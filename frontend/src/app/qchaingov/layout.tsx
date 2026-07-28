@@ -6,13 +6,17 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://a
 export const metadata: Metadata = {
   title: "QChainGov — DAO Governance · AEVION",
   description:
-    "DAO-платформа народного управления: identity-bound голоса через AEVION Auth, QSign-цепочка под каждым решением, quadratic voting + delegate-trees.",
+    // Было «quadratic voting + delegate-trees» — ни того, ни другого в модуле нет:
+    // в роутере ноль упоминаний quadratic/sqrt/delegat при 71 упоминании vote,
+    // а вес голоса суммируется линейно (DOUBLE PRECISION), не по квадратному корню.
+    // Оставлено то, что реализовано: три режима голосования и цепочка подписей.
+    "DAO-платформа народного управления: identity-bound голоса через AEVION Auth, QSign-цепочка под каждым решением, режимы «да/нет», ранжированный и взвешенный.",
   alternates: { canonical: `${SITE}/qchaingov` },
   openGraph: {
     type: "website",
     url: `${SITE}/qchaingov`,
     title: "QChainGov — DAO Governance",
-    description: "Identity-bound votes · QSign chain · quadratic voting · delegate trees · transparent process.",
+    description: "Identity-bound votes · QSign chain · ranked-choice and weighted modes · transparent process.",
     siteName: "AEVION",
   },
   robots: { index: true, follow: true },

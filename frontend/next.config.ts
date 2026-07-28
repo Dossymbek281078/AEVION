@@ -23,14 +23,24 @@ const nextConfig: NextConfig = {
 
   async headers() {
     return [
-      {
-        // All paths: full Cross-Origin Isolation for SharedArrayBuffer (Stockfish 18).
-        source: "/:path*",
-        headers: [
-          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
-        ],
-      },
+      // Полная кросс-оригин изоляция на всех путях — ради SharedArrayBuffer
+      // (Stockfish 18). Отключается только локально: AEVION_DISABLE_COEP=1.
+      // Нужно для диагностики — под require-corp часть проблем в браузере
+      // выглядит не как ошибка, а как «страница просто не ожила», и отличить
+      // одно от другого можно, лишь сняв заголовок и сравнив.
+      // ВНИМАНИЕ: с отключённым COEP у CyberChess пропадает многопоточный
+      // Stockfish, поэтому в прод этот флаг ставить нельзя.
+      ...(process.env.AEVION_DISABLE_COEP === "1"
+        ? []
+        : [
+            {
+              source: "/:path*",
+              headers: [
+                { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+                { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
+              ],
+            },
+          ]),
       {
         // CyberChess: COEP=credentialless даёт SharedArrayBuffer (Stockfish multi-thread)
         // И при этом разрешает YouTube/Twitch/любые third-party iframe — они грузятся

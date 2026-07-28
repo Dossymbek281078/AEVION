@@ -13,13 +13,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type ChatMessage = {
-  id: string;
-  author: string;
-  text: string;
-  ts: number;
-  isHost?: boolean;
-};
+import { sanitizeChatMessages, type ChatMessage } from "./chatMessages";
 
 interface Props {
   gameId: string;
@@ -130,8 +124,10 @@ export default function SpectatorChat(props: Props) {
         );
         if (!r.ok) return;
         const data = await r.json();
-        if (!cancelled && data?.ok && Array.isArray(data.messages)) {
-          setMessages(data.messages as ChatMessage[]);
+        if (!cancelled && data?.ok) {
+          // Приведение типа ничего не проверяло: элемент с нестроковым text доходил
+          // до разметки и ронял ВСЮ панель, а не одно сообщение.
+          setMessages(sanitizeChatMessages(data.messages));
         }
       } catch {
         /* ignore initial-load errors */

@@ -23,7 +23,7 @@ const PILOTS: Pilot[] = [
     title: "Подпись · секреты · IP-аттестация",
     price: "$50 000",
     duration: "90 дней",
-    modules: ["QSign v2 (ML-DSA-65 FIPS 204)", "QShield (threshold)", "QRight (IP registry)"],
+    modules: ["QSign v2 (Ed25519 + HMAC; ML-DSA-65 включается ключом)", "QShield (threshold)", "QRight (IP registry)"],
     included: [
       "Onboarding-call с founder + technical lead",
       "5 SDK seats (TS + Python) с приоритетным каналом в Slack",

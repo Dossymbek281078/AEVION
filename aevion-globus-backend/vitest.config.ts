@@ -64,8 +64,20 @@ export default defineConfig({
     //
     // Правильное лечение — модульные синглтоны: перечитывать состояние на
     // каждый вызов (как aev.ts с кошельками) либо дать модулю явный reset()
-    // для тестов. Кандидаты: qtrade, src/lib/qpaynetCrypto.ts,
-    // src/routes/cyberchessOpening.ts, src/routes/i18n.ts. Это отдельная
+    // для тестов. ТОЧНЫЕ КООРДИНАТЫ, найденные 29.07:
+    //   src/routes/qtrade.ts:49  const accounts: Account[] = []
+    //   src/routes/qtrade.ts:51  const operations: Operation[] = []
+    // — оба живут всю жизнь процесса, отсюда и оговорка в
+    // tests/qtradeInternalCredit.test.ts про бесполезность свежего
+    // AEVION_DATA_DIR. Прочие кандидаты с кэшем на уровне модуля:
+    // src/lib/qpaynetCrypto.ts, src/routes/cyberchessOpening.ts,
+    // src/routes/i18n.ts.
+    //
+    // ⚠️ Одной правки qtrade, скорее всего, НЕ хватит: tier3OgRoutes и
+    // provisioning.sendEmail дёргают vi.resetModules по 8-10 раз, а это
+    // задевает общий реестр модулей воркера независимо от qtrade. То есть
+    // возвращать fileParallelism можно только после того, как разобраны все
+    // источники, и проверять — повторными прогонами, а не одним. Это отдельная
     // работа; пока она не сделана, последовательный прогон честнее красного
     // гейта — но причина жива, и при возврате параллелизма всё вернётся.
     //

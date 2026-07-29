@@ -385,7 +385,7 @@ export default function InvestorPage() {
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px,1fr))", gap: 20 }}>
             {[
-              { emoji: "🔐", title: "NIST ML-DSA-65 finalized", desc: "August 2024. Enterprises are starting to require post-quantum signatures in contracts. We already ship it." },
+              { emoji: "🔐", title: "NIST ML-DSA-65 finalized", desc: "August 2024. Enterprises are starting to require post-quantum signatures in contracts. Our implementation is ready and switches on with the signing key." },
               { emoji: "🤖", title: "AI content flood", desc: "Sora, Midjourney, Suno create billions of files/day. Proving authorship became a crisis. Our pipeline solves it." },
               { emoji: "⚖️", title: "EU AI Act (2025)", desc: "Requires provenance documentation for AI-generated content. Our Bureau certificate is the compliance answer." },
             ].map(item => (

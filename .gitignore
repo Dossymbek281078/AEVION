@@ -75,3 +75,7 @@ page_v*_backup.*
 
 # Прогоны бенчмарка QReal: ссылки на рендеры, судейские листы, ключ плеч.
 benchmark-out/
+
+# Playwright artefacts: written by every run, useful to nobody in git.
+test-results/
+**/test-results/

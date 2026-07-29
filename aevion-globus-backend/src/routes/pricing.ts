@@ -24,6 +24,10 @@ import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 import { CHANGELOG, type ChangelogKind } from "../data/changelog";
 import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, type Subscription } from "./provisioning";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+// Эти catch возвращали 500 и писали только в console — сбой был не виден в проде.
+const capture = makeServiceCapture("pricing");
 
 export const pricingRouter = Router();
 
@@ -314,6 +318,7 @@ pricingRouter.post("/lead", (req, res) => {
     ensureLeadsDir();
     appendFileSync(LEADS_FILE, JSON.stringify(lead) + "\n", "utf8");
   } catch (e) {
+    capture(e);
     console.error("[pricing/lead] write failed", e);
     return res.status(500).json({ error: "storage_error" });
   }
@@ -332,6 +337,7 @@ pricingRouter.get("/leads/count", (_req, res) => {
     const lines = content.split("\n").filter((l) => l.trim().length > 0);
     res.json({ total: lines.length });
   } catch (e) {
+    capture(e);
     console.error("[pricing/leads/count] read failed", e);
     res.status(500).json({ error: "read_error" });
   }
@@ -371,6 +377,7 @@ pricingRouter.get("/leads", (req, res) => {
     }
     res.json({ items, total: lines.length });
   } catch (e) {
+    capture(e);
     console.error("[pricing/leads] read failed", e);
     res.status(500).json({ error: "read_error" });
   }
@@ -522,6 +529,7 @@ pricingRouter.post("/newsletter", (req, res) => {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     appendFileSync(NEWSLETTER_FILE, JSON.stringify(entry) + "\n", "utf8");
   } catch (e) {
+    capture(e);
     console.error("[newsletter] write failed", e);
     return res.status(500).json({ error: "storage_error" });
   }
@@ -540,6 +548,7 @@ pricingRouter.get("/newsletter/count", (_req, res) => {
     const lines = content.split("\n").filter((l) => l.trim().length > 0);
     res.json({ total: lines.length });
   } catch (e) {
+    capture(e);
     console.error("[newsletter/count] read failed", e);
     res.status(500).json({ error: "read_error" });
   }
@@ -745,6 +754,7 @@ pricingRouter.post("/affiliate/apply", (req, res) => {
   try {
     persistApplication(AFFILIATE_FILE, app);
   } catch (e) {
+    capture(e);
     console.error("[affiliate/apply] write failed", e);
     return res.status(500).json({ error: "storage_error" });
   }
@@ -793,6 +803,7 @@ pricingRouter.post("/partners/apply", (req, res) => {
   try {
     persistApplication(PARTNERS_FILE, app);
   } catch (e) {
+    capture(e);
     console.error("[partners/apply] write failed", e);
     return res.status(500).json({ error: "storage_error" });
   }
@@ -838,6 +849,7 @@ pricingRouter.post("/edu/apply", (req, res) => {
   try {
     persistApplication(EDU_FILE, app);
   } catch (e) {
+    capture(e);
     console.error("[edu/apply] write failed", e);
     return res.status(500).json({ error: "storage_error" });
   }
@@ -887,6 +899,7 @@ pricingRouter.get("/applications", (req, res) => {
     }
     res.json({ items, total: lines.length, kind });
   } catch (e) {
+    capture(e);
     console.error(`[applications/${kind}] read failed`, e);
     res.status(500).json({ error: "read_error" });
   }
@@ -922,6 +935,7 @@ pricingRouter.get("/newsletter/list", (req, res) => {
     }
     res.json({ items, total: lines.length });
   } catch (e) {
+    capture(e);
     console.error("[newsletter/list] read failed", e);
     res.status(500).json({ error: "read_error" });
   }
@@ -1250,6 +1264,7 @@ pricingRouter.post("/partners/deals", (req, res) => {
   try {
     persistDeal(deal);
   } catch (e) {
+    capture(e);
     console.error("[partners/deals] write failed", e);
     return res.status(500).json({ error: "storage_error" });
   }
@@ -1423,6 +1438,7 @@ pricingRouter.get("/subscription/me", (req, res) => {
       },
     });
   } catch (e) {
+    capture(e);
     console.error("[subscription/me] read failed", e);
     res.status(500).json({ error: "read_failed" });
   }
@@ -1494,6 +1510,7 @@ pricingRouter.post("/subscriptions/purge", (req, res) => {
     const { removed, remaining } = purgeSubscriptions(email);
     res.json({ ok: true, email, removed, remaining });
   } catch (e) {
+    capture(e);
     console.error("[subscriptions/purge] failed", e);
     res.status(500).json({ error: "purge_failed" });
   }

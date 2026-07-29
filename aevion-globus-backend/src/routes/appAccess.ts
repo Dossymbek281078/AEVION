@@ -12,6 +12,10 @@
 
 import { Router } from "express";
 import { getPool } from "../lib/dbPool";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+// Эти catch возвращали 500 и писали только в console — сбой был не виден в проде.
+const capture = makeServiceCapture("app-access");
 
 export const appAccessRouter = Router();
 
@@ -27,6 +31,7 @@ appAccessRouter.get("/", async (req, res) => {
     );
     return res.json({ apps: result.rows.map((r: { appSlug: string }) => r.appSlug) });
   } catch (err) {
+    capture(err);
     console.error("[appAccess] query error:", err instanceof Error ? err.message : err);
     return res.status(500).json({ error: "db error" });
   }
@@ -45,6 +50,7 @@ appAccessRouter.get("/check", async (req, res) => {
     );
     return res.json({ active: result.rowCount! > 0 });
   } catch (err) {
+    capture(err);
     console.error("[appAccess] check error:", err instanceof Error ? err.message : err);
     return res.status(500).json({ error: "db error" });
   }

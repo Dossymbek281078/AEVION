@@ -23,6 +23,10 @@ import {
   createItem, listItems, getItem, statsFor,
   searchByPayloadField, searchByDistance,
 } from "../lib/moduleMvpStore";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+// Эти catch возвращали 500 и писали только в console — сбой был не виден в проде.
+const capture = makeServiceCapture("mvp-concepts");
 
 type ConceptConfig = {
   id: string;
@@ -95,6 +99,7 @@ function buildRouter(cfg: ConceptConfig): Router {
       const { items, total } = await listItems(cfg.id, { limit, offset, tag });
       res.json({ items, total, moduleId: cfg.id, noun: cfg.noun });
     } catch (err) {
+      capture(err);
       res.status(500).json({ error: "list_failed", detail: err instanceof Error ? err.message : "unknown" });
     }
   });
@@ -106,6 +111,7 @@ function buildRouter(cfg: ConceptConfig): Router {
       if (!item) return res.status(404).json({ error: "not_found" });
       res.json(item);
     } catch (err) {
+      capture(err);
       res.status(500).json({ error: "get_failed", detail: err instanceof Error ? err.message : "unknown" });
     }
   });
@@ -131,6 +137,7 @@ function buildRouter(cfg: ConceptConfig): Router {
       const item = await createItem(cfg.id, { title, summary, payload: body, tags, ownerId });
       res.status(201).json(item);
     } catch (err) {
+      capture(err);
       res.status(500).json({ error: "create_failed", detail: err instanceof Error ? err.message : "unknown" });
     }
   });
@@ -141,6 +148,7 @@ function buildRouter(cfg: ConceptConfig): Router {
       const s = await statsFor(cfg.id);
       res.json({ moduleId: cfg.id, noun: cfg.noun, ...s });
     } catch (err) {
+      capture(err);
       res.status(500).json({ error: "stats_failed", detail: err instanceof Error ? err.message : "unknown" });
     }
   });
@@ -171,6 +179,7 @@ function attachModuleExtensions(app: Express): void {
       const items = await searchByDistance("mapreality", lat, lng, radiusKm, limit);
       res.json({ items, total: items.length, moduleId: "mapreality", noun: "claims", query: { lat, lng, radiusKm } });
     } catch (err) {
+      capture(err);
       res.status(500).json({ error: "nearby_failed", detail: err instanceof Error ? err.message : "unknown" });
     }
   });
@@ -183,6 +192,7 @@ function attachModuleExtensions(app: Express): void {
       const items = await searchByPayloadField("startup-exchange", "stage", stage, limit);
       res.json({ items, total: items.length, moduleId: "startup-exchange", noun: "listings", query: { stage } });
     } catch (err) {
+      capture(err);
       res.status(500).json({ error: "by_stage_failed", detail: err instanceof Error ? err.message : "unknown" });
     }
   });
@@ -195,6 +205,7 @@ function attachModuleExtensions(app: Express): void {
       const items = await searchByPayloadField("voice-of-earth", "location", location, limit);
       res.json({ items, total: items.length, moduleId: "voice-of-earth", noun: "feeds", query: { location } });
     } catch (err) {
+      capture(err);
       res.status(500).json({ error: "by_location_failed", detail: err instanceof Error ? err.message : "unknown" });
     }
   });

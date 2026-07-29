@@ -6,7 +6,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 const IDEAS = [
   {
     title: "QSign — государственная e-подпись",
-    desc: "Post-quantum FIPS 204 — единственный коммерческий продукт в регионе. Потенциал: нацинфраструктура KZ / UAE / SA.",
+    desc: "Ed25519 + пороговая схема Шамира, канонизация RFC 8785. Потенциал: нацинфраструктура KZ / UAE / SA.",
     arr: "$20-100M/год",
     accent: "#10b981",
     ready: "В проде",
@@ -174,11 +174,8 @@ export default function PartnerPage() {
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginBottom: 24 }}>
           {[
-            { label: "130+ PR · 500+ коммитов на GitHub", href: "https://github.com/Dossymbek281078/AEVION", note: "Объём работы одного человека — верифицируется по git log", color: "#10b981" },
-            { label: "GET /api/aevion/registry", href: "https://aevion-production-a70c.up.railway.app/api/aevion/registry", note: "JSON реестр 30+ модулей с реальными backend-ами", color: "#3b82f6" },
-            { label: "QSign v2 — postquantum подпись", href: "https://aevion.app/qsign", note: "ML-DSA-65 FIPS 204 в production — единственный в регионе", color: "#8b5cf6" },
+            { label: "QSign v2 — подпись и реестр ключей", href: "https://aevion.app/qsign", note: "Ed25519 + HMAC-SHA256 активны в проде; ML-DSA-65 включается ключом", color: "#8b5cf6" },
             { label: "Constitution v1 — атестация", href: "https://aevion.app/constitution", note: "Реальный документ с QSign-envelope, AI-советник работает", color: "#f59e0b" },
-            { label: "Transparency board", href: "https://aevion.app/transparency", note: "Daily smoke 24/24 — ничего не скрыто", color: "#ec4899" },
             { label: "OpenAPI 3.1 spec", href: "https://aevion-production-a70c.up.railway.app/api/openapi.json", note: "Все задокументированные endpoints backend-а", color: "#06b6d4" },
           ].map(item => (
             <a key={item.label} href={item.href} target="_blank" rel="noopener" style={{ padding: "18px 20px", background: "rgba(255,255,255,0.03)", border: `1px solid ${item.color}30`, borderRadius: 16, textDecoration: "none", display: "flex", flexDirection: "column", gap: 6 }}>

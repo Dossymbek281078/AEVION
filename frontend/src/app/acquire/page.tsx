@@ -107,8 +107,8 @@ const PILLARS: Pillar[] = [
     title: "Dev-слой / Planet DevHub",
     oneLine:
       "15 SaaS-вкладок → один agent-layer под единым AEV-биллингом.",
-    modules: ["DevHub (9 интеграций)", "QCoreAI (5+ AI-провайдеров)", "QBuild", "Bureau v2"],
-    proof: "9 integrations live · 23 vitest · QCoreAI 230 routes / 364 vitest · QBuild 60+ endpoints",
+    modules: ["DevHub (14 возможностей live)", "QCoreAI (5+ AI-провайдеров)", "QBuild", "Bureau v2"],
+    proof: "14 capabilities live из 16 · 23 vitest · QCoreAI 230 routes / 364 vitest · QBuild 60+ endpoints",
     tamAnchor: "Dev-tools + IT-ops ≈ $200B → $400B",
     accent: "#8b5cf6",
   },
@@ -422,7 +422,7 @@ export default function AcquirePage() {
           {[
             { t: "AEV в обращении", d: "Доверие к расчётной единице накапливается транзакциями, не маркетингом." },
             { t: "Constitution v1 + Planet", d: "Правовой режим, опубликованный через QSign envelope. Документ, не правила в Notion." },
-            { t: "9 интеграций DevHub", d: "36+ месяцев комплаенс-работы для нового игрока. Уже пройдено." },
+            { t: "14 возможностей DevHub live", d: "36+ месяцев комплаенс-работы для нового игрока. Уже пройдено." },
             { t: "30+ модулей с health-pings", d: "Каждый отдельно — 6-18 мес инжиниринга. В сумме — 200+ человеко-лет." },
           ].map(item => (
             <div key={item.t} style={{ padding: 22, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16 }}>

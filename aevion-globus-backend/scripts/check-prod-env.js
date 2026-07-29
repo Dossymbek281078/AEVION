@@ -96,6 +96,19 @@ for (const row of CONDITIONAL) {
   if (err) failures.push({ name: row.name, err, severity: "CONDITIONAL" });
 }
 
+// Наблюдаемость. НЕ влияет на код возврата: без DSN сервис грузится и
+// работает, поэтому валить деплой было бы неправильно. Но молчать тоже
+// нельзя — makeServiceCapture() при отсутствии SENTRY_DSN тихо выходит,
+// и обёртка в 72 роутах превращается в мёртвый код. Замерено 29.07:
+// именно так выглядит "ошибок нет" при выключенном отлове ошибок.
+if (NODE_ENV === "production" && !process.env.SENTRY_DSN) {
+  console.warn(
+    "[check-prod-env] ⚠️  SENTRY_DSN не задан — отлов ошибок ВЫКЛЮЧЕН.\n" +
+    "    Все capture() в роутах станут no-op: сбои 500 не долетят никуда,\n" +
+    "    кроме console. Деплой не блокируется."
+  );
+}
+
 if (failures.length === 0) {
   console.log("[check-prod-env] ✅ all required env vars set and well-formed.");
   process.exit(0);

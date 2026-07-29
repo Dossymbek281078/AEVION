@@ -266,13 +266,13 @@ export default function InvestorPage() {
               <div style={productBadge("#10b981")}>IP Trust Pipeline</div>
               <h3 style={productTitle}>QRight + QSign + Bureau</h3>
               <p style={productDesc}>
-                Register a SHA-256 fingerprint → Sign with <strong>ML-DSA-65</strong> (NIST FIPS 204, post-quantum) → Get a legally-meaningful certificate with Trust Graph edge.
+                Register a SHA-256 fingerprint → Sign with <strong>Ed25519</strong> (ML-DSA-65 / NIST FIPS 204 switches on with the signing key) → Get a legally-meaningful certificate with Trust Graph edge.
               </p>
               <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(16,185,129,0.08)", borderRadius: 8, border: "1px solid rgba(16,185,129,0.2)" }}>
                 <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700 }}>WOW:</span>
                 <span style={{ fontSize: 12, color: "#94a3b8", marginLeft: 6 }}>
                   Harvest-now-decrypt-later. Documents signed with RSA today will not hold in court in 2031.
-                  Ours will. Only B2C product with ML-DSA-65 on the shelf.
+                  Ours will. ML-DSA-65 is implemented and switches on with the signing key.
                 </span>
               </div>
               <div style={{ marginTop: 12 }}>
@@ -407,7 +407,7 @@ export default function InvestorPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px,1fr))", gap: 16 }}>
           {[
             { n: "1", title: "Trust Graph", desc: "Accumulates with every signature. Competitor starting today is 2 years behind." },
-            { n: "2", title: "Post-quantum on day 1", desc: "No one else ships ML-DSA-65 B2C. First mover in a mandatory migration." },
+            { n: "2", title: "Post-quantum on day 1", desc: "ML-DSA-65 implemented, key-gated. First mover in a mandatory migration." },
             { n: "3", title: "Atomic pipeline", desc: "4 platforms → 1 UI. Switching cost grows with every cert issued." },
             { n: "4", title: "Open velocity", desc: "130+ merged PRs in 30 days. Verifiable in public GitHub history." },
           ].map(m => (
@@ -464,7 +464,7 @@ export default function InvestorPage() {
         <div style={{ maxWidth: 560, margin: "0 auto" }}>
           <h2 style={{ fontSize: 32, fontWeight: 900, marginBottom: 12 }}>8-minute demo</h2>
           <p style={{ fontSize: 16, color: "#94a3b8", marginBottom: 28, lineHeight: 1.6 }}>
-            Register on aevion.app → create a QRight object → sign with ML-DSA-65 → get a Bureau certificate.
+            Register on aevion.app → create a QRight object → sign with Ed25519 → get a Bureau certificate.
             All verifiable, all on prod, no staging.
           </p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>

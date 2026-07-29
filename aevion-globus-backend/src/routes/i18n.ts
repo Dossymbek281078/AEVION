@@ -98,6 +98,19 @@ const MAX_LEN = 5_000;
 
 const ckey = (target: string, text: string) => `${target}${text}`;
 
+/**
+ * Remember a translation only when the engine actually produced one.
+ *
+ * `undefined` means the engine gave us nothing and the caller fell back to the
+ * source; an unchanged string means nothing was translated. Neither is worth
+ * pinning: the next request should get a fresh attempt rather than a permanent
+ * echo of the source text.
+ */
+export function shouldCache(source: string, engineResult: string | undefined): boolean {
+  if (typeof engineResult !== "string" || engineResult === "") return false;
+  return engineResult !== source;
+}
+
 async function deeplBatch(texts: string[], deeplTarget: string): Promise<string[]> {
   const apiKey = process.env.DEEPL_API_KEY?.trim();
   if (!apiKey) throw new Error("DEEPL_API_KEY not configured");
@@ -208,9 +221,19 @@ i18nRouter.post("/translate", async (req, res) => {
       // or over quota — which is exactly what broke it in production for years.
       const translated = await translateBatch(target, missTexts);
       for (let j = 0; j < missIdx.length; j++) {
-        const tr = translated[j] ?? missTexts[j];
+        const engine = translated[j];
+        const tr = engine ?? missTexts[j];
         out[missIdx[j]] = tr;
-        if (cache.size < MAX_CACHE) cache.set(ckey(target, missTexts[j]), tr);
+        // Only a real translation is worth remembering. A result equal to the
+        // source is either a brand token (cheap to ask again) or the shape a
+        // failure takes here — and caching that pins the failure for the life
+        // of the deploy. Measured 28.07.2026: 39 module captions on the home
+        // page came back as themselves for every German visitor, while the
+        // same strings sent fresh translated correctly. The cache was serving
+        // an old identity answer, not the engine.
+        if (shouldCache(missTexts[j], engine) && cache.size < MAX_CACHE) {
+          cache.set(ckey(target, missTexts[j]), tr);
+        }
       }
     }
 

@@ -33,6 +33,10 @@ import {
 import { _legacyGenerateShards } from "../lib/shamir/legacy";
 void _legacyGenerateShards;
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+// Эти catch отдавали 500 и писали только в console — сбой был не виден в проде.
+const capture = makeServiceCapture("quantum-shield");
 
 export const quantumShieldRouter = Router();
 const pool = getPool();
@@ -574,6 +578,7 @@ quantumShieldRouter.get("/transparency", async (_req, res) => {
       byPolicy: Object.fromEntries(byPolicy.rows.map((r: { p: string; n: number }) => [r.p, r.n])),
     });
   } catch (err: unknown) {
+    capture(err);
     res.status(500).json({ error: "transparency failed" });
   }
 });
@@ -732,6 +737,7 @@ quantumShieldRouter.get("/og.svg", async (req, res) => {
 
     res.send(svg);
   } catch (err) {
+    capture(err);
     res.status(500).json({ error: "index og failed" });
   }
 });
@@ -808,6 +814,7 @@ quantumShieldRouter.get("/:id/og.svg", async (req, res) => {
 
     res.send(svg);
   } catch (err) {
+    capture(err);
     res.status(500).json({ error: "shield og failed" });
   }
 });
@@ -891,6 +898,7 @@ ${items}
 
     res.send(xml);
   } catch (err) {
+    capture(err);
     res.status(500).json({ error: "shield rss failed" });
   }
 });
@@ -946,6 +954,7 @@ ${urls.join("\n")}
 
     res.send(xml);
   } catch (err) {
+    capture(err);
     res.status(500).json({ error: "sitemap failed" });
   }
 });

@@ -13,6 +13,10 @@
 
 import { Router } from "express";
 import { callProvider, type ChatMessage } from "../services/qcoreai/providers";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+// Эти catch отдавали 500 и писали только в console — сбой был не виден в проде.
+const capture = makeServiceCapture("i18n");
 
 export const i18nRouter = Router();
 
@@ -217,6 +221,7 @@ i18nRouter.post("/translate", async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.json({ translations: out, target, cached: texts.length - missTexts.length });
   } catch (e) {
+    capture(e);
     res.status(500).json({ error: e instanceof Error ? e.message : "translate failed" });
   }
 });

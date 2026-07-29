@@ -94,9 +94,11 @@ export default function InvestorPage() {
           <a href="https://aevion.app" style={btnPrimary}>
             Try the product →
           </a>
-          <a href="https://github.com/Dossymbek281078/AEVION" target="_blank" rel="noopener" style={btnGhost}>
-            Open repo (130+ PRs)
-          </a>
+          {/* Ссылка на репозиторий снята 29.07.2026: аккаунт GitHub приостановлен,
+              профиль отдаёт 404. Кнопка, ведущая в ошибку, хуже отсутствующей —
+              тем более на странице для инвестора, где она подавалась как
+              доказательство. Вернуть после разблокировки или переезда:
+              C:\Users\user\aevion-rewrite-repo-links.ps1 */}
           <Link href="/launch-status" style={btnGhost}>
             Live status
           </Link>
@@ -469,7 +471,8 @@ export default function InvestorPage() {
           </p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             <a href="https://aevion.app/auth" style={btnPrimary}>Start demo →</a>
-            <a href="https://github.com/Dossymbek281078/AEVION" target="_blank" rel="noopener" style={btnGhost}>Inspect the code</a>
+            {/* «Inspect the code» снята 29.07.2026 — репозиторий отдаёт 404,
+                пока аккаунт GitHub приостановлен. Вернуть после переезда. */}
           </div>
           <p style={{ fontSize: 13, color: "#475569", marginTop: 20 }}>
             Partnership, not a buyout · $10M returnable advance + 51/49 revenue · contact:{" "}
@@ -483,7 +486,9 @@ export default function InvestorPage() {
       <footer style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
         <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px", display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 12, color: "#334155" }}>
-            AEVION · aevion.app · github.com/Dossymbek281078/AEVION
+            {/* Адрес репозитория убран 29.07.2026 — ведёт на 404, пока аккаунт
+                приостановлен. Вернуть вместе с кнопками выше. */}
+            AEVION · aevion.app
           </div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
             <Link href="/partner" style={{ color: "#94a3b8", textDecoration: "none" }}>Innovation Partnership</Link>

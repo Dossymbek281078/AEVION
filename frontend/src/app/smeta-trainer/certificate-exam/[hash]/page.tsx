@@ -33,12 +33,10 @@ function formatDate(iso: string): string {
 export default function CertificatePage({
   params,
 }: {
-  params: Promise<{ hash: string }> | { hash: string };
+  params: Promise<{ hash: string }>;
 }) {
   const { hash } =
-    typeof (params as Promise<{ hash: string }>).then === "function"
-      ? use(params as Promise<{ hash: string }>)
-      : (params as { hash: string });
+    use(params as Promise<{ hash: string }>);
   const payload = decodePayload(hash);
   if (!payload) {
     notFound();

@@ -25,8 +25,10 @@ function fmt(n: number) {
   return n.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-export async function generateMetadata({ params }: { params: { token: string } }): Promise<Metadata> {
-  const meta = await loadRequest(params.token);
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  // Promise per Next 16; the synchronous shape passed CI only because Turbopack
+  // does not type-check route entries.
+  const meta = await loadRequest((await params).token);
   if (!meta?.amount) {
     return {
       title: "Запрос на оплату · QPayNet · AEVION",

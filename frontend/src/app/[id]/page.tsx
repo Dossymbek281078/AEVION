@@ -45,9 +45,13 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  // Next 16 requires this to be a Promise; the union that used to be here made
+  // the generated route types reject the page. Only a webpack build catches it
+  // — Turbopack skips route type checking, so CI stayed green while
+  // `next build --webpack` failed outright.
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const p = (await Promise.resolve(params)) as { id: string };
+  const p = await params;
   const id = p.id;
   try {
     const res = await fetch(apiUrl(`/api/globus/projects/${id}`), {

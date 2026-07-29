@@ -133,7 +133,12 @@ function evalWhiteRatio(cp?: number | null, mate?: number | null): number {
 }
 
 interface Props {
-  params: { gameId: string } | Promise<{ gameId: string }>;
+  // Next 16 requires a Promise here. The old union kept a Next 14 shape alive
+  // and made the generated route types reject this page — invisible to CI,
+  // because Turbopack skips route type checking, and fatal to
+  // `next build --webpack`. The body below still handles both shapes at
+  // runtime, so nothing changes for a caller.
+  params: Promise<{ gameId: string }>;
 }
 
 export default function SpectatorViewerPage(props: Props) {

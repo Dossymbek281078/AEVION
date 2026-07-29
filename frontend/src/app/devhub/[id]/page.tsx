@@ -404,7 +404,7 @@ function FileContextMenu({
   );
 }
 
-export default function DevHubProjectPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
+export default function DevHubProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = params instanceof Promise ? use(params) : params;
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);

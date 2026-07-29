@@ -43,6 +43,15 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm install --ignore-scripts
       - run: npx playwright install --with-deps chromium
+      # Turbopack does not type-check route entries, so `next build` stays green
+      # over pages whose params are typed in a shape Next 16 rejects — eight of
+      # them had accumulated by 28.07.2026, and only `next build --webpack`
+      # complained. `next typegen` writes the same generated route types in
+      # seconds; tsc then judges them.
+      - name: Route types (what Turbopack does not check)
+        run: |
+          npx next typegen
+          npx tsc --noEmit
       - run: npm run build
       # The founder-flow spec is excluded on purpose: it fires a real AI
       # generation against production and belongs to the nightly, not to a

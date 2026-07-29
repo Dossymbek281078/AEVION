@@ -68,7 +68,7 @@ export default function AcquirePrintPage() {
           <li><strong>aevion.app/launch-status</strong> — daily smoke 24/24</li>
           <li><strong>aevion.app/constitution</strong> — учредительный документ (RU/EN/KK), QSign envelope</li>
           <li><strong>aevion.app/devhub</strong> — 14 возможностей live из 16, единый AEV-биллинг</li>
-          <li><strong>/api/aevion/registry · /api/aevion/stats · /api/planet/stats</strong> — JSON метрики</li>
+          <li><strong>/api/aevion/stats · /api/planet/stats</strong> — JSON метрики</li>
         </ul>
 
         <div className="footer">

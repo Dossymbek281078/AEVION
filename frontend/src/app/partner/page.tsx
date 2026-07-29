@@ -176,7 +176,7 @@ export default function PartnerPage() {
           {[
             { label: "QSign v2 — подпись и реестр ключей", href: "https://aevion.app/qsign", note: "Ed25519 + HMAC-SHA256 активны в проде; ML-DSA-65 включается ключом", color: "#8b5cf6" },
             { label: "Constitution v1 — атестация", href: "https://aevion.app/constitution", note: "Реальный документ с QSign-envelope, AI-советник работает", color: "#f59e0b" },
-            { label: "OpenAPI 3.1 spec", href: "https://aevion-production-a70c.up.railway.app/api/openapi.json", note: "Все задокументированные endpoints backend-а", color: "#06b6d4" },
+            { label: "OpenAPI 3.1 spec", href: "https://aevion.app/api-backend/api/openapi.json", note: "Все задокументированные endpoints backend-а", color: "#06b6d4" },
           ].map(item => (
             <a key={item.label} href={item.href} target="_blank" rel="noopener" style={{ padding: "18px 20px", background: "rgba(255,255,255,0.03)", border: `1px solid ${item.color}30`, borderRadius: 16, textDecoration: "none", display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: item.color }}>↗ {item.label}</div>

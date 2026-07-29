@@ -29,6 +29,12 @@ import {
 import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders, resolveProvider } from "../services/qcoreai/providers";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { makeServiceCapture } from "../lib/sentry/platform";
+
+// Все catch-блоки ниже возвращали 500 и писали только в console — то есть в
+// проде такие сбои были не видны. Обёртка та же, что уже стоит в qai,
+// qcontract, qevents, qtradeoffline и veilnetxLedger, а не второй способ.
+const capture = makeServiceCapture("psyapp-deps");
 
 export const psyappDepsRouter = Router();
 
@@ -380,6 +386,7 @@ psyappDepsRouter.post("/users/:alias/start", writeLimit, async (req: Request, re
       streak_days: streakDays(user.streak_start_at),
     });
   } catch (e: any) {
+    capture(e);
     return res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -399,6 +406,7 @@ psyappDepsRouter.get("/users/:alias", readLimit, async (req: Request, res: Respo
     }
     return res.json({ ok: true, user, streak_days: streakDays(user.streak_start_at) });
   } catch (e: any) {
+    capture(e);
     return res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -433,6 +441,7 @@ psyappDepsRouter.post("/users/:alias/relapse", writeLimit, async (req: Request, 
       message: "Streak reset. New day, fresh start.",
     });
   } catch (e: any) {
+    capture(e);
     return res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -478,6 +487,7 @@ psyappDepsRouter.post("/triggers", writeLimit, async (req: Request, res: Respons
     const trigger = isPsyAppDbReady() ? await dbInsertTrigger(fields) : memInsertTrigger(fields);
     return res.status(201).json({ ok: true, trigger });
   } catch (e: any) {
+    capture(e);
     return res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -503,6 +513,7 @@ psyappDepsRouter.get("/triggers/:alias", readLimit, async (req: Request, res: Re
 
     return res.json({ ok: true, triggers, count: triggers.length, limit, offset });
   } catch (e: any) {
+    capture(e);
     return res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -538,6 +549,7 @@ psyappDepsRouter.post("/support", aiLimit, async (req: Request, res: Response) =
         model: result.model,
       });
     } catch (err: any) {
+      capture(err);
       const msg = err?.message || String(err);
       if (msg.includes("No AI provider configured") || msg === "not-configured") {
         return res.status(503).json({
@@ -556,6 +568,7 @@ psyappDepsRouter.post("/support", aiLimit, async (req: Request, res: Response) =
       });
     }
   } catch (e: any) {
+    capture(e);
     return res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });
@@ -571,6 +584,7 @@ psyappDepsRouter.get("/stats", readLimit, async (_req: Request, res: Response) =
     const stats = isPsyAppDbReady() ? await dbStats() : memStats();
     res.json({ ok: true, ...stats });
   } catch (e: any) {
+    capture(e);
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
 });

@@ -65,6 +65,7 @@ jobs:
             e2e/language-honesty.spec.ts \
             e2e/translation-canary.spec.ts \
             e2e/translation-cache.spec.ts \
+            e2e/globe-lazy.spec.ts \
             --project=chromium
       - if: failure()
         uses: actions/upload-artifact@v4

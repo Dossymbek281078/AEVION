@@ -4,8 +4,19 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
-import Globus3D from "./components/Globus3D";
+import dynamic from "next/dynamic";
 import Globus3DPlaceholder from "./components/Globus3DPlaceholder";
+
+// three.js is 748 KB, and it was reaching pages that show no globe at all:
+// measured 28.07.2026, /devhub and /compare both carried the chunk in their own
+// <script> tags — the bundler had folded it into a group they share with this
+// page. Loading it on demand keeps it out of that group, and the globe is below
+// the fold on the one page that does use it. The placeholder already holds the
+// exact slot, so nothing shifts while it arrives.
+const Globus3D = dynamic(() => import("./components/Globus3D"), {
+  ssr: false,
+  loading: () => <Globus3DPlaceholder />,
+});
 import { PlanetPulse } from "./components/PlanetPulse";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { countryByGlobusName } from "@/lib/constitution";

@@ -117,6 +117,15 @@ export function FinancialCopilot({
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [recurring, setRecurring] = useState<Recurring[]>([]);
   const [circlesCount, setCirclesCount] = useState<number>(0);
+  // Тикающее время для расчёта инсайтов. Раньше внутри useMemo стоял
+  // Date.now() — и это не только react-hooks/purity, а настоящий дефект:
+  // useMemo КЭШИРУЕТ результат, поэтому при неизменных зависимостях правило
+  // «≥3 операции за последние 20 минут» считалось от устаревшего момента, и
+  // подсказка могла врать. Теперь время — зависимость, и пересчёт происходит
+  // раз в минуту. Ноль означает «ещё не проставлено»: при нём useMemo возвращает
+  // пустой список, иначе twentyMinAgo стал бы отрицательным и в «всплеск
+  // активности» попали бы ВСЕ операции за всю историю.
+  const [insightsNow, setInsightsNow] = useState<number>(0);
   const [pending, setPending] = useState<Gift[]>([]);
   const [dismissed, setDismissed] = useState<Record<string, number>>({});
   const [open, setOpen] = useState<boolean>(false);
@@ -164,6 +173,23 @@ export function FinancialCopilot({
       window.removeEventListener(AUTOPILOT_EVENT, syncAutopilot);
       window.removeEventListener(FREEZE_EVENT, syncFreeze);
       window.clearTimeout(t);
+    };
+  }, []);
+
+  // Время для инсайтов. Отдельный интервал, а не переиспользование чужих:
+  // соседние (заморозка — 1с, автопилот — 60с) делают свою работу, и вешать на
+  // них ещё и пересчёт подсказок значило бы связать несвязанное.
+  // Минута выбрана по самому короткому порогу инсайтов (20 минут) — чаще
+  // пересчитывать нечего, реже уже заметно.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // setTimeout(0), а не прямой setInsightsNow в теле эффекта: прямой вызов
+    // ловит react-hooks/set-state-in-effect.
+    const first = window.setTimeout(() => setInsightsNow(Date.now()), 0);
+    const id = window.setInterval(() => setInsightsNow(Date.now()), 60_000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(id);
     };
   }, []);
 
@@ -330,9 +356,12 @@ export function FinancialCopilot({
 
   const insights = useMemo<Insight[]>(() => {
     const out: Insight[] = [];
+    // Пока время не проставлено эффектом, инсайтов нет. Считать от нуля нельзя:
+    // все пороги ниже превратились бы в «за всю историю».
+    if (insightsNow === 0) return out;
 
     // 1) Activity burst — ≥3 ops in last 20 minutes
-    const twentyMinAgo = Date.now() - 20 * 60 * 1000;
+    const twentyMinAgo = insightsNow - 20 * 60 * 1000;
     const burst = operations.filter((op) => {
       const t = Date.parse(op.createdAt);
       return Number.isFinite(t) && t > twentyMinAgo;
@@ -376,7 +405,7 @@ export function FinancialCopilot({
     }
 
     // 3) Recurring vs balance — 30-day outflow projection
-    const thirty = Date.now() + 30 * 24 * 60 * 60 * 1000;
+    const thirty = insightsNow + 30 * 24 * 60 * 60 * 1000;
     let due30d = 0;
     for (const r of recurring) {
       if (!r.active) continue;
@@ -498,7 +527,7 @@ export function FinancialCopilot({
         const t = Date.parse(op.createdAt);
         return Number.isFinite(t) && t > acc ? t : acc;
       }, 0);
-      const daysIdle = (Date.now() - newest) / (24 * 60 * 60 * 1000);
+      const daysIdle = (insightsNow - newest) / (24 * 60 * 60 * 1000);
       if (daysIdle >= 3 && recurring.length === 0) {
         out.push({
           id: "idle-setup-recurring",
@@ -525,11 +554,11 @@ export function FinancialCopilot({
         const unlockMs = g.unlockAt ? Date.parse(g.unlockAt) : Number.NaN;
         return { g, unlockMs };
       })
-      .filter(({ unlockMs }) => Number.isFinite(unlockMs) && unlockMs - Date.now() >= 0 && unlockMs - Date.now() <= soon)
+      .filter(({ unlockMs }) => Number.isFinite(unlockMs) && unlockMs - insightsNow >= 0 && unlockMs - insightsNow <= soon)
       .sort((a, b) => a.unlockMs - b.unlockMs);
     if (imminent.length > 0) {
       const first = imminent[0];
-      const hoursLeft = Math.max(1, Math.round((first.unlockMs - Date.now()) / (60 * 60 * 1000)));
+      const hoursLeft = Math.max(1, Math.round((first.unlockMs - insightsNow) / (60 * 60 * 1000)));
       out.push({
         id: `timelock-${first.g.id}`,
         kind: "info",
@@ -577,7 +606,7 @@ export function FinancialCopilot({
       .filter((i) => !(i.id in dismissed))
       .sort((a, b) => b.priority - a.priority)
       .slice(0, 6);
-  }, [operations, goals, recurring, account.balance, trust, bioSettings, royalty, circlesCount, pending, dismissed, t]);
+  }, [insightsNow, operations, goals, recurring, account.balance, trust, bioSettings, royalty, circlesCount, pending, dismissed, t]);
 
   const dismiss = useCallback((id: string) => {
     setDismissed((prev) => {

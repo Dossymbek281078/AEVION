@@ -245,7 +245,17 @@ export default function MvpConceptBoard({
                   >
                     <div className="mb-1 flex items-start justify-between gap-2">
                       <p className="font-medium text-slate-100">{title}</p>
-                      <span className="shrink-0 font-mono text-[10px] text-slate-500">
+                      {/* suppressHydrationWarning: timeAgo зовёт Date.now(), поэтому
+                          сервер и клиент дают разное «5m» / «6m» — React справедливо
+                          ругался в консоли, и подавления здесь не было. Ставим
+                          осознанно, как это уже сделано в PlanetActivityFeed для той
+                          же функции: относительное время по своей природе не может
+                          совпасть между двумя моментами рендера, а переписывать
+                          сигнатуру timeAgo ради одной подписи дороже пользы. */}
+                      <span
+                        suppressHydrationWarning
+                        className="shrink-0 font-mono text-[10px] text-slate-500"
+                      >
                         {timeAgo(it.createdAt)}
                       </span>
                     </div>

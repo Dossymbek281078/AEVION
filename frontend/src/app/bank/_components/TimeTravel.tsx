@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
@@ -46,10 +46,29 @@ export function TimeTravel({
   const { code } = useCurrency();
   const [win, setWin] = useState<Window>("90d");
   const [pct, setPct] = useState(100); // 100 = now, 0 = start of window
+  // Время правой границы окна. Было Date.now() внутри useMemo — результат
+  // кэшируется, поэтому «сейчас» на шкале машины времени замирало на моменте
+  // первого рендера, и операции после открытия страницы в график не попадали.
+  const [nowMs, setNowMs] = useState<number>(0);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // setTimeout(0) вместо прямого setState в теле эффекта.
+    // Раз в 5 минут: шкала измеряется днями.
+    const first = window.setTimeout(() => setNowMs(Date.now()), 0);
+    const id = window.setInterval(() => setNowMs(Date.now()), 5 * 60 * 1000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(id);
+    };
+  }, []);
 
   const series = useMemo(() => {
+    // nowMs === 0 — время ещё не проставлено. Возвращаем пустой ряд: ниже уже
+    // есть проверка `series.length === 0 → return null`, поэтому блок просто
+    // не рисуется. Считать от нуля нельзя — окно ушло бы в 1970.
+    if (nowMs === 0) return [];
     const days = WINDOW_DAYS[win];
-    const now = Date.now();
+    const now = nowMs;
     const start = now - days * 86_400_000;
     // Walk operations newest→oldest, subtract effect to compute balance going back in time.
     const sorted = [...operations]
@@ -72,7 +91,7 @@ export function TimeTravel({
       points.push({ ts: start, balance: runningBalance });
     }
     return points.sort((a, b) => a.ts - b.ts);
-  }, [operations, account.balance, account.id, win]);
+  }, [nowMs, operations, account.balance, account.id, win]);
 
   const range = useMemo(() => {
     if (series.length === 0) return null;

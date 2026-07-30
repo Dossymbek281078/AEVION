@@ -84,9 +84,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
+    // Ref копируется в переменную ВНУТРИ эффекта — так требует
+    // react-hooks/exhaustive-deps. Здесь timers.current фактически неизменен
+    // (это одна и та же Map на всё время жизни компонента), поэтому поведение
+    // не меняется; правка снимает предупреждение и оставляет код правильным
+    // на случай, если ref когда-нибудь начнут переназначать.
+    const map = timers.current;
     return () => {
-      for (const t of timers.current.values()) clearTimeout(t);
-      timers.current.clear();
+      for (const t of map.values()) clearTimeout(t);
+      map.clear();
     };
   }, []);
 

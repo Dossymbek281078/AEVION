@@ -314,9 +314,14 @@ const { items } = await cat.list({ status: "mvp" });
 const qsign = await cat.get("qsign");
 const stats = await cat.stats();`}</pre>
           <div style={{ marginTop: 10, fontSize: 12, color: "#64748b" }}>
-            Source:{" "}
+            {/* Было «Source» + ссылка на GitHub. Репозиторий отдаёт 404, пока
+                аккаунт приостановлен; ведём на npm, где пакет живой (проверено,
+                registry отвечает 200, latest 0.8.1). Слово заменено намеренно:
+                npm — это пакет, а не исходники, и подпись не должна обещать
+                больше, чем открывается по ссылке. */}
+            Package:{" "}
             <a
-              href="https://github.com/Dossymbek281078/AEVION/tree/main/packages/aevion-catalog-client"
+              href="https://www.npmjs.com/package/@aevion-io/catalog-client"
               style={{ color: "#0d9488", fontWeight: 700 }}
               target="_blank"
               rel="noreferrer"

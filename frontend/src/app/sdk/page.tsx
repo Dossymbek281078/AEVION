@@ -36,10 +36,17 @@ const CARD_BORDER = "rgba(15,23,42,0.08)";
 // recent enough not to look like a broken page.
 const FALLBACK_VERSION = "0.8.1";
 
-const COOKBOOK_URL =
-  "https://github.com/Dossymbek281078/AEVION/blob/main/docs/SDK_USAGE.md";
+// Вело на docs/SDK_USAGE.md в GitHub — 404, пока аккаунт приостановлен.
+// Своя страница /developers закрывает ту же потребность и живёт: 19 упоминаний
+// SDK и готовые команды установки для трёх пакетов. Внутренняя ссылка вместо
+// внешней здесь выигрывает — не зависит от чужого хостинга вообще.
+const COOKBOOK_URL = "/developers";
+// Вело в GitHub, который отдаёт 404, пока аккаунт приостановлен. Пакет при
+// этом ОПУБЛИКОВАН: registry.npmjs.org отвечает 200, latest 0.8.1 — та же
+// версия, что в packages/aevion-catalog-client/package.json. npm здесь даже
+// лучше исходников: посетитель сразу видит команду установки.
 const GITHUB_PACKAGE_URL =
-  "https://github.com/Dossymbek281078/AEVION/tree/main/packages/aevion-catalog-client";
+  "https://www.npmjs.com/package/@aevion-io/catalog-client";
 
 /* ----------------------------- types ----------------------------- */
 
@@ -257,8 +264,13 @@ const API_GROUPS: { group: string; methods: { name: string; desc: string }[] }[]
 const BOTTOM_CTAS = [
   { label: "Try it live →", href: "/api-explorer/sdk", external: false, accent: TEAL },
   { label: "Browse explorer →", href: "/api-explorer", external: false, accent: "#0ea5e9" },
-  { label: "GitHub source →", href: GITHUB_PACKAGE_URL, external: true, accent: "#475569" },
-  { label: "Cookbook →", href: COOKBOOK_URL, external: true, accent: "#8b5cf6" },
+  // Надпись была «GitHub source →», но ссылка теперь ведёт в npm. Текст обязан
+  // совпадать с тем, что откроется: это пакет, а не исходники.
+  { label: "Package on npm →", href: GITHUB_PACKAGE_URL, external: true, accent: "#475569" },
+  // external переведён в false вместе с адресом: COOKBOOK_URL теперь внутренний
+  // (/developers). Оставить true значило бы открывать свою же страницу в новой
+  // вкладке с rel=noreferrer — флаг управляет рендером, а не только видом.
+  { label: "Cookbook →", href: COOKBOOK_URL, external: false, accent: "#8b5cf6" },
 ] as const;
 
 /* ----------------------------- subcomponents ----------------------------- */
@@ -483,10 +495,10 @@ export default async function SdkLandingPage() {
             >
               Try it live →
             </Link>
+            {/* target=_blank и rel сняты: адрес стал внутренним (/developers),
+                открывать свою же страницу в новой вкладке незачем. */}
             <a
               href={COOKBOOK_URL}
-              target="_blank"
-              rel="noreferrer"
               style={{
                 padding: "12px 22px",
                 borderRadius: 10,
@@ -771,14 +783,18 @@ export default async function SdkLandingPage() {
                 color: MUTED,
               }}
             >
+              {/* Было `${GITHUB_PACKAGE_URL}/blob/main/CHANGELOG.md` — путь в
+                  стиле GitHub. После перевода константы на npm он превратился бы
+                  в мусорный адрес, поэтому ведём на саму страницу пакета: там
+                  видны все версии. Текст ссылки приведён в соответствие. */}
               Changelog unavailable at build time. See{" "}
               <a
-                href={`${GITHUB_PACKAGE_URL}/blob/main/CHANGELOG.md`}
+                href={GITHUB_PACKAGE_URL}
                 target="_blank"
                 rel="noreferrer"
                 style={{ color: TEAL, fontWeight: 700, textDecoration: "underline" }}
               >
-                CHANGELOG.md on GitHub
+                version history on npm
               </a>
               .
             </div>

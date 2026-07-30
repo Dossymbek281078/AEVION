@@ -1,3 +1,9 @@
+import { MODULE_NODES } from "./pitchFacts";
+
+// Число узлов подставляется из единого источника, а не пишется в тексте.
+// 30.07.2026 здесь стояло «37» при фактических 40: реестр пополнили, а
+// сценарий демонстрации — нет. Этот текст читают инвестору вслух, поэтому
+// устаревшая цифра тут дороже, чем в коде.
 /**
  * Тексты для демо-экрана: выгоды экосистемы и каждого узла (27 + Planet).
  * Синхронизировано по id с aevion-globus-backend/src/data/projects.ts
@@ -41,7 +47,7 @@ export const ecosystemIntro = {
   bullets: [
     "Integration cost reduction: reusing Auth, QSign and API instead of reinventing the wheel in every product.",
     "Faster time to market: ready-made pipeline 'registry → signature → bureau' to demonstrate maturity to investors and partners.",
-    "Scalable story: 37 nodes on Globus — a growth roadmap, not a feature chaos.",
+    `Scalable story: ${MODULE_NODES} nodes on Globus — a growth roadmap, not a feature chaos.`,
     "Regulatory and ESG transparency: Planet compliance as a foundation for audit and certification.",
     "Network effect: the more modules on the shared platform, the higher the value of data, reputation and cross-selling.",
   ],

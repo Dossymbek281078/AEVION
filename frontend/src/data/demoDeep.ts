@@ -1,3 +1,9 @@
+import { MODULE_NODES } from "./pitchFacts";
+
+// Число узлов подставляется из единого источника, а не пишется в тексте.
+// 30.07.2026 здесь стояло «37» при фактических 40: реестр пополнили, а
+// сценарий демонстрации — нет. Этот текст читают инвестору вслух, поэтому
+// устаревшая цифра тут дороже, чем в коде.
 /**
  * Deep technical document for engineer-investors and CTOs evaluating AEVION.
  * Complements /demo (product showcase) and /pitch (investment thesis).
@@ -35,7 +41,7 @@ export const demoDeepSections: DeepSection[] = [
       "Bank renders on top of QTrade — a non-custodial AEC ledger with /api/qtrade/{accounts,transfers,operations}.csv for audit. Royalties from Awards, prizes from CyberChess and per-cert revenue from Bureau all settle into the same ledger; the Trust Score (8-factor radar) gates salary advances and credit features.",
     ],
     bullets: [
-      "Auth → JWT in localStorage; same token works across all 37 modules.",
+      `Auth → JWT in localStorage; same token works across all ${MODULE_NODES} modules.`,
       "QRight → SHA-256 + ownerUserId binding; the atomic Trust Graph node.",
       "QSign → HMAC-SHA256 over canonical JSON; client-verifiable.",
       "Quantum Shield → Ed25519 + Shamir SSS (default 2-of-3 threshold).",
@@ -93,7 +99,7 @@ function buildCertificate(qrightId) {
       "Awards — POST /api/awards/{music,film}/submit; GET /api/awards/{music,film}/leaderboard.",
       "Bank / QTrade — GET /api/qtrade/summary; POST /api/qtrade/{topup,transfer}; GET /api/qtrade/{accounts,transfers,operations}.csv.",
       "QCoreAI — GET /api/qcoreai/providers; POST /api/qcoreai/chat.",
-      "Globus — GET /api/globus/projects (catalog of all 37 nodes with status and priority).",
+      `Globus — GET /api/globus/projects (catalog of all ${MODULE_NODES} nodes with status and priority).`,
     ],
   },
   {
@@ -171,11 +177,11 @@ function buildCertificate(qrightId) {
     title: "8 · Next steps",
     lead: "Where to go from here, depending on what you're evaluating.",
     body: [
-      "If you came for the narrative — the visual product showcase across all 37 nodes lives at /demo, and the investment thesis (TAM, network effects, defensibility, GTM, ARR trajectory) lives at /pitch. Both pages pull live data from the same backend you've been reading about above.",
+      `If you came for the narrative — the visual product showcase across all ${MODULE_NODES} nodes lives at /demo, and the investment thesis (TAM, network effects, defensibility, GTM, ARR trajectory) lives at /pitch. Both pages pull live data from the same backend you've been reading about above.`,
       "If you came for the contract — open /api/openapi.json on the backend origin and start with QRight, QSign and Bureau. Those three modules together are the minimum reproducible end-to-end flow.",
     ],
     bullets: [
-      "Visual product tour → /demo (37 nodes, live ecosystem pulse, 90-second pipeline).",
+      `Visual product tour → /demo (${MODULE_NODES} nodes, live ecosystem pulse, 90-second pipeline).`,
       "Investment thesis → /pitch (why AEVION is a partnership, not a buyout).",
       "API contract → /api/openapi.json on the backend origin.",
       "Reproduce the end-to-end flow → Auth → QRight → QSign → Bureau in any browser.",

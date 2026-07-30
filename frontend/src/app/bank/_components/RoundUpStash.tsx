@@ -34,9 +34,16 @@ export function RoundUpStash({
   const { code } = useCurrency();
   const { goals, contribute } = useSavings();
   const [cfg, setCfg] = useState<RoundUpConfig>(DEFAULT_CONFIG);
+  // Время для запасного курсора (когда realizedCursor ещё не выставлен).
+  // Раньше здесь стоял Date.now() ПРЯМО В РЕНДЕРЕ, и это давало обратную
+  // проблему по сравнению с остальными файлами: cursorMs шёл в зависимости
+  // useMemo ниже, поэтому менялся на КАЖДОМ рендере и кэш не работал вообще —
+  // pendingStash пересчитывался каждый раз. Плюс расхождение SSR и гидрации.
+  const [nowMs, setNowMs] = useState<number>(0);
 
   useEffect(() => {
     setCfg(loadRoundUpConfig());
+    setNowMs(Date.now());
     const handler = () => setCfg(loadRoundUpConfig());
     window.addEventListener(ROUNDUP_EVENT, handler);
     window.addEventListener("storage", handler);
@@ -53,7 +60,14 @@ export function RoundUpStash({
 
   const cursorMs = cfg.realizedCursor
     ? new Date(cfg.realizedCursor).getTime()
-    : new Date(Date.now() - 30 * 86_400_000).getTime();
+    // nowMs === 0 значит «эффект ещё не отработал». Ставим Infinity, а НЕ ноль:
+    // pendingStash пропускает операции по условию `ts <= cursorMs`, поэтому при
+    // Infinity не пройдёт ни одна и сумма честно равна нулю. Ноль здесь был бы
+    // ошибкой — окно «с начала времён» просуммировало бы округления по ВСЕМ
+    // операциям и экран показал бы завышенную сумму «доступно в копилку».
+    : nowMs === 0
+      ? Number.POSITIVE_INFINITY
+      : nowMs - 30 * 86_400_000;
 
   const stash = useMemo(
     () => pendingStash(operations, myAccountId, cfg.increment, cursorMs),

@@ -485,9 +485,12 @@ function StructuredData() {
         "@id": "https://aevion.app/#org",
         name: "AEVION",
         url: "https://aevion.app",
-        sameAs: [
-          "https://github.com/Dossymbek281078/AEVION",
-        ],
+        // Поле sameAs убрано целиком. Это структурированные данные для
+        // поисковиков — список профилей, подтверждающих тождество организации.
+        // Единственная запись вела на приостановленный аккаунт и отдавала 404,
+        // то есть Google получал подтверждение, которое не открывается. Пустой
+        // массив тоже не годится: это сигнал «профилей нет», а не «поля нет».
+        // Вернуть после переезда, добавив новый адрес.
         description:
           "AEVION operates an interlocking financial fabric — VeilNetX settlement, QMaskCard masking, QPayNet wallets, QGood charity, Z-Tide reputation, QChainGov governance.",
       },

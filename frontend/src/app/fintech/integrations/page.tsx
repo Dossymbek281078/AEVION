@@ -36,7 +36,7 @@ const INTEGRATIONS = [
     items: [
       { name: "Health endpoints", icon: "❤️", desc: "GET /api/{module}/health returns {status, service, checks} — wire into your uptime monitor.", status: "live", href: "/fintech/status" },
       { name: "Prometheus metrics", icon: "📊", desc: "GET /api/metrics (Bearer token required) — standard Prometheus scrape format for all modules.", status: "live", href: "/developers/fintech" },
-      { name: "Smoke script", icon: "🧪", desc: "node scripts/fintech-all-smoke.js — 13 read-only checks across all 6 modules. Run after deploys.", status: "live", href: "https://github.com/Dossymbek281078/AEVION/blob/main/aevion-globus-backend/scripts/fintech-all-smoke.js" },
+      { name: "Smoke script", icon: "🧪", desc: "node scripts/fintech-all-smoke.js — 13 read-only checks across all 6 modules. Run after deploys — results visible on the live status dashboard.", status: "live", href: "/fintech/status" },
     ],
   },
 ];

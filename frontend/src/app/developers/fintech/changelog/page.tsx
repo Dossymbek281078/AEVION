@@ -49,12 +49,15 @@ function relAge(iso: string | null | undefined): string | null {
 
 // Maps SDK id → GitHub path of its CHANGELOG.md. The repo path is stable
 // across releases (the file moves only on package rename).
-const CHANGELOG_PATHS: Record<string, string> = {
-  "fintech-sdk": "packages/fintech-sdk/CHANGELOG.md",
-  "catalog-client": "packages/aevion-catalog-client/CHANGELOG.md",
+// Было: пути к CHANGELOG.md внутри репозитория + константа GITHUB_REPO.
+// Оба адреса отдавали 404, пока аккаунт GitHub приостановлен. Пакеты при этом
+// живы — проверено запросами к registry: fintech-sdk 0.2.0 и catalog-client
+// 0.8.1, оба HTTP 200. Страница версий npm показывает историю релизов, то есть
+// отвечает на тот же вопрос и не зависит от хостинга исходников.
+const CHANGELOG_URLS: Record<string, string> = {
+  "fintech-sdk": "https://www.npmjs.com/package/@aevion-io/fintech-sdk?activeTab=versions",
+  "catalog-client": "https://www.npmjs.com/package/@aevion-io/catalog-client?activeTab=versions",
 };
-
-const GITHUB_REPO = "https://github.com/Dossymbek281078/AEVION";
 
 export default async function FintechChangelogPage() {
   const data = await fetchSdks();
@@ -73,8 +76,11 @@ export default async function FintechChangelogPage() {
           <div style={{ marginTop: 36, display: "grid", gap: 16 }}>
             {sdks.map(sdk => {
               const age = relAge(sdk.lastPublished);
-              const changelogPath = CHANGELOG_PATHS[sdk.id];
-              const changelogHref = changelogPath ? `${GITHUB_REPO}/blob/main/${changelogPath}` : null;
+              // Прямой адрес из карты вместо склейки `${REPO}/blob/main/${path}`:
+              // склейка была привязана к структуре GitHub и на другом хостинге
+              // дала бы мусорный URL (именно так я и сломал ссылку в /sdk,
+              // прежде чем заметил).
+              const changelogHref = CHANGELOG_URLS[sdk.id] ?? null;
               return (
                 <div key={sdk.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "1.25rem 1.5rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -108,7 +114,7 @@ export default async function FintechChangelogPage() {
         ) : (
           <div style={{ marginTop: 36, padding: "1rem 1.25rem", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: "0.85rem", color: C.muted }}>
             SDK registry endpoint вернул ошибку. Полный CHANGELOG доступен напрямую в репозитории:{" "}
-            <a href={`${GITHUB_REPO}/blob/main/packages/fintech-sdk/CHANGELOG.md`} target="_blank" rel="noopener noreferrer" style={{ color: C.blue, textDecoration: "none" }}>
+            <a href={CHANGELOG_URLS["fintech-sdk"]} target="_blank" rel="noopener noreferrer" style={{ color: C.blue, textDecoration: "none" }}>
               fintech-sdk ↗
             </a>
           </div>

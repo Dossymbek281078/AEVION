@@ -177,13 +177,11 @@ export default function FintechChangelogPage() {
           ))}
         </div>
 
-        {/* GitHub link */}
-        <div style={{ marginTop: 32, padding: "12px 16px", background: C.panel, borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 12, color: C.dim, textAlign: "center" }}>
-          Full commit history:{" "}
-          <a href="https://github.com/Dossymbek281078/AEVION/commits/main" style={{ color: C.accent, textDecoration: "none" }}>
-            github.com/Dossymbek281078/AEVION →
-          </a>
-        </div>
+        {/* Блок «Full commit history» убран целиком 29.07.2026: вёл на
+            commits/main приостановленного аккаунта (404). Заменить адрес было
+            нечем — истории коммитов на своём домене нет, а увести «историю
+            коммитов» на /help значило бы обещать одно и открывать другое.
+            Вернуть блок после переезда, подставив новый адрес. */}
 
         <FintechFooter />
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
@@ -76,9 +76,31 @@ export function MoneyFlowMap({
   const { ecosystem } = useEcosystemData();
   const [period, setPeriod] = useState<Period>("30d");
   const [hovered, setHovered] = useState<string | null>(null);
+  // Время для окна расчёта. Было Date.now() внутри useMemo — результат
+  // кэшируется, поэтому «за последние N дней» отсчитывалось от первого
+  // рендера и со временем сдвигалось. Теперь время в зависимостях.
+  // Ноль означает «ещё не проставлено»: при нём cutoff уходит в
+  // отрицательные и в карту попали бы ВСЕ операции за всю историю,
+  // поэтому расчёт ждёт эффекта.
+  const [nowMs, setNowMs] = useState<number>(0);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // setTimeout(0) вместо прямого setState в теле эффекта —
+    // react-hooks/set-state-in-effect. Раз в 5 минут: окно измеряется днями.
+    const first = window.setTimeout(() => setNowMs(Date.now()), 0);
+    const id = window.setInterval(() => setNowMs(Date.now()), 5 * 60 * 1000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(id);
+    };
+  }, []);
 
   const data = useMemo(() => {
-    if (!ecosystem) return null;
+    // nowMs === 0 значит «время ещё не проставлено эффектом». Считать нельзя:
+    // cutoff ниже стал бы отрицательным и в карту попали бы ВСЕ операции за всю
+    // историю вместо выбранного окна. null здесь уже обрабатывается — компонент
+    // ничего не рисует, как и при отсутствии данных экосистемы.
+    if (!ecosystem || nowMs === 0) return null;
     const days = PERIOD_DAYS[period];
     const slice = ecosystem.daily.slice(-days);
 
@@ -91,7 +113,7 @@ export function MoneyFlowMap({
       icon: SOURCE_ICON[src],
     })).filter((n) => n.amount > 0);
 
-    const cutoff = Date.now() - days * 86_400_000;
+    const cutoff = nowMs - days * 86_400_000;
     const byCat: Record<SpendCategory, number> = {
       subscriptions: 0,
       tips: 0,
@@ -117,7 +139,7 @@ export function MoneyFlowMap({
     const totalIn = inNodes.reduce((s, n) => s + n.amount, 0);
     const totalOut = outNodes.reduce((s, n) => s + n.amount, 0);
     return { inNodes, outNodes, totalIn, totalOut, net: totalIn - totalOut };
-  }, [ecosystem, operations, accountId, period, t]);
+  }, [nowMs, ecosystem, operations, accountId, period, t]);
 
   const layout = useMemo(() => {
     if (!data) return null;

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
@@ -36,10 +36,25 @@ function SuccessInner() {
   const appId = sp.get("appId") ?? "platform";
 
   const totalUsd = totalCents ? Math.round(parseInt(totalCents, 10) / 100) : null;
-  const trialEndDate =
-    trialDays > 0
-      ? new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toLocaleDateString("ru-RU")
-      : null;
+  // Дата окончания триала. Считалась прямо в рендере через Date.now() —
+  // react-hooks/purity, и на странице ОПЛАТЫ это особенно неудачно: сервер и
+  // браузер берут разное время и разную таймзону, поэтому в SSR-разметке и
+  // после гидрации покупатель мог увидеть РАЗНЫЕ даты. toLocaleDateString к
+  // тому же зависит от локали окружения, а на сервере она не та, что у
+  // пользователя. Считаем на клиенте после монтирования: до этого подпись с
+  // датой просто не рисуется (ниже уже есть проверка на trialEndDate).
+  const [trialEndDate, setTrialEndDate] = useState<string | null>(null);
+  useEffect(() => {
+    if (trialDays <= 0) return;
+    const t = window.setTimeout(
+      () =>
+        setTrialEndDate(
+          new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toLocaleDateString("ru-RU"),
+        ),
+      0,
+    );
+    return () => window.clearTimeout(t);
+  }, [trialDays]);
 
   const tierName = tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : "Pro";
   const appLink = APP_LINKS[appId] ?? APP_LINKS["platform"];

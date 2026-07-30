@@ -515,7 +515,7 @@ export default function DevelopersPage() {
               </div>
             </Link>
             <a
-              href="https://github.com/Dossymbek281078/AEVION/tree/main/packages/aevion-catalog-client"
+              href="https://www.npmjs.com/package/@aevion-io/catalog-client"
               target="_blank"
               rel="noreferrer"
               style={{

@@ -9,7 +9,10 @@ export const metadata: Metadata = {
 
 const C = { bg: "#050810", surface: "#0d1117", border: "#1e2a3a", text: "#e2e8f0", muted: "#64748b", code: "#0f1923", green: "#10b981", amber: "#f59e0b", red: "#ef4444", accent: "#6366f1" };
 
-const GITHUB_CHANGELOG = "https://github.com/Dossymbek281078/AEVION/blob/main/packages/fintech-sdk/CHANGELOG.md";
+// Вело в GitHub (404, аккаунт приостановлен). Пакет опубликован: registry
+// отвечает 200, latest 0.2.0. На странице npm видны все версии — то есть
+// changelog по существу, и без зависимости от чужого хостинга исходников.
+const GITHUB_CHANGELOG = "https://www.npmjs.com/package/@aevion-io/fintech-sdk?activeTab=versions";
 
 function CodePre({ children }: { children: string }) {
   return (
@@ -62,7 +65,7 @@ const c = new FintechClient({ baseUrl }).withToken(token);`}</CodePre>
 
         <div style={{ marginTop: 28, padding: "14px 18px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: "0.82rem", color: C.muted, lineHeight: 1.7 }}>
           <strong style={{ color: C.text }}>Related:</strong>{" "}
-          <a href={GITHUB_CHANGELOG} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, textDecoration: "none" }}>Full CHANGELOG.md ↗</a>
+          <a href={GITHUB_CHANGELOG} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, textDecoration: "none" }}>Version history on npm ↗</a>
           {" · "}
           <Link href="/developers/fintech/changelog" style={{ color: C.accent, textDecoration: "none" }}>Changelog index →</Link>
           {" · "}

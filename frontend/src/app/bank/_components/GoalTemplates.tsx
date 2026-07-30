@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
@@ -49,11 +49,32 @@ export function GoalTemplates({
   const { t } = useI18n();
   const { code } = useCurrency();
   const { goals, add } = useSavings();
+  // Время для расчёта медианного дохода. Ноль означает «ещё не проставлено»:
+  // при нём cutoff уходит в отрицательные, то есть в выборку попадают ВСЕ
+  // операции — а не последние 6 месяцев. Поэтому расчёт ждёт эффекта.
+  const [nowMs, setNowMs] = useState<number>(0);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // setTimeout(0), а не прямой setState в теле эффекта — иначе
+    // react-hooks/set-state-in-effect. Раз в час достаточно: окно расчёта
+    // шесть месяцев, чаще пересчитывать нечего.
+    const first = window.setTimeout(() => setNowMs(Date.now()), 0);
+    const id = window.setInterval(() => setNowMs(Date.now()), 60 * 60 * 1000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(id);
+    };
+  }, []);
 
   // Median monthly inflow: bucket inflow per month over last 6 months, take median
   const monthlyInflow = useMemo(() => {
     const buckets = new Map<string, number>();
-    const cutoff = Date.now() - 6 * 30 * 86_400_000;
+    // Было Date.now() прямо здесь. Внутри useMemo это не только
+    // react-hooks/purity: результат кэшируется, поэтому «медианный доход за
+    // последние 6 месяцев» считался от момента первого рендера и со временем
+    // расходился с действительностью. Время берём из состояния — оно стоит в
+    // зависимостях ниже, поэтому пересчёт происходит.
+    const cutoff = nowMs - 6 * 30 * 86_400_000;
     for (const op of operations) {
       const ts = new Date(op.createdAt).getTime();
       if (!Number.isFinite(ts) || ts < cutoff) continue;
@@ -67,7 +88,7 @@ export function GoalTemplates({
     if (vals.length === 0) return 0;
     const mid = Math.floor(vals.length / 2);
     return vals.length % 2 === 0 ? (vals[mid - 1] + vals[mid]) / 2 : vals[mid];
-  }, [operations, myAccountId]);
+  }, [nowMs, operations, myAccountId]);
 
   const cards = useMemo(
     () =>

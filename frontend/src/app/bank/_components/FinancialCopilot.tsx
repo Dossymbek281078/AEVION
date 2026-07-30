@@ -1031,10 +1031,31 @@ function AutopilotPanel({
 }) {
   const { t } = useI18n();
   const recent = actions.slice(0, 3);
-  const last24h = actions.filter((a) => {
-    const ts = Date.parse(a.at);
-    return Number.isFinite(ts) && Date.now() - ts < 24 * 60 * 60 * 1000;
-  });
+  // Время окна «за последние 24 часа». Раньше здесь стоял Date.now() прямо в
+  // рендере (react-hooks/purity) — сервер и клиент считали от разных моментов.
+  //
+  // Ноль обработан ЯВНО и это принципиально: подставить его в условие нельзя.
+  // Проверка вида `nowMs - ts < 24ч` при нуле даёт отрицательную разницу,
+  // которая меньше суток ВСЕГДА, то есть в сумму попали бы все действия за всю
+  // историю и подзаголовок показал бы ЗАВЫШЕННУЮ сумму перемещённых денег.
+  // Пустой список честнее: сумма 0, пока время не проставлено.
+  const [nowMs, setNowMs] = useState<number>(0);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const first = window.setTimeout(() => setNowMs(Date.now()), 0);
+    const id = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(id);
+    };
+  }, []);
+  const last24h =
+    nowMs === 0
+      ? []
+      : actions.filter((a) => {
+          const ts = Date.parse(a.at);
+          return Number.isFinite(ts) && nowMs - ts < 24 * 60 * 60 * 1000;
+        });
   const movedToday = last24h.reduce((s, a) => s + a.amount, 0);
   const [preview, setPreview] = useState<{ tick: TickDecision; anomaly: AnomalyDecision; at: number } | null>(null);
 

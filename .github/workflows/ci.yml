@@ -53,6 +53,25 @@ jobs:
       - name: i18n parity (en/ru/kk)
         working-directory: ${{ github.workspace }}
         run: node scripts/i18n-kk-extract.mjs
+      # Линтер до 30.07.2026 не работал ВООБЩЕ (несовместимость eslint 10 с
+      # eslint-plugin-react внутри eslint-config-next) и в CI не вызывался, поэтому
+      # поломка была невидима. За один вечер после починки он нашёл семь дефектов,
+      # которых не видят ни tsc, ни next build: Date.now() в рендере (расхождение
+      # SSR и гидрации), <a> вместо Link на внутренних адресах (полная
+      # перезагрузка вместо перехода), setState в теле эффекта.
+      #
+      # ПОЧЕМУ ПО КАТАЛОГАМ, а не `eslint src`: прогон по всему src падает с
+      # крашем V8 — дерево src/app не влезает в память Node. Замерено 30.07.
+      #
+      # ПОЧЕМУ `|| true`: на момент включения накопленные ошибки не разобраны
+      # (src/lib 3, src/components ~24, src/app частично). Ронять этим все PR
+      # очереди нельзя — сначала пусть будет видно. Убрать `|| true` следующим
+      # шагом, когда накопленное закрыто; иначе шаг превращается в украшение.
+      - name: ESLint (по каталогам — полный прогон не влезает в память)
+        run: |
+          npx eslint src/lib || true
+          npx eslint src/components || true
+          npx eslint src/app/qbuild src/app/qventure src/app/fintech || true
       - run: npm run build
 
   payments-smoke:

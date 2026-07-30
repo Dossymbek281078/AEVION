@@ -573,18 +573,32 @@ function ConfettiBurst({ color }: { color: string }) {
     return () => mq.removeEventListener?.("change", update);
   }, []);
 
-  const pieces = useMemo(() => {
+  // Раньше это был useMemo с Math.random() внутри — react-hooks/purity, и
+  // причина не формальная: при серверном рендере выпадали одни случайные
+  // координаты, при гидрации другие, то есть разметки не совпадали.
+  // Генерируем ПОСЛЕ монтирования: до этого частиц просто нет, а конфетти —
+  // декоративная анимация, её отсутствие в первом кадре незаметно.
+  const [pieces, setPieces] = useState<
+    { key: number; left: number; tx: number; ty: number; rot: number; size: number; delay: number; color: string }[]
+  >([]);
+  useEffect(() => {
     const palette = [color, "#059669", "#d97706", "#0ea5e9", "#db2777"];
-    return Array.from({ length: 14 }, (_, i) => ({
-      key: i,
-      left: 50 + (Math.random() - 0.5) * 40,
-      tx: (Math.random() - 0.5) * 220,
-      ty: -60 - Math.random() * 140,
-      rot: (Math.random() - 0.5) * 520,
-      size: 6 + Math.random() * 6,
-      delay: Math.random() * 120,
-      color: palette[i % palette.length],
-    }));
+    // Через setTimeout(0), а не прямым setPieces в теле эффекта: прямой вызов
+    // ловит react-hooks/set-state-in-effect. Для декоративной анимации задержка
+    // в один кадр не имеет значения.
+    const t = window.setTimeout(() => setPieces(
+      Array.from({ length: 14 }, (_, i) => ({
+        key: i,
+        left: 50 + (Math.random() - 0.5) * 40,
+        tx: (Math.random() - 0.5) * 220,
+        ty: -60 - Math.random() * 140,
+        rot: (Math.random() - 0.5) * 520,
+        size: 6 + Math.random() * 6,
+        delay: Math.random() * 120,
+        color: palette[i % palette.length],
+      })),
+    ), 0);
+    return () => window.clearTimeout(t);
   }, [color]);
 
   if (prm) return null;

@@ -49,13 +49,32 @@ export function NetWorthTracker({
   const { ecosystem } = useEcosystemData();
   const [win, setWin] = useState<Window>("90d");
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
+  // Время для линейной аппроксимации накоплений. Было Date.now() внутри
+  // useMemo — результат кэшируется, поэтому «возраст цели» замирал на момент
+  // первого рендера и график со временем врал. Теперь время в зависимостях.
+  const [nowMs, setNowMs] = useState<number>(0);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // setTimeout(0), а не прямой setState в теле эффекта.
+    // Раз в 5 минут: график строится по дням.
+    const first = window.setTimeout(() => setNowMs(Date.now()), 0);
+    const id = window.setInterval(() => setNowMs(Date.now()), 5 * 60 * 1000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     setGoals(loadGoals());
   }, [account.id]);
 
   const series = useMemo<DailyPoint[] | null>(() => {
-    if (!ecosystem) return null;
+    // nowMs === 0 значит «время ещё не проставлено». Считать нельзя: ageMs ниже
+    // схлопнется в 1 мс, и линейная аппроксимация вернёт ПОЛНУЮ сумму каждой
+    // цели вместо частичной — график показал бы завышенные накопления. null
+    // компонент уже обрабатывает, как и при отсутствии данных экосистемы.
+    if (!ecosystem || nowMs === 0) return null;
     const days = WINDOW_DAYS[win];
     const today = startOfDay(new Date());
     const start = new Date(today);
@@ -115,7 +134,7 @@ export function NetWorthTracker({
       for (const g of goals) {
         const created = new Date(g.createdAt).getTime();
         if (!Number.isFinite(created) || ts < created) continue;
-        const ageMs = Math.max(1, Date.now() - created);
+        const ageMs = Math.max(1, nowMs - created);
         const elapsed = Math.max(0, Math.min(ageMs, ts - created));
         total += (g.currentAec * elapsed) / ageMs;
       }
@@ -139,7 +158,7 @@ export function NetWorthTracker({
       });
     }
     return points;
-  }, [account.balance, account.id, operations, ecosystem, goals, win]);
+  }, [nowMs, account.balance, account.id, operations, ecosystem, goals, win]);
 
   if (!ecosystem || !series) {
     return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { BuildVacancy } from "@/lib/build/api";
 import { buildApi } from "@/lib/build/api";
@@ -36,9 +36,19 @@ export function VacancyCard({
       return !u || new Date(u) > new Date();
     })();
   const hasQuestions = (vacancy.questions?.length ?? 0) > 0;
-  const daysLeft = vacancy.expiresAt
-    ? Math.ceil((new Date(vacancy.expiresAt).getTime() - Date.now()) / 86400000)
-    : null;
+  // Было вычисление прямо в рендере через Date.now() — линтер ловит это как
+  // react-hooks/purity, и справедливо: серверная разметка получала одно число,
+  // клиентская при гидрации другое, а на границе суток текст расходился
+  // («ends today» против «1d left»). Считаем после монтирования: до этого
+  // значок просто не рисуется, потому что expiringSoon остаётся false.
+  const [daysLeft, setDaysLeft] = useState<number | null>(null);
+  useEffect(() => {
+    if (!vacancy.expiresAt) return;
+    const calc = () =>
+      setDaysLeft(Math.ceil((new Date(vacancy.expiresAt!).getTime() - Date.now()) / 86400000));
+    const t = setTimeout(calc, 0);
+    return () => clearTimeout(t);
+  }, [vacancy.expiresAt]);
   const expiringSoon = daysLeft != null && daysLeft >= 0 && daysLeft <= 7 && !isClosed;
   const city = vacancy.city || vacancy.projectCity || null;
   const region = regionLabel(vacancy.region);

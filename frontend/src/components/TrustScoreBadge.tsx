@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 
 // AEVION Trust Score badge — the platform's honest data-provenance KPI, read from
@@ -138,13 +139,15 @@ export function TrustScoreBadge() {
                 >
                   verify
                 </a>
-                <a
+                {/* Link вместо <a>: адрес внутренний, через <a> вместо
+                    клиентского перехода была бы полная перезагрузка. */}
+                <Link
                   href="/explore/trust"
                   onClick={(e) => e.stopPropagation()}
                   style={{ color: "#5eead4", marginLeft: 8, textDecoration: "underline" }}
                 >
                   anchor to Bitcoin →
-                </a>
+                </Link>
               </span>
             )}
           </span>

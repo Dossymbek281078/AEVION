@@ -52,7 +52,20 @@ export function BalanceProjection({ account }: { account: Account }) {
   const { code } = useCurrency();
   const [recurring, setRecurring] = useState<Recurring[]>([]);
   const [pending, setPending] = useState<Gift[]>([]);
-  const [, setTick] = useState<number>(0);
+  // Здесь было `const [, setTick] = useState<number>(0)` — счётчик, который
+  // увеличивался раз в 5 минут «чтобы горизонты обновлялись». Он НЕ РАБОТАЛ:
+  // значение не читалось и не входило в зависимости useMemo ниже, поэтому
+  // проекция не пересчитывалась. Инкремент вызывал ререндер, но useMemo
+  // возвращал закэшированный результат — от времени первого расчёта.
+  //
+  // Заменено на само время: оно и подставляется в расчёт (вместо Date.now()
+  // внутри useMemo — react-hooks/purity), и стоит в зависимостях, так что
+  // пересчёт действительно происходит.
+  //
+  // Ноль как начальное значение безопасен: при нём горизонт попадает в 1970,
+  // суммы выходят нулевыми, hasAnyOut === false и компонент возвращает null —
+  // ровно то же, что он делает, когда исходящих платежей нет.
+  const [nowMs, setNowMs] = useState<number>(0);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -63,17 +76,20 @@ export function BalanceProjection({ account }: { account: Account }) {
     sync();
     window.addEventListener(GIFTS_EVENT, sync);
     window.addEventListener("focus", sync);
-    // Re-render every 5 min so horizon deltas refresh quietly.
-    const id = window.setInterval(() => setTick((t) => t + 1), 5 * 60 * 1000);
+    // Обновляем ВРЕМЯ раз в 5 минут — оно входит в зависимости useMemo, поэтому
+    // проекция действительно пересчитывается (раньше счётчик крутился впустую).
+    const firstTime = window.setTimeout(() => setNowMs(Date.now()), 0);
+    const id = window.setInterval(() => setNowMs(Date.now()), 5 * 60 * 1000);
     return () => {
       window.removeEventListener(GIFTS_EVENT, sync);
       window.removeEventListener("focus", sync);
       window.clearInterval(id);
+      window.clearTimeout(firstTime);
     };
   }, []);
 
   const projections = useMemo(() => {
-    const now = Date.now();
+    const now = nowMs;
     return HORIZONS.map((h) => {
       const giftOut = giftSumWithin(pending, h.ms, now);
       const recurringOut = recurringSumWithin(recurring, h.ms, now);
@@ -86,7 +102,7 @@ export function BalanceProjection({ account }: { account: Account }) {
         delta: projected - account.balance,
       };
     });
-  }, [account.balance, pending, recurring]);
+  }, [nowMs, account.balance, pending, recurring]);
 
   const hasAnyOut = projections.some((p) => p.giftOut + p.recurringOut > 0);
   if (!hasAnyOut) return null;

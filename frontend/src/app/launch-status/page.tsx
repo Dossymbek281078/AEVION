@@ -49,7 +49,14 @@ export default function LaunchStatusPage() {
   const [health, setHealth] = useState<ApiState<Health>>(initial<Health>());
   const [modules, setModules] = useState<ApiState<ModulesStatus>>(initial<ModulesStatus>());
   const [quotas, setQuotas] = useState<ApiState<Quotas>>(initial<Quotas>());
-  const [now, setNow] = useState(Date.now());
+  // Было `useState(Date.now())` — линтер (react-hooks/purity) справедливо
+  // возражает: инициализатор вызывается на КАЖДОМ рендере, а его значение
+  // берётся только при первом. Хуже другое: при серверном рендере сюда
+  // попадает время сервера, при гидрации — время браузера, и подпись
+  // «последнее обновление N сек назад» расходится между разметками.
+  // Ноль детерминирован, а настоящее время ставит эффект ниже — до этого
+  // подпись просто не показывается.
+  const [now, setNow] = useState(0);
 
   const load = async () => {
     const fetchOne = async <T,>(path: string, set: (s: ApiState<T>) => void) => {
@@ -72,10 +79,18 @@ export default function LaunchStatusPage() {
   useEffect(() => {
     load();
     const interval = setInterval(load, 60_000);
+    // Первое значение — отдельным таймером на 0 мс, а не прямым вызовом в теле
+    // эффекта: прямой вызов ловит react-hooks/set-state-in-effect (лишний
+    // рендер сразу после монтирования). Через колбэк правило соблюдено, а
+    // подпись всё равно появляется без секундной задержки.
+    const first = setTimeout(() => setNow(Date.now()), 0);
     const tick = setInterval(() => setNow(Date.now()), 1_000);
     return () => {
       clearInterval(interval);
       clearInterval(tick);
+      // Без этого таймер на 0 мс мог сработать уже после размонтирования —
+      // setState на мёртвом компоненте.
+      clearTimeout(first);
     };
   }, []);
 
@@ -105,9 +120,14 @@ export default function LaunchStatusPage() {
           <h1 className="text-4xl font-bold tracking-tight mb-2">AEVION Launch Status</h1>
           <p className="text-slate-400">
             Real-time состояние production-инфраструктуры. Auto-refresh каждые 60 секунд.{" "}
-            <span className="text-slate-500">
-              · последнее обновление {Math.floor((now - Math.max(health.fetchedAt, modules.fetchedAt, quotas.fetchedAt)) / 1000)}s назад
-            </span>
+            {/* Показываем только когда now уже проставлен эффектом. При now === 0
+                разность дала бы огромное отрицательное число — то есть подпись
+                соврала бы вместо того, чтобы промолчать. */}
+            {now > 0 && (
+              <span className="text-slate-500">
+                · последнее обновление {Math.floor((now - Math.max(health.fetchedAt, modules.fetchedAt, quotas.fetchedAt)) / 1000)}s назад
+              </span>
+            )}
           </p>
         </div>
 

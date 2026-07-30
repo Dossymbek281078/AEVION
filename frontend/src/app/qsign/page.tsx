@@ -1894,10 +1894,12 @@ export default function QSignPage() {
             >
               OpenAPI 3.0 spec ↗
             </a>
+            {/* Вела на GitHub, который отдаёт 404, пока аккаунт приостановлен.
+                Уводим на собственную живую страницу /sdk («SDK for AEVION Hub»)
+                — она работает и отвечает на тот же вопрос. Возвращать внешнюю
+                ссылку после переезда НЕ обязательно: своя страница лучше. */}
             <a
-              href="https://github.com/Dossymbek281078/AEVION/tree/main/aevion-globus-backend/sdk"
-              target="_blank"
-              rel="noreferrer"
+              href="/sdk"
               style={{
                 padding: "8px 14px",
                 borderRadius: 8,

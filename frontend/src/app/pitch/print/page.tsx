@@ -227,7 +227,10 @@ export default function PitchPrintPage() {
         </p>
         <p style={{ margin: 0 }}>
           To follow up: <a href={ask.ctaPrimary.href}>{ask.ctaPrimary.label}</a>. Live product:{" "}
-          <a href="https://github.com/Dossymbek281078/AEVION">github.com/Dossymbek281078/AEVION</a>.
+          {/* Здесь стоял адрес репозитория, но он отдаёт 404, пока аккаунт GitHub
+              приостановлен, а это ПЕЧАТНАЯ версия питча — в бумаге исправить
+              ссылку уже нельзя. Ведём на живой продукт: он работает. */}
+          <a href="https://aevion.app">aevion.app</a>.
           AEVION · {totalNodes} nodes · {liveCount} live MVPs · one Trust Graph.
         </p>
       </footer>

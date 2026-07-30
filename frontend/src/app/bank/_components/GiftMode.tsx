@@ -61,7 +61,22 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
   const [unlockDate, setUnlockDate] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [history, setHistory] = useState<Gift[]>([]);
-  const [nowTick, setNowTick] = useState<number>(Date.now());
+  // Было `useState<number>(Date.now())` — react-hooks/purity: инициализатор
+  // вызывается на каждом рендере, и вдобавок на сервере он получит одно время,
+  // в браузере другое (расхождение при гидрации).
+  //
+  // Ноль здесь безопасен, но только вместе с двумя вещами ниже:
+  //   1) отдельный таймер на 0 мс, который проставляет время сразу (нельзя
+  //      вызвать весь tick() — он делает автоотправку подарков, то есть
+  //      реальные переводы, и немедленный вызов изменил бы поведение);
+  //   2) pending-строки не рендерятся, пока nowTick === 0 — иначе отсчёт
+  //      показал бы `unlockMs - 0`, десятки тысяч дней.
+  //
+  // Проверено отдельно: сама отмена подарка НЕ зависит от этого значения —
+  // cancelPending вызывает canCancelGift(g) без аргумента, то есть с
+  // актуальным Date.now(). Кнопка могла бы отобразиться лишней, но нажатие
+  // вернуло бы «время истекло». Деньги не под угрозой ни до, ни после правки.
+  const [nowTick, setNowTick] = useState<number>(0);
   const { code } = useCurrency();
   const recipientRef = useRef<HTMLSelectElement | null>(null);
   const sendRef = useRef(send);
@@ -99,10 +114,16 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
       }
     };
     const id = window.setInterval(tick, 30_000);
+    // Только время, БЕЗ tick(): tick отправляет созревшие подарки, и вызвать
+    // его на монтировании значило бы сдвинуть автоотправку на 30 секунд раньше.
+    // Через setTimeout, а не прямым setNowTick в теле эффекта — иначе
+    // срабатывает react-hooks/set-state-in-effect.
+    const firstTime = window.setTimeout(() => setNowTick(Date.now()), 0);
     return () => {
       window.removeEventListener(GIFTS_EVENT, sync);
       window.removeEventListener("focus", sync);
       window.clearInterval(id);
+      window.clearTimeout(firstTime);
     };
   }, [notify, t]);
 
@@ -192,6 +213,17 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
   };
 
   const pending = history.filter((g) => g.status === "pending");
+
+  // Раньше это сравнение стояло прямо в JSX кнопки, ДВАЖДЫ, и каждый раз
+  // вызывало Date.now() в рендере (react-hooks/purity). Считаем один раз и от
+  // nowTick — того же времени, что уже используется для отсчётов.
+  //
+  // Почему безопасно: значение решает только, показать «Запланировать» или
+  // «Отправить». При монтировании unlockDate пуст, поэтому вся конструкция даёт
+  // false независимо от времени; к моменту, когда пользователь выберет дату,
+  // nowTick давно проставлен.
+  const isTimelocked =
+    !!unlockDate && nowTick > 0 && Date.parse(new Date(unlockDate).toISOString()) > nowTick;
 
   return (
     <section
@@ -351,7 +383,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               background:
                 busy || contacts.length === 0
                   ? "#94a3b8"
-                  : unlockDate && Date.parse(new Date(unlockDate).toISOString()) > Date.now()
+                  : isTimelocked
                     ? "linear-gradient(135deg, #7c3aed, #0ea5e9)"
                     : "linear-gradient(135deg, #db2777, #9d174d)",
               color: "#fff",
@@ -364,7 +396,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               ? t("gift.btn.sending")
               : contacts.length === 0
                 ? t("gift.btn.addContactFirst")
-                : unlockDate && Date.parse(new Date(unlockDate).toISOString()) > Date.now()
+                : isTimelocked
                   ? t("gift.btn.scheduleTimelock")
                   : t("gift.btn.send")}
           </button>
@@ -399,15 +431,21 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               gap: 6,
             }}
           >
-            {pending.map((g) => (
-              <PendingGiftRow
-                key={g.id}
-                g={g}
-                now={nowTick}
-                onCancel={() => cancelPending(g)}
-                onShare={() => void copyShareLink(g, myAccountId, notify, t)}
-              />
-            ))}
+            {/* nowTick === 0 значит «время ещё не проставлено эффектом».
+                Рендерить строки в этот момент нельзя: PendingGiftRow считает
+                remainingMs как unlockMs - now, и при нуле показал бы отсчёт в
+                десятки тысяч дней. Пропуск длится один кадр — отдельный таймер
+                проставляет время через 0 мс. */}
+            {nowTick > 0 &&
+              pending.map((g) => (
+                <PendingGiftRow
+                  key={g.id}
+                  g={g}
+                  now={nowTick}
+                  onCancel={() => cancelPending(g)}
+                  onShare={() => void copyShareLink(g, myAccountId, notify, t)}
+                />
+              ))}
           </div>
         </div>
       ) : null}

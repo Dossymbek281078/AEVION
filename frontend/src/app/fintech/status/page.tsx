@@ -223,7 +223,13 @@ export default async function FintechStatusPage() {
           initial={Object.fromEntries(
             results.map((r) => [
               r.path,
-              { ms: r.ms, status: r.status, at: Date.now() },
+              // Было `at: Date.now()` — вызов нечистой функции в рендере
+              // (react-hooks/purity). Берём время ИЗ САМОЙ ПРОБЫ: probedAt
+              // проставляется в момент замера, а Date.now() давал момент
+              // отрисовки. Разница не косметическая — это метка на графике
+              // задержек, и она должна говорить, когда мерили, а не когда
+              // рисовали.
+              { ms: r.ms, status: r.status, at: new Date(r.probedAt).getTime() },
             ])
           )}
         />

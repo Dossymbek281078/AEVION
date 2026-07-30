@@ -1,5 +1,10 @@
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
+// Берём число узлов из единого источника, а не зашиваем в строку. Здесь оно
+// отстало от реестра (стояло 37 при фактических 40) и попадало в превью ссылки
+// — то есть первое, что видит человек, которому кинули ссылку в мессенджере.
+// pitchFacts — обычный модуль констант, edge-runtime его тянет без проблем.
+import { MODULE_NODES } from "@/data/pitchFacts";
 
 export const runtime = "edge";
 
@@ -161,7 +166,7 @@ export async function GET(
           }}
         >
           <div style={{ display: "flex" }}>aevion.app</div>
-          <div style={{ color: theme.accent, display: "flex" }}>37 nodes · one Trust Graph</div>
+          <div style={{ color: theme.accent, display: "flex" }}>{MODULE_NODES} nodes · one Trust Graph</div>
         </div>
       </div>
     ),

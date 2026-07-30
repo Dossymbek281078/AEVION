@@ -57,10 +57,16 @@ export default function BankStatementPage() {
   // Filled in after mount so the server-rendered HTML and client first
   // paint don't disagree about the user's locale / timezone formatting.
   const [generatedAt, setGeneratedAt] = useState<string>("");
+  // Время конца периода выписки. Раньше внутри useMemo стоял Date.now() —
+  // результат кэшируется, поэтому граница периода замирала на момент первого
+  // рендера и свежие операции в выписку не попадали. Тот же приём, что уже
+  // применён строкой выше для generatedAt: пустое значение + эффект.
+  const [nowMs, setNowMs] = useState<number>(0);
 
   useEffect(() => {
     setCode(loadCurrency());
     setGeneratedAt(new Date().toLocaleString());
+    setNowMs(Date.now());
     let cancelled = false;
     (async () => {
       try {
@@ -87,7 +93,10 @@ export default function BankStatementPage() {
   const account = accounts[0] ?? null;
 
   const range = useMemo(() => {
-    const end = Date.now();
+    // nowMs === 0 значит «эффект ещё не отработал». Диапазон при нуле был бы
+    // пустым (end === 0), то есть выписка показала бы ноль операций — это
+    // видно как «нет данных», а не как неверные цифры.
+    const end = nowMs;
     let start: number;
     if (period === "all") {
       start = 0;
@@ -98,7 +107,7 @@ export default function BankStatementPage() {
       start = end - PERIOD_DAYS[period] * 86_400_000;
     }
     return { start, end };
-  }, [period]);
+  }, [nowMs, period]);
 
   const filtered = useMemo(() => {
     return operations.filter((op) => {

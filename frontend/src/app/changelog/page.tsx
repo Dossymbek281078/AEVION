@@ -105,11 +105,13 @@ export default function ChangelogPage() {
           AEVION changelog
         </h1>
         <p style={{ fontSize: 15, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 36px" }}>
-          Notable updates only. The git log is the unfiltered source of truth — see{" "}
-          <a href="https://github.com/Dossymbek281078/AEVION/commits/bank-payment-layer" style={{ color: "#5eead4" }}>
-            commits/bank-payment-layer
-          </a>{" "}
-          on GitHub.
+          {/* Здесь стояло «git log — источник истины» со ссылкой на
+              commits/bank-payment-layer. Снято 29.07.2026 по двум причинам:
+              ссылка отдаёт 404 (аккаунт приостановлен), и вела она на ветку
+              bank-payment-layer, а не на main — то есть даже до блокировки
+              показывала не то, что обещала. Ссылку на историю вернуть после
+              переезда, но уже на main. */}
+          Notable updates only.
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>

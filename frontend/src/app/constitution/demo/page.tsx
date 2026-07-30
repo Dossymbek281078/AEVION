@@ -232,7 +232,10 @@ export default function ConstitutionDemoPage() {
           <Link href="/constitution/learn" style={{ color: "#9aa3c0" }}>Academy</Link>
           <Link href="/constitution/api" style={{ color: "#9aa3c0" }}>API docs</Link>
           <Link href="/constitution/leaderboard" style={{ color: "#9aa3c0" }}>Leaderboard</Link>
-          <a href="https://github.com/Dossymbek281078/AEVION" style={{ color: "#9aa3c0" }} target="_blank" rel="noreferrer">GitHub (open source)</a>
+          {/* «GitHub (open source)» снята 29.07.2026: аккаунт приостановлен,
+              ссылка отдавала 404. Тем более неудачно рядом с надписью «open
+              source» — утверждение, которое нельзя проверить, хуже отсутствия
+              ссылки. Вернуть после переезда. */}
         </div>
         <p style={{ marginTop: 12, color: "#475569", fontSize: 11 }}>
           aevion.app · Constitution module · SaaS subscription · Instant digital delivery · No physical goods

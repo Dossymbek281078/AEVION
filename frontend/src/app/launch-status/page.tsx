@@ -212,14 +212,10 @@ export default function LaunchStatusPage() {
                   >
                     /api/quotas (machine-readable)
                   </a>
-                  <a
-                    href="https://github.com/Dossymbek281078/AEVION/blob/main/docs/api/PUBLIC_API_QUOTAS.md"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-teal-400 hover:underline"
-                  >
-                    Spec PUBLIC_API_QUOTAS.md →
-                  </a>
+                  {/* «Spec PUBLIC_API_QUOTAS.md» снята: файл в приостановленном
+                      аккаунте, ссылка отдавала 404. Потери нет — рядом стоит
+                      живая ручка /api/quotas, а она и есть источник истины по
+                      квотам, в отличие от документа, который мог разойтись. */}
                 </div>
               </>
             ) : null}
@@ -228,25 +224,15 @@ export default function LaunchStatusPage() {
 
         {/* CI / external */}
         <section className="mb-12">
-          <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-3">CI &amp; external</h2>
+          <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-3">Live checks</h2>
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
             <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm">
-              <a
-                href="https://github.com/Dossymbek281078/AEVION/actions/workflows/daily-smoke.yml"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-teal-400 hover:underline"
-              >
-                Daily smoke (GitHub Actions) →
-              </a>
-              <a
-                href="https://github.com/Dossymbek281078/AEVION"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-teal-400 hover:underline"
-              >
-                Source code →
-              </a>
+              {/* Сняты 29.07.2026: «Daily smoke (GitHub Actions)» и «Source code»
+                  вели в приостановленный аккаунт и отдавали 404. На странице
+                  СТАТУСА это особенно плохо: ссылка, которая должна доказывать
+                  живость, сама не открывается. Осталась проверка, которая
+                  реально работает. Вернуть после переезда:
+                  C:\Users\user\aevion-rewrite-repo-links.ps1 */}
               <a
                 href="/api-backend/api/health/deep"
                 target="_blank"

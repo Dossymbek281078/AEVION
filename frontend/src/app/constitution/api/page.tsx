@@ -157,10 +157,11 @@ export default function ConstitutionApiPlaygroundPage() {
             {t("constitution.api.intro")}
           </p>
           <div className="mt-3 text-xs">
+            {/* Тот же документ, тоже 404. Ведём на Academy — живой раздел с
+                объяснениями; текст ключа docsLink («Full docs documentation»)
+                остаётся уместным, поэтому i18n не трогаем. */}
             <a
-              href="https://github.com/Dossymbek281078/AEVION/blob/main/docs/constitution-public-api.md"
-              target="_blank"
-              rel="noreferrer"
+              href="/constitution/learn"
               className="text-cyan-300 hover:underline"
             >
               {t("constitution.api.docsLink")}
@@ -328,13 +329,19 @@ export default function ConstitutionApiPlaygroundPage() {
         <footer className="mt-8 text-xs text-[#9aa3c0] max-w-3xl">
           <p>
             {t("constitution.api.footerPre")}{" "}
+            {/* Вело на docs/constitution-public-api.md в приостановленном
+                аккаунте — 404. Убрать нельзя: i18n-ключи footerPre/footerPost
+                дают «(see » и «)», без ссылки осталось бы «(see )», а править
+                их пришлось бы в одиннадцати языках. Поэтому ведём на живую
+                машиночитаемую спеку — она точнее документа, который мог
+                разойтись с кодом. */}
             <a
-              href="https://github.com/Dossymbek281078/AEVION/blob/main/docs/constitution-public-api.md"
+              href="/api-backend/api/openapi.json"
               target="_blank"
               rel="noreferrer"
               className="text-cyan-300 hover:underline"
             >
-              docs/constitution-public-api.md
+              OpenAPI spec
             </a>
             {t("constitution.api.footerPost")}
           </p>

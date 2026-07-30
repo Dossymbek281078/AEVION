@@ -648,12 +648,10 @@ export default function VeilNetXLanding() {
           >
             Live status JSON →
           </Link>
-          <Link
-            href="https://github.com/Dossymbek281078/AEVION"
-            className="px-5 py-2.5 border border-slate-700 hover:bg-slate-900 rounded-lg text-sm font-semibold"
-          >
-            Watch on GitHub →
-          </Link>
+          {/* «Watch on GitHub →» снята 29.07.2026: аккаунт приостановлен,
+              кнопка вела на 404. Вернуть после переезда. Попутно замечено:
+              для внешнего адреса здесь стоял next/link Link вместо <a> —
+              при возврате использовать <a> с target/rel. */}
         </div>
       </section>
 

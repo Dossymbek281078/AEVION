@@ -92,7 +92,14 @@ function formatLaunchDate(iso: string): string {
  */
 function EtaCountdown({ moduleId, color }: { moduleId: string; color: string }) {
   const [info, setInfo] = useState<EtaInfo | null>(null);
-  const [now, setNow] = useState<number>(Date.now());
+  // Было `useState<number>(Date.now())` — react-hooks/purity: инициализатор
+  // вызывается на каждом рендере, а его значение берётся только при первом.
+  // Здесь это ещё и расхождение SSR/гидрации: на сервере одно время, в браузере
+  // другое, и подпись «осталось N дней» могла разойтись между разметками.
+  // Ноль безопасен: пока info не загружен, компонент возвращает null и now
+  // вообще не используется. Тот же приём применён в launch-status — держим
+  // один способ, а не два.
+  const [now, setNow] = useState<number>(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,11 +116,21 @@ function EtaCountdown({ moduleId, color }: { moduleId: string; color: string }) 
   }, [moduleId]);
 
   useEffect(() => {
+    // Первое значение — отдельным таймером на 0 мс, а не прямым setNow в теле
+    // эффекта: прямой вызов ловит react-hooks/set-state-in-effect. Без него
+    // подпись ждала бы первого тика, то есть целую минуту.
+    const first = setTimeout(() => setNow(Date.now()), 0);
     const t = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(t);
+    return () => {
+      clearInterval(t);
+      clearTimeout(first);
+    };
   }, []);
 
-  if (!info || info.tbd || !info.etaDate) return null;
+  // now === 0 означает «эффект ещё не проставил время». Без этой проверки
+  // расчёт ниже дал бы (targetMs - 0) / 86400000 — то есть десятки тысяч дней
+  // от 1970 года, и на экране появилось бы абсурдное число вместо ожидания.
+  if (!info || info.tbd || !info.etaDate || now === 0) return null;
 
   const c = COLORS[color] ?? COLORS.emerald;
   const targetMs = new Date(info.etaDate).getTime();

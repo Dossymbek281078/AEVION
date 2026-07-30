@@ -455,9 +455,12 @@ export default function TroubleshootingPage() {
                 упирался в ошибку, то есть страница «что делать при сбое» сама
                 была сбоем. Ведём на свою /help — она живая. */}
             File an issue at{" "}
-            <a href="/help" style={{ color: C.accent, textDecoration: "none" }}>
+            {/* Link, а не <a>: адрес внутренний, и next/no-html-link-for-pages
+                справедливо возражает — через <a> вместо клиентского перехода
+                была бы полная перезагрузка страницы. */}
+            <Link href="/help" style={{ color: C.accent, textDecoration: "none" }}>
               aevion.app/help
-            </a>
+            </Link>
             {" "}with tag <code style={{ background: "rgba(255,255,255,0.05)", padding: "1px 5px", borderRadius: 3 }}>fintech-bug</code>.
             Include: timestamp (UTC), affected endpoint, request body (redact secrets), response body, and which playbook step you reached.
           </div>

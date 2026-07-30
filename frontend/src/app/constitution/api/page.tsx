@@ -160,12 +160,12 @@ export default function ConstitutionApiPlaygroundPage() {
             {/* Тот же документ, тоже 404. Ведём на Academy — живой раздел с
                 объяснениями; текст ключа docsLink («Full docs documentation»)
                 остаётся уместным, поэтому i18n не трогаем. */}
-            <a
+            <Link
               href="/constitution/learn"
               className="text-cyan-300 hover:underline"
             >
               {t("constitution.api.docsLink")}
-            </a>
+            </Link>
           </div>
         </header>
 

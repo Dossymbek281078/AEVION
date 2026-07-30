@@ -1898,7 +1898,7 @@ export default function QSignPage() {
                 Уводим на собственную живую страницу /sdk («SDK for AEVION Hub»)
                 — она работает и отвечает на тот же вопрос. Возвращать внешнюю
                 ссылку после переезда НЕ обязательно: своя страница лучше. */}
-            <a
+            <Link
               href="/sdk"
               style={{
                 padding: "8px 14px",
@@ -1912,7 +1912,7 @@ export default function QSignPage() {
               }}
             >
               SDK packages ↗
-            </a>
+            </Link>
           </div>
         </div>
 

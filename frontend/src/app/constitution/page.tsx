@@ -648,7 +648,11 @@ export default function ConstitutionPage() {
     } finally {
       setSigning(false);
     }
-  }, [title, sliders, regime, metrics]);
+    // track добавлен в зависимости: он приходит из useFunnel(), то есть может
+    // меняться между рендерами, и без него колбэк держал бы устаревшую версию.
+    // В трёх других местах этого файла (строки ~465, ~546, ~577) он уже был
+    // указан — здесь просто забыли.
+  }, [title, sliders, regime, metrics, track]);
 
   const downloadPdf = useCallback(async () => {
     track("pdf_download", { regime: regime.id });
@@ -685,7 +689,8 @@ export default function ConstitutionPage() {
     } finally {
       setPdfBusy(false);
     }
-  }, [title, sliders, regime, openedArtifactId]);
+    // track из useFunnel() — см. пояснение выше.
+  }, [title, sliders, regime, openedArtifactId, track]);
 
   const publishToPlanet = useCallback(async () => {
     track("planet_publish", { regime: regime.id });
@@ -748,7 +753,11 @@ export default function ConstitutionPage() {
     } finally {
       setPublishing(false);
     }
-  }, [title, sliders, regime, metrics]);
+    // track добавлен в зависимости: он приходит из useFunnel(), то есть может
+    // меняться между рендерами, и без него колбэк держал бы устаревшую версию.
+    // В трёх других местах этого файла (строки ~465, ~546, ~577) он уже был
+    // указан — здесь просто забыли.
+  }, [title, sliders, regime, metrics, track]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">

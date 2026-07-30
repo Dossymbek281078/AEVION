@@ -17,18 +17,23 @@
  * The canonical module registry is the backend file
  * `aevion-globus-backend/src/data/projects.ts`, served at
  * `/api/modules/registry`. As of this file's last audit it holds 38 entries:
- * 35 `status:"live"` + 3 `status:"mvp"`. The public-facing "37 product nodes"
+ * 36 `status:"live"` + 5 `status:"mvp"`. The public-facing "40 product nodes"
  * excludes the `globus` entry, which is the interactive map shell itself, not
- * a product node (38 registry entries − 1 map shell = 37 nodes on the map).
+ * a product node (41 registry entries − 1 map shell = 40 nodes on the map).
+ *
+ * Обновлено 30.07.2026: было 37/35 при 38 записях. Три модуля добавили, а числа
+ * здесь не тронули — питч обещал инвестору МЕНЬШЕ, чем есть. Поймано только
+ * потому, что guard-тест переписан: раньше он сверял константу с захардкоженным
+ * числом (expect(LIVE_MODULES).toBe(35)) и молчал при любом изменении реестра.
  * If you add/remove a module in projects.ts, update MODULE_NODES / LIVE_MODULES
  * here and the guard-test expectations that lock them.
  */
 
 // ── Ecosystem scale ────────────────────────────────────────────────────────
-/** Public "product nodes on the Globus map" = 38 registry entries − the globus map shell. */
-export const MODULE_NODES = 37;
-/** Registry entries with status:"live". The remaining 3 are status:"mvp". */
-export const LIVE_MODULES = 35;
+/** Public "product nodes on the Globus map" = 41 registry entries − the globus map shell. */
+export const MODULE_NODES = 40;
+/** Registry entries with status:"live". The remaining 5 are status:"mvp". */
+export const LIVE_MODULES = 36;
 /** Honest qualitative framing (from the #484 objectivity audit): deployed ≠ feature-complete. */
 export const FEATURE_COMPLETE_LABEL = "~a dozen feature-complete";
 

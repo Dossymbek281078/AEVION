@@ -77,13 +77,41 @@ describe("pitch numbers — retired figures must not resurface", () => {
  * updated to match — so the single source of truth can't silently drift.
  */
 describe("pitchFacts — canonical counts stay in sync with the registry", () => {
-  it("MODULE_NODES = 37 (38 registry entries − the globus map shell)", async () => {
+  // Эти две проверки раньше выглядели так:
+  //     expect(LIVE_MODULES).toBe(35);
+  // то есть сверяли константу с ЗАХАРДКОЖЕННЫМ числом, а не с реестром. Тест был
+  // зелёным и не защищал ни от чего: он подтверждал, что 35 равно 35. Реестр можно
+  // было менять сколько угодно — guard молчал, и 30.07.2026 обнаружилось, что в
+  // projects.ts уже 41 запись (36 live + 5 mvp), а питч всё ещё обещает 37/35.
+  //
+  // Теперь считаем ФАКТ из projects.ts. Добавили модуль — тест падает и напоминает
+  // обновить материалы для инвестора вместе с кодом.
+  function registryCounts(): { entries: number; live: number; mvp: number } {
+    const registry = readFileSync(
+      path.join(process.cwd(), "..", "aevion-globus-backend", "src", "data", "projects.ts"),
+      "utf8",
+    );
+    const statuses = registry.match(/status:\s*"(live|mvp)"/g) ?? [];
+    return {
+      entries: statuses.length,
+      live: statuses.filter((s) => s.includes('"live"')).length,
+      mvp: statuses.filter((s) => s.includes('"mvp"')).length,
+    };
+  }
+
+  it("MODULE_NODES совпадает с реестром (записи минус globus — сам холст карты)", async () => {
     const { MODULE_NODES } = await import("@/data/pitchFacts");
-    expect(MODULE_NODES).toBe(37);
+    const { entries } = registryCounts();
+    // Страховка от сломанного разбора: пустой список статусов дал бы 0 и тест
+    // «прошёл» бы на пустоте, как это уже было с прошлой версией guard'а.
+    expect(entries).toBeGreaterThan(20);
+    expect(MODULE_NODES).toBe(entries - 1);
   });
 
-  it("LIVE_MODULES = 35 (status:\"live\" in projects.ts)", async () => {
+  it("LIVE_MODULES совпадает с числом status:\"live\" в projects.ts", async () => {
     const { LIVE_MODULES } = await import("@/data/pitchFacts");
-    expect(LIVE_MODULES).toBe(35);
+    const { live } = registryCounts();
+    expect(live).toBeGreaterThan(20);
+    expect(LIVE_MODULES).toBe(live);
   });
 });

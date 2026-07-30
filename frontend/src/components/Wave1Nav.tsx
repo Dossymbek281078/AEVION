@@ -3,7 +3,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ldFees, todayRealizedPnl } from "@/app/qtrade/fees";
 import { ldClosed } from "@/app/qtrade/marketSim";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
 type Props = {
   hidePlanet?: boolean;
   variant?: "light" | "dark";

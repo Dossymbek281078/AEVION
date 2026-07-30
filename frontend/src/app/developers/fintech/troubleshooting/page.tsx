@@ -450,9 +450,13 @@ export default function TroubleshootingPage() {
         <div style={{ marginTop: 36, padding: "16px 20px", background: C.panel, borderRadius: 12, border: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 8 }}>Still stuck?</div>
           <div style={{ fontSize: 13, color: C.dim, lineHeight: 1.65 }}>
+            {/* Вело в GitHub Issues приостановленного аккаунта — 404. Это
+                КАНАЛ ПОДДЕРЖКИ: человек с проблемой шёл сообщить о баге и
+                упирался в ошибку, то есть страница «что делать при сбое» сама
+                была сбоем. Ведём на свою /help — она живая. */}
             File an issue at{" "}
-            <a href="https://github.com/Dossymbek281078/AEVION/issues" style={{ color: C.accent, textDecoration: "none" }}>
-              github.com/Dossymbek281078/AEVION/issues
+            <a href="/help" style={{ color: C.accent, textDecoration: "none" }}>
+              aevion.app/help
             </a>
             {" "}with tag <code style={{ background: "rgba(255,255,255,0.05)", padding: "1px 5px", borderRadius: 3 }}>fintech-bug</code>.
             Include: timestamp (UTC), affected endpoint, request body (redact secrets), response body, and which playbook step you reached.

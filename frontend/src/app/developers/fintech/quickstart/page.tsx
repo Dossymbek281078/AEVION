@@ -125,7 +125,10 @@ export default function FintechQuickstartPage() {
               { href: "/developers/fintech/troubleshooting", label: "Troubleshooting — 8 common issues with severity + fix steps" },
               { href: "/fintech/status", label: "Live health dashboard — module uptime" },
               { href: "/fintech", label: "Fintech ecosystem overview" },
-              { href: "https://github.com/Dossymbek281078/AEVION/issues", label: "GitHub Issues — report bugs or request endpoints" },
+              // Был GitHub Issues (404, аккаунт приостановлен). Здесь это ещё и
+              // рендерилось через next/link Link, то есть внешний адрес шёл как
+              // внутренний. Теперь адрес действительно внутренний — /help.
+              { href: "/help", label: "Help & support — report bugs or request endpoints" },
             ].map((l) => (
               <Link key={l.href} href={l.href} style={{ fontSize: 13, color: "#a78bfa", textDecoration: "none" }}>
                 → {l.label}

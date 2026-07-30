@@ -1150,12 +1150,15 @@ SMOKE_BASE=https://api.aevion.app npm run smoke:all`}</Pre>
               aevion.app/status
             </a>
             <br />
-            <strong>Issues:</strong>{" "}
+            {/* Вело в GitHub Issues приостановленного аккаунта (404) — канал
+                поддержки не работал. Ведём на живую /help; текст заменён вместе
+                с адресом, подпись обязана совпадать с тем, что откроется. */}
+            <strong>Support:</strong>{" "}
             <a
-              href="https://github.com/Dossymbek281078/AEVION/issues"
+              href="/help"
               style={{ color: ACCENT_PURPLE, textDecoration: "none" }}
             >
-              github.com/Dossymbek281078/AEVION/issues
+              aevion.app/help
             </a>
           </P>
         </footer>

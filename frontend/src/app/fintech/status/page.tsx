@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
+import Link from "next/link";
 import { getApiBase, getBackendOrigin } from "@/lib/apiBase";
 import LiveStatus from "./LiveStatus";
 
@@ -291,18 +292,17 @@ export default async function FintechStatusPage() {
             <code style={S.codeDim}>{probedAtIso}</code>
           </p>
           <div style={S.links}>
-            <a href="/developers/fintech" style={S.linkBtn}>Full API reference →</a>
+            {/* Link, а не <a>: адрес внутренний, иначе полная перезагрузка вместо перехода. */}
+            <Link href="/developers/fintech" style={S.linkBtn}>Full API reference →</Link>
             <a href={`${backendOrigin}/api/openapi.json`} target="_blank" rel="noopener noreferrer" style={S.linkBtn}>
               Raw OpenAPI ↗
             </a>
-            <a
-              href="https://aevion-production-a70c.up.railway.app/api/openapi.json"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={S.linkBtnMuted}
-            >
-              Production OpenAPI ↗
-            </a>
+            {/* Убрана ссылка «Production OpenAPI» с ЗАШИТЫМ адресом Railway
+                (aevion-production-a70c.up.railway.app). Две причины: она
+                дублировала соседнюю «Raw OpenAPI», которая ведёт туда же через
+                getBackendOrigin(), и показывала посетителю служебный домен
+                инфраструктуры — при смене хостинга такая ссылка умрёт молча.
+                Тот же дефект уже правился на /partner. */}
           </div>
         </section>
 

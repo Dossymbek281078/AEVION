@@ -852,7 +852,14 @@ smetaTrainerRouter.delete("/admin/webhooks/:id", writeLimiter, async (req, res) 
   if (!userId) return res.status(401).json({ error: "auth_required" });
   const id = String(req.params.id ?? "");
   const all = await loadWebhooks();
-  if (!(id in all)) return res.status(404).json({ error: "not_found" });
+  // `id` приходит прямо из адреса, а `all` — обычный объект из JSON-файла.
+  // С оператором `in` запрос DELETE /admin/webhooks/constructor проходил эту
+  // проверку насквозь (ключ унаследован от Object.prototype): 404 не
+  // возвращался, delete ничего не удалял, файл переписывался зря, а вызывающему
+  // отвечали ok:true про вебхук, которого никогда не было.
+  if (!Object.prototype.hasOwnProperty.call(all, id)) {
+    return res.status(404).json({ error: "not_found" });
+  }
   delete all[id];
   await saveWebhooks(all);
   res.json({ ok: true });

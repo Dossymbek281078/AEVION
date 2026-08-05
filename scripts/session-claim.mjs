@@ -84,6 +84,51 @@ function dirtyInZone(wtPath, prefixes) {
   return files.filter((f) => prefixes.some((p) => p && f.startsWith(p)));
 }
 
+// Files another branch has ALREADY COMMITTED under the given zone prefixes.
+//
+// Without this the guard has a blind spot that costs exactly what it exists to
+// prevent. On 05.08.2026 two sessions fixed the same defect in
+// routes/pricing.ts: one claimed "pricing", the other claimed "qskyway" and
+// committed its pricing.ts change hours earlier. Nothing was dirty, and the
+// branch name said nothing about pricing — so the check answered FREE, and the
+// duplicate surfaced only as a merge conflict on identical lines.
+//
+// Committed work is a stronger claim than uncommitted work, not a weaker one:
+// it means someone already finished there.
+// Ветки, тронутые за последние две недели. Дублирование случается между
+// ЖИВЫМИ сессиями, а сравнение всех 48 worktree подряд стоило лишних секунд —
+// команду, которую зовут перед каждой правкой, при задержке просто перестают
+// звать. Замерено 05.08.2026: было 4.5 с без этой проверки, 11 с со сплошным
+// перебором, 7 с с отсечкой по свежести. Итоговая цена слепого пятна — 2.5 с.
+const RECENT_BRANCHES = (() => {
+  const out = sh(
+    `git for-each-ref --sort=-committerdate --format="%(refname:short) %(committerdate:unix)" refs/heads`,
+    ROOT,
+  );
+  const cutoff = Math.floor(Date.now() / 1000) - 14 * 24 * 3600;
+  const set = new Set();
+  for (const line of out.split("\n")) {
+    const [name, ts] = line.trim().split(/\s+/);
+    if (name && Number(ts) >= cutoff) set.add(name);
+  }
+  return set;
+})();
+
+function committedInZone(branch, prefixes) {
+  if (!branch || branch === "main" || branch === "master") return [];
+  if (!RECENT_BRANCHES.has(branch)) return [];
+  // Three dots: only what the branch added since it diverged, not what main
+  // moved on to — otherwise every stale branch looks like it touches everything.
+  // Пути отдаём git'у, а не фильтруем в JS: без этого проверка по 48 worktree
+  // занимала 11 секунд вместо секунды, а команду, которую зовут перед каждой
+  // правкой, при такой задержке просто перестают звать.
+  const paths = prefixes.filter(Boolean).map((p) => `"${p}"`).join(" ");
+  if (!paths) return [];
+  const out = sh(`git diff --name-only main...${branch} -- ${paths}`, ROOT);
+  if (!out) return [];
+  return out.split("\n").map((f) => f.trim()).filter(Boolean);
+}
+
 const arg = process.argv[2];
 
 if (arg === "--map") {
@@ -116,30 +161,57 @@ const prefixes = [appDir, ...routes].filter(Boolean);
 const token = (ALIAS[id]?.app || id).toLowerCase();
 
 const conflicts = [];
+const overlaps = [];
 for (const wt of wts) {
   if (resolve(wt.path) === self) continue;
   const branch = (wt.branch || "").toLowerCase();
   const byName = branch.includes(token) || branch.includes(id.toLowerCase());
   const byFiles = dirtyInZone(wt.path, prefixes);
-  if (byName || byFiles.length) {
-    conflicts.push({ wt, byName, byFiles });
-  }
+  const byCommits = committedInZone(wt.branch, prefixes);
+  // Закоммиченное НЕ блокирует. Иначе на живом репозитории почти любая зона
+  // выглядит занятой: pricing.ts, например, тронут четырьмя ветками сразу.
+  // Сторож, который звенит всегда, перестаёт значить что-либо — его глушат, и
+  // вместе с ним теряются настоящие срабатывания.
+  if (byName || byFiles.length) conflicts.push({ wt, byName, byFiles, byCommits });
+  else if (byCommits.length) overlaps.push({ wt, byCommits });
 }
 
 console.log(`Module "${id}"  zones: ${prefixes.join(", ") || "(core)"}\n`);
+// Перекрытие по УЖЕ ЗАКОММИЧЕННЫМ файлам печатается отдельно от блокировки:
+// это не «занято», а «здесь уже сделано — посмотри, прежде чем делать снова».
+function printOverlaps() {
+  if (!overlaps.length) return;
+  console.log(`\nℹ️  В этой зоне уже есть закоммиченные правки в других ветках`);
+  console.log(`   (не блокирует — но сначала посмотрите, не сделано ли уже):`);
+  for (const o of overlaps) {
+    console.log(`   • ${o.wt.branch}`);
+    for (const f of o.byCommits.slice(0, 4)) console.log(`       ${f}`);
+  }
+  console.log(`   Посмотреть: git log --oneline main..<ветка> -- <файл>`);
+}
+
 if (conflicts.length === 0) {
   console.log(`✅ FREE — no other worktree is claiming "${id}". Safe to work here.`);
   console.log(`   Reminder: use a branch named feat/${id}-... and commit --only your zone.`);
+  printOverlaps();
   process.exit(0);
 }
 
 console.log(`⚠️  CLAIMED by another worktree — do NOT edit "${id}" here:`);
 for (const c of conflicts) {
-  const why = [c.byName ? "branch name" : null, c.byFiles.length ? `${c.byFiles.length} dirty file(s)` : null]
+  const why = [
+    c.byName ? "branch name" : null,
+    c.byFiles.length ? `${c.byFiles.length} dirty file(s)` : null,
+    c.byCommits.length ? `${c.byCommits.length} already committed` : null,
+  ]
     .filter(Boolean)
     .join(" + ");
   console.log(`   • ${c.wt.branch}  (${why})  ${c.wt.path}`);
   for (const f of c.byFiles.slice(0, 5)) console.log(`       ${f}`);
+  // Закоммиченное показываем отдельной пометкой: это не «кто-то сейчас правит»,
+  // а «здесь уже сделано» — реакция другая, вплоть до «не делай второй раз».
+  for (const f of c.byCommits.slice(0, 5)) console.log(`       ${f}  (уже закоммичено)`);
 }
+printOverlaps();
 console.log(`\nPick a different, free module or coordinate before touching this one.`);
 process.exit(1);

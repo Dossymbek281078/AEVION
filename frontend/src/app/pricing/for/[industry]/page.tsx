@@ -201,7 +201,17 @@ interface PricingPayload {
 export default function IndustryLandingPage() {
   const { t } = useI18n();
   const params = useParams<{ industry: string }>();
-  const industry = INDUSTRIES[params?.industry as IndustryId];
+  // Обращаться к словарю ключом из адреса можно только через hasOwnProperty:
+  // INDUSTRIES["constructor"] вернёт функцию из прототипа — она истинна, ветка
+  // "не найдено" ниже её пропускала, и на industry.recommendedModules страница
+  // падала с 500. Воспроизведено на проде 05.08.2026 для constructor,
+  // __proto__ и toString.
+  const industryKey = params?.industry;
+  const industry: IndustryConfig | undefined =
+    typeof industryKey === "string" &&
+    Object.prototype.hasOwnProperty.call(INDUSTRIES, industryKey)
+      ? INDUSTRIES[industryKey as IndustryId]
+      : undefined;
   const [data, setData] = useState<PricingPayload | null>(null);
 
   useEffect(() => {

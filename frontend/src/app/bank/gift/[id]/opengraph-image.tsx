@@ -36,6 +36,17 @@ const THEME_TEXT: Record<string, string> = {
   wedding: "#831843",
 };
 
+// Тема приходит из ?p= в адресе, то есть снаружи. Проверять её через
+// `themeId in THEME_GRADIENT` нельзя: `in` идёт по цепочке прототипов, и
+// "constructor" проходил проверку — в gradient попадала функция вместо строки,
+// превью подарочной ссылки отрисовывалось неправильно. У Set цепочки нет:
+// THEME_IDS.has("constructor") — честное false.
+const THEME_IDS = new Set(Object.keys(THEME_GRADIENT));
+
+export function resolveThemeId(raw: string | undefined): string {
+  return raw && THEME_IDS.has(raw) ? raw : "general";
+}
+
 function tryDecode(p: string | undefined): DecodedGift | null {
   if (!p) return null;
   try {
@@ -60,7 +71,7 @@ export default function GiftOgImage({
   searchParams?: { p?: string };
 }) {
   const decoded = tryDecode(searchParams?.p);
-  const themeId = decoded?.themeId && decoded.themeId in THEME_GRADIENT ? decoded.themeId : "general";
+  const themeId = resolveThemeId(decoded?.themeId);
   const gradient = THEME_GRADIENT[themeId];
   const icon = THEME_ICON[themeId];
   const textColor = THEME_TEXT[themeId] ?? "#ffffff";

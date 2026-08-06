@@ -172,7 +172,17 @@ for (const wt of wts) {
   // выглядит занятой: pricing.ts, например, тронут четырьмя ветками сразу.
   // Сторож, который звенит всегда, перестаёт значить что-либо — его глушат, и
   // вместе с ним теряются настоящие срабатывания.
-  if (byName || byFiles.length) conflicts.push({ wt, byName, byFiles, byCommits });
+  // Возраст последнего коммита чужой ветки. Без него «занято» звучит одинаково
+  // и для сессии, которая работает прямо сейчас, и для брошенной. 06.08.2026
+  // страж сказал CLAIMED про feat/qskyway-airspace-trust — я не стал трогать
+  // зону, а ветка не менялась ДЕВЯТЬ дней при чистом каталоге: готовые фиксы
+  // живых дефектов прода простаивали всё это время.
+  let ageDays = null;
+  if (wt.branch) {
+    const ts = sh(`git log -1 --format=%ct ${wt.branch}`, ROOT);
+    if (ts) ageDays = Math.floor((Date.now() / 1000 - Number(ts)) / 86400);
+  }
+  if (byName || byFiles.length) conflicts.push({ wt, byName, byFiles, byCommits, ageDays });
   else if (byCommits.length) overlaps.push({ wt, byCommits });
 }
 
@@ -201,6 +211,9 @@ console.log(`⚠️  CLAIMED by another worktree — do NOT edit "${id}" here:`)
 for (const c of conflicts) {
   const why = [
     c.byName ? "branch name" : null,
+    // Неделя без коммитов — повод посмотреть, жива ли та сессия, а не молча
+    // уступать зону: работа могла быть доделана и брошена.
+    c.ageDays !== null && c.ageDays >= 7 ? `⚠ последний коммит ${c.ageDays} дн. назад` : null,
     c.byFiles.length ? `${c.byFiles.length} dirty file(s)` : null,
     c.byCommits.length ? `${c.byCommits.length} already committed` : null,
   ]

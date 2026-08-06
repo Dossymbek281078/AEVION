@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
@@ -231,25 +231,17 @@ export default function IndustryLandingPage() {
     }
   }, [industry]);
 
+  // Раньше здесь рисовался блок «отрасль не найдена» — с кодом ответа 200.
+  // Для человека это выглядело честно, а поисковику говорило «страница
+  // существует»: под любой выдуманный адрес получалась индексируемая страница
+  // с уникальным заголовком. Массу почти пустых страниц поисковики считают
+  // манипуляцией и понижают весь домен, а не отдельный адрес.
+  //
+  // notFound() в клиентском компоненте работает — проверено на нашей же
+  // /smeta-trainer/certificate-exam/<hash>: прод отвечает 404 на любой
+  // выдуманный хеш. Отраслей конечные пять, всё остальное честно 404.
   if (!industry) {
-    return (
-      <ProductPageShell>
-        <div style={{ padding: 60, textAlign: "center" }}>
-          <h1>{t("pricing.forIndustry.notFound.title")}</h1>
-          <p style={{ color: "#64748b" }}>
-            {t("pricing.forIndustry.notFound.available")}{" "}
-            {Object.keys(INDUSTRIES).map((k) => (
-              <Link key={k} href={`/pricing/for/${k}`} style={{ color: "#0d9488", marginRight: 12 }}>
-                {t(INDUSTRIES[k as IndustryId].nameKey)}
-              </Link>
-            ))}
-          </p>
-          <Link href="/pricing" style={{ color: "#0d9488", fontWeight: 700 }}>
-            {t("pricing.forIndustry.backToPricing")}
-          </Link>
-        </div>
-      </ProductPageShell>
-    );
+    notFound();
   }
 
   const recommendedTier = data?.tiers.find((tier) => tier.id === industry.recommendedTier);

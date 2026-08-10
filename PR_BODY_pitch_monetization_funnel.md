@@ -86,6 +86,15 @@ Constitution Free/Pro $9/Team $49 (`constitutionCheckout.ts`), module add-on chi
   Explanatory text is excused only on real comment lines, so adding the word "repriced"
   to a UI string cannot smuggle a wrong price past it — verified.
 
+## Also verified, no defect
+
+The promo-discount cap (`MAX_PROMO_DISCOUNT_RATIO`) is applied in **both** `buildQuote`
+and `checkout.ts`, so the calculator cannot promise a discount larger than the charge
+applies. Annual pricing agrees too: `checkout.ts` charges `tier.priceAnnualTotal` (×10),
+the figure the pricing pages display. Studio Pro is consistent at $149 across `/devhub`,
+`/studio`, `lib/products.ts` and `revenue.ts` — both pages now read the catalogue for
+the price *and* the checkout URL instead of keeping their own copies.
+
 ## Needs a decision, not code
 
 `/partner` and `/pitch` publish two different revenue curves for the same company —

@@ -55,7 +55,7 @@ frontend-tests-and-build:
   # сообщает; задача заведена отдельно.
   script:
     - cd frontend
-    - npm install --no-audit --no-fund
+    - npm ci --no-audit --no-fund
     - npx vitest run
     # Сборка обязательна, одних тестов НЕ ХВАТАЕТ. Проверено 10.08.2026:
     # 438 тестов были зелёными дважды подряд при странице /pitch, которая

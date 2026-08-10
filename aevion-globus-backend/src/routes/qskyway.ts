@@ -665,7 +665,18 @@ qskywayRouter.get("/cities", (_req: Request, res: Response) => {
     // Tokyo, where a regulator governs every flight but publishes no altitudes.
     // Kazakhstan publishes neither, so no provider can obey anything there yet.
     airspaceCoverage: {
-      withFeed: Object.keys(CITIES).filter((id) => AIRSPACE[id] || PERMISSION[id]).length,
+      // `withFeed` называлось не тем, что считало: `AIRSPACE[id] || PERMISSION[id]`
+      // — это ЛЮБОЙ регуляторный слой, а фид из трёх городов есть у одного
+      // (Нью-Йорк). У Астаны правило опубликовано документом eAIP, у Токио —
+      // растровым слоем MLIT. На странице формулировка была верной
+      // («регуляторный слой: 3 из 3»), а поле API — нет, и читающий его напрямую
+      // делал вывод, что фид есть у всех. Модуль как раз приглашает читать API,
+      // так что цена такой опечатки в имени выше обычной.
+      //
+      // Теперь два поля, и разница между ними — ровно то, чем модуль дорожит:
+      // «нет API» не равно «нет правила».
+      withRegulatoryLayer: Object.keys(CITIES).filter((id) => AIRSPACE[id] || PERMISSION[id]).length,
+      withFeed: Object.keys(CITIES).filter((id) => AIRSPACE[id]).length,
       withCeilings: Object.keys(CITIES).filter((id) => AIRSPACE[id]).length,
       withPermissionRegime: Object.keys(CITIES).filter((id) => PERMISSION[id]).length,
       total: Object.keys(CITIES).length,

@@ -164,6 +164,26 @@ function detectBrowserLang(): Lang {
   return "en";
 }
 
+/**
+ * Start fetching the visitor's dictionary the moment this module runs, rather
+ * than waiting for React to mount and an effect to fire.
+ *
+ * Between those two points sits the hydration of a large page — on a mid-range
+ * phone, hundreds of milliseconds during which the chrome shows its English
+ * fallback for someone who chose Russian. The request costs nothing extra: it
+ * is the same fetch the provider would make, deduplicated by loadDict, only
+ * started earlier. Guarded on `window` because this module is also evaluated on
+ * the server, where there is no visitor to have a preference.
+ */
+if (typeof window !== "undefined") {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    void loadDict(isLang(saved) ? saved : detectBrowserLang());
+  } catch {
+    // Private mode can refuse localStorage; the provider's effect still runs.
+  }
+}
+
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>("en");
   const [langReady, setLangReady] = useState(false);

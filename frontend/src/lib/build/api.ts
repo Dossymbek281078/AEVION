@@ -1921,9 +1921,11 @@ export async function completePasswordReset(email: string, token: string, newPas
 
 /** Request a verification email for the currently logged-in user. */
 export async function requestEmailVerification(): Promise<void> {
-  const token = typeof window !== "undefined"
-    ? localStorage.getItem("build_auth_token") || sessionStorage.getItem("build_auth_token")
-    : null;
+  // Токен — из собственного стора модуля (lib/build/auth.ts, zustand
+  // persist под ключом "aevion-build-auth"). Здесь читался "build_auth_token"
+  // — имя, в которое НИКТО не пишет, поэтому заголовок уходил пустым и
+  // подтверждение почты молча не работало ни у кого.
+  const token = getAuthToken();
   const res = await fetch(apiUrl("/api/auth/email/verify/request"), {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -1937,9 +1939,11 @@ export async function requestEmailVerification(): Promise<void> {
 
 /** Complete email verification with the token from the verification link. */
 export async function completeEmailVerification(token: string): Promise<void> {
-  const authToken = typeof window !== "undefined"
-    ? localStorage.getItem("build_auth_token") || sessionStorage.getItem("build_auth_token")
-    : null;
+  // Токен — из собственного стора модуля (lib/build/auth.ts, zustand
+  // persist под ключом "aevion-build-auth"). Здесь читался "build_auth_token"
+  // — имя, в которое НИКТО не пишет, поэтому заголовок уходил пустым и
+  // подтверждение почты молча не работало ни у кого.
+  const authToken = getAuthToken();
   const res = await fetch(apiUrl("/api/auth/email/verify/complete"), {
     method: "POST",
     headers: {

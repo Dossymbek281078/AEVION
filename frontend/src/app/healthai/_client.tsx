@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 
 const BACKEND =
@@ -24,17 +25,14 @@ const BACKEND =
 
 const LS_PROFILE_ID = "aevion:healthai:profileId";
 const LS_TAB = "aevion:healthai:tab";
-const LS_AUTH_TOKEN = "aevion:auth:token";
 const LS_NOTIF_OPTIN = "aevion:healthai:notif";
 
+// Токен — из общего хелпера. Здесь читался "aevion:auth:token" — имя,
+// в которое никто в приложении не пишет: вход сохраняет JWT в
+// "aevion_auth_token_v1" (src/lib/auth.ts). Заголовок уходил пустым,
+// и залогиненный пользователь обращался к модулю как аноним.
 function authHeader(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  try {
-    const t = window.localStorage.getItem(LS_AUTH_TOKEN);
-    return t ? { Authorization: `Bearer ${t}` } : {};
-  } catch {
-    return {};
-  }
+  return getAuthHeaders();
 }
 
 type Lang = "en" | "ru";
@@ -719,9 +717,9 @@ export default function HealthAIPage() {
   const [familyProfiles, setFamilyProfiles] = useState<Array<Profile & { bmi: number }>>([]);
   const [hasAuthToken, setHasAuthToken] = useState(false);
   useEffect(() => {
-    try {
-      setHasAuthToken(!!window.localStorage.getItem(LS_AUTH_TOKEN));
-    } catch {}
+    // Тот же мёртвый ключ: признак «пользователь вошёл» был всегда ложным,
+    // поэтому модуль показывал состояние для неавторизованного даже после входа.
+    setHasAuthToken(isAuthenticated());
   }, []);
 
   // Check draft

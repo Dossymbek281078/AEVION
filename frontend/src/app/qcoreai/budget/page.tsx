@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthHeaders } from "@/lib/auth";
 
+// Токен берётся через общий хелпер. Здесь читались "aevion_token" и
+// "qcoreai_token" — имена, в которые НИКТО в приложении не пишет: вход
+// сохраняет JWT в "aevion_auth_token_v1" (src/lib/auth.ts). Заголовок
+// уходил пустым, и залогиненный пользователь получал 401 как аноним.
 function bearerHeader(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  const t = localStorage.getItem("aevion_token") ?? sessionStorage.getItem("qcoreai_token") ?? "";
-  return t ? { Authorization: `Bearer ${t}` } : {};
+  return getAuthHeaders();
 }
 
 interface SpendSummary {

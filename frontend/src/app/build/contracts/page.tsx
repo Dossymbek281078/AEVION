@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken as getBuildToken } from "@/lib/build/auth";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
@@ -87,7 +88,8 @@ function Body() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${typeof window !== "undefined" ? localStorage.getItem("build_token") ?? "" : ""}`,
+          // Токен модуля build (свой стор), а не мёртвый ключ "build_token".
+          ...(getBuildToken() ? { Authorization: `Bearer ${getBuildToken()}` } : {}),
         },
       });
       const json = await res.json();

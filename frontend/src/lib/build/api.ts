@@ -1963,9 +1963,33 @@ export const buildApi = {
       "GET", "/api/build/references/my"
     ),
   workerReferences: (userId: string) =>
-    call<{ references: Array<{ id: string; projectId: string; rating: number; text: string; recommend: boolean; createdAt: string; projectTitle?: string; authorName?: string }>; total: number }>(
-      "GET", `/api/build/worker-references/${userId}`
+    call<{
+      references: Array<{
+        id: string;
+        projectId: string;
+        authorId: string;
+        rating: number;
+        text: string;
+        recommend: boolean;
+        createdAt: string;
+        projectTitle?: string;
+        authorName?: string;
+        authorPhoto?: string | null;
+      }>;
+      total: number;
+      avgRating: number | null;
+    }>("GET", `/api/build/worker-references/${encodeURIComponent(userId)}`),
+  // Public profile surfaces: someone else's posts, and the document types an
+  // admin has verified for them (the endpoint returns VERIFIED rows only).
+  userStories: (userId: string) =>
+    call<{ items: BuildStory[]; total: number }>(
+      "GET", `/api/build/stories/by-user/${encodeURIComponent(userId)}`,
     ),
+  userDocuments: (userId: string) =>
+    call<{
+      items: Array<{ id: string; docType: string; status: string; verifiedAt: string | null }>;
+      total: number;
+    }>("GET", `/api/build/documents/user/${encodeURIComponent(userId)}`),
   createReference: (projectId: string, input: { workerId: string; rating: number; text: string; recommend: boolean }) =>
     call<{ id: string }>("POST", `/api/build/projects/${projectId}/references`, input),
   deleteReference: (id: string) =>

@@ -225,3 +225,72 @@ describe("prices — derived surfaces stay in sync with the backend tier registr
     });
   }
 });
+
+/**
+ * The same drift, one level down: per-product prices quoted on marketing and
+ * investor surfaces while the charging code lives elsewhere in the backend.
+ * Each case below was a real wrong number found on 2026-08-10, so each is
+ * pinned to the file that actually decides what a customer pays.
+ */
+
+const BACKEND_SRC = path.resolve(FRONTEND_ROOT, "../aevion-globus-backend/src");
+
+/** Read a backend file, failing with a useful message if the layout moved. */
+function readBackend(rel: string): string {
+  const abs = path.join(BACKEND_SRC, rel);
+  try {
+    return readFileSync(abs, "utf8");
+  } catch {
+    throw new Error(
+      `Could not read ${abs}. If the backend was restructured, repoint this guard — ` +
+        "do not delete it; it exists because these numbers drifted silently once.",
+    );
+  }
+}
+
+describe("product prices — marketing copy stays pinned to the charging code", () => {
+  it("the All-Access upgrade banner carries no hardcoded price", () => {
+    const src = readFileSync(path.join(FRONTEND_ROOT, "src/components/UpgradeButton.tsx"), "utf8");
+    // This banner renders on 9 module pages next to a live checkout. It sat at
+    // "$59/мес" — a number no tier ever charged. The price must be imported.
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    expect(
+      /\$\s?\d/.test(code),
+      "UpgradeButton.tsx must not type a price literal — import it from @/data/pitchFacts.",
+    ).toBe(false);
+    expect(src).toContain("LIVE_TOP_TIER_MONTHLY");
+  });
+
+  it("/investor quotes the live Bureau Verified price", () => {
+    const payment = readBackend("lib/payment/index.ts");
+    // getVerifiedTierPriceCents(): the env override is a deployment concern;
+    // the default in code is what the published page should quote.
+    const m = payment.match(/BUREAU_VERIFIED_PRICE_CENTS[\s\S]{0,200}?return\s+(\d+);/);
+    expect(m, "Could not read the Verified-tier default price from lib/payment/index.ts").toBeTruthy();
+    const usd = Number(m![1]) / 100;
+
+    const investor = readFileSync(path.join(FRONTEND_ROOT, "src/app/investor/page.tsx"), "utf8");
+    expect(
+      investor,
+      `Bureau Verified is charged at $${usd}/cert — /investor must not quote a different figure.`,
+    ).toContain(`{ tier: "Verified", price: "$${usd}"`);
+  });
+
+  it("/investor quotes the real QBuild hire-fee range", () => {
+    const build = readBackend("lib/build/index.ts");
+    // hireFeeBps/10000 of the accepted salary, tier-adjusted at hire time.
+    const bps = [...build.matchAll(/hireFeeBps:\s*(\d+),/g)]
+      .map((x) => Number(x[1]))
+      .filter((n) => n > 0);
+    expect(bps.length, "No hireFeeBps values found in lib/build/index.ts").toBeGreaterThan(1);
+    const base = Math.max(...bps) / 100;
+    const best = Math.min(...bps) / 100;
+
+    const investor = readFileSync(path.join(FRONTEND_ROOT, "src/app/investor/page.tsx"), "utf8");
+    expect(
+      investor,
+      `The hire fee runs ${base}% (default recruiter tier) down to ${best}% (Platinum). ` +
+        "It once read \"1.5%\" here — 8× below what the platform actually takes.",
+    ).toContain(`price: "${base}% → ${best}%"`);
+  });
+});

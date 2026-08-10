@@ -117,6 +117,10 @@ export default function TikTokPublisherPage() {
     text: string;
     spinning?: boolean;
   } | null>(null);
+  // Posting is irreversible on a real profile, so the same URL cannot be sent
+  // twice by accident: after a successful queue the button stays out until the
+  // creator actually changes the link.
+  const [queuedUrl, setQueuedUrl] = useState<string | null>(null);
   const cancelPolling = useRef<(() => void) | null>(null);
 
   // A tab closed mid-publish must not leave a timer polling forever.
@@ -305,6 +309,7 @@ export default function TikTokPublisherPage() {
         setPostMsg({ kind: "err", text: `Не удалось отправить: ${detail || errorText(j.error, "ошибка")}` });
       } else {
         setPostMsg({ kind: "ok", text: "Задание принято TikTok." });
+        setQueuedUrl(url);
         pollPublishStatus(j.publishId);
       }
     } catch (e: any) {
@@ -331,7 +336,9 @@ export default function TikTokPublisherPage() {
   const disclosureIncomplete = discloseCommercial && !brandOrganic && !brandContent;
   // Without the creator's allowed privacy levels a post can only be rejected,
   // so the button stays out of reach instead of promising something it cannot do.
-  const canPublish = privacyOptions.length > 0 && !!privacy && !disclosureIncomplete;
+  const alreadyQueued = !!queuedUrl && queuedUrl === videoUrl.trim();
+  const canPublish =
+    privacyOptions.length > 0 && !!privacy && !disclosureIncomplete && !alreadyQueued;
 
   // Ticking «Branded content» while «Только я» was selected must not leave a
   // combination TikTok will reject sitting in the form.
@@ -575,7 +582,9 @@ export default function TikTokPublisherPage() {
                 </button>
                 {!canPublish && !posting && (
                   <p className="ttp-fine">
-                    {brandedContentBlockedByAudit
+                    {alreadyQueued
+                      ? "Этот ролик уже отправлен. Чтобы опубликовать другой, замените ссылку."
+                      : brandedContentBlockedByAudit
                       ? "Этому аккаунту TikTok пока разрешает только статус «Только я» — так рекламу по договору публиковать нельзя. Снимите отметку «Реклама по договору» либо дождитесь прохождения аудита TikTok."
                       : !privacyOptions.length
                         ? "Публикация недоступна, пока TikTok не вернул настройки аккаунта. Переподключите аккаунт."

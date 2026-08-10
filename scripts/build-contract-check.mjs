@@ -22,6 +22,19 @@
  * Usage: node scripts/build-contract-check.mjs [--module=<name>] [--list-unused]
  *        --module defaults to `build`. Other modules were never swept — expect
  *        real findings the first time (qpaynet and qcoreai both have them).
+ *
+ * LIMIT — read this before believing a "no backend route" count on a module
+ * other than build. Routes are discovered from routes/<module>.ts and, if it
+ * exists, routes/<module>/. A module whose routers are split across sibling
+ * FILES and mounted separately in index.ts is under-discovered, and every call
+ * to the missing half is then reported as having no route. Measured 2026-08-10:
+ * cyberchess showed 38 such phantoms (index.ts mounts cyberchessPuzzles,
+ * cyberchessTournaments, cyberchessDaily… as their own prefixes) and qsign 21
+ * (/api/qsign/v2 comes from qsignV2.ts). Confirm the module is single-file
+ * before treating that column as a bug list.
+ *
+ * The wrong-origin column does not depend on route discovery and is reliable
+ * everywhere.
  */
 import fs from "node:fs";
 import path from "node:path";

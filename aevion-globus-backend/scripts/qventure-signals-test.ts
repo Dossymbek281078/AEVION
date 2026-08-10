@@ -105,14 +105,68 @@ ok("structured financials → high coverage", structuredAnalyze.signalCoverage >
 ok("structured financials → TAM full mode", structuredAnalyze.tam.mode === "full", structuredAnalyze.tam.mode);
 
 const saas = resolveSector("saas");
-const grounded = analyzeProjections([{ year: 2026, revenueUsd: 2_000_000 }, { year: 2029, revenueUsd: 3_000_000 }], saas);
-ok("grounded projection", grounded !== null && grounded.verdict === "grounded", grounded?.verdict);
-const hockey = analyzeProjections([{ year: 2026, revenueUsd: 1_000_000 }, { year: 2029, revenueUsd: 100_000_000 }], saas);
-ok("hockey-stick projection flagged", hockey !== null && hockey.verdict === "hockey-stick", hockey?.verdict);
-const preRev = analyzeProjections([{ year: 2026, revenueUsd: 0 }, { year: 2029, revenueUsd: 5_000_000 }], saas);
+// The benchmark is the stage's venture bar, not the market CAGR: a plan that
+// grows at market rate never takes share, and an ordinary venture plan is not a
+// hockey stick. Both used to be judged the other way round.
+const belowMarket = analyzeProjections([{ year: 2026, revenueUsd: 2_000_000 }, { year: 2029, revenueUsd: 2_400_000 }], saas, "seed");
+ok("market-rate plan is below-market, not 'grounded'", belowMarket !== null && belowMarket.verdict === "below-market", belowMarket?.verdict);
+const ventureGrade = analyzeProjections([{ year: 2026, revenueUsd: 2_400_000 }, { year: 2028, revenueUsd: 14_000_000 }], saas, "seed");
+ok("2.4M→14M seed plan is venture-grade", ventureGrade !== null && ventureGrade.verdict === "venture-grade", `${ventureGrade?.verdict} ${ventureGrade?.impliedCagrPct}%`);
+const seriesA = analyzeProjections([{ year: 2026, revenueUsd: 4_800_000 }, { year: 2028, revenueUsd: 17_000_000 }], resolveSector("climate"), "series-a");
+ok("Series A 3.5x/2yr is venture-grade", seriesA !== null && seriesA.verdict === "venture-grade", `${seriesA?.verdict} ${seriesA?.impliedCagrPct}%`);
+ok("stage bar tightens with stage", (analyzeProjections([{ year: 2026, revenueUsd: 1e6 }, { year: 2027, revenueUsd: 2e6 }], saas, "seed")!.stageBarCagrPct)
+  > (analyzeProjections([{ year: 2026, revenueUsd: 1e6 }, { year: 2027, revenueUsd: 2e6 }], saas, "growth")!.stageBarCagrPct));
+ok("same plan reads harsher at growth stage than at seed",
+  analyzeProjections([{ year: 2026, revenueUsd: 1e6 }, { year: 2028, revenueUsd: 9e6 }], saas, "growth")!.ratioToBar!
+  > analyzeProjections([{ year: 2026, revenueUsd: 1e6 }, { year: 2028, revenueUsd: 9e6 }], saas, "seed")!.ratioToBar!);
+const conservative = analyzeProjections([{ year: 2026, revenueUsd: 2_000_000 }, { year: 2028, revenueUsd: 3_400_000 }], saas, "seed");
+ok("above market but under the bar → conservative", conservative !== null && conservative.verdict === "conservative", `${conservative?.verdict} ${conservative?.impliedCagrPct}%`);
+const hockey = analyzeProjections([{ year: 2026, revenueUsd: 1_000_000 }, { year: 2029, revenueUsd: 100_000_000 }], saas, "seed");
+ok("100x/3yr still flagged hockey-stick", hockey !== null && hockey.verdict === "hockey-stick", `${hockey?.verdict} ${hockey?.impliedCagrPct}%`);
+const preRev = analyzeProjections([{ year: 2026, revenueUsd: 0 }, { year: 2029, revenueUsd: 5_000_000 }], saas, "seed");
 ok("pre-revenue projection handled", preRev !== null && preRev.verdict === "pre-revenue", preRev?.verdict);
-ok("single point → null", analyzeProjections([{ year: 2026, revenueUsd: 1_000_000 }], saas) === null);
-ok("projections wired into analyze()", analyze({ name: "P", sector: "saas", stage: "seed", description: "x", projections: [{ year: 2026, revenueUsd: 1_000_000 }, { year: 2029, revenueUsd: 80_000_000 }] }).projections?.verdict === "hockey-stick");
+ok("single point → null", analyzeProjections([{ year: 2026, revenueUsd: 1_000_000 }], saas, "seed") === null);
+ok("projections wired into analyze() with the deal's stage", analyze({ name: "P", sector: "saas", stage: "seed", description: "x", projections: [{ year: 2026, revenueUsd: 1_000_000 }, { year: 2029, revenueUsd: 80_000_000 }] }).projections?.stageBarCagrPct === 180);
+
+console.log("\n9. Churn period — 4% a year is not 4% a month");
+const churnAnnual = parsePlanSignals("Enterprise SaaS with 4% annual churn and $2M ARR.");
+ok("annual churn parsed with its period", churnAnnual.churnPct === 4 && churnAnnual.churnPeriod === "annual", `${churnAnnual.churnPct}/${churnAnnual.churnPeriod}`);
+ok("annual churn normalized to ~0.34%/mo", churnAnnual.churnMonthlyPct !== null && Math.abs(churnAnnual.churnMonthlyPct - 0.34) < 0.05, String(churnAnnual.churnMonthlyPct));
+const churnMonthly = parsePlanSignals("Consumer app with 4% monthly churn and $2M ARR.");
+ok("monthly churn kept as stated", churnMonthly.churnPct === 4 && churnMonthly.churnPeriod === "monthly" && churnMonthly.churnMonthlyPct === 4);
+const churnPerYear = parsePlanSignals("Churn of 20% per year across the base.");
+ok("'20% per year' → annual", churnPerYear.churnPeriod === "annual" && churnPerYear.churnMonthlyPct !== null && churnPerYear.churnMonthlyPct < 2, `${churnPerYear.churnPeriod}/${churnPerYear.churnMonthlyPct}`);
+const churnBare = parsePlanSignals("Churn is 3% and margins are healthy.");
+ok("period-less churn read as monthly, and marked", churnBare.churnPct === 3 && churnBare.churnPeriod === "unspecified" && churnBare.churnMonthlyPct === 3);
+const annualChurnDeal = analyze({ ...base, description: "B2B SaaS. $3M ARR, 2,000 customers, 20% annual churn, 82% gross margin." });
+ok("20% annual churn raises no high-churn flag", !annualChurnDeal.redFlags.some((f) => /churn/i.test(f)), annualChurnDeal.redFlags.join("|"));
+const monthlyChurnDeal = analyze({ ...base, description: "B2B SaaS. $3M ARR, 2,000 customers, 20% monthly churn, 82% gross margin." });
+ok("20% monthly churn does flag", monthlyChurnDeal.redFlags.some((f) => /churn/i.test(f)), monthlyChurnDeal.redFlags.join("|"));
+ok("annual-churn deal scores above the identical monthly-churn deal", annualChurnDeal.composite > monthlyChurnDeal.composite, `${annualChurnDeal.composite} vs ${monthlyChurnDeal.composite}`);
+// The churn test above surfaced this: a bare "<n>% monthly" was read as growth.
+ok("'20% monthly churn' is not read as 20% MoM growth", parsePlanSignals("SaaS with 20% monthly churn.").growthPct === null, String(parsePlanSignals("SaaS with 20% monthly churn.").growthPct));
+ok("'4% annual churn' is not read as growth", parsePlanSignals("SaaS with 4% annual churn.").growthPct === null);
+ok("real growth still parses with its period", parsePlanSignals("revenue growing 12% MoM").growthPct === 12 && parsePlanSignals("revenue growing 12% MoM").growthPeriod === "MoM");
+ok("'30% month-over-month growth' parses", parsePlanSignals("we see 30% month-over-month growth").growthPct === 30);
+ok("'up 15% MoM' parses", parsePlanSignals("bookings up 15% MoM").growthPct === 15);
+ok("'growth of 40% annually' → YoY", parsePlanSignals("growth of 40% annually").growthPeriod === "YoY");
+
+console.log("\n10. A money unit must be a unit, not the next word's first letter");
+// Found on a real deck: "CAC $3, LTV $2, monthly churn 14%" scored LTV as $2M.
+const glued = parsePlanSignals("Unit economics: gross margin 96%, CAC $3, LTV $2, monthly churn 14%.");
+ok("'LTV $2, monthly' is $2, not $2M", glued.ltvUsd === 2, String(glued.ltvUsd));
+ok("resulting LTV/CAC is 0.7, not 666,666", glued.ltvCacRatio !== null && glued.ltvCacRatio < 1, String(glued.ltvCacRatio));
+ok("'$50 tests' is not fifty trillion", parsePlanSignals("ARR of $50 tests per week").revenueUsd !== 50e12, String(parsePlanSignals("ARR of $50 tests per week").revenueUsd));
+ok("real units still parse: $2M ARR", parsePlanSignals("$2M ARR").revenueUsd === 2_000_000, String(parsePlanSignals("$2M ARR").revenueUsd));
+ok("real units still parse: $2 million ARR", parsePlanSignals("$2 million ARR").revenueUsd === 2_000_000, String(parsePlanSignals("$2 million ARR").revenueUsd));
+ok("real units still parse: $500k MRR", parsePlanSignals("$500k MRR").revenueUsd === 6_000_000, String(parsePlanSignals("$500k MRR").revenueUsd));
+ok("real units still parse: TAM of $12B", parsePlanSignals("TAM of $12B").bottomUpTamUsd === 12_000_000_000);
+ok("real units still parse: TAM of $2 trillion", parsePlanSignals("TAM of $2 trillion").bottomUpTamUsd === 2e12, String(parsePlanSignals("TAM of $2 trillion").bottomUpTamUsd));
+ok("customers with a unit still parse: 12k customers", parsePlanSignals("12k customers on the platform").customers === 12_000, String(parsePlanSignals("12k customers on the platform").customers));
+const structuredChurn = mergeStructuredSignals(parsePlanSignals("vague pitch"), { churnPct: 24, churnPeriod: "annual" });
+ok("structured annual churn normalized on merge", structuredChurn.churnMonthlyPct !== null && structuredChurn.churnMonthlyPct < 3, String(structuredChurn.churnMonthlyPct));
+ok("unspecified-period churn is disclosed in assumptions",
+  analyze({ ...base, description: "SaaS with $2M ARR, 1,000 customers and churn of 3%." }).assumptions.some((a) => /read as monthly/.test(a)));
 
 console.log(`\n${fail === 0 ? "✅" : "❌"} signals test: ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

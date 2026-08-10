@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import {
@@ -45,7 +46,7 @@ const DEMO_METRICS: LiveMetrics = {
 
 const marqueePhrases = [
   "AEVION · unified trust platform",
-  "37 product nodes · one pipeline",
+  `${MODULE_NODES} product nodes · one pipeline`,
   "QRight · QSign · Bureau · Planet",
   "Auth · registry · signature · compliance",
   "Globus · ecosystem map",
@@ -269,7 +270,7 @@ export default function DemoShowcasePage() {
             }}
           >
             What does this <em>do</em>? Below: the live ecosystem pulse, the 90-second pipeline from
-            idea to certificate, all 37 product nodes, and the cross-module flywheel that makes the
+            idea to certificate, all {MODULE_NODES} product nodes, and the cross-module flywheel that makes the
             sum bigger than its parts. For the <Link href="/pitch" style={{ color: "#fbbf24", fontWeight: 700 }}>partnership thesis</Link>, see /pitch.
           </p>
 
@@ -520,7 +521,7 @@ export default function DemoShowcasePage() {
             textTransform: "uppercase",
           }}
         >
-          37 product nodes — benefits for each
+          {MODULE_NODES} product nodes — benefits for each
         </h2>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -603,7 +604,7 @@ export default function DemoShowcasePage() {
             Cross-module flywheel
           </h2>
           <p style={{ fontSize: 14, color: "#cbd5e1", lineHeight: 1.6, margin: "0 0 20px" }}>
-            Three of the four network forces that compound across the 37 nodes. The fourth (switching
+            Three of the four network forces that compound across the {MODULE_NODES} nodes. The fourth (switching
             costs) is detailed in the /pitch deck.
           </p>
           <div

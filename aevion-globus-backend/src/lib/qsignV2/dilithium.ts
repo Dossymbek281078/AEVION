@@ -84,6 +84,39 @@ export async function getActiveDilithium(): Promise<RealKeypair | null> {
   return realKeypairCache;
 }
 
+export type DilithiumStatus = {
+  /** Что реально подписывает прод прямо сейчас. */
+  mode: "real" | "preview";
+  /**
+   * Почему именно так. `seed_malformed` — самый важный: переменная задана, но
+   * не проходит формат, и система молча падает в preview. Сейчас об этом
+   * говорит только предупреждение в логе, которое никто не читает, — а снаружи
+   * "задал ключ, значит работает" и "задал ключ, но он не тот" выглядят
+   * одинаково.
+   */
+  reason: "seed_set" | "seed_unset" | "seed_malformed";
+};
+
+/**
+ * Синхронный статус режима подписи — без загрузки ключей и без keygen.
+ *
+ * Раскрытия не добавляет: тот же `mode` уже возвращается в каждом ответе
+ * /api/qsign/v2/sign, а публичное описание API прямым текстом говорит, что
+ * preview-дайджест «NOT a cryptographic signature». Сюда вынесено ровно
+ * затем, чтобы ответ на вопрос «а что на проде» стоил одного запроса, а не
+ * похода в переменные окружения.
+ *
+ * Сам сид наружу не отдаётся ни в каком виде — ни значение, ни длина.
+ */
+export function dilithiumStatus(): DilithiumStatus {
+  const seedHex = process.env.QSIGN_DILITHIUM_V1_SEED?.trim();
+  if (!seedHex) return { mode: "preview", reason: "seed_unset" };
+  if (!/^[0-9a-fA-F]{64}$/.test(seedHex)) {
+    return { mode: "preview", reason: "seed_malformed" };
+  }
+  return { mode: "real", reason: "seed_set" };
+}
+
 export type DilithiumSignResult = {
   kid: string;
   signature: string;

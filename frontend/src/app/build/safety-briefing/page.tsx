@@ -83,7 +83,7 @@ function Body() {
   async function loadBriefingsForShift(shiftId: string) {
     setLoadingBriefings(true);
     try {
-      const res = await fetch(`/api/build/safety-briefing/shift/${shiftId}`, {
+      const res = await fetch(apiUrl(`/api/build/safety-briefing/shift/${shiftId}`), {
         headers: {
           Authorization: `Bearer ${typeof window !== "undefined" ? localStorage.getItem("build_token") ?? "" : ""}`,
         },

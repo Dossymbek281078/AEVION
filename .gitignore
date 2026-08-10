@@ -79,3 +79,6 @@ page_v*_backup.*
 # прогон тестов не из каталога бэкенда (см. tests/subscriptionStorePath.test.ts).
 **/data/subscriptions.jsonl
 **/data/subscriptions.jsonl.tmp
+
+# Прогоны бенчмарка QReal: ссылки на рендеры, судейские листы, ключ плеч.
+benchmark-out/

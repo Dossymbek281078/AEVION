@@ -11,6 +11,30 @@ type Entry = {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-07-26",
+    highlight: "See the council disagree without signing in — and call it from the SDK",
+    body:
+      "The council spends tokens, so running one needs an account. Showing what it does should not. The split was resolved by a property of the dissent map itself: it is derived from the text of replies already received, without a single extra model call — so it costs nothing to compute and can be handed out freely. /multichat-engine now has a «show me an example» button open to everyone. The three replies are canned, but the map under them is computed by the SERVER, through the same public endpoint a real request uses — so the example runs the real algorithm rather than a picture of one: change the thresholds and the numbers on screen change with them. It is labelled as an example, because letting it pass for your own run would be no better than drawing the result. That endpoint, POST /api/multichat/dissent/preview, is public and free for anyone's answers — from this SDK, from your own models, from anywhere. All three multichat calls are now in the TypeScript client too, two of them needing no token: verifying a receipt must not require an account, or the receipt means nothing.",
+    modules: ["Multichat", "SDK"],
+    kind: "feat",
+  },
+  {
+    date: "2026-07-26",
+    highlight: "Multichat now shows where the agents disagree — and hands you a receipt for the answer",
+    body:
+      "Every multi-agent product synthesises the replies into one polished answer and throws the disagreement away. That disagreement is the signal: where the models diverged is exactly where the answer cannot be taken on trust — agreement proves little, since models trained on overlapping data fail in similar ways, and the console says so out loud when they agree. The council on /multichat-engine asks three differently-roled agents in parallel and puts the dissent map ABOVE the replies: pairwise similarity, the outlier (not «wrong» — «read this one first»), conflicts in NUMBERS (the most checkable form of disagreement), refusals and hedges. It costs nothing extra: the map is computed from the replies already received, with no additional model call, so it is free and reproducible. Each answer also carries a receipt — panel composition, prompt and reply hashes, dissent summary and cost, in RFC8785 canonical form with a sha256 digest and an ed25519 signature from the QSign v2 key registry. Download it, drop it on /multichat-engine/verify, and see whether the content still matches its hash. That page is public by design: demanding an account to verify someone else's receipt would defeat the point. And the spec is open — RFC8785 plus sha256 — so the hash can be recomputed by any third-party implementation without trusting our button.",
+    modules: ["Multichat"],
+    kind: "feat",
+  },
+  {
+    date: "2026-07-26",
+    highlight: "QReal keeps a character's face across shots — and can now prove it",
+    body:
+      "A storyboard is written shot by shot, so the model re-describes the same hero every time: «7yo boy, tousled hair, oversized sweater» in one shot, «little boy running» in the next — two different faces on screen. That drift is the weakness every competitor publicly admits, and it is the niche QReal claims. Now there is a scene cast: subjects across all shots are grouped into characters, the most detailed description becomes the canon and goes into every shot the hero appears in, plus an explicit continuity directive. The director can rewrite the canon on /qreal and the render prompts rebuild themselves; reference frames are passed to the engine that supports them (Seedance reference-to-video, addressed as @Image1 inside the prompt). Realism QC also stopped being a checklist: each of the 14 criteria now carries 1/3/5 anchors, a shot is scored into a verdict — accept, regenerate, or «too little judged to decide» — and regeneration is opt-in and capped, because every retry costs money. Continuity itself is measurable too: five criteria judged on the assembled film, and a scene where nobody recurs honestly returns «nothing to compare» instead of a cheerful pass.",
+    modules: ["QReal"],
+    kind: "feat",
+  },
+  {
     date: "2026-07-21",
     highlight: "QReal Studio is born — fully-alive AI video without an actor, first film rendered same day",
     body:

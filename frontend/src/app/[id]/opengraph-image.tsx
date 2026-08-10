@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import { apiUrl } from "@/lib/apiBase";
 
 export const runtime = "nodejs";
@@ -113,7 +114,7 @@ export default async function ProjectOg({ params }: { params: Promise<{ id: stri
           }}
         >
           <div style={{ display: "flex" }}>aevion.app/{id}</div>
-          <div style={{ color: accent, display: "flex" }}>37 nodes · one Trust Graph</div>
+          <div style={{ color: accent, display: "flex" }}>{MODULE_NODES} nodes · one Trust Graph</div>
         </div>
       </div>
     ),

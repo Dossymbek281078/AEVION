@@ -68,33 +68,6 @@ export type BuildPaymentEvent = {
   workerId?: string | null;
 };
 
-export type LeaderboardRow = {
-  rank: number;
-  userId: string;
-  name: string;
-  avatarUrl: string | null;
-  photoUrl?: string | null;
-  score: number;
-  tier: string;
-  kind: "employer" | "worker";
-  rating?: number;
-  projectCount?: number;
-  hireCount?: number;
-  completedProjects?: number;
-  averageRating?: number;
-  avgRating?: number;
-  reviewCount?: number;
-  totalEarned?: number;
-  hires?: number;
-  tierKey?: string;
-  tierLabel?: string;
-  trialsApproved?: number;
-  jobsDone?: number;
-  workerScore?: number;
-  title?: string | null;
-  city?: string | null;
-  specialty?: string | null;
-};
 export type ProjectStatus = "OPEN" | "IN_PROGRESS" | "DONE";
 export type VacancyStatus = "OPEN" | "CLOSED" | "ARCHIVED";
 export type ApplicationStatus = "PENDING" | "ACCEPTED" | "REJECTED";
@@ -1832,10 +1805,6 @@ export const buildApi = {
     call<{ items: BuildPaymentEvent[]; summary: { due: number; paid: number; overdue: number } }>("GET", "/api/build/payment-calendar"),
   updatePaymentEvent: (id: string, patch: { status?: PaymentEventStatus; paidAt?: string | null; note?: string | null }) =>
     call<BuildPaymentEvent>("PATCH", `/api/build/payment-calendar/${id}`, patch),
-
-  // Leaderboard
-  leaderboard: (kind: "employer" | "worker", limit = 30) =>
-    call<{ items: LeaderboardRow[] }>("GET", `/api/build/leaderboard?kind=${kind}&limit=${limit}`),
 
   // Documents — verification workflow
   uploadDocument: (input: { fileUrl: string; docType: string }) =>

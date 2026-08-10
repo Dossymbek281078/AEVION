@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import type { NextRequest } from "next/server";
 
 export const runtime = "edge";
@@ -161,7 +162,7 @@ export async function GET(
           }}
         >
           <div style={{ display: "flex" }}>aevion.app</div>
-          <div style={{ color: theme.accent, display: "flex" }}>37 nodes · one Trust Graph</div>
+          <div style={{ color: theme.accent, display: "flex" }}>{MODULE_NODES} nodes · one Trust Graph</div>
         </div>
       </div>
     ),

@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { MODULE_NODES } from "@/data/pitchFacts";
 
 export const runtime = "edge";
 export const alt = "AEVION · Investor Pitch — the AEVION partnership offer";
@@ -52,7 +53,7 @@ export default function PitchOgImage() {
             <span style={{ color: "#5eead4" }}>for digital creation</span>
           </div>
           <div style={{ fontSize: 26, color: "#cbd5e1", maxWidth: 900, lineHeight: 1.4, display: "flex" }}>
-            37 modules deployed · 12 feature-complete · one Trust Graph
+            {MODULE_NODES} modules deployed · 12 feature-complete · one Trust Graph
           </div>
         </div>
 

@@ -53,7 +53,11 @@ describe("тесты, которые мы написали, кто-то дейс
 
   it("CI-job frontend запускает фронтовые тесты, а не только сборку", () => {
     const block = jobBlock("frontend");
-    expect(block).toMatch(/run:\s*npm run test:run/);
+    // Написание не фиксируем: `npm run test:run` и `npm run test -- --run`
+    // делают одно и то же, и в main прижилось второе. Сторож обязан ловить
+    // ОТСУТСТВИЕ шага, а не расхождение в его орфографии — иначе он краснеет на
+    // мерже двух правильных версий, чем и обесценивает себя.
+    expect(block).toMatch(/run:\s*npm run test(:run\b|\s+--\s+--run)/);
     expect(block).toMatch(/run:\s*npm run build/);
   });
 

@@ -8,6 +8,21 @@ import { productById } from "@/lib/products";
 type Billing = "monthly" | "annual";
 
 /* ── Prices ─────────────────────────────────────────────────────────────────── */
+// ⚠️ Planet is the one paid AEVION offer whose price lives nowhere but this file.
+// Everything else resolves to a source of truth: tiers to data/pricing.ts (what
+// checkout.ts charges), one-off products and subscriptions to lib/products.ts
+// (verified against the live payment dashboards on 2026-07-26). These two numbers
+// have neither, and the checkout links below are raw Lemon Squeezy variant UUIDs
+// typed into this page — they bypass lib/products.ts AND the backend's
+// tier_planet_monthly / tier_planet_annual reference system
+// (data/lemonSqueezyVariants.ts), so nothing in the codebase can tell whether the
+// $250 shown here is what Lemon Squeezy actually bills.
+//
+// That is the same shape as the "All-Access $59/мес" banner, which advertised a
+// price for years while the button opened a different product. Not changed here:
+// correcting it needs the real variant prices from the Lemon Squeezy dashboard,
+// and inventing a number would be worse than naming the gap. Fix = add Planet to
+// lib/products.ts with its verified price + href, then read it from there.
 const PLANET_MONTHLY = 250;
 const PLANET_ANNUAL_PER_MO = 200; // 12-month commitment, billed monthly
 

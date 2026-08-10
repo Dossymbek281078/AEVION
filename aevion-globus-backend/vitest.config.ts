@@ -21,7 +21,19 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     globals: false,
-    testTimeout: 10_000,
+    // 30 с, не 10. Замер 10.08.2026: `provisioning.sendEmail.test.ts` в
+    // одиночку проходит за 530 мс, а в общем прогоне на этой машине занял
+    // 31.5 с и упал по таймауту — вместе с `qtradeInternalCredit` (31.6 с) и
+    // `tier3OgRoutes` (21.5 с). Причина внешняя: параллельные сессии держали
+    // две сборки Next (9.3 и 7.5 ГБ), свободной памяти оставалось 14 ГБ при
+    // потребности 18. Логика тестов при этом верна — они зелёные и по одному,
+    // и на ненагруженной машине.
+    //
+    // Здесь это не мелочь стиля: набор, который краснеет от соседней сборки,
+    // перестают читать, и настоящая регрессия тонет среди мнимых. Порог всё
+    // ещё ограничен — зависший тест упрётся в него, просто не раньше времени.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     // `opentimestamps` (0.4.x, CJS, no clean exports map) intermittently trips
     // Vite's dep optimizer when several test files import it concurrently on a
     // cold cache — surfacing as "Failed to resolve entry for package

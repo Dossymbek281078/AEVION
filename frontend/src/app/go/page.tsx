@@ -7,6 +7,11 @@ import {
   withChannel,
   type Product,
 } from "@/lib/products";
+// Счётчик живых модулей — из pitchFacts, заперт на реестр сторожем.
+// До 10.08.2026 здесь стояло «29 живых модулей», пока реестр отдавал 36:
+// страница-хаб для ссылки в профиле занижала платформу на семь модулей
+// перед всем трафиком из соцсетей.
+import { LIVE_MODULES } from "@/data/pitchFacts";
 
 // /go — страница-хаб под ссылку в профиле соцсетей.
 //
@@ -165,7 +170,7 @@ export default async function GoPage({
           <LinkCard
             href={keep("/explore")}
             kicker="Бесплатно · обзор"
-            title="29 живых модулей AEVION"
+            title={`${LIVE_MODULES} живых модулей AEVION`}
             note="Шахматы с ИИ-коучем, сметный тренажёр, венчурный аналитик, IP-бюро и другие."
           />
           {allAccess && (

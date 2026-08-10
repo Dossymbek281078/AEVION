@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type BuildVideoRoom as VideoRoom } from "@/lib/build/api";
+import { useBuildAuth } from "@/lib/build/auth";
 import { useI18n } from "@/lib/i18n";
 
 export default function VideoPage() {
@@ -17,6 +18,7 @@ export default function VideoPage() {
 
 function VideoInner() {
   const { t } = useI18n();
+  const me = useBuildAuth((s) => s.user);
   const [rooms, setRooms] = useState<VideoRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -41,10 +43,20 @@ function VideoInner() {
         guestId: guestId.trim() || undefined,
         scheduledAt: scheduledAt || undefined,
       });
-      setNewRoom(r as unknown as VideoRoom);
+      setNewRoom(r);
       setCreating(false);
       setGuestId("");
       setScheduledAt("");
+      load();
+    } catch {/**/} finally { setBusy(false); }
+  }
+
+  async function endRoom(roomId: string) {
+    setBusy(true);
+    try {
+      await buildApi.endVideoRoom(roomId);
+      // The banner points at a room that is now closed.
+      setNewRoom((cur) => (cur?.id === roomId ? null : cur));
       load();
     } catch {/**/} finally { setBusy(false); }
   }
@@ -169,14 +181,25 @@ function VideoInner() {
                 <p className="text-xs text-slate-500">{new Date(room.createdAt).toLocaleDateString("ru")}</p>
               </div>
               {room.status !== "ENDED" && (
-                <a
-                  href={room.roomUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-400"
-                >
-                  🎥 {t("build.video.enter")}
-                </a>
+                <div className="flex gap-2">
+                  <a
+                    href={room.roomUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-400"
+                  >
+                    🎥 {t("build.video.enter")}
+                  </a>
+                  {room.hostId === me?.id && (
+                    <button
+                      disabled={busy}
+                      onClick={() => void endRoom(room.id)}
+                      className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-50"
+                    >
+                      ⏹ Завершить
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ))}

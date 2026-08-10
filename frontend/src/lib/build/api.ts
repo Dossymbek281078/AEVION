@@ -1782,6 +1782,9 @@ export const buildApi = {
     call<BuildVideoRoom>("POST", "/api/build/video/rooms", input),
   myVideoRooms: () =>
     call<{ items: BuildVideoRoom[]; total: number }>("GET", "/api/build/video/rooms/my"),
+  // Host closes the room; without this every room stays "active" forever.
+  endVideoRoom: (roomId: string) =>
+    call<BuildVideoRoom>("PATCH", `/api/build/video/rooms/${encodeURIComponent(roomId)}/end`),
   inviteToVideoRoom: (roomId: string, guestId: string) =>
     call<{ invited: boolean }>("POST", `/api/build/video/rooms/${roomId}/invite`, { guestId }),
 

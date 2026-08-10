@@ -10,6 +10,7 @@ import { competitorsFor } from "@/lib/competitors";
 import type { DataQuality } from "@/lib/dataQuality";
 import type { RegulatorySource } from "@/lib/regulatorySource";
 import { resolveStartCity } from "./startCity";
+import { isSmokeSlot, countSmokeSlots } from "./slotSource";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
 // Клиент рисует реальный цифровой двойник Астаны (318 зданий из OpenStreetMap,
@@ -183,6 +184,9 @@ export default function QSkywayClient() {
   const [justState, setJustState] = useState<"idle" | "busy" | "verified" | "invalid">("idle");
   const [vpRows, setVpRows] = useState<VertiportRow[]>([]);
   const [slots, setSlots] = useState<{ list: Slot[]; count: number; capacityPerRoute: number; store: string }>({ list: [], count: 0, capacityPerRoute: 0, store: "" });
+  // Считаем по загруженному списку, а не по `count` с сервера: сервер отдаёт
+  // общее число, а тестовые видны только в записях.
+  const smokeSlotCount = countSmokeSlots(slots.list);
   const [verify, setVerify] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
 
   // ── engine (pure over the loaded city) ──────────────────────────────────────
@@ -964,7 +968,19 @@ export default function QSkywayClient() {
 
               <section style={card}>
                 <div style={{ ...cardH, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span>Рынок 4D-слотов (QRight) · {slots.count}</span>
+                  {/*
+                    На проде 10.08.2026 здесь стояло «· 34», и 33 из них были
+                    вывод смоук-набора. Читалось как рыночная активность:
+                    квитанции настоящие, отличить нечем. Не прячем — называем.
+                  */}
+                  <span>
+                    Рынок 4D-слотов (QRight) · {slots.count}
+                    {smokeSlotCount > 0 && (
+                      <span style={{ color: "#fbbf24", textTransform: "none", letterSpacing: 0 }}>
+                        {" "}· из них тестовых: {smokeSlotCount}
+                      </span>
+                    )}
+                  </span>
                   {slots.store && (
                     <span style={{ color: slots.store === "postgres" ? "#2dd4bf" : "#fbbf24", textTransform: "none", letterSpacing: 0 }} title={slots.store === "postgres" ? "Слоты сохраняются в Postgres — переживут рестарт" : "Слоты только в памяти процесса — теряются при рестарте бэкенда"}>
                       {slots.store === "postgres" ? "● persist" : "● ephemeral"}
@@ -978,7 +994,18 @@ export default function QSkywayClient() {
                     {[...slots.list].reverse().slice(0, 20).map((s) => (
                       <div key={s.id} style={{ padding: "8px 14px", borderTop: "1px solid #1e2836", fontFamily: "monospace", fontSize: 11 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", color: "#9fb0c4" }}>
-                          <span>{s.id}</span><span>{s.holder}</span>
+                          <span>
+                            {s.id}
+                            {isSmokeSlot(s) && (
+                              <span
+                                style={{ color: "#fbbf24", marginLeft: 6 }}
+                                title="Бронь оставлена смоук-прогоном, а не человеком. Право зафиксировано по-настоящему, но рыночной активностью это не является."
+                              >
+                                тест
+                              </span>
+                            )}
+                          </span>
+                          <span>{s.holder}</span>
                         </div>
                         <div style={{ color: "#5f7086", fontSize: 10.5, wordBreak: "break-all" }}>{s.routeId} · {s.receipt}</div>
                       </div>

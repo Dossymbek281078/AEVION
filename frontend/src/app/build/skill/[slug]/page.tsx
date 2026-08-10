@@ -30,6 +30,30 @@ function slugToSkill(slug: string): string {
   return decodeURIComponent(slug).replace(/-/g, " ").trim();
 }
 
+/**
+ * Список настоящих навыков — тот же источник, что у карты сайта.
+ *
+ * Возвращает null при сбое или таймауте, и это НЕ то же самое, что пустой
+ * список: при null страница не выдаёт 404. Иначе временная недоступность
+ * бэкенда выкинула бы из индекса живые страницы навыков — лечение вышло бы
+ * хуже болезни.
+ */
+async function fetchKnownSkills(): Promise<string[] | null> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/build/vacancies/skills/popular`, {
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const items = j?.data?.items;
+    if (!Array.isArray(items)) return null;
+    return items.map((i: { skill?: string }) => String(i?.skill ?? "").toLowerCase()).filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
 async function fetchSkill(skill: string): Promise<{ vacancies: Vacancy[]; salary: Salary | null }> {
   const apiBase = getApiBase();
   try {
@@ -86,6 +110,23 @@ export default async function SkillPage({
   const { slug } = await params;
   const skill = slugToSkill(slug);
   if (!skill || skill.length > 60) notFound();
+
+  // Навык должен быть настоящим, иначе под любой выдуманный адрес отдавалась
+  // осмысленная страница: «Zzqq vydumannyj adres 777 jobs — AEVION QBuild»,
+  // код 200, разметка для поисковика. Таких можно наделать сколько угодно, а
+  // массу почти пустых страниц с уникальными заголовками поисковики считают
+  // манипуляцией и понижают весь домен. Замерено на живом проде 06.08.2026.
+  //
+  // Список берём оттуда же, откуда его берёт карта сайта — /skills/popular.
+  // Это важно: критерий совпадает с тем, что мы сами публикуем, поэтому 404
+  // получают ровно те адреса, которых для нас не существует.
+  //
+  // Проверка «есть ли вакансии по навыку» НЕ годится: открытых вакансий сейчас
+  // нет вообще, и по ней настоящий react неотличим от выдуманного — 404 съел
+  // бы живые страницы из карты сайта.
+  const known = await fetchKnownSkills();
+  if (known && !known.includes(skill.toLowerCase())) notFound();
+
   const { vacancies, salary } = await fetchSkill(skill);
 
   const jobListLd = vacancies.length > 0 ? {

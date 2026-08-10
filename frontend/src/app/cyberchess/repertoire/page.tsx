@@ -529,6 +529,12 @@ function CompareCard({ branch }: { branch: RepertoireBranch }) {
     };
   }, [branch.id, branch.moves]);
 
+  /* `replies` — настоящая статистика мастеров; `mockBookStats` синтезирует её из суммы
+     кодов символов хода: «12 000 партий», проценты белых и чёрных. Отрисовывается это
+     теми же полосами и той же подписью «N игр», что и настоящие данные, — то есть при
+     любом сбое загрузки игрок выбирал дебют по выдуманным числам и не мог этого понять.
+     Подставлять всё равно надо (пустой список хуже), но подписывать обязательно. */
+  const estimated = !replies;
   const stats = replies || mockBookStats(branch);
   const rate = successRate(branch);
   const colorBadge = branch.color === "white" ? "♔" : "♚";
@@ -624,6 +630,24 @@ function CompareCard({ branch }: { branch: RepertoireBranch }) {
           {Math.round((totals.white / totals.total) * 100)}% / D{" "}
           {Math.round((totals.draws / totals.total) * 100)}% / B{" "}
           {Math.round((totals.black / totals.total) * 100)}%
+        </div>
+      )}
+
+      {estimated && (
+        <div
+          style={{
+            fontSize: 10.5,
+            padding: "6px 8px",
+            marginBottom: 8,
+            borderRadius: 6,
+            color: COLORS.textDim,
+            background: "rgba(234,179,8,0.08)",
+            border: "1px solid rgba(234,179,8,0.3)",
+            lineHeight: 1.45,
+          }}
+        >
+          Статистика мастеров не загрузилась. Числа ниже — показательные, они не взяты из
+          реальных партий: выбирать дебют по ним нельзя.
         </div>
       )}
 

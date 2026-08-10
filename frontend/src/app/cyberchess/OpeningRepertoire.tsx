@@ -1189,6 +1189,10 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
   }, [branch.id, branch.moves]);
 
   const streak = recentStreak(branch);
+  /* См. тот же разбор в repertoire/page.tsx: `mockBookStats` синтезирует «12 000 партий»
+     и проценты из суммы кодов символов хода, а рисуется это неотличимо от настоящей
+     статистики мастеров. Подставляем, но подписываем. */
+  const estimated = !replies;
   const stats = replies || mockBookStats(branch);
   const avgRating = stats.find((s) => s.averageRating)?.averageRating;
 
@@ -1281,6 +1285,24 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
       <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 8 }}>
         {loading ? "Загружаем статистику…" : "Топ ответов противника:"}
       </div>
+
+      {!loading && estimated && (
+        <div
+          style={{
+            fontSize: 10.5,
+            padding: "6px 8px",
+            marginBottom: 8,
+            borderRadius: 6,
+            color: COLORS.textDim,
+            background: "rgba(234,179,8,0.08)",
+            border: "1px solid rgba(234,179,8,0.3)",
+            lineHeight: 1.45,
+          }}
+        >
+          Статистика мастеров не загрузилась. Числа ниже — показательные, они не взяты из
+          реальных партий: выбирать дебют по ним нельзя.
+        </div>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {stats.slice(0, 3).map((s, i) => (

@@ -59,6 +59,25 @@ afterEach(() => {
 
 const auth = (r: request.Test) => r.set("Authorization", `Bearer ${token}`);
 
+describe("Мультичат: проверка доступа к модулю", () => {
+  test("GET /health отвечает — иначе пейволл-гейт страницы молча не срабатывает", async () => {
+    // Страница модуля зовёт эту ручку через fetchOrPaywall, а тот трактует
+    // всё, кроме 402, как «не заблокировано». Пока ручки не было, её 404
+    // означал «пускать всех»: в день включения PAYWALL_MODULES человек без
+    // модуля увидел бы страницу вместо предложения купить.
+    const r = await auth(request(app).get("/api/multichat/health"));
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+  });
+
+  test("без токена — 401, и это НЕ повод показывать пейволл", async () => {
+    // 402 отдаёт requireModule выше по стеку; сам роутер про оплату не знает
+    // и на анонима отвечает обычным 401.
+    const r = await request(app).get("/api/multichat/health");
+    expect(r.status).toBe(401);
+  });
+});
+
 describe("Мультичат: список бесед при параллельных операциях", () => {
   test("одновременно созданные беседы все попадают в список", async () => {
     const N = 12;

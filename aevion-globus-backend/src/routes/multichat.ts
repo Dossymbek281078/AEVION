@@ -390,6 +390,24 @@ async function searchConvs(userId: string, q: string, limit: number, offset: num
 // ────────────────────────────────────────────────────────────────────────
 // Routes
 
+// GET /api/multichat/health — лёгкая проверка доступа к модулю.
+//
+// Её зовёт страница `multichat-engine/page.tsx` через `fetchOrPaywall`, чтобы
+// отличить «модуль не куплен» от всего остального: роутер смонтирован за
+// requireModule("multichat-engine"), поэтому без доступа сюда прилетит 402 с
+// payload'ом пейволла, и страница покажет предложение купить.
+//
+// Ручки не существовало, а `fetchOrPaywall` по устройству трактует всё, кроме
+// 402, как «не заблокировано» — то есть 404 молча означал «пускать всех».
+// Пока PAYWALL_MODULES пуст, это ничего не ломало; в день включения пейволла
+// человек без модуля увидел бы страницу вместо предложения купить. Найдено
+// прогоном scripts/build-contract-check.mjs 2026-08-10.
+//
+// Никаких данных не отдаёт намеренно: весь смысл в коде ответа.
+multichatRouter.get("/health", (_req, res) => {
+  res.json({ ok: true, module: "multichat-engine" });
+});
+
 // POST /api/multichat/conversations { title }
 multichatRouter.post("/conversations", async (req, res) => {
   const userId = req.auth!.sub;

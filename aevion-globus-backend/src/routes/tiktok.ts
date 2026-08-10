@@ -52,6 +52,7 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { rateLimit } from "../lib/rateLimit";
 
 const capture = makeServiceCapture("tiktok");
 
@@ -161,6 +162,74 @@ function writeSession(res: any, s: Session) {
   setCookie(res, SESSION_COOKIE, JSON.stringify(s), 30 * 24 * 3600);
 }
 
+// Posting is a rare, expensive, irreversible action (it lands on a real
+// TikTok profile) — a stuck retry loop in a browser tab must not be able to
+// spray a creator's feed. Reads stay unlimited.
+const publishLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  max: 20,
+  keyPrefix: "tiktok-publish",
+  message: "Слишком много публикаций подряд. Подождите и повторите.",
+});
+
+const authLimiter = rateLimit({
+  windowMs: 10 * 60_000,
+  max: 20,
+  keyPrefix: "tiktok-auth",
+  message: "Слишком много попыток подключения. Подождите и повторите.",
+});
+
+// TikTok pulls the file itself (PULL_FROM_URL), so this is not an SSRF sink
+// for us — but an unparseable or non-https URL comes back from TikTok as an
+// opaque code the creator cannot act on. Reject it here with a reason.
+function validateVideoUrl(raw: string): { ok: true; url: string } | { ok: false; error: string } {
+  const value = raw.trim();
+  if (value.length > 2048) return { ok: false, error: "video_url_too_long" };
+  let u: URL;
+  try {
+    u = new URL(value);
+  } catch {
+    return { ok: false, error: "video_url_malformed" };
+  }
+  if (u.protocol !== "https:") return { ok: false, error: "video_url_must_be_https" };
+  return { ok: true, url: value };
+}
+
+// Single door to creator_info/query — used both by the /creator-info route
+// and by the publish-time privacy check, so there is one place that knows
+// how TikTok shapes this response.
+async function fetchCreatorInfo(
+  accessToken: string,
+): Promise<{ ok: true; data: any } | { ok: false; detail: any }> {
+  const r = await fetch(CREATOR_INFO_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json; charset=UTF-8",
+    },
+  });
+  const j: any = await r.json().catch(() => ({}));
+  if (!r.ok || j.error?.code !== "ok") return { ok: false, detail: j.error || r.status };
+  return { ok: true, data: j.data || {} };
+}
+
+// The allowed privacy levels are the ones TikTok reports for THIS creator —
+// never a hard-coded list (an audit requirement, and it keeps working when
+// TikTok adds a level). Validation is advisory: if creator_info is
+// unreachable we let TikTok itself be the arbiter rather than blocking a
+// legitimate post.
+async function allowedPrivacyLevels(accessToken: string): Promise<string[] | null> {
+  try {
+    const info = await fetchCreatorInfo(accessToken);
+    if (!info.ok) return null;
+    const opts = info.data.privacy_level_options;
+    return Array.isArray(opts) && opts.length ? opts : null;
+  } catch (e) {
+    capture(e, { where: "allowedPrivacyLevels" });
+    return null;
+  }
+}
+
 function pkce() {
   const verifier = crypto.randomBytes(48).toString("base64url");
   const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
@@ -222,17 +291,35 @@ async function refreshToken(cfg: TikTokConfig, s: Session): Promise<Session> {
   };
 }
 
+// A session is usable only while the access token is still valid or a refresh
+// token exists to renew it. An expired access token with no refresh token is
+// dead weight: keeping it would make /config answer `connected: true` while
+// every real call 401s — the UI would show a connected account that cannot
+// publish and offers no way back.
+function isSessionUsable(s: Session | null): s is Session {
+  if (!s) return false;
+  return s.expires_at > Math.floor(Date.now() / 1000) || !!s.refresh_token;
+}
+
 // Returns a valid access token, refreshing + re-issuing the cookie if needed.
+// On an unrecoverable session (expired with no refresh, or a refresh TikTok
+// rejected) the cookie is dropped so the next /config reports the truth and
+// the UI can offer "connect" again instead of silently failing.
 async function ensureToken(cfg: TikTokConfig, req: any, res: any): Promise<Session | null> {
   let s = readSession(req);
   if (!s) return null;
   if (s.expires_at > Math.floor(Date.now() / 1000)) return s;
+  if (!s.refresh_token) {
+    clearCookie(res, SESSION_COOKIE);
+    return null;
+  }
   try {
     s = await refreshToken(cfg, s);
     writeSession(res, s);
     return s;
   } catch (e) {
     capture(e, { where: "ensureToken.refresh" });
+    clearCookie(res, SESSION_COOKIE);
     return null;
   }
 }
@@ -240,17 +327,21 @@ async function ensureToken(cfg: TikTokConfig, req: any, res: any): Promise<Sessi
 // GET /api/tiktok/config — public, tells the frontend whether it can start.
 tiktokRouter.get("/config", (req, res) => {
   const cfg = getConfig();
+  const s = readSession(req);
+  const connected = isSessionUsable(s);
+  // Drop a cookie we already know is unusable, so the browser stops sending it.
+  if (s && !connected) clearCookie(res, SESSION_COOKIE);
   res.json({
     configured: cfg.configured,
     clientKey: cfg.configured ? cfg.clientKey : "",
     scopes: cfg.scopes,
     redirectUri: cfg.redirectUri,
-    connected: !!readSession(req),
+    connected,
   });
 });
 
 // GET /api/tiktok/auth/start — 302 to TikTok authorize with PKCE.
-tiktokRouter.get("/auth/start", (req, res) => {
+tiktokRouter.get("/auth/start", authLimiter, (req, res) => {
   const cfg = getConfig();
   if (!cfg.configured) {
     return res
@@ -327,18 +418,11 @@ tiktokRouter.get("/creator-info", async (req, res) => {
   const s = await ensureToken(cfg, req, res);
   if (!s) return res.status(401).json({ error: "not_connected" });
   try {
-    const r = await fetch(CREATOR_INFO_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${s.access_token}`,
-        "Content-Type": "application/json; charset=UTF-8",
-      },
-    });
-    const j: any = await r.json().catch(() => ({}));
-    if (!r.ok || j.error?.code !== "ok") {
-      return res.status(502).json({ error: "creator_info_failed", detail: j.error || r.status });
+    const info = await fetchCreatorInfo(s.access_token);
+    if (!info.ok) {
+      return res.status(502).json({ error: "creator_info_failed", detail: info.detail });
     }
-    const d = j.data || {};
+    const d = info.data;
     res.json({
       nickname: d.creator_nickname,
       username: d.creator_username,
@@ -356,7 +440,7 @@ tiktokRouter.get("/creator-info", async (req, res) => {
 });
 
 // POST /api/tiktok/publish — direct post from a public video URL.
-tiktokRouter.post("/publish", async (req, res) => {
+tiktokRouter.post("/publish", publishLimiter, async (req, res) => {
   const cfg = getConfig();
   const s = await ensureToken(cfg, req, res);
   if (!s) return res.status(401).json({ error: "not_connected" });
@@ -371,8 +455,14 @@ tiktokRouter.post("/publish", async (req, res) => {
   if (!videoUrl || typeof videoUrl !== "string") {
     return res.status(400).json({ error: "video_url_required" });
   }
+  const checked = validateVideoUrl(videoUrl);
+  if (!checked.ok) return res.status(400).json({ error: checked.error });
   if (!privacyLevel || typeof privacyLevel !== "string") {
     return res.status(400).json({ error: "privacy_level_required" });
+  }
+  const allowed = await allowedPrivacyLevels(s.access_token);
+  if (allowed && !allowed.includes(privacyLevel)) {
+    return res.status(400).json({ error: "privacy_level_not_allowed", allowed });
   }
   try {
     const r = await fetch(PUBLISH_INIT_URL, {
@@ -389,7 +479,7 @@ tiktokRouter.post("/publish", async (req, res) => {
           disable_duet: !!disableDuet,
           disable_stitch: !!disableStitch,
         },
-        source_info: { source: "PULL_FROM_URL", video_url: videoUrl },
+        source_info: { source: "PULL_FROM_URL", video_url: checked.url },
       }),
     });
     const j: any = await r.json().catch(() => ({}));
@@ -398,7 +488,14 @@ tiktokRouter.post("/publish", async (req, res) => {
       // ownership unverified, or SELF_ONLY-only until the app is audited).
       return res.status(502).json({ error: "publish_failed", detail: j.error || { code: r.status } });
     }
-    res.json({ publishId: j.data?.publish_id });
+    const publishId = j.data?.publish_id;
+    if (!publishId) {
+      // An "ok" body with no publish_id means nothing was queued. Reporting
+      // success here would show the creator "publish_id: undefined" and hide
+      // the fact that the post never started.
+      return res.status(502).json({ error: "publish_no_id", detail: j.data || null });
+    }
+    res.json({ publishId });
   } catch (e: any) {
     capture(e, { where: "publish" });
     res.status(502).json({ error: "publish_error", message: e?.message });

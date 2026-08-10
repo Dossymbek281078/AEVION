@@ -1,0 +1,207 @@
+import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
+import express from "express";
+import request from "supertest";
+import { tiktokRouter } from "../src/routes/tiktok";
+
+// TikTok publisher hardening — 2026-08-10.
+//
+// The route shipped with a class of defect that never throws: it kept
+// reporting a connected TikTok account after the token behind it had died.
+//
+//   1. /config answered `connected: true` for any cookie holding an
+//      access_token, without looking at expires_at. A day after connecting,
+//      the UI showed a connected account whose every call 401'd.
+//   2. ensureToken returned null on an unusable session but left the cookie
+//      in place, so the state was sticky — reload after reload.
+//   3. /publish forwarded any string as video_url and reported success on an
+//      "ok" body with no publish_id ("publish_id: undefined" to the creator,
+//      while nothing had been queued).
+//
+// These tests pin the honest behaviour: a dead session reads as
+// disconnected and its cookie is cleared, bad input is rejected with a
+// reason, and only a real publish_id counts as a queued post.
+
+const CREATOR_INFO_URL = "https://open.tiktokapis.com/v2/post/publish/creator_info/query/";
+const PUBLISH_INIT_URL = "https://open.tiktokapis.com/v2/post/publish/video/init/";
+
+const ENV_KEYS = ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET", "TIKTOK_REDIRECT_URI"];
+
+let fetchMock: ReturnType<typeof vi.fn>;
+
+function makeApp() {
+  const app = express();
+  app.use(express.json());
+  app.use("/api/tiktok", tiktokRouter);
+  return app;
+}
+
+/** Serialise a session the way the route's own cookie writer does. */
+function sessionCookie(session: Record<string, unknown>): string {
+  return `tt_sess=${encodeURIComponent(JSON.stringify(session))}`;
+}
+
+const nowSec = () => Math.floor(Date.now() / 1000);
+
+const liveSession = { access_token: "at-live", refresh_token: "rt", expires_at: nowSec() + 3600 };
+const expiredNoRefresh = { access_token: "at-dead", expires_at: nowSec() - 10 };
+const expiredWithRefresh = { access_token: "at-old", refresh_token: "rt", expires_at: nowSec() - 10 };
+
+/** Did the response tell the browser to drop the session cookie? */
+function clearsSessionCookie(res: request.Response): boolean {
+  const raw = res.headers["set-cookie"];
+  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return list.some((c) => c.startsWith("tt_sess=") && /Max-Age=0/.test(c));
+}
+
+function tiktokOk(data: unknown) {
+  return { ok: true, json: async () => ({ data, error: { code: "ok" } }) };
+}
+
+beforeEach(() => {
+  process.env.TIKTOK_CLIENT_KEY = "test-key";
+  process.env.TIKTOK_CLIENT_SECRET = "test-secret";
+  process.env.TIKTOK_REDIRECT_URI = "https://aevion.example/api/tiktok/auth/callback";
+  fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+});
+
+afterEach(() => {
+  for (const k of ENV_KEYS) delete process.env[k];
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe("/config reports the real session state", () => {
+  test("live token reads as connected", async () => {
+    const app = makeApp();
+    const res = await request(app).get("/api/tiktok/config").set("Cookie", sessionCookie(liveSession));
+    expect(res.status).toBe(200);
+    expect(res.body.connected).toBe(true);
+    expect(clearsSessionCookie(res)).toBe(false);
+  });
+
+  test("expired token with a refresh token still reads as connected", async () => {
+    const app = makeApp();
+    const res = await request(app).get("/api/tiktok/config").set("Cookie", sessionCookie(expiredWithRefresh));
+    expect(res.body.connected).toBe(true);
+    expect(clearsSessionCookie(res)).toBe(false);
+  });
+
+  test("expired token with no refresh reads as disconnected and the cookie is dropped", async () => {
+    const app = makeApp();
+    const res = await request(app).get("/api/tiktok/config").set("Cookie", sessionCookie(expiredNoRefresh));
+    // Was: `connected: true` — the UI showed an account that could not post.
+    expect(res.body.connected).toBe(false);
+    expect(clearsSessionCookie(res)).toBe(true);
+  });
+
+  test("no cookie at all reads as disconnected", async () => {
+    const app = makeApp();
+    const res = await request(app).get("/api/tiktok/config");
+    expect(res.body.connected).toBe(false);
+  });
+
+  test("never leaks the client secret", async () => {
+    const app = makeApp();
+    const res = await request(app).get("/api/tiktok/config");
+    expect(JSON.stringify(res.body)).not.toContain("test-secret");
+  });
+});
+
+describe("/publish rejects input TikTok could only bounce", () => {
+  test("non-https URL is refused with a reason, before any TikTok call", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(liveSession))
+      .send({ videoUrl: "http://cdn.example/v.mp4", privacyLevel: "SELF_ONLY" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("video_url_must_be_https");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("unparseable URL is refused with a reason", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(liveSession))
+      .send({ videoUrl: "cdn.example/v.mp4", privacyLevel: "SELF_ONLY" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("video_url_malformed");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("privacy level the creator is not allowed to use is refused", async () => {
+    fetchMock.mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY"] }));
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(liveSession))
+      .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "PUBLIC_TO_EVERYONE" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("privacy_level_not_allowed");
+    expect(res.body.allowed).toEqual(["SELF_ONLY"]);
+    // creator_info was consulted; video/init was never reached.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(CREATOR_INFO_URL);
+  });
+
+  test("a dead session returns 401 and drops the cookie instead of sticking", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(expiredNoRefresh))
+      .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY" });
+    expect(res.status).toBe(401);
+    expect(clearsSessionCookie(res)).toBe(true);
+  });
+});
+
+describe("/publish only claims success when a post was really queued", () => {
+  test("forwards the validated URL and returns the publish id", async () => {
+    fetchMock
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY", "PUBLIC_TO_EVERYONE"] }))
+      .mockResolvedValueOnce(tiktokOk({ publish_id: "pub-123" }));
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(liveSession))
+      .send({ videoUrl: "  https://cdn.example/v.mp4  ", title: "hi", privacyLevel: "SELF_ONLY" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.publishId).toBe("pub-123");
+
+    const initCall = fetchMock.mock.calls.find((c) => c[0] === PUBLISH_INIT_URL);
+    expect(initCall).toBeTruthy();
+    const body = JSON.parse(initCall![1].body);
+    expect(body.source_info).toEqual({ source: "PULL_FROM_URL", video_url: "https://cdn.example/v.mp4" });
+    expect(body.post_info.privacy_level).toBe("SELF_ONLY");
+  });
+
+  test("an ok body with no publish_id is an error, not a success", async () => {
+    fetchMock
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY"] }))
+      .mockResolvedValueOnce(tiktokOk({}));
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(liveSession))
+      .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY" });
+    // Was: 200 with publishId undefined — the UI printed "publish_id: undefined".
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe("publish_no_id");
+  });
+
+  test("publishing still works when creator_info is unreachable (TikTok arbitrates)", async () => {
+    fetchMock
+      .mockRejectedValueOnce(new Error("creator_info down"))
+      .mockResolvedValueOnce(tiktokOk({ publish_id: "pub-456" }));
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(liveSession))
+      .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "PUBLIC_TO_EVERYONE" });
+    expect(res.status).toBe(200);
+    expect(res.body.publishId).toBe("pub-456");
+  });
+});

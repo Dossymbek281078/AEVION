@@ -11,9 +11,38 @@
 // All backend calls go to /api-backend/api/tiktok/* (Vercel rewrites to the
 // Railway backend). The OAuth start is a full navigation, not fetch.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const API = "/api-backend/api/tiktok";
+
+// TikTok reports processing through publish/status/fetch. Everything that is
+// not one of these two is still in flight.
+const TERMINAL_OK = "PUBLISH_COMPLETE";
+const TERMINAL_FAIL = "FAILED";
+
+const STATUS_LABELS: Record<string, string> = {
+  PROCESSING_UPLOAD: "TikTok загружает файл…",
+  PROCESSING_DOWNLOAD: "TikTok скачивает видео по ссылке…",
+  SEND_TO_USER_INBOX: "Отправлено в приложение — подтвердите публикацию в TikTok",
+  PUBLISH_COMPLETE: "Опубликовано в TikTok",
+  FAILED: "TikTok отклонил публикацию",
+};
+
+const POLL_INTERVAL_MS = 3000;
+const POLL_TIMEOUT_MS = 3 * 60_000;
+
+// Backend rejection codes, spelled out for the creator. Anything not listed
+// falls through to TikTok's own message.
+const ERROR_TEXT: Record<string, string> = {
+  video_url_required: "Укажите ссылку на видео.",
+  video_url_malformed: "Ссылка не похожа на адрес — проверьте её.",
+  video_url_must_be_https: "TikTok принимает только https-ссылки.",
+  video_url_too_long: "Ссылка слишком длинная.",
+  privacy_level_required: "Выберите, кто увидит ролик.",
+  privacy_level_not_allowed: "Этот уровень приватности недоступен для вашего аккаунта.",
+  publish_no_id: "TikTok ответил без идентификатора задания — публикация не началась.",
+  not_connected: "Сессия TikTok истекла — подключите аккаунт заново.",
+};
 
 type Config = { configured: boolean; connected: boolean; scopes: string; redirectUri: string };
 type Creator = {
@@ -49,6 +78,17 @@ export default function TikTokPublisherPage() {
 
   const [posting, setPosting] = useState(false);
   const [postMsg, setPostMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  // `spinning` is what drives the spinner — a "wait" state we have stopped
+  // polling must not keep animating as if work were still happening.
+  const [publishStatus, setPublishStatus] = useState<{
+    kind: "wait" | "ok" | "err";
+    text: string;
+    spinning?: boolean;
+  } | null>(null);
+  const cancelPolling = useRef<(() => void) | null>(null);
+
+  // A tab closed mid-publish must not leave a timer polling forever.
+  useEffect(() => () => cancelPolling.current?.(), []);
 
   // Surface OAuth callback result from the query string.
   useEffect(() => {
@@ -59,7 +99,16 @@ export default function TikTokPublisherPage() {
   const loadCreator = useCallback(async () => {
     try {
       const r = await fetch(`${API}/creator-info`, { credentials: "include" });
-      if (r.status === 401) return; // not connected
+      if (r.status === 401) {
+        // The TikTok session expired or was revoked. Say so and fall back to
+        // the connect screen — silently returning here used to leave a
+        // "connected" card with no creator, no privacy options, and a publish
+        // button that could only ever fail.
+        setCreator(null);
+        setCfg((c) => (c ? { ...c, connected: false } : c));
+        setErr("Сессия TikTok истекла — подключите аккаунт заново.");
+        return;
+      }
       const j = await r.json();
       if (!r.ok) {
         setErr(typeof j.detail === "object" ? JSON.stringify(j.detail) : j.error || "creator_info_failed");
@@ -93,14 +142,93 @@ export default function TikTokPublisherPage() {
   }, [loadCreator]);
 
   const disconnect = async () => {
+    cancelPolling.current?.();
     await fetch(`${API}/logout`, { method: "POST", credentials: "include" });
     setCreator(null);
     setCfg((c) => (c ? { ...c, connected: false } : c));
+    setPublishStatus(null);
+    setPostMsg(null);
   };
+
+  // Follow the post until TikTok says it is live or rejected. Without this the
+  // creator only ever saw a publish_id and had to go check the app by hand.
+  const pollPublishStatus = useCallback((publishId: string) => {
+    cancelPolling.current?.();
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const startedAt = Date.now();
+    cancelPolling.current = () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+
+    const tick = async () => {
+      if (stopped) return;
+      try {
+        const r = await fetch(`${API}/publish/status?publishId=${encodeURIComponent(publishId)}`, {
+          credentials: "include",
+        });
+        const j = await r.json();
+        if (stopped) return;
+        if (!r.ok) {
+          setPublishStatus({
+            kind: "err",
+            text: `Не удалось узнать статус: ${j.error || r.status}. Проверьте приложение TikTok.`,
+          });
+          return;
+        }
+        const status: string = j.status || "";
+        // SEND_TO_USER_INBOX is terminal too: the video is waiting in the
+        // TikTok app for the creator to confirm. Polling past it would just
+        // spin until the timeout.
+        if (status === TERMINAL_OK || status === "SEND_TO_USER_INBOX") {
+          setPublishStatus({ kind: "ok", text: STATUS_LABELS[status] });
+          return;
+        }
+        if (status === TERMINAL_FAIL) {
+          setPublishStatus({
+            kind: "err",
+            text: `${STATUS_LABELS[TERMINAL_FAIL]}${j.failReason ? `: ${j.failReason}` : ""}`,
+          });
+          return;
+        }
+        if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+          // Give up watching, but say so plainly instead of spinning forever.
+          setPublishStatus({
+            kind: "wait",
+            text: "TikTok всё ещё обрабатывает видео — это дольше обычного. Проверьте уведомления в приложении.",
+          });
+          return;
+        }
+        setPublishStatus({
+          kind: "wait",
+          text: STATUS_LABELS[status] || `Обработка: ${status || "…"}`,
+          spinning: true,
+        });
+        timer = setTimeout(tick, POLL_INTERVAL_MS);
+      } catch {
+        if (!stopped) {
+          setPublishStatus({ kind: "err", text: "Связь со статусом прервалась. Проверьте приложение TikTok." });
+        }
+      }
+    };
+
+    setPublishStatus({ kind: "wait", text: "TikTok принял задание, идёт обработка…", spinning: true });
+    timer = setTimeout(tick, POLL_INTERVAL_MS);
+  }, []);
 
   const publish = async () => {
     setPostMsg(null);
-    if (!videoUrl.trim()) return setPostMsg({ kind: "err", text: "Укажите публичный URL видео (mp4)." });
+    setPublishStatus(null);
+    cancelPolling.current?.();
+    const url = videoUrl.trim();
+    if (!url) return setPostMsg({ kind: "err", text: "Укажите публичный URL видео (mp4)." });
+    if (!/^https:\/\//i.test(url)) {
+      return setPostMsg({
+        kind: "err",
+        text: "Ссылка должна начинаться с https:// и вести на файл, доступный TikTok без авторизации.",
+      });
+    }
     if (!privacy) return setPostMsg({ kind: "err", text: "Выберите уровень приватности." });
     setPosting(true);
     try {
@@ -108,15 +236,20 @@ export default function TikTokPublisherPage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoUrl: videoUrl.trim(), title, privacyLevel: privacy, disableComment, disableDuet, disableStitch }),
+        body: JSON.stringify({ videoUrl: url, title, privacyLevel: privacy, disableComment, disableDuet, disableStitch }),
       });
       const j = await r.json();
-      if (!r.ok) {
+      if (r.status === 401) {
+        setCreator(null);
+        setCfg((c) => (c ? { ...c, connected: false } : c));
+        setPostMsg({ kind: "err", text: "Сессия TikTok истекла — подключите аккаунт заново." });
+      } else if (!r.ok) {
         const d = j.detail;
-        const detail = typeof d === "object" ? `${d.code || ""} ${d.message || ""}`.trim() : String(d || j.error || "");
-        setPostMsg({ kind: "err", text: `Не удалось отправить: ${detail || "ошибка"}` });
+        const detail = typeof d === "object" && d ? `${d.code || ""} ${d.message || ""}`.trim() : String(d || "");
+        setPostMsg({ kind: "err", text: `Не удалось отправить: ${ERROR_TEXT[j.error] || detail || j.error || "ошибка"}` });
       } else {
-        setPostMsg({ kind: "ok", text: `Отправлено в TikTok. publish_id: ${j.publishId}. Проверьте уведомления в приложении.` });
+        setPostMsg({ kind: "ok", text: "Задание принято TikTok." });
+        pollPublishStatus(j.publishId);
       }
     } catch (e: any) {
       setPostMsg({ kind: "err", text: e?.message || "Сбой отправки" });
@@ -126,6 +259,10 @@ export default function TikTokPublisherPage() {
   };
 
   const connected = !!creator || !!cfg?.connected;
+  const privacyOptions = creator?.privacyOptions || [];
+  // Without the creator's allowed privacy levels a post can only be rejected,
+  // so the button stays out of reach instead of promising something it cannot do.
+  const canPublish = privacyOptions.length > 0;
 
   return (
     <main className="ttp">
@@ -225,12 +362,21 @@ export default function TikTokPublisherPage() {
                 />
 
                 <label className="ttp-label">Кто увидит</label>
-                <select className="ttp-input" value={privacy} onChange={(e) => setPrivacy(e.target.value)}>
-                  {(creator?.privacyOptions || []).map((o) => (
-                    <option key={o} value={o}>
-                      {PRIVACY_LABELS[o] || o}
-                    </option>
-                  ))}
+                <select
+                  className="ttp-input"
+                  value={privacy}
+                  disabled={!privacyOptions.length}
+                  onChange={(e) => setPrivacy(e.target.value)}
+                >
+                  {privacyOptions.length ? (
+                    privacyOptions.map((o) => (
+                      <option key={o} value={o}>
+                        {PRIVACY_LABELS[o] || o}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">TikTok не вернул доступные уровни</option>
+                  )}
                 </select>
 
                 <div className="ttp-toggles">
@@ -263,11 +409,26 @@ export default function TikTokPublisherPage() {
                   </label>
                 </div>
 
-                <button className="ttp-btn ttp-btn-tiktok ttp-post" onClick={publish} disabled={posting}>
+                <button
+                  className="ttp-btn ttp-btn-tiktok ttp-post"
+                  onClick={publish}
+                  disabled={posting || !canPublish}
+                >
                   {posting ? "Отправка…" : "Опубликовать в TikTok"}
                 </button>
+                {!canPublish && !posting && (
+                  <p className="ttp-fine">
+                    Публикация недоступна, пока TikTok не вернул настройки аккаунта. Переподключите аккаунт.
+                  </p>
+                )}
 
                 {postMsg && <div className={`ttp-msg ttp-msg-${postMsg.kind}`}>{postMsg.text}</div>}
+                {publishStatus && (
+                  <div className={`ttp-msg ttp-msg-${publishStatus.kind === "wait" ? "wait" : publishStatus.kind}`}>
+                    {publishStatus.spinning && <span className="ttp-spin" aria-hidden="true" />}
+                    {publishStatus.text}
+                  </div>
+                )}
 
                 <p className="ttp-fine ttp-disclosure">
                   Публикуя, вы соглашаетесь с{" "}
@@ -331,5 +492,9 @@ const CSS = `
 .ttp-msg{margin-top:12px;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.5}
 .ttp-msg-ok{background:rgba(37,244,238,.12);color:var(--accent);border:1px solid rgba(37,244,238,.3)}
 .ttp-msg-err{background:rgba(254,44,85,.12);color:#ff8fa3;border:1px solid rgba(254,44,85,.3)}
+.ttp-msg-wait{background:rgba(245,179,66,.12);color:var(--amber);border:1px solid rgba(245,179,66,.3);display:flex;align-items:center;gap:9px}
+.ttp-spin{width:13px;height:13px;flex:none;border-radius:50%;border:2px solid rgba(245,179,66,.3);border-top-color:var(--amber);animation:ttp-spin .8s linear infinite}
+@keyframes ttp-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.ttp-spin{animation-duration:2.4s}}
 .ttp-disclosure a{color:var(--accent)}
 `;

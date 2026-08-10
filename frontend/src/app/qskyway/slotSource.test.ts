@@ -36,6 +36,13 @@ describe("тестовая бронь отличается от настояще
     expect(isSmokeSlot({ routeId: "", holder: "" })).toBe(false);
   });
 
+  it("флаг сервера главнее собственного разбора", () => {
+    // Сервер считает то же самое (`lib/slotOrigin.ts`) и является источником
+    // правды; свой разбор нужен лишь пока прод не выкачен.
+    expect(isSmokeSlot({ routeId: "smoke-route-1", holder: "op0", test: false })).toBe(false);
+    expect(isSmokeSlot({ routeId: "route-astana-h1-h2", holder: "человек", test: true })).toBe(true);
+  });
+
   it("на выборке с прода считается 3 из 4", () => {
     expect(countSmokeSlots(PROD_SAMPLE)).toBe(3);
     expect(countSmokeSlots([])).toBe(0);

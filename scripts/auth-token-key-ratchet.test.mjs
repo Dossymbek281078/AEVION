@@ -42,7 +42,12 @@ const BASELINE = 42;
 // "aevion_auth_token" (без _v1) сюда НЕ входит: его никто не пишет, но
 // migrateAuthToken() читает его намеренно, чтобы перенести старые сессии на
 // канонический ключ. Это не дефект, а миграция.
-const DEAD_KEYS = ['"aevion_token"', '"aevion_jwt"', '"qcoreai_token"'];
+const DEAD_KEYS = ["aevion_token", "aevion_jwt", "qcoreai_token"];
+
+// Кавычки обеих форм. Сейчас ключи входа пишут только в двойных, но проверка,
+// не знающая про одинарные, молча пропустит первый же такой вызов — а она
+// поставлена ровно против класса «незаметно мимо».
+const mentions = (text, key) => new RegExp(`["']${key}["']`).test(text);
 const CANONICAL = /aevion_auth_token_v1|getAuthToken|getAuthHeaders/;
 
 function walk(dir, out = []) {
@@ -58,7 +63,7 @@ function walk(dir, out = []) {
 const broken = [];
 for (const file of walk(SRC)) {
   const text = readFileSync(file, "utf8");
-  if (DEAD_KEYS.some((k) => text.includes(k)) && !CANONICAL.test(text)) {
+  if (DEAD_KEYS.some((k) => mentions(text, k)) && !CANONICAL.test(text)) {
     broken.push(path.relative(SRC, file).split(path.sep).join("/"));
   }
 }
@@ -92,8 +97,7 @@ ok(
 const all = walk(SRC).map((f) => readFileSync(f, "utf8")).join("\n");
 ok("канонический ключ действительно записывается", /setItem\(\s*(AUTH_TOKEN_KEY|"aevion_auth_token_v1")/.test(all));
 for (const key of DEAD_KEYS) {
-  const bare = key.slice(1, -1);
-  ok(`ключ ${bare} по-прежнему никто не записывает`, !new RegExp(`setItem\\(\\s*["']${bare}["']`).test(all));
+  ok(`ключ ${key} по-прежнему никто не записывает`, !new RegExp(`setItem\\(\\s*["']${key}["']`).test(all));
 }
 
 if (broken.length) {

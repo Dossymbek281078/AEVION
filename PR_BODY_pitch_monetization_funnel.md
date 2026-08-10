@@ -1,9 +1,19 @@
 # fix(pricing): every published number now matches the code behind it
 
-40 files, +1649/−136. Branch is level with `main` (merged 2026-08-10, two OG-image
+40 files, +1718/−136. Branch is level with `main` (merged 2026-08-10, two OG-image
 conflicts resolved). `tsc` clean on frontend and backend; **569 frontend tests across 55
-files and 15 backend tests pass.** Every guard added here was verified to go **red on a
-reverted value** before landing.
+files pass**, as do the guards added here on the backend. Every guard was verified to go
+**red on a reverted value** before landing.
+
+⚠️ **The backend suite is not reliably green, and not because of this branch.**
+`tests/devhub-integrations.test.ts` fails a *different set* of its 238 tests on each full
+run and passes completely in isolation. Diagnosed while verifying this branch:
+`src/routes/devhub.ts` starts work that outlives the request — two un-awaited
+`fetch(...).catch(() => {})` calls, four `setTimeout(async …)` blocks and an async IIFE.
+Each hits the **global** `fetch` after its test has ended, eating a response the next test
+queued. Raising timeouts will not help; these are assertion failures. The fix belongs to
+DevHub (make that background work awaitable or injectable). Flagged because CI runs the
+backend `npm test`, so it can redden unrelated PRs including this one.
 
 ## Why
 

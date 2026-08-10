@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
-import { LIVE_TOP_TIER_MONTHLY } from "@/data/pitchFacts";
+import { productById } from "@/lib/products";
 import { track } from "@/lib/track";
 
 // Единственный живой процессинг — Gumroad (Paddle/Stripe/LemonSqueezy не в
@@ -11,13 +11,11 @@ import { track } from "@/lib/track";
 
 interface Props {
   /**
-   * Which tier this button sells. Defaults to `full` — the banner copy says
-   * "All-Access · все модули включены", which is the Full tier, and no caller
-   * overrides it. It used to default to `pro` (Universe), so the tier tag sent
-   * to Gumroad and to the funnel disagreed with the price on the banner. The
-   * Gumroad params are attribution-only and do not change the charge, so this
-   * fixes reporting, not billing. `pro`/`business` stay accepted for legacy
-   * callers.
+   * Tier tag for attribution only — the charge comes from the Gumroad product,
+   * not from this value. Defaults to `full`: the banner sells All-Access ("все
+   * модули включены"), and `full` is the closest tier label for that. It used to
+   * default to `pro` (Universe), which tagged every hand-off with a tier the copy
+   * never offered. `pro`/`business` stay accepted for legacy callers.
    */
   tierId?: "full" | "pro" | "business";
   /** "button" — обычная кнопка, "banner" — полоса на всю ширину, "pill" — компактный */
@@ -36,6 +34,8 @@ export function UpgradeButton({
   className = "",
 }: Props) {
   const [loading, setLoading] = useState(false);
+  // The Gumroad All-Access subscription this banner sells.
+  const allAccess = productById("xpxzam");
 
   function handleClick() {
     setLoading(true);
@@ -61,12 +61,13 @@ export function UpgradeButton({
       <div className={`w-full ${className}`}>
         <div className="bg-gradient-to-r from-blue-600/20 to-violet-600/20 border border-blue-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
           <div>
-            {/* "Все модули включены" = the Full tier. The price is imported, not
-                typed: this banner sat at a hardcoded "$59/мес" that matched no
-                tier in any era (Full was $49 before the 2026-07-22 repricing and
-                is $89 after), on 9 module pages, right next to a live checkout. */}
+            {/* This button opens the Gumroad product `xpxzam`, NOT a tier checkout,
+                so the price must come from the product catalogue — not from the tier
+                registry. $59 is the real Gumroad price, verified against the live
+                dashboard on 2026-07-26 (see lib/products.ts). Imported rather than
+                typed so it tracks the catalogue. */}
             <div className="text-sm font-semibold text-white">
-              AEVION All-Access — {LIVE_TOP_TIER_MONTHLY}/мес
+              AEVION All-Access — ${allAccess?.priceUsd ?? 59}/мес
             </div>
             <div className="text-xs text-gray-400 mt-0.5">Все модули включены · Отмена в любой момент · Карта любого банка</div>
           </div>

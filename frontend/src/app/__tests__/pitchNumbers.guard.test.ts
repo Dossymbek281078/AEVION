@@ -372,9 +372,12 @@ describe("product prices — marketing copy stays pinned to the charging code", 
     const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     expect(
       /\$\s?\d/.test(code),
-      "UpgradeButton.tsx must not type a price literal — import it from @/data/pitchFacts.",
+      "UpgradeButton.tsx must not type a price literal — read it from @/lib/products.",
     ).toBe(false);
-    expect(src).toContain("LIVE_TOP_TIER_MONTHLY");
+    // It sells the Gumroad product `xpxzam`, not a tier, so the figure must come
+    // from the product catalogue (verified against the live Gumroad dashboard on
+    // 2026-07-26) — not from the tier registry.
+    expect(src).toContain('productById("xpxzam")');
   });
 
   it("/investor quotes the live Bureau Verified price", () => {

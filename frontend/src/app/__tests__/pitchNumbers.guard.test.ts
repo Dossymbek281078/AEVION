@@ -252,6 +252,15 @@ function registryCardPrices(): number[] {
     .sort((a, b) => a - b);
 }
 
+/**
+ * These pull in pitchModel/pitchFacts through a dynamic import. Under a full
+ * parallel run on a loaded machine that import alone can exceed vitest's 5s
+ * default, which is sized for pure unit tests — the guard then goes red because
+ * the disk was busy, not because a price drifted. A guard that is red for no
+ * reason is one people learn to skim past.
+ */
+const IMPORT_TIMEOUT_MS = 30_000;
+
 describe("prices — derived surfaces stay in sync with the backend tier registry", () => {
   it("the registry parses and still holds the six known tiers", () => {
     const tiers = registryTierPrices();
@@ -259,7 +268,7 @@ describe("prices — derived surfaces stay in sync with the backend tier registr
       ["enterprise", "free", "full", "lite", "medium", "pro"],
     );
     expect(tiers.enterprise).toBeNull();
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   it("pitchFacts quotes the live ladder (entry / top-live-checkout / Universe)", async () => {
     const tiers = registryTierPrices();
@@ -281,7 +290,7 @@ describe("prices — derived surfaces stay in sync with the backend tier registr
       facts.UNIVERSE_SEAT_MONTHLY,
       "UNIVERSE_SEAT_MONTHLY must equal the `pro` (Universe) price in data/pricing.ts",
     ).toBe(`$${tiers.pro}`);
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   it("the Universe annual figure follows the registry's ×10 annual formula", async () => {
     const tiers = registryTierPrices();
@@ -293,7 +302,7 @@ describe("prices — derived surfaces stay in sync with the backend tier registr
         "This figure is the seat ARPU the growth model runs on — if it drifts, every " +
         "ARR row in pitchModel.ts is wrong.",
     ).toBe(expected);
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   it("the growth model prices the Universe seat at the registry price", async () => {
     const tiers = registryTierPrices();
@@ -304,7 +313,7 @@ describe("prices — derived surfaces stay in sync with the backend tier registr
       launchGrowth.seat.honesty,
       "The on-ramp ladder quoted next to the seat price must be the live one.",
     ).toContain(`($0/$${tiers.lite}/$${tiers.medium}/$${tiers.full})`);
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   it("the bottom-up model prices All-Access at the live Full tier", async () => {
     const tiers = registryTierPrices();
@@ -315,7 +324,7 @@ describe("prices — derived surfaces stay in sync with the backend tier registr
       allAccess!.price.startsWith(`$${tiers.full}/mo`),
       `All-Access is the Full tier — its modelled price must open with $${tiers.full}/mo, got: ${allAccess!.price}`,
     ).toBe(true);
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   // OG cards are the classic laggard: nobody re-opens an image when a price
   // changes. Compare the full set of prices on the card to the registry rather
@@ -335,7 +344,7 @@ describe("prices — derived surfaces stay in sync with the backend tier registr
         `${rel} is a share card — its prices must be the live ladder from ` +
           "aevion-globus-backend/src/data/pricing.ts (Enterprise shows a word, not a number).",
       ).toEqual(registryCardPrices());
-    });
+    }, IMPORT_TIMEOUT_MS);
   }
 });
 
@@ -375,7 +384,7 @@ describe("product prices — marketing copy stays pinned to the charging code", 
     // from the product catalogue (verified against the live Gumroad dashboard on
     // 2026-07-26) — not from the tier registry.
     expect(src).toContain('productById("xpxzam")');
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   it("/investor quotes the live Bureau Verified price", () => {
     const payment = readBackend("lib/payment/index.ts");
@@ -390,7 +399,7 @@ describe("product prices — marketing copy stays pinned to the charging code", 
       investor,
       `Bureau Verified is charged at $${usd}/cert — /investor must not quote a different figure.`,
     ).toContain(`{ tier: "Verified", price: "$${usd}"`);
-  });
+  }, IMPORT_TIMEOUT_MS);
 
   it("/investor quotes the real QBuild hire-fee range", () => {
     const build = readBackend("lib/build/index.ts");
@@ -408,5 +417,5 @@ describe("product prices — marketing copy stays pinned to the charging code", 
       `The hire fee runs ${base}% (default recruiter tier) down to ${best}% (Platinum). ` +
         "It once read \"1.5%\" here — 8× below what the platform actually takes.",
     ).toContain(`price: "${base}% → ${best}%"`);
-  });
+  }, IMPORT_TIMEOUT_MS);
 });

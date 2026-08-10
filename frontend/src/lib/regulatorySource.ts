@@ -51,6 +51,17 @@ export interface RegulatorySource {
    * the chip states the narrower, true one.
    */
   publishedEffective?: string | null;
+  /**
+   * У источника нет фида, который можно опрашивать: это опубликованный
+   * ДОКУМЕНТ (eAIP цикла AIRAC, растровый слой ведомства), а не набор данных с
+   * эндпоинтом. Отличать обязательно: при `upToDate == null` чип говорит
+   * «сверка ещё не выполнялась», а это обещание проверки, которой для документа
+   * не бывает. Здесь честное утверждение другое — сверяем при пересборке слоя,
+   * и вот когда сверяли в последний раз (`lastReviewed`).
+   */
+  noLiveFeed?: boolean;
+  /** когда слой в последний раз сверяли с документом вручную */
+  lastReviewed?: string;
   /** cryptographically attested (e.g. Ed25519 over the ingested rule set) */
   attested?: boolean;
 }

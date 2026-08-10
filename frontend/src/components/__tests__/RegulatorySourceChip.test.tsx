@@ -65,6 +65,39 @@ describe("RegulatorySourceChip — свежесть источника", () => {
     expect(text).not.toContain("reg.tip.fresh");
   });
 
+  it("источник-документ не обещает сверки, которой не бывает", () => {
+    // Астана и Токио стоят на eAIP/растровом слое: опрашивать нечего.
+    // «Сверка ещё не выполнялась» читалось бы как «скоро выполним».
+    render(
+      <RegulatorySourceChip
+        source={{
+          tier: "official",
+          authority: "Казаэронавигация / AIP KZ",
+          effective: "AIRAC 2026-05-14",
+          upToDate: null,
+          noLiveFeed: true,
+          lastReviewed: "2026-07-26",
+        }}
+      />,
+    );
+    const text = tooltipText();
+    expect(text).toContain("reg.tip.nofeed.reviewed");
+    expect(text).toContain("2026-07-26");
+    expect(text).not.toContain("reg.tip.unchecked");
+  });
+
+  it("документ без даты сверки не выдумывает её", () => {
+    render(
+      <RegulatorySourceChip
+        source={{ tier: "official", authority: "AIP KZ", upToDate: null, noLiveFeed: true }}
+      />,
+    );
+    const text = tooltipText();
+    expect(text).toContain("reg.tip.nofeed");
+    expect(text).not.toContain("reg.tip.nofeed.reviewed");
+    expect(text).not.toContain("reg.tip.unchecked");
+  });
+
   it("реальный дрейф по-прежнему просит обновить данные и получает ⚠", () => {
     render(
       <RegulatorySourceChip
@@ -82,10 +115,13 @@ describe("словарь: формулировка переиздания ест
   // редакции не потерялась при переводе — без {edition} фраза снова стала бы
   // общей и недоказуемой.
   for (const lang of ["en", "ru", "kk"] as const) {
-    it(`${lang} — ключ есть и несёт {edition}`, () => {
+    it(`${lang} — ключи есть и несут свои подстановки`, () => {
       const dict = (translations as Record<string, Record<string, string>>)[lang];
       expect(dict["reg.tip.reissued"]).toBeDefined();
       expect(dict["reg.tip.reissued"]).toContain("{edition}");
+      expect(dict["reg.tip.nofeed"]).toBeDefined();
+      expect(dict["reg.tip.nofeed.reviewed"]).toBeDefined();
+      expect(dict["reg.tip.nofeed.reviewed"]).toContain("{reviewed}");
     });
   }
 });

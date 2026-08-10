@@ -68,7 +68,19 @@ export function RegulatorySourceChip({ source, labels, subject }: Props) {
     if (reissued) lines.push(t("reg.tip.reissued", { edition: source!.publishedEffective as string }));
     else if (source?.upToDate === true) lines.push(t("reg.tip.fresh"));
     if (source?.upToDate === false) lines.push(t("reg.tip.drift"));
-    if (source?.upToDate == null) lines.push(t("reg.tip.unchecked"));
+    // «Ещё не выполнялась» — обещание проверки. Для документа (eAIP цикла AIRAC,
+    // растровый слой ведомства) её не бывает вовсе, и обещать её нельзя.
+    if (source?.upToDate == null) {
+      if (source?.noLiveFeed) {
+        lines.push(
+          source.lastReviewed
+            ? t("reg.tip.nofeed.reviewed", { reviewed: source.lastReviewed })
+            : t("reg.tip.nofeed"),
+        );
+      } else {
+        lines.push(t("reg.tip.unchecked"));
+      }
+    }
     if (source?.attested) lines.push(t("reg.tip.attested"));
   } else if (tier === "illustrative") {
     lines.push(t("reg.tip.illustrative"));

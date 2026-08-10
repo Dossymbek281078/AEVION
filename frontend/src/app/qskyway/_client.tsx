@@ -32,7 +32,7 @@ interface AirspaceSummary {
   note?: string;
   freshness?: { checked: boolean; upToDate: boolean | null; publishedEffective: string | null; cellsChanged: number; checkedAt: string | null };
   /** a regulator gate on the operation, published separately from any ceiling */
-  permission?: { available: boolean; authority?: string; regime?: string; kind?: "permission" | "prohibition"; basis?: string; effective?: string; coveragePct?: number; uniform?: boolean; note?: string; provenanceNote?: string };
+  permission?: { available: boolean; authority?: string; regime?: string; kind?: "permission" | "prohibition"; basis?: string; effective?: string; sampled?: string; coveragePct?: number; uniform?: boolean; note?: string; provenanceNote?: string };
   _signature?: { alg: string; contentHash: string };
 }
 /** Per-route verdict against that ceiling. compliant=null → no feed, no verdict. */
@@ -103,6 +103,12 @@ function airspaceRegSource(a: AirspaceSummary | undefined): RegulatorySource {
         effective: perm.effective,
         scopeNote: [perm.regime, perm.note, perm.provenanceNote].filter(Boolean).join(" "),
         upToDate: null,
+        // Астана и Токио стоят не на фиде, а на документе: eAIP цикла AIRAC и
+        // растровый слой ведомства. Опрашивать нечего, поэтому «сверка ещё не
+        // выполнялась» обещало бы проверку, которой не бывает. Честно —
+        // назвать природу источника и дату последней ручной сверки.
+        noLiveFeed: true,
+        lastReviewed: perm.sampled,
         attested: false,
       };
     }

@@ -1,7 +1,9 @@
-# fix(pricing): every published price now matches the code that charges it
+# fix(pricing): every published number now matches the code behind it
 
-18 files, +440/−108. Branch is level with `main` (merged 2026-08-10, two OG-image
-conflicts resolved). `tsc` clean on frontend and backend; **560 tests across 52 files pass.**
+40 files, +1649/−136. Branch is level with `main` (merged 2026-08-10, two OG-image
+conflicts resolved). `tsc` clean on frontend and backend; **569 frontend tests across 55
+files and 15 backend tests pass.** Every guard added here was verified to go **red on a
+reverted value** before landing.
 
 ## Why
 
@@ -109,6 +111,49 @@ Constitution Free/Pro $9/Team $49 (`constitutionCheckout.ts`), module add-on chi
   legitimately someone else's, and an allowlist that large could not be verified.
   Explanatory text is excused only on real comment lines, so adding the word "repriced"
   to a UI string cannot smuggle a wrong price past it — verified.
+
+## The same audit, applied outward
+
+Once the tier ladder was pinned, the same question — *what code backs this number?* —
+was put to every other numeric claim. AEVION turns out to have **four** money sources of
+truth, and a surface belongs to exactly one: `data/pricing.ts` (tier checkout),
+`lib/products.ts` (Gumroad/LS products, verified against the live dashboards on
+2026-07-26), `routes/apiQuotas.ts` (the API ladder, served machine-readable at
+`/api/quotas`), and per-product backends (Bureau cents, Constitution, QBuild's RUB plans).
+
+- **API `Scale` tier** — `/developers/fintech/rate-limits` and `/fintech/compare` printed
+  `$199/mo` while the registry a developer can curl says `$249`. Fixed; all three
+  surfaces pinned by `apiTierPrices.guard.test.ts`.
+- **Public module counter** — `data/trust.ts` served `27` at `/api/pricing/trust` while
+  `projects.ts` holds 41 entries, and credited it to "Business", a tier with no object in
+  `TIERS`. Both are derivable from code, so both were fixed (40 = entries − the globus map
+  shell; Business → Full, the mapping `provisioning.ts` already uses).
+- **Guard blind spot** — `scaleClaims.guard` and `retiredPrices.guard` stop at
+  `frontend/src`, which is exactly why the backend counter survived. Closed from the
+  backend side in `trustClaims.guard.test.ts`, which reads the registry rather than
+  comparing one constant to another — a constant-vs-constant assertion is green forever,
+  and that is how `27` outlived the registry's growth.
+
+## Findings left for a decision, deliberately unfixed
+
+Each is documented at the site, so the next reader does not mistake it for settled.
+
+- **Two tier limits nothing enforces.** Of the seven `TierLimits` fields, five are read by
+  code; `qrightObjectsPerMonth` and `qsignOpsPerDay` are advertised on the pricing page and
+  read by nothing. The divergence runs in the customer's favour, and switching enforcement
+  on means deciding whom to start refusing.
+- **Three SLA ladders for one promise.** `apiQuotas.ts` (Build 99.0 · Scale 99.5 ·
+  Enterprise 99.9), `trust.ts` (99.5 · 99.95), and the `/pricing` glossary ("99.9% on
+  everything"). The glossary contradicts the registry a developer can curl. An SLA is a
+  commercial commitment; picking one to make the files agree would be inventing it.
+- **Traction counters with no source.** "12 000+ ideas", "3 200+ artifacts", "30+
+  countries" in `trust.ts`, for a pre-revenue company.
+- **Retired price inside customer quotes.** A testimonial and a case study still say
+  `$19/мес`. Allowlisted with a reason rather than corrected — rewriting a price inside a
+  quote attributed to a named person is falsifying a testimonial.
+- **Planet.** The one paid offer whose price ($250/$200) lives in a page component and
+  whose checkout links are raw Lemon Squeezy UUIDs, bypassing both the catalogue and the
+  backend's reference system. Nothing in the codebase can verify what it bills.
 
 ## Also verified, no defect
 

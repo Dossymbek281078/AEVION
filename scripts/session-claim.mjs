@@ -13,8 +13,18 @@
 //
 // Usage:
 //   node scripts/session-claim.mjs <module-id>   # check one module
+//   node scripts/session-claim.mjs --file <path> # who ALREADY changed this file
 //   node scripts/session-claim.mjs --map         # print module -> paths map
 //   node scripts/session-claim.mjs               # summarize every worktree's zone
+//
+// Why --file exists (added 2026-08-10 after a real duplicate). The module check
+// looks at branch NAMES and at UNCOMMITTED files. Both missed a collision that
+// cost two sessions the same two hours: another worktree had already COMMITTED
+// its change to frontend/src/data/pitchFacts.ts, so nothing was dirty, and its
+// branch was called fix/pitch-one-denominator — the word "pitchFacts" appears
+// nowhere in it. Asking about the module returned FREE, truthfully and
+// uselessly. Shared files (data/*.ts, guards in __tests__/) belong to no single
+// module, so ask about the FILE before touching them.
 //
 // Exit code: 0 = free (or informational), 1 = claimed by another worktree.
 
@@ -152,6 +162,41 @@ if (!arg) {
   console.log("\nRule: 1 module = 1 worktree = 1 branch. Claim before editing:");
   console.log("  node scripts/session-claim.mjs <module-id>");
   process.exit(0);
+}
+
+// ── --file mode: кто УЖЕ менял этот файл в своей ветке ────────────────────
+// Смотрим коммиты, а не грязь в рабочей папке: чужая работа чаще всего уже
+// закоммичена, и именно поэтому проверка по имени зоны её не видит.
+if (arg === "--file") {
+  const target = process.argv[3];
+  if (!target) {
+    console.log("Usage: node scripts/session-claim.mjs --file <path-from-repo-root>");
+    process.exit(0);
+  }
+  console.log(`File "${target}" — who already changed it on their branch:
+`);
+  const touched = [];
+  for (const wt of wts) {
+    if (resolve(wt.path) === self) continue;
+    if (!wt.branch) continue;
+    let n = 0;
+    try {
+      n = Number(sh(`git rev-list --count main..${wt.branch} -- "${target}"`, ROOT) || "0");
+    } catch {
+      n = 0;
+    }
+    if (n > 0) touched.push({ branch: wt.branch, path: wt.path, commits: n });
+  }
+  if (!touched.length) {
+    console.log("✅ FREE — no other worktree has committed changes to this file.");
+    process.exit(0);
+  }
+  console.log("⚠️  Уже правят — согласуй, иначе мерж затрёт чужое:");
+  for (const t of touched.sort((a, b) => b.commits - a.commits)) {
+    console.log(`   • ${t.branch}  (${t.commits} коммит(ов) по этому файлу)  ${t.path}`);
+  }
+  console.log(`\nПосмотреть чужую правку: git diff main...<ветка> -- ${target}`);
+  process.exit(1);
 }
 
 // Claim-check mode for a specific module.

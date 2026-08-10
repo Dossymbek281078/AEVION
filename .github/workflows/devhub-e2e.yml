@@ -76,6 +76,7 @@ jobs:
             e2e/translation-cache.spec.ts \
             e2e/globe-lazy.spec.ts \
             e2e/page-weight.spec.ts \
+            e2e/i18n-lazy-dictionary.spec.ts \
             --project=chromium
       - if: failure()
         uses: actions/upload-artifact@v4

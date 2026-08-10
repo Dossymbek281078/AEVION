@@ -207,18 +207,15 @@ describe("pitchFacts — canonical counts stay in sync with the registry", () =>
  * derived surfaces match. Any future price change fails here until every
  * surface is updated — the drift becomes a red build, not a support ticket.
  *
- * KNOWN LIMIT, and the next step. Like the top half of this file, the checks
- * below look at a NAMED list of surfaces. scaleClaims.guard.test.ts made the
- * opposite bet for module counts — it sweeps the whole frontend and requires
- * every exception to be listed by name with a reason — after a full audit on
- * 2026-07-27 found 31 stale counts, none of them on any named surface. Prices
- * deserve the same inversion: the $59 All-Access banner and the $149 devhub
- * upgrade link were both found by hand on 2026-08-10, not by this guard.
- * Doing it properly needs a deliberate allowlist of the legitimate non-tier
- * prices (Bureau $19/cert, Constitution $9/$49, the API tiers, competitor
- * figures in comparison copy) — build that list from evidence, not from a
- * quick grep, or the sweep will be either noisy or falsely green. Extend
- * scaleClaims' approach here rather than adding a third mechanism.
+ * SCOPE, and its counterpart. The checks below pin NAMED surfaces to the
+ * registry — they answer "is this specific figure still right?". They cannot
+ * answer "did a retired price reappear somewhere nobody is watching?": the $59
+ * All-Access banner and the $149 devhub link were both found by hand on
+ * 2026-08-10, not by this guard. That question belongs to
+ * retiredPrices.guard.test.ts, which sweeps the whole frontend for the four
+ * retired tier prices and names every legitimate exception — the same bet
+ * scaleClaims.guard.test.ts makes for module counts. Keep the two apart:
+ * positive pinning here, whole-sweep there, and no third mechanism.
  */
 
 const BACKEND_PRICING = path.resolve(

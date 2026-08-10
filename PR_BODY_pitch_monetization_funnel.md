@@ -78,13 +78,13 @@ Constitution Free/Pro $9/Team $49 (`constitutionCheckout.ts`), module add-on chi
   successful), but the generated route types fail on `frontend/src/app/[id]/page.tsx`
   (`params: Promise<T> | T`, last touched in #537) — an unrelated pre-existing file, and
   this worktree resolves a different Next patch than the pinned one. CI is the authority.
-- **This guard still watches a named list of surfaces.** `scaleClaims.guard.test.ts`
-  already made the opposite bet for module counts — sweep everything, name every
-  exception — after an audit found 31 stale counts on unwatched surfaces. Prices deserve
-  the same inversion; the `$59` banner and the `$149` devhub link were both found by
-  hand, not by a test. Doing it properly needs an evidence-built allowlist of legitimate
-  non-tier prices. Noted in the guard so the next pass extends `scaleClaims` rather than
-  inventing a third mechanism.
+- **Whole-frontend sweep is in** (`retiredPrices.guard.test.ts`), covering the four
+  retired tier prices with every legitimate exception named and reasoned — the same bet
+  `scaleClaims.guard.test.ts` makes for module counts. Scope stops there deliberately:
+  the frontend holds 1033 dollar literals across 300 distinct values, almost all of them
+  legitimately someone else's, and an allowlist that large could not be verified.
+  Explanatory text is excused only on real comment lines, so adding the word "repriced"
+  to a UI string cannot smuggle a wrong price past it — verified.
 
 ## Needs a decision, not code
 

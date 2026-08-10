@@ -1,60 +1,100 @@
 #!/usr/bin/env node
 /**
- * QBuild frontend <-> backend contract check.
+ * AEVION frontend <-> backend API contract check.
  *
- * Refactors on the Express side kept renaming /api/build/* routes while the
- * frontend client kept calling the old ones. Nothing failed loudly: the calls
- * 404'd into an empty catch, so pages just rendered empty forever. This finds
- * that class of drift statically.
+ * Refactors on the Express side kept renaming routes while the frontend kept
+ * calling the old ones. Nothing failed loudly: the calls 404'd into an empty
+ * catch, so pages just rendered empty forever. This finds that class of drift
+ * statically, plus a second one — a bare relative /api/<module>/... URL, which
+ * resolves against the Next app instead of the backend because next.config
+ * rewrites only /api-backend/*.
  *
- * It collects every /api/build/* request the frontend makes:
- *   - buildApi client methods in frontend/src/lib/build/api.ts
- *   - raw fetch(apiUrl("/api/build/...")) anywhere under frontend/src
- * and every route actually mounted under buildRouter, then reports calls with
- * no matching route.
+ * It collects every /api/<module>/* request the frontend makes:
+ *   - client methods in frontend/src/lib/<module>/api.ts, when that file exists
+ *   - any literal in a request position anywhere under frontend/src
+ * and every route mounted under the module's router, then reports calls with no
+ * matching route and calls sent to the wrong origin. Exit code 1 on either, so
+ * it can gate a build.
  *
- * Exit code 1 when a call has no route, so it can gate a build.
- * Verified 2026-08-10: the route list this produces is identical (228/228) to
- * the one read off the live Express routers at runtime.
+ * Verified 2026-08-10 on `build`: the route list it produces is identical
+ * (228/228) to the one read off the live Express routers at runtime.
  *
- * Usage: node scripts/build-contract-check.mjs [--list-unused]
+ * Usage: node scripts/build-contract-check.mjs [--module=<name>] [--list-unused]
+ *        --module defaults to `build`. Other modules were never swept — expect
+ *        real findings the first time (qpaynet and qcoreai both have them).
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const MODULE = (process.argv.find((a) => a.startsWith("--module=")) ?? "--module=build").slice(9);
+if (!/^[a-z0-9-]+$/.test(MODULE)) {
+  console.error(`Bad --module: ${MODULE}`);
+  process.exit(2);
+}
+const PREFIX = `/api/${MODULE}`;
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const API = path.join(ROOT, "frontend/src/lib/build/api.ts");
 const SRC = path.join(ROOT, "frontend/src");
-const ROUTES_DIR = path.join(ROOT, "aevion-globus-backend/src/routes/build");
-const BUILD_TS = path.join(ROOT, "aevion-globus-backend/src/routes/build.ts");
-
-// ── backend: mount prefix per sub-router ──────────────────────────────────
-const buildSrc = fs.readFileSync(BUILD_TS, "utf8");
-const mounts = {};
-for (const m of buildSrc.matchAll(/buildRouter\.use\(\s*"([^"]+)"\s*,\s*(\w+)\s*\)/g)) {
-  (mounts[m[2]] ??= []).push(m[1] === "/" ? "" : m[1]);
-}
-const importFile = {};
-for (const m of buildSrc.matchAll(/import\s*\{([^}]+)\}\s*from\s*"\.\/build\/([\w-]+)"/g)) {
-  for (const name of m[1].split(",").map((s) => s.trim()).filter(Boolean)) importFile[name] = m[2];
+// Only `build` and `bank` have a dedicated api.ts; every other module fetches
+// inline from its pages, and the generic scan below covers those.
+const API = path.join(ROOT, `frontend/src/lib/${MODULE}/api.ts`);
+const HAS_API = fs.existsSync(API);
+const ROUTES_DIR = path.join(ROOT, `aevion-globus-backend/src/routes/${MODULE}`);
+const ROOT_ROUTE_FILE = path.join(ROOT, `aevion-globus-backend/src/routes/${MODULE}.ts`);
+if (!fs.existsSync(ROOT_ROUTE_FILE)) {
+  console.error(`No backend router at ${path.relative(ROOT, ROOT_ROUTE_FILE)} — is "${MODULE}" the right module?`);
+  process.exit(2);
 }
 
+// ── backend: routes on the module router, plus any mounted sub-routers ─────
+const rootSrc = fs.readFileSync(ROOT_ROUTE_FILE, "utf8");
 const backend = [];
-for (const [routerVar, prefixes] of Object.entries(mounts)) {
-  const file = importFile[routerVar];
-  if (!file) continue;
-  const p = path.join(ROUTES_DIR, `${file}.ts`);
-  if (!fs.existsSync(p)) continue;
-  const src = fs.readFileSync(p, "utf8");
-  for (const m of src.matchAll(/\b\w*[Rr]outer\.(get|post|patch|put|delete)\(\s*"([^"]*)"/g)) {
-    for (const prefix of prefixes) {
-      backend.push({
-        method: m[1].toUpperCase(),
-        pattern: `/api/build${prefix}${m[2] === "/" ? "" : m[2]}`,
-        file,
-      });
-    }
+
+// `router.post("/x", someLimiter)` attaches middleware to a path — it is not an
+// endpoint, and counting it would both inflate the route list and let a path
+// look "served" when only a rate limiter sits there. Require an inline handler.
+const ROUTE_CALL = /\b\w*[Rr]outer\.(get|post|patch|put|delete)\(\s*"([^"]*)"/g;
+
+const collect = (src, prefix, file) => {
+  for (const m of src.matchAll(ROUTE_CALL)) {
+    // A handler can sit behind middleware — router.post("/x", limiter, async
+    // (req, res) => ...) — so look ahead for one instead of demanding it be the
+    // next argument. No handler in sight means the line only attaches
+    // middleware to that path.
+    if (!/async\s*\(|\(\s*_?req\b/.test(src.slice(m.index, m.index + 220))) continue;
+    backend.push({
+      method: m[1].toUpperCase(),
+      pattern: `${PREFIX}${prefix}${m[2] === "/" ? "" : m[2]}`,
+      file,
+    });
+  }
+};
+
+// Routes declared straight on the module's own router file.
+collect(rootSrc, "", MODULE);
+
+// Modules big enough to split declare sub-routers in routes/<module>/*.ts and
+// mount them with a prefix; modules that never split have no such directory.
+if (fs.existsSync(ROUTES_DIR)) {
+  const mounts = {};
+  for (const m of rootSrc.matchAll(/\w+Router\.use\(\s*"([^"]+)"\s*,\s*(\w+)\s*\)/g)) {
+    (mounts[m[2]] ??= []).push(m[1] === "/" ? "" : m[1]);
+  }
+  const importRe = new RegExp(
+    String.raw`import\s*\{([^}]+)\}\s*from\s*"\./${MODULE}/([\w-]+)"`, "g",
+  );
+  const importFile = {};
+  for (const m of rootSrc.matchAll(importRe)) {
+    for (const name of m[1].split(",").map((x) => x.trim()).filter(Boolean)) importFile[name] = m[2];
+  }
+  for (const [routerVar, prefixes] of Object.entries(mounts)) {
+    const file = importFile[routerVar];
+    if (!file) continue;
+    const p = path.join(ROUTES_DIR, `${file}.ts`);
+    if (!fs.existsSync(p)) continue;
+    const src = fs.readFileSync(p, "utf8");
+    for (const prefix of prefixes) collect(src, prefix, file);
   }
 }
 
@@ -89,16 +129,16 @@ const LITERAL = String.raw`"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|\`(?:[^\`\\]|
 const unquote = (lit) => lit.slice(1, -1);
 
 const calls = [];
-const apiSrc = fs.readFileSync(API, "utf8");
+const apiSrc = HAS_API ? fs.readFileSync(API, "utf8") : "";
 for (const m of apiSrc.matchAll(
   new RegExp(String.raw`call<[\s\S]*?>\(\s*"(GET|POST|PATCH|PUT|DELETE)"\s*,\s*(${LITERAL})`, "g"),
 )) {
   const p = toPath(unquote(m[2]));
-  if (!p.startsWith("/api/build")) continue;
+  if (!p.startsWith(PREFIX)) continue;
   calls.push({
     method: m[1],
     path: p,
-    where: "frontend/src/lib/build/api.ts",
+    where: path.relative(ROOT, API).replace(/\\/g, "/"),
     line: apiSrc.slice(0, m.index).split("\n").length,
   });
 }
@@ -112,9 +152,9 @@ function walk(dir, out = []) {
   return out;
 }
 // Outside api.ts there is no single calling convention: fetch(apiUrl("...")),
-// fetch(`${getApiBase()}/api/build/...`) and bare endpoint="..." props all
+// fetch(`${getApiBase()}/api/<module>/...`) and bare endpoint="..." props all
 // occur. So do not match on the caller — match on any string or template
-// literal that contains an /api/build path, and infer the method from the
+// literal that contains the module path, and infer the method from the
 // nearest `method: "..."` after it (fetch defaults to GET when absent).
 // Comments and JSX prose mention these URLs too (docs pages, changelog), and
 // a path quoted in prose is not a call. Blank comments out first, then keep
@@ -127,14 +167,14 @@ for (const file of walk(SRC)) {
   const src = stripComments(fs.readFileSync(file, "utf8"));
   for (const m of src.matchAll(new RegExp(LITERAL, "g"))) {
     const lit = unquote(m[0]);
-    if (!lit.includes("/api/build")) continue;
-    const raw = lit.slice(lit.indexOf("/api/build"));
+    if (!lit.includes(PREFIX)) continue;
+    const raw = lit.slice(lit.indexOf(PREFIX));
     // Strip `${...}` before judging: an interpolation legitimately contains
     // spaces (`${q ? "?" + q : ""}`), a sentence about the URL does too, and
     // only the second should be discarded.
     const p = toPath(raw).replace(/[.,;:)]+$/, (t) => (/\.(xml|pdf|csv|js|json)$/.test(raw) ? t : ""));
     if (/[\s<>]/.test(p)) continue;
-    if (!p.startsWith("/api/build")) continue;
+    if (!p.startsWith(PREFIX)) continue;
     // The method may sit in a fetch options object, or be passed in as a prop
     // from elsewhere. Guessing GET when it is absent invents drift that is not
     // there, so an undetermined method matches the path under any verb.
@@ -142,7 +182,7 @@ for (const file of walk(SRC)) {
     const before = src.slice(Math.max(0, m.index - 40), m.index);
     const isFetch = /fetch\(\s*$|fetch\(\s*apiUrl\(\s*$/.test(before);
     // next.config rewrites only /api-backend/* to the backend, so a bare
-    // relative /api/build URL hits the Next app itself and 404s into whatever
+    // relative module URL hits the Next app itself and 404s into whatever
     // error handling the caller has. The path is right; the origin is not.
     //
     // A literal only carries an origin if something supplies one: apiUrl(...)
@@ -151,11 +191,11 @@ for (const file of walk(SRC)) {
     // goes straight into fetch() or reaches it through a prop or a variable.
     // Flag only positions where the string really is a request target: a fetch
     // argument, a browser-followed href/src, or an endpoint prop passed down to
-    // one. A docs component rendering `path="/api/build/..."` as text, or a
+    // one. A docs component rendering `path="/api/..."` as text, or a
     // helper like sitemap's fetchIds() that prepends the base itself, is not.
     const isTarget = /(?:fetch\(|href=\{?|src=\{?|endpoint=\{?)\s*$/.test(before);
     const wrappedInApiUrl = /apiUrl\(\s*$/.test(before);
-    const wrongOrigin = isTarget && !wrappedInApiUrl && lit.indexOf("/api/build") === 0;
+    const wrongOrigin = isTarget && !wrappedInApiUrl && lit.indexOf(PREFIX) === 0;
     calls.push({
       method: method ? method[1] : isFetch ? "GET" : "ANY",
       path: p,
@@ -195,7 +235,7 @@ const misaddressed = calls.filter((c) => c.wrongOrigin);
 
 console.log(`frontend calls: ${calls.length} | backend routes: ${backend.length}`);
 if (unmatched.length === 0) {
-  console.log("OK — every /api/build call resolves to a mounted route.");
+  console.log(`OK — every ${PREFIX} call resolves to a mounted route.`);
 } else {
   console.log(`\nFRONTEND CALLS WITH NO BACKEND ROUTE (${unmatched.length}):`);
   for (const c of unmatched) console.log(`  ${c.where}:${c.line}  ${c.method} ${c.path}`);
@@ -203,7 +243,7 @@ if (unmatched.length === 0) {
 
 if (misaddressed.length > 0) {
   console.log(`\nCALLS SENT TO THE WRONG ORIGIN (${misaddressed.length}):`);
-  console.log("  A bare relative /api/build URL reaches the Next app, not the backend.");
+  console.log(`  A bare relative ${PREFIX} URL reaches the Next app, not the backend.`);
   console.log("  Wrap it in apiUrl() or call it through buildApi.");
   for (const c of misaddressed) console.log(`  ${c.where}:${c.line}  ${c.method} ${c.path}`);
 }

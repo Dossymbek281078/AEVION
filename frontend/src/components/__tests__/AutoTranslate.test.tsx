@@ -14,7 +14,12 @@ describe("AutoTranslate — fragmented text nodes", () => {
     // Pre-seed the persisted translation cache so no network round-trip is
     // needed for the phrase under test.
     localStorage.setItem(
-      "aevion_tr_v1_ru",
+      // Версия ключа поднята до v2 10.08.2026: в кешах посетителей осели
+      // неверные пары («Обзор → физ», «Настройки → целлюлоза»), а кеш к API
+      // не обращается, поэтому мусор жил бы в браузере бесконечно. Тест
+      // должен пользоваться тем же ключом, что и код, иначе он проверяет
+      // пустой кеш и молча теряет смысл.
+      "aevion_tr_v2_ru",
       JSON.stringify({ "3 smart calls": "3 умных вызова" })
     );
     global.fetch = vi.fn().mockResolvedValue({
@@ -49,7 +54,12 @@ describe("AutoTranslate — fragmented text nodes", () => {
 
   it("still translates single text nodes exactly as before", async () => {
     localStorage.setItem(
-      "aevion_tr_v1_ru",
+      // Версия ключа поднята до v2 10.08.2026: в кешах посетителей осели
+      // неверные пары («Обзор → физ», «Настройки → целлюлоза»), а кеш к API
+      // не обращается, поэтому мусор жил бы в браузере бесконечно. Тест
+      // должен пользоваться тем же ключом, что и код, иначе он проверяет
+      // пустой кеш и молча теряет смысл.
+      "aevion_tr_v2_ru",
       JSON.stringify({ "Open project": "Открыть проект" })
     );
     const { container } = await act(async () =>

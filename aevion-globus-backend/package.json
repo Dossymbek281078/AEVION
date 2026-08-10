@@ -59,7 +59,7 @@
     "coord:update-commit": "node scripts/coord-update.js --commit",
     "wait-for-deploy": "node scripts/wait-for-deploy.js",
     "test": "vitest run && npm run test:qreal-suite",
-    "test:qreal-suite": "node ../scripts/qreal-judge.test.mjs && node ../scripts/qreal-characters.test.mjs && node ../scripts/qreal-continuity.test.mjs && node ../scripts/qreal-sync-rubric.mjs --check && node ../scripts/multichat-dissent.test.mjs && node ../scripts/multichat-receipt.test.mjs && node ../scripts/multichat-contrast.test.mjs && node ../scripts/auth-token-key-ratchet.test.mjs && node ../scripts/api-base-ratchet.test.mjs",
+    "test:qreal-suite": "node ../scripts/qreal-judge.test.mjs && node ../scripts/qreal-characters.test.mjs && node ../scripts/qreal-continuity.test.mjs && node ../scripts/qreal-sync-rubric.mjs --check && node ../scripts/multichat-dissent.test.mjs && node ../scripts/multichat-receipt.test.mjs && node ../scripts/multichat-contrast.test.mjs && node ../scripts/auth-token-key-ratchet.test.mjs && node ../scripts/api-base-ratchet.test.mjs && node ../scripts/next-params-type-check.mjs",
     "test:watch": "vitest"
   },
   "keywords": [],

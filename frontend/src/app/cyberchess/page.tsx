@@ -125,6 +125,7 @@ import { accuracyOf } from "./accuracy";
 import { award as ledgerAward, canSpend, spend as ledgerSpend, unlock as ledgerUnlock, migrateWallet } from "./chessyLedger";
 import { buildPuzzleQuery } from "./puzzleQuery";
 import { ingestPuzzles } from "./puzzleIngest";
+import { writeJson, onStorageFailure } from "./storageHealth";
 
 /* Результат в PGN АБСОЛЮТЕН — «1-0» значит «выиграли белые», — а строка `over` относительна
    игроку («You win»). Во всех четырёх местах, где строился PGN и метаданные ролика, стояло
@@ -447,14 +448,18 @@ const RK="aevion_chess_rating_v2",SK="aevion_chess_stats_v2";
 function ldR(){try{return parseInt(localStorage.getItem(RK)||"800")}catch{return 800}}
 function svR(v:number){try{localStorage.setItem(RK,String(Math.round(v)))}catch{}}
 function ldS(){try{return JSON.parse(localStorage.getItem(SK)||'{"w":0,"l":0,"d":0}')}catch{return{w:0,l:0,d:0}}}
-function svS(v:{w:number;l:number;d:number}){try{localStorage.setItem(SK,JSON.stringify(v))}catch{}}
+/* Через writeJson, а не через проглоченный catch: это счёт побед, а не настройка —
+   отказ записи здесь означает, что игрок потеряет результаты после перезагрузки. */
+function svS(v:{w:number;l:number;d:number}){writeJson(SK,v)}
 function gRank(e:number){return[...RANKS].reverse().find(r=>e>=r.min)||RANKS[0]}
 
 /* ═══ Game History ═══ */
 type SavedGame = {id:string;date:string;moves:string[];result:string;playerColor:"w"|"b";aiLevel:string;rating:number;tc:string;category:"Bullet"|"Blitz"|"Rapid"|"Classical";opening?:string;analysis?:Array<{ply:number;quality:string;cpLoss?:number}>};
 const GK="aevion_chess_games_v1";
 function loadGames():SavedGame[]{try{return JSON.parse(localStorage.getItem(GK)||"[]")}catch{return[]}}
-function saveGame(g:SavedGame){try{const all=loadGames();all.unshift(g);if(all.length>200)all.length=200;localStorage.setItem(GK,JSON.stringify(all))}catch{}}
+/* Самая тяжёлая запись в модуле — до 200 партий с ходами и разбором. Именно она
+   первой упрётся в исчерпанную квоту, и именно её отказ незаметнее всего. */
+function saveGame(g:SavedGame){const all=loadGames();all.unshift(g);if(all.length>200)all.length=200;writeJson(GK,all)}
 
 /* ═══ Chessy — in-game currency ═══ */
 type ChessyState={v:1;balance:number;lifetime:number;lastDaily?:string;streak:number;welcome:boolean;owned:Record<string,boolean>;ach:Record<string,number>};
@@ -464,7 +469,8 @@ const CHESSY_DEFAULT:ChessyState={v:1,balance:0,lifetime:0,streak:0,welcome:fals
    на `r.v!==1` возвращал пустое состояние, то есть первое же поднятие версии
    стёрло бы всем баланс, достижения и покупки. */
 function ldChessy():ChessyState{try{const s=localStorage.getItem(CK);if(!s)return {...CHESSY_DEFAULT};return migrateWallet(JSON.parse(s),CHESSY_DEFAULT)}catch{return {...CHESSY_DEFAULT}}}
-function svChessy(s:ChessyState){try{localStorage.setItem(CK,JSON.stringify(s))}catch{}}
+// Кошелёк: отказ записи = заработанные Chessy исчезнут при следующем заходе.
+function svChessy(s:ChessyState){writeJson(CK,s)}
 // Chessy transaction log (last 50 events) for shop "History" section
 type ChessyLogEntry={ts:number;amount:number;reason:string;sign:1|-1};
 const CLK="aevion_chessy_log_v1";
@@ -1302,6 +1308,12 @@ export default function CyberChessPage(){
   const[showOpeningCard,sShowOpeningCard]=useState(false);
   const[openingCardShownPly,sOpeningCardShownPly]=useState(-1);
   const[savedGames,sSavedGames]=useState<SavedGame[]>([]);
+  /* Браузер перестал принимать запись — игрок должен узнать об этом ДО того, как
+     потеряет заработанное. Экран показывает состояние из памяти и выглядит нормально,
+     расхождение с диском вскроется только после перезагрузки. Подписка одна на страницу,
+     срабатывает один раз (см. storageHealth). */
+  const[storageBroken,sStorageBroken]=useState(false);
+  useEffect(()=>onStorageFailure(()=>sStorageBroken(true)),[]);
   const[qrDataUrl,sQrDataUrl]=useState<string|null>(null);
   const[moveTooltip,sMoveTooltip]=useState<{ply:number;x:number;y:number}|null>(null);
   const[engineHintArrow,sEngineHintArrow]=useState<{from:string;to:string;san:string;fen:string}|null>(null);
@@ -15265,6 +15277,28 @@ ${question.trim()}`;
     {/* Projects banner — ТОЛЬКО на лаунчпаде/между партиями. Никогда во время активной
         игры/пазла/скретча: фиксированная плашка перекрывала ходы и премувы (фидбэк юзера). */}
     {bannerShown&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
+    {storageBroken&&<div role="alert" style={{position:"fixed",left:12,right:12,bottom:12,zIndex:9999,maxWidth:560,margin:"0 auto",
+      padding:"12px 14px",borderRadius:10,background:"#4a1d1d",color:"#ffd9d9",border:"1px solid #b91c1c",
+      fontSize:13,lineHeight:1.5,boxShadow:"0 8px 30px rgba(0,0,0,0.45)"}}>
+      <b>Прогресс перестал сохраняться.</b> Браузеру не хватает места, поэтому партии, счёт и Chessy
+      больше не записываются — то, что видно на экране, пропадёт при перезагрузке.
+      <div style={{marginTop:8}}>
+        {/* Кнопка, а не ссылка на раздел: путь к выгрузке лежит внутри настроек, а
+           отдельной страницы у неё нет — ссылка вела бы в никуда. Здесь тот же вызов,
+           что и в настройках, чтобы предупреждение сразу предлагало выход. */}
+        <button onClick={()=>{
+          try{
+            const now=new Date().toISOString();
+            const data=collectProgress(localStorage,now);
+            const n=Object.keys(data.keys).length;
+            if(n===0){showToast("Сохранять пока нечего","info");return}
+            downloadFile(new Blob([JSON.stringify(data)],{type:"application/json"}),backupFilename(now));
+            showToast(`Копия сохранена · ${n} записей`,"success");
+          }catch{showToast("Не удалось сохранить копию","error")}
+        }} style={{padding:"7px 12px",borderRadius:8,border:"1px solid #fca5a5",background:"#7f1d1d",
+          color:"#fff",fontWeight:800,fontSize:12,cursor:"pointer"}}>⬇ Сохранить копию прогресса</button>
+      </div>
+    </div>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with

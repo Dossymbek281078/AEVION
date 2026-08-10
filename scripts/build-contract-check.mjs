@@ -42,6 +42,17 @@
  * say they are real: the /payments/v1/* pages call routes payments.ts does not
  * serve — it only has /gumroad/* and /stripe/*.
  *
+ * Mounts come from two places, both read: app.use in index.ts (middleware may
+ * sit between the prefix and the router) and the { path, router } table in
+ * routes/moduleManifest.ts, which is the only mount qreal, qskyway, qventure
+ * and qevents have.
+ *
+ * "index.ts mounts nothing under /api/<x>" is usually the right answer rather
+ * than a failure: checkout and events live under /api/pricing/..., and
+ * provisioning exports no router at all — it is a service imported by
+ * pricing.ts. The one real gap is entitlements, mounted at bare "/api", which
+ * this module-per-prefix model cannot express.
+ *
  * Still not modelled: a route registered anywhere other than a `<name>Router.`
  * or `router.` call with a literal path, and a mount whose prefix is built from
  * a variable.
@@ -85,18 +96,52 @@ for (const m of indexSrc.matchAll(/import\s+(\w+)\s+from\s*["']\.\/routes\/([\w.
   importedFrom[m[1]] = m[2];
 }
 
+// Not every mount is an app.use in index.ts: routes/moduleManifest.ts holds a
+// table of { path, router } entries that index.ts loops over. qreal, qskyway,
+// qventure, qevents and data-quality are mounted only from there.
+const MANIFEST = path.join(ROUTES_ROOT, "moduleManifest.ts");
+let manifestMounts = [];
+if (fs.existsSync(MANIFEST)) {
+  const manifestSrc = fs.readFileSync(MANIFEST, "utf8");
+  const manifestImports = {};
+  for (const m of manifestSrc.matchAll(/import\s*\{([^}]+)\}\s*from\s*["']\.\/([\w.-]+)["']/g)) {
+    for (const n of m[1].split(",").map((x) => x.trim()).filter(Boolean)) manifestImports[n] = m[2];
+  }
+  for (const m of manifestSrc.matchAll(/path:\s*["']([^"']+)["']\s*,\s*router:\s*(\w+)/g)) {
+    const file = manifestImports[m[2]];
+    if (file) manifestMounts.push({ mountPrefix: m[1], routerVar: m[2], file });
+  }
+}
+
 const entryPoints = [];
-for (const m of indexSrc.matchAll(/app\.use\(\s*["']([^"']+)["']\s*,\s*(\w+)\s*\)/g)) {
-  const [, mountPrefix, routerVar] = m;
+for (const { mountPrefix, file } of manifestMounts) {
   const mine =
     mountPrefix === PREFIX ||
     mountPrefix.startsWith(`${PREFIX}/`) ||
     mountPrefix.startsWith(`${PREFIX}-`);
   if (!mine) continue;
-  const file = importedFrom[routerVar];
-  if (!file) continue;
   const filePath = path.join(ROUTES_ROOT, `${file}.ts`);
   if (fs.existsSync(filePath)) entryPoints.push({ mountPrefix, file, filePath });
+}
+
+// Middleware can sit between the prefix and the router —
+// app.use("/api/qcoreai", requireModule("qcoreai"), qcoreaiRouter) — so read the
+// whole argument list and keep whichever token names an imported router.
+for (const m of indexSrc.matchAll(/app\.use\(\s*["']([^"']+)["']\s*,([^;]*)\)/g)) {
+  const mountPrefix = m[1];
+  const mine =
+    mountPrefix === PREFIX ||
+    mountPrefix.startsWith(`${PREFIX}/`) ||
+    mountPrefix.startsWith(`${PREFIX}-`);
+  if (!mine) continue;
+  for (const token of m[2].match(/[A-Za-z_$][\w$]*/g) ?? []) {
+    const file = importedFrom[token];
+    if (!file) continue;
+    const filePath = path.join(ROUTES_ROOT, `${file}.ts`);
+    if (!fs.existsSync(filePath)) continue;
+    if (entryPoints.some((e) => e.mountPrefix === mountPrefix && e.file === file)) continue;
+    entryPoints.push({ mountPrefix, file, filePath });
+  }
 }
 
 if (entryPoints.length === 0) {

@@ -67,13 +67,47 @@ const UNSAFE_RES: RegExp[] = UNSAFE_STEMS.map((stem) => {
   return new RegExp(`(?:^|[^${LETTER.slice(1, -1)}])${s}${LETTER}*`, "iu");
 });
 
+// Characters that are invisible (or as good as invisible) in a text field but
+// split a word in two for the matcher. Pasting "нар<U+200B>котик" from a web
+// page used to walk straight past every stem — measured 2026-08-10.
+const INVISIBLE = /[­͏؜᠎​-‏‪-‮⁠-⁤⁪-⁯﻿]/g;
+
+// Digit-for-letter substitutions ("p0rn", "we3d"). Only latin lookalikes are
+// mapped: Cyrillic stems never contain digits, so nothing here can turn an
+// innocent Russian word into a stem hit.
+const LEET: Record<string, string> = {
+  "0": "o",
+  "1": "i",
+  "3": "e",
+  "4": "a",
+  "5": "s",
+  "7": "t",
+  "@": "a",
+  $: "s",
+};
+
+/**
+ * Fold away the cheap ways a term hides from a stem list, without touching
+ * word boundaries — collapsing spaces would be a far bigger change and risks
+ * inventing stems across ordinary word breaks ("виде**о ру**чка"), so spaced-out
+ * text is deliberately left to the system prompt as the next layer.
+ */
+function normalise(text: string): string {
+  return text
+    .normalize("NFKC")
+    .replace(INVISIBLE, "")
+    .toLowerCase()
+    .replace(/[013457@$]/g, (d) => LEET[d] ?? d);
+}
+
 /**
  * Returns true if the text contains a clear-harm term. Case-insensitive,
- * inflection-aware, boundary-guarded against innocent-word collisions.
+ * inflection-aware, boundary-guarded against innocent-word collisions, and
+ * blind to invisible characters and digit-for-letter swaps.
  */
 export function containsUnsafe(text: string): boolean {
   if (!text) return false;
-  const t = text.toLowerCase();
+  const t = normalise(text);
   for (const re of UNSAFE_RES) {
     if (re.test(t)) return true;
   }

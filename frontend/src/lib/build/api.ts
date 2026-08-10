@@ -1991,7 +1991,24 @@ export const buildApi = {
       total: number;
     }>("GET", `/api/build/documents/user/${encodeURIComponent(userId)}`),
   createReference: (projectId: string, input: { workerId: string; rating: number; text: string; recommend: boolean }) =>
-    call<{ id: string }>("POST", `/api/build/projects/${projectId}/references`, input),
+    call<{ id: string }>("POST", `/api/build/projects/${encodeURIComponent(projectId)}/references`, input),
+  projectReferences: (projectId: string) =>
+    call<{
+      references: Array<{
+        id: string;
+        workerId: string;
+        authorId: string;
+        rating: number;
+        text: string;
+        skills: string[];
+        recommend: boolean;
+        createdAt: string;
+        workerName: string | null;
+        workerTitle: string | null;
+        workerPhoto: string | null;
+        authorName: string | null;
+      }>;
+    }>("GET", `/api/build/projects/${encodeURIComponent(projectId)}/references`),
   deleteReference: (id: string) =>
     call<{ ok: boolean }>("DELETE", `/api/build/references/${id}`),
 

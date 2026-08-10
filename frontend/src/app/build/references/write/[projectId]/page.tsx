@@ -14,6 +14,16 @@ const SKILL_PRESET_KEYS = [
   "professionalism", "initiative",
 ];
 
+function StarRating({ rating }: { rating: number }) {
+  return (
+    <span className="inline-flex gap-0.5">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <span key={s} className={s <= rating ? "text-amber-400" : "text-slate-700"}>★</span>
+      ))}
+    </span>
+  );
+}
+
 function StarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [hover, setHover] = useState(0);
   return (
@@ -31,6 +41,8 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
     </div>
   );
 }
+
+type ProjectReference = Awaited<ReturnType<typeof buildApi.projectReferences>>["references"][number];
 
 function WriteReferenceForm() {
   const { t } = useI18n();
@@ -50,9 +62,11 @@ function WriteReferenceForm() {
   const [recommend, setRecommend] = useState(true);
   const [skills, setSkills] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [existing, setExisting] = useState<ProjectReference[]>([]);
 
   useEffect(() => {
     buildApi.getProject(projectId).then((p) => setProjectTitle(p.project?.title ?? "")).catch(() => {});
+    buildApi.projectReferences(projectId).then((r) => setExisting(r.references)).catch(() => {});
   }, [projectId]);
 
   function skillLabel(key: string): string {
@@ -212,6 +226,29 @@ function WriteReferenceForm() {
           {submitting ? t("build.referenceWrite.publishing") : t("build.referenceWrite.publishBtn")}
         </button>
         <p className="text-xs text-slate-600 text-center">{t("build.referenceWrite.revokeHint")}</p>
+
+        {existing.length > 0 && (
+          <section className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <h2 className="text-sm font-bold text-white">{t("build.referenceWrite.alreadyTitle")}</h2>
+            <p className="mt-0.5 text-xs text-slate-500">{t("build.referenceWrite.alreadyHint")}</p>
+            <ul className="mt-3 space-y-2">
+              {existing.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-medium text-slate-200">{r.workerName ?? r.workerId.slice(0, 8)}</span>
+                  <StarRating rating={r.rating} />
+                  {r.recommend && (
+                    <span className="rounded-full border border-emerald-700/40 bg-emerald-900/40 px-2 py-0.5 text-[10px] text-emerald-300">
+                      {t("build.referenceWrite.alreadyRecommends")}
+                    </span>
+                  )}
+                  <span className="ml-auto text-slate-500">
+                    {new Date(r.createdAt).toLocaleDateString("ru-RU")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     </div>
   );

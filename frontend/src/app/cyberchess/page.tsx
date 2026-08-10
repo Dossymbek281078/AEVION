@@ -124,7 +124,6 @@ import { isPlayerPly, isPlayerIndex } from "./plyOwner";
 import { accuracyOf } from "./accuracy";
 import { award as ledgerAward, canSpend, spend as ledgerSpend, unlock as ledgerUnlock, migrateWallet } from "./chessyLedger";
 import { buildPuzzleQuery } from "./puzzleQuery";
-import { themeLabel } from "./puzzleThemes";
 import { ingestPuzzles } from "./puzzleIngest";
 
 /* Результат в PGN АБСОЛЮТЕН — «1-0» значит «выиграли белые», — а строка `over` относительна
@@ -1356,8 +1355,13 @@ export default function CyberChessPage(){
      в шапке «400 puzzles» (это загруженный слайс, а не пул), на карточке зашитая
      строка «10 818 задач в банке» и настоящий пул на 500 000. Первое вводило в
      заблуждение, второе было прямо выдумано. Здесь хранится то, что сказал сервер;
-     null — значит не знаем, и тогда показываем то, что реально загружено. */
-  const[poolSize,sPoolSize]=useState<number|null>(null);
+     null — значит не знаем, и тогда показываем то, что реально загружено.
+
+     Имя с приставкой bank не для красоты: из вариантов уже импортирована функция
+     `poolSize(pool, color)` — пул сброшенных фигур в крейзихаусе. Состояние с тем же
+     именем перекрывало её внутри компонента, и все четыре вызова превращались в
+     «poolSize is not a function» при первом же взятии в этом режиме. */
+  const[bankPoolSize,sBankPoolSize]=useState<number|null>(null);
   /* Поиск по всему банку, когда загруженная выборка пуста. Клиент держит до 20 000
      задач из 500 000 и фильтрует их у себя; узкий фильтр опустошает выборку, хотя в
      банке таких задач тысячи. Раньше в этом случае писали «Нет задач по фильтру» —
@@ -1388,24 +1392,6 @@ export default function CyberChessPage(){
     })();
     return()=>{cancelled=true};
   },[]);
-  const[bankSearching,sBankSearching]=useState(false);
-  const searchBank=useCallback(async()=>{
-    sBankSearching(true);
-    try{
-      const qs=buildPuzzleQuery({theme:pzFilterTheme,phase:pzFilterPhase,rating:pzFilterRating,limit:2000});
-      const r=await fetch(`/api-backend/api/cyberchess-puzzles?${qs}`);
-      if(!r.ok)throw new Error(String(r.status));
-      const d=await r.json();
-      if(!d||!d.ok||!Array.isArray(d.puzzles))throw new Error("bad");
-      if(typeof d.poolSize==="number"&&d.poolSize>0)sPoolSize(d.poolSize);
-      const found=ingestPuzzles(d.puzzles as Puzzle[]);
-      if(found.length===0){showToast("В банке тоже нет задач по этому фильтру","info");return}
-      // добавляем к уже загруженным, не теряя их и не дублируя
-      sPuzzles(prev=>{const seen=new Set(prev.map(x=>x.fen));return [...prev,...found.filter(x=>!seen.has(x.fen))]});
-      showToast(`Из банка добавлено ${found.length} задач`,"success");
-    }catch{showToast("Банк не ответил — попробуй ещё раз","error")}
-    finally{sBankSearching(false)}
-  },[pzFilterTheme,pzFilterPhase,pzFilterRating,showToast]);
   // Puzzle system
   const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush"|"custom">("learn");
   const[pzCustomSec,sPzCustomSec]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_pz_custom_sec_v1")||"600");return isNaN(v)||v<30||v>3600?600:v}catch{return 600}});
@@ -1517,6 +1503,32 @@ export default function CyberChessPage(){
   const[pzFilterSide,sPzFilterSide]=useState<string>("all");
   const[pzFilterRating,sPzFilterRating]=useState<[number,number]>([0,3000]);
   const[pzFiltersExpanded,sPzFiltersExpanded]=useState(false);
+  /* Поиск по всему банку, когда загруженная выборка пуста. Клиент держит до 20 000
+     задач из 500 000 и фильтрует их у себя; узкий фильтр опустошает выборку, хотя в
+     банке таких задач тысячи. Раньше в этом случае писали «Нет задач по фильтру» —
+     утверждение об отсутствии, которого никто не проверял.
+
+     Стоит здесь, а не выше по файлу, потому что читает pzFilter* в списке зависимостей:
+     список вычисляется при КАЖДОМ рендере, поэтому объявление раньше этих состояний
+     давало ReferenceError по временной мёртвой зоне и белую страницу на всём модуле. */
+  const[bankSearching,sBankSearching]=useState(false);
+  const searchBank=useCallback(async()=>{
+    sBankSearching(true);
+    try{
+      const qs=buildPuzzleQuery({theme:pzFilterTheme,phase:pzFilterPhase,rating:pzFilterRating,limit:2000});
+      const r=await fetch(`/api-backend/api/cyberchess-puzzles?${qs}`);
+      if(!r.ok)throw new Error(String(r.status));
+      const d=await r.json();
+      if(!d||!d.ok||!Array.isArray(d.puzzles))throw new Error("bad");
+      if(typeof d.poolSize==="number"&&d.poolSize>0)sBankPoolSize(d.poolSize);
+      const found=ingestPuzzles(d.puzzles as Puzzle[]);
+      if(found.length===0){showToast("В банке тоже нет задач по этому фильтру","info");return}
+      // добавляем к уже загруженным, не теряя их и не дублируя
+      sPuzzles(prev=>{const seen=new Set(prev.map(x=>x.fen));return [...prev,...found.filter(x=>!seen.has(x.fen))]});
+      showToast(`Из банка добавлено ${found.length} задач`,"success");
+    }catch{showToast("Банк не ответил — попробуй ещё раз","error")}
+    finally{sBankSearching(false)}
+  },[pzFilterTheme,pzFilterPhase,pzFilterRating,showToast]);
   // Per-puzzle stopwatch
   const[pzTimer,sPzTimer]=useState(0);
   const pzTimerRef=useRef<number>(0);
@@ -2780,7 +2792,7 @@ export default function CyberChessPage(){
         const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=20000");
         if(r.ok){
           const d=await r.json();
-          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){if(typeof d.poolSize==="number"&&d.poolSize>0)sPoolSize(d.poolSize);sPuzzles(ingestPuzzles(d.puzzles as Puzzle[]));return;}
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){if(typeof d.poolSize==="number"&&d.poolSize>0)sBankPoolSize(d.poolSize);sPuzzles(ingestPuzzles(d.puzzles as Puzzle[]));return;}
         }
       }catch{}
       try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(ingestPuzzles(d2 as Puzzle[]));}catch{}
@@ -2951,7 +2963,7 @@ export default function CyberChessPage(){
         const r=await fetch("/api-backend/api/cyberchess-puzzles?shuffle=1&limit=400");
         if(r.ok){
           const d=await r.json();
-          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=50){if(typeof d.poolSize==="number"&&d.poolSize>0)sPoolSize(d.poolSize);sPuzzles(ingestPuzzles(d.puzzles as Puzzle[]));return;}
+          if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=50){if(typeof d.poolSize==="number"&&d.poolSize>0)sBankPoolSize(d.poolSize);sPuzzles(ingestPuzzles(d.puzzles as Puzzle[]));return;}
         }
       }catch{}
       // Небольшой сбой начального слайса не критичен — полный лениво-загружаемый пул
@@ -5903,7 +5915,7 @@ export default function CyberChessPage(){
               </span>}
             </div>
             <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-              SF18 · {(poolSize??PUZZLES.length).toLocaleString("ru-RU")} puzzles{useSF&&sfOk?" · ⚡":""}
+              SF18 · {(bankPoolSize??PUZZLES.length).toLocaleString("ru-RU")} puzzles{useSF&&sfOk?" · ⚡":""}
             </div>
           </div>
         </div>
@@ -7005,7 +7017,7 @@ export default function CyberChessPage(){
           {savedGames.length<3&&(()=>{
             const tiles:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
               {emoji:"♟",title:"Сыграй первую партию",desc:"AI любого уровня. От 800 до 2400. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
-              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:`${(poolSize??PUZZLES.length).toLocaleString("ru-RU")} задач в банке.`}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
+              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:`${(bankPoolSize??PUZZLES.length).toLocaleString("ru-RU")} задач в банке.`}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
               {emoji:"🎓",title:"Спроси Coach",desc:"AI-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
               {emoji:"📅",title:"Задача дня",desc:"Один пазл каждый день. Streak, leaderboard, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
             ];
@@ -10367,7 +10379,7 @@ export default function CyberChessPage(){
                 {fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13}}>
                   <div style={{fontStyle:"italic",marginBottom:10}}>В загруженной выборке нет задач по этому фильтру.</div>
                   <Btn size="sm" variant="secondary" disabled={bankSearching} onClick={searchBank}>
-                    {bankSearching?"Ищу в банке…":`Поискать в банке${poolSize?` · ${poolSize.toLocaleString("ru-RU")} задач`:""}`}
+                    {bankSearching?"Ищу в банке…":`Поискать в банке${bankPoolSize?` · ${bankPoolSize.toLocaleString("ru-RU")} задач`:""}`}
                   </Btn>
                 </div>:
                 fPz.slice(0,100).map((pz,i)=>{

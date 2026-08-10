@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
-import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
+import { readJsonFile, updateJsonFile } from "../lib/jsonFileStore";
 
 // AEV wallet + append-only ledger backend. MVP storage via jsonFileStore
 // (atomic JSON files in AEVION_DATA_DIR). Prisma schema готов для миграции
@@ -137,12 +137,43 @@ async function loadLedger(): Promise<LedgerEntry[]> {
   return readJsonFile<LedgerEntry[]>(LEDGER_FILE, []);
 }
 
-async function saveWallets(w: Record<string, WalletRecord>) {
-  await writeJsonFile(WALLETS_FILE, w);
+// ── Изменение кошелька: проверка и запись одной операцией ──────────
+//
+// Раньше каждый обработчик делал «прочитал файл → проверил баланс →
+// записал файл» тремя отдельными await. Между проверкой и записью успевал
+// вклиниться параллельный запрос, и оба видели один и тот же баланс.
+//
+// Замер 2026-08-10 (10 одновременных списаний по 100 при балансе 100):
+// прошли ВСЕ ДЕСЯТЬ, каждому вернулось ok:true, итоговый баланс 0, а в
+// реестре осталась одна запись из десяти. То есть модуль-потребитель
+// выдал товар десять раз, списание засчиталось одно, и аудит этого не
+// показывает. Отказа при этом не было ни одного.
+//
+// updateJsonFile держит замок на файл от чтения до записи, поэтому
+// проверка баланса и списание больше не разъезжаются.
+
+/** Прочитать кошельки, изменить на месте и записать — под замком на файл.
+ *  `fn` возвращает ответ обработчику; кошельки правятся в переданном объекте. */
+async function mutateWallets<T>(
+  fn: (wallets: Record<string, WalletRecord>) => T | Promise<T>,
+): Promise<T> {
+  let out!: T;
+  await updateJsonFile<Record<string, WalletRecord>>(WALLETS_FILE, {}, async (wallets) => {
+    out = await fn(wallets);
+    return wallets;
+  });
+  return out;
 }
 
-async function saveLedger(l: LedgerEntry[]) {
-  await writeJsonFile(LEDGER_FILE, l);
+/** Дозапись в реестр. Тоже read-modify-write: без замка параллельные
+ *  записи затирали друг друга — из десяти операций сохранялась одна. */
+async function appendLedger(entry: LedgerEntry): Promise<void> {
+  await updateJsonFile<LedgerEntry[]>(LEDGER_FILE, [], (ledger) => {
+    const list = Array.isArray(ledger) ? ledger : [];
+    list.push(entry);
+    // Trim oldest if we're over cap (append-only — but bounded for MVP)
+    return list.length > LEDGER_MAX ? list.slice(-LEDGER_MAX) : list;
+  });
 }
 
 function sanitizeDeviceId(raw: unknown): string | null {
@@ -191,35 +222,39 @@ aevRouter.post("/wallet/:deviceId/sync", syncLimiter, async (req: Request, res: 
   const gate = requireAuthForMintIfProd(req, res);
   if (gate === "blocked") return;
 
-  const wallets = await loadWallets();
-  const existing = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, null);
   const bearerUserId = readUserIdFromBearer(req);
 
-  // Anti-takeover: bound wallet → must present matching Bearer
-  if (existing.userId && existing.userId !== bearerUserId) {
-    return res.status(403).json({ error: "ownership_mismatch" });
-  }
+  const outcome = await mutateWallets((wallets) => {
+    const existing = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, null);
 
-  const merged: WalletRecord = {
-    ...existing,
-    userId: bearerUserId ?? existing.userId,
-    balance: Number.isFinite(body.balance) ? Number(body.balance) : existing.balance,
-    lifetimeMined: Math.max(existing.lifetimeMined, Number(body.lifetimeMined) || 0),
-    lifetimeSpent: Math.max(existing.lifetimeSpent, Number(body.lifetimeSpent) || 0),
-    globalSupplyMined: Math.max(existing.globalSupplyMined, Number(body.globalSupplyMined) || 0),
-    dividendsClaimed: Math.max(existing.dividendsClaimed, Number(body.dividendsClaimed) || 0),
-    modes: {
-      play: !!(body.modes?.play ?? existing.modes.play),
-      compute: !!(body.modes?.compute ?? existing.modes.compute),
-      stewardship: !!(body.modes?.stewardship ?? existing.modes.stewardship),
-    },
-    startTs: Math.min(existing.startTs, Number(body.startTs) || existing.startTs),
-    updatedAt: Date.now(),
-  };
+    // Anti-takeover: bound wallet → must present matching Bearer
+    if (existing.userId && existing.userId !== bearerUserId) {
+      return { ok: false as const, error: "ownership_mismatch" };
+    }
 
-  wallets[deviceId] = merged;
-  await saveWallets(wallets);
-  res.json({ ok: true, wallet: merged });
+    const merged: WalletRecord = {
+      ...existing,
+      userId: bearerUserId ?? existing.userId,
+      balance: Number.isFinite(body.balance) ? Number(body.balance) : existing.balance,
+      lifetimeMined: Math.max(existing.lifetimeMined, Number(body.lifetimeMined) || 0),
+      lifetimeSpent: Math.max(existing.lifetimeSpent, Number(body.lifetimeSpent) || 0),
+      globalSupplyMined: Math.max(existing.globalSupplyMined, Number(body.globalSupplyMined) || 0),
+      dividendsClaimed: Math.max(existing.dividendsClaimed, Number(body.dividendsClaimed) || 0),
+      modes: {
+        play: !!(body.modes?.play ?? existing.modes.play),
+        compute: !!(body.modes?.compute ?? existing.modes.compute),
+        stewardship: !!(body.modes?.stewardship ?? existing.modes.stewardship),
+      },
+      startTs: Math.min(existing.startTs, Number(body.startTs) || existing.startTs),
+      updatedAt: Date.now(),
+    };
+
+    wallets[deviceId] = merged;
+    return { ok: true as const, wallet: merged };
+  });
+
+  if (!outcome.ok) return res.status(403).json({ error: outcome.error });
+  res.json({ ok: true, wallet: outcome.wallet });
 });
 
 // ── POST /api/aev/wallet/:deviceId/mint ────────────────────────────
@@ -236,37 +271,38 @@ aevRouter.post("/wallet/:deviceId/mint", writeLimiter, async (req: Request, res:
   const gate = requireAuthForMintIfProd(req, res);
   if (gate === "blocked") return;
 
-  const [wallets, ledger] = await Promise.all([loadWallets(), loadLedger()]);
-  const w = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, null);
   const bearerUserId = readUserIdFromBearer(req);
-  if (w.userId && w.userId !== bearerUserId) {
-    return res.status(403).json({ error: "ownership_mismatch" });
-  }
-  if (!w.userId && bearerUserId) w.userId = bearerUserId;
-  w.balance = Math.round((w.balance + amount) * 1_000_000) / 1_000_000;
-  w.lifetimeMined = Math.round((w.lifetimeMined + amount) * 1_000_000) / 1_000_000;
-  w.globalSupplyMined = Math.round((w.globalSupplyMined + amount) * 1_000_000) / 1_000_000;
-  w.updatedAt = Date.now();
-  wallets[deviceId] = w;
 
-  const entry: LedgerEntry = {
-    id: randomUUID(),
-    deviceId,
-    kind: "mint",
-    amount,
-    sourceKind: typeof req.body?.sourceKind === "string" ? req.body.sourceKind : undefined,
-    sourceModule: typeof req.body?.sourceModule === "string" ? req.body.sourceModule : undefined,
-    sourceAction: typeof req.body?.sourceAction === "string" ? req.body.sourceAction : undefined,
-    reason: typeof req.body?.reason === "string" ? req.body.reason.slice(0, 256) : undefined,
-    balanceAfter: w.balance,
-    ts: Date.now(),
-  };
-  ledger.push(entry);
-  // Trim oldest if we're over cap (append-only — but bounded for MVP)
-  const trimmed = ledger.length > LEDGER_MAX ? ledger.slice(-LEDGER_MAX) : ledger;
+  const outcome = await mutateWallets(async (wallets) => {
+    const w = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, null);
+    if (w.userId && w.userId !== bearerUserId) {
+      return { ok: false as const, error: "ownership_mismatch" };
+    }
+    if (!w.userId && bearerUserId) w.userId = bearerUserId;
+    w.balance = Math.round((w.balance + amount) * 1_000_000) / 1_000_000;
+    w.lifetimeMined = Math.round((w.lifetimeMined + amount) * 1_000_000) / 1_000_000;
+    w.globalSupplyMined = Math.round((w.globalSupplyMined + amount) * 1_000_000) / 1_000_000;
+    w.updatedAt = Date.now();
+    wallets[deviceId] = w;
 
-  await Promise.all([saveWallets(wallets), saveLedger(trimmed)]);
-  res.json({ ok: true, wallet: w, entry });
+    const entry: LedgerEntry = {
+      id: randomUUID(),
+      deviceId,
+      kind: "mint",
+      amount,
+      sourceKind: typeof req.body?.sourceKind === "string" ? req.body.sourceKind : undefined,
+      sourceModule: typeof req.body?.sourceModule === "string" ? req.body.sourceModule : undefined,
+      sourceAction: typeof req.body?.sourceAction === "string" ? req.body.sourceAction : undefined,
+      reason: typeof req.body?.reason === "string" ? req.body.reason.slice(0, 256) : undefined,
+      balanceAfter: w.balance,
+      ts: Date.now(),
+    };
+    await appendLedger(entry);
+    return { ok: true as const, wallet: w, entry };
+  });
+
+  if (!outcome.ok) return res.status(403).json({ error: outcome.error });
+  res.json({ ok: true, wallet: outcome.wallet, entry: outcome.entry });
 });
 
 // ── POST /api/aev/wallet/:deviceId/spend ───────────────────────────
@@ -276,38 +312,49 @@ aevRouter.post("/wallet/:deviceId/spend", writeLimiter, async (req: Request, res
   const amount = clampAmount(req.body?.amount);
   if (amount === null) return res.status(400).json({ error: "invalid_amount" });
 
-  const [wallets, ledger] = await Promise.all([loadWallets(), loadLedger()]);
-  const w = wallets[deviceId];
-  if (!w) return res.status(404).json({ error: "not_found", deviceId });
   const bearerUserId = readUserIdFromBearer(req);
-  if (w.userId && w.userId !== bearerUserId) {
-    return res.status(403).json({ error: "ownership_mismatch" });
-  }
-  if (!w.userId && bearerUserId) w.userId = bearerUserId;
-  if (w.balance < amount) return res.status(409).json({ error: "insufficient_funds", balance: w.balance, requested: amount });
 
-  w.balance = Math.round((w.balance - amount) * 1_000_000) / 1_000_000;
-  w.lifetimeSpent = Math.round((w.lifetimeSpent + amount) * 1_000_000) / 1_000_000;
-  w.updatedAt = Date.now();
-  wallets[deviceId] = w;
+  // Проверка баланса и списание — внутри одной операции над файлом.
+  // Порознь они разъезжались: десять одновременных списаний по 100 при
+  // балансе 100 проходили все десять.
+  const outcome = await mutateWallets(async (wallets) => {
+    const w = wallets[deviceId];
+    if (!w) return { ok: false as const, status: 404, body: { error: "not_found", deviceId } };
+    if (w.userId && w.userId !== bearerUserId) {
+      return { ok: false as const, status: 403, body: { error: "ownership_mismatch" } };
+    }
+    if (!w.userId && bearerUserId) w.userId = bearerUserId;
+    if (w.balance < amount) {
+      return {
+        ok: false as const,
+        status: 409,
+        body: { error: "insufficient_funds", balance: w.balance, requested: amount },
+      };
+    }
 
-  const entry: LedgerEntry = {
-    id: randomUUID(),
-    deviceId,
-    kind: "spend",
-    amount,
-    sourceKind: typeof req.body?.sourceKind === "string" ? req.body.sourceKind : undefined,
-    sourceModule: typeof req.body?.sourceModule === "string" ? req.body.sourceModule : undefined,
-    sourceAction: typeof req.body?.sourceAction === "string" ? req.body.sourceAction : undefined,
-    reason: typeof req.body?.reason === "string" ? req.body.reason.slice(0, 256) : undefined,
-    balanceAfter: w.balance,
-    ts: Date.now(),
-  };
-  ledger.push(entry);
-  const trimmed = ledger.length > LEDGER_MAX ? ledger.slice(-LEDGER_MAX) : ledger;
+    w.balance = Math.round((w.balance - amount) * 1_000_000) / 1_000_000;
+    w.lifetimeSpent = Math.round((w.lifetimeSpent + amount) * 1_000_000) / 1_000_000;
+    w.updatedAt = Date.now();
+    wallets[deviceId] = w;
 
-  await Promise.all([saveWallets(wallets), saveLedger(trimmed)]);
-  res.json({ ok: true, wallet: w, entry });
+    const entry: LedgerEntry = {
+      id: randomUUID(),
+      deviceId,
+      kind: "spend",
+      amount,
+      sourceKind: typeof req.body?.sourceKind === "string" ? req.body.sourceKind : undefined,
+      sourceModule: typeof req.body?.sourceModule === "string" ? req.body.sourceModule : undefined,
+      sourceAction: typeof req.body?.sourceAction === "string" ? req.body.sourceAction : undefined,
+      reason: typeof req.body?.reason === "string" ? req.body.reason.slice(0, 256) : undefined,
+      balanceAfter: w.balance,
+      ts: Date.now(),
+    };
+    await appendLedger(entry);
+    return { ok: true as const, wallet: w, entry };
+  });
+
+  if (!outcome.ok) return res.status(outcome.status).json(outcome.body);
+  res.json({ ok: true, wallet: outcome.wallet, entry: outcome.entry });
 });
 
 // ── GET /api/aev/ledger/:deviceId ──────────────────────────────────
@@ -347,34 +394,33 @@ export async function internalMintForDevice(opts: {
   const amount = clampAmount(opts.amount);
   if (amount === null) return { ok: false, error: "invalid_amount" };
 
-  const [wallets, ledger] = await Promise.all([loadWallets(), loadLedger()]);
-  const w = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, opts.expectedUserId ?? null);
-  if (opts.expectedUserId && w.userId && w.userId !== opts.expectedUserId) {
-    return { ok: false, error: "ownership_mismatch", balance: w.balance };
-  }
-  if (!w.userId && opts.expectedUserId) w.userId = opts.expectedUserId;
-  w.balance = Math.round((w.balance + amount) * 1_000_000) / 1_000_000;
-  w.lifetimeMined = Math.round((w.lifetimeMined + amount) * 1_000_000) / 1_000_000;
-  w.globalSupplyMined = Math.round((w.globalSupplyMined + amount) * 1_000_000) / 1_000_000;
-  w.updatedAt = Date.now();
-  wallets[deviceId] = w;
+  return mutateWallets(async (wallets) => {
+    const w = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, opts.expectedUserId ?? null);
+    if (opts.expectedUserId && w.userId && w.userId !== opts.expectedUserId) {
+      return { ok: false as const, error: "ownership_mismatch", balance: w.balance };
+    }
+    if (!w.userId && opts.expectedUserId) w.userId = opts.expectedUserId;
+    w.balance = Math.round((w.balance + amount) * 1_000_000) / 1_000_000;
+    w.lifetimeMined = Math.round((w.lifetimeMined + amount) * 1_000_000) / 1_000_000;
+    w.globalSupplyMined = Math.round((w.globalSupplyMined + amount) * 1_000_000) / 1_000_000;
+    w.updatedAt = Date.now();
+    wallets[deviceId] = w;
 
-  const entry: LedgerEntry = {
-    id: randomUUID(),
-    deviceId,
-    kind: "mint",
-    amount,
-    sourceKind: opts.sourceKind,
-    sourceModule: opts.sourceModule,
-    sourceAction: opts.sourceAction,
-    reason: opts.reason?.slice(0, 256),
-    balanceAfter: w.balance,
-    ts: Date.now(),
-  };
-  ledger.push(entry);
-  const trimmed = ledger.length > LEDGER_MAX ? ledger.slice(-LEDGER_MAX) : ledger;
-  await Promise.all([saveWallets(wallets), saveLedger(trimmed)]);
-  return { ok: true, wallet: w, entry };
+    const entry: LedgerEntry = {
+      id: randomUUID(),
+      deviceId,
+      kind: "mint",
+      amount,
+      sourceKind: opts.sourceKind,
+      sourceModule: opts.sourceModule,
+      sourceAction: opts.sourceAction,
+      reason: opts.reason?.slice(0, 256),
+      balanceAfter: w.balance,
+      ts: Date.now(),
+    };
+    await appendLedger(entry);
+    return { ok: true as const, wallet: w, entry };
+  });
 }
 
 // ── GET /api/aev/stats ─────────────────────────────────────────────

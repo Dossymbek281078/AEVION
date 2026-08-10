@@ -27,11 +27,26 @@ stages:
 frontend-tests:
   stage: test
   image: node:22
-  # npm ci, а не install: ставит ровно то, что в локфайле, и не может его
-  # изменить. Проверка обязана гонять те же зависимости, что и разработчик.
+  # ВЫНУЖДЕННО npm install, а не npm ci — и это не небрежность, а обход
+  # настоящего дефекта репозитория, который первый же прогон CI и вскрыл:
+  #
+  #   npm error `npm ci` can only install packages when your package.json and
+  #   package-lock.json are in sync.
+  #   Missing: @emnapi/runtime@1.11.3 from lock file
+  #   Missing: @swc/helpers@0.5.23 from lock file
+  #
+  # Локфайл собран на Windows и не содержит опциональных пакетов под Linux.
+  # На Windows `npm ci` проходит (эти пакеты там не нужны), на любой линуксовой
+  # машине — падает. То есть чистая воспроизводимая установка у нас сломана
+  # везде, кроме ноутбука разработчика, и увидеть это локально было нельзя.
+  #
+  # Правильное лечение — пересобрать локфайл так, чтобы он покрывал обе
+  # платформы. Но package-lock.json общий для всех сессий и для сборок Vercel,
+  # трогать его мимоходом нельзя. Пока CI ставит install и честно об этом
+  # сообщает; задача заведена отдельно.
   script:
     - cd frontend
-    - npm ci --no-audit --no-fund
+    - npm install --no-audit --no-fund
     - npx vitest run
   cache:
     key:

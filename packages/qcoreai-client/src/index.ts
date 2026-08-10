@@ -278,6 +278,86 @@ export type Pipeline = {
   updatedAt: string;
 };
 
+/* ── Multichat types ───────────────────────────────────────────────────────
+   Mirrors aevion-globus-backend/src/services/multichat/{dissent,receipt}.ts.
+   Kept structural rather than clever so a server-side field addition does not
+   silently break consumers.
+   ──────────────────────────────────────────────────────────────────────── */
+
+export type MultichatAgentSpec = { id: string; role?: string; provider?: string; model?: string };
+
+export type MultichatAnswer = {
+  agentId: string;
+  provider?: string;
+  model?: string;
+  ok: boolean;
+  reply?: string;
+  error?: string;
+};
+
+/** A number one agent asserted, with the sentence it appeared in. */
+export type NumericConflict = {
+  context: string;
+  values: Array<{ agentId: string; raw: string; value: number }>;
+  spread: number;
+};
+
+export type Dissent = {
+  agents: number;
+  answered: number;
+  /** Mean pairwise similarity, 0..1. `null` when there is nothing to compare. */
+  agreement: number | null;
+  /** The agent furthest from the rest — where to look first. */
+  outlier: { agentId: string; distance: number } | null;
+  /** Disagreements in numbers: the most checkable form a dispute can take. */
+  numericConflicts: NumericConflict[];
+  /** Agents that failed or hedged. A hedge is a weaker claim, not an answer. */
+  hedges: Array<{ agentId: string; kind: "failed" | "hedged"; note: string }>;
+  /** `insufficient` when fewer than two agents answered — not a cheerful consensus. */
+  verdict: "consensus" | "split" | "insufficient";
+  note: string;
+  /**
+   * What to actually go and check. The map says WHERE the agents diverged;
+   * this turns that diagnosis into next steps.
+   *
+   * Ordered by how checkable an item is, not by how important it sounds: a
+   * number two agents disagree on can be settled against a source in a minute,
+   * whereas "read the outlier first" needs judgement. Advice that cannot be
+   * acted on quickly tends not to be acted on at all.
+   *
+   * Non-empty even on consensus — agreement between models proves little, and
+   * an empty list would read as "all clear".
+   */
+  checks?: Array<{
+    kind: "number" | "outlier" | "hedge" | "failure" | "consensus";
+    text: string;
+    agents: string[];
+    weight: 1 | 2 | 3;
+  }>;
+};
+
+export type SignedReceipt = {
+  receipt: Record<string, unknown>;
+  hash: string;
+  /** `null` when no signing key is configured — stated plainly rather than faked. */
+  signature: { algo: string; kid: string; value: string } | null;
+  signatureNote: string | null;
+};
+
+export type CouncilResult = {
+  results: MultichatAnswer[];
+  dissent: Dissent | null;
+  receipt: SignedReceipt | null;
+};
+
+export type ReceiptVerification = {
+  hashMatches: boolean;
+  computedHash: string;
+  signature: "valid" | "invalid" | "absent" | "unverifiable";
+  signatureNote: string | null;
+  spec: { canonicalization: string; digest: string; signature: string };
+};
+
 export type ClientOptions = {
   /** Base URL of the AEVION backend, e.g. "https://api.aevion.app". */
   baseUrl: string;
@@ -2221,6 +2301,72 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`getRoutingRules failed: ${await safeError(res)}`);
     const d = await res.json();
     return d.rules ?? [];
+  }
+
+  /* ── Multichat: council, dissent, receipt ────────────────────────────────
+     What sets this apart from an ordinary fan-out is not that N agents answer
+     — everyone does that — but that the disagreement is kept instead of being
+     smoothed into a consensus, and that each answer carries a verifiable
+     receipt. Agreement between models proves little: they trained on
+     overlapping data and fail the same way. So the map comes first here too.
+     ────────────────────────────────────────────────────────────────────── */
+
+  /**
+   * Ask a panel of agents one question and get their answers, the dissent map
+   * and a signed receipt in one call. Requires a token — this spends credits.
+   */
+  async council(
+    conversationId: string,
+    prompt: string,
+    agents: MultichatAgentSpec[]
+  ): Promise<CouncilResult> {
+    const res = await this.fetchImpl(
+      this.url(`/api/multichat/conversations/${encodeURIComponent(conversationId)}/dispatch`),
+      { method: "POST", headers: this.headers(), body: JSON.stringify({ prompt, agents }) }
+    );
+    if (!res.ok) throw new Error(`council failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return { results: d.results ?? [], dissent: d.dissent ?? null, receipt: d.receipt ?? null };
+  }
+
+  /**
+   * Compute the dissent map for answers you already have — from this SDK, from
+   * your own models, from anywhere.
+   *
+   * No token required, and it costs nothing: the map is derived from the text
+   * of the answers, without a single extra model call. That is also why it can
+   * be offered for free — there is nothing to meter.
+   */
+  async dissentPreview(answers: MultichatAnswer[]): Promise<Dissent> {
+    const res = await this.fetchImpl(this.url("/api/multichat/dissent/preview"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers }),
+    });
+    if (!res.ok) throw new Error(`dissentPreview failed: ${await safeError(res)}`);
+    return (await res.json()).dissent;
+  }
+
+  /**
+   * Verify somebody else's receipt. No token: requiring an account to check a
+   * receipt would defeat the point of issuing one.
+   *
+   * Note this is a convenience, not the proof. The proof is that the spec is
+   * open — RFC8785 canonicalisation, sha256 digest, ed25519 signature — so the
+   * hash can be recomputed by any implementation without trusting this call.
+   */
+  async verifyReceipt(signed: {
+    receipt: Record<string, unknown>;
+    hash?: string;
+    signature?: { algo: string; kid: string; value: string } | null;
+  }): Promise<ReceiptVerification> {
+    const res = await this.fetchImpl(this.url("/api/multichat/receipt/verify"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(signed),
+    });
+    if (!res.ok) throw new Error(`verifyReceipt failed: ${await safeError(res)}`);
+    return await res.json();
   }
 }
 

@@ -1,3 +1,5 @@
+import { Chess } from 'chess.js';
+
 /**
  * voiceCoachPrompt.ts
  *
@@ -304,7 +306,10 @@ const SYSTEM_PROMPT_COACH =
   'открытые линии, планы обеих сторон.\n' +
   '- Если ход сильный или слабый — объясни ПОЧЕМУ (что он даёт или чего лишает), ' +
   'а не «хороший ход» / «позиция развивается».\n' +
-  '- Где уместно — подскажи идею следующего хода или план в 1-2 словах.\n' +
+  '- Где уместно — подскажи идею следующего хода или план в 1-2 словах. Если называешь ' +
+  'конкретный ход-идею — он ДОЛЖЕН дословно совпадать с одним из ходов в списке «Легальные ' +
+  'ходы» из контекста; если не уверен в конкретной нотации — говори про план словами, не ' +
+  'выдумывай ход.\n' +
   '- Стандартная нотация (e4, Nf3, O-O). Без воды, без англицизмов, без пустых фраз.';
 
 const SYSTEM_PROMPT_QA =
@@ -317,7 +322,10 @@ const SYSTEM_PROMPT_QA =
   'ходы» из контекста — если хода там нет, он невозможен на доске, не называй его. Если не ' +
   'уверен в конкретном ходе — говори про идею/план словами, а не выдумывай нотацию. «Лучший ' +
   'ход по движку», если он есть в контексте, уже проверен и всегда легален — используй его ' +
-  'как основу для конкретных рекомендаций. Если вопрос не про шахматы — мягко верни диалог к партии.';
+  'как основу для конкретных рекомендаций. Если вопрос про состав доски (какие фигуры где ' +
+  'стоят, перечисли фигуры/пешки) — бери ответ ДОСЛОВНО из строки «Фигуры на доске» в ' +
+  'контексте, не воображай позицию по памяти и не пересчитывай FEN самостоятельно — там уже ' +
+  'детерминированный список. Если вопрос не про шахматы — мягко верни диалог к партии.';
 
 function joinSignals(...signals: (AbortSignal | undefined)[]): AbortSignal {
   const ctrl = new AbortController();
@@ -419,7 +427,13 @@ function buildCoachUserMessage(input: BuildCommentInput): string {
   if (input.isPromotion) flags.push('превращение пешки');
 
   const lines: string[] = [];
-  if (input.fen) lines.push(`FEN: ${input.fen}`);
+  if (input.fen) {
+    lines.push(`FEN: ${input.fen}`);
+    const legal = legalMovesFromFen(input.fen);
+    if (legal.length) {
+      lines.push(`Легальные ходы в этой позиции (${legal.length}): ${legal.join(', ')}`);
+    }
+  }
   if (move?.san) {
     const fromTo =
       move.from && move.to ? ` (${move.from}-${move.to})` : '';
@@ -508,6 +522,64 @@ function describeMove(m: string | MoveInfo | null | undefined): string | null {
   return null;
 }
 
+const PIECE_RU: Record<string, string> = {
+  k: 'Кр',
+  q: 'Ф',
+  r: 'Л',
+  b: 'С',
+  n: 'К',
+  p: 'п',
+};
+
+/**
+ * Deterministic legal-move list for `buildCommentLLM`'s per-move commentary,
+ * computed server-side from the FEN alone (same trick as `describeBoardPieces`
+ * below). `answerQuestion`'s hallucinated-move fix (#794/#803) relied on the
+ * frontend passing `legalMoves`/`bestMove` — but `buildCommentLLM` is a
+ * separate LLM touchpoint (per-move "GM разбор" remark, fired after every
+ * move) that never got that grounding, even though its prompt explicitly
+ * invites the model to suggest a next-move idea. Returns [] (not undefined)
+ * on an invalid FEN so callers can treat "no moves" and "bad FEN" the same.
+ */
+export function legalMovesFromFen(fen: string): string[] {
+  try {
+    return new Chess(fen).moves();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Deterministic, chess.js-derived piece list for the current FEN — same
+ * grounding pattern as `legalMoves`/`bestMove`. Descriptive "what's on the
+ * board" questions aren't covered by legalMoves (that only fixes move
+ * selection), so the model was omitting/inventing pieces when asked to
+ * enumerate them (issue #858). Computed server-side from the FEN itself so
+ * every caller gets it automatically, with no frontend changes required.
+ */
+export function describeBoardPieces(fen: string): string | null {
+  let chess: Chess;
+  try {
+    chess = new Chess(fen);
+  } catch {
+    return null;
+  }
+  const white: string[] = [];
+  const black: string[] = [];
+  for (const row of chess.board()) {
+    for (const cell of row) {
+      if (!cell) continue;
+      const label = `${PIECE_RU[cell.type] ?? cell.type}${cell.square}`;
+      (cell.color === 'w' ? white : black).push(label);
+    }
+  }
+  if (!white.length && !black.length) return null;
+  return (
+    `Фигуры на доске (детерминированно из FEN, используй дословно при перечислении): ` +
+    `белые (${white.length}) — ${white.join(', ')}; чёрные (${black.length}) — ${black.join(', ')}.`
+  );
+}
+
 /**
  * Multi-turn Q&A: user asks "почему мой ход плохой?" etc.
  * Throws on LLM failure — caller decides how to surface the error.
@@ -521,7 +593,11 @@ export async function answerQuestion(
   if (!q) throw new Error('answerQuestion: empty question');
 
   const contextLines: string[] = [];
-  if (context.fen) contextLines.push(`FEN: ${context.fen}`);
+  if (context.fen) {
+    contextLines.push(`FEN: ${context.fen}`);
+    const pieces = describeBoardPieces(context.fen);
+    if (pieces) contextLines.push(pieces);
+  }
   if (context.userSide) {
     contextLines.push(
       `Игрок играет: ${context.userSide === 'w' ? 'белыми' : 'чёрными'}`,

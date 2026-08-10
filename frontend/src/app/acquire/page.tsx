@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { MODULE_NODES, REGISTRY_ENTRIES } from "@/data/pitchFacts";
 import { useEffect, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { track } from "@/lib/track";
 
 const KNOWN_REFS: Record<string, string> = {
   stripe: "Stripe",
@@ -72,6 +74,9 @@ type Pillar = {
 };
 
 type RegistryStats = {
+  // /api/aevion/stats shape: { total, byStatus: { live, mvp }, ... }
+  total?: number;
+  byStatus?: { live?: number; mvp?: number };
   totalModules?: number;
   coverage?: {
     withFrontend?: number;
@@ -88,7 +93,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Расчётная единица + платёжная рельса + банковский UI для эпохи, когда «банк» = API.",
     modules: ["AEV", "QPayNet", "AEVION Bank", "Payments Rail", "QTrade", "QTradeOffline"],
-    proof: "AEV cap 21M · /api/aev/* 6 endpoints · smoke 10/10 · QPayNet ~99.5% prod",
+    proof: "AEV cap 21M · /api/aev/* 6 endpoints · prod smoke 12/12 (27 Jul) · QPayNet SLA 99.5%",
     tamAnchor: "Digital payments flow → $20T к 2030",
     accent: "#10b981",
   },
@@ -98,7 +103,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Подпись, секреты, патенты и governance — встроены в один контур, FIPS 204 post-quantum.",
     modules: ["QSign v2", "QShield", "QRight", "QContract", "QChainGov", "QMaskCard", "VeilNetX", "Z-Tide"],
-    proof: "ML-DSA-65 GA · prod smoke 20/20 · QShield Lagrange-reconstruct · QRight IP-registry live",
+    proof: "ML-DSA-65 (FIPS 204), key-activated · prod smoke 24/24 (27 Jul) · QShield Lagrange-reconstruct · QRight IP-registry live",
     tamAnchor: "IP economy + cybersec ≈ $400B → $700B",
     accent: "#3b82f6",
   },
@@ -118,7 +123,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Доказательство, что инфраструктура держит массовых пользователей, а не только слайды.",
     modules: ["CyberChess (AEVION CPI)", "HealthAI v3", "Multichat", "KidsAI", "Smeta Trainer", "MapReality", "LifeBox", "StartupX"],
-    proof: "Stockfish 18 в браузере · 5818 пазлов · HealthAI 19 commits · Multichat 12 фич",
+    proof: "Stockfish 18 в браузере · 10 818 пазлов · HealthAI 19 commits · Multichat 12 фич",
     tamAnchor: "Proof of execution (не TAM-якорь)",
     accent: "#fbbf24",
   },
@@ -128,7 +133,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Constitution v1 + Planet attestations + публичный health-board.",
     modules: ["Constitution v1", "/planet", "/transparency", "/launch-status", "AEVION_COORDINATION"],
-    proof: "Constitution опубликован через QSign envelope (commit 1cacd5a1) · 24/24 daily smoke",
+    proof: "Constitution опубликован через QSign envelope (commit 1cacd5a1) · daily smoke полностью зелёный",
     tamAnchor: "Trust premium для всех четырёх слоёв",
     accent: "#f472b6",
   },
@@ -159,6 +164,17 @@ export default function AcquirePage() {
   const [devhubLive, setDevhubLive] = useState<{ live: number; total: number } | null>(null);
   const acquireRef = useAcquireRef();
 
+  // Attribution for the most valuable visits on the site: personalized briefs.
+  // `source` carries the explicit ?ref= (anthropic/openai/...), full query in path.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    track({
+      type: "page_view",
+      source: params.get("ref") ?? params.get("utm_source") ?? undefined,
+      meta: { page: "acquire", campaign: params.get("utm_campaign") },
+    });
+  }, []);
+
   useEffect(() => {
     fetch(apiUrl("/api/devhub/studio/capabilities"))
       .then(r => r.json())
@@ -179,7 +195,7 @@ export default function AcquirePage() {
     });
   }, []);
 
-  const totalModules = registry?.totalModules ?? 30;
+  const totalModules = registry?.total ?? registry?.totalModules ?? REGISTRY_ENTRIES;
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #050810 0%, #0a0e1a 40%, #0f172a 100%)", color: "#f8fafc", fontFamily: "Inter, system-ui, -apple-system, sans-serif" }}>
@@ -266,7 +282,7 @@ export default function AcquirePage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 24, padding: 28, background: "rgba(255,255,255,0.03)", borderRadius: 20, border: "1px solid rgba(255,255,255,0.08)" }}>
           <Counter label="Modules tracked" value={totalModules.toString()} sub="/api/aevion/registry" />
           <Counter label="AEV cap supply" value="21 000 000" sub="зафиксирован навсегда" />
-          <Counter label="Daily smoke" value="24/24" sub="PASS today" />
+          <Counter label="Daily smoke" value="PASS" sub="все проверки зелёные" />
           <Counter
             label="DevHub integrations"
             value={devhubLive ? devhubLive.live.toString() : "9"}
@@ -573,7 +589,7 @@ export default function AcquirePage() {
                 Полный пакет промо одним архивом
               </h3>
               <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.6, marginBottom: 18 }}>
-                PROMPT (мета-промт) · MASTER PITCH (60s / 3m / 12m) · MODULES (по всем 30+) ·
+                PROMPT (мета-промт) · MASTER PITCH (60s / 3m / 12m) · MODULES (по всем {MODULE_NODES}) ·
                 DEAL TERMS · VIDEO STORYBOARD · DEMO FLOW · FINANCIAL APPENDIX · FAQ.
                 Один zip, ~42KB, читается в Cursor/Obsidian/Notepad.
               </p>

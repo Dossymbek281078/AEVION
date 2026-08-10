@@ -1,4 +1,6 @@
 import dotenv from "dotenv";
+import { dilithiumStatus } from "./lib/qsignV2/dilithium";
+import { eventsStoreStatus } from "./routes/events";
 dotenv.config();
 
 import express from "express";
@@ -129,7 +131,20 @@ const PORT = process.env.PORT || 4001;
 // express-rate-limit reads the real client IP from X-Forwarded-For.
 app.set("trust proxy", 1);
 
-app.use(cors());
+// CORS_ALLOWED_ORIGINS: comma-separated allow-list (e.g. "https://aevion.app,https://aevion.vercel.app").
+// Falls back to permissive (reflect any origin) when unset, matching prior
+// behavior for local dev / environments that haven't configured it yet.
+const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+app.use(
+  cors(
+    corsAllowedOrigins.length > 0
+      ? { origin: corsAllowedOrigins }
+      : undefined
+  )
+);
 // 10mb to accommodate base64-encoded resume scans posted to /api/build/ai/parse-resume.
 // Plain JSON payloads everywhere else stay tiny — limit is just a ceiling.
 //
@@ -177,7 +192,36 @@ function healthPayload() {
     commit: BUILD_COMMIT,
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
+    // Аналитика пишется в файл. Если её самое старое событие всегда моложе
+    // bootedAt выше — значит хранилище не переживает перезапуск, и метки
+    // utm из рассылки теряются на каждом деплое. Раньше это было видно
+    // только из переменных окружения; теперь видно отсюда. Счётчики и одна
+    // метка времени, без единого поля самих событий.
+    eventsStore: safeEventsStoreStatus(),
+    // Какой режим подписи реально активен. Письма партнёрам утверждают
+    // «post-quantum signatures (ML-DSA-65, FIPS 204)», а это включается ключом:
+    // без него прод отдаёт SHA-512, который наше же описание API называет
+    // «NOT a cryptographic signature». Теперь проверяется одним запросом.
+    qsign: safeDilithiumStatus(),
   };
+}
+
+/** health не должен падать из-за диагностики. */
+function safeDilithiumStatus() {
+  try {
+    return dilithiumStatus();
+  } catch {
+    return { mode: null, reason: null };
+  }
+}
+
+/** health не должен падать из-за диагностики. */
+function safeEventsStoreStatus() {
+  try {
+    return eventsStoreStatus();
+  } catch {
+    return { persistedByEnv: null, exists: null, count: null, oldest: null };
+  }
 }
 app.get("/health", (_req, res) => res.json(healthPayload()));
 app.get("/api/health", (_req, res) => res.json(healthPayload()));
@@ -533,11 +577,25 @@ app.get("/api/openapi.json", (_req, res) => {
       // QReal Studio — fully-alive AI video (no actor), realism QC, provenance
       "/api/qreal/health": { get: { summary: "QReal health + pipeline stages", security: [] } },
       "/api/qreal/engines": { get: { summary: "Direct render engines + $/s unit economics", security: [] } },
-      "/api/qreal/realism-criteria": { get: { summary: "14 weighted realism QC criteria", security: [] } },
+      "/api/qreal/realism-criteria": {
+        get: { summary: "14 weighted realism QC criteria + 1/3/5 anchors + acceptance threshold", security: [] },
+      },
       "/api/qreal/demo": { get: { summary: "Seeded demo project (steppe morning)", security: [] } },
       "/api/qreal/projects": {
         get: { summary: "List my projects (Bearer required)" },
         post: { summary: "Create project from a text brief", security: [] },
+      },
+      "/api/qreal/projects/{id}/characters": {
+        get: { summary: "Scene cast: one canonical description per character (kills face drift between shots)", security: [] },
+      },
+      "/api/qreal/projects/{id}/characters/{cid}": {
+        patch: { summary: "Edit a character's canon or reference frames — render prompts are rebuilt", security: [] },
+      },
+      "/api/qreal/projects/{id}/shots/{sid}/qc": {
+        post: { summary: "Score a shot against the 14 criteria; {judge:true} runs the paid VLM judge", security: [] },
+      },
+      "/api/qreal/projects/{id}/continuity": {
+        post: { summary: "Character continuity across shots, judged on the assembled film (409 if nobody recurs)", security: [] },
       },
       // QAI — universal AI assistant (personas + sessions + chat)
       "/api/qai/health": { get: { summary: "QAI health + session count", security: [] } },
@@ -609,6 +667,20 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       // Multichat — multi-agent chat (fully Bearer-gated on prod)
       "/api/multichat/health": { get: { summary: "Multichat health (Bearer required)" } },
+      "/api/multichat/conversations/{id}/dispatch": {
+        post: { summary: "Fan out one prompt to N agents; returns replies, dissent map and a signed receipt" },
+      },
+      "/api/multichat/receipt/verify": {
+        post: { summary: "PUBLIC — recompute a receipt's RFC8785/sha256 hash and check its ed25519 signature", security: [] },
+      },
+      "/api/multichat/dissent/preview": {
+        post: {
+          summary:
+            "PUBLIC — dissent map for answers you already have (max 8). Free because it makes no model call: " +
+            "similarity, outlier, numeric conflicts and hedges are derived from the answer text alone",
+          security: [],
+        },
+      },
       "/api/multichat/rooms": {
         get: { summary: "List user chat rooms (Bearer required)" },
         post: { summary: "Create new room (Bearer required)" },

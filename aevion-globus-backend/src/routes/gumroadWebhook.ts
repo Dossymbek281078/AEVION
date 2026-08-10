@@ -23,7 +23,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
+import { gumroadPaymentProvider, verifyGumroadSale } from "../lib/payment/gumroadProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
@@ -68,6 +68,43 @@ const TIER_PERMALINK_ENV: Record<string, string> = {
   GUMROAD_PERMALINK_TIER_FULL_ANNUAL: "tier_full_annual",
 };
 
+/**
+ * Code-level defaults for the permalinks that actually exist in the AEVION
+ * Gumroad account (verified against the live dashboard 2026-07-26 — 8 products
+ * Published). Env still wins: this map is consulted only AFTER the env-driven
+ * branches, and only replaces the legacy `constitution-pro` catch-all below.
+ *
+ * WHY THIS EXISTS — without it, entitlement depended on env vars nobody had set,
+ * and the catch-all silently mis-provisioned real money:
+ *   - a $9.99 BOOK buyer fell through to "constitution-pro" → tierForReference()
+ *     → "lite", i.e. a book purchase handed out a paid subscription tier. The
+ *     comment on branch 0 already warned about exactly this, but the protection
+ *     was opt-in via GUMROAD_EXTERNAL_PERMALINKS. Three book sales have already
+ *     gone through this path (27/29 May, 2 June).
+ *   - an "AEVION All-Access" $59/mo buyer likewise landed on "lite" unless
+ *     GUMROAD_PERMALINK_TIER_FULL_MONTHLY happened to be set to xpxzam.
+ *
+ * Deliberately NOT listed: `wjvquw` (Constitution Team $49/mo). tierForReference()
+ * maps anything containing "team" to `full` = the whole ecosystem, which is very
+ * likely not what a Constitution-scoped product should grant. Leaving it on the
+ * catch-all keeps today's behaviour; deciding what Team actually unlocks is a
+ * product call, not a silent code change.
+ */
+const KNOWN_PERMALINK_REFERENCE: Record<string, string> = {
+  // Books and one-off guides — files, not subscriptions. "external" stops
+  // provisioning from granting any tier at all.
+  orcfbo: "external", // Gratitude ∞ Forever Young — Book (PDF + EPUB) $9.99
+  lelzw: "external",  // Gratitude ∞ Forever Young — Book + Audiobook $14.99
+  ghvzq: "external",  // Gratitude ∞ Forever Young — Complete Pack $29.99
+  tmuyxw: "external", // Протокол «Анти-седина» (RU) $9
+  oijxmq: "external", // Протокол долголетия — 12 недель (RU) $19
+  kkiavh: "external", // The Anti-Grey Protocol (EN) $19
+  // Platform bundle — the whole ecosystem.
+  xpxzam: "tier_full_monthly", // AEVION All-Access $59/mo
+  // Constitution entry tier — same as the legacy default, made explicit.
+  pyiaz: "constitution-pro", // Constitution Pro $9/mo
+};
+
 /** Last path segment of a Gumroad permalink or full product URL, lowercased.
  *  "https://aevion.gumroad.com/l/xpxzam?x=1" → "xpxzam"; "xpxzam" → "xpxzam". */
 function permalinkSlug(v?: string | null): string {
@@ -108,7 +145,13 @@ function resolveReference(raw: Record<string, string>): string {
   const studioPro = permalinkSlug(process.env.GUMROAD_PERMALINK_DEVHUB_STUDIO_PRO ?? "studio-pro");
   if (pingSlug && pingSlug === studioPro) return "devhub-studio-pro";
 
-  // 4. Legacy catch-all — keep Constitution Pro working without explicit mapping.
+  // 4. Known AEVION permalinks — code-level default so entitlement never depends
+  //    on an env var that was never set. See KNOWN_PERMALINK_REFERENCE above.
+  if (pingSlug && KNOWN_PERMALINK_REFERENCE[pingSlug]) {
+    return KNOWN_PERMALINK_REFERENCE[pingSlug];
+  }
+
+  // 5. Legacy catch-all — keep Constitution Pro working without explicit mapping.
   return "constitution-pro";
 }
 
@@ -196,6 +239,32 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   if (reference === "external") {
     console.log(`[gumroad/webhook] external product ${productId} — skipping`);
     return res.json({ ok: true, ignored: "external_product" });
+  }
+
+  // Подтверждение продажи, когда пинг не подписан.
+  //
+  // parseWebhook проверяет HMAC только при заданном GUMROAD_WEBHOOK_SECRET. На
+  // проде 26.07.2026 секрет не задан, а Ping-адрес публично известен — то есть
+  // любой POST с чужим email выдавал бы платный тариф без единого платежа.
+  // Здесь мы спрашиваем у самого Gumroad, существует ли такая продажа.
+  //
+  // Отклоняем ТОЛЬКО при определённом «нет такой продажи». Если подтвердить не
+  // удалось (нет токена, сеть, 5xx) — ведём себя как раньше и провижиним:
+  // реальный покупатель не должен терять доступ из-за сбоя стороннего API.
+  // Аварийный выключатель: GUMROAD_VERIFY_SALES=0.
+  const signatureEnforced = Boolean(process.env.GUMROAD_WEBHOOK_SECRET);
+  if (!signatureEnforced && process.env.GUMROAD_VERIFY_SALES !== "0") {
+    const verdict = await verifyGumroadSale(saleId);
+    if (verdict === "not_found") {
+      console.warn(`[gumroad/webhook] sale ${saleId} not found in Gumroad API — rejecting 401`);
+      SEEN.delete(dedupKey); // не занимать ключ отклонённым пингом
+      return res.status(401).json({ ok: false, error: "sale_not_found" });
+    }
+    if (verdict === "unverifiable") {
+      console.warn(
+        `[gumroad/webhook] sale ${saleId} unverifiable (no token or API unavailable) — provisioning anyway`,
+      );
+    }
   }
 
   // DevHub Studio Pro — upgrades DevHubTier, not the main subscription tier.

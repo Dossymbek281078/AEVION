@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
-import { getApiBase } from "@/lib/apiBase";
+import { serverFetch } from "@/lib/apiBase";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import paper from "@/styles/aevionPaper.module.css";
@@ -13,11 +13,9 @@ type Props = { params: Promise<{ id: string }> };
 
 async function loadAnalysis(id: string): Promise<AnalysisResult | null> {
   try {
-    const res = await fetch(`${getApiBase()}/api/qventure/analyses/${encodeURIComponent(id)}`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return null;
+    // Retries a cold backend so a deploy-time render doesn't 404 a real report.
+    const res = await serverFetch(`/api/qventure/analyses/${encodeURIComponent(id)}`);
+    if (!res || !res.ok) return null;
     const j = await res.json();
     return j?.ok ? (j.data as AnalysisResult) : null;
   } catch {

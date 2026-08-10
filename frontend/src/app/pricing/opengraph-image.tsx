@@ -2,7 +2,9 @@ import { ImageResponse } from "next/og";
 import { MODULE_NODES, ENTRY_PAID_TIER_MONTHLY } from "@/data/pitchFacts";
 
 export const runtime = "edge";
-export const alt = `AEVION Pricing — ${MODULE_NODES} modules in one subscription`;
+// Count-free wording kept from main — one less number that can go stale. The
+// module count still appears in the card body, where it comes from MODULE_NODES.
+export const alt = "AEVION Pricing — every module in one subscription";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -79,7 +81,7 @@ export default async function Image() {
               maxWidth: 980,
             }}
           >
-            37 модулей в одной подписке
+            все модули в одной подписке
           </h1>
           <p
             style={{

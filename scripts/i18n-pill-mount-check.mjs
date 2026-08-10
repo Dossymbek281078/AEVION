@@ -41,8 +41,14 @@ export function runPillMountCheck() {
     if (!/<AppShellLanguagePill\s*\/>/.test(cp)) {
       errors.push(`${CLIENT_PROVIDERS}: missing <AppShellLanguagePill /> in JSX`);
     }
-    if (!/isApp\s*&&\s*<AppShellLanguagePill/.test(cp)) {
-      errors.push(`${CLIENT_PROVIDERS}: pill must render only when isApp is true (look for 'isApp && <AppShellLanguagePill')`);
+    // Требование по сути: pill рендерится ТОЛЬКО при isApp. Дополнительные
+    // И-условия между ними это требование не ослабляют — `isApp && !isBare &&`
+    // по-прежнему невозможен без isApp. Раньше шаблон требовал, чтобы компонент
+    // шёл вплотную за `isApp &&`, и красил CI в красный за добавление
+    // `!isBare` (голые страницы вроде /go, где своя вёрстка). Проверять надо
+    // условие, а не расстояние до него; `||` по-прежнему не проходит.
+    if (!/isApp\s*&&(?:\s*!?[A-Za-z0-9_$.]+\s*&&)*\s*<AppShellLanguagePill/.test(cp)) {
+      errors.push(`${CLIENT_PROVIDERS}: pill must render only when isApp is true (look for 'isApp && … && <AppShellLanguagePill')`);
     }
   }
 

@@ -16,19 +16,31 @@
  * GROUND TRUTH FOR THE COUNTS
  * The canonical module registry is the backend file
  * `aevion-globus-backend/src/data/projects.ts`, served at
- * `/api/modules/registry`. As of this file's last audit it holds 38 entries:
- * 35 `status:"live"` + 3 `status:"mvp"`. The public-facing "37 product nodes"
+ * `/api/modules/registry`. As of 2026-07-26 it holds 41 entries:
+ * 36 `status:"live"` + 5 `status:"mvp"`. The public-facing product-node count
  * excludes the `globus` entry, which is the interactive map shell itself, not
- * a product node (38 registry entries − 1 map shell = 37 nodes on the map).
- * If you add/remove a module in projects.ts, update MODULE_NODES / LIVE_MODULES
- * here and the guard-test expectations that lock them.
+ * a product node (41 registry entries − 1 map shell = 40 nodes on the map).
+ *
+ * These two constants are locked to projects.ts by pitchNumbers.guard.test.ts,
+ * which COUNTS the file rather than comparing one hardcoded number to another.
+ * An earlier version of that test asserted `MODULE_NODES === 37` against a
+ * literal, so the registry could grow to 41 while the test stayed green and
+ * every pitch surface quietly published a stale figure. If the count changes,
+ * the test now tells you the new number instead of agreeing with the old one.
  */
 
 // ── Ecosystem scale ────────────────────────────────────────────────────────
-/** Public "product nodes on the Globus map" = 38 registry entries − the globus map shell. */
-export const MODULE_NODES = 37;
-/** Registry entries with status:"live". The remaining 3 are status:"mvp". */
-export const LIVE_MODULES = 35;
+/**
+ * Всего записей в реестре, включая `globus` — оболочку карты.
+ * Именно это число /api/aevion/registry отдаёт в поле `total`, поэтому
+ * счётчики, подписанные этим эндпоинтом, должны падать сюда, а не в
+ * MODULE_NODES (тот на единицу меньше — он считает продуктовые узлы карты).
+ */
+export const REGISTRY_ENTRIES = 41;
+/** Public "product nodes on the Globus map" = registry entries − the globus map shell. */
+export const MODULE_NODES = 40;
+/** Registry entries with status:"live". The remaining 5 are status:"mvp". */
+export const LIVE_MODULES = 36;
 /** Honest qualitative framing (from the #484 objectivity audit): deployed ≠ feature-complete. */
 export const FEATURE_COMPLETE_LABEL = "~a dozen feature-complete";
 

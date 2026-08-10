@@ -1,9 +1,14 @@
 // QSkyway Phase 4 — no-fly zones + layered wind, per city.
 //
-// ⚠️ Иллюстративные данные, НЕ авторитетный источник ограничений. Реальные
-// запретные зоны берутся из официальных публикаций регулятора (FAA UAS / NOTAM,
-// EASA U-space, CAAC). Ветер здесь — детерминированная демо-модель; в проде
-// подключается фид METAR/прогноза.
+// ⚠️ No-fly зоны здесь — иллюстративные данные, НЕ авторитетный источник
+// ограничений. Реальные запретные зоны берутся из официальных публикаций
+// регулятора (FAA UAS / NOTAM, EASA U-space, CAAC) — ещё не подключено.
+//
+// WindConfig ниже — fallback-модель, используется только когда живой METAR
+// (qskyway.metar.ts, aviationweather.gov) недоступен для города. При
+// доступном METAR наземный ветер (fromDeg/baseMs) реальный; perBandMs
+// (рост с высотой) остаётся иллюстративным всегда — METAR не сообщает ветер
+// на высоте.
 
 export interface NoFlyZone {
   id: string;
@@ -12,6 +17,15 @@ export interface NoFlyZone {
   center: [number, number]; // [lon, lat]
   radiusM: number;
   until?: string; // ISO-8601 для temporary
+  /**
+   * What the regulator actually publishes for this spot, where we know it.
+   *
+   * A demo circle named after a real restriction is worse than an unnamed one:
+   * the name makes it look sourced. Astana's "government quarter" placeholder
+   * understated the published prohibition fourteenfold in radius and nothing on
+   * screen said so. Where a real rule is known, it is named here.
+   */
+  realityNote?: string;
 }
 
 export interface WindConfig {
@@ -23,7 +37,15 @@ export interface WindConfig {
 
 export const NOFLY: Record<string, NoFlyZone[]> = {
   astana: [
-    { id: "nfz-gov", name: "Правительственный квартал", kind: "permanent", center: [71.4418, 51.1268], radiusM: 320 },
+    {
+      id: "nfz-gov", name: "Правительственный квартал (демо-геометрия)", kind: "permanent",
+      center: [71.4418, 51.1268], radiusM: 320,
+      realityNote:
+        "Это НАША демо-окружность, а не опубликованная зона. Реально действует запретная зона UAP28 " +
+        "(AIP KZ ENR 5.1): круг радиусом 4.5 км, от земли до 4800 ft, круглосуточно — он накрывает 100% " +
+        "твина, то есть в 14 раз шире по радиусу, чем эта фигура. Демо-круг оставлен, чтобы показать " +
+        "механику обхода; за реальным ограничением см. блок airspace.permission.",
+    },
     { id: "nfz-event", name: "Массовое мероприятие", kind: "temporary", center: [71.4270, 51.1240], radiusM: 240, until: "2026-07-13T20:00:00Z" },
   ],
   nyc: [

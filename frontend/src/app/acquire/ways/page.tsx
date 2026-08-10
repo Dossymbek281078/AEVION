@@ -109,7 +109,7 @@ export default function AcquireWaysPage() {
         <h3>Why it needed to exist yesterday</h3>
         <ul>
           <li>AI content is already flooding — the provenance crisis is now, not later.</li>
-          <li>The quantum clock is already running — signatures must be reissued today (ML-DSA-65, FIPS 204, in prod).</li>
+          <li>The quantum clock is already running — signatures must be reissued today (ML-DSA-65, FIPS 204 — key-activated in QSign v2).</li>
           <li>Every state is reaching for AI sovereignty at once — first to set the standard anchors nations for a generation.</li>
           <li>Tools are commoditizing — the window to own the place, not just a tool, is closing.</li>
         </ul>

@@ -10,6 +10,13 @@ on:
   schedule:
     - cron: "30 22 * * *" # 04:30 Astana — after the daily smoke window
 
+# The repo default for GITHUB_TOKEN is read-only, so the issue steps below
+# failed with "Resource not accessible by integration (createIssue)" — the
+# 2026-07-25 failure never reached a human. Declared explicitly here.
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   founder-flow:
     runs-on: ubuntu-latest
@@ -37,3 +44,33 @@ jobs:
           name: founder-flow-traces
           path: frontend/test-results/
           retention-days: 7
+      - name: Close stale failure issues once the flow is green again
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "Founder flow nightly failed in:title" --json number -q '.[].number' |
+          while read -r n; do
+            gh issue close "$n" --repo "$GITHUB_REPOSITORY" \
+              --comment "Nightly founder flow is green again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} — closing."
+          done
+      - name: Open an issue so the failure reaches a human by morning
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # A week of red nights must not open seven identical issues — comment
+          # on the existing one instead, so the thread shows how long it's been red.
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "Founder flow nightly failed in:title" --json number -q '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" \
+              --body "Still failing: $RUN_URL (traces attached as artifact)."
+          else
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "🔴 Founder flow nightly failed — describe→app is broken on prod" \
+              --body "The flagship flow failed against production. Run: $RUN_URL (traces attached as artifact). This is the product's front door — triage before anything else."
+          fi

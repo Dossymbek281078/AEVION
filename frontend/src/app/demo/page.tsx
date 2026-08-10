@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import {
@@ -28,6 +29,7 @@ type LiveMetrics = {
   participants: number | null;
   shieldRecords: number | null;
   qtradeOps: number | null;
+  liveRevenueUsd: number | null;
 };
 
 const DEMO_METRICS: LiveMetrics = {
@@ -36,11 +38,15 @@ const DEMO_METRICS: LiveMetrics = {
   participants: 312,
   shieldRecords: 96,
   qtradeOps: 1450,
+  // No invented placeholder here, unlike the counts above — a fabricated
+  // dollar figure on an investor-facing page is a different order of risk
+  // than a made-up object count. Shows "…" until the real number loads.
+  liveRevenueUsd: null,
 };
 
 const marqueePhrases = [
   "AEVION · unified trust platform",
-  "37 product nodes · one pipeline",
+  `${MODULE_NODES} product nodes · one pipeline`,
   "QRight · QSign · Bureau · Planet",
   "Auth · registry · signature · compliance",
   "Globus · ecosystem map",
@@ -96,6 +102,7 @@ export default function DemoShowcasePage() {
     participants: null,
     shieldRecords: null,
     qtradeOps: null,
+    liveRevenueUsd: null,
   });
   const [metricsLive, setMetricsLive] = useState(false);
 
@@ -123,11 +130,12 @@ export default function DemoShowcasePage() {
     let cancelled = false;
     (async () => {
       try {
-        const [qr, ps, qs, qt] = await Promise.all([
+        const [qr, ps, qs, qt, rev] = await Promise.all([
           fetch(apiUrl("/api/qright/objects")).catch(() => null),
           fetch(apiUrl("/api/planet/stats")).catch(() => null),
           fetch(apiUrl("/api/quantum-shield/records")).catch(() => null),
           fetch(apiUrl("/api/qtrade/summary")).catch(() => null),
+          fetch(apiUrl("/api/revenue/summary")).catch(() => null),
         ]);
         if (cancelled) return;
 
@@ -153,6 +161,10 @@ export default function DemoShowcasePage() {
         if (qt && qt.ok) {
           const j = await qt.json().catch(() => null);
           if (j?.operationCount != null) { next.qtradeOps = j.operationCount; anyOk = true; }
+        }
+        if (rev && rev.ok) {
+          const j = await rev.json().catch(() => null);
+          if (j && typeof j.grossUsd === "number") { next.liveRevenueUsd = j.grossUsd; anyOk = true; }
         }
 
         if (!cancelled) {
@@ -258,7 +270,7 @@ export default function DemoShowcasePage() {
             }}
           >
             What does this <em>do</em>? Below: the live ecosystem pulse, the 90-second pipeline from
-            idea to certificate, all 37 product nodes, and the cross-module flywheel that makes the
+            idea to certificate, all {MODULE_NODES} product nodes, and the cross-module flywheel that makes the
             sum bigger than its parts. For the <Link href="/pitch" style={{ color: "#fbbf24", fontWeight: 700 }}>partnership thesis</Link>, see /pitch.
           </p>
 
@@ -388,6 +400,7 @@ export default function DemoShowcasePage() {
             <LivePill label="Planet participants" value={metrics.participants} />
             <LivePill label="Shielded artifacts" value={metrics.shieldRecords} />
             <LivePill label="QTrade ops" value={metrics.qtradeOps} />
+            <LivePill label="Live revenue" value={metrics.liveRevenueUsd} prefix="$" />
           </div>
         </section>
 
@@ -508,7 +521,7 @@ export default function DemoShowcasePage() {
             textTransform: "uppercase",
           }}
         >
-          37 product nodes — benefits for each
+          {MODULE_NODES} product nodes — benefits for each
         </h2>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -591,7 +604,7 @@ export default function DemoShowcasePage() {
             Cross-module flywheel
           </h2>
           <p style={{ fontSize: 14, color: "#cbd5e1", lineHeight: 1.6, margin: "0 0 20px" }}>
-            Three of the four network forces that compound across the 37 nodes. The fourth (switching
+            Three of the four network forces that compound across the {MODULE_NODES} nodes. The fourth (switching
             costs) is detailed in the /pitch deck.
           </p>
           <div
@@ -721,8 +734,8 @@ export default function DemoShowcasePage() {
   );
 }
 
-function LivePill({ label, value }: { label: string; value: number | null }) {
-  const display = value == null ? "…" : value.toLocaleString("en-US");
+function LivePill({ label, value, prefix }: { label: string; value: number | null; prefix?: string }) {
+  const display = value == null ? "…" : `${prefix ?? ""}${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
   return (
     <span
       style={{

@@ -66,7 +66,7 @@ export default async function Image() {
               marginBottom: 12,
             }}
           >
-            27 МОДУЛЕЙ × 4 ТАРИФА
+            ВСЕ МОДУЛИ × 4 ТАРИФА
           </div>
           <h1
             style={{

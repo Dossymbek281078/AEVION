@@ -31,7 +31,8 @@ const MODULES = [
   { id: "qpersona",         noun: "personas",   create: { alias: `sm${Date.now()}`, displayName: "Smoke Bot", traits: ["test"], blueprint: "x" } },
   { id: "voice-of-earth",   noun: "feeds",      create: { location: "Test", metric: "pm2.5", observation: "x" } },
   { id: "deepsan",          noun: "runs",       create: { facility: "TestF", method: "uv",   } },
-  { id: "shadownet",        noun: "posts",      create: { alias: `smoke${Date.now()}`, title: "Smoke", body: "Anon test body", ciphertext: "c2lnbmVkLXNtb2tlLXRlc3Q=", iv: "smoke-iv-aevion", salt: "smoke-salt-aevion" } },
+  // shadownet removed 2026-07-23 — graduated to its own domain router/store
+  // (single-store consolidation); covered by scripts/shadownet-smoke.js.
   { id: "lifebox",          noun: "capsules",   create: { alias: `lb${Date.now()}`, title: "Smoke capsule", content: "Test capsule content", category: "knowledge", unlock_at: "2099-01-01T00:00:00Z", year: 2026, occasion: "test" } },
 ];
 

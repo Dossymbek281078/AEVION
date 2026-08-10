@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
@@ -219,7 +220,7 @@ export default function ConstitutionDemoPage() {
       <div style={{ background: "#0b1736", borderTop: "1px solid rgba(212,175,55,0.15)", padding: "32px 24px" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
           <Fact title="⚡ Instant Digital Delivery" text="Lemon Squeezy webhook fires subscription_created → server provisions Pro tier within seconds → watermarks removed, AI limits lifted. Zero manual steps." />
-          <Fact title="🏗️ SaaS Platform" text="Constitution is 1 of 30+ modules on AEVION (aevion.app). Other modules: Bank, Chess, QRight IP registry, AI playground, Smeta trainer. Full open-source on GitHub." />
+          <Fact title="🏗️ SaaS Platform" text={`Constitution is 1 of ${MODULE_NODES} modules on AEVION (aevion.app). Other modules: Bank, Chess, QRight IP registry, AI playground, Smeta trainer. Full open-source on GitHub.`} />
           <Fact title="🔒 No Physical Goods" text="Purely digital: sliders + data + AI requests + PDFs. No downloads, no shipping, no custom services. All computation on Railway (Node.js + Postgres)." />
         </div>
       </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import {
   ask,
   billionDefense,
@@ -34,6 +35,7 @@ type LiveMetrics = {
   participants: number | null;
   shieldRecords: number | null;
   qtradeOps: number | null;
+  liveRevenueUsd: number | null;
 };
 
 const DEMO_METRICS: LiveMetrics = {
@@ -42,6 +44,11 @@ const DEMO_METRICS: LiveMetrics = {
   participants: 312,
   shieldRecords: 96,
   qtradeOps: 1450,
+  // Deliberately no invented placeholder here, unlike the other counts above —
+  // a fabricated dollar figure on an investor-facing page is a different
+  // order of risk than a made-up object count. Shows "…" until the real
+  // number loads; never a fake one.
+  liveRevenueUsd: null,
 };
 
 const stageLabel: Record<LaunchStage, string> = {
@@ -118,6 +125,7 @@ export default function PitchPage() {
     qrightObjects: null,
     certifiedArtifacts: null,
     participants: null,
+    liveRevenueUsd: null,
     shieldRecords: null,
     qtradeOps: null,
   });
@@ -154,11 +162,12 @@ export default function PitchPage() {
     let cancelled = false;
     (async () => {
       try {
-        const [qr, ps, qs, qt] = await Promise.all([
+        const [qr, ps, qs, qt, rev] = await Promise.all([
           fetch(apiUrl("/api/qright/objects")).catch(() => null),
           fetch(apiUrl("/api/planet/stats")).catch(() => null),
           fetch(apiUrl("/api/quantum-shield/records")).catch(() => null),
           fetch(apiUrl("/api/qtrade/summary")).catch(() => null),
+          fetch(apiUrl("/api/revenue/summary")).catch(() => null),
         ]);
         if (cancelled) return;
 
@@ -184,6 +193,10 @@ export default function PitchPage() {
         if (qt && qt.ok) {
           const j = await qt.json().catch(() => null);
           if (j?.operationCount != null) { next.qtradeOps = j.operationCount; anyOk = true; }
+        }
+        if (rev && rev.ok) {
+          const j = await rev.json().catch(() => null);
+          if (j && typeof j.grossUsd === "number") { next.liveRevenueUsd = j.grossUsd; anyOk = true; }
         }
 
         if (!cancelled) {
@@ -465,6 +478,7 @@ export default function PitchPage() {
             <LivePill label="Planet participants" value={metrics.participants} />
             <LivePill label="Shielded artifacts" value={metrics.shieldRecords} />
             <LivePill label="QTrade ops" value={metrics.qtradeOps} />
+            <LivePill label="Live revenue" value={metrics.liveRevenueUsd} prefix="$" />
           </div>
 
           <div className="pitch-no-print" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -496,7 +510,7 @@ export default function PitchPage() {
                 fontSize: 16,
               }}
             >
-              See the 37 modules
+              See the 41 modules
             </a>
             <a
               href={ask.ctaPrimary.href}
@@ -717,7 +731,7 @@ export default function PitchPage() {
       </Section>
 
       {/* ───────── PILLARS ───────── */}
-      <Section anchor="pillars" eyebrow="Three architectural pillars" title="Why this is one product, not 27">
+      <Section anchor="pillars" eyebrow="Three architectural pillars" title={`Why this is one product, not ${MODULE_NODES}`}>
         <div
           style={{
             display: "grid",
@@ -1736,7 +1750,7 @@ export default function PitchPage() {
             </Link>
           </div>
           <p style={{ marginTop: 40, fontSize: 12, color: "#475569" }}>
-            AEVION · 37 modules · 12 feature-complete · one Trust Graph · {new Date().getFullYear()}
+            AEVION · 41 modules · 12 feature-complete · one Trust Graph · {new Date().getFullYear()}
           </p>
         </div>
       </section>
@@ -1853,8 +1867,8 @@ function PressColumn({ title, items, accent }: { title: string; items: ReadonlyA
   );
 }
 
-function LivePill({ label, value }: { label: string; value: number | null }) {
-  const display = value == null ? "…" : value.toLocaleString("en-US");
+function LivePill({ label, value, prefix }: { label: string; value: number | null; prefix?: string }) {
+  const display = value == null ? "…" : `${prefix ?? ""}${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
   return (
     <span
       style={{

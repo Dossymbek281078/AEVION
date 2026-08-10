@@ -27,7 +27,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Hero — control (A) */
     "hero.badge": "AEVION GTM · ПРАЙС-ЛИСТ",
     "hero.title": "Цены AEVION",
-    "hero.subtitle": "Единая платформа: цифровая собственность, AI, финтех, потребительские продукты — 37 модулей под одним аккаунтом.",
+    "hero.subtitle": "Единая платформа: цифровая собственность, AI, финтех, потребительские продукты — все модули под одним аккаунтом.",
     /* Hero variant B — savings/comparison angle */
     "hero.B.badge": "AEVION GTM · −73% VS DOCUSIGN+OPENAI+STRIPE",
     "hero.B.title": "Замените 4 SaaS на одно решение",
@@ -35,7 +35,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Hero variant C — outcome/free trial angle */
     "hero.C.badge": "AEVION GTM · 14 ДНЕЙ FREE · NO CREDIT CARD",
     "hero.C.title": "Запустите свой digital-продукт за 14 дней",
-    "hero.C.subtitle": "37 production-ready модулей AEVION: AI, IP, fintech и compliance. Free trial 14 дней, без credit card. Customer Success включён бесплатно.",
+    "hero.C.subtitle": "Production-ready модули AEVION: AI, IP, fintech и compliance. Free trial 14 дней, без credit card. Customer Success включён бесплатно.",
 
     /* Period / currency */
     "period.monthly": "Месяц",
@@ -44,6 +44,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Promo */
     "promo.activeBanner": "АКТИВНЫЕ ПРОМО:",
     "promo.copied": "✓ Скопировано",
+    "promo.upTo": "до",
 
     /* Tier CTA */
     "tier.popular": "ПОПУЛЯРНЫЙ",
@@ -105,13 +106,13 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "compare.subtitle": "Что обычно собирают по кускам — у нас под одним аккаунтом и одной подпиской.",
 
     /* Full compare matrix */
-    "compareFull.badge": "ПОЛНАЯ МАТРИЦА · 27 МОДУЛЕЙ × 4 ТАРИФА",
+    "compareFull.badge": "ПОЛНАЯ МАТРИЦА",
     "compareFull.title": "Сравнение тарифов и модулей",
     "compareFull.subtitle": "Что включено в каждый тариф, что доступно как add-on, что только в Enterprise. Фильтруйте по типу модуля или скрывайте те, что ещё в работе.",
     "compareFull.filterLabel": "ФИЛЬТР:",
     "compareFull.filterAll": "Все",
     "compareFull.hideUnavailable": "Скрыть SOON / by-request",
-    "compareFull.stickyHeader": "27 МОДУЛЕЙ",
+    "compareFull.stickyHeader": "МОДУЛЬ",
     "compareFull.ctaTitle": "Готовы выбрать тариф?",
     "compareFull.ctaSubtitle": "Соберите смету в калькуляторе или свяжитесь с продажами для Enterprise-конфигурации.",
     "compareFull.ctaCalculator": "Открыть калькулятор",
@@ -526,19 +527,20 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "hero.badge": "AEVION GTM · PRICING",
     "hero.title": "AEVION pricing",
-    "hero.subtitle": "Unified platform: digital IP, AI, fintech, consumer products — 37 modules under a single account.",
+    "hero.subtitle": "Unified platform: digital IP, AI, fintech, consumer products — every module under a single account.",
     "hero.B.badge": "AEVION GTM · −73% VS DOCUSIGN+OPENAI+STRIPE",
     "hero.B.title": "Replace 4 SaaS with one platform",
     "hero.B.subtitle": "Digital IP, AI, signatures and payments in one subscription. Save up to 73% vs DocuSign + OpenAI + Stripe + Patently combined.",
     "hero.C.badge": "AEVION GTM · 14 DAYS FREE · NO CREDIT CARD",
     "hero.C.title": "Ship your digital product in 14 days",
-    "hero.C.subtitle": "37 production-ready AEVION modules: AI, IP, fintech and compliance. Free trial 14 days, no credit card. Customer Success included.",
+    "hero.C.subtitle": "Production-ready AEVION modules: AI, IP, fintech and compliance. Free trial 14 days, no credit card. Customer Success included.",
 
     "period.monthly": "Monthly",
     "period.annual": "Annual (-16%)",
 
     "promo.activeBanner": "ACTIVE PROMOS:",
     "promo.copied": "✓ Copied",
+    "promo.upTo": "up to",
 
     "tier.popular": "POPULAR",
     "tier.perMonth": "/mo",
@@ -592,13 +594,13 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "compare.title": "AEVION vs alternatives",
     "compare.subtitle": "What's usually pieced together from many vendors — under one account here.",
 
-    "compareFull.badge": "FULL MATRIX · 27 MODULES × 4 TIERS",
+    "compareFull.badge": "FULL MATRIX",
     "compareFull.title": "Compare tiers and modules",
     "compareFull.subtitle": "What's included in each tier, what's available as add-on, what's Enterprise-only. Filter by module kind or hide work-in-progress.",
     "compareFull.filterLabel": "FILTER:",
     "compareFull.filterAll": "All",
     "compareFull.hideUnavailable": "Hide SOON / by-request",
-    "compareFull.stickyHeader": "27 MODULES",
+    "compareFull.stickyHeader": "MODULE",
     "compareFull.ctaTitle": "Ready to pick a tier?",
     "compareFull.ctaSubtitle": "Build a quote in the calculator or contact sales for Enterprise.",
     "compareFull.ctaCalculator": "Open calculator",

@@ -35,6 +35,24 @@ interface OpexData {
   source: "db" | "memory";
 }
 
+interface FunnelRow {
+  module: string;
+  denies: number;
+  last24h: number;
+  byPlan: Record<string, number>;
+  unlockPriceUsd?: number | null;
+  mrrCeilingUsd?: number | null;
+}
+
+interface FunnelData {
+  totalDenies: number;
+  last24h: number;
+  byModule: FunnelRow[];
+  windowDays: number;
+  source: "db" | "memory";
+  mrrCeilingUsd?: number;
+}
+
 const PROVIDER_COLOR: Record<string, string> = {
   anthropic: "#d97706",
   openai: "#10b981",
@@ -52,6 +70,7 @@ const fmtTokens = (n: number) =>
 export default function OpexPage() {
   const { t } = useI18n();
   const [data, setData] = useState<OpexData | null>(null);
+  const [funnel, setFunnel] = useState<FunnelData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -60,6 +79,10 @@ export default function OpexPage() {
       .then((d) => d && setData(d))
       .catch(() => {})
       .finally(() => setLoading(false));
+    fetch(apiUrl("/api/paywall/funnel?days=30"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setFunnel(d))
+      .catch(() => {});
   }, []);
 
   const maxDaily = data ? Math.max(...data.daily.map((d) => d.costUsd), 0.000001) : 1;
@@ -148,6 +171,46 @@ export default function OpexPage() {
                 })}
               </div>
             </div>
+
+            {/* Paywall deny funnel — demand for paid modules */}
+            {funnel && funnel.byModule.length > 0 && (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-3">
+                  {t("qcoreai.opex.funnel")} · {funnel.totalDenies} {t("qcoreai.opex.funnel.total")} · {funnel.last24h} {t("qcoreai.opex.funnel.last24h")}
+                  {typeof funnel.mrrCeilingUsd === "number" && funnel.mrrCeilingUsd > 0 && (
+                    <span className="text-emerald-400"> · ≤${funnel.mrrCeilingUsd.toLocaleString()}/mo {t("qcoreai.opex.funnel.mrr")}</span>
+                  )}
+                </p>
+                <div className="space-y-3">
+                  {funnel.byModule.map((f) => {
+                    const share = funnel.totalDenies > 0 ? (f.denies / funnel.totalDenies) * 100 : 0;
+                    return (
+                      <div key={f.module}>
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <span className="font-semibold">{f.module}</span>
+                          <span className="text-slate-400 text-xs">
+                            {f.denies} · {share.toFixed(0)}% · {f.last24h} {t("qcoreai.opex.funnel.last24h")}
+                            {typeof f.mrrCeilingUsd === "number" && f.mrrCeilingUsd > 0 && (
+                              <span className="text-emerald-400"> · ≤${f.mrrCeilingUsd.toLocaleString()}/mo</span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-rose-500/80" style={{ width: `${share}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-600 mt-3">{t("qcoreai.opex.funnel.mrr.note")}</p>
+              </div>
+            )}
+            {funnel && funnel.byModule.length === 0 && (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{t("qcoreai.opex.funnel")}</p>
+                <p className="text-sm text-slate-500">{t("qcoreai.opex.funnel.empty")}</p>
+              </div>
+            )}
 
             {/* Per-model top */}
             {data.byModel.length > 0 && (

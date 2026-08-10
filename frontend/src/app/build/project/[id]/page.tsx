@@ -148,6 +148,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     existingTitles={vacancies
                       .filter((v) => v.status !== "ARCHIVED")
                       .map((v) => v.title)}
+                    city={project.city}
                   />
                 </div>
               )}
@@ -597,10 +598,12 @@ function NewVacancyButton({
   projectId,
   onCreated,
   existingTitles = [],
+  city = null,
 }: {
   projectId: string;
   onCreated: () => void;
   existingTitles?: string[];
+  city?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -745,6 +748,20 @@ function NewVacancyButton({
           setSalary(t.salary > 0 ? String(t.salary) : "");
           setSkills(t.skills ?? []);
           setQuestions(t.questions ?? []);
+        }}
+      />
+      <AiVacancyGen
+        city={city}
+        onApply={(draft) => {
+          setTitle(draft.title);
+          setDescription(draft.description);
+          if (draft.salaryMin != null) setSalary(String(draft.salaryMin));
+          setSkills(draft.skills ?? []);
+          setQuestions(draft.questions ?? []);
+          if (draft.region) setRegion(draft.region);
+          if (draft.workMode) setWorkMode(draft.workMode);
+          if (draft.minExperienceYears != null) setMinExperienceYears(String(draft.minExperienceYears));
+          if (draft.educationLevel) setEducationLevel(draft.educationLevel);
         }}
       />
       <input

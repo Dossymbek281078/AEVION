@@ -4,9 +4,15 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 const captureQCoreAIError = makeServiceCapture("qcoreai");
 
 import { verifyBearerOptional } from "../lib/authJwt";
-import { enforceFreeTokenQuota, enforcePremiumModelQuota, freeTokenLimit } from "../lib/qcoreQuota";
+import {
+  enforceFreeTokenQuota,
+  enforcePremiumModelQuota,
+  freeTokenLimit,
+  premiumQuotaGateForRequest,
+  type PremiumQuotaGate,
+} from "../lib/qcoreQuota";
 import { resolveUserPlan } from "../lib/planGate";
-import { getTier } from "../data/pricing";
+import { getTier, TIERS } from "../data/pricing";
 import {
   callProvider,
   callProviderResilient,
@@ -246,6 +252,7 @@ import {
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
+import { csvNeutralizeFormula } from "../lib/csv";
 
 export const qcoreaiRouter = Router();
 
@@ -1165,6 +1172,32 @@ qcoreaiRouter.get("/me/token-quota", async (req, res) => {
   }
 });
 
+/*
+ * Public, unauthenticated quota policy — mirrors GET /api/paywall/policy's
+ * pattern (entitlements.ts) for the three qcoreQuota.ts gates. Unlike
+ * /me/token-quota (per-caller, needs a Bearer token), this reports the
+ * PLATFORM'S current enforcement state and the per-tier caps table — safe
+ * to cache on the edge, and usable by a smoke script with no test account.
+ */
+qcoreaiRouter.get("/quota-policy", (_req, res) => {
+  res.json({
+    freeQuotaEnforced: process.env.QCOREAI_FREE_QUOTA === "1",
+    tierQuotaEnforced: process.env.QCOREAI_TIER_QUOTA === "1",
+    premiumQuotaEnforced: process.env.QCOREAI_PREMIUM_QUOTA === "1",
+    // Which dispatch surfaces the premium gate covers in THIS build — lets the
+    // flip-readiness smoke assert the deployed binary carries the orchestrator
+    // wire-in (2026-07-26), not just that the env flag is set.
+    premiumQuotaScope: ["chat", "chat-stream", "orchestrator"],
+    freeTokenLimit: freeTokenLimit(),
+    tiers: TIERS.map((t) => ({
+      tier: t.id,
+      llmTokensPerMonth: t.limits.llmTokensPerMonth,
+      premiumTokensPerMonth: t.limits.premiumTokensPerMonth,
+    })),
+    generatedAt: new Date().toISOString(),
+  });
+});
+
 /* ═══════════════════════════════════════════════════════════════════════
    Sessions CRUD
    ═══════════════════════════════════════════════════════════════════════ */
@@ -2063,7 +2096,10 @@ qcoreaiRouter.get("/runs/:id/export", async (req, res) => {
     }
 
     if (fmt === "csv") {
-      const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      // content — текст запросов и ответов, его пишет пользователь. Гашение формул
+      // из общего lib/csv, чтобы выгрузка не исполнялась при открытии в Excel.
+      const escape = (v: unknown) =>
+        `"${csvNeutralizeFormula(String(v ?? "")).replace(/"/g, '""')}"`;
       const rows = [
         ["role", "stage", "instance", "provider", "model", "content", "tokensIn", "tokensOut", "costUsd", "durationMs"].join(","),
         ...messages.map((m) => [m.role, m.stage, m.instance, m.provider, m.model, m.content, m.tokensIn, m.tokensOut, m.costUsd, m.durationMs].map(escape).join(",")),
@@ -2548,6 +2584,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       history,
       guidanceProvider: () => drainGuidanceSync(guidanceBus, runId),
       maxCostUsd,
+      premiumGate: premiumQuotaGateForRequest(req),
     }) as AsyncGenerator<OrchestratorEvent>) {
       if (aborted) break;
       send(evt);
@@ -2760,7 +2797,7 @@ qcoreaiRouter.post("/smart", multiAgentLimiter, async (req, res) => {
   const userInput = raw.split("").filter((ch) => { const c = ch.charCodeAt(0); return c > 31 || c === 9 || c === 10 || c === 13; }).join("").trim().slice(0, SMART_PUBLIC_MAX_CHARS);
   if (!userInput) return res.status(400).json({ error: "input required" });
 
-  const args: SmartCompleteInput = { userInput };
+  const args: SmartCompleteInput = { userInput, premiumGate: premiumQuotaGateForRequest(req) };
   if (typeof req.body?.councilSize === "number") {
     args.councilSize = Math.max(2, Math.min(8, Math.floor(req.body.councilSize)));
   }
@@ -3373,6 +3410,7 @@ async function runBatchItem(opts: {
   overrides: { analyst?: AgentOverride; writer?: AgentOverride; writerB?: AgentOverride; critic?: AgentOverride };
   maxRevisions: number;
   maxCostUsd?: number;
+  premiumGate?: PremiumQuotaGate;
 }): Promise<{ costUsd: number; status: "done" | "error" }> {
   let ordering = 2;
   let finalContent: string | null = null;
@@ -3390,6 +3428,7 @@ async function runBatchItem(opts: {
       history: [],
       guidanceProvider: () => [],
       maxCostUsd: opts.maxCostUsd,
+      premiumGate: opts.premiumGate,
     }) as AsyncGenerator<OrchestratorEvent>) {
       switch (evt.type) {
         case "agent_start":
@@ -3499,7 +3538,7 @@ qcoreaiRouter.post("/batch", batchLimiter, async (req, res) => {
           while (active < BATCH_CONCURRENCY && idx < queue.length) {
             const { runId, input } = queue[idx++];
             active++;
-            runBatchItem({ runId, sessionId: session.id, batchId: batch.id, userInput: input, strategy, overrides, maxRevisions, maxCostUsd })
+            runBatchItem({ runId, sessionId: session.id, batchId: batch.id, userInput: input, strategy, overrides, maxRevisions, maxCostUsd, premiumGate: premiumQuotaGateForRequest(req) })
               .then(({ costUsd: c, status }) => updateBatchProgress(batch.id, {
                 completedDelta: status === "done" ? 1 : 0,
                 failedDelta: status === "error" ? 1 : 0,
@@ -3700,7 +3739,7 @@ qcoreaiRouter.post("/schedules/:id/run-now", batchLimiter, async (req, res) => {
           while (active < BATCH_CONCURRENCY && idx < queue.length) {
             const { runId, input } = queue[idx++];
             active++;
-            runBatchItem({ runId, sessionId: session.id, batchId: batch.id, userInput: input, strategy, overrides, maxRevisions: 0 })
+            runBatchItem({ runId, sessionId: session.id, batchId: batch.id, userInput: input, strategy, overrides, maxRevisions: 0, premiumGate: premiumQuotaGateForRequest(req) })
               .then(({ costUsd: c, status }) => updateBatchProgress(batch.id, { completedDelta: status === "done" ? 1 : 0, failedDelta: status === "error" ? 1 : 0, costDelta: c }))
               .catch(() => updateBatchProgress(batch.id, { failedDelta: 1 }))
               .finally(() => { active--; next(); });
@@ -5581,6 +5620,7 @@ qcoreaiRouter.post("/prompt-chains/:id/run", async (req, res) => {
           strategy,
           overrides: {},
           maxRevisions: 0,
+          premiumGate: premiumQuotaGateForRequest(req),
         })) {
           if (evt.type === "final") {
             finalContent = evt.content || "";
@@ -5838,7 +5878,19 @@ qcoreaiRouter.get("/benchmarks", (_req, res) => {
     const blend = price ? blendedPrice(price) : 0;
     const costScore = blend <= 0 ? 100 : Math.round(Math.min(100, (cheapest / blend) * 100));
     const lat = latencySummary(m.provider, m.model);
-    return { ...m, costScore, measuredLatencyMs: lat.p50Ms, latencySamples: lat.samples };
+    // Real traffic often hits other models of the same provider (e.g. the
+    // orchestrator's flagship pick) — fall back to the provider-level median
+    // so the page shows measured data instead of null. Flagged separately so
+    // the UI can label the scope honestly.
+    const provLat = lat.p50Ms == null ? providerLatencySummary(m.provider) : null;
+    return {
+      ...m,
+      costScore,
+      measuredLatencyMs: lat.p50Ms,
+      latencySamples: lat.samples,
+      providerLatencyMs: provLat?.p50Ms ?? null,
+      providerLatencySamples: provLat?.samples ?? 0,
+    };
   });
   res.json({
     models,
@@ -6287,7 +6339,7 @@ qcoreaiRouter.post("/ab-tests/:id/run", async (req, res) => {
       let finalContent = "";
       let totalCostUsd = 0;
       try {
-        for await (const evt of runMultiAgent({ userInput: prompt, strategy, overrides: testOverrides, maxRevisions: 0 })) {
+        for await (const evt of runMultiAgent({ userInput: prompt, strategy, overrides: testOverrides, maxRevisions: 0, premiumGate: premiumQuotaGateForRequest(req) })) {
           if ((evt as any).type === "final") finalContent = (evt as any).content || "";
           if ((evt as any).type === "run_complete") { totalCostUsd = (evt as any).totalCostUsd ?? 0; finalContent = finalContent || (evt as any).finalContent || ""; }
         }

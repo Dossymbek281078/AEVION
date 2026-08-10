@@ -219,13 +219,14 @@ pricingRouter.post("/promo/validate", (req, res) => {
   const body = req.body ?? {};
   const code = typeof body.code === "string" ? body.code.trim().slice(0, 40) : "";
   const tierId = body.tierId as TierId;
+  const period: BillingPeriod = body.period === "annual" ? "annual" : "monthly";
   if (!code) {
     return res.status(400).json({ valid: false, reason: "empty_code" });
   }
   if (!tierId || !["free", "lite", "medium", "full", "enterprise"].includes(tierId)) {
     return res.status(400).json({ valid: false, reason: "invalid_tier" });
   }
-  const { promo, reason } = resolvePromoCode(code, tierId);
+  const { promo, reason } = resolvePromoCode(code, tierId, period);
   if (!promo) {
     return res.json({ valid: false, reason });
   }
@@ -236,6 +237,7 @@ pricingRouter.post("/promo/validate", (req, res) => {
       kind: promo.kind,
       amount: promo.amount,
       description: promo.description,
+      annualOnly: promo.annualOnly ?? false,
     },
   });
 });

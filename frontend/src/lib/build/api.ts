@@ -18,6 +18,10 @@ export type AiVacancyDraft = {
   questions?: string[];
   tasks?: string[];
   requirements?: string[];
+  region?: string | null;
+  workMode?: WorkMode | null;
+  minExperienceYears?: number | null;
+  educationLevel?: EducationLevel | null;
 };
 
 export type BuildStory = {
@@ -64,33 +68,6 @@ export type BuildPaymentEvent = {
   workerId?: string | null;
 };
 
-export type LeaderboardRow = {
-  rank: number;
-  userId: string;
-  name: string;
-  avatarUrl: string | null;
-  photoUrl?: string | null;
-  score: number;
-  tier: string;
-  kind: "employer" | "worker";
-  rating?: number;
-  projectCount?: number;
-  hireCount?: number;
-  completedProjects?: number;
-  averageRating?: number;
-  avgRating?: number;
-  reviewCount?: number;
-  totalEarned?: number;
-  hires?: number;
-  tierKey?: string;
-  tierLabel?: string;
-  trialsApproved?: number;
-  jobsDone?: number;
-  workerScore?: number;
-  title?: string | null;
-  city?: string | null;
-  specialty?: string | null;
-};
 export type ProjectStatus = "OPEN" | "IN_PROGRESS" | "DONE";
 export type VacancyStatus = "OPEN" | "CLOSED" | "ARCHIVED";
 export type ApplicationStatus = "PENDING" | "ACCEPTED" | "REJECTED";
@@ -1202,6 +1179,14 @@ export const buildApi = {
       skillsOverlap?: string[];
       usage?: { input: number; output: number };
     }>("POST", "/api/build/ai/cover-letter", input),
+  // Distinct from aiCoverLetter: that one looks up a real vacancyId + the
+  // caller's saved profile (used by ApplicationForm's apply-flow); this one
+  // takes two pasted text blocks with no DB lookup (used by /build/ai-match).
+  aiCoverLetterFreeform: (input: { profileText: string; vacancyText: string; tone?: string }) =>
+    call<{
+      coverLetter: string;
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/cover-letter-freeform", input),
   aiWhyMatch: (applicationId: string, force = false) =>
     call<{
       explanation: string;
@@ -1773,8 +1758,6 @@ export const buildApi = {
     call<{ draft: AiVacancyDraft }>("POST", "/api/build/ai/generate-vacancy", input),
   aiMatchVacancy: (input: { profileText: string; vacancyText: string }) =>
     call<{ match: { score: number; label: string; strengths: string[]; gaps: string[]; tip: string } }>("POST", "/api/build/ai/match-vacancy", input),
-  aiScoreApplication: (input: { applicationId: string; vacancyContext?: string }) =>
-    call<{ score: number; summary: string; redFlags: string[] }>("POST", "/api/build/ai/score-application", input),
 
   // ── Interviews ──────────────────────────────────────────────────────────
   proposeInterview: (input: {
@@ -1822,10 +1805,6 @@ export const buildApi = {
     call<{ items: BuildPaymentEvent[]; summary: { due: number; paid: number; overdue: number } }>("GET", "/api/build/payment-calendar"),
   updatePaymentEvent: (id: string, patch: { status?: PaymentEventStatus; paidAt?: string | null; note?: string | null }) =>
     call<BuildPaymentEvent>("PATCH", `/api/build/payment-calendar/${id}`, patch),
-
-  // Leaderboard
-  leaderboard: (kind: "employer" | "worker", limit = 30) =>
-    call<{ items: LeaderboardRow[] }>("GET", `/api/build/leaderboard?kind=${kind}&limit=${limit}`),
 
   // Documents — verification workflow
   uploadDocument: (input: { fileUrl: string; docType: string }) =>

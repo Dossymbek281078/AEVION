@@ -5,7 +5,7 @@ import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/paybox
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
 import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
 import {
-  TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES,
+  TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO,
   type TierId, type BillingPeriod, type CurrencyCode,
 } from "../data/pricing";
 import { provisionSubscription, countSubscriptions } from "./provisioning";
@@ -115,12 +115,13 @@ checkoutRouter.post("/session", async (req, res) => {
     // Promo code discount
     let discountUsd = 0;
     if (body.promoCode) {
-      const { promo } = resolvePromoCode(body.promoCode, tier.id);
+      const { promo } = resolvePromoCode(body.promoCode, tier.id, period);
       if (promo) {
         const subtotal = totalUsd;
-        discountUsd = promo.kind === "percent"
+        const rawDiscount = promo.kind === "percent"
           ? Math.round(subtotal * promo.amount) / 100
           : Math.min(subtotal, promo.amount * (period === "annual" ? 12 : 1));
+        discountUsd = Math.min(rawDiscount, subtotal * MAX_PROMO_DISCOUNT_RATIO);
         totalUsd = Math.max(0, totalUsd - discountUsd);
       }
     }
@@ -214,24 +215,33 @@ checkoutRouter.post("/session", async (req, res) => {
       return res.json({ url: intent.checkoutUrl, mode: "real", provider: "gumroad", intentId: intent.intentId });
     }
 
-    // 3) Stub — ни один процессинг не настроен для этого tier:period.
-    if (body.email) {
-      provisionSubscription({
-        email: body.email,
-        tierId: tier.id,
-        period,
-        seats,
-        modules: body.modules ?? [],
-        trialDays,
-        amountUsd: totalUsd,
-        promoCode: body.promoCode,
-        source: "stub_checkout",
-      }).catch((e) => console.error("[stub_provisioning] failed", e));
-    }
-    return res.json({
-      url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${totalCents}`,
-      mode: "stub",
-      provider: "none",
+    // 3) Процессинга для этого tier:period нет.
+    //
+    // Раньше здесь стояла заглушка, которая ПРОВИЖИНИЛА подписку (source:
+    // "stub_checkout") и уводила покупателя на /pricing/checkout/success?stub=true.
+    // На проде 26.07.2026 в эту ветку попадал тариф Universe — самый дорогой
+    // продукт платформы, $249.99/мес и $2499.90/год: у него не заведён вариант
+    // LemonSqueezy, поэтому любой POST с email выдавал платную подписку бесплатно
+    // и показывал страницу «оплачено». Эндпоинт публичный, авторизации нет.
+    // Счётчик подписок вырос с 28 до 31 от трёх диагностических запросов — то есть
+    // часть накопленных записей, скорее всего, именно такого происхождения.
+    //
+    // Сюда доходят только ПЛАТНЫЕ суммы: бесплатные и полностью погашенные промо
+    // обрабатываются веткой totalCents <= 0 выше и провижинятся законно. Значит,
+    // отказ здесь ничего работающего не ломает — он лишь перестаёт раздавать
+    // доступ даром и врать покупателю про успешную оплату.
+    console.error(
+      `[checkout/session] нет процессинга для ${reference} — отказ вместо заглушки ` +
+        `(tier=${tier.id}, period=${period}, total=${totalCents}¢)`,
+    );
+    return res.status(503).json({
+      error: "checkout_unavailable",
+      tier: tier.id,
+      period,
+      message:
+        "Оплата этого тарифа сейчас недоступна: платёжный вариант не настроен. " +
+        "Подписка не оформлена и деньги не списаны — напишите нам, и мы оформим доступ вручную.",
+      contactUrl: `${FRONTEND_URL}/pricing/contact?tier=${tier.id}`,
     });
   } catch (e: unknown) {
     capture(e);

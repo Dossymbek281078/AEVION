@@ -46,10 +46,29 @@ const GOAL_PRIMARY_USD = () => Number(process.env.REVENUE_GOAL_PRIMARY_USD) || 1
 const GOAL_STRETCH_USD = () => Number(process.env.REVENUE_GOAL_STRETCH_USD) || 20_000_000;
 const GOAL_DEADLINE = () => process.env.REVENUE_GOAL_DEADLINE?.trim() || "2027-01-01";
 
+/** Адреса, покупки с которых — проверка платёжного пути, а не выручка.
+ *  Их две в базе на 27.07.2026, и вместе они дают 89% брутто: своя книга за
+ *  $9.99 и свой DevHub Studio Pro за $149. Пока они считались продажами,
+ *  `/pitch` показывал инвестору $178.97 там, где снаружи пришло $19.98.
+ *  Суммы не выбрасываются, а выносятся в отдельные поля — цифра должна
+ *  становиться честнее, а не тише. */
+const INTERNAL_EMAILS = (): Set<string> =>
+  new Set(
+    (process.env.REVENUE_INTERNAL_EMAILS ?? "yahiin1978@gmail.com,dossymbek@mail.ru")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+export function isInternalPurchase(email: string | undefined | null, internal = INTERNAL_EMAILS()): boolean {
+  return internal.has((email ?? "").trim().toLowerCase());
+}
+
 // ─── LemonSqueezy orders (живой канал подписок) ───────────────────────────
 interface LsOrder {
   id: string; total: number; status: string; refunded: boolean;
   currency: string; created_at: string; email: string; product: string;
+  variantId: string;
 }
 /**
  * Fetch all pages of GET /v1/orders, following the JSON:API `links.next` URL.
@@ -85,6 +104,7 @@ async function lsOrdersUncached(maxPages = 10): Promise<LsOrder[] | null> {
           created_at: String(a.created_at ?? ""),
           email: String(a.user_email ?? ""),
           product: String(foi.product_name ?? foi.variant_name ?? "AEVION"),
+          variantId: String(foi.variant_id ?? ""),
         });
       }
       pages++;
@@ -143,6 +163,50 @@ function appIdForPermalink(permalink?: string | null): string {
     process.env[`GUMROAD_APP_${slug}`]?.trim() ||
     process.env[`GUMROAD_PRODUCT_${slug}`]?.trim() ||
     GUMROAD_PERMALINK_APP[permalink.toLowerCase()] ||
+    "platform"
+  );
+}
+
+/**
+ * LemonSqueezy variant → appId, mirroring appIdForPermalink's approach for
+ * Gumroad. LS checkout already sets one `LEMON_SQUEEZY_VARIANT_<NAME>` env
+ * var per product (see aevion-globus-backend/.env.example) to know which
+ * variant ID to charge for a given purchase — this just reads the same
+ * vars in reverse to recover the appId from an order's variant_id.
+ *
+ * Deliberately excludes the generic plan-tier variants (LITE/MEDIUM/FULL,
+ * DEFAULT_VARIANT_ID) — a "Full plan" subscription is a platform-wide
+ * bundle, not one specific app's revenue, so those stay bucketed under
+ * "platform" same as before.
+ */
+const LS_VARIANT_APP_ENV_SUFFIXES: Record<string, string> = {
+  DEVHUB_STUDIO_PRO: "devhub",
+  CYBERCHESS: "cyberchess",
+  CONSTITUTION: "constitution",
+  QVENTURE: "qventure",
+  QCONTRACT: "qcontract",
+  QPAYNET: "qpaynet-embedded",
+  SMETA: "smeta-trainer",
+  IP_BUREAU: "ip-bureau",
+  QRENEW: "qrenew",
+  PLANET_MONTHLY: "planet",
+  PLANET_ANNUAL: "planet",
+};
+
+let lsVariantAppCache: Record<string, string> | null = null;
+
+function appIdForLsVariant(variantId?: string | null): string {
+  if (!variantId) return "platform";
+  if (!lsVariantAppCache) {
+    lsVariantAppCache = {};
+    for (const [suffix, appId] of Object.entries(LS_VARIANT_APP_ENV_SUFFIXES)) {
+      const v = process.env[`LEMON_SQUEEZY_VARIANT_${suffix}`]?.trim();
+      if (v) lsVariantAppCache[v] = appId;
+    }
+  }
+  return (
+    process.env[`LEMON_SQUEEZY_APP_${variantId}`]?.trim() ||
+    lsVariantAppCache[variantId] ||
     "platform"
   );
 }
@@ -230,6 +294,10 @@ async function twitchChannelStats(login: string): Promise<{
 
 interface GumroadSale {
   id?: string;
+  /** Произвольные query-параметры со страницы оплаты. Сюда приезжает метка
+   *  канала (?channel=instagram), которую ставит /go и /shop — благодаря ей
+   *  видно не только ЧТО купили, но и откуда пришёл покупатель. */
+  url_params?: Record<string, string>;
   email?: string;
   product_name?: string;
   product_permalink?: string;
@@ -341,15 +409,32 @@ async function ensureSnapshotTable(): Promise<void> {
       "refundedCount"  INT NOT NULL DEFAULT 0,
       "byApp"          JSONB NOT NULL DEFAULT '{}'::jsonb,
       "byChannel"      JSONB NOT NULL DEFAULT '{}'::jsonb,
-      "source"         TEXT NOT NULL DEFAULT 'combined'
+      "source"         TEXT NOT NULL DEFAULT 'combined',
+      "internalUsd"    NUMERIC(14,2),
+      "internalCount"  INT
     );
   `);
+  // Таблица уже существует на проде с 26.05.2026 — CREATE ... IF NOT EXISTS её
+  // не тронет, поэтому колонки добавляются отдельно. NULL здесь значимый: он
+  // отмечает снимки, снятые ДО 27.07.2026, когда свои проверочные покупки ещё
+  // входили в grossUsd. Без этой отметки график тренда покажет падение выручки
+  // там, где на самом деле её просто перестали завышать.
+  await pool.query(`ALTER TABLE "RevenueSnapshot" ADD COLUMN IF NOT EXISTS "internalUsd" NUMERIC(14,2);`);
+  await pool.query(`ALTER TABLE "RevenueSnapshot" ADD COLUMN IF NOT EXISTS "internalCount" INT;`);
+  // Отдельный явный признак вместо «internalUsd IS NULL значит гросс завышен».
+  // Эта перегрузка сломалась ровно в тот момент, когда досчёт заполнил колонку:
+  // у снимков, снятых ПОСЛЕ 27.07.2026, гросс уже без своих покупок, и вычитать
+  // их повторно нельзя — на графике выходило минус сто тридцать девять долларов.
+  await pool.query(`ALTER TABLE "RevenueSnapshot" ADD COLUMN IF NOT EXISTS "grossIncludesInternal" BOOLEAN;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "RevenueSnapshot_time_idx" ON "RevenueSnapshot" ("capturedAt" DESC);`);
   snapshotTableReady = true;
 }
 
 interface LiveTotals {
   grossUsd: number;
+  /** Покупки с внутренних адресов — вынесены из выручки, но показаны отдельно. */
+  internalUsd: number;
+  internalCount: number;
   netUsd: number;
   feesUsd: number;
   saleCount: number;
@@ -366,20 +451,25 @@ interface LiveTotals {
 async function computeLiveTotals(): Promise<LiveTotals> {
   const t: LiveTotals = {
     grossUsd: 0, netUsd: 0, feesUsd: 0, saleCount: 0, refundedCount: 0,
+    internalUsd: 0, internalCount: 0,
     byApp: {}, byChannel: {}, channelsUsed: [],
   };
 
   if (GUMROAD_TOKEN()) {
     const sales = await gumroadSales();
     if (sales) {
-      const valid = sales.filter((s) => !s.refunded && !s.disputed && !s.chargedback);
+      const paid = sales.filter((s) => !s.refunded && !s.disputed && !s.chargedback);
+      const internal = paid.filter((s) => isInternalPurchase(s.email));
+      const valid = paid.filter((s) => !isInternalPurchase(s.email));
+      t.internalUsd += internal.reduce((sum, s) => sum + (s.price ? s.price / 100 : 0), 0);
+      t.internalCount += internal.length;
       const gross = valid.reduce((sum, s) => sum + (s.price ? s.price / 100 : 0), 0);
       const fees = valid.reduce((sum, s) => sum + (s.gumroad_fee ? s.gumroad_fee / 100 : 0), 0);
       t.grossUsd += gross;
       t.feesUsd += fees;
       t.netUsd += gross - fees;
       t.saleCount += valid.length;
-      t.refundedCount += sales.length - valid.length;
+      t.refundedCount += sales.length - paid.length;
       t.byChannel.gumroad = { grossUsd: round2(gross), netUsd: round2(gross - fees), count: valid.length };
       t.channelsUsed.push("gumroad");
       for (const s of valid) {
@@ -394,18 +484,25 @@ async function computeLiveTotals(): Promise<LiveTotals> {
   if (LS_KEY()) {
     const orders = await lsOrders();
     if (orders) {
-      const valid = orders.filter((o) => o.status === "paid" && !o.refunded);
+      const paid = orders.filter((o) => o.status === "paid" && !o.refunded);
+      const internal = paid.filter((o) => isInternalPurchase(o.email));
+      const valid = paid.filter((o) => !isInternalPurchase(o.email));
+      t.internalUsd += internal.reduce((sum, o) => sum + o.total / 100, 0);
+      t.internalCount += internal.length;
       const gross = valid.reduce((sum, o) => sum + o.total / 100, 0);
       t.grossUsd += gross;
       t.netUsd += gross; // LS net (after ~5%+pp) only known at payout time
       t.saleCount += valid.length;
-      t.refundedCount += orders.length - valid.length;
+      t.refundedCount += orders.length - paid.length;
       t.byChannel.lemonsqueezy = { grossUsd: round2(gross), netUsd: round2(gross), count: valid.length };
       t.channelsUsed.push("lemonsqueezy");
-      const cur = t.byApp.platform ?? { count: 0, grossUsd: 0 };
-      cur.count += valid.length;
-      cur.grossUsd = round2(cur.grossUsd + gross);
-      t.byApp.platform = cur;
+      for (const o of valid) {
+        const appId = appIdForLsVariant(o.variantId);
+        const cur = t.byApp[appId] ?? { count: 0, grossUsd: 0 };
+        cur.count += 1;
+        cur.grossUsd = round2(cur.grossUsd + o.total / 100);
+        t.byApp[appId] = cur;
+      }
     }
   }
 
@@ -430,6 +527,11 @@ interface SnapshotRow {
   byApp: Record<string, unknown>;
   byChannel: Record<string, unknown>;
   source: string;
+  /** NULL у снимков до 27.07.2026 — тогда свои покупки ещё сидели в grossUsd. */
+  internalUsd: string | number | null;
+  internalCount: number | null;
+  /** true — свои покупки СИДЯТ в grossUsd (снимки до 27.07.2026). */
+  grossIncludesInternal: boolean | null;
 }
 
 function serializeSnapshot(r: SnapshotRow) {
@@ -444,6 +546,12 @@ function serializeSnapshot(r: SnapshotRow) {
     byApp: r.byApp,
     byChannel: r.byChannel,
     source: r.source,
+    internalUsd: r.internalUsd === null || r.internalUsd === undefined ? null : Number(r.internalUsd),
+    internalCount: r.internalCount ?? null,
+    // Строки старше самой колонки трактуем как «гросс завышен» — это
+    // консервативная сторона: показать предупреждение там, где его можно было
+    // не показывать, дешевле, чем вычесть свои покупки дважды.
+    includesInternal: r.grossIncludesInternal ?? true,
   };
 }
 
@@ -461,8 +569,7 @@ revenueRouter.get("/health", (_req, res) => {
       paddle: {
         configured: Boolean(PADDLE_KEY()),
         sandbox: PADDLE_SANDBOX(),
-        note: "KYC не пройдена — не используется как живой канал",
-        setupGuide: "/api/paddle/setup-guide",
+        note: "KYC не пройдена — не используется; /api/paddle/* routes удалены (PR #779)",
       },
       paybox: { configured: Boolean(process.env.PAYBOX_MERCHANT_ID?.trim() && process.env.PAYBOX_SECRET?.trim()), note: "KZT — карты КЗ + Kaspi (12 приложений). Каскад checkout: currency=KZT → PayBox." },
       paypal: { configured: Boolean(process.env.PAYPAL_CLIENT_ID?.trim() && process.env.PAYPAL_SECRET?.trim()), sandbox: process.env.PAYPAL_SANDBOX !== "0", note: "Глобальный карт/PayPal-канал. Каскад checkout: method=paypal → PayPal Orders v2." },
@@ -542,7 +649,7 @@ revenueRouter.get("/apps/:appId", async (req, res) => {
       sandbox: PADDLE_SANDBOX(),
     };
   } else {
-    result.paddle = { stub: true, message: "PADDLE_API_KEY not set — visit /api/paddle/setup-guide" };
+    result.paddle = { stub: true, message: "PADDLE_API_KEY not set — Paddle не используется (KYC), канал = Gumroad" };
   }
 
   res.json(result);
@@ -597,7 +704,15 @@ revenueRouter.get("/goals", (_req, res) => {
 revenueRouter.get("/summary", async (_req, res) => {
   try {
     const totals = await computeLiveTotals();
-    res.json({ grossUsd: totals.grossUsd, netUsd: totals.netUsd, saleCount: totals.saleCount, channelsUsed: totals.channelsUsed });
+    res.json({
+      grossUsd: totals.grossUsd,
+      netUsd: totals.netUsd,
+      saleCount: totals.saleCount,
+      channelsUsed: totals.channelsUsed,
+      // Свои проверочные покупки не входят в суммы выше, но и не прячутся.
+      internalUsd: totals.internalUsd,
+      internalCount: totals.internalCount,
+    });
   } catch (err: unknown) {
     capture(err, { route: "GET /summary" });
     console.error("[revenue] summary_failed", err instanceof Error ? err.message : err);
@@ -632,7 +747,7 @@ revenueRouter.get("/twitch/:login", async (req, res) => {
  */
 revenueRouter.get("/paddle/balance", async (_req, res) => {
   if (!PADDLE_KEY()) {
-    return res.json({ stub: true, message: "PADDLE_API_KEY not set", setupGuide: "/api/paddle/setup-guide" });
+    return res.json({ stub: true, message: "PADDLE_API_KEY not set — Paddle decommissioned (PR #779)" });
   }
   const data = await paddleGet("/transactions?per_page=50&status_equals=completed") as {
     data?: { total?: string; currency_code?: string; custom_data?: Record<string, string> }[];
@@ -649,7 +764,7 @@ revenueRouter.get("/paddle/balance", async (_req, res) => {
  */
 revenueRouter.get("/paddle/recent", async (_req, res) => {
   if (!PADDLE_KEY()) {
-    return res.json({ stub: true, transactions: [], message: "PADDLE_API_KEY not set", setupGuide: "/api/paddle/setup-guide" });
+    return res.json({ stub: true, transactions: [], message: "PADDLE_API_KEY not set — Paddle decommissioned (PR #779)" });
   }
   const data = await paddleGet("/transactions?per_page=20&order_by=id[DESC]") as {
     data?: { id: string; status: string; custom_data?: Record<string, string>; total?: string; currency_code?: string; created_at?: string }[];
@@ -691,6 +806,10 @@ revenueRouter.get("/gumroad/balance", async (_req, res) => {
   const valid = sales.filter((s) => !s.refunded && !s.disputed && !s.chargedback);
   const grossUsd = valid.reduce((sum, s) => sum + (s.price ? s.price / 100 : 0), 0);
   const feesUsd = valid.reduce((sum, s) => sum + (s.gumroad_fee ? s.gumroad_fee / 100 : 0), 0);
+  // Здесь gross намеренно остаётся полным — он должен сходиться с кабинетом
+  // Gumroad. Свои проверочные покупки показываются рядом, чтобы дашборд мог
+  // сказать «из них свои», а сверка с провайдером не сломалась.
+  const internal = valid.filter((s) => isInternalPurchase(s.email));
 
   res.json({
     grossUsd,
@@ -699,6 +818,8 @@ revenueRouter.get("/gumroad/balance", async (_req, res) => {
     currency: "USD",
     saleCount: valid.length,
     refundedCount: sales.length - valid.length,
+    internalUsd: round2(internal.reduce((sum, s) => sum + (s.price ? s.price / 100 : 0), 0)),
+    internalCount: internal.length,
   });
 });
 
@@ -721,18 +842,34 @@ revenueRouter.get("/gumroad/recent", async (_req, res) => {
     amountUsd: s.price ? s.price / 100 : 0,
     currency: s.currency?.toUpperCase() ?? "USD",
     refunded: Boolean(s.refunded || s.disputed || s.chargedback),
+    // null = продажа пришла без метки: либо до введения атрибуции, либо человек
+    // попал на товар не через /go и /shop (прямая ссылка, поиск Gumroad).
+    channel: s.url_params?.channel ?? null,
     date: s.created_at ?? null,
   }));
+
+  // Разрез по ИСТОЧНИКУ ТРАФИКА — ответ на вопрос «что окупается», ради которого
+  // метки и заводились. Имя `bySource`, а не `byChannel`: в этом файле `byChannel`
+  // уже занят и означает ПЛАТЁЖНЫЙ канал (gumroad / lemonsqueezy). Одно имя на два
+  // разных смысла в одном файле — гарантированная будущая путаница.
+  //
+  // Продажи без метки собираются в "unattributed", а не выбрасываются: молча терять
+  // часть выручки из сводки хуже, чем честно показать, сколько её не размечено.
+  const bySource: Record<string, { count: number; totalUsd: number }> = {};
 
   const byApp: Record<string, { count: number; totalUsd: number }> = {};
   for (const s of recent) {
     if (s.refunded) continue;
+    const src = s.channel ?? "unattributed";
+    if (!bySource[src]) bySource[src] = { count: 0, totalUsd: 0 };
+    bySource[src].count++;
+    bySource[src].totalUsd += s.amountUsd;
     if (!byApp[s.appId]) byApp[s.appId] = { count: 0, totalUsd: 0 };
     byApp[s.appId].count++;
     byApp[s.appId].totalUsd += s.amountUsd;
   }
 
-  res.json({ sales: recent, byApp });
+  res.json({ sales: recent, byApp, bySource });
 });
 
 /**
@@ -748,11 +885,16 @@ revenueRouter.get("/lemonsqueezy/balance", async (_req, res) => {
   if (!orders) return res.status(502).json({ error: "lemonsqueezy_api_error" });
   const valid = orders.filter((o) => o.status === "paid" && !o.refunded);
   const grossUsd = valid.reduce((s, o) => s + o.total / 100, 0);
+  // Как и у Gumroad: gross сходится с кабинетом провайдера, свои покупки —
+  // отдельной строкой. На 27.07.2026 весь LS-баланс это одна своя покупка.
+  const internal = valid.filter((o) => isInternalPurchase(o.email));
   res.json({
     grossUsd,
     currency: "USD",
     saleCount: valid.length,
     refundedCount: orders.length - valid.length,
+    internalUsd: round2(internal.reduce((sum, o) => sum + o.total / 100, 0)),
+    internalCount: internal.length,
     note: "LS забирает комиссию ~5%+pp; точный net — в Payouts LS",
   });
 });
@@ -769,6 +911,7 @@ revenueRouter.get("/lemonsqueezy/recent", async (_req, res) => {
   if (!orders) return res.status(502).json({ error: "lemonsqueezy_api_error" });
   const recent = orders.slice(0, 20).map((o) => ({
     id: o.id,
+    appId: appIdForLsVariant(o.variantId),
     product: o.product,
     email: o.email || null,
     amountUsd: o.total / 100,
@@ -813,12 +956,13 @@ revenueRouter.post("/snapshot", snapshotWriteLimit, async (req, res) => {
     const id = crypto.randomUUID();
     const pool = getPool();
     const r = await pool.query(
-      `INSERT INTO "RevenueSnapshot" ("id","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'combined')
-       RETURNING "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source"`,
+      `INSERT INTO "RevenueSnapshot" ("id","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount","grossIncludesInternal")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'combined',$9,$10,false)
+       RETURNING "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount","grossIncludesInternal"`,
       [
         id, totals.grossUsd, totals.netUsd, totals.feesUsd, totals.saleCount, totals.refundedCount,
         JSON.stringify(totals.byApp), JSON.stringify(totals.byChannel),
+        totals.internalUsd, totals.internalCount,
       ],
     );
     // Bound the table's growth: /snapshots and /trend never query past 365
@@ -851,7 +995,7 @@ revenueRouter.get("/snapshots", snapshotReadLimit, async (req, res) => {
     }
     params.push(limit);
     const r = await pool.query(
-      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source"
+      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount","grossIncludesInternal"
        FROM "RevenueSnapshot" ${where}
        ORDER BY "capturedAt" DESC LIMIT $${params.length}`,
       params,
@@ -861,6 +1005,99 @@ revenueRouter.get("/snapshots", snapshotReadLimit, async (req, res) => {
     capture(err, { route: "GET /snapshots" });
     console.error("[revenue] snapshots_list_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "snapshots_list_failed" });
+  }
+});
+
+/**
+ * POST /api/revenue/snapshots/backfill-internal
+ * Досчитывает internalUsd/internalCount для снимков, снятых до 27.07.2026 —
+ * тогда свои проверочные покупки ещё сидели в grossUsd, и на графике это
+ * выглядит как обрыв выручки в день правки.
+ *
+ * Заказы у провайдеров лежат с датами, поэтому «сколько своих денег было в
+ * сумме на момент снимка» — это не догадка, а пересчёт: берутся внутренние
+ * покупки, созданные ДО capturedAt.
+ *
+ * Трогает ТОЛЬКО строки, где internalUsd IS NULL, и только эти две колонки:
+ * grossUsd остаётся как был, чтобы историю можно было сверить с тем, что
+ * показывал дашборд в тот день.
+ */
+revenueRouter.post("/snapshots/backfill-internal", async (req, res) => {
+  try {
+    const guard = process.env.REVENUE_SNAPSHOT_TOKEN?.trim();
+    if (guard && String(req.header("x-revenue-token") ?? "") !== guard) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+    await ensureSnapshotTable();
+    const pool = getPool();
+
+    const [sales, orders] = await Promise.all([gumroadSales(), lsOrders()]);
+    const internalDated: { at: number; usd: number }[] = [];
+    const externalDated: { at: number; usd: number }[] = [];
+    for (const sale of sales ?? []) {
+      if (sale.refunded || sale.disputed || sale.chargedback) continue;
+      const at = Date.parse(sale.created_at ?? "");
+      if (Number.isNaN(at)) continue;
+      const usd = sale.price ? sale.price / 100 : 0;
+      (isInternalPurchase(sale.email) ? internalDated : externalDated).push({ at, usd });
+    }
+    for (const order of orders ?? []) {
+      if (order.status !== "paid" || order.refunded) continue;
+      const at = Date.parse(order.created_at ?? "");
+      if (Number.isNaN(at)) continue;
+      const usd = order.total / 100;
+      (isInternalPurchase(order.email) ? internalDated : externalDated).push({ at, usd });
+    }
+    const sumUpTo = (rows: { at: number; usd: number }[], cutoff: number) =>
+      round2(rows.filter((r) => r.at <= cutoff).reduce((sum, r) => sum + r.usd, 0));
+
+    const pending = await pool.query(
+      `SELECT "id","capturedAt","grossUsd" FROM "RevenueSnapshot"
+        WHERE "internalUsd" IS NULL OR "grossIncludesInternal" IS NULL
+        ORDER BY "capturedAt" ASC`,
+    );
+    let updated = 0;
+    let assumedIncluded = 0;
+    for (const row of pending.rows as { id: string; capturedAt: string; grossUsd: string }[]) {
+      const cutoff = Date.parse(String(row.capturedAt));
+      const before = internalDated.filter((p) => p.at <= cutoff);
+      const internalUsd = round2(before.reduce((sum, p) => sum + p.usd, 0));
+      const externalUsd = sumUpTo(externalDated, cutoff);
+      const gross = Number(row.grossUsd);
+
+      // Признак определяется ЗАМЕРОМ, а не датой: гросс снимка сверяется с двумя
+      // суммами, посчитанными по заказам на тот момент. Совпал с внешней — свои
+      // покупки в нём не сидят; совпал с внешней плюс своей — сидят. Дата тут
+      // ненадёжна: правка выкатывалась между снимками, и граница по времени
+      // промахнулась бы ровно на тот снимок, который и дал −$139.01.
+      let includes: boolean;
+      if (Math.abs(gross - externalUsd) < 0.011) includes = false;
+      else if (Math.abs(gross - (externalUsd + internalUsd)) < 0.011) includes = true;
+      else {
+        includes = true; // не сошлось ни с чем — консервативно считаем завышенным
+        assumedIncluded++;
+      }
+
+      await pool.query(
+        `UPDATE "RevenueSnapshot"
+            SET "internalUsd"=$2,"internalCount"=$3,"grossIncludesInternal"=$4
+          WHERE "id"=$1`,
+        [row.id, internalUsd, before.length, includes],
+      );
+      updated++;
+    }
+    res.json({
+      updated,
+      internalPurchasesFound: internalDated.length,
+      // Сколько строк не сошлись ни с одной из сумм — если их много, значит
+      // история снимков и заказы разошлись, и цифру надо смотреть руками.
+      unmatchedAssumedIncluded: assumedIncluded,
+      note: "grossUsd не изменён — досчитаны только internalUsd/internalCount/grossIncludesInternal",
+    });
+  } catch (err: unknown) {
+    capture(err, { route: "POST /snapshots/backfill-internal" });
+    console.error("[revenue] backfill_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "backfill_failed" });
   }
 });
 
@@ -875,7 +1112,7 @@ revenueRouter.get("/trend", snapshotReadLimit, async (req, res) => {
     const windowDays = Math.min(365, Math.max(1, parseInt(String(req.query.windowDays ?? "30"), 10) || 30));
     const pool = getPool();
     const r = await pool.query(
-      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source"
+      `SELECT "id","capturedAt","grossUsd","netUsd","feesUsd","saleCount","refundedCount","byApp","byChannel","source","internalUsd","internalCount","grossIncludesInternal"
        FROM "RevenueSnapshot"
        WHERE "capturedAt" > NOW() - ($1 || ' days')::interval
        ORDER BY "capturedAt" ASC`,
@@ -900,7 +1137,20 @@ revenueRouter.get("/trend", snapshotReadLimit, async (req, res) => {
         netGrowthPct: growth(first.netUsd, last.netUsd),
         saleGrowthPct: growth(first.saleCount, last.saleCount),
       },
-      series: series.map((s) => ({ capturedAt: s.capturedAt, netUsd: s.netUsd, grossUsd: s.grossUsd, saleCount: s.saleCount })),
+      // includesInternal обязан доезжать до графика: без него дашборд не
+      // отличит снимок, где свои покупки лежали в выручке, от снимка без них,
+      // и ступенька 27.07.2026 прочитается как обвал выручки.
+      series: series.map((s) => ({
+        capturedAt: s.capturedAt,
+        netUsd: s.netUsd,
+        grossUsd: s.grossUsd,
+        saleCount: s.saleCount,
+        includesInternal: s.includesInternal,
+        // Не только флаг, но и сама сумма: график вычитает её из точки, чтобы
+        // рисовать деньги снаружи на всей истории, а не ставить подпись под
+        // ступенькой. Флага для этого недостаточно.
+        internalUsd: s.internalUsd,
+      })),
     });
   } catch (err: unknown) {
     capture(err, { route: "GET /trend" });
@@ -952,6 +1202,13 @@ revenueRouter.get("/env-guide", (_req, res) => {
         envKeyPattern: `GUMROAD_APP_<PERMALINK>=${a.appId}`,
       })),
     },
-    setupGuide: "/api/paddle/setup-guide",
+    lemonsqueezyAttribution: {
+      note: "Уже читает существующие LEMON_SQUEEZY_VARIANT_<NAME> переменные (те же, что использует checkout) в обратную сторону — variant_id продажи → appId. Ручной оверрайд: LEMON_SQUEEZY_APP_<VARIANT_ID>=<appId>. Тарифные варианты (LITE/MEDIUM/FULL/DEFAULT) намеренно не маппятся — это бандл всей платформы, не одно приложение, остаются в 'platform'.",
+      example: "LEMON_SQUEEZY_APP_1902349=devhub",
+      mappedVariants: Object.keys(LS_VARIANT_APP_ENV_SUFFIXES).map((suffix) => ({
+        envKey: `LEMON_SQUEEZY_VARIANT_${suffix}`,
+        appId: LS_VARIANT_APP_ENV_SUFFIXES[suffix],
+      })),
+    },
   });
 });

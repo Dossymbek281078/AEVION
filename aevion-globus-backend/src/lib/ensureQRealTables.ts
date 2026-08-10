@@ -25,6 +25,11 @@ export async function ensureQRealTables(pool: PgPoolInstance): Promise<void> {
       "url" TEXT NOT NULL,
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS "QRealStoryboardCache" (
+      "briefHash" TEXT PRIMARY KEY,
+      "shots" JSONB NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );`);
     await pool.query(`CREATE TABLE IF NOT EXISTS "QRealQuota" (
       "day" TEXT NOT NULL,
       "ip" TEXT NOT NULL,

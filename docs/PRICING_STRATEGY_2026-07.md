@@ -99,6 +99,15 @@ access"). Not implemented in this pass — flagged here so it isn't lost.
   policy — revisit pricing once traction data exists.
 - Enterprise stays "contact sales" / custom — no change.
 
+## ⏰ Review checkpoint — 2026-09-22 (60-90 days out)
+
+CyberChess ($9.99) and QCoreAI-standalone ($9.99) are explicitly *penetration*
+pricing, not a permanent stance — re-check by ~2026-09-22 (60-90 days from
+this pass): has either module gained enough real traction/market share that
+the discount should be trimmed back toward (or above) parity with
+chess.com / Claude Pro-ChatGPT Plus? If nobody revisits this, it silently
+becomes the permanent price by inertia — don't let that happen unchecked.
+
 ## Update 2026-07-22 (same day) — premium-model sub-cap shipped, other modules checked
 
 **Premium/frontier-model token sub-cap — implemented.** The "open follow-up"
@@ -120,11 +129,15 @@ model before hitting the raw count) is now built, not just flagged:
   `/chat` + `/chat-stream` endpoints, called after the model is resolved and
   before dispatch (unlike the other two gates, which run at request start,
   this one needs to know which model first).
-- **Known gap, not yet covered:** the multi-agent orchestrator's per-call
-  dispatch points (the `/run` pipeline, batch runs, etc.) don't call this
-  gate yet — only the two direct chat endpoints do. A heavy orchestrator run
-  could still spend unboundedly on premium models today. Extending coverage
-  there is the next piece of this specific work, not done in this pass.
+- ~~**Known gap, not yet covered:** the multi-agent orchestrator's per-call
+  dispatch points don't call this gate yet.~~ **CLOSED 2026-07-26**: the
+  orchestrator's `streamAgent()` choke point now checks a `premiumGate`
+  callback before every dispatch (`/multi-agent` SSE, `/smart`, `/batch`,
+  schedules run-now, prompt chains, A/B tests, WS server). A blocked premium
+  call yields a `premium_quota_exceeded` event and the run degrades
+  gracefully, keeping partial output. Same dormant flag, same fail-open
+  policy, shared code with the `/chat` 402 path. Details in
+  `docs/QCOREAI_QUOTA_FLIP_READINESS.md`.
 - **Pre-flip visibility**: `GET /api/qcoreai/me/token-quota` (authenticated,
   already existed for the free-tier gate) now also reports the caller's
   status against both the overall paid-tier cap and the premium sub-cap —

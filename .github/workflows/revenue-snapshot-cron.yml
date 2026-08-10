@@ -1,0 +1,43 @@
+# Revenue Hub — daily snapshot capture.
+#
+# POST /api/revenue/snapshot freezes the combined live Gumroad+LemonSqueezy
+# totals into a RevenueSnapshot row, which is what /revenue's trend chart and
+# goalEta.ts's pace projection are built on. Until now this only happened
+# when someone manually clicked "Снять снапшот" on the dashboard — a tab left
+# closed for a week meant a week-wide gap in the trend. This just automates
+# that same click once a day.
+#
+# Confirmed 2026-07 that prod does NOT currently require REVENUE_SNAPSHOT_TOKEN
+# (the route no-ops the auth check when that env var is unset) — the secret
+# below is optional and only sent if configured, so this keeps working either
+# way if that changes later.
+name: Revenue snapshot cron
+
+on:
+  schedule:
+    - cron: "30 2 * * *" # once daily, 02:30 UTC
+  workflow_dispatch: {}
+
+jobs:
+  snapshot:
+    name: POST /api/revenue/snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - name: Capture revenue snapshot
+        run: |
+          set -o pipefail
+          status=$(curl -sS -o /tmp/snapshot-response.json -w "%{http_code}" -X POST \
+            "${BASE}/api/revenue/snapshot" \
+            -H "Content-Type: application/json" \
+            ${TOKEN:+-H "x-revenue-token: $TOKEN"})
+          echo "HTTP $status"
+          cat /tmp/snapshot-response.json
+          echo
+          # 503 = no live channel configured yet — not a cron failure, nothing to capture.
+          if [ "$status" = "201" ] || [ "$status" = "503" ]; then
+            exit 0
+          fi
+          exit 1
+        env:
+          BASE: ${{ secrets.REVENUE_SNAPSHOT_BASE || 'https://api.aevion.app' }}
+          TOKEN: ${{ secrets.REVENUE_SNAPSHOT_TOKEN || '' }}

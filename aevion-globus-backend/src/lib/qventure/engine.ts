@@ -31,8 +31,10 @@ import { defineBands } from "../verdictBands";
  * v2  adverse disclosures penalised; pass reachable
  * v3  negation fixes, moat no longer inherited from stage, weights moved to
  *     company evidence (execution 0.12 -> 0.28); orphan metric flags weighted
+ * v4  churn read in its stated period (annual != monthly) and a bare "<n>%
+ *     monthly" no longer counted as growth — both moved execution scores
  */
-export const RUBRIC_VERSION = 3;
+export const RUBRIC_VERSION = 4;
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -263,7 +265,10 @@ function quantifiedExecution(sig: PlanSignals): { score: number; note: string } 
     notes.push(`${sig.customers.toLocaleString("en-US")} customers`);
   }
   if (sig.retentionPct !== null) s += sig.retentionPct >= 120 ? 6 : sig.retentionPct >= 90 ? 3 : 0;
-  if (sig.churnPct !== null && sig.churnPct > 5) { s -= 6; notes.push(`${sig.churnPct}% churn`); }
+  // Scored on the monthly-equivalent rate, so "20% annual churn" (1.8%/mo, fine)
+  // is not punished like "20% monthly churn" (92%/yr, fatal).
+  const churnMonthly = sig.churnMonthlyPct ?? sig.churnPct;
+  if (churnMonthly !== null && churnMonthly > 5) { s -= 6; notes.push(`${churnMonthly}%/mo churn`); }
   return { score: clamp(s), note: `Quantified traction: ${notes.join("; ")}.` };
 }
 
@@ -490,8 +495,12 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   if (signals.ltvCacRatio !== null && signals.ltvCacRatio < 1) {
     textOnlyFlags.push(`LTV/CAC of ${signals.ltvCacRatio} is below 1 — the company currently loses money on each customer acquired.`);
   }
-  if (signals.churnPct !== null && signals.churnPct > 8) {
-    textOnlyFlags.push(`${signals.churnPct}% churn is high — retention is a material risk to the model.`);
+  const churnMonthlyPct = signals.churnMonthlyPct ?? signals.churnPct;
+  if (churnMonthlyPct !== null && churnMonthlyPct > 8) {
+    const asStated = signals.churnPeriod && signals.churnPeriod !== "monthly" && signals.churnPeriod !== "unspecified"
+      ? ` (stated as ${signals.churnPct}% ${signals.churnPeriod})`
+      : "";
+    textOnlyFlags.push(`${churnMonthlyPct}% monthly churn${asStated} is high — retention is a material risk to the model.`);
   }
 
   const redFlags: string[] = [...adverse.map((a) => a.flag), ...metricFlags.map((f) => f.flag), ...textOnlyFlags];
@@ -525,12 +534,15 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
       : `Sector reference data (${sector.label}) is directional — override with primary diligence.`,
     `Signal coverage: ~${round(signalCoverage * 100)}% of the score is backed by the plan's own disclosed metrics (${signals.fieldsFound} quantified field${signals.fieldsFound === 1 ? "" : "s"}); the remainder uses ${sector.label} sector priors — add financials to raise it.`,
     `Stage norms reflect US-market ${stage} deals; adjust for geography "${rawInput.geography || "US"}".`,
+    ...(signals.churnPct !== null && (signals.churnPeriod === null || signals.churnPeriod === "unspecified")
+      ? [`Churn of ${signals.churnPct}% was disclosed without a period and is read as monthly (the deck convention). State it as monthly or annual to remove the assumption.`]
+      : []),
     `Score is a screening signal, not a substitute for legal, financial, and technical due diligence.`,
   ];
 
   const stress = stressTest(signals);
   const tam = triangulateTam(signals, sector);
-  const projections = analyzeProjections(rawInput.projections, sector);
+  const projections = analyzeProjections(rawInput.projections, sector, stage);
 
   return { rubricVersion: RUBRIC_VERSION, composite, verdict: strategy.verdict, factors, sector, stage, strategy, assumptions, signals, signalCoverage, redFlags, stress, tam, projections };
 }
@@ -568,8 +580,8 @@ function buildStrategy(args: {
     high: round(norms.preMoneyHigh * scoreMul, 0),
   };
 
-  // Ownership target scales mildly with conviction.
-  const ownershipTargetPct = round(
+  // Ideal ownership target scales mildly with conviction.
+  const idealOwnershipPct = round(
     norms.ownershipTarget * (conviction === "high" ? 1.25 : conviction === "medium" ? 1.0 : 0.6) * 100,
     1
   );
@@ -578,12 +590,21 @@ function buildStrategy(args: {
   // assume round ≈ 25% of pre-money (typical dilution).
   const roundSize = input.askUsd && input.askUsd > 0 ? input.askUsd : round(valuationBandUsd.base * 0.25, 0);
   const postMoney = valuationBandUsd.base + roundSize;
-  const targetTicket = round((ownershipTargetPct / 100) * postMoney, 0);
+  // Never lead more than half the round. When the ideal ownership would need a
+  // bigger cheque than that (a small round relative to the target stake), the
+  // achievable ticket is the lead cap — and the ownership it buys is less than
+  // ideal. Cap the target here rather than letting it exceed its own max.
+  const roundLeadCap = round(roundSize * 0.5, 0);
+  const idealTicket = (idealOwnershipPct / 100) * postMoney;
+  const targetTicket = round(Math.min(idealTicket, roundLeadCap), 0);
   const ticketUsd = {
     min: round(targetTicket * 0.5, 0),
     target: targetTicket,
-    max: round(Math.min(targetTicket * 1.6, roundSize * 0.5), 0), // don't lead >50% of a round
+    max: round(Math.min(targetTicket * 1.6, roundLeadCap), 0),
   };
+  // Report the ownership the *actual* ticket buys, not the (possibly infeasible)
+  // ideal — so "$X for ~Y%" is internally consistent.
+  const ownershipTargetPct = round((targetTicket / postMoney) * 100, 1);
 
   // Tranche schedule — sharper staging for weaker/earlier deals.
   const tranches = buildTranches(verdict, stage);

@@ -97,9 +97,9 @@ const FEATURE_CATEGORIES = [
     items: [
       { icon: "🚂", name: "Railway Deploy", desc: "One-click backend deployment — Node.js, Python, Postgres, Redis", href: "/devhub", badge: "NEEDS TOKEN" },
       { icon: "▲", name: "Vercel Deploy", desc: "Frontend deployment — Next.js, React SPA, static sites", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "☁️", name: "Cloudflare Pages", desc: "Static-site deploy via wrangler with serve-verification + *.aevion.build domain", href: "/devhub", badge: "LIVE" },
+      { icon: "☁️", name: "Cloudflare Pages", desc: "Static-site deploy via wrangler, marked live only after the page really answers", href: "/devhub", badge: "LIVE" },
       { icon: "🐙", name: "GitHub Auto-Push", desc: "Code syncs to GitHub repo in aevion-io org automatically", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "🌐", name: "Domain (aevion.build)", desc: "Provision <slug>.aevion.build subdomain via Cloudflare", href: "/devhub", badge: "NEEDS TOKEN" },
+      { icon: "🌐", name: "Domain (aevion.build)", desc: "Waiting on domain delegation — the zone is not pointed at Cloudflare yet, so these subdomains do not resolve", href: "/devhub", badge: "PENDING" },
     ],
   },
   {
@@ -325,7 +325,7 @@ export default function StudioPage() {
             },
             {
               tier: "Pro", price: "$149", color: "#0d9488",
-              features: ["50 videos / month", "200 images / month", "30k TTS chars", "100 music tracks", "Unlimited deploys", "Your own *.aevion.build subdomain", "Everything in Free", "Priority support"],
+              features: ["50 videos / month", "200 images / month", "30k TTS chars", "100 music tracks", "Unlimited deploys", "Public *.pages.dev URL for every project", "Everything in Free", "Priority support"],
               cta: "Upgrade to Pro", ctaHref: "https://aevion.lemonsqueezy.com/checkout/buy/ab30b6f3-1d69-4db6-b7ab-86ef0d363a57", disabled: false,
             },
             {

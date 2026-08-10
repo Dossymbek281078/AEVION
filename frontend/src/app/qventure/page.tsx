@@ -33,13 +33,16 @@ type FormShape = {
   geography: string; askUsd: string; description: string; tractionNotes: string;
   // Optional exact financials — override the text parser for precise scoring.
   finArr: string; finGrossMargin: string; finLtvCac: string; finChurn: string;
-  finCustomers: string; finGrowth: string; finTam: string;
+  // Churn only means something with its period: 4%/mo and 4%/yr are different companies.
+  finChurnPeriod: "weekly" | "monthly" | "quarterly" | "annual";
+  finCustomers: string; finGrowth: string; finGrowthPeriod: "WoW" | "MoM" | "YoY"; finTam: string;
   // Optional 3-year revenue projection (this year, +1, +2).
   projY0: string; projY1: string; projY2: string;
 };
 const emptyForm = (): FormShape => ({
   name: "", sector: "ai_app", stage: "seed", geography: "US", askUsd: "", description: "", tractionNotes: "",
-  finArr: "", finGrossMargin: "", finLtvCac: "", finChurn: "", finCustomers: "", finGrowth: "", finTam: "",
+  finArr: "", finGrossMargin: "", finLtvCac: "", finChurn: "", finChurnPeriod: "monthly",
+  finCustomers: "", finGrowth: "", finGrowthPeriod: "MoM", finTam: "",
   projY0: "", projY1: "", projY2: "",
 });
 
@@ -67,7 +70,13 @@ async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisRe
       ["churnPct", data.finChurn], ["customers", data.finCustomers], ["growthPct", data.finGrowth], ["bottomUpTamUsd", data.finTam],
     ];
     for (const [k, v] of map) { const n = num(v); if (n !== undefined) financials[k] = n; }
-    if (Object.keys(financials).length) payload.financials = financials;
+    if (Object.keys(financials).length) {
+      // Periods travel with their figures — without them the engine has to assume.
+      const withPeriods: Record<string, unknown> = { ...financials };
+      if (financials.churnPct !== undefined) withPeriods.churnPeriod = data.finChurnPeriod;
+      if (financials.growthPct !== undefined) withPeriods.growthPeriod = data.finGrowthPeriod;
+      payload.financials = withPeriods;
+    }
 
     // Optional 3-year projection.
     const y0 = new Date().getFullYear();
@@ -294,8 +303,11 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
         finGrossMargin: num(fin.grossMarginPct),
         finLtvCac: num(fin.ltvCacRatio),
         finChurn: num(fin.churnPct),
+        // Keep the period the deck stated; only fall back to the default when it said nothing.
+        finChurnPeriod: (["weekly", "monthly", "quarterly", "annual"].includes(fin.churnPeriod) ? fin.churnPeriod : "monthly") as FormShape["finChurnPeriod"],
         finCustomers: num(fin.customers),
         finGrowth: num(fin.growthPct),
+        finGrowthPeriod: (["WoW", "MoM", "YoY"].includes(fin.growthPeriod) ? fin.growthPeriod : "MoM") as FormShape["finGrowthPeriod"],
         finTam: num(fin.bottomUpTamUsd),
         projY0: projRev(0),
         projY1: projRev(1),
@@ -576,9 +588,30 @@ function FormFields({ form, set, sectors, full = false }: {
             <div><label style={LABEL}>ARR (USD)</label><input style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
             <div><label style={LABEL}>Gross margin (%)</label><input style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
             <div><label style={LABEL}>LTV / CAC ratio</label><input style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
-            <div><label style={LABEL}>Monthly churn (%)</label><input style={INPUT} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" /></div>
+            <div>
+              <label style={LABEL}>Churn (%)</label>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" />
+                <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label="Churn period">
+                  <option value="weekly">/ week</option>
+                  <option value="monthly">/ month</option>
+                  <option value="quarterly">/ quarter</option>
+                  <option value="annual">/ year</option>
+                </select>
+              </div>
+            </div>
             <div><label style={LABEL}>Customers</label><input style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
-            <div><label style={LABEL}>Growth (% MoM)</label><input style={INPUT} value={form.finGrowth} onChange={set("finGrowth")} placeholder="15" inputMode="numeric" /></div>
+            <div>
+              <label style={LABEL}>Growth (%)</label>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} placeholder="15" inputMode="numeric" />
+                <select style={{ ...INPUT, width: 104 }} value={form.finGrowthPeriod} onChange={set("finGrowthPeriod")} aria-label="Growth period">
+                  <option value="WoW">WoW</option>
+                  <option value="MoM">MoM</option>
+                  <option value="YoY">YoY</option>
+                </select>
+              </div>
+            </div>
             <div><label style={LABEL}>Bottom-up TAM (USD)</label><input style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
           </div>
           <div style={{ marginTop: 14 }}>

@@ -848,6 +848,78 @@ authRouter.get("/me/audit", async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// Admin: cross-account device correlation
+// ─────────────────────────────────────────────────────────────────────────
+//
+// AuthSession has captured (ip, userAgent) per login since it was introduced,
+// but nothing ever correlated those columns across userIds — a second
+// account created for multi-accounting / ban evasion / rating-farming (in
+// CyberChess or any other module with a leaderboard/reward) was invisible
+// however heavily it reused the same browser. This is platform-wide, not
+// module-specific: any AEVION feature that cares about one-account-per-human
+// can use it, not just CyberChess anti-cheat (the original motivating case).
+//
+// Requires an exact match on BOTH ip and userAgent (not ip alone) — IP-only
+// correlation has too many false positives (offices, NAT, VPNs, campus
+// networks all share one public IP across unrelated people); requiring the
+// full user-agent string too narrows it to "same physical browser install",
+// which is a much stronger multi-accounting signal.
+
+// 🔹 GET /admin/correlate/:userId — accounts sharing a browser (ip+userAgent)
+//    with the given user, admin-only (role === "ADMIN", same JWT claim used
+//    everywhere else in this file — no separate admin-key/allowlist needed).
+authRouter.get("/admin/correlate/:userId", async (req, res) => {
+  try {
+    const payload: any = requireAuth(req, res);
+    if (!payload) return;
+    if (payload.role !== "ADMIN") {
+      res.status(403).json({ error: "admin_required" });
+      return;
+    }
+    await ensureAuthTier2Tables();
+
+    const userId = String(req.params.userId ?? "").trim();
+    if (!userId) {
+      res.status(400).json({ error: "userId required" });
+      return;
+    }
+
+    const r = await pool.query(
+      `SELECT s2."userId" AS "otherUserId", s2."ip", s2."userAgent",
+              COUNT(*) AS "sharedSessions", MAX(s2."lastActiveAt") AS "lastSeenAt"
+       FROM "AuthSession" s1
+       JOIN "AuthSession" s2
+         ON s1."ip" = s2."ip"
+        AND s1."userAgent" = s2."userAgent"
+        AND s2."userId" != s1."userId"
+       WHERE s1."userId" = $1
+         AND s1."ip" IS NOT NULL AND s1."ip" != 'unknown'
+         AND s1."userAgent" IS NOT NULL
+       GROUP BY s2."userId", s2."ip", s2."userAgent"
+       ORDER BY "sharedSessions" DESC
+       LIMIT 20`,
+      [userId],
+    );
+
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      ok: true,
+      userId,
+      sharedDeviceAccounts: r.rows.map((row: any) => ({
+        otherUserId: row.otherUserId,
+        ip: row.ip,
+        userAgent: row.userAgent,
+        sharedSessions: Number(row.sharedSessions),
+        lastSeenAt: row.lastSeenAt instanceof Date ? row.lastSeenAt.toISOString() : row.lastSeenAt,
+      })),
+    });
+  } catch (err: any) {
+    captureAuthError(err, { route: "admin-correlate" });
+    res.status(500).json({ error: "correlate failed" });
+  }
+});
+
 // 🔹 GET /whoami-strict — verifies sid against AuthSession.revokedAt.
 //    Useful for clients that want server-confirmed session validity
 //    (legacy stateless JWT verify is opt-out via lack of sid).

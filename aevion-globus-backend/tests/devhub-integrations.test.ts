@@ -65,6 +65,13 @@ afterEach(() => {
     "CLOUDFLARE_R2_SECRET_KEY", "CLOUDFLARE_R2_BUCKET", "CLOUDFLARE_R2_PUBLIC_URL",
     "DEEPL_API_KEY", "BREVO_SENDER_EMAIL", "BREVO_SENDER_NAME",
     "GOOGLE_DRIVE_ACCESS_TOKEN", "TOGETHER_API_KEY",
+    // Added with the media/database work: a leftover REPLICATE_API_TOKEN makes
+    // the music route take its new MusicGen fallback and fire a second fetch,
+    // which fails an unrelated test depending on file order. The others gate
+    // provisioning and per-project deploys the same way.
+    "REPLICATE_API_TOKEN", "DEVHUB_DB_ADMIN_URL", "DEVHUB_RAILWAY_PER_PROJECT",
+    "DEVHUB_DB_CONNECTION_LIMIT", "ELEVENLABS_TTS_MODEL",
+    "RAILWAY_DEPLOY_PROJECT_ID", "RAILWAY_DEPLOY_ENV_ID",
   ]) {
     delete process.env[key];
   }
@@ -137,7 +144,10 @@ describe("POST /api/devhub/media/tts (ElevenLabs)", () => {
     expect((opts as any).headers["xi-api-key"]).toBe("fake-key");
     const body = JSON.parse((opts as any).body);
     expect(body.text).toBe("Hello world");
-    expect(body.model_id).toBe("eleven_monolingual_v1");
+    // Was pinned to eleven_monolingual_v1 — a model ElevenLabs has since
+    // REMOVED. The test stayed green while prod voice was fully broken, which
+    // is why this now tracks the model we actually send.
+    expect(body.model_id).toBe("eleven_multilingual_v2");
   });
 });
 
@@ -410,8 +420,43 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
       .send({ prompt: "a cat" });
 
     expect(r.status).toBe(502);
-    expect(r.body.error).toMatch(/All image providers failed/);
+    // The message now names the fix instead of restating the failure: this
+    // mock is a billing rejection, so it must read as a blocked provider
+    // rather than a bad prompt.
+    expect(r.body.providersBlocked).toBe(true);
+    expect(r.body.error).toMatch(/not your prompt/);
     expect(r.body.attempts.map((a: { provider: string }) => a.provider)).toEqual(["openai", "workers-ai"]);
+  });
+});
+
+describe("POST /api/devhub/projects/:id/generate — dialog history as context", () => {
+  test("prior turns are folded into the prompt (capped), so follow-ups keep their referent", async () => {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "groq", name: "Groq", models: [], defaultModel: "m", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },
+    ] as never);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [{ path: "src/App.jsx", content: "x", language: "javascript" }] }),
+      model: "m", usage: null,
+    } as never);
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "H" });
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/generate`).send({
+      prompt: "make the button blue",
+      history: [
+        { role: "user", text: "build a pomodoro timer with a start button" },
+        { role: "assistant", text: "Changed files: src/App.jsx" },
+        { role: "weird", text: "dropped" },
+      ],
+    });
+    expect(r.status).toBe(200);
+    const messages = vi.mocked(callProvider).mock.calls[0][1] as Array<{ role: string; content: string }>;
+    const userMsg = messages.find((m) => m.role === "user")!.content;
+    expect(userMsg).toContain("Conversation so far");
+    expect(userMsg).toContain("User: build a pomodoro timer");
+    expect(userMsg).toContain("Assistant: Changed files: src/App.jsx");
+    expect(userMsg).not.toContain("dropped");
+    expect(userMsg).toContain("make the button blue");
+    vi.mocked(callProvider).mockReset();
   });
 });
 
@@ -454,6 +499,84 @@ describe("POST /api/devhub/projects/:id/github/sync — pull repo state into the
     const f2 = await request(app).get(`/api/devhub/projects/${id}/file?path=index.html`);
     expect(f2.body.file.content).toBe("<h1>old</h1>");
     delete process.env.GITHUB_TOKEN;
+  });
+});
+
+describe("POST /api/devhub/projects/:id/generate/stream — honest status events", () => {
+  test("streams real phase events and ends with the full /generate payload", async () => {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "groq", name: "Groq", models: [], defaultModel: "m", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },
+    ] as never);
+    vi.mocked(callProvider).mockResolvedValue({
+      reply: JSON.stringify({ files: [{ path: "src/App.jsx", content: "export default () => null", language: "jsx" }] }),
+      model: "m", usage: null,
+    } as never);
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "S" });
+    const r = await request(app)
+      .post(`/api/devhub/projects/${cr.body.project.id}/generate/stream`)
+      .send({ prompt: "a page" });
+
+    const events = r.text.split("\n\n").filter((l) => l.startsWith("data: ")).map((l) => JSON.parse(l.slice(6)));
+    const stages = events.filter((e) => e.type === "status").map((e) => e.stage);
+    expect(stages).toEqual(expect.arrayContaining(["calling_model", "syntax_check", "saving"]));
+    const result = events.find((e) => e.type === "result");
+    expect(result.files.map((f: { path: string }) => f.path)).toEqual(["src/App.jsx"]);
+    expect(result.checkpointId).toBeTruthy();
+    vi.mocked(callProvider).mockReset();
+  });
+});
+
+describe("truncated model reply — complete files are salvaged, not dumped to output.ts", () => {
+  test("salvage triggers a continuation call that recovers the missing tail file", async () => {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "groq", name: "Groq", models: [], defaultModel: "m", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },
+    ] as never);
+    const truncated =
+      '{"files":[' +
+      '{"path":"src/App.jsx","content":"export default () => null","language":"jsx"},' +
+      '{"path":"src/big.css","content":".progress { transition: width 1s lin';
+    vi.mocked(callProvider)
+      .mockResolvedValueOnce({ reply: truncated, model: "m", usage: null } as never)
+      .mockResolvedValueOnce({
+        reply: JSON.stringify({ files: [{ path: "src/big.css", content: ".progress { width: 100%; }", language: "css" }] }),
+        model: "m", usage: null,
+      } as never);
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "C" });
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/generate`).send({ prompt: "pomodoro" });
+    expect(r.status).toBe(200);
+    expect(r.body.files.map((f: { path: string }) => f.path).sort()).toEqual(["src/App.jsx", "src/big.css"]);
+    expect(r.body.continued).toBe(true); // honest process note reaches the UI
+    // Continuation prompt names the completed files and asks only for the rest.
+    const contCall = vi.mocked(callProvider).mock.calls[1];
+    const contUser = (contCall[1] as Array<{ role: string; content: string }>).filter((m) => m.role === "user").pop()!;
+    expect(contUser.content).toContain("cut off");
+    expect(contUser.content).toContain("src/App.jsx");
+    // Codegen calls carry the raised token cap.
+    expect(contCall[5]).toBe(8192);
+    vi.mocked(callProvider).mockReset();
+  });
+
+  test("a reply cut mid-string yields the complete leading files", async () => {
+    vi.mocked(getProviders).mockReturnValue([
+      { id: "groq", name: "Groq", models: [], defaultModel: "m", envKey: "GROQ_API_KEY", configured: true, free: true, tier: "free" },
+    ] as never);
+    // Two complete file objects, then a third cut off inside its content —
+    // exactly the live 2026-07-22 failure shape (max_tokens truncation).
+    const truncated =
+      '{"files":[' +
+      '{"path":"src/App.jsx","content":"export default function App() { return <div className=\\"x\\">ok</div>; }","language":"jsx"},' +
+      '{"path":"src/app.css","content":".x { color: red; }","language":"css"},' +
+      '{"path":"src/big.css","content":".progress { transition: width 1s lin';
+    vi.mocked(callProvider).mockResolvedValue({ reply: truncated, model: "m", usage: null } as never);
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/generate`).send({ prompt: "pomodoro" });
+    expect(r.status).toBe(200);
+    const paths = r.body.files.map((f: { path: string }) => f.path);
+    expect(paths).toEqual(["src/App.jsx", "src/app.css"]); // cut-off tail dropped, no output.ts dump
+    vi.mocked(callProvider).mockReset();
   });
 });
 
@@ -823,75 +946,28 @@ describe("Credit gating on metered routes", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe("POST /api/devhub/projects/:id/deploy (Railway)", () => {
-  async function createProject(app: express.Express) {
-    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
-    expect(cr.status).toBe(201);
-    return cr.body.project.id as string;
-  }
-
-  async function flushMicrotasks() {
-    // The Railway branch is a fire-and-forget async IIFE; the failure path
-    // resolves after one `await fetch(...)` + one `await r.json()`, well
-    // before the 5s "mark as live" timer, so a couple of ticks are enough.
-    await new Promise((r) => setTimeout(r, 0));
-    await new Promise((r) => setTimeout(r, 0));
-  }
-
-  test("GraphQL 200-with-errors is reported as a failed deployment, not live", async () => {
+  // The legacy path these tests covered — deploymentCreate against a single
+  // shared RAILWAY_SERVICE_ID — is gone. It never deployed the user's code and
+  // on production that id was the AEVION backend's own service, so every click
+  // restarted our API. With DEVHUB_RAILWAY_PER_PROJECT set the request now
+  // takes the per-project path (own service, own repo, own env vars); without
+  // it, the route refuses. Both states are covered by the two describes below
+  // ("Railway deploy no longer restarts our own backend" and "per-project
+  // Railway deploys"), so the old assertions were removed rather than adapted
+  // to a code path that no longer exists.
+  test("legacy shared-service deploy path is gone", async () => {
+    delete process.env.DEVHUB_RAILWAY_PER_PROJECT;
     process.env.RAILWAY_API_TOKEN = "tok";
     process.env.RAILWAY_PROJECT_ID = "proj";
     process.env.RAILWAY_SERVICE_ID = "svc";
     const app = makeApp();
-    const projectId = await createProject(app);
-
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      data: null,
-      errors: [{ message: "Not Authorized" }],
-    }));
-
-    const r = await request(app).post(`/api/devhub/projects/${projectId}/deploy`).send({});
-    expect(r.status).toBe(200);
-    expect(r.body.status).toBe("building"); // optimistic immediate response, unchanged
-
-    await flushMicrotasks();
-
-    const list = await request(app).get(`/api/devhub/projects/${projectId}/deployments`);
-    const latest = list.body.deployments[0];
-    expect(latest.status).toBe("failed");
-    expect(latest.buildLog).toMatch(/Not Authorized/);
-  });
-
-  test("GraphQL 200 with no deploymentCreate.id is also a failure, not a fabricated live URL", async () => {
-    process.env.RAILWAY_API_TOKEN = "tok";
-    process.env.RAILWAY_PROJECT_ID = "proj";
-    process.env.RAILWAY_SERVICE_ID = "svc";
-    const app = makeApp();
-    const projectId = await createProject(app);
-
-    fetchMock.mockResolvedValueOnce(jsonResp(200, { data: {} })); // no deploymentCreate at all
-
-    await request(app).post(`/api/devhub/projects/${projectId}/deploy`).send({});
-    await flushMicrotasks();
-
-    const list = await request(app).get(`/api/devhub/projects/${projectId}/deployments`);
-    expect(list.body.deployments[0].status).toBe("failed");
-  });
-
-  test("a real deploymentCreate.id still goes building (happy path unaffected)", async () => {
-    process.env.RAILWAY_API_TOKEN = "tok";
-    process.env.RAILWAY_PROJECT_ID = "proj";
-    process.env.RAILWAY_SERVICE_ID = "svc";
-    const app = makeApp();
-    const projectId = await createProject(app);
-
-    fetchMock.mockResolvedValueOnce(jsonResp(200, { data: { deploymentCreate: { id: "dep_ok", status: "QUEUED" } } }));
-
-    await request(app).post(`/api/devhub/projects/${projectId}/deploy`).send({});
-    await flushMicrotasks();
-
-    const list = await request(app).get(`/api/devhub/projects/${projectId}/deployments`);
-    expect(list.body.deployments[0].status).toBe("building");
-    expect(list.body.deployments[0].deployUrl).toMatch(/\.up\.railway\.app$/);
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "Legacy" });
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/deploy`).send({});
+    expect(r.status).toBe(501);
+    expect(fetchMock).not.toHaveBeenCalled();
+    delete process.env.RAILWAY_API_TOKEN;
+    delete process.env.RAILWAY_PROJECT_ID;
+    delete process.env.RAILWAY_SERVICE_ID;
   });
 });
 
@@ -1953,35 +2029,43 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
     const id = await createProject(app);
 
     const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    // Record when each upstream call starts and ends. Overlapping intervals
+    // prove concurrency directly; wall-clock does not, because under a loaded
+    // parallel test run the overhead alone can exceed any fixed ceiling (this
+    // assertion used to be `elapsed < 150ms` and measured 154 in full runs).
+    const spans: Array<{ who: string; start: number; end: number }> = [];
+    const track = async (who: string, ms: number, make: () => any) => {
+      const start = Date.now();
+      await delay(ms);
+      const out = make();
+      spans.push({ who, start, end: Date.now() });
+      return out;
+    };
     fetchMock.mockImplementation(async (url: string) => {
       if (String(url).includes("openai.com")) {
-        await delay(80); // slow — would finish LAST if this and tts ran sequentially
-        return jsonResp(200, { data: [{ url: "https://oai.example/hero.png" }] });
+        return track("image", 80, () => jsonResp(200, { data: [{ url: "https://oai.example/hero.png" }] }));
       }
       if (String(url).includes("elevenlabs.io")) {
-        await delay(5); // fast — finishes first if truly concurrent
-        return audioResp(200, 512);
+        return track("tts", 5, () => audioResp(200, 512));
       }
       throw new Error(`unexpected url ${url}`);
     });
 
-    const startedAt = Date.now();
     const r = await request(app)
       .post(`/api/devhub/projects/${id}/agent/workflow`)
       .send({ steps: [{ type: "image", prompt: "hero" }, { type: "tts", text: "hi" }] });
-    const elapsedMs = Date.now() - startedAt;
-
     expect(r.status).toBe(200);
     expect(r.body.successCount).toBe(2);
     // Order in the response matches step order, even though the tts (fast)
     // call resolves before the image (slow) one internally.
     expect(r.body.results[0].type).toBe("image");
     expect(r.body.results[1].type).toBe("tts");
-    // Concurrent → total time tracks the SLOWER step (~80ms), not the sum
-    // (~85ms) plus per-request overhead. Generous ceiling to avoid CI flake
-    // while still failing hard if this regresses to sequential (which would
-    // add another 80ms+ of pure serial wait on top).
-    expect(elapsedMs).toBeLessThan(150);
+    // Sequential execution cannot overlap: the second call would start only
+    // after the first ended. Any overlap at all proves they ran together, and
+    // this holds no matter how slow the machine is.
+    expect(spans).toHaveLength(2);
+    const [a, b] = [...spans].sort((x, y) => x.start - y.start);
+    expect(b.start).toBeLessThan(a.end);
   });
 });
 
@@ -3331,5 +3415,953 @@ describe("SSE /agent/workflow/stream — audio auto-R2 parity", () => {
     expect(done.savedAs).toBe("public/music-0.mp3.b64");
     expect(done.output.url).toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 24. Export ZIP — non-ASCII file names (confirmed broken on prod 2026-07-26)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("export zip: UTF-8 file names", () => {
+  test("sets general purpose bit 11 so readers decode names as UTF-8, not CP437", async () => {
+    const { buildZipStored } = await import("../src/routes/devhub");
+    const zip = buildZipStored([
+      { path: "src/компоненты/Таймер.jsx", content: Buffer.from("export default 1;", "utf8") },
+      { path: "README.md", content: Buffer.from("# hi", "utf8") },
+    ]);
+
+    // Local header: signature at 0, flags at offset 6.
+    expect(zip.readUInt32LE(0)).toBe(0x04034b50);
+    expect(zip.readUInt16LE(6) & 0x0800).toBe(0x0800);
+
+    // Every central directory entry must agree — a mismatch makes some tools
+    // trust the local header and others the central one.
+    for (let i = 0; i < zip.length - 4; i++) {
+      if (zip.readUInt32LE(i) === 0x02014b50) {
+        expect(zip.readUInt16LE(i + 8) & 0x0800).toBe(0x0800);
+      }
+    }
+
+    // The name really is UTF-8 bytes in the archive.
+    expect(zip.includes(Buffer.from("src/компоненты/Таймер.jsx", "utf8"))).toBe(true);
+  });
+
+  test("round-trips a Cyrillic name through our own import endpoint", async () => {
+    const { buildZipStored } = await import("../src/routes/devhub");
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "Utf8Zip", stack: "next" });
+    const id = cr.body.project.id;
+    const zip = buildZipStored([{ path: "проект/файл.txt", content: Buffer.from("данные", "utf8") }]);
+
+    const up = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+    expect(up.status).toBe(200);
+    expect(up.body.imported.map((x: { path: string }) => x.path)).toContain("проект/файл.txt");
+  });
+});
+
+describe("import zip: file name encoding", () => {
+  async function proj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "ImpEnc", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("refuses non-UTF-8 names with an actionable message instead of importing U+FFFD paths", async () => {
+    const app = makeApp();
+    const id = await proj(app);
+    // "файл.txt" as CP866 bytes — what a Russian Windows archiver writes when
+    // it does not set bit 11. Decoded as UTF-8 these become replacement chars.
+    const cp866Name = Buffer.from([0xa4, 0xa0, 0xa9, 0xab, 0x2e, 0x74, 0x78, 0x74]);
+    // Swap the name bytes in place: same length, and CRC covers data only, so
+    // the archive stays structurally valid — only its name encoding changes.
+    const zip = buildSimpleZip([{ name: "aaaa.txt", data: Buffer.from("data", "utf8") }]);
+    const placeholder = Buffer.from("aaaa.txt", "utf8");
+    let at = zip.indexOf(placeholder);
+    while (at !== -1) {
+      cp866Name.copy(zip, at);
+      at = zip.indexOf(placeholder, at + 1);
+    }
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/not UTF-8/);
+    expect(r.body.error).toMatch(/Re-create the archive/);
+  });
+
+  test("plain ASCII names still import from archives with no UTF-8 flag (the common case)", async () => {
+    const app = makeApp();
+    const id = await proj(app);
+    const zip = buildSimpleZip([{ name: "src/App.jsx", data: Buffer.from("export default 1;", "utf8") }]);
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+
+    expect(r.status).toBe(200);
+    expect(r.body.imported.map((x: { path: string }) => x.path)).toContain("src/App.jsx");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 26. Export → Import round trip (both sides were fixed separately: #923/#924)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("zip round trip: export → import", () => {
+  test("a project survives a full export/import cycle, Cyrillic paths included", async () => {
+    const app = makeApp();
+    const src = (await request(app).post("/api/devhub/projects").send({ name: "RtSrc", stack: "react" })).body.project.id;
+
+    const files = [
+      { path: "src/компоненты/Таймер.jsx", content: "export default function Таймер(){ return null; }" },
+      { path: "src/App.jsx", content: "import T from './компоненты/Таймер';\nexport default T;" },
+      { path: "README.md", content: "# проект\nописание" },
+    ];
+    for (const f of files) {
+      const put = await request(app)
+        .put(`/api/devhub/projects/${src}/file?path=${encodeURIComponent(f.path)}`)
+        .send({ content: f.content, language: "javascript" });
+      expect(put.status).toBe(200);
+    }
+
+    const exported = await request(app)
+      .get(`/api/devhub/projects/${src}/export`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(c));
+        res.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(exported.status).toBe(200);
+
+    const dst = (await request(app).post("/api/devhub/projects").send({ name: "RtDst", stack: "react" })).body.project.id;
+    const imp = await request(app)
+      .post(`/api/devhub/projects/${dst}/import-zip`)
+      .send({ base64Zip: (exported.body as Buffer).toString("base64") });
+    expect(imp.status).toBe(200);
+
+    // Paths AND contents must match — a mangled name would still "import".
+    const listed = await request(app).get(`/api/devhub/projects/${dst}/files`);
+    const got: Record<string, string> = {};
+    for (const f of listed.body.files) got[f.path] = f.content;
+    for (const f of files) expect(got[f.path]).toBe(f.content);
+    expect(Object.keys(got).sort()).toEqual(files.map((f) => f.path).sort());
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 27. Real database provisioning (schema + role per project)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("database provisioning", () => {
+  async function proj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "DbProj", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("503 with the env var named when provisioning is not configured", async () => {
+    delete process.env.DEVHUB_DB_ADMIN_URL;
+    const app = makeApp();
+    const id = await proj(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/database/provision`).send({});
+    expect(r.status).toBe(503);
+    expect(r.body.envVar).toBe("DEVHUB_DB_ADMIN_URL");
+  });
+
+  test("refuses to provision on the platform's own database", async () => {
+    const { refusesPlatformDatabase } = await import("../src/lib/devhubDbProvision");
+    const same = "postgres://admin:x@db.internal:5432/aevion";
+    expect(refusesPlatformDatabase(same, "postgres://other:y@db.internal:5432/aevion")).toBe(true);
+    expect(refusesPlatformDatabase(same, "postgres://admin:x@projects.internal:5432/aevion")).toBe(false);
+    expect(refusesPlatformDatabase(same, undefined)).toBe(false);
+  });
+
+  test("derives safe identifiers and a scoped connection string", async () => {
+    const m = await import("../src/lib/devhubDbProvision");
+    const pid = "e35bc59c-56e1-4467-bc01-dc1cb5ed5abe";
+    expect(m.schemaNameFor(pid)).toBe("p_e35bc59c56e1");
+    expect(m.roleNameFor(pid)).toBe("u_e35bc59c56e1");
+    const url = m.buildProjectUrl("postgres://admin:pw@host:5432/db", "u_x", "s3cret", "p_x");
+    expect(url).toContain("u_x:s3cret@host:5432/db");
+    // URLSearchParams encodes the space as "+", so normalise before asserting.
+    expect(decodeURIComponent(url).replace(/\+/g, " ")).toContain("options=-c search_path=p_x");
+  });
+
+  test("creates role + schema, locks it out of public, applies the project's schema.sql", async () => {
+    const executed: string[] = [];
+    const m = await import("../src/lib/devhubDbProvision");
+    const r = await m.provisionProjectDatabase({
+      projectId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      schemaSql: "CREATE TABLE IF NOT EXISTS todos (id serial primary key);",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      platformUrl: "postgres://admin:pw@platform.internal:5432/aevion",
+      query: async (sql) => {
+        executed.push(sql.trim().split("\n")[0]);
+        return { rows: sql.includes("pg_roles") ? [] : [] };
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.appliedSchemaSql).toBe(true);
+    const joined = executed.join(" | ");
+    expect(joined).toContain("CREATE ROLE u_aaaaaaaabbbb LOGIN PASSWORD");
+    expect(joined).toContain("CREATE SCHEMA IF NOT EXISTS p_aaaaaaaabbbb AUTHORIZATION u_aaaaaaaabbbb");
+    expect(joined).toContain("REVOKE ALL ON SCHEMA public FROM u_aaaaaaaabbbb");
+    expect(joined).toContain("SET ROLE u_aaaaaaaabbbb"); // DDL runs as the project, not as admin
+    expect(joined).toContain("RESET ROLE");
+    expect(r.databaseUrl).not.toContain("admin:pw@"); // admin credential never leaks to the project
+  });
+
+  test("rotates the password instead of failing when the role already exists", async () => {
+    const executed: string[] = [];
+    const m = await import("../src/lib/devhubDbProvision");
+    const r = await m.provisionProjectDatabase({
+      projectId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      query: async (sql) => {
+        executed.push(sql.trim().split("\n")[0]);
+        return { rows: sql.includes("pg_roles") ? [{ "?column?": 1 }] : [] };
+      },
+    });
+    expect(r.ok).toBe(true);
+    expect(executed.join(" | ")).toContain("ALTER ROLE u_aaaaaaaabbbb WITH LOGIN PASSWORD");
+    expect(executed.join(" | ")).not.toContain("CREATE ROLE");
+  });
+
+  test("deprovision drops schema, owned objects and role", async () => {
+    const executed: string[] = [];
+    const m = await import("../src/lib/devhubDbProvision");
+    const r = await m.deprovisionProjectDatabase({
+      projectId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      query: async (sql) => {
+        executed.push(sql.trim());
+        return { rows: [] };
+      },
+    });
+    expect(r.ok).toBe(true);
+    expect(executed).toContain("DROP SCHEMA IF EXISTS p_aaaaaaaabbbb CASCADE");
+    expect(executed).toContain("DROP ROLE IF EXISTS u_aaaaaaaabbbb");
+  });
+});
+
+describe("deleting a project drops its database", () => {
+  test("no DATABASE_URL on the project → delete proceeds untouched", async () => {
+    delete process.env.DEVHUB_DB_ADMIN_URL;
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "NoDb", stack: "next" });
+    const r = await request(app).delete(`/api/devhub/projects/${cr.body.project.id}`);
+    expect(r.status).toBe(200);
+    expect(r.body.databaseDropped).toBeUndefined();
+  });
+
+  test("if the drop fails the project is NOT deleted — no orphan schema left behind", async () => {
+    // A port nothing listens on: the real deprovision path fails fast, which
+    // is exactly the situation that used to silently orphan a schema.
+    process.env.DEVHUB_DB_ADMIN_URL = "postgres://admin:pw@127.0.0.1:1/pool";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "DropFails", stack: "next" });
+    const id = cr.body.project.id;
+    await request(app).put(`/api/devhub/projects/${id}/env`).send({ key: "DATABASE_URL", value: "postgres://u:p@h/db" });
+
+    const r = await request(app).delete(`/api/devhub/projects/${id}`);
+    expect(r.status).toBe(502);
+    expect(r.body.error).toMatch(/could not be dropped/);
+    expect(r.body.hint).toMatch(/DELETE \/projects\/:id\/database/);
+
+    // Still there, so the user can retry instead of losing track of the schema.
+    const still = await request(app).get(`/api/devhub/projects/${id}`);
+    expect(still.status).toBe(200);
+    delete process.env.DEVHUB_DB_ADMIN_URL;
+  }, 20_000);
+});
+
+
+describe("Railway deploy no longer restarts our own backend", () => {
+  test("refuses with 501 by default and says what does work", async () => {
+    process.env.RAILWAY_API_TOKEN = "tok";
+    process.env.RAILWAY_PROJECT_ID = "proj";
+    process.env.RAILWAY_SERVICE_ID = "svc";
+    delete process.env.DEVHUB_RAILWAY_PER_PROJECT;
+
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "DeployMe", stack: "next" });
+    const id = cr.body.project.id;
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/deploy`).send({});
+    expect(r.status).toBe(501);
+    expect(r.body.error).toMatch(/not available yet/i);
+    expect(r.body.alternative).toMatch(/Cloudflare Pages/);
+    // Nothing was sent to Railway at all — that is the whole point.
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // And the attempt is recorded as failed rather than left "pending".
+    const list = await request(app).get(`/api/devhub/projects/${id}/deployments`);
+    expect(list.body.deployments[0].status).toBe("failed");
+    expect(list.body.deployments[0].buildLog).toMatch(/AEVION platform service/);
+  });
+
+  test("capability reports railway as not_available instead of live", async () => {
+    process.env.RAILWAY_API_TOKEN = "tok";
+    delete process.env.DEVHUB_RAILWAY_PER_PROJECT;
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/studio/capabilities");
+    const railway = r.body.capabilities.find((c: { id: string }) => c.id === "railway");
+    expect(railway.status).toBe("not_available");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 28. Video model catalogue (Veo 3 / Seedance / Kling instead of 2024 models)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("video models", () => {
+  test("catalogue exposes the current generation and marks the default", async () => {
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/media/video/models");
+    expect(r.status).toBe(200);
+    const ids = r.body.models.map((m: { id: string }) => m.id);
+    expect(ids).toContain("google/veo-3-fast");
+    expect(ids).toContain("bytedance/seedance-1-pro");
+    expect(ids).toContain("kwaivgi/kling-v2.1");
+    const def = r.body.models.filter((m: { default: boolean }) => m.default);
+    expect(def).toHaveLength(1);
+    expect(def[0].audio).toBe(true); // the default is the one that ships sound
+  });
+
+  test("maps our request onto each model's real input schema", async () => {
+    const { findVideoModel } = await import("../src/lib/devhubVideoModels");
+    const veo = findVideoModel("google/veo-3-fast")!.toInput({ prompt: "a cat", aspectRatio: "9:16", resolution: "720p" });
+    expect(veo).toMatchObject({ prompt: "a cat", aspect_ratio: "9:16", resolution: "720p", generate_audio: true });
+    expect(veo).not.toHaveProperty("num_frames"); // the old code sent this; Veo ignores it
+
+    const seed = findVideoModel("bytedance/seedance-1-pro")!.toInput({ prompt: "a car", duration: 10, imageUrl: "https://x/y.png" });
+    expect(seed).toMatchObject({ duration: 10, image: "https://x/y.png", fps: 24 });
+
+    const kling = findVideoModel("kwaivgi/kling-v2.1")!.toInput({ prompt: "a city", imageUrl: "https://x/y.png", resolution: "1080p" });
+    expect(kling).toMatchObject({ start_image: "https://x/y.png", mode: "pro" }); // not "image"
+    // Durations outside a model's list fall back rather than erroring at the provider.
+    expect(findVideoModel("bytedance/seedance-1-pro")!.toInput({ prompt: "x", duration: 7 })).toMatchObject({ duration: 5 });
+  });
+
+  test("unknown model id is refused with the list instead of a provider error", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "x", model: "made/up" });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/unknown video model/);
+    expect(r.body.models).toContain("google/veo-3-fast");
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+});
+
+describe("3D assets and music fallback", () => {
+  test("3D catalogue lists both meshers and marks the default", async () => {
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/media/3d/models");
+    expect(r.status).toBe(200);
+    const ids = r.body.models.map((m: { id: string }) => m.id);
+    expect(ids).toEqual(expect.arrayContaining(["firtoz/trellis", "tencent/hunyuan3d-2"]));
+    expect(r.body.models.filter((m: { default: boolean }) => m.default)).toHaveLength(1);
+  });
+
+  test("3D refuses a non-URL image with an actionable message", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/3d").send({ imageUrl: "not-a-url" });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/imageUrl/);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("3D maps inputs onto each mesher's real schema", async () => {
+    const { find3dModel } = await import("../src/lib/devhub3dModels");
+    const trellis = find3dModel("firtoz/trellis")!.toInput({ imageUrl: "https://x/y.png" });
+    expect(trellis).toMatchObject({ images: ["https://x/y.png"], generate_model: true, generate_color: true });
+    const hunyuan = find3dModel("tencent/hunyuan3d-2")!.toInput({ imageUrl: "https://x/y.png", removeBackground: false });
+    expect(hunyuan).toMatchObject({ image: "https://x/y.png", remove_background: false });
+  });
+
+  test("music falls back to MusicGen when ElevenLabs is not configured", async () => {
+    delete process.env.ELEVENLABS_API_KEY;
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: "pred-music-1", status: "starting" }),
+    } as any);
+
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/music").send({ prompt: "lofi beat", musicLengthMs: 12000 });
+    expect(r.status).toBe(200);
+    expect(r.body.provider).toBe("replicate/musicgen");
+    expect(r.body.async).toBe(true);
+    expect(r.body.predictionId).toBe("pred-music-1");
+    expect(r.body.fallbackFrom).toMatch(/ELEVENLABS_API_KEY/);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("without either provider music says which env vars would fix it", async () => {
+    delete process.env.ELEVENLABS_API_KEY;
+    delete process.env.REPLICATE_API_TOKEN;
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/music").send({ prompt: "lofi beat" });
+    expect(r.status).toBe(503);
+    expect(r.body.error).toMatch(/ELEVENLABS_API_KEY or REPLICATE_API_TOKEN/);
+  });
+});
+
+describe("provider realities: retired TTS model, empty video balance", () => {
+  test("TTS no longer sends the removed eleven_monolingual_v1", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-test";
+    fetchMock.mockResolvedValueOnce({
+      ok: true, status: 200,
+      arrayBuffer: async () => new ArrayBuffer(64),
+    } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/tts").send({ text: "привет" });
+    expect(r.status).toBe(200);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.model_id).toBe("eleven_multilingual_v2"); // multilingual: our prompts are Russian
+    expect(body.model_id).not.toBe("eleven_monolingual_v1");
+    delete process.env.ELEVENLABS_API_KEY;
+  });
+
+  test("a retired model is survived by retrying the fallback chain", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-test";
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 400, text: async () => '{"detail":{"code":"unsupported_model"}}' } as any)
+      .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(32) } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/tts").send({ text: "привет" });
+    expect(r.status).toBe(200);
+    expect(r.headers["x-tts-model"]).toBe("eleven_turbo_v2_5");
+    delete process.env.ELEVENLABS_API_KEY;
+  });
+
+  test("an empty Replicate balance says 'top up', not 'Replicate error'", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({
+      ok: false, status: 402,
+      text: async () => '{"title":"Insufficient credit"}',
+    } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "a cat" });
+    expect(r.status).toBe(402);
+    expect(r.body.error).toMatch(/no credit/i);
+    expect(r.body.topUpUrl).toContain("replicate.com");
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+});
+
+describe("realism pass shared with QReal", () => {
+  test("video prompts carry QReal's realism directives by default", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: "p1", status: "starting" }) } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "a barista pours milk" });
+    expect(r.status).toBe(200);
+    expect(r.body.realism).toBe(true);
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    // Same text QReal renders with — imported, not duplicated.
+    const { REALISM_DIRECTIVES } = await import("../src/services/qreal/directives");
+    expect(sent.input.prompt).toContain("a barista pours milk");
+    expect(sent.input.prompt).toContain(REALISM_DIRECTIVES);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("realism:false leaves a stylised prompt untouched", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: "p2", status: "starting" }) } as any);
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/video").send({ prompt: "flat 2d cartoon fox", realism: false });
+    expect(r.body.realism).toBe(false);
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(sent.input.prompt).toBe("flat 2d cartoon fox");
+    expect(sent.input.prompt).not.toMatch(/ARRI Alexa/);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+});
+
+describe("database quotas", () => {
+  test("roles are created with a connection cap so one app cannot starve the rest", async () => {
+    const executed: string[] = [];
+    const m = await import("../src/lib/devhubDbProvision");
+    await m.provisionProjectDatabase({
+      projectId: "cccccccc-dddd-eeee-ffff-000000000000",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      query: async (sql) => { executed.push(sql.trim().split("\n")[0]); return { rows: [] }; },
+    });
+    expect(executed.join(" | ")).toMatch(/CREATE ROLE u_ccccccccdddd LOGIN PASSWORD '.*' CONNECTION LIMIT 5/);
+  });
+
+  test("size is measured, not estimated", async () => {
+    const m = await import("../src/lib/devhubDbProvision");
+    const r = await m.projectSchemaSizeBytes({
+      projectId: "cccccccc-dddd-eeee-ffff-000000000000",
+      adminUrl: "postgres://admin:pw@projects.internal:5432/pool",
+      query: async (sql, params) => {
+        expect(sql).toContain("pg_total_relation_size");
+        expect(params).toEqual(["p_ccccccccdddd"]);
+        return { rows: [{ bytes: "2097152", tables: 3 }] };
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) { expect(r.bytes).toBe(2097152); expect(r.tables).toBe(3); }
+  });
+
+  test("usage endpoint answers honestly for an unprovisioned project", async () => {
+    delete process.env.DEVHUB_DB_ADMIN_URL;
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "NoDbYet", stack: "next" });
+    const r = await request(app).get(`/api/devhub/projects/${cr.body.project.id}/database`);
+    expect(r.status).toBe(200);
+    expect(r.body.provisioned).toBe(false);
+    expect(r.body.connectionLimit).toBe(5);
+  });
+});
+
+describe("capabilities tell the truth about providers", () => {
+  test("a live capability turns degraded after a real provider failure", async () => {
+    const { noteProviderFailure, __resetProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+
+    const app = makeApp();
+    const before = await request(app).get("/api/devhub/studio/capabilities");
+    expect(before.body.capabilities.find((c: { id: string }) => c.id === "video").status).toBe("live");
+
+    noteProviderFailure("video", "Replicate: insufficient credit");
+
+    const after = await request(app).get("/api/devhub/studio/capabilities");
+    const video = after.body.capabilities.find((c: { id: string }) => c.id === "video");
+    expect(video.status).toBe("degraded");
+    expect(video.lastError).toMatch(/insufficient credit/);
+    expect(after.body.summary.degraded).toBe(1);
+    __resetProviderHealth();
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("a later success clears it, and an unconfigured capability is untouched", async () => {
+    const { noteProviderFailure, noteProviderSuccess, __resetProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    delete process.env.REPLICATE_API_TOKEN;
+
+    noteProviderFailure("video", "boom");
+    const app = makeApp();
+    // No token: it stays needs_token rather than being mislabelled degraded.
+    const r1 = await request(app).get("/api/devhub/studio/capabilities");
+    expect(r1.body.capabilities.find((c: { id: string }) => c.id === "video").status).toBe("needs_token");
+
+    process.env.REPLICATE_API_TOKEN = "rep-test";
+    noteProviderSuccess("video");
+    const r2 = await request(app).get("/api/devhub/studio/capabilities");
+    expect(r2.body.capabilities.find((c: { id: string }) => c.id === "video").status).toBe("live");
+    __resetProviderHealth();
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+});
+
+describe("image failures name the fix, not just the failure", () => {
+  test("a billing wall plus a 401 fallback reads as 'providers blocked'", async () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc";
+    process.env.CLOUDFLARE_API_TOKEN = "cf";
+    delete process.env.TOGETHER_API_KEY;
+
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 400, text: async () => '{"error":{"code":"billing_hard_limit_reached"}}' } as any)
+      .mockResolvedValueOnce({ ok: false, status: 401, text: async () => '{"errors":[{"code":10000,"message":"Authentication error"}]}' } as any);
+
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/image").send({ prompt: "a red circle" });
+    expect(r.status).toBe(502);
+    expect(r.body.providersBlocked).toBe(true);
+    expect(r.body.error).toMatch(/not your prompt/);
+    expect(r.body.error).toMatch(/top up the OpenAI account/);
+    expect(r.body.error).toMatch(/TOGETHER_API_KEY/);
+
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.CLOUDFLARE_ACCOUNT_ID;
+    delete process.env.CLOUDFLARE_API_TOKEN;
+  });
+});
+
+describe("aevion.build subdomain is only promised when it resolves", () => {
+  test("an unresolvable custom domain does not become liveUrl", async () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc";
+    process.env.CLOUDFLARE_API_TOKEN = "cf";
+    process.env.CLOUDFLARE_ZONE_ID = "zone";
+
+    // wrangler upload, CNAME creation, then the domain probe fails (the zone
+    // is not delegated) while pages.dev answers.
+    vi.doMock("../src/lib/wranglerPagesDeploy", () => ({
+      wranglerPagesDeploy: async () => ({ ok: true, url: "https://abc.aevion-x.pages.dev" }),
+    }));
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true, result: {} }), text: async () => "" } as any);
+
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "DomainCheck", stack: "static" });
+    await request(app).put(`/api/devhub/projects/${cr.body.project.id}/file?path=index.html`).send({ content: "<h1>hi</h1>", language: "html" });
+
+    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/deploy/pages`).send({});
+    if (r.status === 200 && r.body.domainUrl) {
+      // Whatever the probe decided, liveUrl must never be a domain reported as
+      // not ready — that is the promise that was broken for two weeks.
+      if (!r.body.domainReady) expect(r.body.liveUrl).toBe(r.body.pagesUrl);
+      expect(r.body).toHaveProperty("domainReady");
+    }
+    vi.doUnmock("../src/lib/wranglerPagesDeploy");
+    delete process.env.CLOUDFLARE_ZONE_ID;
+  });
+});
+
+describe("translation failures are legible", () => {
+  test("DeepL 456 reads as an account quota problem, not a generic error", async () => {
+    process.env.DEEPL_API_KEY = "key:fx";
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 456, text: async () => '{"message":"Quota exceeded"}' } as any);
+
+    const app = makeApp();
+    const r = await request(app).post("/api/devhub/media/translate").send({ text: "Привет", targetLang: "EN" });
+    expect(r.status).toBe(456);
+    expect(r.body.provider).toBe("deepl");
+    expect(r.body.error).toMatch(/out of quota/i);
+    // The detail that cost an hour to find: their usage endpoint lies.
+    expect(r.body.error).toMatch(/can still show 0 used/);
+    delete process.env.DEEPL_API_KEY;
+  });
+
+  test("translation is listed as a capability so its state is visible at all", async () => {
+    process.env.DEEPL_API_KEY = "key:fx";
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/studio/capabilities");
+    const t = r.body.capabilities.find((c: { id: string }) => c.id === "translate");
+    expect(t).toBeTruthy();
+    expect(t.status).toBe("live");
+    delete process.env.DEEPL_API_KEY;
+  });
+});
+
+describe("provider key health", () => {
+  test("reports a pending Cloudflare zone as unhealthy — the aevion.build failure", async () => {
+    process.env.CLOUDFLARE_API_TOKEN = "cf";
+    process.env.CLOUDFLARE_ZONE_ID = "zone";
+    delete process.env.BREVO_API_KEY;
+    delete process.env.REPLICATE_API_TOKEN;
+    delete process.env.OPENAI_API_KEY;
+
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes("tokens/verify")) return { ok: true, status: 200, json: async () => ({ success: true }) } as any;
+      if (String(url).includes("/zones/")) return { ok: true, status: 200, json: async () => ({ result: { status: "pending" } }) } as any;
+      return { ok: false, status: 500, json: async () => ({}) } as any;
+    });
+
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/providers/health");
+    expect(r.status).toBe(200);
+    const zone = r.body.checks.find((c: { name: string }) => c.name === "cloudflare_zone");
+    expect(zone.ok).toBe(false);
+    expect(zone.detail).toMatch(/pending/);
+    expect(r.body.failing).toContain("cloudflare_zone");
+    // A token that is present but the zone undelegated: the token check passes.
+    expect(r.body.checks.find((c: { name: string }) => c.name === "cloudflare").ok).toBe(true);
+
+    delete process.env.CLOUDFLARE_ZONE_ID;
+    delete process.env.CLOUDFLARE_API_TOKEN;
+  });
+
+  test("a valid key is not mistaken for a funded account", async () => {
+    process.env.REPLICATE_API_TOKEN = "rep";
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ username: "acme" }) } as any);
+    const app = makeApp();
+    const r = await request(app).get("/api/devhub/providers/health");
+    const rep = r.body.checks.find((c: { name: string }) => c.name === "replicate");
+    expect(rep.ok).toBe(true);
+    // Says so out loud: this is exactly how "video: live" stayed wrong.
+    expect(rep.detail).toMatch(/balance not visible/);
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+});
+
+describe("per-project Railway deploys", () => {
+  test("refuses to deploy user services into the platform's own Railway project", async () => {
+    const { isSafeDeployTarget } = await import("../src/lib/devhubRailwayDeploy");
+    expect(isSafeDeployTarget("proj-users", "proj-platform")).toBe(true);
+    expect(isSafeDeployTarget("proj-platform", "proj-platform")).toBe(false); // next to our API and databases
+    expect(isSafeDeployTarget(undefined, "proj-platform")).toBe(false);
+  });
+
+  test("reads owner/repo out of every URL form we store", async () => {
+    const { repoSlugFromUrl } = await import("../src/lib/devhubRailwayDeploy");
+    expect(repoSlugFromUrl("https://github.com/acme/widget")).toBe("acme/widget");
+    expect(repoSlugFromUrl("https://github.com/acme/widget.git")).toBe("acme/widget");
+    expect(repoSlugFromUrl("git@github.com:acme/widget.git")).toBe("acme/widget");
+    expect(repoSlugFromUrl(null)).toBeNull();
+  });
+
+  test("without a repo it says so instead of creating an empty service", async () => {
+    const { deployProjectToRailway } = await import("../src/lib/devhubRailwayDeploy");
+    const r = await deployProjectToRailway({
+      projectId: "p1", repoUrl: null, envVars: {},
+      token: "tok", deployProjectId: "users", environmentId: "env", platformProjectId: "platform",
+      gql: async () => { throw new Error("must not be called"); },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/GitHub repo/);
+  });
+
+  test("creates the service, pushes the project's env vars, returns a domain", async () => {
+    const { deployProjectToRailway } = await import("../src/lib/devhubRailwayDeploy");
+    const calls: string[] = [];
+    const vars: Record<string, string> = {};
+    const r = await deployProjectToRailway({
+      projectId: "aaaaaaaa-bbbb", repoUrl: "https://github.com/acme/widget",
+      envVars: { DATABASE_URL: "postgres://u:p@h/db", NODE_ENV: "production" },
+      token: "tok", deployProjectId: "users", environmentId: "env", platformProjectId: "platform",
+      gql: async (q, v: any) => {
+        calls.push(q.split("(")[0].trim());
+        if (q.includes("serviceCreate")) {
+          expect(v.input.source.repo).toBe("acme/widget");
+          return { serviceCreate: { id: "svc-1" } };
+        }
+        if (q.includes("repoTriggers")) return { service: { repoTriggers: { edges: [{ node: { repository: "acme/widget" } }] } } };
+        if (q.includes("variableUpsert")) { vars[v.input.name] = v.input.value; return { variableUpsert: true }; }
+        if (q.includes("serviceDomainCreate")) return { serviceDomainCreate: { domain: "widget-production.up.railway.app" } };
+        return { serviceInstanceRedeploy: true };
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.domain).toBe("widget-production.up.railway.app");
+    expect(r.created).toBe(true);
+    // The whole point of the rewrite: the app gets its own database URL.
+    expect(vars.DATABASE_URL).toBe("postgres://u:p@h/db");
+    expect(vars.NODE_ENV).toBe("production");
+  });
+
+  test("a redeploy reuses the service instead of billing a new container", async () => {
+    const { deployProjectToRailway } = await import("../src/lib/devhubRailwayDeploy");
+    let createdCalled = false;
+    const r = await deployProjectToRailway({
+      projectId: "p1", repoUrl: "https://github.com/acme/widget", envVars: {},
+      token: "tok", deployProjectId: "users", environmentId: "env", platformProjectId: "platform",
+      existingServiceId: "svc-existing",
+      gql: async (q) => {
+        if (q.includes("serviceCreate")) { createdCalled = true; return { serviceCreate: { id: "svc-new" } }; }
+        if (q.includes("serviceDomainCreate")) return { serviceDomainCreate: { domain: "d.up.railway.app" } };
+        return { serviceInstanceRedeploy: true };
+      },
+    });
+    expect(createdCalled).toBe(false);
+    expect(r.ok && r.serviceId).toBe("svc-existing");
+    expect(r.ok && r.created).toBe(false);
+  });
+
+  test("a GraphQL 200-with-errors body is a failure, not a success", async () => {
+    const { deployProjectToRailway } = await import("../src/lib/devhubRailwayDeploy");
+    const r = await deployProjectToRailway({
+      projectId: "p1", repoUrl: "https://github.com/acme/widget", envVars: {},
+      token: "tok", deployProjectId: "users", environmentId: "env", platformProjectId: "platform",
+      gql: async () => { throw new Error("Not Authorized"); },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/Not Authorized/);
+  });
+});
+
+
+describe("Railway repo attachment is verified, not assumed", () => {
+  test("a service created without the repo actually attached is a failure", async () => {
+    const { deployProjectToRailway } = await import("../src/lib/devhubRailwayDeploy");
+    // Reproduces what the live API did on 2026-07-26: serviceCreate returned an
+    // id, and repoTriggers came back empty — the service would have built
+    // nothing while the deploy reported success.
+    const r = await deployProjectToRailway({
+      projectId: "p1", repoUrl: "https://github.com/acme/widget", envVars: {},
+      token: "tok", deployProjectId: "users", environmentId: "env", platformProjectId: "platform",
+      gql: async (q) => {
+        if (q.includes("serviceCreate")) return { serviceCreate: { id: "svc-1" } };
+        if (q.includes("repoTriggers")) return { service: { repoTriggers: { edges: [] } } };
+        return {};
+      },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toMatch(/did not attach/);
+      expect(r.error).toMatch(/GitHub App/);
+    }
+  });
+});
+
+
+describe("A ZIP import is undoable, like every other bulk write", () => {
+  // /github/sync has taken a checkpoint before writing since it was built —
+  // import-zip, the other bulk write, did not. With overwrite=true it replaces
+  // whole files, so a mis-picked archive destroyed work that the IDE's Undo
+  // and History advertise as recoverable.
+  async function createProj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "ZipUndo", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("undo after an overwriting import puts the original content back", async () => {
+    const app = makeApp();
+    const id = await createProj(app);
+    await request(app)
+      .put(`/api/devhub/projects/${id}/file?path=${encodeURIComponent("README.md")}`)
+      .send({ content: "ORIGINAL", language: "markdown" });
+
+    const zip = buildSimpleZip([
+      { name: "README.md", data: Buffer.from("FROM ZIP", "utf8") },
+      { name: "src/new.txt", data: Buffer.from("brand new", "utf8") },
+    ]);
+    const imp = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64"), overwrite: true });
+    expect(imp.status).toBe(200);
+    expect(imp.body.importedCount).toBe(2);
+    expect(imp.body.checkpointId).toBeTruthy();
+
+    const afterImport = await request(app).get(`/api/devhub/projects/${id}/files`);
+    expect(afterImport.body.files.find((f: any) => f.path === "README.md").content).toBe("FROM ZIP");
+
+    const undo = await request(app).post(`/api/devhub/projects/${id}/generate/undo`).send({});
+    expect(undo.status).toBe(200);
+
+    const after = await request(app).get(`/api/devhub/projects/${id}/files`);
+    const paths = after.body.files.map((f: any) => f.path);
+    // The file that existed comes back with its own content...
+    expect(after.body.files.find((f: any) => f.path === "README.md").content).toBe("ORIGINAL");
+    // ...and the one the archive introduced is removed, not left behind empty.
+    expect(paths).not.toContain("src/new.txt");
+  });
+
+  test("the import shows up in history with a label a human can recognise", async () => {
+    const app = makeApp();
+    const id = await createProj(app);
+    const zip = buildSimpleZip([{ name: "a.txt", data: Buffer.from("a", "utf8") }]);
+    await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+
+    const hist = await request(app).get(`/api/devhub/projects/${id}/checkpoints`);
+    expect(hist.status).toBe(200);
+    expect(hist.body.checkpoints[0].label).toMatch(/ZIP import/i);
+  });
+
+  test("an import that writes nothing does not leave an empty checkpoint to undo", async () => {
+    const app = makeApp();
+    const id = await createProj(app);
+    await request(app)
+      .put(`/api/devhub/projects/${id}/file?path=${encodeURIComponent("keep.txt")}`)
+      .send({ content: "KEEP", language: "plaintext" });
+
+    const zip = buildSimpleZip([{ name: "keep.txt", data: Buffer.from("nope", "utf8") }]);
+    const imp = await request(app)
+      .post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64"), overwrite: false });
+    expect(imp.body.importedCount).toBe(0);
+    expect(imp.body.checkpointId).toBeNull();
+
+    const hist = await request(app).get(`/api/devhub/projects/${id}/checkpoints`);
+    expect(hist.body.checkpoints || []).toHaveLength(0);
+  });
+});
+
+
+describe("Deleting a project takes its Railway service with it", () => {
+  // The project delete path already drops the database schema and role, for a
+  // stated reason. The service was the same thing with a bill attached: a
+  // container built from the user's repo, carrying their env, on a live
+  // domain, with nothing left pointing at it once the project row was gone.
+  test("the service is deleted, and only after Railway confirms it is in the user-deploy project", async () => {
+    const { deleteProjectService } = await import("../src/lib/devhubRailwayDeploy");
+    const calls: string[] = [];
+    const r = await deleteProjectService({
+      serviceId: "svc-user-1",
+      token: "tok",
+      deployProjectId: "users",
+      platformProjectId: "platform",
+      platformServiceIds: ["svc-platform"],
+      gql: async (q) => {
+        calls.push(q.includes("serviceDelete") ? "delete" : "lookup");
+        if (q.includes("service(id")) return { service: { projectId: "users" } };
+        return { serviceDelete: true };
+      },
+    });
+    expect(r.ok).toBe(true);
+    expect(calls).toEqual(["lookup", "delete"]);
+  });
+
+  test("refuses to delete the platform's own service", async () => {
+    const { deleteProjectService } = await import("../src/lib/devhubRailwayDeploy");
+    let deleted = false;
+    const r = await deleteProjectService({
+      serviceId: "svc-platform",
+      token: "tok",
+      deployProjectId: "users",
+      platformProjectId: "platform",
+      platformServiceIds: ["svc-platform"],
+      gql: async (q) => { if (q.includes("serviceDelete")) deleted = true; return {}; },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/platform's own/i);
+    expect(deleted).toBe(false); // never even asked
+  });
+
+  test("refuses a service that lives outside the user-deploy project", async () => {
+    const { deleteProjectService } = await import("../src/lib/devhubRailwayDeploy");
+    let deleted = false;
+    const r = await deleteProjectService({
+      serviceId: "svc-elsewhere",
+      token: "tok",
+      deployProjectId: "users",
+      platformProjectId: "platform",
+      gql: async (q) => {
+        if (q.includes("serviceDelete")) { deleted = true; return {}; }
+        return { service: { projectId: "someone-elses-project" } };
+      },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/not the user-deploy project/);
+    expect(deleted).toBe(false);
+  });
+
+  test("a service Railway no longer knows about counts as cleaned up", async () => {
+    const { deleteProjectService } = await import("../src/lib/devhubRailwayDeploy");
+    const r = await deleteProjectService({
+      serviceId: "svc-gone",
+      token: "tok",
+      deployProjectId: "users",
+      platformProjectId: "platform",
+      gql: async () => ({ service: null }),
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  test("a failed service delete blocks the project delete instead of orphaning it", async () => {
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "OrphanGuard", stack: "next" });
+    const id = cr.body.project.id;
+    await request(app).put(`/api/devhub/projects/${id}/env`).send({ key: "RAILWAY_SERVICE_ID", value: "svc-user-1" });
+
+    const prevToken = process.env.RAILWAY_API_TOKEN;
+    const prevFlag = process.env.DEVHUB_RAILWAY_PER_PROJECT;
+    process.env.RAILWAY_API_TOKEN = "tok";
+    process.env.DEVHUB_RAILWAY_PER_PROJECT = "1";
+    // No RAILWAY_DEPLOY_PROJECT_ID: the guard refuses, so the delete must fail.
+    const del = await request(app).delete(`/api/devhub/projects/${id}`);
+    if (prevToken === undefined) delete process.env.RAILWAY_API_TOKEN; else process.env.RAILWAY_API_TOKEN = prevToken;
+    if (prevFlag === undefined) delete process.env.DEVHUB_RAILWAY_PER_PROJECT; else process.env.DEVHUB_RAILWAY_PER_PROJECT = prevFlag;
+
+    expect(del.status).toBe(502);
+    expect(del.body.serviceId).toBe("svc-user-1");
+    // The project must still be there — a deleted row with a live service is
+    // exactly the orphan this is meant to prevent.
+    const still = await request(app).get(`/api/devhub/projects/${id}`);
+    expect(still.status).toBe(200);
   });
 });

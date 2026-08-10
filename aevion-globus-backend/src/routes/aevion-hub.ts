@@ -10,6 +10,7 @@
 import { Router, type Request } from "express";
 import { projects } from "../data/projects";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { csvNeutralizeFormula } from "../lib/csv";
 
 const capture = makeServiceCapture("aevion-hub");
 
@@ -358,7 +359,9 @@ aevionHubRouter.get("/catalog", (req, res) => {
     // RFC 4180 CSV — fields with comma/quote/newline get quoted; embedded
     // quotes get doubled. Stable column order for spreadsheet import.
     const esc = (v: unknown): string => {
-      const s = v == null ? "" : Array.isArray(v) ? v.join(";") : String(v);
+      const s = csvNeutralizeFormula(
+        v == null ? "" : Array.isArray(v) ? v.join(";") : String(v),
+      );
       return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const cols = [

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { MODULE_NODES } from "@/data/pitchFacts";
 
 export const metadata: Metadata = {
   title: "AEVION · Investor Pitch — the AEVION partnership offer",
   description:
-    "37 modules deployed to production (~a dozen feature-complete) across IP enforcement, creator economy and digital payments. Pre-revenue. One identity, one pipeline, one Trust Graph.",
+    `${MODULE_NODES} modules deployed to production (~a dozen feature-complete) across IP enforcement, creator economy and digital payments. Pre-revenue. One identity, one pipeline, one Trust Graph.`,
   keywords: [
     "AEVION",
     "investor pitch",
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AEVION — Trust operating system for digital creation",
     description:
-      "37 modules deployed (~a dozen feature-complete) across IP, signatures, bureau, compliance, AI, banking. Pre-revenue; large category TAM across IP, creators and payments.",
+      `${MODULE_NODES} modules deployed (~a dozen feature-complete) across IP, signatures, bureau, compliance, AI, banking. Pre-revenue; large category TAM across IP, creators and payments.`,
     type: "website",
     siteName: "AEVION",
   },
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "AEVION — trust infrastructure partnership",
     description:
-      "37 modules deployed · ~a dozen feature-complete · one Trust Graph · large category TAM (IP, creators, payments).",
+      `${MODULE_NODES} modules deployed · ~a dozen feature-complete · one Trust Graph · large category TAM (IP, creators, payments).`,
   },
   alternates: { canonical: "/pitch" },
 };

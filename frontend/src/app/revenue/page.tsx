@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { externalRevenueAt } from "./externalRevenue";
+import { useI18n } from "@/lib/i18n";
 import { etaLabel, type GoalPace } from "@/lib/goalEta";
+import { fmtNum, intlLocale, type NumLang } from "@/lib/locale";
 
 interface RevenueOverview {
   totalApps: number;
@@ -19,20 +22,54 @@ interface RevenueOverview {
   apps: { appId: string; appName: string; channels: string[]; color: string }[];
 }
 
+interface GumroadSale {
+  id: string;
+  appId: string;
+  product: string;
+  email: string | null;
+  amountUsd: number;
+  currency: string;
+  refunded: boolean;
+  date: string | null;
+}
+
 interface GumroadRecent {
-  sales: {
-    id: string;
-    appId: string;
-    product: string;
-    email: string | null;
-    amountUsd: number;
-    currency: string;
-    refunded: boolean;
-    date: string | null;
-  }[];
+  sales: GumroadSale[];
   byApp: Record<string, { count: number; totalUsd: number }>;
+  /** Разрез по ИСТОЧНИКУ ТРАФИКА (метка ?c= со страницы /go), не по платёжке.
+   *  Продажи без метки приходят под ключом "unattributed". */
+  bySource?: Record<string, { count: number; totalUsd: number }>;
   stub?: boolean;
   message?: string;
+}
+
+interface LsSale {
+  id: string;
+  appId: string;
+  product: string;
+  email: string | null;
+  amountUsd: number;
+  currency: string;
+  refunded: boolean;
+  date: string | null;
+}
+
+interface LsRecent {
+  sales: LsSale[];
+  stub?: boolean;
+  message?: string;
+}
+
+/** A sale row tagged with which channel it came from, for the combined table. */
+interface SaleRow {
+  id: string;
+  source: "gumroad" | "lemonsqueezy";
+  appId: string;
+  product: string;
+  amountUsd: number;
+  currency: string;
+  refunded: boolean;
+  date: string | null;
 }
 
 interface GumroadBalance {
@@ -42,7 +79,11 @@ interface GumroadBalance {
   currency?: string;
   saleCount?: number;
   refundedCount?: number;
+  /** Покупки с внутренних адресов: входят в gross канала, но не в выручку. */
+  internalUsd?: number;
+  internalCount?: number;
   stub?: boolean;
+  error?: string;
   message?: string;
   setupGuide?: string;
 }
@@ -99,9 +140,9 @@ function daysUntil(deadline: string): number {
 }
 
 /** Compact form for large dollar amounts ($19,999,821 → $20.0M); small ones stay exact. */
-function formatCompactUsd(n: number): string {
-  if (n < 10_000) return `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
-  return `$${Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n)}`;
+function formatCompactUsd(n: number, lang: NumLang = "en"): string {
+  if (n < 10_000) return `$${fmtNum(n, lang, { maximumFractionDigits: 2 })}`;
+  return `$${Intl.NumberFormat(intlLocale(lang), { notation: "compact", maximumFractionDigits: 1 }).format(n)}`;
 }
 
 // Static "HH:MM:SS" — deliberately not a live-ticking "N sec ago": a text
@@ -115,6 +156,8 @@ function clockLabel(ms: number): string {
 }
 
 export default function RevenuePage() {
+  const { lang } = useI18n();
+  const numLang: NumLang = lang === "ru" ? "ru" : "en";
   const [overview, setOverview] = useState<RevenueOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [balance, setBalance] = useState<GumroadBalance | null>(null);
@@ -123,6 +166,8 @@ export default function RevenuePage() {
   const [lsLoading, setLsLoading] = useState(true);
   const [recent, setRecent] = useState<GumroadRecent | null>(null);
   const [recentLoading, setRecentLoading] = useState(true);
+  const [lsRecent, setLsRecent] = useState<LsRecent | null>(null);
+  const [lsRecentLoading, setLsRecentLoading] = useState(true);
   const [goals, setGoals] = useState<RevenueGoals>(DEFAULT_GOALS);
   const [pace, setPace] = useState<RevenuePace | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
@@ -136,12 +181,17 @@ export default function RevenuePage() {
     const loadAll = () => {
       fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null)
         .then((d) => { setOverview(d); setOverviewLoading(false); touch(); });
-      fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => null)
+      // Falls back to an explicit {error} shape (not null) on network failure —
+      // null and "real zero" both render as $0.00, which hid genuine channel
+      // outages behind an indistinguishable "no sales yet" state.
+      fetch(apiUrl("/api/revenue/gumroad/balance")).then((r) => r.json()).catch(() => ({ error: "network_error" }))
         .then((d) => { setBalance(d); setBalanceLoading(false); touch(); });
       fetch(apiUrl("/api/revenue/gumroad/recent")).then((r) => r.json()).catch(() => null)
         .then((d) => { setRecent(d); setRecentLoading(false); touch(); });
-      fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => null)
+      fetch(apiUrl("/api/revenue/lemonsqueezy/balance")).then((r) => r.json()).catch(() => ({ error: "network_error" }))
         .then((d) => { setLsBalance(d); setLsLoading(false); touch(); });
+      fetch(apiUrl("/api/revenue/lemonsqueezy/recent")).then((r) => r.json()).catch(() => null)
+        .then((d) => { setLsRecent(d); setLsRecentLoading(false); touch(); });
       fetch(apiUrl("/api/revenue/goals")).then((r) => r.json()).catch(() => null)
         .then((d) => { if (d && typeof d.primaryUsd === "number") setGoals(d); });
       fetch(apiUrl("/api/revenue/trend?windowDays=30")).then((r) => r.json()).catch(() => null)
@@ -154,6 +204,8 @@ export default function RevenuePage() {
 
   const providers = overview?.providers;
   const gumroadConfigured = providers?.gumroad?.configured;
+  const lemonsqueezyConfigured = providers?.lemonsqueezy?.configured;
+  const anyChannelConfigured = gumroadConfigured || lemonsqueezyConfigured;
 
   // Совокупная выручка по всем живым чекаутам (Gumroad + LemonSqueezy).
   const gGross = balance?.grossUsd ?? 0;
@@ -162,7 +214,55 @@ export default function RevenuePage() {
   const lsCount = lsBalance?.saleCount ?? 0;
   const totalGross = gGross + lsGross;
   const totalCount = gCount + lsCount;
+  // Свои проверочные покупки входят в gross канала (он обязан сходиться с
+  // кабинетом провайдера), но выручкой не являются. 27.07.2026 их было две
+  // на $158.99 — 89% валовой суммы, и без этого разделения дашборд говорил
+  // «$178.97 выручки» там, где снаружи пришло $19.98.
+  const totalInternal = (balance?.internalUsd ?? 0) + (lsBalance?.internalUsd ?? 0);
+  const totalInternalCount = (balance?.internalCount ?? 0) + (lsBalance?.internalCount ?? 0);
+  const externalGross = totalGross - totalInternal;
+  const externalCount = totalCount - totalInternalCount;
   const daysLeft = daysUntil(goals.deadline);
+
+  // Merge both channels' recent sales — the backend now attributes LS
+  // orders to an appId too (via LEMON_SQUEEZY_VARIANT_* env vars, same
+  // idea as Gumroad's permalink mapping), falling back to "platform" for
+  // generic plan-tier variants that aren't one specific app.
+  const combinedSales: SaleRow[] = [
+    ...(recent?.sales ?? []).map((s): SaleRow => ({ ...s, source: "gumroad" })),
+    ...(lsRecent?.sales ?? []).map((s): SaleRow => ({ ...s, source: "lemonsqueezy" })),
+  ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+
+  // Normalizes keys (trim + lowercase) while merging so two sources that
+  // happen to spell the same appId differently land in one bucket instead
+  // of two side-by-side entries.
+  const combinedByApp: Record<string, { count: number; totalUsd: number }> = {};
+  const addByApp = (appId: string, count: number, totalUsd: number) => {
+    const key = appId.trim().toLowerCase();
+    const cur = combinedByApp[key] ?? { count: 0, totalUsd: 0 };
+    combinedByApp[key] = { count: cur.count + count, totalUsd: cur.totalUsd + totalUsd };
+  };
+  for (const [appId, data] of Object.entries(recent?.byApp ?? {})) {
+    addByApp(appId, data.count, data.totalUsd);
+  }
+  for (const s of (lsRecent?.sales ?? []).filter((sale) => !sale.refunded)) {
+    addByApp(s.appId, 1, s.amountUsd);
+  }
+
+  // Источники: размеченные вперёд и по убыванию суммы, «без метки» всегда последним —
+  // он почти всегда крупнейший и, стоя первым, оттеснял бы то, ради чего блок нужен.
+  const sourceEntries = Object.entries(recent?.bySource ?? {});
+  const sourceRows = [
+    ...sourceEntries.filter(([k]) => k !== "unattributed").sort((a, b) => b[1].totalUsd - a[1].totalUsd),
+    ...sourceEntries.filter(([k]) => k === "unattributed"),
+  ];
+  const attributed = sourceEntries.filter(([k]) => k !== "unattributed");
+  const attributedUsd = attributed.reduce((sum, [, d]) => sum + d.totalUsd, 0);
+  // Видимость блока — по ЧИСЛУ размеченных продаж, а не по сумме: бесплатный лид-магнит
+  // с меткой даёт totalUsd = 0, и условие «есть выручка» спрятало бы факт, что канал
+  // вообще приводит людей. Сумма нужна только для долей ниже.
+  const attributedCount = attributed.reduce((sum, [, d]) => sum + d.count, 0);
+  const unattributedUsd = recent?.bySource?.unattributed?.totalUsd ?? 0;
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -205,16 +305,18 @@ export default function RevenuePage() {
               <GoalBar
                 label="$1M — первая цель"
                 target={goals.primaryUsd}
-                current={totalGross}
+                current={externalGross}
                 colorClass="bg-gradient-to-r from-sky-500 to-cyan-300"
-                eta={etaLabel(goals.primaryUsd, totalGross, pace)}
+                eta={etaLabel(goals.primaryUsd, externalGross, pace, numLang)}
+                lang={numLang}
               />
               <GoalBar
                 label="$20M — стретч-цель"
                 target={goals.stretchUsd}
-                current={totalGross}
+                current={externalGross}
                 colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-400"
-                eta={etaLabel(goals.stretchUsd, totalGross, pace)}
+                eta={etaLabel(goals.stretchUsd, externalGross, pace, numLang)}
+                lang={numLang}
               />
             </div>
           )}
@@ -230,19 +332,34 @@ export default function RevenuePage() {
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
             Всего · все чекауты <span className="ml-2 text-xs text-emerald-400 normal-case">(live)</span>
           </h2>
+          {!balanceLoading && !lsLoading && (balance?.error || lsBalance?.error) && (
+            <div className="mb-3 text-xs rounded-lg px-3 py-2 border bg-rose-500/10 border-rose-500/30 text-rose-300">
+              ⚠ {balance?.error && lsBalance?.error ? "Оба канала" : balance?.error ? "Gumroad" : "LemonSqueezy"} сейчас недоступны — цифры ниже могут быть занижены, это не обязательно «0 продаж»
+            </div>
+          )}
           {balanceLoading || lsLoading ? (
             <SkeletonGrid cols={3} />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <div className="bg-gray-900 border border-emerald-500/25 rounded-xl p-5">
-                <div className="text-xs text-gray-400 mb-2">Валовая выручка · все каналы</div>
+                <div className="text-xs text-gray-400 mb-2">Выручка снаружи · все каналы</div>
                 <div className="text-3xl font-semibold text-white">
-                  ${totalGross.toFixed(2)}<span className="text-sm text-gray-400 ml-2">USD</span>
+                  ${externalGross.toFixed(2)}<span className="text-sm text-gray-400 ml-2">USD</span>
                 </div>
+                {totalInternal > 0 && (
+                  <div className="text-xs text-amber-400/90 mt-1">
+                    + ${totalInternal.toFixed(2)} свои проверочные покупки (не в выручке)
+                  </div>
+                )}
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                <div className="text-xs text-gray-400 mb-2">Продаж всего</div>
-                <div className="text-3xl font-semibold text-white">{totalCount}</div>
+                <div className="text-xs text-gray-400 mb-2">Продаж снаружи</div>
+                <div className="text-3xl font-semibold text-white">{externalCount}</div>
+                {totalInternalCount > 0 && (
+                  <div className="text-xs text-amber-400/90 mt-1">
+                    + {totalInternalCount} своих
+                  </div>
+                )}
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                 <div className="text-xs text-gray-400 mb-2">По каналам (gross · продажи)</div>
@@ -262,6 +379,10 @@ export default function RevenuePage() {
           </h2>
           {balanceLoading ? (
             <SkeletonGrid cols={4} />
+          ) : balance?.error ? (
+            <div className="bg-gray-900 border border-rose-500/30 rounded-xl p-5 text-sm text-rose-300">
+              ✗ Gumroad API сейчас недоступен ({balance.error}) — это не значит, что продаж не было, просто не смогли их получить прямо сейчас
+            </div>
           ) : balance?.stub ? (
             <GumroadSetupCard />
           ) : (
@@ -279,7 +400,7 @@ export default function RevenuePage() {
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                 <div className="text-xs text-gray-400 mb-2">Комиссия Gumroad</div>
-                <div className="text-3xl font-semibold text-gray-400">${(balance?.feesUsd ?? 0).toFixed(2)}</div>
+                <div className="text-3xl font-semibold text-rose-400/80">-${(balance?.feesUsd ?? 0).toFixed(2)}</div>
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                 <div className="text-xs text-gray-400 mb-2">Продаж</div>
@@ -295,17 +416,17 @@ export default function RevenuePage() {
         {/* Revenue trend (Postgres snapshots) */}
         <RevenueTrend />
 
-        {/* Recent Sales */}
-        {(overviewLoading || gumroadConfigured) && (
+        {/* Recent Sales — merged Gumroad + LemonSqueezy */}
+        {(overviewLoading || anyChannelConfigured) && (
           <section>
             <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Последние продажи</h2>
-            {overviewLoading || recentLoading ? (
+            {overviewLoading || recentLoading || lsRecentLoading ? (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-sm text-gray-500 animate-pulse">Загружаем продажи…</div>
-            ) : recent?.stub ? (
-              <div className="bg-gray-900 border border-pink-500/20 rounded-xl p-4 text-sm text-pink-400">Gumroad не настроен</div>
+            ) : recent?.stub && lsRecent?.stub ? (
+              <div className="bg-gray-900 border border-pink-500/20 rounded-xl p-4 text-sm text-pink-400">Ни один канал не настроен</div>
             ) : (
               <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                {(recent?.sales ?? []).length === 0 ? (
+                {combinedSales.length === 0 ? (
                   <div className="p-4 text-sm text-gray-500">Нет продаж пока</div>
                 ) : (
                   <table className="w-full text-sm">
@@ -313,17 +434,23 @@ export default function RevenuePage() {
                       <tr className="border-b border-gray-800 text-gray-400 text-xs">
                         <th className="text-left px-4 py-2.5">Продукт</th>
                         <th className="text-left px-4 py-2.5">Приложение</th>
+                        <th className="text-left px-4 py-2.5">Канал</th>
                         <th className="text-left px-4 py-2.5">Сумма</th>
                         <th className="text-left px-4 py-2.5">Статус</th>
                         <th className="text-left px-4 py-2.5">Дата</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(recent?.sales ?? []).map((s) => (
-                        <tr key={s.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                      {combinedSales.map((s) => (
+                        <tr key={`${s.source}-${s.id}`} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                           <td className="px-4 py-2 text-gray-200">{s.product}</td>
                           <td className="px-4 py-2">
                             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">{s.appId}</span>
+                          </td>
+                          <td className="px-4 py-2">
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${s.source === "gumroad" ? "bg-pink-500/20 text-pink-300" : "bg-teal-500/20 text-teal-300"}`}>
+                              {s.source === "gumroad" ? "Gumroad" : "LemonSqueezy"}
+                            </span>
                           </td>
                           <td className="px-4 py-2 font-medium">${s.amountUsd.toFixed(2)}</td>
                           <td className="px-4 py-2">
@@ -342,12 +469,13 @@ export default function RevenuePage() {
           </section>
         )}
 
-        {/* By-App breakdown */}
-        {gumroadConfigured && recent && !recent.stub && Object.keys(recent.byApp ?? {}).length > 0 && (
+        {/* By-App breakdown — merged Gumroad + LemonSqueezy (LS orders have no
+            per-app attribution backend-side, so they land in "platform"). */}
+        {anyChannelConfigured && Object.keys(combinedByApp).length > 0 && (
           <section>
             <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">По приложениям</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {Object.entries(recent.byApp).map(([appId, data]) => (
+              {Object.entries(combinedByApp).map(([appId, data]) => (
                 <div key={appId} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                   <div className="text-xs text-gray-400 mb-1">{appId}</div>
                   <div className="text-lg font-semibold text-white">${data.totalUsd.toFixed(2)}</div>
@@ -355,6 +483,42 @@ export default function RevenuePage() {
                 </div>
               ))}
             </div>
+          </section>
+        )}
+
+        {/* Источники трафика — ради этого и заводились метки ?c= на /go.
+            Показываем ТОЛЬКО когда есть хоть одна РАЗМЕЧЕННАЯ продажа: пока весь оборот
+            без метки, блок сообщал бы одно «источник неизвестен» и занимал место.
+            Он появится сам, когда первая продажа придёт с /go?c=. Долю считаем от
+            размеченных, а не от всех — иначе доля канала падала бы просто потому,
+            что много старых продаж пришло без метки. */}
+        {attributedCount > 0 && (
+          <section>
+            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
+              Источники трафика
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {sourceRows.map(([source, data]) => (
+                <div key={source} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                  <div className="text-xs text-gray-400 mb-1">
+                    {source === "unattributed" ? "без метки" : source}
+                  </div>
+                  <div className="text-lg font-semibold text-white">${data.totalUsd.toFixed(2)}</div>
+                  <div className="text-xs text-gray-500">
+                    {data.count} продаж
+                    {source !== "unattributed" && attributedUsd > 0 && (
+                      <> · {Math.round((data.totalUsd / attributedUsd) * 100)}% размеченных</>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {unattributedUsd > 0 && (
+              <p className="text-xs text-gray-500 mt-2">
+                Без метки — продажи до введения атрибуции и прямые заходы мимо /go.
+                Доли считаются от размеченных, поэтому эта сумма их не размывает.
+              </p>
+            )}
           </section>
         )}
 
@@ -396,7 +560,16 @@ export default function RevenuePage() {
   );
 }
 
-interface TrendPoint { capturedAt: string; netUsd: number; grossUsd: number; saleCount: number }
+interface TrendPoint {
+  capturedAt: string;
+  netUsd: number;
+  grossUsd: number;
+  saleCount: number;
+  /** true у снимков до 27.07.2026: в их суммах ещё сидели свои покупки. */
+  includesInternal?: boolean;
+  /** Сумма своих покупок на момент снимка; null — ещё не досчитана. */
+  internalUsd?: number | null;
+}
 interface TrendResp {
   windowDays: number;
   points: number;
@@ -412,6 +585,10 @@ function RevenueTrend() {
   const [loading, setLoading] = useState(true);
   const [capturing, setCapturing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Synchronous guard alongside `capturing`: setState is async, so a very
+  // fast double-click can fire two POSTs before the button re-renders
+  // disabled. A plain ref updates immediately, closing that gap.
+  const inFlightRef = useRef(false);
 
   const load = () => {
     setLoading(true);
@@ -424,6 +601,8 @@ function RevenueTrend() {
   useEffect(() => { load(); }, []);
 
   const capture = async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setCapturing(true); setNote(null);
     try {
       const r = await fetch(apiUrl("/api/revenue/snapshot"), { method: "POST", headers: { "Content-Type": "application/json" } });
@@ -435,15 +614,41 @@ function RevenueTrend() {
         setNote("✗ Нет живого канала (не настроены GUMROAD_ACCESS_TOKEN / LEMON_SQUEEZY_API_KEY)");
       } else if (r.status === 401) {
         setNote("✗ Требуется x-revenue-token (снапшоты снимает cron)");
+      } else if (r.status === 429) {
+        const retryAfter = r.headers.get("retry-after");
+        setNote(retryAfter ? `✗ Слишком часто — подожди ${retryAfter} сек` : "✗ Слишком часто — лимит 6 снапшотов в минуту, попробуй через минуту");
       } else {
         setNote(`✗ ${j.error ?? "snapshot_failed"}`);
       }
     } catch { setNote("✗ Network error"); }
-    finally { setCapturing(false); }
+    finally { inFlightRef.current = false; setCapturing(false); }
   };
 
   const series = trend?.series ?? [];
   const change = trend?.change;
+  // Снимки до 27.07.2026 считали свои проверочные покупки выручкой. Линия на
+  // их границе падает не потому, что деньги ушли, а потому что их перестали
+  // приписывать. Без подписи это читается как обвал — а Δ за окно уже читается
+  // как убыток.
+  // Линия рисуется по деньгам СНАРУЖИ на каждой точке: у снимков до правки
+  // internalUsd досчитан по датам заказов, поэтому ступеньки нет — она была
+  // артефактом того, что в старых точках свои покупки сидели внутри суммы.
+  // Логика вынесена в externalRevenueAt и покрыта тестом на реальных строках
+  // из прод-таблицы: вычитание внутри JSX уже дважды за день давало дефект,
+  // который ловился только глазами на задеплоенной странице.
+  const externalAt = externalRevenueAt;
+  // Подпись остаётся, только пока есть точки, для которых свои покупки НЕ
+  // досчитаны: там линия по-прежнему завышена, и молчать об этом нельзя.
+  const unresolved = series.filter((p) => p.includesInternal && p.internalUsd == null).length;
+  const externalFirst = series.length ? externalAt(series[0]) : 0;
+  const externalLast = series.length ? externalAt(series[series.length - 1]) : 0;
+  const externalChange = Math.round((externalLast - externalFirst) * 100) / 100;
+  const externalGrowthPct =
+    externalFirst === 0
+      ? externalLast > 0
+        ? 100
+        : 0
+      : Math.round(((externalLast - externalFirst) / externalFirst) * 10000) / 100;
 
   return (
     <section>
@@ -463,6 +668,13 @@ function RevenueTrend() {
         </div>
       )}
 
+      {unresolved > 0 && (
+        <div className="mb-3 text-xs rounded-lg px-3 py-2 border bg-amber-500/10 border-amber-500/30 text-amber-200">
+          У {unresolved} точек свои проверочные покупки не досчитаны — там линия
+          завышена на их сумму. Досчитать: POST /api/revenue/snapshots/backfill-internal.
+        </div>
+      )}
+
       {loading ? (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-sm text-gray-500 animate-pulse">Загружаем тренд…</div>
       ) : series.length < 2 ? (
@@ -475,19 +687,21 @@ function RevenueTrend() {
         <div className="bg-gray-900 border border-emerald-500/20 rounded-xl p-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
             <div>
-              <div className="text-xs text-gray-400 mb-1">Net сейчас</div>
-              <div className="text-2xl font-semibold text-white">${(trend?.latest?.netUsd ?? 0).toFixed(2)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-400 mb-1">Δ Net за окно</div>
-              <div className={`text-2xl font-semibold ${(change?.netUsd ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                {(change?.netUsd ?? 0) >= 0 ? "+" : ""}${(change?.netUsd ?? 0).toFixed(2)}
+              <div className="text-xs text-gray-400 mb-1">Снаружи сейчас</div>
+              <div className="text-2xl font-semibold text-white">
+                ${(series.length ? externalAt(series[series.length - 1]) : 0).toFixed(2)}
               </div>
             </div>
             <div>
-              <div className="text-xs text-gray-400 mb-1">Рост Net</div>
-              <div className={`text-2xl font-semibold ${(change?.netGrowthPct ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                {(change?.netGrowthPct ?? 0) >= 0 ? "▲" : "▼"} {Math.abs(change?.netGrowthPct ?? 0).toFixed(1)}%
+              <div className="text-xs text-gray-400 mb-1">Δ снаружи за окно</div>
+              <div className={`text-2xl font-semibold ${externalChange >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                {externalChange >= 0 ? "+" : ""}${externalChange.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-400 mb-1">Рост снаружи</div>
+              <div className={`text-2xl font-semibold ${externalGrowthPct >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                {externalGrowthPct >= 0 ? "▲" : "▼"} {Math.abs(externalGrowthPct).toFixed(1)}%
               </div>
             </div>
             <div>
@@ -500,7 +714,7 @@ function RevenueTrend() {
               </div>
             </div>
           </div>
-          <Sparkline points={series.map((s) => s.netUsd)} />
+          <Sparkline points={series.map(externalAt)} />
           <div className="flex justify-between text-[10px] text-gray-500 mt-1.5 font-mono">
             <span>{trend?.first ? new Date(trend.first.capturedAt).toLocaleDateString("ru") : ""}</span>
             <span>{trend?.points ?? 0} точек</span>
@@ -560,17 +774,31 @@ function SkeletonGrid({ cols }: { cols: number }) {
   );
 }
 
-function GoalBar({ label, target, current, colorClass, eta }: { label: string; target: number; current: number; colorClass: string; eta?: string | null }) {
+function GoalBar({ label, target, current, colorClass, eta, lang = "en" }: { label: string; target: number; current: number; colorClass: string; eta?: string | null; lang?: NumLang }) {
   const [exact, setExact] = useState(false);
   const pct = Math.min(100, (current / target) * 100);
   const remaining = Math.max(0, target - current);
   const reached = pct >= 100;
-  const currentStr = exact ? `$${current.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : formatCompactUsd(current);
-  const remainingStr = exact ? `$${remaining.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : formatCompactUsd(remaining);
+  const currentStr = exact ? `$${fmtNum(current, lang, { maximumFractionDigits: 2 })}` : formatCompactUsd(current, lang);
+  const remainingStr = exact ? `$${fmtNum(remaining, lang, { maximumFractionDigits: 2 })}` : formatCompactUsd(remaining, lang);
+
+  // Pulse for a short celebration window, then settle into a plain static
+  // glow — an indefinite animate-pulse reads as "something's wrong" to a
+  // visitor who reopens the page months after the goal was actually hit.
+  const [celebrating, setCelebrating] = useState(false);
+  useEffect(() => {
+    if (!reached) { setCelebrating(false); return; }
+    setCelebrating(true);
+    const t = setTimeout(() => setCelebrating(false), 10_000);
+    return () => clearTimeout(t);
+  }, [reached]);
+
   return (
     <div
       className={`bg-gray-900 border rounded-xl p-5 transition-shadow ${
-        reached ? "border-emerald-400/60 shadow-[0_0_24px_rgba(52,211,153,0.35)] animate-pulse" : "border-gray-800"
+        reached
+          ? `border-emerald-400/60 shadow-[0_0_24px_rgba(52,211,153,0.35)]${celebrating ? " animate-pulse" : ""}`
+          : "border-gray-800"
       }`}
     >
       <div className="flex items-baseline justify-between mb-2">

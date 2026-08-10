@@ -113,6 +113,7 @@ export default function AdminEventsPage() {
 
   // Фильтры
   const [sourceFilter, setSourceFilter] = useState("");
+  const [pathFilter, setPathFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [tierFilter, setTierFilter] = useState("");
   const [industryFilter, setIndustryFilter] = useState("");
@@ -213,6 +214,15 @@ export default function AdminEventsPage() {
     }, 15000);
     return () => clearInterval(id);
   }, [autoRefresh, hasToken, fetchAll]);
+
+  // Клиентский фильтр по path (utm-метки живут в query внутри path):
+  // /recent не фильтрует на сервере, поэтому кампании отсекаем здесь.
+  const shownItems = useMemo(() => {
+    if (!recent) return [];
+    const q = pathFilter.trim().toLowerCase();
+    if (!q) return recent.items;
+    return recent.items.filter((it) => (it.path ?? "").toLowerCase().includes(q));
+  }, [recent, pathFilter]);
 
   // Палитра group → цвет (стабильная по индексу в agg.groups)
   const groupColor = useMemo(() => {
@@ -442,13 +452,32 @@ export default function AdminEventsPage() {
           <div style={card}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
               <h2 style={{ margin: 0, fontSize: 18 }}>Recent events</h2>
-              <span style={{ fontSize: 11, color: "#64748b" }}>
-                shown {recent.items.length}
-                {recent.filtered ? ` (matched ${recent.matched})` : ""} of {recent.total} total
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  value={pathFilter}
+                  onChange={(e) => setPathFilter(e.target.value)}
+                  placeholder="path contains… (utm_campaign=big6)"
+                  style={{ fontSize: 11, padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: 6, width: 210 }}
+                />
+                <button
+                  onClick={() => setPathFilter(pathFilter === "utm_campaign=big6" ? "" : "utm_campaign=big6")}
+                  style={{
+                    fontSize: 11, padding: "4px 10px", borderRadius: 999, cursor: "pointer",
+                    border: "1px solid " + (pathFilter === "utm_campaign=big6" ? "#0f766e" : "#e2e8f0"),
+                    background: pathFilter === "utm_campaign=big6" ? "#ccfbf1" : "#fff",
+                    color: pathFilter === "utm_campaign=big6" ? "#0f766e" : "#475569",
+                  }}
+                >
+                  big6
+                </button>
+                <span style={{ fontSize: 11, color: "#64748b" }}>
+                  shown {shownItems.length}
+                  {recent.filtered ? ` (matched ${recent.matched})` : ""} of {recent.total} total
+                </span>
               </span>
             </div>
 
-            {recent.items.length === 0 ? (
+            {shownItems.length === 0 ? (
               <div style={{ color: "#64748b", fontSize: 13, padding: "20px 0" }}>Нет событий.</div>
             ) : (
               <div style={{ overflowX: "auto" }}>
@@ -466,7 +495,7 @@ export default function AdminEventsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {recent.items.map((it, i) => (
+                    {shownItems.map((it, i) => (
                       <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
                         <td style={{ padding: "6px 6px", color: "#475569", whiteSpace: "nowrap" }}>
                           {new Date(it.ts).toLocaleString()}

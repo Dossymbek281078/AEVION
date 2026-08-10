@@ -24,8 +24,8 @@ const KIND_COLOR: Record<string, string> = {
   legal: "#f472b6",
 };
 
-export default async function ProjectOg({ params }: { params: Promise<{ id: string }> | { id: string } }) {
-  const p = (await Promise.resolve(params)) as { id: string };
+export default async function ProjectOg({ params }: { params: Promise<{ id: string }> }) {
+  const p = await params;
   const id = p.id;
 
   let project: GlobusProject | null = null;

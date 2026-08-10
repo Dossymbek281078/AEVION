@@ -45,9 +45,9 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const p = (await Promise.resolve(params)) as { id: string };
+  const p = await params;
   const id = p.id;
   try {
     const res = await fetch(apiUrl(`/api/globus/projects/${id}`), {

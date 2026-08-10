@@ -12,6 +12,13 @@
 // Railway backend). The OAuth start is a full navigation, not fetch.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  formatTimecode,
+  errorText as errorTextFor,
+  visiblePrivacyOptions,
+  publishGate,
+  commercialLabel,
+} from "./publisherRules";
 
 const API = "/api-backend/api/tiktok";
 
@@ -60,20 +67,20 @@ const ERROR_TEXT: Record<string, string> = {
   tiktok_not_configured: "Интеграция с TikTok ещё не настроена на сервере.",
 };
 
-/** Milliseconds into the video as m:ss.d, e.g. 3200 → "0:03.2". */
-function formatTimecode(ms: number): string {
-  const totalSec = ms / 1000;
-  const min = Math.floor(totalSec / 60);
-  const sec = Math.floor(totalSec % 60);
-  const tenth = Math.floor((ms % 1000) / 100);
-  return `${min}:${String(sec).padStart(2, "0")}.${tenth}`;
-}
+// One line per reason publishGate can withhold the button — so a new reason
+// added to the rules cannot silently render as an empty hint.
+const BLOCKED_TEXT: Record<string, string> = {
+  already_queued: "Этот ролик уже отправлен. Чтобы опубликовать другой, замените ссылку.",
+  branded_content_blocked_by_audit:
+    "Этому аккаунту TikTok пока разрешает только статус «Только я» — так рекламу по договору публиковать нельзя. Снимите отметку «Реклама по договору» либо дождитесь прохождения аудита TikTok.",
+  no_account_options: "Публикация недоступна, пока TikTok не вернул настройки аккаунта. Переподключите аккаунт.",
+  disclosure_incomplete: "Отметьте, что именно рекламирует ролик.",
+  privacy_not_chosen: "Выберите, кто увидит ролик.",
+};
 
-/** Human text for a backend error code, falling back to the code itself. */
-function errorText(code: unknown, fallback = "неизвестная ошибка"): string {
-  if (typeof code !== "string" || !code) return fallback;
-  return ERROR_TEXT[code] || code;
-}
+/** Human text for a backend error code — see publisherRules for the rule. */
+const errorText = (code: unknown, fallback?: string) =>
+  fallback === undefined ? errorTextFor(ERROR_TEXT, code) : errorTextFor(ERROR_TEXT, code, fallback);
 
 type Config = { configured: boolean; connected: boolean; scopes: string; redirectUri: string };
 type Creator = {
@@ -357,24 +364,22 @@ export default function TikTokPublisherPage() {
 
   const connected = !!creator || !!cfg?.connected;
   const accountPrivacyOptions = creator?.privacyOptions || [];
-  // Branded content may not be posted privately, so «Только я» leaves the
-  // list entirely while that box is ticked.
-  const privacyOptions = accountPrivacyOptions.filter(
-    (o) => !(brandContent && o === "SELF_ONLY"),
-  );
-  // Before an app passes TikTok's audit the account is limited to SELF_ONLY —
-  // so ticking «Реклама по договору» empties the list. That is a different
-  // situation from TikTok returning nothing, and saying "settings did not
-  // arrive" there would be plainly wrong.
-  const brandedContentBlockedByAudit = accountPrivacyOptions.length > 0 && privacyOptions.length === 0;
-  // Disclosure is incomplete while the switch is on but neither kind is
-  // chosen — TikTok requires publishing to be blocked in that state.
+  const privacyOptions = visiblePrivacyOptions(accountPrivacyOptions, brandContent);
+  // One place decides whether publishing is allowed and, if not, why —
+  // see publisherRules, where the reasons are ordered most-specific first.
+  const gate = publishGate({
+    accountPrivacyOptions,
+    privacy,
+    discloseCommercial,
+    brandOrganic,
+    brandContent,
+    videoUrl: videoUrl.trim(),
+    queuedUrl,
+  });
+  const canPublish = gate.canPublish;
+  const blockedBecause = gate.canPublish ? null : gate.reason;
+  const brandedContentBlockedByAudit = blockedBecause === "branded_content_blocked_by_audit";
   const disclosureIncomplete = discloseCommercial && !brandOrganic && !brandContent;
-  // Without the creator's allowed privacy levels a post can only be rejected,
-  // so the button stays out of reach instead of promising something it cannot do.
-  const alreadyQueued = !!queuedUrl && queuedUrl === videoUrl.trim();
-  const canPublish =
-    privacyOptions.length > 0 && !!privacy && !disclosureIncomplete && !alreadyQueued;
 
   // Ticking «Branded content» while «Только я» was selected must not leave a
   // combination TikTok will reject sitting in the form.
@@ -637,8 +642,7 @@ export default function TikTokPublisherPage() {
                       )}
                       {(brandOrganic || brandContent) && (
                         <p className="ttp-fine ttp-fine-tight">
-                          На ролике появится пометка:{" "}
-                          <b>{brandContent ? "Paid partnership" : "Promotional content"}</b>
+                          На ролике появится пометка: <b>{commercialLabel(brandOrganic, brandContent)}</b>
                         </p>
                       )}
                     </div>
@@ -652,19 +656,7 @@ export default function TikTokPublisherPage() {
                 >
                   {posting ? "Отправка…" : "Опубликовать в TikTok"}
                 </button>
-                {!canPublish && !posting && (
-                  <p className="ttp-fine">
-                    {alreadyQueued
-                      ? "Этот ролик уже отправлен. Чтобы опубликовать другой, замените ссылку."
-                      : brandedContentBlockedByAudit
-                      ? "Этому аккаунту TikTok пока разрешает только статус «Только я» — так рекламу по договору публиковать нельзя. Снимите отметку «Реклама по договору» либо дождитесь прохождения аудита TikTok."
-                      : !privacyOptions.length
-                        ? "Публикация недоступна, пока TikTok не вернул настройки аккаунта. Переподключите аккаунт."
-                        : disclosureIncomplete
-                          ? "Отметьте, что именно рекламирует ролик."
-                          : "Выберите, кто увидит ролик."}
-                  </p>
-                )}
+                {blockedBecause && !posting && <p className="ttp-fine">{BLOCKED_TEXT[blockedBecause]}</p>}
 
                 {postMsg && <div className={`ttp-msg ttp-msg-${postMsg.kind}`}>{postMsg.text}</div>}
                 {publishStatus && (

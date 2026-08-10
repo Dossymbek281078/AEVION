@@ -53,24 +53,47 @@ const SRC = path.join(ROOT, "frontend/src");
 // inline from its pages, and the generic scan below covers those.
 const API = path.join(ROOT, `frontend/src/lib/${MODULE}/api.ts`);
 const HAS_API = fs.existsSync(API);
-const ROUTES_DIR = path.join(ROOT, `aevion-globus-backend/src/routes/${MODULE}`);
-const ROOT_ROUTE_FILE = path.join(ROOT, `aevion-globus-backend/src/routes/${MODULE}.ts`);
-if (!fs.existsSync(ROOT_ROUTE_FILE)) {
-  console.error(`No backend router at ${path.relative(ROOT, ROOT_ROUTE_FILE)} — is "${MODULE}" the right module?`);
+const ROUTES_ROOT = path.join(ROOT, "aevion-globus-backend/src/routes");
+const INDEX_TS = path.join(ROOT, "aevion-globus-backend/src/index.ts");
+
+// ── backend: every router index.ts mounts under this module's prefix ───────
+// A module is not one file. cyberchess is mounted from six, and /api/qsign/v2
+// lives in qsignV2.ts — index.ts is the only place that knows. Guessing the
+// file from the prefix leaves half the routes undiscovered and makes their
+// callers look routeless.
+const indexSrc = fs.readFileSync(INDEX_TS, "utf8");
+
+const importedFrom = {};
+for (const m of indexSrc.matchAll(/import\s*\{([^}]+)\}\s*from\s*"\.\/routes\/([\w.-]+)"/g)) {
+  for (const n of m[1].split(",").map((x) => x.trim()).filter(Boolean)) importedFrom[n] = m[2];
+}
+
+const entryPoints = [];
+for (const m of indexSrc.matchAll(/app\.use\(\s*"([^"]+)"\s*,\s*(\w+)\s*\)/g)) {
+  const [, mountPrefix, routerVar] = m;
+  const mine =
+    mountPrefix === PREFIX ||
+    mountPrefix.startsWith(`${PREFIX}/`) ||
+    mountPrefix.startsWith(`${PREFIX}-`);
+  if (!mine) continue;
+  const file = importedFrom[routerVar];
+  if (!file) continue;
+  const filePath = path.join(ROUTES_ROOT, `${file}.ts`);
+  if (fs.existsSync(filePath)) entryPoints.push({ mountPrefix, file, filePath });
+}
+
+if (entryPoints.length === 0) {
+  console.error(`index.ts mounts nothing under ${PREFIX} — is "${MODULE}" the right module?`);
   process.exit(2);
 }
 
-// ── backend: routes on the module router, plus any mounted sub-routers ─────
-const rootSrc = fs.readFileSync(ROOT_ROUTE_FILE, "utf8");
 const backend = [];
 
 // `router.post("/x", someLimiter)` attaches middleware to a path — it is not an
 // endpoint, and counting it would both inflate the route list and let a path
 // look "served" when only a rate limiter sits there. Require an inline handler.
-const ROUTE_CALL = /\b\w*[Rr]outer\.(get|post|patch|put|delete)\(\s*"([^"]*)"/g;
-
-const collect = (src, prefix, file) => {
-  for (const m of src.matchAll(ROUTE_CALL)) {
+const collect = (src, mountPrefix, subPrefix, file) => {
+  for (const m of src.matchAll(/\b\w*[Rr]outer\.(get|post|patch|put|delete)\(\s*"([^"]*)"/g)) {
     // A handler can sit behind middleware — router.post("/x", limiter, async
     // (req, res) => ...) — so look ahead for one instead of demanding it be the
     // next argument. No handler in sight means the line only attaches
@@ -78,36 +101,37 @@ const collect = (src, prefix, file) => {
     if (!/async\s*\(|\(\s*_?req\b/.test(src.slice(m.index, m.index + 220))) continue;
     backend.push({
       method: m[1].toUpperCase(),
-      pattern: `${PREFIX}${prefix}${m[2] === "/" ? "" : m[2]}`,
+      pattern: `${mountPrefix}${subPrefix}${m[2] === "/" ? "" : m[2]}`,
       file,
     });
   }
 };
 
-// Routes declared straight on the module's own router file.
-collect(rootSrc, "", MODULE);
+for (const { mountPrefix, file, filePath } of entryPoints) {
+  const src = fs.readFileSync(filePath, "utf8");
+  collect(src, mountPrefix, "", file);
 
-// Modules big enough to split declare sub-routers in routes/<module>/*.ts and
-// mount them with a prefix; modules that never split have no such directory.
-if (fs.existsSync(ROUTES_DIR)) {
+  // A router big enough to split declares sub-routers in routes/<file>/*.ts and
+  // mounts them under a further prefix of its own.
+  const subDir = path.join(ROUTES_ROOT, file);
+  if (!fs.existsSync(subDir)) continue;
+
   const mounts = {};
-  for (const m of rootSrc.matchAll(/\w+Router\.use\(\s*"([^"]+)"\s*,\s*(\w+)\s*\)/g)) {
+  for (const m of src.matchAll(/\w+Router\.use\(\s*"([^"]+)"\s*,\s*(\w+)\s*\)/g)) {
     (mounts[m[2]] ??= []).push(m[1] === "/" ? "" : m[1]);
   }
-  const importRe = new RegExp(
-    String.raw`import\s*\{([^}]+)\}\s*from\s*"\./${MODULE}/([\w-]+)"`, "g",
-  );
   const importFile = {};
-  for (const m of rootSrc.matchAll(importRe)) {
-    for (const name of m[1].split(",").map((x) => x.trim()).filter(Boolean)) importFile[name] = m[2];
+  const importRe = new RegExp(String.raw`import\s*\{([^}]+)\}\s*from\s*"\./${file}/([\w-]+)"`, "g");
+  for (const m of src.matchAll(importRe)) {
+    for (const n of m[1].split(",").map((x) => x.trim()).filter(Boolean)) importFile[n] = m[2];
   }
   for (const [routerVar, prefixes] of Object.entries(mounts)) {
-    const file = importFile[routerVar];
-    if (!file) continue;
-    const p = path.join(ROUTES_DIR, `${file}.ts`);
-    if (!fs.existsSync(p)) continue;
-    const src = fs.readFileSync(p, "utf8");
-    for (const prefix of prefixes) collect(src, prefix, file);
+    const subFile = importFile[routerVar];
+    if (!subFile) continue;
+    const subPath = path.join(subDir, `${subFile}.ts`);
+    if (!fs.existsSync(subPath)) continue;
+    const subSrc = fs.readFileSync(subPath, "utf8");
+    for (const sub of prefixes) collect(subSrc, mountPrefix, sub, subFile);
   }
 }
 

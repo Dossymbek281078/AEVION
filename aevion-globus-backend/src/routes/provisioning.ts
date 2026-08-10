@@ -51,6 +51,8 @@ export interface Subscription {
   amountUsd?: number;
   promoCode?: string;
   stripeSessionId?: string;
+  /** Provider event id this record was provisioned from — durable replay guard. */
+  externalEventId?: string;
   source?: string;
 }
 
@@ -104,6 +106,41 @@ export function purgeSubscriptions(email: string): { removed: number; remaining:
   writeFileSync(tmp, out, "utf8");
   renameSync(tmp, subsFile());
   return { removed, remaining: kept.length };
+}
+
+/**
+ * Has a payment webhook event already been provisioned?
+ *
+ * Payment webhooks deduplicate on an in-process Set, which a deploy empties —
+ * and a deploy is exactly when a provider is retrying a delivery it never got
+ * an answer for. Provisioning is NOT idempotent (each call writes a fresh
+ * subscription running 30/365 days from *now* and emails the customer), so a
+ * replay hands out an extra period. The subscription journal is persisted, so
+ * stamping the provider's event id on the record makes it the durable
+ * evidence the in-memory Set cannot be.
+ */
+export function subscriptionExistsForEvent(externalEventId: string): boolean {
+  const target = externalEventId.trim();
+  if (!target) return false;
+  try {
+    if (!existsSync(subsFile())) return false;
+    const lines = readFileSync(subsFile(), "utf8").split("\n").filter((l) => l.trim().length > 0);
+    for (const line of lines) {
+      try {
+        const sub = JSON.parse(line) as Subscription;
+        if (sub.externalEventId === target) return true;
+      } catch {
+        // A malformed line must not make a real replay look new.
+        continue;
+      }
+    }
+    return false;
+  } catch (e) {
+    capture(e);
+    // Unreadable store: say "not seen" so a genuine first delivery is never
+    // dropped. The in-memory Set still guards the common case.
+    return false;
+  }
 }
 
 export function countSubscriptions(): number {
@@ -303,6 +340,7 @@ export async function provisionSubscription(input: {
   stripeSessionId?: string;
   paddleTransactionId?: string;
   source?: string;
+  externalEventId?: string;
 }): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean }> {
   const trialDays = input.trialDays ?? 0;
   const period: BillingPeriod = input.period ?? "monthly";
@@ -321,6 +359,7 @@ export async function provisionSubscription(input: {
     amountUsd: input.amountUsd,
     promoCode: input.promoCode,
     stripeSessionId: input.stripeSessionId,
+    externalEventId: input.externalEventId,
     source: input.source,
   };
 

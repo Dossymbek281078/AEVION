@@ -24,7 +24,12 @@
 
 import { Router, type Request, type Response } from "express";
 import { gumroadPaymentProvider, verifyGumroadSale } from "../lib/payment/gumroadProvider";
-import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import {
+  provisionSubscription,
+  writeSubscription,
+  subscriptionExistsForEvent,
+  type Subscription,
+} from "./provisioning";
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -229,7 +234,14 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
   // Dedup on sale_id + status
   const dedupKey = `${saleId}:${result.status}`;
-  if (SEEN.has(dedupKey)) return res.json({ ok: true, deduped: true });
+  // SEEN is the fast path only. It lives in process memory, so a deploy wipes
+  // it — and a deploy is exactly when Gumroad is retrying a delivery it never
+  // got an answer for. Provisioning is not idempotent (a replay writes a new
+  // subscription running 30/365 days from now and emails the buyer again), so
+  // the durable check is the provisioned record itself.
+  if (SEEN.has(dedupKey) || subscriptionExistsForEvent(dedupKey)) {
+    return res.json({ ok: true, deduped: true });
+  }
   SEEN.add(dedupKey);
 
   const reference = resolveReference(raw);
@@ -336,6 +348,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         modules: [],
         trialDays: 0,
         source: `gumroad:${result.status}`,
+        externalEventId: dedupKey,
       };
       writeSubscription(downgrade);
       console.log(`[gumroad/webhook] ${result.status} → downgraded ${email} to free`);
@@ -350,6 +363,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         email,
         tierId,
         period,
+        externalEventId: dedupKey,
         modules: [],
         source: "gumroad",
       });

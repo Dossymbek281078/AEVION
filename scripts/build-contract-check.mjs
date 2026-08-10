@@ -139,10 +139,18 @@ for (const file of walk(SRC)) {
     // from elsewhere. Guessing GET when it is absent invents drift that is not
     // there, so an undetermined method matches the path under any verb.
     const method = src.slice(m.index, m.index + 300).match(/method:\s*"(GET|POST|PATCH|PUT|DELETE)"/);
-    const isFetch = /fetch\(\s*$|fetch\(\s*apiUrl\(\s*$/.test(src.slice(Math.max(0, m.index - 40), m.index));
+    const before = src.slice(Math.max(0, m.index - 40), m.index);
+    const isFetch = /fetch\(\s*$|fetch\(\s*apiUrl\(\s*$/.test(before);
+    // next.config rewrites only /api-backend/* to the backend, so a bare
+    // relative /api/build URL hits the Next app itself and 404s into whatever
+    // error handling the caller has. The path is right; the origin is not.
+    // Only bare literals qualify — `${getApiBase()}/api/build/...` supplies an
+    // origin, and there the path does not start at index 0.
+    const wrongOrigin = /fetch\(\s*$/.test(before) && lit.indexOf("/api/build") === 0;
     calls.push({
       method: method ? method[1] : isFetch ? "GET" : "ANY",
       path: p,
+      wrongOrigin,
       where: path.relative(ROOT, file).replace(/\\/g, "/"),
       line: src.slice(0, m.index).split("\n").length,
     });
@@ -174,12 +182,21 @@ for (const c of calls) {
   else unmatched.push(c);
 }
 
+const misaddressed = calls.filter((c) => c.wrongOrigin);
+
 console.log(`frontend calls: ${calls.length} | backend routes: ${backend.length}`);
 if (unmatched.length === 0) {
   console.log("OK — every /api/build call resolves to a mounted route.");
 } else {
   console.log(`\nFRONTEND CALLS WITH NO BACKEND ROUTE (${unmatched.length}):`);
   for (const c of unmatched) console.log(`  ${c.where}:${c.line}  ${c.method} ${c.path}`);
+}
+
+if (misaddressed.length > 0) {
+  console.log(`\nCALLS SENT TO THE WRONG ORIGIN (${misaddressed.length}):`);
+  console.log("  A bare relative /api/build URL reaches the Next app, not the backend.");
+  console.log("  Wrap it in apiUrl() or call it through buildApi.");
+  for (const c of misaddressed) console.log(`  ${c.where}:${c.line}  ${c.method} ${c.path}`);
 }
 
 // Routes nothing calls are not a failure — admin tools, PDF/CSV links opened
@@ -195,4 +212,4 @@ if (process.argv.includes("--list-unused")) {
   }
 }
 
-process.exit(unmatched.length === 0 ? 0 : 1);
+process.exit(unmatched.length === 0 && misaddressed.length === 0 ? 0 : 1);

@@ -85,6 +85,18 @@ export type BuildShiftRow = {
 };
 
 // Signable payload handed to QSign by POST /applications/:id/contract.
+export type BuildAdminUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  createdAt: string;
+  buildRole: string | null;
+  city: string | null;
+  openToWork: boolean | null;
+  verifiedAt: string | null;
+};
+
 export type BuildContractPayload = {
   type: string;
   applicationId: string;
@@ -1530,6 +1542,25 @@ export const buildApi = {
       };
     }>("GET", `/api/build/stats/sources${qs ? "?" + qs : ""}`);
   },
+  // Admin user registry + manual verification badge.
+  adminListUsers: (q?: { search?: string; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams();
+    if (q?.search) params.set("q", q.search);
+    if (q?.limit != null) params.set("limit", String(q.limit));
+    if (q?.offset != null) params.set("offset", String(q.offset));
+    const qs = params.toString();
+    return call<{ items: BuildAdminUser[]; total: number }>(
+      "GET", `/api/build/admin/users${qs ? "?" + qs : ""}`,
+    );
+  },
+  adminVerifyUser: (userId: string, reason?: string) =>
+    call<{ userId: string; verified: boolean; verifiedAt: string }>(
+      "POST", `/api/build/admin/users/${encodeURIComponent(userId)}/verify`, reason ? { reason } : {},
+    ),
+  adminUnverifyUser: (userId: string) =>
+    call<{ userId: string; verified: boolean }>(
+      "DELETE", `/api/build/admin/users/${encodeURIComponent(userId)}/verify`,
+    ),
   adminListPartnerKeys: () =>
     call<{
       items: {

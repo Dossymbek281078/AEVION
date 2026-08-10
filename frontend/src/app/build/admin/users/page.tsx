@@ -3,20 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, type BuildAdminUser } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
-type UserRow = {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  createdAt: string;
-  buildRole: string | null;
-  city: string | null;
-  openToWork: boolean | null;
-  verifiedAt: string | null;
-};
+type UserRow = BuildAdminUser;
 
 export default function AdminUsersPage() {
   return (
@@ -35,22 +25,19 @@ function Body() {
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
 
   async function load(search: string) {
     if (!token || user?.role !== "ADMIN") return;
     setLoading(true);
+    setErr(null);
     try {
-      const r = await fetch(
-        `/api/build/admin/users?limit=100&q=${encodeURIComponent(search)}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      const j = await r.json();
-      if (j.success) {
-        setItems(j.data.items);
-        setTotal(j.data.total);
-      }
-    } catch {
-      // ignore
+      const r = await buildApi.adminListUsers({ search, limit: 100 });
+      setItems(r.items);
+      setTotal(r.total);
+    } catch (e) {
+      setErr((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -87,6 +74,12 @@ function Body() {
       </div>
 
       {loading && <p className="text-sm text-slate-400">Loading…</p>}
+
+      {err && (
+        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">
+          {err}
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-white/10">
         <table className="w-full sm:min-w-[800px] text-left text-xs">
@@ -130,16 +123,21 @@ function Body() {
                       <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-sky-200">verified</span>
                     )}
                     <button
+                      disabled={toggling === u.id}
                       onClick={async () => {
-                        if (!token) return;
-                        const endpoint = u.verifiedAt
-                          ? `/api/build/admin/users/${u.id}/verify`
-                          : `/api/build/admin/users/${u.id}/verify`;
-                        const method = u.verifiedAt ? "DELETE" : "POST";
-                        await fetch(endpoint, { method, headers: { Authorization: `Bearer ${token}` } });
-                        load(q);
+                        setToggling(u.id);
+                        setErr(null);
+                        try {
+                          if (u.verifiedAt) await buildApi.adminUnverifyUser(u.id);
+                          else await buildApi.adminVerifyUser(u.id);
+                          await load(q);
+                        } catch (e) {
+                          setErr((e as Error).message);
+                        } finally {
+                          setToggling(null);
+                        }
                       }}
-                      className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase transition ${
+                      className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase transition disabled:opacity-50 ${
                         u.verifiedAt
                           ? "bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
                           : "bg-sky-500/10 text-sky-300 hover:bg-sky-500/20"

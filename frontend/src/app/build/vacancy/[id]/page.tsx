@@ -16,6 +16,7 @@ import {
   type TalentRow,
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { apiUrl } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
 import { formatSalary } from "@/lib/build/format";
 import { emailError, isEmail } from "@/lib/build/validate";
@@ -3130,7 +3131,7 @@ function ExportCsvButton({
     setBusy(true);
     try {
       const res = await fetch(
-        `/api/build/applications/by-vacancy/${encodeURIComponent(vacancyId)}/export.csv`,
+        apiUrl(`/api/build/applications/by-vacancy/${encodeURIComponent(vacancyId)}/export.csv`),
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

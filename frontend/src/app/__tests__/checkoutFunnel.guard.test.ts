@@ -25,7 +25,15 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 const SRC_ROOT = path.resolve(__dirname, "../..");
-const SKIP_DIRS = new Set(["node_modules", ".next", "__tests__"]);
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".next",
+  "__tests__",
+  // Учебные чертежи сметного тренажёра: огромное дерево без единой кнопки
+  // оплаты. Читать его целиком — это те самые лишние секунды, из-за которых
+  // сторож упирался в дефолтный таймаут vitest на загруженной машине.
+  "drawings-practice",
+]);
 
 /** Признаки того, что файл ведёт человека в оплату. */
 const CHECKOUT_MARKERS = [
@@ -78,15 +86,28 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/**
+ * Один обход на модуль: тестов здесь три, и без кеша дерево читалось трижды.
+ * Именно эти лишние секунды упирались в дефолтный таймаут vitest при полном
+ * прогоне на загруженной машине — сторож краснел из-за очереди на диск, а не
+ * из-за находки.
+ */
+let cache: Array<{ rel: string; src: string }> | null = null;
+
 function checkoutFiles(): Array<{ rel: string; src: string }> {
+  if (cache) return cache;
   const found: Array<{ rel: string; src: string }> = [];
   for (const file of walk(SRC_ROOT)) {
     const src = readFileSync(file, "utf8");
     if (!CHECKOUT_MARKERS.some((m) => src.includes(m))) continue;
     found.push({ rel: path.relative(SRC_ROOT, file).replace(/\\/g, "/"), src });
   }
+  cache = found;
   return found;
 }
+
+/** Обход дерева, а не юнит — дефолтные 5 секунд vitest тут не про этот тест. */
+const SWEEP_TIMEOUT_MS = 30_000;
 
 describe("воронка оплаты — каждая точка входа шлёт событие", () => {
   it("ни одна кнопка оплаты не молчит", () => {
@@ -103,7 +124,7 @@ describe("воронка оплаты — каждая точка входа ш�
         `(или upgrade_click через useFunnel, если модуль ведёт свою воронку). ` +
         `Если файл кнопкой не является — впиши его в EXEMPT С ПРИЧИНОЙ.`,
     ).toEqual([]);
-  });
+  }, SWEEP_TIMEOUT_MS);
 
   it("список исключений не протух", () => {
     // Исключение, которое больше ни на что не указывает, выглядит как
@@ -124,5 +145,5 @@ describe("воронка оплаты — каждая точка входа ш�
       expect(files.get(rel), `${rel} перестал быть точкой входа в оплату — проверь, что это осознанно`).toBeTruthy();
       expect(files.get(rel), `${rel} больше не шлёт checkout_start`).toContain("checkout_start");
     }
-  });
+  }, SWEEP_TIMEOUT_MS);
 });

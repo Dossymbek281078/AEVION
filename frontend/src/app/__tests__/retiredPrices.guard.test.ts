@@ -220,6 +220,23 @@ const EXPLANATORY =
 /** Суммы сделок и рынков: $29B, $49M. Это не цены. */
 const MAGNITUDE_SUFFIX = /^[BMKbmk]/;
 
+/**
+ * Один обход на модуль. Оба теста здесь читают всё дерево; без кеша под
+ * нагрузкой они выходили за дефолтный таймаут vitest, и сторож падал не по
+ * делу. Сторож, который иногда красный без причины, перестают читать.
+ */
+let corpusCache: Array<{ rel: string; lines: string[] }> | null = null;
+
+function corpus(): Array<{ rel: string; lines: string[] }> {
+  if (!corpusCache) {
+    corpusCache = walk(SRC_ROOT).map((file) => ({
+      rel: path.relative(SRC_ROOT, file).replace(/\\/g, "/"),
+      lines: readFileSync(file, "utf8").split("\n"),
+    }));
+  }
+  return corpusCache;
+}
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     if (SKIP_DIRS.has(name)) continue;
@@ -240,6 +257,16 @@ function registryPrice(tierId: string): string {
   return m ? `$${m[1]}` : "(не найдена в реестре)";
 }
 
+
+/**
+ * Явный таймаут: это не юнит-тест, а обход ~1000 файлов с чтением каждого.
+ * Дефолтные 5 секунд vitest рассчитаны на юниты, и при полном прогоне (54
+ * файла параллельно на загруженной машине) обход в них не укладывался —
+ * сторож краснел из-за очереди на диск, а не из-за находки. Красный без
+ * причины опаснее отсутствующего теста: его начинают пролистывать.
+ */
+const SWEEP_TIMEOUT_MS = 30_000;
+
 describe("отставные цены тарифов не возвращаются ни на одну поверхность", () => {
   it("сплошной обход фронтенда не находит ни одной", () => {
     const amounts = RETIRED.map((r) => r.amount.replace(".", "\\.")).join("|");
@@ -247,9 +274,7 @@ describe("отставные цены тарифов не возвращаютс
     const re = new RegExp(`\\$(${amounts})(?![\\d.,]*[\\dBMKbmk])`, "g");
 
     const violations: string[] = [];
-    for (const file of walk(SRC_ROOT)) {
-      const rel = path.relative(SRC_ROOT, file).replace(/\\/g, "/");
-      const lines = readFileSync(file, "utf8").split("\n");
+    for (const { rel, lines } of corpus()) {
       const isComment = commentMask(lines);
       lines.forEach((line, idx) => {
           re.lastIndex = 0;
@@ -272,19 +297,19 @@ describe("отставные цены тарифов не возвращаютс
         `\n\nЕсли это НОВАЯ законная цена с тем же номиналом — допиши строку в ALLOWED ` +
         `с причиной и ссылкой на код, который её списывает. Без причины — это заглушённый сторож.`,
     ).toEqual([]);
-  });
+  }, SWEEP_TIMEOUT_MS);
 
   it("каждое исключение действительно что-то исключает", () => {
     // Протухший фрагмент — тихая дыра: он ничего не разрешает, но выглядит как
     // осознанное решение, и следующий человек не станет его перепроверять.
-    const corpus = walk(SRC_ROOT)
-      .map((f) => readFileSync(f, "utf8"))
+    const all = corpus()
+      .map((f) => f.lines.join("\n"))
       .join("\n");
-    const dead = ALLOWED.filter((a) => !corpus.includes(a.fragment)).map((a) => a.fragment);
+    const dead = ALLOWED.filter((a) => !all.includes(a.fragment)).map((a) => a.fragment);
     expect(
       dead,
       `Эти фрагменты ALLOWED больше не встречаются во фронтенде — удали их, ` +
         `иначе список превращается в свалку:\n  ${dead.join("\n  ")}`,
     ).toEqual([]);
-  });
+  }, SWEEP_TIMEOUT_MS);
 });

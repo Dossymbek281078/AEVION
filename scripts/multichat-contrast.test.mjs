@@ -25,7 +25,7 @@ const THRESHOLD = 4.5;
 const theme = readFileSync(path.join(MOD, "theme.ts"), "utf8");
 const T = Object.fromEntries([...theme.matchAll(/ {2}(\w+): "([^"]+)",/g)].map((m) => [m[1], m[2]]));
 
-const sources = ["MultichatEngineClient.tsx", "CouncilConsole.tsx", "verify/page.tsx"]
+const sources = ["MultichatEngineClient.tsx", "CouncilConsole.tsx", "verify/page.tsx", "library/page.tsx"]
   .map((f) => readFileSync(path.join(MOD, f), "utf8"));
 const code = sources.join("\n");
 
@@ -73,6 +73,17 @@ for (const s of SURFACES) {
   ok(`подложка ${s} задана и непрозрачна`, !!T[s] && parse(T[s])[3] === 1, T[s]);
 }
 
+// Текст на акцентной кнопке нельзя мерить к бумаге: белый на белом даст 1.00
+// и уронит проверку на цвете, который на экране лежит на бирюзе. Роль зашита
+// в имя (onAccent*), поэтому подложка для него — акцентные заливки, а не лист.
+// Ровно та же логика, что у чипов ниже: сравнивать надо с тем, на чём цвет
+// реально лежит.
+// Условие «светлый» обязательно: onAccent (#1a1a17) — тёмные чернила, они
+// лежат и на белых поверхностях тоже, мерить их к бирюзе неверно. А светлый
+// токен на бумаге не живёт по определению: он существует ради тёмной кнопки.
+const ACCENT_BACKDROPS = ["btnAccentBg", "accent"];
+const isOnAccent = (n) => /^onAccent/.test(n) && luminance(parse(T[n])) > 0.5;
+
 // 1. Обычный текст — к бумаге и к панели.
 const textTokens = Object.keys(T).filter(
   (n) => new RegExp(`color: T\\.${n}\\b`).test(code) && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(T[n])
@@ -80,8 +91,10 @@ const textTokens = Object.keys(T).filter(
 ok("текстовые токены найдены", textTokens.length >= 10, `найдено ${textTokens.length}`);
 
 for (const n of textTokens) {
-  const worst = Math.min(...SURFACES.map((s) => contrast(parse(T[n]), parse(T[s]))));
-  ok(`текст ${n} читается на подложке`, worst >= THRESHOLD, `${worst.toFixed(2)} < ${THRESHOLD} (${T[n]})`);
+  const backdrops = isOnAccent(n) ? ACCENT_BACKDROPS : SURFACES;
+  const worst = Math.min(...backdrops.map((s) => contrast(parse(T[n]), parse(T[s]))));
+  const where = isOnAccent(n) ? "на акцентной кнопке" : "на подложке";
+  ok(`текст ${n} читается ${where}`, worst >= THRESHOLD, `${worst.toFixed(2)} < ${THRESHOLD} (${T[n]})`);
 }
 
 // 2. Чипы ролей — текст к СМЕШАННОЙ подложке, а не к бумаге.

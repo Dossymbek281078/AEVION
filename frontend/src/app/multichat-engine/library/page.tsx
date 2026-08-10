@@ -1,8 +1,18 @@
 "use client";
+
+// Библиотека бесед мультичата.
+//
+// Страница переведена на светлый газетный эталон AEVION 2026-08-10: до этого
+// она оставалась тёмной (slate-950) и рядом с «Консилиумом» читалась как
+// кусок другого продукта. Цвета — только через токены ./theme, сырых значений
+// в файле нет: контраст проверяется тестом scripts/multichat-contrast.test.mjs,
+// а литерал проверка не видит.
+
 import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { T } from "../theme";
 
 interface Conversation {
   id: string;
@@ -19,6 +29,57 @@ interface Usage {
   costUsd: number;
   /** Вызовы, для которых цена неизвестна (бесплатный флот, локальная модель). */
   unpricedCalls?: number;
+}
+
+// Кнопки строки беседы — четыре роли, одна форма. Отдельными функциями, а не
+// копиями объекта в JSX: пять одинаковых литералов подряд разъезжаются на
+// первой же правке отступов.
+const rowBtnBase = {
+  borderRadius: 8,
+  padding: "5px 10px",
+  fontSize: 13,
+  fontFamily: "inherit",
+} as const;
+
+function secondaryBtn(busy: boolean) {
+  return {
+    ...rowBtnBase,
+    background: "transparent",
+    color: busy ? T.textFaded : T.textDim,
+    border: `1px solid ${T.lineSoft}`,
+    cursor: busy ? "default" : "pointer",
+  };
+}
+
+function accentBtn(busy: boolean) {
+  return {
+    ...rowBtnBase,
+    background: busy ? T.btnDisabledBg : T.btnAccentBg,
+    color: busy ? T.textMute : T.onAccentDeep,
+    border: "none",
+    fontWeight: 600,
+    cursor: busy ? "default" : "pointer",
+  };
+}
+
+function warnBtn(busy: boolean) {
+  return {
+    ...rowBtnBase,
+    background: T.amberFill12,
+    color: busy ? T.textFaded : T.warnBright,
+    border: `1px solid ${T.amberEdge35}`,
+    cursor: busy ? "default" : "pointer",
+  };
+}
+
+function dangerBtn(busy: boolean) {
+  return {
+    ...rowBtnBase,
+    background: "transparent",
+    color: busy ? T.textFaded : T.badBright,
+    border: `1px solid ${T.redEdge35}`,
+    cursor: busy ? "default" : "pointer",
+  };
 }
 
 function fmtDate(iso: string) {
@@ -188,52 +249,86 @@ export default function MultichatLibraryPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <p className="text-slate-400">Войдите чтобы видеть свои чаты.</p>
+      <div style={{ minHeight: "100vh", background: T.canvas, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <p style={{ color: T.textMute, fontSize: 15, textAlign: "center", maxWidth: 420, lineHeight: 1.6 }}>
+          Войдите, чтобы увидеть свои беседы. Библиотека хранит вопросы, ответы всех
+          агентов и расход по каждой беседе.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/multichat-engine" className="text-slate-400 hover:text-white text-sm">
-            ← Multichat
+    <div style={{ minHeight: "100vh", background: T.canvas, color: T.text }}>
+      <header
+        style={{
+          borderBottom: `1px solid ${T.lineSoft}`,
+          padding: "14px 24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <Link href="/multichat-engine" style={{ color: T.textMute, fontSize: 14, textDecoration: "none" }}>
+            ← Мультичат
           </Link>
-          <span className="text-slate-600">·</span>
-          <h1 className="text-sm font-bold">📚 Library</h1>
+          <span style={{ color: T.textFaded }}>·</span>
+          <h1 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: T.text }}>Библиотека бесед</h1>
         </div>
         <button
           onClick={() => void load(token, q)}
           disabled={loading}
-          className="px-3 py-1.5 bg-violet-700 hover:bg-violet-600 disabled:opacity-40 rounded-lg text-xs font-semibold"
+          style={{
+            background: loading ? T.btnDisabledBg : T.btnAccentBg,
+            color: loading ? T.textMute : T.onAccentDeep,
+            border: "none",
+            borderRadius: 8,
+            padding: "7px 14px",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: loading ? "default" : "pointer",
+          }}
         >
-          {loading ? "..." : "↻"}
+          {loading ? "Обновляю…" : "Обновить"}
         </button>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-4">
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px", display: "grid", gap: 16 }}>
         {error && (
-          <div className="bg-red-950/40 border border-red-800 rounded-xl p-3 text-sm text-red-300">
+          <div style={{ background: T.redFill18, border: `1px solid ${T.redEdge45}`, borderRadius: 10, padding: 12, fontSize: 14, color: T.bad }}>
             {error}
           </div>
         )}
 
-        <div className="flex gap-2">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input
             type="text"
             value={q}
             onChange={e => setQ(e.target.value)}
-            placeholder="Поиск по названию..."
-            className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:border-violet-600 focus:outline-none"
+            placeholder="Поиск по названию…"
+            style={{
+              flex: "1 1 220px",
+              background: T.surface,
+              border: `1px solid ${T.lineSoft}`,
+              borderRadius: 10,
+              padding: "9px 12px",
+              fontSize: 14,
+              color: T.text,
+              fontFamily: "inherit",
+            }}
             onKeyDown={e => {
               if (e.key === "Enter") void load(token, q);
             }}
           />
           <button
             onClick={() => void load(token, q)}
-            className="px-4 py-2 bg-violet-700 hover:bg-violet-600 rounded-lg text-sm font-semibold"
+            style={{
+              background: T.btnAccentBg, color: T.onAccentDeep, border: "none", borderRadius: 10,
+              padding: "9px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer",
+            }}
           >
             Найти
           </button>
@@ -243,106 +338,99 @@ export default function MultichatLibraryPage() {
                 setQ("");
                 void load(token, "");
               }}
-              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm"
+              style={{
+                background: "transparent", color: T.textDim, border: `1px solid ${T.lineSoft}`,
+                borderRadius: 10, padding: "9px 14px", fontSize: 14, cursor: "pointer",
+              }}
             >
-              ✕
+              Сбросить
             </button>
           )}
         </div>
 
         {loading && items.length === 0 && (
-          <div className="text-slate-500 text-sm py-12 text-center">Загрузка...</div>
+          <div style={{ color: T.textMute, fontSize: 14, padding: "48px 0", textAlign: "center" }}>Загрузка…</div>
         )}
         {!loading && items.length === 0 && (
-          <div className="text-slate-600 text-sm py-12 text-center">
-            {q ? "По запросу ничего не найдено" : "У вас пока нет чатов"}
+          <div style={{ color: T.textMute, fontSize: 14, padding: "48px 0", textAlign: "center", lineHeight: 1.6 }}>
+            {q ? (
+              "По запросу ничего не найдено"
+            ) : (
+              <>
+                Здесь пока пусто.{" "}
+                <Link href="/multichat-engine" style={{ color: T.accent }}>
+                  Спросите консилиум
+                </Link>{" "}
+                — беседа появится в библиотеке сразу после ответа.
+              </>
+            )}
           </div>
         )}
 
-        <div className="space-y-2">
+        <div style={{ display: "grid", gap: 10 }}>
           {items.map(c => {
             const u = usageMap[c.id];
+            const busy = busyId === c.id;
             return (
               <div
                 key={c.id}
-                className="bg-slate-900 border border-slate-800 rounded-xl p-4"
+                style={{ background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 16 }}
                 onMouseEnter={() => void loadUsage(c.id)}
               >
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div className="flex-1 min-w-0">
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 260px", minWidth: 0 }}>
                     <Link
                       href={`/multichat-engine?conv=${c.id}`}
-                      className="font-bold text-base hover:text-violet-300 truncate block"
+                      style={{
+                        fontSize: 16, fontWeight: 600, color: T.text, textDecoration: "none",
+                        display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}
                     >
                       {c.title}
                     </Link>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
-                      Updated: {fmtDate(c.updatedAt)} · Created: {fmtDate(c.createdAt)}
+                    <div style={{ fontSize: 12, color: T.textFaded, marginTop: 3 }}>
+                      Изменена {fmtDate(c.updatedAt)} · создана {fmtDate(c.createdAt)}
                     </div>
                     {u && (
-                      <div className="text-[11px] text-slate-500 mt-1 font-mono">
-                        {u.calls} calls · {u.tokens.total.toLocaleString("ru-RU")} tokens · ${u.costUsd.toFixed(4)}
+                      <div style={{ fontSize: 12, color: T.textMute, marginTop: 5, fontFamily: "ui-monospace, monospace" }}>
+                        {u.calls} вызовов · {u.tokens.total.toLocaleString("ru-RU")} токенов · ${u.costUsd.toFixed(4)}
                         {/* «$0.0000» при неизвестной цене читается как «бесплатно».
                             Говорим прямо, сколько вызовов посчитать не смогли. */}
                         {u.unpricedCalls ? (
-                          <span className="text-amber-500/80">
-                            {" "}· {u.unpricedCalls} без цены
-                          </span>
+                          <span style={{ color: T.warn }}> · {u.unpricedCalls} без известной цены</span>
                         ) : null}
                       </div>
                     )}
                     {c.shareToken && (
-                      <div className="text-[11px] text-emerald-400 mt-1">
-                        🔗 Public:{" "}
-                        <code className="bg-slate-950 px-1 rounded">
+                      <div style={{ fontSize: 12, color: T.accent, marginTop: 5 }}>
+                        Открыта по ссылке:{" "}
+                        <code style={{ background: T.surfaceSoft, padding: "1px 5px", borderRadius: 4, color: T.textDim }}>
                           /multichat-engine/shared/{c.shareToken.slice(0, 12)}…
                         </code>
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-1.5 shrink-0">
-                    <button
-                      onClick={() => rename(c.id)}
-                      disabled={busyId === c.id}
-                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded text-xs"
-                    >
-                      ✎ Rename
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => rename(c.id)} disabled={busy} style={secondaryBtn(busy)}>
+                      Переименовать
                     </button>
-                    <button
-                      onClick={() => downloadExport(c.id, "json")}
-                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs"
-                    >
-                      ↓ JSON
+                    <button onClick={() => downloadExport(c.id, "json")} style={secondaryBtn(false)}>
+                      Скачать JSON
                     </button>
-                    <button
-                      onClick={() => downloadExport(c.id, "csv")}
-                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs"
-                    >
-                      ↓ CSV
+                    <button onClick={() => downloadExport(c.id, "csv")} style={secondaryBtn(false)}>
+                      Скачать CSV
                     </button>
                     {c.shareToken ? (
-                      <button
-                        onClick={() => revoke(c.id)}
-                        disabled={busyId === c.id}
-                        className="px-2 py-1 bg-amber-900 hover:bg-amber-800 text-amber-300 disabled:opacity-40 rounded text-xs"
-                      >
-                        🚫 Revoke
+                      <button onClick={() => revoke(c.id)} disabled={busy} style={warnBtn(busy)}>
+                        Отозвать ссылку
                       </button>
                     ) : (
-                      <button
-                        onClick={() => share(c.id)}
-                        disabled={busyId === c.id}
-                        className="px-2 py-1 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 rounded text-xs"
-                      >
-                        🔗 Share
+                      <button onClick={() => share(c.id)} disabled={busy} style={accentBtn(busy)}>
+                        Поделиться
                       </button>
                     )}
-                    <button
-                      onClick={() => del(c.id)}
-                      disabled={busyId === c.id}
-                      className="px-2 py-1 bg-red-900 hover:bg-red-800 text-red-300 disabled:opacity-40 rounded text-xs"
-                    >
-                      🗑 Delete
+                    <button onClick={() => del(c.id)} disabled={busy} style={dangerBtn(busy)}>
+                      Удалить
                     </button>
                   </div>
                 </div>

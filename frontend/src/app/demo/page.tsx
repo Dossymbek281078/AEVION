@@ -38,6 +38,16 @@ const DEMO_METRICS: LiveMetrics = {
   qtradeOps: 1450,
 };
 
+// Порядок совпадает с порядком таблеток на экране — список один, чтобы
+// счётчик «LIVE n/5» и сами таблетки не разъехались при добавлении метрики.
+const METRIC_KEYS: (keyof LiveMetrics)[] = [
+  "qrightObjects",
+  "certifiedArtifacts",
+  "participants",
+  "shieldRecords",
+  "qtradeOps",
+];
+
 const marqueePhrases = [
   "AEVION · unified trust platform",
   "37 product nodes · one pipeline",
@@ -97,7 +107,15 @@ export default function DemoShowcasePage() {
     shieldRecords: null,
     qtradeOps: null,
   });
-  const [metricsLive, setMetricsLive] = useState(false);
+  // Живость считается ПО КАЖДОЙ метрике, а не одним флагом на блок.
+  //
+  // Раньше значок «LIVE» загорался, если ответила ХОТЯ БЫ ОДНА из четырёх
+  // ручек. На публичной /demo это давало прямую неправду: `/api/qtrade/summary`
+  // закрыт авторизацией (`qtradeRouter.use(requireAuth)`), у гостя он не может
+  // ответить НИКОГДА — значит число операций QTrade всегда бралось из зашитой
+  // константы DEMO_METRICS и показывалось под зелёным «LIVE». Проверено на
+  // проде 09-10.08.2026: в консоли гостя 401, значок при этом горит.
+  const [liveKeys, setLiveKeys] = useState<Partial<Record<keyof LiveMetrics, boolean>>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -132,37 +150,45 @@ export default function DemoShowcasePage() {
         if (cancelled) return;
 
         const next: LiveMetrics = { ...DEMO_METRICS };
-        let anyOk = false;
+        const live: Partial<Record<keyof LiveMetrics, boolean>> = {};
 
         if (qr && qr.ok) {
           const j = await qr.json().catch(() => null);
-          if (Array.isArray(j?.items)) { next.qrightObjects = j.items.length; anyOk = true; }
+          if (Array.isArray(j?.items)) { next.qrightObjects = j.items.length; live.qrightObjects = true; }
         }
         if (ps && ps.ok) {
           const j = await ps.json().catch(() => null);
           if (j) {
-            next.certifiedArtifacts = j.certifiedArtifactVersions ?? next.certifiedArtifacts;
-            next.participants = j.eligibleParticipants ?? next.participants;
-            anyOk = true;
+            // Отмечаем живым только то поле, которое ручка реально прислала:
+            // `?? next.x` оставляет демо-константу, и без этой проверки она
+            // уехала бы на экран с зелёной пометкой.
+            if (j.certifiedArtifactVersions != null) {
+              next.certifiedArtifacts = j.certifiedArtifactVersions;
+              live.certifiedArtifacts = true;
+            }
+            if (j.eligibleParticipants != null) {
+              next.participants = j.eligibleParticipants;
+              live.participants = true;
+            }
           }
         }
         if (qs && qs.ok) {
           const j = await qs.json().catch(() => null);
-          if (Array.isArray(j?.items)) { next.shieldRecords = j.items.length; anyOk = true; }
+          if (Array.isArray(j?.items)) { next.shieldRecords = j.items.length; live.shieldRecords = true; }
         }
         if (qt && qt.ok) {
           const j = await qt.json().catch(() => null);
-          if (j?.operationCount != null) { next.qtradeOps = j.operationCount; anyOk = true; }
+          if (j?.operationCount != null) { next.qtradeOps = j.operationCount; live.qtradeOps = true; }
         }
 
         if (!cancelled) {
           setMetrics(next);
-          setMetricsLive(anyOk);
+          setLiveKeys(live);
         }
       } catch {
         if (!cancelled) {
           setMetrics(DEMO_METRICS);
-          setMetricsLive(false);
+          setLiveKeys({});
         }
       }
     })();
@@ -194,6 +220,8 @@ export default function DemoShowcasePage() {
   }, []);
 
   const liveMvpCount = launchedModules.filter((m) => m.stage === "live").length;
+  const liveCount = METRIC_KEYS.filter((k) => liveKeys[k]).length;
+  const allLive = liveCount === METRIC_KEYS.length;
   const emergingCount = ecosystemNodes.length;
 
   const flywheelCards = useMemo(
@@ -356,8 +384,8 @@ export default function DemoShowcasePage() {
                 fontSize: 10,
                 fontWeight: 800,
                 letterSpacing: "0.15em",
-                color: metricsLive ? "#34d399" : "#fbbf24",
-                background: metricsLive ? "rgba(52,211,153,0.12)" : "rgba(251,191,36,0.12)",
+                color: allLive ? "#34d399" : "#fbbf24",
+                background: allLive ? "rgba(52,211,153,0.12)" : "rgba(251,191,36,0.12)",
                 padding: "4px 10px",
                 borderRadius: 999,
                 textTransform: "uppercase",
@@ -371,23 +399,25 @@ export default function DemoShowcasePage() {
                   width: 6,
                   height: 6,
                   borderRadius: 999,
-                  background: metricsLive ? "#34d399" : "#fbbf24",
+                  background: allLive ? "#34d399" : "#fbbf24",
                 }}
                 aria-hidden
               />
-              {metricsLive ? "LIVE" : "DEMO"}
+              {allLive ? "LIVE" : liveCount > 0 ? `LIVE ${liveCount}/${METRIC_KEYS.length}` : "DEMO"}
             </span>
           </div>
           <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.6, margin: "0 0 18px" }}>
-            Pulled in parallel from QRight, Planet, Quantum Shield and QTrade. Falls back to a fixed
-            demo snapshot when the backend is offline — same pattern as /pitch.
+            Pulled in parallel from QRight, Planet, Quantum Shield and QTrade. A number whose source
+            did not answer falls back to a fixed demo snapshot and is marked{" "}
+            <span style={{ color: "#fbbf24", fontWeight: 700 }}>demo</span> — only unmarked numbers
+            come from a live call.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-            <LivePill label="QRight records" value={metrics.qrightObjects} />
-            <LivePill label="Bureau certs" value={metrics.certifiedArtifacts} />
-            <LivePill label="Planet participants" value={metrics.participants} />
-            <LivePill label="Shielded artifacts" value={metrics.shieldRecords} />
-            <LivePill label="QTrade ops" value={metrics.qtradeOps} />
+            <LivePill label="QRight records" value={metrics.qrightObjects} live={!!liveKeys.qrightObjects} />
+            <LivePill label="Bureau certs" value={metrics.certifiedArtifacts} live={!!liveKeys.certifiedArtifacts} />
+            <LivePill label="Planet participants" value={metrics.participants} live={!!liveKeys.participants} />
+            <LivePill label="Shielded artifacts" value={metrics.shieldRecords} live={!!liveKeys.shieldRecords} />
+            <LivePill label="QTrade ops" value={metrics.qtradeOps} live={!!liveKeys.qtradeOps} />
           </div>
         </section>
 
@@ -721,8 +751,20 @@ export default function DemoShowcasePage() {
   );
 }
 
-function LivePill({ label, value }: { label: string; value: number | null }) {
+function LivePill({
+  label,
+  value,
+  live,
+}: {
+  label: string;
+  value: number | null;
+  live: boolean;
+}) {
   const display = value == null ? "…" : value.toLocaleString("en-US");
+  // Пока идёт первый запрос, value === null и метка не нужна: «…» и так не
+  // выдаёт себя за результат. Метка появляется только когда число ПОКАЗАНО,
+  // но пришло не из живого вызова.
+  const showDemoMark = value != null && !live;
   return (
     <span
       style={{
@@ -736,8 +778,23 @@ function LivePill({ label, value }: { label: string; value: number | null }) {
         whiteSpace: "nowrap",
       }}
     >
-      <strong style={{ color: "#5eead4", marginRight: 6 }}>{display}</strong>
+      <strong style={{ color: showDemoMark ? "#fbbf24" : "#5eead4", marginRight: 6 }}>{display}</strong>
       <span style={{ color: "#94a3b8" }}>{label}</span>
+      {showDemoMark && (
+        <span
+          style={{
+            marginLeft: 6,
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "0.1em",
+            color: "#fbbf24",
+            textTransform: "uppercase",
+          }}
+          title="Источник не ответил — показан фиксированный демо-снимок, не живое число"
+        >
+          demo
+        </span>
+      )}
     </span>
   );
 }

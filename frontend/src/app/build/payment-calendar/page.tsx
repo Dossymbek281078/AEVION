@@ -10,20 +10,33 @@ import { useI18n } from "@/lib/i18n";
 export default function PaymentCalendarPage() {
   const { t } = useI18n();
   const [items, setItems] = useState<BuildPaymentEvent[] | null>(null);
-  const [summary, setSummary] = useState<{ due: number; paid: number; overdue: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const me = useBuildAuth((s) => s.user);
 
   const refresh = () =>
     buildApi
       .myPaymentCalendar()
-      .then((r) => {
-        setItems(r.items);
-        setSummary(r.summary);
-      })
+      .then((r) => setItems(r.items))
       .catch((e) => setErr((e as Error).message));
 
   useEffect(() => { refresh(); }, []);
+
+  // The endpoint's `summary` adds up amounts regardless of currency and the
+  // card used to stamp ₽ on the result, so a KZT row silently inflated a
+  // rouble total. Roll up per currency from the rows instead — they carry it.
+  const totals = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const map = new Map<string, { due: number; paid: number; overdue: number }>();
+    for (const it of items ?? []) {
+      const cur = it.currency || "RUB";
+      const acc = map.get(cur) ?? { due: 0, paid: 0, overdue: 0 };
+      if (it.status === "PAID") acc.paid += Number(it.amount);
+      else if (it.status === "PENDING" && (it.dueDate ?? "") < today) acc.overdue += Number(it.amount);
+      else if (it.status === "PENDING") acc.due += Number(it.amount);
+      map.set(cur, acc);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [items]);
 
   const groups = useMemo(() => {
     if (!items) return [];
@@ -54,13 +67,13 @@ export default function PaymentCalendarPage() {
         <p className="text-sm text-slate-400">{t("build.paymentCalendar.subtitle")}</p>
       </div>
 
-      {summary && (
-        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <SummaryCard label={t("build.paymentCalendar.summaryDue")} amount={summary.due} tone="amber" />
-          <SummaryCard label={t("build.paymentCalendar.summaryOverdue")} amount={summary.overdue} tone="rose" />
-          <SummaryCard label={t("build.paymentCalendar.summaryPaid")} amount={summary.paid} tone="emerald" />
+      {totals.map(([currency, sum]) => (
+        <div key={currency} className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <SummaryCard label={t("build.paymentCalendar.summaryDue")} amount={sum.due} currency={currency} tone="amber" />
+          <SummaryCard label={t("build.paymentCalendar.summaryOverdue")} amount={sum.overdue} currency={currency} tone="rose" />
+          <SummaryCard label={t("build.paymentCalendar.summaryPaid")} amount={sum.paid} currency={currency} tone="emerald" />
         </div>
-      )}
+      ))}
 
       {err && <p className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">{err}</p>}
 
@@ -89,7 +102,17 @@ export default function PaymentCalendarPage() {
   );
 }
 
-function SummaryCard({ label, amount, tone }: { label: string; amount: number; tone: "amber" | "emerald" | "rose" }) {
+function SummaryCard({
+  label,
+  amount,
+  currency,
+  tone,
+}: {
+  label: string;
+  amount: number;
+  currency: string;
+  tone: "amber" | "emerald" | "rose";
+}) {
   const cls =
     tone === "emerald"
       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
@@ -99,7 +122,9 @@ function SummaryCard({ label, amount, tone }: { label: string; amount: number; t
   return (
     <div className={`rounded-xl border p-4 ${cls}`}>
       <div className="text-xs uppercase opacity-70">{label}</div>
-      <div className="mt-1 text-xl font-bold">{amount.toLocaleString("ru-RU")} ₽</div>
+      <div className="mt-1 text-xl font-bold">
+        {amount.toLocaleString("ru-RU")} {currency}
+      </div>
     </div>
   );
 }
@@ -117,6 +142,16 @@ function PaymentRow({ row, myId, onChanged, t }: { row: BuildPaymentEvent; myId:
   const update = async (patch: { status?: PaymentEventStatus }) => {
     setBusy(true);
     try { await buildApi.updatePaymentEvent(row.id, patch); onChanged(); }
+    catch {/**/}
+    finally { setBusy(false); }
+  };
+
+  // Cancelling keeps the row for the record; deleting is for a row entered by
+  // mistake, so it is the client's only and confirmed.
+  const remove = async () => {
+    if (!window.confirm(`Удалить платёж на ${row.amount.toLocaleString("ru-RU")} ${row.currency}?`)) return;
+    setBusy(true);
+    try { await buildApi.deletePaymentEvent(row.id); onChanged(); }
     catch {/**/}
     finally { setBusy(false); }
   };
@@ -157,6 +192,16 @@ function PaymentRow({ row, myId, onChanged, t }: { row: BuildPaymentEvent; myId:
             </button>
           )}
         </div>
+      )}
+      {row.clientId === myId && (
+        <button
+          disabled={busy}
+          onClick={() => void remove()}
+          title="Удалить платёж"
+          className="rounded-md border border-white/10 px-2 py-1 text-xs text-slate-400 hover:bg-white/5 hover:text-rose-200 disabled:opacity-50"
+        >
+          ×
+        </button>
       )}
     </div>
   );

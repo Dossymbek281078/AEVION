@@ -6,6 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import { BuildShell } from "@/components/build/BuildShell";
 import { useToast } from "@/components/build/Toast";
 import { ScheduleShiftModal } from "@/components/build/ScheduleShiftModal";
+import { SchedulePaymentModal } from "@/components/build/SchedulePaymentModal";
 import { buildApi, type BuildApplication, type ApplicationLabel } from "@/lib/build/api";
 
 const LABEL_OPTIONS: { key: ApplicationLabel; emoji: string; label: string }[] = [
@@ -32,6 +33,7 @@ export default function ApplicationReviewPage() {
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [scheduling, setScheduling] = useState(false);
+  const [planningPayment, setPlanningPayment] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -392,13 +394,22 @@ export default function ApplicationReviewPage() {
                 </>
               )}
               {current.status === "ACCEPTED" && (
-                <button
-                  type="button"
-                  onClick={() => setScheduling(true)}
-                  className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25"
-                >
-                  📅 Назначить смену
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setScheduling(true)}
+                    className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25"
+                  >
+                    📅 Назначить смену
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlanningPayment(true)}
+                    className="rounded-md border border-amber-400/40 bg-amber-400/15 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-400/25"
+                  >
+                    💸 Запланировать оплату
+                  </button>
+                </>
               )}
             </div>
             <button
@@ -567,6 +578,15 @@ export default function ApplicationReviewPage() {
           workerName={current.applicantName}
           onClose={() => setScheduling(false)}
           onScheduled={() => toast.success("Смена назначена — работник получил уведомление")}
+        />
+      )}
+
+      {planningPayment && current && (
+        <SchedulePaymentModal
+          applicationId={current.id}
+          workerName={current.applicantName}
+          onClose={() => setPlanningPayment(false)}
+          onScheduled={() => toast.success("Платёж добавлен в календарь обеих сторон")}
         />
       )}
     </BuildShell>

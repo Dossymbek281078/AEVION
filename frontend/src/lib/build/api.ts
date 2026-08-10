@@ -1866,8 +1866,20 @@ export const buildApi = {
   // Payment calendar
   myPaymentCalendar: () =>
     call<{ items: BuildPaymentEvent[]; summary: { due: number; paid: number; overdue: number } }>("GET", "/api/build/payment-calendar/my"),
+  // Client plans a payment against an ACCEPTED application. `summary` from the
+  // endpoint above sums across currencies, so callers should total per-currency
+  // from `items` instead.
+  createPaymentEvent: (input: {
+    applicationId: string;
+    amount: number;
+    dueDate: string;
+    currency?: string;
+    note?: string | null;
+  }) => call<BuildPaymentEvent>("POST", "/api/build/payment-calendar", input),
   updatePaymentEvent: (id: string, patch: { status?: PaymentEventStatus; paidAt?: string | null; note?: string | null }) =>
     call<BuildPaymentEvent>("PATCH", `/api/build/payment-calendar/${id}`, patch),
+  deletePaymentEvent: (id: string) =>
+    call<{ ok: boolean }>("DELETE", `/api/build/payment-calendar/${encodeURIComponent(id)}`),
 
   // Documents — verification workflow
   uploadDocument: (input: { fileUrl: string; docType: string }) =>

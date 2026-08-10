@@ -195,12 +195,33 @@ function validateVideoUrl(raw: string): { ok: true; url: string } | { ok: false;
   return { ok: true, url: value };
 }
 
+// TikTok allows only 6 requests per minute per access_token, shared by every
+// endpoint. One publish used to spend two of them (creator_info for the
+// privacy check, then video/init) on top of the page load and the status
+// poll — enough to cross the limit and fail a healthy post. creator_info
+// barely changes, so a short cache removes the duplicate call without making
+// the check any less real. Keyed by a hash so raw tokens never sit in a map.
+const CREATOR_INFO_TTL_MS = 60_000;
+const creatorInfoCache = new Map<string, { at: number; data: any }>();
+
+function tokenKey(accessToken: string): string {
+  return crypto.createHash("sha256").update(accessToken).digest("hex").slice(0, 32);
+}
+
 // Single door to creator_info/query — used both by the /creator-info route
 // and by the publish-time privacy check, so there is one place that knows
 // how TikTok shapes this response.
 async function fetchCreatorInfo(
   accessToken: string,
 ): Promise<{ ok: true; data: any } | { ok: false; detail: any }> {
+  const key = tokenKey(accessToken);
+  const now = Date.now();
+  const hit = creatorInfoCache.get(key);
+  if (hit && now - hit.at < CREATOR_INFO_TTL_MS) return { ok: true, data: hit.data };
+  // Drop expired entries so a long-lived process doesn't accumulate them.
+  for (const [k, v] of creatorInfoCache) {
+    if (now - v.at >= CREATOR_INFO_TTL_MS) creatorInfoCache.delete(k);
+  }
   const r = await fetch(CREATOR_INFO_URL, {
     method: "POST",
     headers: {
@@ -210,7 +231,9 @@ async function fetchCreatorInfo(
   });
   const j: any = await r.json().catch(() => ({}));
   if (!r.ok || j.error?.code !== "ok") return { ok: false, detail: j.error || r.status };
-  return { ok: true, data: j.data || {} };
+  const data = j.data || {};
+  creatorInfoCache.set(key, { at: Date.now(), data });
+  return { ok: true, data };
 }
 
 // The allowed privacy levels are the ones TikTok reports for THIS creator —

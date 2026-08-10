@@ -42,7 +42,14 @@ function sessionCookie(session: Record<string, unknown>): string {
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
-const liveSession = { access_token: "at-live", refresh_token: "rt", expires_at: nowSec() + 3600 };
+// creator_info is cached per access_token for 60s, so each test gets its own
+// token — otherwise one test's cached response would answer the next one.
+let tokenSeq = 0;
+const freshLiveSession = () => ({
+  access_token: `at-live-${++tokenSeq}`,
+  refresh_token: "rt",
+  expires_at: nowSec() + 3600,
+});
 const expiredNoRefresh = { access_token: "at-dead", expires_at: nowSec() - 10 };
 const expiredWithRefresh = { access_token: "at-old", refresh_token: "rt", expires_at: nowSec() - 10 };
 
@@ -74,7 +81,7 @@ afterEach(() => {
 describe("/config reports the real session state", () => {
   test("live token reads as connected", async () => {
     const app = makeApp();
-    const res = await request(app).get("/api/tiktok/config").set("Cookie", sessionCookie(liveSession));
+    const res = await request(app).get("/api/tiktok/config").set("Cookie", sessionCookie(freshLiveSession()));
     expect(res.status).toBe(200);
     expect(res.body.connected).toBe(true);
     expect(clearsSessionCookie(res)).toBe(false);
@@ -113,7 +120,7 @@ describe("/publish rejects input TikTok could only bounce", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/tiktok/publish")
-      .set("Cookie", sessionCookie(liveSession))
+      .set("Cookie", sessionCookie(freshLiveSession()))
       .send({ videoUrl: "http://cdn.example/v.mp4", privacyLevel: "SELF_ONLY" });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("video_url_must_be_https");
@@ -124,7 +131,7 @@ describe("/publish rejects input TikTok could only bounce", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/tiktok/publish")
-      .set("Cookie", sessionCookie(liveSession))
+      .set("Cookie", sessionCookie(freshLiveSession()))
       .send({ videoUrl: "cdn.example/v.mp4", privacyLevel: "SELF_ONLY" });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("video_url_malformed");
@@ -136,7 +143,7 @@ describe("/publish rejects input TikTok could only bounce", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/tiktok/publish")
-      .set("Cookie", sessionCookie(liveSession))
+      .set("Cookie", sessionCookie(freshLiveSession()))
       .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "PUBLIC_TO_EVERYONE" });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("privacy_level_not_allowed");
@@ -157,13 +164,52 @@ describe("/publish rejects input TikTok could only bounce", () => {
   });
 });
 
+describe("creator_info is not fetched twice inside the rate-limit window", () => {
+  test("a publish reuses the creator_info the page load already fetched", async () => {
+    // TikTok allows 6 requests/min per token; page load + publish used to
+    // spend two on creator_info alone, on top of video/init and the poll.
+    fetchMock
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY"], creator_nickname: "n" }))
+      .mockResolvedValueOnce(tiktokOk({ publish_id: "pub-cached" }));
+    const app = makeApp();
+    const cookie = sessionCookie(freshLiveSession());
+
+    const info = await request(app).get("/api/tiktok/creator-info").set("Cookie", cookie);
+    expect(info.status).toBe(200);
+
+    const pub = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", cookie)
+      .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY" });
+    expect(pub.status).toBe(200);
+
+    // Exactly two upstream calls: one creator_info, one video/init.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.filter((c) => c[0] === CREATOR_INFO_URL)).toHaveLength(1);
+  });
+
+  test("a different account does not read the cached creator_info", async () => {
+    fetchMock
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY"], creator_nickname: "first" }))
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["PUBLIC_TO_EVERYONE"], creator_nickname: "second" }));
+    const app = makeApp();
+
+    const a = await request(app).get("/api/tiktok/creator-info").set("Cookie", sessionCookie(freshLiveSession()));
+    const b = await request(app).get("/api/tiktok/creator-info").set("Cookie", sessionCookie(freshLiveSession()));
+
+    expect(a.body.nickname).toBe("first");
+    expect(b.body.nickname).toBe("second");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("commercial-content disclosure travels with the post", () => {
   test("branded content cannot be published privately", async () => {
     fetchMock.mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY", "PUBLIC_TO_EVERYONE"] }));
     const app = makeApp();
     const res = await request(app)
       .post("/api/tiktok/publish")
-      .set("Cookie", sessionCookie(liveSession))
+      .set("Cookie", sessionCookie(freshLiveSession()))
       .send({
         videoUrl: "https://cdn.example/v.mp4",
         privacyLevel: "SELF_ONLY",
@@ -182,7 +228,7 @@ describe("commercial-content disclosure travels with the post", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/tiktok/publish")
-      .set("Cookie", sessionCookie(liveSession))
+      .set("Cookie", sessionCookie(freshLiveSession()))
       .send({
         videoUrl: "https://cdn.example/v.mp4",
         privacyLevel: "PUBLIC_TO_EVERYONE",
@@ -203,7 +249,7 @@ describe("commercial-content disclosure travels with the post", () => {
     const app = makeApp();
     await request(app)
       .post("/api/tiktok/publish")
-      .set("Cookie", sessionCookie(liveSession))
+      .set("Cookie", sessionCookie(freshLiveSession()))
       .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY" });
     const initCall = fetchMock.mock.calls.find((c) => c[0] === PUBLISH_INIT_URL);
     const body = JSON.parse(initCall![1].body);
@@ -219,7 +265,7 @@ describe("commercial-content disclosure travels with the post", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/tiktok/publish")
-      .set("Cookie", sessionCookie(liveSession))
+      .set("Cookie", sessionCookie(freshLiveSession()))
       .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY", isAigc: true });
     expect(res.status).toBe(200);
     const initCall = fetchMock.mock.calls.find((c) => c[0] === PUBLISH_INIT_URL);
@@ -233,7 +279,7 @@ describe("commercial-content disclosure travels with the post", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/tiktok/publish")
-      .set("Cookie", sessionCookie(liveSession))
+      .set("Cookie", sessionCookie(freshLiveSession()))
       .send({
         videoUrl: "https://cdn.example/v.mp4",
         privacyLevel: "PUBLIC_TO_EVERYONE",
@@ -252,7 +298,7 @@ describe("/publish only claims success when a post was really queued", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/tiktok/publish")
-      .set("Cookie", sessionCookie(liveSession))
+      .set("Cookie", sessionCookie(freshLiveSession()))
       .send({ videoUrl: "  https://cdn.example/v.mp4  ", title: "hi", privacyLevel: "SELF_ONLY" });
 
     expect(res.status).toBe(200);
@@ -272,7 +318,7 @@ describe("/publish only claims success when a post was really queued", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/tiktok/publish")
-      .set("Cookie", sessionCookie(liveSession))
+      .set("Cookie", sessionCookie(freshLiveSession()))
       .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY" });
     // Was: 200 with publishId undefined — the UI printed "publish_id: undefined".
     expect(res.status).toBe(502);
@@ -286,7 +332,7 @@ describe("/publish only claims success when a post was really queued", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/tiktok/publish")
-      .set("Cookie", sessionCookie(liveSession))
+      .set("Cookie", sessionCookie(freshLiveSession()))
       .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "PUBLIC_TO_EVERYONE" });
     expect(res.status).toBe(200);
     expect(res.body.publishId).toBe("pub-456");

@@ -67,7 +67,7 @@ export default function QuantumShieldPublicPage() {
         try {
           const tok =
             typeof window !== "undefined"
-              ? localStorage.getItem("aevion_token") || localStorage.getItem("aevion_jwt")
+              ? localStorage.getItem("aevion_auth_token_v1") || localStorage.getItem("aevion_jwt")
               : null;
           if (tok) headers.Authorization = `Bearer ${tok}`;
         } catch {

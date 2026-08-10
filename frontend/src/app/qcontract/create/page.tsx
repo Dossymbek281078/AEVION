@@ -52,7 +52,7 @@ export default function CreateDocument() {
   }
 
   async function handleCreate() {
-    const token = localStorage.getItem("aevion_token") ?? "";
+    const token = localStorage.getItem("aevion_auth_token_v1") ?? "";
     if (!token) { setError(t("qcontract.create.error.auth_required")); return; }
     if (!title.trim()) { setError(t("qcontract.create.error.title_required")); return; }
     if (!content.trim()) { setError(t("qcontract.create.error.content_required")); return; }

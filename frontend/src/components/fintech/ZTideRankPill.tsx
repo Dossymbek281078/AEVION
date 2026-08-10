@@ -50,7 +50,7 @@ export default function ZTideRankPill(): React.ReactElement | null {
 
   useEffect(() => {
     let cancelled = false;
-    const token = typeof window !== "undefined" ? window.localStorage.getItem("aevion_token") : null;
+    const token = typeof window !== "undefined" ? window.localStorage.getItem("aevion_auth_token_v1") : null;
     if (!token) {
       setReady(true);
       return;

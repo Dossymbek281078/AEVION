@@ -343,6 +343,9 @@ for (const file of walk(SRC)) {
       .split(/["'`)}<>]/)[0]
       .replace(/[.,;:]+$/, (t) => (/\.(xml|pdf|csv|js|json)$/.test(raw) ? t : ""));
     if (/[\s<>]/.test(p)) continue;
+    // `{id}` and `{music,film}` are OpenAPI-style notation in prose and pitch
+    // data, not URLs — a real path has no braces left once `${...}` is stripped.
+    if (p.includes("{")) continue;
     if (!p.startsWith(PREFIX)) continue;
     // A module specifier is not a URL: `import { store } from
     // "../../api/payments/v1/_lib"` contains the prefix and means nothing here.

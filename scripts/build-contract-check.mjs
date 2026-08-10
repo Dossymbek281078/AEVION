@@ -441,10 +441,20 @@ for (const c of calls) {
 // only needed for paths that must leave for the Express backend.
 const misaddressed = calls.filter((c) => c.wrongOrigin && !c.next);
 
-console.log(`frontend calls: ${calls.length} | backend routes: ${backend.length}`);
-if (unmatched.length === 0) {
-  console.log(`OK — every ${PREFIX} call resolves to a mounted route.`);
+// The verdict goes FIRST. It used to be the second line, with a blank line in
+// its place whenever there were findings — so `head -2` looked calm on a failing
+// run, and exactly that hid a regression of mine for a commit.
+const counts = `${calls.length} calls / ${backend.length} routes`;
+if (unmatched.length === 0 && misaddressed.length === 0) {
+  console.log(`OK ${PREFIX} — ${counts}, no drift`);
 } else {
+  const parts = [];
+  if (unmatched.length) parts.push(`${unmatched.length} with no route`);
+  if (misaddressed.length) parts.push(`${misaddressed.length} misaddressed`);
+  console.log(`FAIL ${PREFIX} — ${parts.join(", ")} (${counts})`);
+}
+
+if (unmatched.length > 0) {
   console.log(`\nFRONTEND CALLS WITH NO BACKEND ROUTE (${unmatched.length}):`);
   for (const c of unmatched) console.log(`  ${c.where}:${c.line}  ${c.method} ${c.path}`);
 }

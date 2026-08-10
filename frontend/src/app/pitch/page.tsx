@@ -43,6 +43,16 @@ const DEMO_METRICS: LiveMetrics = {
   qtradeOps: 1450,
 };
 
+// Порядок совпадает с порядком таблеток — один список, чтобы счётчик и
+// таблетки не разъехались при добавлении метрики.
+const METRIC_KEYS: (keyof LiveMetrics)[] = [
+  "qrightObjects",
+  "certifiedArtifacts",
+  "participants",
+  "shieldRecords",
+  "qtradeOps",
+];
+
 const stageLabel: Record<LaunchStage, string> = {
   live: "Live",
   beta: "Beta",
@@ -120,7 +130,15 @@ export default function PitchPage() {
     shieldRecords: null,
     qtradeOps: null,
   });
-  const [metricsLive, setMetricsLive] = useState(false);
+  // Живость — по каждой метрике. Общий флаг «ответила хотя бы одна ручка»
+  // подписывал «Live data from API» под числом QTrade, которое на этой
+  // странице живым не бывает никогда: /api/qtrade/summary закрыт
+  // авторизацией, а /pitch читают инвесторы без входа. Замер прода
+  // 10.08.2026: четыре источника отдают 25 / 25 / 20 / 50, пятый — 401,
+  // и на его месте стояла зашитая константа.
+  const [liveKeys, setLiveKeys] = useState<Partial<Record<keyof LiveMetrics, boolean>>>({});
+  const liveCount = METRIC_KEYS.filter((k) => liveKeys[k]).length;
+  const allLive = liveCount === METRIC_KEYS.length;
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 720);
@@ -162,37 +180,44 @@ export default function PitchPage() {
         if (cancelled) return;
 
         let next: LiveMetrics = { ...DEMO_METRICS };
-        let anyOk = false;
+        const live: Partial<Record<keyof LiveMetrics, boolean>> = {};
 
         if (qr && qr.ok) {
           const j = await qr.json().catch(() => null);
-          if (Array.isArray(j?.items)) { next.qrightObjects = j.items.length; anyOk = true; }
+          if (Array.isArray(j?.items)) { next.qrightObjects = j.items.length; live.qrightObjects = true; }
         }
         if (ps && ps.ok) {
           const j = await ps.json().catch(() => null);
           if (j) {
-            next.certifiedArtifacts = j.certifiedArtifactVersions ?? next.certifiedArtifacts;
-            next.participants = j.eligibleParticipants ?? next.participants;
-            anyOk = true;
+            // Поштучно: `?? next.x` оставляет демо-константу, и общий флаг
+            // пометил бы её живой.
+            if (j.certifiedArtifactVersions != null) {
+              next.certifiedArtifacts = j.certifiedArtifactVersions;
+              live.certifiedArtifacts = true;
+            }
+            if (j.eligibleParticipants != null) {
+              next.participants = j.eligibleParticipants;
+              live.participants = true;
+            }
           }
         }
         if (qs && qs.ok) {
           const j = await qs.json().catch(() => null);
-          if (Array.isArray(j?.items)) { next.shieldRecords = j.items.length; anyOk = true; }
+          if (Array.isArray(j?.items)) { next.shieldRecords = j.items.length; live.shieldRecords = true; }
         }
         if (qt && qt.ok) {
           const j = await qt.json().catch(() => null);
-          if (j?.operationCount != null) { next.qtradeOps = j.operationCount; anyOk = true; }
+          if (j?.operationCount != null) { next.qtradeOps = j.operationCount; live.qtradeOps = true; }
         }
 
         if (!cancelled) {
           setMetrics(next);
-          setMetricsLive(anyOk);
+          setLiveKeys(live);
         }
       } catch {
         if (!cancelled) {
           setMetrics(DEMO_METRICS);
-          setMetricsLive(false);
+          setLiveKeys({});
         }
       }
     })();
@@ -446,8 +471,8 @@ export default function PitchPage() {
                 fontSize: 10,
                 fontWeight: 800,
                 letterSpacing: "0.15em",
-                color: metricsLive ? "#34d399" : "#fbbf24",
-                background: metricsLive ? "rgba(52,211,153,0.12)" : "rgba(251,191,36,0.12)",
+                color: allLive ? "#34d399" : "#fbbf24",
+                background: allLive ? "rgba(52,211,153,0.12)" : "rgba(251,191,36,0.12)",
                 padding: "4px 10px",
                 borderRadius: 999,
                 textTransform: "uppercase",
@@ -456,14 +481,18 @@ export default function PitchPage() {
                 gap: 6,
               }}
             >
-              <span style={{ width: 6, height: 6, borderRadius: 999, background: metricsLive ? "#34d399" : "#fbbf24" }} aria-hidden />
-              {metricsLive ? "Live data from API" : "Demo snapshot (backend offline)"}
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: allLive ? "#34d399" : "#fbbf24" }} aria-hidden />
+              {allLive
+                ? "Live data from API"
+                : liveCount > 0
+                  ? `Live data from API (${liveCount}/${METRIC_KEYS.length}); the rest is a demo snapshot`
+                  : "Demo snapshot (backend offline)"}
             </span>
-            <LivePill label="QRight records" value={metrics.qrightObjects} />
-            <LivePill label="Bureau certs" value={metrics.certifiedArtifacts} />
-            <LivePill label="Planet participants" value={metrics.participants} />
-            <LivePill label="Shielded artifacts" value={metrics.shieldRecords} />
-            <LivePill label="QTrade ops" value={metrics.qtradeOps} />
+            <LivePill label="QRight records" value={metrics.qrightObjects} live={!!liveKeys.qrightObjects} />
+            <LivePill label="Bureau certs" value={metrics.certifiedArtifacts} live={!!liveKeys.certifiedArtifacts} />
+            <LivePill label="Planet participants" value={metrics.participants} live={!!liveKeys.participants} />
+            <LivePill label="Shielded artifacts" value={metrics.shieldRecords} live={!!liveKeys.shieldRecords} />
+            <LivePill label="QTrade ops" value={metrics.qtradeOps} live={!!liveKeys.qtradeOps} />
           </div>
 
           <div className="pitch-no-print" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -1852,8 +1881,19 @@ function PressColumn({ title, items, accent }: { title: string; items: ReadonlyA
   );
 }
 
-function LivePill({ label, value }: { label: string; value: number | null }) {
+function LivePill({
+  label,
+  value,
+  live,
+}: {
+  label: string;
+  value: number | null;
+  live: boolean;
+}) {
   const display = value == null ? "…" : value.toLocaleString("en-US");
+  // Пока идёт первый запрос (value === null) метка не нужна: «…» ни за что
+  // себя не выдаёт. Метка нужна там, где число ПОКАЗАНО, но не живое.
+  const showDemoMark = value != null && !live;
   return (
     <span
       style={{
@@ -1867,8 +1907,23 @@ function LivePill({ label, value }: { label: string; value: number | null }) {
         whiteSpace: "nowrap",
       }}
     >
-      <strong style={{ color: "#5eead4", marginRight: 6 }}>{display}</strong>
+      <strong style={{ color: showDemoMark ? "#fbbf24" : "#5eead4", marginRight: 6 }}>{display}</strong>
       <span style={{ color: "#94a3b8" }}>{label}</span>
+      {showDemoMark && (
+        <span
+          style={{
+            marginLeft: 6,
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "0.1em",
+            color: "#fbbf24",
+            textTransform: "uppercase",
+          }}
+          title="Source did not answer — fixed demo snapshot, not a live number"
+        >
+          demo
+        </span>
+      )}
     </span>
   );
 }

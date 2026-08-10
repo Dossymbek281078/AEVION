@@ -7162,11 +7162,22 @@ export default function CyberChessPage(){
             };
             return <Card padding={0} elevation="sm">
               <div style={{padding:`${SPACE[3]}px ${SPACE[3]}px`,borderBottom:`1px solid ${CC.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                {/* Строки этой таблицы синтезированы `leaderboards.ts` из сида — Магнус,
+                    Хикару и прочие с выдуманными рейтингами. Соседний блок ниже такую же
+                    симуляцию честно помечает значком «демо», а здесь пометки не было, и
+                    игрок читал свой ранг среди чемпионов как настоящий. Настоящая таблица
+                    существует и живёт на /cyberchess/leaderboard (рейтинг матчмейкинга),
+                    поэтому рядом с пометкой даём к ней переход. */}
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                   <span style={{fontSize:22,lineHeight:1}}>🏆</span>
                   <span style={{fontSize:16,fontWeight:900,color:CC.text,letterSpacing:0.4}}>Лидеры площадки</span>
+                  <Badge tone="accent" size="xs" style={{fontSize:9}}>демо</Badge>
                 </div>
                 <span style={{fontSize:11,color:CC.textMute,fontWeight:700}}>топ-3 + твоя позиция</span>
+              </div>
+              <div style={{padding:`0 ${SPACE[3]}px ${SPACE[2]}px`,fontSize:10.5,color:CC.textDim,lineHeight:1.45}}>
+                Соперники в списке — симуляция для наглядности. Таблица по живым партиям —{" "}
+                <a href="/cyberchess/leaderboard" style={{color:CC.brand,fontWeight:800}}>рейтинг матчмейкинга</a>.
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))"}}>
                 {categories.map((cat,catIdx)=>{
@@ -12332,8 +12343,14 @@ ${question.trim()}`;
       setTimeout(()=>{
         try{const el=document.querySelector("[data-lb-me=\"1\"]");if(el)(el as HTMLElement).scrollIntoView({block:"center",behavior:"smooth"})}catch{}
       },50);
-      return <Modal open={!!lbExpanded} onClose={()=>sLbExpanded(null)} size="lg" title={`🏆 ${CATEGORY_LABEL[lbExpanded]} · топ-${all.length}`}>
+      {/* Развёрнутый вид той же симуляции. Здесь пометка нужнее всего: человек
+          доскроллил до своей строки среди тысяч имён и читает ранг как настоящий. */}
+      return <Modal open={!!lbExpanded} onClose={()=>sLbExpanded(null)} size="lg" title={`🏆 ${CATEGORY_LABEL[lbExpanded]} · топ-${all.length} · демо`}>
         <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2]}}>Твоя позиция: <span style={{fontWeight:900,color:CC.brand}}>#{myRank.toLocaleString()}</span> · рейтинг {myRating}</div>
+        <div style={{fontSize:11,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.45}}>
+          Соперники синтезированы для наглядности — твой рейтинг настоящий, их нет. Таблица по живым партиям —{" "}
+          <a href="/cyberchess/leaderboard" style={{color:CC.brand,fontWeight:800}}>рейтинг матчмейкинга</a>.
+        </div>
         <div style={{maxHeight:"60vh",overflowY:"auto",border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:CC.surface1}}>
           {all.map((e,i)=>{
             const podium=e.rank===1?"🥇":e.rank===2?"🥈":e.rank===3?"🥉":null;
@@ -13677,7 +13694,11 @@ ${question.trim()}`;
               })}
             </div>
             <div style={{fontSize:10,color:CC.textDim,marginTop:SPACE[2],fontStyle:"italic",lineHeight:1.4}}>
-              Топ-10 мировых гроссмейстеров — симулировано. Реальный лидерборд появится с запуском multiplayer.
+              {/* «появится с запуском multiplayer» — обещание протухло: матчмейкинг живой,
+                  и таблица по настоящим партиям уже есть. Обещать то, что сделано, — тот же
+                  неверный факт на экране, что и выдуманные строки. */}
+              Топ-10 мировых гроссмейстеров — симулировано. Таблица по живым партиям —{" "}
+              <a href="/cyberchess/leaderboard" style={{color:CC.brand,fontWeight:800}}>рейтинг матчмейкинга</a>.
             </div>
           </div>;
         })()}

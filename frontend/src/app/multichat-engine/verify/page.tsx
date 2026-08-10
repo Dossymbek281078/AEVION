@@ -17,7 +17,8 @@ import { apiUrl } from "@/lib/apiBase";
 import { T } from "../theme";
 
 type VerifyResult = {
-  hashMatches: boolean;
+  /** null — хеш к чеку не приложили. Это НЕ то же самое, что «не сходится». */
+  hashMatches: boolean | null;
   computedHash: string;
   signature: "valid" | "invalid" | "absent" | "unverifiable";
   signatureNote: string | null;
@@ -64,7 +65,16 @@ export default function VerifyReceiptPage() {
     void check(text);
   }
 
-  const verdictColor = !res ? T.textMute : res.hashMatches ? T.accent : T.bad;
+  // Три состояния, а не два: «сходится», «не сходится» и «сравнивать не с чем».
+  // Раньше третье показывалось как второе — человеку с подлинным чеком без
+  // приложенного хеша страница заявляла, что содержимое изменено.
+  const verdictColor = !res
+    ? T.textMute
+    : res.hashMatches === null
+      ? T.warn
+      : res.hashMatches
+        ? T.accent
+        : T.bad;
 
   return (
     <main style={{ background: T.canvas, minHeight: "100vh", padding: "48px 20px", color: T.text }}>
@@ -126,7 +136,11 @@ export default function VerifyReceiptPage() {
         {res && (
           <div style={{ marginTop: 22, background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 18 }}>
             <h2 style={{ fontSize: 20, margin: 0, color: verdictColor }}>
-              {res.hashMatches ? "Хеш сходится — содержимое не изменено" : "Хеш НЕ сходится — содержимое изменено"}
+              {res.hashMatches === null
+                ? "Хеш не приложен — сравнивать не с чем"
+                : res.hashMatches
+                  ? "Хеш сходится — содержимое не изменено"
+                  : "Хеш НЕ сходится — содержимое изменено"}
             </h2>
             <p style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: T.textFaded, margin: "10px 0 0", wordBreak: "break-all" }}>
               пересчитано: {res.computedHash}
@@ -148,10 +162,19 @@ export default function VerifyReceiptPage() {
               подпись {res.spec.signature}.
             </p>
 
-            {!res.hashMatches && (
+            {res.hashMatches === false && (
               <p style={{ fontSize: 13, color: T.warn, margin: "12px 0 0", lineHeight: 1.6 }}>
                 Расхождение означает одно из двух: файл отредактировали после выдачи, либо это чек
                 другого ответа. Сравните поле <code>hash</code> в файле с пересчитанным выше.
+              </p>
+            )}
+
+            {res.hashMatches === null && (
+              <p style={{ fontSize: 13, color: T.textDim, margin: "12px 0 0", lineHeight: 1.6 }}>
+                Вы принесли сам чек, но без поля <code>hash</code> — это нормальный формат, просто
+                сверять нам не с чем. Хеш выше пересчитан по содержимому: сравните его с тем, что
+                указан у отправителя. Целиком скачанный файл (<code>receipt</code>, <code>hash</code>,{" "}
+                <code>signature</code>) страница сверит сама.
               </p>
             )}
           </div>

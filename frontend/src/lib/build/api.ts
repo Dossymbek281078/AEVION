@@ -1762,6 +1762,8 @@ export const buildApi = {
     call<{ items: BuildStory[] }>("GET", `/api/build/stories${q?.limit ? `?limit=${q.limit}` : ""}`),
   createStory: (input: { text?: string; content?: string; mediaUrl?: string | null; mediaType?: string | null }) =>
     call<BuildStory>("POST", "/api/build/stories", input),
+  deleteStory: (storyId: string) =>
+    call<{ ok: boolean }>("DELETE", `/api/build/stories/${encodeURIComponent(storyId)}`),
   toggleStoryLike: (storyId: string) =>
     call<{ liked: boolean; likes: number; likeCount: number }>("POST", `/api/build/stories/${storyId}/like`, {}),
 

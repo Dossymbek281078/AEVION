@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { buildApi, type BuildStory } from "@/lib/build/api";
+import { useBuildAuth } from "@/lib/build/auth";
 import { useI18n } from "@/lib/i18n";
 
 export default function StoriesPage() {
@@ -196,9 +197,11 @@ function StoryCard({
   onChanged: () => void;
 }) {
   const { t } = useI18n();
+  const me = useBuildAuth((s) => s.user);
   const [likeCount, setLikeCount] = useState(story.likeCount);
   const [liked, setLiked] = useState(story.likedByMe ?? false);
   const [liking, setLiking] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const ago = relativeTime(story.createdAt, t);
 
   // Prefer the userName field; fall back to authorName for older API responses
@@ -222,6 +225,19 @@ function StoryCard({
       setLikeCount(story.likeCount);
     } finally {
       setLiking(false);
+    }
+  }
+
+  // Deleting also drops the story's likes server-side, so make it deliberate.
+  async function handleDelete() {
+    if (deleting) return;
+    if (!window.confirm("Удалить эту историю? Отменить будет нельзя.")) return;
+    setDeleting(true);
+    try {
+      await buildApi.deleteStory(story.id);
+      onChanged();
+    } catch {
+      setDeleting(false);
     }
   }
 
@@ -264,6 +280,17 @@ function StoryCard({
             {ago}
           </div>
         </div>
+        {story.userId === me?.id && (
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={() => void handleDelete()}
+            title="Удалить историю"
+            className="shrink-0 self-start rounded-md border border-white/10 px-2 py-1 text-xs text-slate-500 transition hover:bg-white/5 hover:text-rose-200 disabled:opacity-50"
+          >
+            ×
+          </button>
+        )}
       </div>
 
       {/* Content */}

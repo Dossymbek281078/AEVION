@@ -10,8 +10,13 @@
  *
  * - Three outcomes are kept apart, because collapsing them mislabels all three.
  *   A module with calls gets a row. A module whose routes were found but which
- *   nothing calls is listed under "no frontend callers" — puzzles, search and
- *   tiktok are there, 14 routes between them with no caller at all. A module
+ *   nothing calls is listed under "no frontend callers" — DO NOT read that as
+ *   dead code without checking. It was wrong for tiktok on first use: the
+ *   /tiktok-publisher page calls every one of those routes through
+ *   `const API = "/api-backend/api/tiktok"` plus `${API}/config`, and the
+ *   collector does not see a call assembled that way. `/api-backend/api/...`
+ *   is a convention used in awards and bank too, so the same blind spot can
+ *   hide callers in any module. A module
  *   index.ts mounts nothing for is "could not resolve": its prefix differs from
  *   its file name, or the file is a service rather than a router. Printing
  *   either of the last two as a clean row would be exactly the kind of quiet

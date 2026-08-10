@@ -8,7 +8,10 @@
     "build:frontend": "npm run build --prefix frontend",
     "build:all": "npm run build:backend && npm run build:frontend",
     "verify": "npm run build:all",
-    "lint:frontend": "npm run lint --prefix frontend"
+    "lint:frontend": "npm run lint --prefix frontend",
+    "test": "node scripts/run-all-tests.mjs",
+    "test:backend": "node scripts/run-all-tests.mjs aevion-globus-backend",
+    "test:frontend": "node scripts/run-all-tests.mjs frontend"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

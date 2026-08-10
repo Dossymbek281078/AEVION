@@ -34,7 +34,7 @@ jobs:
       - run: npm test
 
   frontend:
-    name: Frontend (next build)
+    name: Frontend (unit tests + next build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -53,6 +53,13 @@ jobs:
       - name: i18n parity (en/ru/kk)
         working-directory: ${{ github.workspace }}
         run: node scripts/i18n-kk-extract.mjs
+      # 476 фронтовых юнит-тестов (paywall-перехватчик fetch, ToastProvider,
+      # InstallPrompt, PipelineSteps, комиссии QTrade, гвардия чисел питча)
+      # существовали, но не выполнялись НИГДЕ: этот job собирал только `next
+      # build`, а локальный `npx vitest run` из корня запускал их без jsdom и
+      # алиасов и потому всегда красным — то есть его вывод игнорировали.
+      # Проверено 10.08.2026 своим раннером: 476/476 зелёных.
+      - run: npm run test:run
       - run: npm run build
 
   payments-smoke:

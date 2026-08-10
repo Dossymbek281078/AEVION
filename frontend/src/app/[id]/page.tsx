@@ -42,12 +42,17 @@ const DEDICATED_ROUTES: Record<string, string> = {
 // the i18n client-module boundary leaves translations undefined.
 export const dynamic = "force-dynamic";
 
+// params — всегда промис (Next 15+). Объединение `Promise<…> | {…}` осталось
+// со времён перехода и в Next 16 роняет сборку на проверке типов: сгенерённый
+// PageProps требует `Promise<any> | undefined`, а объединение под него не
+// подходит. Компиляция при этом проходит, падает уже type check — то есть
+// ошибка видна только в полной сборке, не в dev.
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const p = (await Promise.resolve(params)) as { id: string };
+  const p = await params;
   const id = p.id;
   try {
     const res = await fetch(apiUrl(`/api/globus/projects/${id}`), {

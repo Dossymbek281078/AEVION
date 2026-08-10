@@ -60,3 +60,82 @@ describe("data/trust.ts — публичные счётчики не расхо�
     ).toBe(false);
   });
 });
+
+/**
+ * Отставные цены тарифов в ПУБЛИЧНЫХ данных бэкенда.
+ *
+ * Фронтовый `retiredPrices.guard` делает ровно это по frontend/src и по той же
+ * причине не видит `src/data/*.ts`, хотя эти файлы отдаются наружу. Здесь —
+ * та же проверка со стороны бэкенда, на тот же короткий список из четырёх
+ * отставных цен (19 / 29 / 49 / 149.99 — репрайсинг 22.07.2026).
+ */
+const PUBLIC_DATA = ["data/trust.ts", "data/cases.ts", "data/changelog.ts", "data/roadmap.ts"];
+
+/**
+ * Законные вхождения — с причиной, иначе это просто заглушённый сторож.
+ *
+ * Отзывы клиентов правке НЕ подлежат: цитата подписана именем человека, и
+ * переписать в ней цену — значит подделать отзыв. Поэтому они здесь, а не
+ * «исправлены»: сторож фиксирует, что про них знают, и оставляет решение
+ * основателю (реальные это отзывы или демо — и что с ними делать).
+ */
+const ALLOWED_BACKEND: Array<{ fragment: string; reason: string }> = [
+  {
+    fragment: "Теперь всё под одним аккаунтом за $19/мес",
+    reason: "цитата отзыва в trust.ts — правка = подделка отзыва, ждёт решения основателя",
+  },
+  {
+    fragment: "дал нам это за $19/мес",
+    reason: "цитата кейса в cases.ts — то же самое",
+  },
+];
+
+/** Запись чейнджлога описывает, что произошло ТОГДА. «Lite $19→$24» — правда. */
+const CHANGELOG_ENTRY = /→\s*\$|kind:\s*"changed"/;
+
+describe("публичные данные бэкенда не печатают отставные цены тарифов", () => {
+  test("сплошной обход data/*.ts не находит ни одной", () => {
+    const re = /\$(19|29|49|149\.99)(?![\d.,]*[\dBMKbmk])/g;
+    const violations: string[] = [];
+
+    for (const rel of PUBLIC_DATA) {
+      const abs = path.join(SRC, rel);
+      let content: string;
+      try {
+        content = readFileSync(abs, "utf8");
+      } catch {
+        continue; // файл переименовали — это не задача этого сторожа
+      }
+      content.split("\n").forEach((line, idx) => {
+        re.lastIndex = 0;
+        if (!re.test(line)) return;
+        if (CHANGELOG_ENTRY.test(line)) return;
+        if (ALLOWED_BACKEND.some((a) => line.includes(a.fragment))) return;
+        violations.push(`${rel}:${idx + 1}  «${line.trim().slice(0, 110)}»`);
+      });
+    }
+
+    expect(
+      violations,
+      "Отставные цены тарифов (19/29/49/149.99 — репрайсинг 22.07.2026) в публичных " +
+        "данных бэкенда:\n  " + violations.join("\n  ") +
+        "\n\nЖивые цены — в data/pricing.ts. Если это законное вхождение, впиши его " +
+        "в ALLOWED_BACKEND С ПРИЧИНОЙ.",
+    ).toEqual([]);
+  });
+
+  test("список исключений не протух", () => {
+    const corpus = PUBLIC_DATA.map((rel) => {
+      try {
+        return readFileSync(path.join(SRC, rel), "utf8");
+      } catch {
+        return "";
+      }
+    }).join("\n");
+    const dead = ALLOWED_BACKEND.filter((a) => !corpus.includes(a.fragment)).map((a) => a.fragment);
+    expect(
+      dead,
+      `Эти исключения больше ни на что не указывают — удали их:\n  ${dead.join("\n  ")}`,
+    ).toEqual([]);
+  });
+});

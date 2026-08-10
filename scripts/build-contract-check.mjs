@@ -61,6 +61,20 @@
  * Still not modelled: a route registered anywhere other than a `<name>Router.`
  * or `router.` call with a literal path, and a mount whose prefix is built from
  * a variable.
+ *
+ * ⚠️ KNOWN UNDER-COUNT, found 2026-08-10 and NOT yet fixed. stripComments()
+ * blanks from any `/*` to the next `*​/`, including a `/*` that sits inside a
+ * string — CSS-in-JS templates have them — so it can erase real code for
+ * hundreds of lines. Measured across frontend/src: 92 files lose /api/
+ * references this way, 203 in total. Some of those genuinely are comments, but
+ * not all: it is why /tiktok-publisher reported zero callers when it calls eight
+ * routes, its `const API = "/api-backend/api/tiktok"` having been blanked.
+ *
+ * So a clean verdict from this tool means "no drift among what it could see".
+ * That is still worth gating on — every finding it has produced was real once
+ * the false-positive classes were fixed — but do not read OK as proof of
+ * absence. Fixing it needs a real tokenizer for comment-vs-string, not another
+ * regex.
  */
 import fs from "node:fs";
 import path from "node:path";

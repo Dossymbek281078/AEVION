@@ -37,10 +37,15 @@
  * /api/aevion-hub call as its own, 81 calls against 6 routes.
  *
  * Measured after all four, 2026-08-10: cyberchess 38 phantom findings -> 4,
- * qsign 21 -> 4, qright 20 -> 7, veilnetx 19 -> 4, aev 75 -> 0. What survives
- * on those modules is worth reading. payments still reports 17, and spot checks
- * say they are real: the /payments/v1/* pages call routes payments.ts does not
- * serve — it only has /gumroad/* and /stripe/*.
+ * qsign 21 -> 4, qright 20 -> 7, veilnetx 19 -> 4, aev 75 -> 0.
+ *
+ * Not everything under /api is Express, and missing that produced the worst
+ * false alarm of the day: payments reported 17, and an earlier revision of this
+ * comment called them real on the strength of "payments.ts does not serve
+ * them". It does not — Next does, from frontend/src/app/api/payments/v1/**.
+ * Those handlers are read now, a relative URL to one is the correct call rather
+ * than a misaddressed one, and payments reports 0. Checking that Express lacks
+ * a route is not the same as checking that nothing serves it.
  *
  * Mounts come from two places, both read: app.use in index.ts (middleware may
  * sit between the prefix and the router) and the { path, router } table in
@@ -76,6 +81,33 @@ const API = path.join(ROOT, `frontend/src/lib/${MODULE}/api.ts`);
 const HAS_API = fs.existsSync(API);
 const ROUTES_ROOT = path.join(ROOT, "aevion-globus-backend/src/routes");
 const INDEX_TS = path.join(ROOT, "aevion-globus-backend/src/index.ts");
+
+// Not everything under /api is Express. Next serves its own handlers from
+// frontend/src/app/api/**/route.ts — /api/payments/v1/* is entirely Next, and
+// for those a bare relative URL is the correct call, not a misaddressed one.
+const NEXT_API = path.join(SRC, "app/api");
+const nextRoutes = [];
+(function walkNext(dir, urlPath) {
+  if (!fs.existsSync(dir)) return;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory()) {
+      // [id] -> :param, [[...rest]] / [...rest] -> match anything below.
+      const seg = /^\[\[?\.\.\./.test(e.name) ? "*" : e.name.replace(/^\[(.+)\]$/, ":$1");
+      walkNext(path.join(dir, e.name), `${urlPath}/${seg}`);
+    } else if (e.name === "route.ts" || e.name === "route.tsx") {
+      nextRoutes.push(urlPath);
+    }
+  }
+})(NEXT_API, "/api");
+
+const servedByNext = (p) =>
+  nextRoutes.some((r) => {
+    const src = r
+      .split("/")
+      .map((seg) => (seg === "*" ? ".*" : seg.startsWith(":") ? "[^/]+" : seg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+      .join("/");
+    return new RegExp(`^${src}$`).test(p);
+  });
 
 // ── backend: every router index.ts mounts under this module's prefix ───────
 // A module is not one file. cyberchess is mounted from six, and /api/qsign/v2
@@ -301,6 +333,9 @@ for (const file of walk(SRC)) {
     const p = toPath(raw).replace(/[.,;:)]+$/, (t) => (/\.(xml|pdf|csv|js|json)$/.test(raw) ? t : ""));
     if (/[\s<>]/.test(p)) continue;
     if (!p.startsWith(PREFIX)) continue;
+    // A module specifier is not a URL: `import { store } from
+    // "../../api/payments/v1/_lib"` contains the prefix and means nothing here.
+    if (/\bfrom\s*$|\brequire\(\s*$|\bimport\(\s*$/.test(src.slice(Math.max(0, m.index - 20), m.index))) continue;
     // The method may sit in a fetch options object, or be passed in as a prop
     // from elsewhere. Guessing GET when it is absent invents drift that is not
     // there, so an undetermined method matches the path under any verb.
@@ -354,13 +389,31 @@ for (const c of calls) {
   const hit = compiled
     .filter((b) => (c.method === "ANY" || b.method === c.method) && b.re.test(target))
     .sort((a, b) => (a.pattern.match(/:/g)?.length ?? 0) - (b.pattern.match(/:/g)?.length ?? 0))[0];
+  // Independent of Express: /api/metrics is served by BOTH a Next handler and
+  // an Express route, and a relative call to it is correct either way.
+  if (servedByNext(target)) c.next = true;
+
   if (hit) {
     used.add(`${hit.method} ${hit.pattern}`);
     usedHandlers.add(hit.handler);
-  } else unmatched.push(c);
+  } else if (c.next) {
+    // Already accounted for.
+  } else if (
+    // A base URL is not an endpoint: `servers: [{ url: ".../api/payments" }]`
+    // in an OpenAPI doc, or `${origin}/api/payments/v1` built for display.
+    // Recognise it as a strict prefix of routes that do exist.
+    c.method === "ANY" &&
+    [...backend.map((b) => b.pattern), ...nextRoutes].some((r) => r.startsWith(`${target}/`))
+  ) {
+    c.baseUrl = true;
+  } else {
+    unmatched.push(c);
+  }
 }
 
-const misaddressed = calls.filter((c) => c.wrongOrigin);
+// A relative URL is the correct way to reach a Next handler — the rewrite is
+// only needed for paths that must leave for the Express backend.
+const misaddressed = calls.filter((c) => c.wrongOrigin && !c.next);
 
 console.log(`frontend calls: ${calls.length} | backend routes: ${backend.length}`);
 if (unmatched.length === 0) {

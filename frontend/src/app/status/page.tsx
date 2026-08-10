@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { apiUrl } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 type ServiceProbe = {
   name: string;
@@ -569,7 +569,7 @@ export default function StatusPage() {
                 Backend process
               </div>
               <Link
-                href="/api/metrics/json"
+                href={`${getClientApiBase()}/api/metrics/json`}
                 style={{ fontSize: 10, color: "#0d9488", textDecoration: "none", fontFamily: "monospace" }}
               >
                 /api/metrics/json →

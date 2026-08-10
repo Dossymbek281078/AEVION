@@ -10,7 +10,16 @@ import { track } from "@/lib/track";
 // реэкспортится из ./PaddleUpgradeButton для старых импортов (~11 модулей).
 
 interface Props {
-  tierId?: "pro" | "business";
+  /**
+   * Which tier this button sells. Defaults to `full` — the banner copy says
+   * "All-Access · все модули включены", which is the Full tier, and no caller
+   * overrides it. It used to default to `pro` (Universe), so the tier tag sent
+   * to Gumroad and to the funnel disagreed with the price on the banner. The
+   * Gumroad params are attribution-only and do not change the charge, so this
+   * fixes reporting, not billing. `pro`/`business` stay accepted for legacy
+   * callers.
+   */
+  tierId?: "full" | "pro" | "business";
   /** "button" — обычная кнопка, "banner" — полоса на всю ширину, "pill" — компактный */
   variant?: "button" | "banner" | "pill";
   /** Название приложения — пробрасывается в Gumroad URL для аналитики атрибуции */
@@ -20,7 +29,7 @@ interface Props {
 }
 
 export function UpgradeButton({
-  tierId = "pro",
+  tierId = "full",
   variant = "button",
   appId = "platform",
   label,

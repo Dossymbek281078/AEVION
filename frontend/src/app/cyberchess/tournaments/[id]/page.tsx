@@ -16,6 +16,7 @@
 //      auto-trigger queue-match on round completion for realPlayers tournaments
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
+import { readDisplayName } from "../../displayName";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -126,8 +127,10 @@ function genLocalUserId(tournamentId: string): string {
 }
 
 function getDisplayName(): string {
-  if (typeof window === "undefined") return "";
-  return window.localStorage.getItem("cc_display_name") || "";
+  // Читалось из "cc_display_name", куда никто никогда не писал: имя
+  // сохраняет подбор соперника под "cyberchess.displayName", поэтому
+  // в турнирной таблице игрок оставался безымянным. См. displayName.ts.
+  return readDisplayName();
 }
 
 export default function TournamentDetailPage({

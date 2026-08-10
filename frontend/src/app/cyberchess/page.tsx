@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { readDisplayName } from "./displayName";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -1981,7 +1982,7 @@ export default function CyberChessPage(){
     const evalCpHistory=analysis.length>0?analysis.map(a=>typeof a.cp==="number"?a.cp:0):undefined;
     const payload={
       gameId:spectatorGameIdRef.current||undefined,
-      hostName:(typeof window!=="undefined"?(localStorage.getItem("aevion_user_display_name")||"Anon"):"Anon"),
+      hostName:(readDisplayName()||"Anon"),
       fen:game.fen(),
       hist,
       fenSnapshots:fenHist.length>0?fenHist:undefined,

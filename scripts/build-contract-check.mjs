@@ -339,7 +339,13 @@ for (const file of walk(SRC)) {
     // The method may sit in a fetch options object, or be passed in as a prop
     // from elsewhere. Guessing GET when it is absent invents drift that is not
     // there, so an undetermined method matches the path under any verb.
-    const method = src.slice(m.index, m.index + 300).match(/method:\s*"(GET|POST|PATCH|PUT|DELETE)"/);
+    // Docs tables write the verb before the path — { method: "GET", path: "..." }
+    // — while a fetch options object writes it after. Looking only forward took
+    // the *next* row's verb and invented drift on entire documentation pages, so
+    // check a short window behind first.
+    const method =
+      src.slice(Math.max(0, m.index - 60), m.index).match(/method:\s*["'](GET|POST|PATCH|PUT|DELETE)["'][^"']*$/) ??
+      src.slice(m.index, m.index + 300).match(/method:\s*["'](GET|POST|PATCH|PUT|DELETE)["']/);
     const before = src.slice(Math.max(0, m.index - 40), m.index);
     const isFetch = /fetch\(\s*$|fetch\(\s*apiUrl\(\s*$/.test(before);
     // next.config rewrites only /api-backend/* to the backend, so a bare

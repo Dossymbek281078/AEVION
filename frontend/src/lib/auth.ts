@@ -49,13 +49,69 @@ export function getAuthToken(): string | null {
   }
 }
 
+/**
+ * Имена, под которыми модули читают токен, не имея о нём договорённости.
+ *
+ * Обнаружено 10.08.2026 сплошным свипом: 92 места чтения в 87 файлах, и в
+ * 59 файлах в цепочке НЕТ канонического имени — там читается только
+ * `aevion_token` или `aevion_jwt`. Эти ключи не пишет ни одна строка
+ * боевого кода. Единственная запись `aevion_token` во всём репозитории —
+ * в e2e-тесте `qpaynet-admin-smoke.spec.ts`, который сам кладёт токен в
+ * хранилище перед проверкой. То есть набор проходил ровно потому, что
+ * подготавливал состояние, которого приложение не создаёт никогда
+ * (см. память feedback_green_tests_on_synthetic_inputs).
+ *
+ * Последствие: залогиненный пользователь обращался к QCoreAI, QContract,
+ * QChainGov, QMaskCard, QEvents, QMedia и другим модулям как аноним. На
+ * проде это 401 на журнале QCoreAI и 402 на HealthAI — платящему подписчику
+ * предлагали оформить подписку.
+ *
+ * Здесь зеркалирование, а не правка 59 файлов, потому что: файлы принадлежат
+ * разным сессиям и правка такого объёма гарантирует конфликты; а один
+ * владелец значения — это ровно то, чего не хватало. Модули по-прежнему
+ * читают своё имя, но пишет его одно место.
+ *
+ * Убирать псевдонимы можно только после того, как все читатели перейдут на
+ * `getAuthToken()` — сторож `authTokenKey.guard.test.ts` показывает, кто
+ * ещё не перешёл.
+ */
+const TOKEN_ALIASES = ["aevion_token", "aevion_jwt"] as const;
+
 /** Persists the Bearer JWT. No-op on SSR. */
 export function setAuthToken(token: string): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+    for (const alias of TOKEN_ALIASES) window.localStorage.setItem(alias, token);
   } catch {
     /* ignore — see getAuthToken */
+  }
+}
+
+/**
+ * Проставляет псевдонимы тем, кто уже вошёл РАНЬШЕ этой правки.
+ *
+ * Без этого починка досталась бы только тем, кто перелогинится: у остальных
+ * канонический ключ уже лежит, а `setAuthToken` больше не вызовется.
+ * Вызывается из ClientProviders при старте приложения. Идемпотентна.
+ *
+ * @returns `true`, если что-то дописала.
+ */
+export function syncTokenAliases(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const canonical = window.localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!canonical) return false;
+    let changed = false;
+    for (const alias of TOKEN_ALIASES) {
+      if (window.localStorage.getItem(alias) !== canonical) {
+        window.localStorage.setItem(alias, canonical);
+        changed = true;
+      }
+    }
+    return changed;
+  } catch {
+    return false;
   }
 }
 
@@ -65,6 +121,12 @@ export function clearAuthToken(): void {
   try {
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
     window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
+    // Псевдонимы тоже: иначе выход из аккаунта оставил бы рабочий токен
+    // лежать под другим именем — и модули продолжили бы им пользоваться.
+    for (const alias of TOKEN_ALIASES) window.localStorage.removeItem(alias);
+    for (const alias of TOKEN_ALIASES) {
+      try { window.sessionStorage.removeItem(alias); } catch { /* ignore */ }
+    }
   } catch {
     /* ignore */
   }

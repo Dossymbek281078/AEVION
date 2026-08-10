@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { BuildShell } from "@/components/build/BuildShell";
 import { useToast } from "@/components/build/Toast";
+import { ScheduleShiftModal } from "@/components/build/ScheduleShiftModal";
 import { buildApi, type BuildApplication, type ApplicationLabel } from "@/lib/build/api";
 
 const LABEL_OPTIONS: { key: ApplicationLabel; emoji: string; label: string }[] = [
@@ -30,6 +31,7 @@ export default function ApplicationReviewPage() {
   const [noteBusy, setNoteBusy] = useState(false);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -389,6 +391,15 @@ export default function ApplicationReviewPage() {
                   </button>
                 </>
               )}
+              {current.status === "ACCEPTED" && (
+                <button
+                  type="button"
+                  onClick={() => setScheduling(true)}
+                  className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25"
+                >
+                  📅 Назначить смену
+                </button>
+              )}
             </div>
             <button
               type="button"
@@ -549,6 +560,15 @@ export default function ApplicationReviewPage() {
           </div>
         </div>
       </div>
+
+      {scheduling && current && (
+        <ScheduleShiftModal
+          applicationId={current.id}
+          workerName={current.applicantName}
+          onClose={() => setScheduling(false)}
+          onScheduled={() => toast.success("Смена назначена — работник получил уведомление")}
+        />
+      )}
     </BuildShell>
   );
 }

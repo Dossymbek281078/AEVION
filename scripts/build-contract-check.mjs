@@ -163,9 +163,13 @@ const compiled = backend.map((b) => ({
 const unmatched = [];
 const used = new Set();
 for (const c of calls) {
-  const hit = compiled.find(
-    (b) => (c.method === "ANY" || b.method === c.method) && b.re.test(c.path.replace(/:x/g, "X")),
-  );
+  // `/profiles/search` matches both `/profiles/:id` and `/profiles/search`.
+  // Express resolves that with an explicit next("route") in the param handler,
+  // so credit the literal route — otherwise it looks uncalled.
+  const target = c.path.replace(/:x/g, "X");
+  const hit = compiled
+    .filter((b) => (c.method === "ANY" || b.method === c.method) && b.re.test(target))
+    .sort((a, b) => (a.pattern.match(/:/g)?.length ?? 0) - (b.pattern.match(/:/g)?.length ?? 0))[0];
   if (hit) used.add(`${hit.method} ${hit.pattern}`);
   else unmatched.push(c);
 }

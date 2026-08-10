@@ -1741,6 +1741,15 @@ export const buildApi = {
     call<{ userId: string; availableNow: boolean; availableUntil: string | null }>("POST", "/api/build/availability", { on: available, hours }),
   myAvailability: () =>
     call<{ availableNow: boolean; availableUntil: string | null; city: string | null; skills: string[] }>("GET", "/api/build/availability/me"),
+  // Client schedules a shift against an ACCEPTED application; the worker gets
+  // a push. Times are free-form "HH:MM" strings, as the backend stores them.
+  createShift: (input: {
+    applicationId: string;
+    shiftDate: string;
+    startTime?: string | null;
+    endTime?: string | null;
+    notes?: string | null;
+  }) => call<BuildShiftRow>("POST", "/api/build/shifts", input),
   myShifts: () =>
     call<{ items: BuildShiftRow[]; total: number }>("GET", "/api/build/shifts/my"),
   shiftCheckin: (shiftId: string, lat?: number, lng?: number) =>

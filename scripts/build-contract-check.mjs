@@ -16,25 +16,35 @@
  * matching route and calls sent to the wrong origin. Exit code 1 on either, so
  * it can gate a build.
  *
- * Verified 2026-08-10 on `build`: the route list it produces is identical
- * (228/228) to the one read off the live Express routers at runtime.
+ * An earlier version of this script was validated against the live Express
+ * routers read at runtime and matched 228/228 — but that was before discovery
+ * learned to follow index.ts, and 228 turned out to be an undercount: build
+ * really serves 271, the difference being /api/build/jobs and /api/build/social,
+ * which are mounted from qjobs.ts and qsocial.ts. Treat the runtime comparison
+ * as confirming the route-parsing regexes, not the module's total.
  *
  * Usage: node scripts/build-contract-check.mjs [--module=<name>] [--list-unused]
  *        --module defaults to `build`. Other modules were never swept — expect
  *        real findings the first time (qpaynet and qcoreai both have them).
  *
- * LIMIT — read this before believing a "no backend route" count on a module
- * other than build. Routes are discovered from routes/<module>.ts and, if it
- * exists, routes/<module>/. A module whose routers are split across sibling
- * FILES and mounted separately in index.ts is under-discovered, and every call
- * to the missing half is then reported as having no route. Measured 2026-08-10:
- * cyberchess showed 38 such phantoms (index.ts mounts cyberchessPuzzles,
- * cyberchessTournaments, cyberchessDaily… as their own prefixes) and qsign 21
- * (/api/qsign/v2 comes from qsignV2.ts). Confirm the module is single-file
- * before treating that column as a bug list.
+ * Route discovery reads index.ts: every app.use whose prefix is the module's or
+ * sits under it, resolved to a file through its import (named or default), then
+ * that file's own sub-router mounts. Four things had to be right before the
+ * counts could be trusted, each found by a wrong number rather than by reading:
+ * default imports (nine cyberchess routers use them), single-quoted route
+ * declarations, sibling prefixes like /api/cyberchess-daily, and a segment
+ * boundary after the prefix — without it MODULE=aev scored every
+ * /api/aevion-hub call as its own, 81 calls against 6 routes.
  *
- * The wrong-origin column does not depend on route discovery and is reliable
- * everywhere.
+ * Measured after all four, 2026-08-10: cyberchess 38 phantom findings -> 4,
+ * qsign 21 -> 4, qright 20 -> 7, veilnetx 19 -> 4, aev 75 -> 0. What survives
+ * on those modules is worth reading. payments still reports 17, and spot checks
+ * say they are real: the /payments/v1/* pages call routes payments.ts does not
+ * serve — it only has /gumroad/* and /stripe/*.
+ *
+ * Still not modelled: a route registered anywhere other than a `<name>Router.`
+ * or `router.` call with a literal path, and a mount whose prefix is built from
+ * a variable.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -64,12 +74,19 @@ const INDEX_TS = path.join(ROOT, "aevion-globus-backend/src/index.ts");
 const indexSrc = fs.readFileSync(INDEX_TS, "utf8");
 
 const importedFrom = {};
-for (const m of indexSrc.matchAll(/import\s*\{([^}]+)\}\s*from\s*"\.\/routes\/([\w.-]+)"/g)) {
+// Named: import { qjobsRouter } from "./routes/qjobs"
+for (const m of indexSrc.matchAll(/import\s*\{([^}]+)\}\s*from\s*["']\.\/routes\/([\w.-]+)["']/g)) {
   for (const n of m[1].split(",").map((x) => x.trim()).filter(Boolean)) importedFrom[n] = m[2];
+}
+// Default: import cyberchessDailyRouter from "./routes/cyberchessDaily" — nine
+// cyberchess routers use this form, and reading only the named form left them
+// undiscovered, which is what made every call to them look routeless.
+for (const m of indexSrc.matchAll(/import\s+(\w+)\s+from\s*["']\.\/routes\/([\w.-]+)["']/g)) {
+  importedFrom[m[1]] = m[2];
 }
 
 const entryPoints = [];
-for (const m of indexSrc.matchAll(/app\.use\(\s*"([^"]+)"\s*,\s*(\w+)\s*\)/g)) {
+for (const m of indexSrc.matchAll(/app\.use\(\s*["']([^"']+)["']\s*,\s*(\w+)\s*\)/g)) {
   const [, mountPrefix, routerVar] = m;
   const mine =
     mountPrefix === PREFIX ||
@@ -93,7 +110,7 @@ const backend = [];
 // endpoint, and counting it would both inflate the route list and let a path
 // look "served" when only a rate limiter sits there. Require an inline handler.
 const collect = (src, mountPrefix, subPrefix, file) => {
-  for (const m of src.matchAll(/\b\w*[Rr]outer\.(get|post|patch|put|delete)\(\s*"([^"]*)"/g)) {
+  for (const m of src.matchAll(/\b\w*[Rr]outer\.(get|post|patch|put|delete)\(\s*["']([^"']*)["']/g)) {
     // A handler can sit behind middleware — router.post("/x", limiter, async
     // (req, res) => ...) — so look ahead for one instead of demanding it be the
     // next argument. No handler in sight means the line only attaches
@@ -117,11 +134,11 @@ for (const { mountPrefix, file, filePath } of entryPoints) {
   if (!fs.existsSync(subDir)) continue;
 
   const mounts = {};
-  for (const m of src.matchAll(/\w+Router\.use\(\s*"([^"]+)"\s*,\s*(\w+)\s*\)/g)) {
+  for (const m of src.matchAll(/\w+Router\.use\(\s*["']([^"']+)["']\s*,\s*(\w+)\s*\)/g)) {
     (mounts[m[2]] ??= []).push(m[1] === "/" ? "" : m[1]);
   }
   const importFile = {};
-  const importRe = new RegExp(String.raw`import\s*\{([^}]+)\}\s*from\s*"\./${file}/([\w-]+)"`, "g");
+  const importRe = new RegExp(String.raw`import\s*\{([^}]+)\}\s*from\s*["']\./${file}/([\w-]+)["']`, "g");
   for (const m of src.matchAll(importRe)) {
     for (const n of m[1].split(",").map((x) => x.trim()).filter(Boolean)) importFile[n] = m[2];
   }
@@ -204,8 +221,14 @@ for (const file of walk(SRC)) {
   const src = stripComments(fs.readFileSync(file, "utf8"));
   for (const m of src.matchAll(new RegExp(LITERAL, "g"))) {
     const lit = unquote(m[0]);
-    if (!lit.includes(PREFIX)) continue;
-    const raw = lit.slice(lit.indexOf(PREFIX));
+    // Substring is not enough: with MODULE=aev, "/api/aevion-hub/..." contains
+    // "/api/aev" and would be scored against the wrong module. Require a real
+    // segment boundary after the prefix.
+    const at = lit.indexOf(PREFIX);
+    if (at < 0) continue;
+    const after = lit[at + PREFIX.length];
+    if (after !== undefined && !"/-?\"'`".includes(after)) continue;
+    const raw = lit.slice(at);
     // Strip `${...}` before judging: an interpolation legitimately contains
     // spaces (`${q ? "?" + q : ""}`), a sentence about the URL does too, and
     // only the second should be discarded.

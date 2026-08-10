@@ -3,15 +3,14 @@
 //   node scripts/auth-token-key-ratchet.test.mjs
 //
 // Страница входа (frontend/src/app/auth/page.tsx) кладёт JWT под ключом
-// "aevion_auth_token_v1". Ключ "aevion_token" во всём коде фронтенда НЕ
-// ЗАПИСЫВАЕТ НИКТО. Страница, читающая его без запасного варианта, не видит
+// "aevion_auth_token_v1". Ключи из списка DEAD_KEYS ниже во всём коде
+// фронтенда НЕ ЗАПИСЫВАЕТ НИКТО. Страница, читающая только их, не видит
 // сессию вошедшего человека: показывает «войдите» или шлёт запрос без Bearer
 // и получает 401. Отказа при этом нет — продукт просто ведёт себя так, будто
 // вы не входили, и потому это годами не всплывало.
 //
-// 10.08.2026 таких файлов было 55. Тест держит планку: новых быть не должно,
-// а когда зона свою часть чинит — число здесь уменьшают. Назад храповик не
-// отпускает.
+// Тест держит планку: новых быть не должно, а когда зона свою часть чинит —
+// число здесь уменьшают. Назад храповик не отпускает.
 //
 // Что делать, если тест упал:
 //   • пишете НОВЫЙ код — берите getAuthToken()/getAuthHeaders() из
@@ -29,12 +28,21 @@ const SRC = path.join(HERE, "..", "frontend", "src");
 
 /**
  * Сколько файлов ещё читают мёртвый ключ БЕЗ запасного варианта.
- * Только вниз. Срез 10.08.2026: было 55, закрыто 14 (свободные зоны +
- * multichat), осталось 41 — qpaynet 21, qcoreai 19, qright 1.
+ * Только вниз. Срез 10.08.2026: 42. Из них 41 через "aevion_token" (qpaynet 21, qcoreai 19,
+ * qright 1) и 1 через "aevion_jwt" — /qmedia, зона занята.
  */
-const BASELINE = 41;
+const BASELINE = 42;
 
-const DEAD_KEY = '"aevion_token"';
+// Мёртвые ключи — те, что читают, но не записывает НИКТО (проверено grep-ом
+// по setItem). Их три, а не один: "aevion_token" нашёлся первым, но точно так
+// же висят "aevion_jwt" (из-за него не видит сессию /qmedia) и
+// "qcoreai_token" (две страницы QCoreAI). Один ключ в списке — значит
+// следующий такой же дефект проверка пропустит.
+//
+// "aevion_auth_token" (без _v1) сюда НЕ входит: его никто не пишет, но
+// migrateAuthToken() читает его намеренно, чтобы перенести старые сессии на
+// канонический ключ. Это не дефект, а миграция.
+const DEAD_KEYS = ['"aevion_token"', '"aevion_jwt"', '"qcoreai_token"'];
 const CANONICAL = /aevion_auth_token_v1|getAuthToken|getAuthHeaders/;
 
 function walk(dir, out = []) {
@@ -50,7 +58,7 @@ function walk(dir, out = []) {
 const broken = [];
 for (const file of walk(SRC)) {
   const text = readFileSync(file, "utf8");
-  if (text.includes(DEAD_KEY) && !CANONICAL.test(text)) {
+  if (DEAD_KEYS.some((k) => text.includes(k)) && !CANONICAL.test(text)) {
     broken.push(path.relative(SRC, file).split(path.sep).join("/"));
   }
 }
@@ -83,7 +91,10 @@ ok(
 // первым, иначе он будет годами охранять неверную посылку.
 const all = walk(SRC).map((f) => readFileSync(f, "utf8")).join("\n");
 ok("канонический ключ действительно записывается", /setItem\(\s*(AUTH_TOKEN_KEY|"aevion_auth_token_v1")/.test(all));
-ok("мёртвый ключ по-прежнему никто не записывает", !/setItem\(\s*"aevion_token"/.test(all));
+for (const key of DEAD_KEYS) {
+  const bare = key.slice(1, -1);
+  ok(`ключ ${bare} по-прежнему никто не записывает`, !new RegExp(`setItem\\(\\s*["']${bare}["']`).test(all));
+}
 
 if (broken.length) {
   console.log("\nостаются (первые 10):");

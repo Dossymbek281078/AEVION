@@ -369,7 +369,14 @@ const stripComments = (s) => {
 };
 
 for (const file of walk(SRC)) {
-  const src = stripComments(fs.readFileSync(file, "utf8"));
+  let src = stripComments(fs.readFileSync(file, "utf8"));
+  // A call is often assembled from a file-local base constant rather than
+  // written out: `const API = "/api-backend/api/tiktok"` then
+  // `` fetch(`${API}/config`) ``. Inline those so the literal scan sees the URL
+  // the code actually builds.
+  for (const bm of src.matchAll(/\bconst\s+(\w+)\s*=\s*["']([^"']*\/api\/[^"']*)["']/g)) {
+    src = src.split("${" + bm[1] + "}").join(bm[2]);
+  }
   for (const m of src.matchAll(new RegExp(LITERAL, "g"))) {
     const lit = unquote(m[0]);
     // Substring is not enough: with MODULE=aev, "/api/aevion-hub/..." contains

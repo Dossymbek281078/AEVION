@@ -483,6 +483,9 @@ tiktokRouter.post("/publish", publishLimiter, async (req, res) => {
     // AEVION generates a lot of its footage with AI, and TikTok requires
     // such videos to carry the AI-generated label.
     isAigc = false,
+    // Which frame becomes the cover. TikTok falls back to the first frame,
+    // which on most of our renders is black.
+    coverTimestampMs,
   } = (req.body || {}) as Record<string, any>;
   if (!videoUrl || typeof videoUrl !== "string") {
     return res.status(400).json({ error: "video_url_required" });
@@ -502,6 +505,17 @@ tiktokRouter.post("/publish", publishLimiter, async (req, res) => {
   if (brandContentToggle && privacyLevel === "SELF_ONLY") {
     return res.status(400).json({ error: "branded_content_cannot_be_private" });
   }
+  // int32 milliseconds into the video, or nothing at all. A negative or
+  // absurd value would be silently ignored by TikTok, quietly giving the
+  // creator the black first frame they were trying to avoid.
+  let coverMs: number | undefined;
+  if (coverTimestampMs != null) {
+    const n = Number(coverTimestampMs);
+    if (!Number.isInteger(n) || n < 0 || n > 2_147_483_647) {
+      return res.status(400).json({ error: "cover_timestamp_invalid" });
+    }
+    coverMs = n;
+  }
   try {
     const r = await fetch(PUBLISH_INIT_URL, {
       method: "POST",
@@ -519,6 +533,10 @@ tiktokRouter.post("/publish", publishLimiter, async (req, res) => {
           brand_organic_toggle: !!brandOrganicToggle,
           brand_content_toggle: !!brandContentToggle,
           is_aigc: !!isAigc,
+          // Omitted rather than sent as 0 when unset: 0 is a legitimate
+          // timestamp (the first frame), so it must not stand in for "no
+          // choice was made".
+          ...(coverMs != null ? { video_cover_timestamp_ms: coverMs } : {}),
         },
         source_info: { source: "PULL_FROM_URL", video_url: checked.url },
       }),

@@ -48,6 +48,7 @@ const ERROR_TEXT: Record<string, string> = {
   privacy_level_required: "Выберите, кто увидит ролик.",
   privacy_level_not_allowed: "Этот уровень приватности недоступен для вашего аккаунта.",
   branded_content_cannot_be_private: "Рекламу по договору нельзя публиковать со статусом «Только я».",
+  cover_timestamp_invalid: "Не удалось разобрать выбранный кадр обложки — выберите его заново.",
   publish_no_id: "TikTok ответил без идентификатора задания — публикация не началась.",
   not_connected: "Сессия TikTok истекла — подключите аккаунт заново.",
   publish_failed: "TikTok отклонил публикацию.",
@@ -58,6 +59,15 @@ const ERROR_TEXT: Record<string, string> = {
   status_error: "Не удалось получить статус публикации.",
   tiktok_not_configured: "Интеграция с TikTok ещё не настроена на сервере.",
 };
+
+/** Milliseconds into the video as m:ss.d, e.g. 3200 → "0:03.2". */
+function formatTimecode(ms: number): string {
+  const totalSec = ms / 1000;
+  const min = Math.floor(totalSec / 60);
+  const sec = Math.floor(totalSec % 60);
+  const tenth = Math.floor((ms % 1000) / 100);
+  return `${min}:${String(sec).padStart(2, "0")}.${tenth}`;
+}
 
 /** Human text for a backend error code, falling back to the code itself. */
 function errorText(code: unknown, fallback = "неизвестная ошибка"): string {
@@ -103,6 +113,11 @@ export default function TikTokPublisherPage() {
   // AEVION's own footage is largely AI-generated, and TikTok requires such
   // videos to be labelled.
   const [isAigc, setIsAigc] = useState(false);
+
+  // Cover frame. TikTok defaults to the first frame, which on most of our
+  // renders is black — so the creator picks one from the preview instead.
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [coverMs, setCoverMs] = useState<number | null>(null);
 
   const [discloseCommercial, setDiscloseCommercial] = useState(false);
   const [brandOrganic, setBrandOrganic] = useState(false); // «Your Brand»
@@ -314,6 +329,7 @@ export default function TikTokPublisherPage() {
           brandOrganicToggle: brandOrganic,
           brandContentToggle: brandContent,
           isAigc,
+          ...(coverMs != null ? { coverTimestampMs: coverMs } : {}),
         }),
       });
       const j = await r.json();
@@ -365,6 +381,13 @@ export default function TikTokPublisherPage() {
   useEffect(() => {
     if (brandContent && privacy === "SELF_ONLY") setPrivacy("");
   }, [brandContent, privacy]);
+
+  // A cover timestamp belongs to one specific video. Swapping the link must
+  // drop it, or a mark picked at 0:15 of the previous clip would silently
+  // travel to a new one that may not even be that long.
+  useEffect(() => {
+    setCoverMs(null);
+  }, [videoUrl]);
 
   // Turning the master switch off clears both kinds, so a hidden checkbox can
   // never travel with the request.
@@ -451,11 +474,40 @@ export default function TikTokPublisherPage() {
                 <div className="ttp-preview">
                   {videoUrl.trim() ? (
                     // eslint-disable-next-line jsx-a11y/media-has-caption
-                    <video src={videoUrl.trim()} controls playsInline className="ttp-video" />
+                    <video ref={videoRef} src={videoUrl.trim()} controls playsInline className="ttp-video" />
                   ) : (
                     <div className="ttp-preview-ph">Предпросмотр появится после ввода URL</div>
                   )}
                 </div>
+
+                {videoUrl.trim() && (
+                  <div className="ttp-cover">
+                    <button
+                      type="button"
+                      className="ttp-btn ttp-btn-ghost"
+                      onClick={() => {
+                        const t = videoRef.current?.currentTime;
+                        if (typeof t === "number" && Number.isFinite(t)) {
+                          setCoverMs(Math.max(0, Math.round(t * 1000)));
+                        }
+                      }}
+                    >
+                      Сделать обложкой текущий кадр
+                    </button>
+                    <span className="ttp-cover-state">
+                      {coverMs == null ? (
+                        "обложка: первый кадр"
+                      ) : (
+                        <>
+                          обложка: {formatTimecode(coverMs)}{" "}
+                          <button type="button" className="ttp-linkbtn" onClick={() => setCoverMs(null)}>
+                            сбросить
+                          </button>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                )}
                 {creator?.maxDurationSec ? (
                   <p className="ttp-fine">Макс. длительность для этого аккаунта: {creator.maxDurationSec}s</p>
                 ) : null}
@@ -686,6 +738,9 @@ const CSS = `
 .ttp-preview{aspect-ratio:9/16;max-height:360px;background:#000;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;border:1px solid var(--line)}
 .ttp-video{width:100%;height:100%;object-fit:contain}
 .ttp-preview-ph{color:var(--mut);font-size:13px;padding:20px;text-align:center}
+.ttp-cover{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+.ttp-cover-state{color:var(--mut);font-size:12px}
+.ttp-linkbtn{background:none;border:none;padding:0;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;text-decoration:underline}
 .ttp-toggles{display:flex;flex-direction:column;gap:10px;margin:6px 0 16px}
 .ttp-toggle{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--txt);cursor:pointer}
 .ttp-toggle-off{opacity:.5;cursor:not-allowed}

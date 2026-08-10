@@ -258,6 +258,56 @@ describe("commercial-content disclosure travels with the post", () => {
     expect(body.post_info.is_aigc).toBe(false);
   });
 
+  test("a chosen cover frame reaches TikTok; no choice omits the field", async () => {
+    fetchMock
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY"] }))
+      .mockResolvedValueOnce(tiktokOk({ publish_id: "pub-cover" }));
+    const app = makeApp();
+    await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(freshLiveSession()))
+      .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY", coverTimestampMs: 3200 });
+    let body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === PUBLISH_INIT_URL)![1].body);
+    expect(body.post_info.video_cover_timestamp_ms).toBe(3200);
+
+    fetchMock.mockClear();
+    fetchMock
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY"] }))
+      .mockResolvedValueOnce(tiktokOk({ publish_id: "pub-nocover" }));
+    await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(freshLiveSession()))
+      .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY" });
+    body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === PUBLISH_INIT_URL)![1].body);
+    // Absent, not 0 — frame 0 is a legitimate choice and must stay distinct.
+    expect("video_cover_timestamp_ms" in body.post_info).toBe(false);
+  });
+
+  test("frame 0 is a real choice and survives as 0", async () => {
+    fetchMock
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY"] }))
+      .mockResolvedValueOnce(tiktokOk({ publish_id: "pub-zero" }));
+    const app = makeApp();
+    await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(freshLiveSession()))
+      .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY", coverTimestampMs: 0 });
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === PUBLISH_INIT_URL)![1].body);
+    expect(body.post_info.video_cover_timestamp_ms).toBe(0);
+  });
+
+  test("a nonsense cover timestamp is refused instead of silently dropped", async () => {
+    const app = makeApp();
+    for (const bad of [-1, 1.5, "abc", 2_147_483_648]) {
+      const res = await request(app)
+        .post("/api/tiktok/publish")
+        .set("Cookie", sessionCookie(freshLiveSession()))
+        .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY", coverTimestampMs: bad });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("cover_timestamp_invalid");
+    }
+  });
+
   test("AI-generated footage is labelled as such for TikTok", async () => {
     fetchMock
       .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY"] }))

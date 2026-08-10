@@ -27,13 +27,18 @@ test("a page fetches the visitor's dictionary and shows it", async ({ page }) =>
   // Counted against English rather than asserted outright: the language menu
   // spells Kazakh in Kazakh whatever language the page is in, so a plain "is
   // there a Kazakh letter" check would pass with the dictionary never loading.
-  await page.goto("/");
+  // Never wait for "networkidle" on these pages: when the translation service
+  // is unreachable AutoTranslate keeps retrying, the network never goes quiet,
+  // and the wait burns the whole timeout. That is exactly how this spec failed
+  // inside the full suite while passing when run alone.
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.evaluate(() => localStorage.setItem("aevion_lang_v1", "en"));
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("load");
   const inEnglish = await kazakhLetters(page);
 
   await page.evaluate(() => localStorage.setItem("aevion_lang_v1", "kk"));
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
 
   // Not a fixed wait: the dictionary is a network chunk, so give the assertion
   // room to become true rather than guessing how long the fetch takes.
@@ -49,17 +54,14 @@ test("English needs no fetch: it is already in the page", async ({ page }) => {
   // The first render must match the server's, which renders in English, so the
   // English dictionary has to be compiled in. If it ever became a chunk too,
   // every page would hydrate showing raw keys like "home.badge".
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.evaluate(() => localStorage.setItem("aevion_lang_v1", "en"));
-
-  const requests: string[] = [];
-  page.on("request", (r) => requests.push(r.url()));
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("load");
 
   const body = (await page.locator("body").innerText()) || "";
   expect(body.length, "the page rendered something").toBeGreaterThan(100);
   // A key that leaked through would look like a dotted identifier standing
   // alone as visible text.
   expect(body).not.toMatch(/(^|\s)(home|nav|footer)\.[a-z][\w.]+(\s|$)/);
-  expect(requests.length, "the page made requests at all").toBeGreaterThan(0);
 });

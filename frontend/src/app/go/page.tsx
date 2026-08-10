@@ -7,6 +7,7 @@ import {
   withChannel,
   type Product,
 } from "@/lib/products";
+import { BuyLink } from "@/components/BuyLink";
 
 // /go — страница-хаб под ссылку в профиле соцсетей.
 //
@@ -48,6 +49,8 @@ function LinkCard({
   note,
   price,
   external,
+  product,
+  channel,
 }: {
   href: string;
   kicker: string;
@@ -55,13 +58,15 @@ function LinkCard({
   note?: string;
   price?: string;
   external?: boolean;
+  /** Позиция каталога — только у внешних (платных) карточек. */
+  product?: Product;
+  channel?: string | null;
 }) {
-  return (
-    <a
-      href={href}
-      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      style={styles.card}
-    >
+  // Внешняя ссылка на этой странице всегда ведёт в оплату, поэтому идёт через
+  // BuyLink — иначе покупка с /go не попадёт в воронку. Внутренние переходы
+  // остаются обычным якорем: там покупки ещё нет.
+  const inner = (
+    <>
       <div style={styles.cardKicker}>{kicker}</div>
       <div style={styles.cardTitle}>{title}</div>
       {note ? <div style={styles.cardNote}>{note}</div> : null}
@@ -69,6 +74,27 @@ function LinkCard({
         {price ? <span style={styles.price}>{price}</span> : <span />}
         <span style={styles.arrow}>→</span>
       </div>
+    </>
+  );
+
+  if (external) {
+    return (
+      <BuyLink
+        href={href}
+        source="go"
+        productId={product?.id}
+        priceUsd={product?.priceUsd}
+        channel={channel}
+        style={styles.card}
+      >
+        {inner}
+      </BuyLink>
+    );
+  }
+
+  return (
+    <a href={href} style={styles.card}>
+      {inner}
     </a>
   );
 }
@@ -121,6 +147,8 @@ export default async function GoPage({
             <LinkCard
               href={withChannel(protocol.href, channel)}
               external
+              product={protocol}
+              channel={channel}
               kicker={protocol.format}
               title="Тот же протокол в PDF"
               note="Чтобы заполнять на нулевой и двенадцатой неделе, не открывая сайт."
@@ -131,6 +159,8 @@ export default async function GoPage({
             <LinkCard
               href={withChannel(antiGreyRu.href, channel)}
               external
+              product={antiGreyRu}
+              channel={channel}
               kicker={antiGreyRu.format}
               title="Протокол «Анти-седина»"
               note="Почему волос седеет и что реально это замедляет. Медь, цинк, спермидин."
@@ -145,6 +175,8 @@ export default async function GoPage({
             <LinkCard
               href={withChannel(bookFull.href, channel)}
               external
+              product={bookFull}
+              channel={channel}
               kicker={bookFull.format}
               title="Благодарность ∞ Вечная Молодость"
               note="90 дней по четыре минуты. Книга, аудиокнига и материалы одним пакетом."
@@ -172,6 +204,8 @@ export default async function GoPage({
             <LinkCard
               href={withChannel(allAccess.href, channel)}
               external
+              product={allAccess}
+              channel={channel}
               kicker={allAccess.format}
               title="Доступ ко всему сразу"
               note="Вместо покупки модулей поштучно."

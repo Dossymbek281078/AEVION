@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { BuyLink } from "@/components/BuyLink";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 import { productById } from "@/lib/products";
 
@@ -192,14 +193,21 @@ export default function QRenewClient() {
             здесь не дублируются. */}
         <div style={styles.buyRow}>
           {BUY.map((p) => (
-            <a key={p.id} href={p.href} target="_blank" rel="noopener noreferrer" style={styles.buyCard}>
+            <BuyLink
+              key={p.id}
+              href={p.href}
+              source="qrenew"
+              productId={p.id}
+              priceUsd={p.priceUsd}
+              style={styles.buyCard}
+            >
               <div style={styles.buyKicker}>{p.format}</div>
               <div style={styles.buyTitle}>{p.title}</div>
               <div style={styles.buyFoot}>
                 <span style={styles.buyPrice}>${p.priceUsd}</span>
                 <span style={styles.buyBtn}>Купить&nbsp;→</span>
               </div>
-            </a>
+            </BuyLink>
           ))}
         </div>
 

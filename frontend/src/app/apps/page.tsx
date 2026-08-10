@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { productById } from "@/lib/products";
+import { track } from "@/lib/track";
 
 type Billing = "monthly" | "annual";
 
@@ -365,6 +366,15 @@ export default function AppsPage() {
                   : "https://aevion.lemonsqueezy.com/checkout/buy/23fa912b-b6dc-4b42-8dd8-7498b6298b1b"}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() =>
+                  track({
+                    type: "checkout_start",
+                    tier: "planet",
+                    source: "apps/planet",
+                    value: planetPrice,
+                    meta: { period: billing, processor: "lemonsqueezy" },
+                  })
+                }
                 style={{
                   display: "block",
                   marginTop: 16,
@@ -500,6 +510,14 @@ export default function AppsPage() {
                           href={app.checkoutUrl}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={() =>
+                            track({
+                              type: "checkout_start",
+                              source: `apps/${app.id}`,
+                              value: app.price,
+                              meta: { module: app.id },
+                            })
+                          }
                           style={{
                             padding: "8px 18px",
                             background: clr,

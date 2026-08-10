@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { track } from "@/lib/track";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 
@@ -132,6 +133,7 @@ export default function QMelaninClient() {
             href="https://aevion.gumroad.com/l/tmuyxw"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => track({ type: "checkout_start", source: "qmelanin/ru", value: 9, meta: { permalink: "tmuyxw", processor: "gumroad" } })}
             style={{ ...styles.buyCard, flex: 1, minWidth: 280, marginTop: 0 }}
           >
             <span>
@@ -147,6 +149,7 @@ export default function QMelaninClient() {
             href="https://aevion.gumroad.com/l/kkiavh"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => track({ type: "checkout_start", source: "qmelanin/en", value: 19, meta: { permalink: "kkiavh", processor: "gumroad" } })}
             style={{ ...styles.buyCard, flex: 1, minWidth: 280, marginTop: 0 }}
           >
             <span>

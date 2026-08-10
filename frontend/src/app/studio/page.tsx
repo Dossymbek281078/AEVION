@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import { productById } from "@/lib/products";
+import { track } from "@/lib/track";
 
 interface Capability {
   id: string;
@@ -222,7 +223,11 @@ export default function StudioPage() {
                 <span style={{ fontSize: 11, color: "#94a3b8" }}>{credits.month}</span>
               </div>
               {credits.tier === "free" && (
-                <a href="#upgrade" style={{ fontSize: 12, fontWeight: 700, color: "#0d9488", textDecoration: "none", padding: "4px 12px", border: "1px solid #0d9488", borderRadius: 6 }}>
+                <a
+                  href="#upgrade"
+                  onClick={() => track({ type: "cta_click", tier: "studio-pro", source: "studio/credits-badge" })}
+                  style={{ fontSize: 12, fontWeight: 700, color: "#0d9488", textDecoration: "none", padding: "4px 12px", border: "1px solid #0d9488", borderRadius: 6 }}
+                >
                   Upgrade to Pro {`$${STUDIO_PRO?.priceUsd ?? 149}`} →
                 </a>
               )}
@@ -334,6 +339,14 @@ export default function StudioPage() {
               tier: "Pro", price: `$${STUDIO_PRO?.priceUsd ?? 149}`, color: "#0d9488",
               features: ["50 videos / month", "200 images / month", "30k TTS chars", "100 music tracks", "Unlimited deploys", "Public *.pages.dev URL for every project", "Everything in Free", "Priority support"],
               cta: "Upgrade to Pro", ctaHref: STUDIO_PRO?.href ?? "#", disabled: false,
+              onCta: () =>
+                track({
+                  type: "checkout_start",
+                  tier: "studio-pro",
+                  source: "studio/plans",
+                  value: STUDIO_PRO?.priceUsd,
+                  meta: { processor: "lemonsqueezy" },
+                }),
             },
             {
               tier: "Enterprise", price: "Custom", color: "#7c3aed",
@@ -353,6 +366,7 @@ export default function StudioPage() {
               </ul>
               <a
                 href={plan.ctaHref}
+                onClick={() => plan.onCta?.()}
                 style={{
                   display: "block", textAlign: "center", padding: "10px", borderRadius: 8,
                   background: plan.disabled ? "#f1f5f9" : plan.color,

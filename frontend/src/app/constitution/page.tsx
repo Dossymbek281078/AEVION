@@ -2163,6 +2163,8 @@ function ProPaywallBanner({
   limit: number;
 }) {
   const { t } = useI18n();
+  // Own funnel, like the rest of this module (useFunnel → /api/constitution/funnel/track).
+  const { track } = useFunnel();
   return (
     <div className="mb-4 bg-gradient-to-r from-fuchsia-900/40 via-purple-900/30 to-cyan-900/40 border border-fuchsia-400/40 rounded-xl p-4">
       <div className="flex justify-between items-start flex-wrap gap-3">
@@ -2191,6 +2193,9 @@ function ProPaywallBanner({
             href="https://aevion.gumroad.com/l/pyiaz"
             target="_blank"
             rel="noopener noreferrer"
+            // Constitution keeps its own funnel (useFunnel → /api/constitution/funnel/track);
+            // its /pricing page already fires upgrade_click here, this banner did not.
+            onClick={() => track("upgrade_click", { tier: "pro", source: "constitution/inline-banner" })}
             className="px-4 py-2 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-white font-bold text-sm text-center hover:opacity-90"
           >
             Upgrade →

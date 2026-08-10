@@ -22,6 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   createPreMatchedMatch,
+  onMatchSettled,
   ALLOWED_TIME_CONTROLS,
   type TimeControl as MmTimeControl,
 } from "./cyberchessMatchmaking";
@@ -993,6 +994,39 @@ function publishRoundToMatchmaking(t: Tournament, matches: BracketMatch[]): void
 // ── routes ─────────────────────────────────────────────────────────
 
 initStore();
+
+/* Партия турнира кончилась — закрываем пару в сетке.
+ *
+ * До 10.08.2026 этого звена не было. Пары публиковались в матчмейкинг
+ * (`publishRoundToMatchmaking` → `createPreMatchedMatch`), партии игрались,
+ * сервер сам определял исход и пересчитывал рейтинг — а сетка об этом не узнавала.
+ * Закрыть пару умеет только `applyResultToMatch`, а единственный путь к ней,
+ * `POST /:id/result`, не звал НИКТО: ни клиент (ни одного обращения во всём
+ * фронтенде), ни сервер. Настоящий турнир навсегда застревал на первом круге;
+ * выглядел он при этом здоровым, потому что показательный турнир зашит уже
+ * сыгранным.
+ *
+ * Цвета не переставляем: белые в паре становятся белыми в матче — так их передаёт
+ * `publishRoundToMatchmaking` в `createPreMatchedMatch`, — поэтому исход матчмейкинга
+ * ложится на пару один в один. Связь ищем по `liveMatchId`, который проставила
+ * публикация круга.
+ */
+onMatchSettled(({ matchId, tournamentId, result }) => {
+  if (!tournamentId) return;
+  const t = TOURNAMENTS.find((x) => x.id === tournamentId);
+  if (!t) return;
+  let match: BracketMatch | undefined;
+  for (const r of t.rounds) {
+    match = r.matches.find((m) => m.liveMatchId === matchId);
+    if (match) break;
+  }
+  // Пары нет или её уже закрыли вручную через /result — второй раз не считаем.
+  if (!match || match.status === "done") return;
+  applyResultToMatch(t, match, result);
+  maybeAdvanceSwiss(t);
+  maybeAdvanceRR(t);
+  tryWriteToDisk();
+});
 
 // GET /list
 router.get("/list", (req: Request, res: Response): void => {

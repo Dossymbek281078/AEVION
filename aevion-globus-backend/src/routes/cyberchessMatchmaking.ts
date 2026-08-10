@@ -271,6 +271,47 @@ function submitServerAnticheatSignals(m: Match): void {
   }
 }
 
+/**
+ * Кто хочет знать, чем кончилась партия.
+ *
+ * Заведено для турнирной сетки: пары публикуются сюда через
+ * `createPreMatchedMatch`, партия играется и засчитывается здесь — а обратно в
+ * сетку результат не возвращался НИКАК. Единственный, кто закрывает пару,
+ * `POST /api/cyberchess-tournaments/:id/result`, не вызывался ни клиентом, ни
+ * сервером, поэтому у настоящего турнира сетка застывала на «идёт» навсегда:
+ * партии игрались, рейтинг менялся, а следующий круг не наступал.
+ *
+ * Подписка, а не прямой вызов, потому что зависимость уже направлена в другую
+ * сторону — турниры импортируют матчмейкинг, и обратный импорт замкнул бы круг.
+ */
+export type SettledMatchInfo = {
+  matchId: string;
+  tournamentId?: string;
+  round?: number;
+  result: "white" | "black" | "draw";
+  reason: string;
+};
+
+const settledListeners: ((info: SettledMatchInfo) => void)[] = [];
+
+export function onMatchSettled(fn: (info: SettledMatchInfo) => void): void {
+  settledListeners.push(fn);
+}
+
+function notifyMatchSettled(info: SettledMatchInfo): void {
+  for (const fn of settledListeners) {
+    try {
+      fn(info);
+    } catch (e) {
+      // Подписчик не вправе сорвать засчитывание партии игрокам.
+      console.warn(
+        "[cyberchess matchmaking] settled listener failed:",
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+}
+
 async function settleMatch(
   m: Match,
   result: "white" | "black" | "draw",
@@ -290,6 +331,15 @@ async function settleMatch(
   }
   m.subscribers.clear();
   if (!firstEnd) return null;
+  // Строго после проверки firstEnd: повторный /end от второго клиента не должен
+  // засчитать сетке тот же результат дважды.
+  notifyMatchSettled({
+    matchId: m.matchId,
+    tournamentId: m.tournamentId,
+    round: m.tournamentRound,
+    result,
+    reason,
+  });
   submitServerAnticheatSignals(m);
   return finalizeMatch(m.matchId, {
     whiteUserId: m.white.userId,

@@ -1542,6 +1542,28 @@ export const buildApi = {
       };
     }>("GET", `/api/build/stats/sources${qs ? "?" + qs : ""}`);
   },
+  // Accuracy of the 2-agent NL search on real traffic: a non-empty `issues`
+  // means the checker agent had to correct the parser agent.
+  adminAiSearchLog: (limit = 50) =>
+    call<{
+      summary: {
+        total: number;
+        withIssues: number;
+        issueRate: number;
+        talentCount: number;
+        vacancyCount: number;
+        last7d: number;
+      };
+      recent: {
+        id: string;
+        mode: string;
+        queryText: string;
+        filters: Record<string, unknown>;
+        issues: string[];
+        createdAt: string;
+      }[];
+    }>("GET", `/api/build/admin/ai-search-log?limit=${limit}`),
+
   // Admin user registry + manual verification badge.
   adminListUsers: (q?: { search?: string; limit?: number; offset?: number }) => {
     const params = new URLSearchParams();

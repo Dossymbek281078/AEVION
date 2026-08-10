@@ -290,11 +290,17 @@ export default function TikTokPublisherPage() {
   };
 
   const connected = !!creator || !!cfg?.connected;
+  const accountPrivacyOptions = creator?.privacyOptions || [];
   // Branded content may not be posted privately, so «Только я» leaves the
   // list entirely while that box is ticked.
-  const privacyOptions = (creator?.privacyOptions || []).filter(
+  const privacyOptions = accountPrivacyOptions.filter(
     (o) => !(brandContent && o === "SELF_ONLY"),
   );
+  // Before an app passes TikTok's audit the account is limited to SELF_ONLY —
+  // so ticking «Реклама по договору» empties the list. That is a different
+  // situation from TikTok returning nothing, and saying "settings did not
+  // arrive" there would be plainly wrong.
+  const brandedContentBlockedByAudit = accountPrivacyOptions.length > 0 && privacyOptions.length === 0;
   // Disclosure is incomplete while the switch is on but neither kind is
   // chosen — TikTok requires publishing to be blocked in that state.
   const disclosureIncomplete = discloseCommercial && !brandOrganic && !brandContent;
@@ -431,12 +437,21 @@ export default function TikTokPublisherPage() {
                       ))}
                     </>
                   ) : (
-                    <option value="">TikTok не вернул доступные уровни</option>
+                    <option value="">
+                      {brandedContentBlockedByAudit
+                        ? "нет статуса, совместимого с рекламой по договору"
+                        : "TikTok не вернул доступные уровни"}
+                    </option>
                   )}
                 </select>
-                {brandContent && (
+                {brandContent && !brandedContentBlockedByAudit && (
                   <p className="ttp-fine ttp-fine-tight">
                     «Только я» недоступно: рекламу по договору нельзя скрывать от всех.
+                  </p>
+                )}
+                {brandedContentBlockedByAudit && (
+                  <p className="ttp-fine ttp-fine-warn">
+                    Пока приложение не прошло аудит TikTok, аккаунту доступен только статус «Только я».
                   </p>
                 )}
 
@@ -528,11 +543,13 @@ export default function TikTokPublisherPage() {
                 </button>
                 {!canPublish && !posting && (
                   <p className="ttp-fine">
-                    {!privacyOptions.length
-                      ? "Публикация недоступна, пока TikTok не вернул настройки аккаунта. Переподключите аккаунт."
-                      : disclosureIncomplete
-                        ? "Отметьте, что именно рекламирует ролик."
-                        : "Выберите, кто увидит ролик."}
+                    {brandedContentBlockedByAudit
+                      ? "Этому аккаунту TikTok пока разрешает только статус «Только я» — так рекламу по договору публиковать нельзя. Снимите отметку «Реклама по договору» либо дождитесь прохождения аудита TikTok."
+                      : !privacyOptions.length
+                        ? "Публикация недоступна, пока TikTok не вернул настройки аккаунта. Переподключите аккаунт."
+                        : disclosureIncomplete
+                          ? "Отметьте, что именно рекламирует ролик."
+                          : "Выберите, кто увидит ролик."}
                   </p>
                 )}
 

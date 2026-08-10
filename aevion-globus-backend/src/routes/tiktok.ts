@@ -457,6 +457,9 @@ tiktokRouter.post("/publish", publishLimiter, async (req, res) => {
     // Content" (labelled "Paid partnership").
     brandOrganicToggle = false,
     brandContentToggle = false,
+    // AEVION generates a lot of its footage with AI, and TikTok requires
+    // such videos to carry the AI-generated label.
+    isAigc = false,
   } = (req.body || {}) as Record<string, any>;
   if (!videoUrl || typeof videoUrl !== "string") {
     return res.status(400).json({ error: "video_url_required" });
@@ -492,6 +495,7 @@ tiktokRouter.post("/publish", publishLimiter, async (req, res) => {
           disable_stitch: !!disableStitch,
           brand_organic_toggle: !!brandOrganicToggle,
           brand_content_toggle: !!brandContentToggle,
+          is_aigc: !!isAigc,
         },
         source_info: { source: "PULL_FROM_URL", video_url: checked.url },
       }),

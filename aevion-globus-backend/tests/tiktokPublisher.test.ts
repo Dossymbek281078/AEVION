@@ -209,6 +209,21 @@ describe("commercial-content disclosure travels with the post", () => {
     const body = JSON.parse(initCall![1].body);
     expect(body.post_info.brand_organic_toggle).toBe(false);
     expect(body.post_info.brand_content_toggle).toBe(false);
+    expect(body.post_info.is_aigc).toBe(false);
+  });
+
+  test("AI-generated footage is labelled as such for TikTok", async () => {
+    fetchMock
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY"] }))
+      .mockResolvedValueOnce(tiktokOk({ publish_id: "pub-ai" }));
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(liveSession))
+      .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY", isAigc: true });
+    expect(res.status).toBe(200);
+    const initCall = fetchMock.mock.calls.find((c) => c[0] === PUBLISH_INIT_URL);
+    expect(JSON.parse(initCall![1].body).post_info.is_aigc).toBe(true);
   });
 
   test("branded content with a public level is allowed through", async () => {

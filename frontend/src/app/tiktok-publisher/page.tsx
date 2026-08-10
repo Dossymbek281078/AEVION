@@ -28,8 +28,12 @@ const STATUS_LABELS: Record<string, string> = {
   FAILED: "TikTok отклонил публикацию",
 };
 
-const POLL_INTERVAL_MS = 3000;
-const POLL_TIMEOUT_MS = 3 * 60_000;
+// TikTok allows 6 requests per minute per access_token, and the publish call
+// itself spends from the same budget. Polling every 3s (20/min) would have
+// run straight into that limit and turned a healthy post into a status
+// error. 15s keeps us at 4/min with room to spare.
+const POLL_INTERVAL_MS = 15_000;
+const POLL_TIMEOUT_MS = 5 * 60_000;
 
 const MUSIC_USAGE_URL = "https://www.tiktok.com/legal/page/global/music-usage-confirmation/en";
 const BRANDED_CONTENT_POLICY_URL = "https://www.tiktok.com/legal/page/global/bc-policy/en";
@@ -96,6 +100,10 @@ export default function TikTokPublisherPage() {
   // Commercial-content disclosure — required by TikTok's audit. The master
   // toggle must start OFF; enabling it reveals the two kinds, at least one
   // of which has to be picked before publishing is allowed.
+  // AEVION's own footage is largely AI-generated, and TikTok requires such
+  // videos to be labelled.
+  const [isAigc, setIsAigc] = useState(false);
+
   const [discloseCommercial, setDiscloseCommercial] = useState(false);
   const [brandOrganic, setBrandOrganic] = useState(false); // «Your Brand»
   const [brandContent, setBrandContent] = useState(false); // «Branded Content»
@@ -281,6 +289,7 @@ export default function TikTokPublisherPage() {
           disableStitch,
           brandOrganicToggle: brandOrganic,
           brandContentToggle: brandContent,
+          isAigc,
         }),
       });
       const j = await r.json();
@@ -498,6 +507,13 @@ export default function TikTokPublisherPage() {
                       onChange={(e) => setDisableStitch(e.target.checked)}
                     />
                     Выключить Stitch
+                  </label>
+                  <label className="ttp-toggle">
+                    <input type="checkbox" checked={isAigc} onChange={(e) => setIsAigc(e.target.checked)} />
+                    <span>
+                      Ролик создан с помощью ИИ
+                      <span className="ttp-kind-note">TikTok пометит его как AI-generated</span>
+                    </span>
                   </label>
                 </div>
 

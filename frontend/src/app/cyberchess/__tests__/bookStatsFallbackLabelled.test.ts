@@ -24,12 +24,21 @@ const stripComments = (s: string) =>
   s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 describe("подстановка статистики дебютов подписана", () => {
-  it("оба места, где она подставляется, помечают это флагом", () => {
+  it("признак живёт в самих данных, а не в «пришёл ли ответ»", () => {
+    /* `fetchRealBookStats` подставляет выдумку ВНУТРИ себя — когда нет UCI и когда
+       Lichess не ответил. Значит непустой ответ ещё не значит «настоящее», и проверка
+       `!replies` молчала бы ровно в тех случаях, ради которых заведена. Я так и написал
+       с первого раза; поймал, только когда пошёл смотреть, что там за fallback внутри. */
+    const data = stripComments(
+      readFileSync(join(__dirname, "..", "openingRepertoireData.ts"), "utf8"),
+    );
+    expect(data).toMatch(/estimated\?: boolean/);
+    expect(data).toMatch(/estimated: true/);
     for (const f of SITES) {
       const src = stripComments(readFileSync(f, "utf8"));
       expect(src, f).toMatch(/mockBookStats\(/);
-      // подстановка и признак подстановки должны стоять вместе
-      expect(src, f).toMatch(/const estimated = !replies;/);
+      expect(src, f).toMatch(/const estimated = stats\.some\(\(s\) => s\.estimated\);/);
+      expect(src, f).not.toMatch(/const estimated = !replies/);
     }
   });
 

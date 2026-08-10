@@ -534,8 +534,8 @@ function CompareCard({ branch }: { branch: RepertoireBranch }) {
      теми же полосами и той же подписью «N игр», что и настоящие данные, — то есть при
      любом сбое загрузки игрок выбирал дебют по выдуманным числам и не мог этого понять.
      Подставлять всё равно надо (пустой список хуже), но подписывать обязательно. */
-  const estimated = !replies;
   const stats = replies || mockBookStats(branch);
+  const estimated = stats.some((s) => s.estimated);
   const rate = successRate(branch);
   const colorBadge = branch.color === "white" ? "♔" : "♚";
 

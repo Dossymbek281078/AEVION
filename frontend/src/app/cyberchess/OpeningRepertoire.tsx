@@ -1192,8 +1192,8 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
   /* См. тот же разбор в repertoire/page.tsx: `mockBookStats` синтезирует «12 000 партий»
      и проценты из суммы кодов символов хода, а рисуется это неотличимо от настоящей
      статистики мастеров. Подставляем, но подписываем. */
-  const estimated = !replies;
   const stats = replies || mockBookStats(branch);
+  const estimated = stats.some((s) => s.estimated);
   const avgRating = stats.find((s) => s.averageRating)?.averageRating;
 
   return (

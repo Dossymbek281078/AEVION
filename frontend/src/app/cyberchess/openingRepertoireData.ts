@@ -73,6 +73,13 @@ export type BookReply = {
   draw: number; // %
   black: number; // %
   averageRating?: number;
+  /* true — числа синтезированы, а не взяты из партий.
+     Признак живёт в самих данных, а не у вызывающего: `fetchRealBookStats` подставляет
+     выдумку ВНУТРИ себя (нет UCI; Lichess не ответил), поэтому непустой ответ ещё не
+     значит «настоящее». Проверка «пришёл ли ответ» такую подстановку не видит — по ней
+     я сначала и написал предупреждение, и оно бы молчало ровно в тех случаях, ради
+     которых заведено. */
+  estimated?: boolean;
 };
 
 export type EcoInfo = { eco: string; name: string };
@@ -398,7 +405,7 @@ function mockBookStatsFromMoves(branchMoves: string[]): BookReply[] {
     const white = base + (i === 0 ? 8 : i === 1 ? 2 : -4) + (seed % 5);
     const draw = 28 + i * 3 - (seed % 4);
     const black = Math.max(100 - white - draw, 10);
-    return { move: m, games, white, draw, black };
+    return { move: m, games, white, draw, black, estimated: true };
   });
 }
 

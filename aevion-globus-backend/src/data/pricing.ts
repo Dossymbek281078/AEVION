@@ -67,9 +67,30 @@ export type ModuleAvailability = "live" | "beta" | "soon" | "on_request";
 export interface TierLimits {
   /** Кол-во активных модулей в подписке (null = без ограничений) */
   modules: number | null;
-  /** Кол-во QRight-объектов / месяц */
+  /**
+   * Кол-во QRight-объектов / месяц.
+   *
+   * ⚠️ ВИТРИННОЕ ЧИСЛО: на 10.08.2026 его не читает НИ ОДИН участок кода.
+   * Проверено сплошным поиском по бэкенду — поле встречается только здесь и
+   * в ответе `/api/pricing`, откуда попадает в буллеты тарифов и в FAQ.
+   * Роут `routes/qright.ts` никакого месячного потолка не проверяет.
+   */
   qrightObjectsPerMonth: number | null;
-  /** Кол-во QSign-операций / день */
+  /**
+   * Кол-во QSign-операций / день.
+   *
+   * ⚠️ Ровно та же история: показывается покупателю, но не enforce'ится.
+   * Направление расхождения безопасное для клиента — он получает БОЛЬШЕ
+   * обещанного, а не меньше, поэтому это не срочный баг. Но написано здесь,
+   * чтобы следующий читатель не решил, будто лимит уже работает: из семи
+   * полей TierLimits пять читаются кодом (modules и seats — в checkout.ts,
+   * llmTokensPerMonth и premiumTokensPerMonth — в lib/qcoreQuota.ts, причём
+   * под env-флагами QCOREAI_TIER_QUOTA / QCOREAI_PREMIUM_QUOTA), а эти два —
+   * нет. supportSlaHours — обещание человеку, а не код, и это нормально.
+   *
+   * Включать enforcement здесь не стали: это продуктовое решение (кому и
+   * когда начать отказывать), а не техническая правка.
+   */
   qsignOpsPerDay: number | null;
   /** LLM-токены / месяц (QCoreAI / Multichat) */
   llmTokensPerMonth: number | null;

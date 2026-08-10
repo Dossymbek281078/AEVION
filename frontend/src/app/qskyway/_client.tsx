@@ -9,6 +9,7 @@ import { CompetitorMatrix } from "@/components/CompetitorMatrix";
 import { competitorsFor } from "@/lib/competitors";
 import type { DataQuality } from "@/lib/dataQuality";
 import type { RegulatorySource } from "@/lib/regulatorySource";
+import { resolveStartCity } from "./startCity";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
 // Клиент рисует реальный цифровой двойник Астаны (318 зданий из OpenStreetMap,
@@ -392,7 +393,14 @@ export default function QSkywayClient() {
           if (j.airspaceCoverage) setCoverage(j.airspaceCoverage);
         }
       } catch { /* selector optional */ }
-      loadCity("astana");
+      // `?city=` из адреса. До 10.08.2026 здесь стояло жёсткое "astana", и
+      // ссылка вида /qskyway?city=nyc открывала Астану молча — при том что
+      // бэкенд параметр поддерживает, и именно такой ссылкой естественно
+      // поделиться. Незнакомый город не подменяем: пусть загрузка упрётся в 404
+      // и страница скажет об этом, а не покажет чужой город под чужой ссылкой.
+      const start = resolveStartCity(typeof window === "undefined" ? "" : window.location.search);
+      setCityId(start);
+      loadCity(start);
       fetchSlots();
     })();
     return () => { cancelAnimationFrame(rafRef.current); };
@@ -715,6 +723,28 @@ export default function QSkywayClient() {
             <style>{`.qsky-grid { grid-template-columns: 1fr; } @media (min-width: 900px) { .qsky-grid { grid-template-columns: 1.55fr 1fr; } }`}</style>
             <section style={card}>
               <div style={cardH}>Аэрокарта · реальные здания{stats.city ? " · " + stats.city : ""}</div>
+              {/*
+                Пока город грузится, страница выглядела ТОЧНО как сломанная:
+                пустая чёрная карта и нули в телеметрии, без единого признака,
+                что что-то происходит. Ошибку она показывает честно (красная
+                карточка выше), а загрузку не показывала никак — и отличить одно
+                от другого было нельзя. Соседние страницы платформы (например
+                /pricing) в этот момент прямо пишут «загружаю». Здесь — то же
+                самое, и с указанием, какой именно город грузим: при переходе
+                между городами это единственный признак, что клик сработал.
+              */}
+              {!loaded && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    padding: "10px 14px", fontSize: 12, color: "#9fb0c4",
+                    borderBottom: "1px solid #1e2836", fontFamily: "monospace",
+                  }}
+                >
+                  Загружаю город: {cityId} — здания, сетка высот и правила регулятора…
+                </div>
+              )}
               <canvas ref={mapRef} style={{ display: "block", width: "100%", background: "#0a121d" }} />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
                 <button style={btnPri} onClick={newHero} disabled={!loaded}>↻ Новый рейс</button>

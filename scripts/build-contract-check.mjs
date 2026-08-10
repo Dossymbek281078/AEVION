@@ -329,11 +329,19 @@ for (const file of walk(SRC)) {
     // A template can wrap a nested literal: `${apiUrl("/api/qjobs/jobs")}${qs}`.
     // Slicing from the prefix to the end of the outer template drags `")}` into
     // the path. Stop at the first character a URL cannot contain.
-    const raw = lit.slice(at).split(/["'`)}\s<>]/)[0];
+    const raw = lit.slice(at);
     // Strip `${...}` before judging: an interpolation legitimately contains
     // spaces (`${q ? "?" + q : ""}`), a sentence about the URL does too, and
     // only the second should be discarded.
-    const p = toPath(raw).replace(/[.,;:)]+$/, (t) => (/\.(xml|pdf|csv|js|json)$/.test(raw) ? t : ""));
+    // A template can wrap a nested literal: `${apiUrl("/api/qjobs/jobs")}${qs}`.
+    // Taking everything to the end of the outer template drags `")}` into the
+    // path. Truncate at the first character a URL cannot contain — but only
+    // AFTER interpolations are replaced, since `${id}` itself contains `}`.
+    const p = toPath(raw)
+      // Whitespace is deliberately NOT a cut point: it is what marks prose, and
+      // the sentence check below relies on it surviving.
+      .split(/["'`)}<>]/)[0]
+      .replace(/[.,;:]+$/, (t) => (/\.(xml|pdf|csv|js|json)$/.test(raw) ? t : ""));
     if (/[\s<>]/.test(p)) continue;
     if (!p.startsWith(PREFIX)) continue;
     // A module specifier is not a URL: `import { store } from

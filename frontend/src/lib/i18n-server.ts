@@ -27,7 +27,11 @@ import { cookies, headers } from "next/headers";
 // "Cannot read properties of undefined (reading <key>)" for every SSR page
 // that wasn't a static route (observed on /globus, /qbuild, /qtradeoffline,
 // /aevion-ip-bureau, /awards on Vercel 2026-05-03).
-import { LANGS, LANG_COOKIE, interpolate, translations, type Lang } from "./i18n-data";
+import { LANGS, LANG_COOKIE, interpolate, type Lang } from "./i18n-data";
+// The server renders whichever language the visitor asked for, so it takes all
+// of them. This import is what keeps i18n-all.ts out of the client bundle —
+// nothing a client component imports may reach it.
+import { translations } from "./i18n-all";
 
 export type { Lang } from "./i18n-data";
 

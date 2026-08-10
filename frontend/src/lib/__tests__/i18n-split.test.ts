@@ -1,89 +1,76 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { splitTranslations, SOURCE } from "../../../scripts/splitI18n.mjs";
-import { translations, LANGS } from "../i18n-data";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { translations } from "../i18n-all";
+import { LANGS, LANG_KEY_COUNT } from "../i18n-data";
 
 /**
- * Proof that splitting the dictionary per language loses nothing.
+ * The split exists to keep ten dictionaries off every page. This guards the
+ * property that makes it worth anything: no client module may compile in more
+ * than English.
  *
- * The split exists to stop shipping all eleven dictionaries to every page (the
- * platform's biggest single payload). Rearranging 2.4 MB of translated strings
- * is exactly the kind of change that can quietly drop a key or mangle an escape
- * and still build, so this checks the pieces against the real dictionary — not
- * against a fixture written to agree with them.
+ * Measured 10.08.2026 with scripts/page-weight.mjs, the combined dictionary was
+ * 1.3 MB of the 2.5 MB a page had to load before it could answer a tap — the
+ * largest single item on every page of the platform. One stray static import of
+ * `i18n-all` or of a second language file from a "use client" module puts all
+ * of it back, and nothing else would notice: the build stays green, the page
+ * just gets heavy again.
  */
 
-const source = readFileSync(SOURCE, "utf8");
-const blocks = splitTranslations(source);
+const SRC = path.join(__dirname, "..", "..");
+const LANG_DIR = path.join(__dirname, "..", "i18n-lang");
 
-/**
- * What this test found on its first run, and why the split is not wired yet:
- * the literal blocks in the file are NOT the dictionary the app uses. Eight of
- * the eleven languages are filled in below the literal via Object.assign, so
- * `translations.ru` holds 7222 keys at runtime while its literal shows 3888.
- * Any split that reads the source text alone silently drops most of the
- * dictionary — including every key French has. The splitter therefore has to
- * be fed the runtime object, not the file, and that is the next step.
- *
- * It also found that those eight languages were being assigned over rather than
- * merged into, which silently dropped 320 finished translations; that is fixed,
- * and guarded by i18n-language-merge.test.ts.
- */
-
-/** The generated modules are plain object literals; read them back as data. */
-function parse(body: string): Record<string, string> {
-  return new Function(`return ${body}`)() as Record<string, string>;
+function sourceFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) out.push(...sourceFiles(p));
+    else if (/\.(ts|tsx)$/.test(e.name) && !p.includes("__tests__")) out.push(p);
+  }
+  return out;
 }
 
-describe("splitting i18n-data by language", () => {
-  it("finds every language the app offers, and no extras", () => {
-    expect(Object.keys(blocks).sort()).toEqual([...LANGS].sort());
+const files = sourceFiles(SRC).map((f) => ({ path: f, text: readFileSync(f, "utf8") }));
+const isClient = (text: string) => /^\s*["']use client["']/.test(text);
+
+describe("one language per page", () => {
+  it("has a module for every language, and no extras", () => {
+    const found = readdirSync(LANG_DIR)
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => f.replace(/\.ts$/, ""))
+      .sort();
+    expect(found).toEqual([...LANGS].sort());
   });
 
-  it("reproduces every literal entry exactly for the languages that are real", () => {
-    // ru, en and kk are the three languages actually translated (7222, 7221 and
-    // 7221 keys at runtime; the other eight hold 94 each). For them the literal
-    // is what reaches the user, so the split must reproduce it character for
-    // character.
-    for (const lang of ["ru", "en", "kk"] as const) {
-      const split = parse(blocks[lang]);
-      const original = translations[lang] as Record<string, string>;
-      for (const [key, value] of Object.entries(split)) {
-        expect(original[key], `${lang}.${key} must exist in the real dictionary`).toBeDefined();
-        if (value === original[key]) continue;
-
-        // Tolerated only when the file defines that key twice — the section
-        // below the literal redefines it and wins at runtime. Found this way:
-        // kk."bank.history" is "Транзакциялар тарихы" in the literal and
-        // "Транзакция тарихы" at runtime. Anything else is a split defect.
-        const defined = source.split(`"${key}"`).length - 1;
-        expect(defined, `${lang}.${key} differs but is defined once — the split changed it`)
-          .toBeGreaterThan(1);
+  it("compiles only English into client code", () => {
+    // A dynamic `import(\`./i18n-lang/${lang}\`)` is how the rest arrive; only a
+    // static import puts a dictionary in the page's own bundle.
+    const offenders: string[] = [];
+    for (const { path: p, text } of files) {
+      // i18n-all is the one module allowed to hold them all; the test below
+      // keeps it away from client code, which is what makes that safe.
+      if (p.endsWith(`lib${path.sep}i18n-all.ts`)) continue;
+      for (const m of text.matchAll(/^\s*import\s+[^;]*?from\s+["'][^"']*i18n-lang\/([a-z]{2})["']/gm)) {
+        if (m[1] !== "en") offenders.push(`${path.relative(SRC, p)} imports ${m[1]}`);
       }
     }
+    expect(offenders, "static imports of a non-English dictionary").toEqual([]);
   });
 
-  it("keeps the strings that break naive splitting", () => {
-    // Braces, quotes and escapes inside translated text are what a regex-based
-    // split gets wrong; the parser walks brace depth outside of strings.
-    const ru = parse(blocks.ru);
-    const awkward = ["{", "}", '"', "'", "\\"];
-    const tricky = Object.entries(ru).filter(([, v]) => awkward.some((c) => v.includes(c))).slice(0, 20);
-    expect(tricky.length, "the dictionary should contain such strings at all").toBeGreaterThan(0);
-    for (const [key, value] of tricky) {
-      expect(value, `ru.${key}`).toBe((translations.ru as Record<string, string>)[key]);
+  it("keeps the every-language aggregate out of client modules", () => {
+    const offenders = files
+      .filter(({ text }) => isClient(text) && /from\s+["'][^"']*i18n-all["']/.test(text))
+      .map(({ path: p }) => path.relative(SRC, p));
+    expect(offenders, '"use client" modules importing i18n-all').toEqual([]);
+  });
+
+  it("keeps LANG_KEY_COUNT equal to what the dictionaries hold", () => {
+    // The switcher draws its coverage label from this map instead of counting
+    // live keys, which is the whole reason a percentage no longer costs eleven
+    // dictionaries. Stale numbers would make the UI lie without failing a build.
+    for (const lang of LANGS) {
+      expect(LANG_KEY_COUNT[lang], `${lang} — regenerate with scripts/splitI18n.mjs`)
+        .toBe(Object.keys(translations[lang]).length);
     }
-  });
-
-  it("records why the split cannot be wired from the source text alone", () => {
-    // The gap this test found: eight languages are filled in via Object.assign
-    // below the literal, so a source-text split silently drops most of the
-    // dictionary. When someone teaches the splitter to consume the runtime
-    // object instead, these numbers converge and this case fails — which is
-    // exactly when the split becomes safe to wire.
-    const literalRu = Object.keys(parse(blocks.ru)).length;
-    const runtimeRu = Object.keys(translations.ru as Record<string, string>).length;
-    expect(literalRu, "literal ru").toBeLessThan(runtimeRu);
-    expect(Object.keys(parse(blocks.fr)).length, "literal fr is nearly empty").toBeLessThan(100);
   });
 });

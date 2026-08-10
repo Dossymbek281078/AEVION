@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { coverageOf, coveragePercent, isUsable, langsByCoverage } from "../langCoverage";
-import { translations, LANGS } from "../i18n-data";
+import { LANG_KEY_COUNT, LANGS } from "../i18n-data";
 
 /**
  * The switcher offered eleven languages as equals while eight of them held
@@ -11,10 +11,11 @@ import { translations, LANGS } from "../i18n-data";
 
 describe("language coverage", () => {
   it("matches what the dictionary actually holds", () => {
-    const biggest = Math.max(...LANGS.map((l) => Object.keys(translations[l]).length));
+    // That LANG_KEY_COUNT itself still matches the dictionaries is checked in
+    // i18n-split.test.ts; here the arithmetic on top of it is what is at stake.
+    const biggest = Math.max(...LANGS.map((l) => LANG_KEY_COUNT[l]));
     for (const lang of LANGS) {
-      const expected = Object.keys(translations[lang]).length / biggest;
-      expect(coverageOf(lang), lang).toBeCloseTo(expected, 6);
+      expect(coverageOf(lang), lang).toBeCloseTo(LANG_KEY_COUNT[lang] / biggest, 6);
     }
   });
 
@@ -35,19 +36,14 @@ describe("language coverage", () => {
   it("promotes a language as soon as it is genuinely translated", () => {
     // The threshold is data-driven, not a list of language codes — the day
     // German is filled in, it stops being labelled partial without an edit.
-    const before = isUsable("de");
-    expect(before).toBe(false);
-    const de = translations.de as Record<string, string>;
-    const ru = translations.ru as Record<string, string>;
-    const added: string[] = [];
-    for (const key of Object.keys(ru)) {
-      if (de[key] === undefined) { de[key] = ru[key]; added.push(key); }
-    }
+    expect(isUsable("de")).toBe(false);
+    const was = LANG_KEY_COUNT.de;
+    LANG_KEY_COUNT.de = LANG_KEY_COUNT.ru;
     try {
       expect(isUsable("de"), "a filled-in language counts as usable").toBe(true);
       expect(coveragePercent("de")).toBeGreaterThanOrEqual(99);
     } finally {
-      for (const key of added) delete de[key];
+      LANG_KEY_COUNT.de = was;
     }
     expect(isUsable("de"), "and the fixture is restored").toBe(false);
   });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useI18n, translations, type Lang } from "@/lib/i18n";
+import { useI18n, loadDict, peekDict, type Lang } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
 
 // Warn ONCE if the translate endpoint fails, so a backend misconfiguration
@@ -303,9 +303,11 @@ type SourceLang = "en" | "ru";
 function getLangDict(target: Lang, source: SourceLang = "en"): { d: Record<string, string>; k: string[] } {
   const cacheKey = `${source}->${target}`;
   if (langDictCache.has(cacheKey)) return langDictCache.get(cacheKey)!;
-  const tbl = translations as Record<string, Record<string, string>>;
-  const srcTbl = tbl[source] ?? {};
-  const langTbl = tbl[target] ?? {};
+  // Both dictionaries are fetched before the translating effect runs (see the
+  // effect that waits on loadDict below), so by here they are in the cache. An
+  // absent one degrades to "no seed pairs" — the live API path still works.
+  const srcTbl = peekDict(source) ?? {};
+  const langTbl = peekDict(target) ?? {};
   const d: Record<string, string> = {};
   for (const key of Object.keys(srcTbl)) {
     const src = srcTbl[key];
@@ -424,6 +426,17 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
   // на проде 27.07 — `/multichat-engine` при ru делал 2 запроса presets, при en
   // ровно 1. То есть каждый fetch-на-mount уходил дважды, а локальное состояние
   // компонентов сбрасывалось.
+  /**
+   * The seed dictionaries arrive over the network now, so the translating pass
+   * has to wait for them.
+   *
+   * Only English is compiled into the page (see i18n.tsx); Russian is the other
+   * source language for the seed map, and the target may be a third. Running
+   * before they land would seed nothing and send every common UI word to the
+   * paid translation API instead of matching it for free.
+   */
+  const [seedReady, setSeedReady] = useState(0);
+
   const [resetToken, setResetToken] = useState(0);
   const settledLang = useRef<Lang | null>(null);
   useEffect(() => {
@@ -438,6 +451,19 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
     }
   }, [lang, langReady]);
 
+  useEffect(() => {
+    if (!langReady) return;
+    let alive = true;
+    // English is compiled in; these two may not be. Both resolve immediately
+    // once fetched, so a language switch back costs nothing.
+    Promise.all([loadDict("ru"), loadDict(lang)]).then(() => {
+      if (alive) setSeedReady((n) => n + 1);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [lang, langReady]);
+
   // observe=false → один стартовый проход перевода, БЕЗ live-MutationObserver.
   // Нужно для full-app оболочек (CyberChess и т.п.): там DOM меняется постоянно
   // (часы тикают, доска ходит, eval стримит), и подписка observer на весь субтри
@@ -450,6 +476,9 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
     // значит переводить страницу в язык, который пользователь не просил, и
     // портить исходный DOM до того, как придёт настоящее значение.
     if (!langReady) return;
+    // Seed dictionaries not here yet — the effect below fetches them and bumps
+    // seedReady, which re-runs this one.
+    if (!peekDict("ru") || !peekDict(lang)) return;
 
     // map = instant seed ∪ persisted API results (original -> translation).
     // cache = API results only (what we persist back).
@@ -675,7 +704,7 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
     // и только следующим шагом React заменяет поддерево на исходное. Без
     // перезапуска перевод так и не ложился на новый DOM — проверено вживую:
     // RU → EN работал, EN → RU оставлял страницу английской.
-  }, [lang, observe, langReady, resetToken]);
+  }, [lang, observe, langReady, resetToken, seedReady]);
 
   return <div ref={ref} key={resetToken} style={{ display: "contents" }}>{children}</div>;
 }

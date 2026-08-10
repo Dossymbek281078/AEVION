@@ -457,8 +457,10 @@ function gRank(e:number){return[...RANKS].reverse().find(r=>e>=r.min)||RANKS[0]}
 type SavedGame = {id:string;date:string;moves:string[];result:string;playerColor:"w"|"b";aiLevel:string;rating:number;tc:string;category:"Bullet"|"Blitz"|"Rapid"|"Classical";opening?:string;analysis?:Array<{ply:number;quality:string;cpLoss?:number}>};
 const GK="aevion_chess_games_v1";
 function loadGames():SavedGame[]{try{return JSON.parse(localStorage.getItem(GK)||"[]")}catch{return[]}}
-/* Самая тяжёлая запись в модуле — до 200 партий с ходами и разбором. Именно она
-   первой упрётся в исчерпанную квоту, и именно её отказ незаметнее всего. */
+/* Самая тяжёлая запись в модуле — до 200 партий с ходами и разбором (замер: 0.8–1.2 МБ
+   на полную историю, то есть квоту в 5–10 МБ она сама не исчерпает). Важна не она,
+   а то, что её отказ незаметнее всех: в приватном режиме запись не проходит с самого
+   начала, и игрок теряет всю сессию, ничего об этом не узнав. */
 function saveGame(g:SavedGame){const all=loadGames();all.unshift(g);if(all.length>200)all.length=200;writeJson(GK,all)}
 
 /* ═══ Chessy — in-game currency ═══ */

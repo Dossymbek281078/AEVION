@@ -12,7 +12,11 @@ import {
   RESOURCE_QUIZ_PASS_THRESHOLD,
 } from "../lib/resourceMethodQuiz";
 
-const PASS_KEY = "smeta-trainer:resource-quiz-pass-v1";
+import {
+  KEY_QUIZ_BEST,
+  KEY_RESOURCE_QUIZ_PASS as PASS_KEY,
+  PROGRESS_UPDATE_EVENT,
+} from "../progressKeys";
 
 export default function ResourceQuizPage() {
   const [answers, setAnswers] = useState<Record<number, number>>({});
@@ -37,12 +41,29 @@ export default function ResourceQuizPage() {
 
   function handleSubmit() {
     setSubmitted(true);
-    if (correctCount >= RESOURCE_QUIZ_PASS_THRESHOLD) {
-      try {
+    try {
+      // Результат записывается на ЛЮБОМ исходе, а не только при сдаче.
+      // Раньше писался лишь флаг «сдал», и то при успехе: непройденная
+      // попытка не оставляла следа вовсе, а лучший результат не сохранял
+      // никто — дашборд читал ключ, в который никто не писал, и вечно
+      // показывал «0 из 20, 0 %». Опыт за квиз не начислялся, достижение
+      // «Снайпер квизов» (95 %+) было недостижимо в принципе.
+      const prevRaw = localStorage.getItem(KEY_QUIZ_BEST);
+      const prev = prevRaw ? (JSON.parse(prevRaw) as { scoreCorrect?: number }) : null;
+      const prevBest = typeof prev?.scoreCorrect === "number" ? prev.scoreCorrect : -1;
+      // Строго «больше»: равный результат не переписывает запись — иначе
+      // повторная попытка с тем же баллом каждый раз трогала бы хранилище.
+      if (correctCount > prevBest) {
+        localStorage.setItem(
+          KEY_QUIZ_BEST,
+          JSON.stringify({ scoreCorrect: correctCount, scoreTotal: RESOURCE_QUIZ.length }),
+        );
+      }
+      if (correctCount >= RESOURCE_QUIZ_PASS_THRESHOLD) {
         localStorage.setItem(PASS_KEY, "true");
-        window.dispatchEvent(new CustomEvent("aevion-smeta-progress-update"));
-      } catch {}
-    }
+      }
+      window.dispatchEvent(new CustomEvent(PROGRESS_UPDATE_EVENT));
+    } catch {}
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 

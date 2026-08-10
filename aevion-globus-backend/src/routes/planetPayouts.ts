@@ -60,7 +60,24 @@ planetPayoutsRouter.get("/payouts.csv", requireAuth, async (req, res) => {
 
 const getWebhookSecret = () => requireProdSecret("PLANET_WEBHOOK_SECRET", "dev-planet-webhook");
 
+// Fast path only. The authoritative replay check is the persisted
+// planetCerts list below: this Set lives in process memory, so on its own it
+// forgets every event the moment the service restarts — and a restart is
+// exactly when a webhook sender is most likely to be retrying.
 const seenWebhookIds = new Set<string>();
+
+/**
+ * Has this certification already been recorded? A version of an artifact is
+ * certified once, so an existing (email, artifactVersionId) row is a replay
+ * regardless of which delivery attempt carried it. Reads the persisted list,
+ * so it survives the restart that empties seenWebhookIds.
+ */
+function findExistingCert(email: string, artifactVersionId: string): PlanetCert | undefined {
+  const owner = email.trim().toLowerCase();
+  return planetCerts.find(
+    (x) => x.email === owner && x.artifactVersionId === artifactVersionId,
+  );
+}
 
 planetPayoutsRouter.post("/payouts/certify-webhook", async (req, res) => {
   const verdict = verifyWebhookSig({
@@ -90,12 +107,12 @@ planetPayoutsRouter.post("/payouts/certify-webhook", async (req, res) => {
     return res.status(400).json({ error: "amount must be positive number" });
   }
 
-  if (seenWebhookIds.has(eventId)) {
-    const existing = planetCerts.find(
-      (x) =>
-        x.email === email.toLowerCase() &&
-        x.artifactVersionId === artifactVersionId,
-    );
+  // Replay check reads the persisted certificates, not just this process's
+  // memory. Retries after a deploy used to miss the in-memory Set entirely
+  // and credit the same certification a second time.
+  const existing = findExistingCert(email, artifactVersionId);
+  if (existing || seenWebhookIds.has(eventId)) {
+    seenWebhookIds.add(eventId);
     return res.status(200).json({
       replayed: true,
       id: existing?.id ?? null,
@@ -111,13 +128,25 @@ planetPayoutsRouter.post("/payouts/certify-webhook", async (req, res) => {
     memo: `Planet certification · ${artifactVersionId}`,
   });
 
+  if (!credit.ok) {
+    // Money did not move. Recording the certification anyway and answering
+    // 201 told the sender "delivered", so it never retried and the reward
+    // was silently lost. Fail loudly instead and leave nothing behind: the
+    // event stays un-seen, so a retry runs the whole thing again.
+    return res.status(502).json({
+      error: "credit_failed",
+      reason: credit.error,
+      eventId,
+    });
+  }
+
   const cert: PlanetCert = {
     id: `pcert_${randomUUID()}`,
     email: email.toLowerCase(),
     artifactVersionId,
     amount: a,
     certifiedAt: new Date().toISOString(),
-    transferId: credit.ok ? credit.operationId : null,
+    transferId: credit.operationId,
     source: "planet",
   };
   planetCerts.push(cert);
@@ -130,7 +159,6 @@ planetPayoutsRouter.post("/payouts/certify-webhook", async (req, res) => {
     eventId,
     certifiedAt: cert.certifiedAt,
     transferId: cert.transferId,
-    accountId: credit.ok ? credit.accountId : null,
-    creditError: credit.ok ? undefined : credit.error,
+    accountId: credit.accountId,
   });
 });

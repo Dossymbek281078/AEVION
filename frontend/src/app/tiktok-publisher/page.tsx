@@ -43,9 +43,23 @@ const ERROR_TEXT: Record<string, string> = {
   video_url_too_long: "Ссылка слишком длинная.",
   privacy_level_required: "Выберите, кто увидит ролик.",
   privacy_level_not_allowed: "Этот уровень приватности недоступен для вашего аккаунта.",
+  branded_content_cannot_be_private: "Рекламу по договору нельзя публиковать со статусом «Только я».",
   publish_no_id: "TikTok ответил без идентификатора задания — публикация не началась.",
   not_connected: "Сессия TikTok истекла — подключите аккаунт заново.",
+  publish_failed: "TikTok отклонил публикацию.",
+  publish_error: "Не удалось достучаться до TikTok. Попробуйте ещё раз.",
+  creator_info_failed: "TikTok не отдал настройки аккаунта.",
+  creator_info_error: "Не удалось получить настройки аккаунта из TikTok.",
+  status_failed: "TikTok не отдал статус публикации.",
+  status_error: "Не удалось получить статус публикации.",
+  tiktok_not_configured: "Интеграция с TikTok ещё не настроена на сервере.",
 };
+
+/** Human text for a backend error code, falling back to the code itself. */
+function errorText(code: unknown, fallback = "неизвестная ошибка"): string {
+  if (typeof code !== "string" || !code) return fallback;
+  return ERROR_TEXT[code] || code;
+}
 
 type Config = { configured: boolean; connected: boolean; scopes: string; redirectUri: string };
 type Creator = {
@@ -121,7 +135,7 @@ export default function TikTokPublisherPage() {
       }
       const j = await r.json();
       if (!r.ok) {
-        setErr(typeof j.detail === "object" ? JSON.stringify(j.detail) : j.error || "creator_info_failed");
+        setErr(errorText(j.error, "не удалось получить настройки аккаунта"));
         return;
       }
       setCreator(j);
@@ -183,7 +197,7 @@ export default function TikTokPublisherPage() {
         if (!r.ok) {
           setPublishStatus({
             kind: "err",
-            text: `Не удалось узнать статус: ${j.error || r.status}. Проверьте приложение TikTok.`,
+            text: `${errorText(j.error, `ошибка ${r.status}`)} Проверьте приложение TikTok.`,
           });
           return;
         }
@@ -275,9 +289,11 @@ export default function TikTokPublisherPage() {
         setCfg((c) => (c ? { ...c, connected: false } : c));
         setPostMsg({ kind: "err", text: "Сессия TikTok истекла — подключите аккаунт заново." });
       } else if (!r.ok) {
+        // TikTok's own message (in `detail`) is more specific than our code,
+        // so it wins when present.
         const d = j.detail;
         const detail = typeof d === "object" && d ? `${d.code || ""} ${d.message || ""}`.trim() : String(d || "");
-        setPostMsg({ kind: "err", text: `Не удалось отправить: ${ERROR_TEXT[j.error] || detail || j.error || "ошибка"}` });
+        setPostMsg({ kind: "err", text: `Не удалось отправить: ${detail || errorText(j.error, "ошибка")}` });
       } else {
         setPostMsg({ kind: "ok", text: "Задание принято TikTok." });
         pollPublishStatus(j.publishId);

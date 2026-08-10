@@ -21,7 +21,7 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { getPool } from "../lib/dbPool";
-import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
+import { readJsonFile, updateJsonFile } from "../lib/jsonFileStore";
 import { rateLimit } from "../lib/rateLimit";
 import { requireAuth } from "../lib/authJwt";
 import { listChatTurns, recordChatTurn, type ChatTurn } from "../lib/chatHistory";
@@ -101,10 +101,14 @@ async function createConv(userId: string, title: string): Promise<Conversation> 
       [c.id, c.userId, c.title, c.createdAt, c.updatedAt],
     );
   } else {
-    const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
-    const items = Array.isArray(data.items) ? data.items : [];
-    items.push(c);
-    await writeJsonFile(STORE_REL, { items });
+    // updateJsonFile, а не пара read+write: список бесед общий на всех, и
+    // параллельные создание/переименование/шаринг затирали друг друга —
+    // беседа просто пропадала из библиотеки без единой ошибки.
+    await updateJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] }, (data) => {
+      const items = Array.isArray(data.items) ? data.items : [];
+      items.push(c);
+      return { items };
+    });
   }
   return c;
 }
@@ -163,13 +167,12 @@ async function touchConv(id: string): Promise<void> {
     await getPool().query(`UPDATE multichat_conversations SET updated_at = NOW() WHERE id = $1`, [id]);
     return;
   }
-  const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
-  const items = Array.isArray(data.items) ? data.items : [];
-  const c = items.find((x) => x.id === id);
-  if (c) {
-    c.updatedAt = new Date().toISOString();
-    await writeJsonFile(STORE_REL, { items });
-  }
+  await updateJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] }, (data) => {
+    const items = Array.isArray(data.items) ? data.items : [];
+    const c = items.find((x) => x.id === id);
+    if (c) c.updatedAt = new Date().toISOString();
+    return { items };
+  });
 }
 
 function toIso(v: unknown): string {
@@ -270,13 +273,14 @@ async function deleteConv(id: string, userId: string): Promise<boolean> {
     );
     return (r.rowCount ?? 0) > 0;
   }
-  const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
-  const items = Array.isArray(data.items) ? data.items : [];
-  const before = items.length;
-  const filtered = items.filter((c) => !(c.id === id && c.userId === userId));
-  if (filtered.length === before) return false;
-  await writeJsonFile(STORE_REL, { items: filtered });
-  return true;
+  let deleted = false;
+  await updateJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] }, (data) => {
+    const items = Array.isArray(data.items) ? data.items : [];
+    const filtered = items.filter((c) => !(c.id === id && c.userId === userId));
+    deleted = filtered.length !== items.length;
+    return { items: filtered };
+  });
+  return deleted;
 }
 
 async function renameConv(id: string, userId: string, title: string): Promise<Conversation | null> {
@@ -294,14 +298,18 @@ async function renameConv(id: string, userId: string, title: string): Promise<Co
     if (!row) return null;
     return { ...row, createdAt: toIso(row.createdAt), updatedAt: toIso(row.updatedAt) } as Conversation;
   }
-  const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
-  const items = Array.isArray(data.items) ? data.items : [];
-  const c = items.find((x) => x.id === id && x.userId === userId);
-  if (!c) return null;
-  c.title = safe;
-  c.updatedAt = new Date().toISOString();
-  await writeJsonFile(STORE_REL, { items });
-  return c;
+  let renamed: Conversation | null = null;
+  await updateJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] }, (data) => {
+    const items = Array.isArray(data.items) ? data.items : [];
+    const c = items.find((x) => x.id === id && x.userId === userId);
+    if (c) {
+      c.title = safe;
+      c.updatedAt = new Date().toISOString();
+      renamed = c;
+    }
+    return { items };
+  });
+  return renamed;
 }
 
 async function setShareToken(id: string, userId: string, token: string | null): Promise<Conversation | null> {
@@ -318,14 +326,18 @@ async function setShareToken(id: string, userId: string, token: string | null): 
     if (!row) return null;
     return { ...row, createdAt: toIso(row.createdAt), updatedAt: toIso(row.updatedAt) } as Conversation;
   }
-  const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
-  const items = Array.isArray(data.items) ? data.items : [];
-  const c = items.find((x) => x.id === id && x.userId === userId);
-  if (!c) return null;
-  c.shareToken = token;
-  c.updatedAt = new Date().toISOString();
-  await writeJsonFile(STORE_REL, { items });
-  return c;
+  let updated: Conversation | null = null;
+  await updateJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] }, (data) => {
+    const items = Array.isArray(data.items) ? data.items : [];
+    const c = items.find((x) => x.id === id && x.userId === userId);
+    if (c) {
+      c.shareToken = token;
+      c.updatedAt = new Date().toISOString();
+      updated = c;
+    }
+    return { items };
+  });
+  return updated;
 }
 
 async function findByShareToken(token: string): Promise<Conversation | null> {

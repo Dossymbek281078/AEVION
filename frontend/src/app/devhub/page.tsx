@@ -7,6 +7,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
+import { track } from "@/lib/track";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -336,6 +337,10 @@ export default function DevHubPage() {
                 href="https://aevion.lemonsqueezy.com/checkout/buy/ab30b6f3-1d69-4db6-b7ab-86ef0d363a57"
                 target="_blank"
                 rel="noopener noreferrer"
+                // Studio Pro sells through its own Lemon Squeezy variant, so the
+                // charge never passes through /api/pricing/checkout — this event
+                // is the only way it shows up in the funnel dashboard.
+                onClick={() => track({ type: "checkout_start", tier: "studio-pro", source: "devhub", meta: { processor: "lemonsqueezy" } })}
                 style={{
                   padding: "9px 20px", background: "#fff", color: "#0d9488",
                   borderRadius: 8, fontWeight: 700, fontSize: 14, textDecoration: "none",

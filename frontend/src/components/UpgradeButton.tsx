@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
 import { LIVE_TOP_TIER_MONTHLY } from "@/data/pitchFacts";
+import { track } from "@/lib/track";
 
 // Единственный живой процессинг — Gumroad (Paddle/Stripe/LemonSqueezy не в
 // primary). Кнопка ведёт на Gumroad-чекаут. Legacy-имя PaddleUpgradeButton
@@ -29,6 +30,16 @@ export function UpgradeButton({
 
   function handleClick() {
     setLoading(true);
+    // Purchase intent from a module page. Without this the funnel dashboard
+    // only ever saw checkout_start from the /pricing table, so every upgrade
+    // started here (9 module pages) was invisible. track() uses sendBeacon,
+    // which survives the navigation below.
+    track({
+      type: "checkout_start",
+      tier: tierId,
+      source: `upgrade-button/${appId}`,
+      meta: { variant, processor: "gumroad" },
+    });
     // Gumroad hosted checkout — единственный живой рельс.
     window.location.href = gumroadCheckoutUrl({ key: appId, tier: tierId });
   }

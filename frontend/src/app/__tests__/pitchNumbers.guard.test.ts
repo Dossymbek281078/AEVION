@@ -87,3 +87,46 @@ describe("pitchFacts — canonical counts stay in sync with the registry", () =>
     expect(LIVE_MODULES).toBe(35);
   });
 });
+
+/**
+ * Guard: a number on a public page never wears a "live" label unless it came
+ * from a live call.
+ *
+ * Why this exists. On 2026-08-09 /demo and /pitch both showed a green "LIVE"
+ * badge whenever ANY ONE of four endpoints answered. One of them —
+ * /api/qtrade/summary — sits behind requireAuth, so for a signed-out visitor it
+ * can never answer: its number always came from the hardcoded DEMO_METRICS
+ * (1450) and was presented as live. Measured against production the same day,
+ * the four working sources returned 25 / 25 / 20 / 50 — so a fabricated
+ * four-digit figure stood next to real two-digit ones under one green dot.
+ *
+ * The structural invariant that prevents the whole class: every metric pill
+ * must be told whether ITS OWN source answered. A pill rendered without the
+ * `live` prop is a number with no way to mark itself, which is exactly how the
+ * old bug looked in the diff — nothing about it read as wrong.
+ */
+describe("live metrics — every pill declares its own liveness", () => {
+  const PILL_SURFACES = ["src/app/demo/page.tsx", "src/app/pitch/page.tsx"];
+
+  for (const rel of PILL_SURFACES) {
+    it(`${rel} renders no LivePill without a live= prop`, () => {
+      const src = readFileSync(path.join(FRONTEND_ROOT, rel), "utf8");
+      // Each usage is a single JSX element; match up to the self-closing slash
+      // so a multi-prop pill on one line is captured whole.
+      const usages = src.match(/<LivePill\b[^>]*\/>/g) || [];
+      expect(
+        usages.length,
+        `${rel} no longer renders any LivePill — if the block was removed, drop it from PILL_SURFACES; ` +
+          `if it was renamed, point this guard at the new component.`,
+      ).toBeGreaterThan(0);
+
+      const unmarked = usages.filter((u) => !/\blive=/.test(u));
+      expect(
+        unmarked,
+        `${rel} renders ${unmarked.length} metric pill(s) with no live= prop. ` +
+          `A pill that cannot know whether its source answered will show the DEMO_METRICS ` +
+          `fallback as if it were a live number.`,
+      ).toEqual([]);
+    });
+  }
+});

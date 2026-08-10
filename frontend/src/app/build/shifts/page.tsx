@@ -2,25 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, type BuildShiftRow as Shift } from "@/lib/build/api";
 import { SafetyBriefingModal } from "@/components/build/SafetyBriefingModal";
 import { HelpTip } from "@/components/build/HelpTip";
 import { useI18n } from "@/lib/i18n";
-
-type Shift = {
-  id: string;
-  applicationId: string;
-  workerId: string;
-  clientId: string;
-  shiftDate: string;
-  startTime: string | null;
-  endTime: string | null;
-  status: string;
-  checkInAt: string | null;
-  checkOutAt: string | null;
-  workerName: string | null;
-  clientName: string | null;
-};
 
 const STATUS_STYLE: Record<string, string> = {
   PLANNED: "border-slate-500/30 bg-slate-500/10 text-slate-300",

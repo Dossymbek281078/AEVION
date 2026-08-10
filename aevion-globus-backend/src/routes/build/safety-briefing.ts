@@ -62,7 +62,9 @@ safetyBriefingRouter.post("/", async (req, res) => {
          VALUES ($1,$2,$3,$4) RETURNING *`,
         [id, shiftId.value, auth.sub, JSON.stringify(items)],
       );
-      return ok(res, r.rows[0], 201);
+      // `items` is stored as a JSON string — hand it back parsed, the same
+      // shape GET /safety-briefing/shift/:id returns.
+      return ok(res, { ...r.rows[0], items }, 201);
     } catch (err: unknown) {
       // Unique violation on (shiftId, workerId) — already signed.
       if ((err as { code?: string }).code === "23505") {
@@ -70,7 +72,10 @@ safetyBriefingRouter.post("/", async (req, res) => {
           `SELECT * FROM "BuildSafetyBriefing" WHERE "shiftId" = $1 AND "workerId" = $2 LIMIT 1`,
           [shiftId.value, auth.sub],
         );
-        return ok(res, existing.rows[0]);
+        return ok(res, {
+          ...existing.rows[0],
+          items: safeParseJson(existing.rows[0].items, [] as string[]),
+        });
       }
       throw err;
     }

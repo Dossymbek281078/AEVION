@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { buildPool as pool, ok, fail, requireBuildAuth } from "../../lib/build";
+import { buildPool as pool, ok, fail, requireBuildAuth, safeParseJson } from "../../lib/build";
 
 export const availabilityRouter = Router();
 
@@ -40,13 +40,17 @@ availabilityRouter.get("/me", async (req, res) => {
     if (!auth) return;
 
     const r = await pool.query(
-      `SELECT "availableNow", "availableUntil"
+      `SELECT "availableNow", "availableUntil", "city", "skillsJson"
        FROM "BuildProfile" WHERE "userId" = $1 LIMIT 1`,
       [auth.sub],
     );
     if (r.rowCount === 0) return fail(res, 404, "profile_not_found");
 
     const row = r.rows[0];
+    // /build/availability shows "employers can find you by <city> · <skills>",
+    // so the status endpoint has to carry them — the page has no other source.
+    row.skills = safeParseJson<string[]>(row.skillsJson, []);
+    delete row.skillsJson;
     // Auto-expire: if availableUntil is in the past, treat as off
     const expired = row.availableUntil && new Date(row.availableUntil) < new Date();
     if (expired && row.availableNow) {

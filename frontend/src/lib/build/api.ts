@@ -68,6 +68,54 @@ export type BuildPaymentEvent = {
   workerId?: string | null;
 };
 
+export type BuildShiftRow = {
+  id: string;
+  applicationId: string;
+  workerId: string;
+  clientId: string;
+  shiftDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  status: string;
+  checkInAt: string | null;
+  checkOutAt: string | null;
+  // Joined only by GET /shifts/my — check-in/out return the bare row.
+  workerName?: string | null;
+  clientName?: string | null;
+};
+
+// Signable payload handed to QSign by POST /applications/:id/contract.
+export type BuildContractPayload = {
+  type: string;
+  applicationId: string;
+  client: { name: string; city: string };
+  worker: { name: string; city: string };
+  vacancy: { title: string; salary: number | null; currency: string; project: string };
+  generatedAt: string;
+  platform: string;
+};
+
+export type BuildSafetyBriefing = {
+  id: string;
+  shiftId: string;
+  workerId: string;
+  items: string[];
+  signedAt: string;
+};
+
+export type BuildVideoRoom = {
+  id: string;
+  roomUrl: string;
+  hostId: string;
+  guestId: string | null;
+  scheduledAt: string | null;
+  status: string;
+  createdAt: string;
+  // Joined only by GET /video/rooms/my.
+  hostName?: string | null;
+  guestName?: string | null;
+};
+
 export type ProjectStatus = "OPEN" | "IN_PROGRESS" | "DONE";
 export type VacancyStatus = "OPEN" | "CLOSED" | "ARCHIVED";
 export type ApplicationStatus = "PENDING" | "ACCEPTED" | "REJECTED";
@@ -1685,18 +1733,20 @@ export const buildApi = {
     call<{ id: string; title: string; status: string }>("POST", "/api/build/team-requests", input),
 
   // Available workers & shifts
-  availableWorkers: (q?: { skill?: string; city?: string; specialty?: string; limit?: number; offset?: number }) =>
-    call<{ items: unknown[]; total: number; asOf?: string }>("GET", `/api/build/workers/available${q ? `?${new URLSearchParams(Object.fromEntries(Object.entries(q).filter(([,v])=>v!=null)) as Record<string,string>)}` : ""}`),
+  // Only city/specialty/limit are read server-side — anything else is dropped
+  // silently, so the type deliberately does not offer it.
+  availableWorkers: (q?: { city?: string; specialty?: string; limit?: number }) =>
+    call<{ items: unknown[]; total: number; asOf?: string }>("GET", `/api/build/availability/workers${q ? `?${new URLSearchParams(Object.fromEntries(Object.entries(q).filter(([,v])=>v!=null)) as Record<string,string>)}` : ""}`),
   setAvailability: (available: boolean, hours?: number) =>
-    call<{ updated: boolean; availableNow?: boolean; availableUntil?: string | null }>("PATCH", "/api/build/workers/availability", { available, hours }),
+    call<{ userId: string; availableNow: boolean; availableUntil: string | null }>("POST", "/api/build/availability", { on: available, hours }),
   myAvailability: () =>
-    call<{ available: boolean; availableNow?: boolean; skills: string[]; city: string | null; availableUntil?: string | null }>("GET", "/api/build/workers/my-availability"),
+    call<{ availableNow: boolean; availableUntil: string | null; city: string | null; skills: string[] }>("GET", "/api/build/availability/me"),
   myShifts: () =>
-    call<{ items: Array<{ id: string; applicationId: string; workerId: string; clientId: string; shiftDate: string; startTime: string | null; endTime: string | null; status: string; checkInAt: string | null; checkOutAt: string | null; workerName: string | null; clientName: string | null }>; total: number }>("GET", "/api/build/shifts/me"),
+    call<{ items: BuildShiftRow[]; total: number }>("GET", "/api/build/shifts/my"),
   shiftCheckin: (shiftId: string, lat?: number, lng?: number) =>
-    call<{ checkedIn: boolean }>("POST", `/api/build/shifts/${shiftId}/checkin`, { lat, lng }),
+    call<BuildShiftRow>("PATCH", `/api/build/shifts/${shiftId}/checkin`, { lat, lng }),
   shiftCheckout: (shiftId: string, lat?: number, lng?: number) =>
-    call<{ checkedOut: boolean }>("POST", `/api/build/shifts/${shiftId}/checkout`, { lat, lng }),
+    call<BuildShiftRow>("PATCH", `/api/build/shifts/${shiftId}/checkout`, { lat, lng }),
 
   // Stories
   storiesFeed: (q?: { limit?: number }) =>
@@ -1720,17 +1770,15 @@ export const buildApi = {
 
   // Video rooms
   createVideoRoom: (input: { title?: string; maxParticipants?: number; guestId?: string; scheduledAt?: string }) =>
-    call<{ id: string; roomUrl: string; hostId: string; guestId: string | null; scheduledAt: string | null; status: string; hostName: string | null; guestName: string | null; createdAt: string }>("POST", "/api/build/video-rooms", input),
+    call<BuildVideoRoom>("POST", "/api/build/video/rooms", input),
   myVideoRooms: () =>
-    call<{ items: Array<{ id: string; roomUrl: string; hostId: string; guestId: string | null; scheduledAt: string | null; status: string; hostName: string | null; guestName: string | null; createdAt: string }> }>("GET", "/api/build/video-rooms/me"),
-  inviteToVideoRoom: (roomId: string, userId: string) =>
-    call<{ invited: boolean }>("POST", `/api/build/video-rooms/${roomId}/invite`, { userId }),
+    call<{ items: BuildVideoRoom[]; total: number }>("GET", "/api/build/video/rooms/my"),
+  inviteToVideoRoom: (roomId: string, guestId: string) =>
+    call<{ invited: boolean }>("POST", `/api/build/video/rooms/${roomId}/invite`, { guestId }),
 
   // Push notifications
   pushPublicKey: () =>
     call<{ publicKey: string }>("GET", "/api/build/push/public-key", undefined, { auth: false }),
-  registerPushSubscription: (subscription: object) =>
-    call<{ registered: boolean }>("POST", "/api/build/push/subscribe", { subscription }),
   pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
     call<{ subscribed: boolean }>("POST", "/api/build/push/subscribe", sub),
   pushUnsubscribe: (endpoint: string) =>
@@ -1740,13 +1788,19 @@ export const buildApi = {
 
   // Safety briefing
   safetyTemplate: () =>
-    call<{ items: string[] }>("GET", "/api/build/safety/template", undefined, { auth: false }),
-  signSafetyBriefing: (shiftId: string, checkedItemIds: string[]) =>
-    call<{ signed: boolean; signedAt: string }>("POST", `/api/build/shifts/${shiftId}/safety-briefing`, { checkedItemIds }),
+    call<{ items: string[] }>("GET", "/api/build/safety-briefing/template", undefined, { auth: false }),
+  signSafetyBriefing: (shiftId: string, items: string[]) =>
+    call<BuildSafetyBriefing>("POST", "/api/build/safety-briefing", { shiftId, items }),
+  shiftSafetyBriefings: (shiftId: string) =>
+    call<{ items: BuildSafetyBriefing[]; total: number }>(
+      "GET", `/api/build/safety-briefing/shift/${encodeURIComponent(shiftId)}`,
+    ),
 
-  // Quick apply
-  quickApply: (input: { vacancyId: string; referredByUserId?: string | null }) =>
-    call<{ applicationId: string; status: string }>("POST", "/api/build/quick-apply", input),
+  // Contracts (QSign hand-off)
+  generateContract: (applicationId: string) =>
+    call<{ contractPayload: BuildContractPayload; qsignUrl: string; hint: string }>(
+      "POST", `/api/build/applications/${encodeURIComponent(applicationId)}/contract`,
+    ),
 
   setVacancyUrgent: (id: string, input: { urgent: boolean; urgentNote?: string; urgentUntil?: string }) =>
     call<{ vacancy: { id: string; urgent: boolean; urgentUntil: string | null; urgentNote: string | null } }>(
@@ -1802,7 +1856,7 @@ export const buildApi = {
 
   // Payment calendar
   myPaymentCalendar: () =>
-    call<{ items: BuildPaymentEvent[]; summary: { due: number; paid: number; overdue: number } }>("GET", "/api/build/payment-calendar"),
+    call<{ items: BuildPaymentEvent[]; summary: { due: number; paid: number; overdue: number } }>("GET", "/api/build/payment-calendar/my"),
   updatePaymentEvent: (id: string, patch: { status?: PaymentEventStatus; paidAt?: string | null; note?: string | null }) =>
     call<BuildPaymentEvent>("PATCH", `/api/build/payment-calendar/${id}`, patch),
 
@@ -1852,9 +1906,6 @@ export const buildApi = {
   updatePortfolioPhoto: (id: string, input: { caption?: string; projectType?: string }) =>
     call<{ id: string; caption: string | null }>("PATCH", `/api/build/portfolio/photos/${id}`, input),
 
-  // Safety briefing template (public)
-  safetyBriefingTemplate: () =>
-    call<{ items: string[] }>("GET", "/api/build/safety-briefing/template"),
 };
 
 // ── Auth helpers (use existing /api/auth/* — not part of /api/build) ─

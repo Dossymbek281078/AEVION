@@ -42,15 +42,11 @@ export function QuickApplyButton({
           setBusy(true);
           setErr(null);
           try {
-            await buildApi.quickApply({ vacancyId, referredByUserId });
+            await buildApi.applyVacancy({ vacancyId, referredByUserId, sourceTag: "quick-apply" });
             setDone(true);
             router.refresh();
           } catch (e) {
             const msg = e instanceof BuildApiError ? e.message : (e as Error).message;
-            if (msg === "profile_required_for_quick_apply") {
-              router.push(`/build/profile?next=/build/vacancy/${vacancyId}`);
-              return;
-            }
             if (msg === "already_applied") {
               setDone(true);
               return;

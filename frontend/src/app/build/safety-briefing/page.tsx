@@ -1,35 +1,15 @@
 "use client";
-import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import {
+  buildApi,
+  type BuildShiftRow as Shift,
+  type BuildSafetyBriefing as BriefingRecord,
+} from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
-
-type Shift = {
-  id: string;
-  applicationId: string;
-  workerId: string;
-  clientId: string;
-  shiftDate: string;
-  startTime: string | null;
-  endTime: string | null;
-  status: string;
-  checkInAt: string | null;
-  checkOutAt: string | null;
-  workerName: string | null;
-  clientName: string | null;
-};
-
-type BriefingRecord = {
-  id: string;
-  shiftId: string;
-  workerId: string;
-  items: string[];
-  signedAt: string;
-};
 
 export default function SafetyBriefingPage() {
   return (
@@ -70,7 +50,7 @@ function Body() {
 
   async function loadTemplate() {
     try {
-      const r = await buildApi.safetyBriefingTemplate();
+      const r = await buildApi.safetyTemplate();
       setTemplateItems(r.items);
       const init: Record<string, boolean> = {};
       r.items.forEach((_, i) => { init[String(i)] = false; });
@@ -83,13 +63,8 @@ function Body() {
   async function loadBriefingsForShift(shiftId: string) {
     setLoadingBriefings(true);
     try {
-      const res = await fetch(apiUrl(`/api/build/safety-briefing/shift/${shiftId}`), {
-        headers: {
-          Authorization: `Bearer ${typeof window !== "undefined" ? localStorage.getItem("build_token") ?? "" : ""}`,
-        },
-      });
-      const json = await res.json();
-      if (res.ok) setBriefings(json.items ?? []);
+      const r = await buildApi.shiftSafetyBriefings(shiftId);
+      setBriefings(r.items);
     } catch {
       // ignore
     } finally {
@@ -125,16 +100,7 @@ function Body() {
     setSigning(true);
     try {
       const signedItems = templateItems.filter((_, i) => checked[String(i)]);
-      const res = await fetch(apiUrl("/api/build/safety-briefing"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${typeof window !== "undefined" ? localStorage.getItem("build_token") ?? "" : ""}`,
-        },
-        body: JSON.stringify({ shiftId: selectedShiftId, items: signedItems }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "sign_failed");
+      await buildApi.signSafetyBriefing(selectedShiftId, signedItems);
       toast.success("Safety briefing signed. Stay safe on site!");
       await loadBriefingsForShift(selectedShiftId);
       // Reset checklist

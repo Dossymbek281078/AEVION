@@ -33,7 +33,7 @@ function Body() {
     setError(null);
     try {
       const r = await buildApi.myAvailability();
-      setAvailable(r.availableNow ?? r.available ?? false);
+      setAvailable(r.availableNow ?? false);
       setAvailableUntil(r.availableUntil ?? null);
       setSkills(r.skills ?? []);
       setCity(r.city ?? null);

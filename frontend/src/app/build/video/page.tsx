@@ -2,20 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, type BuildVideoRoom as VideoRoom } from "@/lib/build/api";
 import { useI18n } from "@/lib/i18n";
-
-type VideoRoom = {
-  id: string;
-  roomUrl: string;
-  hostId: string;
-  guestId: string | null;
-  scheduledAt: string | null;
-  status: string;
-  hostName: string | null;
-  guestName: string | null;
-  createdAt: string;
-};
 
 export default function VideoPage() {
   return (

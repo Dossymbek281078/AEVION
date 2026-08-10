@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { apiUrl } from "@/lib/apiBase";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi, type BuildApplication } from "@/lib/build/api";
+import { buildApi, type BuildApplication, type BuildContractPayload } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 
@@ -13,12 +12,7 @@ type ContractStatus = "pending" | "signed" | "expired";
 type ContractEntry = BuildApplication & {
   contractStatus: ContractStatus;
   qsignUrl?: string;
-  contractPayload?: {
-    client: { name: string; city: string };
-    worker: { name: string; city: string };
-    vacancy: { title: string; salary: number | null; currency: string; project: string };
-    generatedAt: string;
-  };
+  contractPayload?: BuildContractPayload;
 };
 
 const STATUS_COLOR: Record<ContractStatus, string> = {
@@ -83,15 +77,7 @@ function Body() {
   async function generateContract(appId: string) {
     setGenerating(appId);
     try {
-      const res = await fetch(apiUrl(`/api/build/applications/${appId}/contract`), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${typeof window !== "undefined" ? localStorage.getItem("build_token") ?? "" : ""}`,
-        },
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "contract_failed");
+      const json = await buildApi.generateContract(appId);
       setItems((prev) =>
         prev.map((e) =>
           e.id === appId

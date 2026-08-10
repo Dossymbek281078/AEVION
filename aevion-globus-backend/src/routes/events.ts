@@ -115,6 +115,37 @@ interface AnalyticsEvent {
   ua?: string;
 }
 
+
+/**
+ * Разбивка НАЧАЛ ОПЛАТЫ по поверхности и по каналу привлечения.
+ *
+ * Вынесено отдельной чистой функцией, чтобы тест проверял тот самый код,
+ * который выполняется в проде, а не его копию, переписанную в тесте: копия
+ * расходится с оригиналом молча и создаёт ровно ту ложную уверенность,
+ * ради борьбы с которой тест и пишется.
+ *
+ * `bySource` в сводке считает ВСЕ события, поэтому в нём доминируют
+ * page_view и намерение купить тонет. Здесь — только `checkout_start`.
+ * Канал приезжает в `meta.channel` из метки `?c=` (lib/products withChannel
+ * + components/BuyLink). Ключи нейтральные: дашборд открывают и в EN/KK.
+ */
+export function summarizeCheckoutStarts(events: Array<Pick<AnalyticsEvent, "type" | "source" | "meta">>): {
+  bySource: Record<string, number>;
+  byChannel: Record<string, number>;
+} {
+  const bySource: Record<string, number> = {};
+  const byChannel: Record<string, number> = {};
+  for (const ev of events) {
+    if (ev.type !== "checkout_start") continue;
+    const src = ev.source?.trim() || "unknown";
+    bySource[src] = (bySource[src] ?? 0) + 1;
+    const ch = ev.meta?.channel;
+    const chKey = typeof ch === "string" && ch.trim() ? ch.trim() : "direct";
+    byChannel[chKey] = (byChannel[chKey] ?? 0) + 1;
+  }
+  return { bySource, byChannel };
+}
+
 const ALLOWED_TYPES = new Set([
   "page_view",
   "cta_click",
@@ -238,6 +269,8 @@ eventsRouter.get("/summary", (req, res) => {
       byType: {},
       bySource: {},
       byTier: {},
+      checkoutBySource: {},
+      checkoutByChannel: {},
       byIndustry: {},
       sessionCount: 0,
       windowHours: 24,
@@ -265,6 +298,8 @@ eventsRouter.get("/summary", (req, res) => {
   const bySource: Record<string, number> = {};
   const byTier: Record<string, number> = {};
   const byIndustry: Record<string, number> = {};
+  /** Разбивку по ним считает summarizeCheckoutStarts — см. её комментарий. */
+  const checkoutEvents: AnalyticsEvent[] = [];
   const sids = new Set<string>();
   let total = 0;
 
@@ -278,10 +313,13 @@ eventsRouter.get("/summary", (req, res) => {
       if (ev.tier) byTier[ev.tier] = (byTier[ev.tier] ?? 0) + 1;
       if (ev.industry) byIndustry[ev.industry] = (byIndustry[ev.industry] ?? 0) + 1;
       if (ev.sid) sids.add(ev.sid);
+      if (ev.type === "checkout_start") checkoutEvents.push(ev);
     } catch {
       // skip malformed line
     }
   }
+
+  const checkoutSummary = summarizeCheckoutStarts(checkoutEvents);
 
   res.json({
     total,
@@ -289,6 +327,8 @@ eventsRouter.get("/summary", (req, res) => {
     bySource,
     byTier,
     byIndustry,
+    checkoutBySource: checkoutSummary.bySource,
+    checkoutByChannel: checkoutSummary.byChannel,
     sessionCount: sids.size,
     windowHours: sinceHours,
   });

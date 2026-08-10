@@ -12,6 +12,7 @@ import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { getAuthToken } from "@/lib/auth";
 import { T } from "../theme";
 
 interface Conversation {
@@ -101,7 +102,13 @@ export default function MultichatLibraryPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    // Ключ входа берём из общего lib/auth, а не литералом. Страница читала
+    // "aevion_token" — ключ, который в коде фронтенда НИКТО не записывает
+    // (канонический — aevion_auth_token_v1). То есть вошедший пользователь
+    // видел здесь «Войдите, чтобы увидеть свои беседы», и библиотека была
+    // недоступна вообще. Тот же литерал стоит ещё в 54 файлах платформы —
+    // отдельная задача, см. разбор от 2026-08-10.
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) {
       setLoading(false);

@@ -23,7 +23,7 @@ const STEPS = [
   {
     title: "3. VeilNetX latest block",
     desc: "Read the current chain head — verifiable by any observer.",
-    curl: `curl ${BASE}/api/veilnetx-ledger/head`,
+    curl: `curl ${BASE}/api/veilnetx-ledger/chain/head`,
     response: `{ "hash": "a3f7b2...", "length": 1842, "timestamp": "..." }`,
   },
   {

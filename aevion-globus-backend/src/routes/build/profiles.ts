@@ -541,47 +541,9 @@ profilesRouter.get("/profiles/search", async (req, res) => {
   }
 });
 
-// POST /api/build/profiles/:id/verify — admin-only
-profilesRouter.post("/profiles/:id/verify", async (req, res) => {
-  try {
-    const auth = requireBuildAuth(req, res);
-    if (!auth) return;
-    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
-
-    const id = String(req.params.id);
-    const reason = req.body?.reason == null ? null : String(req.body.reason).trim().slice(0, 200) || null;
-
-    const result = await pool.query(
-      `UPDATE "BuildProfile" SET "verifiedAt" = NOW(), "verifiedReason" = $2, "updatedAt" = NOW()
-       WHERE "userId" = $1 RETURNING *`,
-      [id, reason],
-    );
-    if (result.rowCount === 0) return fail(res, 404, "profile_not_found");
-    return ok(res, result.rows[0]);
-  } catch (err: unknown) {
-    return fail(res, 500, "profile_verify_failed");
-  }
-});
-
-// DELETE /api/build/profiles/:id/verify — admin-only revoke
-profilesRouter.delete("/profiles/:id/verify", async (req, res) => {
-  try {
-    const auth = requireBuildAuth(req, res);
-    if (!auth) return;
-    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
-
-    const id = String(req.params.id);
-    const result = await pool.query(
-      `UPDATE "BuildProfile" SET "verifiedAt" = NULL, "verifiedReason" = NULL, "updatedAt" = NOW()
-       WHERE "userId" = $1 RETURNING *`,
-      [id],
-    );
-    if (result.rowCount === 0) return fail(res, 404, "profile_not_found");
-    return ok(res, result.rows[0]);
-  } catch (err: unknown) {
-    return fail(res, 500, "profile_unverify_failed");
-  }
-});
+// Verification lives on the admin router: POST/DELETE
+// /api/build/admin/users/:id/verify. A second identical pair used to sit
+// here with no callers — removed 2026-08-10 so the two cannot drift.
 
 // GET /api/build/profiles/:id/resume.pdf — public PDF export
 profilesRouter.get("/profiles/:id/resume.pdf", async (req, res) => {

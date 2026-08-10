@@ -326,7 +326,10 @@ for (const file of walk(SRC)) {
     if (at < 0) continue;
     const after = lit[at + PREFIX.length];
     if (after !== undefined && !"/-?\"'`".includes(after)) continue;
-    const raw = lit.slice(at);
+    // A template can wrap a nested literal: `${apiUrl("/api/qjobs/jobs")}${qs}`.
+    // Slicing from the prefix to the end of the outer template drags `")}` into
+    // the path. Stop at the first character a URL cannot contain.
+    const raw = lit.slice(at).split(/["'`)}\s<>]/)[0];
     // Strip `${...}` before judging: an interpolation legitimately contains
     // spaces (`${q ? "?" + q : ""}`), a sentence about the URL does too, and
     // only the second should be discarded.
@@ -343,9 +346,12 @@ for (const file of walk(SRC)) {
     // — while a fetch options object writes it after. Looking only forward took
     // the *next* row's verb and invented drift on entire documentation pages, so
     // check a short window behind first.
+    // The forward window must not cross into the next statement: a GET call
+    // followed a line later by a PATCH call was being reported as PATCH.
+    const ahead = src.slice(m.index, m.index + 300).split(/;|fetch\(/)[0];
     const method =
       src.slice(Math.max(0, m.index - 60), m.index).match(/method:\s*["'](GET|POST|PATCH|PUT|DELETE)["'][^"']*$/) ??
-      src.slice(m.index, m.index + 300).match(/method:\s*["'](GET|POST|PATCH|PUT|DELETE)["']/);
+      ahead.match(/method:\s*["'](GET|POST|PATCH|PUT|DELETE)["']/);
     const before = src.slice(Math.max(0, m.index - 40), m.index);
     const isFetch = /fetch\(\s*$|fetch\(\s*apiUrl\(\s*$/.test(before);
     // next.config rewrites only /api-backend/* to the backend, so a bare

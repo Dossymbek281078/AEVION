@@ -7,7 +7,8 @@
     "build:backend": "npm run build --prefix aevion-globus-backend",
     "build:frontend": "npm run build --prefix frontend",
     "build:all": "npm run build:backend && npm run build:frontend",
-    "verify": "npm run build:all",
+    "check:build-contract": "node scripts/build-contract-check.mjs",
+    "verify": "npm run check:build-contract && npm run build:all",
     "lint:frontend": "npm run lint --prefix frontend"
   },
   "devDependencies": {

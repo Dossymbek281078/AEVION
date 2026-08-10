@@ -154,6 +154,13 @@ Each is documented at the site, so the next reader does not mistake it for settl
 - **Planet.** The one paid offer whose price ($250/$200) lives in a page component and
   whose checkout links are raw Lemon Squeezy UUIDs, bypassing both the catalogue and the
   backend's reference system. Nothing in the codebase can verify what it bills.
+- **qmelanin and qrenew are sold twice.** `MODULES_PRICING` lists them as monthly add-ons
+  ($15 / $19); `lib/products.ts` sells the same brands as one-off Gumroad PDFs ($19 EN /
+  $9 RU). Adding qrenew on `/pricing` charges $19 **every month**; buying from `/qrenew`
+  charges $19 **once**, and neither page distinguishes them. The existing
+  `audit:projects-pricing` CI step has been printing these two as an informational line
+  ("in MODULES_PRICING but NOT in projects.ts") on every run — it was not noise, and it
+  had not been checked. Picking one shape means deleting the other.
 
 ## Also verified, no defect
 

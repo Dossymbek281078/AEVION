@@ -53,6 +53,16 @@ jobs:
       - name: i18n parity (en/ru/kk)
         working-directory: ${{ github.workspace }}
         run: node scripts/i18n-kk-extract.mjs
+      # Sub-second, no install needed — reads the sources. Fails the job when a
+      # /api/build call has no route behind it, or when one is addressed
+      # relatively and so lands on the Next app instead of the backend. Both
+      # used to fail into an empty catch and render a blank page, which is why
+      # they went unnoticed for months. Only `build` is gated: it is the module
+      # that has been swept clean. Add --module=<name> lines for the others as
+      # each reaches zero, otherwise this turns red on findings nobody owns yet.
+      - name: API contract (frontend ↔ backend routes)
+        working-directory: ${{ github.workspace }}
+        run: node scripts/build-contract-check.mjs
       - run: npm run build
 
   payments-smoke:

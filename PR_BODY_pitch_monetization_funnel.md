@@ -50,12 +50,36 @@ of truth at all.
 
 **Funnel instrumentation**
 
-`checkout_start` fired from exactly one place — the `/pricing` table — so
-`/pricing/admin` reported a checkout-start count that silently excluded
-`ModulePricingChip` (a real `checkout/session` call), `UpgradeButton`→Gumroad (9 module
-pages) and devhub Studio Pro (its own LS variant, never touches `/api/pricing/checkout`).
-All three now fire it with a `source` naming the origin. The two `/pricing/[tierId]` CTAs
-fire `cta_click`, since they hand off to the calculator rather than starting a checkout.
+`checkout_start` fired from exactly one place — the `/pricing` table. Writing a guard to
+keep the first three fixes in place immediately found six more silent entry points, so
+`/pricing/admin` had been reporting a count that excluded **most of the store**:
+
+| Surface | What it sells |
+|---|---|
+| `ModulePricingChip` | Lite + a chosen module, real `checkout/session` call |
+| `UpgradeButton` → Gumroad | All-Access, on 9 module pages |
+| `/apps` | 7 module checkouts + the Planet offer |
+| `/shop`, `/go` | the whole product catalogue |
+| `/longevity`, `/qrenew`, `/qmelanin` | the paid PDFs |
+| `/devhub`, `/studio` | Studio Pro |
+| `/constitution` banner | Constitution Pro |
+
+`/shop` and `/go` are server components, so rather than four copies of a tracked anchor
+there is now one shared `<BuyLink>` wrapper; it sends via `sendBeacon`, which survives the
+redirect to the processor, and carries the `?c=` acquisition channel into the event so a
+purchase can be tied back to the traffic that produced it. The two `/pricing/[tierId]`
+CTAs fire `cta_click`, since they hand off to the calculator rather than starting a
+checkout.
+
+`checkoutFunnel.guard.test.ts` keeps it that way: any file that reaches a checkout must
+emit a funnel event, exceptions are named with reasons, and a second test fails when an
+exception stops matching anything. It accepts either funnel and accepts delegation to
+`<BuyLink>` — demanding a `track()` call in a file that handed the job to a component
+would force duplicate tracking.
+
+**Worth knowing:** Constitution keeps its own funnel by design, so its sales do **not**
+appear in `/pricing/admin`. That dashboard is not the whole revenue picture. Unifying the
+two is a product decision, not a technical one.
 
 **Guard**
 

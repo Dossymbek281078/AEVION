@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
+import { LIVE_TOP_TIER_MONTHLY } from "@/data/pitchFacts";
 
 // Единственный живой процессинг — Gumroad (Paddle/Stripe/LemonSqueezy не в
 // primary). Кнопка ведёт на Gumroad-чекаут. Legacy-имя PaddleUpgradeButton
@@ -40,8 +41,12 @@ export function UpgradeButton({
       <div className={`w-full ${className}`}>
         <div className="bg-gradient-to-r from-blue-600/20 to-violet-600/20 border border-blue-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
           <div>
+            {/* "Все модули включены" = the Full tier. The price is imported, not
+                typed: this banner sat at a hardcoded "$59/мес" that matched no
+                tier in any era (Full was $49 before the 2026-07-22 repricing and
+                is $89 after), on 9 module pages, right next to a live checkout. */}
             <div className="text-sm font-semibold text-white">
-              AEVION All-Access — $59/мес
+              AEVION All-Access — {LIVE_TOP_TIER_MONTHLY}/мес
             </div>
             <div className="text-xs text-gray-400 mt-0.5">Все модули включены · Отмена в любой момент · Карта любого банка</div>
           </div>

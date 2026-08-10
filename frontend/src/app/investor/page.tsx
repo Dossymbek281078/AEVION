@@ -284,11 +284,17 @@ export default function InvestorPage() {
             <div style={{ minWidth: 200 }}>
               <div style={pricingBox}>
                 <div style={pricingTitle}>Pricing</div>
+                {/* Verified is the only tier with a live charge: $19/cert
+                    (getVerifiedTierPriceCents() in aevion-globus-backend/src/lib/payment,
+                    overridable via BUREAU_VERIFIED_PRICE_CENTS) — the same figure the
+                    /bureau upgrade flow shows. It read "$9" here. Notarized has a request
+                    flow but no price in code; Gold/Platinum exist nowhere yet, so they are
+                    labelled planned rather than shown as if they were sellable today. */}
                 {[
-                  { tier: "Verified", price: "$9", desc: "SHA-256 + ML-DSA-65 + cert" },
-                  { tier: "Notarized", price: "$49", desc: "+ notary registry + Shamir backup" },
-                  { tier: "Gold", price: "$199", desc: "+ legal review + int'l databases" },
-                  { tier: "Platinum", price: "$999", desc: "+ multi-jurisdiction protection" },
+                  { tier: "Verified", price: "$19", desc: "SHA-256 + ML-DSA-65 + cert" },
+                  { tier: "Notarized (planned)", price: "$49", desc: "+ notary registry + Shamir backup" },
+                  { tier: "Gold (planned)", price: "$199", desc: "+ legal review + int'l databases" },
+                  { tier: "Platinum (planned)", price: "$999", desc: "+ multi-jurisdiction protection" },
                 ].map(p => (
                   <div key={p.tier} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                     <span style={{ fontSize: 12, color: "#f1f5f9", fontWeight: 600 }}>{p.tier}</span>
@@ -322,11 +328,17 @@ export default function InvestorPage() {
             <div style={{ minWidth: 200 }}>
               <div style={pricingBox}>
                 <div style={pricingTitle}>Pricing</div>
+                {/* Real plans as seeded in aevion-globus-backend/src/lib/build/index.ts
+                    (BuildPlan seed) — QBuild bills in RUB, ≈ at ~100 ₽/$. The hire fee
+                    is hireFeeBps/10000 on the accepted salary: 12% base, falling to 4%
+                    at the Platinum recruiter tier (RECRUITER_TIERS). This box used to
+                    claim a Starter/Pro $49/$249 ladder that does not exist and a 1.5%
+                    hire fee — 8× below what the code actually charges. */}
                 {[
-                  { tier: "Free", price: "$0", desc: "3 active vacancies" },
-                  { tier: "Starter", price: "$49/mo", desc: "10 vacancies + AI scoring" },
-                  { tier: "Pro", price: "$249/mo", desc: "unlimited + analytics" },
-                  { tier: "Hire fee", price: "1.5%", desc: "per successful placement" },
+                  { tier: "Free", price: "$0", desc: "1 active vacancy · 5 talent searches/mo" },
+                  { tier: "Pro", price: "4 990 ₽/mo", desc: "10 vacancies + unlimited talent search" },
+                  { tier: "Agency", price: "14 990 ₽/mo", desc: "unlimited vacancies + white-label" },
+                  { tier: "Hire fee", price: "12% → 4%", desc: "per placement, falls with recruiter tier" },
                 ].map(p => (
                   <div key={p.tier} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                     <span style={{ fontSize: 12, color: "#f1f5f9", fontWeight: 600 }}>{p.tier}</span>

@@ -66,10 +66,11 @@ export default function QuantumShieldPublicPage() {
         // the cached public projection.
         const headers: Record<string, string> = {};
         try {
-          const tok =
-            typeof window !== "undefined"
-              ? getAuthToken() || localStorage.getItem("aevion_jwt")
-              : null;
+          // Только getAuthToken(). Хвост `|| localStorage.getItem("aevion_jwt")`
+          // убран: этот ключ в коде фронтенда не записывает никто, то есть
+          // запасным вариантом он не был — он лишь создавал видимость, что
+          // запасной путь есть.
+          const tok = typeof window !== "undefined" ? getAuthToken() : null;
           if (tok) headers.Authorization = `Bearer ${tok}`;
         } catch {
           /* localStorage may be blocked */

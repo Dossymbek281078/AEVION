@@ -476,9 +476,15 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
     // значит переводить страницу в язык, который пользователь не просил, и
     // портить исходный DOM до того, как придёт настоящее значение.
     if (!langReady) return;
-    // Seed dictionaries not here yet — the effect below fetches them and bumps
-    // seedReady, which re-runs this one.
-    if (!peekDict("ru") || !peekDict(lang)) return;
+    // Wait for the fetch to have SETTLED, not to have succeeded.
+    //
+    // Asking for the dictionaries themselves here would be a trap: a chunk that
+    // fails to load never appears, so the check would never pass and live
+    // translation would be off for good — worse than the missing seed pairs it
+    // was guarding against, and silent. Settled means the free dictionary
+    // matches were given their chance; without them this pass still translates
+    // through the API.
+    if (seedReady === 0) return;
 
     // map = instant seed ∪ persisted API results (original -> translation).
     // cache = API results only (what we persist back).

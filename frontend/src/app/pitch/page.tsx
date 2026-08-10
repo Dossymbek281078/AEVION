@@ -137,8 +137,13 @@ export default function PitchPage() {
   // 10.08.2026: четыре источника отдают 25 / 25 / 20 / 50, пятый — 401,
   // и на его месте стояла зашитая константа.
   const [liveKeys, setLiveKeys] = useState<Partial<Record<keyof LiveMetrics, boolean>>>({});
-  const liveCount = METRIC_KEYS.filter((k) => liveKeys[k]).length;
-  const allLive = liveCount === METRIC_KEYS.length;
+  // Имя с приставкой Metric обязательно: на этой странице ниже уже живёт свой
+  // `liveCount` — счётчик ЗАПУЩЕННЫХ МОДУЛЕЙ, к живости метрик отношения не
+  // имеющий. Первая версия правки назвала переменную так же, и сборка легла на
+  // повторном объявлении — при 438 зелёных тестах, потому что тесты этот
+  // компонент не компилируют.
+  const liveMetricCount = METRIC_KEYS.filter((k) => liveKeys[k]).length;
+  const allMetricsLive = liveMetricCount === METRIC_KEYS.length;
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 720);
@@ -471,8 +476,8 @@ export default function PitchPage() {
                 fontSize: 10,
                 fontWeight: 800,
                 letterSpacing: "0.15em",
-                color: allLive ? "#34d399" : "#fbbf24",
-                background: allLive ? "rgba(52,211,153,0.12)" : "rgba(251,191,36,0.12)",
+                color: allMetricsLive ? "#34d399" : "#fbbf24",
+                background: allMetricsLive ? "rgba(52,211,153,0.12)" : "rgba(251,191,36,0.12)",
                 padding: "4px 10px",
                 borderRadius: 999,
                 textTransform: "uppercase",
@@ -481,11 +486,11 @@ export default function PitchPage() {
                 gap: 6,
               }}
             >
-              <span style={{ width: 6, height: 6, borderRadius: 999, background: allLive ? "#34d399" : "#fbbf24" }} aria-hidden />
-              {allLive
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: allMetricsLive ? "#34d399" : "#fbbf24" }} aria-hidden />
+              {allMetricsLive
                 ? "Live data from API"
-                : liveCount > 0
-                  ? `Live data from API (${liveCount}/${METRIC_KEYS.length}); the rest is a demo snapshot`
+                : liveMetricCount > 0
+                  ? `Live data from API (${liveMetricCount}/${METRIC_KEYS.length}); the rest is a demo snapshot`
                   : "Demo snapshot (backend offline)"}
             </span>
             <LivePill label="QRight records" value={metrics.qrightObjects} live={!!liveKeys.qrightObjects} />

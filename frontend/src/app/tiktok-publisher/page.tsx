@@ -198,6 +198,22 @@ export default function TikTokPublisherPage() {
       if (timer) clearTimeout(timer);
     };
 
+    // A single blink of mobile network — or one 429 — must not end the watch
+    // while the video is still publishing. Transient failures are retried at
+    // the normal cadence and only give up after several in a row.
+    let consecutiveFailures = 0;
+    const MAX_CONSECUTIVE_FAILURES = 3;
+
+    const retryOrGiveUp = (message: string) => {
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES || Date.now() - startedAt > POLL_TIMEOUT_MS) {
+        setPublishStatus({ kind: "err", text: `${message} Проверьте приложение TikTok.` });
+        return;
+      }
+      setPublishStatus({ kind: "wait", text: `${message} Пробуем ещё раз…`, spinning: true });
+      timer = setTimeout(tick, POLL_INTERVAL_MS);
+    };
+
     const tick = async () => {
       if (stopped) return;
       try {
@@ -207,12 +223,18 @@ export default function TikTokPublisherPage() {
         const j = await r.json();
         if (stopped) return;
         if (!r.ok) {
-          setPublishStatus({
-            kind: "err",
-            text: `${errorText(j.error, `ошибка ${r.status}`)} Проверьте приложение TikTok.`,
-          });
+          // 401 is final — the session is gone, retrying cannot fix it.
+          if (r.status === 401) {
+            setPublishStatus({
+              kind: "err",
+              text: "Сессия TikTok истекла. Проверьте приложение TikTok — публикация могла пройти.",
+            });
+            return;
+          }
+          retryOrGiveUp(errorText(j.error, `ошибка ${r.status}`));
           return;
         }
+        consecutiveFailures = 0;
         const status: string = j.status || "";
         // SEND_TO_USER_INBOX is terminal too: the video is waiting in the
         // TikTok app for the creator to confirm. Polling past it would just
@@ -243,9 +265,7 @@ export default function TikTokPublisherPage() {
         });
         timer = setTimeout(tick, POLL_INTERVAL_MS);
       } catch {
-        if (!stopped) {
-          setPublishStatus({ kind: "err", text: "Связь со статусом прервалась. Проверьте приложение TikTok." });
-        }
+        if (!stopped) retryOrGiveUp("Связь прервалась.");
       }
     };
 

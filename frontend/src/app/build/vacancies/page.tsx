@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { getClientApiBase } from "@/lib/apiBase";
 import { BuildShell } from "@/components/build/BuildShell";
 import { VacancyCard } from "@/components/build/VacancyCard";
 import { VacancySkeleton } from "@/components/build/Skeleton";
@@ -213,7 +214,7 @@ function VacanciesFeedInner() {
         </div>
         <div className="flex items-center gap-2">
           <a
-            href="/api/build/public/rss/vacancies.xml"
+            href={`${getClientApiBase()}/api/build/public/rss/vacancies.xml`}
             target="_blank"
             rel="noopener noreferrer"
             title="Subscribe via RSS — last 50 open vacancies"

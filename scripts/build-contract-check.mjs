@@ -144,9 +144,18 @@ for (const file of walk(SRC)) {
     // next.config rewrites only /api-backend/* to the backend, so a bare
     // relative /api/build URL hits the Next app itself and 404s into whatever
     // error handling the caller has. The path is right; the origin is not.
-    // Only bare literals qualify — `${getApiBase()}/api/build/...` supplies an
-    // origin, and there the path does not start at index 0.
-    const wrongOrigin = /fetch\(\s*$/.test(before) && lit.indexOf("/api/build") === 0;
+    //
+    // A literal only carries an origin if something supplies one: apiUrl(...)
+    // around it, or a `${getApiBase()}` prefix inside it — and a prefix means
+    // the path does not start at index 0. Everything else is bare, whether it
+    // goes straight into fetch() or reaches it through a prop or a variable.
+    // Flag only positions where the string really is a request target: a fetch
+    // argument, a browser-followed href/src, or an endpoint prop passed down to
+    // one. A docs component rendering `path="/api/build/..."` as text, or a
+    // helper like sitemap's fetchIds() that prepends the base itself, is not.
+    const isTarget = /(?:fetch\(|href=\{?|src=\{?|endpoint=\{?)\s*$/.test(before);
+    const wrappedInApiUrl = /apiUrl\(\s*$/.test(before);
+    const wrongOrigin = isTarget && !wrappedInApiUrl && lit.indexOf("/api/build") === 0;
     calls.push({
       method: method ? method[1] : isFetch ? "GET" : "ANY",
       path: p,

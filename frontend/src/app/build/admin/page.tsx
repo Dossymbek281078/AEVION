@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
+import { apiUrl } from "@/lib/apiBase";
 import { buildApi } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
@@ -74,7 +75,7 @@ function Body() {
 
       <h2 className="pt-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Quick actions</h2>
       <div className="flex flex-wrap gap-2">
-        <BulkActionButton token={token} label="Close expired vacancies" endpoint="/api/build/admin/vacancies/close-expired" />
+        <BulkActionButton token={token} label="Close expired vacancies" path="/api/build/admin/vacancies/close-expired" />
       </div>
 
       <h2 className="pt-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Sections</h2>
@@ -120,7 +121,7 @@ function Tile({
   );
 }
 
-function BulkActionButton({ token, label, endpoint }: { token: string | null; label: string; endpoint: string }) {
+function BulkActionButton({ token, label, path }: { token: string | null; label: string; path: string }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
@@ -129,7 +130,7 @@ function BulkActionButton({ token, label, endpoint }: { token: string | null; la
     setBusy(true);
     setResult(null);
     try {
-      const r = await fetch(endpoint, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const r = await fetch(apiUrl(path), { method: "POST", headers: { Authorization: `Bearer ${token}` } });
       const j = await r.json();
       setResult(j.success ? `Done: ${JSON.stringify(j.data)}` : j.error);
     } catch (e) {

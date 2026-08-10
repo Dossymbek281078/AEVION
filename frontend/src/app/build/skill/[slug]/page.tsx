@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { formatSalary } from "@/lib/build/format";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getApiBase } from "@/lib/apiBase";
+import { getApiBase, getClientApiBase } from "@/lib/apiBase";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +72,7 @@ export async function generateMetadata({
     openGraph: { title, description: desc },
     alternates: {
       types: {
-        "application/rss+xml": `/api/build/public/rss/vacancies.xml?skill=${encodeURIComponent(skill)}`,
+        "application/rss+xml": `${getClientApiBase()}/api/build/public/rss/vacancies.xml?skill=${encodeURIComponent(skill)}`,
       },
     },
   };
@@ -133,7 +133,7 @@ export default async function SkillPage({
 
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <a
-            href={`/api/build/public/rss/vacancies.xml?skill=${encodeURIComponent(skill)}`}
+            href={`${getClientApiBase()}/api/build/public/rss/vacancies.xml?skill=${encodeURIComponent(skill)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/20"

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
+import { getClientApiBase } from "@/lib/apiBase";
 
 export const metadata: Metadata = {
   title: "Changelog — AEVION QBuild",
@@ -145,7 +146,7 @@ export default function ChangelogPage() {
             ← Developer docs
           </Link>
           <a
-            href="/api/build/public/rss/vacancies.xml"
+            href={`${getClientApiBase()}/api/build/public/rss/vacancies.xml`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-md border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-amber-200 hover:bg-amber-400/20"

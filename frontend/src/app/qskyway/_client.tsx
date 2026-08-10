@@ -168,7 +168,7 @@ export default function QSkywayClient() {
   const [booking, setBooking] = useState<string>("");
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
-  const [coverage, setCoverage] = useState<{ withFeed: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
+  const [coverage, setCoverage] = useState<{ withFeed: number; withRegulatoryLayer?: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
   const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
   const [cityId, setCityId] = useState<string>("astana");
   const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; airspace?: AirspaceSummary } | null>(null);
@@ -688,7 +688,7 @@ export default function QSkywayClient() {
         {coverage && (
           <div style={{ margin: "0 0 16px", padding: "10px 13px", borderRadius: 8, background: "#0e141f", border: "1px solid #1e2836", fontSize: 12.5, color: "#9fb0c4", lineHeight: 1.5 }}>
             <span style={{ color: "#22d3ee", fontFamily: "monospace" }}>
-              🛂 {t("qskyway.coverage.head", { withFeed: coverage.withFeed, total: coverage.total })}
+              🛂 {t("qskyway.coverage.head", { withFeed: coverage.withRegulatoryLayer ?? coverage.withFeed, total: coverage.total })}
             </span>{" "}
             {coverage.missing.length === 0
               ? t("qskyway.coverage.full", {

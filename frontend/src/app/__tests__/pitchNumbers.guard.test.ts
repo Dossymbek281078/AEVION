@@ -190,3 +190,68 @@ describe("pitchFacts — canonical counts stay in sync with the registry", () =>
     expect(Object.keys(byStatus).length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Знаменатель на /pitch должен быть ОДИН — и приходить из pitchFacts.
+ *
+ * Что случилось 10.08.2026: pitchFacts уже был вылечен и заперт на реестр
+ * (40 узлов / 36 живых), а прод-страница /pitch в ту же минуту печатала шесть
+ * разных чисел про одно и то же — «12 live MVPs of 33 planned nodes» в шапке,
+ * «41 product nodes» в лиде, «one of 41 modules» в сравнении конкурентов,
+ * «13 of 41 nodes committed, remaining 15» в рисках. Проверка «константы
+ * сходятся с реестром» была зелёной, потому что тексты вокруг констант живут
+ * своей жизнью: там числа вписаны словами внутри строк.
+ *
+ * Поэтому сторож смотрит не на константы, а на ТЕКСТ, который увидит читатель:
+ * в исходниках pitch-поверхностей рядом со словами nodes/modules/MVP не должно
+ * остаться числового литерала. Комментарии вырезаются перед проверкой — иначе
+ * этот самый абзац, объясняющий поломку, и красил бы сборку в красный
+ * (сторож, краснеющий на собственном объяснении, снимается через неделю).
+ */
+const COUNT_SURFACES = ["src/data/pitchModel.ts", "src/app/pitch/page.tsx"];
+
+/** Убирает //-строки и многострочные комментарии, чтобы сканировать только код. */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
+describe("pitch — счётчики модулей приходят из pitchFacts, а не вписаны цифрой", () => {
+  // Диапазон намеренно узкий: это порядок величины реестра (33–41). Числа вроде
+  // 3 флагманов, 4 приоритетных модулей или 12 месяцев сюда не попадают, иначе
+  // сторож ловил бы половину питча и его бы отключили.
+  const COUNT_NEAR_NOUN =
+    /(\b(3[3-9]|4[0-5])\b[^\n"`']{0,40}?(nodes|modules|MVPs?)\b)|(\b(nodes|modules|MVPs?)\b[^\n"`']{0,25}?\b(3[3-9]|4[0-5])\b)/i;
+
+  for (const rel of COUNT_SURFACES) {
+    it(`${rel} не печатает счётчик модулей литералом`, () => {
+      const code = stripComments(readFileSync(path.resolve(FRONTEND_ROOT, rel), "utf8"));
+      const hits = code
+        .split("\n")
+        .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+        .filter(({ line }) => COUNT_NEAR_NOUN.test(line));
+
+      expect(
+        hits.map((h) => `  ${rel}:${h.n}  ${h.line.slice(0, 120)}`).join("\n"),
+        "Счётчик модулей вписан числом. Возьми его из @/data/pitchFacts " +
+          "(MODULE_NODES / LIVE_MODULES / DEEP_DIVE_MODULES / COMMITTED_NODES) — " +
+          "иначе страница снова начнёт спорить сама с собой.",
+      ).toBe("");
+    });
+  }
+
+  it("DEEP_DIVE_MODULES равен числу карточек со stage:\"live\" в pitchModel", async () => {
+    const src = readFileSync(path.resolve(FRONTEND_ROOT, "src/data/pitchModel.ts"), "utf8");
+    const deckLive = (src.match(/stage:\s*"live"/g) ?? []).length;
+    const { DEEP_DIVE_MODULES } = await import("@/data/pitchFacts");
+    expect(
+      DEEP_DIVE_MODULES,
+      `в колоде ${deckLive} карточек со stage:"live" — обнови DEEP_DIVE_MODULES в pitchFacts.ts`,
+    ).toBe(deckLive);
+  });
+
+  it("COMMITTED_NODES не превышает MODULE_NODES", async () => {
+    const { COMMITTED_NODES, MODULE_NODES } = await import("@/data/pitchFacts");
+    expect(COMMITTED_NODES).toBeGreaterThan(0);
+    expect(COMMITTED_NODES).toBeLessThanOrEqual(MODULE_NODES);
+  });
+});

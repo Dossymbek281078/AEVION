@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
-import { MODULE_NODES } from "@/data/pitchFacts";
+import { DEEP_DIVE_MODULES, FEATURE_COMPLETE_LABEL, LIVE_MODULES, MODULE_NODES } from "@/data/pitchFacts";
 import {
   ask,
   billionDefense,
@@ -212,8 +212,13 @@ export default function PitchPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const liveCount = launchedModules.filter((m) => m.stage === "live").length;
-  const totalNodes = launchedModules.length + ecosystemNodes.length;
+  // Сколько модулей разобрано карточкой на этой странице. Это НЕ знаменатель
+  // планеты: колода покрывает часть реестра, и раньше её длина (33) печаталась
+  // в шапке как «of 33 planned nodes», пока абзац ниже говорил «41 product
+  // nodes». Знаменатель теперь один на всю страницу — MODULE_NODES из
+  // pitchFacts, который заперт на реестр считающим сторожем.
+  const deckLive = launchedModules.filter((m) => m.stage === "live").length;
+  const deckTotal = launchedModules.length + ecosystemNodes.length;
 
   const groupedLaunched = useMemo(() => {
     const buckets: Record<ValueBucket, typeof launchedModules> = {
@@ -439,7 +444,11 @@ export default function PitchPage() {
               marginBottom: 16,
             }}
           >
-            <HeroStat value={`${liveCount}`} unit="live MVPs" hint={`of ${totalNodes} planned nodes`} />
+            <HeroStat
+              value={`${LIVE_MODULES}`}
+              unit="modules deployed"
+              hint={`of ${MODULE_NODES} product nodes · ${FEATURE_COMPLETE_LABEL}`}
+            />
             <HeroStat value="$340B" unit="addressable market" hint="IP + creators + payments" />
             <HeroStat value="≈$9.4M" unit="modelled ARR" hint="bottom-up · 3 flagships" />
             <HeroStat value="$10M" unit="returnable advance" hint="partnership, not buyout" />
@@ -509,7 +518,7 @@ export default function PitchPage() {
                 fontSize: 16,
               }}
             >
-              See the 41 modules
+              See the {MODULE_NODES} modules
             </a>
             <a
               href={ask.ctaPrimary.href}
@@ -1067,7 +1076,7 @@ export default function PitchPage() {
       {/* ───────── LAUNCHED MODULES ───────── */}
       <Section
         anchor="modules"
-        eyebrow={`${liveCount} live MVPs · ${totalNodes - liveCount} more on roadmap`}
+        eyebrow={`${deckLive} live MVPs profiled below · ${deckTotal - deckLive} roadmap nodes`}
         title="Every module sells separately. The bundle sells the company."
       >
         {(Object.keys(groupedLaunched) as ValueBucket[]).map((bucket) => {
@@ -1749,7 +1758,7 @@ export default function PitchPage() {
             </Link>
           </div>
           <p style={{ marginTop: 40, fontSize: 12, color: "#475569" }}>
-            AEVION · 41 modules · 12 feature-complete · one Trust Graph · {new Date().getFullYear()}
+            AEVION · {MODULE_NODES} modules · {DEEP_DIVE_MODULES} feature-complete · one Trust Graph · {new Date().getFullYear()}
           </p>
         </div>
       </section>

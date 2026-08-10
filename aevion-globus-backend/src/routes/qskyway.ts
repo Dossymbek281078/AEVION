@@ -57,7 +57,7 @@ import { rateLimit } from "../lib/rateLimit";
  *                           (обход зон + ветер в ETA + регуляторный потолок)
  *   POST /route/justification — один подписанный документ «почему рейс обоснован»
  *   GET  /verify?city=id  — проверка подписей Ed25519 (двойник + слой ограничений)
- *   GET  /airspace/impact — сколько пар площадок реально укладывается в потолок
+ *   GET  /airspace/impact — сколько маршрутов между площадками реально укладывается в потолок
  *   POST /airspace/anchor — Bitcoin-якорь (OpenTimestamps) на слой ограничений
  *   GET  /airspace/proof  — вшитый Bitcoin-пруф текущей редакции + его проверка
  *   GET  /slots  · POST /slots — рынок 4D-слотов прав (QRight)
@@ -763,7 +763,7 @@ qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
     padsNeedingAtc,
     zeroCeilingCells: field.zeroCeilingCells,
     gridCells: field.cols * field.rows,
-    note: `${compliant} из ${pairs} пар площадок укладываются в опубликованный потолок; ${plural(padsNeedingAtc, "площадка стоит", "площадки стоят", "площадок стоят")} там, где автоматического допуска нет вовсе.`,
+    note: `${compliant} из ${pairs} маршрутов между площадками укладываются в опубликованный потолок; ${plural(padsNeedingAtc, "площадка стоит", "площадки стоят", "площадок стоят")} там, где автоматического допуска нет вовсе.`,
   };
   impactCache.set(id, payload);
   res.json(payload);

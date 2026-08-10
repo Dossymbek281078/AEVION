@@ -81,6 +81,22 @@ const CHANGELOG_LINE = /changelog/i;
 /** Комментарий, который объясняет само устаревание, а не утверждает число. */
 const EXPLANATORY_COMMENT = /Раньше тут стояло|stale module count|retired/i;
 
+/**
+ * Строка целиком комментарий — её читатель страницы не увидит никогда.
+ *
+ * До 10.08.2026 объяснения пропускались по списку фраз («Раньше тут стояло»,
+ * «stale module count», «retired»). Список — это второй источник правды: я
+ * написал в investor/page.tsx комментарий «здесь стояло ?? 27 при 41 записи
+ * в реестре», объясняющий ровно ту поломку, ради которой сторож и живёт, и
+ * сторож покраснел на объяснении. Ложно краснеющего сторожа отключают, а
+ * вместе с ним пропадает и настоящая проверка.
+ *
+ * Признак теперь структурный, а не по фразе: строка начинается с `//`, `*`
+ * или `/*`. Число внутри комментария пользователю не показывается по
+ * определению, поэтому пропускать его безопасно.
+ */
+const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*)/;
+
 function countRegistryTotal(): number {
   const src = readFileSync(REGISTRY, "utf8");
   return Array.from(src.matchAll(/status:\s*["'](\w+)["']/g)).length;
@@ -138,6 +154,7 @@ describe("заявления о масштабе экосистемы свере
         // экстремальных: там одна строка может быть на пол-экрана.
         if (line.length > 900) return;
         if (CHANGELOG_LINE.test(line)) return;
+        if (COMMENT_LINE.test(line)) return;
         if (EXPLANATORY_COMMENT.test(line)) return;
         if (/Модуль\s*#\d/.test(line)) return;
         if (ALLOWED.some((a) => line.includes(a.fragment))) return;

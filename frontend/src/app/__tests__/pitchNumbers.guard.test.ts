@@ -283,3 +283,49 @@ describe("pitch — счётчики модулей приходят из pitchF
     expect(COMMITTED_NODES).toBeLessThanOrEqual(MODULE_NODES);
   });
 });
+
+/**
+ * Запасное значение живого счётчика не пишется числом.
+ *
+ * Отдельный класс от литерала в тексте, и куда неприятнее. `registry?.total ?? 27`
+ * выглядит аккуратно и в браузере показывает правду — запрос отрабатывает и
+ * подменяет число. Но серверный HTML отдаётся ДО запроса, поэтому в исходнике
+ * страницы, в превью-карточках соцсетей и у всех, к кому бэкенд не доехал,
+ * остаётся запасное значение. Прогоном это не ловится: смотришь глазами в
+ * браузере — всё верно.
+ *
+ * Найдено 10.08.2026 сплошным свипом витрины: /investor обещал инвестору
+ * «27 modules tracked», /api-explorer — 29, при 41 записи в реестре. Обе
+ * страницы занижали платформу примерно в полтора раза, обе — молча.
+ *
+ * Правило: запасное значение счётчика реестра берётся из pitchFacts, который
+ * заперт на сам реестр считающим сторожем. Ноль (`?? 0`) разрешён — это
+ * честное «данных нет», а не выдуманное число.
+ */
+describe("витрина — запасное значение счётчика реестра не вписано числом", () => {
+  const FALLBACK_SURFACES = [
+    "src/app/investor/page.tsx",
+    "src/app/api-explorer/page.tsx",
+    "src/app/explore/page.tsx",
+    "src/app/acquire/page.tsx",
+  ];
+  // Ноль пропускаем намеренно: `?? 0` означает «нечего показывать».
+  const HARDCODED_FALLBACK = /\b(?:total|count|live|modules|nodes)\b[^\n]{0,20}\?\?\s*([1-9][0-9]*)/i;
+
+  for (const rel of FALLBACK_SURFACES) {
+    it(`${rel} не подставляет счётчик числом`, () => {
+      const code = stripComments(readFileSync(path.resolve(FRONTEND_ROOT, rel), "utf8"));
+      const hits = code
+        .split("\n")
+        .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+        .filter(({ line }) => HARDCODED_FALLBACK.test(line));
+
+      expect(
+        hits.map((h) => `  ${rel}:${h.n}  ${h.line.slice(0, 120)}`).join("\n"),
+        "Запасное значение счётчика вписано числом. Возьми REGISTRY_ENTRIES / " +
+          "LIVE_MODULES / MODULE_NODES из @/data/pitchFacts — иначе страница будет " +
+          "занижать платформу ровно тогда, когда бэкенд не ответил.",
+      ).toBe("");
+    });
+  }
+});

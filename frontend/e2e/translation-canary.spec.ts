@@ -40,7 +40,15 @@ test("a translation service that invents text is not trusted", async ({ page }) 
 
   expect(requests.length, "the client asked at least once").toBeGreaterThan(0);
   expect(requests[0][0], "and the first batch carried the canary").toBe("AEVION 2026 · 12345");
-  expect(requests.length, "and it stopped asking after the canary came back wrong").toBeLessThan(3);
+
+  // Asserted as "it stopped", not as "it asked fewer than three times". The
+  // verdict on the canary arrives while batches are already in flight, so the
+  // exact count depends on how busy the machine is — it was 2 on a quiet run
+  // and 3 inside the full suite, which failed a threshold without anything
+  // being wrong. What matters is that nothing more is sent afterwards.
+  const afterVerdict = requests.length;
+  await page.waitForTimeout(4000);
+  expect(requests.length, "it kept asking after the canary came back wrong").toBe(afterVerdict);
 });
 
 test("a translation service that behaves is still used", async ({ page }) => {

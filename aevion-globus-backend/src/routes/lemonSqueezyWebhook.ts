@@ -30,7 +30,7 @@
 
 import { Router } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import { provisionSubscription, writeSubscription, type Subscription, subscriptionExistsForEvent } from "./provisioning";
 import {
   referenceForVariantId,
   tierForLemonSqueezyReference,
@@ -191,7 +191,12 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
 
   // Dedup
   const dedupKey = `${payload.data?.id ?? "?"}:${event}:${attrs.renews_at ?? attrs.ends_at ?? ""}`;
-  if (SEEN.has(dedupKey)) {
+  // SEEN is the fast path only: it lives in process memory, so a deploy wipes
+  // it — and a deploy is exactly when the provider retries a delivery it never
+  // got an answer for. Provisioning is not idempotent (a replay grants another
+  // full period and re-emails the buyer), so the durable check is the
+  // provisioned record itself. See provisioning.subscriptionExistsForEvent.
+  if (SEEN.has(dedupKey) || subscriptionExistsForEvent(dedupKey)) {
     return res.json({ ok: true, deduped: true });
   }
   SEEN.add(dedupKey);
@@ -228,6 +233,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         period: "monthly",
         modules,
         source: "lemonsqueezy",
+        externalEventId: dedupKey,
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);
       return res.json({ ok: true, action: "activated", tierId, subscriptionId: result.subscription.id });
@@ -244,6 +250,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         modules: [],
         trialDays: 0,
         source: "lemonsqueezy:cancel",
+        externalEventId: dedupKey,
       };
       writeSubscription(downgrade);
       console.log(`[ls/webhook] ${event} → downgraded ${email} to free`);

@@ -18,7 +18,7 @@
 
 import { Router, type Request, type Response } from "express";
 import { payboxPaymentProvider } from "../lib/payment/payboxProvider";
-import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import { provisionSubscription, writeSubscription, type Subscription, subscriptionExistsForEvent } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
@@ -87,7 +87,14 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   }
 
   const dedupKey = `${paymentId}:${result.status}`;
-  if (SEEN.has(dedupKey)) return res.json({ ok: true, deduped: true });
+  // SEEN is the fast path only: it lives in process memory, so a deploy wipes
+  // it — and a deploy is exactly when the provider retries a delivery it never
+  // got an answer for. Provisioning is not idempotent (a replay grants another
+  // full period and re-emails the buyer), so the durable check is the
+  // provisioned record itself. See provisioning.subscriptionExistsForEvent.
+  if (SEEN.has(dedupKey) || subscriptionExistsForEvent(dedupKey)) {
+    return res.json({ ok: true, deduped: true });
+  }
   SEEN.add(dedupKey);
 
   const reference = referenceFromOrderId(orderId);
@@ -105,6 +112,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         modules: [],
         trialDays: 0,
         source: `paybox:${result.status}`,
+        externalEventId: dedupKey,
       };
       writeSubscription(downgrade);
       console.log(`[paybox/webhook] ${result.status} → downgraded ${email} to free`);
@@ -120,6 +128,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         period,
         modules: module ? [module] : [],
         source: "paybox",
+        externalEventId: dedupKey,
       });
       console.log(`[paybox/webhook] paid → provisioned ${tierId}/${period} for ${email} (ref=${reference})`);
       return res.json({ ok: true, action: "activated", tierId, email, subscriptionId: provResult.subscription.id });

@@ -374,15 +374,21 @@ for (const file of walk(SRC)) {
 }
 
 // ── match ─────────────────────────────────────────────────────────────────
-const compiled = backend.map((b) => ({
-  ...b,
-  re: new RegExp(
-    `^${b.pattern
-      .split("/")
-      .map((seg) => (seg.startsWith(":") ? "[^/]+" : seg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
-      .join("/")}$`,
-  ),
-}));
+// Both sides can carry an unknown segment: the route has :params, and the call
+// may interpolate a variable — `/screener/${activeTest}` where activeTest is
+// "phq9" | "gad7", both of which are real routes. Treating an unknown as literal
+// text invents drift, so compare segment by segment and let an unknown match
+// anything in that position.
+const isUnknown = (seg) => seg.startsWith(":");
+
+const pathsCompatible = (callPath, routePattern) => {
+  const a = callPath.split("/");
+  const b = routePattern.split("/");
+  if (a.length !== b.length) return false;
+  return a.every((seg, i) => isUnknown(seg) || isUnknown(b[i]) || seg === b[i]);
+};
+
+const compiled = backend.map((b) => ({ ...b, matches: (p) => pathsCompatible(p, b.pattern) }));
 
 const unmatched = [];
 const used = new Set();
@@ -391,9 +397,9 @@ for (const c of calls) {
   // `/profiles/search` matches both `/profiles/:id` and `/profiles/search`.
   // Express resolves that with an explicit next("route") in the param handler,
   // so credit the literal route — otherwise it looks uncalled.
-  const target = c.path.replace(/:x/g, "X");
+  const target = c.path;
   const hit = compiled
-    .filter((b) => (c.method === "ANY" || b.method === c.method) && b.re.test(target))
+    .filter((b) => (c.method === "ANY" || b.method === c.method) && b.matches(target))
     .sort((a, b) => (a.pattern.match(/:/g)?.length ?? 0) - (b.pattern.match(/:/g)?.length ?? 0))[0];
   // Independent of Express: /api/metrics is served by BOTH a Next handler and
   // an Express route, and a relative call to it is correct either way.

@@ -253,7 +253,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .map((s) => s.skill?.trim())
     .filter((s): s is string => !!s)
     .slice(0, 50)
-    .map((s) => s.toLowerCase().replace(/\s+/g, "-"));
+    // Пробелы в дефис, а ВСЁ остальное небезопасное — кодируем.
+    //
+    // Раньше заменялись только пробелы, и навык «mig/mag welding» превращался
+    // в слаг `mig/mag-welding`. Слэш делит адрес на два сегмента, маршрут
+    // /build/skill/[slug] в него не попадает — и карта сайта звала поисковик
+    // на страницу, отдающую 404. Проверено на живом проде 10.08.2026:
+    // /build/skill/mig/mag-welding → 404, /build/skill/steel-structures → 200.
+    // То есть одна из двух опубликованных страниц навыков была битой.
+    .map((s) => encodeURIComponent(s.toLowerCase().replace(/\s+/g, "-")));
 
   // Merge strategy:
   // 1. Every route in TOP_LEVEL_ROUTES keeps its hand-tuned changeFreq + priority

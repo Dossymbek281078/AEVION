@@ -303,11 +303,14 @@ type SourceLang = "en" | "ru";
 function getLangDict(target: Lang, source: SourceLang = "en"): { d: Record<string, string>; k: string[] } {
   const cacheKey = `${source}->${target}`;
   if (langDictCache.has(cacheKey)) return langDictCache.get(cacheKey)!;
-  // Both dictionaries are fetched before the translating effect runs (see the
-  // effect that waits on loadDict below), so by here they are in the cache. An
-  // absent one degrades to "no seed pairs" — the live API path still works.
-  const srcTbl = peekDict(source) ?? {};
-  const langTbl = peekDict(target) ?? {};
+  // Both dictionaries are normally fetched before the translating effect runs
+  // (see the effect that waits on loadDict below). If one is missing anyway —
+  // its chunk failed — this degrades to "no seed pairs" and the live API path
+  // still works, but the result must NOT be cached: a later successful load
+  // would otherwise keep serving the empty map it was asked for once.
+  const srcTbl = peekDict(source);
+  const langTbl = peekDict(target);
+  if (!srcTbl || !langTbl) return { d: {}, k: [] };
   const d: Record<string, string> = {};
   for (const key of Object.keys(srcTbl)) {
     const src = srcTbl[key];

@@ -11,6 +11,7 @@ import { anchorAirspace, verifyAnchoredAirspace } from "./qskyway.airspace.ancho
 import { AIRSPACE_PROOFS } from "./qskyway.airspace.proof";
 import { PERMISSION, permissionSummary } from "./qskyway.permission";
 import { getPool } from "../lib/dbPool";
+import { isSmokeSlot, countLiveSlots } from "../lib/slotOrigin";
 import { rateLimit } from "../lib/rateLimit";
 
 /**
@@ -1142,7 +1143,21 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
 
 qskywayRouter.get("/slots", async (_req: Request, res: Response) => {
   const slots = await listSlots();
-  res.json({ count: slots.length, capacityPerRoute: SLOT_CAPACITY, store: slotsDbAvailable ? "postgres" : "memory", slots });
+  // `count` остаётся прежним (все записи) — на него опирается прод-смок и
+  // внешние читатели. Рядом появляются два честных поля: `liveCount` — глубина
+  // рынка без наших же тестовых броней, и `test` у каждой записи.
+  //
+  // 10.08.2026 на проде было 34 записи, из них 33 — вывод смока: он бронирует
+  // 5–6 слотов каждый прогон и за собой не убирает. Ничего не удаляем: право
+  // зафиксировано по-настоящему, квитанция честная. Перестаём выдавать это за
+  // рыночную активность.
+  res.json({
+    count: slots.length,
+    liveCount: countLiveSlots(slots),
+    capacityPerRoute: SLOT_CAPACITY,
+    store: slotsDbAvailable ? "postgres" : "memory",
+    slots: slots.map((s) => ({ ...s, test: isSmokeSlot(s) })),
+  });
 });
 
 qskywayRouter.post("/slots", async (req: Request, res: Response) => {

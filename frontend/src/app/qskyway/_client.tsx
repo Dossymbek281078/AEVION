@@ -183,7 +183,7 @@ export default function QSkywayClient() {
   const [justification, setJustification] = useState<{ doc: JustDoc; attestation: JustAttestation; scope: string } | null>(null);
   const [justState, setJustState] = useState<"idle" | "busy" | "verified" | "invalid">("idle");
   const [vpRows, setVpRows] = useState<VertiportRow[]>([]);
-  const [slots, setSlots] = useState<{ list: Slot[]; count: number; capacityPerRoute: number; store: string }>({ list: [], count: 0, capacityPerRoute: 0, store: "" });
+  const [slots, setSlots] = useState<{ list: Slot[]; count: number; liveCount: number | null; capacityPerRoute: number; store: string }>({ list: [], count: 0, liveCount: null, capacityPerRoute: 0, store: "" });
   // Считаем по загруженному списку, а не по `count` с сервера: сервер отдаёт
   // общее число, а тестовые видны только в записях.
   const smokeSlotCount = countSmokeSlots(slots.list);
@@ -573,7 +573,7 @@ export default function QSkywayClient() {
       const res = await fetch(apiUrl("/api/qskyway/slots"));
       if (!res.ok) return;
       const j = await res.json();
-      setSlots({ list: j.slots ?? [], count: j.count ?? 0, capacityPerRoute: j.capacityPerRoute ?? 0, store: j.store ?? "" });
+      setSlots({ list: j.slots ?? [], count: j.count ?? 0, liveCount: typeof j.liveCount === "number" ? j.liveCount : null, capacityPerRoute: j.capacityPerRoute ?? 0, store: j.store ?? "" });
     } catch { /* market panel is best-effort */ }
   }, []);
 
@@ -974,10 +974,10 @@ export default function QSkywayClient() {
                     квитанции настоящие, отличить нечем. Не прячем — называем.
                   */}
                   <span>
-                    Рынок 4D-слотов (QRight) · {slots.count}
+                    Рынок 4D-слотов (QRight) · {slots.liveCount ?? slots.count}
                     {smokeSlotCount > 0 && (
                       <span style={{ color: "#fbbf24", textTransform: "none", letterSpacing: 0 }}>
-                        {" "}· из них тестовых: {smokeSlotCount}
+                        {" "}+ {smokeSlotCount} тестовых
                       </span>
                     )}
                   </span>

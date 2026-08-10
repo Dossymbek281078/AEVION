@@ -14,6 +14,13 @@
 export interface SlotLike {
   routeId?: string;
   holder?: string;
+  /**
+   * Ответ сервера. Он считает то же самое (`lib/slotOrigin.ts`) и является
+   * источником правды: если поле пришло — верим ему, а не пересчитываем. Свой
+   * разбор остаётся только на случай, когда фронт новее задеплоенного бэкенда —
+   * иначе на проде до выката панель молчала бы о тестовых бронях.
+   */
+  test?: boolean;
 }
 
 /** Держатели, которыми представляются смоук-сценарии (см. scripts/*-smoke.js). */
@@ -28,6 +35,7 @@ const SMOKE_HOLDERS = new Set(["smoke-holder", "verify", "op0", "op1", "op2", "o
  * выдаёт прогон за рынок.
  */
 export function isSmokeSlot(slot: SlotLike): boolean {
+  if (typeof slot.test === "boolean") return slot.test;
   const route = (slot.routeId ?? "").toLowerCase();
   if (route.startsWith("smoke-") || route.includes("-smoke-")) return true;
   return SMOKE_HOLDERS.has((slot.holder ?? "").toLowerCase());

@@ -134,6 +134,22 @@ function ttlMs(): number {
   return TTL_PRESETS[getCacheTtl()];
 }
 
+/* Синтезированная статистика не должна лежать столько же, сколько настоящая.
+ *
+ * Подстановка кладётся в тот же кэш, что и данные Lichess, и раньше жила по общему
+ * сроку: по умолчанию СУТКИ, а если игрок выбрал «неделя» — неделю. То есть одна
+ * неудачная загрузка закрепляла выдуманные проценты за веткой на неделю, и все
+ * последующие заходы отдавали её из кэша, даже не пробуя сеть. Сбой на минуту
+ * превращался в неделю неверных чисел.
+ *
+ * Держим её ровно столько, чтобы не долбить Lichess, пока он лежит, и чтобы
+ * следующий заход через пару минут попробовал снова. */
+export const ESTIMATED_TTL_MS = 2 * 60 * 1000;
+
+function cacheTtlFor(data: BookReply[]): number {
+  return data.some((d) => d.estimated) ? ESTIMATED_TTL_MS : ttlMs();
+}
+
 export function clearRepertoireCaches(): void {
   bookStatsCache.clear();
   ecoCache.clear();
@@ -192,7 +208,7 @@ export async function fetchRealBookStats(
   const key = branchMoves.join("-") || "(root)";
   const now = Date.now();
   const hit = bookStatsCache.get(key);
-  if (hit && now - hit.ts < ttlMs()) return hit.data;
+  if (hit && now - hit.ts < cacheTtlFor(hit.data)) return hit.data;
 
   // Need UCI for Lichess `play` param. If not provided, fall back to mock.
   const uci = opts?.uciMoves;

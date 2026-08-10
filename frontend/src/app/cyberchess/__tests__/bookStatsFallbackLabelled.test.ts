@@ -59,3 +59,37 @@ describe("подстановка статистики дебютов подпи�
     }
   });
 });
+
+describe("подстановка не залёживается в кэше", () => {
+  it("для синтезированных данных срок жизни короткий, а не общий", () => {
+    const data = stripComments(
+      readFileSync(join(__dirname, "..", "openingRepertoireData.ts"), "utf8"),
+    );
+    /* Подстановка кладётся в ТОТ ЖЕ кэш, что и данные Lichess. По общему сроку она
+       жила бы сутки, а при настройке «неделя» — неделю: одна неудачная загрузка
+       закрепляла выдуманные проценты за веткой, и следующие заходы отдавали их из
+       кэша, даже не пробуя сеть. Минутный сбой превращался в неделю неверных чисел. */
+    expect(data).toMatch(/ESTIMATED_TTL_MS/);
+    expect(data).toMatch(/function cacheTtlFor/);
+    /* Проверяем ТОЛЬКО кэш статистики. Рядом живут ecoCache и gmGamesCache — они
+       читаются по общему сроку, и это правильно: подстановки там нет. Первая версия
+       проверки запрещала `ttlMs()` во всём файле и краснела на верном коде. */
+    const fn = data.slice(
+      data.indexOf("export async function fetchRealBookStats"),
+      data.indexOf("export async function detectECO"),
+    );
+    expect(fn.length).toBeGreaterThan(200);
+    expect(fn).toMatch(/now - hit\.ts < cacheTtlFor\(hit\.data\)/);
+    expect(fn).not.toMatch(/now - hit\.ts < ttlMs\(\)/);
+  });
+
+  it("короткий срок действительно короче общего минимума", () => {
+    const data = readFileSync(join(__dirname, "..", "openingRepertoireData.ts"), "utf8");
+    const m = /ESTIMATED_TTL_MS = ([^;]+);/.exec(data);
+    expect(m).not.toBeNull();
+    const estimated = Function(`"use strict";return (${m![1]})`)() as number;
+    // самый короткий общий пресет — час; подстановка должна жить заметно меньше
+    expect(estimated).toBeLessThan(60 * 60 * 1000);
+    expect(estimated).toBeGreaterThan(0);
+  });
+});

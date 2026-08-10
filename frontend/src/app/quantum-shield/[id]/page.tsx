@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { getAuthToken } from "@/lib/auth";
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -67,7 +68,7 @@ export default function QuantumShieldPublicPage() {
         try {
           const tok =
             typeof window !== "undefined"
-              ? localStorage.getItem("aevion_auth_token_v1") || localStorage.getItem("aevion_jwt")
+              ? getAuthToken() || localStorage.getItem("aevion_jwt")
               : null;
           if (tok) headers.Authorization = `Bearer ${tok}`;
         } catch {

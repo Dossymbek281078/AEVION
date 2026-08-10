@@ -27,6 +27,15 @@ stages:
 frontend-tests-and-build:
   stage: test
   image: node:22
+  variables:
+    # Без этого сборка падает на проверке типов:
+    #   FATAL ERROR: Ineffective mark-compacts near heap limit
+    #   Allocation failed - JavaScript heap out of memory
+    # Компиляция проходит за 3.5 минуты, а `Running TypeScript` упирается в
+    # стандартный потолок кучи Node (~2 ГБ). На моём ноутбуке памяти много и
+    # сборка проходила, на раннере — нет: ещё один случай, когда «у меня
+    # работает» ничего не доказывает про чужую машину.
+    NODE_OPTIONS: "--max-old-space-size=6144"
   # ВЫНУЖДЕННО npm install, а не npm ci — и это не небрежность, а обход
   # настоящего дефекта репозитория, который первый же прогон CI и вскрыл:
   #

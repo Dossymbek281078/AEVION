@@ -11,20 +11,29 @@ name: DevHub E2E (browser)
 # that prompted it — right-click → Rename / Delete in the file tree did nothing
 # at all, because the menu closed before the click landed.
 
+# The path list must name everything the gate now covers. It grew past DevHub on
+# 10.08.2026 — translation guards, the language switcher, page-weight budgets —
+# while the filter still said "devhub" only, so an i18n change would have skipped
+# the gate that exists to watch it, and the run would simply not appear. A gate
+# that does not fire is indistinguishable from a gate that passed.
 on:
   workflow_dispatch:
   pull_request:
-    paths:
+    paths: &gate_paths
       - "frontend/src/app/devhub/**"
       - "frontend/src/lib/devhub*"
+      - "frontend/src/lib/i18n*"
+      - "frontend/src/components/AutoTranslate.tsx"
       - "frontend/e2e/devhub-*"
+      - "frontend/e2e/i18n-*"
+      - "frontend/e2e/translation-*"
+      - "frontend/e2e/language-*"
+      - "frontend/e2e/page-weight*"
+      - "frontend/e2e/globe-lazy*"
       - ".github/workflows/devhub-e2e.yml"
   push:
     branches: [main]
-    paths:
-      - "frontend/src/app/devhub/**"
-      - "frontend/src/lib/devhub*"
-      - "frontend/e2e/devhub-*"
+    paths: *gate_paths
 
 jobs:
   devhub-e2e:

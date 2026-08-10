@@ -72,19 +72,61 @@ describe("pitch numbers — retired figures must not resurface", () => {
 });
 
 /**
- * Lock the canonical counts to the registry. If someone adds/removes a module
- * in aevion-globus-backend/src/data/projects.ts, this fails until pitchFacts is
- * updated to match — so the single source of truth can't silently drift.
+ * Числа витрины должны совпадать с РЕЕСТРОМ, а не с самими собой.
+ *
+ * Заголовок «stay in sync with the registry» тут стоял и раньше, но проверка
+ * реестр не открывала: она сравнивала MODULE_NODES с литералом 37, а
+ * LIVE_MODULES с литералом 35. Такой тест краснеет, только если кто-то трогает
+ * pitchFacts, и молчит ровно в том случае, ради которого писался — когда
+ * растёт реестр.
+ *
+ * Замерено 10.08.2026: в projects.ts уже 41 запись и 36 живых, а pitchFacts
+ * говорил 37 и 35. То есть продающие страницы занижали платформу на четыре
+ * узла, боевой API отдавал 36 живых, а сторож был зелёный и мешал исправить.
+ *
+ * Теперь счёт берётся из самого реестра, и добавление модуля роняет тест до
+ * обновления pitchFacts — как и было обещано в исходном комментарии.
  */
-describe("pitchFacts — canonical counts stay in sync with the registry", () => {
-  it("MODULE_NODES = 37 (38 registry entries − the globus map shell)", async () => {
-    const { MODULE_NODES } = await import("@/data/pitchFacts");
-    expect(MODULE_NODES).toBe(37);
+describe("pitchFacts — числа берутся из реестра, а не из самих себя", () => {
+  const REGISTRY = path.resolve(
+    FRONTEND_ROOT,
+    "../aevion-globus-backend/src/data/projects.ts",
+  );
+
+  const registryCounts = () => {
+    const src = readFileSync(REGISTRY, "utf8");
+    const statuses = src.match(/status:\s*"([a-z_]+)"/g) || [];
+    const live = statuses.filter((s) => s.includes('"live"')).length;
+    // Каждая запись реестра имеет ровно один id — считаем по ним, а не по
+    // фигурным скобкам: вложенные объекты внутри записи сбили бы счёт.
+    const entries = (src.match(/^\s{4}id:\s*"/gm) || []).length;
+    return { entries, live };
+  };
+
+  it("реестр вообще прочитан — иначе ноль совпадений выглядел бы как успех", () => {
+    const { entries, live } = registryCounts();
+    expect(entries).toBeGreaterThan(20);
+    expect(live).toBeGreaterThan(10);
   });
 
-  it("LIVE_MODULES = 35 (status:\"live\" in projects.ts)", async () => {
+  it("MODULE_NODES = записи реестра минус оболочка карты globus", async () => {
+    const { MODULE_NODES } = await import("@/data/pitchFacts");
+    const { entries } = registryCounts();
+    expect(
+      MODULE_NODES,
+      `в реестре ${entries} записей, значит узлов ${entries - 1} ` +
+        `(globus — это карта, а не продукт). Обнови MODULE_NODES в pitchFacts.`,
+    ).toBe(entries - 1);
+  });
+
+  it("LIVE_MODULES = число записей со статусом live", async () => {
     const { LIVE_MODULES } = await import("@/data/pitchFacts");
-    expect(LIVE_MODULES).toBe(35);
+    const { live } = registryCounts();
+    expect(
+      LIVE_MODULES,
+      `в реестре ${live} живых модулей. Обнови LIVE_MODULES в pitchFacts — ` +
+        `иначе витрина занижает платформу.`,
+    ).toBe(live);
   });
 });
 

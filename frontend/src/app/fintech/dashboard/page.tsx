@@ -109,7 +109,7 @@ export default function FintechDashboardPage() {
             Module pulse (1 min poll · sparklines)
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-            <FintechMetric label="VeilNetX chain"     icon="🌀" accent="#a78bfa" apiPath="/api/veilnetx-ledger/head"  valuePath="length"             pollSeconds={60} />
+            <FintechMetric label="VeilNetX chain"     icon="🌀" accent="#a78bfa" apiPath="/api/veilnetx-ledger/chain/head"  valuePath="length"             pollSeconds={60} />
             <FintechMetric label="QGood raised (¢)"   icon="💚" accent="#34d399" apiPath="/api/qgood/stats"           valuePath="total_raised_cents" pollSeconds={60} />
             <FintechMetric label="Z-Tide users"       icon="🌊" accent="#fbbf24" apiPath="/api/ztide/stats"           valuePath="active_users"       pollSeconds={60} />
             <FintechMetric label="QChain proposals"   icon="🗳" accent="#f472b6" apiPath="/api/qchaingov/stats"       valuePath="open_proposals"     pollSeconds={60} />

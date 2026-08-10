@@ -10,7 +10,7 @@ const PRESETS = [
   { label: "Z-Tide stats",     method: "GET",  path: "/api/ztide/stats",           body: null,   auth: false },
   { label: "QChainGov stats",  method: "GET",  path: "/api/qchaingov/stats",       body: null,   auth: false },
   { label: "QGood campaigns",  method: "GET",  path: "/api/qgood/campaigns?status=active", body: null, auth: false },
-  { label: "VeilNetX head",    method: "GET",  path: "/api/veilnetx/chain/head",   body: null,   auth: false },
+  { label: "VeilNetX head",    method: "GET",  path: "/api/veilnetx-ledger/chain/head",   body: null,   auth: false },
   { label: "API quotas",       method: "GET",  path: "/api/quotas",                body: null,   auth: false },
   { label: "QMedia tracks",    method: "GET",  path: "/api/qmedia/tracks",         body: null,   auth: false },
   { label: "My wallets",       method: "GET",  path: "/api/qpaynet/wallets",       body: null,   auth: true  },

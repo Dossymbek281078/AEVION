@@ -67,7 +67,7 @@ export default function FintechLiveStats() {
         } catch { return null; }
       };
       const [veil, qgoodS, qgoodC, ztide, qchain] = await Promise.all([
-        safeFetch<{ length?: number; total?: number }>("/api/veilnetx-ledger/head"),
+        safeFetch<{ length?: number; total?: number }>("/api/veilnetx-ledger/chain/head"),
         safeFetch<{ total_raised_cents?: number }>("/api/qgood/stats"),
         safeFetch<{ campaigns?: { id: string }[] }>("/api/qgood/campaigns"),
         safeFetch<{ entries?: { username?: string; userId?: string }[] }>("/api/ztide/leaderboard"),

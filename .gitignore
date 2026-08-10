@@ -72,3 +72,10 @@ page_v*_backup.*
 # — must NOT sit in the watched project tree or Turbopack HMR-reloads mid-test
 .playwright-mcp/
 **/.playwright-mcp/
+
+# Хранилище подписок (PII). Внутрипакетный путь закрыт в
+# aevion-globus-backend/.gitignore; этот шаблон закрывает файл ГДЕ УГОДНО в
+# дереве — 10.08.2026 записи попали в коммиты через корневой data/, куда их клал
+# прогон тестов не из каталога бэкенда (см. tests/subscriptionStorePath.test.ts).
+**/data/subscriptions.jsonl
+**/data/subscriptions.jsonl.tmp

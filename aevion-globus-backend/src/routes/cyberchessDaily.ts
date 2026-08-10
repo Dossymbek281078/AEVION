@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
+import { pickDailyPuzzle } from '../lib/cyberchessDailyPuzzle';
 
 const router = Router();
 
@@ -13,19 +14,21 @@ type Puzzle = {
 };
 
 // ============================================================================
-// PUZZLE POOL — 365 entries (30 hand-crafted + 335 procedurally generated)
+// PUZZLE POOL — 30 hand-crafted entries
 // ============================================================================
 //
-// The 30 hand-crafted puzzles below mirror the frontend pool and provide real,
-// tested FEN/solution pairs across varied tactical themes (Fork, Pin, Skewer,
-// Sacrifice, Discovered Attack, Greek Gift, Mate-in-N, etc.).
+// ⚠️ This is NOT the product's puzzle of the day. The daily puzzle every player
+// sees comes from the real puzzle bank: GET /api/cyberchess-puzzles/daily,
+// which picks from the imported corpus via the shared `pickDailyPuzzle`.
+// The pool below only backs this router's own /puzzle and /history, kept so an
+// operator can query a day→puzzle mapping without loading the whole bank.
+// If you are wiring a client, call the bank — not this.
 //
-// The remaining 335 are procedurally generated using a small template library:
-// a handful of base positions parameterised over piece colours, side-to-move
-// and small perturbations. They are intentionally lower-fidelity ("detection
-// puzzles" — find the candidate move) and ratings/themes are varied via a
-// deterministic generator so the daily rotation is well-distributed across the
-// full Glicko-like 800–2400 range.
+// Until 2026-08-10 this pool also held 335 "procedurally generated" puzzles.
+// They were fiction: 10 base positions repeated 33× each, with `theme` and
+// `rating` drawn from a PRNG and pinned onto positions they did not describe —
+// an Italian opening served as "Mate in 2, rating 2350". Numbers shown to a
+// learner have to come from the position, so they are gone.
 // ============================================================================
 
 const HAND_CRAFTED: Puzzle[] = [
@@ -61,63 +64,7 @@ const HAND_CRAFTED: Puzzle[] = [
   { id: 'p030', fen: 'rnbqk2r/pp2bppp/4pn2/2pp4/3P4/2N1PN2/PPP1BPPP/R1BQK2R w KQkq - 0 1', sol: ['d4c5', 'b8d7', 'b2b4'], theme: 'Pawn grab', rating: 1300 },
 ];
 
-// Procedural generator: synthesises 335 additional "detection" puzzles using a
-// small set of base templates. Each base is a known-legal opening/middlegame
-// FEN. The solution is the first canonical tactical try for that template;
-// theme + rating vary deterministically by index so the rotation is diverse.
-const TEMPLATE_BASES: { fen: string; sol: string[] }[] = [
-  { fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4', sol: ['c4f7', 'e8f7', 'f3e5'] },
-  { fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 2', sol: ['f1c4', 'g8f6', 'f3g5'] },
-  { fen: 'rnbqkb1r/ppp1pppp/5n2/3p4/3P4/2N5/PPP1PPPP/R1BQKBNR w KQkq - 2 2', sol: ['c1f4', 'c7c6', 'e2e3'] },
-  { fen: 'rnbqkbnr/ppp2ppp/4p3/3p4/3PP3/8/PPP2PPP/RNBQKBNR w KQkq - 0 3', sol: ['e4d5', 'e6d5', 'b1c3'] },
-  { fen: 'r1bqkb1r/pp1p1ppp/2n1pn2/2p5/2P5/2N2NP1/PP1PPP1P/R1BQKB1R w KQkq - 0 5', sol: ['f1g2', 'd7d5', 'c4d5'] },
-  { fen: 'rnbqkb1r/pp2pppp/3p1n2/2p5/3P4/2N2N2/PPP1PPPP/R1BQKB1R w KQkq - 0 4', sol: ['d4c5', 'd6c5', 'e2e4'] },
-  { fen: 'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 4 5', sol: ['b1c3', 'd7d6', 'c1g5'] },
-  { fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2', sol: ['g1f3', 'b8c6', 'd2d4'] },
-  { fen: 'rnbqkb1r/pp2pp1p/3p1np1/8/3NP3/2N5/PPP2PPP/R1BQKB1R w KQkq - 0 6', sol: ['f1e2', 'f8g7', 'c1e3'] },
-  { fen: 'r1bqkb1r/pp1ppppp/2n2n2/2p5/2P5/2N2N2/PP1PPPPP/R1BQKB1R w KQkq - 4 4', sol: ['d2d4', 'c5d4', 'f3d4'] },
-];
-
-const THEMES = [
-  'Mate in 1', 'Mate in 2', 'Mate in 3',
-  'Fork', 'Pin', 'Skewer', 'Discovered attack', 'Double attack',
-  'Remove defender', 'Deflection', 'Decoy', 'Zugzwang',
-  'Sacrifice', 'Combination', 'Tactic',
-];
-
-// Deterministic PRNG (Mulberry32) — same seed → same pool every boot
-function mulberry32(seed: number) {
-  let t = seed >>> 0;
-  return () => {
-    t = (t + 0x6d2b79f5) >>> 0;
-    let r = Math.imul(t ^ (t >>> 15), 1 | t);
-    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function generateProcedural(count: number): Puzzle[] {
-  const rng = mulberry32(0xc0ffee);
-  const out: Puzzle[] = [];
-  for (let i = 0; i < count; i++) {
-    const base = TEMPLATE_BASES[i % TEMPLATE_BASES.length];
-    const theme = THEMES[Math.floor(rng() * THEMES.length)];
-    // Rating: spread 800–2400 in 50-point buckets, biased mildly to middle.
-    const ratingBucket = Math.floor(rng() * 33); // 0..32
-    const rating = 800 + ratingBucket * 50;
-    const idStr = `g${String(i + 1).padStart(3, '0')}`;
-    out.push({
-      id: idStr,
-      fen: base.fen,
-      sol: [...base.sol],
-      theme,
-      rating,
-    });
-  }
-  return out;
-}
-
-const POOL: Puzzle[] = [...HAND_CRAFTED, ...generateProcedural(335)];
+const POOL: Puzzle[] = HAND_CRAFTED;
 
 // ============================================================================
 // PERSISTENT LEADERBOARD (file-backed, top-1000)
@@ -136,9 +83,6 @@ const DATA_DIR = path.resolve(process.cwd(), 'data');
 const LB_FILE = path.join(DATA_DIR, 'cyberchess-daily-leaderboard.json');
 const LB_MAX = 1000;
 
-const COUNTRIES = ['🇷🇺', '🇺🇸', '🇩🇪', '🇫🇷', '🇪🇸', '🇮🇹', '🇰🇿', '🇺🇦', '🇵🇱', '🇧🇷', '🇨🇳', '🇯🇵', '🇮🇳', '🇬🇧', '🇰🇷', '🇳🇱', '🇸🇪', '🇳🇴', '🇫🇮', '🇦🇷'];
-const NAMES = ['Magnus', 'Hikaru', 'Fabiano', 'Ding', 'Anish', 'Ian', 'Levon', 'Wesley', 'Maxime', 'Alireza', 'Praggnanandhaa', 'Gukesh', 'Erigaisi', 'Nakamura', 'Carlsen', 'Caruana', 'Liren', 'Giri', 'Vachier', 'Firouzja', 'Karjakin', 'Aronian', 'So', 'MVL', 'Pragg', 'Dommaraju', 'Niemann', 'Abdusattorov', 'Esipenko', 'Sarana'];
-
 function ensureDataDir(): void {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -147,24 +91,15 @@ function ensureDataDir(): void {
   }
 }
 
-function seedLeaderboard(): LeaderEntry[] {
-  const out: LeaderEntry[] = [];
-  const now = new Date().toISOString();
-  for (let i = 0; i < 100; i++) {
-    const name = `${NAMES[i % NAMES.length]}${i < NAMES.length ? '' : '_' + Math.floor(i / NAMES.length)}`;
-    const country = COUNTRIES[i % COUNTRIES.length];
-    const streak = Math.max(1, 365 - i * 3);
-    const score = streak * 100 + Math.max(0, 200 - i);
-    out.push({
-      name,
-      country,
-      streak,
-      score,
-      userId: `seed_${i.toString().padStart(3, '0')}`,
-      updatedAt: now,
-    });
-  }
-  return out.sort((a, b) => b.score - a.score);
+/* Until 2026-08-10 an empty leaderboard was filled with 100 invented players —
+ * "Magnus", "Hikaru", "Carlsen" with streaks counting down from 365 — and
+ * written to disk under userId `seed_000`…`seed_099`. Nobody had solved
+ * anything; the table was decoration. A leaderboard that shows strangers ahead
+ * of a real player who just took first place is worse than an empty one, so the
+ * seeding is gone and legacy seed rows are dropped on load. An empty board is
+ * the honest state of a board nobody has climbed yet. */
+export function isSeededEntry(e: { userId?: string }): boolean {
+  return typeof e.userId === 'string' && e.userId.startsWith('seed_');
 }
 
 function loadLeaderboard(): LeaderEntry[] {
@@ -173,19 +108,14 @@ function loadLeaderboard(): LeaderEntry[] {
     if (fs.existsSync(LB_FILE)) {
       const raw = fs.readFileSync(LB_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed as LeaderEntry[];
+      if (Array.isArray(parsed)) {
+        return (parsed as LeaderEntry[]).filter((e) => !isSeededEntry(e));
+      }
     }
-  } catch (e) {
-    // fall through to seed
-  }
-  const seeded = seedLeaderboard();
-  try {
-    ensureDataDir();
-    fs.writeFileSync(LB_FILE, JSON.stringify(seeded, null, 2), 'utf-8');
   } catch {
-    // ignore — in-memory fallback only
+    // unreadable file → start empty rather than invent entries
   }
-  return seeded;
+  return [];
 }
 
 function saveLeaderboard(entries: LeaderEntry[]): void {
@@ -253,21 +183,32 @@ function upsertLeaderboard(uid: string, name: string, country: string, streak: n
 
 /**
  * GET /puzzle
- * Returns today's puzzle (deterministic by ISO date).
+ * Today's puzzle out of THIS router's own 30-entry pool.
+ *
+ * ⚠️ Not the puzzle players see — that is GET /api/cyberchess-puzzles/daily.
+ * `source` says so in the payload so a caller cannot mistake one for the other.
+ *
+ * Selection goes through the shared `pickDailyPuzzle` rather than
+ * `POOL[day % POOL.length]`: index arithmetic ties the answer to pool length, so
+ * the page's 10-entry copy and this pool disagreed on 355 days out of 365 while
+ * both looked like "day modulo pool".
  */
 router.get('/puzzle', (_req: Request, res: Response) => {
-  const idx = dayIndex() % POOL.length;
-  const p = POOL[idx];
+  const p = pickDailyPuzzle(POOL, dayIndex());
+  if (!p) return res.status(503).json({ ok: false, error: 'pool_empty' });
   return res.json({
     day: todayIso(),
     poolSize: POOL.length,
+    source: 'cyberchess-daily fallback pool — the live daily puzzle is /api/cyberchess-puzzles/daily',
     puzzle: {
       id: p.id,
       fen: p.fen,
       theme: p.theme,
       rating: p.rating,
       solLength: p.sol.length,
-      // Solution hint: only the first move (client validates rest via chess.js)
+      // Full line: the client has to validate every reply, not just the first
+      // move, and this pool ships in the client bundle anyway.
+      sol: p.sol,
       solHint: p.sol[0],
     },
   });
@@ -275,7 +216,8 @@ router.get('/puzzle', (_req: Request, res: Response) => {
 
 /**
  * GET /history?days=7
- * Returns the last N daily puzzles (defaults to 7, max 30).
+ * Returns the last N daily puzzles (defaults to 7, max 30) from the same pool
+ * and the same selection function as /puzzle.
  */
 router.get('/history', (req: Request, res: Response) => {
   const rawDays = parseInt(String(req.query.days || '7'), 10);
@@ -285,7 +227,8 @@ router.get('/history', (req: Request, res: Response) => {
   for (let i = 0; i < days; i++) {
     const di = today - i;
     const date = new Date(di * 86400000).toISOString().slice(0, 10);
-    const p = POOL[di % POOL.length];
+    const p = pickDailyPuzzle(POOL, di);
+    if (!p) continue;
     out.push({ day: date, id: p.id, theme: p.theme, rating: p.rating });
   }
   return res.json({ days, history: out });
@@ -402,7 +345,7 @@ router.post('/reset', (req: Request, res: Response) => {
   if (!provided || provided !== expected) {
     return res.status(403).json({ ok: false, error: 'forbidden' });
   }
-  LEADERBOARD = seedLeaderboard();
+  LEADERBOARD = [];
   saveLeaderboard(LEADERBOARD);
   userStats.clear();
   solveStore.clear();

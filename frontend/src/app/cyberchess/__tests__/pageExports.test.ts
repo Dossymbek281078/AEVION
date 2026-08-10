@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 /* Файл страницы Next вправе экспортировать только default и небольшой набор
@@ -16,6 +16,26 @@ import { join } from "node:path";
 
 const PAGE = join(__dirname, "..", "page.tsx");
 const src = readFileSync(PAGE, "utf8");
+
+const MODULE_DIR = join(__dirname, "..");
+
+/* Проверять одну лишь главную страницу мало: правило Next действует на КАЖДЫЙ
+   page.tsx, а в модуле их два десятка. 10.08.2026 я вынес разбор ответа банка в
+   `daily/page.tsx` и экспортировал его оттуда ради теста — ровно та ошибка, про
+   которую написано выше, только этажом ниже, и сторож её не увидел. Теперь обходим
+   все файлы страниц. */
+function pageFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) {
+      if (e.name !== "__tests__") out.push(...pageFiles(p));
+    } else if (e.name === "page.tsx") {
+      out.push(p);
+    }
+  }
+  return out;
+}
 
 /** Что Next разрешает экспортировать из файла страницы. */
 const ALLOWED = new Set([
@@ -71,6 +91,26 @@ describe("экспорты файла страницы", () => {
 
   it("страница экспортирует default", () => {
     expect(exportedNames(src)).toContain("default");
+  });
+});
+
+describe("экспорты всех страниц модуля", () => {
+  const files = pageFiles(MODULE_DIR);
+
+  it("страниц найдено больше одной — иначе обход ничего не даёт", () => {
+    expect(files.length).toBeGreaterThan(1);
+  });
+
+  it("ни одна страница не экспортирует лишнего", () => {
+    const offenders: string[] = [];
+    for (const f of files) {
+      const extra = exportedNames(readFileSync(f, "utf8")).filter((n) => !ALLOWED.has(n));
+      if (extra.length) offenders.push(`${f.replace(MODULE_DIR, "")}: ${extra.join(", ")}`);
+    }
+    expect(
+      offenders,
+      `Лишние экспорты из файлов страниц:\n${offenders.join("\n")}\nNext разрешает только ${[...ALLOWED].join(", ")}. Вынеси это в отдельный модуль и импортируй — как сделано с daily/dailyPuzzleSource.ts.`,
+    ).toEqual([]);
   });
 });
 

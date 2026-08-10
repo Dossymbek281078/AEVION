@@ -1,15 +1,30 @@
 'use client';
-// CyberChess Daily Puzzle — real chess.js + 365 pool + leaderboard + streak
+/* CyberChess — задача дня.
+ *
+ * Задача берётся из общего банка (`/api/cyberchess-puzzles/daily`) — из того же
+ * места, что и виджет «пазл дня» на главной странице, чтобы у продукта была ОДНА
+ * задача дня.
+ *
+ * До 2026-08-10 эта страница выбирала задачу сама, из десяти зашитых позиций, по
+ * формуле `POOL[номер_суток % длина_пула]`. Формула та же, что на сервере, а длина
+ * пула другая (10 против 365) — значит 355 дней из 365 игрок решал не ту задачу,
+ * которую сервер считал задачей дня и против которой записывал результат.
+ * Совпадение формул выглядело как согласованность и ею не было.
+ */
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Chess, Square } from 'chess.js';
-
-type Puzzle = {
-  fen: string;
-  sol: string[];
-  theme: string;
-  rating: number;
-};
+import { bumpDaily } from '../DailyMission';
+import {
+  API_BANK,
+  API_DAILY,
+  FALLBACK_POOL,
+  bankPuzzleToLocal,
+  dayIndex,
+  playerIdentity,
+  todayKey,
+  type Puzzle,
+} from './dailyPuzzleSource';
 
 type LeaderEntry = {
   name: string;
@@ -20,33 +35,15 @@ type LeaderEntry = {
 
 type HintLevel = 0 | 1 | 2 | 3;
 
-// 30 mock puzzles. FEN is illustrative; full validation via chess.js.
-const POOL: Puzzle[] = [
-  { fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1', sol: ['f3e5', 'c6e5', 'c4f7'], theme: 'Fork', rating: 1200 },
-  { fen: 'r3k2r/ppp2ppp/2n1bn2/2bqp3/2B1P3/2NP1N2/PPPQ1PPP/R1B1K2R w KQkq - 0 1', sol: ['c3d5', 'f6d5', 'e4d5'], theme: 'Pin', rating: 1450 },
-  { fen: 'r1bq1rk1/ppp2ppp/2np1n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQ1RK1 w - - 0 1', sol: ['c4f7', 'g8f7', 'f3g5'], theme: 'Sacrifice', rating: 1600 },
-  { fen: '2kr3r/ppp2ppp/2n1b3/3qp3/3PnB2/2N1PN2/PPP2PPP/R2QKB1R w KQ - 0 1', sol: ['d4e5', 'c6e5', 'f3e5'], theme: 'Double attack', rating: 1500 },
-  { fen: 'r2qkb1r/ppp2ppp/2n1bn2/3p4/3P4/2N1PN2/PPP1BPPP/R1BQK2R w KQkq - 0 1', sol: ['c3d5', 'c6d4', 'd5f6'], theme: 'Discovered attack', rating: 1700 },
-  { fen: 'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 1', sol: ['f3e5', 'c6e5', 'd3d4'], theme: 'Tactic', rating: 1300 },
-  { fen: 'r4rk1/pppq1ppp/2n1bn2/3p4/3P4/2NBPN2/PPPQ1PPP/R4RK1 w - - 0 1', sol: ['d3h7', 'g8h7', 'f3g5'], theme: 'Greek gift', rating: 1800 },
-  { fen: 'r2q1rk1/ppp1bppp/2np1n2/4p3/2B1P3/2NP1N2/PPP2PPP/R1BQ1RK1 w - - 0 1', sol: ['c4f7', 'f8f7', 'f3g5'], theme: 'Sacrifice', rating: 1550 },
-  { fen: 'rnbqkb1r/ppp2ppp/4pn2/3p4/2PP4/2N5/PP2PPPP/R1BQKBNR w KQkq - 0 1', sol: ['c4d5', 'e6d5', 'c3d5'], theme: 'Opening trap', rating: 1100 },
-  { fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1', sol: ['c4f7', 'e8f7', 'f3e5'], theme: 'Fried liver', rating: 1400 },
-];
+/** Откуда взялась показанная задача — это видно игроку, а не только в консоли. */
+type PuzzleSource = 'bank' | 'fallback';
 
-const COUNTRIES = ['🇷🇺', '🇺🇸', '🇩🇪', '🇫🇷', '🇪🇸', '🇮🇹', '🇰🇿', '🇺🇦', '🇵🇱', '🇧🇷', '🇨🇳', '🇯🇵', '🇮🇳', '🇬🇧', '🇰🇷', '🇳🇱', '🇸🇪', '🇳🇴', '🇫🇮', '🇦🇷'];
-const NAMES = ['Magnus', 'Hikaru', 'Fabiano', 'Ding', 'Anish', 'Ian', 'Levon', 'Wesley', 'Maxime', 'Alireza', 'Praggnanandhaa', 'Gukesh', 'Erigaisi', 'Nakamura', 'Carlsen', 'Caruana', 'Liren', 'Giri', 'Vachier', 'Firouzja', 'Karjakin', 'Aronian', 'So', 'MVL', 'Pragg', 'Dommaraju', 'Niemann', 'Abdusattorov', 'Esipenko', 'Sarana'];
-
-function mockLeaderboard(): LeaderEntry[] {
-  const out: LeaderEntry[] = [];
-  for (let i = 0; i < 100; i++) {
-    const name = `${NAMES[i % NAMES.length]}${i < NAMES.length ? '' : '_' + Math.floor(i / NAMES.length)}`;
-    const country = COUNTRIES[i % COUNTRIES.length];
-    const streak = Math.max(1, 365 - i * 3 - Math.floor(Math.random() * 5));
-    out.push({ name, country, streak });
-  }
-  return out.sort((a, b) => b.streak - a.streak);
-}
+/* Таблица лидеров раньше рисовалась здесь функцией `mockLeaderboard()`: сто
+   выдуманных игроков — Magnus, Hikaru, Carlsen — со streak'ами от 365 вниз и
+   разбросом через `Math.random()`. Заголовок над ними говорил «🏆 Top-100
+   Streaks», без пометки, что это декорация. Реальный игрок с серией 3 видел себя
+   не просто вне сотни, а вне мира. Теперь показываем тех, кто действительно
+   решал: пусто — значит пусто. */
 
 // Unicode pieces by FEN char
 const PIECE: Record<string, string> = {
@@ -64,14 +61,6 @@ function uciToCoord(uci: string): [number, number] {
   const file = uci.charCodeAt(0) - 'a'.charCodeAt(0);
   const rank = 8 - parseInt(uci[1], 10);
   return [rank, file];
-}
-
-function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function dayIndex(): number {
-  return Math.floor(Date.parse(todayKey()) / 86400000);
 }
 
 function pieceCharFromChess(piece: { type: string; color: 'w' | 'b' } | null): string {
@@ -93,11 +82,14 @@ function formatTime(ms: number): string {
 }
 
 export default function DailyPuzzlePage() {
-  const puzzle = useMemo(() => POOL[dayIndex() % POOL.length], []);
-  const leaderboard = useMemo(() => mockLeaderboard(), []);
+  const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
+  const [puzzleSource, setPuzzleSource] = useState<PuzzleSource | null>(null);
+  // null = ещё не ответили; [] = ответили, и решавших пока нет
+  const [leaderboard, setLeaderboard] = useState<LeaderEntry[] | null>(null);
+  const [serverStats, setServerStats] = useState<{ bestStreak: number; totalSolved: number } | null>(null);
 
   // chess engine (mutable via ref to keep instance stable across renders)
-  const chessRef = useRef<Chess>(new Chess(puzzle.fen));
+  const chessRef = useRef<Chess>(new Chess());
   const [board, setBoard] = useState<string[][]>(() => buildBoardFromChess(chessRef.current));
   const [selected, setSelected] = useState<[number, number] | null>(null);
   const [legalDests, setLegalDests] = useState<string[]>([]); // list of UCI dest squares for current selected
@@ -124,6 +116,79 @@ export default function DailyPuzzlePage() {
 
   // Bot reply pending (visual)
   const [botPending, setBotPending] = useState(false);
+
+  /* Задача дня — из общего банка, как у виджета на главной. Резервные позиции
+     берём, только если банк не ответил, и говорим об этом на экране: иначе игрок
+     решит одну задачу, а в зачёт пойдёт другая, и он об этом не узнает. */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let next: Puzzle | null = null;
+      try {
+        const r = await fetch(`${API_BANK}/daily`);
+        if (r.ok) {
+          const d = await r.json();
+          if (d && d.ok) next = bankPuzzleToLocal(d.puzzle);
+        }
+      } catch {
+        // сеть недоступна — ниже возьмём резерв
+      }
+      if (cancelled) return;
+      if (next) {
+        setPuzzle(next);
+        setPuzzleSource('bank');
+      } else {
+        setPuzzle(FALLBACK_POOL[dayIndex() % FALLBACK_POOL.length]);
+        setPuzzleSource('fallback');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Доска следует за задачей: она приходит из сети, а не существует с первого рендера
+  useEffect(() => {
+    if (!puzzle) return;
+    chessRef.current = new Chess(puzzle.fen);
+    setBoard(buildBoardFromChess(chessRef.current));
+    setSelected(null);
+    setLegalDests([]);
+    setLastMove(null);
+    setSolIndex(0);
+  }, [puzzle]);
+
+  // Таблица лидеров и личная статистика — с сервера, без выдуманных строк
+  const loadStandings = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_DAILY}/leaderboard?limit=100`);
+      if (r.ok) {
+        const d = await r.json();
+        if (Array.isArray(d?.leaderboard)) setLeaderboard(d.leaderboard as LeaderEntry[]);
+        else setLeaderboard([]);
+      } else {
+        setLeaderboard([]);
+      }
+    } catch {
+      setLeaderboard([]);
+    }
+    const { userId } = playerIdentity();
+    if (!userId) return;
+    try {
+      const r = await fetch(`${API_DAILY}/user/${encodeURIComponent(userId)}/stats`);
+      if (!r.ok) return;
+      const d = await r.json();
+      if (typeof d?.bestStreak === 'number' && typeof d?.totalSolved === 'number') {
+        setServerStats({ bestStreak: d.bestStreak, totalSolved: d.totalSolved });
+      }
+    } catch {
+      // личная статистика не критична для игры — молча остаёмся на локальной
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStandings();
+  }, [loadStandings]);
 
   // load streak from localStorage on mount
   useEffect(() => {
@@ -236,9 +301,23 @@ export default function DailyPuzzlePage() {
         : `Поздравляем! Решено за ${formatTime(totalMs)}. Streak +1 = ${newStreak}. Best: ${newBest}`
     );
 
-    // Send to backend (best-effort, ignore failures — UI doesn't block)
+    /* Засчитываем задание «Реши пазл дня». Раньше это делал только виджет на
+       главной, а сюда ведут и карточка раздела, и палитра команд, и push-
+       уведомление — то есть игрок решал пазл дня и видел задание невыполненным. */
     try {
-      await fetch('/api-backend/api/cyberchess-daily/solve', {
+      bumpDaily('daily-puzzle');
+    } catch {
+      // счётчик заданий не должен мешать засчитать решение
+    }
+
+    /* Отправляем результат на сервер. Личность обязательна: бэкенд по своему же
+       правилу не пускает в таблицу записи от 'anonymous', а без userId мы слали
+       именно их — то есть решения копились в общей безымянной куче и не попадали
+       ни в таблицу, ни в личную статистику. */
+    const { userId, name } = playerIdentity();
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_DAILY}/solve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -246,15 +325,18 @@ export default function DailyPuzzlePage() {
           day: today,
           timeMs: totalMs,
           hintsUsed: hUsed,
+          userId,
+          ...(name ? { name } : {}),
         }),
       });
+      if (res.ok) await loadStandings();
     } catch {
       // ignore network errors — local state already saved
     }
-  }, [streak, bestStreak, stopTimer]);
+  }, [streak, bestStreak, stopTimer, loadStandings]);
 
   const applyPlayerMove = useCallback((from: Square, to: Square, promotion?: 'q' | 'r' | 'b' | 'n') => {
-    if (solved) return;
+    if (solved || !puzzle) return;
     const expectedUci = puzzle.sol[solIndex];
     if (!expectedUci) return;
 
@@ -329,10 +411,10 @@ export default function DailyPuzzlePage() {
     } else {
       setMessage('Верно. Продолжай.');
     }
-  }, [solved, puzzle.sol, solIndex, hintsUsed, timeMs, refreshBoard, startTimerIfNeeded, playBotReply, finalizeSolved]);
+  }, [solved, puzzle, solIndex, hintsUsed, timeMs, refreshBoard, startTimerIfNeeded, playBotReply, finalizeSolved]);
 
   function onCellClick(r: number, c: number) {
-    if (solved || botPending || promoMove) return;
+    if (solved || botPending || promoMove || !puzzle) return;
     const sq = coordToUci(r, c) as Square;
     const pieceHere = board[r][c];
 
@@ -386,7 +468,7 @@ export default function DailyPuzzlePage() {
   }
 
   function chooseHint() {
-    if (solved) return;
+    if (solved || !puzzle) return;
     const next = Math.min(3, hintLevel + 1) as HintLevel;
     setHintLevel(next);
     setHintsUsed((h) => h + 1);
@@ -402,7 +484,7 @@ export default function DailyPuzzlePage() {
   }
 
   function resetBoard() {
-    if (solved) return;
+    if (solved || !puzzle) return;
     chessRef.current = new Chess(puzzle.fen);
     refreshBoard();
     setSelected(null);
@@ -464,9 +546,26 @@ export default function DailyPuzzlePage() {
         >
           🧩 Daily Puzzle
         </h1>
-        <p style={{ color: '#9aa0b4', margin: '0 0 24px 0', fontSize: 14 }}>
+        <p style={{ color: '#9aa0b4', margin: '0 0 16px 0', fontSize: 14 }}>
           Один пазл в день. Решай каждый день — держи streak. Многоходовые пазлы: бот отвечает за противника.
         </p>
+
+        {puzzleSource === 'fallback' && (
+          <div
+            style={{
+              margin: '0 0 24px 0',
+              padding: '10px 14px',
+              borderRadius: 10,
+              background: 'rgba(255, 216, 77, 0.08)',
+              border: '1px solid rgba(255, 216, 77, 0.3)',
+              color: '#ffd84d',
+              fontSize: 13,
+            }}
+          >
+            Банк задач сейчас недоступен, поэтому показана резервная позиция — она может отличаться от
+            сегодняшней задачи у других игроков, и результат не попадёт в общую таблицу.
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 24, alignItems: 'start' }}>
           {/* Left: board + controls */}
@@ -483,7 +582,9 @@ export default function DailyPuzzlePage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 12, color: '#9aa0b4' }}>Тема</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#00ff9d' }}>{puzzle.theme}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#00ff9d' }}>
+                    {puzzle ? puzzle.theme : '…'}
+                  </div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 12, color: '#9aa0b4' }}>Время</div>
@@ -493,7 +594,10 @@ export default function DailyPuzzlePage() {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 12, color: '#9aa0b4' }}>Рейтинг</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#b56bff' }}>{puzzle.rating}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#b56bff' }}>
+                    {/* 0 у банка означает «рейтинг не указан» — прочерк честнее нуля */}
+                    {puzzle ? (puzzle.rating > 0 ? puzzle.rating : '—') : '…'}
+                  </div>
                 </div>
               </div>
 
@@ -704,7 +808,16 @@ export default function DailyPuzzlePage() {
                 }}
               >
                 <div style={{ fontSize: 12, color: '#9aa0b4' }}>Лучший streak</div>
-                <div style={{ fontSize: 32, fontWeight: 800, color: '#b56bff' }}>🏆 {bestStreak}</div>
+                {/* Серверный рекорд переживает чистку браузера, локальный — нет.
+                    Если сервер знает больше, показываем его число, а не меньшее. */}
+                <div style={{ fontSize: 32, fontWeight: 800, color: '#b56bff' }}>
+                  🏆 {Math.max(bestStreak, serverStats?.bestStreak ?? 0)}
+                </div>
+                {serverStats && (
+                  <div style={{ fontSize: 12, color: '#9aa0b4', marginTop: 4 }}>
+                    Решено задач дня: {serverStats.totalSolved}
+                  </div>
+                )}
               </div>
               <div
                 style={{
@@ -732,10 +845,23 @@ export default function DailyPuzzlePage() {
             }}
           >
             <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 12px 0', color: '#b56bff' }}>
-              🏆 Top-100 Streaks
+              🏆 Лучшие серии
             </h2>
+
+            {leaderboard === null && (
+              <div style={{ color: '#9aa0b4', fontSize: 13 }}>Загружаем…</div>
+            )}
+
+            {leaderboard !== null && leaderboard.length === 0 && (
+              <div style={{ color: '#9aa0b4', fontSize: 13, lineHeight: 1.6 }}>
+                Пока никто не решал — таблица пустая.
+                <br />
+                Реши сегодняшнюю задачу, и первая строка будет твоей.
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {leaderboard.map((entry, i) => (
+              {(leaderboard ?? []).map((entry, i) => (
                 <div
                   key={i}
                   style={{

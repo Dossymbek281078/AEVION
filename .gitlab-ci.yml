@@ -98,5 +98,12 @@ lockfile-linux-diff:
     - git diff -U0 package-lock.json | grep -E '^\+ +"node_modules/' | sed 's/[":]//g' | sort -u
     - echo "=== ПОЛНАЯ РАЗНИЦА ==="
     - git diff package-lock.json
+  # Отдаём готовый файл артефактом. Переносить 113 вставок руками из журнала —
+  # способ внести ошибку, а не починить: локфайл читают машины, а не люди.
+  artifacts:
+    name: "package-lock-linux"
+    paths:
+      - frontend/package-lock.json
+    expire_in: 7 days
   timeout: 10 minutes
   interruptible: true

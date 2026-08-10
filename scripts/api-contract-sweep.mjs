@@ -8,10 +8,14 @@
  *
  * Two things about the output are deliberate:
  *
- * - A module with 0 collected calls is dropped rather than reported clean. The
- *   checker derives both the URL prefix and the file from one name, so a module
- *   whose prefix differs from its file name finds nothing — that is "could not
- *   measure", not "nothing wrong", and printing it as a clean row would lie.
+ * - Three outcomes are kept apart, because collapsing them mislabels all three.
+ *   A module with calls gets a row. A module whose routes were found but which
+ *   nothing calls is listed under "no frontend callers" — puzzles, search and
+ *   tiktok are there, 14 routes between them with no caller at all. A module
+ *   index.ts mounts nothing for is "could not resolve": its prefix differs from
+ *   its file name, or the file is a service rather than a router. Printing
+ *   either of the last two as a clean row would be exactly the kind of quiet
+ *   lie this tool exists to catch.
  * - The `no-route` column is only as good as route discovery. It has been wrong
  *   before in both directions; see the header of build-contract-check.mjs for
  *   the seven faults that had to be fixed. `wrong-origin` does not depend on
@@ -36,7 +40,8 @@ const modules = fs
   .filter((m) => /^[a-z0-9-]+$/.test(m));
 
 const rows = [];
-const unmeasured = [];
+const unresolved = [];
+const noCallers = [];
 
 for (const m of modules) {
   let out = "";
@@ -57,13 +62,17 @@ for (const m of modules) {
   // "FAIL /api/x — 2 with no route (12 calls / 34 routes)".
   const head = out.match(/(\d+) calls \/ (\d+) routes/);
   if (!head) {
-    unmeasured.push(m);
+    // Exit 2: index.ts mounts nothing under /api/<name>. Either the prefix
+    // differs from the file name, or the file exports no router at all.
+    unresolved.push(m);
     continue;
   }
   const calls = Number(head[1]);
   const routes = Number(head[2]);
   if (calls === 0) {
-    unmeasured.push(m);
+    // Routes were found, the frontend simply never calls them. Not the same
+    // as "could not measure" — reporting them together mislabels both.
+    noCallers.push({ m, routes });
     continue;
   }
   rows.push({
@@ -86,7 +95,18 @@ for (const r of rows) {
 
 const dirty = rows.filter((r) => r.noRoute + r.wrongOrigin > 0);
 console.log(`\nmeasured: ${rows.length} | with findings: ${dirty.length}`);
-console.log(
-  `not measurable (${unmeasured.length}): no calls found under /api/<name>, usually because the ` +
-    `prefix differs from the file name — ${unmeasured.join(", ")}`,
-);
+if (noCallers.length) {
+  console.log(
+    `
+no frontend callers (${noCallers.length}) — routes exist, nothing calls them: ` +
+      noCallers.map((r) => `${r.m} (${r.routes})`).join(", "),
+  );
+}
+if (unresolved.length) {
+  console.log(
+    `
+could not resolve (${unresolved.length}) — index.ts mounts nothing under /api/<name>, ` +
+      `so the prefix differs from the file name or the file is a service, not a router: ` +
+      unresolved.join(", "),
+  );
+}

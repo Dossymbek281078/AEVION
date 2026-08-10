@@ -76,6 +76,7 @@ const BLOCKED_TEXT: Record<string, string> = {
   no_account_options: "Публикация недоступна, пока TikTok не вернул настройки аккаунта. Переподключите аккаунт.",
   disclosure_incomplete: "Отметьте, что именно рекламирует ролик.",
   privacy_not_chosen: "Выберите, кто увидит ролик.",
+  video_too_long: "Ролик длиннее, чем разрешено этому аккаунту — TikTok его отклонит. Обрежьте видео.",
 };
 
 /** Human text for a backend error code — see publisherRules for the rule. */
@@ -125,6 +126,9 @@ export default function TikTokPublisherPage() {
   // renders is black — so the creator picks one from the preview instead.
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [coverMs, setCoverMs] = useState<number | null>(null);
+  // Measured from the preview once the browser has the metadata — used to
+  // catch a clip that is longer than the account may post, before sending it.
+  const [videoDurationSec, setVideoDurationSec] = useState<number | null>(null);
 
   const [discloseCommercial, setDiscloseCommercial] = useState(false);
   const [brandOrganic, setBrandOrganic] = useState(false); // «Your Brand»
@@ -375,6 +379,8 @@ export default function TikTokPublisherPage() {
     brandContent,
     videoUrl: videoUrl.trim(),
     queuedUrl,
+    videoDurationSec,
+    maxDurationSec: creator?.maxDurationSec ?? null,
   });
   const canPublish = gate.canPublish;
   const blockedBecause = gate.canPublish ? null : gate.reason;
@@ -392,6 +398,9 @@ export default function TikTokPublisherPage() {
   // travel to a new one that may not even be that long.
   useEffect(() => {
     setCoverMs(null);
+    // Same reasoning for the measured length: it belongs to the old clip and
+    // would otherwise judge the new one until the browser re-reads metadata.
+    setVideoDurationSec(null);
   }, [videoUrl]);
 
   // Turning the master switch off clears both kinds, so a hidden checkbox can
@@ -479,7 +488,18 @@ export default function TikTokPublisherPage() {
                 <div className="ttp-preview">
                   {videoUrl.trim() ? (
                     // eslint-disable-next-line jsx-a11y/media-has-caption
-                    <video ref={videoRef} src={videoUrl.trim()} controls playsInline className="ttp-video" />
+                    <video
+                      ref={videoRef}
+                      src={videoUrl.trim()}
+                      controls
+                      playsInline
+                      className="ttp-video"
+                      onLoadedMetadata={(e) => {
+                        const d = e.currentTarget.duration;
+                        setVideoDurationSec(Number.isFinite(d) ? d : null);
+                      }}
+                      onError={() => setVideoDurationSec(null)}
+                    />
                   ) : (
                     <div className="ttp-preview-ph">Предпросмотр появится после ввода URL</div>
                   )}
@@ -514,7 +534,10 @@ export default function TikTokPublisherPage() {
                   </div>
                 )}
                 {creator?.maxDurationSec ? (
-                  <p className="ttp-fine">Макс. длительность для этого аккаунта: {creator.maxDurationSec}s</p>
+                  <p className={`ttp-fine${blockedBecause === "video_too_long" ? " ttp-fine-warn" : ""}`}>
+                    Макс. длительность для этого аккаунта: {creator.maxDurationSec}s
+                    {videoDurationSec != null && ` · у этого ролика ${Math.round(videoDurationSec)}s`}
+                  </p>
                 ) : null}
               </div>
 

@@ -5,6 +5,7 @@ import {
   visiblePrivacyOptions,
   publishGate,
   commercialLabel,
+  exceedsMaxDuration,
   type PublishGateInput,
 } from "./publisherRules";
 
@@ -74,6 +75,45 @@ describe("publishGate — reasons are specific, not the nearest one", () => {
 
   test("changing the link after a post re-enables publishing", () => {
     expect(gate({ queuedUrl: "https://cdn.example/old.mp4" })).toEqual({ canPublish: true });
+  });
+});
+
+describe("video length against the account's limit", () => {
+  test("a clip over the limit blocks with its own reason", () => {
+    expect(gate({ videoDurationSec: 200, maxDurationSec: 60 })).toEqual({
+      canPublish: false,
+      reason: "video_too_long",
+    });
+  });
+
+  test("a clip within the limit passes", () => {
+    expect(gate({ videoDurationSec: 45, maxDurationSec: 60 })).toEqual({ canPublish: true });
+  });
+
+  test("a second of slack absorbs rounding at the boundary", () => {
+    // Browser durations are floats; TikTok's limit is an integer. 60.4s
+    // against a 60s limit must not be called too long.
+    expect(gate({ videoDurationSec: 60.4, maxDurationSec: 60 })).toEqual({ canPublish: true });
+    expect(gate({ videoDurationSec: 61.5, maxDurationSec: 60 })).toEqual({
+      canPublish: false,
+      reason: "video_too_long",
+    });
+  });
+
+  test("an unknown duration never blocks — not knowing is not evidence", () => {
+    expect(gate({ videoDurationSec: null, maxDurationSec: 60 })).toEqual({ canPublish: true });
+    expect(gate({ videoDurationSec: Number.NaN, maxDurationSec: 60 })).toEqual({ canPublish: true });
+  });
+
+  test("an account without a stated limit never blocks", () => {
+    expect(gate({ videoDurationSec: 9999, maxDurationSec: null })).toEqual({ canPublish: true });
+    expect(gate({ videoDurationSec: 9999, maxDurationSec: 0 })).toEqual({ canPublish: true });
+  });
+
+  test("exceedsMaxDuration is false whenever either number is missing", () => {
+    expect(exceedsMaxDuration(undefined, 60)).toBe(false);
+    expect(exceedsMaxDuration(120, undefined)).toBe(false);
+    expect(exceedsMaxDuration(null, null)).toBe(false);
   });
 });
 

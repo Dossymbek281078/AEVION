@@ -53,7 +53,8 @@ export type PublishGate =
         | "branded_content_blocked_by_audit"
         | "disclosure_incomplete"
         | "privacy_not_chosen"
-        | "already_queued";
+        | "already_queued"
+        | "video_too_long";
     };
 
 export interface PublishGateInput {
@@ -68,6 +69,28 @@ export interface PublishGateInput {
   videoUrl: string;
   /** The URL of the post already queued in this session, if any. */
   queuedUrl: string | null;
+  /** Length of the loaded video in seconds, once the browser knows it. */
+  videoDurationSec?: number | null;
+  /** max_video_post_duration_sec as creator_info reported it. */
+  maxDurationSec?: number | null;
+}
+
+/**
+ * Is the clip longer than this account may post? Both numbers have to be
+ * known and finite — an unknown duration or an account without a stated
+ * limit is not evidence of a problem, so it must not block publishing.
+ * A whole second of slack absorbs rounding between the browser's float
+ * duration and TikTok's integer limit.
+ */
+export function exceedsMaxDuration(
+  videoDurationSec: number | null | undefined,
+  maxDurationSec: number | null | undefined,
+): boolean {
+  if (typeof videoDurationSec !== "number" || !Number.isFinite(videoDurationSec)) return false;
+  if (typeof maxDurationSec !== "number" || !Number.isFinite(maxDurationSec) || maxDurationSec <= 0) {
+    return false;
+  }
+  return videoDurationSec > maxDurationSec + 1;
 }
 
 /**
@@ -90,6 +113,11 @@ export function publishGate(input: PublishGateInput): PublishGate {
     // The account has levels, branded content just excluded all of them —
     // which is the normal state before TikTok audits the app (SELF_ONLY only).
     return { canPublish: false, reason: "branded_content_blocked_by_audit" };
+  }
+  if (exceedsMaxDuration(input.videoDurationSec, input.maxDurationSec)) {
+    // TikTok would reject this outright; better to say so before the upload
+    // than to let the creator wait for a failure.
+    return { canPublish: false, reason: "video_too_long" };
   }
   if (discloseCommercial && !brandOrganic && !brandContent) {
     return { canPublish: false, reason: "disclosure_incomplete" };

@@ -31,6 +31,9 @@ const STATUS_LABELS: Record<string, string> = {
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 3 * 60_000;
 
+const MUSIC_USAGE_URL = "https://www.tiktok.com/legal/page/global/music-usage-confirmation/en";
+const BRANDED_CONTENT_POLICY_URL = "https://www.tiktok.com/legal/page/global/bc-policy/en";
+
 // Backend rejection codes, spelled out for the creator. Anything not listed
 // falls through to TikTok's own message.
 const ERROR_TEXT: Record<string, string> = {
@@ -76,6 +79,13 @@ export default function TikTokPublisherPage() {
   const [disableDuet, setDisableDuet] = useState(false);
   const [disableStitch, setDisableStitch] = useState(false);
 
+  // Commercial-content disclosure — required by TikTok's audit. The master
+  // toggle must start OFF; enabling it reveals the two kinds, at least one
+  // of which has to be picked before publishing is allowed.
+  const [discloseCommercial, setDiscloseCommercial] = useState(false);
+  const [brandOrganic, setBrandOrganic] = useState(false); // «Your Brand»
+  const [brandContent, setBrandContent] = useState(false); // «Branded Content»
+
   const [posting, setPosting] = useState(false);
   const [postMsg, setPostMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   // `spinning` is what drives the spinner — a "wait" state we have stopped
@@ -115,9 +125,9 @@ export default function TikTokPublisherPage() {
         return;
       }
       setCreator(j);
-      const opts: string[] = j.privacyOptions || [];
-      // Default to the safest available option (SELF_ONLY when present).
-      setPrivacy(opts.includes("SELF_ONLY") ? "SELF_ONLY" : opts[0] || "");
+      // No default privacy level: TikTok's audit requires the creator to
+      // choose visibility deliberately, not to inherit one we picked.
+      setPrivacy("");
       if (j.commentDisabled) setDisableComment(true);
       if (j.duetDisabled) setDisableDuet(true);
       if (j.stitchDisabled) setDisableStitch(true);
@@ -229,14 +239,35 @@ export default function TikTokPublisherPage() {
         text: "Ссылка должна начинаться с https:// и вести на файл, доступный TikTok без авторизации.",
       });
     }
-    if (!privacy) return setPostMsg({ kind: "err", text: "Выберите уровень приватности." });
+    if (!privacy) return setPostMsg({ kind: "err", text: "Выберите, кто увидит ролик." });
+    if (disclosureIncomplete) {
+      return setPostMsg({
+        kind: "err",
+        text: "Отметьте, что именно рекламирует ролик: «Ваш бренд», «Реклама по договору» или оба варианта.",
+      });
+    }
+    if (brandContent && privacy === "SELF_ONLY") {
+      return setPostMsg({
+        kind: "err",
+        text: "Рекламу по договору нельзя публиковать со статусом «Только я».",
+      });
+    }
     setPosting(true);
     try {
       const r = await fetch(`${API}/publish`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoUrl: url, title, privacyLevel: privacy, disableComment, disableDuet, disableStitch }),
+        body: JSON.stringify({
+          videoUrl: url,
+          title,
+          privacyLevel: privacy,
+          disableComment,
+          disableDuet,
+          disableStitch,
+          brandOrganicToggle: brandOrganic,
+          brandContentToggle: brandContent,
+        }),
       });
       const j = await r.json();
       if (r.status === 401) {
@@ -259,10 +290,32 @@ export default function TikTokPublisherPage() {
   };
 
   const connected = !!creator || !!cfg?.connected;
-  const privacyOptions = creator?.privacyOptions || [];
+  // Branded content may not be posted privately, so «Только я» leaves the
+  // list entirely while that box is ticked.
+  const privacyOptions = (creator?.privacyOptions || []).filter(
+    (o) => !(brandContent && o === "SELF_ONLY"),
+  );
+  // Disclosure is incomplete while the switch is on but neither kind is
+  // chosen — TikTok requires publishing to be blocked in that state.
+  const disclosureIncomplete = discloseCommercial && !brandOrganic && !brandContent;
   // Without the creator's allowed privacy levels a post can only be rejected,
   // so the button stays out of reach instead of promising something it cannot do.
-  const canPublish = privacyOptions.length > 0;
+  const canPublish = privacyOptions.length > 0 && !!privacy && !disclosureIncomplete;
+
+  // Ticking «Branded content» while «Только я» was selected must not leave a
+  // combination TikTok will reject sitting in the form.
+  useEffect(() => {
+    if (brandContent && privacy === "SELF_ONLY") setPrivacy("");
+  }, [brandContent, privacy]);
+
+  // Turning the master switch off clears both kinds, so a hidden checkbox can
+  // never travel with the request.
+  useEffect(() => {
+    if (!discloseCommercial) {
+      setBrandOrganic(false);
+      setBrandContent(false);
+    }
+  }, [discloseCommercial]);
 
   return (
     <main className="ttp">
@@ -369,15 +422,23 @@ export default function TikTokPublisherPage() {
                   onChange={(e) => setPrivacy(e.target.value)}
                 >
                   {privacyOptions.length ? (
-                    privacyOptions.map((o) => (
-                      <option key={o} value={o}>
-                        {PRIVACY_LABELS[o] || o}
-                      </option>
-                    ))
+                    <>
+                      <option value="">— выберите —</option>
+                      {privacyOptions.map((o) => (
+                        <option key={o} value={o}>
+                          {PRIVACY_LABELS[o] || o}
+                        </option>
+                      ))}
+                    </>
                   ) : (
                     <option value="">TikTok не вернул доступные уровни</option>
                   )}
                 </select>
+                {brandContent && (
+                  <p className="ttp-fine ttp-fine-tight">
+                    «Только я» недоступно: рекламу по договору нельзя скрывать от всех.
+                  </p>
+                )}
 
                 <div className="ttp-toggles">
                   <label className={`ttp-toggle ${creator?.commentDisabled ? "ttp-toggle-off" : ""}`}>
@@ -409,6 +470,55 @@ export default function TikTokPublisherPage() {
                   </label>
                 </div>
 
+                {/* Commercial-content disclosure — required by TikTok's audit. */}
+                <div className="ttp-disclose">
+                  <label className="ttp-toggle ttp-disclose-main">
+                    <input
+                      type="checkbox"
+                      checked={discloseCommercial}
+                      onChange={(e) => setDiscloseCommercial(e.target.checked)}
+                    />
+                    Ролик рекламирует меня, бренд, товар или услугу
+                  </label>
+
+                  {discloseCommercial && (
+                    <div className="ttp-disclose-kinds">
+                      <label className="ttp-toggle">
+                        <input
+                          type="checkbox"
+                          checked={brandOrganic}
+                          onChange={(e) => setBrandOrganic(e.target.checked)}
+                        />
+                        <span>
+                          Ваш бренд
+                          <span className="ttp-kind-note">вы рекламируете себя или своё дело</span>
+                        </span>
+                      </label>
+                      <label className="ttp-toggle">
+                        <input
+                          type="checkbox"
+                          checked={brandContent}
+                          onChange={(e) => setBrandContent(e.target.checked)}
+                        />
+                        <span>
+                          Реклама по договору
+                          <span className="ttp-kind-note">вы рекламируете чужой бренд за вознаграждение</span>
+                        </span>
+                      </label>
+
+                      {disclosureIncomplete && (
+                        <p className="ttp-fine ttp-fine-warn">Выберите хотя бы один вариант.</p>
+                      )}
+                      {(brandOrganic || brandContent) && (
+                        <p className="ttp-fine ttp-fine-tight">
+                          На ролике появится пометка:{" "}
+                          <b>{brandContent ? "Paid partnership" : "Promotional content"}</b>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <button
                   className="ttp-btn ttp-btn-tiktok ttp-post"
                   onClick={publish}
@@ -418,7 +528,11 @@ export default function TikTokPublisherPage() {
                 </button>
                 {!canPublish && !posting && (
                   <p className="ttp-fine">
-                    Публикация недоступна, пока TikTok не вернул настройки аккаунта. Переподключите аккаунт.
+                    {!privacyOptions.length
+                      ? "Публикация недоступна, пока TikTok не вернул настройки аккаунта. Переподключите аккаунт."
+                      : disclosureIncomplete
+                        ? "Отметьте, что именно рекламирует ролик."
+                        : "Выберите, кто увидит ролик."}
                   </p>
                 )}
 
@@ -430,9 +544,19 @@ export default function TikTokPublisherPage() {
                   </div>
                 )}
 
+                {/* The consent line depends on what was disclosed: branded
+                    content adds TikTok's Branded Content Policy. */}
                 <p className="ttp-fine ttp-disclosure">
                   Публикуя, вы соглашаетесь с{" "}
-                  <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noreferrer">
+                  {brandContent && (
+                    <>
+                      <a href={BRANDED_CONTENT_POLICY_URL} target="_blank" rel="noreferrer">
+                        Branded Content Policy
+                      </a>{" "}
+                      и{" "}
+                    </>
+                  )}
+                  <a href={MUSIC_USAGE_URL} target="_blank" rel="noreferrer">
                     Music Usage Confirmation
                   </a>{" "}
                   TikTok. Контент должен соответствовать Community Guidelines TikTok. AEVION не аффилирован с TikTok.
@@ -489,6 +613,13 @@ const CSS = `
 .ttp-toggle-off{opacity:.5;cursor:not-allowed}
 .ttp-toggle input{width:16px;height:16px;accent-color:var(--accent2)}
 .ttp-post{width:100%;margin-top:4px}
+.ttp-disclose{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 14px}
+.ttp-disclose-main{font-weight:650;align-items:flex-start}
+.ttp-disclose-kinds{display:flex;flex-direction:column;gap:10px;margin:12px 0 2px;padding-left:6px;border-left:2px solid var(--line)}
+.ttp-disclose-kinds .ttp-toggle{align-items:flex-start}
+.ttp-kind-note{display:block;color:var(--mut);font-size:12px;line-height:1.4;margin-top:1px}
+.ttp-fine-tight{margin-top:6px}
+.ttp-fine-warn{margin-top:6px;color:var(--amber)}
 .ttp-msg{margin-top:12px;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.5}
 .ttp-msg-ok{background:rgba(37,244,238,.12);color:var(--accent);border:1px solid rgba(37,244,238,.3)}
 .ttp-msg-err{background:rgba(254,44,85,.12);color:#ff8fa3;border:1px solid rgba(254,44,85,.3)}

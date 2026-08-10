@@ -157,6 +157,78 @@ describe("/publish rejects input TikTok could only bounce", () => {
   });
 });
 
+describe("commercial-content disclosure travels with the post", () => {
+  test("branded content cannot be published privately", async () => {
+    fetchMock.mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY", "PUBLIC_TO_EVERYONE"] }));
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(liveSession))
+      .send({
+        videoUrl: "https://cdn.example/v.mp4",
+        privacyLevel: "SELF_ONLY",
+        brandContentToggle: true,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("branded_content_cannot_be_private");
+    // Rejected before video/init — nothing was posted.
+    expect(fetchMock.mock.calls.some((c) => c[0] === PUBLISH_INIT_URL)).toBe(false);
+  });
+
+  test("both disclosure flags reach TikTok as post_info toggles", async () => {
+    fetchMock
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["PUBLIC_TO_EVERYONE"] }))
+      .mockResolvedValueOnce(tiktokOk({ publish_id: "pub-789" }));
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(liveSession))
+      .send({
+        videoUrl: "https://cdn.example/v.mp4",
+        privacyLevel: "PUBLIC_TO_EVERYONE",
+        brandOrganicToggle: true,
+        brandContentToggle: true,
+      });
+    expect(res.status).toBe(200);
+    const initCall = fetchMock.mock.calls.find((c) => c[0] === PUBLISH_INIT_URL);
+    const body = JSON.parse(initCall![1].body);
+    expect(body.post_info.brand_organic_toggle).toBe(true);
+    expect(body.post_info.brand_content_toggle).toBe(true);
+  });
+
+  test("an undisclosed post sends both toggles as false, not undefined", async () => {
+    fetchMock
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["SELF_ONLY"] }))
+      .mockResolvedValueOnce(tiktokOk({ publish_id: "pub-000" }));
+    const app = makeApp();
+    await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(liveSession))
+      .send({ videoUrl: "https://cdn.example/v.mp4", privacyLevel: "SELF_ONLY" });
+    const initCall = fetchMock.mock.calls.find((c) => c[0] === PUBLISH_INIT_URL);
+    const body = JSON.parse(initCall![1].body);
+    expect(body.post_info.brand_organic_toggle).toBe(false);
+    expect(body.post_info.brand_content_toggle).toBe(false);
+  });
+
+  test("branded content with a public level is allowed through", async () => {
+    fetchMock
+      .mockResolvedValueOnce(tiktokOk({ privacy_level_options: ["PUBLIC_TO_EVERYONE"] }))
+      .mockResolvedValueOnce(tiktokOk({ publish_id: "pub-ok" }));
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/tiktok/publish")
+      .set("Cookie", sessionCookie(liveSession))
+      .send({
+        videoUrl: "https://cdn.example/v.mp4",
+        privacyLevel: "PUBLIC_TO_EVERYONE",
+        brandContentToggle: true,
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.publishId).toBe("pub-ok");
+  });
+});
+
 describe("/publish only claims success when a post was really queued", () => {
   test("forwards the validated URL and returns the publish id", async () => {
     fetchMock

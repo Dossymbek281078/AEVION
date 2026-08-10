@@ -451,6 +451,12 @@ tiktokRouter.post("/publish", publishLimiter, async (req, res) => {
     disableComment = false,
     disableDuet = false,
     disableStitch = false,
+    // Commercial-content disclosure. TikTok's audit requires the publishing
+    // UI to collect this and the API call to carry it: brandOrganic = "Your
+    // Brand" (labelled "Promotional content"), brandContent = "Branded
+    // Content" (labelled "Paid partnership").
+    brandOrganicToggle = false,
+    brandContentToggle = false,
   } = (req.body || {}) as Record<string, any>;
   if (!videoUrl || typeof videoUrl !== "string") {
     return res.status(400).json({ error: "video_url_required" });
@@ -463,6 +469,12 @@ tiktokRouter.post("/publish", publishLimiter, async (req, res) => {
   const allowed = await allowedPrivacyLevels(s.access_token);
   if (allowed && !allowed.includes(privacyLevel)) {
     return res.status(400).json({ error: "privacy_level_not_allowed", allowed });
+  }
+  // TikTok's Branded Content policy forbids a paid partnership that nobody
+  // can see: SELF_ONLY is not a legal visibility for it. Enforced here as
+  // well as in the UI, because the UI is not the only possible caller.
+  if (brandContentToggle && privacyLevel === "SELF_ONLY") {
+    return res.status(400).json({ error: "branded_content_cannot_be_private" });
   }
   try {
     const r = await fetch(PUBLISH_INIT_URL, {
@@ -478,6 +490,8 @@ tiktokRouter.post("/publish", publishLimiter, async (req, res) => {
           disable_comment: !!disableComment,
           disable_duet: !!disableDuet,
           disable_stitch: !!disableStitch,
+          brand_organic_toggle: !!brandOrganicToggle,
+          brand_content_toggle: !!brandContentToggle,
         },
         source_info: { source: "PULL_FROM_URL", video_url: checked.url },
       }),

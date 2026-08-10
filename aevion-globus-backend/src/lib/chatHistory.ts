@@ -17,7 +17,7 @@
 
 import { randomUUID } from "node:crypto";
 import { getPool } from "./dbPool";
-import { readJsonFile, writeJsonFile } from "./jsonFileStore";
+import { readJsonFile, updateJsonFile } from "./jsonFileStore";
 
 export type ChatTurn = {
   id: string;
@@ -53,28 +53,6 @@ CREATE INDEX IF NOT EXISTS idx_chat_turns_conv_created
 `;
 
 const JSON_CAP = 5000;
-
-// Очередь записи для файлового хранилища.
-//
-// Файловая ветка — это read-modify-write целого JSON: два параллельных
-// вызова читают ОДИН и тот же массив и оба пишут свою версию, второй затирает
-// первого. На вееере мультичата это видно сразу: три агента отвечают
-// одновременно, а в ленте оседает один ответ из трёх. Ошибки при этом нет —
-// запрос успешен, файл валиден, просто разговора в нём меньше, чем было.
-// Найдено живым прогоном 2026-08-10; последовательные тесты такое пропускают.
-//
-// Postgres-ветку это не касается: там каждый INSERT самостоятелен.
-let jsonWriteQueue: Promise<unknown> = Promise.resolve();
-
-function enqueueJsonWrite<T>(fn: () => Promise<T>): Promise<T> {
-  const next = jsonWriteQueue.then(fn, fn);
-  // Хвост очереди не должен умирать от чужой ошибки.
-  jsonWriteQueue = next.then(
-    () => undefined,
-    () => undefined,
-  );
-  return next;
-}
 
 function isPg(): boolean {
   return !!process.env.DATABASE_URL?.trim();
@@ -139,13 +117,15 @@ export async function recordChatTurn(input: RecordTurnInput): Promise<ChatTurn> 
         ],
       );
     } else {
-      await enqueueJsonWrite(async () => {
-        const data = await readJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] });
+      // updateJsonFile, а не пара read+write: веер мультичата пишет ответы
+      // агентов параллельно, и без замка на файл они затирают друг друга —
+      // в ленте оседал 1 ответ из 3 (найдено живым прогоном 2026-08-10).
+      await updateJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] }, (data) => {
         const items = Array.isArray(data.items) ? data.items : [];
         items.push(turn);
         // FIFO cap — drop oldest when over the dev ceiling.
         while (items.length > JSON_CAP) items.shift();
-        await writeJsonFile(STORE_REL, { items });
+        return { items };
       });
     }
   } catch (err) {

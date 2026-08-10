@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "node:crypto";
 
 /**
  * Локальное хранилище MVP-модулей (QTrade и т.д.).
@@ -31,13 +32,100 @@ export async function readJsonFile<T>(relativePath: string, fallback: T): Promis
   }
 }
 
-/** Атомарная запись: temp → rename (один файл на модуль). */
-export async function writeJsonFile(relativePath: string, data: unknown): Promise<void> {
+async function writeUnlocked(relativePath: string, data: unknown): Promise<void> {
   const dir = getAevionDataDir();
   const full = path.join(dir, relativePath);
   await fs.promises.mkdir(dir, { recursive: true });
-  const tmp = `${full}.${process.pid}.${Date.now()}.tmp`;
+  // Имя temp-файла собиралось из pid и миллисекунды — два писателя в одну
+  // миллисекунду брали ОДИН путь, и второй rename падал с ENOENT: файл уже
+  // унесли. Случайный хвост убирает совпадение.
+  const tmp = `${full}.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}.tmp`;
   const json = JSON.stringify(data);
   await fs.promises.writeFile(tmp, json, "utf8");
   await fs.promises.rename(tmp, full);
+}
+
+/**
+ * Атомарная запись: temp → rename (один файл на модуль).
+ *
+ * Записи в ОДИН файл выстраиваются в очередь. Не ради «чище»: на Windows
+ * параллельный rename в занятый путь падает с EPERM, а до этого — с ENOENT
+ * на совпавшем имени temp. Отказ при этом прилетал не в тот запрос, который
+ * его вызвал, и, например, в chatHistory тихо глох в catch.
+ */
+export function writeJsonFile(relativePath: string, data: unknown): Promise<void> {
+  return withFileLock(relativePath, () => writeUnlocked(relativePath, data));
+}
+
+// ─── Изменение файла целиком: read → мутация → write под замком ────────────
+//
+// Атомарна здесь только САМА запись (temp → rename). Пара «прочитал —
+// изменил — записал» атомарной не была никогда: два параллельных обработчика
+// читают один и тот же массив и оба пишут свою версию, второй затирает
+// первого. Отказа при этом нет — оба запроса успешны, файл валиден, просто
+// данных в нём меньше, чем записали.
+//
+// Живой случай 2026-08-10: веер мультичата пишет ответы трёх агентов через
+// Promise.all — в ленте оседал один ответ из трёх. Postgres-ветки это не
+// касается (каждый INSERT самостоятелен), поэтому на проде с DATABASE_URL
+// баг невидим, а на любом стенде без БД — тихая потеря данных.
+//
+// Замок — на путь файла и в пределах процесса: этого достаточно, потому что
+// файловое хранилище и есть однопроцессный fallback. Несколько процессов на
+// один каталог данных не поддерживаются (и до этой правки не поддерживались).
+
+const fileLocks = new Map<string, Promise<unknown>>();
+
+/** Выполняет операцию, не пуская параллельную работу с ТЕМ ЖЕ файлом.
+ *  Замок на путь, а не на всё хранилище: медленный модуль не должен
+ *  тормозить остальные. */
+async function withFileLock<T>(relativePath: string, op: () => Promise<T>): Promise<T> {
+  const key = path.join(getAevionDataDir(), relativePath);
+  const prev = fileLocks.get(key) ?? Promise.resolve();
+
+  // Ждём предшественника независимо от того, чем он кончился: чужая ошибка
+  // не должна ни отменять нашу запись, ни рвать очередь.
+  const task = prev.then(op, op);
+  const tail = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  fileLocks.set(key, tail);
+
+  try {
+    return await task;
+  } finally {
+    // Убирает за собой только последний в очереди: если за нами уже встал
+    // следующий, он заменил хвост, и удалять его нельзя. Без этой проверки
+    // Map растёт на каждый файл и держит промисы до конца жизни процесса.
+    if (fileLocks.get(key) === tail) fileLocks.delete(key);
+  }
+}
+
+/**
+ * Прочитать файл, изменить и записать обратно — не пуская параллельный
+ * вызов между чтением и записью того же файла.
+ *
+ * `mutator` получает текущее значение и возвращает то, что надо записать
+ * (можно менять на месте и вернуть его же). Возвращается записанное
+ * значение — чтобы обработчику не приходилось читать файл повторно.
+ *
+ * Используйте вместо пары readJsonFile + writeJsonFile везде, где новое
+ * значение зависит от старого: добавление в список, счётчик, перевод
+ * средств. Для полной перезаписи (значение от старого не зависит)
+ * writeJsonFile по-прежнему достаточно.
+ */
+export function updateJsonFile<T>(
+  relativePath: string,
+  fallback: T,
+  mutator: (current: T) => T | Promise<T>,
+): Promise<T> {
+  return withFileLock(relativePath, async () => {
+    const current = await readJsonFile<T>(relativePath, fallback);
+    const next = await mutator(current);
+    // Внутренняя запись, минуя публичную: та берёт тот же замок и встала бы
+    // в очередь сама за собой.
+    await writeUnlocked(relativePath, next);
+    return next;
+  });
 }

@@ -62,19 +62,19 @@
  * or `router.` call with a literal path, and a mount whose prefix is built from
  * a variable.
  *
- * ⚠️ KNOWN UNDER-COUNT, found 2026-08-10 and NOT yet fixed. stripComments()
- * blanks from any `/*` to the next `*​/`, including a `/*` that sits inside a
- * string — CSS-in-JS templates have them — so it can erase real code for
- * hundreds of lines. Measured across frontend/src: 92 files lose /api/
- * references this way, 203 in total. Some of those genuinely are comments, but
- * not all: it is why /tiktok-publisher reported zero callers when it calls eight
- * routes, its `const API = "/api-backend/api/tiktok"` having been blanked.
+ * Comments are removed by walking the source, not by regex: `/*` inside a
+ * CSS-in-JS template is not a comment, and the old regex stripper blanked real
+ * code from there to the next `*​/` — measured at 203 /api/ references across 92
+ * files, including the `const API = "/api-backend/api/tiktok"` that made
+ * /tiktok-publisher look like it had no callers at all.
  *
- * So a clean verdict from this tool means "no drift among what it could see".
- * That is still worth gating on — every finding it has produced was real once
- * the false-positive classes were fixed — but do not read OK as proof of
- * absence. Fixing it needs a real tokenizer for comment-vs-string, not another
- * regex.
+ * Still under-counted, though less: that page assembles its calls as
+ * `${API}/config`, and the collector reads literals, so five of its six calls
+ * are still unseen. Inlining file-local base constants was written twice and
+ * removed both times for having no effect — the reason the first attempt failed
+ * (the constant was being blanked) is fixed, so the second failure is a new and
+ * undiagnosed one. A clean verdict therefore still means "no drift among what it
+ * could see", not proof of absence.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -325,9 +325,48 @@ function walk(dir, out = []) {
 // Comments and JSX prose mention these URLs too (docs pages, changelog), and
 // a path quoted in prose is not a call. Blank comments out first, then keep
 // only literals that look like a URL rather than a sentence.
-const stripComments = (s) =>
-  s.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " "))
-    .replace(/(^|[^:])\/\/[^\n]*/g, (c, pre) => pre + " ".repeat(c.length - pre.length));
+// Regexes cannot do this: `/*` inside a CSS-in-JS template is not a comment,
+// and treating it as one blanked real code for hundreds of lines — 203 /api/
+// references across 92 files, including the `const API = "..."` that made
+// /tiktok-publisher look like it had no callers. Walk the source instead,
+// tracking whether we are in a string, a template or a comment, and blank only
+// the comments. Length is preserved so line numbers stay correct.
+const stripComments = (s) => {
+  const out = Array.from(s);
+  const blank = (i) => {
+    if (out[i] !== "\n") out[i] = " ";
+  };
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    const next = s[i + 1];
+    if (c === "/" && next === "/") {
+      while (i < s.length && s[i] !== "\n") blank(i++);
+    } else if (c === "/" && next === "*") {
+      blank(i++);
+      blank(i++);
+      while (i < s.length && !(s[i] === "*" && s[i + 1] === "/")) blank(i++);
+      if (i < s.length) {
+        blank(i++);
+        blank(i++);
+      }
+    } else if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      i++;
+      while (i < s.length) {
+        if (s[i] === "\\") { i += 2; continue; }
+        if (s[i] === quote) { i++; break; }
+        // A single- or double-quoted string ends at a newline in practice; not
+        // bailing there lets one stray quote swallow the rest of the file.
+        if (quote !== "`" && s[i] === "\n") break;
+        i++;
+      }
+    } else {
+      i++;
+    }
+  }
+  return out.join("");
+};
 
 for (const file of walk(SRC)) {
   const src = stripComments(fs.readFileSync(file, "utf8"));

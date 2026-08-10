@@ -116,6 +116,12 @@ function airspaceRegSource(a: AirspaceSummary | undefined): RegulatorySource {
     effective: a.effective,
     scopeNote: a.regime ? `${a.regime} — не сертификация аэротакси` : undefined,
     upToDate: a.freshness?.checked ? a.freshness.upToDate : null,
+    // Редакция, которую регулятор публикует ПРЯМО СЕЙЧАС. Отличается от нашей,
+    // когда карту переиздали без изменения потолков: маршрут по-прежнему верен,
+    // но говорить «снимок совпадает с тем, что публикует регулятор» уже нельзя.
+    // Живая сверка 10.08.2026: снимок 7/9/2026, фид публикует 8/6/2026, ноль
+    // изменённых ячеек.
+    publishedEffective: a.freshness?.checked ? a.freshness.publishedEffective : null,
     attested: Boolean(a._signature),
   };
 }

@@ -278,6 +278,25 @@ async function ensureBureauTables(): Promise<void> {
   await pool.query(
     `CREATE INDEX IF NOT EXISTS "BureauTrustEdge_tier_createdAt_idx" ON "BureauTrustEdge" ("tier", "createdAt" DESC);`,
   );
+  // One edge per (cert, tier). recordTrustEdge() checks for an existing row
+  // and inserts if absent — two concurrent calls both see "absent" and both
+  // insert, planning the AEC reward twice. The constraint makes that
+  // impossible at the storage layer rather than relying on the timing.
+  //
+  // Created defensively: if the table already holds duplicates from before
+  // this constraint existed, the index cannot be built — and failing here
+  // would take the whole backend down at boot. Log it and carry on; the
+  // insert path handles the conflict either way.
+  try {
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "BureauTrustEdge_certId_tier_uidx" ON "BureauTrustEdge" ("certId", "tier");`,
+    );
+  } catch (e) {
+    console.warn(
+      "[bureau] could not create BureauTrustEdge_certId_tier_uidx — existing duplicate (certId, tier) rows must be merged first:",
+      e instanceof Error ? e.message : e,
+    );
+  }
   // Webhook event dedup. Stripe and Sumsub may redeliver an event after a
   // network blip; without this table a single payment could double-mint AEC
   // rewards (the row update is idempotent but a planned future "side-effect
@@ -349,23 +368,42 @@ async function recordTrustEdge(opts: {
   }
   const reward = bureauAecReward(opts.tier);
   const edgeId = crypto.randomUUID();
-  await pool.query(
-    `INSERT INTO "BureauTrustEdge"
-       ("id","certId","userId","tier","verificationId","verifiedName",
-        "paymentAmountCents","paymentCurrency","aecRewardPlanned")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [
-      edgeId,
-      opts.certId,
-      opts.userId,
-      opts.tier,
-      opts.verificationId,
-      opts.verifiedName,
-      opts.paymentAmountCents,
-      opts.paymentCurrency,
-      reward,
-    ],
-  );
+  try {
+    await pool.query(
+      `INSERT INTO "BureauTrustEdge"
+         ("id","certId","userId","tier","verificationId","verifiedName",
+          "paymentAmountCents","paymentCurrency","aecRewardPlanned")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [
+        edgeId,
+        opts.certId,
+        opts.userId,
+        opts.tier,
+        opts.verificationId,
+        opts.verifiedName,
+        opts.paymentAmountCents,
+        opts.paymentCurrency,
+        reward,
+      ],
+    );
+  } catch (e: unknown) {
+    // 23505 = unique violation: a concurrent call won the race between the
+    // SELECT above and this INSERT. That is the answer we wanted, not an
+    // error — read back the row the other caller wrote and report it as the
+    // replay it is, so the reward is planned once.
+    if ((e as { code?: string })?.code !== "23505") throw e;
+    const raced = await pool.query(
+      `SELECT "id","aecRewardPlanned" FROM "BureauTrustEdge"
+         WHERE "certId" = $1 AND "tier" = $2 LIMIT 1`,
+      [opts.certId, opts.tier],
+    );
+    if (raced.rows.length === 0) throw e;
+    return {
+      edgeId: raced.rows[0].id,
+      aecRewardPlanned: raced.rows[0].aecRewardPlanned,
+      idempotent: true,
+    };
+  }
   return { edgeId, aecRewardPlanned: reward, idempotent: false };
 }
 

@@ -82,12 +82,18 @@ function stripTemplates(s) {
 const toPath = (raw) => stripTemplates(raw).split("?")[0].replace(/(?<!\/):x$/, "");
 
 // ── frontend: client methods + raw fetches ────────────────────────────────
+// A literal ends at its own delimiter only: `...${q ? "?" + q : ""}` is one
+// template, and a class that stops at any quote silently truncates it — which
+// is how these calls went unchecked in the first place.
+const LITERAL = String.raw`"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|\`(?:[^\`\\]|\\.)*\``;
+const unquote = (lit) => lit.slice(1, -1);
+
 const calls = [];
 const apiSrc = fs.readFileSync(API, "utf8");
 for (const m of apiSrc.matchAll(
-  /call<[\s\S]*?>\(\s*"(GET|POST|PATCH|PUT|DELETE)"\s*,\s*([`"])((?:[^`"\\]|\\.)*)\2/g,
+  new RegExp(String.raw`call<[\s\S]*?>\(\s*"(GET|POST|PATCH|PUT|DELETE)"\s*,\s*(${LITERAL})`, "g"),
 )) {
-  const p = toPath(m[3]);
+  const p = toPath(unquote(m[2]));
   if (!p.startsWith("/api/build")) continue;
   calls.push({
     method: m[1],
@@ -105,15 +111,37 @@ function walk(dir, out = []) {
   }
   return out;
 }
+// Outside api.ts there is no single calling convention: fetch(apiUrl("...")),
+// fetch(`${getApiBase()}/api/build/...`) and bare endpoint="..." props all
+// occur. So do not match on the caller — match on any string or template
+// literal that contains an /api/build path, and infer the method from the
+// nearest `method: "..."` after it (fetch defaults to GET when absent).
+// Comments and JSX prose mention these URLs too (docs pages, changelog), and
+// a path quoted in prose is not a call. Blank comments out first, then keep
+// only literals that look like a URL rather than a sentence.
+const stripComments = (s) =>
+  s.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " "))
+    .replace(/(^|[^:])\/\/[^\n]*/g, (c, pre) => pre + " ".repeat(c.length - pre.length));
+
 for (const file of walk(SRC)) {
-  const src = fs.readFileSync(file, "utf8");
-  for (const m of src.matchAll(/fetch\(\s*apiUrl\(\s*([`"])((?:[^`"\\]|\\.)*)\1/g)) {
-    const p = toPath(m[2]);
+  const src = stripComments(fs.readFileSync(file, "utf8"));
+  for (const m of src.matchAll(new RegExp(LITERAL, "g"))) {
+    const lit = unquote(m[0]);
+    if (!lit.includes("/api/build")) continue;
+    const raw = lit.slice(lit.indexOf("/api/build"));
+    // Strip `${...}` before judging: an interpolation legitimately contains
+    // spaces (`${q ? "?" + q : ""}`), a sentence about the URL does too, and
+    // only the second should be discarded.
+    const p = toPath(raw).replace(/[.,;:)]+$/, (t) => (/\.(xml|pdf|csv|js|json)$/.test(raw) ? t : ""));
+    if (/[\s<>]/.test(p)) continue;
     if (!p.startsWith("/api/build")) continue;
-    // The method lives in the options object after the URL; default is GET.
-    const method = src.slice(m.index, m.index + 400).match(/method:\s*"(GET|POST|PATCH|PUT|DELETE)"/);
+    // The method may sit in a fetch options object, or be passed in as a prop
+    // from elsewhere. Guessing GET when it is absent invents drift that is not
+    // there, so an undetermined method matches the path under any verb.
+    const method = src.slice(m.index, m.index + 300).match(/method:\s*"(GET|POST|PATCH|PUT|DELETE)"/);
+    const isFetch = /fetch\(\s*$|fetch\(\s*apiUrl\(\s*$/.test(src.slice(Math.max(0, m.index - 40), m.index));
     calls.push({
-      method: method ? method[1] : "GET",
+      method: method ? method[1] : isFetch ? "GET" : "ANY",
       path: p,
       where: path.relative(ROOT, file).replace(/\\/g, "/"),
       line: src.slice(0, m.index).split("\n").length,
@@ -135,7 +163,9 @@ const compiled = backend.map((b) => ({
 const unmatched = [];
 const used = new Set();
 for (const c of calls) {
-  const hit = compiled.find((b) => b.method === c.method && b.re.test(c.path.replace(/:x/g, "X")));
+  const hit = compiled.find(
+    (b) => (c.method === "ANY" || b.method === c.method) && b.re.test(c.path.replace(/:x/g, "X")),
+  );
   if (hit) used.add(`${hit.method} ${hit.pattern}`);
   else unmatched.push(c);
 }

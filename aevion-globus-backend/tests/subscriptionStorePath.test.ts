@@ -67,6 +67,24 @@ describe("хранилище подписок: путь считается на 
     expect(src).not.toMatch(/process\.cwd\(\)/);
   });
 
+  it("в репозитории нет отслеживаемого git рабочего состояния QTrade", () => {
+    // Тот же класс и из того же коммита 0ff550de6, что и подписки: прогон
+    // тестов из корня оставил там `.aevion-data/` со счетами вида
+    // `credit-test-…@example.com` и временный `.tmp`, а корневой путь не был
+    // закрыт `.gitignore` — закрыт только внутрипакетный.
+    const root = path.join(__dirname, "..", "..", ".aevion-data");
+    const tracked = fs.existsSync(root)
+      ? fs.readdirSync(root).filter((f) => /\.json(\.\d+\.\d+\.tmp)?$/.test(f))
+      : [];
+    // Файлы на диске — норма, это рабочее состояние. Проверяем, что путь закрыт
+    // от git: иначе следующий прогон снова принесёт их в коммит.
+    const gitignore = fs.readFileSync(path.join(__dirname, "..", "..", ".gitignore"), "utf8");
+    expect(
+      gitignore,
+      `.aevion-data закрыт только внутри пакета, а на диске лежит: ${tracked.join(", ")}`,
+    ).toMatch(/^\*\*\/\.aevion-data\/$/m);
+  });
+
   it("в репозитории нет отслеживаемого git хранилища подписок", () => {
     // Корневой `data/subscriptions.jsonl` появлялся ровно от прогона не из той
     // папки. Файл с записями о подписках не должен лежать в git ни по какому

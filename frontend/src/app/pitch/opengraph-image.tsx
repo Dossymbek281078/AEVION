@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { TAM, ADVANCE, BOTTOM_UP_REGIONAL_ARR } from "@/data/pitchFacts";
 
 export const runtime = "edge";
 export const alt = "AEVION · Investor Pitch — the AEVION partnership offer";
@@ -57,9 +58,9 @@ export default function PitchOgImage() {
         </div>
 
         <div style={{ display: "flex", gap: 28 }}>
-          <OgStat value="$340B" label="addressable market" />
-          <OgStat value="≈$9.4M" label="modelled ARR · bottom-up" />
-          <OgStat value="$10M" label="returnable advance" />
+          <OgStat value={TAM} label="addressable market" />
+          <OgStat value={BOTTOM_UP_REGIONAL_ARR} label="modelled ARR · bottom-up" />
+          <OgStat value={ADVANCE} label="returnable advance" />
           <OgStat value="12" label="live MVPs today" />
         </div>
       </div>

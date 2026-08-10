@@ -87,3 +87,141 @@ describe("pitchFacts — canonical counts stay in sync with the registry", () =>
     expect(LIVE_MODULES).toBe(35);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Price drift — the expensive half of the same problem                        */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The 2026-07-22 repricing (lite 19→24, medium 29→39, full 49→89, Universe
+ * 149.99→249.99) landed in the backend tier registry and nowhere else. For
+ * three weeks the marketing copy, the tier OG cards and the whole investor
+ * model still quoted the old ladder — a visitor read "$19/mo" and the checkout
+ * charged $24. Nothing crashed, no test went red: exactly the silent kind of
+ * wrong that only a human re-reading the page ever catches.
+ *
+ * So: parse the prices straight out of the backend registry and assert the
+ * derived surfaces match. Any future price change fails here until every
+ * surface is updated — the drift becomes a red build, not a support ticket.
+ */
+
+const BACKEND_PRICING = path.resolve(
+  FRONTEND_ROOT,
+  "../aevion-globus-backend/src/data/pricing.ts",
+);
+
+/** tierId → priceMonthly as written in TIERS (null for enterprise). */
+function registryTierPrices(): Record<string, number | null> {
+  const src = readFileSync(BACKEND_PRICING, "utf8");
+  // Slice to the TIERS array — MODULES_PRICING below it also has `id:` keys.
+  const start = src.indexOf("export const TIERS");
+  const end = src.indexOf("export const MODULES_PRICING");
+  expect(
+    start >= 0 && end > start,
+    `Could not locate the TIERS array in ${BACKEND_PRICING}. If the registry was ` +
+      "restructured, update this guard — do not delete it.",
+  ).toBe(true);
+
+  const tiers: Record<string, number | null> = {};
+  const re = /id:\s*"([a-z]+)",[\s\S]*?priceMonthly:\s*([\d.]+|null)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src.slice(start, end))) !== null) {
+    tiers[m[1]] = m[2] === "null" ? null : Number(m[2]);
+  }
+  return tiers;
+}
+
+/** Prices a public price card is allowed to show, ascending. */
+function registryCardPrices(): number[] {
+  const tiers = registryTierPrices();
+  return Object.values(tiers)
+    .filter((p): p is number => p !== null)
+    .sort((a, b) => a - b);
+}
+
+describe("prices — derived surfaces stay in sync with the backend tier registry", () => {
+  it("the registry parses and still holds the six known tiers", () => {
+    const tiers = registryTierPrices();
+    expect(Object.keys(tiers).sort()).toEqual(
+      ["enterprise", "free", "full", "lite", "medium", "pro"],
+    );
+    expect(tiers.enterprise).toBeNull();
+  });
+
+  it("pitchFacts quotes the live ladder (entry / top-live-checkout / Universe)", async () => {
+    const tiers = registryTierPrices();
+    const facts = await import("@/data/pitchFacts");
+
+    expect(
+      facts.ENTRY_PAID_TIER_MONTHLY,
+      "ENTRY_PAID_TIER_MONTHLY must equal the Lite price in data/pricing.ts",
+    ).toBe(`$${tiers.lite}`);
+
+    // Universe (`pro`) has no Lemon Squeezy variant, so Full is the highest
+    // tier a visitor can actually subscribe to — see data/lemonSqueezyVariants.ts.
+    expect(
+      facts.LIVE_TOP_TIER_MONTHLY,
+      "LIVE_TOP_TIER_MONTHLY must equal the Full price in data/pricing.ts",
+    ).toBe(`$${tiers.full}`);
+
+    expect(
+      facts.UNIVERSE_SEAT_MONTHLY,
+      "UNIVERSE_SEAT_MONTHLY must equal the `pro` (Universe) price in data/pricing.ts",
+    ).toBe(`$${tiers.pro}`);
+  });
+
+  it("the Universe annual figure follows the registry's ×10 annual formula", async () => {
+    const tiers = registryTierPrices();
+    const { UNIVERSE_SEAT_ANNUAL_TOTAL } = await import("@/data/pitchFacts");
+    const expected = `~$${Math.round((tiers.pro as number) * 10).toLocaleString("en-US")}/yr`;
+    expect(
+      UNIVERSE_SEAT_ANNUAL_TOTAL,
+      "Annual = pay for 10 months, get 12 (annualTotal() in data/pricing.ts). " +
+        "This figure is the seat ARPU the growth model runs on — if it drifts, every " +
+        "ARR row in pitchModel.ts is wrong.",
+    ).toBe(expected);
+  });
+
+  it("the growth model prices the Universe seat at the registry price", async () => {
+    const tiers = registryTierPrices();
+    const { launchGrowth } = await import("@/data/pitchModel");
+
+    expect(launchGrowth.seat.headline).toBe(`$${tiers.pro} / mo`);
+    expect(
+      launchGrowth.seat.honesty,
+      "The on-ramp ladder quoted next to the seat price must be the live one.",
+    ).toContain(`($0/$${tiers.lite}/$${tiers.medium}/$${tiers.full})`);
+  });
+
+  it("the bottom-up model prices All-Access at the live Full tier", async () => {
+    const tiers = registryTierPrices();
+    const { unitEconomics } = await import("@/data/pitchModel");
+    const allAccess = unitEconomics.flagships.find((f) => f.module === "Ecosystem All-Access");
+    expect(allAccess, "The 'Ecosystem All-Access' flagship disappeared from unitEconomics").toBeTruthy();
+    expect(
+      allAccess!.price.startsWith(`$${tiers.full}/mo`),
+      `All-Access is the Full tier — its modelled price must open with $${tiers.full}/mo, got: ${allAccess!.price}`,
+    ).toBe(true);
+  });
+
+  // OG cards are the classic laggard: nobody re-opens an image when a price
+  // changes. Compare the full set of prices on the card to the registry rather
+  // than banning old literals — that way an added tier fails too, and prose in
+  // comments can still mention a retired price.
+  const PRICE_CARDS: Array<{ rel: string; re: RegExp }> = [
+    { rel: "src/app/pricing/[tierId]/opengraph-image.tsx", re: /price:\s*"\$([\d.]+)"/g },
+    { rel: "src/app/pricing/compare/opengraph-image.tsx", re: /price="\$([\d.]+)"/g },
+  ];
+
+  for (const { rel, re } of PRICE_CARDS) {
+    it(`${rel} shows exactly the registry ladder`, () => {
+      const src = readFileSync(path.join(FRONTEND_ROOT, rel), "utf8");
+      const shown = [...src.matchAll(re)].map((m) => Number(m[1])).sort((a, b) => a - b);
+      expect(
+        shown,
+        `${rel} is a share card — its prices must be the live ladder from ` +
+          "aevion-globus-backend/src/data/pricing.ts (Enterprise shows a word, not a number).",
+      ).toEqual(registryCardPrices());
+    });
+  }
+});

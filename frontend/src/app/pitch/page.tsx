@@ -26,6 +26,7 @@ import {
   type LaunchStage,
   type ValueBucket,
 } from "@/data/pitchModel";
+import { TAM, ADVANCE, BOTTOM_UP_REGIONAL_ARR } from "@/data/pitchFacts";
 
 type LiveMetrics = {
   qrightObjects: number | null;
@@ -427,9 +428,9 @@ export default function PitchPage() {
             }}
           >
             <HeroStat value={`${liveCount}`} unit="live MVPs" hint={`of ${totalNodes} planned nodes`} />
-            <HeroStat value="$340B" unit="addressable market" hint="IP + creators + payments" />
-            <HeroStat value="≈$9.4M" unit="modelled ARR" hint="bottom-up · 3 flagships" />
-            <HeroStat value="$10M" unit="returnable advance" hint="partnership, not buyout" />
+            <HeroStat value={TAM} unit="addressable market" hint="IP + creators + payments" />
+            <HeroStat value={BOTTOM_UP_REGIONAL_ARR} unit="modelled ARR" hint="bottom-up · 3 flagships" />
+            <HeroStat value={ADVANCE} unit="returnable advance" hint="partnership, not buyout" />
           </div>
 
           <div

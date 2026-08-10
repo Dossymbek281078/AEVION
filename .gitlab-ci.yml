@@ -75,3 +75,28 @@ frontend-tests-and-build:
   # не съедал минуты молча.
   timeout: 30 minutes
   interruptible: true
+
+# Временная задача: показать, чего локфайлу не хватает ДЛЯ LINUX.
+#
+# Проблему видно только на Linux, а чинить её надо на Windows, где её не
+# видно — замкнутый круг. Разрывается так: Linux сам пересобирает локфайл и
+# ПЕЧАТАЕТ разницу в журнал. Скачивать артефакт не нужно, правку переношу
+# руками по этому выводу.
+#
+# Задача не валит пайплайн (allow_failure) — она диагностическая, а не
+# контрольная. Убрать, когда локфайл починен.
+lockfile-linux-diff:
+  stage: test
+  image: node:22
+  allow_failure: true
+  script:
+    - cd frontend
+    - npm install --package-lock-only --no-audit --no-fund
+    - echo "=== СТРОК ИЗМЕНИЛОСЬ ==="
+    - git diff --stat package-lock.json
+    - echo "=== ЧТО ДОБАВИЛ LINUX (имена пакетов) ==="
+    - git diff -U0 package-lock.json | grep -E '^\+ +"node_modules/' | sed 's/[":]//g' | sort -u
+    - echo "=== ПОЛНАЯ РАЗНИЦА ==="
+    - git diff package-lock.json
+  timeout: 10 minutes
+  interruptible: true

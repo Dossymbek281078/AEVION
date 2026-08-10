@@ -105,6 +105,29 @@ export function countSubscriptions(): number {
 }
 
 /**
+ * Every record in the store, oldest first. Callers that aggregate (the pricing
+ * provisioning stats endpoint) need the whole set, not just a count; each of
+ * them used to re-implement this parse loop.
+ */
+export function readSubscriptions(): Subscription[] {
+  try {
+    if (!existsSync(SUBS_FILE)) return [];
+    const out: Subscription[] = [];
+    for (const line of readFileSync(SUBS_FILE, "utf8").split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        out.push(JSON.parse(line) as Subscription);
+      } catch {
+        // skip malformed
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Latest subscription record for an email (case-insensitive). The store is
  * append-only and latest-wins, so a later "free" downgrade record (written by
  * the LS subscription webhook on cancel/expire) correctly supersedes an

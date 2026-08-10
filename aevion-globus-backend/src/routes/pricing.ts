@@ -23,7 +23,7 @@ import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 import { CHANGELOG, type ChangelogKind } from "../data/changelog";
-import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, type Subscription } from "./provisioning";
+import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, readSubscriptions, type Subscription } from "./provisioning";
 
 export const pricingRouter = Router();
 
@@ -1379,6 +1379,53 @@ pricingRouter.get("/social-proof", (_req, res) => {
       individuals: 4,
     },
   });
+});
+
+/**
+ * GET /api/pricing/provisioning/stats
+ * Aggregate view of the subscription store for /pricing/provisioning. The page
+ * called this for weeks against a route that was never registered, so the panel
+ * was always empty — the fetch failed into a silent catch.
+ *
+ * Deliberately aggregate-only: no email leaves this endpoint. The per-email
+ * history the same page asks for is NOT served here, because returning someone's
+ * purchase history to anyone who knows their address is a leak; that lookup
+ * needs the magic-link flow this file already uses for the affiliate and partner
+ * dashboards.
+ */
+pricingRouter.get("/provisioning/stats", (_req, res) => {
+  const subs = readSubscriptions();
+  const byTier: Record<string, number> = {
+    free: 0, lite: 0, medium: 0, full: 0, pro: 0, enterprise: 0,
+  };
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  let last7d = 0;
+  let trialsActive = 0;
+
+  for (const sub of subs) {
+    if (sub.tierId in byTier) byTier[sub.tierId] += 1;
+    const ts = Date.parse(sub.ts);
+    if (Number.isFinite(ts) && ts >= weekAgo) last7d += 1;
+    // A trial counts as active only while its validUntil is still ahead.
+    if ((sub.trialDays ?? 0) > 0 && sub.validUntil) {
+      const until = Date.parse(sub.validUntil);
+      if (Number.isFinite(until) && until > now) trialsActive += 1;
+    }
+  }
+
+  const recent = subs
+    .slice(-5)
+    .reverse()
+    .map((sub) => ({
+      id: sub.id,
+      ts: sub.ts,
+      tierId: sub.tierId,
+      period: sub.period,
+      trial: (sub.trialDays ?? 0) > 0,
+    }));
+
+  return res.json({ total: subs.length, byTier, last7d, trialsActive, recent });
 });
 
 /**

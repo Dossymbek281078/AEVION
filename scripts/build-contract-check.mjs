@@ -113,6 +113,21 @@ if (fs.existsSync(MANIFEST)) {
   }
 }
 
+// Every prefix each router file is mounted under, module filter aside. A file
+// with more than one is aliased: qjobs answers at /api/build/jobs and at
+// /api/qjobs, and calls to one prefix say nothing about the other, so routes
+// under the unused prefix must not be reported as though nobody calls them.
+const prefixesPerFile = {};
+for (const m of indexSrc.matchAll(/app\.use\(\s*["']([^"']+)["']\s*,([^;]*)\)/g)) {
+  for (const token of m[2].match(/[A-Za-z_$][\w$]*/g) ?? []) {
+    const f = importedFrom[token];
+    if (f) (prefixesPerFile[f] ??= new Set()).add(m[1]);
+  }
+}
+for (const { mountPrefix, file } of manifestMounts) {
+  (prefixesPerFile[file] ??= new Set()).add(mountPrefix);
+}
+
 const entryPoints = [];
 for (const { mountPrefix, file } of manifestMounts) {
   const mine =
@@ -161,9 +176,15 @@ const collect = (src, mountPrefix, subPrefix, file) => {
     // next argument. No handler in sight means the line only attaches
     // middleware to that path.
     if (!/async\s*\(|\(\s*_?req\b/.test(src.slice(m.index, m.index + 220))) continue;
+    const subPath = `${subPrefix}${m[2] === "/" ? "" : m[2]}`;
     backend.push({
       method: m[1].toUpperCase(),
-      pattern: `${mountPrefix}${subPrefix}${m[2] === "/" ? "" : m[2]}`,
+      pattern: `${mountPrefix}${subPath}`,
+      // Kept so the unused list can tell an alias from a dead route: qjobs and
+      // qsocial are mounted both at /api/build/jobs and at /api/qjobs, and the
+      // frontend uses the second — the first is the same handler under another
+      // name, not something nobody calls.
+      handler: `${m[1].toUpperCase()} ${file}${subPath}`,
       file,
     });
   }
@@ -324,6 +345,7 @@ const compiled = backend.map((b) => ({
 
 const unmatched = [];
 const used = new Set();
+const usedHandlers = new Set();
 for (const c of calls) {
   // `/profiles/search` matches both `/profiles/:id` and `/profiles/search`.
   // Express resolves that with an explicit next("route") in the param handler,
@@ -332,8 +354,10 @@ for (const c of calls) {
   const hit = compiled
     .filter((b) => (c.method === "ANY" || b.method === c.method) && b.re.test(target))
     .sort((a, b) => (a.pattern.match(/:/g)?.length ?? 0) - (b.pattern.match(/:/g)?.length ?? 0))[0];
-  if (hit) used.add(`${hit.method} ${hit.pattern}`);
-  else unmatched.push(c);
+  if (hit) {
+    used.add(`${hit.method} ${hit.pattern}`);
+    usedHandlers.add(hit.handler);
+  } else unmatched.push(c);
 }
 
 const misaddressed = calls.filter((c) => c.wrongOrigin);
@@ -357,12 +381,24 @@ if (misaddressed.length > 0) {
 // by the browser and public feeds all live here legitimately.
 if (process.argv.includes("--list-unused")) {
   const seen = new Set();
-  console.log(`\nBACKEND ROUTES NOT CALLED FROM frontend/src:`);
+  const dead = [];
+  const aliases = [];
   for (const b of backend) {
     const k = `${b.method} ${b.pattern}`;
     if (used.has(k) || seen.has(k)) continue;
     seen.add(k);
-    console.log(`  [${b.file}] ${k}`);
+    // The same handler reached under another prefix is an alias, not a route
+    // nobody calls — /api/build/jobs/* duplicates /api/qjobs/*, and the pages
+    // use the latter. Calls to that other prefix are outside this module's
+    // scan, so judge by the mount table rather than by call counts.
+    const aliased = usedHandlers.has(b.handler) || (prefixesPerFile[b.file]?.size ?? 0) > 1;
+    (aliased ? aliases : dead).push(`  [${b.file}] ${k}`);
+  }
+  console.log(`\nBACKEND ROUTES NOT CALLED FROM frontend/src (${dead.length}):`);
+  for (const line of dead) console.log(line);
+  if (aliases.length > 0) {
+    console.log(`\nSAME HANDLER, CALLED UNDER ANOTHER PREFIX (${aliases.length}) — not dead:`);
+    for (const line of aliases) console.log(line);
   }
 }
 

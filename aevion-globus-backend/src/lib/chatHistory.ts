@@ -54,6 +54,28 @@ CREATE INDEX IF NOT EXISTS idx_chat_turns_conv_created
 
 const JSON_CAP = 5000;
 
+// Очередь записи для файлового хранилища.
+//
+// Файловая ветка — это read-modify-write целого JSON: два параллельных
+// вызова читают ОДИН и тот же массив и оба пишут свою версию, второй затирает
+// первого. На вееере мультичата это видно сразу: три агента отвечают
+// одновременно, а в ленте оседает один ответ из трёх. Ошибки при этом нет —
+// запрос успешен, файл валиден, просто разговора в нём меньше, чем было.
+// Найдено живым прогоном 2026-08-10; последовательные тесты такое пропускают.
+//
+// Postgres-ветку это не касается: там каждый INSERT самостоятелен.
+let jsonWriteQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueJsonWrite<T>(fn: () => Promise<T>): Promise<T> {
+  const next = jsonWriteQueue.then(fn, fn);
+  // Хвост очереди не должен умирать от чужой ошибки.
+  jsonWriteQueue = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
 function isPg(): boolean {
   return !!process.env.DATABASE_URL?.trim();
 }
@@ -117,12 +139,14 @@ export async function recordChatTurn(input: RecordTurnInput): Promise<ChatTurn> 
         ],
       );
     } else {
-      const data = await readJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] });
-      const items = Array.isArray(data.items) ? data.items : [];
-      items.push(turn);
-      // FIFO cap — drop oldest when over the dev ceiling.
-      while (items.length > JSON_CAP) items.shift();
-      await writeJsonFile(STORE_REL, { items });
+      await enqueueJsonWrite(async () => {
+        const data = await readJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] });
+        const items = Array.isArray(data.items) ? data.items : [];
+        items.push(turn);
+        // FIFO cap — drop oldest when over the dev ceiling.
+        while (items.length > JSON_CAP) items.shift();
+        await writeJsonFile(STORE_REL, { items });
+      });
     }
   } catch (err) {
     console.error("[chatHistory] record failed", err);
@@ -131,9 +155,23 @@ export async function recordChatTurn(input: RecordTurnInput): Promise<ChatTurn> 
   return turn;
 }
 
+/** Экранирование под LIKE: `%` и `_` — метасимволы, а id вида `conv_…` содержит `_`. */
+function likeEscape(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 export async function listChatTurns(opts: {
   userId?: string;
   conversationId?: string;
+  /**
+   * Забрать вместе с беседой её агентские подветки `${conversationId}:${agentId}`.
+   *
+   * Веер мультичата пишет ответ каждого агента в СВОЙ conversationId, поэтому
+   * выборка строго по равенству возвращает только вопросы пользователя — без
+   * единого ответа. Именно так и жили экспорт, публичная ссылка и счётчик
+   * токенов: отдавали валидный JSON, в котором не было половины разговора.
+   */
+  includeAgentThreads?: boolean;
   limit?: number;
 }): Promise<ChatTurn[]> {
   const limit = Math.max(1, Math.min(opts.limit ?? 100, 500));
@@ -146,8 +184,15 @@ export async function listChatTurns(opts: {
       args.push(opts.userId);
     }
     if (opts.conversationId) {
-      where.push(`conversation_id = $${args.length + 1}`);
-      args.push(opts.conversationId);
+      if (opts.includeAgentThreads) {
+        where.push(
+          `(conversation_id = $${args.length + 1} OR conversation_id LIKE $${args.length + 2} ESCAPE '\\')`,
+        );
+        args.push(opts.conversationId, `${likeEscape(opts.conversationId)}:%`);
+      } else {
+        where.push(`conversation_id = $${args.length + 1}`);
+        args.push(opts.conversationId);
+      }
     }
     args.push(limit);
     const sql = `
@@ -167,7 +212,17 @@ export async function listChatTurns(opts: {
   const data = await readJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] });
   let items = Array.isArray(data.items) ? data.items : [];
   if (opts.userId) items = items.filter((t) => t.userId === opts.userId);
-  if (opts.conversationId) items = items.filter((t) => t.conversationId === opts.conversationId);
+  if (opts.conversationId) {
+    const root = opts.conversationId;
+    items = items.filter((t) =>
+      opts.includeAgentThreads
+        ? t.conversationId === root || (t.conversationId ?? "").startsWith(`${root}:`)
+        : t.conversationId === root,
+    );
+  }
+  // Порядок — хронологический, как в SQL-ветке: подветки агентов пишутся
+  // параллельно, и порядок вставки в файл не обязан совпадать со временем.
+  items = [...items].sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
   return items.slice(-limit);
 }
 

@@ -17,6 +17,8 @@ interface Usage {
   calls: number;
   tokens: { input: number; output: number; total: number };
   costUsd: number;
+  /** Вызовы, для которых цена неизвестна (бесплатный флот, локальная модель). */
+  unpricedCalls?: number;
 }
 
 function fmtDate(iso: string) {
@@ -51,9 +53,12 @@ export default function MultichatLibraryPage() {
     setLoading(true);
     setError("");
     try {
+      // Через apiUrl, как и все остальные вызовы страницы: голый `/api/...`
+      // уходит в сам Next (переписан только `/api-backend/*`) и стабильно
+      // отвечает 404 — список не грузился ни разу.
       const url = query
-        ? `/api/multichat/search?q=${encodeURIComponent(query)}&limit=200`
-        : `/api/multichat/conversations`;
+        ? apiUrl(`/api/multichat/search?q=${encodeURIComponent(query)}&limit=200`)
+        : apiUrl(`/api/multichat/conversations`);
       const r = await fetch(url, { headers: { Authorization: `Bearer ${t}` } });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
@@ -163,9 +168,14 @@ export default function MultichatLibraryPage() {
   }
 
   function downloadExport(id: string, fmt: "json" | "csv") {
-    const url = `/api/multichat/conversations/${id}/export.${fmt}`;
+    const url = apiUrl(`/api/multichat/conversations/${id}/export.${fmt}`);
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.blob())
+      // Без проверки r.ok страница молча сохраняла страницу ошибки под именем
+      // multichat-….json — «скачалось» и «скачалось нужное» это разные вещи.
+      .then(r => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.blob();
+      })
       .then(blob => {
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
@@ -272,6 +282,13 @@ export default function MultichatLibraryPage() {
                     {u && (
                       <div className="text-[11px] text-slate-500 mt-1 font-mono">
                         {u.calls} calls · {u.tokens.total.toLocaleString("ru-RU")} tokens · ${u.costUsd.toFixed(4)}
+                        {/* «$0.0000» при неизвестной цене читается как «бесплатно».
+                            Говорим прямо, сколько вызовов посчитать не смогли. */}
+                        {u.unpricedCalls ? (
+                          <span className="text-amber-500/80">
+                            {" "}· {u.unpricedCalls} без цены
+                          </span>
+                        ) : null}
                       </div>
                     )}
                     {c.shareToken && (

@@ -24,7 +24,9 @@ import { getPool } from "../lib/dbPool";
 import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
 import { rateLimit } from "../lib/rateLimit";
 import { requireAuth } from "../lib/authJwt";
-import { listChatTurns, recordChatTurn } from "../lib/chatHistory";
+import { listChatTurns, recordChatTurn, type ChatTurn } from "../lib/chatHistory";
+import { usageToTokens } from "../lib/usageTokens";
+import { costUsd } from "../services/qcoreai/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvNeutralizeFormula } from "../lib/csv";
 import { buildDissentMap } from "../services/multichat/dissent";
@@ -174,6 +176,87 @@ function toIso(v: unknown): string {
   if (v instanceof Date) return v.toISOString();
   if (typeof v === "string") return v;
   return new Date().toISOString();
+}
+
+// ─── Лента веера: беседа + подветка на каждого агента ──────────────────────
+//
+// Ответ агента живёт в собственной подветке `${conversationId}:${agentId}`:
+// так соседние агенты не перемешиваются в одну простыню и каждого можно
+// доспросить отдельно. Разделитель и разбор — в одном месте, потому что три
+// читателя (беседа, экспорт, публичная ссылка) разъедутся на первой же правке,
+// если каждый будет резать строку сам.
+
+const AGENT_THREAD_SEP = ":";
+
+function agentThreadId(conversationId: string, agentId: string): string {
+  return `${conversationId}${AGENT_THREAD_SEP}${agentId}`;
+}
+
+/** Маркер несостоявшегося ответа — им же держится позиционное соответствие
+ *  «вопрос ↔ ответ каждого агента» в публичном просмотре. */
+const NO_REPLY_PREFIX = "[no-reply]";
+
+async function recordAgentFailure(userId: string, threadId: string, reason: string): Promise<void> {
+  await recordChatTurn({
+    userId,
+    conversationId: threadId,
+    role: "system",
+    content: `${NO_REPLY_PREFIX} ${String(reason).slice(0, 200)}`,
+  });
+}
+
+export type LedgerTurn = ChatTurn & { agentId: string | null };
+
+/** Помечает каждую реплику её агентом (null — реплика самого пользователя). */
+function withAgentIds(rootId: string, turns: ChatTurn[]): LedgerTurn[] {
+  const prefix = `${rootId}${AGENT_THREAD_SEP}`;
+  return turns.map((t) => {
+    const cid = t.conversationId ?? "";
+    return { ...t, agentId: cid.startsWith(prefix) ? cid.slice(prefix.length) : null };
+  });
+}
+
+/**
+ * Расход по беседе — из фактически записанных реплик, а не из выдуманного поля.
+ *
+ * До этого счётчик читал `turn.usage`, которого у реплики нет и никогда не
+ * было: эндпоинт всегда отдавал 0 вызовов и $0.0000, а библиотека честно эти
+ * нули показывала. Считаем по tokensIn/tokensOut и прайс-листу QCoreAI.
+ *
+ * `unpricedCalls` — вызовы, для которых цена неизвестна (бесплатный флот,
+ * локальная модель, провайдер вне таблицы). Их нельзя молча сложить с нулём:
+ * «$0.00» и «не знаем» — разные утверждения.
+ */
+export function aggregateUsage(turns: Array<Partial<ChatTurn>>): {
+  calls: number;
+  tokens: { input: number; output: number; total: number };
+  costUsd: number;
+  unpricedCalls: number;
+} {
+  let calls = 0;
+  let input = 0;
+  let output = 0;
+  let total = 0;
+  let unpricedCalls = 0;
+
+  for (const t of turns) {
+    if (t.role !== "assistant") continue;
+    calls += 1;
+    const tin = Number(t.tokensIn ?? 0) || 0;
+    const tout = Number(t.tokensOut ?? 0) || 0;
+    input += tin;
+    output += tout;
+    const priced = t.provider && t.model ? costUsd(t.provider, t.model, tin, tout) : 0;
+    if (priced > 0) total += priced;
+    else unpricedCalls += 1;
+  }
+
+  return {
+    calls,
+    tokens: { input, output, total: input + output },
+    costUsd: Number(total.toFixed(6)),
+    unpricedCalls,
+  };
 }
 
 // ─── Phase 2 helpers (delete / rename / share / search / usage) ───────────
@@ -327,8 +410,8 @@ multichatRouter.get("/conversations/:id", async (req, res) => {
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation not found" });
-    const turns = await listChatTurns({ userId, conversationId: id, limit: 200 });
-    res.json({ conversation: conv, turns });
+    const turns = await listChatTurns({ userId, conversationId: id, includeAgentThreads: true, limit: 200 });
+    res.json({ conversation: conv, turns: withAgentIds(id, turns) });
   } catch (err: any) {
     captureMultichatError(err, { route: "get-conversation", entityId: id });
     res.status(500).json({ error: "fetch failed", });
@@ -338,10 +421,16 @@ multichatRouter.get("/conversations/:id", async (req, res) => {
 // POST /api/multichat/conversations/:id/dispatch
 //   { prompt, agents: [{ id, role, provider?, model?, temperature? }, ...] }
 //
-// Fans out one prompt across N agents in parallel. Each agent's reply is
-// independently persisted (own conversationId in chatHistory keyed by
-// `${conversationId}:${agentId}` so multichat UI can re-query per-agent
-// turns later). Returns an array aligned with the input agents.
+// Fans out one prompt across N agents in parallel. Returns an array aligned
+// with the input agents.
+//
+// Лента: вопрос пишется один раз на беседу, ответ каждого агента — в свою
+// подветку `${conversationId}:${agentId}`, запись делает ЭТОТ обработчик.
+// Не отдавать её /api/qcoreai/chat: он принимает conversationId в теле и
+// молча его игнорирует — на этом обещании три эндпоинта (экспорт, публичная
+// ссылка, расход) месяцами возвращали разговор без единого ответа.
+// Не ответивший агент тоже попадает в ленту (role: system) — иначе в
+// публичном просмотре ответы соседей молча сдвигаются на его место.
 multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req, res) => {
   const userId = req.auth!.sub;
   const conversationId = String(req.params.id);
@@ -389,6 +478,8 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
       { role: "user", content: prompt },
     ];
 
+    const threadId = agentThreadId(conversationId, agentId);
+
     try {
       const r = await fetch(`${internalBase}/api/qcoreai/chat`, {
         method: "POST",
@@ -401,28 +492,32 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
           provider,
           model,
           temperature,
-          conversationId: `${conversationId}:${agentId}`,
+          conversationId: threadId,
         }),
       });
       const data = (await r.json().catch(() => null)) as {
         reply?: string;
+        mode?: string;
         provider?: string;
         model?: string;
         usage?: unknown;
         error?: string;
       } | null;
       if (!r.ok) {
+        const error = data?.error || `upstream ${r.status}`;
+        await recordAgentFailure(userId, threadId, error);
         return {
           agentId,
           role,
           ok: false,
-          error: data?.error || `upstream ${r.status}`,
+          error,
         };
       }
       if (!data?.reply?.trim()) {
         // /api/qcoreai/chat returned 200 with no (or blank) reply — a real
         // failure the caller shouldn't render as a successful, silently-empty
         // chat bubble.
+        await recordAgentFailure(userId, threadId, "empty reply from provider");
         return {
           agentId,
           role,
@@ -430,6 +525,23 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
           error: "empty reply from provider",
         };
       }
+      // Ответ агента кладём в ленту САМИ. Раньше комментарий выше обещал, что
+      // это делает /api/qcoreai/chat по переданному conversationId — тот его
+      // просто игнорирует, и в базе оставались одни вопросы: экспорт, публичная
+      // ссылка и счётчик токенов отдавали половину разговора как целый.
+      const { tokensIn, tokensOut } = usageToTokens(data.usage);
+      await recordChatTurn({
+        userId,
+        conversationId: threadId,
+        role: "assistant",
+        content: data.reply,
+        // Ключ прайс-листа — идентификатор провайдера (`mode`), а не его
+        // человекочитаемое имя из поля `provider`.
+        provider: data.mode ?? null,
+        model: data.model ?? model ?? null,
+        tokensIn,
+        tokensOut,
+      });
       return {
         agentId,
         role,
@@ -441,6 +553,7 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
       };
     } catch (err: any) {
       captureMultichatError(err, { route: "dispatch-agent", entityId: agentId });
+      await recordAgentFailure(userId, threadId, err?.message || "dispatch failed");
       return {
         agentId,
         role,
@@ -526,10 +639,10 @@ multichatRouter.get("/conversations/:id/export.json", async (req, res) => {
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation_not_found" });
-    const turns = await listChatTurns({ userId, conversationId: id, limit: 5000 });
+    const turns = await listChatTurns({ userId, conversationId: id, includeAgentThreads: true, limit: 5000 });
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Disposition", `attachment; filename="multichat-${id}.json"`);
-    res.json({ conversation: conv, turns, exportedAt: new Date().toISOString() });
+    res.json({ conversation: conv, turns: withAgentIds(id, turns), exportedAt: new Date().toISOString() });
   } catch (err: any) {
     captureMultichatError(err, { route: "export-json", entityId: id });
     res.status(500).json({ error: "export_failed", });
@@ -543,7 +656,10 @@ multichatRouter.get("/conversations/:id/export.csv", async (req, res) => {
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation_not_found" });
-    const turns = await listChatTurns({ userId, conversationId: id, limit: 5000 });
+    const turns = withAgentIds(
+      id,
+      await listChatTurns({ userId, conversationId: id, includeAgentThreads: true, limit: 5000 }),
+    );
     // Выгружается content — текст сообщений, который пишет пользователь. Гашение
     // формул берём из общего lib/csv: значение с ведущим = + - @ Excel исполняет
     // при открытии файла.
@@ -555,9 +671,11 @@ multichatRouter.get("/conversations/:id/export.csv", async (req, res) => {
       }
       return s;
     };
-    const lines = ["created_at,role,content"];
-    for (const t of turns as Array<Record<string, unknown>>) {
-      lines.push([esc(t.createdAt ?? t.created_at), esc(t.role), esc(t.content)].join(","));
+    // Колонка agent появилась вместе с записью ответов: без неё выгрузка веера
+    // из трёх агентов читается как один сплошной монолог непонятно чей.
+    const lines = ["created_at,agent,role,content"];
+    for (const t of turns) {
+      lines.push([esc(t.createdAt), esc(t.agentId ?? ""), esc(t.role), esc(t.content)].join(","));
     }
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="multichat-${id}.csv"`);
@@ -568,34 +686,18 @@ multichatRouter.get("/conversations/:id/export.csv", async (req, res) => {
   }
 });
 
-// GET /api/multichat/conversations/:id/usage — aggregate token usage + cost
-// across all turns. Pulls usage from chatHistory rows (qcoreai persists usage
-// per call). Useful for per-conversation billing display.
+// GET /api/multichat/conversations/:id/usage — расход по беседе: вызовы,
+// токены, цена. Считается по репликам агентов из ленты (их пишет dispatch) и
+// прайс-листу QCoreAI. Для вызовов без цены отдельный счётчик unpricedCalls —
+// «бесплатно» и «цена неизвестна» не одно и то же.
 multichatRouter.get("/conversations/:id/usage", async (req, res) => {
   const userId = req.auth!.sub;
   const id = String(req.params.id);
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation_not_found" });
-    const turns = await listChatTurns({ userId, conversationId: id, limit: 5000 });
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let totalUsd = 0;
-    let calls = 0;
-    for (const t of turns as Array<Record<string, unknown>>) {
-      const usage = t.usage as { inputTokens?: number; outputTokens?: number; costUsd?: number } | undefined;
-      if (!usage) continue;
-      calls += 1;
-      inputTokens += Number(usage.inputTokens ?? 0);
-      outputTokens += Number(usage.outputTokens ?? 0);
-      totalUsd += Number(usage.costUsd ?? 0);
-    }
-    res.json({
-      conversationId: id,
-      calls,
-      tokens: { input: inputTokens, output: outputTokens, total: inputTokens + outputTokens },
-      costUsd: Number(totalUsd.toFixed(6)),
-    });
+    const turns = await listChatTurns({ userId, conversationId: id, includeAgentThreads: true, limit: 5000 });
+    res.json({ conversationId: id, ...aggregateUsage(turns) });
   } catch (err: any) {
     captureMultichatError(err, { route: "usage", entityId: id });
     res.status(500).json({ error: "usage_failed", });
@@ -965,12 +1067,23 @@ multichatPublicRouter.get("/shared/:token", async (req, res) => {
   try {
     const conv = await findByShareToken(token);
     if (!conv) return res.status(404).json({ error: "not_found_or_revoked" });
-    const turns = await listChatTurns({ userId: conv.userId, conversationId: conv.id, limit: 200 });
-    // Strip per-turn usage to avoid leaking cost/billing info publicly.
-    const safeTurns = (turns as Array<Record<string, unknown>>).map((t) => {
-      const { usage, ...rest } = t;
-      void usage;
-      return rest;
+    const turns = await listChatTurns({
+      userId: conv.userId,
+      conversationId: conv.id,
+      includeAgentThreads: true,
+      limit: 200,
+    });
+    // Публично отдаём разговор, но не счётчик: токены — это расход владельца.
+    // Текст несостоявшегося ответа тоже подменяем: причина отказа провайдера
+    // может нести внутренний адрес или код, а получателю ссылки важен сам факт.
+    const safeTurns = withAgentIds(conv.id, turns).map((t) => {
+      const { tokensIn, tokensOut, userId, ...rest } = t;
+      void tokensIn;
+      void tokensOut;
+      void userId;
+      return rest.role === "system" && rest.content.startsWith(NO_REPLY_PREFIX)
+        ? { ...rest, content: `${NO_REPLY_PREFIX} агент не ответил` }
+        : rest;
     });
     res.json({
       conversation: { id: conv.id, title: conv.title, createdAt: conv.createdAt },

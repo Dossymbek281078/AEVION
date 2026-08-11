@@ -26,6 +26,11 @@
  *   the seven faults that had to be fixed. `wrong-origin` does not depend on
  *   discovery at all and is the more trustworthy column.
  *
+ * Scope: only frontend/src is scanned. In this checkout that is the only
+ * frontend with code — frontend-payments, frontend-qcore and the rest are empty
+ * directories — but if another one ever gains sources, "no callers" would start
+ * meaning "no callers in frontend/src" without saying so.
+ *
  * Usage: node scripts/api-contract-sweep.mjs
  */
 import fs from "node:fs";

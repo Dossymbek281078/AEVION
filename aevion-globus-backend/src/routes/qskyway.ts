@@ -12,6 +12,7 @@ import { AIRSPACE_PROOFS } from "./qskyway.airspace.proof";
 import { PERMISSION, permissionSummary } from "./qskyway.permission";
 import { getPool } from "../lib/dbPool";
 import { isSmokeSlot, countLiveSlots } from "../lib/slotOrigin";
+import { heightReviewsForCity } from "../data/qskywayHeightReview";
 import { rateLimit } from "../lib/rateLimit";
 
 /**
@@ -693,6 +694,12 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
   const zones = zonesMeters(id, city);
   res.json({
     ...city,
+    // Разбор сомнительных высот, которые движок НЕ переопределяет («towers over
+    // the city»): что публикует статья, на которую ссылается сам объект, и наш
+    // вердикт. Без этого интерфейс мог сказать только «в 4.66 раза выше
+    // застройки» — верно, но не проверяемо. Высоту при этом не переписываем:
+    // починка принадлежит OSM. См. src/data/qskywayHeightReview.ts.
+    heightReview: heightReviewsForCity(id),
     nofly: zones.map((z) => ({ id: z.id, name: z.name, kind: z.kind, x: Math.round(z.x), y: Math.round(z.y), radiusM: z.radiusM, until: z.until ?? null, realityNote: z.realityNote ?? null })),
     wind: {
       fromDeg: windAt(id, FLOOR).fromDeg,

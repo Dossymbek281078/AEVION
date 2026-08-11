@@ -62,6 +62,8 @@ interface CityData {
    *  modules do not have an obstacle grid, and a wrong height only matters
    *  because hs=0 buys zero safety clearance. */
   dataQuality?: DataQuality & { suspect?: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[] };
+  /** разбор сомнительных высот: что публикует статья объекта и наш вердикт */
+  heightReview?: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[];
   _signature?: { alg: string; contentHash: string };
 }
 /** The filing document /route/justification returns, signed as one unit. */
@@ -171,7 +173,7 @@ export default function QSkywayClient() {
   const [coverage, setCoverage] = useState<{ withFeed: number; withRegulatoryLayer?: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
   const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
   const [cityId, setCityId] = useState<string>("astana");
-  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; airspace?: AirspaceSummary } | null>(null);
+  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
   // Strict mode asks the backend to treat the published ceiling as a hard
   // constraint instead of an advisory verdict. Off by default: the honest
   // default is "fly the corridor and tell me what it would require".
@@ -366,6 +368,7 @@ export default function QSkywayClient() {
         realPct: city.dataQuality?.realPct ?? 0,
         dq: city.dataQuality,
         suspect: city.dataQuality?.suspect ?? [],
+        heightReview: city.heightReview ?? [],
         airspace: city.airspace,
       });
       type VpScore = NonNullable<CityData["vertiportScores"]>[number];
@@ -836,13 +839,20 @@ export default function QSkywayClient() {
                     >
                       ⚠ высота под вопросом:{" "}
                       {meta.suspect
-                        .map((o) =>
-                          o.was !== undefined
+                        .map((o) => {
+                          if (o.was !== undefined) {
                             // источник спорит сам с собой: тег высоты против собственного счёта этажей
-                            ? `${o.h} м вместо ${o.was} м — тег спорит с ${o.levels} этажами`
-                            // высота, которая в разы выше всей остальной застройки
-                            : `${o.h} м — ×${o.times} к застройке`,
-                        )
+                            return `${o.h} м вместо ${o.was} м — тег спорит с ${o.levels} этажами`;
+                          }
+                          // Высота, которая в разы выше остальной застройки. Если такой
+                          // случай уже разобран человеком — называем ЧИСЛО из статьи
+                          // объекта, а не только кратность: «×4.66 к застройке» верно, но
+                          // проверить его нельзя, а «310.8 м в статье» можно.
+                          const rev = meta.heightReview.find((r) => r.index === o.i);
+                          return rev
+                            ? `${o.h} м — в статье объекта ${rev.publishedM} м`
+                            : `${o.h} м — ×${o.times} к застройке`;
+                        })
                         .join(" · ")}
                     </span>
                   )}

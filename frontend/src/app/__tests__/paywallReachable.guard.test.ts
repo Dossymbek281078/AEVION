@@ -26,8 +26,33 @@ import path from "node:path";
 
 const APP_ROOT = path.resolve(__dirname, "..");
 
-/** Зеркало `isExemptPath()` из aevion-globus-backend/src/lib/planGate.ts. */
-const EXEMPT_SUFFIXES = ["/health", "/status", "/providers", "/me/plan", "/me/entitlements"];
+/**
+ * Открытые подпути читаются ИЗ `planGate.ts`, а не переписываются сюда.
+ *
+ * Скопированный список — это ровно тот дефект, против которого написан весь этот
+ * файл: он молча разойдётся с оригиналом при первом же изменении гейта, и сторож
+ * начнёт врать с уверенным видом. Поэтому парсим `isExemptPath()` и падаем, если
+ * распарсить не вышло, — лучше явная поломка, чем тихо неверная проверка.
+ */
+const PLAN_GATE = path.resolve(
+  APP_ROOT,
+  "../../../aevion-globus-backend/src/lib/planGate.ts",
+);
+
+function exemptSuffixes(): string[] {
+  const src = readFileSync(PLAN_GATE, "utf8");
+  const start = src.indexOf("function isExemptPath");
+  const end = src.indexOf("}", src.indexOf("return (", start));
+  const body = src.slice(start, end);
+  const found = [...body.matchAll(/p === "([^"]+)"/g)].map((m) => m[1]);
+  if (found.length === 0) {
+    throw new Error(
+      `Не удалось прочитать открытые подпути из ${PLAN_GATE}. Если isExemptPath ` +
+        "переписали — почини разбор здесь, но не подставляй список руками.",
+    );
+  }
+  return found;
+}
 
 /**
  * Страницы, чья стена НЕДОСТИЖИМА, и это осознанно. Причина обязательна: без неё
@@ -89,7 +114,7 @@ function walledPages(): Walled[] {
 }
 
 const isExempt = (probe: string) =>
-  EXEMPT_SUFFIXES.some((suffix) => probe.split("?")[0].endsWith(suffix));
+  exemptSuffixes().some((suffix) => probe.split("?")[0].endsWith(suffix));
 
 describe("страничная стена — либо достижима, либо признана недостижимой", () => {
   it("нет страниц с недостижимой стеной вне списка", () => {

@@ -1,9 +1,11 @@
 # fix(pricing): every published number now matches the code behind it
 
 Branch is level with `main` (merged 2026-08-10, two OG-image conflicts resolved).
-**`npm run build` passes end to end** (BUILD_ID written, full route table emitted),
-**574 frontend tests across 57 files pass**, `tsc --noEmit` is clean
-on both, and the i18n parity and projects↔pricing gates pass. Every guard added here was
+**`npm run build` passes end to end at this exact head** — compile 19.6 min, then the
+TypeScript phase that used to fail on route props, BUILD_ID written. **574 frontend tests
+across 57 files pass**, `tsc --noEmit` is clean on both sides, and the i18n parity and
+projects↔pricing gates pass. Backend: 1423/1424, the one failure being the known
+devhub-integrations flake described below, not this branch. Every guard added here was
 verified to go **red on a reverted value** before landing.
 
 ℹ️ **On the backend suite's occasional redness — not this branch, and not yet solved.**

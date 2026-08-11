@@ -68,8 +68,9 @@ function isPaywallPayload(x: unknown): x is PaywallPayload {
  *
  * Замерено 11.08.2026: с `PAYWALL_MODULES=healthai` API отдаёт 402, а страница
  * `/healthai` — 200 и обычный контент, потому что пробует `/api/healthai/health`.
- * Так сейчас у 13 из 14 страниц; исключение — `/qcoreai/playground`, он зовёт реально
- * закрытый `/api/qcoreai/chat` и стену показывает.
+ * Так сейчас у 10 из 14 страниц. Стену реально показывают три — `/qcoreai/playground`
+ * (`/api/qcoreai/chat`), `/qmaskcard` (`/masks`), `/qmedia` (`/videos`); у `/veilnetx`
+ * проба статически не определяется.
  *
  * Это не обязательно баг: лендинг модуля разумно оставить публичной витриной, а отказ
  * показывает глобальный `<PaywallModal>` при первом платном действии. Но если страница

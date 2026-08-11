@@ -109,18 +109,19 @@ Constitution Free/Pro $9/Team $49 (`constitutionCheckout.ts`), module add-on chi
 
 ## Known limits
 
-- **Build blocker found and fixed — 13 route files, none of them this branch's.**
+- **Build blocker found and fixed — 16 route files, none of them this branch's.**
   `npm run build` failed in its type phase on generated route types. `tsc --noEmit` stayed
   clean the whole time, because those types live in `.next/types` and do not exist until a
   build creates them — which is why no test, typecheck or guard ever saw this.
 
   Two shapes, and the second one is why the first sweep was not enough:
   - eight routes declared `params: Promise<T> | T` — a union Next 16 rejects;
-  - five more declared `params: { id: string }` outright, three of them taking
+  - eight more declared `params: { id: string }` outright, three of them taking
     `searchParams` synchronously too. A grep written for the union misses these.
 
   **A shortcut I tried does not work, and the record here said otherwise for a while.**
-  `next build` reports ONE such error per run at ~15 minutes a run. `next typegen` looked
+  `next build` reports ONE such error per run at ~15 minutes a run — 16 files is four hours
+  of waiting. `next typegen` looked
   like the fast equivalent, and `tsc --noEmit` after it came back clean — but typegen emits
   only `routes.d.ts` / `validator.ts` / `cache-life.d.ts`, not the per-route `page.ts` and
   `layout.ts` checkers a build generates. The next build promptly failed on a `layout.tsx`

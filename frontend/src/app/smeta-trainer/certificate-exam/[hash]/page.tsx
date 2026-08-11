@@ -33,12 +33,12 @@ function formatDate(iso: string): string {
 export default function CertificatePage({
   params,
 }: {
-  params: Promise<{ hash: string }> | { hash: string };
+  // Promise-only: Next 16 rejects the `T | Promise<T>` union in generated route
+  // types (build-only error — see the note in src/app/[id]/page.tsx). The sync
+  // branch below was for the pre-Next-15 shape and is unreachable now.
+  params: Promise<{ hash: string }>;
 }) {
-  const { hash } =
-    typeof (params as Promise<{ hash: string }>).then === "function"
-      ? use(params as Promise<{ hash: string }>)
-      : (params as { hash: string });
+  const { hash } = use(params);
   const payload = decodePayload(hash);
   if (!payload) {
     notFound();

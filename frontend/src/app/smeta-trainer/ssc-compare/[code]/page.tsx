@@ -35,12 +35,12 @@ type RegionPrice = {
 export default function SscComparePage({
   params,
 }: {
-  params: Promise<{ code: string }> | { code: string };
+  // Promise-only: Next 16 rejects the `T | Promise<T>` union in generated route
+  // types (build-only error — see the note in src/app/[id]/page.tsx). The sync
+  // branch below was for the pre-Next-15 shape and is unreachable now.
+  params: Promise<{ code: string }>;
 }) {
-  const { code: rawCode } =
-    typeof (params as Promise<{ code: string }>).then === "function"
-      ? use(params as Promise<{ code: string }>)
-      : (params as { code: string });
+  const { code: rawCode } = use(params);
   const code = decodeURIComponent(rawCode);
   const [index, setIndex] = useState<SscBookMeta[] | null>(null);
   const [running, setRunning] = useState(true);

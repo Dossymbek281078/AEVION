@@ -44,12 +44,12 @@ import { LmsReturnBanner } from "../../components/LmsReturnBanner";
 export default function ExamTaskPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  // Promise-only: Next 16 rejects the `T | Promise<T>` union in generated route
+  // types (build-only error — see the note in src/app/[id]/page.tsx). The sync
+  // branch below was for the pre-Next-15 shape and is unreachable now.
+  params: Promise<{ id: string }>;
 }) {
-  const resolved =
-    typeof (params as Promise<{ id: string }>).then === "function"
-      ? use(params as Promise<{ id: string }>)
-      : (params as { id: string });
+  const resolved = use(params);
   const task = findExamTask(resolved.id);
   if (!task) {
     notFound();

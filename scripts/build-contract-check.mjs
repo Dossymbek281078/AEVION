@@ -436,7 +436,17 @@ for (const file of walk(SRC)) {
     // check a short window behind first.
     // The forward window must not cross into the next statement: a GET call
     // followed a line later by a PATCH call was being reported as PATCH.
-    const ahead = src.slice(m.index, m.index + 300).split(/;|fetch\(/)[0];
+    // A closing brace ends it too. In a docs table each row is its own object,
+    // so the next `method:` forward belongs to the NEXT endpoint — that is how
+    // /bank/api's GET /accounts/lookup was read as a POST, a verb no route
+    // serves. A fetch options object writes `method:` after the URL and closes
+    // after it, so the legitimate forward read still lands.
+    const ahead = src
+      .slice(m.index, m.index + 300)
+      // Interpolations first: a `${BASE}` in the URL would otherwise close the
+      // window on its own brace, before any real options object.
+      .replace(/\$\{[^}]*\}/g, "")
+      .split(/;|fetch\(|\}/)[0];
     const method =
       src.slice(Math.max(0, m.index - 60), m.index).match(/method:\s*["'](GET|POST|PATCH|PUT|DELETE)["'][^"']*$/) ??
       ahead.match(/method:\s*["'](GET|POST|PATCH|PUT|DELETE)["']/);

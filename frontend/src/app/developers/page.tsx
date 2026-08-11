@@ -51,7 +51,9 @@ const APIS = [
     color: "#fb7185",
     href: "/qtrade",
     desc: "Wallet, transfers, royalties. Per-account ledger with CSV export, summary, top-up, transfer. AEC native.",
-    endpoints: ["GET /api/qtrade/accounts[.csv]", "GET /api/qtrade/transfers[.csv]", "POST /api/qtrade/topup", "POST /api/qtrade/transfer"],
+    // Written out rather than as accounts[.csv]: both really exist, and a URL in
+    // a developer list should be copy-pasteable as it stands.
+    endpoints: ["GET /api/qtrade/accounts", "GET /api/qtrade/accounts.csv", "GET /api/qtrade/transfers", "GET /api/qtrade/transfers.csv", "POST /api/qtrade/topup", "POST /api/qtrade/transfer"],
   },
   {
     name: "Quantum Shield",

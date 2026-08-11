@@ -7,6 +7,8 @@
 // Server code (i18n-server.ts) imports here directly. Client code keeps
 // importing from "@/lib/i18n", which re-exports these names.
 
+import { LIVE_MODULES, MODULE_NODES } from "@/data/pitchFacts";
+
 export type Lang = "en" | "ru" | "kk" | "de" | "fr" | "es" | "zh" | "ja" | "ar" | "pt" | "tr";
 
 export const LANGS: Lang[] = ["ru", "en", "kk", "de", "fr", "es", "zh", "ja", "ar", "pt", "tr"];
@@ -12153,7 +12155,7 @@ const BANK_EXTRA_EN: Record<string, string> = {
   "primer.creator.headline": "Your reputation becomes your credit",
   "primer.creator.b1": "Trust Score aggregates 8 factors across QRight (IP), CyberChess, Planet, and your banking activity.",
   "primer.creator.b2": "Royalty streams from QRight flow straight into your wallet \u2014 share goals via holographic QR.",
-  "primer.creator.b3": "Achievements unlock tiers; tiers unlock advance lines and perks across 37 AEVION modules.",
+  "primer.creator.b3": `Achievements unlock tiers; tiers unlock advance lines and perks across ${MODULE_NODES} AEVION modules.`,
   "primer.investor.headline": "Capital-light fintech with an ecosystem moat",
   "primer.investor.b1": "Client-side sovereignty: goals, recurring, gifts all live on-device. Zero vendor lock-in.",
   "primer.investor.b2": "Regulator-ready by design: QSign HMAC audit, Shamir SSS 2-of-3, no lending licence needed for v1.",
@@ -13486,7 +13488,7 @@ const BANK_EXTRA_EN: Record<string, string> = {
   "about.s4.body": "Biometric guards on transfers above your threshold. QSign signs every operation with your Ed25519 key. Activity timeline flags anomalies before they hit your statement. Export the whole wallet as a portable JSON file — no lock-in, no hostage situation.",
   "about.cta.kicker": "Live MVP",
   "about.cta.title": "It works today.",
-  "about.cta.body": "12 live modules. 18 wallet features. 11 sub-routes. Multilingual EN / RU / KZ. Installable as a PWA. The trust graph is real and growing.",
+  "about.cta.body": `${LIVE_MODULES} live modules. 18 wallet features. 11 sub-routes. Multilingual EN / RU / KZ. Installable as a PWA. The trust graph is real and growing.`,
   "about.cta.openBank": "Open my wallet",
   "about.cta.exploreSurfaces": "Explore the bank",
   "about.cta.investorPitch": "Investor pitch",
@@ -14368,7 +14370,7 @@ const BANK_EXTRA_EN: Record<string, string> = {
   "tip.ops": "Number of wallet operations (top-ups + transfers in/out) in the last 30 days.",
   "tip.lastActivity": "Time since your most recent wallet event.",
   "tip.trustScore": "Composite reputation 0–100. Aggregates 8 factors: banking activity, royalty earnings, chess tournaments, Planet contributions, signed audit history, biometric protection, achievements, network density. Higher score → bigger advance limits and tier perks.",
-  "tip.trustTier": "Discrete reputation level — New / Growing / Trusted / Elite. Each tier unlocks specific perks across 37 AEVION modules.",
+  "tip.trustTier": `Discrete reputation level — New / Growing / Trusted / Elite. Each tier unlocks specific perks across ${MODULE_NODES} AEVION modules.`,
   "tip.advanceLimit": "Maximum salary advance you can request right now, based on your current Trust tier. Auto-repays from incoming royalty/chess/Planet streams.",
   "tip.earningPace": "Average daily AEC inflow across all ecosystem sources, projected from your last 30 days.",
   "tip.runRate": "If your current 30-day pace held for 12 months, this is what you'd earn. Not a guarantee — markets fluctuate.",

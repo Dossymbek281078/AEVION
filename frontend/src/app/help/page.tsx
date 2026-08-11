@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MODULE_NODES } from "@/data/pitchFacts";
+import { DEEP_DIVE_MODULES, MODULE_NODES } from "@/data/pitchFacts";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -22,7 +22,7 @@ const investorFaqs: FAQ[] = [
   },
   {
     q: "What is the round size and use of proceeds?",
-    a: "Raising for an 18-month sprint: harden the 12 launched MVPs, ship 4 of the 15 emerging nodes, lock 2 enterprise compliance pilots, and open 3 international IP-bureau partnerships. Capital allocation: ~50% engineering, ~30% GTM in three creator verticals, ~20% regulatory and partnerships.",
+    a: `Raising for an 18-month sprint: harden the ${DEEP_DIVE_MODULES} launched MVPs, ship 4 of the ${MODULE_NODES - DEEP_DIVE_MODULES} emerging nodes, lock 2 enterprise compliance pilots, and open 3 international IP-bureau partnerships. Capital allocation: ~50% engineering, ~30% GTM in three creator verticals, ~20% regulatory and partnerships.`,
   },
   {
     q: "What is the revenue model?",

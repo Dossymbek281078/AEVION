@@ -209,6 +209,24 @@ const DILITHIUM_PREVIEW_NOTE =
 const DILITHIUM_REAL_NOTE =
   "Real ML-DSA-65 (FIPS 204 Dilithium-3) post-quantum signature. Verify with the published `publicKey` against the canonical payload.";
 
+// В публичном ответе `valid` для preview-режима ВСЕГДА null, а не true.
+//
+// В крипто-слое `valid: true` означает честное «хеш совпал» — и это правда.
+// Но наружу тот же блок отдаётся вместе с оговоркой, что digest «NOT a
+// cryptographic signature», и в таком соседстве `valid: true` читается как
+// «подпись верна». Автоматический потребитель, который смотрит только на
+// valid, получает подтверждение того, чего не было: SHA-512(canonical||kid)
+// вычислит любой, приватного ключа тут нет вовсе.
+//
+// null здесь не выдумка: тип ниже допускает его изначально, и оба наших
+// потребителя уже рисуют именно его — frontend/src/app/qsign/page.tsx
+// проверяет `valid === null` первым делом, PDF печатает «—». То есть режим
+// «нечего подтверждать» был предусмотрен, просто не выставлялся.
+//
+// Проверено на проде 11.08.2026: activeKeys = { hmac, ed25519 }, ключа
+// ML-DSA нет, значит на боевом стенде работает ровно эта ветка.
+const previewValid = null;
+
 type DilithiumBlock = {
   algo: "ML-DSA-65";
   kid: string;
@@ -246,7 +264,7 @@ async function dilithiumOnSign(
       kid: r.kid,
       mode: "preview",
       digest: r.signature,
-      valid: true,
+      valid: previewValid,
       note: DILITHIUM_PREVIEW_NOTE,
     },
     storedString: r.signature,
@@ -279,7 +297,7 @@ async function dilithiumOnRow(row: any): Promise<DilithiumBlock | null> {
     kid: DILITHIUM_KID_PREVIEW,
     mode: "preview",
     digest: stored,
-    valid: v.valid,
+    valid: previewValid,
     note: DILITHIUM_PREVIEW_NOTE,
   };
 }
@@ -307,7 +325,7 @@ async function dilithiumStateless(
     kid: DILITHIUM_KID_PREVIEW,
     mode: "preview",
     digest: supplied,
-    valid: v.valid,
+    valid: previewValid,
     note: DILITHIUM_PREVIEW_NOTE,
   };
 }

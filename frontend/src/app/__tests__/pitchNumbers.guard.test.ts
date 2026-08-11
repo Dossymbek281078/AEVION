@@ -172,3 +172,70 @@ describe("live metrics — every pill declares its own liveness", () => {
     });
   }
 });
+
+/**
+ * Guard: preview-режим ML-DSA не смеет публиковать `valid: true`.
+ *
+ * Проверено на проде 11.08.2026: activeKeys = { hmac, ed25519 }, ключа ML-DSA
+ * нет — значит боевой стенд работает именно в preview-режиме. В нём ответ
+ * содержит digest = SHA-512(canonical||kid) и собственную оговорку «NOT a
+ * cryptographic signature», но `valid` возвращался true. Автоматический
+ * потребитель, который смотрит только на valid, получал подтверждение того,
+ * чего не было: приватного ключа в этой ветке нет вовсе, такой digest
+ * вычислит любой.
+ *
+ * null здесь предусмотрен изначально: тип DilithiumBlock допускает
+ * `boolean | null`, фронтенд (app/qsign/page.tsx) проверяет `valid === null`
+ * первым делом, PDF печатает «—». Режим «нечего подтверждать» существовал,
+ * просто не выставлялся.
+ *
+ * Сторож структурный, потому что помощники маршрута не экспортируются, а
+ * поднимать базу ради проверки одного поля дороже, чем прочитать исходник.
+ * Прецедент — проверка реестра выше: она тоже читает файл бэкенда.
+ */
+describe("qsign v2 — preview-подпись не выдаёт себя за проверенную", () => {
+  const ROUTE = path.resolve(
+    FRONTEND_ROOT,
+    "../aevion-globus-backend/src/routes/qsignV2.ts",
+  );
+
+  it("исходник прочитан — иначе ноль совпадений выглядел бы как успех", () => {
+    const src = readFileSync(ROUTE, "utf8");
+    expect(src.length).toBeGreaterThan(10000);
+    expect(src).toContain("DILITHIUM_PREVIEW_NOTE");
+  });
+
+  it("previewValid объявлен и равен null", () => {
+    const src = readFileSync(ROUTE, "utf8");
+    expect(src).toMatch(/const\s+previewValid\s*=\s*null\s*;/);
+  });
+
+  it("каждый preview-блок публикует valid: previewValid", () => {
+    const src = readFileSync(ROUTE, "utf8").split(/\r?\n/);
+    // Точная привязка вместо разбивки по пустым строкам: у каждого preview-блока
+    // последняя строка — `note: DILITHIUM_PREVIEW_NOTE`, а поле valid стоит
+    // непосредственно над ней. Первая версия этой проверки резала файл по
+    // абзацам, и в один кусок попадали preview-блок и `valid: true` соседнего
+    // real-блока — сторож краснел на исправном коде. Инструмент, а не код.
+    const marks: number[] = [];
+    src.forEach((l, i) => {
+      if (/^\s*note:\s*DILITHIUM_PREVIEW_NOTE,?\s*$/.test(l)) marks.push(i);
+    });
+    expect(marks.length, "не нашёл ни одного preview-блока в ответе").toBeGreaterThan(0);
+
+    const bad: string[] = [];
+    for (const i of marks) {
+      // Ищем ближайшую строку valid выше метки, не дальше шести строк.
+      let found: string | null = null;
+      for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
+        if (/^\s*valid:/.test(src[j])) { found = src[j].trim(); break; }
+      }
+      if (found === null) bad.push(`строка ${i + 1}: поля valid рядом нет`);
+      else if (!/^valid:\s*previewValid,?$/.test(found)) bad.push(`строка ${i + 1}: ${found}`);
+    }
+    expect(
+      bad,
+      "preview-блок публикует valid как проверенный — вернуть previewValid",
+    ).toEqual([]);
+  });
+});

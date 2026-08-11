@@ -276,7 +276,7 @@ export default async function PressPage() {
             </h2>
             <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 14px", lineHeight: 1.6 }}>
               The full product line, grouped by stage. Auto-generated from{" "}
-              <Link href="/api/aevion/catalog" style={{ color: "#0d9488", fontWeight: 700 }}>
+              <Link href={`${getApiBase()}/api/aevion/catalog`} style={{ color: "#0d9488", fontWeight: 700 }}>
                 /api/aevion/catalog
               </Link>{" "}
               · machine-readable in JSON, CSV, Markdown.

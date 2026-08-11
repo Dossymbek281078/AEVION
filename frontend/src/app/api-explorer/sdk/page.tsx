@@ -603,7 +603,9 @@ export default function SdkPlaygroundPage() {
     if (method.id === "markdownUrl") return buildExportUrl(apiBase, "md", args);
     if (method.id === "badgeUrl") {
       const id = encodeURIComponent((args.id || "").trim());
-      return `${apiBase}/api/aevion/catalog/${id}/badge.svg`;
+      // The badge lives at /badges/<id>.svg — the catalog path this used to
+      // build has never existed, so every URL the explorer handed out 404'd.
+      return `${apiBase}/api/aevion/badges/${id}.svg`;
     }
     const { path } = resolveEndpoint(method, args);
     return `${apiBase}${path}`;

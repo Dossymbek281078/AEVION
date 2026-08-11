@@ -114,13 +114,15 @@ export default function SearchPage() {
         {!loading && error && <span style={{ color: "#e11d48" }}>{error}</span>}
         {!loading && !error && data && t("search.found", { total: data.total })}
         {!loading && !error && !data && q.trim().length > 0 && q.trim().length < 2 && t("search.tooShort")}
+        {!loading && !error && !data && q.trim().length === 0 && t("search.idle")}
       </div>
 
       {groups.map(([type, items]) => (
         <section key={type} style={{ marginTop: 22 }}>
-          <div
+          <h2
             style={{
               display: "inline-block",
+              margin: 0,
               padding: "3px 10px",
               borderRadius: 999,
               fontSize: 11,
@@ -132,7 +134,7 @@ export default function SearchPage() {
             }}
           >
             {t(`search.type.${type}`)}
-          </div>
+          </h2>
           <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 0" }}>
             {items.map((r) => (
               <li
@@ -145,12 +147,23 @@ export default function SearchPage() {
                   background: "#fff",
                 }}
               >
-                <Link
-                  href={r.url}
-                  style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", textDecoration: "none" }}
-                >
-                  {r.title}
-                </Link>
+                {/^https?:\/\//.test(r.url) ? (
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", textDecoration: "none" }}
+                  >
+                    {r.title}
+                  </a>
+                ) : (
+                  <Link
+                    href={r.url}
+                    style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", textDecoration: "none" }}
+                  >
+                    {r.title}
+                  </Link>
+                )}
                 {r.description && (
                   <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
                     {r.description}

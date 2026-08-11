@@ -130,6 +130,13 @@ const nextRoutes = [];
   }
 })(NEXT_API, "/api");
 
+// WebSocket endpoints live on the http server, not the router. Collected from
+// index.ts by the shape every one of them uses: attach<Something>(httpServer,
+// "/api/...").
+const wsMounts = [...fs.readFileSync(INDEX_TS, "utf8").matchAll(/\w+\(\s*httpServer\s*,\s*["'](\/api\/[^"']+)["']/g)].map(
+  (m) => m[1],
+);
+
 const servedByNext = (p) =>
   nextRoutes.some((r) => {
     const src = r
@@ -561,6 +568,11 @@ for (const c of calls) {
   // Independent of Express: /api/metrics is served by BOTH a Next handler and
   // an Express route, and a relative call to it is correct either way.
   if (servedByNext(target)) c.next = true;
+  // Not every /api path is a route at all. A WebSocket is attached to the http
+  // server rather than mounted on the router — attachConstitutionCollab(
+  // httpServer, "/api/constitution/collab") — and a page opening it looks
+  // routeless to a scan that only reads router declarations.
+  if (wsMounts.some((w) => target === w || target.startsWith(`${w}/`))) c.next = true;
 
   if (hit) {
     used.add(`${hit.method} ${hit.pattern}`);

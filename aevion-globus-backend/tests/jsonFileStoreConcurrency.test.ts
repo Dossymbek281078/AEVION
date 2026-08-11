@@ -12,7 +12,7 @@
 // доказывает не «код не падает», а что защита действительно работает.
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, utimesSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -106,6 +106,33 @@ describe("updateJsonFile", () => {
     ]);
 
     expect(order).toEqual(["fast", "slow"]);
+  });
+
+  test("незавершённый temp-файл подметается, а свежий чужой — нет", async () => {
+    // Запись идёт через temp → rename. Если процесс умер между шагами, temp
+    // остаётся навсегда, а в нём полная копия данных — у smeta-trainer это
+    // означало бы секрет вебхука, лежащий рядом в открытом виде. Такой файл
+    // нашёлся после обычного прогона тестов.
+    await writeJsonFile(REL, { items: [1] });
+
+    const stale = path.join(dataDir, `${REL}.9999.1.deadbeef.tmp`);
+    const fresh = path.join(dataDir, `${REL}.8888.2.cafebabe.tmp`);
+    writeFileSync(stale, '{"мусор":true}', "utf8");
+    writeFileSync(fresh, '{"чужая запись прямо сейчас":true}', "utf8");
+    // Старим первый на час: подметаем только заведомо брошенное.
+    const hourAgo = new Date(Date.now() - 3_600_000);
+    utimesSync(stale, hourAgo, hourAgo);
+
+    // Подметание одноразовое на путь за процесс, а первая запись выше его уже
+    // израсходовала — поэтому проверяем на другом файле в том же каталоге.
+    const REL2 = "sweep-probe.json";
+    const stale2 = path.join(dataDir, `${REL2}.7777.3.f00dface.tmp`);
+    writeFileSync(stale2, '{"мусор":true}', "utf8");
+    utimesSync(stale2, hourAgo, hourAgo);
+    await writeJsonFile(REL2, { items: [] });
+
+    expect(existsSync(stale2), "брошенный temp не убран").toBe(false);
+    expect(existsSync(fresh), "убрана чужая свежая запись").toBe(true);
   });
 
   test("возвращает записанное значение, чтобы не перечитывать файл", async () => {

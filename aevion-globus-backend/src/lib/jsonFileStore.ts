@@ -32,10 +32,45 @@ export async function readJsonFile<T>(relativePath: string, fallback: T): Promis
   }
 }
 
+// Незавершённые temp-файлы: подметаем один раз на путь за процесс.
+//
+// Запись идёт через temp → rename. Если процесс умер между этими шагами
+// (деплой, перезапуск, падение), temp остаётся навсегда — а в нём ПОЛНАЯ
+// копия данных файла, включая секреты вебхуков. Найден такой после обычного
+// прогона тестов: `qtrade.json.<pid>.<ts>.<rand>.tmp` рядом с `qtrade.json`.
+//
+// Один readdir на файл за жизнь процесса — этого достаточно, чтобы мусор не
+// копился месяцами, и незаметно по цене. Возраст: старше 10 минут, чтобы не
+// тронуть чужую запись, идущую прямо сейчас в соседнем процессе.
+const sweptPaths = new Set<string>();
+const TMP_MAX_AGE_MS = 10 * 60_000;
+
+async function sweepStaleTemps(dir: string, base: string): Promise<void> {
+  const key = path.join(dir, base);
+  if (sweptPaths.has(key)) return;
+  sweptPaths.add(key);
+  try {
+    const now = Date.now();
+    for (const entry of await fs.promises.readdir(dir)) {
+      if (!entry.startsWith(`${base}.`) || !entry.endsWith(".tmp")) continue;
+      const victim = path.join(dir, entry);
+      try {
+        const st = await fs.promises.stat(victim);
+        if (now - st.mtimeMs > TMP_MAX_AGE_MS) await fs.promises.unlink(victim);
+      } catch {
+        // Файл уже унесли или переименовали — это нормальная гонка, не ошибка.
+      }
+    }
+  } catch {
+    // Каталога ещё нет либо он недоступен: подметать нечего.
+  }
+}
+
 async function writeUnlocked(relativePath: string, data: unknown): Promise<void> {
   const dir = getAevionDataDir();
   const full = path.join(dir, relativePath);
   await fs.promises.mkdir(dir, { recursive: true });
+  await sweepStaleTemps(dir, path.basename(relativePath));
   // Имя temp-файла собиралось из pid и миллисекунды — два писателя в одну
   // миллисекунду брали ОДИН путь, и второй rename падал с ENOENT: файл уже
   // унесли. Случайный хвост убирает совпадение.

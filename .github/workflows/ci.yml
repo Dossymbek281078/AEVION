@@ -72,6 +72,14 @@ jobs:
                    search; do
             node scripts/build-contract-check.mjs --module=$m || exit 1
           done
+      # The path can be right and the field names still disagree — that is how
+      # the video-room invite ({ userId } vs req.body?.guestId) and the safety
+      # briefing ({ checkedItemIds } vs items) both answered 400 into an empty
+      # catch. QBuild only: it is the module whose api.ts declares its calls in
+      # one place, which is what makes this checkable.
+      - name: API request bodies (keys sent vs keys read)
+        working-directory: ${{ github.workspace }}
+        run: node scripts/api-body-check.mjs
       - run: npm run build
 
   payments-smoke:

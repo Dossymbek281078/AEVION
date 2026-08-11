@@ -176,6 +176,21 @@ truth, and a surface belongs to exactly one: `data/pricing.ts` (tier checkout),
   comparing one constant to another — a constant-vs-constant assertion is green forever,
   and that is how `27` outlived the registry's growth.
 
+## Two of the route fixes were a production bug, not just a build error
+
+A parallel session (`feat/multichat-agent-council`) established what the local build failure
+was hiding: in production Next 16 passes `params` as a bare `Promise.resolve(...)` with no
+own properties, so `qpaynet/r/[token]/layout.tsx` and `devhub/[id]/deploy/page.tsx` — both
+of which read `params.x` synchronously — were getting `undefined` in prod. In dev a Proxy
+copies the properties and logs a warning, so it worked on a developer's machine and
+silently did not in production. Those two are the payment-link preview and the deploy page.
+
+Same session also narrowed a claim of mine: **Vercel builds this fine** — the failure is
+specific to local `next build --webpack`; Turbopack checks these types differently. And
+they wrote `scripts/next-params-type-check.mjs`, already running inside
+`npm run test:qreal-suite`, which finds the same places from source in a second — the fast
+check I looked for and got wrong.
+
 ## Findings left for a decision, deliberately unfixed
 
 Each is documented at the site, so the next reader does not mistake it for settled.

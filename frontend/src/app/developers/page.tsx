@@ -186,13 +186,13 @@ const signed = await fetch("https://aevion.app/api/qsign/sign", {
 }).then(r => r.json());
 
 // 4. Submit to Planet for validation
-await fetch("https://aevion.app/api/planet/submit", {
+await fetch("https://aevion.app/api/planet/submissions", {
   method: "POST",
   headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
   body: JSON.stringify({
-    artifactType: "music",
-    qrightCertId: cert.id,
-    qsignReceiptId: signed.id,
+    artifactType: "music",   // one of the valid types
+    title: "My track",       // required
+    productKey: "qmedia",    // required
   }),
 });
 

@@ -736,6 +736,29 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * Replace the visible file tree with a refreshed listing — but only when the
+   * server actually sent one.
+   *
+   * `setFiles(listData.files || [])` reads as harmless and is not: this backend
+   * answers a failure with a JSON body that carries `error` and no `files`, so
+   * `.json()` succeeds, `files` is undefined, and the tree is emptied. The
+   * project then looks wiped after an operation that merely failed to refresh —
+   * the same "a failed read shows an empty project" defect this file already
+   * fixed for env vars.
+   *
+   * An empty array from a healthy answer is a different thing and still
+   * applies: a project with no files should show none.
+   */
+  const applyFileList = (listData: unknown) => {
+    const next = (listData as { files?: FileItem[] } | null | undefined)?.files;
+    if (!Array.isArray(next)) {
+      showToast("Не удалось обновить список файлов — показан прежний", "warning");
+      return;
+    }
+    setFiles(next);
+  };
+
   const showToast = (message: string, type: "success" | "error" | "info" | "warning" = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
@@ -1143,7 +1166,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // Reload files list
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
       setAiPrompt("");
     } catch (e: any) {
       setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), files: [], note: e.message || "Generation failed" }]);
@@ -1161,7 +1184,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
     const listData = await listR.json();
-    setFiles(listData.files || []);
+    applyFileList(listData);
     if (selectedFile && revertedFiles.includes(selectedFile.path)) {
       const stillExists = (listData.files || []).some((f: FileItem) => f.path === selectedFile.path);
       if (stillExists) {
@@ -1346,7 +1369,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (!r.ok) throw new Error("Save failed");
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
       showToast(`Saved — updated ${visualEditHtmlPath}`, "success");
     } catch (e: any) {
       showToast(e.message || "Save failed", "error");
@@ -1386,7 +1409,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setVisualEditImgPrompt("");
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
       showToast(
         String(data.url).startsWith("data:")
           ? "Image generated and saved (embedded inline — the page carries the image data itself)"
@@ -1428,7 +1451,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       ]);
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
       showToast("Database designed — db/schema.sql + client are in the file tree", "success");
       // Schema on disk is only half the job; offer to create the real database
       // right here when the server can (capability "database" is live).
@@ -1549,7 +1572,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // Refreshing the file list retriggers the preview rebuild effect.
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
     } catch (e: any) {
       showToast(e.message || "AI edit failed", "error");
     } finally {
@@ -1569,7 +1592,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       showToast(data.message || "Synced", (data.updated?.length || data.created?.length) ? "success" : "info");
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
     } catch (e: any) {
       showToast(e.message || "Sync failed", "error");
     } finally {
@@ -1708,7 +1731,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (!r.ok) throw new Error(data.error);
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
       showToast(`Template applied — ${(data.files || []).length} files`, "success");
     } catch (e: any) {
       showToast(e.message || "Failed", "error");
@@ -2217,7 +2240,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         }
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json();
-        setFiles(listData.files || []);
+        applyFileList(listData);
       } catch (e: any) {
         showToast(e?.message || "Stream failed", "error");
       } finally {
@@ -2240,7 +2263,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setAgentSummary({ totalSteps: d.totalSteps, successCount: d.successCount, failureCount: d.failureCount });
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
       showToast(`Agent: ${d.successCount}/${d.totalSteps} steps ok`, d.successCount === d.totalSteps ? "success" : "error");
     } catch (e: any) {
       showToast(e?.message || "Workflow failed", "error");
@@ -2371,7 +2394,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // Reload file tree
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json();
-        setFiles(listData.files || []);
+        applyFileList(listData);
       }
     } catch (e: any) {
       setTrFileMsg({ ok: false, text: e?.message || "Translation failed" });
@@ -2853,7 +2876,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         showToast(`Imported ${d.path} (${d.bytes} bytes)`, "success");
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json();
-        setFiles(listData.files || []);
+        applyFileList(listData);
       }
     } catch (e: any) {
       showToast(e?.message || "Import failed", "error");

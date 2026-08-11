@@ -110,19 +110,26 @@ Constitution Free/Pro $9/Team $49 (`constitutionCheckout.ts`), module add-on chi
 
 ## Known limits
 
-- **`npm run build` may fail in CI, on a pre-existing file.** The app *compiles* here
-  (9.3 min, successful), then the generated route-type check fails on
-  `frontend/src/app/[id]/page.tsx`, which declares `params: Promise<{id}> | {id}` — a union
-  Next 16 rejects. Two cyberchess routes have the same shape. The file was last touched in
-  #537 (2026-07-10) and this branch does not go near it.
+- **Build blocker found and fixed — in ten route files, none of them this branch's.**
+  `npm run build` failed on generated route types: eight routes declared
+  `params: Promise<T> | T`, a union Next 16 rejects. `tsc --noEmit` stayed clean the whole
+  time, because the error exists only in `.next/types` — which is why no test, typecheck or
+  guard ever saw it, and only a full build does.
 
-  Correcting something I claimed earlier in this document: I put this down to a Next patch
-  mismatch in my worktree. It is not. After the merge with `main`, `package.json` and the
-  lockfile both pin **16.2.11**, which is exactly what ran here. So the failure is not a
-  local artifact and CI's `npm run build` should be expected to hit it. `tsc --noEmit` on
-  the sources stays clean — the error only exists in `.next/types`, which is why the guard
-  tests and typecheck never saw it. Delete `.next` before typechecking, or a stale build
-  directory will report these as source errors.
+  Fixed by sweeping for the pattern rather than letting the build report one file per
+  ten-minute cycle: `/[id]` (page + OG image), cyberchess spectator and tournaments,
+  `/devhub/[id]`, four smeta-trainer routes, and the `/qsign/verify/[id]` OG image. Each
+  had a runtime branch for the pre-Next-15 sync shape that Next 16 can never reach, in two
+  cases hidden from the compiler by a cast (`as any`). Dead branches dropped rather than
+  cast around; `await`-ing a Promise does exactly what the old
+  `await Promise.resolve(...)` / `typeof .then === "function"` dance did.
+
+  The two cyberchess files belong to another session's zone and were touched only because
+  they carry the identical defect and block the same build — a type signature and an
+  unreachable branch, no game logic.
+
+  Worth knowing when typechecking: delete `.next` first, or a stale build directory reports
+  generated-type errors as if they were source errors.
 - **Whole-frontend sweep is in** (`retiredPrices.guard.test.ts`), covering the four
   retired tier prices with every legitimate exception named and reasoned — the same bet
   `scaleClaims.guard.test.ts` makes for module counts. Scope stops there deliberately:

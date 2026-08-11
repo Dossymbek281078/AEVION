@@ -2,6 +2,11 @@ import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 import { MAX_PROMO_DISCOUNT_RATIO, getTier } from "../src/data/pricing";
+// Imported statically, not via `await import()` inside makeApp(): in a full
+// suite run the first dynamic import of this router takes longer than the
+// 10s per-test timeout, so the first test failed on load time rather than on
+// behaviour. Hoisted vi.mock below still applies.
+import { checkoutRouter } from "../src/routes/checkout";
 
 // Checkout: the zero-price branch — 2026-08-10.
 //
@@ -28,8 +33,7 @@ vi.mock("../src/routes/provisioning", async (importOriginal) => {
   return { ...actual, provisionSubscription: mockProvision };
 });
 
-async function makeApp() {
-  const { checkoutRouter } = await import("../src/routes/checkout");
+function makeApp() {
   const app = express();
   app.use(express.json());
   app.use("/api/checkout", checkoutRouter);
@@ -71,7 +75,7 @@ describe("the zero-price branch is currently unreachable", () => {
 describe("the tiers that return before pricing are unaffected", () => {
   test("free redirects without provisioning anything", async () => {
     // "free" is the absence of a subscription, not a plan to issue.
-    const app = await makeApp();
+    const app = makeApp();
     const res = await request(app).post("/api/checkout/session").send({ tierId: "free" });
     expect(res.status).toBe(200);
     expect(res.body.mode).toBe("stub");
@@ -79,7 +83,7 @@ describe("the tiers that return before pricing are unaffected", () => {
   });
 
   test("enterprise routes to contact, not to checkout", async () => {
-    const app = await makeApp();
+    const app = makeApp();
     const res = await request(app).post("/api/checkout/session").send({ tierId: "enterprise" });
     expect(res.status).toBe(200);
     expect(res.body.url).toContain("contact");
@@ -87,7 +91,7 @@ describe("the tiers that return before pricing are unaffected", () => {
   });
 
   test("an invalid tier is rejected before anything else", async () => {
-    const app = await makeApp();
+    const app = makeApp();
     const res = await request(app).post("/api/checkout/session").send({ tierId: "nonsense" });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("invalid_tier");
@@ -97,7 +101,7 @@ describe("the tiers that return before pricing are unaffected", () => {
 
 describe("a paid tier is never provisioned at checkout time", () => {
   test("issuing access happens on the provider webhook, after money moves", async () => {
-    const app = await makeApp();
+    const app = makeApp();
     const res = await request(app)
       .post("/api/checkout/session")
       .send({ tierId: "full", period: "monthly", email: "buyer@example.com" });

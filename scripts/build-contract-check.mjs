@@ -68,13 +68,15 @@
  * files, including the `const API = "/api-backend/api/tiktok"` that made
  * /tiktok-publisher look like it had no callers at all.
  *
- * Still under-counted, though less: that page assembles its calls as
- * `${API}/config`, and the collector reads literals, so five of its six calls
- * are still unseen. Inlining file-local base constants was written twice and
- * removed both times for having no effect — the reason the first attempt failed
- * (the constant was being blanked) is fixed, so the second failure is a new and
- * undiagnosed one. A clean verdict therefore still means "no drift among what it
- * could see", not proof of absence.
+ * Calls assembled from a file-local base constant are seen too — `const API =
+ * "/api-backend/api/tiktok"` plus `${API}/config`. That took three attempts;
+ * the first two failed because a Python patch script mangled the regex escapes,
+ * which looks correct in a diff and matches a literal backslash. Never patch a
+ * regex into a JS file with text substitution.
+ *
+ * A clean verdict still means "no drift among what it could see" rather than
+ * proof of absence: a URL built from a variable that is not a file-local const,
+ * or assembled across functions, is out of reach.
  */
 import fs from "node:fs";
 import path from "node:path";

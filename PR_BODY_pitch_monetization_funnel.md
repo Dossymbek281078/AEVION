@@ -119,14 +119,18 @@ Constitution Free/Pro $9/Team $49 (`constitutionCheckout.ts`), module add-on chi
   - eight more declared `params: { id: string }` outright, three of them taking
     `searchParams` synchronously too. A grep written for the union misses these.
 
-  **A shortcut I tried does not work, and the record here said otherwise for a while.**
-  `next build` reports ONE such error per run at ~15 minutes a run — 16 files is four hours
-  of waiting. `next typegen` looked
-  like the fast equivalent, and `tsc --noEmit` after it came back clean — but typegen emits
-  only `routes.d.ts` / `validator.ts` / `cache-life.d.ts`, not the per-route `page.ts` and
-  `layout.ts` checkers a build generates. The next build promptly failed on a `layout.tsx`
-  typegen had never produced a checker for. The package.json script and CI step I had added
-  on that false premise were reverted. **Only a full `next build` verifies route props.**
+  **On finding them without 16 build cycles.** `next build` reports ONE such error per run
+  at ~15 minutes a run. `next typegen` looked like the fast equivalent and `tsc --noEmit`
+  after it came back clean — but typegen emits only `routes.d.ts` / `validator.ts` /
+  `cache-life.d.ts`, not the per-route checkers a build generates, so it had not looked at
+  route props at all. A package.json script and a CI step added on that false premise were
+  reverted, and the next build duly failed on a `layout.tsx`.
+
+  What does work, and is how this was finally cleared: **once a build reaches its type
+  phase, `.next/types` is already fully generated — `tsc --noEmit` against it reports every
+  route-type error at once, no rebuild.** Verified here: the build wrote 1000 route checkers
+  under `.next/types/app`, and `tsc --noEmit` against them is clean, which is exactly the
+  check the build's "Running TypeScript" phase performs.
 
   Files: `/[id]` (page + OG), cyberchess spectator and tournaments, `/devhub/[id]` and
   `/devhub/[id]/deploy`, four smeta-trainer routes, and the OG images for

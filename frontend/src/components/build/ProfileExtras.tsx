@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { apiUrl } from "@/lib/apiBase";
 import { buildApi, type BuildStory } from "@/lib/build/api";
 
 interface SkillBadge {
@@ -69,15 +68,13 @@ export function ProfileExtras({ userId }: { userId: string }) {
 
   useEffect(() => {
     Promise.all([
-      fetch(apiUrl(`/api/build/skill-badges/user/${encodeURIComponent(userId)}`))
-        .then((r) => r.ok ? r.json() : { data: { badges: [] } })
-        .then((d) => setBadges(d.data?.badges ?? d.badges ?? []))
-        .catch(() => {}),
-      fetch(apiUrl(`/api/build/worker-references/${encodeURIComponent(userId)}`))
-        .then((r) => r.ok ? r.json() : { data: { references: [], total: 0, avgRating: null } })
+      // Both were hand-written fetches that hedged over the envelope shape
+      // (`d.data?.x ?? d.x`). call() unwraps it, so there is one shape to read.
+      buildApi.userSkillBadges(userId).then((d) => setBadges(d.badges)).catch(() => {}),
+      buildApi.workerReferences(userId)
         .then((d) => {
-          setRefs(d.data?.references ?? d.references ?? []);
-          setAvgRating(d.data?.avgRating ?? d.avgRating ?? null);
+          setRefs(d.references);
+          setAvgRating(d.avgRating);
         })
         .catch(() => {}),
       buildApi.userDocuments(userId).then((d) => setDocs(d.items)).catch(() => {}),

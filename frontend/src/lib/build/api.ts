@@ -85,6 +85,43 @@ export type BuildShiftRow = {
 };
 
 // Signable payload handed to QSign by POST /applications/:id/contract.
+// Skill tests and the badges they grant. Shapes taken from
+// routes/build/skill-badges.ts rather than from what the pages happened to read.
+export type BuildSkillTestSummary = {
+  id: string;
+  title: string;
+  description: string;
+  passingScore: number;
+  questionCount: number;
+};
+
+export type BuildSkillTest = {
+  id: string;
+  title: string;
+  description: string;
+  passingScore: number;
+  questions: { id: string; text: string; options: string[] }[];
+};
+
+export type BuildSkillBadge = {
+  id: string;
+  testId: string;
+  testTitle: string;
+  score: number;
+  passed: boolean;
+  grantedAt: string;
+};
+
+export type BuildSalaryBand = {
+  sampleSize: number;
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  min: number | null;
+  max: number | null;
+  currency: string;
+};
+
 // Row of GET /verification/admin/queue — the request joined with the user and
 // their profile.
 export type BuildVerificationRequest = {
@@ -1577,6 +1614,46 @@ export const buildApi = {
         createdAt: string;
       }[];
     }>("GET", `/api/build/admin/ai-search-log?limit=${limit}`),
+
+  // Salary bands, skill tests and badges. These were hand-written fetches in
+  // three pages; here they fall under the body and response checks like the
+  // rest.
+  // Named for what it returns, and to stay clear of salaryStats above — that one
+  // is a different endpoint (/stats/salary, a single median for one skill).
+  salaryBands: (q?: { q?: string; city?: string }) => {
+    const params = new URLSearchParams();
+    if (q?.q) params.set("q", q.q);
+    if (q?.city) params.set("city", q.city);
+    const qs = params.toString();
+    return call<{
+      workerExpectations: BuildSalaryBand;
+      employerOffers: BuildSalaryBand;
+      topCities: { city: string; vacancyCount: number; avgSalary: number | null }[];
+      query: { q: string | null; city: string | null };
+      generatedAt: string;
+    }>("GET", `/api/build/salary-stats${qs ? "?" + qs : ""}`, undefined, { auth: false });
+  },
+  skillTests: () =>
+    call<{ tests: BuildSkillTestSummary[] }>("GET", "/api/build/skill-tests", undefined, { auth: false }),
+  skillTest: (id: string) =>
+    call<{ test: BuildSkillTest }>("GET", `/api/build/skill-tests/${encodeURIComponent(id)}`, undefined, { auth: false }),
+  submitSkillTest: (id: string, answers: Record<string, string> | string[]) =>
+    call<{
+      score: number;
+      passed: boolean;
+      passingScore: number;
+      correct: number;
+      total: number;
+      // Shape read off the handler, not guessed: one entry per question, with
+      // the chosen index, the correct one, and whether they agree.
+      feedback: { questionId: string; chosen: number; correct: number; isCorrect: boolean }[];
+    }>("POST", `/api/build/skill-tests/${encodeURIComponent(id)}/submit`, { answers }),
+  mySkillBadges: () =>
+    call<{ badges: BuildSkillBadge[] }>("GET", "/api/build/skill-badges/me"),
+  userSkillBadges: (userId: string) =>
+    call<{ badges: BuildSkillBadge[] }>(
+      "GET", `/api/build/skill-badges/user/${encodeURIComponent(userId)}`, undefined, { auth: false },
+    ),
 
   // Verification queue. These three were hand-written fetches in the admin page
   // with their own Authorization header — the same shape that produced the

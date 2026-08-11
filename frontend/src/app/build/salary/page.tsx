@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
-import { apiUrl } from "@/lib/apiBase";
+import { buildApi } from "@/lib/build/api";
 import { useI18n } from "@/lib/i18n";
 
 interface SalaryBand {
@@ -124,13 +124,9 @@ export default function SalaryPage() {
   const load = useCallback(async (specialty = "", cityFilter = "") => {
     setLoading(true); setError("");
     try {
-      const params = new URLSearchParams();
-      if (specialty.trim()) params.set("q", specialty.trim());
-      if (cityFilter.trim()) params.set("city", cityFilter.trim());
-      const r = await fetch(apiUrl(`/api/build/salary-stats?${params}`));
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.error ?? `HTTP ${r.status}`);
-      setData(j.data ?? j);
+      // `j.data ?? j` used to hedge about the envelope; call() unwraps it, so
+      // the shape is no longer a guess.
+      setData(await buildApi.salaryBands({ q: specialty.trim(), city: cityFilter.trim() }));
     } catch (e) {
       setError(e instanceof Error ? e.message : t("build.salary.loadError"));
     } finally {

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { BuildShell } from "@/components/build/BuildShell";
-import { apiUrl } from "@/lib/apiBase";
 import { getAuthToken } from "@/lib/build/auth";
+import { buildApi } from "@/lib/build/api";
 import { useI18n } from "@/lib/i18n";
 
 interface TestInfo {
@@ -38,23 +38,14 @@ export default function SkillTestsPage() {
   const token = typeof window !== "undefined" ? getAuthToken() : null;
 
   useEffect(() => {
-    fetch(apiUrl("/api/build/skill-tests"))
-      .then((r) => r.json())
-      .then((d) => setTests(d.data?.tests ?? d.tests ?? []))
-      .catch(() => {});
-
-    if (token) {
-      fetch(apiUrl("/api/build/skill-badges/me"), { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.json())
-        .then((d) => setBadges(d.data?.badges ?? d.badges ?? []))
-        .catch(() => {});
-    }
+    // The `d.data?.x ?? d.x` hedging is gone: call() unwraps the envelope, so
+    // the shape is the one api.ts declares.
+    buildApi.skillTests().then((d) => setTests(d.tests)).catch(() => {});
+    if (token) buildApi.mySkillBadges().then((d) => setBadges(d.badges)).catch(() => {});
   }, [token]);
 
   async function startTest(id: string) {
-    const r = await fetch(apiUrl(`/api/build/skill-tests/${id}`));
-    const d = await r.json();
-    const test = d.data?.test ?? d.test;
+    const { test } = await buildApi.skillTest(id);
     setActive(test);
     setAnswers(new Array(test.questions.length).fill(-1));
     setResult(null);
@@ -66,14 +57,7 @@ export default function SkillTestsPage() {
     if (answers.some((a) => a === -1)) { setError(t("build.skillTests.answerAllQuestions")); return; }
     setSubmitting(true); setError("");
     try {
-      const r = await fetch(apiUrl(`/api/build/skill-tests/${active.id}/submit`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ answers }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? t("build.skillTests.genericError"));
-      const res = d.data ?? d;
+      const res = await buildApi.submitSkillTest(active.id, answers as unknown as string[]);
       setResult(res);
       if (res.passed) {
         setBadges((prev) => {

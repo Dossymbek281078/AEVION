@@ -67,7 +67,7 @@ export async function fetchOrPaywall<T>(
   let res: Response;
   try {
     res = await fetch(apiUrl(apiPath), { cache: "no-store", ...init });
-  } catch {
+  } catch (err) {
     // Бэкенд недоступен целиком (ECONNREFUSED, DNS, оборванный сокет) — здесь
     // fetch не возвращает ответ, а БРОСАЕТ. Ниже разобран каждый статус, вплоть
     // до 503, с явным правилом «всё, кроме 402, — не пейволл, рендерим
@@ -81,6 +81,16 @@ export async function fetchOrPaywall<T>(
     // показать себя без динамического блока.
     //
     // Политика та же, что и для 5xx: не гейт, данных нет, страница живёт.
+    //
+    // Но молча деградировать нельзя: страница отрисуется пустой, и без строки в
+    // логе никто не поймёт, почему у блока пропали данные — он просто «иногда
+    // пустой». `captureException` из lib/sentry здесь бесполезен, он выходит
+    // сразу при `typeof window === "undefined"`, а этот хелпер серверный.
+    // Поэтому console.warn: он попадает в лог Next-сервера.
+    console.warn(
+      `[paywall] бэкенд недоступен для ${apiPath} — страница рендерится без этих данных`,
+      err,
+    );
     return { data: null as unknown as T };
   }
   if (res.status === 402) {

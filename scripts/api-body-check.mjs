@@ -9,13 +9,17 @@
  * the safety briefing sending `{ checkedItemIds }` where it reads `items`. Both
  * answered 400 into an empty catch, so nothing on screen said anything.
  *
- * Compares the keys each buildApi call sends against the fields the matching
- * handler reads, and reports keys sent that nothing reads. Not the reverse: a
- * handler may read optional fields nobody sends yet.
+ * Two directions, both real failures:
+ *   - a key is sent that the handler never reads (the two bugs above);
+ *   - a field the handler REQUIRES is not sent, so the call answers 400 every
+ *     time. Required means validated straight off req.body with a 400 on
+ *     failure; optional fields are written `req.body?.x == null ? ... : v...`,
+ *     and that null-guard is the tell.
  *
  * Bar it had to clear before being committed, since a checker that invents
- * findings is worse than none: zero findings on the clean tree, and
- * reintroducing either historical bug is caught by name. Both verified.
+ * findings is worse than none: zero findings on the clean tree, and each
+ * direction caught by name when its bug is reintroduced. All verified on the
+ * committed copy, not on a draft.
  *
  * Matching a call to its handler is the part that goes wrong. Params match
  * anything, so /applications/:id/snooze also fits /applications/bulk-message/
@@ -81,7 +85,26 @@ const re = new RegExp(
   "g",
 );
 
+/**
+ * A field is required when it is validated straight off req.body and the very
+ * next thing is a 400. Optional fields here are written as
+ * `req.body?.x == null ? ... : vString(...)`, so the null-guard is the tell.
+ * A call that omits one answers 400 every time it is made.
+ */
+function requiredFields(handler) {
+  const out = [];
+  for (const m of handler.matchAll(/const\s+(\w+)\s*=\s*v\w+\(\s*req\.body\?\.(\w+)\s*,\s*["'](\w+)["']/g)) {
+    const before = handler.slice(Math.max(0, m.index - 90), m.index);
+    if (/==\s*null\s*\?/.test(before)) continue;
+    const after = handler.slice(m.index, m.index + 260);
+    if (!new RegExp(String.raw`if\s*\(!\s*${m[1]}\.ok\)[\s\S]{0,60}?fail\(res,\s*400`).test(after)) continue;
+    out.push(m[2]);
+  }
+  return [...new Set(out)];
+}
+
 const findings = [];
+const missingFindings = [];
 for (const m of apiSrc.matchAll(re)) {
   const method = m[1];
   const callPath = m[2].slice(1, -1).replace(/\$\{[^}]*\}/g, ":x").split("?")[0];
@@ -113,6 +136,9 @@ for (const m of apiSrc.matchAll(re)) {
   const [chosenKey, handler] = cands[0];
   if (!namesAnyBodyField(handler)) continue;
 
+  const missing = requiredFields(handler).filter((f) => !keys.includes(f));
+  if (missing.length) missingFindings.push({ line, method, path: callPath, keys: missing });
+
   const unread = keys.filter((k) => !readsKey(handler, k));
   if (unread.length) {
     if (DEBUG) {
@@ -124,8 +150,24 @@ for (const m of apiSrc.matchAll(re)) {
   }
 }
 
-console.log(findings.length === 0
-  ? "OK /api/build request bodies — every key sent is read by its handler"
-  : `FAIL /api/build request bodies — ${findings.length} call(s) send a key nothing reads`);
-for (const f of findings) console.log(`  frontend/src/lib/build/api.ts:${f.line}  ${f.method} ${f.path}  ->  ${f.keys.join(", ")}`);
-process.exit(findings.length === 0 ? 0 : 1);
+const total = findings.length + missingFindings.length;
+if (total === 0) {
+  console.log("OK /api/build request bodies — every key sent is read, every required field is sent");
+} else {
+  const parts = [];
+  if (findings.length) parts.push(`${findings.length} sending a key nothing reads`);
+  if (missingFindings.length) parts.push(`${missingFindings.length} omitting a required field`);
+  console.log(`FAIL /api/build request bodies — ${parts.join(", ")}`);
+}
+
+const show = (title, list) => {
+  if (!list.length) return;
+  console.log(`\n${title}`);
+  for (const f of list) {
+    console.log(`  frontend/src/lib/build/api.ts:${f.line}  ${f.method} ${f.path}  ->  ${f.keys.join(", ")}`);
+  }
+};
+show("KEYS SENT THAT NOTHING READS:", findings);
+show("REQUIRED FIELDS NOT SENT (this call always answers 400):", missingFindings);
+
+process.exit(total === 0 ? 0 : 1);

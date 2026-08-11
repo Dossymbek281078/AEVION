@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+/* Общий разборщик вместо локальной регулярки: наивный вариант принимал `/*` внутри
+   строкового литерала (`accept="image/*"`) за начало комментария и выбрасывал 13%
+   файла вместе с живым кодом. Замер 11.08.2026: 144 КБ из 1088 КБ. */
+import { stripComments } from "./_stripComments";
 
 /* Самый дорогой товар магазина, «AI Rival» за 100 Chessy, ничего не делал: покупка
    записывала chessy.owned["ai_rival"], и это владение НЕ ЧИТАЛ никто. Деньги списывались,
@@ -12,7 +16,6 @@ import { join } from "node:path";
    Товары с soon:true пропускаются: они честно объявлены неработающими и не продаются. */
 
 const DIR = "src/app/cyberchess";
-const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 function sources(): string[] {
   const out: string[] = [];

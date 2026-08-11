@@ -64,7 +64,25 @@ export async function fetchOrPaywall<T>(
   apiPath: string,
   init?: RequestInit,
 ): Promise<{ data: T } | { paywall: PaywallPayload }> {
-  const res = await fetch(apiUrl(apiPath), { cache: "no-store", ...init });
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(apiPath), { cache: "no-store", ...init });
+  } catch {
+    // Бэкенд недоступен целиком (ECONNREFUSED, DNS, оборванный сокет) — здесь
+    // fetch не возвращает ответ, а БРОСАЕТ. Ниже разобран каждый статус, вплоть
+    // до 503, с явным правилом «всё, кроме 402, — не пейволл, рендерим
+    // страницу», но этот случай мимо него проходил: исключение улетало наверх и
+    // сервер отдавал 500.
+    //
+    // Замерено 2026-08-11 на собранном приложении без бэкенда: /qrenew и
+    // /longevity отдавали 500 за 60–80 мс, тогда как /apps, /shop, /go и
+    // /pricing спокойно рендерились. Обе упавшие страницы продают PDF — то
+    // есть при любой икоте бэкенда витрина гасла целиком, вместо того чтобы
+    // показать себя без динамического блока.
+    //
+    // Политика та же, что и для 5xx: не гейт, данных нет, страница живёт.
+    return { data: null as unknown as T };
+  }
   if (res.status === 402) {
     const body = await res.json().catch(() => null);
     if (isPaywallPayload(body)) return { paywall: body };

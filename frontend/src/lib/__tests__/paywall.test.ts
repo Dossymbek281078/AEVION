@@ -84,6 +84,20 @@ describe("fetchOrPaywall", () => {
     if ("data" in r) expect(r.data).toBeNull();
   });
 
+  it("returns {data:null} when the backend is unreachable (fetch REJECTS, not a status)", async () => {
+    // Единственный путь, который раньше проходил мимо разбора статусов: при
+    // недоступном бэкенде fetch не возвращает ответ, а бросает. Исключение
+    // улетало наверх, и страница отдавала 500 — замерено на собранном
+    // приложении: /qrenew и /longevity падали, пока /apps, /shop и /pricing
+    // рендерились. Политика та же, что для 5xx: не гейт, данных нет.
+    (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } }),
+    );
+    const r = await fetchOrPaywall("/api/qrenew/health");
+    expect("data" in r).toBe(true);
+    if ("data" in r) expect(r.data).toBeNull();
+  });
+
   it("returns {data:null} on non-2xx, non-402 statuses (transient errors don't throw — page renders empty)", async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       mockResponse(500, { error: "boom" }),

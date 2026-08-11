@@ -191,6 +191,30 @@ they wrote `scripts/next-params-type-check.mjs`, already running inside
 `npm run test:qreal-suite`, which finds the same places from source in a second — the fast
 check I looked for and got wrong.
 
+## A resilience bug the tests could not see
+
+Running the built app (rather than trusting the suites) turned up a failure no test,
+typecheck or guard could reach: with the backend unreachable, `/qrenew` and `/longevity`
+returned **500 in 60–80ms**, while `/apps`, `/shop`, `/go` and `/pricing` rendered fine.
+Both failing pages sell PDFs, so a backend hiccup took the storefront fully dark rather
+than dropping one dynamic block.
+
+`fetchOrPaywall` handles every *status* on purpose — 402 is a paywall, everything else
+including 503 means "not gated, render the page" — but `await fetch(...)` does not return a
+status when the host is unreachable: it **rejects**, and that rejection went straight up as
+a 500. Ten pages share the helper (healthai, multichat-engine, qcoreai, qmelanin ×2,
+qrenew ×2, qskyway, smeta-trainer, longevity), so one bad minute could have taken all ten
+down together.
+
+Fixed to the same policy as a 5xx, with a log line so the degradation is visible instead of
+silent, and a regression test that mocks a **rejected** fetch rather than a status — the one
+shape none of the existing cases covered. Verified live: both pages now return 200 with no
+backend running.
+
+Swept for siblings afterwards: of 52 server components that fetch directly, none is
+unguarded (the two the grep flagged are code samples inside template literals), and the
+shared helpers in `lib/` all wrap their fetches. `fetchOrPaywall` was the only one.
+
 ## Findings left for a decision, deliberately unfixed
 
 Each is documented at the site, so the next reader does not mistake it for settled.

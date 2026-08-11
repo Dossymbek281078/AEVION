@@ -4,6 +4,7 @@
 // Auction + Coach Rental + Streamer Subscriptions
 // Зона: aevion-core/main owns frontend/src/app/cyberchess/**
 
+import { canSpend, spend as ledgerSpend, type LedgerState } from "../chessyLedger";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -23,7 +24,12 @@ const C = {
 };
 
 // localStorage keys
-const LS_BALANCE = "aevion_cyberchess_chessy_v1";
+/* Кошелёк — тот же, что у игры. До 11.08.2026 здесь был СВОЙ ключ
+   `aevion_cyberchess_chessy_v1`, и во всём фронтенде он встречался ровно один раз —
+   в этой строке. Его не писал никто, поэтому баланс всегда читался как «нет данных»,
+   и весь раздел — аукционы, аренда коуча, подписки — не работал ни у кого и никогда.
+   Ничего при этом не падало: страница исправно показывала «Сначала заработай Chessy». */
+const LS_WALLET = "aevion_chessy_v1";
 const LS_BIDS = "aevion_cyberchess_auction_bids_v1";
 const LS_COACH = "aevion_cyberchess_rented_coach_v1";
 const LS_STREAMS = "aevion_cyberchess_streamer_subs_v1";
@@ -135,16 +141,27 @@ type Bids = Record<string, number>; // auctionId -> latest bid amount
 type CoachRented = { coachId: string; expiresAt: number } | null;
 type StreamerSubs = Record<string, number>; // streamerId -> expiresAt
 
-function readBalance(): number | null {
+/** Кошелёк игры: список полей шире, чем нужно здесь, поэтому читаем как есть и
+    возвращаем целиком — списание должно сохранить всё остальное (lifetime, покупки,
+    достижения), а не переписать баланс поверх. */
+type Wallet = LedgerState & Record<string, unknown>;
+
+function readWallet(): Wallet | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(LS_BALANCE);
-  if (raw == null) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
+  try {
+    const raw = window.localStorage.getItem(LS_WALLET);
+    if (!raw) return null;
+    const w = JSON.parse(raw) as Partial<Wallet> | null;
+    if (!w || typeof w !== "object" || typeof w.balance !== "number") return null;
+    return { lifetime: 0, ach: {}, ...w, balance: w.balance } as Wallet;
+  } catch {
+    // Испорченный кошелёк не трогаем и ничего не пишем: лучше «нет данных», чем перезапись.
+    return null;
+  }
 }
 
-function writeBalance(v: number) {
-  window.localStorage.setItem(LS_BALANCE, String(v));
+function readBalance(): number | null {
+  return readWallet()?.balance ?? null;
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -207,18 +224,28 @@ export default function EconomyHubPage() {
 
   const effectiveBalance = balance ?? 0;
 
+  /* Списание через общий леджер, а не своей арифметикой: здесь была вторая реализация
+     траты — сама по себе верная, но мимо кошелька. Она не вела lifetime и не получила бы
+     ни одного правила, которое добавят в леджер потом. */
   function spend(cost: number, label: string): boolean {
-    if (balance == null) {
+    const wallet = readWallet();
+    if (!wallet) {
       setToast("Сначала заработай Chessy в CyberChess");
       return false;
     }
-    if (balance < cost) {
+    if (!canSpend(wallet, cost)) {
       setToast("Не хватает Chessy");
       return false;
     }
-    const next = balance - cost;
-    setBalance(next);
-    writeBalance(next);
+    // Читаем прямо перед записью: баланс в состоянии страницы мог устареть.
+    const next = ledgerSpend(wallet, cost);
+    try {
+      window.localStorage.setItem(LS_WALLET, JSON.stringify(next));
+    } catch {
+      setToast("Не удалось сохранить — браузер не принимает запись");
+      return false;
+    }
+    setBalance(next.balance);
     setToast(`${label} · −${cost} AEV`);
     return true;
   }

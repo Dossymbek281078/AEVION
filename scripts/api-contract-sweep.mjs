@@ -45,13 +45,24 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CHECK = path.join(ROOT, "scripts/build-contract-check.mjs");
 
-const modules = fs
+// Two sources, because either alone leaves a hole. File names miss a prefix
+// whose files are all camelCase: /api/constitution is served by nine of them
+// (constitutionWaitlist.ts and friends) and no constitution.ts exists, so the
+// whole module — waitlist, checkout, PDF, pro — was never swept once. Mount
+// prefixes miss nothing that way, but the checker still measures per file for
+// the modules that do have one.
+const fromFiles = fs
   .readdirSync(path.join(ROOT, "aevion-globus-backend/src/routes"))
   .filter((f) => f.endsWith(".ts") && !f.includes(".types"))
   .map((f) => f.replace(/\.ts$/, ""))
   // The checker rejects camelCase names — those files are mounted under a
   // lowercase prefix belonging to another module and get measured with it.
   .filter((m) => /^[a-z0-9-]+$/.test(m));
+
+const indexSrc = fs.readFileSync(path.join(ROOT, "aevion-globus-backend/src/index.ts"), "utf8");
+const fromMounts = [...indexSrc.matchAll(/app\.use\(\s*["']\/api\/([a-z0-9-]+)/g)].map((m) => m[1]);
+
+const modules = [...new Set([...fromFiles, ...fromMounts])].sort();
 
 const rows = [];
 const unresolved = [];

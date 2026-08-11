@@ -57,10 +57,19 @@ const rows = [];
 const unresolved = [];
 const noCallers = [];
 
+// --unused answers the opposite question: what is built and has no way in?
+// That is how QBuild's shift scheduling, payment planning, story deletion and
+// four more shipped — every one existed on the server with no button anywhere.
+// Read it as candidates, never as dead code: a call assembled from a variable
+// is invisible to the collector, which is exactly how /tiktok-publisher once
+// looked like it had no callers while calling all eight of its routes.
+const WANT_UNUSED = process.argv.includes("--unused");
+const unusedPerModule = [];
+
 for (const m of modules) {
   let out = "";
   try {
-    out = execFileSync(process.execPath, [CHECK, `--module=${m}`], {
+    out = execFileSync(process.execPath, [CHECK, `--module=${m}`, ...(WANT_UNUSED ? ["--list-unused"] : [])], {
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
       // Swallow the child's stderr: "mounts nothing under /api/x" is expected
@@ -89,6 +98,20 @@ for (const m of modules) {
     noCallers.push({ m, routes });
     continue;
   }
+  if (WANT_UNUSED) {
+    // Stop at the alias header. Its lines have the same `  [file] VERB /path`
+    // shape, so reading to the end of the output counted 45 aliased mounts as
+    // uncalled and reported build as 48 when the answer is 3.
+    const block = (out.split("BACKEND ROUTES NOT CALLED FROM frontend/src")[1] ?? "").split(
+      "SAME HANDLER, CALLED UNDER ANOTHER PREFIX",
+    )[0];
+    const lines = block
+      .split("\n")
+      .slice(1)
+      .filter((l) => l.startsWith("  ["))
+      .map((l) => l.trim());
+    if (lines.length) unusedPerModule.push({ m, lines });
+  }
   rows.push({
     m,
     calls,
@@ -105,6 +128,17 @@ const num = (s, n) => String(s).padStart(n);
 console.log(`${pad("module", 18)}${num("calls", 6)}${num("routes", 7)}${num("no-route", 10)}${num("wrong-origin", 14)}`);
 for (const r of rows) {
   console.log(pad(r.m, 18) + num(r.calls, 6) + num(r.routes, 7) + num(r.noRoute, 10) + num(r.wrongOrigin, 14));
+}
+
+if (WANT_UNUSED) {
+  const total = unusedPerModule.reduce((s, u) => s + u.lines.length, 0);
+  console.log(`\nROUTES WITH NO CALLER IN frontend/src (${total} across ${unusedPerModule.length} modules)`);
+  console.log("Candidates, not dead code — a URL built from a variable is invisible here.\n");
+  for (const u of unusedPerModule.sort((a, b) => b.lines.length - a.lines.length)) {
+    console.log(`${u.m} (${u.lines.length})`);
+    for (const l of u.lines) console.log(`  ${l}`);
+  }
+  console.log("");
 }
 
 const dirty = rows.filter((r) => r.noRoute + r.wrongOrigin > 0);

@@ -11,7 +11,11 @@
  * - Three outcomes are kept apart, because collapsing them mislabels all three.
  *   A module with calls gets a row. A module whose routes were found but which
  *   nothing calls is listed under "no frontend callers" — DO NOT read that as
- *   dead code without checking. It was wrong for tiktok on first use: the
+ *   dead code without checking. Both entries that list has held so far turned
+ *   out not to be dead: tiktok's calls were invisible to the collector, and
+ *   `puzzles` is an ops surface (read the ChessPuzzle table, plus a seed
+ *   endpoint gated on PUZZLE_SEED_KEY that fails closed when the env is unset)
+ *   which a browser has no business calling. It was wrong for tiktok on first use: the
  *   /tiktok-publisher page calls every one of those routes through
  *   `const API = "/api-backend/api/tiktok"` plus `${API}/config`, and the
  *   collector does not see a call assembled that way. `/api-backend/api/...`

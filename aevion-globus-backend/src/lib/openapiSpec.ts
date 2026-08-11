@@ -785,6 +785,33 @@ export const openapiSpec = {
         },
       },
     },
+    "/api/bureau/waitlist": {
+      post: {
+        summary: "Join the Notarized-tier waitlist (no auth)",
+        description:
+          "Public on purpose — the people who want Notarized mostly do not have an account yet. Re-submitting the same address is a no-op, so a second click still answers 201.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email"],
+                properties: {
+                  email: { type: "string", format: "email" },
+                  source: { type: "string", maxLength: 60, default: "bureau-notarized" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "{ ok: true, total: number }" },
+          "400": { description: "valid email required" },
+        },
+      },
+    },
     // Was documented at /cert/{certId}/public, which no route ever served. The
     // public no-auth view it describes is the embed endpoint, and its body is a
     // sanitized slice rather than the full BureauCert schema.

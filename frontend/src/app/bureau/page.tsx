@@ -123,14 +123,34 @@ export default function BureauPage() {
   const [waitlistBusy, setWaitlistBusy] = useState(false);
   const submitWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!waitlistEmail.trim() || waitlistDone) return;
+    const email = waitlistEmail.trim();
+    if (!email || waitlistDone) return;
     setWaitlistBusy(true);
-    // Store locally — no backend endpoint yet; will wire up when Notarized goes live.
-    try { localStorage.setItem(WAITLIST_KEY, waitlistEmail.trim()); } catch {}
-    await new Promise((r) => setTimeout(r, 600));
-    setWaitlistDone(true);
-    setWaitlistBusy(false);
-    showToast("You're on the waitlist!", "success");
+    // This used to write the address to localStorage, wait 600ms and say
+    // "You're on the waitlist!" — the only copy lived in the visitor's own
+    // browser and no list existed. It posts to the backend now, and a failure
+    // says so instead of congratulating the person.
+    try {
+      const r = await fetch(apiUrl("/api/bureau/waitlist"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, source: "bureau-notarized" }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        showToast(j?.error || `Could not join the waitlist (${r.status})`, "error");
+        return;
+      }
+      // Local flag only remembers the form state for this browser; the record
+      // itself now lives on the server.
+      try { localStorage.setItem(WAITLIST_KEY, email); } catch {}
+      setWaitlistDone(true);
+      showToast("You're on the waitlist!", "success");
+    } catch {
+      showToast("Network error — the waitlist did not receive your address", "error");
+    } finally {
+      setWaitlistBusy(false);
+    }
   };
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [claimingEdgeId, setClaimingEdgeId] = useState<string | null>(null);

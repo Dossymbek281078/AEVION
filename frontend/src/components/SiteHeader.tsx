@@ -50,6 +50,7 @@ export function SiteHeader() {
             Shop
           </Link>
           {[
+            { href: "/search", label: "Search" },
             { href: "/auth", label: "Auth" },
             { href: "/qright", label: "QRight" },
             { href: "/qsign", label: "QSign" },

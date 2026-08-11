@@ -68,7 +68,8 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           for m in build payments metrics veilnetx healthai cyberchess qjobs \
-                   qsocial pipeline awards aev qgood qmaskcard ztide qchaingov; do
+                   qsocial pipeline awards aev qgood qmaskcard ztide qchaingov \
+                   search; do
             node scripts/build-contract-check.mjs --module=$m || exit 1
           done
       - run: npm run build

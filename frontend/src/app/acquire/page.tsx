@@ -123,7 +123,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Доказательство, что инфраструктура держит массовых пользователей, а не только слайды.",
     modules: ["CyberChess (AEVION CPI)", "HealthAI v3", "Multichat", "KidsAI", "Smeta Trainer", "MapReality", "LifeBox", "StartupX"],
-    proof: "Stockfish 18 в браузере · 10 818 пазлов · HealthAI 19 commits · Multichat 12 фич",
+    proof: "Stockfish 18 в браузере · 500 000 пазлов (10 818 офлайн) · HealthAI 19 commits · Multichat 12 фич",
     tamAnchor: "Proof of execution (не TAM-якорь)",
     accent: "#fbbf24",
   },

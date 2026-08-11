@@ -1,10 +1,10 @@
 # fix(pricing): every published number now matches the code behind it
 
 Branch is level with `main` (merged 2026-08-10, two OG-image conflicts resolved).
-**569 frontend tests across 55 files and 1424 backend tests pass**; `tsc --noEmit` is clean
-on both. Every guard added here was verified to go **red on a reverted value** before
-landing. The production build's type phase is the one check that only a full `next build`
-can give — see Known limits.
+**`npm run build` passes end to end** (BUILD_ID written, full route table emitted),
+**569 frontend tests across 55 files and 1424 backend tests pass**, `tsc --noEmit` is clean
+on both, and the i18n parity and projects↔pricing gates pass. Every guard added here was
+verified to go **red on a reverted value** before landing.
 
 ℹ️ **On the backend suite's occasional redness — measured, and it is contention, not a
 bug.** `tests/devhub-integrations.test.ts` loses a different set of its 238 tests under

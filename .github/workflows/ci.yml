@@ -59,16 +59,17 @@ jobs:
       # used to fail into an empty catch and render a blank page, which is why
       # they went unnoticed for months.
       #
-      # All 49 modules measured at zero findings by
-      # `node scripts/api-contract-sweep.mjs` on 2026-08-11. Seven are absent
-      # because they still have findings — qpaynet (24), qcoreai (6), multichat,
-      # qright, auth, pricing, qsign — and a red job nobody
+      # All 50 modules measured at zero findings by
+      # `node scripts/api-contract-sweep.mjs` on 2026-08-11. Nine are absent
+      # because they still have findings — qpaynet (24), aevion (8), qcoreai (6),
+      # multichat, qright, auth, pricing, planet, qsign — and a red job nobody
       # owns teaches people to ignore red jobs. Add a name the day its module
       # reaches zero; drop one the same way if the checker ever misreads it.
       - name: API contract (frontend ↔ backend routes)
         working-directory: ${{ github.workspace }}
         run: |
-          for m in aev awards build bureau coach cyberchess deepsan devhub \
+          for m in aev awards build bureau coach constitution cyberchess \
+                   deepsan devhub \
                    ecosystem healthai i18n lifebox longevity metrics modules \
                    payments pipeline qai qchaingov qcontract qevents qfusionai \
                    qgood \

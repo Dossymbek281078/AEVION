@@ -36,27 +36,21 @@ frontend-tests-and-build:
     # сборка проходила, на раннере — нет: ещё один случай, когда «у меня
     # работает» ничего не доказывает про чужую машину.
     NODE_OPTIONS: "--max-old-space-size=6144"
-  # ВЫНУЖДЕННО npm install, а не npm ci — обход настоящего дефекта, который
-  # первый же прогон CI и вскрыл:
+  # npm ci — строгая установка из локфайла, гарантия воспроизводимости.
   #
-  #   npm error `npm ci` can only install packages when your package.json and
-  #   package-lock.json are in sync.
-  #   Missing: @emnapi/runtime, @emnapi/core, @emnapi/wasi-threads, @swc/helpers
+  # До 11.08.2026 здесь стоял install, потому что `npm ci` падал на Linux:
+  # локфайл собирался на Windows и не содержал @emnapi/runtime,
+  # @emnapi/core, @emnapi/wasi-threads и нужной версии @swc/helpers. Увидеть
+  # это локально было нельзя по построению — на Windows эти пакеты не нужны,
+  # и npm отвечает «up to date».
   #
-  # Локфайл не покрывает Linux. На Windows `npm ci` проходит — там этих
-  # пакетов не требуется, и npm отвечает «up to date», то есть увидеть поломку
-  # локально нельзя по построению.
-  #
-  # ПОПЫТКА ПОЧИНИТЬ С WINDOWS НЕ УДАЛАСЬ, и это замеренный факт, а не
-  # предположение: `npm install --package-lock-only` дописал @emnapi/core и
-  # вложенный wasi-threads (+23 строки), после чего Linux всё равно отбил
-  # установку. Значит локфайл надо пересобирать НА Linux и забирать
-  # результат — иначе гарантия воспроизводимости не возвращается.
-  #
-  # До тех пор CI ставит install и честно пишет причину здесь.
+  # Замкнутый круг разорван так: Linux сам пересобрал локфайл в CI и отдал его
+  # артефактом. Результат строго ДОБАВЛЯЕТ 4 пакета и не убирает ни одного,
+  # поэтому Windows ничего не теряет — проверено обеими установками:
+  # `npm ci` на Windows 714 пакетов за 3 мин, тесты 439/439.
   script:
     - cd frontend
-    - npm install --no-audit --no-fund
+    - npm ci --no-audit --no-fund
     - npx vitest run
     # Сборка обязательна, одних тестов НЕ ХВАТАЕТ. Проверено 10.08.2026:
     # 438 тестов были зелёными дважды подряд при странице /pitch, которая
@@ -74,36 +68,4 @@ frontend-tests-and-build:
   # Тридцати минут хватает с запасом; ограничение нужно, чтобы зависший прогон
   # не съедал минуты молча.
   timeout: 30 minutes
-  interruptible: true
-
-# Временная задача: показать, чего локфайлу не хватает ДЛЯ LINUX.
-#
-# Проблему видно только на Linux, а чинить её надо на Windows, где её не
-# видно — замкнутый круг. Разрывается так: Linux сам пересобирает локфайл и
-# ПЕЧАТАЕТ разницу в журнал. Скачивать артефакт не нужно, правку переношу
-# руками по этому выводу.
-#
-# Задача не валит пайплайн (allow_failure) — она диагностическая, а не
-# контрольная. Убрать, когда локфайл починен.
-lockfile-linux-diff:
-  stage: test
-  image: node:22
-  allow_failure: true
-  script:
-    - cd frontend
-    - npm install --package-lock-only --no-audit --no-fund
-    - echo "=== СТРОК ИЗМЕНИЛОСЬ ==="
-    - git diff --stat package-lock.json
-    - echo "=== ЧТО ДОБАВИЛ LINUX (имена пакетов) ==="
-    - git diff -U0 package-lock.json | grep -E '^\+ +"node_modules/' | sed 's/[":]//g' | sort -u
-    - echo "=== ПОЛНАЯ РАЗНИЦА ==="
-    - git diff package-lock.json
-  # Отдаём готовый файл артефактом. Переносить 113 вставок руками из журнала —
-  # способ внести ошибку, а не починить: локфайл читают машины, а не люди.
-  artifacts:
-    name: "package-lock-linux"
-    paths:
-      - frontend/package-lock.json
-    expire_in: 7 days
-  timeout: 10 minutes
   interruptible: true

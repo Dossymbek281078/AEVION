@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { bankPuzzleToLocal } from "../daily/dailyPuzzleSource";
+import { stripComments } from "./_stripComments";
 
 /* Задача дня существовала в трёх экземплярах, и они расходились молча.
  *
@@ -23,9 +24,6 @@ const BACKEND_DAILY = "../aevion-globus-backend/src/routes/cyberchessDaily.ts";
 /* Комментарии вырезаем перед поиском: этот файл нарочно описывает прежние дефекты
    своими же словами, и без вырезания сторож ловил бы собственный рассказ о них.
    Проверено мутацией — см. тесты ниже, каждый падает на возвращённом коде. */
-const stripComments = (s: string) =>
-  s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-
 const pageSrc = () => stripComments(readFileSync(PAGE, "utf8"));
 const sourceSrc = () => stripComments(readFileSync(SOURCE_MODULE, "utf8"));
 const backendSrc = () => stripComments(readFileSync(BACKEND_DAILY, "utf8"));

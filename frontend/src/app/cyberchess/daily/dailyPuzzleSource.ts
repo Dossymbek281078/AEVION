@@ -54,7 +54,12 @@ export function playerIdentity(): { userId: string; name: string } {
   try {
     return {
       userId: window.localStorage.getItem('cyberchess.userId') || '',
-      name: window.localStorage.getItem('cc_display_name') || '',
+      /* Ключ имени — `cyberchess.displayName`: его пишет матчмейкинг, когда игрок
+         вводит имя перед входом в очередь, и читают ещё три места. Здесь стоял
+         `cc_display_name` — близнец, которого не пишет НИКТО во всём фронтенде,
+         поэтому имя всегда было пустым, и в таблице лидеров все выглядели как
+         `Player_ab12cd`. Таблицу я чинил накануне — и подписал её машинными id. */
+      name: window.localStorage.getItem('cyberchess.displayName') || '',
     };
   } catch {
     return { userId: '', name: '' };

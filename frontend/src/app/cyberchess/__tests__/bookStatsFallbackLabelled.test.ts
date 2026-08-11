@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./_stripComments";
 
 /* Синтезированная статистика дебютов подписана синтезированной.
  *
@@ -19,9 +20,6 @@ const SITES = [
   join(__dirname, "..", "repertoire", "page.tsx"),
   join(__dirname, "..", "OpeningRepertoire.tsx"),
 ];
-
-const stripComments = (s: string) =>
-  s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 describe("подстановка статистики дебютов подписана", () => {
   it("признак живёт в самих данных, а не в «пришёл ли ответ»", () => {

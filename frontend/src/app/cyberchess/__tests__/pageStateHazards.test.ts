@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./_stripComments";
 
 /* Два способа сломать страницу одним именем — оба случились в одном коммите 28.07.2026
  * и жили в ветке до 10.08, пока я не запустил `tsc`.
@@ -23,9 +24,6 @@ import { join } from "node:path";
 
 const PAGE = join(__dirname, "..", "page.tsx");
 const raw = readFileSync(PAGE, "utf8");
-
-const stripComments = (s: string) =>
-  s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 const src = stripComments(raw);
 const lineOf = (index: number) => src.slice(0, index).split("\n").length;

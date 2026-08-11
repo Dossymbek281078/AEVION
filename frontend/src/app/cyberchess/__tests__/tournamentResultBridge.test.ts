@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { stripComments } from "./_stripComments";
 
 /* Турнирная сетка не могла закрыться.
  *
@@ -18,9 +19,6 @@ import { readFileSync } from "node:fs";
 
 const MM = "../aevion-globus-backend/src/routes/cyberchessMatchmaking.ts";
 const TOUR = "../aevion-globus-backend/src/routes/cyberchessTournaments.ts";
-
-const stripComments = (s: string) =>
-  s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 const read = (p: string) => stripComments(readFileSync(p, "utf8"));
 

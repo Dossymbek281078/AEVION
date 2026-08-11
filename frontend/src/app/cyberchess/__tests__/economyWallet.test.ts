@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canSpend, spend } from "../chessyLedger";
+import { stripComments } from "./_stripComments";
 
 /* Раздел «Экономика» держал СВОЙ ключ баланса. Во всём фронтенде он встречался ровно
  * один раз — в собственном объявлении, — то есть его не писал никто. Баланс всегда
@@ -12,9 +13,6 @@ import { canSpend, spend } from "../chessyLedger";
 
 /* Комментарии вырезаем: в самом файле старый ключ нарочно назван в пояснении, почему
    его больше нет. Без вырезания сторож ловил бы собственный рассказ о дефекте. */
-const stripComments = (x: string) =>
-  x.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*/g, "");
-
 const ecoRaw = readFileSync(join(__dirname, "..", "economy", "page.tsx"), "utf8");
 const eco = stripComments(ecoRaw);
 const game = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");

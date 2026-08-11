@@ -127,7 +127,8 @@ function genLocalUserId(tournamentId: string): string {
 
 function getDisplayName(): string {
   if (typeof window === "undefined") return "";
-  return window.localStorage.getItem("cc_display_name") || "";
+  // Тот же ключ, что пишет матчмейкинг и читают остальные страницы турниров.
+  return window.localStorage.getItem("cyberchess.displayName") || "";
 }
 
 export default function TournamentDetailPage({

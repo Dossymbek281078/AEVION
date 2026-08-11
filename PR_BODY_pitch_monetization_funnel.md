@@ -6,13 +6,13 @@ Branch is level with `main` (merged 2026-08-10, two OG-image conflicts resolved)
 on both, and the i18n parity and projects↔pricing gates pass. Every guard added here was
 verified to go **red on a reverted value** before landing.
 
-ℹ️ **On the backend suite's occasional redness — measured, and it is contention, not a
-bug.** `tests/devhub-integrations.test.ts` loses a different set of its 238 tests under
-load. On a quiet machine the full suite runs **1424 passed / 8 skipped / 0 failed, three
-times in a row — and three more times with a candidate fix reverted**, so the fix was not
-what made it green. Under load, individual files take 19–37s against a 10s `testTimeout`
-and other files fail too (`qtradeInternalCredit`, `tier3OgRoutes`). If CI reddens here,
-look at runner contention first, not at logic.
+ℹ️ **On the backend suite's occasional redness — not this branch, and not yet solved.**
+`tests/devhub-integrations.test.ts` loses a different set of its 238 tests. It did not
+reproduce here at all: 1424 passed / 8 skipped / 0 failed, three runs in a row, and three
+more with a candidate fix reverted — which measures nothing about the fix, only that my
+machine was quiet. A parallel session reproduces it in **3 runs out of 5** even after
+`testTimeout` went 10s → 30s, with assertion errors in both directions, which points at a
+shared mock queue rather than contention. Real, open, and owned by DevHub.
 
 ## Why
 

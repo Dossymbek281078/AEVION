@@ -5625,12 +5625,23 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             <span style={{ fontSize: 10, color: "#94a3b8" }}>10–300</span>
                           </div>
                         )}
-                        {/* Step result indicator */}
-                        {agentResults[i] && (
-                          <div style={{ marginTop: 6, fontSize: 11, color: agentResults[i].ok ? "#065f46" : "#991b1b", fontWeight: 600 }}>
-                            {agentResults[i].ok ? "✓" : "✗"} {agentResults[i].ok ? (agentResults[i].savedAs || "ok") : agentResults[i].error}
-                          </div>
-                        )}
+                        {/* Step result indicator.
+                            Looked up by the step number the result carries, not
+                            by its position in the array. Results arrive as they
+                            complete and the stream reader deliberately tolerates
+                            an unparseable event — so one swallowed event shifted
+                            every later result up a row, and each step then
+                            displayed its neighbour's verdict. A failure shown
+                            under the wrong step is worse than no verdict. */}
+                        {(() => {
+                          const res = agentResults.find((r) => r.step === i);
+                          if (!res) return null;
+                          return (
+                            <div style={{ marginTop: 6, fontSize: 11, color: res.ok ? "#065f46" : "#991b1b", fontWeight: 600 }}>
+                              {res.ok ? "✓" : "✗"} {res.ok ? (res.savedAs || "ok") : res.error}
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>

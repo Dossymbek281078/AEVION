@@ -433,7 +433,10 @@ for (const file of walk(SRC)) {
       // Whitespace is deliberately NOT a cut point: it is what marks prose, and
       // the sentence check below relies on it surviving.
       .split(/["'`)}<>]/)[0]
-      .replace(/[.,;:]+$/, (t) => (/\.(xml|pdf|csv|js|json)$/.test(raw) ? t : ""));
+      .replace(/[.,;:]+$/, (t) => (/\.(xml|pdf|csv|js|json)$/.test(raw) ? t : ""))
+      // An ellipsis only ever ends a sentence: "Connecting to /api/aevion/health…"
+      // is a status message, and reported /health… as a route nobody serves.
+      .replace(/[…]+$/, "");
     if (/[\s<>]/.test(p)) continue;
     // `{id}` and `{music,film}` are OpenAPI-style notation in prose and pitch
     // data, not URLs — a real path has no braces left once `${...}` is stripped.

@@ -567,6 +567,14 @@ for (const c of calls) {
 const misaddressed = calls.filter((c) => c.wrongOrigin && !c.next);
 const strays = calls.filter((c) => c.strayFetch);
 
+// Machine-readable route dump, for tools that need the discovered routes rather
+// than the verdict — openapi-drift-check.mjs compares them against the spec.
+// Printed before the verdict and nothing else, so the caller can read it whole.
+if (process.argv.includes("--list-routes")) {
+  for (const b of backend) console.log(`ROUTE ${b.method} ${b.pattern}`);
+  process.exit(0);
+}
+
 // The verdict goes FIRST. It used to be the second line, with a blank line in
 // its place whenever there were findings — so `head -2` looked calm on a failing
 // run, and exactly that hid a regression of mine for a commit.

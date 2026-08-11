@@ -741,57 +741,81 @@ export const openapiSpec = {
         },
       },
     },
-    "/api/bureau/cert/{certId}/verify/start": {
+    // Documented for months at /cert/{certId}/verify/start with a required body,
+    // a 200, and a payment-intent response. Every one of those was wrong: the
+    // route is prefix-level, both fields are optional, it answers 201, and it
+    // creates no payment intent — that is POST /api/bureau/payment/intent.
+    // Rewritten against the handler in routes/bureau.ts.
+    "/api/bureau/verify/start": {
       post: {
-        summary: "Begin Verified-tier upgrade (KYC + payment intent)",
+        summary: "Begin Verified-tier upgrade (opens a KYC session)",
         description:
-          "Creates a KYC session via the configured provider (BUREAU_KYC_PROVIDER) and a payment intent (BUREAU_PAYMENT_PROVIDER). Cert flips to 'verified' once both come back successful.",
-        parameters: [{ in: "path", name: "certId", required: true, schema: { type: "string" } }],
+          "Creates a BureauVerification row and a KYC session via the configured provider (BUREAU_KYC_PROVIDER), and returns the hosted widget URL the user must visit. Payment is a separate call — POST /api/bureau/payment/intent. Note: a bearer is optional; without one the verification row is created with a null userId.",
         requestBody: {
-          required: true,
+          required: false,
           content: {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["declaredName", "declaredCountry"],
                 properties: {
-                  declaredName: { type: "string", maxLength: 200 },
+                  declaredName: { type: "string" },
                   declaredCountry: { type: "string", description: "ISO-3166-1 alpha-2", example: "KZ" },
-                  email: { type: "string", format: "email" },
                 },
               },
             },
           },
         },
         responses: {
-          "200": {
-            description: "KYC + payment session created",
+          "201": {
+            description: "KYC session created",
             content: {
               "application/json": {
                 example: {
+                  verificationId: "bvf-3f8a1c2d4e5b6a70",
+                  kycProvider: "stub",
                   kycSessionId: "kyc-stub-1714000000-abc",
-                  kycRedirectUrl: "/bureau/upgrade/kyc-stub-1714000000-abc",
-                  paymentIntentId: "pay-stub-1714000000-xyz",
-                  paymentAmountCents: 1900,
-                  paymentCurrency: "USD",
+                  redirectUrl: "/bureau/upgrade/kyc-stub-1714000000-abc",
+                  expiresAt: "2026-08-11T12:00:00.000Z",
+                  status: "pending",
                 },
               },
             },
           },
-          "404": { description: "Cert not found / not owned" },
-          "409": { description: "Cert already verified" },
-          "401": { description: "missing/invalid bearer" },
+          "500": { description: "verify/start failed" },
         },
       },
     },
-    "/api/bureau/cert/{certId}/public": {
+    // Was documented at /cert/{certId}/public, which no route ever served. The
+    // public no-auth view it describes is the embed endpoint, and its body is a
+    // sanitized slice rather than the full BureauCert schema.
+    "/api/bureau/cert/{certId}/embed": {
       get: {
-        summary: "Public verification view of a Bureau cert (no auth)",
+        summary: "Public verification view of a Bureau cert (no auth, CORS *)",
+        description:
+          "Sanitized JSON for third-party pages. Weak ETag + Cache-Control: public,max-age=120; a matching If-None-Match returns 304. Per-IP rate limited. A missing cert answers 404 with { id, status: 'not_found' } rather than an error envelope.",
         security: [],
         parameters: [{ in: "path", name: "certId", required: true, schema: { type: "string" } }],
         responses: {
-          "200": { description: "Public-safe Bureau cert slice", content: { "application/json": { schema: { $ref: "#/components/schemas/BureauCert" } } } },
-          "404": { description: "Not found / revoked" },
+          "200": {
+            description: "Public-safe Bureau cert slice",
+            content: {
+              "application/json": {
+                example: {
+                  id: "ipc-1714000000-abc",
+                  title: "Song draft",
+                  kind: "music",
+                  verificationLevel: "verified",
+                  verifiedName: "A. Dossymbek",
+                  verifiedAt: "2026-07-01T09:00:00.000Z",
+                  protectedAt: "2026-06-28T18:30:00.000Z",
+                  status: "active",
+                  verifyUrl: "/bureau/upgrade/ipc-1714000000-abc",
+                },
+              },
+            },
+          },
+          "304": { description: "If-None-Match matched" },
+          "404": { description: "{ id, status: 'not_found' }" },
         },
       },
     },

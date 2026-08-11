@@ -9,7 +9,7 @@ import { apiUrl } from "@/lib/apiBase";
 
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
-  const t = getAuthToken() || localStorage.getItem("aevion_auth_token_v1");
+  const t = getAuthToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 

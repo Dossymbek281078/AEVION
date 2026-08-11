@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+// Счётчики берутся из корпуса, а не вписываются руками: вписанное число не
+// устаревает заметно — оно просто тихо расходится с данными (было «499» при
+// 500 расценках).
+import { rates } from "./lib/corpus";
 import { LevelHome } from "./components/LevelHome";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -18,7 +22,7 @@ export default function SmetaTrainerPage() {
         </div>
         <div className="flex items-center gap-3">
           <div className="text-[10px] text-slate-400 hidden sm:block">
-            НДЦС РК 8.01-08-2022 · 499 расценок ЭСН · 5 уровней · 15 экзаменов · Школа №47, Алматы
+            НДЦС РК 8.01-08-2022 · {rates.length} расценок ЭСН · 5 уровней · 15 экзаменов · Школа №47, Алматы
           </div>
           <Link
             href="/smeta-trainer/guide"

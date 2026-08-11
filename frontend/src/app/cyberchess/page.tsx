@@ -2669,6 +2669,18 @@ export default function CyberChessPage(){
   // никогда не встают на паузу. Против КОМПЬЮТЕРА — можно свободно уйти в анализ/коуч/
   // стрим и вернуться в любой момент; пока игрок не на вкладке «play», часы ЗАМИРАЮТ.
   const isHumanGame=p2pMode||hotseat;
+  /* ОДНА точка, где решается «можно ли уйти с этой вкладки».
+     Мера — античит: в живой партии с человеком анализ и коуч показывают оценку движка,
+     то есть подсказку против соперника. Раньше проверка стояла У ВЫЗЫВАЮЩЕГО, и поэтому
+     держалась ровно там, где её написали: десктопный таб-бар закрывал вкладки, нижняя
+     навигация про замок не знала вовсе (телефон), а палитра команд (Ctrl+K) уводила в
+     анализ мимо обеих. Три поверхности навигации — три разных ответа на один вопрос.
+     Теперь ответ один, и новая поверхность получит его бесплатно. */
+  const navLockedNow=on&&!over&&isHumanGame;
+  const requestTab=useCallback((k:"play"|"puzzles"|"analysis"|"coach")=>{
+    if(k!=="play"&&navLockedNow){ showToast("🔒 Нельзя во время партии с человеком","info"); return false; }
+    sTab(k); return true;
+  },[navLockedNow,showToast]);
   const clockActive=tab==="play"||isHumanGame;
   // sOn(false) matters here — every other game-ending call site (checkmate,
   // resignation, variant win conditions) pairs sOver(...) with it, but these
@@ -5951,13 +5963,14 @@ export default function CyberChessPage(){
             указатель). На мобиле скрыт — там нижний BottomNav. В ЖИВОЙ партии с человеком
             не-play вкладки заблокированы (замок): уход к движку = подсказка против соперника. */}
         {!streamerMode&&vwPx>=769&&(()=>{
-          const navLocked=on&&!over&&isHumanGame;
+          const navLocked=navLockedNow; // то же значение, что у остальных поверхностей
           const TABS:{k:"play"|"puzzles"|"analysis"|"coach";label:string;icon:string;hue:string}[]=
             (["play","puzzles","analysis","coach"] as const).map(k=>({k,label:TAB_META[k].label,icon:TAB_META[k].icon,hue:TAB_META[k].hue}));
           const goTab=(k:"play"|"puzzles"|"analysis"|"coach")=>{
             if(k==="play"){ sTab("play"); if(!on&&!over)sSetup(true); return; }
-            if(navLocked){ showToast("🔒 Нельзя во время партии с человеком","info"); return; }
-            sSetup(false); sTab(k);
+            // Решение о замке — в requestTab, одно на все поверхности навигации.
+            if(!requestTab(k)) return;
+            sSetup(false);
             if(k==="puzzles"&&PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length));
           };
           return <div style={{display:"inline-flex",alignItems:"center",gap:3,padding:3,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`,boxShadow:SHADOW.sm,flex:"0 0 auto"}}>
@@ -5986,7 +5999,7 @@ export default function CyberChessPage(){
 
         {/* Почему вкладки заблокированы — inline рядом с табами (а не только tooltip/toast).
             В живой партии с человеком уход к движку/пазлам = подсказка против соперника. */}
-        {!streamerMode&&vwPx>=769&&on&&!over&&isHumanGame&&
+        {!streamerMode&&vwPx>=769&&navLockedNow&&
           <span role="note" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:RADIUS.full,background:"#fff7ed",border:"1px solid #fed7aa",color:"#9a3412",fontSize:11.5,fontWeight:800,whiteSpace:"nowrap",flexShrink:0}}>
             <span aria-hidden>🔒</span><span>Вкладки закрыты в партии с человеком — античит</span>
           </span>}
@@ -14793,10 +14806,8 @@ ${question.trim()}`;
         шапке, а нижняя плашка перекрывала низ доски. Гейт по vwPx (надёжнее CSS-media). */}
     {!streamerMode&&vwPx<769&&<BottomNav
       setup={setup} tab={tab}
-      /* Тот же признак, что считает десктопный таб-бар (`on&&!over&&isHumanGame`).
-         Одно выражение на оба места, чтобы мера не действовала на одном экране и
-         не действовала на другом. */
-      navLocked={on&&!over&&isHumanGame}
+      // Тот же признак, что у всех остальных поверхностей — одно выражение на весь модуль.
+      navLocked={navLockedNow}
       onLockedTap={()=>showToast("🔒 Нельзя во время партии с человеком","info")}
       onPlay={()=>sShowQuickSetupModal(true)}
       onPuzzles={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}}
@@ -15386,10 +15397,10 @@ ${question.trim()}`;
         {id:"play-tournament",icon:"🏆",group:"Play",label:"Турнир",                hint:"Свисс / Round-Robin",                       run:()=>sShowTournament(true)},
 
         // ── PUZZLES ──
-        {id:"pz-random",    icon:"◆", group:"Puzzles", label:"Случайная задача",  hint:`Из ${PUZZLES.length.toLocaleString()} тактических`, run:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-        {id:"pz-rush",      icon:"⚡",group:"Puzzles", label:"Puzzle Rush",        hint:"Решай как можно больше за время",           run:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-        {id:"pz-3min",      icon:"⏱", group:"Puzzles", label:"3-минутный режим",  hint:"Реши как можно больше за 3 мин · +3с за каждый верный ответ", run:()=>{sTab("puzzles");sPzMode("timed3");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-        {id:"pz-5min",      icon:"⏱", group:"Puzzles", label:"5-минутный режим",  hint:"300 секунд на одну задачу",                 run:()=>{sTab("puzzles");sPzMode("timed5");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-random",    icon:"◆", group:"Puzzles", label:"Случайная задача",  hint:`Из ${PUZZLES.length.toLocaleString()} тактических`, run:()=>{requestTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-rush",      icon:"⚡",group:"Puzzles", label:"Puzzle Rush",        hint:"Решай как можно больше за время",           run:()=>{requestTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-3min",      icon:"⏱", group:"Puzzles", label:"3-минутный режим",  hint:"Реши как можно больше за 3 мин · +3с за каждый верный ответ", run:()=>{requestTab("puzzles");sPzMode("timed3");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-5min",      icon:"⏱", group:"Puzzles", label:"5-минутный режим",  hint:"300 секунд на одну задачу",                 run:()=>{requestTab("puzzles");sPzMode("timed5");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-lichess",   icon:"🌐",group:"Puzzles", label:"Lichess Daily Puzzle",hint:"Задача дня с lichess.org (live)",          run:async()=>{
           if(lichessLoading)return;sLichessLoading(true);showToast("⏳ Загружаю Lichess Daily…","info");
           try{
@@ -15405,21 +15416,21 @@ ${question.trim()}`;
             const mv=probe.move({from:first.slice(0,2),to:first.slice(2,4),promotion:first.slice(4)||undefined});
             if(!mv)throw new Error("solution invalid");
             const fakePz:Puzzle={name:`Lichess Daily · ${j?.puzzle?.id||"?"}`,r:Number(j?.puzzle?.rating)||1500,theme:(j?.puzzle?.themes?.[0]||"tactics") as any,phase:"Middlegame",side:ch.turn() as "w"|"b",goal:"Best move",mateIn:0,fen:ch.fen(),sol:[first]};
-            sTab("puzzles");setGame(new Chess(fakePz.fen));sBk(k=>k+1);sPzCurrent(fakePz);sPzAttempt("idle");sLm(null);sSel(null);sVm(new Set());sHist([]);sFenHist([fakePz.fen]);sPCol(fakePz.side as any);sFlip(fakePz.side==="b");sOn(true);
+            requestTab("puzzles");setGame(new Chess(fakePz.fen));sBk(k=>k+1);sPzCurrent(fakePz);sPzAttempt("idle");sLm(null);sSel(null);sVm(new Set());sHist([]);sFenHist([fakePz.fen]);sPCol(fakePz.side as any);sFlip(fakePz.side==="b");sOn(true);
             showToast(`🌐 Lichess Daily · rating ${fakePz.r}`,"success");
           }catch(e:any){showToast(`Lichess недоступен: ${e?.message||"network"}`,"error")}finally{sLichessLoading(false)}
         }},
 
         // ── COACH / TRAINING ──
-        {id:"coach",        icon:"🎓",group:"Coach",   label:"Открыть Coach",      hint:"AI-наставник + база знаний 90+ тем",         run:()=>sTab("coach")},
-        {id:"coach-knowledge",icon:"📚",group:"Coach", label:"Coach Knowledge",   hint:"9 категорий · дебюты / тактика / эндшпиль / время / память / roadmap",  run:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
-        {id:"coach-lessons",  icon:"📖",group:"Coach", label:"Coach Lessons (Курс)", hint:"14 уроков beginner→advanced с теорией+позициями+упражнениями", run:()=>{sTab("coach");setTimeout(()=>sShowLessons(true),50)}},
+        {id:"coach",        icon:"🎓",group:"Coach",   label:"Открыть Coach",      hint:"AI-наставник + база знаний 90+ тем",         run:()=>requestTab("coach")},
+        {id:"coach-knowledge",icon:"📚",group:"Coach", label:"Coach Knowledge",   hint:"9 категорий · дебюты / тактика / эндшпиль / время / память / roadmap",  run:()=>{requestTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
+        {id:"coach-lessons",  icon:"📖",group:"Coach", label:"Coach Lessons (Курс)", hint:"14 уроков beginner→advanced с теорией+позициями+упражнениями", run:()=>{requestTab("coach");setTimeout(()=>sShowLessons(true),50)}},
         {id:"coord-trainer",icon:"🎯",group:"Coach",   label:"Координаты",         hint:"Тренировка чтения доски (30 сек)",          run:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},
         {id:"opening",      icon:"📖",group:"Coach",   label:"Opening Trainer",   hint:"Дрилл дебютов до автоматизма",              run:()=>sShowOpeningTrainer(true)},
         {id:"editor",       icon:"♟",group:"Coach",   label:"Position Editor",   hint:"FEN · ручная расстановка",                  run:()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}},
 
         // ── ANALYSIS ──
-        {id:"analysis",     icon:"▲", group:"Analysis", label:"Открыть Анализ",   hint:"Eval bar + Opening Explorer",               run:()=>{sTab("analysis");sShowAnal(true)}},
+        {id:"analysis",     icon:"▲", group:"Analysis", label:"Открыть Анализ",   hint:"Eval bar + Opening Explorer",               run:()=>{requestTab("analysis");sShowAnal(true)}},
         {id:"masters",      icon:"★", group:"Analysis", label:"Партии классиков",hint:"Capablanca / Tal / Carlsen · режим «угадай»",run:()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}},
         {id:"game-dna",     icon:"🧬",group:"Analysis", label:"Game DNA",         hint:"Стиль игры из последних партий",            run:()=>sShowGameDna(true)},
         {id:"insights",     icon:"🔬",group:"Analysis", label:"Insights",         hint:"Слабости и сильные стороны",                run:()=>sShowInsights(true)},

@@ -3949,7 +3949,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         disabled={applyingTemplate === t.id}
                         style={{ padding: "6px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 600, fontSize: 12, cursor: "pointer", flexShrink: 0 }}
                       >
-                        {applyingTemplate === t.id ? "Applying..." : "Apply"}
+                        {/* "Apply template", not "Apply": AutoTranslate seeds its
+                            instant map from en→ru pairs across the whole
+                            dictionary and matches by string, so the bare word
+                            inherited the sense some other module chose for it —
+                            build.teamRequestDetail.applyButton renders "Apply"
+                            as "Откликнуться", the word for answering a job ad.
+                            A Russian visitor was offered "Откликнуться" on a
+                            project template. */}
+                        {applyingTemplate === t.id ? "Applying..." : "Apply template"}
                       </button>
                     </div>
                   ))}

@@ -759,9 +759,48 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     setFiles(next);
   };
 
+  /**
+   * Show a message — one at a time, but never at the cost of an earlier one.
+   *
+   * There is a single toast slot, and this used to overwrite it: every call
+   * replaced whatever was on screen and reset the timer. Any warning followed
+   * closely by a success vanished before it could be read, which is how the IDE
+   * managed to say "Saved" while quietly swallowing "the file list could not be
+   * refreshed" — the exact "it says fine while something failed" shape this
+   * file spends its time removing. Found 11.08.2026 while trying to write a
+   * test for that warning and discovering nothing could ever see it.
+   *
+   * Messages now queue and are shown in order. The queue is capped: a burst of
+   * a dozen results should not hold the screen for a minute, and the ones worth
+   * keeping in that case are the failures.
+   */
+  const toastQueue = useRef<{ message: string; type: "success" | "error" | "info" | "warning" }[]>([]);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const drainToasts = useCallback(() => {
+    const next = toastQueue.current.shift();
+    if (!next) {
+      toastTimer.current = null;
+      setToast(null);
+      return;
+    }
+    setToast(next);
+    // Shorter when more are waiting, so a queue never feels stuck.
+    toastTimer.current = setTimeout(drainToasts, toastQueue.current.length > 0 ? 2200 : 4000);
+  }, []);
+
   const showToast = (message: string, type: "success" | "error" | "info" | "warning" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    const queue = toastQueue.current;
+    // Saying the same thing twice in a row is noise, not information.
+    if (queue.length > 0 && queue[queue.length - 1].message === message) return;
+    if (queue.length >= 5) {
+      // Drop a success to make room; a failure never loses its place to one.
+      const victim = queue.findIndex((t) => t.type === "success" || t.type === "info");
+      if (victim === -1) return;
+      queue.splice(victim, 1);
+    }
+    queue.push({ message, type });
+    if (!toastTimer.current) drainToasts();
   };
 
   const fetchProject = useCallback(async () => {

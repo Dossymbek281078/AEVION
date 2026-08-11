@@ -28,7 +28,11 @@ const FILES = [{ id: "f1", path: "index.html", content: INDEX_HTML, language: "h
 
 type Put = { path: string; content: string };
 
-async function mockBackend(page: import("@playwright/test").Page, puts: Put[]) {
+async function mockBackend(
+  page: import("@playwright/test").Page,
+  puts: Put[],
+  failFileList = false,
+) {
   await page.route("**/api/devhub/**", async (route) => {
     const req = route.request();
     const url = req.url();
@@ -40,7 +44,12 @@ async function mockBackend(page: import("@playwright/test").Page, puts: Put[]) {
       puts.push({ path: new URL(url).searchParams.get("path") || "", content: String(body.content ?? "") });
       return json({ file: { id: "f1", path: "index.html", content: body.content, language: "html" } });
     }
-    if (url.includes(`/projects/${PROJECT_ID}/files`)) return json({ files: FILES });
+    if (url.includes(`/projects/${PROJECT_ID}/files`)) {
+      // A refresh that fails the way this backend fails: JSON with an error and
+      // no `files`. Used by the last test in this file.
+      if (failFileList) return json({ error: "nope" }, 500);
+      return json({ files: FILES });
+    }
     if (url.includes(`/projects/${PROJECT_ID}`)) {
       return json({
         project: {
@@ -117,5 +126,43 @@ test.describe("DevHub — Visual Edit writes the source, not the rendering", () 
     expect(saved.content).toContain("rebeccapurple");
     // And the editing scaffolding must never reach the file.
     expect(saved.content).not.toContain("data-vid");
+  });
+
+  test("a file list that fails to refresh leaves the tree alone instead of emptying it", async ({ page }) => {
+    // Saving a visual edit re-reads the file list afterwards. Twelve places in
+    // the IDE did that with `setFiles(listData.files || [])`, and this backend
+    // answers a failure with JSON carrying an error and no files — so the tree
+    // was handed an empty array and the project looked wiped by an operation
+    // that had merely failed to re-read it.
+    test.setTimeout(120_000);
+    const puts: Put[] = [];
+    await mockBackend(page, puts, true);
+
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    const treeEntry = page.getByText("index.html", { exact: false }).first();
+    await expect(treeEntry, "the project loaded with its file").toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole("tab", { name: /Visual Edit/ }).click({ timeout: 30_000 });
+    await expect(page.locator("iframe[sandbox]")).toBeVisible({ timeout: 20_000 });
+    const selected = await selectHeading(page);
+    expect(selected, "the overlay never answered").not.toBeNull();
+
+    const textField = page.locator('textarea, input[type="text"]').filter({ hasText: "" }).first();
+    await expect(textField).toBeVisible({ timeout: 10_000 });
+    await textField.fill("Edited heading");
+    await page.getByRole("button", { name: /^Save$/ }).click();
+
+    // Checked first and on purpose: this warning exists only on the guarded
+    // path, so it proves the refresh was reached and did fail. Three earlier
+    // attempts at this test failed right here — not because the guard was
+    // missing, but because a single-slot toast let the following "Saved"
+    // overwrite the warning before anything could see it. That is fixed; if
+    // this line ever fails again, suspect the same thing.
+    await expect(
+      page.getByText(/Не удалось обновить список файлов/),
+      "the refresh was never reached, so this test proves nothing",
+    ).toBeVisible({ timeout: 20_000 });
+
+    await expect(treeEntry, "the file tree was emptied by a failed refresh").toBeVisible();
   });
 });

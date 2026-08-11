@@ -53,16 +53,24 @@ jobs:
       - name: i18n parity (en/ru/kk)
         working-directory: ${{ github.workspace }}
         run: node scripts/i18n-kk-extract.mjs
-      # Sub-second, no install needed — reads the sources. Fails the job when a
-      # /api/build call has no route behind it, or when one is addressed
+      # Sub-second per module, no install needed — reads the sources. Fails the
+      # job when a call has no route behind it, or when one is addressed
       # relatively and so lands on the Next app instead of the backend. Both
       # used to fail into an empty catch and render a blank page, which is why
-      # they went unnoticed for months. Only `build` is gated: it is the module
-      # that has been swept clean. Add --module=<name> lines for the others as
-      # each reaches zero, otherwise this turns red on findings nobody owns yet.
+      # they went unnoticed for months.
+      #
+      # Listed here are the modules measured at zero findings on 2026-08-11.
+      # Modules that still have findings are deliberately absent: a red job
+      # nobody owns teaches people to ignore red jobs. Add a name here the day
+      # its module reaches zero — `node scripts/api-contract-sweep.mjs` shows
+      # where each stands.
       - name: API contract (frontend ↔ backend routes)
         working-directory: ${{ github.workspace }}
-        run: node scripts/build-contract-check.mjs
+        run: |
+          for m in build payments metrics veilnetx healthai cyberchess qjobs \
+                   qsocial pipeline awards aev qgood qmaskcard ztide qchaingov; do
+            node scripts/build-contract-check.mjs --module=$m || exit 1
+          done
       - run: npm run build
 
   payments-smoke:

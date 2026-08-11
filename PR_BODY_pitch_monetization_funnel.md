@@ -1,19 +1,18 @@
 # fix(pricing): every published number now matches the code behind it
 
-40 files, +1718/−136. Branch is level with `main` (merged 2026-08-10, two OG-image
-conflicts resolved). `tsc` clean on frontend and backend; **569 frontend tests across 55
-files pass**, as do the guards added here on the backend. Every guard was verified to go
-**red on a reverted value** before landing.
+Branch is level with `main` (merged 2026-08-10, two OG-image conflicts resolved).
+**569 frontend tests across 55 files and 1424 backend tests pass**; `tsc --noEmit` is clean
+on both — on the frontend *with generated route types present*, which is what the build's
+type phase actually checks. Every guard added here was verified to go **red on a reverted
+value** before landing.
 
-⚠️ **The backend suite is not reliably green, and not because of this branch.**
-`tests/devhub-integrations.test.ts` fails a *different set* of its 238 tests on each full
-run and passes completely in isolation. Diagnosed while verifying this branch:
-`src/routes/devhub.ts` starts work that outlives the request — two un-awaited
-`fetch(...).catch(() => {})` calls, four `setTimeout(async …)` blocks and an async IIFE.
-Each hits the **global** `fetch` after its test has ended, eating a response the next test
-queued. Raising timeouts will not help; these are assertion failures. The fix belongs to
-DevHub (make that background work awaitable or injectable). Flagged because CI runs the
-backend `npm test`, so it can redden unrelated PRs including this one.
+ℹ️ **On the backend suite's occasional redness — measured, and it is contention, not a
+bug.** `tests/devhub-integrations.test.ts` loses a different set of its 238 tests under
+load. On a quiet machine the full suite runs **1424 passed / 8 skipped / 0 failed, three
+times in a row — and three more times with a candidate fix reverted**, so the fix was not
+what made it green. Under load, individual files take 19–37s against a 10s `testTimeout`
+and other files fail too (`qtradeInternalCredit`, `tier3OgRoutes`). If CI reddens here,
+look at runner contention first, not at logic.
 
 ## Why
 
@@ -110,18 +109,29 @@ Constitution Free/Pro $9/Team $49 (`constitutionCheckout.ts`), module add-on chi
 
 ## Known limits
 
-- **Build blocker found and fixed — in ten route files, none of them this branch's.**
-  `npm run build` failed on generated route types: eight routes declared
-  `params: Promise<T> | T`, a union Next 16 rejects. `tsc --noEmit` stayed clean the whole
-  time, because the error exists only in `.next/types` — which is why no test, typecheck or
-  guard ever saw it, and only a full build does.
+- **Build blocker found and fixed — 13 route files, none of them this branch's.**
+  `npm run build` failed in its type phase on generated route types. `tsc --noEmit` stayed
+  clean the whole time, because those types live in `.next/types` and do not exist until a
+  build creates them — which is why no test, typecheck or guard ever saw this.
 
-  Fixed by sweeping for the pattern rather than letting the build report one file per
-  ten-minute cycle: `/[id]` (page + OG image), cyberchess spectator and tournaments,
-  `/devhub/[id]`, four smeta-trainer routes, and the `/qsign/verify/[id]` OG image. Each
-  had a runtime branch for the pre-Next-15 sync shape that Next 16 can never reach, in two
-  cases hidden from the compiler by a cast (`as any`). Dead branches dropped rather than
-  cast around; `await`-ing a Promise does exactly what the old
+  Two shapes, and the second one is why the first sweep was not enough:
+  - eight routes declared `params: Promise<T> | T` — a union Next 16 rejects;
+  - five more declared `params: { id: string }` outright, three of them taking
+    `searchParams` synchronously too. A grep written for the union misses these.
+
+  **The method matters more than the fix.** `next build` reports ONE such error per run at
+  ~15 minutes a run: 13 files is over three hours of waiting. `next typegen` writes the same
+  `.next/types` in seconds without building, and `tsc --noEmit` then checks sources *and*
+  generated types together — every remaining error in one pass. That is how the second
+  shape was found and cleared, and it is the check to run before claiming a frontend
+  change builds.
+
+  Files: `/[id]` (page + OG), cyberchess spectator and tournaments, `/devhub/[id]` and
+  `/devhub/[id]/deploy`, four smeta-trainer routes, and the OG images for
+  `/qsign/verify/[id]`, `bank/gift/[id]`, `bank/r/[code]`, `bank/share/[handle]`,
+  `qpaynet/r/[token]`. Each carried a runtime branch for the pre-Next-15 sync shape that
+  Next 16 can never reach — in two cases hidden from the compiler by an `as any`. Dead
+  branches dropped rather than cast around; `await`-ing a Promise does exactly what the old
   `await Promise.resolve(...)` / `typeof .then === "function"` dance did.
 
   The two cyberchess files belong to another session's zone and were touched only because

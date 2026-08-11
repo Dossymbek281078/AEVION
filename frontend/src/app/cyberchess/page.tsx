@@ -15280,8 +15280,13 @@ ${question.trim()}`;
       surface={CC.surface1} border={CC.border}
       text={CC.text} textDim={CC.textDim} accent={CC.brand}
     />}
+    {/* Режим стримера обещает скрыть рейтинг и историю. Все три входа в панель уже
+        закрыты в этом режиме (проверено поимённо), но остаётся порядок действий:
+        панель открыта, режим включают из палитры — и она продолжает показывать
+        рейтинг. Гарантию вешаем на отрисовку, а не на входы: тогда обещание не
+        зависит от того, в каком порядке нажимали. */}
     <PlayerStatsDashboard
-      open={showStatsDashboard}
+      open={showStatsDashboard&&!streamerMode}
       onClose={()=>sShowStatsDashboard(false)}
       savedGames={savedGames}
       stats={sts}

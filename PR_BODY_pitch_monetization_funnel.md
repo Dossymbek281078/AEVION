@@ -215,6 +215,40 @@ Swept for siblings afterwards: of 52 server components that fetch directly, none
 unguarded (the two the grep flagged are code samples inside template literals), and the
 shared helpers in `lib/` all wrap their fetches. `fetchOrPaywall` was the only one.
 
+## Turning the paywall on: verified ready, and what you will actually see
+
+The module paywall has been wired-but-dormant since PR #439 — `PAYWALL_MODULES` unset means
+every gate is a no-op. Nobody had confirmed the flip was still safe, so I ran the runbook's
+checkable items instead of trusting them:
+
+| Check | Result |
+|---|---|
+| `audit:projects-pricing` | exit 0 — every module has a pricing row |
+| `paywall-policy-smoke` | 5/5, `enforcedCount: 0`, schema stable, no `UNSAFE_TO_GATE` module enforced |
+| Actual flip, one module | `PAYWALL_MODULES=healthai` → `enforcedCount: 1`, API returns **402** with `requiredTiers`, `upgradeUrl` and a readable message |
+| Refusal logic | already covered by tests: denial, pass-after-purchase, expired-subscription downgrade, "Lite unlocks only its chosen module", and the 2026-07-16 `UNSAFE_TO_GATE` regression |
+
+**Nothing technical blocks enforcement.** What remains is your strategy call: a list, `*`, or
+one module per day.
+
+The runbook itself needed two fixes. Four of its commands used a bare `node scripts/…` while
+there is no `scripts/` at the repo root — following it top-to-bottom failed at step one. And
+its checklist was intentions with no state, so the verified results above are now recorded
+inline.
+
+**The part worth knowing before you flip.** With a module gated, its landing page still
+serves 200 and normal content. That is not a failure: a page renders `<PaywallScreen>` only
+when the endpoint **it probes** returns 402, and the gate deliberately keeps `/health`,
+`/status`, `/providers`, `/me/plan` and `/me/entitlements` open. Ten pages probe `/health`;
+three (`/qcoreai/playground`, `/qmaskcard`, `/qmedia`) probe gated paths and do show the
+wall; the refusal reaches everyone else through the global `<PaywallModal>` on their first
+paid action. So landing pages look identical before and after a flip — check the API
+response or the playground, not the storefront.
+
+`paywallReachable.guard.test.ts` now keeps that honest: a page whose wall cannot fire must
+be named with a reason, stale entries fail, and at least one page must still probe a gated
+path — otherwise `<PaywallScreen>` would quietly become decoration.
+
 ## Findings left for a decision, deliberately unfixed
 
 Each is documented at the site, so the next reader does not mistake it for settled.

@@ -45,7 +45,18 @@ const showAll = process.argv.includes("--all");
 // --plateau-cache extends to MLIT, and the reason a re-run of this script cost
 // minutes of someone else's server all afternoon.
 const cacheFlag = process.argv.indexOf("--osm-cache");
-const osmCache = cacheFlag > 0 ? process.argv[cacheFlag + 1] : null;
+// Кэш теперь ВКЛЮЧЁН по умолчанию, а не по флагу, которого не было даже в
+// справке выше. 11.08.2026 из-за этого каждый запуск шёл в сеть: аудит по
+// Нью-Йорку дважды не дошёл до отчёта — `overpass-api.de` отдаёт на запрос по
+// Мидтауну HTTP 504, и перебор зеркал занимает больше двадцати минут. Один
+// удачный ответ теперь делает все следующие запуски мгновенными, что и есть
+// та вежливость к чужому серверу, о которой говорит комментарий выше.
+// Обойти: `--no-cache` (спросить сеть заново) или `--osm-cache <каталог>`.
+const DEFAULT_OSM_CACHE = new URL("../.aevion-data/osm-cache/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const osmCache = process.argv.includes("--no-cache")
+  ? null
+  : (cacheFlag > 0 ? process.argv[cacheFlag + 1] : DEFAULT_OSM_CACHE);
+if (osmCache) fs.mkdirSync(osmCache, { recursive: true });
 if (!BBOX[city]) {
   console.error(`unknown city "${city}" — known: ${Object.keys(BBOX).join(", ")}`);
   process.exit(1);
@@ -139,7 +150,7 @@ const cacheFile = osmCache ? `${osmCache}/audit-${city}-heights.json` : null;
 let elements;
 if (cacheFile && fs.existsSync(cacheFile)) {
   elements = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
-  process.stderr.write(`QSkyway height audit: ${city} — ${elements.length} elements from cache\n`);
+  process.stderr.write(`QSkyway height audit: ${city} — ${elements.length} elements from cache (возраст ${Math.round((Date.now() - fs.statSync(cacheFile).mtimeMs) / 86400000)} дн., обойти — --no-cache)\n`);
 } else {
   process.stderr.write(`QSkyway height audit: ${city} — querying Overpass…\n`);
   elements = await overpass(

@@ -470,6 +470,23 @@ const pathsCompatible = (callPath, routePattern) => {
   return a.every((seg, i) => isUnknown(seg) || isUnknown(b[i]) || seg === b[i]);
 };
 
+const literalAgreement = (callPath, routePattern) => {
+  const a = callPath.split("/");
+  const b = routePattern.split("/");
+  return a.filter((s, i) => !isUnknown(s) && s === b[i]).length;
+};
+
+// Tie-break when the call has an interpolated segment: /vacancies/${id} agrees
+// literally on four positions with /vacancies/:id, /vacancies/mine AND
+// /vacancies/templates, so literal agreement alone leaves it to insertion order
+// and the real route gets listed as never called. An unknown value is far more
+// likely a parameter than exactly the word "mine".
+const paramAlignment = (callPath, routePattern) => {
+  const a = callPath.split("/");
+  const b = routePattern.split("/");
+  return a.filter((s, i) => isUnknown(s) && isUnknown(b[i])).length;
+};
+
 const compiled = backend.map((b) => ({ ...b, matches: (p) => pathsCompatible(p, b.pattern) }));
 
 const unmatched = [];
@@ -482,7 +499,16 @@ for (const c of calls) {
   const target = c.path;
   const hit = compiled
     .filter((b) => (c.method === "ANY" || b.method === c.method) && b.matches(target))
-    .sort((a, b) => (a.pattern.match(/:/g)?.length ?? 0) - (b.pattern.match(/:/g)?.length ?? 0))[0];
+    // Rank by how many positions agree LITERALLY, not by fewest params: a call
+    // to /profiles/${id} fits both /profiles/:id and /profiles/search, and the
+    // latter has zero params so "fewest" put it first — crediting the call to
+    // the wrong route and listing /profiles/:id as never called. Same fault the
+    // body check hit; same fix.
+    .sort(
+      (a, b) =>
+        literalAgreement(target, b.pattern) - literalAgreement(target, a.pattern) ||
+        paramAlignment(target, b.pattern) - paramAlignment(target, a.pattern),
+    )[0];
   // Independent of Express: /api/metrics is served by BOTH a Next handler and
   // an Express route, and a relative call to it is correct either way.
   if (servedByNext(target)) c.next = true;

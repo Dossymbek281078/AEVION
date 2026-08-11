@@ -239,40 +239,6 @@ async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; mon
 }
 
 // ── Exported reset helpers for tests ─────────────────────────────────────────
-/**
- * Отложенные проверки деплоя (см. `scheduleDeployVerification`). Держим ручки,
- * чтобы тест мог их погасить: иначе таймер, запущенный ОДНИМ тестом, срабатывает
- * уже во время СЛЕДУЮЩЕГО и делает fetch по подменённому глобальному моку —
- * съедая ответ, приготовленный для другого теста.
- *
- * Контекст (2026-08-10): `tests/devhub-integrations.test.ts` терял РАЗНЫЙ набор
- * из своих 238 тестов на каждом полном прогоне, а в одиночку проходил целиком.
- * Утечка таймера — заведомо реальный механизм такой порчи: проверка деплоя ждёт
- * до 5 попыток × 5 с, то есть залётный вызов живёт секунд двадцать пять и
- * успевает задеть несколько тестов подряд.
- *
- * ЧЕСТНАЯ ОГОВОРКА: что это ЕДИНСТВЕННАЯ причина того флака — НЕ доказано.
- * Замерить чисто не удалось: на загруженной машине отдельные файлы отрабатывают
- * по 19–37 с при `testTimeout` 10 с, и падают уже другие наборы (qtrade,
- * tier3Og), то есть часть красноты — это таймауты от нехватки процессора, а не
- * порча состояния. Правка убирает один настоящий источник гонки; о флаке она
- * ничего не обещает, пока кто-нибудь не измерит на тихой машине.
- */
-const pendingDeployVerifications = new Set<ReturnType<typeof setTimeout>>();
-
-/**
- * `setTimeout` для фоновой проверки деплоя, но с ручкой в реестре выше.
- * В проде ведёт себя ровно как раньше; разница только в том, что таймер можно
- * отменить.
- */
-function scheduleDeployVerification(fn: () => void | Promise<void>, delayMs: number): void {
-  const handle = setTimeout(() => {
-    pendingDeployVerifications.delete(handle);
-    void fn();
-  }, delayMs);
-  pendingDeployVerifications.add(handle);
-}
-
 export function __resetDevHubStore() {
   memProjects.clear();
   memFiles.clear();
@@ -280,9 +246,6 @@ export function __resetDevHubStore() {
   memSnippets.clear();
   memUsage.clear();
   memTiers.clear();
-  // Гасим фоновые проверки предыдущего теста ДО того, как он поставит свой мок.
-  for (const handle of pendingDeployVerifications) clearTimeout(handle);
-  pendingDeployVerifications.clear();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2076,7 +2039,7 @@ Built, but ${url} did not answer 2xx in time`;
 
         // Verify the page actually serves before calling it live — same
         // honesty rule as the CF Pages / Vercel paths.
-        scheduleDeployVerification(async () => {
+        setTimeout(async () => {
           const d = memDeployments.get(deployment.id) ?? deployment;
           const serves = await verifyDeploymentServes(railwayDeployUrl);
           if (serves) {
@@ -2118,7 +2081,7 @@ Built, but ${url} did not answer 2xx in time`;
     })();
   } else {
     // Simulate build asynchronously — no Railway token
-    scheduleDeployVerification(async () => {
+    setTimeout(async () => {
       deployment.status = "live";
       deployment.deployUrl = deployUrl;
       deployment.buildLog = `Build started at ${deployment.triggeredAt}\nInstalling dependencies...\nBuilding...\nDeployment complete!\nLive at: ${deployUrl}`;
@@ -5388,7 +5351,7 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 
     // Verify the page actually serves before calling it live — same honesty
     // rule as the CF Pages path (a deploy that never serves is a failure).
-    scheduleDeployVerification(async () => {
+    setTimeout(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(liveUrl);
       if (serves) {
@@ -5573,7 +5536,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // then 500s forever while our records said "live" (found live 2026-07-21:
     // every CF Pages deploy ever made had this). Degraded-convention: a
     // deploy that doesn't serve is FAILED, not live.
-    scheduleDeployVerification(async () => {
+    setTimeout(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(pagesUrl);
       if (serves) {

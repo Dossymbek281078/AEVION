@@ -133,17 +133,18 @@ function evalWhiteRatio(cp?: number | null, mate?: number | null): number {
 }
 
 interface Props {
-  params: { gameId: string } | Promise<{ gameId: string }>;
+  // Promise-only: Next 16 rejects the `T | Promise<T>` union when it generates
+  // route types, and `npm run build` failed on it while `tsc --noEmit` stayed
+  // clean (the error lives in .next/types). The runtime branch below is left
+  // untouched — it already handles a Promise — so this is a type-only change.
+  params: Promise<{ gameId: string }>;
 }
 
 export default function SpectatorViewerPage(props: Props) {
-  // Support both Next 14 sync and Next 15 Promise params
-  const rawParams = props.params as any;
-  const params =
-    rawParams && typeof rawParams.then === "function"
-      ? reactUse(rawParams as Promise<{ gameId: string }>)
-      : (rawParams as { gameId: string });
-
+  // Was a `typeof params.then === "function"` branch behind an `as any`, kept for
+  // the pre-Next-15 sync shape. Under Next 16 params is always a Promise, so the
+  // else path was unreachable and the `as any` was hiding it from the compiler.
+  const params = reactUse(props.params);
   const gameId = params?.gameId ?? "";
 
   const [state, setState] = useState<SpectatorState>({});

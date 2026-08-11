@@ -133,12 +133,16 @@ function getDisplayName(): string {
 export default function TournamentDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  // Promise-only — see the note in cyberchess/spectator/[gameId]/page.tsx:
+  // Next 16 rejects the `T | Promise<T>` union in generated route types, and
+  // `npm run build` failed on it while `tsc --noEmit` stayed clean.
+  params: Promise<{ id: string }>;
 }) {
-  const resolved =
-    typeof (params as Promise<{ id: string }>).then === "function"
-      ? use(params as Promise<{ id: string }>)
-      : (params as { id: string });
+  // The old sync branch (`typeof params.then === "function" ? … : params`) was
+  // there for the pre-Next-15 shape. Under Next 16 params is always a Promise,
+  // so the branch could never take its else path — and once the type says so,
+  // the cast it relied on stops compiling. Dropped rather than cast around.
+  const resolved = use(params);
 
   const tournamentId = resolved.id;
   const router = useRouter();

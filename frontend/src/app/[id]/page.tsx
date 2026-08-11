@@ -42,12 +42,17 @@ const DEDICATED_ROUTES: Record<string, string> = {
 // the i18n client-module boundary leaves translations undefined.
 export const dynamic = "force-dynamic";
 
+// `params` is a Promise, full stop. It used to be typed `Promise<T> | T` for the
+// pre-Next-15 shape, and Next 16 rejects that union when it generates route types
+// — `npm run build` failed on it while `tsc --noEmit` stayed clean, because the
+// error only exists in .next/types. Awaiting a Promise behaves exactly as the old
+// `await Promise.resolve(...)` did, so this is a type fix with no runtime change.
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const p = (await Promise.resolve(params)) as { id: string };
+  const p = await params;
   const id = p.id;
   try {
     const res = await fetch(apiUrl(`/api/globus/projects/${id}`), {

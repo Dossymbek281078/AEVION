@@ -46,7 +46,7 @@ export default function AdminFreezePage() {
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    const t = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     setToken(t);
     try {
       const raw = localStorage.getItem("aevion_admin_freeze_log");

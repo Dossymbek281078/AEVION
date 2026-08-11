@@ -33,7 +33,7 @@ export default function VoteForm({ proposalId, options, voteMode, status }: Prop
   useEffect(() => {
     setHydrated(true);
     try {
-      const t = localStorage.getItem("aevion_token");
+      const t = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token"));
       setHasToken(!!t);
     } catch {
       setHasToken(false);
@@ -51,7 +51,7 @@ export default function VoteForm({ proposalId, options, voteMode, status }: Prop
     setResult(null);
     try {
       const token = (() => {
-        try { return localStorage.getItem("aevion_token") || ""; } catch { return ""; }
+        try { return (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) || ""; } catch { return ""; }
       })();
       const body: Record<string, unknown> = { choice };
       if (showWeight) {

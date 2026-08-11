@@ -55,7 +55,7 @@ export default function AdminPanel({ pools }: { pools: MatchingPool[] }) {
   useEffect(() => {
     setHydrated(true);
     try {
-      const t = typeof window !== "undefined" ? localStorage.getItem("aevion_token") : null;
+      const t = typeof window !== "undefined" ? (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) : null;
       setToken(t);
     } catch {
       setToken(null);

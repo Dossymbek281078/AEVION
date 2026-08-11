@@ -44,7 +44,7 @@ export default function MyRequestsPage() {
   const [filter, setFilter] = useState<string>("all");
 
   useEffect(() => {
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     setToken(saved);
     if (!saved) { setError(t("qpaynet.requests.err.auth")); setLoading(false); return; }
     fetch(apiUrl("/api/qpaynet/requests"), { headers: { Authorization: `Bearer ${saved}` } })

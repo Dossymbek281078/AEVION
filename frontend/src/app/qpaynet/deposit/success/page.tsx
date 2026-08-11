@@ -31,7 +31,7 @@ function SuccessInner() {
 
   useEffect(() => {
     if (!cid) { setError(t("qpaynet.deposit.success.noCid")); return; }
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     if (!saved) { setError(t("qpaynet.deposit.success.loginCheck")); return; }
     let cancelled = false;
     let attempts = 0;
@@ -52,7 +52,7 @@ function SuccessInner() {
 
   async function confirmStub() {
     setConfirming(true);
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     const r = await fetch(apiUrl("/api/qpaynet/deposit/confirm-stub"), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${saved}` },

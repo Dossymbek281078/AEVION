@@ -296,7 +296,7 @@ export default async function FintechStatusPage() {
               Raw OpenAPI ↗
             </a>
             <a
-              href="https://aevion-production-a70c.up.railway.app/api/openapi.json"
+              href="https://aevion.app/api-backend/api/openapi.json"
               target="_blank"
               rel="noopener noreferrer"
               style={S.linkBtnMuted}

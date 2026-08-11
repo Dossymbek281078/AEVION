@@ -94,7 +94,7 @@ export default function PartnerPrintPage() {
         </table>
 
         <div className="footer">
-          aevion.app/partner · aevion.app/transparency · yahiin1978@gmail.com
+          aevion.app/partner · aevion.app/status · yahiin1978@gmail.com
         </div>
 
         {/* PAGE 2 — Innovation pipeline */}
@@ -195,10 +195,10 @@ export default function PartnerPrintPage() {
 
         <h2>Verification — check yourself</h2>
         <ul>
-          <li><strong>aevion.app/transparency</strong> — live health-board, daily smoke полностью зелёный</li>
+          <li><strong>aevion.app/status</strong> — live health-board, daily smoke полностью зелёный</li>
           <li><strong>aevion.app/constitution</strong> — Constitution v1, QSign-attested, 3 languages</li>
           <li><strong>aevion.app/partner</strong> — full visual brief</li>
-          <li><strong>/api/aevion/registry</strong> — JSON registry of all {MODULE_NODES} modules</li>
+          <li><strong>/api/aevion/registry-stats</strong> — JSON registry of all {MODULE_NODES} modules</li>
         </ul>
 
         <div className="footer">

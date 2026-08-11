@@ -211,7 +211,7 @@ export default function PilotPage() {
             <Link href="/acquire" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 28px", fontSize: 14, fontWeight: 800, background: "linear-gradient(135deg,#10b981,#3b82f6)", color: "#0a0e1a", borderRadius: 12, textDecoration: "none" }}>
               See full acquisition brief →
             </Link>
-            <Link href="/transparency" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 24px", fontSize: 14, fontWeight: 700, color: "#cbd5e1", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, textDecoration: "none" }}>
+            <Link href="/status" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 24px", fontSize: 14, fontWeight: 700, color: "#cbd5e1", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, textDecoration: "none" }}>
               Live transparency board
             </Link>
           </div>

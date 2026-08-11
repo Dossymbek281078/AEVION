@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -24,7 +25,7 @@ function wordDiff(textA: string, textB: string): React.ReactNode[] {
 
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
-  const t = localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
+  const t = getAuthToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 

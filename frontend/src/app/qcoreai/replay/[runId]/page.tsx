@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -9,7 +10,7 @@ import { apiUrl } from "@/lib/apiBase";
 
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
-  const t = localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
+  const t = getAuthToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 

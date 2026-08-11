@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
@@ -25,8 +26,7 @@ function bearerHeader(): HeadersInit {
     const t =
       typeof window !== "undefined"
         ? localStorage.getItem("aevion_auth_token_v1") ||
-          localStorage.getItem("aevion_token") ||
-          sessionStorage.getItem("aevion_token")
+          getAuthToken()
         : null;
     if (t) return { Authorization: `Bearer ${t}` };
   } catch {}

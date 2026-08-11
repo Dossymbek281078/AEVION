@@ -58,6 +58,17 @@
  * pricing.ts. The one real gap is entitlements, mounted at bare "/api", which
  * this module-per-prefix model cannot express.
  *
+ * Third finding, QBuild-only: a /api/build call fetched by hand instead of
+ * through lib/build/api.ts. Ten used to live in pages, which put them outside
+ * the body and response checks — those read api.ts and see nothing else. Now
+ * that the migration is finished the rule keeps it finished. Two exceptions,
+ * both verified by adding a probe call and watching it fire, then move: server
+ * files (call() reads the auth token from a browser store, so importing it
+ * across the boundary is the hazard that once cost five SSR 500s — the sitemap,
+ * the opengraph images and the RSC pages all fetch by hand and all are right),
+ * and responses read as .blob()/.arrayBuffer(), since call() parses JSON and
+ * the CSV export answers with a file.
+ *
  * Still not modelled: a route registered anywhere other than a `<name>Router.`
  * or `router.` call with a literal path, and a mount whose prefix is built from
  * a variable.
@@ -375,6 +386,7 @@ const stripComments = (s) => {
 
 for (const file of walk(SRC)) {
   let src = stripComments(fs.readFileSync(file, "utf8"));
+  const isClientFile = /^\s*["']use client["']/.test(src);
   // A call is often assembled from a file-local base constant rather than
   // written out: `const API = "/api-backend/api/tiktok"` then
   // `` fetch(`${API}/config`) ``. Inline those so the literal scan sees the URL
@@ -445,7 +457,26 @@ for (const file of walk(SRC)) {
     const isTarget = /(?:fetch\(|href=\{?|src=\{?|endpoint=\{?)\s*$/.test(before);
     const wrappedInApiUrl = /apiUrl\(\s*$/.test(before);
     const wrongOrigin = isTarget && !wrappedInApiUrl && lit.indexOf(PREFIX) === 0;
+    // Every /api/build call belongs in frontend/src/lib/build/api.ts. Ten used
+    // to live in pages instead, which put them outside the body and response
+    // checks — those only see calls declared through call(). Flagging new ones
+    // keeps that migration from unravelling. Only fetch positions count: an
+    // <a href> to a PDF endpoint is a link, not a call.
+    // Only client components: buildApi's call() reads the auth token from a
+    // browser store, and importing it into a server component is the boundary
+    // hazard that cost five SSR 500s once already. Server files legitimately
+    // fetch by hand — the sitemap, the opengraph images, the RSC pages.
+    // One exception, and it is about the response rather than the caller:
+    // call() parses JSON and unwraps the envelope, so an endpoint that answers
+    // with a file cannot go through it. The CSV export reads .blob() and hands
+    // it to a download anchor — correct as written.
+    const binaryResponse = /\.(?:blob|arrayBuffer)\(\)/.test(
+      src.slice(m.index, m.index + 600).split(/\bfetch\(/)[0],
+    );
+    const strayFetch =
+      HAS_API && isFetch && isClientFile && !binaryResponse && !file.endsWith("lib/build/api.ts");
     calls.push({
+      strayFetch,
       method: method ? method[1] : isFetch ? "GET" : "ANY",
       path: p,
       wrongOrigin,
@@ -534,18 +565,28 @@ for (const c of calls) {
 // A relative URL is the correct way to reach a Next handler — the rewrite is
 // only needed for paths that must leave for the Express backend.
 const misaddressed = calls.filter((c) => c.wrongOrigin && !c.next);
+const strays = calls.filter((c) => c.strayFetch);
 
 // The verdict goes FIRST. It used to be the second line, with a blank line in
 // its place whenever there were findings — so `head -2` looked calm on a failing
 // run, and exactly that hid a regression of mine for a commit.
 const counts = `${calls.length} calls / ${backend.length} routes`;
-if (unmatched.length === 0 && misaddressed.length === 0) {
+if (unmatched.length === 0 && misaddressed.length === 0 && strays.length === 0) {
   console.log(`OK ${PREFIX} — ${counts}, no drift`);
 } else {
   const parts = [];
   if (unmatched.length) parts.push(`${unmatched.length} with no route`);
   if (misaddressed.length) parts.push(`${misaddressed.length} misaddressed`);
+  if (strays.length) parts.push(`${strays.length} fetched outside api.ts`);
   console.log(`FAIL ${PREFIX} — ${parts.join(", ")} (${counts})`);
+}
+
+if (strays.length > 0) {
+  console.log(`
+CALLS FETCHED OUTSIDE lib/build/api.ts (${strays.length}):`);
+  console.log("  Declare them through buildApi — a hand-written fetch is invisible");
+  console.log("  to the request-body and response checks, which read api.ts.");
+  for (const c of strays) console.log(`  ${c.where}:${c.line}  ${c.method} ${c.path}`);
 }
 
 if (unmatched.length > 0) {
@@ -585,4 +626,4 @@ if (process.argv.includes("--list-unused")) {
   }
 }
 
-process.exit(unmatched.length === 0 && misaddressed.length === 0 ? 0 : 1);
+process.exit(unmatched.length === 0 && misaddressed.length === 0 && strays.length === 0 ? 0 : 1);

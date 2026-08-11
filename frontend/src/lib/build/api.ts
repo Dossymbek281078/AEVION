@@ -1235,7 +1235,6 @@ export const buildApi = {
   aiCoverLetter: (input: { vacancyId?: string; profileText?: string; vacancyText?: string; tone?: string; locale?: "ru" | "en" | "kz" }) =>
     call<{
       coverLetter: string;
-      letter?: string;
       skillsOverlap?: string[];
       usage?: { input: number; output: number };
     }>("POST", "/api/build/ai/cover-letter", input),
@@ -1818,7 +1817,7 @@ export const buildApi = {
   deleteStory: (storyId: string) =>
     call<{ ok: boolean }>("DELETE", `/api/build/stories/${encodeURIComponent(storyId)}`),
   toggleStoryLike: (storyId: string) =>
-    call<{ liked: boolean; likes: number; likeCount: number }>("POST", `/api/build/stories/${storyId}/like`, {}),
+    call<{ liked: boolean; likeCount: number }>("POST", `/api/build/stories/${storyId}/like`, {}),
 
   // Communities
   communities: () =>
@@ -1847,9 +1846,9 @@ export const buildApi = {
   pushPublicKey: () =>
     call<{ publicKey: string }>("GET", "/api/build/push/public-key", undefined, { auth: false }),
   pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
-    call<{ subscribed: boolean }>("POST", "/api/build/push/subscribe", sub),
+    call<{ id: string; refreshed?: boolean }>("POST", "/api/build/push/subscribe", sub),
   pushUnsubscribe: (endpoint: string) =>
-    call<{ unsubscribed: boolean }>("POST", "/api/build/push/unsubscribe", { endpoint }),
+    call<{ removed: number }>("POST", "/api/build/push/unsubscribe", { endpoint }),
   pushTest: () =>
     call<{ sent: boolean }>("POST", "/api/build/push/test", {}),
 
@@ -1991,7 +1990,7 @@ export const buildApi = {
       total: number;
     }>("GET", `/api/build/documents/user/${encodeURIComponent(userId)}`),
   createReference: (projectId: string, input: { workerId: string; rating: number; text: string; recommend: boolean }) =>
-    call<{ id: string }>("POST", `/api/build/projects/${encodeURIComponent(projectId)}/references`, input),
+    call<{ reference: { id: string } }>("POST", `/api/build/projects/${encodeURIComponent(projectId)}/references`, input),
   projectReferences: (projectId: string) =>
     call<{
       references: Array<{
@@ -2010,7 +2009,7 @@ export const buildApi = {
       }>;
     }>("GET", `/api/build/projects/${encodeURIComponent(projectId)}/references`),
   deleteReference: (id: string) =>
-    call<{ ok: boolean }>("DELETE", `/api/build/references/${id}`),
+    call<{ deleted: boolean }>("DELETE", `/api/build/references/${id}`),
 
   // Portfolio photos — work-site gallery on worker public profile
   uploadPortfolioPhoto: (input: { url: string; caption?: string; projectType?: string; takenAt?: string }) =>
@@ -2022,7 +2021,7 @@ export const buildApi = {
       "GET", `/api/build/portfolio/photos/${userId}`
     ),
   deletePortfolioPhoto: (id: string) =>
-    call<{ ok: boolean }>("DELETE", `/api/build/portfolio/photos/${id}`),
+    call<{ deleted: boolean }>("DELETE", `/api/build/portfolio/photos/${id}`),
   updatePortfolioPhoto: (id: string, input: { caption?: string; projectType?: string }) =>
     call<{ id: string; caption: string | null }>("PATCH", `/api/build/portfolio/photos/${id}`, input),
 

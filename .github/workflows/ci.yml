@@ -80,6 +80,13 @@ jobs:
       - name: API request bodies (keys sent vs keys read)
         working-directory: ${{ github.workspace }}
         run: node scripts/api-body-check.mjs
+      # Third of the same family: a key the client's type promises that the
+      # handler never returns is undefined at runtime and renders as a blank,
+      # not an error. Seven such lies were removed from api.ts before this was
+      # gated; handlers that spread a DB row are skipped, not guessed at.
+      - name: API responses (keys declared vs keys returned)
+        working-directory: ${{ github.workspace }}
+        run: node scripts/api-response-check.mjs
       - run: npm run build
 
   payments-smoke:

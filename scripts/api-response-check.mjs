@@ -84,9 +84,14 @@ function returnedKeys(handler) {
       if (/^[a-zA-Z_]\w*$/.test(name)) out.add(name);
     }
   }
-  // A handler that also returns a bare row/variable cannot be judged this way.
+  // Two shapes put the answer out of static reach: returning a bare row or
+  // variable (`ok(res, result.rows[0])`), and spreading one into the object
+  // (`ok(res, { ...r.rows[0], plaintext })`) — the spread can carry any column,
+  // so a key that looks absent may well be there. Skip rather than guess; six
+  // of the first thirteen findings turned out to be exactly this.
   const bare = /\bok\(\s*res\s*,\s*[a-zA-Z_]/.test(handler);
-  return { keys: out, judgeable: any && !bare };
+  const spread = /\bok\(\s*res\s*,\s*\{[\s\S]*?\.\.\./.test(handler);
+  return { keys: out, judgeable: any && !bare && !spread };
 }
 
 /** Top-level keys of the declared `call<{ ... }>` generic. */
@@ -112,7 +117,14 @@ const findings = [];
 for (const m of apiSrc.matchAll(re)) {
   const declared = declaredKeys(m[1]);
   const method = m[2];
-  const callPath = m[3].slice(1, -1).replace(/\$\{[^}]*\}/g, ":x").split("?")[0];
+  // `${qs ? "?" + qs : ""}` collapses to a `:x` glued onto the last segment —
+  // that is an interpolated query string, not a path segment, and leaving it on
+  // made /profiles/search match /profiles/:id.
+  const callPath = m[3]
+    .slice(1, -1)
+    .replace(/\$\{[^}]*\}/g, ":x")
+    .split("?")[0]
+    .replace(/(?<!\/):x$/, "");
   const line = apiSrc.slice(0, m.index).split("\n").length;
   if (declared.size === 0) continue;
 

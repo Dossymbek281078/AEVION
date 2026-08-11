@@ -887,8 +887,12 @@ const CPIBadge=React.memo(function CPIBadge({cpi,col,delta,pts,W3,H3,xi,yi,last,
 });
 
 /* ─── BottomNav ─── */
-function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,brand,textMute,surface1,border}:{
-  setup:boolean; tab:string;
+/* `navLocked` — та же мера, что на десктопном таб-баре: в живой партии с ЧЕЛОВЕКОМ
+   уход в анализ или к коучу равен подсказке движком против соперника. Здесь его не
+   было вовсе, и на телефоне мера просто не действовала — а «за одной доской»
+   (hotseat) это как раз телефонный сценарий, где соперник сидит рядом. */
+function BottomNav({setup,tab,navLocked,onLockedTap,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,brand,textMute,surface1,border}:{
+  setup:boolean; tab:string; navLocked:boolean; onLockedTap:()=>void;
   onPlay:()=>void; onPuzzles:()=>void; onAnalysis:()=>void; onCoach:()=>void; onProfile:()=>void;
   brand:string; textMute:string; surface1:string; border:string;
 }){
@@ -897,12 +901,15 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,bran
     : tab === "analysis" ? "analysis"
     : tab === "coach" ? "coach"
     : "play";
+  /* Замок ровно на тех же пунктах, что и на десктопе: «Играть» остаётся (это возврат
+     к доске), «Профиль» — своя статистика, движка там нет. Закрыты пазлы, анализ и
+     коуч — всё, где можно посмотреть оценку позиции. */
   const items=[
-    {id:"play",    icon:"▶", label:"Играть",  action:onPlay},
-    {id:"puzzles", icon:"🧩",label:"Пазлы",   action:onPuzzles},
-    {id:"analysis",icon:"📊",label:"Анализ",  action:onAnalysis},
-    {id:"coach",   icon:"🎓",label:"Коуч",    action:onCoach},
-    {id:"profile", icon:"👤",label:"Профиль", action:onProfile},
+    {id:"play",    icon:"▶", label:"Играть",  action:onPlay,     lockable:false},
+    {id:"puzzles", icon:"🧩",label:"Пазлы",   action:onPuzzles,  lockable:true},
+    {id:"analysis",icon:"📊",label:"Анализ",  action:onAnalysis, lockable:true},
+    {id:"coach",   icon:"🎓",label:"Коуч",    action:onCoach,    lockable:true},
+    {id:"profile", icon:"👤",label:"Профиль", action:onProfile,  lockable:false},
   ];
   return(
     <div className="cc-bottom-nav" style={{
@@ -914,19 +921,23 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,bran
     }}>
       {items.map(item=>{
         const active=activeTab===item.id;
+        const locked=item.lockable&&navLocked;
         return(
-          <button key={item.id} onClick={item.action}
-            aria-label={item.label} aria-current={active?"page":undefined}
+          <button key={item.id} onClick={locked?onLockedTap:item.action}
+            aria-label={locked?`${item.label} — заблокировано во время партии с человеком`:item.label}
+            aria-disabled={locked||undefined}
+            title={locked?"Заблокировано во время партии с человеком":item.label}
+            aria-current={active?"page":undefined}
             style={{
               display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,
               padding:"10px 16px 8px",border:"none",background:"transparent",
               borderTop:active?`2px solid ${brand}`:"2px solid transparent",
-              color:active?brand:textMute,cursor:"pointer",fontSize:10,fontWeight:800,
+              color:locked?textMute:active?brand:textMute,cursor:locked?"not-allowed":"pointer",opacity:locked?0.5:1,fontSize:10,fontWeight:800,
               letterSpacing:0.3,flex:1,
             }}
             onMouseEnter={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=brand}}
             onMouseLeave={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=textMute}}>
-            <span style={{fontSize:20}} aria-hidden>{item.icon}</span>
+            <span style={{fontSize:20}} aria-hidden>{locked?"🔒":item.icon}</span>
             <span>{item.label}</span>
           </button>
         );
@@ -14782,6 +14793,11 @@ ${question.trim()}`;
         шапке, а нижняя плашка перекрывала низ доски. Гейт по vwPx (надёжнее CSS-media). */}
     {!streamerMode&&vwPx<769&&<BottomNav
       setup={setup} tab={tab}
+      /* Тот же признак, что считает десктопный таб-бар (`on&&!over&&isHumanGame`).
+         Одно выражение на оба места, чтобы мера не действовала на одном экране и
+         не действовала на другом. */
+      navLocked={on&&!over&&isHumanGame}
+      onLockedTap={()=>showToast("🔒 Нельзя во время партии с человеком","info")}
       onPlay={()=>sShowQuickSetupModal(true)}
       onPuzzles={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}}
       onAnalysis={()=>{sTab("analysis");sSetup(false)}}

@@ -89,8 +89,11 @@ const PREFIX = `/api/${MODULE}`;
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = path.join(ROOT, "frontend/src");
-// Only `build` and `bank` have a dedicated api.ts; every other module fetches
-// inline from its pages, and the generic scan below covers those.
+// Only `build` routes every call through one `call<T>(method, path, body)`
+// helper. bank has an api.ts too, but it is plain `export async function` +
+// `fetch(apiUrl(...))`, and every other module fetches inline from its pages —
+// the generic literal scan below is what covers those. The body and response
+// checks need the `call<T>` convention, which is why they are QBuild-only.
 const API = path.join(ROOT, `frontend/src/lib/${MODULE}/api.ts`);
 const HAS_API = fs.existsSync(API);
 const ROUTES_ROOT = path.join(ROOT, "aevion-globus-backend/src/routes");

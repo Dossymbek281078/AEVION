@@ -21,8 +21,10 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "VeilNetX · Privacy Proxy",
-    description: "Tor-routed. No logs. No KYC.",
+    // Twitter-карточку июльская правка пропустила: заголовок и метаописание
+    // уже говорили про сканер, а сюда репостилось прежнее «Tor-routed».
+    title: "VeilNetX · Privacy Exposure Scanner",
+    description: "Exposure scan · browser leak check · no logs · no KYC.",
   },
   robots: { index: true, follow: true },
 };

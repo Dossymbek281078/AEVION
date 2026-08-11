@@ -1,6 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import {
   writeJson,
   storageFailed,
@@ -82,22 +80,9 @@ describe("storageHealth", () => {
   });
 });
 
-describe("предупреждение не перекрывает управление", () => {
-  const page = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
-  const banner = page.slice(page.indexOf('{storageBroken&&<div role="alert"'), page.indexOf('{storageBroken&&<div role="alert"') + 1200);
-
-  it("на телефоне поднято над нижней навигацией", () => {
-    /* Плашка во всю ширину с z-index 9999 у самого низа накрывала бы BottomNav —
-       а висит она до перезагрузки, то есть накрыла бы навсегда: человек не смог бы
-       уйти со страницы, которая ему же сообщает о потере прогресса. */
-    expect(banner).toMatch(/vwPx<769/);
-    expect(banner).toMatch(/safe-area-inset-bottom/);
-  });
-
-  it("условие отступа совпадает с условием отрисовки навигации", () => {
-    /* Два места, где написан один и тот же порог, — типовой источник расхождения:
-       поменяют одно, забудут другое, и плашка снова ляжет на кнопки. */
-    expect(page).toMatch(/!streamerMode&&vwPx<769&&<BottomNav/);
-    expect(banner).toMatch(/\(!streamerMode&&vwPx<769\)\?/);
-  });
-});
+/* Проверка «плашка не лежит на нижней навигации» переехала в bottomOverlay.test.ts:
+   отступ теперь считает общий помощник, и проверять его надо там, где он живёт, —
+   вместе с двумя другими элементами, у которых была та же беда. Здесь оставались
+   ассерты на конкретное выражение в разметке, и после выноса они покраснели, хотя
+   поведение стало строже. Дублировать проверку в двух местах — верный способ
+   получить красный тест на верном коде. */

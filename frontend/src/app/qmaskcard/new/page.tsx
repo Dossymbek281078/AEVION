@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { getAuthToken } from "@/lib/auth";
 import { useEffect, useMemo, useState } from "react";
 import { getApiBase } from "@/lib/apiBase";
 
@@ -45,7 +46,7 @@ export default function NewMaskPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    try { setToken(localStorage.getItem("aevion_token")); } catch { setToken(null); } finally { setTokenChecked(true); }
+    try { setToken(getAuthToken()); } catch { setToken(null); } finally { setTokenChecked(true); }
   }, []);
 
   const spendLimitCents = useMemo(() => {

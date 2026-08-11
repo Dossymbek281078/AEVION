@@ -1,5 +1,6 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -19,7 +20,7 @@ function DepositForm() {
   const [done, setDone] = useState<{ newBalance: number } | null>(null);
 
   async function handleDeposit() {
-    const token = localStorage.getItem("aevion_token") ?? "";
+    const token = getAuthToken() ?? "";
     if (!token || !amount || parseFloat(amount) <= 0) { setError(t("qpaynet.deposit.err.amountAuth")); return; }
     setLoading(true); setError("");
     try {
@@ -36,7 +37,7 @@ function DepositForm() {
   }
 
   async function handleCard() {
-    const token = localStorage.getItem("aevion_token") ?? "";
+    const token = getAuthToken() ?? "";
     if (!token || !amount || parseFloat(amount) <= 0) { setError(t("qpaynet.deposit.err.amountAuth")); return; }
     setLoading(true); setError("");
     try {

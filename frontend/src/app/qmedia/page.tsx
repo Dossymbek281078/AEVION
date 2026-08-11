@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -70,7 +71,7 @@ export default function QMediaPage() {
       .then((d) => { if (Array.isArray(d.genres)) setTrendingGenres(d.genres); })
       .catch(() => {});
 
-    const token = typeof window !== "undefined" ? window.localStorage.getItem("aevion_jwt") : null;
+    const token = getAuthToken();
     fetch(apiUrl("/api/qmedia/recommendations?limit=10"), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })

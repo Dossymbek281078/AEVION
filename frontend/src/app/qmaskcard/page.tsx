@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { PaywallScreen } from "@/components/PaywallScreen";
@@ -54,16 +55,12 @@ type Stats = {
 
 function bearer(): HeadersInit {
   if (typeof window === "undefined") return {};
-  const t = localStorage.getItem("aevion_token")
-    || localStorage.getItem("aevion_auth_token_v1")
-    || sessionStorage.getItem("aevion_token");
+  const t = getAuthToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 function hasToken(): boolean {
   if (typeof window === "undefined") return false;
-  return Boolean(localStorage.getItem("aevion_token")
-    || localStorage.getItem("aevion_auth_token_v1")
-    || sessionStorage.getItem("aevion_token"));
+  return Boolean(getAuthToken());
 }
 function fmtMoney(cents: string | number, currency: string): string {
   const n = Number(cents) / 100;

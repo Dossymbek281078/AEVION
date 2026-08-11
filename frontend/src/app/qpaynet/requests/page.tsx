@@ -1,5 +1,6 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -44,7 +45,7 @@ export default function MyRequestsPage() {
   const [filter, setFilter] = useState<string>("all");
 
   useEffect(() => {
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = getAuthToken() ?? "";
     setToken(saved);
     if (!saved) { setError(t("qpaynet.requests.err.auth")); setLoading(false); return; }
     fetch(apiUrl("/api/qpaynet/requests"), { headers: { Authorization: `Bearer ${saved}` } })

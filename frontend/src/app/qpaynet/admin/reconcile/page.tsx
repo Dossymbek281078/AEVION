@@ -1,5 +1,6 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -39,7 +40,7 @@ export default function AdminReconcilePage() {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) { setLoading(false); return; }
     void refresh(t);

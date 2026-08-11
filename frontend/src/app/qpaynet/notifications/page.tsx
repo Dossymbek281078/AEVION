@@ -1,5 +1,6 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -41,7 +42,7 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<"all" | "unread">("all");
 
   useEffect(() => {
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = getAuthToken() ?? "";
     setToken(saved);
     if (!saved) { setLoading(false); return; }
     fetch(apiUrl("/api/qpaynet/notifications"), { headers: { Authorization: `Bearer ${saved}` } })

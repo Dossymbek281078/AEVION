@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 
 interface Submission {
@@ -37,7 +38,7 @@ export default function AdminKycPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) { setLoading(false); return; }
     void refresh(t);

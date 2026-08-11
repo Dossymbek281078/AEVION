@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 
 function ah(): Record<string, string> {
   if (typeof window === "undefined") return {};
-  const t = localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token") ?? "";
+  const t = localStorage.getItem("aevion_auth_token_v1") ?? getAuthToken() ?? "";
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 

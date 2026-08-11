@@ -1,5 +1,6 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -35,7 +36,7 @@ function SendForm() {
   }, [toWalletId]);
 
   async function handleSend() {
-    const token = localStorage.getItem("aevion_token") ?? "";
+    const token = getAuthToken() ?? "";
     if (!token) { setError(t("qpaynet.send.err.auth")); return; }
     if (!toWalletId.trim()) { setError(t("qpaynet.send.err.noRecipient")); return; }
     if (!amount || parseFloat(amount) <= 0) { setError(t("qpaynet.send.err.noAmount")); return; }

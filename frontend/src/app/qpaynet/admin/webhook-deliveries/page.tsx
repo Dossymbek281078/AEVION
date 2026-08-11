@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { reportError } from "@/lib/reporter";
 
@@ -52,7 +53,7 @@ export default function AdminWebhookDeliveriesPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) {
       setLoading(false);

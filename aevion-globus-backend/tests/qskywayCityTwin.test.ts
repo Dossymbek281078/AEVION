@@ -452,3 +452,44 @@ describe("overpassBodyProblem — занятый сервер отвечает �
     expect(overpassBodyProblem(null as unknown as string)).toMatch(/non-JSON/);
   });
 });
+
+// Высоты твина — единственный вход, от которого зависит КАЖДЫЙ маршрут: коридор
+// строится над зданиями, потолок регулятора сравнивается с этой высотой. Ошибка
+// в единицах при пересборке (футы вместо метров — ×3.28) не уронит ничего: она
+// молча поднимет все коридоры и превратит верные маршруты в «не влезающие в
+// потолок». Ровно так 11.08.2026 выглядело бы падение соответствия с 52% до 29%,
+// если бы оно было багом, а не следствием честных высот. Проверено вручную:
+// max=443 (Эмпайр-стейт с антенной — 443.2), 427 (One Vanderbilt), 366 (Bank of
+// America Tower), 320 (Крайслер — 318.9). Тест держит этот порядок величин.
+describe("высоты Нью-Йорка правдоподобны для Мидтауна", () => {
+  const heights = (CITY_NYC.buildings as { h?: number }[])
+    .map((b) => b.h ?? 0)
+    .filter((h) => h > 0)
+    .sort((a, b) => b - a);
+
+  it("самое высокое здание — в диапазоне Эмпайр-стейта, а не в футах", () => {
+    expect(heights.length).toBeGreaterThan(1000);
+    // 443.2 — Эмпайр-стейт с антенной, самая высокая точка твина. Полоса взята
+    // с запасом: ниже 380 означало бы потерю шпилей, выше 500 — что в Мидтаун
+    // попал небоскрёб, которого там нет, или пересчёт из футов.
+    expect(heights[0]).toBeGreaterThan(380);
+    expect(heights[0]).toBeLessThan(500);
+  });
+
+  it("сверхвысоких ровно столько, сколько их в Мидтауне", () => {
+    const over300 = heights.filter((h) => h > 300).length;
+    const over400 = heights.filter((h) => h > 400).length;
+    expect(over300).toBeGreaterThanOrEqual(8);
+    expect(over300).toBeLessThanOrEqual(25);
+    expect(over400).toBeGreaterThanOrEqual(1);
+    expect(over400).toBeLessThanOrEqual(8);
+    expect(heights.filter((h) => h > 500).length).toBe(0);
+  });
+
+  it("массовая застройка низкая — иначе сдвинулась вся шкала, а не верхушка", () => {
+    // Медиана ловит то, чего не ловит максимум: пересчёт единиц поднимает ВСЁ.
+    const median = heights[Math.floor(heights.length / 2)];
+    expect(median).toBeGreaterThan(8);
+    expect(median).toBeLessThan(60);
+  });
+});

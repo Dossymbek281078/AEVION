@@ -15279,7 +15279,14 @@ ${question.trim()}`;
     {/* Projects banner — ТОЛЬКО на лаунчпаде/между партиями. Никогда во время активной
         игры/пазла/скретча: фиксированная плашка перекрывала ходы и премувы (фидбэк юзера). */}
     {bannerShown&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
-    {storageBroken&&<div role="alert" style={{position:"fixed",left:12,right:12,bottom:12,zIndex:9999,maxWidth:560,margin:"0 auto",
+    {storageBroken&&<div role="alert" style={{position:"fixed",left:12,right:12,
+      /* Отступ снизу считаем по ТОМУ ЖЕ условию, что рендерит BottomNav
+         (`!streamerMode&&vwPx<769`): на телефоне под нами нижняя навигация, и плашка
+         во всю ширину с z-index 9999 накрыла бы её кнопки. Предупреждение висит до
+         перезагрузки, поэтому накрыло бы навсегда — человек не смог бы уйти со
+         страницы, которая ему же и сообщает о потере прогресса. */
+      bottom:(!streamerMode&&vwPx<769)?"calc(72px + env(safe-area-inset-bottom, 0px))":12,
+      zIndex:9999,maxWidth:560,margin:"0 auto",
       padding:"12px 14px",borderRadius:10,background:"#4a1d1d",color:"#ffd9d9",border:"1px solid #b91c1c",
       fontSize:13,lineHeight:1.5,boxShadow:"0 8px 30px rgba(0,0,0,0.45)"}}>
       {/* Причину не называем: браузер её не сообщает, а замер показал, что нехватка места —

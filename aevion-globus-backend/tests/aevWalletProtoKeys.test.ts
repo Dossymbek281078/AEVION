@@ -117,3 +117,36 @@ describe("ordinary device ids still work", () => {
     }
   });
 });
+
+describe("the internal mint path is guarded too", () => {
+  // Bureau calls internalMintForDevice() with a deviceId taken straight from
+  // the request body (routes/bureau.ts:815 — only checks it is a non-empty
+  // string). So the guard cannot live only in the HTTP handlers: the export
+  // has to refuse reserved names itself, or a reward mint would create
+  // `wallets["__proto__"]` and rewrite the store's prototype.
+  test.each(HOSTILE)("internalMintForDevice refuses %s", async (id) => {
+    const { internalMintForDevice } = await import("../src/routes/aev");
+    const r = await internalMintForDevice({
+      deviceId: id,
+      amount: 5,
+      sourceKind: "test",
+      sourceModule: "test",
+      sourceAction: "test",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe("invalid_device_id");
+    expect(mockWrite).not.toHaveBeenCalled();
+  });
+
+  test("a normal device id still mints", async () => {
+    const { internalMintForDevice } = await import("../src/routes/aev");
+    const r = await internalMintForDevice({
+      deviceId: "device-abc-123",
+      amount: 5,
+      sourceKind: "test",
+      sourceModule: "test",
+      sourceAction: "test",
+    });
+    expect(r.ok).toBe(true);
+  });
+});

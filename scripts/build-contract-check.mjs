@@ -629,26 +629,67 @@ if (misaddressed.length > 0) {
 
 // Routes nothing calls are not a failure — admin tools, PDF/CSV links opened
 // by the browser and public feeds all live here legitimately.
+const seenUnused = new Set();
+const dead = [];
+const aliases = [];
+for (const b of backend) {
+  const k = `${b.method} ${b.pattern}`;
+  if (used.has(k) || seenUnused.has(k)) continue;
+  seenUnused.add(k);
+  // The same handler reached under another prefix is an alias, not a route
+  // nobody calls — /api/build/jobs/* duplicates /api/qjobs/*, and the pages
+  // use the latter. Calls to that other prefix are outside this module's
+  // scan, so judge by the mount table rather than by call counts.
+  const aliased = usedHandlers.has(b.handler) || (prefixesPerFile[b.file]?.size ?? 0) > 1;
+  (aliased ? aliases : dead).push({ key: k, file: b.file });
+}
+
 if (process.argv.includes("--list-unused")) {
-  const seen = new Set();
-  const dead = [];
-  const aliases = [];
-  for (const b of backend) {
-    const k = `${b.method} ${b.pattern}`;
-    if (used.has(k) || seen.has(k)) continue;
-    seen.add(k);
-    // The same handler reached under another prefix is an alias, not a route
-    // nobody calls — /api/build/jobs/* duplicates /api/qjobs/*, and the pages
-    // use the latter. Calls to that other prefix are outside this module's
-    // scan, so judge by the mount table rather than by call counts.
-    const aliased = usedHandlers.has(b.handler) || (prefixesPerFile[b.file]?.size ?? 0) > 1;
-    (aliased ? aliases : dead).push(`  [${b.file}] ${k}`);
-  }
   console.log(`\nBACKEND ROUTES NOT CALLED FROM frontend/src (${dead.length}):`);
-  for (const line of dead) console.log(line);
+  for (const d of dead) console.log(`  [${d.file}] ${d.key}`);
   if (aliases.length > 0) {
     console.log(`\nSAME HANDLER, CALLED UNDER ANOTHER PREFIX (${aliases.length}) — not dead:`);
-    for (const line of aliases) console.log(line);
+    for (const a of aliases) console.log(`  [${a.file}] ${a.key}`);
+  }
+}
+
+// The exit code alone cannot see a mis-credited match: a call that lands on the
+// wrong route still counts as matched, and the right route quietly joins this
+// list. That is exactly how the uncalled list grew 4 -> 17 while the gate stayed
+// green for a commit. So the list itself is pinned. Each entry has to earn its
+// place in words — anything appearing or disappearing is a change worth reading,
+// in the product or in the matcher.
+const EXPECTED_UNUSED = {
+  // Stub checkout, deferred as its own task — no page calls it yet.
+  "POST /api/build/orders/:id/checkout": "deferred stub checkout",
+  // Called by the payment provider's server, never by a browser.
+  "POST /api/build/webhooks/payment": "inbound webhook",
+  // Ops probe, scraped rather than rendered.
+  "GET /api/build/health/metrics": "ops probe",
+};
+
+if (process.argv.includes("--check-unused")) {
+  if (MODULE !== "build") {
+    console.error("--check-unused has a baseline only for --module=build");
+    process.exit(2);
+  }
+  const now = dead.map((d) => d.key).sort();
+  const expected = Object.keys(EXPECTED_UNUSED).sort();
+  const appeared = now.filter((k) => !expected.includes(k));
+  const gone = expected.filter((k) => !now.includes(k));
+  if (appeared.length === 0 && gone.length === 0) {
+    console.log(`OK /api/build uncalled routes — still the same ${now.length}`);
+  } else {
+    console.log(`FAIL /api/build uncalled routes — ${appeared.length} appeared, ${gone.length} disappeared`);
+    for (const k of appeared) {
+      console.log(`  appeared: ${k}`);
+      console.log("    Either a caller was dropped, or a call is being credited to the wrong route.");
+    }
+    for (const k of gone) {
+      console.log(`  now called: ${k}  (was: ${EXPECTED_UNUSED[k]})`);
+      console.log("    If that is intended, remove it from EXPECTED_UNUSED in this script.");
+    }
+    process.exit(1);
   }
 }
 

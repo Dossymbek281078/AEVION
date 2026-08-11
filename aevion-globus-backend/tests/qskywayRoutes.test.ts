@@ -129,7 +129,14 @@ describe("GET /cities and /verify — coverage and attestation", () => {
     const r = await request(app).get("/api/qskyway/cities");
     expect(r.status).toBe(200);
     const cov = r.body.airspaceCoverage;
-    expect(cov.withFeed).toBe(cov.total);
+    // Смысл теста — «у каждого города есть опубликованное правило», и отвечает
+    // на это `withRegulatoryLayer`. Раньше здесь стоял `withFeed`, потому что он
+    // считал то же самое вопреки своему имени; 11.08.2026 поле разделили, и
+    // `withFeed` теперь честно считает только фиды — у трёх городов он один
+    // (Нью-Йорк), у Астаны правило в документе eAIP, у Токио в растре MLIT.
+    expect(cov.withRegulatoryLayer).toBe(cov.total);
+    expect(cov.withFeed).toBeLessThan(cov.total); // «нет API» ≠ «нет правила»
+    expect(cov.withFeed).toBeGreaterThan(0);
     expect(cov.missing).toEqual([]);
     expect(cov.withCeilings + cov.withPermissionRegime).toBeGreaterThanOrEqual(cov.total);
   });

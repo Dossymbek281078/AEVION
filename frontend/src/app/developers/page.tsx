@@ -37,7 +37,7 @@ const APIS = [
     color: "#f472b6",
     href: "/bureau",
     desc: "Court-grade certificates. Cites Berne/WIPO/TRIPS/eIDAS on issuance. ETag/304, batch protect, enriched /health.",
-    endpoints: ["POST /api/pipeline/protect", "POST /api/pipeline/protect-batch", "GET /api/bureau/certificates/:id"],
+    endpoints: ["POST /api/pipeline/protect", "POST /api/pipeline/protect-batch", "GET /api/pipeline/certificate/:certId/bundle.json"],
   },
   {
     name: "Planet",
@@ -58,7 +58,7 @@ const APIS = [
     color: "#5eead4",
     href: "/quantum-shield",
     desc: "Threshold key management. Shamir's Secret Sharing (k of n). Shard rotation, recovery, post-quantum-ready KDF.",
-    endpoints: ["POST /api/quantum-shield/derive", "POST /api/quantum-shield/recover", "POST /api/quantum-shield/rotate"],
+    endpoints: ["POST /api/quantum-shield/create", "POST /api/quantum-shield/:id/reconstruct", "POST /api/quantum-shield/:id/verify"],
   },
   {
     name: "QCoreAI",

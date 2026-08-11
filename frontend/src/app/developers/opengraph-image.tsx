@@ -11,7 +11,7 @@ const ENDPOINTS = [
   { method: "POST", path: "/api/pipeline/protect",   color: "#f472b6" },
   { method: "POST", path: "/api/planet/submissions",    color: "#86efac" },
   { method: "GET",  path: "/api/qtrade/accounts",  color: "#fb7185" },
-  { method: "POST", path: "/api/quantum-shield/derive", color: "#5eead4" },
+  { method: "POST", path: "/api/quantum-shield/create", color: "#5eead4" },
 ];
 
 export default function DevelopersOg() {

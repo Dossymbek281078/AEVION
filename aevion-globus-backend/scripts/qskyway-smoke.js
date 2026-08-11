@@ -339,7 +339,7 @@ async function main() {
   assert(gov && /демо/i.test(gov.name ?? ""), "[astana] the placeholder zone is named as a placeholder", gov?.name);
   assert(gov && /UAP28/.test(gov.realityNote ?? "") && /4\.5/.test(gov.realityNote ?? ""), "[astana] the placeholder points at the real published zone it stands in for");
   const cov = cs2.json?.airspaceCoverage ?? (await jget("/api/qskyway/cities")).json?.airspaceCoverage;
-  assert(cov?.withFeed === 3 && cov?.withCeilings === 1 && cov?.withPermissionRegime === 2, "every city now has a published rule of some kind", `feed=${cov?.withFeed} ceil=${cov?.withCeilings} perm=${cov?.withPermissionRegime}`);
+  assert(cov?.withRegulatoryLayer === 3 && cov?.withFeed === 1 && cov?.withCeilings === 1 && cov?.withPermissionRegime === 2, "every city has a published rule, and only one of them publishes a feed", `layer=${cov?.withRegulatoryLayer} feed=${cov?.withFeed} ceil=${cov?.withCeilings} perm=${cov?.withPermissionRegime}`);
   assert(Array.isArray(cov?.missing) && cov.missing.length === 0, "nothing is left claiming no regulator source", (cov?.missing ?? []).join(","));
   const justTk = await jpost("/api/qskyway/route/justification", { from: 0, to: 1, city: "tokyo" });
   assert(justTk.json?.document?.permission?.authority && /MLIT/.test(justTk.json.document.permission.authority), "[tokyo] justification carries the permission regime it must disclose");

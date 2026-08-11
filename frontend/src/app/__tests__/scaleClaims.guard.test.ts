@@ -128,7 +128,11 @@ function walk(dir: string, out: string[] = []): string[] {
  * («modules deployed»), и голое «27 MODULES» на /pricing/roadmap проскочило.
  */
 const SCALE_WORD =
-  "(?:product\\s+nodes?|nodes?|modules?|модул\\w*|узл\\w*|МОДУЛ\\w*)";
+  // «AEVION products» добавлено 11.08: строка primer.investor.b3 говорила
+  // «each of 27 AEVION products» и пряталась от проверки, потому что слова
+  // «products» в списке не было. Узко, с обязательным «AEVION» перед ним:
+  // просто «products» — слишком частое слово, дало бы ложные тревоги.
+  "(?:product\\s+nodes?|AEVION\\s+products?|nodes?|modules?|модул\\w*|узл\\w*|МОДУЛ\\w*)";
 // До двух определений между числом и существительным: «29 живых модулей»,
 // «40 product nodes», «12 live MVPs». Без этого проверка ловила только
 // вплотную стоящую пару и пропускала ровно те формулировки, которыми на

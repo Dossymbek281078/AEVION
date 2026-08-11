@@ -276,7 +276,7 @@ export default function AcquirePage() {
 
         {/* Live counters */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 24, padding: 28, background: "rgba(255,255,255,0.03)", borderRadius: 20, border: "1px solid rgba(255,255,255,0.08)" }}>
-          <Counter label="Modules tracked" value={totalModules.toString()} sub="/api/aevion/registry" />
+          <Counter label="Modules tracked" value={totalModules.toString()} sub="/api/aevion/catalog" />
           <Counter label="AEV cap supply" value="21 000 000" sub="зафиксирован навсегда" />
           <Counter label="Daily smoke" value="24/24" sub="PASS today" />
           <Counter

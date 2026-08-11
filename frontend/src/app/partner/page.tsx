@@ -175,7 +175,7 @@ export default function PartnerPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginBottom: 24 }}>
           {[
             { label: "130+ PR · 500+ коммитов на GitHub", href: "https://github.com/Dossymbek281078/AEVION", note: "Объём работы одного человека — верифицируется по git log", color: "#10b981" },
-            { label: "GET /api/aevion/registry", href: "https://aevion-production-a70c.up.railway.app/api/aevion/registry", note: "JSON реестр 30+ модулей с реальными backend-ами", color: "#3b82f6" },
+            { label: "GET /api/aevion/catalog", href: "https://aevion-production-a70c.up.railway.app/api/aevion/catalog", note: "JSON реестр 30+ модулей с реальными backend-ами", color: "#3b82f6" },
             { label: "QSign v2 — postquantum подпись", href: "https://aevion.app/qsign", note: "ML-DSA-65 FIPS 204 в production — единственный в регионе", color: "#8b5cf6" },
             { label: "Constitution v1 — атестация", href: "https://aevion.app/constitution", note: "Реальный документ с QSign-envelope, AI-советник работает", color: "#f59e0b" },
             { label: "Transparency board", href: "https://aevion.app/transparency", note: "Daily smoke 24/24 — ничего не скрыто", color: "#ec4899" },

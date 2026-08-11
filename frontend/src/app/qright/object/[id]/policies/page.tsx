@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
@@ -40,7 +41,7 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 function authHeaders(): HeadersInit {
-  const tok = typeof window !== "undefined" ? localStorage.getItem("aevion_token") : null;
+  const tok = getAuthToken();
   return tok ? { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 }
 

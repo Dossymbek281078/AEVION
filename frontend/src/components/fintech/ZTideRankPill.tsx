@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 
@@ -50,7 +51,7 @@ export default function ZTideRankPill(): React.ReactElement | null {
 
   useEffect(() => {
     let cancelled = false;
-    const token = typeof window !== "undefined" ? window.localStorage.getItem("aevion_token") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) {
       setReady(true);
       return;

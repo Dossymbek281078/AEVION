@@ -2,7 +2,6 @@
   "app/bank/statement/page.tsx",
   "app/cyberchess/page.tsx",
   "app/fintech/playground/page.tsx",
-  "app/keys/page.tsx",
   "app/qcoreai/QCoreAIClient.tsx",
   "app/qcoreai/ab-tests/page.tsx",
   "app/qcoreai/analytics/page.tsx",
@@ -25,11 +24,6 @@
   "app/qmedia/upload/page.tsx",
   "app/qmedia/videos/page.tsx",
   "app/qnews/page.tsx",
-  "app/qright/object/[id]/policies/page.tsx",
   "app/qsign/keys/page.tsx",
-  "app/qsocial/page.tsx",
-  "app/quantum-shield/[id]/page.tsx",
-  "app/z-tide/page.tsx",
-  "components/fintech/ZTideRankPill.tsx",
   "lib/build/applySource.ts"
 ]

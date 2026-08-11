@@ -85,6 +85,21 @@ export type BuildShiftRow = {
 };
 
 // Signable payload handed to QSign by POST /applications/:id/contract.
+// Row of GET /verification/admin/queue — the request joined with the user and
+// their profile.
+export type BuildVerificationRequest = {
+  id: string;
+  userId: string;
+  status: string;
+  note: string | null;
+  createdAt: string;
+  name: string;
+  email: string;
+  city: string | null;
+  buildRole: string | null;
+  experienceYears: number | null;
+};
+
 export type BuildAdminUser = {
   id: string;
   email: string;
@@ -1562,6 +1577,24 @@ export const buildApi = {
         createdAt: string;
       }[];
     }>("GET", `/api/build/admin/ai-search-log?limit=${limit}`),
+
+  // Verification queue. These three were hand-written fetches in the admin page
+  // with their own Authorization header — the same shape that produced the
+  // build_token bug. Going through call() also brings them under the body and
+  // response checks.
+  adminVerificationQueue: () =>
+    call<{ items: BuildVerificationRequest[]; total: number }>(
+      "GET", "/api/build/verification/admin/queue",
+    ),
+  adminApproveVerification: (userId: string) =>
+    call<{ userId: string; approved: boolean }>(
+      "POST", `/api/build/verification/admin/${encodeURIComponent(userId)}/approve`,
+    ),
+  adminRejectVerification: (userId: string, reason?: string) =>
+    call<{ userId: string; rejected: boolean }>(
+      "POST", `/api/build/verification/admin/${encodeURIComponent(userId)}/reject`,
+      reason ? { reason } : {},
+    ),
 
   // Admin user registry + manual verification badge.
   adminListUsers: (q?: { search?: string; limit?: number; offset?: number }) => {

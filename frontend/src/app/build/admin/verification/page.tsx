@@ -1,23 +1,12 @@
 "use client";
-import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { useBuildAuth } from "@/lib/build/auth";
+import { buildApi, type BuildVerificationRequest } from "@/lib/build/api";
 
-type VerifRow = {
-  id: string;
-  userId: string;
-  status: string;
-  note: string | null;
-  createdAt: string;
-  name: string;
-  email: string;
-  city: string | null;
-  buildRole: string | null;
-  experienceYears: number | null;
-};
+type VerifRow = BuildVerificationRequest;
 
 export default function AdminVerificationPage() {
   return (
@@ -35,36 +24,45 @@ function Body() {
   const [items, setItems] = useState<VerifRow[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [error, setError] = useState<string | null>(null);
+
   async function load() {
     if (!token) return;
     setLoading(true);
+    setError(null);
     try {
-      const r = await fetch(apiUrl("/api/build/verification/admin/queue"), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const j = await r.json();
-      if (j.success) setItems(j.data.items);
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+      const r = await buildApi.adminVerificationQueue();
+      setItems(r.items);
+    } catch (e) {
+      // This used to swallow the failure and leave an empty table with no
+      // explanation — the exact shape of bug this page was fixed for.
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, [token]);
 
   async function approve(userId: string) {
-    await fetch(apiUrl(`/api/build/verification/admin/${userId}/approve`), {
-      method: "POST", headers: { Authorization: `Bearer ${token}` },
-    });
-    load();
+    setError(null);
+    try {
+      await buildApi.adminApproveVerification(userId);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
   }
 
   async function reject(userId: string) {
-    const reason = prompt("Reason for rejection (optional):");
-    await fetch(apiUrl(`/api/build/verification/admin/${userId}/reject`), {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ reason }),
-    });
-    load();
+    const reason = prompt("Reason for rejection (optional):") ?? undefined;
+    setError(null);
+    try {
+      await buildApi.adminRejectVerification(userId, reason);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
   }
 
   if (user && user.role !== "ADMIN") {
@@ -80,6 +78,12 @@ function Body() {
       </div>
 
       {loading && <p className="text-sm text-slate-400">Loading…</p>}
+
+      {error && (
+        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">
+          {error}
+        </p>
+      )}
 
       {!loading && items.length === 0 && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">

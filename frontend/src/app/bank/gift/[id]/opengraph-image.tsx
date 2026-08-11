@@ -53,13 +53,16 @@ function tryDecode(p: string | undefined): DecodedGift | null {
   }
 }
 
-export default function GiftOgImage({
+export default async function GiftOgImage({
   searchParams,
 }: {
-  params: { id: string };
-  searchParams?: { p?: string };
+  // Next 16: params/searchParams — Promise. Синхронная форма не проходит
+  // проверку сгенерированных типов маршрутов (ошибка видна только в сборке,
+  // см. заметку в src/app/[id]/page.tsx).
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ p?: string }>;
 }) {
-  const decoded = tryDecode(searchParams?.p);
+  const decoded = tryDecode((await searchParams)?.p);
   const themeId = decoded?.themeId && decoded.themeId in THEME_GRADIENT ? decoded.themeId : "general";
   const gradient = THEME_GRADIENT[themeId];
   const icon = THEME_ICON[themeId];

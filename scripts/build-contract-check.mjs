@@ -385,6 +385,14 @@ const stripComments = (s) => {
 };
 
 for (const file of walk(SRC)) {
+  // lib/i18n-data.ts is a translation dictionary — every literal in it is text
+  // shown to a person, never a request target. Three tooltips mention
+  // /api/ecosystem/leaderboard while explaining that the real leaderboard is not
+  // built yet, and reading those as calls made ecosystem look like it had drift.
+  // The endpoint really is missing, but that is a product fact for the founder's
+  // report, not a contract finding — a checker that reports prose gets ignored.
+  if (file.replace(/\\/g, "/").endsWith("lib/i18n-data.ts")) continue;
+
   let src = stripComments(fs.readFileSync(file, "utf8"));
   const isClientFile = /^\s*["']use client["']/.test(src);
   // A call is often assembled from a file-local base constant rather than

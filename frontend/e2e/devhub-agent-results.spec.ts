@@ -31,14 +31,23 @@ const STREAM = [
   .map((e) => `data: ${JSON.stringify(e)}\n\n`)
   .join("");
 
-async function mockBackend(page: import("@playwright/test").Page) {
+/** A run that stops after two steps and never sends "complete". */
+const TRUNCATED_STREAM = [
+  { type: "step-start", index: 0 },
+  { type: "step-done", index: 0, ok: true, savedAs: "for-step-1" },
+  { type: "step-done", index: 1, ok: true, savedAs: "for-step-2" },
+]
+  .map((e) => `data: ${JSON.stringify(e)}\n\n`)
+  .join("");
+
+async function mockBackend(page: import("@playwright/test").Page, stream = STREAM) {
   await page.route("**/api/devhub/**", async (route) => {
     const url = route.request().url();
     const json = (body: unknown, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
     if (url.includes("/agent/workflow/stream")) {
-      return route.fulfill({ status: 200, contentType: "text/event-stream", body: STREAM });
+      return route.fulfill({ status: 200, contentType: "text/event-stream", body: stream });
     }
     if (url.includes(`/projects/${PROJECT_ID}/files`)) return json({ files: FILES });
     if (url.includes(`/projects/${PROJECT_ID}`)) {
@@ -73,4 +82,24 @@ test("each agent step shows its own result, not its neighbour's", async ({ page 
     (await verdicts.allInnerTexts()).map((t) => t.trim()),
     "results were pinned to array position instead of to their step number",
   ).toEqual(["✓ for-step-1", "✓ for-step-2", "✓ for-step-3"]);
+});
+
+test("a run that stops half way says so instead of ending in silence", async ({ page }) => {
+  // The server ends a finished run with a "complete" event. A stream that
+  // simply stopped — process died, connection dropped, proxy timed out — left
+  // the panel with no summary and no error: the button went back to normal and
+  // the steps that never reported looked identical to steps never run.
+  test.setTimeout(120_000);
+  await mockBackend(page, TRUNCATED_STREAM);
+  await page.goto(`/devhub/${PROJECT_ID}`);
+
+  await page.getByRole("tab", { name: /Agent/ }).click({ timeout: 30_000 });
+  await page.getByRole("button", { name: /Run \d+-step Workflow/ }).click({ timeout: 20_000 });
+
+  await expect(
+    page.getByText(/Прогон оборвался/),
+    "a truncated run reported nothing at all",
+  ).toBeVisible({ timeout: 30_000 });
+  // And it must say how much of the run actually reported.
+  await expect(page.getByText(/отчитались 2 из 3/)).toBeVisible();
 });

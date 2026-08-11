@@ -271,6 +271,9 @@ Each is documented at the site, so the next reader does not mistake it for settl
 - **Planet.** The one paid offer whose price ($250/$200) lives in a page component and
   whose checkout links are raw Lemon Squeezy UUIDs, bypassing both the catalogue and the
   backend's reference system. Nothing in the codebase can verify what it bills.
+- **`/partner` and `/pitch` publish two different revenue curves** for the same company —
+  Year 1 `$15–30M` vs `$0.5M`, a 30–60× gap — and `/partner` never cites the bottom-up model
+  `/pitch` calls the defensible base case. Which curve is *the* claim is positioning.
 - **qmelanin and qrenew are sold twice.** `MODULES_PRICING` lists them as monthly add-ons
   ($15 / $19); `lib/products.ts` sells the same brands as one-off Gumroad PDFs ($19 EN /
   $9 RU). Adding qrenew on `/pricing` charges $19 **every month**; buying from `/qrenew`
@@ -279,20 +282,18 @@ Each is documented at the site, so the next reader does not mistake it for settl
   ("in MODULES_PRICING but NOT in projects.ts") on every run — it was not noise, and it
   had not been checked. Picking one shape means deleting the other.
 
+
 ## Also verified, no defect
 
 The promo-discount cap (`MAX_PROMO_DISCOUNT_RATIO`) is applied in **both** `buildQuote`
 and `checkout.ts`, so the calculator cannot promise a discount larger than the charge
 applies. Annual pricing agrees too: `checkout.ts` charges `tier.priceAnnualTotal` (×10),
 the figure the pricing pages display. Studio Pro is consistent at $149 across `/devhub`,
-`/studio`, `lib/products.ts` and `revenue.ts` — both pages now read the catalogue for
-the price *and* the checkout URL instead of keeping their own copies.
+`/studio`, `lib/products.ts` and `revenue.ts` — both pages now read the catalogue for the
+price *and* the checkout URL instead of keeping their own copies.
 
-## Needs a decision, not code
-
-`/partner` and `/pitch` publish two different revenue curves for the same company —
-Year 1 `$15–30M` vs `$0.5M`, a 30–60× gap — and `/partner` never cites the bottom-up
-model `/pitch` calls the defensible base case. Which curve is *the* claim is
-positioning, so it was left untouched.
+Of 52 server components that fetch directly, none is unguarded (the two a grep flagged are
+code samples inside template literals), and every shared helper in `lib/` wraps its fetch —
+so the resilience class above is closed, not just its one instance.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -275,7 +276,7 @@ export default function QStorePage() {
   }, [fetchFeatured]);
 
   const handlePurchase = async (productId: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = getAuthToken();
     if (!token) {
       setNotice("Sign in to purchase products.");
       return;
@@ -307,7 +308,7 @@ export default function QStorePage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = getAuthToken();
     if (!token) { setFormError("Sign in to list products"); return; }
     if (!form.title.trim()) { setFormError("Title is required"); return; }
     setCreating(true);

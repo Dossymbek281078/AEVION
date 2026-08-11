@@ -11,6 +11,7 @@
  * The SDK lives in the monorepo at `packages/aevion-catalog-client/` and
  * is wired into `frontend/package.json` as `file:` dep plus a tsconfig
  * `paths` alias, so the `@aevion-io/catalog-client` import below resolves
+import { getAuthToken } from "@/lib/auth";
  * to the package's TS source.
  */
 // Relative import to workspace package — Turbopack prod build не резолвит
@@ -40,5 +41,5 @@ export function catalogWithToken(token: string | null | undefined): AevionCatalo
 /** Convenience: read auth token from localStorage (browser-only). */
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("aevion_auth_token");
+  return getAuthToken();
 }

@@ -44,7 +44,6 @@
   "app/qevents/page.tsx",
   "app/qgood/matching-pools/AdminPanel.tsx",
   "app/qjobs/page.tsx",
-  "app/qlearn/page.tsx",
   "app/qmaskcard/charges/[id]/page.tsx",
   "app/qmaskcard/new/page.tsx",
   "app/qmaskcard/page.tsx",
@@ -79,11 +78,8 @@
   "app/qright/object/[id]/policies/page.tsx",
   "app/qsign/keys/page.tsx",
   "app/qsocial/page.tsx",
-  "app/qstore/[id]/page.tsx",
-  "app/qstore/page.tsx",
   "app/quantum-shield/[id]/page.tsx",
   "app/z-tide/page.tsx",
   "components/fintech/ZTideRankPill.tsx",
-  "lib/aevionCatalog.ts",
   "lib/build/applySource.ts"
 ]

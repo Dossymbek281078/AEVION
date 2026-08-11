@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { getAuthToken } from "@/lib/auth";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -114,7 +115,7 @@ export default function QStoreItemPage() {
 
   const handlePurchase = async () => {
     if (!product) return;
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = getAuthToken();
     if (!token) {
       setNotice("Sign in to purchase products.");
       return;
@@ -142,7 +143,7 @@ export default function QStoreItemPage() {
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!product) return;
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = getAuthToken();
     if (!token) {
       setNotice("Sign in to leave a review.");
       return;

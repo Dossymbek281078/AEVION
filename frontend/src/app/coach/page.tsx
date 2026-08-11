@@ -18,6 +18,7 @@
 //     of firing requests that would all 401.
 
 import Link from "next/link";
+import { getAuthToken as getPlatformAuthToken } from "@/lib/auth";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { apiUrl } from "@/lib/apiBase";
@@ -48,12 +49,18 @@ type Goal = {
 };
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
-// AEVION-wide standard key (see frontend/src/lib/aevionCatalog.ts:getAuthToken).
-const AUTH_TOKEN_KEY = "aevion_auth_token";
-
+// Здесь стояло своё `AUTH_TOKEN_KEY = "aevion_auth_token"` с подписью
+// «AEVION-wide standard key (см. aevionCatalog.ts)». Обе части неверны: вход
+// пишет `aevion_auth_token_v1`, а aevionCatalog читал то же неверное имя —
+// два документа ссылались друг на друга и оба ошибались.
+//
+// Последствие описано в шапке этого же файла: «If no token is present we
+// render a "Sign in to use Coach" CTA». То есть страница показывала
+// приглашение войти ВОШЕДШЕМУ, и ни один запрос не отправлялся.
+//
+// Имя функции сохранено, чтобы не трогать места вызова.
 function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+  return getPlatformAuthToken();
 }
 
 // ─── Time helpers ────────────────────────────────────────────────────────────

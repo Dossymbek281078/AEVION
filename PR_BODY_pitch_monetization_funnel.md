@@ -2,15 +2,17 @@
 
 Branch is level with `main` (merged 2026-08-10, two OG-image conflicts resolved).
 **`npm run build` passes end to end** (BUILD_ID written, full route table emitted),
-**569 frontend tests across 55 files and 1424 backend tests pass**, `tsc --noEmit` is clean
+**574 frontend tests across 57 files pass**, `tsc --noEmit` is clean
 on both, and the i18n parity and projects↔pricing gates pass. Every guard added here was
 verified to go **red on a reverted value** before landing.
 
 ℹ️ **On the backend suite's occasional redness — not this branch, and not yet solved.**
 `tests/devhub-integrations.test.ts` loses a different set of its 238 tests. It did not
-reproduce here at all: 1424 passed / 8 skipped / 0 failed, three runs in a row, and three
-more with a candidate fix reverted — which measures nothing about the fix, only that my
-machine was quiet. A parallel session reproduces it in **3 runs out of 5** even after
+reproduce on three quiet runs in a row (1424 / 8 skipped / 0 failed), nor on three more
+with a candidate fix reverted — which measures nothing about the fix, only that my machine
+was quiet at that hour. It **did** reproduce here later the same day at low load (1423 / 1
+failed, an assertion error, not a timeout), and a parallel session hits it in **3 runs out
+of 5** even after
 `testTimeout` went 10s → 30s, with assertion errors in both directions, which points at a
 shared mock queue rather than contention. Real, open, and owned by DevHub.
 

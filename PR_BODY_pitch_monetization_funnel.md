@@ -2,9 +2,9 @@
 
 Branch is level with `main` (merged 2026-08-10, two OG-image conflicts resolved).
 **569 frontend tests across 55 files and 1424 backend tests pass**; `tsc --noEmit` is clean
-on both — on the frontend *with generated route types present*, which is what the build's
-type phase actually checks. Every guard added here was verified to go **red on a reverted
-value** before landing.
+on both. Every guard added here was verified to go **red on a reverted value** before
+landing. The production build's type phase is the one check that only a full `next build`
+can give — see Known limits.
 
 ℹ️ **On the backend suite's occasional redness — measured, and it is contention, not a
 bug.** `tests/devhub-integrations.test.ts` loses a different set of its 238 tests under
@@ -119,12 +119,13 @@ Constitution Free/Pro $9/Team $49 (`constitutionCheckout.ts`), module add-on chi
   - five more declared `params: { id: string }` outright, three of them taking
     `searchParams` synchronously too. A grep written for the union misses these.
 
-  **The method matters more than the fix.** `next build` reports ONE such error per run at
-  ~15 minutes a run: 13 files is over three hours of waiting. `next typegen` writes the same
-  `.next/types` in seconds without building, and `tsc --noEmit` then checks sources *and*
-  generated types together — every remaining error in one pass. That is how the second
-  shape was found and cleared, and it is the check to run before claiming a frontend
-  change builds.
+  **A shortcut I tried does not work, and the record here said otherwise for a while.**
+  `next build` reports ONE such error per run at ~15 minutes a run. `next typegen` looked
+  like the fast equivalent, and `tsc --noEmit` after it came back clean — but typegen emits
+  only `routes.d.ts` / `validator.ts` / `cache-life.d.ts`, not the per-route `page.ts` and
+  `layout.ts` checkers a build generates. The next build promptly failed on a `layout.tsx`
+  typegen had never produced a checker for. The package.json script and CI step I had added
+  on that false premise were reverted. **Only a full `next build` verifies route props.**
 
   Files: `/[id]` (page + OG), cyberchess spectator and tournaments, `/devhub/[id]` and
   `/devhub/[id]/deploy`, four smeta-trainer routes, and the OG images for

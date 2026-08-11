@@ -61,16 +61,6 @@ jobs:
       # a test that passes.
       - name: Frontend unit tests
         run: npm run test -- --run
-      # Route types (`params`/`searchParams` shapes) are checked by `next build`
-      # — but only after a ~15-minute compile, and it stops at the FIRST bad
-      # file. Clearing 13 such files on feat/pitch-monetization-funnel would
-      # have meant three hours of build cycles. `next typegen` writes the same
-      # .next/types in seconds without building, so this step reports every
-      # route-type error at once, a quarter of an hour before the build would.
-      # `tsc --noEmit` alone cannot do it: those types do not exist until
-      # something generates them.
-      - name: Route types (fast — fails before the 15-minute build)
-        run: npm run typecheck:routes
       - run: npm run build
 
   payments-smoke:

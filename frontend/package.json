@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "typecheck:routes": "next typegen && tsc --noEmit",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",

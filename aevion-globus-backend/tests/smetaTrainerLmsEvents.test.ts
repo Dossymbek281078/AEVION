@@ -12,7 +12,7 @@
 // вебхук через админскую ручку, и проверяется, что на ВТОРОЙ синхронизации
 // (когда студент уже существует) событие действительно доставлено.
 
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, afterAll } from "vitest";
 import express from "express";
 import request from "supertest";
 import jwt from "jsonwebtoken";
@@ -95,11 +95,25 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await new Promise((r) => hook.close(() => r(null)));
-  if (prevDataDir === undefined) delete process.env.AEVION_DATA_DIR;
-  else process.env.AEVION_DATA_DIR = prevDataDir;
   if (prevSecret === undefined) delete process.env.AUTH_JWT_SECRET;
   else process.env.AUTH_JWT_SECRET = prevSecret;
   rmSync(dataDir, { recursive: true, force: true });
+  // AEVION_DATA_DIR НЕ восстанавливаем здесь намеренно, см. afterAll.
+});
+
+// Эмиттер вебхуков — fire-and-forget: доставка и запись её статистики могут
+// завершиться уже после того, как тест закончился. Если к этому моменту
+// вернуть AEVION_DATA_DIR в исходное состояние, запоздалая запись уйдёт в
+// каталог по умолчанию — то есть `.aevion-data/` в КОРНЕ репозитория, вместе
+// с секретом вебхука. Ровно это и случилось: каталог появился в git status
+// после первого прогона. Поэтому переменную держим до конца файла.
+afterAll(async () => {
+  // Дать запоздалым доставкам дописать статистику ДО того, как переменная
+  // вернётся к умолчанию. Без этой паузы каталог всё равно появлялся —
+  // проверено: доставка успевает завершиться уже после последнего теста.
+  await new Promise((r) => setTimeout(r, 1200));
+  if (prevDataDir === undefined) delete process.env.AEVION_DATA_DIR;
+  else process.env.AEVION_DATA_DIR = prevDataDir;
 });
 
 const token = () => jwt.sign({ sub: "curator_1" }, SECRET, { expiresIn: "1h" });

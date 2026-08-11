@@ -25,7 +25,13 @@ const THRESHOLD = 4.5;
 const theme = readFileSync(path.join(MOD, "theme.ts"), "utf8");
 const T = Object.fromEntries([...theme.matchAll(/ {2}(\w+): "([^"]+)",/g)].map((m) => [m[1], m[2]]));
 
-const sources = ["MultichatEngineClient.tsx", "CouncilConsole.tsx", "verify/page.tsx", "library/page.tsx"]
+const sources = [
+  "MultichatEngineClient.tsx",
+  "CouncilConsole.tsx",
+  "verify/page.tsx",
+  "library/page.tsx",
+  "shared/[token]/page.tsx", // публичный просмотр — самый внешний экран модуля
+]
   .map((f) => readFileSync(path.join(MOD, f), "utf8"));
 const code = sources.join("\n");
 

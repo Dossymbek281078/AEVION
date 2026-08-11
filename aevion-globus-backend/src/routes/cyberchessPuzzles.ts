@@ -39,6 +39,15 @@ const POOL_URL =
   "https://aevion.vercel.app/puzzles.json";
 
 let POOL: Puzzle[] = [];
+// ОТКУДА пул на самом деле. Раньше ответы отдавали адрес бандла
+// (POOL_PATH или POOL_URL) ВСЕГДА, даже когда данные пришли из Postgres. На проде
+// 11.08.2026 это выглядело так: poolSize 500000 (из БД) при source, указывающем
+// на bundled-файл с 10 818 задачами — ответ противоречил сам себе, и понять по
+// нему, что реально отдаётся игрокам, было нельзя.
+//
+// Описание источника ingest() получал и раньше, но тратил его только на
+// console.warn при ошибке. Теперь сохраняем.
+let POOL_SOURCE = "";
 // theme (lowercased) -> index list, built once for cheap filtered lookups
 const THEME_INDEX = new Map<string, number[]>();
 let loadPromise: Promise<void> | null = null;
@@ -51,6 +60,7 @@ function ingest(arr: unknown, source: string): void {
   POOL = (arr as Puzzle[]).filter(
     (p) => p && typeof p.fen === "string" && Array.isArray(p.sol) && p.sol.length > 0,
   );
+  POOL_SOURCE = source;
   THEME_INDEX.clear();
   for (let i = 0; i < POOL.length; i++) {
     const key = String(POOL[i].theme || "").toLowerCase();
@@ -206,7 +216,7 @@ router.get("/themes", async (_req: Request, res: Response): Promise<void> => {
 // GET /meta — pool health/size (cheap smoke).
 router.get("/meta", async (_req: Request, res: Response): Promise<void> => {
   await ensureLoaded();
-  res.json({ ok: true, poolSize: POOL.length, themes: THEME_INDEX.size, source: POOL_PATH || POOL_URL });
+  res.json({ ok: true, poolSize: POOL.length, themes: THEME_INDEX.size, source: POOL_SOURCE || POOL_PATH || POOL_URL });
 });
 
 /**

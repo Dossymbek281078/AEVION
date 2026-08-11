@@ -126,6 +126,7 @@ import { award as ledgerAward, canSpend, spend as ledgerSpend, unlock as ledgerU
 import { buildPuzzleQuery } from "./puzzleQuery";
 import { ingestPuzzles } from "./puzzleIngest";
 import { writeJson, onStorageFailure } from "./storageHealth";
+import { bottomOffset } from "./bottomOverlay";
 
 /* Результат в PGN АБСОЛЮТЕН — «1-0» значит «выиграли белые», — а строка `over` относительна
    игроку («You win»). Во всех четырёх местах, где строился PGN и метаданные ролика, стояло
@@ -12545,7 +12546,10 @@ ${question.trim()}`;
     {on&&!over&&tab!=="play"&&!isHumanGame&&<button onClick={()=>sTab("play")}
       title="Вернуться к партии — часы на паузе, пока ты здесь"
       style={{
-        position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
+        /* Отступ через общий помощник: на телефоне кнопка стояла на нижней навигации,
+           и появлялась она РОВНО тогда, когда человек ушёл с доски в другой раздел —
+           то есть когда навигация ему и нужна. */
+        position:"fixed",bottom:bottomOffset(vwPx,streamerMode,20),left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
         display:"inline-flex",alignItems:"center",gap:9,
         padding:"11px 20px",borderRadius:RADIUS.full,border:"none",
         background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",
@@ -15268,6 +15272,7 @@ ${question.trim()}`;
         партию (фидбэк основателя). Основное применение — анализ и обучение (Coach),
         в партии — по желанию; в пазлах не показываем («особо не нужен»). */}
     <VoiceCoach
+      collapsedBottom={bottomOffset(vwPx,streamerMode,16)}
       enabled={liveCommentary && tab!=="puzzles"}
       fen={game.fen()}
       lastMove={lm ? {san: hist[hist.length-1] || "", from: lm.from, to: lm.to} : null}
@@ -15285,7 +15290,7 @@ ${question.trim()}`;
          во всю ширину с z-index 9999 накрыла бы её кнопки. Предупреждение висит до
          перезагрузки, поэтому накрыло бы навсегда — человек не смог бы уйти со
          страницы, которая ему же и сообщает о потере прогресса. */
-      bottom:(!streamerMode&&vwPx<769)?"calc(72px + env(safe-area-inset-bottom, 0px))":12,
+      bottom:bottomOffset(vwPx,streamerMode,12),
       zIndex:9999,maxWidth:560,margin:"0 auto",
       padding:"12px 14px",borderRadius:10,background:"#4a1d1d",color:"#ffd9d9",border:"1px solid #b91c1c",
       fontSize:13,lineHeight:1.5,boxShadow:"0 8px 30px rgba(0,0,0,0.45)"}}>

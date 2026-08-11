@@ -80,6 +80,13 @@ export interface VoiceCoachProps {
   userSide?: 'w' | 'b';
   /** Override API base; defaults to '/api-backend/api/cyberchess-voice-coach'. */
   apiBase?: string;
+  /**
+   * Отступ снизу для свёрнутой кнопки. Нужен потому, что этот компонент про ширину
+   * экрана ничего не знает, а на телефоне внизу стоит навигация: кнопка с
+   * `bottom: 16` и z-index 9999 накрывала её крайний пункт. Значение считает
+   * страница через общий `bottomOffset` — второй копии условия здесь нет намеренно.
+   */
+  collapsedBottom?: string | number;
 }
 
 // ─── localStorage keys ───────────────────────────────────────────────────
@@ -157,6 +164,7 @@ export default function VoiceCoach({
   history,
   userSide,
   apiBase = '/api-backend/api/cyberchess-voice-coach',
+  collapsedBottom = 16,
 }: VoiceCoachProps): React.ReactElement | null {
   // ─── Persisted user preferences ──────────────────────────────────────
   const [muted, setMuted] = useState<boolean>(() =>
@@ -668,7 +676,7 @@ export default function VoiceCoach({
         onClick={() => setCollapsed(false)}
         onKeyDown={(e) => e.key === 'Enter' && setCollapsed(false)}
         style={{
-          position: 'fixed', right: 16, bottom: 16, zIndex: 9999,
+          position: 'fixed', right: 16, bottom: collapsedBottom, zIndex: 9999,
           background: 'rgba(15,18,28,0.88)', color: '#e6edf3',
           border: '1px solid rgba(99,130,200,0.35)',
           borderRadius: 8, backdropFilter: 'blur(8px)',

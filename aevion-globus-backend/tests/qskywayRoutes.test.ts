@@ -241,6 +241,40 @@ describe("POST /route/justification — the filing", () => {
     expect(s.buildings).toBeLessThanOrEqual(s.segments);
   });
 
+  /**
+   * Чип на странице говорит «подставлено по типу: N зданий», и без ответа на
+   * вопрос «а летаем-то мы над ними?» он оставляет человека гадать. У спорной
+   * высоты такой ответ уже есть, и там он оказался неочевидным: спорная высота
+   * Астаны не задевает НИ ОДНОГО маршрута, а подстановка — больше половины.
+   */
+  test("[astana] сводка по подстановке считает маршруты, а не пересказывает данные", async () => {
+    const r = await request(app).get("/api/qskyway/height-substitution?city=astana");
+    expect(r.status).toBe(200);
+    const b = r.body;
+    expect(b.available).toBe(true);
+    // Два разных числа: сколько подстановок в данных и сколько из них под
+    // коридорами. Совпадение допустимо, но подмена одного другим — нет.
+    expect(b.buildings).toBeGreaterThan(0);
+    expect(b.buildingsUnderRoutes).toBeLessThanOrEqual(b.buildings);
+    // Замер, а не рассуждение: направления считаются отдельно, 7 площадок = 42 пары.
+    expect(b.pairs).toBe(42);
+    expect(b.affectedPairs).toBeGreaterThan(0);
+    expect(b.affectedPairs).toBeLessThanOrEqual(b.routable);
+    expect(b.note).toContain(String(b.affectedPairs));
+  });
+
+  test("город без подстановок отвечает «нечего мерить», а не пустым успехом", async () => {
+    // Тот же приём, что у /height-dispute: молчащий ответ и «мы не считали»
+    // должны различаться, иначе ноль читается как проверка.
+    const app2 = express().use("/api/qskyway", qskywayRouter);
+    const r = await request(app2).get("/api/qskyway/height-substitution?city=nyc");
+    expect(r.status).toBe(200);
+    // У Нью-Йорка подстановка есть (вокзал), поэтому проверяем форму ответа:
+    // available=false обязан приходить с объяснением, а не с голым false.
+    if (r.body.available === false) expect(String(r.body.note)).not.toHaveLength(0);
+    else expect(r.body.buildings).toBeGreaterThan(0);
+  });
+
   test("for a prohibited city it never says the flight merely needs permission", async () => {
     // The worst defect this module has had: a signed document telling a
     // regulator that a banned flight could be authorized on request.

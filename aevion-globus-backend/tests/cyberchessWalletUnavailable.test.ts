@@ -33,6 +33,10 @@ vi.mock("pg", () => {
       // сочтётся выключенным, и тест проверял бы offline-ветку вместо отказа.
       if (/CREATE TABLE|CREATE INDEX/i.test(text)) return { rows: [] };
       if (failing.on) throw new Error("connection reset by peer");
+      // count(*) в Postgres ВСЕГДА отдаёт строку — на этом и держится различие
+      // «ноль долгов» против «спросить не удалось». Подделка, возвращающая на
+      // такой запрос пустоту, выглядела бы как отказ и проверяла бы не то.
+      if (/count\(\*\)/i.test(text)) return { rows: [{ n: 0 }] };
       return { rows: [] };
     }
     on() {}
@@ -90,6 +94,27 @@ describe("отказ базы не выдаётся за факт о деньг�
 
     expect(res.status).toBe(503);
     expect(res.body.matches).toBeUndefined();
+  });
+
+  test("счётчик зависших выплат доезжает до /debug/stats", async () => {
+    // У тревоги должен быть читатель. Поле существует ради того, чтобы провал
+    // выплаты был виден не только строкой в логе, — а поле, которого нет в
+    // ответе, ровно так же невидимо.
+    failing.on = false;
+    const res = await request(app).get("/api/cyberchess/matchmaking/debug/stats");
+
+    expect(res.status).toBe(200);
+    expect(res.body.awards).toBeDefined();
+    expect(res.body.awards.unpaid).toBe(0);
+  });
+
+  test("на упавшем запросе счётчик показывает null, а не ноль", async () => {
+    // Ноль здесь читался бы как «долгов нет» — заявление, которого никто не
+    // проверял, причём именно в тот момент, когда база не отвечает.
+    const res = await request(app).get("/api/cyberchess/matchmaking/debug/stats");
+
+    expect(res.status).toBe(200);
+    expect(res.body.awards.unpaid).toBeNull();
   });
 
   test("когда база отвечает, честный ноль остаётся нулём", async () => {

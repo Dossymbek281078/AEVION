@@ -60,6 +60,21 @@ for (const f of walk(ROOT)) {
     if (!hosts.has(h)) hosts.set(h, new Set());
     hosts.get(h).add(path.relative(ROOT, f).replace(/\\/g, "/"));
   }
+  // Голые упоминания НАШИХ доменов — подписи в печати, надписи на картинках,
+  // подвалы страниц. Свип по https:// их не видит: 12.08.2026 именно так уцелели
+  // подпись на печатной странице тренажёра и текст внутри SVG-снимка банка,
+  // и находить их пришлось грепом вручную. Чужие домены голым текстом не ищем —
+  // слишком много ложных срабатываний на строках вида "vercel.json".
+  // Зона строго по списку. Первая версия брала любое слово после точки и
+  // выдала 17 «мёртвых доменов», из которых настоящих было два: остальное —
+  // обращения к свойствам в коде (aevion.payments, aevion.modules, aevion.build).
+  // Сторож, кричащий на код, читаться перестаёт.
+  for (const m of s.matchAll(/(?<![/\w.-])aevion\.(app|io|kz|tech|bank|com|net|org|dev|ai|co|cloud)\b/gi)) {
+    const h = m[0].toLowerCase();
+    if (NAMESPACE_HOSTS.has(h)) continue;
+    if (!hosts.has(h)) hosts.set(h, new Set());
+    hosts.get(h).add(path.relative(ROOT, f).replace(/\\/g, "/"));
+  }
 }
 
 console.log("уникальных внешних доменов:", hosts.size, "\n");

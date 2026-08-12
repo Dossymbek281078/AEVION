@@ -69,7 +69,7 @@ export default function CertificatePage() {
 
   // QR-код с verify URL
   const qrSvg = useMemo(() => {
-    // aevion.kz не существует (NXDOMAIN). Это origin для QR на сертификате:
+    // aevion·kz не существует (NXDOMAIN). Это origin для QR на сертификате:
     // при серверном рендере код указывал на несуществующий домен, а QR печатают.
     const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.app";
     const url = `${origin}/smeta-trainer/verify/${certNumber}`;

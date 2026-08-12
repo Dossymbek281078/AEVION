@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatSalary } from "@/lib/build/format";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 import { useToast } from "@/components/build/Toast";
 import { rowsToCsv, downloadCsv } from "@/lib/build/csv";
 import { SavedSearchAlerts } from "@/components/build/SavedSearchAlerts";
@@ -35,7 +35,10 @@ function Body() {
     buildApi
       .myVacanciesFunnel()
       .then((r) => setItems(r.items))
-      .catch((e) => setError((e as Error).message));
+      // Раньше сюда попадал сырой код бэкенда: на экране рекрутера стояло
+      // «build_init_failed». Замечено живым прогоном 12.08 — тесты видели
+      // только то, что сообщение есть.
+      .catch((e) => setError(buildErrorText(e)));
   }, []);
 
   const filtered = useMemo(() => {

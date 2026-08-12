@@ -436,12 +436,6 @@ export default function CaseHousePage() {
               🔄 Пройти кейс снова
             </button>
             <Link
-              href="/smeta-trainer/drawings-practice/case-school47"
-              className="px-4 py-2 bg-amber-600 text-white text-sm font-semibold rounded-lg hover:bg-amber-700"
-            >
-              🎓 К кейсу школы №47
-            </Link>
-            <Link
               href="/smeta-trainer/drawings-practice/hub"
               className="px-4 py-2 bg-purple-700 text-white text-sm font-semibold rounded-lg hover:bg-purple-800"
             >

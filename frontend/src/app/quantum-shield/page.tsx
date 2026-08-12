@@ -412,8 +412,7 @@ export default function QuantumShieldPage() {
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, marginBottom: 20 }}>
           <Link href="/qright" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a" }}>&#8592; QRight</Link>
-          <Link href="/qsign" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a" }}>QSign v1</Link>
-          <Link href="/qsign/v2" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(13,148,136,0.4)", color: "#0d9488" }}>QSign v2</Link>
+          <Link href="/qsign" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(13,148,136,0.4)", color: "#0d9488" }}>QSign v2</Link>
           <Link href="/bureau" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a" }}>IP Bureau &#8594;</Link>
           <Link href="/planet" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid #0f766e", color: "#0f766e" }}>Planet</Link>
         </div>

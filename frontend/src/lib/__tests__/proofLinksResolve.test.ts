@@ -89,7 +89,11 @@ function realRoutes(): Set<string> {
         }
         continue;
       }
-      if (e.name.startsWith("_") || e.name === "__tests__" || e.name === "api") continue;
+      // Only app/api holds route handlers; /constitution/api and /payments/api
+      // are ordinary pages, and skipping them made the first sweep report
+      // three dead links that answer 200.
+      if (e.name.startsWith("_") || e.name === "__tests__") continue;
+      if (e.name === "api" && route === "") continue;
       // Route groups "(marketing)" do not appear in the URL.
       const seg = e.name.startsWith("(") && e.name.endsWith(")") ? "" : `/${e.name}`;
       walk(path.join(dir, e.name), route + seg);
@@ -194,6 +198,54 @@ describe("proof links on audience-facing pages resolve", () => {
       expect([...new Set(dead)]).toEqual([]);
     },
   );
+
+  // Sweeping the whole app found five more of the same defect outside the
+  // audience pages, all confirmed 404 on prod before being fixed:
+  // /qpaynet/settings/webhooks (the webhook setup instructions for
+  // developers — settings do not exist, subscriptions live in
+  // /qpaynet/merchant), /qsign/v2 (there is one QSign page and it already is
+  // v2 — it calls /api/qsign/v2/*), and a capstone-case button pointing at
+  // /smeta-trainer/drawings-practice/case-school47, a page the roadmap still
+  // lists as TODO. Zero left, so the sweep is pinned at zero.
+  test("no page in the app links to a route that does not exist", () => {
+    const allFiles: string[] = [];
+    (function collect(dir: string) {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) collect(p);
+        else if (e.name.endsWith(".tsx")) allFiles.push(p);
+      }
+    })(APP);
+
+    // Sample values inside documented API responses, not links anyone clicks.
+    // Both describe a URL the API says it will hand back, and neither resolves
+    // today — worth checking what prod actually returns, but that is a
+    // question about the API, not a dead link on the page.
+    const SAMPLE_VALUES_IN_API_DOCS = [
+      "/qgood/cmp_2f1a8b/thanks/don_4f1a", // developers/fintech — thankYouUrl
+      "/checkout/co_a3f7m1xyz", // payments/api — checkout session url
+    ];
+
+    const dead: string[] = [];
+    for (const file of allFiles) {
+      for (const { p, line } of citedPaths(fs.readFileSync(file, "utf8"))) {
+        if (p.startsWith("/api/") || p.startsWith("/api-backend/")) continue;
+        if (SAMPLE_VALUES_IN_API_DOCS.includes(p)) continue;
+        if (p.includes(".") || p.includes("${")) continue;
+        const clean = p.replace(/\/$/, "") || "/";
+        if (ROUTES.has(clean)) continue;
+        // A literal path may still be served by a dynamic segment.
+        const segs = clean.split("/").slice(1);
+        const dynamic = [...ROUTES].some((r) => {
+          const rs = r.split("/").slice(1);
+          return rs.length === segs.length && rs.every((s, i) => s === segs[i] || (s.startsWith("[") && s.endsWith("]")));
+        });
+        if (!dynamic) dead.push(`${clean} — ${path.relative(APP, file)}:${line}`);
+      }
+    }
+    expect(dead).toEqual([]);
+    expect(allFiles.length).toBeGreaterThan(1000);
+  });
 
   test.each(AUDIENCE_FILES.map((f) => [path.relative(APP, f), f] as const))(
     "%s — no raw backend host in front of the reader",

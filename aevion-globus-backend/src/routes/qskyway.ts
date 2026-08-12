@@ -490,10 +490,12 @@ interface HeightDispute {
   /** этот коридор действительно опирается на спорную высоту */
   affected: boolean;
   building: number;
-  osm: string;
+  /** элемент OSM: из разбора, иначе из твина, иначе неизвестен */
+  osm: string | null;
   taggedM: number;
-  publishedM: number;
-  publishedSource: string;
+  /** что публикует статья объекта; null — разбора человеком ещё нет */
+  publishedM: number | null;
+  publishedSource: string | null;
   /** участков коридора, поднятых ВЕДУЩИМ спорным зданием (полем `building`) */
   segments: number;
   /** другие спорные здания, тоже поднявшие этот коридор — обычно пусто */
@@ -545,6 +547,7 @@ function heightDisputeFor(
   const segments = ranked[0][1];
   const alsoDisputed = ranked.slice(1).map(([bi]) => bi);
   const rev = reviewForBuilding(cityId, city, building);
+  const suspectEntry = (city.dataQuality?.suspect ?? []).find((s) => s.i === building);
   const shadowTwin = reviewedTwin(cityId, city);
   const shadow = shadowTwin ? buildRoute(cityId, shadowTwin, route.from, route.to, route.respectCeiling) : null;
   const cruiseIf = shadow ? shadow.cruiseAltM : null;
@@ -552,10 +555,17 @@ function heightDisputeFor(
   return {
     affected: true,
     building,
-    osm: rev?.osm ?? "—",
+    // Элемент, если он известен твину, — даже когда разбора ещё нет: по нему
+    // высоту можно проверить и завести замечание.
+    osm: rev?.osm ?? suspectEntry?.osm ?? null,
     taggedM: rev?.taggedM ?? city.buildings[building]?.h ?? 0,
-    publishedM: rev?.publishedM ?? 0,
-    publishedSource: rev?.publishedSource ?? "—",
+    // null, а не 0. Ноль здесь означал бы «в статье объекта опубликовано 0 м»,
+    // и интерфейс так и печатал: «382 м в теге OSM против 0 м в статье».
+    // Сегодня не выстреливало — единственная спорная высота разобрана и до
+    // маршрутов не доходит, — но это ровно тот подменённый отказ, который
+    // модуль ищет в чужих данных: правдоподобное значение вместо «не знаем».
+    publishedM: rev?.publishedM ?? null,
+    publishedSource: rev?.publishedSource ?? null,
     segments,
     alsoDisputed,
     cruiseAltM: route.cruiseAltM,

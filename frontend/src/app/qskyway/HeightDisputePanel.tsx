@@ -15,10 +15,16 @@
  */
 export interface HeightDispute {
   building: number;
-  osm: string;
+  /** элемент OSM; null — твин не знает, по чему проверять */
+  osm: string | null;
   taggedM: number;
-  publishedM: number;
-  publishedSource: string;
+  /**
+   * Что публикует статья объекта. `null` — разбора человеком ещё нет, и это
+   * НЕ ноль: «против 0 м в статье» — правдоподобная цифра вместо «не знаем»,
+   * ровно та подмена, которую модуль ищет в чужих данных.
+   */
+  publishedM: number | null;
+  publishedSource: string | null;
   segments: number;
   cruiseAltM: number;
   cruiseAltMIfPublished: number | null;
@@ -43,7 +49,9 @@ export function HeightDisputePanel({ dispute }: { dispute: HeightDispute | null 
       {cruiseDeltaM != null && cruiseDeltaM > 0 && <> · на {cruiseDeltaM} м выше, чем по опубликованной</>}
       <span style={{ color: "#5f7086" }}> · участков {segments}</span>
       <div style={{ color: "#9fb0c4", fontSize: 10.5, marginTop: 3, whiteSpace: "normal" }}>
-        {taggedM} м в теге OSM против {publishedM} м в статье объекта.
+        {publishedM != null
+          ? <>{taggedM} м в теге OSM против {publishedM} м в статье объекта.</>
+          : <>{taggedM} м в теге OSM; твин считает эту высоту спорной, но разбора по опубликованным данным ещё нет — второго числа назвать не можем.</>}
         {cruiseAltMIfPublished != null && (
           <> Крейсерская была бы {cruiseAltMIfPublished} м вместо {cruiseAltM} м.</>
         )}
@@ -53,7 +61,9 @@ export function HeightDisputePanel({ dispute }: { dispute: HeightDispute | null 
           <> Длина маршрута — {distanceKm} км вместо {distanceKmIfPublished} км.</>
         )}{" "}
         Высоту не переписываем: починка принадлежит источнику
-        {osm !== "—" && (
+        {/* `"—"` — форма прежнего бэкенда: на проде может стоять сборка до
+            перехода на null, и прочерк ссылкой быть не должен. */}
+        {osm != null && osm !== "—" && (
           <>
             {" "}(
             <a href={`https://www.openstreetmap.org/${osm}`} target="_blank" rel="noopener noreferrer" style={{ color: "#2dd4bf" }}>

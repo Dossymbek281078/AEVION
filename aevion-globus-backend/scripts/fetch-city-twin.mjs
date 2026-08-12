@@ -490,6 +490,15 @@ const quantile = (xs, p) => {
 const noTypeMedian = process.argv.includes("--no-type-median");
 let typedGuesses = 0, typedRaised = 0, typedLowered = 0, typedMaxDelta = 0;
 const bigSubstitutions = [];
+// Признак подстановки едет В САМОМ ТВИНЕ, а не только в этом выводе.
+//
+// До 12.08.2026 новая высота записывалась прямо в `b.h`, класс оставался
+// `guessed`, и в данных было не отличить «12 м — слепой дефолт» от «59 м —
+// 75-й процентиль чужих домов того же типа». Человек, глядя на карточку
+// здания, естественно читает второе как догадку об ЭТОМ доме (по этажности).
+// Список печатался в stderr при пересборке — то есть знал о нём только тот,
+// кто её запускал, а не тот, кто смотрит на город.
+const substituted = [];
 for (let i = 0; !noTypeMedian && i < buildings.length; i++) {
   const b = buildings[i];
   if (b.hs !== 2) continue;
@@ -515,6 +524,10 @@ for (let i = 0; !noTypeMedian && i < buildings.length; i++) {
   if (h > b.h) typedRaised++; else typedLowered++;
   typedMaxDelta = Math.max(typedMaxDelta, Math.abs(h - b.h));
   if (h - b.h > BIG_SUBSTITUTION_M) bigSubstitutions.push({ i, type, from: b.h, to: h, samples: xs.length });
+  // `from` — то, что стояло бы без подстановки (слепой дефолт), `n` — по
+  // скольким известным высотам этого типа взят процентиль. Без `n` цифра
+  // выглядит замером; с ней видно, на чём она держится.
+  substituted.push({ i, type, from: b.h, n: xs.length });
   b.h = h;
   typedGuesses++;
 }
@@ -680,6 +693,11 @@ const data = {
     // right has to reach whoever is looking at the city, not just whoever
     // regenerates it. Omitted entirely when clean, so a quiet city stays quiet.
     ...(suspect.length ? { suspect } : {}),
+    // Тем же правилом, что `suspect`: публикуется, а не только печатается.
+    // Высота этих зданий взята из статистики по их типу, а не измерена и не
+    // выведена из этажности именно этого дома — и сказать об этом должен твин,
+    // а не консоль того, кто его пересобирал.
+    ...(substituted.length ? { substituted } : {}),
   },
 };
 

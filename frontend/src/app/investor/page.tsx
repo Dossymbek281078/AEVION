@@ -295,7 +295,7 @@ export default function InvestorPage() {
               <div style={pricingBox}>
                 <div style={pricingTitle}>Pricing</div>
                 {[
-                  { tier: "Verified", price: "$9", desc: "SHA-256 + ML-DSA-65 + cert" },
+                  { tier: "Verified", price: "$9", desc: "SHA-256 + ML-DSA-65 (key-activated) + cert" },
                   { tier: "Notarized", price: "$49", desc: "+ notary registry + Shamir backup" },
                   { tier: "Gold", price: "$199", desc: "+ legal review + int'l databases" },
                   { tier: "Platinum", price: "$999", desc: "+ multi-jurisdiction protection" },
@@ -474,8 +474,8 @@ export default function InvestorPage() {
         <div style={{ maxWidth: 560, margin: "0 auto" }}>
           <h2 style={{ fontSize: 32, fontWeight: 900, marginBottom: 12 }}>8-minute demo</h2>
           <p style={{ fontSize: 16, color: "#94a3b8", marginBottom: 28, lineHeight: 1.6 }}>
-            Register on aevion.app → create a QRight object → sign with ML-DSA-65 → get a Bureau certificate.
-            All verifiable, all on prod, no staging.
+            Register on aevion.app → create a QRight object → sign it → get a Bureau certificate.
+            All verifiable, all on prod, no staging. ML-DSA-65 signing is key-activated.
           </p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             <a href="https://aevion.app/auth" style={btnPrimary}>Start demo →</a>

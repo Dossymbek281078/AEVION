@@ -263,6 +263,33 @@ describe("proof links on audience-facing pages resolve", () => {
   // a hardcoded Railway origin instead of getApiBase(). Prod answers the same
   // through the proxy (402 on /api/healthai/score/x either way), so the module
   // now goes the same route as everything else. Zero left, so zero is pinned.
+  // /pricing/integrations offered a one-click setup link on nine cards, seven
+  // of them labelled "live". All nine answered 404 on 2026-08-12: the six
+  // /api/integrations/* routes are mounted nowhere on the backend, and the
+  // Zapier, Make and GitHub Marketplace listings do not exist. The card
+  // already falls back to /pricing/contact when the field is absent.
+  // External listings cannot be checked from a unit test, so this pins the
+  // half that can be: an /api setup path must exist in the backend.
+  test("integration setup links point at routes the backend mounts", () => {
+    const page = path.join(APP, "pricing", "integrations", "page.tsx");
+    const src = fs.readFileSync(page, "utf8");
+    const backendSrc = fs
+      .readdirSync(path.dirname(BACKEND_HUB))
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => fs.readFileSync(path.join(path.dirname(BACKEND_HUB), f), "utf8"))
+      .join("\n");
+
+    const unmounted = [...src.matchAll(/setupUrl:\s*"(\/api\/[^"]+)"/g)]
+      .map((m) => m[1])
+      .filter((p) => {
+        // "/api/integrations/slack/install" is mounted as some router at
+        // "/api/integrations" plus a "/slack/install" handler inside it.
+        const tail = "/" + p.split("/").slice(3).join("/");
+        return !backendSrc.includes(`"${tail}"`);
+      });
+    expect(unmounted).toEqual([]);
+  });
+
   test("no page hardcodes the internal backend host", () => {
     const offenders: string[] = [];
     (function collect(dir: string) {

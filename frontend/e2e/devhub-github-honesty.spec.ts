@@ -110,6 +110,52 @@ test.describe("DevHub — the GitHub tab says why it cannot read the repo", () =
     await expect(page.getByTestId("github-message")).toHaveAttribute("data-tone", "error", { timeout: 15_000 });
   });
 
+  test("a pull that could not read some files does not toast green", async ({ page }) => {
+    // The route now marks `degraded` when a blob could not be read, which
+    // leaves the project part-new and part-stale — and that mixture is what a
+    // later push or deploy builds from. A success-coloured toast over it reads
+    // as "all of it arrived".
+    //
+    // Asserted by colour rather than a test id on purpose: the toast component
+    // carries no attribute to hook, and adding one would have invalidated the
+    // build this spec runs against. #fef3c7 is the warning background.
+    await page.route("**/api/devhub/**", async (route) => {
+      const url = route.request().url();
+      const json = (body: unknown) =>
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+      if (url.includes("/github/sync")) {
+        return json({
+          ok: true, branch: "main", updated: ["a.ts"], created: [], unchanged: 0,
+          failed: [{ path: "broken.ts", reason: "HTTP 500" }],
+          degraded: true, degradedReason: "1 of 2 files could not be read",
+          message: "Synced o/r@main: 1 updated, 0 new ⚠ 1 file could not be read and are missing from this sync: broken.ts",
+        });
+      }
+      if (url.includes("/github/status")) return json({ exists: true, stars: 0, openIssues: 0 });
+      if (url.includes("/github/branches")) return json({ connected: true, branches: [] });
+      if (url.includes(`/projects/${PROJECT_ID}/files`)) return json({ files: FILES });
+      if (url.includes(`/projects/${PROJECT_ID}`)) {
+        return json({
+          project: {
+            id: PROJECT_ID, name: "gh", description: "", stack: "static",
+            deployUrl: null, repoUrl: REPO, userId: "anonymous", collaborators: [],
+          },
+          files: FILES,
+        });
+      }
+      if (url.includes("/studio/capabilities")) return json({ capabilities: [] });
+      if (url.includes("/deployments")) return json({ deployments: [] });
+      return json({ ok: true });
+    });
+
+    await openGithubTab(page);
+    await page.getByRole("button", { name: /Pull from repo/ }).click({ timeout: 15_000 });
+
+    const toast = page.getByRole("status").filter({ hasText: "broken.ts" });
+    await expect(toast).toBeVisible({ timeout: 15_000 });
+    await expect(toast).toHaveCSS("background-color", "rgb(254, 243, 199)");
+  });
+
   test("a healthy repo shows its branches and no warning at all", async ({ page }) => {
     await mockGithub(page, {
       status: { exists: true, stars: 3, openIssues: 0, lastPush: "2026-08-01T00:00:00Z" },

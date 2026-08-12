@@ -37,11 +37,20 @@ export function rateLimit(opts: RateLimitOptions) {
       }
     }
 
-    const ip =
-      (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
-      req.ip ||
-      req.socket?.remoteAddress ||
-      "unknown";
+    // req.ip, never the raw X-Forwarded-For header.
+    //
+    // This used to read the LEFTMOST entry of X-Forwarded-For, and the leftmost
+    // entry is whatever the caller wrote: a proxy appends on the right, so the
+    // first value is never verified by anything. One header, changed per
+    // request, gave every request its own bucket — so every limit built on this
+    // helper (120 call sites) counted to one and never fired, including the
+    // ones guarding login attempts.
+    //
+    // Express computes req.ip from the same header but only over the hops the
+    // app declares trusted (`app.set("trust proxy", 1)` in index.ts), which
+    // makes it the address the front proxy actually observed. With no trust
+    // proxy configured it falls back to the socket peer, which is also right.
+    const ip = req.ip || req.socket?.remoteAddress || "unknown";
     const key = `${keyPrefix}:${ip}`;
 
     let bucket = GLOBAL_BUCKETS.get(key);

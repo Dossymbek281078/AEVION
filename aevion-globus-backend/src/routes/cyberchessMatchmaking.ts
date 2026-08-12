@@ -37,6 +37,7 @@ import {
   getWallet,
   getWalletLeaderboard,
   countUnpaidAwards,
+  countWalletsWithoutRatedGames,
 } from "./cyberchessMatchStore";
 import { computeServerTimeStats, classifyServerTimeSignal } from "../lib/cyberchessServerTimeSignal";
 import { submitServerReport } from "./cyberchessAnticheat";
@@ -1421,9 +1422,14 @@ router.get("/debug/stats", async (_req: Request, res: Response): Promise<void> =
   // только строкой в логе, а логи никто не открывает. Число, не список: имена
   // и суммы наружу не нужны. null = спросить не удалось (это не «ноль долгов»).
   const unpaidAwards = await countUnpaidAwards().catch(() => null);
+  // Сверка: баланс есть, рейтинговых партий нет. Кошелёк пополняется только на
+  // закрытии партии, где пишется и рейтинг, — расхождение значит либо синтетику
+  // в боевых данных, либо пропущенную запись рейтинга при прошедшей выплате.
+  const walletsWithoutRatedGames = await countWalletsWithoutRatedGames().catch(() => null);
   res.json({
     ok: true,
     awards: { unpaid: unpaidAwards },
+    wallets: { withoutRatedGames: walletsWithoutRatedGames },
     queue: {
       total: QUEUE.size,
       waiting: [...QUEUE.values()].filter((e) => e.status === "waiting").length,

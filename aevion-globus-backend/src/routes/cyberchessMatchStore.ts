@@ -591,6 +591,34 @@ async function settleAwards(
  * показатель был бы навсегда красным, а такой показатель перестают читать.
  * Пустая ведомость → граница now() → ноль, а не вся история.
  */
+/**
+ * Сколько кошельков не имеют ни одной рейтинговой партии.
+ *
+ * Кошелёк пополняется ровно в одном месте — на закрытии сетевой партии, где
+ * пишется и рейтинг. Значит баланс у игрока без единой рейтинговой партии — это
+ * след одного из двух: в боевые данные попала синтетика (проверочный прогон,
+ * аудит), либо запись рейтинга не прошла, а выплата прошла.
+ *
+ * Повод для этой сверки не выдуман: 12.08.2026 на проде публичная Chessy-таблица
+ * показывала двух игроков, `WalletProd1` и `WalletProd2`, при НУЛЕ игроков в
+ * рейтинговой таблице. Заметить это можно было только руками, глядя на две
+ * ручки сразу.
+ *
+ * `null` — спросить не удалось; это не ноль.
+ */
+export async function countWalletsWithoutRatedGames(): Promise<number | null> {
+  const rows = await qOrNull(
+    `SELECT count(*) AS n FROM "CyberWallet" w
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "CyberRating" r WHERE r."userId" = w."userId" AND r."games" > 0
+      )`,
+    [],
+  );
+  if (rows === null) return null;
+  const n = Number(rows[0]?.n);
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function countUnpaidAwards(): Promise<number | null> {
   const rows = await q(
     `SELECT count(*) AS n FROM "CyberMatch" m

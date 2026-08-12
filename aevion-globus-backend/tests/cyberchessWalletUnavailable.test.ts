@@ -108,6 +108,19 @@ describe("отказ базы не выдаётся за факт о деньг�
     expect(res.body.awards.unpaid).toBe(0);
   });
 
+  test("сверка кошелька с рейтингом тоже видна и тоже честна", async () => {
+    // Баланс без рейтинговых партий — след синтетики в боевых данных или
+    // пропущенной записи рейтинга. Замечать это глазами по двум ручкам сразу,
+    // как пришлось 12.08, — не способ.
+    failing.on = false;
+    const ok = await request(app).get("/api/cyberchess/matchmaking/debug/stats");
+    expect(ok.body.wallets.withoutRatedGames).toBe(0);
+
+    failing.on = true;
+    const down = await request(app).get("/api/cyberchess/matchmaking/debug/stats");
+    expect(down.body.wallets.withoutRatedGames).toBeNull();
+  });
+
   test("на упавшем запросе счётчик показывает null, а не ноль", async () => {
     // Ноль здесь читался бы как «долгов нет» — заявление, которого никто не
     // проверял, причём именно в тот момент, когда база не отвечает.

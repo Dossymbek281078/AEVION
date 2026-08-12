@@ -20,7 +20,15 @@ let skipped = 0;
 const skip = (n, why) => { skipped++; console.log(`  ${String(++step).padStart(2, "0")}  SKIP  ${n}  — ${why}`); };
 // A skipped write leg did not pass — folding it into the pass count would make
 // a prod run look like it verified more than it actually did.
-const summary = () => `${failed === 0 ? "ALL PASS" : failed + " FAILED"}  (${step - skipped}/${step} checks${skipped ? `, ${skipped} skipped` : ""})`;
+// Считается ПРОЙДЕННОЕ, а не «выполненное». Прогон против прода 12.08.2026
+// напечатал «8 FAILED (123/125 checks)» — и вторая половина строки читается как
+// «123 прошли», хотя прошли 115. Числа в сводке о качестве не имеют права
+// требовать расшифровки.
+const summary = () => {
+  const ran = step - skipped;
+  const passed = ran - failed;
+  return `${failed === 0 ? "ALL PASS" : failed + " FAILED"}  (${passed}/${ran} passed${skipped ? `, ${skipped} skipped` : ""})`;
+};
 const ok = (n, x) => console.log(`  ${String(++step).padStart(2, "0")}  PASS  ${n}${x ? "  " + x : ""}`);
 const fail = (n, r) => { step++; failed++; console.error(`  ${String(step).padStart(2, "0")}  FAIL  ${n}${r ? "  — " + r : ""}`); };
 const assert = (c, n, r) => (c ? ok(n) : fail(n, r));

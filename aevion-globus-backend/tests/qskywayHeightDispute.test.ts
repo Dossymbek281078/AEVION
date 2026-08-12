@@ -80,6 +80,30 @@ describe("расхождение по высоте — коридор подня
     expect(d!.cruiseDeltaM!).toBeGreaterThanOrEqual(50);
   });
 
+  test("два спорных здания на одном коридоре не сваливаются в один счётчик", () => {
+    // Ведущим должно стать то, что подняло больше участков, а второе — попасть
+    // в alsoDisputed, а не в его счётчик: «участков 5» рядом с числами одного
+    // здания было бы неправдой, и в подписанном документе её не отличить от правды.
+    const twin = twinWithTowerOnTheOnlyPath();
+    twin.grid.heights[5] = 382;               // башня 195 занимает две ячейки → 3 участка
+    twin.buildings[195] = { ...twin.buildings[195], r: [[101, 1], [139, 1], [139, 19], [101, 19]] };
+    twin.grid.heights[9] = 200;               // вторая спорная высота → 2 участка
+    twin.buildings[100] = { h: 200, hs: 1, r: [[181, 1], [199, 1], [199, 19], [181, 19]] };
+    twin.dataQuality.suspect = [
+      { i: 195, h: 382, times: 4.66, why: "towers over the city" },
+      { i: 100, h: 200, times: 2.4, why: "towers over the city" },
+    ];
+
+    const route = __engineForTests.buildRoute("astana", twin, 0, 1, false);
+    const d = __engineForTests.heightDisputeFor("astana", twin, route!)!;
+    expect(d.building).toBe(195);
+    expect(d.segments).toBe(3);
+    expect(d.alsoDisputed).toEqual([100]);
+    // числа в карточке — по ведущему зданию, а не по сумме
+    expect(d.taggedM).toBe(382);
+    expect(d.publishedM).toBe(310.8);
+  });
+
   test("молчит там, где коридор спорного здания не касается", () => {
     const twin = twinWithTowerOnTheOnlyPath();
     // тот же твин без пометки «спорная» — предупреждать не о чем

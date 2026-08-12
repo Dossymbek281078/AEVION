@@ -160,10 +160,60 @@ async function main() {
   assert(contradictions.every((o) => o.levels > 0 && o.h > o.was && o.times === undefined),
     "[tokyo] a contradiction record says was/levels and does NOT pretend to be an outlier");
 
-  const clean = (await jget("/api/qskyway/city?city=nyc")).json?.dataQuality;
-  assert(clean?.suspect === undefined,
-    "a city with nothing to flag stays quiet instead of shipping an empty warning",
-    `nyc suspect=${JSON.stringify(clean?.suspect)}`);
+  // Проверка «городу нечего пометить — он молчит». До 12.08.2026 она была
+  // прибита к Нью-Йорку, а он 28.07 получил свои три записи «тег спорит со
+  // счётом этажей» (коммит bba3b3e61) — и с тех пор ежедневный смок краснел на
+  // ней при исправном продукте. Красная проверка при живой системе хуже
+  // отсутствующей: к ней привыкают. Проверяем теперь то, ради чего она писалась,
+  // и по всем городам сразу: пустого предупреждения быть не должно, а у каждой
+  // записи должен быть ровно один признак — выброс (times) ИЛИ противоречие
+  // (was/levels). Именно потеря признака когда-то напечатала «27 м (xundefined)».
+  for (const cityId of ["astana", "nyc", "tokyo"]) {
+    const dq = (await jget(`/api/qskyway/city?city=${cityId}`)).json?.dataQuality;
+    const sus = dq?.suspect;
+    assert(sus === undefined || (Array.isArray(sus) && sus.length > 0),
+      `[${cityId}] nothing to flag means no field at all, never an empty warning`,
+      `suspect=${JSON.stringify(sus)}`);
+    assert((sus ?? []).every((o) => (o.times !== undefined) !== (o.was !== undefined)),
+      `[${cityId}] every flagged height says WHY in exactly one way — outlier or self-contradiction`,
+      `suspect=${JSON.stringify(sus)}`);
+  }
+
+  // ── спорная высота против МАРШРУТОВ: два ответа, обязанные совпадать ──────
+  // До 12.08.2026 чип в шапке говорил «высоте не верим», а коридор молча на неё
+  // закладывался. Само по себе предупреждение теперь есть; здесь проверяется,
+  // что оно сходится с тем, что отдаёт движок, — иначе продукт снова начнёт
+  // отвечать по-разному в двух местах, и заметит это опять человек.
+  const hd = await jget("/api/qskyway/height-dispute?city=astana");
+  assert(hd.status === 200 && hd.json?.available === true,
+    "[astana] the height the twin distrusts is measured against the routes, not just displayed",
+    `status=${hd.status} available=${hd.json?.available}`);
+  assert((hd.json?.disputed ?? []).some((d) => d.publishedM > 0 && d.osm),
+    "[astana] a disputed height names the OSM object and the figure its own article publishes",
+    JSON.stringify(hd.json?.disputed));
+  assert(hd.json?.routable > 0 && hd.json.affectedPairs <= hd.json.routable,
+    "[astana] the measurement covers every routable pair",
+    `${hd.json?.affectedPairs}/${hd.json?.routable}`);
+  // Сверка ответов: сколько маршрутов САМИ признают, что подняты спорной
+  // высотой, против сетевого замера. Честно про её силу сегодня: обе стороны
+  // равны нулю, поэтому проверка ловит ЛОЖНОЕ предупреждение на рейсе (его
+  // сетевой замер не подтвердит) и не может поймать пропущенное. Станет
+  // двусторонней, как только появится хоть одна затронутая пара — например,
+  // если рядом с башней заведут площадку.
+  let disputeSeen = 0;
+  const astPads = (await jget("/api/qskyway/vertiports?city=astana")).json?.count ?? 0;
+  for (let i = 0; i < astPads; i++) for (let j = 0; j < astPads; j++) {
+    if (i === j) continue;
+    const r = await jpost("/api/qskyway/route", { from: i, to: j, city: "astana" });
+    if (r.json?.heightDispute) disputeSeen++;
+  }
+  assert(disputeSeen === hd.json?.affectedPairs,
+    "[astana] every route answers the same as the network-wide measurement",
+    `routes=${disputeSeen} measured=${hd.json?.affectedPairs}`);
+  const hdTk = await jget("/api/qskyway/height-dispute?city=tokyo");
+  assert(hdTk.json?.available === false,
+    "[tokyo] a height the engine already overrode is not paraded as an open dispute",
+    `available=${hdTk.json?.available}`);
 
   // ── Tokyo (third city): no-fly exposed, avoided, twin signs + verifies ────
   const tk = await jget("/api/qskyway/city?city=tokyo");

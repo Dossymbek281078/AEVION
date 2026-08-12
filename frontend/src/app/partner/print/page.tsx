@@ -198,7 +198,7 @@ export default function PartnerPrintPage() {
           <li><strong>aevion.app/status</strong> — live health-board, daily smoke полностью зелёный</li>
           <li><strong>aevion.app/constitution</strong> — Constitution v1, QSign-attested, 3 languages</li>
           <li><strong>aevion.app/partner</strong> — full visual brief</li>
-          <li><strong>/api/aevion/registry-stats</strong> — JSON registry of all {MODULE_NODES} modules</li>
+          <li><strong>/api/aevion/catalog</strong> — JSON registry of all {MODULE_NODES} modules</li>
         </ul>
 
         <div className="footer">

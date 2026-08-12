@@ -9,6 +9,7 @@
 
 import Link from "next/link";
 import FintechHealthBadge from "./FintechHealthBadge";
+import { repoPath } from "@/lib/repoUrl";
 
 type Props = {
   /** Hide health badge (e.g., when already shown in header). Default: false */
@@ -112,7 +113,7 @@ export default function FintechFooter({ hideHealthBadge = false }: Props) {
               <FintechHealthBadge compact />
             </div>
           )}
-          <Link href="https://github.com/Dossymbek281078/AEVION/issues" style={{ display: "block", color: "#cbd5e1", textDecoration: "none", fontSize: 12 }}>
+          <Link href={repoPath("issues")} style={{ display: "block", color: "#cbd5e1", textDecoration: "none", fontSize: 12 }}>
             Report an issue →
           </Link>
         </div>

@@ -6620,7 +6620,7 @@ export default function CyberChessPage(){
           {savedGames.length<3&&(()=>{
             const tiles:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
               {emoji:"♟",title:"Сыграй первую партию",desc:"AI любого уровня. От 800 до 2400. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
-              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:"10 818 задач в банке."}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
+              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:"500 000 задач в банке."}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
               {emoji:"🎓",title:"Спроси Coach",desc:"AI-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
               {emoji:"📅",title:"Задача дня",desc:"Один пазл каждый день. Streak, leaderboard, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
             ];

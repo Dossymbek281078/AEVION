@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ModuleOfTheDayCard } from "@/components/ModuleOfTheDayCard";
+import { repoPath } from "@/lib/repoUrl";
 
 export const metadata: Metadata = {
   title: "AEVION Developers — APIs, SDKs, webhooks, sandbox",
@@ -528,6 +529,12 @@ export default function DevelopersPage() {
               репозиторий — это отдельное решение, куда их вести.
             */}
             <a
+              // Namely npm, а не repoPath(): это ссылка на ПАКЕТ, а не на
+              // репозиторий. Централизация адреса репозитория (lib/repoUrl)
+              // правильна и работает для остальных ссылок, но её умолчание —
+              // всё тот же github.com, который отдаёт 404 с 27.07, пока не
+              // задан NEXT_PUBLIC_REPO_URL. npm живой уже сейчас и для
+              // разработчика уместнее: там версия, установка и readme.
               href="https://www.npmjs.com/package/@aevion-io/catalog-client"
               target="_blank"
               rel="noreferrer"

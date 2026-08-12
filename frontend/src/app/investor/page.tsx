@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ModuleOfTheDayCard } from "@/components/ModuleOfTheDayCard";
 import { apiUrl } from "@/lib/apiBase";
+import { repoLabel, repoUrl } from "@/lib/repoUrl";
 
 // metadata must live in a server component — moved to layout or generateMetadata.
 // Kept as a plain object for <head> tags injected by the client shell.
@@ -100,7 +101,7 @@ export default function InvestorPage() {
           <a href="https://aevion.app" style={btnPrimary}>
             Try the product →
           </a>
-          <a href="https://github.com/Dossymbek281078/AEVION" target="_blank" rel="noopener" style={btnGhost}>
+          <a href={repoUrl()} target="_blank" rel="noopener" style={btnGhost}>
             Open repo (130+ PRs)
           </a>
           <Link href="/launch-status" style={btnGhost}>
@@ -484,7 +485,7 @@ export default function InvestorPage() {
           </p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             <a href="https://aevion.app/auth" style={btnPrimary}>Start demo →</a>
-            <a href="https://github.com/Dossymbek281078/AEVION" target="_blank" rel="noopener" style={btnGhost}>Inspect the code</a>
+            <a href={repoUrl()} target="_blank" rel="noopener" style={btnGhost}>Inspect the code</a>
           </div>
           <p style={{ fontSize: 13, color: "#475569", marginTop: 20 }}>
             Partnership, not a buyout · $10M returnable advance + 51/49 revenue · contact:{" "}
@@ -498,7 +499,7 @@ export default function InvestorPage() {
       <footer style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
         <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px", display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 12, color: "#334155" }}>
-            AEVION · aevion.app · github.com/Dossymbek281078/AEVION
+            AEVION · aevion.app · {repoLabel()}
           </div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
             <Link href="/partner" style={{ color: "#94a3b8", textDecoration: "none" }}>Innovation Partnership</Link>

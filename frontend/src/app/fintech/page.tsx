@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { repoUrl } from "@/lib/repoUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -486,7 +487,7 @@ function StructuredData() {
         name: "AEVION",
         url: "https://aevion.app",
         sameAs: [
-          "https://github.com/Dossymbek281078/AEVION",
+          repoUrl(),
         ],
         description:
           "AEVION operates an interlocking financial fabric — VeilNetX settlement, QMaskCard masking, QPayNet wallets, QGood charity, Z-Tide reputation, QChainGov governance.",

@@ -71,7 +71,7 @@ export default function AcquirePrintPage() {
           <li><strong>aevion.app/status</strong> — health-board всех модулей</li>
           <li><strong>aevion.app/constitution</strong> — учредительный документ (RU/EN/KK), QSign envelope</li>
           <li><strong>aevion.app/devhub</strong> — 9 интеграций в проде, единый AEV-биллинг</li>
-          <li><strong>/api/aevion/registry · /api/aevion/stats · /api/planet/stats</strong> — JSON метрики</li>
+          <li><strong>/api/aevion/catalog · /api/aevion/stats · /api/planet/stats</strong> — JSON метрики</li>
         </ul>
 
         <div className="footer">

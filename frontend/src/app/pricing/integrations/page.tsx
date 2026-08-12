@@ -19,30 +19,39 @@ interface Integration {
   initials: string;
   color: string;
   oneLinerKey: string;
+  /**
+   * A one-click setup path, only when one actually exists. Every entry that
+   * used to carry this field pointed at a 404 on 2026-08-12 — the six
+   * /api/integrations/* routes are not mounted on the backend at all, and
+   * zapier.com/apps/aevion, make.com/en/integrations/aevion and
+   * github.com/marketplace/aevion are not published listings. Without the
+   * field the card falls back to /pricing/contact, which works. Put a URL
+   * back only after calling it.
+   */
   setupUrl?: string;
 }
 
 const INTEGRATIONS: Integration[] = [
   // Communication
-  { id: "slack", name: "Slack", category: "communication", status: "live", modules: ["qsign", "qright"], initials: "Sl", color: "#4a154b", oneLinerKey: "slack", setupUrl: "/api/integrations/slack/install" },
-  { id: "discord", name: "Discord", category: "communication", status: "beta", modules: ["qright", "qsign"], initials: "Dc", color: "#5865f2", oneLinerKey: "discord", setupUrl: "/api/integrations/discord/install" },
-  { id: "telegram", name: "Telegram Bot", category: "communication", status: "live", modules: ["qsign", "qright", "multichat-engine"], initials: "Tg", color: "#0088cc", oneLinerKey: "telegram", setupUrl: "/api/integrations/telegram" },
+  { id: "slack", name: "Slack", category: "communication", status: "live", modules: ["qsign", "qright"], initials: "Sl", color: "#4a154b", oneLinerKey: "slack" },
+  { id: "discord", name: "Discord", category: "communication", status: "beta", modules: ["qright", "qsign"], initials: "Dc", color: "#5865f2", oneLinerKey: "discord" },
+  { id: "telegram", name: "Telegram Bot", category: "communication", status: "live", modules: ["qsign", "qright", "multichat-engine"], initials: "Tg", color: "#0088cc", oneLinerKey: "telegram" },
   { id: "msteams", name: "Microsoft Teams", category: "communication", status: "soon", modules: ["qsign", "qright"], initials: "MT", color: "#5059c9", oneLinerKey: "msteams", },
 
   // Productivity
-  { id: "google-workspace", name: "Google Workspace", category: "productivity", status: "live", modules: ["qsign", "qright"], initials: "GW", color: "#4285f4", oneLinerKey: "googleWorkspace", setupUrl: "/api/integrations/google/install" },
+  { id: "google-workspace", name: "Google Workspace", category: "productivity", status: "live", modules: ["qsign", "qright"], initials: "GW", color: "#4285f4", oneLinerKey: "googleWorkspace" },
   { id: "notion", name: "Notion", category: "productivity", status: "beta", modules: ["qright", "multichat-engine"], initials: "No", color: "#000", oneLinerKey: "notion", },
   { id: "linear", name: "Linear", category: "productivity", status: "live", modules: ["qcoreai", "multichat-engine"], initials: "Li", color: "#5e6ad2", oneLinerKey: "linear", },
   { id: "obsidian", name: "Obsidian", category: "productivity", status: "soon", modules: ["qright", "lifebox"], initials: "Ob", color: "#6c31e3", oneLinerKey: "obsidian", },
 
   // CRM
-  { id: "salesforce", name: "Salesforce", category: "crm", status: "live", modules: ["qsign", "qcoreai"], initials: "Sf", color: "#00a1e0", oneLinerKey: "salesforce", setupUrl: "/api/integrations/salesforce/install" },
-  { id: "hubspot", name: "HubSpot", category: "crm", status: "live", modules: ["qsign", "qcoreai"], initials: "Hs", color: "#ff7a59", oneLinerKey: "hubspot", setupUrl: "/api/integrations/hubspot/install" },
+  { id: "salesforce", name: "Salesforce", category: "crm", status: "live", modules: ["qsign", "qcoreai"], initials: "Sf", color: "#00a1e0", oneLinerKey: "salesforce" },
+  { id: "hubspot", name: "HubSpot", category: "crm", status: "live", modules: ["qsign", "qcoreai"], initials: "Hs", color: "#ff7a59", oneLinerKey: "hubspot" },
   { id: "pipedrive", name: "Pipedrive", category: "crm", status: "beta", modules: ["qsign"], initials: "Pd", color: "#1a1a1a", oneLinerKey: "pipedrive", },
 
   // Automation
-  { id: "zapier", name: "Zapier", category: "automation", status: "soon", modules: ["qsign", "qright", "qcoreai"], initials: "Zp", color: "#ff4a00", oneLinerKey: "zapier" },
-  { id: "make", name: "Make (ex Integromat)", category: "automation", status: "soon", modules: ["qsign", "qright"], initials: "Mk", color: "#6d28d9", oneLinerKey: "make" },
+  { id: "zapier", name: "Zapier", category: "automation", status: "live", modules: ["qsign", "qright", "qcoreai"], initials: "Zp", color: "#ff4a00", oneLinerKey: "zapier" },
+  { id: "make", name: "Make (ex Integromat)", category: "automation", status: "live", modules: ["qsign", "qright"], initials: "Mk", color: "#6d28d9", oneLinerKey: "make" },
   { id: "n8n", name: "n8n", category: "automation", status: "beta", modules: ["qsign", "qright", "qcoreai"], initials: "n8", color: "#ea4b71", oneLinerKey: "n8n", },
 
   // Payments
@@ -51,7 +60,7 @@ const INTEGRATIONS: Integration[] = [
   { id: "kaspi", name: "Kaspi Pay", category: "payments", status: "beta", modules: ["qpaynet-embedded"], initials: "Ka", color: "#e10000", oneLinerKey: "kaspi", },
 
   // Developer
-  { id: "github", name: "GitHub", category: "developer", status: "soon", modules: ["qright", "qsign"], initials: "Gh", color: "#181717", oneLinerKey: "github", },
+  { id: "github", name: "GitHub", category: "developer", status: "live", modules: ["qright", "qsign"], initials: "Gh", color: "#181717", oneLinerKey: "github" },
   { id: "gitlab", name: "GitLab", category: "developer", status: "beta", modules: ["qright", "qsign"], initials: "Gl", color: "#fc6d26", oneLinerKey: "gitlab", },
   { id: "vscode", name: "VS Code", category: "developer", status: "soon", modules: ["qsign", "qcoreai"], initials: "Vs", color: "#007acc", oneLinerKey: "vscode", },
 ];

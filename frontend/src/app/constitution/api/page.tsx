@@ -10,6 +10,7 @@ import {
   SLIDER_META,
   type Sliders,
 } from "@/lib/constitution";
+import { repoPath } from "@/lib/repoUrl";
 
 type Tab = "curl" | "ts" | "py";
 
@@ -158,7 +159,7 @@ export default function ConstitutionApiPlaygroundPage() {
           </p>
           <div className="mt-3 text-xs">
             <a
-              href="https://github.com/Dossymbek281078/AEVION/blob/main/docs/constitution-public-api.md"
+              href={repoPath("blob/main/docs/constitution-public-api.md")}
               target="_blank"
               rel="noreferrer"
               className="text-cyan-300 hover:underline"
@@ -329,7 +330,7 @@ export default function ConstitutionApiPlaygroundPage() {
           <p>
             {t("constitution.api.footerPre")}{" "}
             <a
-              href="https://github.com/Dossymbek281078/AEVION/blob/main/docs/constitution-public-api.md"
+              href={repoPath("blob/main/docs/constitution-public-api.md")}
               target="_blank"
               rel="noreferrer"
               className="text-cyan-300 hover:underline"

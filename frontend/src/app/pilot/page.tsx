@@ -212,7 +212,7 @@ export default function PilotPage() {
               See full acquisition brief →
             </Link>
             <Link href="/status" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 24px", fontSize: 14, fontWeight: 700, color: "#cbd5e1", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, textDecoration: "none" }}>
-              Live transparency board
+              Live health-board
             </Link>
           </div>
         </div>

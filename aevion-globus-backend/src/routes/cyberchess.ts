@@ -142,13 +142,30 @@ cyberchessRouter.post("/tournament-finalized", async (req, res) => {
 
   type PodiumEntry = { email?: unknown; place?: unknown; amount?: unknown };
   const entries = podium as PodiumEntry[];
-  const recorded: Array<{ id: string; email: string; place: number; amount: number; transferId: string | null }> = [];
+  const recorded: Array<{ id: string; email: string; place: number; amount: number; transferId: string }> = [];
   const replayed: Array<{ id: string; email: string; place: number }> = [];
+  // A podium spot whose credit did not go through, and one we could not read
+  // at all. Both used to vanish without a trace — see the two comments below.
+  const failed: Array<{ email: string; place: number | null; reason: string }> = [];
+  const skipped: Array<{ place: number | null; reason: string }> = [];
 
   for (const e of entries) {
-    if (typeof e.email !== "string" || typeof e.place !== "number") continue;
+    // A malformed entry used to be dropped in silence while the response still
+    // said 201: a winner could disappear from a podium and nothing anywhere
+    // said so. Retrying cannot repair bad input, so this does not fail the
+    // delivery — it just stops being invisible.
+    if (typeof e.email !== "string" || typeof e.place !== "number") {
+      skipped.push({
+        place: typeof e.place === "number" ? e.place : null,
+        reason: "email (string) and place (number) required",
+      });
+      continue;
+    }
     const amt = Number(e.amount);
-    if (!Number.isFinite(amt) || amt <= 0) continue;
+    if (!Number.isFinite(amt) || amt <= 0) {
+      skipped.push({ place: e.place, reason: "amount must be a positive number" });
+      continue;
+    }
 
     const dup = chessPrizes.find(
       (x) =>
@@ -164,11 +181,32 @@ cyberchessRouter.post("/tournament-finalized", async (req, res) => {
     // Credit the winner's QTrade account, same pattern as the QRight royalty
     // webhook (auto-provisions an account, not subject to the daily topup
     // cap since this is a verified external payout).
-    const credit = await internalCreditAccount({
-      owner: e.email,
-      amount: amt,
-      memo: `Chess prize · ${tournamentId} · place ${e.place}`,
-    });
+    // A throw here is treated exactly like ok:false. Letting it escape would
+    // abandon the loop before scheduleEcosystemPersist() below, so prizes
+    // already credited in this batch would be missing from the stored ledger
+    // after a restart — and the retry, finding no record, would pay them twice.
+    let credit: Awaited<ReturnType<typeof internalCreditAccount>>;
+    try {
+      credit = await internalCreditAccount({
+        owner: e.email,
+        amount: amt,
+        memo: `Chess prize · ${tournamentId} · place ${e.place}`,
+      });
+    } catch (err: any) {
+      credit = { ok: false, error: err?.message ? String(err.message) : "credit threw" };
+      captureCyberChessError(err, { route: "tournament-finalized", tournamentId, place: String(e.place) });
+    }
+
+    if (!credit.ok) {
+      // The money did not move. Recording the prize anyway and answering 201
+      // told the sender "delivered", so it never retried and the winner's
+      // prize quietly never existed — while /ecosystem and the bank's
+      // ChessWinnings listed it as paid, transferId null. Record nothing and
+      // report the failure, so the retry credits this spot exactly once (the
+      // dedup above keeps the spots that did go through from paying twice).
+      failed.push({ email: (e.email as string).toLowerCase(), place: e.place, reason: credit.error });
+      continue;
+    }
 
     const prize: ChessPrize = {
       id: `prize_${randomUUID()}`,
@@ -177,11 +215,14 @@ cyberchessRouter.post("/tournament-finalized", async (req, res) => {
       place: e.place,
       amount: amt,
       finalizedAt: new Date().toISOString(),
-      transferId: credit.ok ? credit.operationId : null,
+      transferId: credit.operationId,
       source: "cyberchess",
     };
     chessPrizes.push(prize);
-    recorded.push({ id: prize.id, email: prize.email, place: prize.place, amount: prize.amount, transferId: prize.transferId });
+    // credit.operationId, not prize.transferId: the stored field is nullable
+    // for rows written before this endpoint refused to record an unpaid prize,
+    // but everything reported here as recorded was paid this request.
+    recorded.push({ id: prize.id, email: prize.email, place: prize.place, amount: prize.amount, transferId: credit.operationId });
   }
 
   // Mark the tournament finalized in persistent storage so it stops
@@ -192,12 +233,31 @@ cyberchessRouter.post("/tournament-finalized", async (req, res) => {
     console.error("[cyberchess] markTournamentFinalized failed", err);
   });
 
+  // Persist before answering on either path: the spots that were credited must
+  // be in the stored ledger before the sender is told anything, otherwise a
+  // restart loses the record while the QTrade credit itself survives.
   if (recorded.length > 0) scheduleEcosystemPersist();
+
+  if (failed.length > 0) {
+    // Senders act on the status, not the body. 502 so the delivery is retried;
+    // the spots already paid come back as `replayed`, only the failed ones are
+    // attempted again.
+    return res.status(502).json({
+      error: "credit_failed",
+      tournamentId,
+      recorded,
+      replayed,
+      skipped,
+      failed,
+      finalizedAt: new Date().toISOString(),
+    });
+  }
 
   res.status(201).json({
     tournamentId,
     recorded,
     replayed,
+    skipped,
     finalizedAt: new Date().toISOString(),
   });
 });

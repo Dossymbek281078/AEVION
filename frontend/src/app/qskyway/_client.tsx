@@ -15,6 +15,7 @@ import { isSmokeSlot, countSmokeSlots } from "./slotSource";
 // городах блок не появляется (0 из 42 пар Астаны) — увидеть его можно только
 // в тесте, а для этого он должен рендериться отдельно от канваса.
 import { HeightDisputePanel, type HeightDispute } from "./HeightDisputePanel";
+import { padProhibition } from "./padPermission";
 import { measuredObstaclePct } from "./heightQuality";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
@@ -198,6 +199,9 @@ export default function QSkywayClient() {
   // Считаем по загруженному списку, а не по `count` с сервера: сервер отдаёт
   // общее число, а тестовые видны только в записях.
   const smokeSlotCount = countSmokeSlots(slots.list);
+  // Запрет, накрывающий город целиком, — свойство каждой площадки, поэтому
+  // считается здесь и ставится в строку, а не только в регуляторную карточку.
+  const padBan = padProhibition(meta?.airspace?.permission);
   const [verify, setVerify] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
 
   // ── engine (pure over the loaded city) ──────────────────────────────────────
@@ -1033,6 +1037,14 @@ export default function QSkywayClient() {
                         {v.needsAtc && (
                           <div style={{ color: "#fda4af", fontSize: 10, marginTop: 2 }} title="В этой ячейке регулятор не даёт автоматического допуска (потолок 0 ft) — вылет только по координации с УВД.">
                             🛂 нужна координация с УВД — автоматического допуска нет
+                          </div>
+                        )}
+                        {/* Оценка отвечает «сядет ли сюда аппарат», а не «можно ли
+                            отсюда лететь». Без этой строки «пригодна · 78» в
+                            городе под сплошным запретом читалось как разрешение. */}
+                        {padBan && (
+                          <div style={{ color: "#fb7185", fontSize: 10, marginTop: 2 }} title={padBan.rule}>
+                            🚫 {t("qskyway.pad.prohibited", { authority: padBan.authority })}
                           </div>
                         )}
                       </div>

@@ -86,6 +86,9 @@ export default function DailyPuzzlePage() {
   const [puzzleSource, setPuzzleSource] = useState<PuzzleSource | null>(null);
   // null = ещё не ответили; [] = ответили, и решавших пока нет
   const [leaderboard, setLeaderboard] = useState<LeaderEntry[] | null>(null);
+  // Отдельно от пустой таблицы: пустая означает «никто не решал», а это
+  // заявление обо ВСЕХ игроках. Получать его из упавшего запроса нельзя.
+  const [standingsFailed, setStandingsFailed] = useState(false);
   const [serverStats, setServerStats] = useState<{ bestStreak: number; totalSolved: number } | null>(null);
 
   // chess engine (mutable via ref to keep instance stable across renders)
@@ -164,13 +167,17 @@ export default function DailyPuzzlePage() {
       const r = await fetch(`${API_DAILY}/leaderboard?limit=100`);
       if (r.ok) {
         const d = await r.json();
-        if (Array.isArray(d?.leaderboard)) setLeaderboard(d.leaderboard as LeaderEntry[]);
-        else setLeaderboard([]);
+        // Пустой список от ответившего сервера — законный ответ: сегодня ещё
+        // никто не решал. Пустой список ВМЕСТО ответа — совсем другое.
+        setLeaderboard(Array.isArray(d?.leaderboard) ? (d.leaderboard as LeaderEntry[]) : []);
+        setStandingsFailed(false);
       } else {
-        setLeaderboard([]);
+        setLeaderboard(null);
+        setStandingsFailed(true);
       }
     } catch {
-      setLeaderboard([]);
+      setLeaderboard(null);
+      setStandingsFailed(true);
     }
     const { userId } = playerIdentity();
     if (!userId) return;
@@ -858,15 +865,31 @@ export default function DailyPuzzlePage() {
               overflowY: 'auto',
             }}
           >
-            <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 12px 0', color: '#b56bff' }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0', color: '#b56bff' }}>
               🏆 Лучшие серии
             </h2>
+            {/* Серию, время и подсказки присылает браузер игрока — сервер их
+                только ограничивает разумными рамками, проверить решение он не
+                может: в отчёте о решении нет ходов. Пока это так, таблица
+                обязана называть себя тем, что она есть, иначе выдуманная серия
+                стоит на публичной странице как измеренная. */}
+            <div style={{ color: '#7c8296', fontSize: 11.5, lineHeight: 1.5, margin: '0 0 12px 0' }}>
+              Серии игроки отправляют сами — сервер их не перепроверяет.
+            </div>
 
-            {leaderboard === null && (
+            {leaderboard === null && !standingsFailed && (
               <div style={{ color: '#9aa0b4', fontSize: 13 }}>Загружаем…</div>
             )}
 
-            {leaderboard !== null && leaderboard.length === 0 && (
+            {standingsFailed && (
+              <div style={{ color: '#9aa0b4', fontSize: 13, lineHeight: 1.6 }}>
+                Таблицу сейчас не удалось загрузить.
+                <br />
+                Это не значит, что она пустая — попробуйте позже.
+              </div>
+            )}
+
+            {leaderboard !== null && !standingsFailed && leaderboard.length === 0 && (
               <div style={{ color: '#9aa0b4', fontSize: 13, lineHeight: 1.6 }}>
                 Пока никто не решал — таблица пустая.
                 <br />

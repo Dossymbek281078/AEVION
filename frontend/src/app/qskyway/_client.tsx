@@ -15,6 +15,7 @@ import { isSmokeSlot, countSmokeSlots } from "./slotSource";
 // городах блок не появляется (0 из 42 пар Астаны) — увидеть его можно только
 // в тесте, а для этого он должен рендериться отдельно от канваса.
 import { HeightDisputePanel, type HeightDispute } from "./HeightDisputePanel";
+import { measuredObstaclePct } from "./heightQuality";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
 // Клиент рисует реальный цифровой двойник Астаны (318 зданий из OpenStreetMap,
@@ -929,7 +930,7 @@ export default function QSkywayClient() {
                             title={`Из ${stats.obstacleSegments} участков со зданием под крылом на обмеренной городом высоте стоят ${stats.measuredObstacleSegments ?? 0}. Остальные — вывод из тега или счёта этажей OSM, либо слепой дефолт; за неуверенность коридор платит запасом по высоте.`}
                             style={{ fontSize: 11, fontWeight: 400, color: (stats.measuredObstacleSegments ?? 0) === 0 ? "#fbbf24" : "#5f7086", marginLeft: 5, cursor: "help" }}
                           >
-                            (по зданиям {Math.round(100 * (stats.measuredObstacleSegments ?? 0) / stats.obstacleSegments)}%)
+                            (по зданиям {measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments)}%)
                           </span>
                         )}
                       </>
@@ -993,7 +994,7 @@ export default function QSkywayClient() {
                         {justification.doc.obstacleSegments != null && justification.doc.obstacleSegments > 0 && (
                           <div style={{ marginTop: 3, color: justification.doc.measuredObstacleSegments === 0 ? "#fbbf24" : "#5f7086" }}>
                             высоты: {justification.doc.heightConfidencePct}% по коридору ·{" "}
-                            {Math.round(100 * (justification.doc.measuredObstacleSegments ?? 0) / justification.doc.obstacleSegments)}% по зданиям
+                            {measuredObstaclePct(justification.doc.obstacleSegments, justification.doc.measuredObstacleSegments)}% по зданиям
                             {justification.doc.measuredObstacleSegments === 0 && " — городского обмера нет ни у одного"}
                           </div>
                         )}

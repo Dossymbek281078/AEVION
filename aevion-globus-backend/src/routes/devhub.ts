@@ -152,11 +152,17 @@ function creditMonth(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-async function getUserTier(userId: string): Promise<StudioTier> {
-  if (!isDevHubDbReady()) return memTiers.get(userId) ?? "free";
+/**
+ * `tierKnown: false` means we had to guess. Answering a bare "free" on a failed
+ * read took the plan a customer had paid for away from them for as long as the
+ * database wobbled, and said nothing about it — the mirror image of the usage
+ * meter answering 0. The last value we actually saw is preferred to the guess.
+ */
+async function getUserTierChecked(userId: string): Promise<{ tier: StudioTier; tierKnown: boolean }> {
+  if (!isDevHubDbReady()) return { tier: memTiers.get(userId) ?? "free", tierKnown: true };
   try {
     const r = await pool.query(`SELECT "tier" FROM "DevHubTier" WHERE "userId"=$1`, [userId]);
-    if (r.rows[0]?.tier) return r.rows[0].tier as StudioTier;
+    if (r.rows[0]?.tier) return { tier: r.rows[0].tier as StudioTier, tierKnown: true };
     // Check email-based tier (set by payment webhook before user registered)
     const er = await pool.query(`
       SELECT det."tier" FROM "AEVIONUser" au
@@ -170,10 +176,23 @@ async function getUserTier(userId: string): Promise<StudioTier> {
         INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
         ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
       `, [userId, promoted]).catch(() => {});
-      return promoted;
+      return { tier: promoted, tierKnown: true };
     }
-    return "free";
-  } catch { return "free"; }
+    // No row is a real answer: this user is on the free plan. But a setUserTier
+    // whose write failed parks the value in memTiers, and that map used to be
+    // read only with the database KNOWN to be down — so an upgrade applied
+    // during a wobble never took effect at all.
+    const parked = memTiers.get(userId);
+    if (parked) return { tier: parked, tierKnown: true };
+    return { tier: "free", tierKnown: true };
+  } catch {
+    // Prefer the last value we actually saw over the guess.
+    return { tier: memTiers.get(userId) ?? "free", tierKnown: false };
+  }
+}
+
+async function getUserTier(userId: string): Promise<StudioTier> {
+  return (await getUserTierChecked(userId)).tier;
 }
 
 async function setUserTier(userId: string, tier: StudioTier): Promise<void> {
@@ -260,8 +279,8 @@ async function debitCredit(userId: string, capability: CapabilityKey, amount = 1
 
 type UsageCell = { used: number; limit: number; usedKnown?: false };
 
-async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; month: string; usage: Record<CapabilityKey, UsageCell>; anyUnknown: boolean }> {
-  const tier = await getUserTier(userId);
+async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; tierKnown: boolean; month: string; usage: Record<CapabilityKey, UsageCell>; anyUnknown: boolean }> {
+  const { tier, tierKnown } = await getUserTierChecked(userId);
   const month = creditMonth();
   const caps: CapabilityKey[] = ["video", "image", "tts", "music", "deploy"];
   const usage: Record<string, UsageCell> = {};
@@ -273,7 +292,7 @@ async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; mon
     if (used === null) anyUnknown = true;
     usage[cap] = { used: used ?? 0, limit: TIER_LIMITS[tier][cap], ...(used === null ? { usedKnown: false as const } : {}) };
   }
-  return { tier, month, usage: usage as Record<CapabilityKey, UsageCell>, anyUnknown };
+  return { tier, tierKnown, month, usage: usage as Record<CapabilityKey, UsageCell>, anyUnknown };
 }
 
 // ── Deferred post-deploy work ────────────────────────────────────────────────
@@ -6561,8 +6580,14 @@ devhubRouter.get("/studio/credits", async (req, res) => {
     const { anyUnknown, ...result } = await getAllMonthUsage(userId);
     return res.json({
       ...result,
-      ...(anyUnknown
-        ? degraded("Monthly usage could not be read from the database — the numbers shown are not a measurement and limits were not enforced for this check")
+      ...(anyUnknown || !result.tierKnown
+        ? degraded(
+            !result.tierKnown && anyUnknown
+              ? "Neither the plan nor the monthly usage could be read from the database — the numbers shown are not a measurement and limits were not enforced for this check"
+              : anyUnknown
+                ? "Monthly usage could not be read from the database — the numbers shown are not a measurement and limits were not enforced for this check"
+                : "The plan could not be read from the database — the tier shown is the last one seen, not a current reading",
+          )
         : {}),
       tierInfo: {
         free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },

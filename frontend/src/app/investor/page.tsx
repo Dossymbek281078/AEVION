@@ -499,7 +499,7 @@ export default function InvestorPage() {
             <Link href="/partner" style={{ color: "#94a3b8", textDecoration: "none" }}>Innovation Partnership</Link>
             <Link href="/acquire" style={{ color: "#94a3b8", textDecoration: "none" }}>Acquisition brief</Link>
             <Link href="/pilot" style={{ color: "#94a3b8", textDecoration: "none" }}>90-day pilot</Link>
-            <Link href="/transparency" style={{ color: "#94a3b8", textDecoration: "none" }}>Live health-board</Link>
+            <Link href="/status" style={{ color: "#94a3b8", textDecoration: "none" }}>Live health-board</Link>
           </div>
         </div>
       </footer>

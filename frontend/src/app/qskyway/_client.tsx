@@ -75,6 +75,8 @@ interface JustDoc {
   kind: string; city: string; from: number; to: number; respectCeiling: boolean;
   distanceKm: number; cruiseAltM: number; etaMinWind: number;
   twinContentHash: string; windSource: string; heightConfidencePct: number; issuedAt: string;
+  /** участков коридора со зданием под крылом и сколько из них на городском обмере */
+  obstacleSegments?: number; measuredObstacleSegments?: number;
   airspace: null | { authority: string; source: string; regime: string; effective: string; contentHash: string | null; compliant: boolean | null; exceedingSegments: number; maxExceedanceM: number; lowestCeilingM: number | null };
 }
 interface JustAttestation { alg: string; contentHash: string; signature: string; publicKey: string; ephemeral: boolean }
@@ -982,6 +984,17 @@ export default function QSkywayClient() {
                           <div style={{ marginTop: 3, color: justification.doc.airspace.compliant ? "#2dd4bf" : "#fbbf24" }}>
                             {justification.doc.airspace.authority} · {justification.doc.airspace.effective} ·{" "}
                             {justification.doc.airspace.compliant ? t("qskyway.just.within") : t("qskyway.just.above")}
+                          </div>
+                        )}
+                        {/* Качество высотных данных — часть обоснования, а не
+                            примечание к нему: коридор в этом документе построен
+                            по ним. Показываем то же, что лежит внутри файла, и
+                            обе цифры сразу — иначе на экране остаётся удобная. */}
+                        {justification.doc.obstacleSegments != null && justification.doc.obstacleSegments > 0 && (
+                          <div style={{ marginTop: 3, color: justification.doc.measuredObstacleSegments === 0 ? "#fbbf24" : "#5f7086" }}>
+                            высоты: {justification.doc.heightConfidencePct}% по коридору ·{" "}
+                            {Math.round(100 * (justification.doc.measuredObstacleSegments ?? 0) / justification.doc.obstacleSegments)}% по зданиям
+                            {justification.doc.measuredObstacleSegments === 0 && " — городского обмера нет ни у одного"}
                           </div>
                         )}
                         <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>

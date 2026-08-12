@@ -79,7 +79,13 @@ type LeaderEntry = {
   updatedAt: string;
 };
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+// Overridable so a test run can point the store at a scratch directory. The
+// leaderboard file is committed to the repository, so a suite that wrote to
+// the real one would dirty tracked data while reporting green — which is
+// exactly what the paywall suite did to data/subscriptions.jsonl.
+const DATA_DIR = process.env.CYBERCHESS_DAILY_DIR
+  ? path.resolve(process.env.CYBERCHESS_DAILY_DIR)
+  : path.resolve(process.cwd(), 'data');
 const LB_FILE = path.join(DATA_DIR, 'cyberchess-daily-leaderboard.json');
 const LB_MAX = 1000;
 
@@ -239,16 +245,38 @@ router.get('/history', (req: Request, res: Response) => {
  * Body: { streak: number, day: string, timeMs?: number, hintsUsed?: number, userId?: string, name?: string, country?: string }
  * Records the solve and updates leaderboard + user stats.
  */
+// Bounds on what a client may claim. There are no accounts here, so /solve
+// takes the player's word for their run — these exist so a wrong or invented
+// word cannot become permanent. The leaderboard is sorted by score, an entry is
+// only ever replaced by a HIGHER score, and the whole table is written to disk:
+// one request claiming a streak of a billion took first place for good — no
+// honest run can produce a higher score, and nothing lowers an existing one.
+// (NaN and Infinity are not reachable here: JSON has neither, so they arrive as
+// null and are already refused by the type check above.)
+const MAX_STREAK = 3650; // ten years of consecutive daily puzzles
+const MAX_TIME_MS = 24 * 60 * 60 * 1000;
+const MAX_HINTS = 20;
+const MAX_NAME_LEN = 40;
+const MAX_COUNTRY_LEN = 8;
+
 router.post('/solve', (req: Request, res: Response) => {
   const { streak, day, timeMs, hintsUsed, userId, name, country } = req.body || {};
   if (typeof streak !== 'number' || typeof day !== 'string') {
     return res.status(400).json({ ok: false, error: 'streak (number) and day (string) required' });
   }
-  const tMs = typeof timeMs === 'number' && timeMs >= 0 ? timeMs : 0;
-  const hUsed = typeof hintsUsed === 'number' && hintsUsed >= 0 ? Math.floor(hintsUsed) : 0;
+  // Whole, non-negative, and within a range a real player could reach.
+  if (!Number.isInteger(streak) || streak < 0 || streak > MAX_STREAK) {
+    return res.status(400).json({
+      ok: false,
+      error: 'invalid_streak',
+      hint: `streak must be a whole number between 0 and ${MAX_STREAK}`,
+    });
+  }
+  const tMs = typeof timeMs === 'number' && timeMs >= 0 ? Math.min(timeMs, MAX_TIME_MS) : 0;
+  const hUsed = typeof hintsUsed === 'number' && hintsUsed >= 0 ? Math.min(Math.floor(hintsUsed), MAX_HINTS) : 0;
   const uid = typeof userId === 'string' && userId.length > 0 ? userId : 'anonymous';
-  const uname = typeof name === 'string' && name.length > 0 ? name : `Player_${uid.slice(0, 6)}`;
-  const uctry = typeof country === 'string' && country.length > 0 ? country : '🌍';
+  const uname = typeof name === 'string' && name.length > 0 ? name.slice(0, MAX_NAME_LEN) : `Player_${uid.slice(0, 6)}`;
+  const uctry = typeof country === 'string' && country.length > 0 ? country.slice(0, MAX_COUNTRY_LEN) : '🌍';
 
   const score = computeScore(streak, tMs, hUsed);
   const key = `${uid}:${day}`;

@@ -15,6 +15,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken, getAuthHeaders } from "@/lib/auth";
 
 const BACKEND =
   process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() ||
@@ -24,18 +25,13 @@ const BACKEND =
 
 const LS_PROFILE_ID = "aevion:healthai:profileId";
 const LS_TAB = "aevion:healthai:tab";
-const LS_AUTH_TOKEN = "aevion:auth:token";
 const LS_NOTIF_OPTIN = "aevion:healthai:notif";
 
-function authHeader(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  try {
-    const t = window.localStorage.getItem(LS_AUTH_TOKEN);
-    return t ? { Authorization: `Bearer ${t}` } : {};
-  } catch {
-    return {};
-  }
-}
+// Свой ключ входа модуль больше не выдумывает. До 12.08.2026 здесь стояло
+// LS_AUTH_TOKEN = "aevion:auth:token" — имя, под которым JWT не пишет никто:
+// форма входа кладёт его под "aevion_auth_token_v1". Из-за этого HealthAI
+// уходил в бэкенд без Bearer и считал вошедшего человека гостем.
+const authHeader = getAuthHeaders;
 
 type Lang = "en" | "ru";
 
@@ -720,7 +716,7 @@ export default function HealthAIPage() {
   const [hasAuthToken, setHasAuthToken] = useState(false);
   useEffect(() => {
     try {
-      setHasAuthToken(!!window.localStorage.getItem(LS_AUTH_TOKEN));
+      setHasAuthToken(!!getAuthToken());
     } catch {}
   }, []);
 

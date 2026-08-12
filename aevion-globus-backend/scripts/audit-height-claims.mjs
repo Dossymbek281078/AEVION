@@ -25,6 +25,7 @@ import {
   parseInfoboxHeights, compareTagToArticle, storeyRatio, rawHeightFields,
 } from "./lib/wiki-infobox.mjs";
 import { parseMetres, overpassBodyProblem } from "./lib/city-twin-geometry.mjs";
+import { overpass as overpassShared } from "./lib/overpass.mjs";
 import fs from "node:fs";
 
 const BBOX = {
@@ -32,10 +33,6 @@ const BBOX = {
   nyc: { minLat: 40.7474728, maxLat: 40.7629936, minLon: -74.0002478, maxLon: -73.9758674 },
   tokyo: { minLat: 35.683592, maxLat: 35.6978747, minLon: 139.6879457, maxLon: 139.7037075 },
 };
-const OVERPASS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-];
 const UA = "AEVION-QSkyway/1.0 (height-claim audit; contact via github.com/Dossymbek281078/AEVION)";
 
 const city = process.argv[2];
@@ -62,51 +59,10 @@ if (!BBOX[city]) {
   process.exit(1);
 }
 
-/**
- * Rounds outside, hosts inside — deliberately, and not the obvious nesting.
- *
- * With hosts on the OUTER loop a dead mirror costs three full timeouts before
- * anything else is tried: on 2026-07-27 overpass.kumi.systems stopped answering
- * while overpass-api.de replied in one second, and this script sat for nine
- * minutes per run because it asked the dead one three times first. Round-robin
- * spends one timeout per host per round, so a healthy mirror is reached at once.
- */
-async function overpass(query) {
-  let last;
-  for (let round = 1; round <= 3; round++) {
-    for (const host of OVERPASS) {
-      // Пишем ДО запроса, а не только при ошибке. Худший случай честно длинный:
-      // три круга × три зеркала × 120 с плюс паузы — больше двадцати минут, и всё
-      // это время инструмент не печатал ни строки. Человек в такой тишине решает,
-      // что он повис, и больше его не запускает: 11.08.2026 я так и решил на
-      // прогоне по Нью-Йорку и снял процесс. Проверка, которую перестают звать,
-      // ничем не лучше отсутствующей — ровно та болезнь, что этот модуль лечит.
-      process.stderr.write(`  → ${new URL(host).host} (круг ${round} из 3, ждём до 120 с)…\n`);
-      try {
-        const res = await fetch(host, {
-          method: "POST", body: query,
-          headers: { "Content-Type": "text/plain", "User-Agent": UA },
-          signal: AbortSignal.timeout(120_000),
-        });
-        // 429/504 is Overpass asking us to wait, not saying the data is absent.
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        // …and an overloaded instance says so with HTTP **200** and an HTML page:
-        // "Error: runtime error: … The server is probably too busy to handle your
-        // request." Parsing that as JSON throws something unreadable about
-        // token '<', which reads like a bug here rather than a busy server.
-        const body = await res.text();
-        const bodyProblem = overpassBodyProblem(body);
-        if (bodyProblem) throw new Error(bodyProblem);
-        return JSON.parse(body).elements;
-      } catch (e) {
-        last = e;
-        process.stderr.write(`  ${host} round ${round}: ${e.message}\n`);
-      }
-    }
-    if (round < 3) await new Promise((r) => setTimeout(r, 12_000 * round));
-  }
-  throw last;
-}
+/** Общий доступ к Overpass живёт в scripts/lib/overpass.mjs — перебор зеркал по
+ * кругу, строка прогресса до запроса и таймауты там же. Здесь остаётся только
+ * User-Agent и разбор перегруженного ответа, специфичные для этого аудита. */
+const overpass = (query) => overpassShared(query, { ua: UA, bodyProblem: overpassBodyProblem });
 
 /**
  * → { text } | { error }.

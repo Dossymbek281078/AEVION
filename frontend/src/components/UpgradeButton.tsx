@@ -2,13 +2,22 @@
 
 import { useState } from "react";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
+import { productById } from "@/lib/products";
+import { track } from "@/lib/track";
 
 // Единственный живой процессинг — Gumroad (Paddle/Stripe/LemonSqueezy не в
 // primary). Кнопка ведёт на Gumroad-чекаут. Legacy-имя PaddleUpgradeButton
 // реэкспортится из ./PaddleUpgradeButton для старых импортов (~11 модулей).
 
 interface Props {
-  tierId?: "pro" | "business";
+  /**
+   * Tier tag for attribution only — the charge comes from the Gumroad product,
+   * not from this value. Defaults to `full`: the banner sells All-Access ("все
+   * модули включены"), and `full` is the closest tier label for that. It used to
+   * default to `pro` (Universe), which tagged every hand-off with a tier the copy
+   * never offered. `pro`/`business` stay accepted for legacy callers.
+   */
+  tierId?: "full" | "pro" | "business";
   /** "button" — обычная кнопка, "banner" — полоса на всю ширину, "pill" — компактный */
   variant?: "button" | "banner" | "pill";
   /** Название приложения — пробрасывается в Gumroad URL для аналитики атрибуции */
@@ -18,16 +27,28 @@ interface Props {
 }
 
 export function UpgradeButton({
-  tierId = "pro",
+  tierId = "full",
   variant = "button",
   appId = "platform",
   label,
   className = "",
 }: Props) {
   const [loading, setLoading] = useState(false);
+  // The Gumroad All-Access subscription this banner sells.
+  const allAccess = productById("xpxzam");
 
   function handleClick() {
     setLoading(true);
+    // Purchase intent from a module page. Without this the funnel dashboard
+    // only ever saw checkout_start from the /pricing table, so every upgrade
+    // started here (9 module pages) was invisible. track() uses sendBeacon,
+    // which survives the navigation below.
+    track({
+      type: "checkout_start",
+      tier: tierId,
+      source: `upgrade-button/${appId}`,
+      meta: { variant, processor: "gumroad" },
+    });
     // Gumroad hosted checkout — единственный живой рельс.
     window.location.href = gumroadCheckoutUrl({ key: appId, tier: tierId });
   }
@@ -40,8 +61,13 @@ export function UpgradeButton({
       <div className={`w-full ${className}`}>
         <div className="bg-gradient-to-r from-blue-600/20 to-violet-600/20 border border-blue-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
           <div>
+            {/* This button opens the Gumroad product `xpxzam`, NOT a tier checkout,
+                so the price must come from the product catalogue — not from the tier
+                registry. $59 is the real Gumroad price, verified against the live
+                dashboard on 2026-07-26 (see lib/products.ts). Imported rather than
+                typed so it tracks the catalogue. */}
             <div className="text-sm font-semibold text-white">
-              AEVION All-Access — $59/мес
+              AEVION All-Access — ${allAccess?.priceUsd ?? 59}/мес
             </div>
             <div className="text-xs text-gray-400 mt-0.5">Все модули включены · Отмена в любой момент · Карта любого банка</div>
           </div>

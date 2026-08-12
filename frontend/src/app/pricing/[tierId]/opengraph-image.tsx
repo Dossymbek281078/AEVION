@@ -5,6 +5,11 @@ export const alt = "AEVION Tier";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
+// Prices MUST match the tier registry in aevion-globus-backend/src/data/pricing.ts.
+// This card is a share surface — it is the classic place a retired price survives
+// a repricing, because nobody re-opens an OG image. Repriced 2026-07-22:
+// lite 19→24, medium 29→39, full 49→89, and `pro` (Universe) was missing entirely,
+// so /pricing/pro used to share a card reading "Medium $29".
 const TIER_DATA: Record<string, { name: string; price: string; tagline: string; gradient: string }> = {
   free: {
     name: "Free",
@@ -14,21 +19,27 @@ const TIER_DATA: Record<string, { name: string; price: string; tagline: string; 
   },
   lite: {
     name: "Lite",
-    price: "$19",
+    price: "$24",
     tagline: "Один продукт на выбор",
     gradient: "linear-gradient(135deg, #0d9488, #0ea5e9)",
   },
   medium: {
     name: "Medium",
-    price: "$29",
+    price: "$39",
     tagline: "Бандл из 10 продуктов",
     gradient: "linear-gradient(135deg, #0ea5e9, #6366f1)",
   },
   full: {
     name: "Full",
-    price: "$49",
+    price: "$89",
     tagline: "Вся экосистема AEVION",
     gradient: "linear-gradient(135deg, #7c3aed, #ec4899)",
+  },
+  pro: {
+    name: "Universe",
+    price: "$249.99",
+    tagline: "Всё AEVION в одном месте",
+    gradient: "linear-gradient(135deg, #4338ca, #a21caf)",
   },
   enterprise: {
     name: "Enterprise",

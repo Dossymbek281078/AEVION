@@ -53,7 +53,7 @@ const TIERS = [
   {
     id: "scale",
     name: "Scale",
-    price: "$199/mo",
+    price: "$249/mo",
     color: "#8b5cf6",
     callsPerMonth: "1M",
     rateLimit: "2K/min",

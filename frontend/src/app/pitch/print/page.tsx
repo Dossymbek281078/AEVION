@@ -19,6 +19,7 @@ import {
   useCases,
 } from "@/data/pitchModel";
 import { repoLabel, repoUrl } from "@/lib/repoUrl";
+import { TAM, ADVANCE, BOTTOM_UP_REGIONAL_ARR } from "@/data/pitchFacts";
 
 // Print-only flat layout. Black-on-white, no hero gradients, no animations,
 // no sticky chrome. Auto-opens the print dialog on mount so this page IS the
@@ -54,9 +55,9 @@ export default function PitchPrintPage() {
         <p style={{ fontSize: 14, lineHeight: 1.6, color: "#334155", margin: "0 0 14px" }}>{thesis.lead}</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12 }}>
           <Stat value={`${liveCount}`} unit="live MVPs" hint={`of ${totalNodes} planned`} />
-          <Stat value="$340B" unit="addressable market" hint="IP + creators + payments" />
-          <Stat value="≈$9.4M" unit="modelled ARR" hint="bottom-up · 3 flagships" />
-          <Stat value="$10M" unit="returnable advance" hint="partnership, not buyout" />
+          <Stat value={TAM} unit="addressable market" hint="IP + creators + payments" />
+          <Stat value={BOTTOM_UP_REGIONAL_ARR} unit="modelled ARR" hint="bottom-up · 3 flagships" />
+          <Stat value={ADVANCE} unit="returnable advance" hint="partnership, not buyout" />
         </div>
       </header>
 

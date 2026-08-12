@@ -37,9 +37,11 @@ async function loadPublic(id: string): Promise<PublicSig | null> {
 export default async function OG({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  // Promise-only — see the note in src/app/[id]/page.tsx: Next 16 rejects the
+  // union in generated route types, and it is a build-only error.
+  params: Promise<{ id: string }>;
 }) {
-  const resolved = "then" in (params as any) ? await (params as Promise<{ id: string }>) : (params as { id: string });
+  const resolved = await params;
   const id = resolved?.id || "";
   const pub = await loadPublic(id);
 

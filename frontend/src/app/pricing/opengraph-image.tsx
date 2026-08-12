@@ -1,6 +1,9 @@
 import { ImageResponse } from "next/og";
+import { MODULE_NODES, ENTRY_PAID_TIER_MONTHLY } from "@/data/pitchFacts";
 
 export const runtime = "edge";
+// Count-free wording kept from main — one less number that can go stale. The
+// module count still appears in the card body, where it comes from MODULE_NODES.
 export const alt = "AEVION Pricing — every module in one subscription";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
@@ -90,15 +93,15 @@ export default async function Image() {
               lineHeight: 1.3,
             }}
           >
-            Цифровая собственность · AI · подписи · платежи. От $19/мес.
+            Цифровая собственность · AI · подписи · платежи. От {ENTRY_PAID_TIER_MONTHLY}/мес.
           </p>
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", gap: 32 }}>
-            <Stat value="27" label="модулей" />
+            <Stat value={`${MODULE_NODES}`} label="модулей" />
             <Stat value="30+" label="стран" />
-            <Stat value="$19" label="от/мес" />
+            <Stat value={ENTRY_PAID_TIER_MONTHLY} label="от/мес" />
             <Stat value="14" label="дней trial" />
           </div>
           <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing</div>

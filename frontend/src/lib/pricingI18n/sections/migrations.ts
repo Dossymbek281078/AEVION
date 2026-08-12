@@ -31,7 +31,7 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.docusign.before.b2": "Audit-trail в отдельной системе, не интегрирован с реестром авторских прав",
     "migrations.docusign.before.b3": "Нет TSP-timestamp по умолчанию, для compliance — отдельный продукт",
 
-    "migrations.docusign.after.b1": "$19/мес/seat (Pro) или $9/мес add-on к любому тарифу — без overage",
+    "migrations.docusign.after.b1": "$24/мес/seat (Lite) или $9/мес add-on к любому тарифу — без overage",
     "migrations.docusign.after.b2": "QRight + QSign в одном аккаунте: подпись автоматически фиксируется в реестре",
     "migrations.docusign.after.b3": "TSP-timestamp + audit-trail включены, SOC2 evidence pack одной кнопкой",
 
@@ -141,7 +141,7 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.docusign.before.b2": "Audit trail in a separate system, not integrated with copyright registry",
     "migrations.docusign.before.b3": "No TSP timestamp by default; compliance is a separate product",
 
-    "migrations.docusign.after.b1": "$19/seat/mo (Pro) or $9/mo add-on on any tier — no overage",
+    "migrations.docusign.after.b1": "$24/seat/mo (Lite) or $9/mo add-on on any tier — no overage",
     "migrations.docusign.after.b2": "QRight + QSign in one account: signature is auto-recorded in registry",
     "migrations.docusign.after.b3": "TSP timestamp + audit trail included, SOC2 evidence pack in one click",
 

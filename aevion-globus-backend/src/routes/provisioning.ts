@@ -218,8 +218,14 @@ const TIER_DISPLAY: Record<TierId, string> = {
   medium: "Medium",
   full: "Full",
   enterprise: "Enterprise",
-  // legacy aliases (deprecated)
-  pro: "Lite",
+  // `pro` is NOT a legacy alias — it is the live Universe tier ($249.99 in
+  // data/pricing.ts), and lib/planGate.ts normalizes it to `full` access.
+  // This map still called it "Lite", so someone who had just paid for Universe
+  // got a welcome email headlined "Добро пожаловать в AEVION Lite". Same
+  // mistaken assumption that once gated a Universe customer at Lite access
+  // (fixed in planGate on 2026-07-22); this was the last copy of it.
+  pro: "Universe",
+  // business — genuinely deprecated, kept so old Gumroad webhooks resolve.
   business: "Full",
 };
 

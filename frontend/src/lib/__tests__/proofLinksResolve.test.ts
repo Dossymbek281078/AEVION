@@ -105,6 +105,16 @@ function realRoutes(): Set<string> {
 
 /** Routes mounted under /api/aevion, read from the router itself. */
 function aevionApiRoutes(): Set<string> {
+  if (!fs.existsSync(BACKEND_HUB)) {
+    // Say what actually happened. A bare ENOENT here reads like the test is
+    // broken, when the real news is that the source of truth moved and every
+    // /api/aevion path on the selling pages is now unchecked.
+    throw new Error(
+      `aevion-hub router not found at ${BACKEND_HUB} — this guard resolves the ` +
+        `/api/aevion paths cited on the selling pages against it. Point it at the ` +
+        `router's new home rather than deleting the check.`,
+    );
+  }
   const src = fs.readFileSync(BACKEND_HUB, "utf8");
   const out = new Set<string>();
   for (const m of src.matchAll(/aevionHubRouter\.(?:get|post|put|delete)\(\s*"([^"]+)"/g)) {

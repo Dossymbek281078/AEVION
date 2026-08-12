@@ -34,6 +34,7 @@ vi.mock("../src/routes/cyberchessMatchStore", () => ({
   // undefined и падает вызовом, а не отсутствием — то есть ломается ручка, к
   // этому тесту отношения не имеющая (здесь — /debug/stats).
   countUnpaidAwards: vi.fn().mockResolvedValue(0),
+  countWalletsWithoutRatedGames: vi.fn().mockResolvedValue(0),
 }));
 
 vi.mock("../src/routes/cyberchessAnticheat", () => ({
@@ -177,5 +178,19 @@ describe("the legitimate paths still work", () => {
     const res = await preMatch().set("x-internal-token", "x").send(body);
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe("the stand-in for the store covers what the router imports", () => {
+  test("/debug/stats answers, so no import arrived undefined", async () => {
+    // This file replaces the whole match store. An export the router imports but
+    // the replacement omits arrives as undefined and fails at the call — and it
+    // breaks an endpoint this file has no interest in, which is how it goes
+    // unnoticed. /debug/stats reads the store counters, so it is the one that
+    // notices. Twice today an export was added and this mock did not follow.
+    const res = await request(app).get("/api/cyberchess/matchmaking/debug/stats");
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
   });
 });

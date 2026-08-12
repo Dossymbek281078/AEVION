@@ -459,8 +459,10 @@ interface HeightDispute {
   taggedM: number;
   publishedM: number;
   publishedSource: string;
-  /** участков коридора, поднятых спорным зданием */
+  /** участков коридора, поднятых ВЕДУЩИМ спорным зданием (полем `building`) */
   segments: number;
+  /** другие спорные здания, тоже поднявшие этот коридор — обычно пусто */
+  alsoDisputed: number[];
   cruiseAltM: number;
   /** каким был бы коридор, окажись правдой число из статьи */
   cruiseAltMIfPublished: number | null;
@@ -482,8 +484,10 @@ function heightDisputeFor(
   if (cells.size === 0) return null;
   const g = city.grid;
   const obst = obstOf(g);
-  let segments = 0;
-  let building = -1;
+  // Считаем ПО ЗДАНИЯМ, а не одним счётчиком: если коридор задел два спорных
+  // дома, «участков 5» рядом с числами одного из них — уже неправда, а такую
+  // неправду в подписанном документе не отличить от правды.
+  const perBuilding = new Map<number, number>();
   for (let k = 0; k < route.alts.length; k++) {
     const a = route.path[k], b = route.path[k + 1];
     const ia = a.r * g.cols + a.c, ib = b.r * g.cols + b.c;
@@ -494,12 +498,17 @@ function heightDisputeFor(
     for (const [idx, bi] of [[ia, cells.get(ia)], [ib, cells.get(ib)]] as [number, number | undefined][]) {
       if (bi === undefined) continue;
       if (g.heights[idx] !== worst) continue;
-      segments++;
-      building = bi;
+      perBuilding.set(bi, (perBuilding.get(bi) ?? 0) + 1);
       break;
     }
   }
-  if (segments === 0) return null;
+  if (perBuilding.size === 0) return null;
+  // Ведущее здание — то, что подняло больше участков; остальные названы отдельно,
+  // а не свалены в его счётчик.
+  const ranked = [...perBuilding.entries()].sort((x, y) => y[1] - x[1]);
+  const building = ranked[0][0];
+  const segments = ranked[0][1];
+  const alsoDisputed = ranked.slice(1).map(([bi]) => bi);
   const rev = heightReviewFor(cityId, building);
   const shadowTwin = reviewedTwin(cityId, city);
   const shadow = shadowTwin ? buildRoute(cityId, shadowTwin, route.from, route.to, route.respectCeiling) : null;
@@ -513,6 +522,7 @@ function heightDisputeFor(
     publishedM: rev?.publishedM ?? 0,
     publishedSource: rev?.publishedSource ?? "—",
     segments,
+    alsoDisputed,
     cruiseAltM: route.cruiseAltM,
     cruiseAltMIfPublished: cruiseIf,
     cruiseDeltaM: delta,
@@ -522,6 +532,30 @@ function heightDisputeFor(
       ? `${segments} из ${route.alts.length} участков коридора подняты зданием, высоте которого мы сами не верим: ${rev.taggedM} м из тега OSM при ${rev.publishedM} м в статье объекта. Высоту не переписываем — починка принадлежит источнику (${rev.osm}); здесь названа цена расхождения.`
       : `${segments} из ${route.alts.length} участков коридора подняты высотой, которую твин считает спорной и по которой ещё нет разбора человеком.`,
   };
+}
+
+/**
+ * Все маршруты «каждая площадка в каждую» в совещательном режиме, посчитанные
+ * один раз на процесс.
+ *
+ * Два эндпоинта — `/airspace/impact` и `/height-dispute` — считают по одному и
+ * тому же набору пар, и без общего кэша страница Астаны платила за один и тот
+ * же A* дважды на каждую загрузку. Данные компилтайм-детерминированные, ответ
+ * измениться внутри процесса не может — по той же причине кэшируются
+ * ceilingField() и сам impact.
+ */
+const pairRoutesCache = new Map<string, (RouteResult | null)[]>();
+function allPairRoutes(cityId: string, city: CityData): (RouteResult | null)[] {
+  const hit = pairRoutesCache.get(cityId);
+  if (hit) return hit;
+  const n = city.vertiports.length;
+  const out: (RouteResult | null)[] = [];
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    if (i === j) continue;
+    out.push(buildRoute(cityId, city, i, j, false));
+  }
+  pairRoutesCache.set(cityId, out);
+  return out;
 }
 
 /**
@@ -899,18 +933,18 @@ qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
     impactCache.set(id, none);
     return res.json(none);
   }
-  const n = city.vertiports.length;
   let pairs = 0, routable = 0, compliant = 0, strictRoutable = 0;
   let worstExceedanceM = 0;
-  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-    if (i === j) continue;
+  // Совещательные маршруты берутся из общего кэша пар: тот же набор считает
+  // `/height-dispute`, и без него страница платила за один и тот же A* дважды.
+  // Строгий режим — отдельный расчёт: там маршрут другой по построению.
+  for (const r of allPairRoutes(id, city)) {
     pairs++;
-    const r = buildRoute(id, city, i, j, false);
     if (!r) continue;
     routable++;
     if (r.airspace.compliant) compliant++;
     worstExceedanceM = Math.max(worstExceedanceM, r.airspace.maxExceedanceM);
-    if (buildRoute(id, city, i, j, true)) strictRoutable++;
+    if (buildRoute(id, city, r.from, r.to, true)) strictRoutable++;
   }
   // Pads the regulator authorizes nothing over: they cannot launch at all, which
   // is a different and harsher fact than a corridor merely flying too high.
@@ -966,12 +1000,9 @@ qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
     disputeImpactCache.set(id, none);
     return res.json(none);
   }
-  const n = city.vertiports.length;
   let pairs = 0, routable = 0, affectedPairs = 0, maxCruiseDeltaM = 0, maxSegments = 0;
-  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-    if (i === j) continue;
+  for (const r of allPairRoutes(id, city)) {
     pairs++;
-    const r = buildRoute(id, city, i, j, false);
     if (!r) continue;
     routable++;
     const d = heightDisputeFor(id, city, r);

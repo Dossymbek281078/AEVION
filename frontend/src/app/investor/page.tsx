@@ -295,7 +295,12 @@ export default function InvestorPage() {
               <div style={pricingBox}>
                 <div style={pricingTitle}>Pricing</div>
                 {[
-                  { tier: "Verified", price: "$9", desc: "SHA-256 + ML-DSA-65 (key-activated) + cert" },
+                  // Что покупатель получает СЕГОДНЯ. Раньше строка перечисляла
+                  // ML-DSA-65 как часть тарифа: на проде активны только hmac и
+                  // ed25519 (/api/qsign/v2/keys), поэтому за $9 подписи ML-DSA
+                  // не выдаётся. Оговорка «key-activated» читалась покупателем
+                  // как «входит в пакет» — язык разработчика на продающей строке.
+                  { tier: "Verified", price: "$9", desc: "SHA-256 + Ed25519 signature + cert" },
                   { tier: "Notarized", price: "$49", desc: "+ notary registry + Shamir backup" },
                   { tier: "Gold", price: "$199", desc: "+ legal review + int'l databases" },
                   { tier: "Platinum", price: "$999", desc: "+ multi-jurisdiction protection" },

@@ -32,6 +32,9 @@ interface SharedConversation {
     createdAt: string;
   };
   turns: Turn[];
+  /** Сколько реплик в беседе всего — сервер отдаёт только последние 200. */
+  totalTurns?: number;
+  truncated?: boolean;
 }
 
 function fmtDate(iso?: string) {
@@ -121,21 +124,33 @@ export default function SharedConversationPage() {
 
   if (!data) return null;
 
-  // Group turns by agent (conversationId pattern: `${convId}:${agentId}`)
-  const byAgent = new Map<string, Turn[]>();
-  const userTurns: Turn[] = [];
+  // Круг = вопрос + ответы, пришедшие ПОСЛЕ него.
+  //
+  // Раньше ответы раскладывались по порядковому номеру: `byAgent[a][idx]`.
+  // Пока в ленте лежала вся беседа целиком, номера совпадали. Но сервер
+  // отдаёт последние 200 реплик, и окно режет разговор в произвольном месте:
+  // первым в нём оказывается ответ на вопрос, который в окно уже не попал.
+  // Тогда весь столбец агента съезжал на круг вверх, и под вопросом стоял
+  // чужой ответ — без единого признака ошибки.
+  //
+  // Поэтому группируем по ленте: реплика принадлежит последнему вопросу
+  // перед ней, а «осиротевшие» ответы в начале окна не показываем — их
+  // вопрос остался за пределами видимого куска.
+  const rounds: Array<{ question: Turn; answers: Map<string, Turn> }> = [];
+  const agentOrder: string[] = [];
   for (const t of data.turns) {
     if (t.role === "user") {
-      userTurns.push(t);
+      rounds.push({ question: t, answers: new Map() });
       continue;
     }
+    const current = rounds[rounds.length - 1];
+    if (!current) continue; // ответ на вопрос за границей окна
     const cid = t.conversationId ?? "";
     const agentId = cid.includes(":") ? cid.split(":")[1] : "agent";
-    const arr = byAgent.get(agentId) ?? [];
-    arr.push(t);
-    byAgent.set(agentId, arr);
+    if (!agentOrder.includes(agentId)) agentOrder.push(agentId);
+    if (!current.answers.has(agentId)) current.answers.set(agentId, t);
   }
-  const agents = [...byAgent.keys()];
+  const agents = agentOrder;
 
   return (
     <div style={{ minHeight: "100vh", background: T.canvas, color: T.text }}>
@@ -165,18 +180,32 @@ export default function SharedConversationPage() {
           намеренно: там, где они разошлись, и надо смотреть в первую очередь.
         </p>
 
-        {userTurns.map((u, idx) => (
+        {data.truncated && (
+          <p
+            style={{
+              fontSize: 13, color: T.textDim, margin: 0, background: T.surfaceSoft,
+              border: `1px solid ${T.lineSoft}`, borderRadius: 10, padding: "10px 14px",
+            }}
+          >
+            Показана последняя часть беседы — {data.turns.length} реплик из{" "}
+            {data.totalTurns ?? data.turns.length}. Начало разговора в публичную ссылку не попало.
+          </p>
+        )}
+
+        {rounds.map((round, idx) => (
           <div key={idx} style={{ display: "grid", gap: 12 }}>
             <div style={{ background: T.surfaceSoft, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 16 }}>
               <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, marginBottom: 6 }}>
-                Вопрос · {fmtDate(u.createdAt)}
+                Вопрос · {fmtDate(round.question.createdAt)}
               </div>
-              <div style={{ fontSize: 15, lineHeight: 1.65, whiteSpace: "pre-wrap", color: T.text }}>{u.content}</div>
+              <div style={{ fontSize: 15, lineHeight: 1.65, whiteSpace: "pre-wrap", color: T.text }}>
+                {round.question.content}
+              </div>
             </div>
 
             <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
               {agents.map(a => {
-                const turn = (byAgent.get(a) ?? [])[idx];
+                const turn = round.answers.get(a);
                 if (!turn) return null;
                 // Не ответивший агент попадает в ленту как system-реплика —
                 // показываем это прямо, иначе на его месте была бы пустота и

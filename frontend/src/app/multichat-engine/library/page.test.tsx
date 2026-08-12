@@ -13,7 +13,7 @@
 // ни от сервера, ни от браузера.
 
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 
 import MultichatLibraryPage from "./page";
 
@@ -78,5 +78,50 @@ describe("Библиотека бесед и ключ входа", () => {
 
     expect(await screen.findByText(/Войдите, чтобы увидеть свои беседы/)).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// Расход считается по репликам беседы, а сервер отдаёт их не больше потолка.
+// Если беседа длиннее — сумма ЗАНИЖЕНА, и число без оговорки читается как
+// окончательное. Ровно этим же дефектом («$0.0000» вместо «цена неизвестна»)
+// счётчик уже болел раньше.
+describe("Библиотека: расход по длинной беседе", () => {
+  test("занижённая сумма помечена, а не выдана за итоговую", async () => {
+    localStorage.setItem(CANONICAL_KEY, TOKEN);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/usage")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              conversationId: "conv_1",
+              calls: 5000,
+              tokens: { input: 1000, output: 2000, total: 3000 },
+              costUsd: 1.5,
+              unpricedCalls: 0,
+              totalTurns: 6200,
+              truncated: true,
+            }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [{ id: "conv_1", title: "Первая беседа", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }],
+          }),
+        };
+      }) as unknown as typeof fetch,
+    );
+
+    render(<MultichatLibraryPage />);
+
+    const row = await screen.findByText("Первая беседа");
+    fireEvent.mouseEnter(row.closest("li") ?? row);
+
+    expect(await screen.findByText(/не менее/)).toBeTruthy();
+    expect(screen.getByText(/по части беседы/)).toBeTruthy();
   });
 });

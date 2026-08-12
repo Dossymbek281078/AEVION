@@ -30,6 +30,9 @@ interface Usage {
   costUsd: number;
   /** Вызовы, для которых цена неизвестна (бесплатный флот, локальная модель). */
   unpricedCalls?: number;
+  /** Сколько реплик в беседе всего и влезла ли она в подсчёт целиком. */
+  totalTurns?: number;
+  truncated?: boolean;
 }
 
 // Кнопки строки беседы — четыре роли, одна форма. Отдельными функциями, а не
@@ -400,11 +403,20 @@ export default function MultichatLibraryPage() {
                     </div>
                     {u && (
                       <div style={{ fontSize: 12, color: T.textMute, marginTop: 5, fontFamily: "ui-monospace, monospace" }}>
+                        {/* Беседа длиннее потолка выборки в подсчёт входит не вся:
+                            сумма тогда — нижняя граница, и назвать её итоговой
+                            значит занизить расход молча. */}
+                        {u.truncated ? "не менее " : ""}
                         {u.calls} вызовов · {u.tokens.total.toLocaleString("ru-RU")} токенов · ${u.costUsd.toFixed(4)}
                         {/* «$0.0000» при неизвестной цене читается как «бесплатно».
                             Говорим прямо, сколько вызовов посчитать не смогли. */}
                         {u.unpricedCalls ? (
                           <span style={{ color: T.warn }}> · {u.unpricedCalls} без известной цены</span>
+                        ) : null}
+                        {u.truncated ? (
+                          <span style={{ color: T.warn }}>
+                            {" "}· посчитано по части беседы{u.totalTurns ? ` (${u.totalTurns} реплик)` : ""}
+                          </span>
                         ) : null}
                       </div>
                     )}

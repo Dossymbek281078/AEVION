@@ -72,6 +72,62 @@ describe("Публичный просмотр беседы", () => {
   });
 });
 
+// Длинная беседа приезжает в ленту не целиком: сервер отдаёт последние 200
+// реплик и говорит об этом полями totalTurns/truncated. Отсюда две вещи,
+// которые обязана делать страница.
+describe("Публичный просмотр: беседа показана не целиком", () => {
+  function mockWindow(turns: Array<Record<string, unknown>>, totalTurns: number) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          conversation: { id: "conv_1", title: "Длинная беседа", createdAt: ISO },
+          turns,
+          totalTurns,
+          truncated: true,
+        }),
+      })) as unknown as typeof fetch,
+    );
+  }
+
+  test("сказано, что видна только часть разговора", async () => {
+    mockWindow(
+      [
+        { role: "user", content: "Последний вопрос", createdAt: ISO, conversationId: "conv_1" },
+        { role: "assistant", content: "Последний ответ", createdAt: ISO, conversationId: "conv_1:analyst" },
+      ],
+      620,
+    );
+
+    render(<SharedConversationPage />);
+
+    // Без этой строки получатель ссылки уверен, что видит разговор целиком.
+    expect(await screen.findByText(/620/)).toBeTruthy();
+  });
+
+  test("ответы стоят под своим вопросом, когда окно разрезало круг", async () => {
+    // Окно начинается с ответа на вопрос, который в него уже не попал.
+    mockWindow(
+      [
+        { role: "assistant", content: "Ответ на прошлый вопрос", createdAt: "2026-08-11T08:00:00.000Z", conversationId: "conv_1:analyst" },
+        { role: "user", content: "Новый вопрос", createdAt: "2026-08-11T09:00:00.000Z", conversationId: "conv_1" },
+        { role: "assistant", content: "Ответ на новый вопрос", createdAt: "2026-08-11T09:00:01.000Z", conversationId: "conv_1:analyst" },
+      ],
+      620,
+    );
+
+    render(<SharedConversationPage />);
+
+    await screen.findByText("Новый вопрос");
+    // Раскладка по порядковому номеру ставила под «Новый вопрос» ответ из
+    // предыдущего круга — читатель видел чужой ответ и не мог этого заметить.
+    expect(screen.getByText("Ответ на новый вопрос")).toBeTruthy();
+    expect(screen.queryByText("Ответ на прошлый вопрос")).toBeNull();
+  });
+});
+
 describe("Публичный просмотр: ссылка недоступна", () => {
   test("отозванная ссылка объясняет причину, а не показывает пустой экран", async () => {
     vi.stubGlobal(

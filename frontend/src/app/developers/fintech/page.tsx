@@ -1152,10 +1152,10 @@ SMOKE_BASE=https://api.aevion.app npm run smoke:all`}</Pre>
             <br />
             <strong>Issues:</strong>{" "}
             <a
-              href="https://github.com/Dossymbek281078/AEVION/issues"
+              href="/help"
               style={{ color: ACCENT_PURPLE, textDecoration: "none" }}
             >
-              github.com/Dossymbek281078/AEVION/issues
+              aevion.app/help
             </a>
           </P>
         </footer>

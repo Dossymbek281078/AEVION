@@ -22,7 +22,10 @@ export function ProfileShareQR({
   const url =
     typeof window !== "undefined"
       ? `${window.location.origin}/build/u/${encodeURIComponent(userId)}`
-      : `https://aevion.tech/build/u/${encodeURIComponent(userId)}`;
+      // Запасной origin для серверного рендера. Раньше тут стоял aevion·tech —
+      // домена НЕ СУЩЕСТВУЕТ (NXDOMAIN), и QR вёл в никуда у всех, кому страница
+      // отдавалась с сервера. Сайт живёт на aevion.app.
+      : `https://aevion.app/build/u/${encodeURIComponent(userId)}`;
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=${encodeURIComponent(
     url,
   )}`;

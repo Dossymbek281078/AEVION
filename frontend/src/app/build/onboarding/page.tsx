@@ -179,8 +179,8 @@ function Body() {
           /build/help
         </Link>
         , {t("build.onboarding.footerEmailLabel")}{" "}
-        <a href="mailto:hello@aevion.tech" className="text-paper-teal-deep underline">
-          hello@aevion.tech
+        <a href="mailto:hello@aevion.io" className="text-paper-teal-deep underline">
+          hello@aevion.io
         </a>
         .
       </p>

@@ -209,7 +209,7 @@ export default function AllLessonsPage() {
         {/* Подвал */}
         <footer className="py-8 mt-8 border-t-2 border-emerald-600 text-center text-xs text-slate-500 print:break-before-page">
           <div className="font-bold text-emerald-700">AEVION · Сметный тренажёр РК</div>
-          <div className="mt-1">aevion.kz · /smeta-trainer</div>
+          <div className="mt-1">aevion.app · /smeta-trainer</div>
           <div className="mt-3 text-[10px] text-slate-400 max-w-md mx-auto leading-relaxed">
             Учебный материал. Для применения в реальной экспертной деятельности
             требуется проверка по актуальной редакции нормативных документов РК.

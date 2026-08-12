@@ -121,7 +121,7 @@ export function buildSnapshotSVG(data: SnapshotData): string {
   ${categoryChips}
 
   <text x="60" y="${height - 50}" fill="#64748b" font-size="13" font-weight="600">Unique balance · Trust · Network-rank snapshot across AEVION's creator / banking / chess / planet stack</text>
-  <text x="${width - 60}" y="${height - 50}" fill="#64748b" font-size="13" font-weight="700" text-anchor="end">aevion.bank</text>
+  <text x="${width - 60}" y="${height - 50}" fill="#64748b" font-size="13" font-weight="700" text-anchor="end">aevion.app</text>
 </svg>`;
 }
 
@@ -148,6 +148,6 @@ export function buildSnapshotText(data: SnapshotData): string {
     `Achievements: ${data.achievementsEarned} / ${data.achievementsTotal}`,
     `Best peer dimension: ${data.peerBestLabel} · ${data.peerBestValue}`,
     ``,
-    `aevion.bank`,
+    `aevion.app`,
   ].join("\n");
 }

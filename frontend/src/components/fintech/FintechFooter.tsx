@@ -112,7 +112,7 @@ export default function FintechFooter({ hideHealthBadge = false }: Props) {
               <FintechHealthBadge compact />
             </div>
           )}
-          <Link href="https://github.com/Dossymbek281078/AEVION/issues" style={{ display: "block", color: "#cbd5e1", textDecoration: "none", fontSize: 12 }}>
+          <Link href="/help" style={{ display: "block", color: "#cbd5e1", textDecoration: "none", fontSize: 12 }}>
             Report an issue →
           </Link>
         </div>

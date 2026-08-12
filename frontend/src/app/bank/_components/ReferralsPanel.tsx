@@ -37,7 +37,9 @@ export function ReferralsPanel({
   const { code } = useCurrency();
 
   const stats: ReferralStats = useMemo(
-    () => computeReferralStats(account.id, origin || "https://aevion.bank"),
+    // aevion·bank не существует (NXDOMAIN): реферальные ссылки, собранные без
+    // origin, вели в никуда. Сайт живёт на aevion.app.
+    () => computeReferralStats(account.id, origin || "https://aevion.app"),
     [account.id, origin],
   );
 

@@ -61,6 +61,8 @@ import { rateLimit } from "../lib/rateLimit";
  *   GET  /verify?city=id  — проверка подписей Ed25519 (двойник + слой ограничений)
  *   GET  /airspace/impact — сколько маршрутов между площадками реально укладывается в потолок
  *   GET  /height-dispute  — опирается ли хоть один коридор на высоту, которой твин сам не верит
+ *   GET  /height-substitution — доходят ли до коридоров высоты, подставленные
+ *                           по типу застройки (75-й процентиль), и сколько их
  *   POST /airspace/anchor — Bitcoin-якорь (OpenTimestamps) на слой ограничений
  *   GET  /airspace/proof  — вшитый Bitcoin-пруф текущей редакции + его проверка
  *   GET  /slots  · POST /slots — рынок 4D-слотов прав (QRight)
@@ -466,7 +468,7 @@ function substitutedCellsOf(city: CityData): Map<number, number> {
  * зданиям они принадлежат. `null`, если таких участков нет — поле в документе
  * тогда не появляется вовсе, чтобы чистый случай оставался чистым.
  */
-function substitutedOnRoute(city: CityData, route: RouteResult): { segments: number; buildings: number } | null {
+function substitutedOnRoute(city: CityData, route: RouteResult): { segments: number; buildings: number; buildingIndexes: number[] } | null {
   const cells = substitutedCellsOf(city);
   if (cells.size === 0) return null;
   const g = city.grid;
@@ -488,7 +490,9 @@ function substitutedOnRoute(city: CityData, route: RouteResult): { segments: num
   if (segments === 0) return null;
   // Зданий, а не ячеек: вокзал Нью-Йорка занимает 40 ячеек, и «40 зданий» в
   // подписанном документе было бы неправдой.
-  return { segments, buildings: hitBuildings.size };
+  // Индексы нужны сводке по городу: там считается, СКОЛЬКО РАЗНЫХ зданий стоят
+  // под коридорами, а сумма по маршрутам дала бы одно здание много раз.
+  return { segments, buildings: hitBuildings.size, buildingIndexes: [...hitBuildings] };
 }
 
 /** Ячейки сетки, высоту которым дало здание, которое твин сам считает спорным. */
@@ -1114,6 +1118,62 @@ qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
  * коридоров сегодня не поднимает.
  */
 const disputeImpactCache = new Map<string, unknown>();
+/**
+ * Доходит ли подставленная высота до полётов — тем же движком и по тем же парам
+ * площадок, что и остальные ответы модуля.
+ *
+ * Чип на странице говорит «подставлено по типу: 38 зданий», и без этого ответа
+ * человек остаётся с вопросом «а летаем-то мы над ними?». У спорной высоты такой
+ * ответ уже есть (`/height-dispute`), и там он оказался неочевидным: подстановка
+ * в Астане задевает больше половины маршрутов, а спорная высота — ни одного.
+ * Догадаться нельзя, надо мерить.
+ *
+ * Как и у соседей, счёт по НАПРАВЛЕНИЯМ: A→B и B→A — разные полёты.
+ */
+const substitutionImpactCache = new Map<string, unknown>();
+qskywayRouter.get("/height-substitution", (req: Request, res: Response) => {
+  const resolved = resolveCity(req.query.city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const cached = substitutionImpactCache.get(resolved.id);
+  if (cached) return res.json(cached);
+  const { id, city } = resolved;
+  const subs = city.dataQuality?.substituted ?? [];
+  if (subs.length === 0) {
+    const none = {
+      city: id, available: false, buildings: 0, pairs: 0, routable: 0, affectedPairs: 0, maxSegments: 0,
+      note: "Высот, подставленных по типу застройки, в этом городе нет: у всех зданий высота либо измерена, либо выведена из этажности самого дома.",
+    };
+    substitutionImpactCache.set(id, none);
+    return res.json(none);
+  }
+  let pairs = 0, routable = 0, affectedPairs = 0, maxSegments = 0;
+  const touched = new Set<number>();
+  for (const r of allPairRoutes(id, city)) {
+    pairs++;
+    if (!r) continue;
+    routable++;
+    const s = substitutedOnRoute(city, r);
+    if (!s) continue;
+    affectedPairs++;
+    maxSegments = Math.max(maxSegments, s.segments);
+    for (const b of s.buildingIndexes) touched.add(b);
+  }
+  const payload = {
+    city: id,
+    available: true,
+    // Всего подставленных зданий в городе и сколько из них реально под коридорами:
+    // первое число говорит о данных, второе — о полётах, и путать их нельзя.
+    buildings: subs.length,
+    buildingsUnderRoutes: touched.size,
+    pairs, routable, affectedPairs, maxSegments,
+    note: affectedPairs === 0
+      ? `Подставленные высоты в твине есть (${subs.length}), но ни один из ${routable} маршрутов между площадками над ними не проходит: на коридоры они сегодня не влияют.`
+      : `${affectedPairs} из ${routable} маршрутов между площадками проходят над зданием, высота которого взята из статистики по типу застройки, а не измерена у этого дома (${touched.size} из ${subs.length} таких зданий). Высота при этом не занижена: берётся 75-й процентиль, то есть в безопасную сторону — но это оценка квартала, а не свойство здания.`,
+  };
+  substitutionImpactCache.set(id, payload);
+  res.json(payload);
+});
+
 qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
   if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
@@ -1335,7 +1395,11 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
     // правдоподобное число, взятое из статистики по типу застройки. Второе
     // поднимает коридор всерьёз (Нью-Йорк, вокзал: +87.5 м), поэтому названо
     // отдельно. `null` — таких участков у этого коридора нет.
-    substitutedHeights: substitutedOnRoute(resolved.city, route),
+    // Только два числа: внутренние индексы зданий в подписанной бумаге —
+    // шум, который переживёт не всякую пересборку твина.
+    substitutedHeights: ((s) => (s ? { segments: s.segments, buildings: s.buildings } : null))(
+      substitutedOnRoute(resolved.city, route),
+    ),
     // A permission regime belongs on the paperwork even though it never touched
     // the routing — "this corridor is legal geometry" and "this flight may take
     // place at all" are both things the filing has to answer.

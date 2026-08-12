@@ -192,6 +192,20 @@ async function main() {
   // закладывался. Само по себе предупреждение теперь есть; здесь проверяется,
   // что оно сходится с тем, что отдаёт движок, — иначе продукт снова начнёт
   // отвечать по-разному в двух местах, и заметит это опять человек.
+  // Подстановка по типу застройки — вторая половина того же вопроса о доверии к
+  // высотам, и ответ у неё ДРУГОЙ: спорная высота Астаны не задевает ни одного
+  // маршрута, а подстановка — больше половины. Догадаться нельзя, поэтому мерим.
+  const hs = await jget("/api/qskyway/height-substitution?city=astana");
+  assert(hs.status === 200 && hs.json?.available === true,
+    "[astana] type-substituted heights are measured against the routes, not just listed",
+    `status=${hs.status} available=${hs.json?.available}`);
+  assert(hs.json?.buildingsUnderRoutes <= hs.json?.buildings && hs.json?.buildings > 0,
+    "[astana] buildings in the data and buildings under corridors are counted separately",
+    `${hs.json?.buildingsUnderRoutes} of ${hs.json?.buildings}`);
+  assert(hs.json?.pairs === 42 && hs.json?.affectedPairs <= hs.json?.routable,
+    "[astana] substitution impact counts both directions of every pad pair",
+    `${hs.json?.affectedPairs}/${hs.json?.routable} of ${hs.json?.pairs}`);
+
   const hd = await jget("/api/qskyway/height-dispute?city=astana");
   assert(hd.status === 200 && hd.json?.available === true,
     "[astana] the height the twin distrusts is measured against the routes, not just displayed",

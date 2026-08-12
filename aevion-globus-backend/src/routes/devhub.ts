@@ -542,6 +542,9 @@ async function dbSaveDeployment(d: DevHubDeployment): Promise<void> {
        "status"=$4,"deployUrl"=$5,"buildLog"=$6,"completedAt"=$8`,
     [d.id, d.projectId, d.userId, d.status, d.deployUrl, d.buildLog, d.triggeredAt, d.completedAt]
   );
+  // The row is the truth again — a stale parked copy would freeze the status
+  // the IDE shows at whatever it was when the write last failed.
+  memDeployments.delete(d.id);
 }
 
 async function dbListDeployments(projectId: string, limit = 10): Promise<DevHubDeployment[]> {
@@ -555,7 +558,17 @@ async function dbListDeployments(projectId: string, limit = 10): Promise<DevHubD
     `SELECT * FROM "DevHubDeployment" WHERE "projectId"=$1 ORDER BY "triggeredAt" DESC LIMIT $2`,
     [projectId, limit]
   );
-  return r.rows.map(rowToDeployment);
+  // Same overlay as projects and checkpoints: a deployment record whose save
+  // failed is parked here, and this list is the only place the IDE learns a
+  // deploy happened at all. Missing rows read as "nothing was deployed".
+  const rows: DevHubDeployment[] = r.rows.map(rowToDeployment);
+  const parked = [...memDeployments.values()].filter((d) => d.projectId === projectId);
+  if (parked.length === 0) return rows;
+  const byId = new Map<string, DevHubDeployment>(rows.map((d) => [d.id, d]));
+  for (const d of parked) byId.set(d.id, d);
+  return [...byId.values()]
+    .sort((a, b) => b.triggeredAt.localeCompare(a.triggeredAt))
+    .slice(0, limit);
 }
 
 function rowToDeployment(row: any): DevHubDeployment {

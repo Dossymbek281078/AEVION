@@ -29,7 +29,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     if (!text || typeof text !== "string") return;
     idRef.current += 1;
     const id = idRef.current;
-    setItems((prev) => [...prev, { id, text, tone, createdAt: Date.now() }]);
+    setItems((prev) => {
+      // Одна и та же ошибка часто прилетает дважды: страница грузит несколько
+      // источников сразу, и все падают об один недоступный сервис. Две
+      // одинаковых плашки подряд не добавляют смысла, а место занимают —
+      // на телефоне закрывают собой содержимое. Замечено живым прогоном
+      // /build/video 12.08: «Build init failed» показался дважды.
+      if (prev.some((t) => t.text === text && t.tone === tone)) return prev;
+      return [...prev, { id, text, tone, createdAt: Date.now() }];
+    });
     // auto-dismiss after 5s; errors stay 8s
     const ttl = tone === "error" ? 8000 : 5000;
     setTimeout(() => {

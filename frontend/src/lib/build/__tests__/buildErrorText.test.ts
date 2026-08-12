@@ -14,6 +14,21 @@ describe("buildErrorText", () => {
     );
   });
 
+  it("говорит по-человечески о транспортных отказах, а не «Bad response 500»", () => {
+    // Именно это увидел живой прогон /build/shifts без бэкенда.
+    expect(buildErrorText(new BuildApiError(500, "bad_response_500"))).toBe(
+      "Сервер сейчас недоступен. Попробуйте через минуту.",
+    );
+    expect(buildErrorText(new BuildApiError(503, "http_503"))).toBe(
+      "Сервер сейчас недоступен. Попробуйте через минуту.",
+    );
+    expect(buildErrorText(new BuildApiError(401, "http_401"))).toBe("Нужно войти заново.");
+    expect(buildErrorText(new BuildApiError(429, "http_429"))).toContain("Подождите минуту");
+    expect(buildErrorText(new BuildApiError(400, "http_400"))).toBe(
+      "Запрос не прошёл. Попробуйте ещё раз.",
+    );
+  });
+
   it("makes an unmapped code legible instead of dumping snake_case", () => {
     expect(buildErrorText(new BuildApiError(500, "shift_checkin_failed"))).toBe(
       "Shift checkin failed",

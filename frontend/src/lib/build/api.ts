@@ -565,6 +565,10 @@ const BUILD_ERROR_TEXT: Record<string, string> = {
   only_worker_can_checkout: "Закрыть смену может только назначенный работник.",
   shift_not_found: "Смена не найдена — обновите страницу.",
   profile_not_found: "Сначала заполните профиль.",
+  // Отдаётся общим middleware QBuild, когда недоступна база: значит легло не
+  // одно действие, а весь раздел. Виден на КАЖДОЙ странице модуля, поэтому
+  // оставлять его английским кодом нельзя (замечено живым прогоном 12.08).
+  build_init_failed: "Сервис сейчас недоступен. Попробуйте через минуту.",
   payment_event_not_found: "Платёж не найден — обновите страницу.",
   forbidden: "Нет доступа к этому действию.",
 };
@@ -587,6 +591,20 @@ export function buildErrorText(e: unknown): string {
   if (known) return known;
   if (code === "Failed to fetch" || code.startsWith("NetworkError")) {
     return "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.";
+  }
+
+  // Транспортные коды: сервер ответил не тем, чем должен. Правило про
+  // snake_case ниже превратило бы их в «Bad response 500» — англоязычный
+  // мусор на экране у рабочего на объекте. Замечено живым прогоном страницы
+  // /build/shifts без бэкенда, тесты этого не показывали.
+  const transport = /^(?:bad_response|http)_(\d{3})$/.exec(code);
+  if (transport) {
+    const status = Number(transport[1]);
+    if (status === 401 || status === 403) return "Нужно войти заново.";
+    if (status === 404) return "Не найдено — обновите страницу.";
+    if (status === 429) return "Слишком часто. Подождите минуту и повторите.";
+    if (status >= 500) return "Сервер сейчас недоступен. Попробуйте через минуту.";
+    return "Запрос не прошёл. Попробуйте ещё раз.";
   }
   // `shift_checkin_failed` → `Shift checkin failed`: still a code, but a
   // legible one, and it names which action broke.

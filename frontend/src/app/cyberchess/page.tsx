@@ -9673,18 +9673,26 @@ export default function CyberChessPage(){
                 {pzAttempt==="correct"&&(()=>{
                   // Определяем тактический мотив из theme + sol для объяснения (lichess-style)
                   const theme=pzCurrent.theme||"";
-                  const motifMap:Record<string,{icon:string;name:string;desc:string}>={
-                    fork:{icon:"🐴",name:"Вилка",desc:"Одна фигура атакует две цели одновременно — соперник не успевает защитить обе."},
-                    pin:{icon:"📌",name:"Связка",desc:"Фигура не может двигаться — за ней стоит более ценная. Используй это давление."},
-                    skewer:{icon:"⚔",name:"Рентген",desc:"Атака на ценную фигуру, за которой прячется ещё одна. Вынуждает отступить и потерять материал."},
-                    discoveredAttack:{icon:"💥",name:"Открытый удар",desc:"Ход одной фигуры открывает атаку другой — соперник не готов к двойному удару."},
-                    deflection:{icon:"↗",name:"Отвлечение",desc:"Вынуждаем фигуру уйти с важного поля, теряя защиту ключевой цели."},
-                    decoy:{icon:"🎭",name:"Завлечение",desc:"Жертвой заманиваем фигуру на невыгодное поле для последующего удара."},
-                    backRankMate:{icon:"🏰",name:"Мат на последней горизонтали",desc:"Король заперт своими пешками. Ладья или ферзь ставят мат по первой/восьмой линии."},
-                    hangingPiece:{icon:"🎁",name:"Висячая фигура",desc:"Фигура соперника без защиты — просто забирай!"},
-                    trappedPiece:{icon:"🕸",name:"Западня",desc:"Фигура не может уйти без потерь — окружай и бери."},
+                  // ru — название темы, которое РЕАЛЬНО лежит в задаче. Раньше карта
+                  // ключевалась только английскими тегами Lichess, а импортёры пишут
+                  // в theme русское название: "связка".includes("pin") — ложь, и
+                  // объяснение приёма не показывалось НИКОГДА. Функция названа тут же
+                  // ключевым отличием от простого «верно/неверно» — и была мертва.
+                  // Английские ключи оставлены: в старом бандле часть тем сырые теги.
+                  const motifMap:Record<string,{icon:string;name:string;desc:string;ru:string}>={
+                    fork:{icon:"🐴",name:"Вилка",ru:"Вилка",desc:"Одна фигура атакует две цели одновременно — соперник не успевает защитить обе."},
+                    pin:{icon:"📌",name:"Связка",ru:"Связка",desc:"Фигура не может двигаться — за ней стоит более ценная. Используй это давление."},
+                    skewer:{icon:"⚔",name:"Рентген",ru:"Рентген",desc:"Атака на ценную фигуру, за которой прячется ещё одна. Вынуждает отступить и потерять материал."},
+                    discoveredAttack:{icon:"💥",name:"Открытый удар",ru:"Вскрытое нападение",desc:"Ход одной фигуры открывает атаку другой — соперник не готов к двойному удару."},
+                    deflection:{icon:"↗",name:"Отвлечение",ru:"Отвлечение",desc:"Вынуждаем фигуру уйти с важного поля, теряя защиту ключевой цели."},
+                    decoy:{icon:"🎭",name:"Завлечение",ru:"Завлечение",desc:"Жертвой заманиваем фигуру на невыгодное поле для последующего удара."},
+                    backRankMate:{icon:"🏰",name:"Мат на последней горизонтали",ru:"Мат на последней горизонтали",desc:"Король заперт своими пешками. Ладья или ферзь ставят мат по первой/восьмой линии."},
+                    hangingPiece:{icon:"🎁",name:"Висячая фигура",ru:"Висящая фигура",desc:"Фигура соперника без защиты — просто забирай!"},
+                    trappedPiece:{icon:"🕸",name:"Западня",ru:"Поймана фигура",desc:"Фигура не может уйти без потерь — окружай и бери."},
                   };
-                  const motif=Object.entries(motifMap).find(([k])=>theme.toLowerCase().includes(k.toLowerCase()))||null;
+                  const themeLc=theme.toLowerCase();
+                  const motif=Object.entries(motifMap).find(([k,v])=>
+                    themeLc.includes(k.toLowerCase())||themeLc.includes(v.ru.toLowerCase()))||null;
                   const isMate=pzCurrent.goal==="Mate";
                   return <div style={{marginBottom:10}}>
                     <div style={{fontSize:15,fontWeight:900,color:"#065f46",padding:"10px 14px",borderRadius:8,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",border:"1px solid #6ee7b7",display:"flex",alignItems:"center",gap:8,animation:"cc-turn-flash 0.6s ease-out"}}>

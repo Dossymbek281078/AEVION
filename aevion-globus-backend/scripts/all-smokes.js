@@ -49,6 +49,9 @@ const SMOKES = [
   // Live pages: actually OPENS the public page of each live module (2xx +
   // real body). API success ≠ working page — the 2026-07-21 CF Pages lesson.
   { name: "pages-live", script: "pages-live-smoke.js", readOnly: true },
+  // Сверяет openapi с продом: обещанная, но отсутствующая ручка — тот же дефект,
+  // что и поломка, только тише. Нашёл три таких 12.08.2026.
+  { name: "openapi-live", script: "openapi-live-smoke.mjs", readOnly: true },
   // QSkyway: routing, regulator ceilings (FAA feed), signatures and the filing
   // document. Prod-safe — the slot-booking and QRight-registry write legs
   // self-skip under READ_ONLY=1, so the daily prod run covers the whole read

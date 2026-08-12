@@ -95,6 +95,50 @@ function sentenceAround(src: string, at: number, len: number): string {
 /** Числа с их окружением. Если один агент говорит «$36», а другой «$50» про то
  *  же — это конкретное расхождение, которое человек проверит за минуту, в
  *  отличие от расхождения в тоне или формулировке. */
+/**
+ * Число из текста ответа модели — с разбором разделителя тысяч.
+ *
+ * Раньше здесь стояло `.replace(",", ".")`, то есть запятая ВСЕГДА считалась
+ * десятичной. «$1,200» превращалось в 1.2, и два агента, назвавшие одну и ту же
+ * сумму разной записью, попадали в карту разногласий с разбросом 1198.8. Ложный
+ * конфликт вреднее пропущенного: он отправляет человека проверять то, чего нет.
+ * «$1,234,567» и вовсе выпадало — Number("1.234,567") даёт NaN, и число молча
+ * не участвовало в сравнении.
+ *
+ * Разбор по структуре, а не по локали (в одном ответе модель мешает обе):
+ *   1 234 / 1,234,567 / 1.234.567 — группы по три цифры → разделитель тысяч;
+ *   1 234,56 / 1,234.56 — последний одиночный разделитель → десятичный;
+ *   2,5 / 1.5 — одиночный разделитель с 1-2 цифрами → десятичный.
+ *
+ * Остаётся неоднозначность «2,500»: три цифры после запятой читаются как
+ * тысячи. В русском тексте десятичную долю пишут одной-двумя цифрами («2,5»),
+ * поэтому такой выбор ошибается реже обратного.
+ */
+export function parseNumeric(raw: string): number {
+  // Валюта, проценты и пробелы-разделители тысяч к значению не относятся.
+  const body = raw.replace(/[^\d.,]/g, "");
+  if (!body) return NaN;
+
+  const groups = /^\d{1,3}([.,]\d{3})+$/;
+  if (groups.test(body)) return Number(body.replace(/[.,]/g, ""));
+
+  // Смешанная запись: последний разделитель — десятичный, остальные — тысячи.
+  const lastDot = body.lastIndexOf(".");
+  const lastComma = body.lastIndexOf(",");
+  if (lastDot >= 0 && lastComma >= 0) {
+    const decAt = Math.max(lastDot, lastComma);
+    const intPart = body.slice(0, decAt).replace(/[.,]/g, "");
+    return Number(`${intPart}.${body.slice(decAt + 1)}`);
+  }
+
+  const sep = lastDot >= 0 ? lastDot : lastComma;
+  if (sep < 0) return Number(body);
+  const tail = body.slice(sep + 1);
+  // Ровно три цифры после одиночного разделителя — разделитель тысяч.
+  if (tail.length === 3 && /^\d{3}$/.test(tail)) return Number(body.slice(0, sep) + tail);
+  return Number(`${body.slice(0, sep)}.${tail}`);
+}
+
 export function numericClaims(text: string): NumericClaim[] {
   const out: NumericClaim[] = [];
   const src = String(text || "");
@@ -103,7 +147,7 @@ export function numericClaims(text: string): NumericClaim[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(src))) {
     const raw = m[0].trim();
-    const num = Number(raw.replace(/[^\d.,-]/g, "").replace(/\s/g, "").replace(",", "."));
+    const num = parseNumeric(raw);
     if (!Number.isFinite(num)) continue;
     // Годы и порядковые номера шумят и почти никогда не являются предметом спора.
     if (num >= 1900 && num <= 2100 && !/[$€₸%]/.test(raw)) continue;

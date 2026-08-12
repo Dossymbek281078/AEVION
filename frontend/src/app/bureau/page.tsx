@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -91,6 +92,51 @@ export default function BureauPage() {
   const [kindFilter, setKindFilter] = useState<string>("all");
   const [sort, setSort] = useState<SortMode>("newest");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+
+  // Глубокая ссылка на объект: /bureau?objectId=… (маркер на 3D-глобусе) и
+  // ?qrightObjectId=… (страница объекта QRight, «посмотреть сертификат»).
+  //
+  // Оба параметра страница не читала вовсе — человек нажимал на конкретный
+  // объект и попадал в общий реестр, где его объект надо искать руками. Со
+  // стороны отправителя это невидимо: ссылка формируется верно, переход
+  // происходит, ошибки нет.
+  //
+  // Подставить id прямо в поиск нельзя: в сертификате его нет, поиск идёт по
+  // заголовку, автору и хешам — вышло бы «найдено 0», что читается как «моего
+  // объекта здесь нет». Поэтому спрашиваем у QRight хеш содержимого объекта и
+  // ищем по нему. Не разрешилось — говорим об этом, а не молчим.
+  const searchParams = useSearchParams();
+  const deepObjectId =
+    searchParams?.get("objectId") || searchParams?.get("qrightObjectId") || "";
+  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!deepObjectId) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(apiUrl(`/api/qright/objects/${encodeURIComponent(deepObjectId)}`));
+        if (!r.ok) {
+          if (alive) setDeepLinkError("Не удалось открыть объект по ссылке — записи с таким номером в реестре QRight нет.");
+          return;
+        }
+        const data = (await r.json()) as { contentHash?: string; object?: { contentHash?: string } };
+        const hash = data?.contentHash || data?.object?.contentHash || "";
+        if (!alive) return;
+        if (!hash) {
+          setDeepLinkError("Не удалось открыть объект по ссылке — у записи нет хеша содержимого.");
+          return;
+        }
+        setDeepLinkError(null);
+        setQuery(hash);
+      } catch {
+        if (alive) setDeepLinkError("Не удалось открыть объект по ссылке — реестр QRight сейчас недоступен.");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [deepObjectId]);
 
   // File drag-drop on /bureau: compute SHA-256 → populate search query.
   const [fileDragOver, setFileDragOver] = useState(false);
@@ -537,6 +583,25 @@ export default function BureauPage() {
               <input type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) hashAndSearch(f); }} />
             </label>
           </div>
+
+          {/* Ссылка не разрешилась — говорим об этом. Молчаливые «0
+              результатов» человек читает как «моего объекта здесь нет». */}
+          {deepLinkError && (
+            <div
+              style={{
+                marginBottom: 14,
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(185,28,28,0.25)",
+                background: "rgba(185,28,28,0.05)",
+                color: "#b91c1c",
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              {deepLinkError}
+            </div>
+          )}
 
           {!loading && certificates.length > 0 && (
             <div style={{ display: "grid", gap: 10, marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>

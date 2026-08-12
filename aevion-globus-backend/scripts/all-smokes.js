@@ -64,6 +64,12 @@ const SMOKES = [
   // сертификате, реферальные ссылки банка, виджет для партнёров и разметка для
   // поисковиков. Только DNS, прод не трогает.
   { name: "dead-domains", script: "dead-domain-sweep.mjs", readOnly: true },
+  // Каналы связи, которые сайт ОБЕЩАЕТ: есть ли MX у доменов с напечатанных
+  // адресов и жива ли ручка приёма обращений. Ручку спрашивает заведомо неверным
+  // пакетом (400 = роут жив, 404 = его нет), поэтому настоящих обращений на
+  // проде не оставляет. Известное — запись MX и невыкаченная ручка — печатается
+  // громко, но провала не даёт; провал только на НОВОМ обрыве.
+  { name: "contact-channels", script: "contact-channels-smoke.mjs", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).

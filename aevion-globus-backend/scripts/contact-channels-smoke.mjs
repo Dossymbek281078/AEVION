@@ -35,6 +35,14 @@ const BASE = (process.env.BASE || "https://aevion.app/api-backend").replace(/\/+
 // смок попросит убрать домен отсюда.
 const KNOWN_NO_MX = new Set(["aevion.app"]);
 
+// Ручка /api/help/contact написана 12.08.2026, но на проде появится только
+// после выкладки ветки. До тех пор она отвечает 404 — и это ИЗВЕСТНО, а не
+// новая поломка. Без этой отметки смок нельзя было бы подключить к ежедневному
+// набору сегодня, а «подключу позже» — ровно тот способ, которым инструменты
+// становятся забытыми: сегодня я нашёл сразу несколько таких.
+// Отметка обязана сняться: когда ручка ответит, смок сам попросит убрать её.
+const ENDPOINT_PENDING_DEPLOY = true;
+
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -129,8 +137,16 @@ if (emails.size === 0) {
     unknown++;
     console.log(`  ?     не смог спросить: ${ep.detail}`);
   } else {
-    console.log(`  ${ep.ok ? "ok   " : "ПУСТО"} /api/help/contact — ${ep.detail}`);
-    if (!ep.ok) broken++;
+    if (ep.ok && ENDPOINT_PENDING_DEPLOY) {
+      console.log(`  ok    /api/help/contact — ${ep.detail}`);
+      console.log("  ПОЧИНЕНО — ручка выкатилась, убери ENDPOINT_PENDING_DEPLOY");
+    } else if (!ep.ok && ENDPOINT_PENDING_DEPLOY) {
+      known++;
+      console.log(`  ИЗВЕСТНО /api/help/contact — ${ep.detail}; ждёт выкладки ветки`);
+    } else {
+      console.log(`  ${ep.ok ? "ok   " : "ПУСТО"} /api/help/contact — ${ep.detail}`);
+      if (!ep.ok) broken++;
+    }
   }
 
   console.log("");

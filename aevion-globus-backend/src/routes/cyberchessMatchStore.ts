@@ -606,7 +606,38 @@ async function settleAwards(
  *
  * `null` — спросить не удалось; это не ноль.
  */
+/**
+ * Кэш диагностических счётчиков.
+ *
+ * Обе сверки живут на ПУБЛИЧНОЙ ручке `/debug/stats`, и каждая — запрос к базе.
+ * Без кэша посторонний получает дешёвый способ нагружать базу: один HTTP-вызов
+ * оборачивается двумя полными сканами. Тридцати секунд достаточно — показатели
+ * меняются от закрытия партии, а не ежесекундно.
+ *
+ * Кэшируется и `null`: «спросить не удалось» — тоже ответ, и повторять
+ * неудачный запрос на каждый вызов тем более незачем.
+ */
+const COUNTER_TTL_MS = 30_000;
+const counterCache = new Map<string, { at: number; value: number | null }>();
+
+/** Сброс кэша для тестов: в одном процессе они переключают состояние базы. */
+export function resetCounterCache(): void {
+  counterCache.clear();
+}
+
+async function cachedCount(key: string, run: () => Promise<number | null>): Promise<number | null> {
+  const hit = counterCache.get(key);
+  if (hit && Date.now() - hit.at < COUNTER_TTL_MS) return hit.value;
+  const value = await run();
+  counterCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
 export async function countWalletsWithoutRatedGames(): Promise<number | null> {
+  return cachedCount("walletsWithoutRatedGames", uncachedWalletsWithoutRatedGames);
+}
+
+async function uncachedWalletsWithoutRatedGames(): Promise<number | null> {
   const rows = await qOrNull(
     `SELECT count(*) AS n FROM "CyberWallet" w
       WHERE NOT EXISTS (
@@ -620,6 +651,10 @@ export async function countWalletsWithoutRatedGames(): Promise<number | null> {
 }
 
 export async function countUnpaidAwards(): Promise<number | null> {
+  return cachedCount("unpaidAwards", uncachedUnpaidAwards);
+}
+
+async function uncachedUnpaidAwards(): Promise<number | null> {
   const rows = await q(
     `SELECT count(*) AS n FROM "CyberMatch" m
       WHERE m."status"='ended'

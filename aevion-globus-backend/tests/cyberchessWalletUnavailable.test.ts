@@ -45,6 +45,7 @@ vi.mock("pg", () => {
 });
 
 import matchmakingRouter from "../src/routes/cyberchessMatchmaking";
+import { resetCounterCache } from "../src/routes/cyberchessMatchStore";
 
 const app = express();
 app.use(express.json());
@@ -52,6 +53,10 @@ app.use("/api/cyberchess/matchmaking", matchmakingRouter);
 
 beforeEach(() => {
   failing.on = true;
+  // Счётчики диагностики кэшируются на 30 с (ручка публичная, два запроса к базе
+  // на вызов). Тесты переключают состояние базы внутри одного процесса, поэтому
+  // кэш надо сбрасывать — иначе проверялся бы прошлый ответ.
+  resetCounterCache();
 });
 
 describe("отказ базы не выдаётся за факт о деньгах", () => {
@@ -117,6 +122,7 @@ describe("отказ базы не выдаётся за факт о деньг�
     expect(ok.body.wallets.withoutRatedGames).toBe(0);
 
     failing.on = true;
+    resetCounterCache(); // иначе вернётся закэшированный ответ живой базы
     const down = await request(app).get("/api/cyberchess/matchmaking/debug/stats");
     expect(down.body.wallets.withoutRatedGames).toBeNull();
   });

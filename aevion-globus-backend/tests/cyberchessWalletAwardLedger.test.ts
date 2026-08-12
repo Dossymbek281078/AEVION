@@ -108,7 +108,12 @@ vi.mock("pg", () => {
   return { default: { Pool }, Pool };
 });
 
-import { finalizeMatch, awardMatchChessy, countUnpaidAwards } from "../src/routes/cyberchessMatchStore";
+import {
+  finalizeMatch,
+  awardMatchChessy,
+  countUnpaidAwards,
+  resetCounterCache,
+} from "../src/routes/cyberchessMatchStore";
 
 const INFO = {
   whiteUserId: "white-player",
@@ -139,6 +144,10 @@ beforeEach(() => {
   state.unpaid = 0;
   state.endedAtMs = 0;
   state.ledgerStartMs = null;
+  // Счётчики диагностики кэшируются на 30 с; тесты меняют состояние базы внутри
+  // одного процесса, поэтому кэш надо сбрасывать — иначе проверялся бы прошлый
+  // ответ, а не текущий.
+  resetCounterCache();
 });
 
 describe("подмена драйвера действительно работает", () => {

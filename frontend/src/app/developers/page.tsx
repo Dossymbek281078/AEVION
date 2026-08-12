@@ -37,7 +37,11 @@ const APIS = [
     color: "#f472b6",
     href: "/bureau",
     desc: "Court-grade certificates. Cites Berne/WIPO/TRIPS/eIDAS on issuance. ETag/304, batch protect, enriched /health.",
-    endpoints: ["POST /api/bureau/protect", "POST /api/bureau/protect-batch", "GET /api/bureau/certificates/:id"],
+    // Поток защиты живёт в /api/pipeline, а не в /api/bureau: bureauRouter
+    // отвечает за проверку личности, оплату и доверие, а объект QRight +
+    // Quantum Shield + сертификат целиком собирает pipelineRouter.post("/protect").
+    // До 12.08.2026 здесь стоял /api/bureau/protect — адрес, которого нет.
+    endpoints: ["POST /api/pipeline/protect", "POST /api/pipeline/protect-batch", "GET /api/bureau/certificates/:id"],
   },
   {
     name: "Planet",
@@ -237,7 +241,7 @@ curl -s https://aevion.app/api/qright/register \\
   -d '{"title":"My AI Track","kind":"music"}'
 
 # 3. Issue an admissible-evidence Bureau certificate
-curl -s https://aevion.app/api/bureau/protect \\
+curl -s https://aevion.app/api/pipeline/protect \\
   -H "Authorization: Bearer $TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"title":"Whitepaper v3","description":"draft","kind":"text"}'

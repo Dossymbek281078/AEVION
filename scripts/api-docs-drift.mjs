@@ -56,9 +56,20 @@ const DOCS = [
   "frontend/src/app/pricing/api-pricing/page.tsx",
 ];
 
+// Комментарии выбрасываем: страница обещает адреса КОДОМ, а пояснение рядом
+// («до 12.08 здесь стоял /api/bureau/protect — адреса нет») обещанием не
+// является. Без этого проверка посчитала мой же комментарий о поправке новым
+// расхождением и число выросло с 26 до 27 после ПОЧИНКИ.
+const stripComments = (text) =>
+  text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((l) => !/^\s*(\/\/|\*)/.test(l))
+    .join("\n");
+
 const promised = new Map();
 for (const rel of DOCS) {
-  const text = readFileSync(path.join(ROOT, rel), "utf8");
+  const text = stripComments(readFileSync(path.join(ROOT, rel), "utf8"));
   for (const m of text.matchAll(/\/api\/[a-z0-9][a-z0-9/_.:{}-]*/gi)) {
     const p = m[0].replace(/\/+$/, "");
     if (p.length < 6) continue;

@@ -130,7 +130,7 @@ function ProviderHealthStrip() {
             color: T.accent,
           }}
         >
-          ◉ Provider Health
+          ◉ Ключи поставщиков
         </span>
         <span style={{ flex: 1 }} />
         {!gated && (
@@ -176,25 +176,25 @@ function ProviderHealthStrip() {
             gap: 8,
           }}
         >
+          {/* Оговорка обязательна и стоит рядом с самими значками: без неё
+              список ключей читается как список работающих поставщиков —
+              ровно то заблуждение, которое здесь и было. */}
           {providers.map((p) => {
-            const dotColor = !p.configured
-              ? T.textFaded
-              : p.reachable
-              ? T.goodBright
-              : T.badBright;
-            const stateLabel = !p.configured
-              ? "no key"
-              : p.reachable
-              ? "online"
-              : "down";
-            const latencyLabel =
-              p.latencyMs == null
-                ? ""
-                : p.latencyMs < 250
-                ? `${p.latencyMs}ms`
-                : p.latencyMs < 1000
-                ? `${p.latencyMs}ms ⚠`
-                : `${p.latencyMs}ms 🐢`;
+            // Показываем ровно то, что известно: задан ли ключ.
+            //
+            // Здесь стояли «online / down», зелёный огонёк и задержка вида
+            // «3ms ⚠». Ни одно из этих утверждений не измерялось: данные
+            // приходят из /api/qcoreai/providers, а тот СИНХРОННО читает
+            // переменные окружения и перечисляет провайдеров с заданным
+            // ключом — обращения к Anthropic, OpenAI и прочим там нет ни
+            // одной строкой. «Задержка» была временем ответа нашего же
+            // localhost, поданным как задержка провайдера.
+            //
+            // То есть при лежащем OpenAI страница писала «online». Наличие
+            // ключа — полезный факт, и он остаётся; выдуманная доступность
+            // ушла.
+            const dotColor = p.configured ? T.goodBright : T.textFaded;
+            const stateLabel = p.configured ? "ключ настроен" : "ключа нет";
             return (
               <div
                 key={p.id}
@@ -209,7 +209,7 @@ function ProviderHealthStrip() {
                 }}
                 title={
                   p.configured
-                    ? `${p.name} · ${stateLabel}${latencyLabel ? ` · ${latencyLabel}` : ""}${p.defaultModel ? ` · default ${p.defaultModel}` : ""}`
+                    ? `${p.name} · ${stateLabel}${p.defaultModel ? ` · модель по умолчанию ${p.defaultModel}` : ""}`
                     : `${p.name} not configured (missing API key)`
                 }
               >
@@ -243,24 +243,31 @@ function ProviderHealthStrip() {
                 >
                   <span
                     style={{
-                      color:
-                        !p.configured
-                          ? T.textFaded
-                          : p.reachable
-                          ? T.good
-                          : T.bad,
+                      color: p.configured ? T.good : T.textFaded,
                       fontWeight: 700,
                       letterSpacing: "0.05em",
-                      textTransform: "uppercase",
                     }}
                   >
                     {stateLabel}
                   </span>
-                  {latencyLabel ? <span>· {latencyLabel}</span> : null}
+                  {p.defaultModel ? <span>· {p.defaultModel}</span> : null}
                 </div>
               </div>
             );
           })}
+          <p
+            style={{
+              gridColumn: "1 / -1",
+              margin: "2px 0 0",
+              fontSize: 11,
+              lineHeight: 1.5,
+              color: T.textFaded,
+            }}
+          >
+            Здесь видно, у каких поставщиков задан ключ. Доступность самих
+            поставщиков не проверяется — это стоило бы платного запроса к каждому
+            на каждую загрузку страницы.
+          </p>
         </div>
       )}
     </section>

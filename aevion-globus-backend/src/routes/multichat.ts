@@ -927,14 +927,21 @@ type ProviderStatus = {
 
 // Cache provider-status for 20s to avoid hammering the upstream qcoreai
 // /providers endpoint when the UI auto-refreshes every 30s across many tabs.
-let providerStatusCache: { at: number; data: ProviderStatus[] } | null = null;
+let providerStatusCache: { at: number; data: ProviderStatus[]; catalogLatencyMs: number } | null = null;
 const PROVIDER_STATUS_TTL_MS = 20_000;
 
 // GET /api/multichat/provider-status — live health per LLM provider.
 multichatRouter.get("/provider-status", async (req, res) => {
   const now = Date.now();
   if (providerStatusCache && now - providerStatusCache.at < PROVIDER_STATUS_TTL_MS) {
-    return res.json({ providers: providerStatusCache.data, cachedAt: new Date(providerStatusCache.at).toISOString(), fresh: false });
+    return res.json({
+      providers: providerStatusCache.data,
+      cachedAt: new Date(providerStatusCache.at).toISOString(),
+      fresh: false,
+      probed: false,
+      catalogLatencyMs: providerStatusCache.catalogLatencyMs,
+      note: "configured = задан ключ. Доступность самих поставщиков здесь не проверяется.",
+    });
   }
 
   const port = Number(process.env.PORT) || 4001;
@@ -950,24 +957,45 @@ multichatRouter.get("/provider-status", async (req, res) => {
     const data = (await r.json().catch(() => null)) as { providers?: Array<Record<string, unknown>> } | null;
     const list = Array.isArray(data?.providers) ? data!.providers! : [];
 
+    // Что здесь на самом деле известно, а что утверждалось.
+    //
+    // Источник — /api/qcoreai/providers, и он СИНХРОННЫЙ: читает переменные
+    // окружения и перечисляет провайдеров с заданным ключом. Ни одного
+    // обращения к Anthropic, OpenAI или Gemini там нет.
+    //
+    // Стояло `reachable: configured && r.ok`, где r.ok — «наш собственный
+    // внутренний маршрут ответил 200». Поле с именем «достижим» означало
+    // «ключ задан и наш бэкенд жив», а страница рисовала по нему зелёный
+    // огонёк и слово «online». При лежащем OpenAI ответ говорил бы то же
+    // самое. Туда же ехала latencyMs — время round-trip до нашего localhost,
+    // поданное как задержка провайдера (на странице ещё и с порогами ⚠/🐢).
+    //
+    // Теперь: reachable ровно повторяет configured (поле оставлено ради
+    // совместимости с packages/aevion-catalog-client и помечено там как
+    // устаревшее), latencyMs больше не выдумывается, а честная величина —
+    // catalogLatencyMs — названа своим именем. `probed: false` говорит прямо,
+    // что апстримы не опрашивались.
     const providers: ProviderStatus[] = list.map((p) => {
       const configured = Boolean(p.configured);
       return {
         id: String(p.id ?? ""),
         name: String(p.name ?? p.id ?? ""),
         configured,
-        // reachable = both configured AND the upstream /providers route returned OK
-        reachable: configured && r.ok,
-        // Per-provider latency isn't measured upstream; approximate with the
-        // single round-trip latency to the qcoreai aggregator. Honest about
-        // it on the client.
-        latencyMs: configured ? totalLatency : null,
+        reachable: configured,
+        latencyMs: null,
         defaultModel: typeof p.defaultModel === "string" ? p.defaultModel : null,
       };
     });
 
-    providerStatusCache = { at: now, data: providers };
-    res.json({ providers, cachedAt: new Date(now).toISOString(), fresh: true });
+    providerStatusCache = { at: now, data: providers, catalogLatencyMs: totalLatency };
+    res.json({
+      providers,
+      cachedAt: new Date(now).toISOString(),
+      fresh: true,
+      probed: false,
+      catalogLatencyMs: totalLatency,
+      note: "configured = задан ключ. Доступность самих поставщиков здесь не проверяется.",
+    });
   } catch (err: any) {
     captureMultichatError(err, { route: "provider-status" });
     res.status(502).json({

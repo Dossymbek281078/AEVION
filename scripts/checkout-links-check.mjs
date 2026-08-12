@@ -11,8 +11,14 @@
  * Замер 12.08.2026: все 9 адресов Lemon Squeezy отвечали 404 при живом
  * магазине, все 5 адресов Gumroad — 200.
  *
- * Запуск:  node scripts/checkout-links-check.mjs
+ * Запуск:  node scripts/checkout-links-check.mjs          — только код
+ *          node scripts/checkout-links-check.mjs --prod   — код + живые страницы
  * Код выхода: 0 — все живы, 1 — есть мёртвые.
+ *
+ * Про --prod. Проверять один код НЕДОСТАТОЧНО: 12.08.2026 витрина
+ * `aevion.app/shop` отдавала семь мёртвых ссылок Lemon Squeezy, которых в
+ * репозитории нет вовсе — прод не выкатывался с 27.07 и разошёлся с кодом.
+ * Проверка по одному лишь коду занизила бы охват почти вдвое.
  *
  * В CI намеренно НЕ включено: это обращения к чужим сайтам, им место в ручной
  * или редкой проверке, а не в каждом прогоне на каждый PR.
@@ -44,6 +50,38 @@ for (const file of walk(ROOT)) {
     if (!found.has(url)) found.set(url, new Set());
     found.get(url).add(file.slice(ROOT.length + 1).replace(/\\/g, "/"));
   }
+}
+
+// Страницы, которые реально показывают кнопки покупки. Прод живёт отдельно от
+// кода, поэтому список свой, а не выведенный из репозитория.
+const PROD_PAGES = ["/shop", "/apps", "/studio", "/devhub", "/pricing", "/constitution/pricing"];
+const PROD_BASE = process.env.PROD_BASE || "https://aevion.app";
+
+if (process.argv.includes("--prod")) {
+  console.log(`Смотрю живые страницы на ${PROD_BASE}…`);
+  for (const page of PROD_PAGES) {
+    try {
+      const res = await fetch(`${PROD_BASE}${page}`, {
+        redirect: "follow",
+        headers: { "User-Agent": "Mozilla/5.0 (AEVION checkout-links-check)" },
+        signal: AbortSignal.timeout(25_000),
+      });
+      const html = await res.text();
+      let n = 0;
+      for (const m of html.matchAll(URL_RE)) {
+        const url = m[0];
+        if (!found.has(url)) found.set(url, new Set());
+        found.get(url).add(`прод ${page}`);
+        n += 1;
+      }
+      console.log(`  ${page} — ${res.status}, ссылок на магазины: ${new Set([...html.matchAll(URL_RE)].map((x) => x[0])).size}`);
+      void n;
+    } catch (e) {
+      console.log(`  ${page} — не открылась: ${e.message}`);
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  console.log("");
 }
 
 if (found.size === 0) {

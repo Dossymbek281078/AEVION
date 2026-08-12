@@ -154,18 +154,57 @@ let persistFailures = 0;
 const PERSIST_RETRY_MS = 60_000;
 let TOURNAMENTS: Tournament[] = [];
 
-function tryLoadFromDisk(): Tournament[] | null {
+/**
+ * Файл есть, но прочитать его не удалось. Это НЕ «файла нет».
+ *
+ * Раньше оба случая возвращали null, а initStore на null писал на диск
+ * ФИКСТУРЫ. То есть одна ошибка чтения — испорченный JSON, нехватка прав,
+ * неожиданная форма содержимого — заменяла все регистрации и результаты
+ * демо-турнирами прямо на старте процесса, без чьего-либо участия и без единого
+ * сообщения. Атомарная запись через переименование, о которой сказано ниже,
+ * защищает только от обрыва посреди записи, а не от остальных причин.
+ */
+let storeDegraded = false;
+
+type LoadResult = { ok: true; tournaments: Tournament[] | null } | { ok: false };
+
+function tryLoadFromDisk(): LoadResult {
   try {
-    if (!fs.existsSync(DATA_FILE)) return null;
+    if (!fs.existsSync(DATA_FILE)) return { ok: true, tournaments: null }; // файла нет — честно пусто
     const raw = fs.readFileSync(DATA_FILE, "utf-8");
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed?.tournaments)) return null;
-    return parsed.tournaments as Tournament[];
+    if (!Array.isArray(parsed?.tournaments)) {
+      console.error("[cyberchess-tournaments] файл есть, но не той формы — содержимое неизвестно, запись заблокирована");
+      return { ok: false };
+    }
+    return { ok: true, tournaments: parsed.tournaments as Tournament[] };
   } catch (e) {
-    console.warn("[cyberchess-tournaments] load failed:", (e as Error).message);
+    console.error("[cyberchess-tournaments] файл не прочитан — запись заблокирована, чтобы не заменить его фикстурами:", (e as Error).message);
     capture(e);
-    return null;
+    return { ok: false };
   }
+}
+
+/** Состояние хранилища турниров — читает, ничего не меняет. */
+export function tournamentStoreDegraded(): boolean {
+  return storeDegraded;
+}
+
+/**
+ * Пока файл не читается, модуль не работает целиком: отдавать фикстуры вместо
+ * настоящих турниров нельзя (это выдуманные данные под видом живых), а копить
+ * изменения в памяти бессмысленно — сохранить их всё равно некуда. Каждый
+ * запрос сначала пробует перечитать: причина обычно временная.
+ */
+function degradedGuard(_req: Request, res: Response, next: () => void): void {
+  if (!storeDegraded) return next();
+  const retry = tryLoadFromDisk();
+  if (retry.ok) {
+    storeDegraded = false;
+    TOURNAMENTS = retry.tournaments && retry.tournaments.length > 0 ? retry.tournaments : buildSeedFixtures();
+    return next();
+  }
+  res.status(503).json({ ok: false, error: "tournaments_store_unavailable" });
 }
 
 function tryWriteToDisk(): void {
@@ -179,6 +218,7 @@ function tryWriteToDisk(): void {
   // временная (полный диск, права, гонка на переименовании), но защёлка
   // не давала попробовать снова НИ РАЗУ до перезапуска.
   if (persistPausedUntil > Date.now()) return;
+  if (storeDegraded) return; // содержимое файла неизвестно — не затираем его
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -220,8 +260,16 @@ export function tournamentPersistenceState(): {
 }
 
 function initStore(): void {
-  // try filesystem first; if unavailable, fall back to seed fixtures in memory
-  const loaded = tryLoadFromDisk();
+  const result = tryLoadFromDisk();
+  if (!result.ok) {
+    // Содержимое файла неизвестно. Ни писать поверх, ни выдавать фикстуры за
+    // настоящие турниры нельзя — модуль отвечает отказом, пока файл не
+    // прочитается (см. degradedGuard).
+    storeDegraded = true;
+    TOURNAMENTS = [];
+    return;
+  }
+  const loaded = result.tournaments;
   if (loaded && loaded.length > 0) {
     TOURNAMENTS = loaded;
     // backfill new fields on legacy persisted data
@@ -1072,6 +1120,11 @@ function publishRoundToMatchmaking(t: Tournament, matches: BracketMatch[]): void
 // ── routes ─────────────────────────────────────────────────────────
 
 initStore();
+
+// Пока файл турниров не прочитан, ни один маршрут не работает: отдавать
+// фикстуры под видом настоящих турниров и копить изменения, которые некуда
+// сохранить, — хуже честного отказа. Страж сам пробует перечитать файл.
+router.use(degradedGuard);
 
 /* Партия турнира кончилась — закрываем пару в сетке.
  *

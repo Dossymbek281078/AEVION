@@ -5,6 +5,22 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
+import { T } from "../../theme";
+import { agentFailure } from "../../failureText";
+
+// Публичная страница расшаренного консилиума — единственный экран модуля,
+// который открывает ПОСТОРОННИЙ человек по ссылке.
+//
+// До 12.08.2026 она осталась на тёмных классах Tailwind (`bg-slate-950`,
+// `text-slate-400`, фиолетовые акценты), хотя весь модуль 26–27.07 перевели на
+// светлый газетный эталон AEVION и на токены ./theme. То есть первое, что видел
+// приглашённый, выглядело как другой продукт. Токенов сторож не проверял: он
+// ищет сырые hex-литералы, а имя класса Tailwind для него не цвет — поэтому
+// расхождение и жило молча.
+//
+// Стиль здесь инлайновый и через T, как в остальном модуле: два способа
+// красить одну зону разъезжаются на первой же смене темы.
+
 interface Turn {
   role: "user" | "assistant" | "system";
   content: string;
@@ -31,6 +47,37 @@ function fmtDate(iso?: string) {
   });
 }
 
+/** Экран во всю высоту с одним сообщением по центру — загрузка и отказ. */
+function Centered({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: T.canvas,
+        color: T.text,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "0 24px",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+const linkButton: React.CSSProperties = {
+  display: "inline-block",
+  marginTop: 16,
+  padding: "10px 18px",
+  background: T.btnAccentBg,
+  color: T.onAccent,
+  borderRadius: 10,
+  fontSize: 14,
+  fontWeight: 600,
+  textDecoration: "none",
+};
+
 export default function SharedConversationPage() {
   const params = useParams<{ token: string }>();
   const token = params.token;
@@ -54,12 +101,14 @@ export default function SharedConversationPage() {
         return;
       }
       if (!r.ok) {
-        setError(`Ошибка ${r.status}`);
+        // Голое «Ошибка 429» человеку ничего не говорит и звучит как его вина.
+        const body = (await r.json().catch(() => null)) as { error?: unknown } | null;
+        setError(agentFailure(body?.error ?? `upstream ${r.status}`).human);
         return;
       }
       setData(await r.json());
     } catch {
-      setError("Не удалось загрузить");
+      setError("Не удалось загрузить страницу. Проверьте соединение и обновите её.");
     } finally {
       setLoading(false);
     }
@@ -67,33 +116,32 @@ export default function SharedConversationPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <p className="text-slate-500 text-sm">Загрузка...</p>
-      </div>
+      <Centered>
+        <p style={{ color: T.textMute, fontSize: 14 }}>Загрузка…</p>
+      </Centered>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6">
-        <div className="max-w-md text-center space-y-3">
-          <div className="text-4xl">🔗</div>
-          <h1 className="text-xl font-bold">Ссылка недоступна</h1>
-          <p className="text-sm text-slate-400">{error}</p>
-          <Link
-            href="/multichat-engine"
-            className="inline-block mt-4 px-4 py-2 bg-violet-700 hover:bg-violet-600 rounded-lg text-sm"
-          >
-            Открыть Multichat
+      <Centered>
+        <div style={{ maxWidth: 420, textAlign: "center" }}>
+          <div style={{ fontSize: 40 }}>🔗</div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: "10px 0 6px", color: T.text }}>
+            Ссылка недоступна
+          </h1>
+          <p style={{ fontSize: 14, color: T.textMute, lineHeight: 1.6, margin: 0 }}>{error}</p>
+          <Link href="/multichat-engine" style={linkButton}>
+            Открыть Мультичат
           </Link>
         </div>
-      </div>
+      </Centered>
     );
   }
 
   if (!data) return null;
 
-  // Group turns by agent (conversationId pattern: `${convId}:${agentId}`)
+  // Ответы сгруппированы по агенту: conversationId приходит как `${convId}:${agentId}`.
   const byAgent = new Map<string, Turn[]>();
   const userTurns: Turn[] = [];
   for (const t of data.turns) {
@@ -110,47 +158,114 @@ export default function SharedConversationPage() {
   const agents = [...byAgent.keys()];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/multichat-engine" className="text-slate-400 hover:text-white text-sm">
-            AEVION Multichat
+    <div style={{ minHeight: "100vh", background: T.canvas, color: T.text }}>
+      <header
+        style={{
+          borderBottom: `1px solid ${T.line}`,
+          padding: "14px 24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <Link href="/multichat-engine" style={{ color: T.textMute, fontSize: 14, textDecoration: "none" }}>
+            AEVION Мультичат
           </Link>
-          <span className="text-slate-600">·</span>
-          <h1 className="text-sm font-bold truncate max-w-md">{data.conversation.title}</h1>
+          <span style={{ color: T.textFaded }}>·</span>
+          <h1
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              margin: 0,
+              color: T.text,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              maxWidth: 420,
+            }}
+          >
+            {data.conversation.title}
+          </h1>
         </div>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-900 text-emerald-300 font-semibold">
-          PUBLIC SHARE
+        <span
+          style={{
+            fontSize: 10,
+            padding: "3px 8px",
+            borderRadius: 999,
+            background: T.surfaceSoft,
+            color: T.textMute,
+            fontWeight: 700,
+            letterSpacing: 0.6,
+            textTransform: "uppercase",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Открытая ссылка
         </span>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        <div className="text-xs text-slate-500">
-          Чат создан {fmtDate(data.conversation.createdAt)} · только просмотр (read-only)
+      <div style={{ maxWidth: 1024, margin: "0 auto", padding: "32px 24px", display: "grid", gap: 24 }}>
+        <div style={{ fontSize: 12, color: T.textFaded }}>
+          Создано {fmtDate(data.conversation.createdAt)} · только просмотр, менять нельзя
         </div>
 
         {userTurns.map((u, idx) => (
-          <div key={idx} className="space-y-3">
-            <div className="bg-violet-900/30 border border-violet-800 rounded-xl p-4">
-              <div className="text-[10px] uppercase font-bold text-violet-300 mb-1">
-                User · {fmtDate(u.createdAt)}
+          <div key={idx} style={{ display: "grid", gap: 12 }}>
+            <div
+              style={{
+                background: T.surfaceSoft,
+                border: `1px solid ${T.line}`,
+                borderRadius: 12,
+                padding: 16,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 10,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.8,
+                  fontWeight: 700,
+                  color: T.textMute,
+                  marginBottom: 6,
+                }}
+              >
+                Вопрос · {fmtDate(u.createdAt)}
               </div>
-              <div className="text-sm whitespace-pre-wrap">{u.content}</div>
+              <div style={{ fontSize: 14, whiteSpace: "pre-wrap", lineHeight: 1.65, color: T.text }}>
+                {u.content}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {agents.map(a => {
+            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+              {agents.map((a) => {
                 const turn = (byAgent.get(a) ?? [])[idx];
                 if (!turn) return null;
                 return (
                   <div
                     key={a}
-                    className="bg-slate-900 border border-slate-800 rounded-xl p-4"
+                    style={{
+                      background: T.surface,
+                      border: `1px solid ${T.lineSoft}`,
+                      borderRadius: 12,
+                      padding: 16,
+                    }}
                   >
-                    <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">
-                      Agent: {a}
+                    <div
+                      style={{
+                        fontSize: 10,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.8,
+                        fontWeight: 700,
+                        color: T.textFaded,
+                        marginBottom: 6,
+                      }}
+                    >
+                      Агент: {a}
                     </div>
-                    <div className="text-sm whitespace-pre-wrap text-slate-200">
+                    <div style={{ fontSize: 14, whiteSpace: "pre-wrap", lineHeight: 1.65, color: T.textDim }}>
                       {turn.content}
                     </div>
                   </div>
@@ -160,13 +275,12 @@ export default function SharedConversationPage() {
           </div>
         ))}
 
-        <div className="text-center pt-8 border-t border-slate-800">
-          <p className="text-xs text-slate-600 mb-3">Powered by AEVION Multichat Engine</p>
-          <Link
-            href="/multichat-engine"
-            className="inline-block px-4 py-2 bg-violet-700 hover:bg-violet-600 rounded-lg text-sm font-semibold"
-          >
-            Создать свой multichat →
+        <div style={{ textAlign: "center", paddingTop: 28, borderTop: `1px solid ${T.lineSoft}` }}>
+          <p style={{ fontSize: 12, color: T.textFaded, margin: "0 0 4px" }}>
+            Сделано в AEVION Мультичат
+          </p>
+          <Link href="/multichat-engine" style={linkButton}>
+            Собрать свой консилиум →
           </Link>
         </div>
       </div>

@@ -20,7 +20,17 @@
 
 export interface HeightReview {
   city: string;
-  /** индекс здания в twin.buildings — тот же, что в dataQuality.suspect[].i */
+  /**
+   * Индекс здания в twin.buildings — тот же, что в dataQuality.suspect[].i.
+   *
+   * Хрупкая привязка, и это осознанно: OSM-идентификатор в твин не едет (в
+   * генераторе он лежит в служебном массиве meta, который не отгружается),
+   * поэтому индекс — единственная ручка. Пересборка твина его сдвигает: 12.08.2026
+   * Абу-Даби Плаза переехала со 195 на 194, когда в bbox добавилось пять зданий.
+   * Ровно на этот случай в `qskywayHeightReview.test.ts` стоит проверка, что
+   * разбор описывает здание, которое в твине действительно есть, — она и поймала
+   * сдвиг в ту же минуту.
+   */
   index: number;
   /** элемент OSM, чтобы починку можно было довести до источника */
   osm: string;
@@ -38,7 +48,7 @@ export interface HeightReview {
 export const HEIGHT_REVIEWS: HeightReview[] = [
   {
     city: "astana",
-    index: 195,
+    index: 194,
     osm: "way/486561786",
     taggedM: 382,
     publishedM: 310.8,

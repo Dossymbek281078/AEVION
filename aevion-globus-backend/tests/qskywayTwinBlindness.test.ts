@@ -22,7 +22,7 @@ import type { CityData } from "../src/routes/qskyway.city";
 
 const PROFILE: Record<string, { twin: CityData; total: number; measured: number; guessed: number }> = {
   // Астана: городского обмера нет вовсе, тег несущий — тут слепота дороже всего
-  astana: { twin: CITY, total: 470, measured: 0, guessed: 240 },
+  astana: { twin: CITY, total: 475, measured: 0, guessed: 237 },
   // Нью-Йорк и Токио: высоты перекрыты городским обмером
   nyc: { twin: CITY_NYC, total: 2976, measured: 2879, guessed: 28 },
   tokyo: { twin: CITY_TOKYO, total: 3781, measured: 3504, guessed: 116 },

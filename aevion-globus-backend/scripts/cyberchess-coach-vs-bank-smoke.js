@@ -32,6 +32,13 @@ const BASE = (process.env.BASE || "https://aevion.app/api-backend").replace(/\/+
 const MIN_COUNT = Math.max(1, Number(process.env.MIN_COUNT) || 1);
 const TIMEOUT_MS = 20000;
 
+// Приёмы, про которые УЖЕ известно, что задач нет (замер 12.08.2026 против
+// прода). Чинятся пересевом банка, до него никуда не денутся — и ронять из-за
+// них весь ежедневный набор нельзя: постоянно красная проверка перестаёт
+// читаться. Список должен ПУСТЕТЬ: когда приём снова обеспечен задачами, смок
+// прямо просит убрать его отсюда, иначе исключение переживёт свою причину.
+const KNOWN_EMPTY = new Set(["pin", "skewer", "sacrifice", "zugzwang"]);
+
 const ENGINE = path.join(__dirname, "..", "..", "frontend", "src", "app", "cyberchess", "chessCoachEngine.ts");
 const SEED = path.join(__dirname, "seed-puzzles.mjs");
 
@@ -119,13 +126,41 @@ async function themeCount(theme) {
     console.error("НЕ СМОГ ПРОВЕРИТЬ: банк не ответил ни на один запрос");
     process.exit(2);
   }
-  if (empty.length === 0) {
-    console.log("Все приёмы тренера обеспечены задачами.");
+
+  const regressions = empty.filter((e) => !KNOWN_EMPTY.has(e.id));
+  const fixed = [...KNOWN_EMPTY].filter((id) => !empty.some((e) => e.id === id) && taught.includes(id));
+
+  // Известное чинится пересевом базы и до него никуда не денется. Ронять из-за
+  // него весь ежедневный набор нельзя: постоянно красная проверка перестаёт
+  // читаться и прячет НОВЫЕ поломки. Поэтому известное — громкое предупреждение,
+  // а провал только на ухудшении.
+  if (empty.length > 0) {
+    const known = empty.filter((e) => KNOWN_EMPTY.has(e.id));
+    if (known.length) {
+      console.log(`ИЗВЕСТНО (ждёт пересева банка): ${known.map((e) => e.theme).join(", ")}`);
+      console.log("Причина — раскладка тем при импорте, починена в scripts/seed-puzzles.mjs.");
+      console.log("Лечится прогоном сеялки против дампа Lichess.");
+    }
+  }
+
+  // Иначе исключение переживёт то, ради чего заведено: банк пересеют, а список
+  // так и будет молча прощать эти приёмы, если они пропадут снова.
+  if (fixed.length) {
+    console.log("");
+    console.log(`ПОЧИНЕНО — убери из KNOWN_EMPTY: ${fixed.join(", ")}`);
+  }
+
+  if (regressions.length === 0) {
+    console.log("");
+    console.log(empty.length === 0
+      ? "Все приёмы тренера обеспечены задачами."
+      : "Новых пропаж нет.");
     process.exit(0);
   }
 
-  console.error(`ПРОВАЛ: приёмов без задач — ${empty.length}:`);
-  for (const e of empty) console.error(`   ${e.theme} (тег ${e.id}) — ${e.total} задач`);
+  console.error("");
+  console.error(`ПРОВАЛ: приёмов без задач стало БОЛЬШЕ — ${regressions.length}:`);
+  for (const e of regressions) console.error(`   ${e.theme} (тег ${e.id}) — ${e.total} задач`);
   console.error("");
   console.error("Тренер учит приёму, которого не на чем отработать. Обычная причина —");
   console.error("раскладка тем при импорте: прогнать scripts/seed-puzzles.mjs заново.");

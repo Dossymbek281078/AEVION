@@ -6,7 +6,7 @@
 // целиком, с живыми дочерними компонентами.
 
 import { describe, test, expect, afterEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 vi.mock("@/lib/auth", () => ({
   isAuthenticated: () => true,
@@ -98,5 +98,64 @@ describe("Полоса поставщиков — говорит только т
     render(<MultichatEnginePage />);
 
     expect(await screen.findByText(/ключа нет/i)).toBeTruthy();
+  });
+});
+
+// Витрина заданий обещала то, чего не происходило.
+//
+// Кнопка «Launch →» создавала на сервере беседу и уводила пользователя на
+// /qcoreai/multi?conv=…&preset=…, а комментарий в коде утверждал, что та
+// страница читает оба параметра и заранее расставляет роли. Проверено по
+// исходнику: /qcoreai/multi разбирает ТОЛЬКО `from=notebook` и `from=pipeline`
+// через sessionStorage. Ни `conv`, ни `preset` там не читаются нигде.
+//
+// Итог для человека: он нажал «запустить миссию», ушёл со страницы модуля,
+// оказался на пустом экране без системного промта и без ролей, а в библиотеке
+// у него появилась пустая беседа «💻 Code review» с нулём реплик.
+//
+// Задание должно наполнять консилиум ЗДЕСЬ ЖЕ — за этим на страницу и пришли.
+describe("Витрина заданий — задание попадает в консоль, а не в никуда", () => {
+  const PRESET = {
+    id: "code-review",
+    name: "Code review",
+    emoji: "💻",
+    description: "Три инженера оценят ваш диф: ясность, корректность, безопасность.",
+    systemPrompt: "Вы старший инженер на ревью. Ищите дефекты корректности и безопасности.",
+    recommendedAgents: [{ role: "Code" }],
+    defaultProvider: "anthropic",
+  };
+
+  function stubPresets() {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/presets")) {
+        return { ok: true, status: 200, json: async () => ({ presets: [PRESET] }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ providers: [] }) };
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    return fetchMock;
+  }
+
+  test("нажатие кладёт задание в поле консилиума на этой же странице", async () => {
+    stubPresets();
+    render(<MultichatEnginePage />);
+
+    const btn = await screen.findByRole("button", { name: /взять в консилиум/i });
+    fireEvent.click(btn);
+
+    const textarea = screen.getByPlaceholderText(/стоит ли запускать платный тариф/i) as HTMLTextAreaElement;
+    await waitFor(() => expect(textarea.value).toContain("ревью"));
+  });
+
+  test("пустая беседа на сервере при этом не заводится", async () => {
+    const fetchMock = stubPresets();
+    render(<MultichatEnginePage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /взять в консилиум/i }));
+
+    await waitFor(() => {
+      const launched = fetchMock.mock.calls.some((c) => String(c[0]).includes("/launch"));
+      expect(launched).toBe(false);
+    });
   });
 });

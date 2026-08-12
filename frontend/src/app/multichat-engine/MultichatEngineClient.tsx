@@ -27,14 +27,25 @@ import { CouncilConsole } from "./CouncilConsole";
 import { T } from "./theme";
 
 /* ─────────────────────────────────────────────────────────────────
- * Phase 3 additions wired into the landing:
- *   A) ProviderHealthStrip — live ping of /api/multichat/provider-status,
- *      auto-refresh every 30s, badges per provider with latency + status dot.
- *   B) MissionPresetGrid — server-defined preset catalogue from
- *      /api/multichat/presets, each card "Launch" button POSTs to
- *      /api/multichat/presets/:id/launch and routes the user to
- *      /qcoreai/multi pre-filled.
- * Both consume apiUrl() so they work in dev (Vercel proxy) and prod.
+ * Два блока вокруг консоли. Описание правлено 12.08.2026 — прежнее обещало
+ * то, чего код не делал, и на это обещание я сам потратил полчаса, прежде
+ * чем проверил источник.
+ *
+ *   A) ProviderHealthStrip — НЕ пинг поставщиков. Показывает, у каких
+ *      поставщиков задан ключ: /api/multichat/provider-status берёт данные
+ *      из /api/qcoreai/providers, а тот синхронно читает переменные
+ *      окружения. Доступность самих поставщиков не измеряется, и страница
+ *      говорит об этом прямо.
+ *
+ *   B) MissionPresetGrid — каталог заданий с сервера
+ *      (/api/multichat/presets). Выбранное задание кладётся в поле консоли
+ *      НА ЭТОЙ ЖЕ странице. Раньше кнопка создавала беседу через
+ *      /presets/:id/launch и уводила на /qcoreai/multi — та страница ни
+ *      `conv`, ни `preset` не читает, так что человек попадал на пустой
+ *      экран, а в библиотеке оседала беседа с нулём реплик. Ручка /launch
+ *      осталась в API (её отдаёт SDK), но интерфейс её больше не зовёт.
+ *
+ * Оба ходят через apiUrl() — иначе запрос уходит в сам Next и получает 404.
  * ────────────────────────────────────────────────────────────── */
 
 type LiveProviderStatus = {
@@ -284,10 +295,9 @@ type MissionPreset = {
   defaultProvider: string;
 };
 
-function MissionPresetGrid() {
+function MissionPresetGrid({ onPick }: { onPick: (preset: MissionPreset) => void }) {
   const [presets, setPresets] = useState<MissionPreset[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [launching, setLaunching] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [gated, setGated] = useState(false);
 
@@ -325,38 +335,21 @@ function MissionPresetGrid() {
     };
   }, []);
 
-  const launch = useCallback(async (preset: MissionPreset) => {
-    setLaunching(preset.id);
-    try {
-      const r = await fetch(apiUrl(`/api/multichat/presets/${preset.id}/launch`), {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: `${preset.emoji} ${preset.name}` }),
-      });
-      if (!r.ok) {
-        setLaunching(null);
-        const msg = r.status === 401 ? "Sign in to launch a mission." : `Launch failed (${r.status}).`;
-        // Inline error: surface via an alert + visual via err state
-        if (typeof window !== "undefined") window.alert(msg);
-        return;
-      }
-      const data = (await r.json()) as {
-        conversation?: { id?: string };
-      };
-      const convId = data?.conversation?.id;
-      if (convId && typeof window !== "undefined") {
-        // Route to the multi-agent runner with the new conversation preselected.
-        // The /qcoreai/multi page reads ?conv= + ?preset= to pre-wire roles.
-        window.location.href = `/qcoreai/multi?conv=${encodeURIComponent(convId)}&preset=${encodeURIComponent(preset.id)}`;
-      } else {
-        setLaunching(null);
-      }
-    } catch (e: any) {
-      setLaunching(null);
-      if (typeof window !== "undefined") window.alert(e?.message || "Network error");
-    }
-  }, []);
+  // Задание наполняет консилиум ЗДЕСЬ ЖЕ.
+  //
+  // Было: кнопка создавала на сервере беседу и уводила на
+  // /qcoreai/multi?conv=…&preset=…, а комментарий рядом утверждал, что та
+  // страница читает оба параметра и заранее расставляет роли. Она их не
+  // читает: там разбираются только `from=notebook` и `from=pipeline` через
+  // sessionStorage. Человек уходил со страницы модуля на пустой экран без
+  // системного промта и без ролей, а в библиотеке у него оседала пустая
+  // беседа «💻 Code review» с нулём реплик.
+  //
+  // Теперь задание кладётся в поле консоли на этой же странице, а беседа
+  // заводится тогда же, когда и при обычном вопросе, — при отправке.
+  const pick = useCallback((preset: MissionPreset) => {
+    onPick(preset);
+  }, [onPick]);
 
   if (err) {
     return (
@@ -505,25 +498,21 @@ function MissionPresetGrid() {
               <div style={{ display: "flex", gap: 6, marginTop: "auto" }}>
                 <button
                   type="button"
-                  onClick={() => launch(preset)}
-                  disabled={launching !== null}
+                  onClick={() => pick(preset)}
                   style={{
                     flex: 1,
                     padding: "7px 10px",
                     borderRadius: 8,
                     border: "none",
-                    background:
-                      launching === preset.id
-                        ? T.violetEdge40
-                        : `linear-gradient(135deg, ${T.brandDeep}, ${T.indigo})`,
+                    background: `linear-gradient(135deg, ${T.brandDeep}, ${T.indigo})`,
                     color: T.onAccent,
-                    cursor: launching !== null ? "wait" : "pointer",
+                    cursor: "pointer",
                     fontWeight: 800,
                     fontSize: 12,
                     letterSpacing: "0.03em",
                   }}
                 >
-                  {launching === preset.id ? "Launching…" : "Launch →"}
+                  Взять в консилиум →
                 </button>
                 <button
                   type="button"
@@ -556,6 +545,9 @@ function MissionPresetGrid() {
 
 export default function MultichatEnginePage() {
   const origin = getClientApiBase();
+  // Выбранное задание живёт на странице, а не в адресной строке: консоль
+  // стоит здесь же, уводить человека некуда.
+  const [mission, setMission] = useState<string | null>(null);
 
   return (
     <main>
@@ -568,7 +560,7 @@ export default function MultichatEnginePage() {
 
         {/* Рабочая консоль стоит первой: модуль должен открываться промтом
             «опиши — сделаю», а не описанием возможностей. */}
-        <CouncilConsole />
+        <CouncilConsole seed={mission} />
 
         <div
           style={{
@@ -590,7 +582,9 @@ export default function MultichatEnginePage() {
         </div>
 
         <ProviderHealthStrip />
-        <MissionPresetGrid />
+        <MissionPresetGrid onPick={(p) => setMission(`${p.systemPrompt}
+
+Задача: `)} />
 
         <div
           style={{

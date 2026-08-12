@@ -188,7 +188,7 @@ function buildReport(
   return L.join("\n");
 }
 
-export function CouncilConsole() {
+export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<AgentResult[] | null>(null);
@@ -203,6 +203,14 @@ export function CouncilConsole() {
   // и React выдаст ошибку гидрации. Именно эффект, а не вызов в рендере —
   // setState во время рендера работает, но остаётся источником тихих циклов.
   useEffect(() => setAuthed(isAuthenticated()), []);
+
+  // Задание из витрины выше кладётся в поле здесь, а не уводит на другую
+  // страницу. Затираем только пустое поле: если человек уже что-то написал,
+  // его текст важнее выбранной карточки.
+  useEffect(() => {
+    if (!seed) return;
+    setPrompt((cur) => (cur.trim() ? cur : seed));
+  }, [seed]);
 
   const disabled = busy || prompt.trim().length < 5 || authed !== true;
 

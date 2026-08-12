@@ -132,7 +132,7 @@ const PILLARS: Pillar[] = [
     title: "Governance / Trust",
     oneLine:
       "Constitution v1 + Planet attestations + публичный health-board.",
-    modules: ["Constitution v1", "/planet", "/transparency", "/launch-status", "AEVION_COORDINATION"],
+    modules: ["Constitution v1", "/planet", "/status", "/launch-status", "AEVION_COORDINATION"],
     proof: "Constitution опубликован через QSign envelope (commit 1cacd5a1) · daily smoke полностью зелёный",
     tamAnchor: "Trust premium для всех четырёх слоёв",
     accent: "#f472b6",
@@ -274,13 +274,13 @@ export default function AcquirePage() {
             Запросить LOI → yahiin1978@gmail.com
           </a>
           <Link href="/launch-status" style={btnGhost}>Live status</Link>
-          <Link href="/transparency" style={btnGhost}>Transparency board</Link>
+          <Link href="/status" style={btnGhost}>Live health-board</Link>
           <Link href="/constitution" style={btnGhost}>Constitution v1</Link>
         </div>
 
         {/* Live counters */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 24, padding: 28, background: "rgba(255,255,255,0.03)", borderRadius: 20, border: "1px solid rgba(255,255,255,0.08)" }}>
-          <Counter label="Modules tracked" value={totalModules.toString()} sub="/api/aevion/catalog" />
+          <Counter label="Modules tracked" value={totalModules.toString()} sub="/api/aevion/stats" />
           <Counter label="AEV cap supply" value="21 000 000" sub="зафиксирован навсегда" />
           <Counter label="Daily smoke" value="PASS" sub="все проверки зелёные" />
           <Counter
@@ -689,7 +689,7 @@ export default function AcquirePage() {
           </div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
             <Link href="/launch-status" style={{ color: "#94a3b8", textDecoration: "none" }}>Live status</Link>
-            <Link href="/transparency" style={{ color: "#94a3b8", textDecoration: "none" }}>Transparency</Link>
+            <Link href="/status" style={{ color: "#94a3b8", textDecoration: "none" }}>Health board</Link>
             <Link href="/constitution" style={{ color: "#94a3b8", textDecoration: "none" }}>Constitution</Link>
             <Link href="/devhub" style={{ color: "#94a3b8", textDecoration: "none" }}>DevHub</Link>
             <Link href="/planet" style={{ color: "#94a3b8", textDecoration: "none" }}>Planet</Link>

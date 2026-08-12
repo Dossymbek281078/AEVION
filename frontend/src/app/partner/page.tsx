@@ -101,7 +101,7 @@ export default function PartnerPage() {
             Запросить LOI · yahiin1978@gmail.com
           </a>
           <Link href="/partner#deal" style={btnGhost}>Условия сделки</Link>
-          <Link href="/transparency" style={btnGhost}>Live health-board</Link>
+          <Link href="/status" style={btnGhost}>Live health-board</Link>
           <Link href="/partner/print" style={btnGhost}>PDF brief →</Link>
         </div>
 
@@ -175,11 +175,11 @@ export default function PartnerPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginBottom: 24 }}>
           {[
             { label: "130+ PR · 500+ коммитов на GitHub", href: "https://github.com/Dossymbek281078/AEVION", note: "Объём работы одного человека — верифицируется по git log", color: "#10b981" },
-            { label: "GET /api/aevion/catalog", href: "https://aevion-production-a70c.up.railway.app/api/aevion/catalog", note: "JSON реестр 30+ модулей с реальными backend-ами", color: "#3b82f6" },
+            { label: "GET /api/aevion/catalog", href: "https://aevion.app/api-backend/api/aevion/catalog", note: "JSON реестр 30+ модулей с реальными backend-ами", color: "#3b82f6" },
             { label: "QSign v2 — postquantum подпись", href: "https://aevion.app/qsign", note: "ML-DSA-65 FIPS 204 — реализовано в QSign v2, включается ключом подписи", color: "#8b5cf6" },
             { label: "Constitution v1 — атестация", href: "https://aevion.app/constitution", note: "Реальный документ с QSign-envelope, AI-советник работает", color: "#f59e0b" },
-            { label: "Transparency board", href: "https://aevion.app/transparency", note: "Daily smoke полностью зелёный — ничего не скрыто", color: "#ec4899" },
-            { label: "OpenAPI 3.1 spec", href: "https://aevion-production-a70c.up.railway.app/api/openapi.json", note: "Все задокументированные endpoints backend-а", color: "#06b6d4" },
+            { label: "Live health-board", href: "https://aevion.app/status", note: "Daily smoke полностью зелёный — ничего не скрыто", color: "#ec4899" },
+            { label: "OpenAPI 3.1 spec", href: "https://aevion.app/api-backend/api/openapi.json", note: "Все задокументированные endpoints backend-а", color: "#06b6d4" },
           ].map(item => (
             <a key={item.label} href={item.href} target="_blank" rel="noopener" style={{ padding: "18px 20px", background: "rgba(255,255,255,0.03)", border: `1px solid ${item.color}30`, borderRadius: 16, textDecoration: "none", display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: item.color }}>↗ {item.label}</div>
@@ -346,7 +346,7 @@ export default function PartnerPage() {
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px", display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 12, color: "#64748b" }}>AEVION · Innovation Partnership · Confidential · 2026</div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
-            <Link href="/transparency" style={{ color: "#94a3b8", textDecoration: "none" }}>Live health-board</Link>
+            <Link href="/status" style={{ color: "#94a3b8", textDecoration: "none" }}>Live health-board</Link>
             <Link href="/partner/print" style={{ color: "#94a3b8", textDecoration: "none" }}>PDF brief</Link>
             <Link href="/acquire" style={{ color: "#94a3b8", textDecoration: "none" }}>Acquisition brief</Link>
             <Link href="/pilot" style={{ color: "#94a3b8", textDecoration: "none" }}>90-day pilot</Link>

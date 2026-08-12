@@ -68,10 +68,10 @@ export default function AcquirePrintPage() {
         <h3>Что покупатель проверит сам</h3>
         <ul>
           <li><strong>aevion.app/launch-status</strong> — daily smoke полностью зелёный</li>
-          <li><strong>aevion.app/transparency</strong> — health-board всех модулей</li>
+          <li><strong>aevion.app/status</strong> — health-board всех модулей</li>
           <li><strong>aevion.app/constitution</strong> — учредительный документ (RU/EN/KK), QSign envelope</li>
           <li><strong>aevion.app/devhub</strong> — 9 интеграций в проде, единый AEV-биллинг</li>
-          <li><strong>/api/aevion/registry · /api/aevion/stats · /api/planet/stats</strong> — JSON метрики</li>
+          <li><strong>/api/aevion/catalog · /api/aevion/stats · /api/planet/stats</strong> — JSON метрики</li>
         </ul>
 
         <div className="footer">

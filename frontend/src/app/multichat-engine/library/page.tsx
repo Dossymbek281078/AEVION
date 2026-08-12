@@ -4,6 +4,30 @@ import { apiUrl } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import { getAuthToken } from "@/lib/auth";
+import { T } from "../theme";
+import { agentFailure } from "../failureText";
+
+// Библиотека беседы пользователя.
+//
+// Три дефекта, найденные 12.08.2026, все из класса «работает молча не так»:
+//
+// 1. Токен читался из localStorage по имени aevion_token. Такого ключа НЕ ПИШЕТ
+//    ни одна строка фронтенда (канонический — aevion_auth_token_v1, см.
+//    lib/auth.ts). То есть страница показывала «Войдите чтобы видеть свои чаты»
+//    ВОШЕДШЕМУ человеку, всегда. Теперь токен берётся тем же getAuthToken(),
+//    которым его кладёт вход, — одно имя на оба конца.
+// 2. У загрузки не было catch. Сетевой сбой уходил в finally, loading гасло, и
+//    экран уверенно писал «У вас пока нет чатов» — упавшее чтение становилось
+//    фактом. Теперь сбой виден как сбой.
+// 3. Список и экспорт шли на относительный путь, а остальные вызовы через
+//    apiUrl(). Два способа обратиться к одному API расходятся на первой же
+//    смене базы. Теперь один.
+//
+// Цвета — только через токены ../theme (сторож themeTokens.guard проверяет и
+// hex, и классы Tailwind: страница была на тёмных slate-классах, пока весь
+// модуль уже жил на светлом газетном эталоне).
+
 interface Conversation {
   id: string;
   title: string;
@@ -28,17 +52,42 @@ function fmtDate(iso: string) {
   });
 }
 
+/** Причина отказа по-русски из тела ответа; общая с остальным модулем. */
+async function failureOf(r: Response): Promise<string> {
+  const d = (await r.json().catch(() => null)) as { error?: unknown } | null;
+  return agentFailure(d?.error ?? `upstream ${r.status}`).human;
+}
+
+const btnBase: React.CSSProperties = {
+  padding: "5px 9px",
+  borderRadius: 6,
+  fontSize: 12,
+  border: `1px solid ${T.lineSoft}`,
+  background: T.surfaceSoft,
+  color: T.text,
+  cursor: "pointer",
+};
+
+const btnAccent: React.CSSProperties = {
+  ...btnBase,
+  background: T.btnAccentBg,
+  color: T.onAccent,
+  border: "none",
+  fontWeight: 600,
+};
+
 export default function MultichatLibraryPage() {
   const [token, setToken] = useState("");
   const [items, setItems] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [q, setQ] = useState("");
   const [usageMap, setUsageMap] = useState<Record<string, Usage>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) {
       setLoading(false);
@@ -51,17 +100,19 @@ export default function MultichatLibraryPage() {
     setLoading(true);
     setError("");
     try {
-      const url = query
+      const path = query
         ? `/api/multichat/search?q=${encodeURIComponent(query)}&limit=200`
         : `/api/multichat/conversations`;
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${t}` } });
+      const r = await fetch(apiUrl(path), { headers: { Authorization: `Bearer ${t}` } });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        setError(`Ошибка: ${d.error ?? r.status}`);
+        setError(await failureOf(r));
         return;
       }
       const d = await r.json();
       setItems(d.items ?? []);
+    } catch {
+      // Без этого сбой сети выглядел как пустая библиотека.
+      setError("Не удалось получить список. Проверьте соединение и попробуйте снова.");
     } finally {
       setLoading(false);
     }
@@ -75,17 +126,18 @@ export default function MultichatLibraryPage() {
       });
       if (!r.ok) return;
       const u = (await r.json()) as Usage;
-      setUsageMap(prev => ({ ...prev, [id]: u }));
+      setUsageMap((prev) => ({ ...prev, [id]: u }));
     } catch {
-      // ignore
+      // Расход — справка рядом с названием; молчаливый пропуск здесь уместен.
     }
   }
 
   async function rename(id: string) {
-    const current = items.find(i => i.id === id);
-    const next = prompt("Новое название:", current?.title ?? "")?.trim();
+    const current = items.find((i) => i.id === id);
+    const next = window.prompt("Новое название:", current?.title ?? "")?.trim();
     if (!next || next === current?.title) return;
     setBusyId(id);
+    setError("");
     try {
       const r = await fetch(apiUrl(`/api/multichat/conversations/${id}`), {
         method: "PATCH",
@@ -93,31 +145,34 @@ export default function MultichatLibraryPage() {
         body: JSON.stringify({ title: next }),
       });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        alert(`Ошибка: ${d.error ?? r.status}`);
+        setError(await failureOf(r));
         return;
       }
-      setItems(prev => prev.map(i => (i.id === id ? { ...i, title: next } : i)));
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, title: next } : i)));
+    } catch {
+      setError("Переименовать не удалось: сеть не ответила.");
     } finally {
       setBusyId(null);
     }
   }
 
   async function del(id: string) {
-    const conv = items.find(i => i.id === id);
-    if (!confirm(`Удалить "${conv?.title}"? Это необратимо.`)) return;
+    const conv = items.find((i) => i.id === id);
+    if (!window.confirm(`Удалить «${conv?.title}»? Это необратимо.`)) return;
     setBusyId(id);
+    setError("");
     try {
       const r = await fetch(apiUrl(`/api/multichat/conversations/${id}`), {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        alert(`Ошибка: ${d.error ?? r.status}`);
+        setError(await failureOf(r));
         return;
       }
-      setItems(prev => prev.filter(i => i.id !== id));
+      setItems((prev) => prev.filter((i) => i.id !== id));
+    } catch {
+      setError("Удалить не удалось: сеть не ответила. Беседа осталась на месте.");
     } finally {
       setBusyId(null);
     }
@@ -125,106 +180,177 @@ export default function MultichatLibraryPage() {
 
   async function share(id: string) {
     setBusyId(id);
+    setError("");
+    setNotice("");
     try {
       const r = await fetch(apiUrl(`/api/multichat/conversations/${id}/share`), {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-      const d = await r.json().catch(() => ({}));
       if (!r.ok) {
-        alert(`Ошибка: ${d.error ?? r.status}`);
+        setError(await failureOf(r));
         return;
       }
-      const url = `${window.location.origin}${d.shareUrl}`;
-      await navigator.clipboard.writeText(url).catch(() => {});
-      alert(`Public URL скопирован:\n${url}`);
-      setItems(prev => prev.map(i => (i.id === id ? { ...i, shareToken: d.shareToken } : i)));
+      const d = (await r.json()) as { shareUrl?: string; shareToken?: string };
+      const url = `${window.location.origin}${d.shareUrl ?? ""}`;
+      // Копирование может быть запрещено (нет разрешения, не тот контекст) —
+      // тогда ссылку надо ПОКАЗАТЬ, а не сказать «скопировано» и потерять её.
+      const copied = await navigator.clipboard
+        .writeText(url)
+        .then(() => true)
+        .catch(() => false);
+      setNotice(copied ? `Ссылка скопирована: ${url}` : `Ссылка готова, скопируйте вручную: ${url}`);
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, shareToken: d.shareToken } : i)));
+    } catch {
+      setError("Открыть ссылку не удалось: сеть не ответила.");
     } finally {
       setBusyId(null);
     }
   }
 
   async function revoke(id: string) {
-    if (!confirm("Отозвать public-ссылку? Старая перестанет работать.")) return;
+    if (!window.confirm("Отозвать открытую ссылку? Старая перестанет работать.")) return;
     setBusyId(id);
+    setError("");
+    setNotice("");
     try {
       const r = await fetch(apiUrl(`/api/multichat/conversations/${id}/share`), {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!r.ok) {
-        alert(`Ошибка: ${r.status}`);
+        setError(await failureOf(r));
         return;
       }
-      setItems(prev => prev.map(i => (i.id === id ? { ...i, shareToken: null } : i)));
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, shareToken: null } : i)));
+      setNotice("Ссылка отозвана.");
+    } catch {
+      setError("Отозвать не удалось: сеть не ответила. Ссылка ещё работает.");
     } finally {
       setBusyId(null);
     }
   }
 
-  function downloadExport(id: string, fmt: "json" | "csv") {
-    const url = `/api/multichat/conversations/${id}/export.${fmt}`;
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.blob())
-      .then(blob => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `multichat-${id}.${fmt}`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      })
-      .catch(() => alert("Не удалось скачать"));
+  async function downloadExport(id: string, fmt: "json" | "csv") {
+    setError("");
+    try {
+      const r = await fetch(apiUrl(`/api/multichat/conversations/${id}/export.${fmt}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) {
+        setError(await failureOf(r));
+        return;
+      }
+      const blob = await r.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `multichat-${id}.${fmt}`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      setError("Скачать не удалось: сеть не ответила.");
+    }
   }
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <p className="text-slate-400">Войдите чтобы видеть свои чаты.</p>
+      <div
+        style={{
+          minHeight: "100vh",
+          background: T.canvas,
+          color: T.text,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "0 24px",
+        }}
+      >
+        <p style={{ color: T.textMute, fontSize: 15 }}>Войдите, чтобы видеть свои беседы.</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/multichat-engine" className="text-slate-400 hover:text-white text-sm">
-            ← Multichat
+    <div style={{ minHeight: "100vh", background: T.canvas, color: T.text }}>
+      <header
+        style={{
+          borderBottom: `1px solid ${T.line}`,
+          padding: "14px 24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Link href="/multichat-engine" style={{ color: T.textMute, fontSize: 14, textDecoration: "none" }}>
+            ← Мультичат
           </Link>
-          <span className="text-slate-600">·</span>
-          <h1 className="text-sm font-bold">📚 Library</h1>
+          <span style={{ color: T.textFaded }}>·</span>
+          <h1 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: T.text }}>Библиотека</h1>
         </div>
         <button
           onClick={() => void load(token, q)}
           disabled={loading}
-          className="px-3 py-1.5 bg-violet-700 hover:bg-violet-600 disabled:opacity-40 rounded-lg text-xs font-semibold"
+          style={{ ...btnAccent, opacity: loading ? 0.4 : 1 }}
         >
-          {loading ? "..." : "↻"}
+          {loading ? "Обновляю…" : "Обновить"}
         </button>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-4">
+      <div style={{ maxWidth: 1024, margin: "0 auto", padding: "24px", display: "grid", gap: 16 }}>
         {error && (
-          <div className="bg-red-950/40 border border-red-800 rounded-xl p-3 text-sm text-red-300">
+          <div
+            style={{
+              background: T.surfaceSoft,
+              border: `1px solid ${T.bad}`,
+              borderRadius: 12,
+              padding: 12,
+              fontSize: 14,
+              color: T.bad,
+              lineHeight: 1.6,
+            }}
+          >
             {error}
           </div>
         )}
+        {notice && (
+          <div
+            style={{
+              background: T.surfaceSoft,
+              border: `1px solid ${T.lineSoft}`,
+              borderRadius: 12,
+              padding: 12,
+              fontSize: 13,
+              color: T.textDim,
+              wordBreak: "break-all",
+            }}
+          >
+            {notice}
+          </div>
+        )}
 
-        <div className="flex gap-2">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input
             type="text"
             value={q}
-            onChange={e => setQ(e.target.value)}
-            placeholder="Поиск по названию..."
-            className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:border-violet-600 focus:outline-none"
-            onKeyDown={e => {
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Поиск по названию…"
+            style={{
+              flex: 1,
+              minWidth: 200,
+              background: T.surface,
+              border: `1px solid ${T.line}`,
+              borderRadius: 8,
+              padding: "9px 12px",
+              fontSize: 14,
+              color: T.text,
+            }}
+            onKeyDown={(e) => {
               if (e.key === "Enter") void load(token, q);
             }}
           />
-          <button
-            onClick={() => void load(token, q)}
-            className="px-4 py-2 bg-violet-700 hover:bg-violet-600 rounded-lg text-sm font-semibold"
-          >
+          <button onClick={() => void load(token, q)} style={btnAccent}>
             Найти
           </button>
           {q && (
@@ -233,99 +359,97 @@ export default function MultichatLibraryPage() {
                 setQ("");
                 void load(token, "");
               }}
-              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm"
+              style={btnBase}
             >
-              ✕
+              Сбросить
             </button>
           )}
         </div>
 
         {loading && items.length === 0 && (
-          <div className="text-slate-500 text-sm py-12 text-center">Загрузка...</div>
+          <div style={{ color: T.textMute, fontSize: 14, padding: "48px 0", textAlign: "center" }}>
+            Загрузка…
+          </div>
         )}
-        {!loading && items.length === 0 && (
-          <div className="text-slate-600 text-sm py-12 text-center">
-            {q ? "По запросу ничего не найдено" : "У вас пока нет чатов"}
+        {!loading && !error && items.length === 0 && (
+          <div style={{ color: T.textFaded, fontSize: 14, padding: "48px 0", textAlign: "center" }}>
+            {q ? "По запросу ничего не найдено" : "У вас пока нет беседы"}
           </div>
         )}
 
-        <div className="space-y-2">
-          {items.map(c => {
+        <div style={{ display: "grid", gap: 8 }}>
+          {items.map((c) => {
             const u = usageMap[c.id];
             return (
               <div
                 key={c.id}
-                className="bg-slate-900 border border-slate-800 rounded-xl p-4"
+                style={{
+                  background: T.surface,
+                  border: `1px solid ${T.lineSoft}`,
+                  borderRadius: 12,
+                  padding: 16,
+                }}
                 onMouseEnter={() => void loadUsage(c.id)}
               >
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div className="flex-1 min-w-0">
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <Link
                       href={`/multichat-engine?conv=${c.id}`}
-                      className="font-bold text-base hover:text-violet-300 truncate block"
+                      style={{
+                        fontWeight: 700,
+                        fontSize: 16,
+                        color: T.text,
+                        textDecoration: "none",
+                        display: "block",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
                     >
                       {c.title}
                     </Link>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
-                      Updated: {fmtDate(c.updatedAt)} · Created: {fmtDate(c.createdAt)}
+                    <div style={{ fontSize: 11, color: T.textFaded, marginTop: 3 }}>
+                      Изменена {fmtDate(c.updatedAt)} · создана {fmtDate(c.createdAt)}
                     </div>
                     {u && (
-                      <div className="text-[11px] text-slate-500 mt-1 font-mono">
-                        {u.calls} calls · {u.tokens.total.toLocaleString("ru-RU")} tokens · ${u.costUsd.toFixed(4)}
+                      <div style={{ fontSize: 11, color: T.textFaded, marginTop: 4 }}>
+                        Вызовов {u.calls} · токенов {u.tokens.total.toLocaleString("ru-RU")} · ${u.costUsd.toFixed(4)}
                       </div>
                     )}
                     {c.shareToken && (
-                      <div className="text-[11px] text-emerald-400 mt-1">
-                        🔗 Public:{" "}
-                        <code className="bg-slate-950 px-1 rounded">
+                      <div style={{ fontSize: 11, color: T.good, marginTop: 4 }}>
+                        Открытая ссылка:{" "}
+                        <code style={{ background: T.surfaceSoft, padding: "1px 4px", borderRadius: 4 }}>
                           /multichat-engine/shared/{c.shareToken.slice(0, 12)}…
                         </code>
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-1.5 shrink-0">
-                    <button
-                      onClick={() => rename(c.id)}
-                      disabled={busyId === c.id}
-                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded text-xs"
-                    >
-                      ✎ Rename
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => rename(c.id)} disabled={busyId === c.id} style={btnBase}>
+                      Переименовать
                     </button>
-                    <button
-                      onClick={() => downloadExport(c.id, "json")}
-                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs"
-                    >
-                      ↓ JSON
+                    <button onClick={() => void downloadExport(c.id, "json")} style={btnBase}>
+                      Скачать JSON
                     </button>
-                    <button
-                      onClick={() => downloadExport(c.id, "csv")}
-                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs"
-                    >
-                      ↓ CSV
+                    <button onClick={() => void downloadExport(c.id, "csv")} style={btnBase}>
+                      Скачать CSV
                     </button>
                     {c.shareToken ? (
-                      <button
-                        onClick={() => revoke(c.id)}
-                        disabled={busyId === c.id}
-                        className="px-2 py-1 bg-amber-900 hover:bg-amber-800 text-amber-300 disabled:opacity-40 rounded text-xs"
-                      >
-                        🚫 Revoke
+                      <button onClick={() => revoke(c.id)} disabled={busyId === c.id} style={btnBase}>
+                        Отозвать ссылку
                       </button>
                     ) : (
-                      <button
-                        onClick={() => share(c.id)}
-                        disabled={busyId === c.id}
-                        className="px-2 py-1 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 rounded text-xs"
-                      >
-                        🔗 Share
+                      <button onClick={() => share(c.id)} disabled={busyId === c.id} style={btnAccent}>
+                        Открыть ссылку
                       </button>
                     )}
                     <button
                       onClick={() => del(c.id)}
                       disabled={busyId === c.id}
-                      className="px-2 py-1 bg-red-900 hover:bg-red-800 text-red-300 disabled:opacity-40 rounded text-xs"
+                      style={{ ...btnBase, color: T.bad, borderColor: T.bad }}
                     >
-                      🗑 Delete
+                      Удалить
                     </button>
                   </div>
                 </div>

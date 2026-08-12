@@ -312,3 +312,72 @@ describe("POST /github/pull-request — a PR missing files is not a complete PR"
     expect(r.body.degraded).toBeUndefined();
   });
 });
+
+describe("POST /github/sync — a file we failed to read is not 'skipped by policy'", () => {
+  // `skipped` used to hold two unrelated things: files deliberately not synced
+  // (binaries, oversized, past the 100-file cap) and files whose blob fetch
+  // FAILED. The success line counted only updated/created, so a project could
+  // come back part-new part-stale while the message said "Synced: 1 updated" —
+  // and that mixture is what the next push or deploy would build from.
+  test("a blob that could not be read is reported as a failure, not as policy", async () => {
+    process.env.GITHUB_TOKEN = "gh-fake";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "S" });
+    const id = cr.body.project.id as string;
+    await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: "https://github.com/o/r" });
+
+    const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64");
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.endsWith("/repos/o/r")) return ghResp(200, { default_branch: "main" });
+      if (u.includes("/git/trees/")) {
+        return ghResp(200, {
+          tree: [
+            { path: "ok.ts", type: "blob", sha: "s1", size: 10 },
+            { path: "broken.ts", type: "blob", sha: "s2", size: 10 },
+            { path: "logo.png", type: "blob", sha: "s3", size: 10 },
+          ],
+        });
+      }
+      if (u.includes("/git/blobs/s1")) return ghResp(200, { content: b64("ok"), encoding: "base64" });
+      if (u.includes("/git/blobs/s2")) return ghResp(500, { message: "server error" });
+      return ghResp(200, {});
+    });
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/sync`);
+
+    expect(r.body.ok).toBe(true);
+    // The binary was never going to be synced — that is policy, not a loss.
+    expect(r.body.skipped).toEqual(["logo.png"]);
+    // The one we tried and could not read is a different fact entirely.
+    expect(r.body.failed?.map((f: any) => f.path)).toEqual(["broken.ts"]);
+    expect(r.body.degraded).toBe(true);
+    // The frontend shows `message` verbatim, so the loss has to be in it.
+    expect(r.body.message).toMatch(/broken\.ts/);
+  });
+
+  test("a sync where everything readable arrived is not marked degraded", async () => {
+    process.env.GITHUB_TOKEN = "gh-fake";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "S2" });
+    const id = cr.body.project.id as string;
+    await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: "https://github.com/o/r" });
+
+    const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64");
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.endsWith("/repos/o/r")) return ghResp(200, { default_branch: "main" });
+      if (u.includes("/git/trees/")) {
+        return ghResp(200, { tree: [{ path: "ok.ts", type: "blob", sha: "s1", size: 10 }] });
+      }
+      if (u.includes("/git/blobs/s1")) return ghResp(200, { content: b64("ok"), encoding: "base64" });
+      return ghResp(200, {});
+    });
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/sync`);
+
+    expect(r.body.ok).toBe(true);
+    expect(r.body.degraded).toBeUndefined();
+    expect(r.body.failed).toBeUndefined();
+  });
+});

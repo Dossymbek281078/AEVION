@@ -2481,6 +2481,7 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
     }
 
     const skipped: string[] = [];
+    const failed: Array<{ path: string; reason: string }> = [];
     const candidates = treeData.tree.filter((n) => {
       if (n.type !== "blob") return false;
       if (SYNC_BINARY_EXT.test(n.path) || (n.size ?? 0) > SYNC_MAX_FILE_BYTES) { skipped.push(n.path); return false; }
@@ -2499,10 +2500,18 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
     const toWrite: Array<{ path: string; content: string }> = [];
 
     for (const node of candidates) {
+      // `skipped` means "we were never going to sync this" — a binary, an
+      // oversized file, anything past the cap. A file we TRIED to read and
+      // could not is a different fact and belongs in `failed`: putting both in
+      // one list let a genuine loss pass for policy, and the project came back
+      // part-new part-stale with a message that said only "Synced".
       const blobResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/blobs/${node.sha}`, { headers: ghHeaders });
-      if (!blobResp.ok) { skipped.push(node.path); continue; }
+      if (!blobResp.ok) { failed.push({ path: node.path, reason: `HTTP ${blobResp.status}` }); continue; }
       const blob = await blobResp.json() as { content?: string; encoding?: string };
-      if (blob.encoding !== "base64" || typeof blob.content !== "string") { skipped.push(node.path); continue; }
+      if (blob.encoding !== "base64" || typeof blob.content !== "string") {
+        failed.push({ path: node.path, reason: `unexpected encoding ${blob.encoding ?? "none"}` });
+        continue;
+      }
       const content = Buffer.from(blob.content, "base64").toString("utf8");
       const current = byPath.get(node.path);
       if (!current) { created.push(node.path); toWrite.push({ path: node.path, content }); }
@@ -2530,13 +2539,20 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
       }
     }
 
+    // The frontend shows `message` verbatim in its toast, so a loss that is
+    // only present in a separate field would never reach the person looking.
+    const lossNote = failed.length
+      ? ` ⚠ ${failed.length} file${failed.length > 1 ? "s" : ""} could not be read and are missing from this sync: ${failed.map((f) => f.path).join(", ")}`
+      : "";
+
     res.json({
       ok: true, branch, updated, created, unchanged,
       ...(skipped.length ? { skipped } : {}),
+      ...(failed.length ? { failed, ...degraded(`${failed.length} of ${candidates.length} files could not be read from ${owner}/${repo}@${branch}`) } : {}),
       ...(checkpointId ? { checkpointId } : {}),
-      message: toWrite.length
+      message: (toWrite.length
         ? `Synced ${owner}/${repo}@${branch}: ${updated.length} updated, ${created.length} new (undo restores the pre-sync state)`
-        : `Already in sync with ${owner}/${repo}@${branch}`,
+        : `Already in sync with ${owner}/${repo}@${branch}`) + lossNote,
     });
   } catch (e: any) {
     res.status(502).json({ error: e?.message || "GitHub sync failed" });

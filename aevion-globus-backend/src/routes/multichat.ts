@@ -526,6 +526,17 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
     temperature?: unknown;
   };
 
+  // Тайм-аут на агента.
+  //
+  // Веер ждёт всех через Promise.all, то есть консилиум возвращается по САМОМУ
+  // МЕДЛЕННОМУ. Без тайм-аута провайдер, который принял соединение и замолчал,
+  // держал весь запрос столько, сколько позволит сеть, — а человек всё это
+  // время смотрел на «Агенты отвечают…», хотя двое из трёх уже ответили.
+  //
+  // 60 секунд: длинный ответ модели укладывается с запасом, но зависание
+  // становится отличимым от работы. Переопределяется на прогонах.
+  const agentTimeoutMs = Number(process.env.MULTICHAT_AGENT_TIMEOUT_MS) || 60_000;
+
   const calls = (agents as AgentSpec[]).map(async (a, idx) => {
     const agentId = typeof a.id === "string" ? a.id : `agent_${idx}`;
     const role = typeof a.role === "string" ? a.role : "Agent";
@@ -554,6 +565,7 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
           temperature,
           conversationId: threadId,
         }),
+        signal: AbortSignal.timeout(agentTimeoutMs),
       });
       const data = (await r.json().catch(() => null)) as {
         reply?: string;
@@ -612,13 +624,21 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
         usage: data?.usage ?? null,
       };
     } catch (err: any) {
-      captureMultichatError(err, { route: "dispatch-agent", entityId: agentId });
-      await recordAgentFailure(userId, threadId, err?.message || "dispatch failed");
+      // Молчание провайдера — не поломка нашего кода, и в Sentry ему не место:
+      // иначе шумная минута у апстрима хоронит настоящие ошибки веера. Но на
+      // экран причина уходит своя, а не общее «dispatch failed» — «не ответил
+      // за 60 с» и «упал» человек чинит по-разному.
+      const timedOut = err?.name === "TimeoutError" || err?.name === "AbortError";
+      const error = timedOut
+        ? `no reply within ${Math.round(agentTimeoutMs / 1000)}s`
+        : err?.message || "dispatch failed";
+      if (!timedOut) captureMultichatError(err, { route: "dispatch-agent", entityId: agentId });
+      await recordAgentFailure(userId, threadId, error);
       return {
         agentId,
         role,
         ok: false,
-        error: err?.message || "dispatch failed",
+        error,
       };
     }
   });

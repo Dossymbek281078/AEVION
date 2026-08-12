@@ -202,7 +202,7 @@ export function Level5View() {
               <div className="bg-red-50 border border-red-200 rounded px-3 py-2 text-xs text-red-700">
                 <strong>Режим эксперта.</strong> В этой смете {EXPERT_ERRORS.length} заложенных ошибок. Найдите их через чеклист на вкладке «Чеклист ошибок». AI-советник справа подскажет часть.
               </div>
-              <LsrFormHeader meta={LEVEL5_LSR.meta ?? {}} calc={calc} onChange={() => {}} />
+              <LsrFormHeader meta={LEVEL5_LSR.meta ?? {}} calc={calc} onChange={() => {}} readOnly />
               <LsrFormTable calc={calc} notices={aiNotices} onChangeVolume={() => {}} onRemove={() => {}} />
             </div>
           )}

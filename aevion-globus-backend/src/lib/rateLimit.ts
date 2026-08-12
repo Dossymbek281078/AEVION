@@ -7,16 +7,40 @@ export interface RateLimitOptions {
   max?: number;
   /** Alias for max — token-bucket style naming used by bank routes. */
   capacity?: number;
+  /**
+   * Namespace this limiter counts in.
+   *
+   * Omitting it used to mean "share one bucket with every other limiter that
+   * also omitted it" — 45 of the 115 call sites do, so all 45 incremented a
+   * single counter per address while each compared it against its own `max`.
+   * The default is now unique per limiter instance, so omitting it isolates.
+   * Pass the SAME value from two call sites only when you want one shared
+   * budget across them.
+   */
   keyPrefix?: string;
   message?: string;
   /** Ignored compat field from bank token-bucket API. */
   refillPerSec?: number;
-  /** Ignored compat field — per-request key customisation not supported in this impl. */
+  /**
+   * What to count the caller by, when the address is the wrong unit — e.g. a
+   * per-account limit that must not make users behind one office NAT share a
+   * budget. Return a value that DIFFERS per caller: a constant (or one that
+   * collapses every anonymous caller onto the same string) turns a per-caller
+   * limit into a global one. Falls back to the address when it returns nothing
+   * or throws. Omit it to count by address.
+   */
   keyFn?: (req: import("express").Request) => string;
 }
 
 const GLOBAL_BUCKETS = new Map<string, Bucket>();
 let lastSweep = 0;
+
+/**
+ * Serial for the default keyPrefix. Only has to be unique inside the process —
+ * the buckets it names live in this module's Map and nothing outside reads the
+ * key. Module-load order therefore does not matter.
+ */
+let limiterSeq = 0;
 
 /**
  * In-process fixed-window rate limiter. No external deps.
@@ -26,7 +50,9 @@ let lastSweep = 0;
 export function rateLimit(opts: RateLimitOptions) {
   const windowMs = opts.windowMs ?? 60_000;
   const max = opts.max ?? opts.capacity ?? 60;
-  const { keyPrefix = "rl", message = "Too many requests" } = opts;
+  const { message = "Too many requests", keyFn } = opts;
+  // Unique per instance, not the shared "rl" this used to default to.
+  const keyPrefix = opts.keyPrefix ?? `rl#${++limiterSeq}`;
 
   return function rateLimitMiddleware(req: Request, res: Response, next: NextFunction) {
     const now = Date.now();
@@ -42,7 +68,18 @@ export function rateLimit(opts: RateLimitOptions) {
       req.ip ||
       req.socket?.remoteAddress ||
       "unknown";
-    const key = `${keyPrefix}:${ip}`;
+    // A keyFn from the call site names the unit to count (an account, a tenant);
+    // the address is the fallback, including when the fn yields nothing usable.
+    let counted = ip;
+    if (keyFn) {
+      try {
+        const named = keyFn(req);
+        if (typeof named === "string" && named.trim()) counted = named.trim();
+      } catch {
+        // A limiter must not be the reason a request fails. Count by address.
+      }
+    }
+    const key = `${keyPrefix}:${counted}`;
 
     let bucket = GLOBAL_BUCKETS.get(key);
     if (!bucket || bucket.resetAt <= now) {

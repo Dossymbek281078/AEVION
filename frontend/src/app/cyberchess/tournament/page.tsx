@@ -374,6 +374,20 @@ export default function TournamentHubPage() {
             borderRadius: 12,
             padding: "20px 18px",
           }}>
+            {/* Сетка и результаты строятся из MOCK_PLAYERS/MOCK_RESULTS — это
+                показательный пример, а не сыгранный турнир. Лидерборд ниже при
+                живом бэкенде настоящий и это подписано; у сетки такой подписи
+                не было, и отличить её от настоящей было нечем. */}
+            <div
+              data-testid="bracket-demo-notice"
+              style={{
+                marginBottom: 12, fontSize: 12, lineHeight: 1.5,
+                color: C.faint,
+              }}
+            >
+              Сетка ниже — <b>пример оформления</b>: имена участников и счёт
+              выдуманы, такого турнира не было.
+            </div>
             {bracket.length > 0
               ? <BracketView bracket={bracket} />
               : <div style={{ color: C.faint, fontStyle: "italic" }}>Bracket пуст</div>

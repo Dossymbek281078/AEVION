@@ -72,3 +72,21 @@ describe("страница «Экономика» не выдаёт макетн
     expect(src).toMatch(/ставок|ставк/i);
   });
 });
+
+describe("турнирная сетка подписана так же, как лидерборд рядом", () => {
+  const PAGE = "src/app/cyberchess/tournament/page.tsx";
+
+  it("у сетки есть подпись, что имена и счёт выдуманы", () => {
+    /* Лидерборд на этой же странице при живом бэкенде настоящий, и это
+       подписано. Сетка строится из MOCK_PLAYERS/MOCK_RESULTS всегда, а подписи
+       не имела — рядом с настоящими данными это читается как настоящее. */
+    const src = read(PAGE);
+    expect(src).toMatch(/bracket-demo-notice/);
+    expect(src).toMatch(/выдуман/i);
+  });
+
+  it("подпись стоит перед самой сеткой", () => {
+    const src = read(PAGE);
+    expect(src.indexOf("bracket-demo-notice")).toBeLessThan(src.indexOf("<BracketView"));
+  });
+});

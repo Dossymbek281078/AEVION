@@ -131,6 +131,27 @@ const stillReal = m.buildDissentMap([
 ok("«не хватит» против «хватит» осталось противоречием",
   stillReal.contradictions.some((c) => c.word === "хватит"), JSON.stringify(stillReal.contradictions));
 
+// Ответ по-английски. Панель спрашивает по-русски, но модель отвечает на языке
+// вопроса пользователя, а он вправе спросить как угодно. Детектор, работающий
+// только на русском, — это тот же молчащий детектор, просто реже.
+const enOpposite = m.buildDissentMap([
+  A("gpt", "Yes, you should launch the paid tier before the first sale."),
+  A("claude", "No, you should not launch the paid tier before the first sale."),
+]);
+ok("английское отрицание → split", enOpposite.verdict === "split",
+  `${enOpposite.verdict} (${enOpposite.agreement})`);
+ok("английское противоречие названо действием, о котором спор",
+  enOpposite.contradictions.some((c) => c.word === "launch"), JSON.stringify(enOpposite.contradictions));
+ok("местоимение целью отрицания не становится",
+  !enOpposite.contradictions.some((c) => c.word === "you"), JSON.stringify(enOpposite.contradictions));
+
+const enNotOnly = m.buildDissentMap([
+  A("gpt", "The problem is not only price: the value proposition is unclear."),
+  A("claude", "Only price matters here, everything else is secondary."),
+]);
+ok("«not only» противоречием не считается", enNotOnly.contradictions.length === 0,
+  JSON.stringify(enNotOnly.contradictions));
+
 /* ── 2. Нечего сравнивать — не выдавать консенсус ───────────────────────── */
 
 ok("один ответ → insufficient", m.buildDissentMap([A("gpt", "Ответ")]).verdict === "insufficient");

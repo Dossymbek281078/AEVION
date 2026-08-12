@@ -242,11 +242,20 @@ const ANTONYMS: Array<[string, string]> = [
 // это конструкции «X и сверх того» и «не ниже границы». Без этого списка
 // детектор противоречий сам становится источником ложных конфликтов, то есть
 // ровно того шума, ради устранения которого он и заведён.
-const NEGATION_CANCELS = new Set(["только", "просто", "лишь", "менее", "более"]);
+const NEGATION_CANCELS = new Set([
+  "только", "просто", "лишь", "менее", "более",
+  "only", "just", "merely", "less", "fewer",
+]);
 
-// Усилители степени отрицание пропускает дальше: в «не очень удачная» спорят
-// об «удачной», а не о слове «очень».
-const NEGATION_PASSES_THROUGH = new Set(["очень", "слишком", "совсем", "вовсе", "столь", "настолько"]);
+// Отрицание проходит СКВОЗЬ служебные слова и усилители к тому слову, о котором
+// на самом деле спорят: «не очень удачная» — об «удачной», «No, you should not
+// launch» — о «launch», а не о «you». Стоп-слова берём те же, что и в мере
+// схожести: список значимых слов в модуле должен быть один.
+const NEGATION_PASSES_THROUGH = new Set([
+  "очень", "слишком", "совсем", "вовсе", "столь", "настолько",
+  "very", "too", "quite", "really",
+  "you", "we", "they", "she", "one",
+]);
 
 /** Слова, которые в этом ответе отрицаются: «не стоит» → «стоит». */
 export function negatedWords(text: string): Set<string> {
@@ -265,7 +274,7 @@ export function negatedWords(text: string): Set<string> {
       const w = raw[j];
       if (NEGATORS.has(w) || w.length <= 2) continue;
       if (NEGATION_CANCELS.has(w)) break; // «не только», «не менее» — не отрицание
-      if (NEGATION_PASSES_THROUGH.has(w)) continue; // «не очень X» → отрицается X
+      if (NEGATION_PASSES_THROUGH.has(w) || STOP.has(w)) continue; // «не очень X» → отрицается X
       out.add(w);
       break;
     }

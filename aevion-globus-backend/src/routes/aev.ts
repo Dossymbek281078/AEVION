@@ -145,11 +145,59 @@ async function saveLedger(l: LedgerEntry[]) {
   await writeJsonFile(LEDGER_FILE, l);
 }
 
+/**
+ * Device ids that are also property names of every JS object. The format
+ * check below happily accepts them — "__proto__" is nine characters of
+ * letters and underscores — and the wallet store is a plain object parsed
+ * from JSON, so `wallets["__proto__"]` answers with Object.prototype instead
+ * of undefined. Measured before this guard existed:
+ *
+ *   GET  /api/aev/wallet/__proto__        → 200 with an empty wallet
+ *                                           (the `if (!w) 404` never fires)
+ *   POST /api/aev/wallet/__proto__/sync   → 200; `existing.userId` is
+ *                                           undefined, so the ownership
+ *                                           check that blocks takeover is
+ *                                           skipped, and the assignment
+ *                                           rewrites the store's prototype
+ *
+ * The 27.07 hardening pass closed this shape in pricing, skill badges,
+ * qmelanin, qskyway, smeta-trainer and the payment webhooks — seven
+ * branches, none of which touch this file, the one holding balances.
+ */
+const RESERVED_DEVICE_IDS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+  "hasOwnProperty",
+  "toString",
+  "valueOf",
+  "isPrototypeOf",
+  "propertyIsEnumerable",
+  "toLocaleString",
+]);
+
 function sanitizeDeviceId(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const t = raw.trim();
   if (!/^[a-zA-Z0-9._-]{6,128}$/.test(t)) return null;
+  // Rejected by name, not by tightening the format: dots, dashes and
+  // underscores stay legal because real device ids use them.
+  if (RESERVED_DEVICE_IDS.has(t)) return null;
   return t;
+}
+
+/**
+ * Read a wallet without walking the prototype chain. Belt to the braces
+ * above: if a reserved id ever slips through another entry point, this still
+ * answers "no such wallet" rather than handing back Object.prototype.
+ */
+function walletOf(
+  wallets: Record<string, WalletRecord>,
+  deviceId: string,
+): WalletRecord | undefined {
+  return Object.prototype.hasOwnProperty.call(wallets, deviceId)
+    ? wallets[deviceId]
+    : undefined;
 }
 
 function clampAmount(raw: unknown, maxPerCall = 1000): number | null {
@@ -167,7 +215,7 @@ aevRouter.get("/wallet/:deviceId", async (req: Request, res: Response) => {
   if (!deviceId) return res.status(400).json({ error: "invalid_device_id" });
 
   const wallets = await loadWallets();
-  const w = wallets[deviceId];
+  const w = walletOf(wallets, deviceId);
   if (!w) return res.status(404).json({ error: "not_found", deviceId });
   res.json({ ok: true, wallet: w });
 });
@@ -192,7 +240,7 @@ aevRouter.post("/wallet/:deviceId/sync", syncLimiter, async (req: Request, res: 
   if (gate === "blocked") return;
 
   const wallets = await loadWallets();
-  const existing = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, null);
+  const existing = walletOf(wallets, deviceId) ?? DEFAULT_WALLET(deviceId, null);
   const bearerUserId = readUserIdFromBearer(req);
 
   // Anti-takeover: bound wallet → must present matching Bearer
@@ -237,7 +285,7 @@ aevRouter.post("/wallet/:deviceId/mint", writeLimiter, async (req: Request, res:
   if (gate === "blocked") return;
 
   const [wallets, ledger] = await Promise.all([loadWallets(), loadLedger()]);
-  const w = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, null);
+  const w = walletOf(wallets, deviceId) ?? DEFAULT_WALLET(deviceId, null);
   const bearerUserId = readUserIdFromBearer(req);
   if (w.userId && w.userId !== bearerUserId) {
     return res.status(403).json({ error: "ownership_mismatch" });
@@ -277,7 +325,7 @@ aevRouter.post("/wallet/:deviceId/spend", writeLimiter, async (req: Request, res
   if (amount === null) return res.status(400).json({ error: "invalid_amount" });
 
   const [wallets, ledger] = await Promise.all([loadWallets(), loadLedger()]);
-  const w = wallets[deviceId];
+  const w = walletOf(wallets, deviceId);
   if (!w) return res.status(404).json({ error: "not_found", deviceId });
   const bearerUserId = readUserIdFromBearer(req);
   if (w.userId && w.userId !== bearerUserId) {
@@ -348,7 +396,7 @@ export async function internalMintForDevice(opts: {
   if (amount === null) return { ok: false, error: "invalid_amount" };
 
   const [wallets, ledger] = await Promise.all([loadWallets(), loadLedger()]);
-  const w = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, opts.expectedUserId ?? null);
+  const w = walletOf(wallets, deviceId) ?? DEFAULT_WALLET(deviceId, opts.expectedUserId ?? null);
   if (opts.expectedUserId && w.userId && w.userId !== opts.expectedUserId) {
     return { ok: false, error: "ownership_mismatch", balance: w.balance };
   }

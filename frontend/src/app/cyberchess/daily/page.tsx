@@ -89,7 +89,9 @@ export default function DailyPuzzlePage() {
   // Отдельно от пустой таблицы: пустая означает «никто не решал», а это
   // заявление обо ВСЕХ игроках. Получать его из упавшего запроса нельзя.
   const [standingsFailed, setStandingsFailed] = useState(false);
-  const [serverStats, setServerStats] = useState<{ bestStreak: number; totalSolved: number } | null>(null);
+  // totalSolved: null — сервер не знает ответа (статистика по дням живёт в
+  // памяти процесса и обнуляется на перезапуске), а не «решено ноль задач».
+  const [serverStats, setServerStats] = useState<{ bestStreak: number; totalSolved: number | null } | null>(null);
 
   // chess engine (mutable via ref to keep instance stable across renders)
   const chessRef = useRef<Chess>(new Chess());
@@ -185,8 +187,16 @@ export default function DailyPuzzlePage() {
       const r = await fetch(`${API_DAILY}/user/${encodeURIComponent(userId)}/stats`);
       if (!r.ok) return;
       const d = await r.json();
-      if (typeof d?.bestStreak === 'number' && typeof d?.totalSolved === 'number') {
-        setServerStats({ bestStreak: d.bestStreak, totalSolved: d.totalSolved });
+      // totalSolved приходит числом только когда сервер действительно знает
+      // ответ. Статистика по дням живёт в памяти процесса и обнуляется на
+      // перезапуске — тогда сервер присылает null и признак statsKnown: false,
+      // и показывать «Решено задач дня: 0» человеку, который стоит в таблице
+      // лидеров со своей серией, нельзя.
+      if (typeof d?.bestStreak === 'number') {
+        setServerStats({
+          bestStreak: d.bestStreak,
+          totalSolved: typeof d.totalSolved === 'number' ? d.totalSolved : null,
+        });
       }
     } catch {
       // личная статистика не критична для игры — молча остаёмся на локальной
@@ -834,7 +844,7 @@ export default function DailyPuzzlePage() {
                 <div style={{ fontSize: 32, fontWeight: 800, color: '#b56bff' }}>
                   🏆 {Math.max(bestStreak, serverStats?.bestStreak ?? 0)}
                 </div>
-                {serverStats && (
+                {serverStats && serverStats.totalSolved !== null && (
                   <div style={{ fontSize: 12, color: '#9aa0b4', marginTop: 4 }}>
                     Решено задач дня: {serverStats.totalSolved}
                   </div>

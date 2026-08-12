@@ -408,12 +408,22 @@ router.get('/user/:userId/stats', (req: Request, res: Response) => {
   const uid = String(req.params.userId);
   const stats = userStats.get(uid);
   if (!stats) {
+    // Записи нет — но это НЕ то же самое, что «человек ничего не решал».
+    // userStats живёт только в памяти процесса: любой перезапуск обнуляет её,
+    // а таблица лидеров сохраняется на диск. Отдавая здесь нули, сервер
+    // сообщал «решено: 0» тому, кто в тот же момент стоит в таблице со своей
+    // серией — два числа об одном человеке на одном экране, и оба наши.
+    //
+    // Что знаем достоверно, то и отдаём: лучшая серия есть в сохранённой
+    // таблице. Остальное помечено как неизвестное, а не как ноль.
+    const known = LEADERBOARD.find((e) => e.userId === uid);
     return res.json({
       userId: uid,
-      bestStreak: 0,
-      totalSolved: 0,
-      avgTimeMs: 0,
+      bestStreak: known ? known.streak : 0,
+      totalSolved: null,
+      avgTimeMs: null,
       history: [],
+      statsKnown: false,
     });
   }
   const avg = stats.totalSolved > 0 ? Math.round(stats.totalTimeMs / stats.totalSolved) : 0;
@@ -422,6 +432,7 @@ router.get('/user/:userId/stats', (req: Request, res: Response) => {
     bestStreak: stats.bestStreak,
     totalSolved: stats.totalSolved,
     avgTimeMs: avg,
+    statsKnown: true,
     history: stats.history.slice(-30), // last 30 days
   });
 });

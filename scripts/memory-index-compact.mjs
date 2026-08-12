@@ -56,7 +56,12 @@ function shorten(line) {
   const head = link[0];
   const rest = line.slice(head.length).replace(/^\s*[—-]\s*/, "");
   const room = MAX - head.length - 4; // " — " plus the ellipsis
-  if (room <= 20) return line; // nothing meaningful would survive
+  // Dropping the hook entirely when it will not fit, instead of returning the
+  // line untouched. The earlier `return line` made a TIGHTER --max compress
+  // LESS (150 → 41 934 bytes against 200 → 36 364): every line whose link
+  // alone exceeded the budget fell through this branch and stayed at full
+  // length. A knob that works backwards is worse than no knob.
+  if (room <= 20) return head;
   let hook = rest.slice(0, room);
   const lastSpace = hook.lastIndexOf(" ");
   if (lastSpace > room * 0.6) hook = hook.slice(0, lastSpace);

@@ -54,6 +54,8 @@ interface Tournament {
   swissRounds?: number;
   currentRound?: number;
   realPlayers?: boolean;
+  /** "user" — турнир завёл кто угодно через открытую ручку; "seed" — фикстура. */
+  origin?: "seed" | "user";
 }
 
 interface StandingRow {
@@ -661,6 +663,16 @@ function TournamentCard({ t }: { t: Tournament }) {
       >
         <span style={{ fontSize: 14, color: T.yellow, fontWeight: 700 }}>
           💎 {t.prizeChessy.toLocaleString("ru-RU")} Chessy
+          {t.origin === "user" && t.prizeChessy > 0 && (
+            // Турнир может завести кто угодно, без входа, и приз он объявляет
+            // сам — до десяти миллионов. Платит призы только подписанный
+            // вебхук, то есть за этим числом никто не стоит. Без оговорки оно
+            // выглядит как обязательство площадки, да ещё и рядом с самой
+            // сильной подписью «настоящие игроки».
+            <span style={{ fontSize: 11.5, fontWeight: 400, color: T.dim, marginLeft: 6 }}>
+              объявлен создателем
+            </span>
+          )}
         </span>
         <div style={{ display: "flex", gap: 8 }}>
           <Link

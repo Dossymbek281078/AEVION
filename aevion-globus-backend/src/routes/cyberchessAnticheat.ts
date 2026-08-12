@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { clientIp } from "../lib/rateLimit";
 import { randomUUID } from "node:crypto";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -149,12 +150,12 @@ function isRateLimited(ip: string): boolean {
 const VERDICTS: Verdict[] = ["clean", "unusual", "suspicious", "flagged"];
 const CONFIDENCES: Confidence[] = ["insufficient", "low", "medium", "high"];
 
+// Reads req.ip through the shared helper. This used to take the LEFTMOST
+// X-Forwarded-For entry, which a proxy never writes — the caller does. Varying
+// that header per request handed every request its own bucket, so the limit
+// below could not fire while looking, from outside, exactly like one that works.
 function getIp(req: Request): string {
-  return (
-    (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
-    req.socket.remoteAddress ??
-    "unknown"
-  );
+  return clientIp(req);
 }
 
 function evictOldestIfFull(): void {

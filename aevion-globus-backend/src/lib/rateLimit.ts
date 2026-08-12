@@ -19,6 +19,24 @@ const GLOBAL_BUCKETS = new Map<string, Bucket>();
 let lastSweep = 0;
 
 /**
+ * The address to count a caller by.
+ *
+ * Never read X-Forwarded-For directly. A proxy appends on the right, so the
+ * LEFTMOST entry — the one a `split(",")[0]` picks — is whatever the caller
+ * wrote and nothing verifies it. Keying a limit on it gives every request its
+ * own bucket the moment the caller varies the header, which is a limit that
+ * cannot fire while looking from the outside exactly like one that works.
+ *
+ * req.ip reads the same header, but only across the hops the app declares
+ * trusted (`app.set("trust proxy", 1)` in index.ts), so it is the address the
+ * front proxy actually observed. With no trust proxy configured it falls back
+ * to the socket peer, which is also right.
+ */
+export function clientIp(req: Request): string {
+  return req.ip || req.socket?.remoteAddress || "unknown";
+}
+
+/**
  * In-process fixed-window rate limiter. No external deps.
  * Good enough for public read-only endpoints; replace with Redis-backed
  * limiter if the app ever runs on multiple instances.
@@ -37,20 +55,7 @@ export function rateLimit(opts: RateLimitOptions) {
       }
     }
 
-    // req.ip, never the raw X-Forwarded-For header.
-    //
-    // This used to read the LEFTMOST entry of X-Forwarded-For, and the leftmost
-    // entry is whatever the caller wrote: a proxy appends on the right, so the
-    // first value is never verified by anything. One header, changed per
-    // request, gave every request its own bucket — so every limit built on this
-    // helper (120 call sites) counted to one and never fired, including the
-    // ones guarding login attempts.
-    //
-    // Express computes req.ip from the same header but only over the hops the
-    // app declares trusted (`app.set("trust proxy", 1)` in index.ts), which
-    // makes it the address the front proxy actually observed. With no trust
-    // proxy configured it falls back to the socket peer, which is also right.
-    const ip = req.ip || req.socket?.remoteAddress || "unknown";
+    const ip = clientIp(req);
     const key = `${keyPrefix}:${ip}`;
 
     let bucket = GLOBAL_BUCKETS.get(key);

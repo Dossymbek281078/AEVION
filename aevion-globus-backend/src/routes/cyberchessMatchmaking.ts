@@ -23,6 +23,7 @@
 //    set; otherwise loopback-only).
 
 import { Router, type Request, type Response } from "express";
+import { clientIp as sharedClientIp } from "../lib/rateLimit";
 import { randomUUID, timingSafeEqual, createHash } from "node:crypto";
 import { Chess } from "chess.js";
 import {
@@ -368,12 +369,12 @@ function safeRating(n: unknown): number | null {
   return Math.round(r);
 }
 
+// Reads req.ip through the shared helper. This used to take the LEFTMOST
+// X-Forwarded-For entry, which a proxy never writes — the caller does. Varying
+// that header per request handed every request its own bucket, so the limit
+// below could not fire while looking, from outside, exactly like one that works.
 function clientIp(req: Request): string {
-  const fwd = req.headers["x-forwarded-for"];
-  if (typeof fwd === "string" && fwd.length > 0) {
-    return fwd.split(",")[0].trim();
-  }
-  return req.ip || req.socket?.remoteAddress || "unknown";
+  return sharedClientIp(req);
 }
 
 function purgeStaleQueue(): void {

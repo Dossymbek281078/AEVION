@@ -17,6 +17,7 @@
 // notification + redirect URL.
 
 import { Router, type Request, type Response } from "express";
+import { clientIp } from "../lib/rateLimit";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -1522,12 +1523,10 @@ function createRateOk(ip: string): boolean {
 
 // POST / — create a tournament
 router.post("/", (req: Request, res: Response): void => {
-  const ip =
-    (typeof req.headers["x-forwarded-for"] === "string"
-      ? (req.headers["x-forwarded-for"] as string).split(",")[0].trim()
-      : "") ||
-    req.ip ||
-    "unknown";
+  // clientIp, not the raw header: the leftmost X-Forwarded-For entry is written
+  // by the caller, so varying it gave every request a fresh bucket and this
+  // creation limit never fired.
+  const ip = clientIp(req);
   if (!createRateOk(ip)) {
     res.status(429).json({ ok: false, error: "rate_limited", hint: "too many tournaments created; try later" });
     return;

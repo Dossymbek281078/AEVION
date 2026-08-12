@@ -26,6 +26,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import { clientIp as sharedClientIp } from "../lib/rateLimit";
 import crypto from "crypto";
 
 // ---------- Types ----------
@@ -258,12 +259,12 @@ function sanitizeVoiceAudioUrl(url: unknown): string | undefined {
   return trimmed;
 }
 
+// Reads req.ip through the shared helper. This used to take the LEFTMOST
+// X-Forwarded-For entry, which a proxy never writes — the caller does. Varying
+// that header per request handed every request its own bucket, so the limit
+// below could not fire while looking, from outside, exactly like one that works.
 function clientIp(req: Request): string {
-  const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff.length > 0) {
-    return xff.split(",")[0].trim();
-  }
-  return req.ip || req.socket.remoteAddress || "unknown";
+  return sharedClientIp(req);
 }
 
 function rateLimitOk(ip: string): boolean {

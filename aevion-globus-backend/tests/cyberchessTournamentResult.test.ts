@@ -55,6 +55,9 @@ vi.mock("../src/routes/cyberchessMatchmaking", () => ({
 import tournamentsRouter from "../src/routes/cyberchessTournaments";
 
 const app = express();
+// Same as index.ts — without it req.ip ignores X-Forwarded-For entirely and
+// the rate-limit test below would pass for the wrong reason.
+app.set("trust proxy", 1);
 app.use(express.json());
 app.use("/api/cyberchess-tournaments", tournamentsRouter);
 
@@ -229,5 +232,34 @@ describe("the registration ticket is something the server can recognise", () => 
       .send({ userId: `b_${crypto.randomUUID().slice(0, 8)}` });
 
     expect(a.body.ticketId).not.toBe(b.body.ticketId);
+  });
+});
+
+describe("creating tournaments cannot be sped up with a header", () => {
+  test("a rotating X-Forwarded-For does not buy extra creations", async () => {
+    // Creating a tournament is open — CyberChess has no accounts — so the only
+    // thing standing between it and unbounded writes to persistent storage is
+    // a limit of 5 per 10 minutes per caller. That limit used to be keyed on
+    // the LEFTMOST X-Forwarded-For entry, which the caller writes: a different
+    // value per request meant a fresh bucket every time and the limit never
+    // fired. The address the proxy observed is appended on the right, as in
+    // production.
+    const statuses: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      const res = await request(app)
+        .post("/api/cyberchess-tournaments")
+        .set("x-forwarded-for", `10.0.0.${i}, 203.0.113.77`)
+        .send({
+          title: `Spoof Cup ${i}`,
+          format: "swiss",
+          timeControl: "blitz",
+          maxPlayers: 8,
+        });
+      statuses.push(res.status);
+    }
+
+    expect(statuses.filter((s) => s === 429).length).toBeGreaterThan(0);
+    // The first few are genuinely allowed — this is a limit, not a wall.
+    expect(statuses[0]).not.toBe(429);
   });
 });

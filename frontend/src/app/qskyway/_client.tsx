@@ -11,6 +11,10 @@ import type { DataQuality } from "@/lib/dataQuality";
 import type { RegulatorySource } from "@/lib/regulatorySource";
 import { resolveStartCity } from "./startCity";
 import { isSmokeSlot, countSmokeSlots } from "./slotSource";
+// Цена спорной высоты для ЭТОГО рейса. Отдельным файлом, потому что на живых
+// городах блок не появляется (0 из 42 пар Астаны) — увидеть его можно только
+// в тесте, а для этого он должен рендериться отдельно от канваса.
+import { HeightDisputePanel, type HeightDispute } from "./HeightDisputePanel";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
 // Клиент рисует реальный цифровой двойник Астаны (318 зданий из OpenStreetMap,
@@ -74,18 +78,6 @@ interface JustDoc {
   airspace: null | { authority: string; source: string; regime: string; effective: string; contentHash: string | null; compliant: boolean | null; exceedingSegments: number; maxExceedanceM: number; lowestCeilingM: number | null };
 }
 interface JustAttestation { alg: string; contentHash: string; signature: string; publicKey: string; ephemeral: boolean }
-/**
- * Цена спорной высоты для ЭТОГО рейса. Чип «⚠ высота под вопросом» в шапке
- * говорит про город целиком; здесь — про коридор, которым борт летит сейчас.
- * Приходит только когда маршрут действительно опирается на спорное здание,
- * иначе предупреждение висело бы на каждом рейсе и его перестали бы читать.
- */
-interface HeightDispute {
-  building: number; osm: string; taggedM: number; publishedM: number; publishedSource: string;
-  segments: number; cruiseAltM: number;
-  cruiseAltMIfPublished: number | null; cruiseDeltaM: number | null;
-  distanceKm: number; distanceKmIfPublished: number | null; note: string;
-}
 interface Cell { c: number; r: number; }
 interface Taxi { path: Cell[]; alts: number[]; seg: number; u: number; speed: number; hero: boolean; slow: number; }
 interface VertiportRow { id: string; suitability: number; cls: string; openRadiusM: number | null; clearanceM: number | null; distNoFlyM: number | null; ceilingM: number | null; needsAtc: boolean; }
@@ -946,30 +938,7 @@ export default function QSkywayClient() {
                     не верим», а коридор на неё закладывается. Пока это было видно
                     только по городу, рейс молчал — здесь названа цена именно для
                     него. Высоту при этом не переписываем: починка принадлежит OSM. */}
-                {heightDispute && (
-                  <div style={{ padding: "10px 14px", borderTop: "1px solid #1e2836", fontFamily: "monospace", fontSize: 11, color: "#fbbf24" }}>
-                    ⚠ коридор поднят спорной высотой
-                    {heightDispute.cruiseDeltaM != null && heightDispute.cruiseDeltaM > 0 && (
-                      <> · на {heightDispute.cruiseDeltaM} м выше, чем по опубликованной</>
-                    )}
-                    <span style={{ color: "#5f7086" }}> · участков {heightDispute.segments}</span>
-                    <div style={{ color: "#9fb0c4", fontSize: 10.5, marginTop: 3, whiteSpace: "normal" }}>
-                      {heightDispute.taggedM} м в теге OSM против {heightDispute.publishedM} м в статье объекта.
-                      {heightDispute.cruiseAltMIfPublished != null && (
-                        <> Крейсерская была бы {heightDispute.cruiseAltMIfPublished} м вместо {heightDispute.cruiseAltM} м.</>
-                      )}
-                      {/* Крюк вокруг завышенного препятствия — вторая половина цены:
-                          высота меняет не только эшелон, но и сам путь. */}
-                      {heightDispute.distanceKmIfPublished != null && heightDispute.distanceKmIfPublished !== heightDispute.distanceKm && (
-                        <> Длина маршрута — {heightDispute.distanceKm} км вместо {heightDispute.distanceKmIfPublished} км.</>
-                      )}{" "}
-                      Высоту не переписываем: починка принадлежит источнику
-                      {heightDispute.osm !== "—" && (
-                        <> (<a href={`https://www.openstreetmap.org/${heightDispute.osm}`} target="_blank" rel="noopener noreferrer" style={{ color: "#2dd4bf" }}>{heightDispute.osm}</a>)</>
-                      )}.
-                    </div>
-                  </div>
-                )}
+                <HeightDisputePanel dispute={heightDispute} />
                 <div style={{ padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
                   <button style={btnPri} onClick={bookSlot} disabled={!loaded}>Забронировать слот (QRight)</button>
                   {booking && <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.startsWith("✓") ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>{booking}</div>}

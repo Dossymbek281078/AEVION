@@ -30,6 +30,12 @@ const PROFILE: Record<string, { twin: CityData; total: number; measured: number;
 };
 
 describe("профиль слепых высот в твинах", () => {
+  // Тот же предохранитель: профиль перебирается по PROFILE, и пустой объект
+  // дал бы зелёный файл без единой проверки.
+  test("профиль описывает все три города", () => {
+    expect(Object.keys(PROFILE).length).toBe(3);
+  });
+
   for (const [city, p] of Object.entries(PROFILE)) {
     test(`[${city}] доля угаданных высот не выросла молча`, () => {
       const dq = p.twin.dataQuality;

@@ -23,7 +23,10 @@
  */
 
 import fs from "node:fs";
-import { parseMetres, overpassBodyProblem } from "./lib/city-twin-geometry.mjs";
+import {
+  parseMetres, overpassBodyProblem,
+  METRES_PER_LEVEL, PARAPET_M, DEFAULT_HEIGHT_M,
+} from "./lib/city-twin-geometry.mjs";
 import { cachedOverpass, osmCacheDir } from "./lib/overpass.mjs";
 
 const BBOX = {
@@ -32,10 +35,11 @@ const BBOX = {
   tokyo: { minLat: 35.683592, maxLat: 35.6978747, minLon: 139.6879457, maxLon: 139.7037075 },
 };
 const UA = "AEVION-QSkyway/1.0 (guessed-height audit; contact via github.com/Dossymbek281078/AEVION)";
-// Те же константы, что и в fetch-city-twin.mjs: 3.2 м на этаж + 1.6 м парапет,
-// и слепой дефолт 12 м. Если они там изменятся, а здесь нет — отчёт начнёт
-// сравнивать с несуществующим дефолтом, поэтому цифры названы вслух.
-const M_PER_LEVEL = 3.2, PARAPET = 1.6, BLIND_DEFAULT = 12;
+// Формула этажей и слепой дефолт берутся ИЗ той же библиотеки, что и сборщик
+// твина, а не переписываются сюда числами. Переписанная копия разошлась бы
+// молча, и отчёт начал бы сравнивать с дефолтом, которого в продукте нет, —
+// ровно тот класс тихой неправды, который этот же отчёт и ищет в данных.
+const M_PER_LEVEL = METRES_PER_LEVEL, PARAPET = PARAPET_M, BLIND_DEFAULT = DEFAULT_HEIGHT_M;
 // Что реально пролетает над слепым зданием: сам дефолт + обязательный просвет
 // (CLEAR=15) + страховка за класс guessed (SRC_CLEARANCE[2]=16). Ровно это
 // число и делает вопрос о дефолте вопросом безопасности, а не аккуратности:

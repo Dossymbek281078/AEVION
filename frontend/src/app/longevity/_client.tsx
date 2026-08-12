@@ -314,7 +314,7 @@ export default function LongevityClient({ channel = null }: { channel?: string |
         {/* Протокол в PDF — модуль был живым с 13.07, но купить в нём было нечего.
             Цена и ссылка берутся из каталога @/lib/products, а не пишутся здесь. */}
         {PROTOCOL_PDF && (
-          <a href={withChannel(PROTOCOL_PDF.href, channel)} target="_blank" rel="noopener noreferrer" style={styles.buyCard}>
+          <a href={withChannel(PROTOCOL_PDF.href, channel, "longevity")} target="_blank" rel="noopener noreferrer" style={styles.buyCard}>
             <div style={styles.buyLeft}>
               <div style={styles.buyKicker}>{PROTOCOL_PDF.format}</div>
               <div style={styles.buyTitle}>Забрать протокол с собой</div>

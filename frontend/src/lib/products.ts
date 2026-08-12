@@ -336,8 +336,21 @@ export const MODULES_TOTAL_USD = MODULES.reduce((s, p) => s + p.priceUsd, 0);
  *
  * Решение без внешней аналитики и куки: метка едет прямо в чекаут.
  *   - Gumroad кладёт произвольные query-параметры в `url_params` и отдаёт их
- *     обратно в ping-вебхуке → канал виден рядом с продажей;
+ *     обратно в ping-вебхуке;
  *   - LemonSqueezy принимает `checkout[custom][key]` и возвращает в custom_data.
+ *
+ * ⚠️ Одного `channel=` НЕ ХВАТАЕТ, и это проверено 12.08.2026, до раздачи роликов.
+ * Метка честно доезжала до чекаута, но увидеть её было негде:
+ *   1. В дашборде продаж Gumroad произвольные параметры не отображаются —
+ *      строит отчёт он только по UTM (`utm_source`/`utm_medium`/`utm_campaign`),
+ *      создавая ссылку сам при первом переходе. `url_params` доступны лишь
+ *      через API и ping.
+ *   2. Наш ping-обработчик `gumroadWebhook.ts` `url_params` не читает вообще —
+ *      он берёт email, товар и статус. То есть обещание «канал виден рядом с
+ *      продажей» не выполнял НИКТО: ни Gumroad, ни мы.
+ * Поэтому рядом с `channel=` едет и UTM-тройка: она попадает в тот отчёт, куда
+ * основатель действительно смотрит. `channel=` оставлен — он в `url_params`,
+ * и по нему можно поднять канал через API, когда вебхук научится его читать.
  *
  * Метка берётся из адреса самой страницы: в шапке профиля Instagram стоит
  * `/go?c=ig`, в TikTok — `/go?c=tt`, и так далее. Одна страница, разные суффиксы.
@@ -363,16 +376,37 @@ export function channelFrom(raw: string | string[] | undefined): string | null {
   return CHANNELS[v.trim().toLowerCase()] ?? null;
 }
 
+/** Тип трафика для `utm_medium`. Все метки из CHANNELS — соцсети, кроме
+ *  печатного QR-кода: он приходит с бумаги, и мешать его с соцсетями значит
+ *  завысить их вклад. Выводится из самой метки, отдельного списка не заводим —
+ *  иначе он разъедется с CHANNELS. */
+function utmMedium(channel: string): string {
+  return channel === "qr-code" ? "qr" : "social";
+}
+
 /**
  * Добавляет метку канала к ссылке оплаты. Для Gumroad и LemonSqueezy параметр
  * называется по-разному, поэтому разбираем по домену, а не по типу товара:
  * товар может переехать с одного процессинга на другой, домен — нет.
+ *
+ * @param landing страница, с которой ушёл клик («go», «shop», «longevity»).
+ *   Едет в `utm_campaign`, чтобы было видно не только КАКОЙ канал принёс
+ *   продажу, но и какая витрина. Значение по умолчанию намеренно безликое:
+ *   новый вызов без аргумента даст валидную UTM-тройку, а не сломанную.
  */
-export function withChannel(href: string, channel: string | null): string {
+export function withChannel(href: string, channel: string | null, landing = "site"): string {
   if (!channel) return href;
   const sep = href.includes("?") ? "&" : "?";
   if (href.includes("lemonsqueezy.com")) {
     return `${href}${sep}checkout[custom][channel]=${encodeURIComponent(channel)}`;
   }
-  return `${href}${sep}channel=${encodeURIComponent(channel)}`;
+  // UTM-тройка целиком: Gumroad заводит ссылку в отчёте по первому переходу,
+  // и неполный набор в этот отчёт не попадает.
+  const q = new URLSearchParams({
+    channel,
+    utm_source: channel,
+    utm_medium: utmMedium(channel),
+    utm_campaign: landing,
+  });
+  return `${href}${sep}${q.toString()}`;
 }

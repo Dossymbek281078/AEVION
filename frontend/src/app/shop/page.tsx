@@ -38,7 +38,7 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
   // до нажатия кнопки, а не в письме от LemonSqueezy.
   const isSub = p.billing === "monthly";
   return (
-    <a href={withChannel(p.href, channel)} target="_blank" rel="noopener noreferrer" style={styles.card}>
+    <a href={withChannel(p.href, channel, "shop")} target="_blank" rel="noopener noreferrer" style={styles.card}>
       <div style={styles.cardTop}>
         {p.badge ? <span style={styles.badge}>{p.badge}</span> : null}
         <span style={styles.format}>{p.format}</span>

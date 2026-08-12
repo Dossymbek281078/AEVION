@@ -379,11 +379,26 @@ async function dbListProjects(userId: string): Promise<DevHubProject[]> {
     `SELECT * FROM "DevHubProject" WHERE "userId"=$1 ORDER BY "updatedAt" DESC`,
     [userId]
   );
-  return r.rows.map(rowToProject);
+  // Same overlay as dbGetProject: a project whose save failed has to be listed,
+  // or the shelf shows the user one fewer project than they have.
+  const rows: DevHubProject[] = r.rows.map(rowToProject);
+  const parked = [...memProjects.values()].filter((p) => p.userId === userId);
+  if (parked.length === 0) return rows;
+  const byId = new Map<string, DevHubProject>(rows.map((p) => [p.id, p]));
+  for (const p of parked) byId.set(p.id, p);
+  return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 async function dbGetProject(id: string): Promise<DevHubProject | null> {
   if (!isDevHubDbReady()) return memProjects.get(id) ?? null;
+  // memProjects holds state a save could not persist. Routes fall back to it
+  // only when the READ throws, which misses the ordinary case: the write
+  // failed, the read is healthy, and the row simply is not there. Preferring
+  // the parked copy is what keeps a "created" project from vanishing — and
+  // dbSaveProject drops the entry the moment a write lands, so it cannot
+  // shadow the database for longer than the failure lasts.
+  const parked = memProjects.get(id);
+  if (parked) return parked;
   const r = await pool.query(`SELECT * FROM "DevHubProject" WHERE "id"=$1`, [id]);
   return r.rows[0] ? rowToProject(r.rows[0]) : null;
 }
@@ -399,6 +414,10 @@ async function dbSaveProject(p: DevHubProject): Promise<void> {
     [p.id, p.userId, p.name, p.description, p.stack, p.status, p.repoUrl, p.deployUrl,
      p.customDomain, JSON.stringify(p.envVars), JSON.stringify(p.collaborators), p.createdAt, p.updatedAt]
   );
+  // The row is now the truth again, so the parked copy must go — otherwise the
+  // rescue above becomes its own bug and a stale in-memory project outranks
+  // every later database read for the life of the process.
+  memProjects.delete(p.id);
 }
 
 async function dbDeleteProject(id: string): Promise<void> {
@@ -407,6 +426,12 @@ async function dbDeleteProject(id: string): Promise<void> {
     for (const [fid, f] of memFiles) { if (f.projectId === id) memFiles.delete(fid); }
     return;
   }
+  // Drop the parked copy too, or the overlay in dbGetProject resurrects a
+  // project the user just deleted — a hole the overlay itself opens.
+  // Drop the parked copy too, or the overlay in dbGetProject resurrects a
+  // project the user just deleted — a hole the overlay itself opens.
+  memProjects.delete(id);
+  for (const [fid, f] of memFiles) { if (f.projectId === id) memFiles.delete(fid); }
   await pool.query(`DELETE FROM "DevHubFile" WHERE "projectId"=$1`, [id]);
   await pool.query(`DELETE FROM "DevHubProject" WHERE "id"=$1`, [id]);
 }

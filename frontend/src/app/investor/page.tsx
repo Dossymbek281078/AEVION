@@ -301,10 +301,21 @@ export default function InvestorPage() {
                   // ed25519 (/api/qsign/v2/keys), поэтому за $9 подписи ML-DSA
                   // не выдаётся. Оговорка «key-activated» читалась покупателем
                   // как «входит в пакет» — язык разработчика на продающей строке.
-                  { tier: "Verified", price: "$9", desc: "SHA-256 + Ed25519 signature + cert" },
-                  { tier: "Notarized", price: "$49", desc: "+ notary registry + Shamir backup" },
-                  { tier: "Gold", price: "$199", desc: "+ legal review + int'l databases" },
-                  { tier: "Platinum", price: "$999", desc: "+ multi-jurisdiction protection" },
+                  //
+                  // Цена привязана к коду тарификации: Verified — единственный
+                  // тариф с live charge: $19/cert (getVerifiedTierPriceCents()
+                  // в aevion-globus-backend/src/lib/payment, переопределяется
+                  // BUREAU_VERIFIED_PRICE_CENTS), ту же цифру показывает поток
+                  // апгрейда /bureau. Две ветки чинили эту строку порознь: одна
+                  // вернула честную криптографию, но поставила $9 — цену, которой
+                  // платформа не берёт; вторая верную цену, но с ML-DSA. Здесь
+                  // верно и то и другое. Notarized имеет поток заявки без цены в
+                  // коде, Gold и Platinum не существуют нигде — отсюда «planned»,
+                  // а не вид товара, который можно купить сегодня.
+                  { tier: "Verified", price: "$19", desc: "SHA-256 + Ed25519 signature + cert" },
+                  { tier: "Notarized (planned)", price: "$49", desc: "+ notary registry + Shamir backup" },
+                  { tier: "Gold (planned)", price: "$199", desc: "+ legal review + int'l databases" },
+                  { tier: "Platinum (planned)", price: "$999", desc: "+ multi-jurisdiction protection" },
                 ].map(p => (
                   <div key={p.tier} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                     <span style={{ fontSize: 12, color: "#f1f5f9", fontWeight: 600 }}>{p.tier}</span>
@@ -342,7 +353,7 @@ export default function InvestorPage() {
                   { tier: "Free", price: "$0", desc: "3 active vacancies" },
                   { tier: "Starter", price: "$49/mo", desc: "10 vacancies + AI scoring" },
                   { tier: "Pro", price: "$249/mo", desc: "unlimited + analytics" },
-                  { tier: "Hire fee", price: "1.5%", desc: "per successful placement" },
+                  { tier: "Hire fee", price: "12% → 4%", desc: "per successful placement; 12% recruiter tier down to 4% on Platinum" },
                 ].map(p => (
                   <div key={p.tier} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                     <span style={{ fontSize: 12, color: "#f1f5f9", fontWeight: 600 }}>{p.tier}</span>

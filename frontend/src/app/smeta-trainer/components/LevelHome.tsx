@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LEVELS } from "../lib/levels";
+import { rates } from "../lib/corpus";
+import { LESSONS } from "../lib/lessons";
 import { useProgress } from "../lib/useProgress";
 import { getLessonsForLevel, levelLessonsCompletion, loadLessonProgress } from "../lib/lessons";
 import { ACHIEVEMENTS, computeEarned } from "../lib/achievements";
@@ -348,7 +350,7 @@ export function LevelHome() {
             >
               📋 Каталог расценок ЭСН
               <span className="text-[10px] text-emerald-600 font-normal">
-                499 норм · поиск · фильтры
+                {rates.length} норм · поиск · фильтры
               </span>
             </Link>
             <Link
@@ -447,7 +449,7 @@ export function LevelHome() {
             >
               📖 Весь курс PDF
               <span className="text-[10px] text-emerald-500 font-normal">
-                47 уроков печатно
+                {LESSONS.length} уроков печатно
               </span>
             </Link>
             <Link

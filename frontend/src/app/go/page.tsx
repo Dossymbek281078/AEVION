@@ -119,7 +119,7 @@ export default async function GoPage({
           />
           {protocol && (
             <LinkCard
-              href={withChannel(protocol.href, channel)}
+              href={withChannel(protocol.href, channel, "go")}
               external
               kicker={protocol.format}
               title="Тот же протокол в PDF"
@@ -129,7 +129,7 @@ export default async function GoPage({
           )}
           {antiGreyRu && (
             <LinkCard
-              href={withChannel(antiGreyRu.href, channel)}
+              href={withChannel(antiGreyRu.href, channel, "go")}
               external
               kicker={antiGreyRu.format}
               title="Протокол «Анти-седина»"
@@ -143,7 +143,7 @@ export default async function GoPage({
           <h2 style={styles.h2}>Книга</h2>
           {bookFull && (
             <LinkCard
-              href={withChannel(bookFull.href, channel)}
+              href={withChannel(bookFull.href, channel, "go")}
               external
               kicker={bookFull.format}
               title="Благодарность ∞ Вечная Молодость"
@@ -170,7 +170,7 @@ export default async function GoPage({
           />
           {allAccess && (
             <LinkCard
-              href={withChannel(allAccess.href, channel)}
+              href={withChannel(allAccess.href, channel, "go")}
               external
               kicker={allAccess.format}
               title="Доступ ко всему сразу"

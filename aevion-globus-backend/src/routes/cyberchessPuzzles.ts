@@ -48,6 +48,13 @@ let POOL: Puzzle[] = [];
 // Описание источника ingest() получал и раньше, но тратил его только на
 // console.warn при ошибке. Теперь сохраняем.
 let POOL_SOURCE = "";
+// НАСТОЯЩИЙ размер банка, а не размер выборки. Разница важна для продающих
+// страниц: POOL.length упирается в cap (по умолчанию 500 000), и ответ
+// «poolSize: 500000» при cap = 500 000 — это не измерение, а обрезка. Взять
+// такое число на страницу значило бы напечатать настройку под видом факта.
+// 0 = не знаем (источник не умеет считать себя), и это НЕ то же самое, что 0 задач.
+let POOL_TOTAL = 0;
+let POOL_CAPPED = false;
 // theme (lowercased) -> index list, built once for cheap filtered lookups
 const THEME_INDEX = new Map<string, number[]>();
 let loadPromise: Promise<void> | null = null;
@@ -61,6 +68,10 @@ function ingest(arr: unknown, source: string): void {
     (p) => p && typeof p.fen === "string" && Array.isArray(p.sol) && p.sol.length > 0,
   );
   POOL_SOURCE = source;
+  // По умолчанию источник равен тому, что загрузили: для файла и URL весь банк
+  // и есть выборка. DB-ветка ниже перезапишет это настоящим COUNT(*).
+  POOL_TOTAL = POOL.length;
+  POOL_CAPPED = false;
   THEME_INDEX.clear();
   for (let i = 0; i < POOL.length; i++) {
     const key = String(POOL[i].theme || "").toLowerCase();
@@ -122,6 +133,22 @@ function ensureLoaded(): Promise<void> {
             } as Puzzle;
           });
           ingest(mapped, `db ChessPuzzle (${q.rows.length})`);
+          // Настоящий размер таблицы — отдельным запросом, ПОСЛЕ ingest():
+          // ingest ставит POOL_TOTAL = POOL.length, и здесь мы его уточняем.
+          // Свой try/catch: медленный или упавший COUNT(*) не должен ронять
+          // уже загруженный пул — тогда просто остаёмся без точного числа.
+          try {
+            const c = await pool.query(`SELECT COUNT(*)::bigint AS n FROM "ChessPuzzle"`);
+            // pg отдаёт bigint строкой — Number() обязателен, иначе сравнение
+            // с cap пойдёт лексикографически ("500000" > "1000000" как строки).
+            const n = Number(c.rows?.[0]?.n ?? 0);
+            if (Number.isFinite(n) && n > 0) {
+              POOL_TOTAL = n;
+              POOL_CAPPED = n > POOL.length;
+            }
+          } catch (e) {
+            console.warn("[cyberchess-puzzles] COUNT(*) failed:", e instanceof Error ? e.message : e);
+          }
           if (POOL.length > 0) return;
         }
       } catch (e) {
@@ -216,7 +243,17 @@ router.get("/themes", async (_req: Request, res: Response): Promise<void> => {
 // GET /meta — pool health/size (cheap smoke).
 router.get("/meta", async (_req: Request, res: Response): Promise<void> => {
   await ensureLoaded();
-  res.json({ ok: true, poolSize: POOL.length, themes: THEME_INDEX.size, source: POOL_SOURCE || POOL_PATH || POOL_URL });
+  // poolSize — сколько задач обслуживается сейчас (упирается в cap).
+  // bankTotal — сколько их в источнике на самом деле; для страниц брать ЭТО.
+  // capped — обслуживаем не весь банк, число занижено намеренно.
+  res.json({
+    ok: true,
+    poolSize: POOL.length,
+    bankTotal: POOL_TOTAL,
+    capped: POOL_CAPPED,
+    themes: THEME_INDEX.size,
+    source: POOL_SOURCE || POOL_PATH || POOL_URL,
+  });
 });
 
 /**

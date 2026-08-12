@@ -22,6 +22,7 @@
  *   флаги кэша те же: --no-cache, --osm-cache <каталог>
  */
 
+import fs from "node:fs";
 import { parseMetres, overpassBodyProblem } from "./lib/city-twin-geometry.mjs";
 import { cachedOverpass, osmCacheDir } from "./lib/overpass.mjs";
 
@@ -126,6 +127,30 @@ console.log(
   + ` (${Math.round((100 * covered) / Math.max(1, blind))}%); остальным ${uncovered} город ответить нечем —`
   + ` для них ${BLIND_DEFAULT} м остаётся честнее любой подстановки.`,
 );
+// Доходит ли слепота тегов до КОРИДОРОВ — отдельный вопрос, и без него отчёт
+// пугает зря. В Токио и Нью-Йорке высоты перекрыты городским обмером (PLATEAU,
+// NYC Open Data), и слепой тег там до маршрутизации не доживает; в Астане
+// обмера нет вовсе, и тег несущий. Ровно эту проверку я не сделал 11.08 по
+// занижённым тегам Токио и подал находку как живую опасность.
+const TWIN_FILE = { astana: "qskyway.city.ts", nyc: "qskyway.city.nyc.ts", tokyo: "qskyway.city.tokyo.ts" };
+try {
+  const twinPath = new URL(`../src/routes/${TWIN_FILE[city]}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+  const dq = JSON.parse(fs.readFileSync(twinPath, "utf8").match(/"dataQuality":(\{.*?\})(?:,"heightReview"|\})/s)?.[1] ?? "null");
+  if (dq) {
+    console.log(
+      `\n── а доходит ли это до коридоров ──\n`
+      + `  в ТВИНЕ ${city}: обмерено ${dq.measured}, выведено ${dq.derived}, угадано ${dq.guessed} (из ${dq.total}).`,
+    );
+    console.log(
+      dq.guessed > 0 && dq.measured === 0
+        ? `  Городского обмера нет ни у одного здания — слепой тег здесь НЕСУЩИЙ, и цифры выше применимы к маршрутам.`
+        : dq.guessed === 0
+          ? `  Слепых высот в твине не осталось: теги перекрыты обмером, до коридоров эта слепота не доходит.`
+          : `  Большая часть перекрыта обмером; до коридоров доходят только ${dq.guessed} угаданных зданий, а не все слепые теги выше.`,
+    );
+  }
+} catch { /* твин не читается — отчёт по OSM остаётся в силе, просто без сверки */ }
+
 console.log(
   `\nСкрипт ничего не меняет. Замена дефолта потребует пересборки твина`
   + ` (fetch-city-twin.mjs) и хранения типа здания, а класс высоты обязан остаться`

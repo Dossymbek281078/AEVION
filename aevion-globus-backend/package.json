@@ -12,6 +12,7 @@
     "smoke:qsign-v2": "node scripts/qsign-v2-smoke.js",
     "smoke:qskyway": "node scripts/qskyway-smoke.js",
     "audit:heights": "node scripts/audit-height-claims.mjs",
+    "audit:guessed-heights": "node scripts/audit-guessed-heights.mjs",
     "smoke:airspace-freshness": "ts-node -T scripts/airspace-freshness-smoke.ts",
     "smoke:trust-anchor": "ts-node -T scripts/trust-anchor-smoke.ts",
     "smoke:trust-signature": "ts-node -T scripts/trust-signature-smoke.ts",

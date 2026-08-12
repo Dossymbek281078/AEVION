@@ -56,7 +56,8 @@ export type LemonSqueezyReference =
   | "app_ip_bureau"
   | "app_qrenew"
   | "app_smeta"
-  | "app_cyberchess";
+  | "app_cyberchess"
+  | "app_devhub";
 
 /** reference → env var holding the LS variant id. */
 const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
@@ -76,6 +77,12 @@ const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
   app_qrenew:      "LEMON_SQUEEZY_VARIANT_QRENEW",
   app_smeta:       "LEMON_SQUEEZY_VARIANT_SMETA",
   app_cyberchess:  "LEMON_SQUEEZY_VARIANT_CYBERCHESS",
+  // DevHub Studio Pro продаётся в магазине ПОДПИСКОЙ ($149/мес, is_subscription:
+  // true, interval: month — проверено на витрине 12.08.2026), а не разовой
+  // покупкой. Переменная та же, что использовал разовый путь `order_created`, —
+  // новой настройки на Railway не требуется. Без этой строки обратный поиск
+  // возвращал null, и подписка за $149 провижинила тариф «lite» ($19).
+  app_devhub:      "LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO",
 };
 
 function isReference(s: string): s is LemonSqueezyReference {

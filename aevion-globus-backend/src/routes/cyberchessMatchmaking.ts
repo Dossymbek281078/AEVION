@@ -1349,14 +1349,29 @@ router.get("/wallet", async (req: Request, res: Response): Promise<void> => {
     res.status(400).json({ ok: false, error: "userId_required" });
     return;
   }
-  const wallet = await getWallet(userId).catch(() => ({ userId, displayName: null, balance: 0, earnedTotal: 0 }));
+  // Отказ базы отвечает 503, а не нулевым балансом. Раньше и падение запроса, и
+  // отсутствие DATABASE_URL превращались в `ok:true, balance:0` — то есть
+  // сервер утверждал, что человек ничего не заработал, ни разу этого не
+  // проверив. Экран показывает такому ответу «не удалось запросить».
+  const wallet = await getWallet(userId).catch(() => null);
+  if (!wallet) {
+    res.status(503).json({ ok: false, error: "wallet_unavailable" });
+    return;
+  }
   res.json({ ok: true, ...wallet });
 });
 
 // GET /wallet/leaderboard?limit=50 — public, top Chessy balances.
 router.get("/wallet/leaderboard", async (req: Request, res: Response): Promise<void> => {
   const limit = parseInt(String(req.query.limit || "50"), 10) || 50;
-  const rows = await getWalletLeaderboard(limit).catch(() => []);
+  // То же самое: пустая таблица на экране подписана «никто ещё не заработал
+  // Chessy в реальных матчах». Это утверждение обо ВСЕХ игроках, и получать его
+  // из упавшего запроса нельзя.
+  const rows = await getWalletLeaderboard(limit).catch(() => null);
+  if (!rows) {
+    res.status(503).json({ ok: false, error: "wallet_leaderboard_unavailable" });
+    return;
+  }
   res.json({
     ok: true,
     count: rows.length,

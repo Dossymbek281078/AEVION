@@ -137,16 +137,30 @@ export async function ensureDb(): Promise<void> {
   }
 }
 
-async function q(text: string, params: unknown[]): Promise<any[]> {
+/**
+ * Запрос, который отличает «пусто» от «не смогли спросить»: null означает, что
+ * ответа нет — база недоступна или запрос упал.
+ *
+ * Разница не косметическая. Через q() ниже оба случая выглядят как пустой
+ * список, и на чтениях это превращается в утверждение: «у игрока 0 Chessy»,
+ * «никто ещё не заработал». Такие фразы человек читает как факт, а получены они
+ * из запроса, который не выполнился.
+ */
+async function qOrNull(text: string, params: unknown[]): Promise<any[] | null> {
   if (!dbReady && !dbInitTried) await ensureDb();
-  if (!dbReady || !pool) return [];
+  if (!dbReady || !pool) return null;
   try {
     const r = await pool.query(text, params);
     return r.rows || [];
   } catch (e) {
     console.warn("[CyberMatchStore] query failed:", e instanceof Error ? e.message : e);
-    return [];
+    return null;
   }
+}
+
+/** Пишущий/фоновый вариант: отказ — тихий no-op, поток матчей не блокируется. */
+async function q(text: string, params: unknown[]): Promise<any[]> {
+  return (await qOrNull(text, params)) ?? [];
 }
 
 export interface RatingRow extends GlickoState {
@@ -517,19 +531,30 @@ export async function countUnpaidAwards(): Promise<number | null> {
 
 export interface WalletRow { userId: string; displayName: string | null; balance: number; earnedTotal: number }
 
-export async function getWallet(userId: string): Promise<WalletRow> {
-  const rows = await q(`SELECT "userId","displayName","balance","earnedTotal" FROM "CyberWallet" WHERE "userId"=$1`, [userId]);
+/**
+ * Баланс игрока. `null` — «спросить не удалось», и это НЕ ноль: ноль здесь
+ * утверждает, что человек ничего не заработал. Отсутствие строки при живой
+ * базе — честный ноль, он возвращается как строка с нулями.
+ */
+export async function getWallet(userId: string): Promise<WalletRow | null> {
+  const rows = await qOrNull(`SELECT "userId","displayName","balance","earnedTotal" FROM "CyberWallet" WHERE "userId"=$1`, [userId]);
+  if (rows === null) return null;
   const r = rows[0];
   return r
     ? { userId: r.userId, displayName: r.displayName, balance: Number(r.balance), earnedTotal: Number(r.earnedTotal) }
     : { userId, displayName: null, balance: 0, earnedTotal: 0 };
 }
 
-export async function getWalletLeaderboard(limit = 50): Promise<WalletRow[]> {
-  const rows = await q(
+/**
+ * Таблица балансов. `null` — «спросить не удалось». Пустой список означает
+ * ровно то, что написано на экране: никто ещё не заработал.
+ */
+export async function getWalletLeaderboard(limit = 50): Promise<WalletRow[] | null> {
+  const rows = await qOrNull(
     `SELECT "userId","displayName","balance","earnedTotal" FROM "CyberWallet" WHERE "balance">0 ORDER BY "balance" DESC LIMIT $1`,
     [Math.min(200, Math.max(1, limit))],
   );
+  if (rows === null) return null;
   return rows.map((r) => ({ userId: r.userId, displayName: r.displayName, balance: Number(r.balance), earnedTotal: Number(r.earnedTotal) }));
 }
 

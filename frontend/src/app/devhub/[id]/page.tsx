@@ -1643,7 +1643,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/sync`), { method: "POST" });
       const data = await r.json();
       if (!r.ok || data.ok === false) throw new Error(data.error || data.message || "Sync failed");
-      showToast(data.message || "Synced", (data.updated?.length || data.created?.length) ? "success" : "info");
+      // A sync that could not read some files leaves the project part-new and
+      // part-stale — and that mixture is what a later push or deploy builds
+      // from. A green toast over that reads as "all of it arrived".
+      showToast(
+        data.message || "Synced",
+        data.degraded ? "warning" : (data.updated?.length || data.created?.length) ? "success" : "info",
+      );
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);

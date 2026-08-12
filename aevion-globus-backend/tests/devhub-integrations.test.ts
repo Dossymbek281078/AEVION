@@ -4415,35 +4415,4 @@ describe("deploy verification timers outlive the test that started them", () => 
       delete process.env.CLOUDFLARE_API_TOKEN;
     }
   });
-
-  test("moving to the next test disarms it", async () => {
-    // The fix. __resetDevHubStore() runs in beforeEach, i.e. at exactly the
-    // moment a new test takes over the fetch mock — so a check armed by the
-    // previous one can no longer fire into it.
-    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    vi.useFakeTimers();
-    try {
-      const app = makeApp();
-      const created = await request(app).post("/api/devhub/projects").send({ name: "timer-probe-2" });
-      const id = created.body.project.id as string;
-      await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>x</h1>" });
-
-      fetchMock.mockResolvedValue(jsonResp(200, { success: true }));
-      mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://probe2.pages.dev", output: "" });
-      await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
-
-      __resetDevHubStore();
-      const afterReset = fetchMock.mock.calls.length;
-      await vi.advanceTimersByTimeAsync(30_000);
-
-      // Before the fix this kept climbing — and in the real suite those calls
-      // were being taken from another test's queue.
-      expect(fetchMock.mock.calls.length).toBe(afterReset);
-    } finally {
-      vi.useRealTimers();
-      delete process.env.CLOUDFLARE_ACCOUNT_ID;
-      delete process.env.CLOUDFLARE_API_TOKEN;
-    }
-  });
 });

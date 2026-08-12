@@ -239,34 +239,6 @@ async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; mon
   return { tier, month, usage: usage as Record<CapabilityKey, { used: number; limit: number }> };
 }
 
-/**
- * Deploy routes answer immediately and check whether the page actually serves
- * a few seconds later (see verifyDeploymentServes). Those checks are real
- * background work in production — but they are also fetches that fire long
- * after the request that armed them is gone.
- *
- * Tracking them makes that ownable: tests clear them between cases, and the
- * timers do not keep the process alive on their own.
- *
- * Not tracking them is what made the backend suite drift. A check armed by one
- * test woke up during another, read the global fetch mock that by then
- * belonged to that other test, and consumed the response queued for it — so a
- * different, unrelated assertion failed on every run. Isolated the file
- * finished before any timer fired, which hid it completely.
- */
-const pendingVerifications = new Set<NodeJS.Timeout>();
-
-function scheduleDeployVerification(fn: () => void | Promise<void>, delayMs: number): void {
-  const t = setTimeout(() => {
-    pendingVerifications.delete(t);
-    void fn();
-  }, delayMs);
-  // Node keeps the process alive for a pending timer; a deploy check should
-  // not be the reason a process lingers.
-  t.unref?.();
-  pendingVerifications.add(t);
-}
-
 // ── Exported reset helpers for tests ─────────────────────────────────────────
 export function __resetDevHubStore() {
   memProjects.clear();
@@ -275,10 +247,6 @@ export function __resetDevHubStore() {
   memSnippets.clear();
   memUsage.clear();
   memTiers.clear();
-  // Drop deploy verifications armed by the previous test, before they can fire
-  // into this one's fetch mock.
-  for (const t of pendingVerifications) clearTimeout(t);
-  pendingVerifications.clear();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2072,7 +2040,7 @@ Built, but ${url} did not answer 2xx in time`;
 
         // Verify the page actually serves before calling it live — same
         // honesty rule as the CF Pages / Vercel paths.
-        scheduleDeployVerification(async () => {
+        setTimeout(async () => {
           const d = memDeployments.get(deployment.id) ?? deployment;
           const serves = await verifyDeploymentServes(railwayDeployUrl);
           if (serves) {
@@ -2114,7 +2082,7 @@ Built, but ${url} did not answer 2xx in time`;
     })();
   } else {
     // Simulate build asynchronously — no Railway token
-    scheduleDeployVerification(async () => {
+    setTimeout(async () => {
       deployment.status = "live";
       deployment.deployUrl = deployUrl;
       deployment.buildLog = `Build started at ${deployment.triggeredAt}\nInstalling dependencies...\nBuilding...\nDeployment complete!\nLive at: ${deployUrl}`;
@@ -5359,7 +5327,7 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 
     // Verify the page actually serves before calling it live — same honesty
     // rule as the CF Pages path (a deploy that never serves is a failure).
-    scheduleDeployVerification(async () => {
+    setTimeout(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(liveUrl);
       if (serves) {
@@ -5544,7 +5512,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // then 500s forever while our records said "live" (found live 2026-07-21:
     // every CF Pages deploy ever made had this). Degraded-convention: a
     // deploy that doesn't serve is FAILED, not live.
-    scheduleDeployVerification(async () => {
+    setTimeout(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(pagesUrl);
       if (serves) {

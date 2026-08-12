@@ -129,6 +129,7 @@ import { applyGameToCPI, ldCPIState, type GameMetrics } from "./cpi";
 import OpeningFlashCard from "./OpeningFlashCard";
 import MirrorModePanel from "./MirrorModePanel";
 import { buildPlayerProfile, mirrorDepth, type PlayerProfile, type SavedGameForMirror } from "./mirrorMode";
+import { getAuthToken } from "@/lib/auth";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -379,7 +380,7 @@ function setMuted(v:boolean){_muted=v;try{localStorage.setItem(MK,v?"1":"0")}cat
 // браузере (localStorage/fetch), вызываются только в рантайме. Сервер ключует
 // по JWT (не по client-userId), snapshot исключает userId и auth-токен.
 const CC_CLOUD_PREFIX=["cyberchess","aevion_chess"];
-function ccCloudToken():string{try{return localStorage.getItem("aevion_auth_token_v1")||localStorage.getItem("aevion_token")||localStorage.getItem("aevion_jwt")||""}catch{return""}}
+function ccCloudToken():string{try{return getAuthToken()||""}catch{return""}}
 function ccCloudSnapshot():Record<string,string>{const o:Record<string,string>={};try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||k==="cyberchess.userId")continue;if(CC_CLOUD_PREFIX.some(p=>k.startsWith(p)))o[k]=localStorage.getItem(k)||"";}}catch{}return o;}
 async function ccCloudPush():Promise<boolean>{const t=ccCloudToken();if(!t)return false;const s=ccCloudSnapshot();let ser="";try{ser=JSON.stringify(s)}catch{return false}if(ser.length>250000)return false;const ts=Date.now();try{const r=await fetch("/api-backend/api/cyberchess/state",{method:"PUT",headers:{"Content-Type":"application/json",Authorization:`Bearer ${t}`},body:JSON.stringify({state:s,clientTs:ts})});if(r.ok){try{localStorage.setItem("cc_cloud_seen_ts",String(ts))}catch{}return true}}catch{}return false;}
 async function ccCloudFetch():Promise<{state:Record<string,string>|null;clientTs:number}|null>{const t=ccCloudToken();if(!t)return null;try{const r=await fetch("/api-backend/api/cyberchess/state",{headers:{Authorization:`Bearer ${t}`}});if(!r.ok)return null;const d=await r.json() as {state?:Record<string,string>|null;clientTs?:number};return{state:d?.state&&typeof d.state==="object"?d.state:null,clientTs:Number(d?.clientTs)||0};}catch{return null}}
@@ -1497,7 +1498,7 @@ export default function CyberChessPage(){
     let cancelled=false;
     (async()=>{
       let t="";
-      try{t=localStorage.getItem("aevion_auth_token_v1")||localStorage.getItem("aevion_token")||localStorage.getItem("aevion_jwt")||""}catch{}
+      try{t=getAuthToken()||""}catch{}
       if(!t){if(!cancelled)sCcAuth({user:null,checked:true});return;}
       try{
         const r=await fetch("/api-backend/api/auth/me",{headers:{Authorization:`Bearer ${t}`}});
@@ -11453,9 +11454,7 @@ ${question.trim()}`;
                     const amountAev=parseInt(t.price,10)||0;
                     // 1) JWT lookup — mirror keys used elsewhere in the app
                     const jwt=(typeof window!=="undefined")
-                      ? (window.localStorage.getItem("aevion_auth_token_v1")
-                        ?? window.localStorage.getItem("aevion_token")
-                        ?? window.localStorage.getItem("aevion_jwt")
+                      ? (getAuthToken()
                         ?? "")
                       : "";
                     if(!jwt){
@@ -11632,9 +11631,7 @@ ${question.trim()}`;
               sBillingPending(p=>p?{...p,busy:true}:p);
               showToast("⏳ Проверяю оплату…","info");
               const jwt=(typeof window!=="undefined")
-                ? (window.localStorage.getItem("aevion_auth_token_v1")
-                  ?? window.localStorage.getItem("aevion_token")
-                  ?? window.localStorage.getItem("aevion_jwt")
+                ? (getAuthToken()
                   ?? "")
                 : "";
               const paid=await pollPaymentRequest(bp.token,jwt,{intervalMs:3000,timeoutMs:60000});

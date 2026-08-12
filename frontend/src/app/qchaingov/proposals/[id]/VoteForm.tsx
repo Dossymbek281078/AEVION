@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getApiBase } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 type Props = {
   proposalId: string;
@@ -33,7 +34,7 @@ export default function VoteForm({ proposalId, options, voteMode, status }: Prop
   useEffect(() => {
     setHydrated(true);
     try {
-      const t = localStorage.getItem("aevion_token");
+      const t = getAuthToken();
       setHasToken(!!t);
     } catch {
       setHasToken(false);
@@ -51,7 +52,7 @@ export default function VoteForm({ proposalId, options, voteMode, status }: Prop
     setResult(null);
     try {
       const token = (() => {
-        try { return localStorage.getItem("aevion_token") || ""; } catch { return ""; }
+        try { return getAuthToken() || ""; } catch { return ""; }
       })();
       const body: Record<string, unknown> = { choice };
       if (showWeight) {

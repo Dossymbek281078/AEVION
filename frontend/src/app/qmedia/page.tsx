@@ -7,6 +7,7 @@ import { PaywallScreen } from "@/components/PaywallScreen";
 import { apiUrl } from "@/lib/apiBase";
 import { apiFetchOrPaywall, PaywallError, type PaywallPayload } from "@/lib/paywall";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { getAuthToken } from "@/lib/auth";
 
 type Track = {
   id: string;
@@ -70,7 +71,7 @@ export default function QMediaPage() {
       .then((d) => { if (Array.isArray(d.genres)) setTrendingGenres(d.genres); })
       .catch(() => {});
 
-    const token = typeof window !== "undefined" ? window.localStorage.getItem("aevion_jwt") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     fetch(apiUrl("/api/qmedia/recommendations?limit=10"), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })

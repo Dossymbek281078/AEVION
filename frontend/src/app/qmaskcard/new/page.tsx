@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getApiBase } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 type Kind = "single-use" | "recurring" | "merchant-locked" | "category-locked";
 
@@ -45,7 +46,7 @@ export default function NewMaskPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    try { setToken(localStorage.getItem("aevion_token")); } catch { setToken(null); } finally { setTokenChecked(true); }
+    try { setToken(getAuthToken()); } catch { setToken(null); } finally { setTokenChecked(true); }
   }, []);
 
   const spendLimitCents = useMemo(() => {

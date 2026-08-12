@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getApiBase } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 type Category = "treasury" | "protocol" | "module" | "partnership" | "tokenomics" | "social" | "operations" | "emergency";
 type VoteMode = "yes-no-abstain" | "ranked-choice" | "weighted";
@@ -45,7 +46,7 @@ export default function NewProposalPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ id: string; options: string[] } | null>(null);
 
-  useEffect(() => { setToken(localStorage.getItem("aevion_token")); setHydrated(true); }, []);
+  useEffect(() => { setToken(getAuthToken()); setHydrated(true); }, []);
 
   const optionWarnings = useMemo(() => {
     const t = options.map(o => o.trim());

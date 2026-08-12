@@ -240,3 +240,33 @@ describe("уверенность по зданиям — отдельно от �
     expect(j.body.document.obstacleSegments).toBeGreaterThan(0);
   }, 30000);
 });
+
+/**
+ * Разбор найден по элементу OSM, а не по номеру — и теневой маршрут это тоже
+ * знает.
+ *
+ * Найдено 12.08.2026 вычиткой собственного дифа: карточка расхождения уже
+ * искала разбор по `osm`, а подстановка высот для теневого маршрута — всё ещё
+ * по индексу. Пара пережила бы ровно до следующей пересборки твина: карточка
+ * назвала бы опубликованную высоту, а «каким был бы коридор» молча уехало бы
+ * в null. Здесь индекс заведомо ЧУЖОЙ, совпадает только элемент.
+ */
+describe("сдвинутый индекс не отключает подстановку высот", () => {
+  test("разбор найден по osm, и теневой коридор посчитан", () => {
+    const twin = twinWithTowerOnTheOnlyPath();
+    // здание переехало: в разборе стоит 194, в твине оно теперь 300
+    twin.buildings[300] = twin.buildings[194];
+    twin.buildings[194] = { h: 10, hs: 0, r: [[0, 0], [1, 0], [1, 1], [0, 1]] };
+    twin.dataQuality.suspect = [
+      { i: 300, osm: "way/486561786", h: 382, times: 4.66, why: "towers over the city" },
+    ];
+
+    const route = __engineForTests.buildRoute("astana", twin, 0, 1, false);
+    const d = __engineForTests.heightDisputeFor("astana", twin, route!)!;
+    expect(d.building).toBe(300);
+    expect(d.publishedM).toBe(310.8);
+    // главное: подстановка сработала, несмотря на чужой индекс
+    expect(d.cruiseAltMIfPublished).not.toBeNull();
+    expect(d.cruiseAltMIfPublished!).toBeLessThan(d.cruiseAltM);
+  });
+});

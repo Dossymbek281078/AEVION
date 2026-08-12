@@ -1,13 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  buildApi,
-  type BuildProfile,
-  type BuildRole,
-  type ShiftPreference,
-  type AvailabilityType,
-} from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildProfile, type BuildRole, type ShiftPreference, type AvailabilityType } from "@/lib/build/api";
 import {
   WORK_MODES,
   WORK_MODE_LABELS,
@@ -210,7 +204,7 @@ export function ProfileForm({
       setSavedAt(new Date().toISOString());
       onSaved?.(saved);
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setSaving(false);
     }

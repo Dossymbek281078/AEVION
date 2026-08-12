@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { buildApi, BuildApiError } from "@/lib/build/api";
+import { buildApi, buildErrorText, BuildApiError } from "@/lib/build/api";
 import { regionLabel, WORK_MODE_LABELS, EDUCATION_LEVEL_LABELS, type WorkMode, type EducationLevel } from "@/lib/build/geo";
 
 type Turn = { role: "user" | "assistant"; content: string };
@@ -98,7 +98,7 @@ export function AiResumeBuilder({ onApplied }: { onApplied: () => void }) {
       onApplied();
       setOpen(false);
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setApplying(false);
     }

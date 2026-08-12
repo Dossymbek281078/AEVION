@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { buildApi, type BuildResumeBundle } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildResumeBundle } from "@/lib/build/api";
 
 // Print-optimized standalone resume page. No BuildShell, no nav, no toaster.
 // Browser Print → "Save as PDF" produces a 1-page candidate handout.
@@ -22,7 +22,7 @@ export default function ResumePage() {
         if (!cancelled) setProfile(p);
       })
       .catch((e) => {
-        if (!cancelled) setErr((e as Error).message);
+        if (!cancelled) setErr(buildErrorText(e));
       });
     return () => {
       cancelled = true;

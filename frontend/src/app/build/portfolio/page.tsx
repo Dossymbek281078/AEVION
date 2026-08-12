@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
 type Photo = {
@@ -41,7 +41,7 @@ function Body() {
       const r = await buildApi.portfolioPhotos(user.id);
       setPhotos(r.items ?? []);
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     }
   }
 
@@ -63,7 +63,7 @@ function Body() {
       if (typeRef.current) typeRef.current.value = "";
       await load();
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setUploading(false);
     }
@@ -75,7 +75,7 @@ function Body() {
       await buildApi.deletePortfolioPhoto(id);
       setPhotos((prev) => prev?.filter((p) => p.id !== id) ?? null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setDeleting(null);
     }

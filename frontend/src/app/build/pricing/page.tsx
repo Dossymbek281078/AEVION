@@ -3,13 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
-import {
-  buildApi,
-  type BuildPlan,
-  type BuildSubscription,
-  type BuildOrderRow,
-  type PlanKey,
-} from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildPlan, type BuildSubscription, type BuildOrderRow, type PlanKey } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 import { useI18n } from "@/lib/i18n";
@@ -58,7 +52,7 @@ export default function PricingPage() {
           setTierLabel(l.tier.label);
         }
       })
-      .catch((e) => !cancelled && setError((e as Error).message))
+      .catch((e) => !cancelled && setError(buildErrorText(e)))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
@@ -185,7 +179,7 @@ function ClaimCashbackButton({ onClaimed }: { onClaimed: () => void }) {
       }
       onClaimed();
     } catch (e) {
-      setMsg((e as Error).message);
+      setMsg(buildErrorText(e));
     } finally {
       setBusy(false);
     }

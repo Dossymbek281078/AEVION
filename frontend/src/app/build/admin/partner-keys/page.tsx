@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 
@@ -45,7 +45,7 @@ function Body() {
         setUsage(new Map(u.items.map((it) => [it.keyId, it])));
       }
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     }
   }
 

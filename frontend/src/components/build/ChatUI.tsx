@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { buildApi, type BuildMessage } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildMessage } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { VideoCallButton } from "./VideoCallButton";
 import {
@@ -32,7 +32,7 @@ export function ChatUI({
       const data = await buildApi.thread(peerId);
       setMessages(data.items);
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setLoading(false);
     }
@@ -60,7 +60,7 @@ export function ChatUI({
       const msg = await buildApi.send({ receiverId: peerId, content: text });
       setMessages((prev) => [...prev, msg]);
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
       setDraft(text);
     } finally {
       setSending(false);

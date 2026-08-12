@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { useToast } from "@/components/build/Toast";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 
 type Prefs = {
   jobAlerts: boolean;
@@ -66,7 +66,7 @@ function Body() {
         });
       })
       .catch((e) => {
-        if (!cancelled) setErr((e as Error).message);
+        if (!cancelled) setErr(buildErrorText(e));
       });
     return () => {
       cancelled = true;

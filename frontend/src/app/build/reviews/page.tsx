@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi, type BuildReview, type ReviewEligibilityRow } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildReview, type ReviewEligibilityRow } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
 function Stars({ rating, size = "sm" }: { rating: number; size?: "sm" | "lg" }) {
@@ -196,7 +196,7 @@ function EligibleCard({ row, onDone }: { row: ReviewEligibilityRow; onDone: () =
       setDone(true);
       onDone();
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setBusy(false);
     }

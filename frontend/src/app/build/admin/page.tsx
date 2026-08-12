@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { apiUrl } from "@/lib/apiBase";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
 type AdminStats = Awaited<ReturnType<typeof buildApi.adminStats>>;
@@ -27,7 +27,7 @@ function Body() {
 
   useEffect(() => {
     if (!token || user?.role !== "ADMIN") return;
-    buildApi.adminStats().then(setStats).catch((e) => setError((e as Error).message));
+    buildApi.adminStats().then(setStats).catch((e) => setError(buildErrorText(e)));
   }, [token, user]);
 
   if (user && user.role !== "ADMIN") {

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { useBuildAuth } from "@/lib/build/auth";
-import { buildApi, type TierKey } from "@/lib/build/api";
+import { buildApi, buildErrorText, type TierKey } from "@/lib/build/api";
 import { useI18n } from "@/lib/i18n";
 
 type TiersCatalogItem = Awaited<ReturnType<typeof buildApi.loyaltyTiers>>["items"][number];
@@ -74,7 +74,7 @@ export default function LoyaltyPage() {
         setMe(m);
         setCashback(c);
       })
-      .catch((e) => !cancelled && setError((e as Error).message))
+      .catch((e) => !cancelled && setError(buildErrorText(e)))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;

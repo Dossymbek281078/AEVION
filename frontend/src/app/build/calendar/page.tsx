@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 import { useI18n } from "@/lib/i18n";
 
 type Item = Awaited<ReturnType<typeof buildApi.myInterviews>>["items"][number];
@@ -31,7 +31,7 @@ function Body() {
         if (!cancelled) setItems(r.items);
       })
       .catch((e) => {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setError(buildErrorText(e));
       });
     return () => {
       cancelled = true;

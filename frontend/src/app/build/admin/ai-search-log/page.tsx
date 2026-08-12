@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
 type LogData = Awaited<ReturnType<typeof buildApi.adminAiSearchLog>>;
@@ -31,7 +31,7 @@ function Body() {
     buildApi
       .adminAiSearchLog(200)
       .then(setData)
-      .catch((e) => setErr((e as Error).message))
+      .catch((e) => setErr(buildErrorText(e)))
       .finally(() => setLoading(false));
   }, [token, user]);
 

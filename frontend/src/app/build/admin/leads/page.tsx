@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { apiUrl } from "@/lib/apiBase";
 
@@ -46,7 +46,7 @@ function Body() {
       setItems(r.items);
       setTotal(r.total);
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setLoading(false);
     }

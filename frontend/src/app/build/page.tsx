@@ -5,7 +5,7 @@ import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { ProjectCard } from "@/components/build/ProjectCard";
 import { Skeleton } from "@/components/build/Skeleton";
-import { buildApi, type BuildProject, type ProjectStatus } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildProject, type ProjectStatus } from "@/lib/build/api";
 import { formatSalary } from "@/lib/build/format";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useI18n } from "@/lib/i18n";
@@ -68,7 +68,7 @@ export default function BuildHomePage() {
         if (!cancelled) setProjects(r.items);
       })
       .catch((e) => {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setError(buildErrorText(e));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

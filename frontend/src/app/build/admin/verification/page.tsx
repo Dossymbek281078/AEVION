@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { useBuildAuth } from "@/lib/build/auth";
-import { buildApi, type BuildVerificationRequest } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildVerificationRequest } from "@/lib/build/api";
 
 type VerifRow = BuildVerificationRequest;
 
@@ -36,7 +36,7 @@ function Body() {
     } catch (e) {
       // This used to swallow the failure and leave an empty table with no
       // explanation — the exact shape of bug this page was fixed for.
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setLoading(false);
     }
@@ -50,7 +50,7 @@ function Body() {
       await buildApi.adminApproveVerification(userId);
       await load();
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     }
   }
 
@@ -61,7 +61,7 @@ function Body() {
       await buildApi.adminRejectVerification(userId, reason);
       await load();
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     }
   }
 

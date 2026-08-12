@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 
 export default function AvailabilityPage() {
   return (
@@ -38,7 +38,7 @@ function Body() {
       setSkills(r.skills ?? []);
       setCity(r.city ?? null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setLoading(false);
     }
@@ -63,7 +63,7 @@ function Body() {
           : "Status set to Unavailable.",
       );
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setSaving(false);
     }

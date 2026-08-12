@@ -5,7 +5,7 @@ import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import Link from "next/link";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { buildApi, type BuildVacancy } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildVacancy } from "@/lib/build/api";
 
 // Static city → [lat, lng] table. OSM has free reverse-geocoding but
 // we don't want to hammer it on every render. Anything not in the
@@ -68,7 +68,7 @@ export function VacancyMap() {
     buildApi
       .listVacancies({ status: "OPEN" })
       .then((r) => setVacancies(r.items as VacancyWithCity[]))
-      .catch((e) => setErr((e as Error).message));
+      .catch((e) => setErr(buildErrorText(e)));
   }, []);
 
   const markers = useMemo(() => {

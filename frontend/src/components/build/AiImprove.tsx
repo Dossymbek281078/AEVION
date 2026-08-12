@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 
 type Kind = "summary" | "vacancy_description" | "cover_note" | "experience" | "generic";
 
@@ -37,7 +37,7 @@ export function AiImprove({
       const r = await buildApi.aiImproveText({ text: value, kind, locale });
       setImproved(r.improved);
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setBusy(false);
     }

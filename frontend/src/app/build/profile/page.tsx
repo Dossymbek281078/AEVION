@@ -4,13 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { ProfileForm } from "@/components/build/ProfileForm";
-import {
-  buildApi,
-  type BuildProfile,
-  type BuildApplication,
-  type BuildExperience,
-  type BuildEducation,
-} from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildProfile, type BuildApplication, type BuildExperience, type BuildEducation } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 import { VoiceInput } from "@/components/build/VoiceInput";
@@ -71,7 +65,7 @@ function ProfileBody() {
         setApplications(apps.items);
       })
       .catch((e) => {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setError(buildErrorText(e));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -262,7 +256,7 @@ function ExperienceEditor({
       setOpen(false);
       onChange();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(buildErrorText(e));
     } finally {
       setBusy(false);
     }
@@ -534,7 +528,7 @@ function EducationEditor({
       setOpen(false);
       onChange();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(buildErrorText(e));
     } finally {
       setBusy(false);
     }

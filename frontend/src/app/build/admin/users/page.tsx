@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi, type BuildAdminUser } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildAdminUser } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
 type UserRow = BuildAdminUser;
@@ -37,7 +37,7 @@ function Body() {
       setItems(r.items);
       setTotal(r.total);
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(buildErrorText(e));
     } finally {
       setLoading(false);
     }
@@ -132,7 +132,7 @@ function Body() {
                           else await buildApi.adminVerifyUser(u.id);
                           await load(q);
                         } catch (e) {
-                          setErr((e as Error).message);
+                          setErr(buildErrorText(e));
                         } finally {
                           setToggling(null);
                         }

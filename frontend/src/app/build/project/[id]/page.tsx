@@ -12,13 +12,7 @@ import {
   EligibleReviewsBlock,
   ReviewsByProjectSection,
 } from "@/components/build/ReviewsSection";
-import {
-  buildApi,
-  type BuildVacancy,
-  type BuildProject,
-  type BuildFile,
-  type ProjectStatus,
-} from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildVacancy, type BuildProject, type BuildFile, type ProjectStatus } from "@/lib/build/api";
 import {
   WORK_MODES,
   WORK_MODE_LABELS,
@@ -55,7 +49,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     buildApi
       .getProject(id)
       .then((r) => setBundle(r as ProjectBundle))
-      .catch((e) => setError((e as Error).message))
+      .catch((e) => setError(buildErrorText(e)))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -719,7 +713,7 @@ function NewVacancyButton({
           `Plan limit reached: ${apiErr.payload?.used}/${apiErr.payload?.limit} active vacancies. Upgrade your plan on /build/pricing.`,
         );
       } else {
-        setError((e as Error).message);
+        setError(buildErrorText(e));
       }
     } finally {
       setBusy(false);
@@ -991,7 +985,7 @@ function OwnerFileUpload({ projectId, onUploaded }: { projectId: string; onUploa
       setName("");
       onUploaded();
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setBusy(false);
     }

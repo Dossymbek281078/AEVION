@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { buildApi, BuildApiError } from "@/lib/build/api";
+import { buildApi, buildErrorText, BuildApiError } from "@/lib/build/api";
 
 type State = "loading" | "unsupported" | "denied" | "off" | "on" | "no-keys";
 
@@ -46,7 +46,7 @@ export function PushSubscribeButton() {
         setState(existing ? "on" : "off");
       } catch (e) {
         if (!cancelled) {
-          setErr((e as Error).message);
+          setErr(buildErrorText(e));
           setState("off");
         }
       }
@@ -101,7 +101,7 @@ export function PushSubscribeButton() {
       }
       setState("off");
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(buildErrorText(e));
     } finally {
       setBusy(false);
     }
@@ -148,7 +148,7 @@ export function PushSubscribeButton() {
           <button
             onClick={async () => {
               setBusy(true);
-              try { await buildApi.pushTest(); } catch (e) { setErr((e as Error).message); }
+              try { await buildApi.pushTest(); } catch (e) { setErr(buildErrorText(e)); }
               finally { setBusy(false); }
             }}
             disabled={busy}

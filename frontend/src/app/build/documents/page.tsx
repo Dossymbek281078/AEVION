@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 
 type Doc = {
   id: string;
@@ -54,7 +54,7 @@ function Body() {
       const r = await buildApi.myDocuments();
       setDocs(r.items ?? []);
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     }
   }
 
@@ -70,7 +70,7 @@ function Body() {
       if (urlRef.current) urlRef.current.value = "";
       await load();
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setUploading(false);
     }

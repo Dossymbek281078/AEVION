@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 
 export function SafetyBriefingModal({
   shiftId,
@@ -64,7 +64,7 @@ export function SafetyBriefingModal({
                   onSigned?.();
                   onClose();
                 } catch (e) {
-                  setErr((e as Error).message);
+                  setErr(buildErrorText(e));
                 } finally {
                   setBusy(false);
                 }

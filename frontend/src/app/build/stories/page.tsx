@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
-import { buildApi, type BuildStory } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildStory } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useI18n } from "@/lib/i18n";
 
@@ -20,7 +20,7 @@ export default function StoriesPage() {
     buildApi
       .storiesFeed({ limit: 40 })
       .then((r) => setItems(r.items))
-      .catch((e) => setErr((e as Error).message));
+      .catch((e) => setErr(buildErrorText(e)));
 
   useEffect(() => {
     refresh();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { buildApi, type AiVacancyDraft } from "@/lib/build/api";
+import { buildApi, buildErrorText, type AiVacancyDraft } from "@/lib/build/api";
 import { regionLabel, WORK_MODE_LABELS, EDUCATION_LEVEL_LABELS } from "@/lib/build/geo";
 
 export function AiVacancyGen({
@@ -55,7 +55,7 @@ export function AiVacancyGen({
               const r = await buildApi.aiGenerateVacancy({ brief: brief.trim(), city });
               setDraft(r.draft);
             } catch (e) {
-              setErr((e as Error).message);
+              setErr(buildErrorText(e));
             } finally {
               setBusy(false);
             }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { buildApi, type BuildTrialTask, type TrialTaskStatus } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildTrialTask, type TrialTaskStatus } from "@/lib/build/api";
 import { HelpTip } from "./HelpTip";
 
 const TONE: Record<TrialTaskStatus, string> = {
@@ -133,7 +133,7 @@ function ProposeForm({
           });
           onCreated();
         } catch (e) {
-          setErr((e as Error).message);
+          setErr(buildErrorText(e));
         } finally {
           setBusy(false);
         }

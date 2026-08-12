@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi, type HydratedBookmark } from "@/lib/build/api";
+import { buildApi, buildErrorText, type HydratedBookmark } from "@/lib/build/api";
 import { formatSalary } from "@/lib/build/format";
 import { Skeleton } from "@/components/build/Skeleton";
 
@@ -33,7 +33,7 @@ function SavedBody() {
       .then((r) => {
         if (!cancelled) setItems(r.items);
       })
-      .catch((e) => !cancelled && setError((e as Error).message))
+      .catch((e) => !cancelled && setError(buildErrorText(e)))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;

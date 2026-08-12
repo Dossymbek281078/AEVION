@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 
 // ── types ────────────────────────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ function Body() {
           });
         }
       } catch (e) {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setError(buildErrorText(e));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -120,7 +120,7 @@ function Body() {
       setTimeout(() => setSavedKey((prev) => (prev === key ? null : prev)), 1800);
     } catch (e) {
       setPrefs(prefs); // revert
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setSaving(null);
     }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { buildApi, type BuildReview } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildReview } from "@/lib/build/api";
 import { StarsDisplay, StarsInput } from "./StarRating";
 
 // ── Public list of reviews about a single user ─────────────────────
@@ -267,7 +267,7 @@ function SingleReviewForm({
       });
       onSubmitted();
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setBusy(false);
     }

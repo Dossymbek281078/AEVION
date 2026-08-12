@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { buildApi, BuildApiError, type BuildProfile } from "@/lib/build/api";
+import { buildApi, buildErrorText, BuildApiError, type BuildProfile } from "@/lib/build/api";
 import { VoiceInput } from "./VoiceInput";
 
 type Mode = "TEXT" | "IMAGE";
@@ -144,7 +144,7 @@ export function ResumeImporter({
       setImageBase64(null);
       setImagePreview(null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(buildErrorText(e));
     } finally {
       setApplying(false);
     }

@@ -196,6 +196,13 @@ if (!city) {
 // the script re-downloads whatever is missing.
 const cacheFlag = process.argv.indexOf("--plateau-cache");
 const plateauCache = cacheFlag > 0 ? process.argv[cacheFlag + 1] : null;
+// Каталог кэша надо СОЗДАТЬ, иначе флаг работает только на уже наполненном.
+// 12.08.2026 прогон по Токио скачал все четыре архива CityGML (~420 МБ) и
+// упал на первой же записи с ENOENT: `writeFileSync` не создаёт каталог.
+// Цена ошибки не в исключении, а в том, что ушедший трафик пропал впустую,
+// а следующий запуск начал бы с нуля — то есть флаг «ускорить повторные
+// прогоны» гарантированно не ускорял ни один из них.
+if (plateauCache) fs.mkdirSync(plateauCache, { recursive: true });
 
 // ── projection ────────────────────────────────────────────────────────────────
 const { minLat, maxLat, minLon, maxLon } = city.bbox;

@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { pickDailyPuzzle } from '../lib/cyberchessDailyPuzzle';
+import { createInMemoryRateLimiter } from '../lib/rateLimit/inMemoryWindow';
+import { clientIp } from '../lib/rateLimit';
 
 const router = Router();
 
@@ -259,7 +261,27 @@ const MAX_HINTS = 20;
 const MAX_NAME_LEN = 40;
 const MAX_COUNTRY_LEN = 8;
 
+// The bounds below stop one absurd claim. They do not stop a thousand
+// believable ones: user ids are whatever the caller invents, the board holds
+// 1000 rows sorted by score, and it is written to disk — so a script posting
+// the maximum allowed streak under fresh ids fills every place and the real
+// players are pushed off a leaderboard that persists. Solving a daily puzzle
+// happens once a day, so this ceiling is far above any honest use and only
+// bites a flood. Shared addresses (an office, a household, a mobile carrier)
+// have room to spare.
+const solveLimiter = createInMemoryRateLimiter({ max: 30, windowMs: 60_000 });
+
 router.post('/solve', (req: Request, res: Response) => {
+  const gate = solveLimiter.check(clientIp(req));
+  if (!gate.allowed) {
+    res.setHeader('Retry-After', String(Math.max(1, Math.ceil(gate.retryAfterMs / 1000))));
+    return res.status(429).json({
+      ok: false,
+      error: 'rate_limited',
+      retryAfterSec: Math.max(1, Math.ceil(gate.retryAfterMs / 1000)),
+    });
+  }
+
   const { streak, day, timeMs, hintsUsed, userId, name, country } = req.body || {};
   if (typeof streak !== 'number' || typeof day !== 'string') {
     return res.status(400).json({ ok: false, error: 'streak (number) and day (string) required' });

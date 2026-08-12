@@ -145,3 +145,35 @@ describe("an ordinary run still counts", () => {
     expect(res.status).toBe(200);
   });
 });
+
+// Must stay LAST in this file. The limiter counts per address and every request
+// here arrives from the same one, so the flood below exhausts the budget for
+// whatever runs after it.
+describe("a flood of believable claims cannot fill the board", () => {
+  test("posting the maximum streak under fresh ids starts being refused", async () => {
+    // The bounds above stop one absurd claim; this stops a thousand plausible
+    // ones. User ids are whatever the caller invents and the board holds 1000
+    // persisted rows sorted by score, so an unthrottled script filling it with
+    // maximum-streak entries pushes every real player off for good.
+    const statuses: number[] = [];
+    for (let i = 0; i < 40; i++) {
+      const res = await solve({ streak: 3650, day, userId: `flood_${i}`, name: `Flood${i}` });
+      statuses.push(res.status);
+    }
+
+    expect(statuses.filter((s) => s === 429).length).toBeGreaterThan(0);
+    // It is a ceiling, not a wall: the first requests still go through.
+    expect(statuses[0]).toBe(200);
+  });
+
+  test("the refusal says how long to wait", async () => {
+    const res = await solve({ streak: 3, day, userId: freshUser() });
+    if (res.status === 429) {
+      expect(Number(res.headers["retry-after"])).toBeGreaterThan(0);
+      expect(res.body.retryAfterSec).toBeGreaterThan(0);
+    } else {
+      // Not yet exhausted in this ordering — the previous test proves the gate.
+      expect(res.status).toBe(200);
+    }
+  });
+});

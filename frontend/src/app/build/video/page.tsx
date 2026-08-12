@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi, type BuildVideoRoom as VideoRoom } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildVideoRoom as VideoRoom } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useToast } from "@/components/build/Toast";
 import { useI18n } from "@/lib/i18n";
 
 export default function VideoPage() {
@@ -18,6 +19,7 @@ export default function VideoPage() {
 
 function VideoInner() {
   const { t } = useI18n();
+  const toast = useToast();
   const me = useBuildAuth((s) => s.user);
   const [rooms, setRooms] = useState<VideoRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +32,11 @@ function VideoInner() {
   const [newRoom, setNewRoom] = useState<VideoRoom | null>(null);
 
   function load() {
-    buildApi.myVideoRooms().then((r) => setRooms(r.items)).catch(() => {}).finally(() => setLoading(false));
+    buildApi
+      .myVideoRooms()
+      .then((r) => setRooms(r.items))
+      .catch((e) => toast.error(buildErrorText(e)))
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => { load(); }, []);
@@ -48,7 +54,11 @@ function VideoInner() {
       setGuestId("");
       setScheduledAt("");
       load();
-    } catch {/**/} finally { setBusy(false); }
+    } catch (e) {
+      // Without this the "Create" button just stops spinning — the 503 for a
+      // missing DAILY_API_KEY looked exactly like success.
+      toast.error(buildErrorText(e));
+    } finally { setBusy(false); }
   }
 
   async function endRoom(roomId: string) {
@@ -58,7 +68,9 @@ function VideoInner() {
       // The banner points at a room that is now closed.
       setNewRoom((cur) => (cur?.id === roomId ? null : cur));
       load();
-    } catch {/**/} finally { setBusy(false); }
+    } catch (e) {
+      toast.error(buildErrorText(e));
+    } finally { setBusy(false); }
   }
 
   async function invite(e: React.FormEvent) {
@@ -68,8 +80,10 @@ function VideoInner() {
       await buildApi.inviteToVideoRoom(inviteRoomId, inviteGuestId.trim());
       setInviteRoomId("");
       setInviteGuestId("");
-      alert(t("build.video.inviteSent"));
-    } catch {/**/} finally { setBusy(false); }
+      toast.success(t("build.video.inviteSent"));
+    } catch (e) {
+      toast.error(buildErrorText(e));
+    } finally { setBusy(false); }
   }
 
   const STATUS_COLOR: Record<string, string> = {

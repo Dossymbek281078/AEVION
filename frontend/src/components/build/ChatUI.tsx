@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { buildApi, type BuildMessage } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { VideoCallButton } from "./VideoCallButton";
 import {
   googleCalendarLink,
   outlookCalendarLink,
@@ -68,8 +69,9 @@ export function ChatUI({
 
   return (
     <div className="flex h-[70vh] min-h-[400px] flex-col rounded-xl border border-white/10 bg-white/5">
-      <header className="border-b border-white/10 px-4 py-3">
+      <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <div className="text-sm font-semibold text-white">{peerName || "Conversation"}</div>
+        <VideoCallButton guestId={peerId} guestName={peerName} />
       </header>
 
       <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto px-4 py-3">

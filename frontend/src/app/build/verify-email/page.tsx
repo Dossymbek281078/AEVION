@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
-import { requestEmailVerification, completeEmailVerification, BuildApiError } from "@/lib/build/api";
+import { requestEmailVerification, completeEmailVerification, buildErrorText, BuildApiError } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useI18n } from "@/lib/i18n";
 
@@ -109,7 +109,11 @@ function VerifyEmailBody() {
                     try {
                       await requestEmailVerification();
                       setSent(true);
-                    } catch {/**/}
+                    } catch (e) {
+                      // Claiming nothing at all after "Resend" is worse than an
+                      // error: the user waits for a letter that was never sent.
+                      setMsg(buildErrorText(e));
+                    }
                     finally { setSending(false); }
                   }}
                   className="text-xs text-emerald-400 hover:underline disabled:opacity-50"

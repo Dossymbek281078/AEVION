@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useToast } from "@/components/build/Toast";
 import { StarsDisplay } from "@/components/build/StarRating";
 import { useI18n } from "@/lib/i18n";
 
@@ -209,6 +210,7 @@ export default function AvailablePage() {
 
 function AvailabilityToggle({ onChanged }: { onChanged: () => void }) {
   const { t } = useI18n();
+  const toast = useToast();
   const token = useBuildAuth((s) => s.token);
   const [on, setOn] = useState(false);
   const [until, setUntil] = useState<string | null>(null);
@@ -232,7 +234,11 @@ function AvailabilityToggle({ onChanged }: { onChanged: () => void }) {
       setOn(!!(r.availableNow && !expired));
       setUntil(r.availableUntil ?? null);
       onChanged();
-    } catch {/**/}
+    } catch (e) {
+      // The switch snaps back on its own; without a message that looks like a
+      // UI glitch rather than "you are still marked unavailable".
+      toast.error(buildErrorText(e));
+    }
     finally { setBusy(false); }
   }
 

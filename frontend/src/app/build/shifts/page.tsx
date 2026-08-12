@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi, type BuildShiftRow as Shift } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildShiftRow as Shift } from "@/lib/build/api";
 import { SafetyBriefingModal } from "@/components/build/SafetyBriefingModal";
+import { useToast } from "@/components/build/Toast";
 import { HelpTip } from "@/components/build/HelpTip";
 import { useI18n } from "@/lib/i18n";
 
@@ -41,13 +42,18 @@ export default function ShiftsPage() {
 
 function ShiftsInner() {
   const { t } = useI18n();
+  const toast = useToast();
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [briefingShift, setBriefingShift] = useState<string | null>(null);
 
   function load() {
-    buildApi.myShifts().then((r) => setShifts(r.items)).catch(() => {}).finally(() => setLoading(false));
+    buildApi
+      .myShifts()
+      .then((r) => setShifts(r.items))
+      .catch((e) => toast.error(buildErrorText(e)))
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => { load(); }, []);
@@ -69,12 +75,21 @@ function ShiftsInner() {
       }
       await buildApi.shiftCheckin(id, lat ?? undefined, lng ?? undefined);
       load();
-    } catch {/**/} finally { setBusy(null); }
+    } catch (e) {
+      // A worker standing on site needs to know the check-in did not register —
+      // silently re-enabling the button read as "done".
+      toast.error(buildErrorText(e));
+    } finally { setBusy(null); }
   }
 
   async function checkout(id: string) {
     setBusy(id);
-    try { await buildApi.shiftCheckout(id); load(); } catch {/**/} finally { setBusy(null); }
+    try {
+      await buildApi.shiftCheckout(id);
+      load();
+    } catch (e) {
+      toast.error(buildErrorText(e));
+    } finally { setBusy(null); }
   }
 
   // Group by date

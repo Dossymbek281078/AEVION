@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
+import { useToast } from "@/components/build/Toast";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
 
@@ -39,6 +40,7 @@ export default function AdminDocumentsPage() {
 
 function AdminDocumentsInner() {
   const { t } = useI18n();
+  const toast = useToast();
   const [docs, setDocs] = useState<Doc[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -46,7 +48,7 @@ function AdminDocumentsInner() {
   function load() {
     buildApi.adminPendingDocuments()
       .then((r) => setDocs(r.items))
-      .catch(() => {})
+      .catch((e) => toast.error(buildErrorText(e)))
       .finally(() => setLoading(false));
   }
 
@@ -54,13 +56,25 @@ function AdminDocumentsInner() {
 
   async function verify(id: string) {
     setBusy(id);
-    try { await buildApi.verifyDocument(id); load(); } catch {/**/} finally { setBusy(null); }
+    try {
+      await buildApi.verifyDocument(id);
+      load();
+    } catch (e) {
+      // The row stays in the pending list either way — an admin had no way to
+      // tell a failed approval from a stale list.
+      toast.error(buildErrorText(e));
+    } finally { setBusy(null); }
   }
 
   async function reject(id: string) {
     const reason = prompt(t("build.adminDocuments.rejectReasonPrompt")) ?? undefined;
     setBusy(id);
-    try { await buildApi.rejectDocument(id, reason); load(); } catch {/**/} finally { setBusy(null); }
+    try {
+      await buildApi.rejectDocument(id, reason);
+      load();
+    } catch (e) {
+      toast.error(buildErrorText(e));
+    } finally { setBusy(null); }
   }
 
   return (

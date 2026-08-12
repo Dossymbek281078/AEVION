@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useToast } from "./Toast";
 
 // Tiny client-side cache so we don't refetch the entire bookmarks list
 // every time a card mounts. Refreshed on first toggle. Module-scoped.
@@ -37,6 +38,7 @@ export function BookmarkButton({
   className?: string;
 }) {
   const token = useBuildAuth((s) => s.token);
+  const toast = useToast();
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -80,7 +82,11 @@ export function BookmarkButton({
             if (r.saved) savedSet.add(k);
             else savedSet.delete(k);
           }
-        } catch {}
+        } catch (err) {
+          // The star simply stayed put on failure, which reads as "already in
+          // that state" rather than "the save did not go through".
+          toast.error(buildErrorText(err));
+        }
         finally {
           setBusy(false);
         }

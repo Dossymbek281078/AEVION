@@ -2,8 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { buildApi, type BuildPaymentEvent, type PaymentEventStatus } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildPaymentEvent, type PaymentEventStatus } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+// This page renders outside BuildShell, so it uses the app-wide toast rather
+// than the build-local one (whose hook no-ops without its provider).
+import { useToast } from "@/components/ToastProvider";
 import { HelpTip } from "@/components/build/HelpTip";
 import { useI18n } from "@/lib/i18n";
 
@@ -17,7 +20,7 @@ export default function PaymentCalendarPage() {
     buildApi
       .myPaymentCalendar()
       .then((r) => setItems(r.items))
-      .catch((e) => setErr((e as Error).message));
+      .catch((e) => setErr(buildErrorText(e)));
 
   useEffect(() => { refresh(); }, []);
 
@@ -130,6 +133,7 @@ function SummaryCard({
 }
 
 function PaymentRow({ row, myId, onChanged, t }: { row: BuildPaymentEvent; myId: string | null; onChanged: () => void; t: (key: string, vars?: Record<string, string | number>) => string }) {
+  const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
   const due = row.status === "PENDING" && !!row.dueDate && row.dueDate < new Date().toISOString().slice(0, 10);
   const tone =
@@ -142,7 +146,11 @@ function PaymentRow({ row, myId, onChanged, t }: { row: BuildPaymentEvent; myId:
   const update = async (patch: { status?: PaymentEventStatus }) => {
     setBusy(true);
     try { await buildApi.updatePaymentEvent(row.id, patch); onChanged(); }
-    catch {/**/}
+    catch (e) {
+      // Marking a payment PAID that did not save is the costliest silent
+      // failure on this page — the row simply stayed PENDING with no reason.
+      showToast(buildErrorText(e), "error");
+    }
     finally { setBusy(false); }
   };
 
@@ -152,7 +160,7 @@ function PaymentRow({ row, myId, onChanged, t }: { row: BuildPaymentEvent; myId:
     if (!window.confirm(`Удалить платёж на ${row.amount.toLocaleString("ru-RU")} ${row.currency}?`)) return;
     setBusy(true);
     try { await buildApi.deletePaymentEvent(row.id); onChanged(); }
-    catch {/**/}
+    catch (e) { showToast(buildErrorText(e), "error"); }
     finally { setBusy(false); }
   };
 

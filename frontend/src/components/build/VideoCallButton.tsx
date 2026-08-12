@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useToast } from "./Toast";
 
-export function VideoCallButton({ guestId, guestName }: { guestId: string; guestName: string }) {
+export function VideoCallButton({ guestId, guestName }: { guestId: string; guestName?: string | null }) {
   const token = useBuildAuth((s) => s.token);
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [roomUrl, setRoomUrl] = useState<string | null>(null);
 
@@ -17,8 +19,13 @@ export function VideoCallButton({ guestId, guestName }: { guestId: string; guest
       const room = await buildApi.createVideoRoom({ guestId });
       await buildApi.inviteToVideoRoom(room.id, guestId);
       setRoomUrl(room.roomUrl);
+      toast.success(
+        guestName ? `Комната создана — ${guestName} приглашён.` : "Комната создана, приглашение отправлено.",
+      );
       window.open(room.roomUrl, "_blank", "noreferrer");
-    } catch {/**/}
+    } catch (e) {
+      toast.error(buildErrorText(e));
+    }
     finally { setBusy(false); }
   }
 

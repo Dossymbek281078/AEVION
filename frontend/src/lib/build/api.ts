@@ -548,6 +548,55 @@ export class BuildApiError extends Error {
   }
 }
 
+// The backend answers with machine codes (`video_not_configured`,
+// `already_checked_in`). Showing the raw code to a worker on site is barely
+// better than showing nothing, so translate the ones a person can act on and
+// fall back to a readable form of the code for the rest.
+const BUILD_ERROR_TEXT: Record<string, string> = {
+  video_not_configured: "Видеозвонки пока не подключены — напишите в поддержку.",
+  video_room_creation_failed: "Не удалось создать комнату. Попробуйте ещё раз.",
+  only_host_can_end: "Завершить встречу может только тот, кто её создал.",
+  only_host_can_invite: "Приглашать в комнату может только её создатель.",
+  room_not_found: "Комната не найдена — возможно, её уже закрыли.",
+  already_checked_in: "Смена уже начата.",
+  already_checked_out: "Смена уже закрыта.",
+  not_checked_in_yet: "Сначала отметьте начало смены.",
+  only_worker_can_checkin: "Отметиться на смене может только назначенный работник.",
+  only_worker_can_checkout: "Закрыть смену может только назначенный работник.",
+  shift_not_found: "Смена не найдена — обновите страницу.",
+  profile_not_found: "Сначала заполните профиль.",
+  payment_event_not_found: "Платёж не найден — обновите страницу.",
+  forbidden: "Нет доступа к этому действию.",
+};
+
+/**
+ * Human-readable text for anything thrown by `buildApi`. Safe on non-Error
+ * values, so it can be used directly in a `catch (e)`.
+ */
+export function buildErrorText(e: unknown): string {
+  const generic = "Что-то пошло не так. Попробуйте ещё раз.";
+  const code =
+    e instanceof BuildApiError ? e.code
+    : e instanceof Error ? e.message
+    : typeof e === "string" ? e
+    // Anything else (a rejected non-Error, a stray object) has no text worth
+    // showing — "[object Object]" in a toast is its own kind of silence.
+    : "";
+  if (!code) return generic;
+  const known = BUILD_ERROR_TEXT[code];
+  if (known) return known;
+  if (code === "Failed to fetch" || code.startsWith("NetworkError")) {
+    return "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.";
+  }
+  // `shift_checkin_failed` → `Shift checkin failed`: still a code, but a
+  // legible one, and it names which action broke.
+  if (/^[a-z0-9_]+$/.test(code)) {
+    const words = code.replace(/_/g, " ");
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+  return code;
+}
+
 async function call<T>(
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,

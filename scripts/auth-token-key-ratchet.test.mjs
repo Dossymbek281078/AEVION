@@ -38,15 +38,35 @@ const SRC = path.join(HERE, "..", "frontend", "src");
 const BASELINE = 0;
 
 // Мёртвые ключи — те, что читают, но не записывает НИКТО (проверено grep-ом
-// по setItem). Их три, а не один: "aevion_token" нашёлся первым, но точно так
-// же висят "aevion_jwt" (из-за него не видит сессию /qmedia) и
-// "qcoreai_token" (две страницы QCoreAI). Один ключ в списке — значит
-// следующий такой же дефект проверка пропустит.
+// по setItem). Один ключ в списке означал бы, что следующий такой же дефект
+// проверка пропустит, — и ровно это и случилось: список из трёх имён был
+// закрыт, а сплошной аудит хранилища 12.08.2026 нашёл ВТОРОЕ семейство из
+// пяти. Мораль в список и вписана: сюда идёт всё, что читают и не пишут.
 //
-// "aevion_auth_token" (без _v1) сюда НЕ входит: его никто не пишет, но
-// migrateAuthToken() читает его намеренно, чтобы перенести старые сессии на
-// канонический ключ. Это не дефект, а миграция.
-const DEAD_KEYS = ["aevion_token", "aevion_jwt", "qcoreai_token"];
+//   aevion_token, aevion_jwt, qcoreai_token — найдены 10.08;
+//   aevion_auth_token   — legacy без _v1: /coach, /qlearn, /qstore и SDK
+//                         читали его напрямую, хотя migrateAuthToken() старое
+//                         значение переносит и СТИРАЕТ, то есть у вошедшего
+//                         человека он пуст всегда;
+//   aevion:auth:token   — своё имя выдумал HealthAI;
+//   build_token,
+//   build_auth_token    — своё имя выдумал QBuild, дважды и по-разному.
+const DEAD_KEYS = [
+  "aevion_token",
+  "aevion_jwt",
+  "qcoreai_token",
+  "aevion_auth_token",
+  "aevion:auth:token",
+  "build_token",
+  "build_auth_token",
+];
+
+// Единственное законное упоминание legacy-ключа: сама миграция в lib/auth.ts
+// переносит старые сессии на канонический ключ и обязана назвать источник.
+// Список именно из пар «файл + ключ», а не из имён файлов: иначе исключение
+// молча разрешило бы в этом файле любой другой мёртвый ключ.
+const ALLOWED = [{ file: "lib/auth.ts", key: "aevion_auth_token" }];
+const isAllowed = (rel, key) => ALLOWED.some((a) => a.file === rel && a.key === key);
 
 // Кавычки обеих форм. Сейчас ключи входа пишут только в двойных, но проверка,
 // не знающая про одинарные, молча пропустит первый же такой вызов — а она
@@ -71,10 +91,34 @@ function walk(dir, out = []) {
   return out;
 }
 
+const rel = (file) => path.relative(SRC, file).split(path.sep).join("/");
+
+/**
+ * Комментарии выбрасываем перед поиском. Иначе проверка ловит объяснение
+ * дефекта вместо дефекта: первыми её нарушителями стали /coach, /healthai и
+ * SDK — файлы, ПОЧИНЕННЫЕ в этом же заходе, где мёртвый ключ назван в
+ * комментарии «раньше здесь стояло вот это». Запрещать называть имя ошибки —
+ * верный способ получить код без объяснений.
+ *
+ * Режем только блочные комментарии и строки, начинающиеся с // или * —
+ * хвостовой // после кода не трогаем, чтобы не съесть «https://» в строке.
+ */
+const stripComments = (text) =>
+  text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((l) => !/^\s*(\/\/|\*)/.test(l))
+    .join("\n");
+
+const deadKeysIn = (text, file) => {
+  const code = stripComments(text);
+  return DEAD_KEYS.filter((k) => mentions(code, k) && !isAllowed(rel(file), k));
+};
+
 const broken = [];
 for (const file of walk(SRC)) {
   const text = readFileSync(file, "utf8");
-  if (DEAD_KEYS.some((k) => mentions(text, k)) && !CANONICAL.test(text)) {
+  if (deadKeysIn(text, file).length > 0 && !CANONICAL.test(text)) {
     broken.push(path.relative(SRC, file).split(path.sep).join("/"));
   }
 }
@@ -111,9 +155,8 @@ ok(
 const mentioners = [];
 for (const file of walk(SRC)) {
   const text = readFileSync(file, "utf8");
-  if (DEAD_KEYS.some((k) => mentions(text, k))) {
-    mentioners.push(path.relative(SRC, file).split(path.sep).join("/"));
-  }
+  const found = deadKeysIn(text, file);
+  if (found.length) mentioners.push(`${rel(file)} (${found.join(", ")})`);
 }
 ok(
   "литерала мёртвого ключа во фронтенде нет вовсе",

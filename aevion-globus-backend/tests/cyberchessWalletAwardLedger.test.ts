@@ -30,6 +30,10 @@ const { queries, failOn, state } = vi.hoisted(() => ({
     ledger: new Set<string>(),
     wallet: new Map<string, number>(),
     unpaid: 0,
+    /** Когда закрыта партия. Сдвигая её в прошлое, проверяем границу доплаты. */
+    endedAtMs: 0,
+    /** Первая выплата в ведомости; null — ведомость пуста. */
+    ledgerStartMs: null as number | null,
   },
 }));
 
@@ -65,12 +69,17 @@ vi.mock("pg", () => {
         return { rows: [{ n: state.unpaid }] };
       }
 
+      if (/min\("paidAt"\)/i.test(text)) {
+        return { rows: [{ t: state.ledgerStartMs === null ? null : new Date(state.ledgerStartMs) }] };
+      }
+
       if (/SELECT\s+"status"/i.test(text)) {
         return {
           rows: [
             {
               status: state.ended ? "ended" : "live",
               result: state.result,
+              endedAt: state.ended ? new Date(state.endedAtMs || Date.now()) : null,
               whiteUserId: "white-player",
               blackUserId: "black-player",
               whiteName: "White",
@@ -128,6 +137,8 @@ beforeEach(() => {
   state.ledger.clear();
   state.wallet.clear();
   state.unpaid = 0;
+  state.endedAtMs = 0;
+  state.ledgerStartMs = null;
 });
 
 describe("подмена драйвера действительно работает", () => {
@@ -189,6 +200,33 @@ describe("неудавшаяся выплата не теряется", () => {
 
     failOn.pattern = null;
     await finalizeMatch("m-4", { ...INFO, result: "black" });
+
+    expect(state.wallet.get("white-player")).toBe(10);
+    expect(state.wallet.get("black-player")).toBe(1);
+  });
+
+  test("партию, закрытую до появления ведомости, доплата не трогает", async () => {
+    // Обратная сторона доплаты. У старых партий строк в ведомости нет не
+    // потому, что им не заплатили, а потому, что её тогда не существовало.
+    // Принять их за неоплаченные значит заплатить второй раз — ровно тот
+    // дефект, ради устранения которого всё и делалось.
+    state.ended = true;
+    state.endedAtMs = Date.now() - 30 * 24 * 3600 * 1000; // месяц назад
+    state.ledgerStartMs = Date.now() - 3600 * 1000; // ведомость ведётся час
+
+    await finalizeMatch("m-old", INFO);
+
+    expect(state.wallet.size).toBe(0);
+  });
+
+  test("партию, закрытую после начала ведомости, доплата берёт", async () => {
+    // Граница не должна съесть саму починку: без этой половины «ничего не
+    // платить никогда» тоже прошло бы.
+    state.ended = true;
+    state.endedAtMs = Date.now() - 60 * 1000; // минуту назад
+    state.ledgerStartMs = Date.now() - 3600 * 1000;
+
+    await finalizeMatch("m-recent", INFO);
 
     expect(state.wallet.get("white-player")).toBe(10);
     expect(state.wallet.get("black-player")).toBe(1);

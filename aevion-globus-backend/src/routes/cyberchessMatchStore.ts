@@ -30,6 +30,10 @@ import pg from "pg";
 let pool: any = null;
 let dbReady = false;
 let dbInitTried = false;
+/** Когда в этом процессе таблицы (включая ведомость выплат) точно есть. */
+let storeReadyAt = 0;
+/** Первая выплата в ведомости, мс. null — ведомость пуста или спросить не вышло. */
+let ledgerStartAt: number | null = null;
 
 /** Классификация скорости по контролю времени (как lichess: base + 40*inc). */
 export function speedOf(timeControl: string): string {
@@ -131,6 +135,10 @@ export async function ensureDb(): Promise<void> {
     `);
     pool = p;
     dbReady = true;
+    // Момент, с которого таблица ведомости заведомо существует в этом процессе
+    // (CREATE TABLE IF NOT EXISTS выше). Нужен как граница доплаты — см.
+    // repairBoundMs().
+    storeReadyAt = Date.now();
     console.log("[CyberMatchStore] pg connected — match/rating store ready");
   } catch (e) {
     console.warn("[CyberMatchStore] pg init failed:", e instanceof Error ? e.message : e);
@@ -296,7 +304,7 @@ export async function finalizeMatch(
   // finalize corrupting Glicko-2 (the in-memory MATCHES guard is volatile and
   // is wiped on process restart while the DB row persists).
   const existing = await q(
-    `SELECT "status","result","whiteUserId","blackUserId","whiteName","blackName",
+    `SELECT "status","result","endedAt","whiteUserId","blackUserId","whiteName","blackName",
             "whiteRatingBefore","blackRatingBefore","whiteRatingAfter","blackRatingAfter"
        FROM "CyberMatch" WHERE "id"=$1`,
     [matchId],
@@ -309,7 +317,14 @@ export async function finalizeMatch(
     // прошло в первый раз. Плательщики и исход берутся из СТРОКИ, а не из
     // аргументов: второй отчёт присылает другой клиент, и его версия исхода
     // не должна решать, кому сколько причитается.
-    await settleAwards(matchId, prior);
+    //
+    // Только для партий, закрытых после появления ведомости: у остальных строк
+    // в ней нет не потому, что им не заплатили, а потому, что её тогда не было
+    // (см. repairBoundMs).
+    const endedAtMs = prior.endedAt ? new Date(prior.endedAt).getTime() : NaN;
+    if (Number.isFinite(endedAtMs) && endedAtMs >= (await repairBoundMs())) {
+      await settleAwards(matchId, prior);
+    }
 
     const wb = Number(prior.whiteRatingBefore), wa = Number(prior.whiteRatingAfter);
     const bb = Number(prior.blackRatingBefore), ba = Number(prior.blackRatingAfter);
@@ -466,6 +481,35 @@ const CHESSY_WIN = 10, CHESSY_DRAW = 3, CHESSY_PLAYED = 1;
 function chessyFor(result: string, side: "white" | "black"): number {
   if (result === "draw") return CHESSY_DRAW;
   return result === side ? CHESSY_WIN : CHESSY_PLAYED;
+}
+
+/**
+ * С какого момента закрытую партию можно доплачивать.
+ *
+ * Ведомость отвечает на вопрос «заплачено ли» только про партии, закрытые после
+ * её появления. У всех, что закончились раньше, строк нет — и доплата приняла бы
+ * их за неоплаченные и заплатила ВТОРОЙ раз. Ровно тот дефект, ради устранения
+ * которого всё и делалось, только вывернутый наизнанку.
+ *
+ * Граница — более ранний из двух моментов, оба безопасны:
+ *   * первая запись в ведомости: всё, что после неё, ведомость уже покрывала;
+ *   * старт хранилища в этом процессе: таблицы созданы, значит любая партия,
+ *     закрытая после, писалась уже с ведомостью. Это же спасает случай, когда
+ *     ведомость пуста именно потому, что самая первая выплата и не прошла.
+ *
+ * Кэшируется только НАСТОЯЩАЯ дата: она, единожды появившись, больше не
+ * меняется. Пустую ведомость и неудачный запрос кэшировать нельзя — первое
+ * навсегда оставило бы границу завышенной (первая выплата случится позже, а мы
+ * бы об этом не узнали), второе от одного отказа запретило бы доплату совсем.
+ */
+async function repairBoundMs(): Promise<number> {
+  if (ledgerStartAt == null) {
+    const rows = await qOrNull(`SELECT min("paidAt") AS t FROM "CyberWalletAward"`, []);
+    const t = rows && rows[0]?.t ? new Date(rows[0].t).getTime() : NaN;
+    ledgerStartAt = Number.isFinite(t) ? t : null;
+  }
+  const fromLedger = ledgerStartAt == null ? Number.POSITIVE_INFINITY : ledgerStartAt;
+  return Math.min(fromLedger, storeReadyAt || Date.now());
 }
 
 /**

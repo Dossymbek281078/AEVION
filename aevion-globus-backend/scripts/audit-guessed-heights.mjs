@@ -28,6 +28,7 @@ import {
   METRES_PER_LEVEL, PARAPET_M, DEFAULT_HEIGHT_M,
 } from "./lib/city-twin-geometry.mjs";
 import { cachedOverpass, osmCacheDir } from "./lib/overpass.mjs";
+import { median } from "./lib/stats.mjs";
 
 const BBOX = {
   astana: { minLat: 51.1183717, maxLat: 51.1356973, minLon: 71.4104119, maxLon: 71.4432041 },
@@ -65,12 +66,6 @@ const elements = await cachedOverpass({
     + `(way["building"](${b.minLat},${b.minLon},${b.maxLat},${b.maxLon});`
     + ` relation["building"](${b.minLat},${b.minLon},${b.maxLat},${b.maxLon}););out tags;`,
 });
-
-const median = (xs) => {
-  const s = [...xs].sort((x, y) => x - y);
-  const m = s.length >> 1;
-  return s.length % 2 ? s[m] : +(((s[m - 1] + s[m]) / 2).toFixed(1));
-};
 
 /** Известная высота здания: тег height, иначе счёт этажей. null — неизвестна. */
 function knownHeight(tags) {

@@ -12,7 +12,7 @@ import { AIRSPACE_PROOFS } from "./qskyway.airspace.proof";
 import { PERMISSION, permissionSummary } from "./qskyway.permission";
 import { getPool } from "../lib/dbPool";
 import { isSmokeSlot, countLiveSlots } from "../lib/slotOrigin";
-import { heightReviewsForCity } from "../data/qskywayHeightReview";
+import { heightReviewFor, heightReviewsForCity } from "../data/qskywayHeightReview";
 import { rateLimit } from "../lib/rateLimit";
 
 /**
@@ -382,6 +382,155 @@ function buildRoute(
     airspace: assessCeiling(field, path, alts),
   };
 }
+
+// ── чего стоит КОНКРЕТНОМУ коридору высота, которой мы сами не верим ──────────
+//
+// Твин помечает высоту сомнительной, интерфейс показывает «⚠ высота под
+// вопросом» — но обе надписи про ГОРОД. Маршрут при этом молча закладывается на
+// то же самое число: сетка высот у движка одна. Расхождение двух наших же
+// ответов и есть дефект (разбор — в AEVION_QSKYWAY_HANDOFF_2026-07-26.md).
+//
+// Что здесь НЕ делается: высота не переписывается и из маршрутизации не
+// выбрасывается. Позиция модуля прежняя — починка принадлежит источнику (OSM).
+// Считается ровно одно: насколько этот коридор отличался бы, окажись правдой
+// число из статьи объекта, которое человек уже проверил (qskywayHeightReview).
+// Это не решение за источник, а названная цена расхождения.
+
+/** Ячейки сетки, высоту которым дало здание, которое твин сам считает спорным. */
+function suspectCellsOf(city: CityData): Map<number, number> {
+  const out = new Map<number, number>(); // cellIndex → индекс здания
+  const g = city.grid;
+  for (const s of city.dataQuality?.suspect ?? []) {
+    // `was` означает, что источник спорил сам с собой и движок УЖЕ взял счёт
+    // этажей: в сетке лежит исправленное число, коридор поднимать нечему.
+    if (s.was !== undefined) continue;
+    const b = city.buildings[s.i];
+    if (!b) continue;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const [x, y] of b.r) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+    const c0 = Math.max(0, Math.floor(minX / g.cell)), c1 = Math.min(g.cols - 1, Math.floor(maxX / g.cell));
+    const r0 = Math.max(0, Math.floor(minY / g.cell)), r1 = Math.min(g.rows - 1, Math.floor(maxY / g.cell));
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        // Внутри габарита здания и ровно его высота: растеризатор мог задеть
+        // соседнюю ячейку, но приписать ей чужое здание мы не имеем права.
+        if (g.heights[r * g.cols + c] === b.h) out.set(r * g.cols + c, s.i);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Копия твина, где спорные высоты заменены на опубликованные в статье объекта.
+ * Только для сравнения — наружу как данные города НЕ отдаётся.
+ * null, если по городу нечего сравнивать (нет разбора или разбор подтвердил тег).
+ */
+// Ключ — сам объект твина, а не id города: по одному id тест подставляет
+// синтетический город, и кэш по строке отдал бы ему чужую подложку (а хуже —
+// оставил бы свою в кэше настоящей Астаны).
+const reviewedTwinCache = new WeakMap<CityData, CityData | null>();
+function reviewedTwin(cityId: string, city: CityData): CityData | null {
+  const hit = reviewedTwinCache.get(city);
+  if (hit !== undefined) return hit;
+  const reviews = heightReviewsForCity(cityId).filter((r) => r.verdict !== "confirmed");
+  const cells = suspectCellsOf(city);
+  let patched = 0;
+  const heights = city.grid.heights.slice();
+  for (const [cellIdx, buildingIdx] of cells) {
+    const rev = reviews.find((r) => r.index === buildingIdx);
+    if (!rev) continue;
+    heights[cellIdx] = Math.round(rev.publishedM);
+    patched++;
+  }
+  const twin = patched > 0 ? { ...city, grid: { ...city.grid, heights } } : null;
+  reviewedTwinCache.set(city, twin);
+  return twin;
+}
+
+interface HeightDispute {
+  /** этот коридор действительно опирается на спорную высоту */
+  affected: boolean;
+  building: number;
+  osm: string;
+  taggedM: number;
+  publishedM: number;
+  publishedSource: string;
+  /** участков коридора, поднятых спорным зданием */
+  segments: number;
+  cruiseAltM: number;
+  /** каким был бы коридор, окажись правдой число из статьи */
+  cruiseAltMIfPublished: number | null;
+  cruiseDeltaM: number | null;
+  distanceKm: number;
+  distanceKmIfPublished: number | null;
+  note: string;
+}
+
+/**
+ * Расхождение для одного маршрута. Считает и вторую половину эффекта: спорная
+ * высота меняет не только эшелон, но и сам путь — A* обходит завышенное
+ * препятствие, и крюк стоит времени, даже когда крейсерская высота совпала.
+ */
+function heightDisputeFor(
+  cityId: string, city: CityData, route: RouteResult,
+): HeightDispute | null {
+  const cells = suspectCellsOf(city);
+  if (cells.size === 0) return null;
+  const g = city.grid;
+  const obst = obstOf(g);
+  let segments = 0;
+  let building = -1;
+  for (let k = 0; k < route.alts.length; k++) {
+    const a = route.path[k], b = route.path[k + 1];
+    const ia = a.r * g.cols + a.c, ib = b.r * g.cols + b.c;
+    const worst = Math.max(obst(a.c, a.r), obst(b.c, b.r));
+    // Участок «поднят спорным зданием» только если именно оно и оказалось
+    // самым высоким препятствием ребра: пролёт рядом с башней, но под другим
+    // домом повыше, к спору отношения не имеет.
+    for (const [idx, bi] of [[ia, cells.get(ia)], [ib, cells.get(ib)]] as [number, number | undefined][]) {
+      if (bi === undefined) continue;
+      if (g.heights[idx] !== worst) continue;
+      segments++;
+      building = bi;
+      break;
+    }
+  }
+  if (segments === 0) return null;
+  const rev = heightReviewFor(cityId, building);
+  const shadowTwin = reviewedTwin(cityId, city);
+  const shadow = shadowTwin ? buildRoute(cityId, shadowTwin, route.from, route.to, route.respectCeiling) : null;
+  const cruiseIf = shadow ? shadow.cruiseAltM : null;
+  const delta = cruiseIf === null ? null : route.cruiseAltM - cruiseIf;
+  return {
+    affected: true,
+    building,
+    osm: rev?.osm ?? "—",
+    taggedM: rev?.taggedM ?? city.buildings[building]?.h ?? 0,
+    publishedM: rev?.publishedM ?? 0,
+    publishedSource: rev?.publishedSource ?? "—",
+    segments,
+    cruiseAltM: route.cruiseAltM,
+    cruiseAltMIfPublished: cruiseIf,
+    cruiseDeltaM: delta,
+    distanceKm: route.distanceKm,
+    distanceKmIfPublished: shadow ? shadow.distanceKm : null,
+    note: rev
+      ? `${segments} из ${route.alts.length} участков коридора подняты зданием, высоте которого мы сами не верим: ${rev.taggedM} м из тега OSM при ${rev.publishedM} м в статье объекта. Высоту не переписываем — починка принадлежит источнику (${rev.osm}); здесь названа цена расхождения.`
+      : `${segments} из ${route.alts.length} участков коридора подняты высотой, которую твин считает спорной и по которой ещё нет разбора человеком.`,
+  };
+}
+
+/**
+ * Только для тестов. Через HTTP расхождение по высоте на живых городах не
+ * воспроизвести: площадок рядом с башней нет, и детектор молчал бы независимо
+ * от того, работает он или сломан. Проверять сам факт молчания — значит принять
+ * тихий no-op за фичу, поэтому тест подставляет сюда синтетический твин.
+ */
+export const __engineForTests = { buildRoute, heightDisputeFor, suspectCellsOf };
 
 // ── vertiport suitability (шаг к муниципальным площадкам) ──────────────────────
 interface VertiportScore {
@@ -788,6 +937,73 @@ qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
   res.json(payload);
 });
 
+/**
+ * Доходит ли спорная высота до того, что модуль реально считает.
+ *
+ * Вопрос возник из расхождения: чип в шапке говорит «высоте не верим», а сетка
+ * высот у маршрутизации та же самая. Ответ на него нельзя было ни увидеть, ни
+ * проверить — из «максимум в сетке 382» естественно (и, как выяснилось,
+ * ошибочно) заключалось, что коридоры над центром подняты все. Здесь он
+ * считается движком по всем парам площадок, а не выводится рассуждением.
+ *
+ * Замер 12.08.2026 по Астане: 0 из 42 — A* платит за высоту и обходит башню,
+ * ячеек у неё шесть. Спорная высота живёт в данных и в карточке здания, но
+ * коридоров сегодня не поднимает.
+ */
+const disputeImpactCache = new Map<string, unknown>();
+qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
+  const resolved = resolveCity(req.query.city);
+  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  const cached = disputeImpactCache.get(resolved.id);
+  if (cached) return res.json(cached);
+  const { id, city } = resolved;
+  const cells = suspectCellsOf(city);
+  if (cells.size === 0) {
+    const none = {
+      city: id, available: false, pairs: 0, affectedPairs: 0,
+      note: "Высот, которые твин считает спорными и не переопределяет сам, в этом городе нет.",
+    };
+    disputeImpactCache.set(id, none);
+    return res.json(none);
+  }
+  const n = city.vertiports.length;
+  let pairs = 0, routable = 0, affectedPairs = 0, maxCruiseDeltaM = 0, maxSegments = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    if (i === j) continue;
+    pairs++;
+    const r = buildRoute(id, city, i, j, false);
+    if (!r) continue;
+    routable++;
+    const d = heightDisputeFor(id, city, r);
+    if (!d) continue;
+    affectedPairs++;
+    maxSegments = Math.max(maxSegments, d.segments);
+    if (d.cruiseDeltaM !== null) maxCruiseDeltaM = Math.max(maxCruiseDeltaM, d.cruiseDeltaM);
+  }
+  const disputed = [...new Set(cells.values())].map((bi) => {
+    const rev = heightReviewFor(id, bi);
+    const cellCount = [...cells.values()].filter((v) => v === bi).length;
+    return {
+      building: bi,
+      taggedM: city.buildings[bi]?.h ?? 0,
+      cells: cellCount,
+      osm: rev?.osm ?? null,
+      publishedM: rev?.publishedM ?? null,
+      publishedSource: rev?.publishedSource ?? null,
+      verdict: rev?.verdict ?? "unreviewed",
+    };
+  });
+  const payload = {
+    city: id, available: true, disputed, pairs, routable, affectedPairs,
+    maxCruiseDeltaM, maxSegments,
+    note: affectedPairs === 0
+      ? `Спорная высота в твине есть, но ни один из ${routable} маршрутов между площадками на неё не опирается: маршрутизация платит за высоту и обходит здание. Высота остаётся видимой в карточке и в провенансе — на коридоры она сегодня не влияет.`
+      : `${affectedPairs} из ${routable} маршрутов между площадками подняты высотой, которой мы сами не верим (максимум ${maxCruiseDeltaM} м против опубликованной). Высоту не переписываем — починка принадлежит источнику; здесь названа цена расхождения.`,
+  };
+  disputeImpactCache.set(id, payload);
+  res.json(payload);
+});
+
 qskywayRouter.get("/vertiports", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
   if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
@@ -824,7 +1040,10 @@ qskywayRouter.post("/route", (req: Request, res: Response) => {
     }
     return res.status(422).json({ error: "маршрут не найден / некорректные вертипорты / отрезан запретными зонами" });
   }
-  res.json(route);
+  // Считается ТОЛЬКО здесь, а не внутри buildRoute: расчёт сам строит теневой
+  // маршрут по разобранным высотам, и вложенный вызов ушёл бы в рекурсию.
+  const heightDispute = heightDisputeFor(resolved.id, resolved.city, route);
+  res.json(heightDispute ? { ...route, heightDispute } : route);
 });
 
 /**
@@ -857,6 +1076,7 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   const src = AIRSPACE[resolved.id];
   const twinSig = signCity(resolved.id, resolved.city);
   const asSig = signAirspace(resolved.id);
+  const dispute = heightDisputeFor(resolved.id, resolved.city, route);
 
   // ASCII-only and explicitly ordered: this is the byte sequence the signature
   // covers, so it must not depend on locale, key order, or JSON escaping
@@ -898,6 +1118,21 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
           kind: PERMISSION[resolved.id].kind,
           basis: PERMISSION[resolved.id].basis,
           coveragePct: PERMISSION[resolved.id].coveragePct,
+        }
+      : null,
+    // Спорная высота принадлежит обоснованию, а не только интерфейсу: коридор в
+    // этом документе поднят числом, которому мы сами не верим. Умолчать о нём в
+    // бумаге, которую понесут регулятору, значит выдать чужой тег за свой замер.
+    heightDispute: dispute
+      ? {
+          building: dispute.building,
+          osm: dispute.osm,
+          taggedM: dispute.taggedM,
+          publishedM: dispute.publishedM,
+          publishedSource: dispute.publishedSource,
+          segments: dispute.segments,
+          cruiseAltMIfPublished: dispute.cruiseAltMIfPublished,
+          cruiseDeltaM: dispute.cruiseDeltaM,
         }
       : null,
     issuedAt: new Date().toISOString(),

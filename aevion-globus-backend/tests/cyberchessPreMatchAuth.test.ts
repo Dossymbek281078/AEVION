@@ -93,6 +93,25 @@ describe("a forwarded header cannot pass for a local call", () => {
     expect(res.status).toBe(403);
   });
 
+  test("the boundary of the old hole, measured", async () => {
+    // Worth pinning because it decides how bad the old code was. Express with
+    // `trust proxy: 1` takes req.ip from the RIGHTMOST X-Forwarded-For entry.
+    // Measured 2026-08-12:
+    //   XFF "127.0.0.1"                 → req.ip 127.0.0.1   (spoof works)
+    //   XFF "127.0.0.1, 203.0.113.9"    → req.ip 203.0.113.9 (spoof fails)
+    // So a proxy that APPENDS the real client address — which Railway does —
+    // defeated the trick on its own, and the old code was a latent hole rather
+    // than a live one: it opened the moment the service was reached without
+    // such a proxy in front. Either way the check must not depend on a proxy's
+    // behaviour to be safe, which is why it reads the socket peer now.
+    peerAddress = "203.0.113.7";
+    const res = await preMatch()
+      .set("x-forwarded-for", "127.0.0.1, 203.0.113.9")
+      .send(body);
+
+    expect(res.status).toBe(403);
+  });
+
   test("an outside caller with no header at all is refused", async () => {
     peerAddress = "203.0.113.7";
     const res = await preMatch().send(body);

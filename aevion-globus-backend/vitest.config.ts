@@ -21,7 +21,18 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     globals: false,
-    testTimeout: 10_000,
+    // 10s was not enough for the files that `await import()` a router inside
+    // the test body. On a loaded machine that first import pulls the router's
+    // whole dependency tree through Vite's transform, and the test dies with
+    // "Test timed out in 10000ms" — nothing to do with the code under test.
+    // Measured 2026-08-12 across two full runs: the same files took 16–30s in
+    // the full suite and 0.7–2.3s in isolation.
+    //
+    // This does NOT make the suite stable on its own. The other failure mode —
+    // assertion errors in devhub-integrations, where a mock queue is shared
+    // across files — survives a bigger timeout and is tracked separately.
+    // Raising this only stops the clock from being the reason.
+    testTimeout: 30_000,
     // `opentimestamps` (0.4.x, CJS, no clean exports map) intermittently trips
     // Vite's dep optimizer when several test files import it concurrently on a
     // cold cache — surfacing as "Failed to resolve entry for package

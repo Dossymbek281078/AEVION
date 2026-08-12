@@ -101,6 +101,8 @@ const CITIES = {
       "     *  as completely as a right one, so it is published, not hidden.",
       "     *  Absent when there is nothing to report. */",
       "    suspect?: { i: number; h: number; why: string;",
+      "                 /** элемент OSM: индекс здания переживает не всякую пересборку, id — переживает */",
+      "                 osm?: string | null;",
       "                 /** set when the height stands out from the city */ times?: number;",
       "                 /** set when the source's own floor count contradicted its height tag */",
       "                 was?: number; levels?: number }[];",
@@ -624,9 +626,17 @@ if (compareOnly) {
   process.exit(0);
 }
 
+// `osm` рядом с индексом — не украшение. Индекс здания живёт до следующей
+// пересборки: 12.08.2026 в bbox Астаны добавилось пять домов, и Абу-Даби Плаза
+// переехала со 195 на 194, а разбор высоты в src/data/qskywayHeightReview.ts
+// был привязан к номеру. Поймал тест, но привязка к элементу источника
+// переживает пересборку сама, поэтому она теперь есть у каждой спорной высоты.
+// Отгружается ТОЛЬКО для спорных: у 475 зданий id стоил бы лишних килобайт в
+// файле, который целиком грузится в браузер.
+const osmIdOf = (i) => meta[i]?.id ?? null;
 const suspect = [
-  ...heightOutliers(buildings).map((o) => ({ i: o.index, h: o.h, times: o.times, why: "towers over the city" })),
-  ...contradicted.map((c) => ({ i: c.i, h: c.h, was: c.was, levels: c.levels, why: "height tag contradicted its own floor count" })),
+  ...heightOutliers(buildings).map((o) => ({ i: o.index, osm: osmIdOf(o.index), h: o.h, times: o.times, why: "towers over the city" })),
+  ...contradicted.map((c) => ({ i: c.i, osm: osmIdOf(c.i), h: c.h, was: c.was, levels: c.levels, why: "height tag contradicted its own floor count" })),
 ];
 if (suspect.length) {
   process.stderr.write(

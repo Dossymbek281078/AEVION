@@ -9,7 +9,8 @@
     "build:all": "npm run build:backend && npm run build:frontend",
     "verify": "npm run build:all",
     "lint:frontend": "npm run lint --prefix frontend",
-  "test:qreal": "node scripts/qreal-judge.test.mjs && node scripts/qreal-characters.test.mjs && node scripts/qreal-continuity.test.mjs && node scripts/qreal-sync-rubric.mjs --check"
+  "test:guards": "node scripts/multichat-dissent.test.mjs && node scripts/multichat-receipt.test.mjs && node scripts/multichat-contrast.test.mjs && npm run test:qreal",
+    "test:qreal": "node scripts/qreal-judge.test.mjs && node scripts/qreal-characters.test.mjs && node scripts/qreal-continuity.test.mjs && node scripts/qreal-sync-rubric.mjs --check"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

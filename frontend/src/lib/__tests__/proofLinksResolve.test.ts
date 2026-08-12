@@ -247,11 +247,23 @@ describe("proof links on audience-facing pages resolve", () => {
     expect(allFiles.length).toBeGreaterThan(1000);
   });
 
-  test.each(AUDIENCE_FILES.map((f) => [path.relative(APP, f), f] as const))(
-    "%s — no raw backend host in front of the reader",
-    (_rel, file) => {
-      const src = fs.readFileSync(file, "utf8");
-      expect(src.includes(RAW_BACKEND_HOST)).toBe(false);
-    },
-  );
+  // Started as a rule for the audience pages, then the sweep found the host
+  // in three more places: a "Production OpenAPI" button on /fintech/status,
+  // and the healthai module, which had its own way of reaching the backend —
+  // a hardcoded Railway origin instead of getApiBase(). Prod answers the same
+  // through the proxy (402 on /api/healthai/score/x either way), so the module
+  // now goes the same route as everything else. Zero left, so zero is pinned.
+  test("no page hardcodes the internal backend host", () => {
+    const offenders: string[] = [];
+    (function collect(dir: string) {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) collect(p);
+        else if (/\.tsx?$/.test(e.name) && fs.readFileSync(p, "utf8").includes(RAW_BACKEND_HOST)) {
+          offenders.push(path.relative(APP, p));
+        }
+      }
+    })(APP);
+    expect(offenders).toEqual([]);
+  });
 });

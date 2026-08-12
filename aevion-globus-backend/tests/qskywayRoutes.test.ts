@@ -174,6 +174,37 @@ describe("POST /route/justification — the filing", () => {
     expect(v.body).toMatchObject({ valid: false, hashValid: false });
   });
 
+  /**
+   * Документ двуязычный, а вердикт его проверки был только русским. Проверять
+   * будет тот, кому документ принесли, — и непрочитанный вердикт ничем не лучше
+   * непрочитанной оговорки. Три исхода должны различаться на обоих языках:
+   * «цел и подписан нами», «цел, но подпись чужая», «содержимое подделано».
+   */
+  test("вердикт проверки различает три исхода и по-английски тоже", async () => {
+    const j = await request(app).post("/api/qskyway/route/justification").send({ from: 1, to: 2, city: "nyc" });
+
+    const ok = await request(app)
+      .post("/api/qskyway/route/justification/verify")
+      .send({ document: j.body.document, attestation: j.body.attestation });
+    expect(ok.body.noteEn).toContain("signed by the platform key");
+
+    const tampered = await request(app)
+      .post("/api/qskyway/route/justification/verify")
+      .send({ document: { ...j.body.document, cruiseAltM: j.body.document.cruiseAltM + 50 }, attestation: j.body.attestation });
+    expect(tampered.body.noteEn).toContain("altered");
+    // Подделку нельзя выдать за «чужой ключ» и наоборот: это разные отказы.
+    expect(tampered.body.noteEn).not.toContain("signature does not belong");
+
+    const foreignKey = await request(app)
+      .post("/api/qskyway/route/justification/verify")
+      .send({
+        document: j.body.document,
+        attestation: { ...j.body.attestation, signature: Buffer.alloc(64, 7).toString("base64") },
+      });
+    expect(foreignKey.body).toMatchObject({ hashValid: true, signatureValid: false });
+    expect(foreignKey.body.noteEn).toContain("does not belong to the platform key");
+  });
+
   test("for a prohibited city it never says the flight merely needs permission", async () => {
     // The worst defect this module has had: a signed document telling a
     // regulator that a banned flight could be authorized on request.

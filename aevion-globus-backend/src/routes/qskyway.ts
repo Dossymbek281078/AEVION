@@ -1326,6 +1326,17 @@ qskywayRouter.post("/route/justification/verify", (req: Request, res: Response) 
     note: hashValid
       ? signatureValid ? "Документ подписан ключом платформы и не изменён." : "Содержимое цело, но подпись не принадлежит ключу платформы."
       : "Содержимое документа изменено — хэш не совпадает.",
+    // Тот же вердикт по-английски. Проверять документ будет тот, кому его
+    // принесли: для Нью-Йорка это FAA, для Токио MLIT. Двуязычная оговорка
+    // внутри документа и русский ответ на её проверку — половина работы;
+    // непрочитанный вердикт ничем не лучше непрочитанной оговорки.
+    // Различие сохранено то же самое: подделанное содержимое и чужая подпись —
+    // разные отказы, и одним словом их сливать нельзя.
+    noteEn: hashValid
+      ? signatureValid
+        ? "The document is signed by the platform key and has not been altered."
+        : "The contents are intact, but the signature does not belong to the platform key."
+      : "The document contents were altered — the hash does not match.",
   });
 });
 

@@ -54,6 +54,11 @@ const SMOKES = [
   // self-skip under READ_ONLY=1, so the daily prod run covers the whole read
   // surface without leaving smoke rows in a live registry.
   { name: "qskyway", script: "qskyway-smoke.js", readOnly: true },
+  // CyberChess: приёмы, которым учит тренер, против содержимого банка задач.
+  // 12.08.2026 из пяти приёмов задачи были на ОДИН — остальные отдавали ноль,
+  // и это ничего не ломало: интерфейс фильтрует темы у себя, пустого экрана
+  // никто не видел. Только чтение.
+  { name: "cyberchess-coach-bank", script: "cyberchess-coach-vs-bank-smoke.js", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).

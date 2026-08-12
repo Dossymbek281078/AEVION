@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi, type BuildApplication, type BuildContractPayload } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildApplication, type BuildContractPayload } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 
@@ -92,7 +92,7 @@ function Body() {
       );
       toast.success("Contract generated — open QSign to sign.");
     } catch (err) {
-      toast.error((err as Error).message);
+      toast.error(buildErrorText(err));
     } finally {
       setGenerating(null);
     }

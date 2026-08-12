@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import {
   buildApi,
+  buildErrorText,
   type BuildShiftRow as Shift,
   type BuildSafetyBriefing as BriefingRecord,
 } from "@/lib/build/api";
@@ -108,7 +109,7 @@ function Body() {
       templateItems.forEach((_, i) => { reset[String(i)] = false; });
       setChecked(reset);
     } catch (err) {
-      toast.error((err as Error).message);
+      toast.error(buildErrorText(err));
     } finally {
       setSigning(false);
     }

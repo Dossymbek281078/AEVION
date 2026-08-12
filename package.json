@@ -9,6 +9,7 @@
     "build:all": "npm run build:backend && npm run build:frontend",
     "verify": "npm run build:all",
     "lint:frontend": "npm run lint --prefix frontend",
+  "audit:drift": "node scripts/audit-drift.mjs",
   "test:qreal": "node scripts/qreal-judge.test.mjs && node scripts/qreal-characters.test.mjs && node scripts/qreal-continuity.test.mjs && node scripts/qreal-sync-rubric.mjs --check"
   },
   "devDependencies": {

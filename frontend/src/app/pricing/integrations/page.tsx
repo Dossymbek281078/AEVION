@@ -41,8 +41,8 @@ const INTEGRATIONS: Integration[] = [
   { id: "pipedrive", name: "Pipedrive", category: "crm", status: "beta", modules: ["qsign"], initials: "Pd", color: "#1a1a1a", oneLinerKey: "pipedrive", },
 
   // Automation
-  { id: "zapier", name: "Zapier", category: "automation", status: "live", modules: ["qsign", "qright", "qcoreai"], initials: "Zp", color: "#ff4a00", oneLinerKey: "zapier", setupUrl: "https://zapier.com/apps/aevion" },
-  { id: "make", name: "Make (ex Integromat)", category: "automation", status: "live", modules: ["qsign", "qright"], initials: "Mk", color: "#6d28d9", oneLinerKey: "make", setupUrl: "https://www.make.com/en/integrations/aevion" },
+  { id: "zapier", name: "Zapier", category: "automation", status: "soon", modules: ["qsign", "qright", "qcoreai"], initials: "Zp", color: "#ff4a00", oneLinerKey: "zapier" },
+  { id: "make", name: "Make (ex Integromat)", category: "automation", status: "soon", modules: ["qsign", "qright"], initials: "Mk", color: "#6d28d9", oneLinerKey: "make" },
   { id: "n8n", name: "n8n", category: "automation", status: "beta", modules: ["qsign", "qright", "qcoreai"], initials: "n8", color: "#ea4b71", oneLinerKey: "n8n", },
 
   // Payments
@@ -51,7 +51,7 @@ const INTEGRATIONS: Integration[] = [
   { id: "kaspi", name: "Kaspi Pay", category: "payments", status: "beta", modules: ["qpaynet-embedded"], initials: "Ka", color: "#e10000", oneLinerKey: "kaspi", },
 
   // Developer
-  { id: "github", name: "GitHub", category: "developer", status: "live", modules: ["qright", "qsign"], initials: "Gh", color: "#181717", oneLinerKey: "github", setupUrl: "https://github.com/marketplace/aevion" },
+  { id: "github", name: "GitHub", category: "developer", status: "soon", modules: ["qright", "qsign"], initials: "Gh", color: "#181717", oneLinerKey: "github", },
   { id: "gitlab", name: "GitLab", category: "developer", status: "beta", modules: ["qright", "qsign"], initials: "Gl", color: "#fc6d26", oneLinerKey: "gitlab", },
   { id: "vscode", name: "VS Code", category: "developer", status: "soon", modules: ["qsign", "qcoreai"], initials: "Vs", color: "#007acc", oneLinerKey: "vscode", },
 ];

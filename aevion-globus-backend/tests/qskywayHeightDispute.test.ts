@@ -24,7 +24,7 @@ app.use("/api/qskyway", qskywayRouter);
 
 /**
  * Узкий коридор шириной в одну ячейку: обойти башню физически негде, поэтому
- * маршрут обязан её перелететь. Индекс здания — 195, тот же, что у разобранной
+ * маршрут обязан её перелететь. Индекс здания — 194, тот же, что у разобранной
  * Абу-Даби Плаза, чтобы подтянулся настоящий разбор (382 м тег / 310.8 м статья).
  */
 function twinWithTowerOnTheOnlyPath(): CityData {
@@ -33,8 +33,8 @@ function twinWithTowerOnTheOnlyPath(): CityData {
   const src = new Array(cols * rows).fill(0);
   heights[6] = 382; // башня ровно посреди единственного пути
   const buildings: CityData["buildings"] = [];
-  for (let i = 0; i < 196; i++) buildings.push({ h: 10, hs: 0, r: [[0, 0], [1, 0], [1, 1], [0, 1]] });
-  buildings[195] = {
+  for (let i = 0; i < 195; i++) buildings.push({ h: 10, hs: 0, r: [[0, 0], [1, 0], [1, 1], [0, 1]] });
+  buildings[194] = {
     h: 382, hs: 1,
     // габарит здания — ровно ячейка с индексом 6 (x 120..140 при cell=20)
     r: [[121, 1], [139, 1], [139, 19], [121, 19]],
@@ -47,9 +47,9 @@ function twinWithTowerOnTheOnlyPath(): CityData {
     buildings,
     vertiports: [{ c: 0, r: 0, x: 10, y: 10 }, { c: 11, r: 0, x: 230, y: 10 }],
     dataQuality: {
-      total: 196, measured: 195, derived: 1, guessed: 0, measuredPct: 99, realPct: 100,
+      total: 195, measured: 194, derived: 1, guessed: 0, measuredPct: 99, realPct: 100,
       source: "test", note: "test",
-      suspect: [{ i: 195, h: 382, times: 4.66, why: "towers over the city" }],
+      suspect: [{ i: 194, h: 382, times: 4.66, why: "towers over the city" }],
     },
   };
 }
@@ -63,7 +63,7 @@ describe("расхождение по высоте — коридор подня
     const d = __engineForTests.heightDisputeFor("astana", twin, route!);
     expect(d).not.toBeNull();
     expect(d!.affected).toBe(true);
-    expect(d!.building).toBe(195);
+    expect(d!.building).toBe(194);
     expect(d!.segments).toBeGreaterThan(0);
 
     // Число из тега и число из статьи — оба из разбора, а не выдуманы здесь.
@@ -85,18 +85,18 @@ describe("расхождение по высоте — коридор подня
     // в alsoDisputed, а не в его счётчик: «участков 5» рядом с числами одного
     // здания было бы неправдой, и в подписанном документе её не отличить от правды.
     const twin = twinWithTowerOnTheOnlyPath();
-    twin.grid.heights[5] = 382;               // башня 195 занимает две ячейки → 3 участка
-    twin.buildings[195] = { ...twin.buildings[195], r: [[101, 1], [139, 1], [139, 19], [101, 19]] };
+    twin.grid.heights[5] = 382;               // башня 194 занимает две ячейки → 3 участка
+    twin.buildings[194] = { ...twin.buildings[194], r: [[101, 1], [139, 1], [139, 19], [101, 19]] };
     twin.grid.heights[9] = 200;               // вторая спорная высота → 2 участка
     twin.buildings[100] = { h: 200, hs: 1, r: [[181, 1], [199, 1], [199, 19], [181, 19]] };
     twin.dataQuality.suspect = [
-      { i: 195, h: 382, times: 4.66, why: "towers over the city" },
+      { i: 194, h: 382, times: 4.66, why: "towers over the city" },
       { i: 100, h: 200, times: 2.4, why: "towers over the city" },
     ];
 
     const route = __engineForTests.buildRoute("astana", twin, 0, 1, false);
     const d = __engineForTests.heightDisputeFor("astana", twin, route!)!;
-    expect(d.building).toBe(195);
+    expect(d.building).toBe(194);
     expect(d.segments).toBe(3);
     expect(d.alsoDisputed).toEqual([100]);
     // числа в карточке — по ведущему зданию, а не по сумме
@@ -115,7 +115,7 @@ describe("расхождение по высоте — коридор подня
   test("ячейки спорного здания находятся по габариту и его же высоте", () => {
     const cells = __engineForTests.suspectCellsOf(twinWithTowerOnTheOnlyPath());
     expect([...cells.keys()]).toEqual([6]);
-    expect(cells.get(6)).toBe(195);
+    expect(cells.get(6)).toBe(194);
   });
 });
 
@@ -155,7 +155,7 @@ describe("живая Астана — предупреждение только 
     expect(r.status).toBe(200);
     expect(r.body.available).toBe(true);
     // разобранная башня видна в ответе вместе с обоими числами
-    const abu = r.body.disputed.find((d: { building: number }) => d.building === 195);
+    const abu = r.body.disputed.find((d: { building: number }) => d.building === 194);
     expect(abu).toBeTruthy();
     expect(abu.taggedM).toBe(382);
     expect(abu.publishedM).toBe(310.8);

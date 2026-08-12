@@ -37,6 +37,15 @@
 
 import fs from "node:fs";
 
+// Сколько известных высот того же типа нужно, чтобы квантиль считался ответом
+// города, а не совпадением двух домов.
+const TYPE_MEDIAN_MIN_SAMPLES = 3;
+// Берём 75-й процентиль распределения этого типа, не медиану: см. замер в блоке
+// подстановки перед rasterize.
+const TYPE_QUANTILE = 0.75;
+// Типы, которые о высоте не сообщают ничего.
+const UNINFORMATIVE_TYPES = new Set(["yes", "building", "construction", "roof"]);
+
 const OVERPASS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
@@ -246,6 +255,11 @@ const buildings = [];
 // Parallel array, diagnostics only — never emitted, so the twin keeps exactly
 // the shape src/routes/qskyway.ts already consumes.
 const meta = [];
+// Тип здания из OSM. Тоже параллельным массивом и тоже не отгружается: он нужен
+// ровно для одного — подставить слепой высоте медиану её собственного типа
+// (см. блок перед rasterize). В самом твине типу делать нечего, там его никто
+// не читает, а лишнее поле в 500-килобайтном файле надо было бы поддерживать.
+const buildingTypes = [];
 const contradicted = [];
 for (const el of elements) {
   const { h, hs, stated, contradicted: was } = heightOf(el.tags);
@@ -254,6 +268,7 @@ for (const el of elements) {
       contradicted.push({ i: buildings.length, h, was, levels: Number(el.tags["building:levels"]) });
     }
     buildings.push({ h, hs, r, stated });
+    buildingTypes.push(String(el.tags?.building || "yes"));
     meta.push({ id: `${el.type}/${el.id}`, name: el.tags?.name ?? el.tags?.["name:en"] ?? null });
   }
 }
@@ -413,6 +428,85 @@ if (city.measured) {
     "вложенности; либо тег height из OSM без подтверждения обмером; либо " +
     "levels×3.2+1.6м парапет) 2=угадано(дефолт 12м). " +
     "Просвет SRC_CLEARANCE растёт по мере падения уверенности.";
+}
+
+/**
+ * Слепой дефолт 12 м заменяется медианой по ТИПУ здания из домов ТОГО ЖЕ города.
+ *
+ * Зачем. 12 метров — не «нет данных», а число, одинаковое для сарая и для жилой
+ * башни. Замер 12.08.2026 по Астане: 22 дома с тегом `building=apartments`
+ * летались как 12-метровые, при том что медиана таких домов в самом городе
+ * 33.6 м, а 30 из 80 известных зданий этого типа выше 43 м — коридора, который
+ * над слепым домом и строится (12 + 15 просвет + 16 страховки за `guessed`).
+ * То есть у каждого третьего такого дома коридор прошёл бы ниже крыши.
+ *
+ * Почему это не «выдумать другое число». Медиана считается ТОЛЬКО по зданиям
+ * того же типа в этом же городе, у которых высота известна, и только при трёх и
+ * более свидетельствах. Город отвечает про себя сам; чужие нормативы и
+ * справочники сюда не попадают.
+ *
+ * Что НЕ меняется: класс остаётся hs=2 (`guessed`) и получает те же 16 м
+ * страховочного просвета. Медиана по типу — догадка получше, но догадка.
+ *
+ * Идёт ПОСЛЕ сверки с обмером (PLATEAU/NYC): там часть зданий переходит в hs=0,
+ * и подставлять надо в окончательный набор угаданных, а не в промежуточный.
+ */
+const knownByType = new Map();
+buildings.forEach((b, i) => {
+  if (b.hs === 2) return;
+  const t = buildingTypes[i] ?? "yes";
+  if (!knownByType.has(t)) knownByType.set(t, []);
+  knownByType.get(t).push(b.h);
+});
+/** Квантиль по возрастанию, линейная интерполяция между соседями. */
+const quantile = (xs, p) => {
+  const s = [...xs].sort((x, y) => x - y);
+  const i = (s.length - 1) * p;
+  const lo = Math.floor(i), hi = Math.ceil(i);
+  return lo === hi ? s[lo] : s[lo] + (s[hi] - s[lo]) * (i - lo);
+};
+// `--no-type-median` оставляет слепой дефолт как был. Нужен не «на всякий
+// случай»: без него нельзя отделить эффект этой подстановки от дрейфа самого
+// OSM, а `--compare` показывает их одной цифрой «ячеек различается».
+const noTypeMedian = process.argv.includes("--no-type-median");
+let typedGuesses = 0, typedRaised = 0, typedLowered = 0, typedMaxDelta = 0;
+for (let i = 0; !noTypeMedian && i < buildings.length; i++) {
+  const b = buildings[i];
+  if (b.hs !== 2) continue;
+  const type = buildingTypes[i] ?? "yes";
+  // `building=yes` — это «здание», и всё. Бакет нетипизированных домов ничего
+  // не говорит о высоте: в Астане его медиана 11 м при 75-м процентиле 27 —
+  // распределение смешанное, и подстановка сюда подняла бы 172 дома на пятнадцать
+  // метров без основания. Предпосылка правила — «тип что-то сообщает»; здесь он
+  // не сообщает ничего, значит остаётся слепой дефолт.
+  if (UNINFORMATIVE_TYPES.has(type)) continue;
+  const xs = knownByType.get(type);
+  if (!xs || xs.length < TYPE_MEDIAN_MIN_SAMPLES) continue;
+  // 75-й процентиль, а не медиана. Замер по Астане: при медиане (34 м у
+  // `apartments`) ВЫШЕ получившегося коридора остаются 16 из 80 известных домов
+  // этого типа — то есть половина исходной опасности сохраняется. При p75 (59 м)
+  // не остаётся ни одного. Занижение здесь дороже завышения: завышение стоит
+  // крюка, занижение — пролёта ниже крыши.
+  //
+  // И никогда НЕ опускаем ниже прежнего слепого дефолта: у угаданного здания
+  // уменьшать запас не за что.
+  const h = Math.max(DEFAULT_HEIGHT_M, Math.round(quantile(xs, TYPE_QUANTILE)));
+  if (h === b.h) continue;
+  if (h > b.h) typedRaised++; else typedLowered++;
+  typedMaxDelta = Math.max(typedMaxDelta, Math.abs(h - b.h));
+  b.h = h;
+  typedGuesses++;
+}
+if (typedGuesses) {
+  process.stderr.write(
+    `  высота по 75-му процентилю своего типа: ${typedGuesses} зданий `
+    + `(поднято ${typedRaised}, опущено ${typedLowered}, макс. сдвиг ${typedMaxDelta} м); `
+    + `класс остался guessed\n`,
+  );
+  provenanceNote = provenanceNote.replace(
+    "2=угадано(дефолт 12м)",
+    `2=угадано(75-й процентиль высот этого же типа зданий в этом же городе, при ${TYPE_MEDIAN_MIN_SAMPLES}+ известных высотах и только для типов, которые о высоте что-то говорят; иначе дефолт ${DEFAULT_HEIGHT_M}м)`,
+  );
 }
 
 const { heights, src } = rasterize(buildings, COLS, ROWS);

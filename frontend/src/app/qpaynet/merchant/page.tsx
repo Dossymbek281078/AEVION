@@ -21,6 +21,20 @@ function fmtDate(iso: string, lang: string) {
   return new Date(iso).toLocaleDateString(localeTag, { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/**
+ * What to show when a revoke comes back not-ok. The server's own message is
+ * preferred over a status code; the dictionary lives in a file several
+ * sessions edit, so nothing new is added to it here.
+ */
+async function failureText(r: Response): Promise<string> {
+  try {
+    const body = await r.json();
+    const msg = typeof body?.error === "string" ? body.error : typeof body?.message === "string" ? body.message : "";
+    if (msg) return `${msg} (HTTP ${r.status})`;
+  } catch { /* not JSON — the status is all we have */ }
+  return `HTTP ${r.status}`;
+}
+
 export default function MerchantPage() {
   const { t, lang } = useI18n();
   const [keys, setKeys] = useState<MerchantKey[]>([]);
@@ -32,6 +46,7 @@ export default function MerchantPage() {
   const [creating, setCreating] = useState(false);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("aevion_token") ?? "";
@@ -63,7 +78,19 @@ export default function MerchantPage() {
 
   async function revokeKey(id: string) {
     if (!confirm(t("qpaynet.merchant.confirmRevoke"))) return;
-    await fetch(`/api/qpaynet/merchant/keys/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    setRevokeError(null);
+    // apiUrl(), not a bare path: "/api/qpaynet/..." is answered by Next, which
+    // has no such route — prod returns 404 there and 401 through the proxy.
+    const r = await fetch(apiUrl(`/api/qpaynet/merchant/keys/${id}`), {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) {
+      // The list used to be marked revoked no matter what came back, so a
+      // failed revoke looked exactly like a successful one — on an API key.
+      setRevokeError(await failureText(r));
+      return;
+    }
     setKeys(prev => prev.map(k => k.id === id ? { ...k, revoked_at: new Date().toISOString() } : k));
   }
 
@@ -163,6 +190,11 @@ X-Api-Key: qpn_live_...
           <h2 className="font-bold mb-3">{t("qpaynet.merchant.keysTitle", { count: keys.length })}</h2>
           {loading && <div className="text-slate-500 text-sm py-4">{t("qpaynet.merchant.loading")}</div>}
           {!loading && keys.length === 0 && <div className="text-slate-600 text-sm py-4">{t("qpaynet.merchant.noKeys")}</div>}
+          {revokeError && (
+            <div role="alert" className="text-sm text-rose-300 bg-rose-950/40 border border-rose-900 rounded-xl px-3 py-2 mb-2">
+              {revokeError}
+            </div>
+          )}
           <div className="space-y-2">
             {keys.map(k => (
               <div key={k.id} className={`flex items-center justify-between p-3 rounded-xl border ${k.revoked_at ? "border-slate-800 opacity-50" : "border-slate-700 bg-slate-900"}`}>
@@ -202,6 +234,7 @@ function WebhookSubs({ token }: { token: string }) {
   const [newUrl, setNewUrl] = useState("");
   const [creating, setCreating] = useState(false);
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+  const [subsError, setSubsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
@@ -222,22 +255,31 @@ function WebhookSubs({ token }: { token: string }) {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ url: newUrl.trim() }),
       });
-      const d = await r.json();
-      if (r.ok) {
-        setSubs(prev => [{ id: d.id, url: d.url, events: d.events, revoked_at: null, created_at: new Date().toISOString() }, ...prev]);
-        setCreatedSecret(d.secret);
-        setNewUrl("");
+      const d = await r.json().catch(() => null);
+      if (!r.ok) {
+        setSubsError(typeof d?.error === "string" ? `${d.error} (HTTP ${r.status})` : `HTTP ${r.status}`);
+        return;
       }
+      setSubs(prev => [{ id: d.id, url: d.url, events: d.events, revoked_at: null, created_at: new Date().toISOString() }, ...prev]);
+      setCreatedSecret(d.secret);
+      setNewUrl("");
     } finally { setCreating(false); }
   }
 
   async function revoke(id: string) {
     if (!confirm(t("qpaynet.merchant.subs.confirmRevoke"))) return;
-    const r = await fetch(`/api/qpaynet/webhook-subs/${id}`, {
+    setSubsError(null);
+    // Bare "/api/..." never reached the backend — see the note on revokeKey.
+    const r = await fetch(apiUrl(`/api/qpaynet/webhook-subs/${id}`), {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (r.ok) setSubs(prev => prev.map(s => s.id === id ? { ...s, revoked_at: new Date().toISOString() } : s));
+    if (!r.ok) {
+      // Previously the button simply did nothing on failure, with no message.
+      setSubsError(await failureText(r));
+      return;
+    }
+    setSubs(prev => prev.map(s => s.id === id ? { ...s, revoked_at: new Date().toISOString() } : s));
   }
 
   return (
@@ -264,6 +306,12 @@ function WebhookSubs({ token }: { token: string }) {
           {creating ? "..." : t("qpaynet.merchant.subs.add")}
         </button>
       </div>
+
+      {subsError && (
+        <div role="alert" className="text-xs text-rose-300 bg-rose-950/40 border border-rose-900 rounded-lg px-3 py-2 mb-3">
+          {subsError}
+        </div>
+      )}
 
       {loading && <div className="text-slate-500 text-xs">{t("qpaynet.merchant.subs.loading")}</div>}
       {!loading && subs.length === 0 && <div className="text-slate-600 text-xs">{t("qpaynet.merchant.subs.empty")}</div>}

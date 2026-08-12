@@ -14,6 +14,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { summariseMyWallet, type WalletFacts } from "./walletSummary";
 
 const SPEEDS = [
   { id: "bullet", label: "Пуля" },
@@ -70,6 +71,11 @@ export default function CyberChessLeaderboardPage() {
   const [walletRows, setWalletRows] = useState<WalletRow[]>([]);
   const [walletLoading, setWalletLoading] = useState(true);
   const [walletError, setWalletError] = useState<string | null>(null);
+  // Собственный баланс. В таблице первые сто — без этого игрок за её пределами
+  // не получает о себе никакого ответа и читает пустое место как поломку.
+  const [myWallet, setMyWallet] = useState<WalletFacts | null>(null);
+  const [myWalletLoading, setMyWalletLoading] = useState(true);
+  const [myWalletFailed, setMyWalletFailed] = useState(false);
 
   useEffect(() => {
     try {
@@ -124,6 +130,42 @@ export default function CyberChessLeaderboardPage() {
   useEffect(() => {
     if (view === "chessy" && walletRows.length === 0 && walletLoading) loadWallet();
   }, [view, walletRows.length, walletLoading, loadWallet]);
+
+  const loadMyWallet = useCallback(async (userId: string) => {
+    setMyWalletLoading(true);
+    setMyWalletFailed(false);
+    try {
+      const r = await fetch(
+        `/api-backend/api/cyberchess/matchmaking/wallet?userId=${encodeURIComponent(userId)}`,
+        { cache: "no-store" },
+      );
+      const data = await r.json();
+      if (!data?.ok) throw new Error("bad response");
+      setMyWallet({ balance: Number(data.balance), earnedTotal: Number(data.earnedTotal) });
+    } catch {
+      // Ноль здесь не ставим: это утверждение «вы ничего не заработали», а мы
+      // всего лишь не получили ответа. Разницу разбирает summariseMyWallet.
+      setMyWallet(null);
+      setMyWalletFailed(true);
+    } finally {
+      setMyWalletLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === "chessy" && myUserId && myWalletLoading) loadMyWallet(myUserId);
+  }, [view, myUserId, myWalletLoading, loadMyWallet]);
+
+  const myWalletView = summariseMyWallet({
+    userId: myUserId,
+    loading: myWalletLoading,
+    failed: myWalletFailed,
+    wallet: myWallet,
+    rows: walletRows,
+    // Таблица считается доступной, только когда она реально пришла: иначе
+    // «вас в ней пока нет» — заявление о списке, которого не загрузили.
+    rowsAvailable: !walletLoading && !walletError,
+  });
 
   return (
     <div className="planet-root">
@@ -232,6 +274,61 @@ export default function CyberChessLeaderboardPage() {
             <div className="planet-muted" style={{ borderBottom: "1px solid var(--pl-line)", padding: "12px 16px", fontSize: 12 }}>
               Только с реальных онлайн-матчей (не с пазлов/уроков/косметики) — серверный кошелёк, честный по конструкции.
             </div>
+
+            {/* Собственный баланс. В таблице первые сто, поэтому без этой строки
+                игрок за её пределами не узнаёт о себе ничего. */}
+            {myWalletView.kind !== "hidden" && (
+              <div
+                data-testid="my-wallet"
+                style={{ borderBottom: "1px solid var(--pl-line)", padding: "12px 16px", fontSize: 13.5 }}
+              >
+                {myWalletView.kind === "loading" && (
+                  <span className="planet-muted">Ваш баланс: загрузка…</span>
+                )}
+
+                {myWalletView.kind === "unavailable" && (
+                  <span className="planet-muted">
+                    Ваш баланс сейчас не удалось запросить. Это не значит, что он нулевой, — попробуйте позже.
+                  </span>
+                )}
+
+                {myWalletView.kind === "empty" && (
+                  <>
+                    <div>У вас пока нет Chessy, заработанных в реальных матчах.</div>
+                    <div className="planet-muted" style={{ marginTop: 4, fontSize: 12.5 }}>
+                      Chessy за пазлы, уроки и косметику — это другой счёт: он хранится только на этом
+                      устройстве и в таблицу не попадает.
+                    </div>
+                    <Link
+                      href="/cyberchess/matchmaking"
+                      style={{ marginTop: 6, display: "inline-block", color: "var(--pl-gold)" }}
+                    >
+                      Сыграть матч →
+                    </Link>
+                  </>
+                )}
+
+                {myWalletView.kind === "earned" && (
+                  <>
+                    <div>
+                      Ваш баланс:{" "}
+                      <span style={{ fontWeight: 700, fontFamily: "var(--pl-mono)", color: "var(--pl-gold)" }}>
+                        {myWalletView.balance}
+                      </span>{" "}
+                      Chessy · заработано всего{" "}
+                      <span style={{ fontFamily: "var(--pl-mono)" }}>{myWalletView.earnedTotal}</span>
+                    </div>
+                    {myWalletView.rankKnown && (
+                      <div className="planet-muted" style={{ marginTop: 4, fontSize: 12.5 }}>
+                        {myWalletView.rank !== null
+                          ? `Вы в таблице — место №${myWalletView.rank}.`
+                          : "В таблице показаны первые сто — вас в ней пока нет."}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
             {walletLoading ? (
               <div className="planet-empty">Загрузка…</div>
             ) : walletError ? (

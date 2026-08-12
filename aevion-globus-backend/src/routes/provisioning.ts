@@ -9,6 +9,7 @@
  * GTM-уровень: запись подписки + welcome-email.
  */
 
+import { Router } from "express";
 import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { join, dirname } from "path";
 import type { TierId, BillingPeriod } from "../data/pricing";
@@ -342,3 +343,172 @@ export async function provisionSubscription(input: {
     emailDegraded: result.degraded,
   };
 }
+
+/* ── Ручки провижининга ────────────────────────────────────────────────────
+ *
+ * Возвращены 12.08.2026. Они были сделаны 14.05 вместе со страницей
+ * `/pricing/provisioning`, а 15.05 коммит `e0f5a2327` — тот самый, чьей целью
+ * было ВЕРНУТЬ два роутера, потерянных при squash-мерже, — заодно снял импорт
+ * и монтирование этого:
+ *     -import { provisioningRouter } from "./routes/provisioning";
+ *     -app.use("/api/pricing/provisioning", provisioningRouter);
+ *
+ * Три месяца страница открывалась на проде (200) и молча ничего не показывала:
+ * обе ручки, которые она зовёт, отдавали 404. Ошибки на экране нет, поэтому
+ * никто и не заметил. Описание в openapi при этом продолжало их рекламировать.
+ *
+ * Что изменено против оригинала — намеренно, а не по невнимательности:
+ *   - путь к хранилищу берётся из `subsFile()`, а не из константы `SUBS_FILE`:
+ *     файл стал функцией, чтобы тесты могли подменить его через env;
+ *   - `byTier` перечисляет ВСЕ семь текущих тарифов. В оригинале их было
+ *     четыре (free/pro/business/enterprise) — с тех пор появились lite, medium
+ *     и full. Дословный перенос дал бы сводку, молча теряющую три тарифа;
+ *     `Record<TierId, number>` этого бы не простил, и tsc поймал бы, но
+ *     проговариваю, потому что молчаливая потеря строки в отчёте о деньгах —
+ *     ровно тот класс дефектов, ради которого страница и нужна.
+ */
+
+/** Все подписки с диска (JSONL → массив), новые первыми. Мусорные строки молча
+ *  пропускаются: одна битая запись не должна прятать остальные. */
+export function readSubscriptions(filter?: { email?: string; tierId?: TierId }): Subscription[] {
+  const file = subsFile();
+  if (!existsSync(file)) return [];
+  let content: string;
+  try {
+    content = readFileSync(file, "utf8");
+  } catch {
+    return [];
+  }
+  const out: Subscription[] = [];
+  const wantEmail = filter?.email?.toLowerCase().trim();
+  const wantTier = filter?.tierId;
+  for (const raw of content.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    try {
+      const sub = JSON.parse(line) as Subscription;
+      if (wantEmail && sub.email?.toLowerCase() !== wantEmail) continue;
+      if (wantTier && sub.tierId !== wantTier) continue;
+      out.push(sub);
+    } catch {
+      // битая строка — пропускаем
+    }
+  }
+  out.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+  return out;
+}
+
+/** Сводка для страницы и для наблюдения: сколько всего, по тарифам, за 7 дней. */
+export function aggregateSubscriptions(): {
+  total: number;
+  byTier: Record<TierId, number>;
+  last7d: number;
+  trialsActive: number;
+  recent: Array<{ id: string; ts: string; tierId: TierId; period: BillingPeriod; trial: boolean }>;
+} {
+  const all = readSubscriptions();
+  // Все семь тарифов перечислены явно: пропущенный ключ дал бы NaN в сводке.
+  const byTier: Record<TierId, number> = {
+    free: 0, lite: 0, medium: 0, full: 0, enterprise: 0, pro: 0, business: 0,
+  };
+  const cutoff7 = Date.now() - 7 * 86400000;
+  const now = Date.now();
+  let last7d = 0;
+  let trialsActive = 0;
+  for (const s of all) {
+    byTier[s.tierId] = (byTier[s.tierId] ?? 0) + 1;
+    const t = Date.parse(s.ts);
+    if (!Number.isNaN(t) && t >= cutoff7) last7d++;
+    if (s.trialDays > 0 && s.validUntil) {
+      const v = Date.parse(s.validUntil);
+      if (!Number.isNaN(v) && v >= now) trialsActive++;
+    }
+  }
+  const recent = all.slice(0, 10).map((s) => ({
+    id: s.id,
+    ts: s.ts,
+    tierId: s.tierId,
+    period: s.period,
+    trial: s.trialDays > 0,
+  }));
+  return { total: all.length, byTier, last7d, trialsActive, recent };
+}
+
+/** `joh***@example.com` — email наружу не отдаём целиком даже в своём кабинете. */
+function maskEmail(email: string): string {
+  const [user, domain] = email.split("@");
+  if (!user || !domain) return "***";
+  if (user.length <= 3) return `${user[0] ?? "*"}***@${domain}`;
+  return `${user.slice(0, 3)}***@${domain}`;
+}
+
+export const provisioningRouter = Router();
+
+const HISTORY_LIMIT = 100;
+
+provisioningRouter.get("/healthz", (_req, res) => {
+  const file = subsFile();
+  res.json({
+    ok: true,
+    storage: file,
+    storageExists: existsSync(file),
+    emailMode: RESEND_KEY ? "real" : "stub",
+  });
+});
+
+provisioningRouter.get("/stats", (_req, res) => {
+  try {
+    res.json(aggregateSubscriptions());
+  } catch (e) {
+    console.error("[provisioning/stats] failed", e);
+    res.status(500).json({ error: "stats_failed" });
+  }
+});
+
+provisioningRouter.get("/history", (req, res) => {
+  try {
+    const email = (req.query.email as string | undefined)?.trim();
+    if (!email) return res.status(400).json({ error: "missing_email", hint: "use ?email=..." });
+    if (!email.includes("@") || email.length < 5) {
+      return res.status(400).json({ error: "invalid_email" });
+    }
+    const items = readSubscriptions({ email }).slice(0, HISTORY_LIMIT);
+    const now = Date.now();
+    const enriched = items.map((s) => {
+      const validTs = s.validUntil ? Date.parse(s.validUntil) : null;
+      const daysLeft =
+        validTs && !Number.isNaN(validTs) ? Math.max(0, Math.ceil((validTs - now) / 86400000)) : null;
+      const active = validTs ? validTs >= now : true;
+      const status = !active
+        ? "expired"
+        : s.trialDays > 0 && validTs && validTs >= now
+          ? "trial"
+          : "active";
+      return {
+        id: s.id,
+        ts: s.ts,
+        tierId: s.tierId,
+        period: s.period,
+        seats: s.seats,
+        modules: s.modules,
+        trialDays: s.trialDays,
+        validUntil: s.validUntil ?? null,
+        amountUsd: s.amountUsd ?? null,
+        promoCode: s.promoCode ?? null,
+        source: s.source ?? null,
+        daysLeft,
+        status,
+        emailMasked: maskEmail(s.email),
+      };
+    });
+    res.json({
+      email: maskEmail(email),
+      count: enriched.length,
+      truncated: items.length >= HISTORY_LIMIT,
+      items: enriched,
+    });
+  } catch (e) {
+    console.error("[provisioning/history] failed", e);
+    res.status(500).json({ error: "history_failed" });
+  }
+});

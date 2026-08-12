@@ -35,6 +35,7 @@ import { checkoutRouter } from "./routes/checkout";
 import { lemonSqueezyWebhookRouter } from "./routes/lemonSqueezyWebhook";
 import { appAccessRouter } from "./routes/appAccess";
 import { gumroadWebhookRouter } from "./routes/gumroadWebhook";
+import { provisioningRouter } from "./routes/provisioning";
 import { payboxWebhookRouter } from "./routes/payboxWebhook";
 import { paypalWebhookRouter } from "./routes/paypalWebhook";
 import { healthaiRouter } from "./routes/healthai";
@@ -1089,6 +1090,9 @@ app.use("/api/qchaingov", qchaingovRouter);
 app.use("/api/pricing/events", eventsRouter);
 app.use("/api/lemonsqueezy", lemonSqueezyWebhookRouter);
 app.use("/api/apps/access", appAccessRouter);
+// Вернулось 12.08.2026: снято 15.05 коммитом e0f5a2327 вместе с чужой починкой,
+// из-за чего страница /pricing/provisioning три месяца показывала пустоту.
+app.use("/api/pricing/provisioning", provisioningRouter);
 app.use("/api/gumroad", gumroadWebhookRouter);
 app.use("/api/paybox", payboxWebhookRouter);
 app.use("/api/paypal", paypalWebhookRouter);

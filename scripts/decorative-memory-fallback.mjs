@@ -38,8 +38,41 @@ if (!fs.existsSync(dir)) {
   process.exit(0);
 }
 
+/**
+ * "Anything but a closing brace" keeps the match inside the catch block, which
+ * is what makes the output worth reading — widening it to any character took
+ * the list from 5 hits to 32, most of them a `catch {}` followed much later by
+ * an unrelated write.
+ *
+ * But the strict form silently missed `memUsage`, the very case this pattern
+ * was first found in: its catch body builds a key from a template literal, and
+ * `${userId}:${month}` closes a brace before the `.set(` is reached. So the
+ * interpolations are removed first (see `stripComments`), and the window stays
+ * strict.
+ */
 const CATCH_WRITE = /catch[^{]*\{[^}]{0,400}?\b(mem[A-Za-z0-9_]*)\s*\.set\(/gs;
 const READ_SUFFIXES = [".get(", ".values(", ".has(", ".find("];
+
+/**
+ * Comments describe the pattern more often than the code uses it — the first
+ * run of this script reported `memFiles`, and the only hit was a JSDoc block
+ * explaining that the pattern had been REMOVED. A grep that finds a thing
+ * inside a comment saying the thing is not there is a lie in the confident
+ * direction, so strip comments before matching.
+ *
+ * Line comments are dropped only when the line begins with `//` or `*`, which
+ * leaves a trailing `https://…` inside a string alone.
+ */
+function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*(\/\/|\*)/.test(line))
+    .join("\n")
+    // `${...}` carries braces that would end the search window early; the
+    // contents never matter to this scan, so collapse them to a placeholder.
+    .replace(/\$\{[^{}]*\}/g, "$_");
+}
 
 /** Counts occurrences without building a regex out of an identifier. */
 function countReads(source, name) {
@@ -58,7 +91,7 @@ function countReads(source, name) {
 
 const rows = [];
 for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".ts"))) {
-  const source = fs.readFileSync(path.join(dir, file), "utf8");
+  const source = stripComments(fs.readFileSync(path.join(dir, file), "utf8"));
   const names = new Set();
   let m;
   CATCH_WRITE.lastIndex = 0;

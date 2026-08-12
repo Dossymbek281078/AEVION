@@ -72,3 +72,12 @@ page_v*_backup.*
 # — must NOT sit in the watched project tree or Turbopack HMR-reloads mid-test
 .playwright-mcp/
 **/.playwright-mcp/
+
+# Локальные хранилища бэкенда, когда тесты или скрипты запущены ИЗ КОРНЯ репо.
+# jsonFileStore и провижининг кладут файлы рядом с process.cwd(), и у бэкенда
+# на этот случай своё правило есть — а из корня оно не действует, и каждый
+# такой прогон оставлял три неотслеживаемых каталога в git status. Мусор в
+# статусе опасен тем, что в нём теряются настоящие изменения.
+.aevion-data/
+.aevion-data-test-*/
+/data/

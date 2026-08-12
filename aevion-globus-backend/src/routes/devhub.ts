@@ -2614,6 +2614,11 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
     // without sha for an existing file).
     const files = await dbListFiles(project.id);
     let pushedFiles = 0;
+    // Counting only the all-or-nothing case let nine files out of ten vanish
+    // into an `ok: true` pull request — the same defect /github/push already
+    // fixed. A PR is reviewed and merged on the belief it holds the change it
+    // claims, so every file that did not land is named.
+    const failedFiles: Array<{ path: string; reason: string }> = [];
     for (const file of files) {
       try {
         const encodedPath = file.path.split("/").map(encodeURIComponent).join("/");
@@ -2637,8 +2642,18 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
           }),
         });
         if (putResp.ok) pushedFiles += 1;
-      } catch {
-        // continue with other files
+        else {
+          const body = await putResp.text().catch(() => "");
+          let reason = `HTTP ${putResp.status}`;
+          try {
+            const parsed = JSON.parse(body);
+            if (parsed?.message) reason = `${reason}: ${parsed.message}`;
+          } catch { /* body was not JSON — the status alone is the reason */ }
+          failedFiles.push({ path: file.path, reason });
+        }
+      } catch (e) {
+        // Keep committing the rest, but never lose the fact that this one didn't.
+        failedFiles.push({ path: file.path, reason: e instanceof Error ? e.message : String(e) });
       }
     }
     if (files.length > 0 && pushedFiles === 0) {
@@ -2655,7 +2670,22 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
       return res.json({ ok: false, message: `GitHub PR create error: ${(await prResp.text()).slice(0, 300)}`, branch, pushedFiles });
     }
     const prData = await prResp.json() as { html_url: string; number: number };
-    return res.json({ ok: true, prUrl: prData.html_url, prNumber: prData.number, branch, pushedFiles });
+    return res.json({
+      ok: true,
+      prUrl: prData.html_url,
+      prNumber: prData.number,
+      branch,
+      pushedFiles,
+      ...(failedFiles.length > 0
+        ? {
+            failedFiles,
+            ...degraded(
+              `${pushedFiles} of ${files.length} files reached the pull request; ` +
+              `${failedFiles.length} did not: ${failedFiles.map((f) => f.path).join(", ")}`,
+            ),
+          }
+        : {}),
+    });
   } catch (e: any) {
     captureException(e, { route: "devhub/github:pull-request", projectId: project.id });
     return res.json({ ok: false, message: e?.message || "GitHub pull request creation failed" });

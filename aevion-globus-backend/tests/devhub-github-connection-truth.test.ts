@@ -236,3 +236,79 @@ describe("no route is declared twice — the second copy can never run", () => {
     expect(duplicates).toEqual([]);
   });
 });
+
+describe("POST /github/pull-request — a PR missing files is not a complete PR", () => {
+  // The /github/push route already reports `degraded` when files are lost
+  // (issue: "a GitHub push that lost files does not report a clean push").
+  // The pull-request route was written the same way but never got that fix:
+  // it counts failures only in the all-or-nothing case, so nine files out of
+  // ten could vanish and the PR still came back `ok: true`. A pull request is
+  // reviewed and merged on the assumption it holds the change it claims.
+  async function projectWithFiles(app: express.Express, paths: string[]) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "PR" });
+    const id = cr.body.project.id as string;
+    for (const p of paths) {
+      await request(app).put(`/api/devhub/projects/${id}/file?path=${p}`).send({ content: `// ${p}` });
+    }
+    await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: REPO_URL });
+    return id;
+  }
+
+  const REPO_URL = "https://github.com/o/r";
+
+  test("files that never reached the branch are named, not silently dropped", async () => {
+    process.env.GITHUB_TOKEN = "gh-fake";
+    const app = makeApp();
+    const id = await projectWithFiles(app, ["a.ts", "b.ts", "c.ts"]);
+
+    fetchMock.mockImplementation(async (url: string, init?: any) => {
+      const u = String(url);
+      if (u.endsWith("/repos/o/r")) return ghResp(200, { default_branch: "main" });
+      if (u.includes("/git/ref/heads/")) return ghResp(200, { object: { sha: "basesha" } });
+      if (u.includes("/git/refs")) return ghResp(201, { ref: "refs/heads/x" });
+      if (u.includes("/contents/") && (!init || init.method !== "PUT")) return ghResp(404, { message: "Not Found" });
+      if (u.includes("/contents/") && init?.method === "PUT") {
+        // Only a.ts lands; the other two are rejected by GitHub.
+        return u.includes("a.ts") ? ghResp(201, { content: {} }) : ghResp(422, { message: "too large" });
+      }
+      if (u.endsWith("/pulls")) return ghResp(201, { html_url: "https://github.com/o/r/pull/7", number: 7 });
+      return ghResp(200, {});
+    });
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/github/pull-request`)
+      .send({ title: "t", branch: "feat/x" });
+
+    expect(r.body.ok).toBe(true);
+    expect(r.body.prUrl).toBe("https://github.com/o/r/pull/7");
+    // The PR exists — but it does not hold what the project holds, and the
+    // answer has to say so rather than leaving it to be inferred from a count.
+    expect(r.body.degraded).toBe(true);
+    expect(r.body.degradedReason).toMatch(/1 of 3|2/);
+    expect(r.body.failedFiles?.map((f: any) => f.path).sort()).toEqual(["b.ts", "c.ts"]);
+  });
+
+  test("a PR with every file present is not marked degraded", async () => {
+    process.env.GITHUB_TOKEN = "gh-fake";
+    const app = makeApp();
+    const id = await projectWithFiles(app, ["a.ts", "b.ts"]);
+
+    fetchMock.mockImplementation(async (url: string, init?: any) => {
+      const u = String(url);
+      if (u.endsWith("/repos/o/r")) return ghResp(200, { default_branch: "main" });
+      if (u.includes("/git/ref/heads/")) return ghResp(200, { object: { sha: "basesha" } });
+      if (u.includes("/git/refs")) return ghResp(201, { ref: "refs/heads/x" });
+      if (u.includes("/contents/") && (!init || init.method !== "PUT")) return ghResp(404, { message: "Not Found" });
+      if (u.includes("/contents/") && init?.method === "PUT") return ghResp(201, { content: {} });
+      if (u.endsWith("/pulls")) return ghResp(201, { html_url: "https://github.com/o/r/pull/8", number: 8 });
+      return ghResp(200, {});
+    });
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/github/pull-request`)
+      .send({ title: "t", branch: "feat/y" });
+
+    expect(r.body.ok).toBe(true);
+    expect(r.body.degraded).toBeUndefined();
+  });
+});

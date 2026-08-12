@@ -205,6 +205,42 @@ describe("POST /route/justification — the filing", () => {
     expect(foreignKey.body.noteEn).toContain("does not belong to the platform key");
   });
 
+  /**
+   * Подставленная высота — не то же самое, что «не обмерено». В общей корзине
+   * «не обмерено» лежит и слепой дефолт 12 м, и правдоподобное число из
+   * статистики по типу застройки; второе поднимает коридор всерьёз (вокзал
+   * Нью-Йорка: 12 → 171 м, эшелон +87.5 м). Замер 12.08.2026: подстановка
+   * задевает 16 маршрутов из 42 в Нью-Йорке — умолчать о ней в бумаге для
+   * регулятора значит выдать статистику по кварталу за свойство здания.
+   */
+  test.each(["nyc", "astana"])("[%s] подставленные высоты названы в документе отдельно от «не обмерено»", async (city) => {
+    // Два города намеренно. Первая версия проверяла только Нью-Йорк, где
+    // подстановка ровно одна, и пропустила дефект счётчика: у Астаны 38
+    // подстановок с одинаковой высотой 59 м, и здание опознавалось по высоте —
+    // один задетый дом считался за тридцать. Живой ответ показывал «участков
+    // 15, зданий 30», то есть зданий больше, чем участков.
+    const found = [] as { from: number; to: number; s: { segments: number; buildings: number } }[];
+    for (let a = 0; a < 7 && found.length === 0; a++) {
+      for (let b = 0; b < 7 && found.length === 0; b++) {
+        if (a === b) continue;
+        const j = await request(app).post("/api/qskyway/route/justification").send({ from: a, to: b, city });
+        if (j.status !== 200) continue;
+        // Поле обязано присутствовать всегда — иначе «нет подстановок» не
+        // отличить от «поле забыли добавить в этот ответ».
+        expect(j.body.document).toHaveProperty("substitutedHeights");
+        const s = j.body.document.substitutedHeights;
+        if (s) found.push({ from: a, to: b, s });
+      }
+    }
+    expect(found.length).toBeGreaterThan(0);
+    const { s } = found[0];
+    expect(s.segments).toBeGreaterThan(0);
+    // Зданий, а не ячеек: вокзал занимает 40 ячеек, и «40 зданий» в подписанном
+    // документе было бы неправдой.
+    expect(s.buildings).toBeGreaterThan(0);
+    expect(s.buildings).toBeLessThanOrEqual(s.segments);
+  });
+
   test("for a prohibited city it never says the flight merely needs permission", async () => {
     // The worst defect this module has had: a signed document telling a
     // regulator that a banned flight could be authorized on request.

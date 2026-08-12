@@ -416,6 +416,81 @@ function buildRoute(
 // число из статьи объекта, которое человек уже проверил (qskywayHeightReview).
 // Это не решение за источник, а названная цена расхождения.
 
+/**
+ * Участки коридора, летящие над зданием, чья высота ПОДСТАВЛЕНА по типу
+ * застройки (`dataQuality.substituted`), а не измерена у этого дома.
+ *
+ * Зачем отдельно от `measuredObstacleSegments`: тот считает «обмерено или нет»,
+ * и подстановка попадает в общий мешок «не обмерено» вместе со слепым дефолтом
+ * 12 м. Но это разные утверждения. Слепой дефолт занижает и виден по абсурдности,
+ * а подстановка даёт правдоподобное число — в Нью-Йорке вокзал получил 171 м по
+ * семи известным высотам своего типа, и коридор над ним поднялся на 87.5 м.
+ * В бумаге, которую понесут регулятору, «мы взяли статистику по типу застройки»
+ * должно быть сказано словами, а не растворяться в проценте.
+ *
+ * Замер 12.08.2026: подстановка задевает 23 маршрута из 42 в Астане, 16 из 42
+ * в Нью-Йорке, 1 из 42 в Токио — то есть молчать об этом нельзя.
+ */
+function substitutedCellsOf(city: CityData): Map<number, number> {
+  // Карта «ячейка → индекс здания», а не множество ячеек. Первая версия
+  // возвращала множество, и здание потом опознавалось по совпадению высоты —
+  // у Астаны 38 подстановок дают одну и ту же высоту 59 м, поэтому один
+  // задетый дом считался за тридцать. В живом ответе это выглядело как
+  // «участков 15, зданий 30», то есть зданий больше, чем участков. Тест этого
+  // не поймал: он смотрел Нью-Йорк, где подстановка ровно одна.
+  const out = new Map<number, number>();
+  const g = city.grid;
+  for (const s of city.dataQuality?.substituted ?? []) {
+    const b = city.buildings[s.i];
+    if (!b) continue;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const [x, y] of b.r) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+    const c0 = Math.max(0, Math.floor(minX / g.cell)), c1 = Math.min(g.cols - 1, Math.floor(maxX / g.cell));
+    const r0 = Math.max(0, Math.floor(minY / g.cell)), r1 = Math.min(g.rows - 1, Math.floor(maxY / g.cell));
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        // Та же оговорка, что у `suspectCellsOf`: растеризатор мог задеть
+        // соседнюю ячейку, но приписывать ей чужое здание мы не имеем права.
+        if (g.heights[r * g.cols + c] === b.h) out.set(r * g.cols + c, s.i);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Сколько участков ЭТОГО коридора идут над подставленной высотой и скольким
+ * зданиям они принадлежат. `null`, если таких участков нет — поле в документе
+ * тогда не появляется вовсе, чтобы чистый случай оставался чистым.
+ */
+function substitutedOnRoute(city: CityData, route: RouteResult): { segments: number; buildings: number } | null {
+  const cells = substitutedCellsOf(city);
+  if (cells.size === 0) return null;
+  const g = city.grid;
+  const hitBuildings = new Set<number>();
+  let segments = 0;
+  for (const p of route.path) {
+    // Коридор поднимается по препятствиям ВОКРУГ трассы, а не только под ней,
+    // поэтому окрестность 3×3 — та же, по которой считается запас высоты.
+    let hit: number | undefined;
+    for (let dr = -1; dr <= 1 && hit === undefined; dr++) {
+      for (let dc = -1; dc <= 1 && hit === undefined; dc++) {
+        const rr = p.r + dr, cc = p.c + dc;
+        if (rr < 0 || cc < 0 || rr >= g.rows || cc >= g.cols) continue;
+        hit = cells.get(rr * g.cols + cc);
+      }
+    }
+    if (hit !== undefined) { segments++; hitBuildings.add(hit); }
+  }
+  if (segments === 0) return null;
+  // Зданий, а не ячеек: вокзал Нью-Йорка занимает 40 ячеек, и «40 зданий» в
+  // подписанном документе было бы неправдой.
+  return { segments, buildings: hitBuildings.size };
+}
+
 /** Ячейки сетки, высоту которым дало здание, которое твин сам считает спорным. */
 function suspectCellsOf(city: CityData): Map<number, number> {
   const out = new Map<number, number>(); // cellIndex → индекс здания
@@ -1256,6 +1331,11 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
     // должны стоять обе, иначе первая читается как «данные хорошие».
     obstacleSegments: route.obstacleSegments,
     measuredObstacleSegments: route.measuredObstacleSegments,
+    // «Не обмерено» — слишком широкая корзина: в ней и слепой дефолт 12 м, и
+    // правдоподобное число, взятое из статистики по типу застройки. Второе
+    // поднимает коридор всерьёз (Нью-Йорк, вокзал: +87.5 м), поэтому названо
+    // отдельно. `null` — таких участков у этого коридора нет.
+    substitutedHeights: substitutedOnRoute(resolved.city, route),
     // A permission regime belongs on the paperwork even though it never touched
     // the routing — "this corridor is legal geometry" and "this flight may take
     // place at all" are both things the filing has to answer.

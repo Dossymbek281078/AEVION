@@ -119,6 +119,18 @@ export interface Tournament {
   rounds: BracketRound[]; // all generated rounds so far
   // real-player extension (default false → legacy behaviour preserved)
   realPlayers?: boolean;
+  /**
+   * Кто завёл турнир: `seed` — фикстура из кода, `user` — кто угодно через
+   * POST /. Создание открыто и не требует входа (ограничено пятью в десять
+   * минут с адреса), а приз объявляется в теле запроса — до десяти миллионов
+   * Chessy. Платит призы только подписанный вебхук, то есть объявленное число
+   * ничем не обеспечено; на публичной странице такой турнир при этом несёт
+   * самую сильную подпись — «настоящие игроки».
+   *
+   * Отличать по префиксу `usr-` в идентификаторе нельзя: это совпадение имени,
+   * а не признак. Отсутствует у турниров, сохранённых до появления поля.
+   */
+  origin?: "seed" | "user";
 }
 
 // ── persistence layer ──────────────────────────────────────────────
@@ -222,6 +234,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: buildLegacyElimRounds(),
     realPlayers: false,
+    origin: "seed",
   };
 
   const elim2: Tournament = {
@@ -241,6 +254,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: buildLegacyElimRounds(),
     realPlayers: false,
+    origin: "seed",
   };
 
   // --- swiss #1 (8-player, 5 rounds) ---
@@ -273,6 +287,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: swissRoster1,
     rounds: [],
     realPlayers: false,
+    origin: "seed",
   };
   // generate first round so /next-round and /standings have data
   swiss1.rounds = [
@@ -318,6 +333,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: swissRoster2,
     rounds: [],
     realPlayers: false,
+    origin: "seed",
   };
 
   // --- round-robin #1 (8-player) ---
@@ -349,6 +365,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: rrRoster1,
     rounds: buildRoundRobinSchedule(rr1RosterToIds(rrRoster1), "classic-rr-may"),
     realPlayers: false,
+    origin: "seed",
   };
 
   // --- round-robin #2 (6-player rapid) ---
@@ -378,6 +395,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: rrRoster2,
     rounds: buildRoundRobinSchedule(rr1RosterToIds(rrRoster2), "rapid-rr-mini"),
     realPlayers: false,
+    origin: "seed",
   };
 
   // --- extras kept from legacy mock list (single elim) ---
@@ -397,6 +415,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: buildLegacyElimRounds(),
     realPlayers: false,
+    origin: "seed",
   };
   const elimLegacy4: Tournament = {
     id: "bullet-storm-7",
@@ -414,6 +433,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: [],
     realPlayers: false,
+    origin: "seed",
   };
   const elimLegacy5: Tournament = {
     id: "veterans-cup",
@@ -431,6 +451,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: [],
     realPlayers: false,
+    origin: "seed",
   };
   const elimLegacy6: Tournament = {
     id: "winter-arena-12",
@@ -448,6 +469,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: buildLegacyElimRounds(),
     realPlayers: false,
+    origin: "seed",
   };
   const elimLegacy7: Tournament = {
     id: "newbies-rapid",
@@ -465,6 +487,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: [],
     realPlayers: false,
+    origin: "seed",
   };
 
   // --- real-player demo tournament (small swiss, realPlayers=true) ---
@@ -1073,6 +1096,9 @@ router.get("/list", (req: Request, res: Response): void => {
     swissRounds: t.swissRounds,
     currentRound: t.currentRound,
     realPlayers: !!t.realPlayers,
+    // Происхождение едет в списке: страница рисует приз именно отсюда, и без
+    // этого поля не может сказать, объявил его создатель или это наша фикстура.
+    origin: t.origin ?? (t.id.startsWith("usr-") ? "user" : "seed"),
   }));
   res.json({ ok: true, count: slim.length, tournaments: slim });
 });
@@ -1576,6 +1602,7 @@ router.post("/", (req: Request, res: Response): void => {
     roster: [],
     rounds: [],
     realPlayers: true, // user-created events are joinable, not cosmetic seeds
+    origin: "user",
   };
 
   // Auto-register the creator as the first participant when identified.

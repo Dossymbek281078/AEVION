@@ -21,7 +21,19 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     globals: false,
-    testTimeout: 10_000,
+    // Было 10 с — и этого не хватало. Замер 12.08.2026 на полном прогоне
+    // (121 файл, 1523 теста): при 10 с падали ТРИ файла и 7–8 тестов, почти
+    // все с «Test timed out in 10000ms»; при 30 с остаётся ОДИН файл и 2 теста.
+    // То есть devhub-integrations — настоящий флак (ошибки утверждений, общая
+    // очередь моков), а qtradeInternalCredit и tier3OgRoutes были чистыми
+    // жертвами таймаута и с ним же лечатся.
+    //
+    // Признак, по которому это узнаётся: от прогона к прогону падает РАЗНЫЙ
+    // набор, а сообщение всегда одно про таймаут. Изолированно те же три файла
+    // дают 251/251. Списывать такое на «нагрузку» — способ годами держать
+    // красный набор и перестать на него смотреть.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     // `opentimestamps` (0.4.x, CJS, no clean exports map) intermittently trips
     // Vite's dep optimizer when several test files import it concurrently on a
     // cold cache — surfacing as "Failed to resolve entry for package

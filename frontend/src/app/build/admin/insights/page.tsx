@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { useToast } from "@/components/build/Toast";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 
 type Insights = Awaited<ReturnType<typeof buildApi.adminInsights>>;
 
@@ -31,7 +31,7 @@ function Body() {
         if (!cancelled) setData(r);
       })
       .catch((e) => {
-        if (!cancelled) toast.error((e as Error).message);
+        if (!cancelled) toast.error(buildErrorText(e));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

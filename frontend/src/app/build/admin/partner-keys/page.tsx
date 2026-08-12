@@ -73,7 +73,7 @@ function Body() {
       setLabel("");
       await load();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     } finally {
       setCreating(false);
     }
@@ -86,7 +86,7 @@ function Body() {
       toast.success("Key revoked");
       await load();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     }
   }
 
@@ -98,7 +98,7 @@ function Body() {
       toast.success("Key rotated — copy the new plaintext");
       await load();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     }
   }
 

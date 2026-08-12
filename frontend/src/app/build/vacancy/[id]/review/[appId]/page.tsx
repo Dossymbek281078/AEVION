@@ -7,7 +7,7 @@ import { BuildShell } from "@/components/build/BuildShell";
 import { useToast } from "@/components/build/Toast";
 import { ScheduleShiftModal } from "@/components/build/ScheduleShiftModal";
 import { SchedulePaymentModal } from "@/components/build/SchedulePaymentModal";
-import { buildApi, type BuildApplication, type ApplicationLabel } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildApplication, type ApplicationLabel } from "@/lib/build/api";
 
 const LABEL_OPTIONS: { key: ApplicationLabel; emoji: string; label: string }[] = [
   { key: "TOP_PICK", emoji: "⭐", label: "Top pick" },
@@ -47,7 +47,7 @@ export default function ApplicationReviewPage() {
         setApplications(appList.items);
         if (v) setVacancyTitle(v.title);
       } catch (e) {
-        if (!cancelled) toast.error((e as Error).message);
+        if (!cancelled) toast.error(buildErrorText(e));
       }
     })();
     return () => {
@@ -105,7 +105,7 @@ export default function ApplicationReviewPage() {
         setApplications((items) =>
           items?.map((a) => (a.id === current.id ? { ...a, labelKey: prevLabel } : a)) ?? items,
         );
-        toast.error((e as Error).message);
+        toast.error(buildErrorText(e));
       } finally {
         setBusy(false);
       }
@@ -128,7 +128,7 @@ export default function ApplicationReviewPage() {
         // auto-advance to next pending if any
         if (next) goTo(next.id);
       } catch (e) {
-        toast.error((e as Error).message);
+        toast.error(buildErrorText(e));
       } finally {
         setBusy(false);
       }
@@ -191,7 +191,7 @@ export default function ApplicationReviewPage() {
       setNotes((arr) => [{ id: note.id, body: note.body, isPinned: !!note.isPinned, createdAt: note.createdAt }, ...arr]);
       setNoteDraft("");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     } finally {
       setNoteBusy(false);
     }

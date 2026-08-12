@@ -135,7 +135,7 @@ function BulkActionButton({ token, label, path }: { token: string | null; label:
       const j = await r.json();
       setResult(j.success ? `Done: ${JSON.stringify(j.data)}` : j.error);
     } catch (e) {
-      setResult((e as Error).message);
+      setResult(buildErrorText(e));
     } finally {
       setBusy(false);
     }

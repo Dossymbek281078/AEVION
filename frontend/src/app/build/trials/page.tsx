@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getClientApiBase } from "@/lib/apiBase";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi, type BuildTrialTask, type TrialTaskStatus } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildTrialTask, type TrialTaskStatus } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 
@@ -59,7 +59,7 @@ function Body() {
       toast.success("Trial task accepted");
       await load();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     }
   }
 
@@ -75,7 +75,7 @@ function Body() {
       toast.success("Submission sent — recruiter will review.");
       await load();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     }
   }
 
@@ -85,7 +85,7 @@ function Body() {
       toast.success("Trial approved");
       await load();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     }
   }
 
@@ -96,7 +96,7 @@ function Body() {
       toast.info("Trial rejected");
       await load();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     }
   }
 

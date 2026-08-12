@@ -77,7 +77,7 @@ export default function PricingPage() {
         }, 100);
       }
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     } finally {
       setBusyKey(null);
     }
@@ -94,7 +94,7 @@ export default function PricingPage() {
       setOrders(o.items);
       toast.success("Order paid ✓");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     }
   }
 

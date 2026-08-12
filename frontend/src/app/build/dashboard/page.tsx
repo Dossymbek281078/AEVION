@@ -885,7 +885,7 @@ function ExportBundleButton() {
         toast.success(`Downloaded ${nonEmpty} CSV file${nonEmpty === 1 ? "" : "s"}`);
       }
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     } finally {
       setBusy(false);
     }
@@ -1009,7 +1009,7 @@ function ClosingSoonBanner({
       toast.success("Vacancy extended by 30 days");
       onChanged();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     }
   }
 

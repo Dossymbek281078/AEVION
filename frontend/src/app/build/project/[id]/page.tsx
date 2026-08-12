@@ -287,7 +287,7 @@ function VacancyBoostButton({
             );
           }
         } catch (err) {
-          toast.error((err as Error).message);
+          toast.error(buildErrorText(err));
         } finally {
           setBusy(false);
         }
@@ -1132,7 +1132,7 @@ function ProjectStatusButton({
       toast.success(next === "DONE" ? "Project marked complete ✓" : "Project moved to In Progress");
       onUpdated();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     } finally {
       setBusy(false);
     }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
-import { buildApi, type BuildApplication, type ApplicationStatus } from "@/lib/build/api";
+import { buildApi, buildErrorText, type BuildApplication, type ApplicationStatus } from "@/lib/build/api";
 import { Skeleton } from "@/components/build/Skeleton";
 import { useToast } from "@/components/build/Toast";
 
@@ -51,7 +51,7 @@ function Body() {
       const r = await buildApi.myApplications();
       setItems(r.items);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     }
   }
 

@@ -84,7 +84,7 @@ function Body() {
       toast.success(`${ITEMS.find((i) => i.key === key)?.title} ${next[key] ? "enabled" : "disabled"}`);
     } catch (e) {
       setPrefs(previous);
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     } finally {
       setBusy(false);
     }

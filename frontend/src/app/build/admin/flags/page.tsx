@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { useToast } from "@/components/build/Toast";
-import { buildApi } from "@/lib/build/api";
+import { buildApi, buildErrorText } from "@/lib/build/api";
 
 type Row = Awaited<ReturnType<typeof buildApi.adminListFlags>>["items"][number];
 type Status = "open" | "dismissed" | "actioned";
@@ -29,7 +29,7 @@ function Body() {
       const r = await buildApi.adminListFlags(s);
       setItems(r.items);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     }
   }
 
@@ -44,7 +44,7 @@ function Body() {
       toast.success(next === "dismissed" ? "Dismissed" : "Marked actioned");
       setItems((arr) => arr?.filter((x) => x.id !== id) ?? arr);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(buildErrorText(e));
     }
   }
 

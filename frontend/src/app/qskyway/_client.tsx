@@ -67,7 +67,11 @@ interface CityData {
    *  of the city. Kept out of the shared DataQuality type on purpose — other
    *  modules do not have an obstacle grid, and a wrong height only matters
    *  because hs=0 buys zero safety clearance. */
-  dataQuality?: DataQuality & { suspect?: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[] };
+  dataQuality?: DataQuality & {
+    suspect?: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[];
+    /** высоты, взятые из статистики по типу застройки, а не измеренные у этого дома */
+    substituted?: { i: number; type: string; from: number; n: number }[];
+  };
   /** разбор сомнительных высот: что публикует статья объекта и наш вердикт */
   heightReview?: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[];
   _signature?: { alg: string; contentHash: string };
@@ -91,6 +95,20 @@ interface Slot { id: string; routeId: string; t0: string; t1: string; holder: st
 // `VP_CLASS_COLOR["constructor"]` вернул бы функцию — то есть непустое значение
 // вместо «класса нет», и запасной вариант не сработал бы (см. разбор
 // `feedback_prototype_keys_in_lookups`). Обращение при этом не меняется.
+/**
+ * Согласование числительного. Ровно то же поведение, что у `plural()` в
+ * `aevion-globus-backend/src/routes/qskyway.ts` (число входит в результат): один
+ * и тот же счётчик показывается и оттуда, и отсюда, и «38 зданий» рядом с
+ * «1 зданий» выглядело бы небрежностью там, где всё остальное посчитано точно.
+ * Через границу API общей функции нет — поэтому копия, а не третий способ.
+ */
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} ${one}`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} ${few}`;
+  return `${n} ${many}`;
+}
+
 const VP_CLASS_LABEL: Record<string, string> = Object.assign(Object.create(null), {
   "candidate-pad": "кандидат на площадку",
   "needs-infrastructure": "нужна инфраструктура",
@@ -185,7 +203,7 @@ export default function QSkywayClient() {
   const [coverage, setCoverage] = useState<{ withFeed: number; withRegulatoryLayer?: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
   const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
   const [cityId, setCityId] = useState<string>("astana");
-  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
+  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; substituted: { i: number; type: string; from: number; n: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
   // Strict mode asks the backend to treat the published ceiling as a hard
   // constraint instead of an advisory verdict. Off by default: the honest
   // default is "fly the corridor and tell me what it would require".
@@ -397,6 +415,7 @@ export default function QSkywayClient() {
         realPct: city.dataQuality?.realPct ?? 0,
         dq: city.dataQuality,
         suspect: city.dataQuality?.suspect ?? [],
+        substituted: city.dataQuality?.substituted ?? [],
         heightReview: city.heightReview ?? [],
         airspace: city.airspace,
       });
@@ -898,6 +917,24 @@ export default function QSkywayClient() {
                             : ` · на маршруты не влияет (0 из ${disputeImpact.routable})`}
                         </span>
                       )}
+                    </span>
+                  )}
+                  {/* Подстановка по типу — не то же самое, что «угадано».
+                      Слепому дому ставится 75-й процентиль домов ЕГО типа в этом
+                      же городе; число выглядит замером, хотя измерен не он.
+                      Класс высоты остаётся `guessed`, и по нему эти дома от
+                      слепого дефолта 12 м не отличить — поэтому сказано прямо. */}
+                  {meta.substituted.length > 0 && (
+                    <span
+                      title={
+                        "Высота взята из статистики домов того же типа в этом городе, а не измерена и не выведена из этажности самого дома. "
+                        + "Занижать нельзя: коридор пройдёт ниже крыши, поэтому берётся 75-й процентиль, а не медиана. Примеры: "
+                        + meta.substituted.slice(0, 3).map((o) => `дом ${o.i} (${o.type}) вместо ${o.from} м, по ${o.n} известным высотам`).join("; ")
+                        + "."
+                      }
+                      style={{ color: "#c8964f", textDecoration: "underline dotted", cursor: "help" }}
+                    >
+                      ▨ подставлено по типу: {plural(meta.substituted.length, "здание", "здания", "зданий")}
                     </span>
                   )}
                   {/* «Годна» здесь было сильнее, чем подпись той же площадки в

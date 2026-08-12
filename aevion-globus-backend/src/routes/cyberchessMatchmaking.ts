@@ -23,7 +23,7 @@
 //    set; otherwise loopback-only).
 
 import { Router, type Request, type Response } from "express";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual, createHash } from "node:crypto";
 import { Chess } from "chess.js";
 import {
   ensureDb as ensureMatchDb,
@@ -927,6 +927,21 @@ router.get("/queue/stream", (req: Request, res: Response): void => {
   });
 });
 
+/**
+ * Constant-time secret comparison. `===` returns as soon as two bytes differ,
+ * so the time it takes to answer leaks how much of the token was right, and a
+ * token can be recovered a character at a time. Same reason webhookSig.ts uses
+ * timingSafeEqual.
+ */
+function sameSecret(provided: string, expected: string): boolean {
+  // Digests rather than the raw strings: timingSafeEqual throws when the two
+  // buffers differ in length, and catching that would leak the token's length
+  // on its own. SHA-256 output is always 32 bytes.
+  const a = createHash("sha256").update(provided).digest();
+  const b = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(a, b);
+}
+
 // POST /internal/pre-match — tournament → matchmaking bridge (HTTP form)
 //
 // Direct in-process callers should use createPreMatchedMatch() instead.
@@ -939,17 +954,24 @@ router.post("/internal/pre-match", (req: Request, res: Response): void => {
   const expected = process.env.INTERNAL_TOKEN || "";
   const provided = String(req.headers["x-internal-token"] || "");
   if (expected) {
-    if (provided !== expected) {
+    if (!sameSecret(provided, expected)) {
       res.status(403).json({ ok: false, error: "forbidden" });
       return;
     }
   } else {
-    const ip = req.ip || req.socket?.remoteAddress || "";
-    const isLoopback =
-      ip === "127.0.0.1" ||
-      ip === "::1" ||
-      ip === "::ffff:127.0.0.1" ||
-      ip.startsWith("127.");
+    // req.socket.remoteAddress, NOT req.ip. index.ts sets `trust proxy`, so
+    // req.ip is read from X-Forwarded-For — a header the caller writes. This
+    // check exists to prove the call came from this machine, and anyone on the
+    // internet could satisfy it by sending `X-Forwarded-For: 127.0.0.1`, then
+    // create matches between any user ids they named. The socket peer is the
+    // address the connection actually came from and cannot be set by headers.
+    //
+    // Consequence worth knowing: behind a proxy the peer is the proxy, never
+    // loopback, so with no INTERNAL_TOKEN set this endpoint is closed in
+    // production. That is the intended direction to fail — in-process callers
+    // use createPreMatchedMatch() directly and never come through here.
+    const ip = req.socket?.remoteAddress || "";
+    const isLoopback = ip === "::1" || ip === "::ffff:127.0.0.1" || ip.startsWith("127.");
     if (!isLoopback) {
       res
         .status(403)

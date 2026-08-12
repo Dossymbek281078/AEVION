@@ -26,9 +26,19 @@ const { mockRead, mockWrite } = vi.hoisted(() => ({
   mockWrite: vi.fn(),
 }));
 
+// updateJsonFile появился вместе с атомарной записью кошелька (починка
+// двойного списания при параллельных запросах). Без него в подмене тест падал
+// не на утверждении, а на «No updateJsonFile export» — то есть выглядел как
+// сломанный код, хотя сломан был мок.
 vi.mock("../src/lib/jsonFileStore", () => ({
   readJsonFile: mockRead,
   writeJsonFile: mockWrite,
+  updateJsonFile: async (_file: string, fallback: unknown, fn: (cur: unknown) => unknown) => {
+    const cur = await mockRead(_file, fallback);
+    const next = fn(cur);
+    await mockWrite(_file, next);
+    return next;
+  },
 }));
 
 async function makeApp() {

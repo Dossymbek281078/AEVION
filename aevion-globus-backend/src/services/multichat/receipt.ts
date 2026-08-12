@@ -159,7 +159,17 @@ export function verifyReceiptHash(receipt: Receipt, expectedHash: string): boole
 }
 
 export type VerifyResult = {
-  hashMatches: boolean;
+  /**
+   * true — сходится, false — НЕ сходится, null — хеша не приложили.
+   *
+   * Третье состояние обязано отличаться от второго. Ручка принимает и целиком
+   * скачанный файл `{receipt, hash}`, и голый чек — и на голом отвечала
+   * `false`, а страница переводила это в «содержимое изменено». То есть
+   * человеку, принёсшему подлинный документ в заявленном же формате,
+   * инструмент проверки говорил, что документ подделан. Для проверяющего
+   * инструмента это худший вид ошибки: он не молчит, он оговаривает.
+   */
+  hashMatches: boolean | null;
   computedHash: string;
   signature: "valid" | "invalid" | "absent" | "unverifiable";
   signatureNote: string | null;
@@ -178,11 +188,20 @@ export async function verifyReceipt(input: {
   signature?: { algo: string; kid: string; value: string } | null;
 }): Promise<VerifyResult> {
   const { hash: computedHash, canonical } = canonicalHash(input.receipt);
-  const hashMatches = typeof input.hash === "string" && input.hash === computedHash;
+  const hashMatches = typeof input.hash === "string" ? input.hash === computedHash : null;
   const spec = { canonicalization: CANONICALIZATION_SPEC, digest: "sha256" as const, signature: "ed25519" as const };
 
   if (!input.signature) {
-    return { hashMatches, computedHash, signature: "absent", signatureNote: "чек не подписан — проверен только хеш", spec };
+    return {
+      hashMatches,
+      computedHash,
+      signature: "absent",
+      signatureNote:
+        hashMatches === null
+          ? "чек не подписан, и хеш к нему не приложен — сверьте пересчитанный сами"
+          : "чек не подписан — проверен только хеш",
+      spec,
+    };
   }
   if (input.signature.algo !== "ed25519") {
     return { hashMatches, computedHash, signature: "unverifiable", signatureNote: `неизвестный алгоритм подписи: ${String(input.signature.algo).slice(0, 32)}`, spec };

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { getAuthToken } from "@/lib/auth";
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -8,7 +9,6 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { useToast } from "@/components/ToastProvider";
 import { apiUrl } from "@/lib/apiBase";
-import { getAuthToken } from "@/lib/auth";
 
 type AuditEntry = {
   id: string;
@@ -66,10 +66,11 @@ export default function QuantumShieldPublicPage() {
         // the cached public projection.
         const headers: Record<string, string> = {};
         try {
-          const tok =
-            typeof window !== "undefined"
-              ? getAuthToken()
-              : null;
+          // Только getAuthToken(). Хвост `|| localStorage.getItem("aevion_jwt")`
+          // убран: этот ключ в коде фронтенда не записывает никто, то есть
+          // запасным вариантом он не был — он лишь создавал видимость, что
+          // запасной путь есть.
+          const tok = typeof window !== "undefined" ? getAuthToken() : null;
           if (tok) headers.Authorization = `Bearer ${tok}`;
         } catch {
           /* localStorage may be blocked */

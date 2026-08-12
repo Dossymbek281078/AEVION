@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getApiBase } from "@/lib/apiBase";
 import { getAuthToken } from "@/lib/auth";
+import { getApiBase } from "@/lib/apiBase";
 
 type Props = {
   proposalId: string;

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import type { MatchingPool } from "./page";
-import { getAuthToken } from "@/lib/auth";
 
 type Currency = "USD" | "EUR" | "KZT";
 

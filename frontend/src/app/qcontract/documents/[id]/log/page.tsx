@@ -1,11 +1,11 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
-import { getAuthToken } from "@/lib/auth";
 
 interface ViewEntry {
   id: string;

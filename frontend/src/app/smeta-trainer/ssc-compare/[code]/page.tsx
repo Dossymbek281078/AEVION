@@ -35,12 +35,13 @@ type RegionPrice = {
 export default function SscComparePage({
   params,
 }: {
-  params: Promise<{ code: string }> | { code: string };
+  // params — всегда промис (Next 15+). Объединение `Promise<…> | {…}` осталось
+  // со времён перехода и в Next 16 роняет СБОРКУ на проверке типов: сгенерённый
+  // PageProps требует `Promise<any>`. В dev это не видно — падает только
+  // полный build, уже после успешной компиляции.
+  params: Promise<{ code: string }>;
 }) {
-  const { code: rawCode } =
-    typeof (params as Promise<{ code: string }>).then === "function"
-      ? use(params as Promise<{ code: string }>)
-      : (params as { code: string });
+  const { code: rawCode } = use(params);
   const code = decodeURIComponent(rawCode);
   const [index, setIndex] = useState<SscBookMeta[] | null>(null);
   const [running, setRunning] = useState(true);

@@ -17,7 +17,7 @@
 
 import { randomUUID } from "node:crypto";
 import { getPool } from "./dbPool";
-import { readJsonFile, writeJsonFile } from "./jsonFileStore";
+import { readJsonFile, updateJsonFile } from "./jsonFileStore";
 
 export type ChatTurn = {
   id: string;
@@ -117,12 +117,16 @@ export async function recordChatTurn(input: RecordTurnInput): Promise<ChatTurn> 
         ],
       );
     } else {
-      const data = await readJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] });
-      const items = Array.isArray(data.items) ? data.items : [];
-      items.push(turn);
-      // FIFO cap — drop oldest when over the dev ceiling.
-      while (items.length > JSON_CAP) items.shift();
-      await writeJsonFile(STORE_REL, { items });
+      // updateJsonFile, а не пара read+write: веер мультичата пишет ответы
+      // агентов параллельно, и без замка на файл они затирают друг друга —
+      // в ленте оседал 1 ответ из 3 (найдено живым прогоном 2026-08-10).
+      await updateJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] }, (data) => {
+        const items = Array.isArray(data.items) ? data.items : [];
+        items.push(turn);
+        // FIFO cap — drop oldest when over the dev ceiling.
+        while (items.length > JSON_CAP) items.shift();
+        return { items };
+      });
     }
   } catch (err) {
     console.error("[chatHistory] record failed", err);
@@ -131,12 +135,45 @@ export async function recordChatTurn(input: RecordTurnInput): Promise<ChatTurn> 
   return turn;
 }
 
-export async function listChatTurns(opts: {
+/** Экранирование под LIKE: `%` и `_` — метасимволы, а id вида `conv_…` содержит `_`. */
+function likeEscape(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Потолок выборки.
+ *
+ * Был 500 и стоял ЖЁСТКО: сколько бы вызывающий ни попросил, приезжало 500.
+ * Выгрузка беседы просит 5000 и заявлена как «полный дамп для compliance»,
+ * счётчик расхода просит 5000 — оба молча получали пятую часть. Консилиум из
+ * четырёх агентов пишет пять реплик за круг, то есть 500 — это сотый круг.
+ *
+ * Потолок нужен (лента целиком в память ради одного ответа — плохая идея), но
+ * он обязан совпадать с тем, что просят честные вызывающие, а превышение —
+ * называться вслух: для этого есть countChatTurns и поле truncated в ответах.
+ */
+const MAX_LIST_LIMIT = 5000;
+
+function clampLimit(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 100;
+  return Math.max(1, Math.min(Math.floor(n), MAX_LIST_LIMIT));
+}
+
+export function maxChatTurnsPerRead(): number {
+  return MAX_LIST_LIMIT;
+}
+
+/**
+ * Сколько всего реплик в беседе — чтобы ответ мог сказать, что показывает не
+ * всё. Без этого числа обрезанная лента и обрезанная выгрузка выглядят точно
+ * так же, как полные.
+ */
+export async function countChatTurns(opts: {
   userId?: string;
   conversationId?: string;
-  limit?: number;
-}): Promise<ChatTurn[]> {
-  const limit = Math.max(1, Math.min(opts.limit ?? 100, 500));
+  includeAgentThreads?: boolean;
+}): Promise<number> {
   if (isPg()) {
     await ensureSchema();
     const where: string[] = [];
@@ -146,10 +183,82 @@ export async function listChatTurns(opts: {
       args.push(opts.userId);
     }
     if (opts.conversationId) {
-      where.push(`conversation_id = $${args.length + 1}`);
-      args.push(opts.conversationId);
+      if (opts.includeAgentThreads) {
+        where.push(
+          `(conversation_id = $${args.length + 1} OR conversation_id LIKE $${args.length + 2} ESCAPE '\\')`,
+        );
+        args.push(opts.conversationId, `${likeEscape(opts.conversationId)}:%`);
+      } else {
+        where.push(`conversation_id = $${args.length + 1}`);
+        args.push(opts.conversationId);
+      }
+    }
+    const r = await getPool().query(
+      `SELECT COUNT(*)::int AS n FROM chat_turns ${where.length ? "WHERE " + where.join(" AND ") : ""}`,
+      args,
+    );
+    return Number(r.rows[0]?.n ?? 0) || 0;
+  }
+
+  const data = await readJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] });
+  let items = Array.isArray(data.items) ? data.items : [];
+  if (opts.userId) items = items.filter((t) => t.userId === opts.userId);
+  if (opts.conversationId) {
+    const root = opts.conversationId;
+    items = items.filter((t) =>
+      opts.includeAgentThreads
+        ? t.conversationId === root || (t.conversationId ?? "").startsWith(`${root}:`)
+        : t.conversationId === root,
+    );
+  }
+  return items.length;
+}
+
+export async function listChatTurns(opts: {
+  userId?: string;
+  conversationId?: string;
+  /**
+   * Забрать вместе с беседой её агентские подветки `${conversationId}:${agentId}`.
+   *
+   * Веер мультичата пишет ответ каждого агента в СВОЙ conversationId, поэтому
+   * выборка строго по равенству возвращает только вопросы пользователя — без
+   * единого ответа. Именно так и жили экспорт, публичная ссылка и счётчик
+   * токенов: отдавали валидный JSON, в котором не было половины разговора.
+   */
+  includeAgentThreads?: boolean;
+  limit?: number;
+}): Promise<ChatTurn[]> {
+  const limit = clampLimit(opts.limit);
+  if (isPg()) {
+    await ensureSchema();
+    const where: string[] = [];
+    const args: unknown[] = [];
+    if (opts.userId) {
+      where.push(`user_id = $${args.length + 1}`);
+      args.push(opts.userId);
+    }
+    if (opts.conversationId) {
+      if (opts.includeAgentThreads) {
+        where.push(
+          `(conversation_id = $${args.length + 1} OR conversation_id LIKE $${args.length + 2} ESCAPE '\\')`,
+        );
+        args.push(opts.conversationId, `${likeEscape(opts.conversationId)}:%`);
+      } else {
+        where.push(`conversation_id = $${args.length + 1}`);
+        args.push(opts.conversationId);
+      }
     }
     args.push(limit);
+    // DESC + разворот, а не ASC.
+    //
+    // Было `ORDER BY created_at ASC LIMIT n` — то есть при упоре в потолок
+    // приезжали САМЫЕ СТАРЫЕ n реплик. Файловая ветка ниже берёт последние
+    // (`slice(-limit)`), и ветки расходились в противоположные стороны. На
+    // проде стоит Postgres: после 200-й реплики консоль замирала на начале
+    // разговора и переставала показывать новые ответы, а у разработчика на
+    // файловом хранилище всё выглядело исправно.
+    //
+    // Индекс idx_chat_turns_conv_created годится и для обратного обхода.
     const sql = `
       SELECT id, user_id AS "userId", conversation_id AS "conversationId",
              role, content, provider, model,
@@ -157,17 +266,28 @@ export async function listChatTurns(opts: {
              created_at AS "createdAt"
       FROM chat_turns
       ${where.length ? "WHERE " + where.join(" AND ") : ""}
-      ORDER BY created_at ASC
+      ORDER BY created_at DESC
       LIMIT $${args.length}
     `;
     const r = await getPool().query(sql, args);
-    return r.rows.map((row: any) => ({ ...row, createdAt: toIso(row.createdAt) })) as ChatTurn[];
+    const rows = r.rows.map((row: any) => ({ ...row, createdAt: toIso(row.createdAt) })) as ChatTurn[];
+    return rows.reverse(); // наружу — хронологический порядок, как и раньше
   }
 
   const data = await readJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] });
   let items = Array.isArray(data.items) ? data.items : [];
   if (opts.userId) items = items.filter((t) => t.userId === opts.userId);
-  if (opts.conversationId) items = items.filter((t) => t.conversationId === opts.conversationId);
+  if (opts.conversationId) {
+    const root = opts.conversationId;
+    items = items.filter((t) =>
+      opts.includeAgentThreads
+        ? t.conversationId === root || (t.conversationId ?? "").startsWith(`${root}:`)
+        : t.conversationId === root,
+    );
+  }
+  // Порядок — хронологический, как в SQL-ветке: подветки агентов пишутся
+  // параллельно, и порядок вставки в файл не обязан совпадать со временем.
+  items = [...items].sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
   return items.slice(-limit);
 }
 

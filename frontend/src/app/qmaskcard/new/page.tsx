@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { getAuthToken } from "@/lib/auth";
 import { useEffect, useMemo, useState } from "react";
 import { getApiBase } from "@/lib/apiBase";
-import { getAuthToken } from "@/lib/auth";
 
 type Kind = "single-use" | "recurring" | "merchant-locked" | "category-locked";
 

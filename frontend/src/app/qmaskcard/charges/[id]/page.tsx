@@ -10,9 +10,9 @@
  */
 
 import Link from "next/link";
+import { getAuthToken } from "@/lib/auth";
 import { useEffect, useMemo, useState, use as reactUse } from "react";
 import { getApiBase } from "@/lib/apiBase";
-import { getAuthToken } from "@/lib/auth";
 
 type Charge = {
   id: string;

@@ -32,6 +32,17 @@ jobs:
         run: npm run audit:projects-pricing
       - run: npm run build
       - run: npm test
+      # Сторожа модулей — чистый Node без зависимостей, поэтому шаг живёт здесь,
+      # а не отдельной работой (working-directory возвращаем в корень репозитория).
+      #
+      # До 12.08.2026 их не запускал НИКТО: шесть проверок — карта разногласий
+      # мультичата, чек, контраст модуля и три сторожа QReal — лежали в
+      # репозитории и срабатывали, только если кто-то звал их руками. Сторож,
+      # который не запускается, не сторожит: он не краснеет, когда поведение
+      # уезжает, зато создаёт ощущение, что что-то проверяется.
+      - name: Module guards (dissent map, receipt, contrast, QReal)
+        working-directory: .
+        run: npm run test:guards
 
   frontend:
     name: Frontend (next build)

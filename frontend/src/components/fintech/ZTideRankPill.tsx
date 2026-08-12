@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
-import { getAuthToken } from "@/lib/auth";
 
 const RANK_COLORS: Record<string, string> = {
   seedling: "#84cc16",

@@ -1,9 +1,22 @@
 "use client";
+
+// Публичный просмотр беседы по ссылке.
+//
+// Самый внешний экран модуля: его открывает человек, у которого нет ни
+// аккаунта, ни подписки, — и часто это первое, что он вообще видит про
+// AEVION. До 2026-08-11 страница оставалась тёмной, хотя весь модуль
+// переведён на светлый газетный эталон 2026-07-27: получатель ссылки попадал
+// как будто в другой продукт.
+//
+// Цвета — только через токены ../../theme: контраст проверяется тестом
+// scripts/multichat-contrast.test.mjs, а сырой литерал проверка не видит.
+
 import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { T } from "../../theme";
 
 interface Turn {
   role: "user" | "assistant" | "system";
@@ -19,6 +32,9 @@ interface SharedConversation {
     createdAt: string;
   };
   turns: Turn[];
+  /** Сколько реплик в беседе всего — сервер отдаёт только последние 200. */
+  totalTurns?: number;
+  truncated?: boolean;
 }
 
 function fmtDate(iso?: string) {
@@ -65,26 +81,41 @@ export default function SharedConversationPage() {
     }
   }
 
+  const screen = {
+    minHeight: "100vh",
+    background: T.canvas,
+    color: T.text,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  } as const;
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <p className="text-slate-500 text-sm">Загрузка...</p>
+      <div style={screen}>
+        <p style={{ color: T.textMute, fontSize: 14 }}>Загрузка…</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6">
-        <div className="max-w-md text-center space-y-3">
-          <div className="text-4xl">🔗</div>
-          <h1 className="text-xl font-bold">Ссылка недоступна</h1>
-          <p className="text-sm text-slate-400">{error}</p>
+      <div style={screen}>
+        <div style={{ maxWidth: 460, textAlign: "center" }}>
+          <h1 style={{ fontSize: 22, fontWeight: 600, margin: "0 0 8px", color: T.text }}>
+            Ссылка недоступна
+          </h1>
+          <p style={{ fontSize: 15, color: T.textMute, lineHeight: 1.6, margin: 0 }}>{error}</p>
           <Link
             href="/multichat-engine"
-            className="inline-block mt-4 px-4 py-2 bg-violet-700 hover:bg-violet-600 rounded-lg text-sm"
+            style={{
+              display: "inline-block", marginTop: 20, background: T.btnAccentBg,
+              color: T.onAccentDeep, borderRadius: 10, padding: "9px 18px",
+              fontSize: 14, fontWeight: 600, textDecoration: "none",
+            }}
           >
-            Открыть Multichat
+            Открыть Мультичат
           </Link>
         </div>
       </div>
@@ -93,80 +124,120 @@ export default function SharedConversationPage() {
 
   if (!data) return null;
 
-  // Group turns by agent (conversationId pattern: `${convId}:${agentId}`)
-  const byAgent = new Map<string, Turn[]>();
-  const userTurns: Turn[] = [];
+  // Круг = вопрос + ответы, пришедшие ПОСЛЕ него.
+  //
+  // Раньше ответы раскладывались по порядковому номеру: `byAgent[a][idx]`.
+  // Пока в ленте лежала вся беседа целиком, номера совпадали. Но сервер
+  // отдаёт последние 200 реплик, и окно режет разговор в произвольном месте:
+  // первым в нём оказывается ответ на вопрос, который в окно уже не попал.
+  // Тогда весь столбец агента съезжал на круг вверх, и под вопросом стоял
+  // чужой ответ — без единого признака ошибки.
+  //
+  // Поэтому группируем по ленте: реплика принадлежит последнему вопросу
+  // перед ней, а «осиротевшие» ответы в начале окна не показываем — их
+  // вопрос остался за пределами видимого куска.
+  const rounds: Array<{ question: Turn; answers: Map<string, Turn> }> = [];
+  const agentOrder: string[] = [];
   for (const t of data.turns) {
     if (t.role === "user") {
-      userTurns.push(t);
+      rounds.push({ question: t, answers: new Map() });
       continue;
     }
+    const current = rounds[rounds.length - 1];
+    if (!current) continue; // ответ на вопрос за границей окна
     const cid = t.conversationId ?? "";
     const agentId = cid.includes(":") ? cid.split(":")[1] : "agent";
-    const arr = byAgent.get(agentId) ?? [];
-    arr.push(t);
-    byAgent.set(agentId, arr);
+    if (!agentOrder.includes(agentId)) agentOrder.push(agentId);
+    if (!current.answers.has(agentId)) current.answers.set(agentId, t);
   }
-  const agents = [...byAgent.keys()];
+  const agents = agentOrder;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/multichat-engine" className="text-slate-400 hover:text-white text-sm">
-            AEVION Multichat
+    <div style={{ minHeight: "100vh", background: T.canvas, color: T.text }}>
+      <header
+        style={{
+          borderBottom: `1px solid ${T.lineSoft}`, padding: "14px 24px", display: "flex",
+          alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
+          <Link href="/multichat-engine" style={{ color: T.textMute, fontSize: 14, textDecoration: "none" }}>
+            AEVION Мультичат
           </Link>
-          <span className="text-slate-600">·</span>
-          <h1 className="text-sm font-bold truncate max-w-md">{data.conversation.title}</h1>
+          <span style={{ color: T.textFaded }}>·</span>
+          <h1 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {data.conversation.title}
+          </h1>
         </div>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-900 text-emerald-300 font-semibold">
-          PUBLIC SHARE
+        <span style={{ fontSize: 12, color: T.textMute, border: `1px solid ${T.lineSoft}`, borderRadius: 999, padding: "2px 10px" }}>
+          Только просмотр
         </span>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        <div className="text-xs text-slate-500">
-          Чат создан {fmtDate(data.conversation.createdAt)} · только просмотр (read-only)
-        </div>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: 24, display: "grid", gap: 22 }}>
+        <p style={{ fontSize: 13, color: T.textFaded, margin: 0 }}>
+          Беседа создана {fmtDate(data.conversation.createdAt)}. Ответы агентов показаны рядом
+          намеренно: там, где они разошлись, и надо смотреть в первую очередь.
+        </p>
 
-        {userTurns.map((u, idx) => (
-          <div key={idx} className="space-y-3">
-            <div className="bg-violet-900/30 border border-violet-800 rounded-xl p-4">
-              <div className="text-[10px] uppercase font-bold text-violet-300 mb-1">
-                User · {fmtDate(u.createdAt)}
+        {data.truncated && (
+          <p
+            style={{
+              fontSize: 13, color: T.textDim, margin: 0, background: T.surfaceSoft,
+              border: `1px solid ${T.lineSoft}`, borderRadius: 10, padding: "10px 14px",
+            }}
+          >
+            Показана последняя часть беседы — {data.turns.length} реплик из{" "}
+            {data.totalTurns ?? data.turns.length}. Начало разговора в публичную ссылку не попало.
+          </p>
+        )}
+
+        {rounds.map((round, idx) => (
+          <div key={idx} style={{ display: "grid", gap: 12 }}>
+            <div style={{ background: T.surfaceSoft, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, marginBottom: 6 }}>
+                Вопрос · {fmtDate(round.question.createdAt)}
               </div>
-              <div className="text-sm whitespace-pre-wrap">{u.content}</div>
+              <div style={{ fontSize: 15, lineHeight: 1.65, whiteSpace: "pre-wrap", color: T.text }}>
+                {round.question.content}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
               {agents.map(a => {
-                const turn = (byAgent.get(a) ?? [])[idx];
+                const turn = round.answers.get(a);
                 if (!turn) return null;
+                // Не ответивший агент попадает в ленту как system-реплика —
+                // показываем это прямо, иначе на его месте была бы пустота и
+                // читатель решил бы, что агентов было меньше.
+                const failed = turn.role === "system";
                 return (
-                  <div
-                    key={a}
-                    className="bg-slate-900 border border-slate-800 rounded-xl p-4"
-                  >
-                    <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">
-                      Agent: {a}
+                  <article key={a} style={{ background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 14 }}>
+                    <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, marginBottom: 8 }}>
+                      {a}
                     </div>
-                    <div className="text-sm whitespace-pre-wrap text-slate-200">
-                      {turn.content}
+                    <div style={{ fontSize: 14, lineHeight: 1.65, whiteSpace: "pre-wrap", color: failed ? T.warn : T.textDim }}>
+                      {failed ? "агент не ответил" : turn.content}
                     </div>
-                  </div>
+                  </article>
                 );
               })}
             </div>
           </div>
         ))}
 
-        <div className="text-center pt-8 border-t border-slate-800">
-          <p className="text-xs text-slate-600 mb-3">Powered by AEVION Multichat Engine</p>
+        <div style={{ textAlign: "center", paddingTop: 24, borderTop: `1px solid ${T.lineSoft}` }}>
+          <p style={{ fontSize: 13, color: T.textFaded, margin: "0 0 12px" }}>
+            Это ответ консилиума AEVION — три роли отвечают независимо, и разногласие видно сразу.
+          </p>
           <Link
             href="/multichat-engine"
-            className="inline-block px-4 py-2 bg-violet-700 hover:bg-violet-600 rounded-lg text-sm font-semibold"
+            style={{
+              display: "inline-block", background: T.btnAccentBg, color: T.onAccentDeep,
+              borderRadius: 10, padding: "9px 18px", fontSize: 14, fontWeight: 600, textDecoration: "none",
+            }}
           >
-            Создать свой multichat →
+            Спросить свой консилиум →
           </Link>
         </div>
       </div>

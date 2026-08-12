@@ -1,10 +1,10 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
-import { getAuthToken } from "@/lib/auth";
 
 type ContentType = "text" | "url" | "html";
 type SelfDestructMode = "views" | "time" | "both" | "none";

@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { getAuthToken } from "@/lib/auth";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
 import ModulePricingChip from "@/components/ModulePricingChip";
-import { getAuthToken } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

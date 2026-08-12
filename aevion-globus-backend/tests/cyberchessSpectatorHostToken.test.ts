@@ -241,3 +241,31 @@ describe("commentary is not something a viewer can put in someone's stream", () 
     expect(res.status).toBe(403);
   });
 });
+
+describe("the secret does not survive into the public replay", () => {
+  test("a finished game is archived without it", async () => {
+    // The replay is served to anyone by gameId. The archive builds its record
+    // field by field today; the day someone writes `{...game}` instead, the
+    // broadcaster's secret becomes public and nothing else would notice.
+    const { gameId, token } = await startStream();
+
+    const ended = await publish(
+      { gameId, fen: FEN2, hist: ["e4"], result: "1-0" },
+      token,
+    );
+    expect(ended.status).toBe(200);
+
+    const replay = await request(app).get(`/api/cyberchess-spectator/replays/${gameId}`);
+    expect(replay.status).toBe(200);
+    expect(JSON.stringify(replay.body)).not.toContain(token);
+    expect(replay.body.replay.hostToken).toBeUndefined();
+  });
+
+  test("the replay directory does not carry it either", async () => {
+    const { gameId, token } = await startStream();
+    await publish({ gameId, fen: FEN2, hist: ["e4"], result: "1-0" }, token);
+
+    const list = await request(app).get("/api/cyberchess-spectator/replays");
+    expect(JSON.stringify(list.body)).not.toContain(token);
+  });
+});

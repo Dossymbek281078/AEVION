@@ -413,6 +413,10 @@ function archiveFinishedGame(g: LiveGame, endedAt: number): void {
       ? g.evalCpHistory.slice()
       : g.hist.map(() => 0);
 
+  // Собирается по полям, а не копированием объекта. Это не стилистика:
+  // у LiveGame есть hostToken, а повтор отдаётся любому по /replays/:gameId —
+  // один `...g` опубликовал бы секрет ведущего, и заметить это было бы нечем.
+  // Закреплено тестом.
   const replay: ReplayGame = {
     gameId: g.gameId,
     hostName: g.hostName,
@@ -944,6 +948,10 @@ router.post("/voice/:gameId", (req: Request, res: Response) => {
     id: crypto.randomUUID(),
     text,
     audioUrl,
+    // Флаг из тела здесь допустим: до этой строки доходят только сам ведущий
+    // (по токену) и наш собственный внутренний вызов — гейт выше. Оставлять
+    // его без этой оговорки нельзя, иначе читатель решит, что поле ничем не
+    // защищено, и «починит» уже закрытое.
     fromHost: body.fromHost === true ? true : undefined,
     ts: Date.now(),
   };

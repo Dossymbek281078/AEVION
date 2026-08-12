@@ -5,6 +5,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken } from "@/lib/auth";
 
 interface CheckoutMeta {
   id: string;
@@ -31,7 +32,7 @@ function SuccessInner() {
 
   useEffect(() => {
     if (!cid) { setError(t("qpaynet.deposit.success.noCid")); return; }
-    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
+    const saved = getAuthToken() ?? "";
     if (!saved) { setError(t("qpaynet.deposit.success.loginCheck")); return; }
     let cancelled = false;
     let attempts = 0;
@@ -52,7 +53,7 @@ function SuccessInner() {
 
   async function confirmStub() {
     setConfirming(true);
-    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
+    const saved = getAuthToken() ?? "";
     const r = await fetch(apiUrl("/api/qpaynet/deposit/confirm-stub"), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${saved}` },

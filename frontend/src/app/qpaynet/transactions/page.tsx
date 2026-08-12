@@ -4,6 +4,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken } from "@/lib/auth";
 
 interface Tx {
   id: string;
@@ -46,7 +47,7 @@ export default function TransactionsPage() {
   const [token, setToken] = useState("");
 
   useEffect(() => {
-    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
+    const saved = getAuthToken() ?? "";
     setToken(saved);
     if (!saved) { setError(translate("qpaynet.tx.err.auth")); setLoading(false); return; }
     fetch(apiUrl("/api/qpaynet/transactions?limit=100"), {

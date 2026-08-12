@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { reportError } from "@/lib/reporter";
+import { getAuthToken } from "@/lib/auth";
 
 interface Delivery {
   id: string;
@@ -52,7 +53,7 @@ export default function AdminWebhookDeliveriesPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) {
       setLoading(false);

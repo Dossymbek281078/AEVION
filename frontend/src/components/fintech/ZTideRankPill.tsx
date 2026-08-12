@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 const RANK_COLORS: Record<string, string> = {
   seedling: "#84cc16",
@@ -50,7 +51,7 @@ export default function ZTideRankPill(): React.ReactElement | null {
 
   useEffect(() => {
     let cancelled = false;
-    const token = typeof window !== "undefined" ? (window.localStorage.getItem("aevion_auth_token_v1") ?? window.localStorage.getItem("aevion_token")) : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) {
       setReady(true);
       return;

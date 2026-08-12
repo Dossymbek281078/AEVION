@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { getAuthToken } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,14 +32,14 @@ interface QEvent {
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
   const token =
-    (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) || sessionStorage.getItem("aevion_token");
+    getAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function getAuthSub(): string | null {
   if (typeof window === "undefined") return null;
   const token =
-    (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) || sessionStorage.getItem("aevion_token");
+    getAuthToken();
   if (!token) return null;
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));

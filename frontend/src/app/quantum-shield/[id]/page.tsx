@@ -8,6 +8,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { useToast } from "@/components/ToastProvider";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 type AuditEntry = {
   id: string;
@@ -67,7 +68,7 @@ export default function QuantumShieldPublicPage() {
         try {
           const tok =
             typeof window !== "undefined"
-              ? (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) || localStorage.getItem("aevion_jwt")
+              ? getAuthToken()
               : null;
           if (tok) headers.Authorization = `Bearer ${tok}`;
         } catch {

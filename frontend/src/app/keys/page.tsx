@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 interface ApiKey {
   id: string;
@@ -41,7 +42,7 @@ interface KeyUsage {
 
 function authHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};
-  const t = localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token") ?? "";
+  const t = getAuthToken() ?? "";
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
@@ -72,7 +73,7 @@ export default function ApiKeysPage() {
   async function load() {
     setLoading(true); setError("");
     try {
-      const t = localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token") ?? "";
+      const t = getAuthToken() ?? "";
       if (!t) { setHasAuth(false); setLoading(false); return; }
       const r = await fetch(apiUrl("/api/keys"), { headers: authHeader() });
       if (r.status === 401) { setHasAuth(false); setLoading(false); return; }

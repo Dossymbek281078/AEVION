@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { fixDoubledScheme } from "@/lib/urls";
+import { getAuthToken } from "@/lib/auth";
 
 type Policy = {
   id: string;
@@ -40,7 +41,7 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 function authHeaders(): HeadersInit {
-  const tok = typeof window !== "undefined" ? (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) : null;
+  const tok = typeof window !== "undefined" ? getAuthToken() : null;
   return tok ? { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 }
 

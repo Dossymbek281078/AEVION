@@ -5,6 +5,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken } from "@/lib/auth";
 
 interface Wallet { id: string; name: string; currency: string; balance: number; }
 
@@ -23,7 +24,7 @@ function RequestForm() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const t = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) return;
     fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${t}` } })

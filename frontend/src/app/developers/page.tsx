@@ -37,7 +37,11 @@ const APIS = [
     color: "#f472b6",
     href: "/bureau",
     desc: "Court-grade certificates. Cites Berne/WIPO/TRIPS/eIDAS on issuance. ETag/304, batch protect, enriched /health.",
-    endpoints: ["POST /api/bureau/protect", "POST /api/bureau/protect-batch", "GET /api/bureau/certificates/:id"],
+    // Поток защиты живёт в /api/pipeline, а не в /api/bureau: bureauRouter
+    // отвечает за проверку личности, оплату и доверие, а объект QRight +
+    // Quantum Shield + сертификат целиком собирает pipelineRouter.post("/protect").
+    // До 12.08.2026 здесь стоял /api/bureau/protect — адрес, которого нет.
+    endpoints: ["POST /api/pipeline/protect", "POST /api/pipeline/protect-batch", "GET /api/bureau/certificates/:id"],
   },
   {
     name: "Planet",
@@ -237,7 +241,7 @@ curl -s https://aevion.app/api/qright/register \\
   -d '{"title":"My AI Track","kind":"music"}'
 
 # 3. Issue an admissible-evidence Bureau certificate
-curl -s https://aevion.app/api/bureau/protect \\
+curl -s https://aevion.app/api/pipeline/protect \\
   -H "Authorization: Bearer $TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"title":"Whitepaper v3","description":"draft","kind":"text"}'
@@ -514,8 +518,17 @@ export default function DevelopersPage() {
                 Pick modules → copy Markdown/HTML for shields.io-style status badges. Auto-refreshes when status changes.
               </div>
             </Link>
+            {/*
+              Ссылка ведёт в npm, а не в репозиторий на GitHub. Репозиторий
+              отдаёт 404 (проверено 12.08.2026) — аккаунт отключён с 27.07, и
+              внешний человек видит битую ссылку на странице, которая продаёт
+              доступ к API. Пакет при этом опубликован и живой, а npm для
+              разработчика и есть естественный адрес: там версия, установка и
+              readme. Ещё 24 файла фронтенда ссылаются на тот же мёртвый
+              репозиторий — это отдельное решение, куда их вести.
+            */}
             <a
-              href="https://github.com/Dossymbek281078/AEVION/tree/main/packages/aevion-catalog-client"
+              href="https://www.npmjs.com/package/@aevion-io/catalog-client"
               target="_blank"
               rel="noreferrer"
               style={{

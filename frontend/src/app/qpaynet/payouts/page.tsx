@@ -4,6 +4,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken } from "@/lib/auth";
 
 interface Payout {
   id: string;
@@ -64,7 +65,7 @@ export default function PayoutsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
+    const saved = getAuthToken() ?? "";
     setToken(saved);
     if (!saved) { setLoading(false); return; }
     Promise.all([

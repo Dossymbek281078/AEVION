@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { getAuthToken } from "@/lib/auth";
 
 interface Submission {
   owner_id: string;
@@ -37,7 +38,7 @@ export default function AdminKycPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const t = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) { setLoading(false); return; }
     void refresh(t);

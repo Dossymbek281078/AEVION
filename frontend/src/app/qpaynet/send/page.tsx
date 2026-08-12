@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken } from "@/lib/auth";
 
 function SendForm() {
   const { t } = useI18n();
@@ -35,7 +36,7 @@ function SendForm() {
   }, [toWalletId]);
 
   async function handleSend() {
-    const token = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
+    const token = getAuthToken() ?? "";
     if (!token) { setError(t("qpaynet.send.err.auth")); return; }
     if (!toWalletId.trim()) { setError(t("qpaynet.send.err.noRecipient")); return; }
     if (!amount || parseFloat(amount) <= 0) { setError(t("qpaynet.send.err.noAmount")); return; }

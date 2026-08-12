@@ -83,6 +83,28 @@ by its own section below.
 | `STRIPE_WEBHOOK_SECRET` | 🟡 | required when Stripe POSTs to `/api/payments/webhook` |
 | `RECEIPT_BASE_URL` | 🟢 | used in receipt PDFs. Default: derive from request host. |
 
+### Платёжные провайдеры кроме Stripe (Gumroad, LemonSqueezy, PayPal, PayBox)
+
+Раздела не было до 12.08.2026: чек-лист описывал Stripe и умалчивал про
+Gumroad, помеченный в реестре как основной канал. Столбец «если не задать» —
+проверен по коду, а не предположен.
+
+| Var | Status | Если не задать |
+|---|---|---|
+| `GUMROAD_ACCESS_TOKEN` | 🔴 | 🔴 **вебхук выдаёт доступ, не сумев проверить оплату.** При пустом `GUMROAD_WEBHOOK_SECRET` перепроверка продажи через API Gumroad — единственная защита, и она держится на этом токене |
+| `GUMROAD_WEBHOOK_SECRET` | 🔴 | подпись пинга не проверяется. **Замер на проде 12.08.2026: `signed:false`** — сейчас не задан |
+| `GUMROAD_DEFAULT_PERMALINK` | 🟢 | нет товара по умолчанию для нераспознанного `product_id` |
+| `GUMROAD_VERIFY_SALES` | 🟢 | аварийный выключатель перепроверки; `0` отключает её |
+| `LEMON_SQUEEZY_WEBHOOK_SECRET` | 🟡 | вебхук отвечает 200 и ничего не выдаёт (stub). Закрывается верно |
+| `LEMON_SQUEEZY_API_KEY` / `LEMON_SQUEEZY_STORE_ID` | 🟡 | оформление заказа через LemonSqueezy недоступно |
+| `PAYPAL_WEBHOOK_ID` | 🟡 | пинг не считается доверенным. Закрывается верно |
+| `PAYPAL_CLIENT_ID` / `PAYPAL_SECRET` | 🟡 | PayPal недоступен |
+| `PAYBOX_MERCHANT_ID` / `PAYBOX_SECRET` | 🟡 | провайдер бросает исключение при первом вызове. Отказ громкий |
+
+**Действие для боевой среды:** задать `GUMROAD_WEBHOOK_SECRET` (в Gumroad и в
+переменных Railway) и убедиться, что `GUMROAD_ACCESS_TOKEN` живой. Пока подпись
+выключена, весь денежный вебхук держится на одном токене.
+
 ### CyberChess
 
 | Var | Status | Notes |

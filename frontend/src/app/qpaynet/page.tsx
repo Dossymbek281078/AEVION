@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken } from "@/lib/auth";
 
 interface Wallet {
   id: string;
@@ -82,7 +83,7 @@ export default function QPayNetDashboard() {
   }
 
   useEffect(() => {
-    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
+    const saved = getAuthToken() ?? "";
     setToken(saved);
     fetch(apiUrl("/api/qpaynet/stats")).then(r => r.json()).then(setStats).catch(() => {});
     if (!saved) { setLoading(false); return; }

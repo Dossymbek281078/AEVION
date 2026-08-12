@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken } from "@/lib/auth";
 
 interface DocItem {
   id: string;
@@ -45,7 +46,7 @@ export default function QContractHome() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    const t = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) { setLoading(false); return; }
     fetch(apiUrl("/api/qcontract/documents"), { headers: { Authorization: `Bearer ${t}` } })

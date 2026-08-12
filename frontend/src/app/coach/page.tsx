@@ -21,8 +21,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { apiUrl } from "@/lib/apiBase";
-import { getAuthToken } from "@/lib/auth";
 import { catalogWithToken } from "@/lib/aevionCatalog";
+import { getAuthToken } from "@/lib/auth";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Session = {
@@ -48,11 +48,11 @@ type Goal = {
   completedAt?: string;
 };
 
-// ─── Auth helper ─────────────────────────────────────────────────────────────
-// Токен берём из общего lib/auth, а НЕ объявляем ключ заново. Здесь стояло
-// собственное объявление со старым ключом `aevion_auth_token`, который не пишет
-// никто, — поэтому вошедший человек выглядел в «Коуче» гостем. Второе
-// «каноническое» объявление и есть то место, где дрейф ключей начинается.
+// Ключ входа больше не объявляется здесь: до 12.08.2026 в этом файле стоял
+// литерал "aevion_auth_token" с комментарием «AEVION-wide standard key», а
+// стандартный ключ — "aevion_auth_token_v1". Под старым именем не пишет никто,
+// так что страница не видела сессию вошедшего. getAuthToken() импортирован из
+// @/lib/auth — единственного источника правды.
 
 // ─── Time helpers ────────────────────────────────────────────────────────────
 function formatElapsed(startedAt: string, endedAt?: string): string {

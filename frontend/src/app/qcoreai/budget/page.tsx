@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 function bearerHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};
-  const t = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? sessionStorage.getItem("qcoreai_token") ?? "";
+  const t = getAuthToken() ?? "";
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 

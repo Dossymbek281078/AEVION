@@ -7,10 +7,11 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import { apiUrl } from "@/lib/apiBase";
 import { apiFetchOrPaywall, PaywallError, type PaywallPayload } from "@/lib/paywall";
+import { getAuthToken } from "@/lib/auth";
 
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
-  const t = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) || sessionStorage.getItem("aevion_token");
+  const t = getAuthToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 

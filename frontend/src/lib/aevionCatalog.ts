@@ -18,6 +18,7 @@
 // Используем явный путь к built dist (package main).
 import { AevionCatalog } from "../../../packages/aevion-catalog-client/dist/index.js";
 import { getApiBase } from "@/lib/apiBase";
+import { getAuthToken as getPlatformAuthToken } from "@/lib/auth";
 
 /** Default unauthenticated client. Cheap to construct; created once. */
 export const catalog = new AevionCatalog({ baseUrl: getApiBase() });
@@ -37,8 +38,18 @@ export function catalogWithToken(token: string | null | undefined): AevionCatalo
   });
 }
 
-/** Convenience: read auth token from localStorage (browser-only). */
+/**
+ * Convenience: read auth token from localStorage (browser-only).
+ *
+ * Делегирует в `@/lib/auth` и НЕ читает ключ сама. До 12.08.2026 здесь стоял
+ * литерал `"aevion_auth_token"` — ключ без суффикса `_v1`, который не пишет
+ * никто: форма входа кладёт JWT под `aevion_auth_token_v1`, а `migrateAuthToken()`
+ * старое значение переносит и СТИРАЕТ. То есть у вошедшего человека этот ключ
+ * пуст всегда, и SDK-клиент молча уходил в бэкенд без Bearer.
+ *
+ * Имя оставлено прежним ради вызывающих (`/coach`), поэтому канонический
+ * хелпер импортируется под псевдонимом.
+ */
 export function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("aevion_auth_token");
+  return getPlatformAuthToken();
 }

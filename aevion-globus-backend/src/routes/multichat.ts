@@ -24,7 +24,7 @@ import { getPool } from "../lib/dbPool";
 import { readJsonFile, updateJsonFile } from "../lib/jsonFileStore";
 import { rateLimit } from "../lib/rateLimit";
 import { requireAuth } from "../lib/authJwt";
-import { listChatTurns, recordChatTurn, type ChatTurn } from "../lib/chatHistory";
+import { countChatTurns, listChatTurns, recordChatTurn, type ChatTurn } from "../lib/chatHistory";
 import { usageToTokens } from "../lib/usageTokens";
 import { costUsd } from "../services/qcoreai/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -211,6 +211,36 @@ async function recordAgentFailure(userId: string, threadId: string, reason: stri
 export type LedgerTurn = ChatTurn & { agentId: string | null };
 
 /** Помечает каждую реплику её агентом (null — реплика самого пользователя). */
+// Сколько реплик берём в ленту и сколько — в выгрузку/счётчик.
+//
+// Оба числа стоят рядом намеренно: раньше выгрузка просила 5000, а хранилище
+// молча отдавало 500, и разойтись им было негде — потолок жил в другом файле.
+const FEED_LIMIT = 200;
+const FULL_READ_LIMIT = 5000;
+
+/**
+ * Лента + признак, что она неполная.
+ *
+ * Обрезанная выборка и полная выглядят одинаково, поэтому каждый читающий
+ * эндпоинт обязан отдать `totalTurns` и `truncated` — иначе «выгрузка для
+ * compliance» и счётчик расхода тихо занижают, оставаясь при 200 OK.
+ */
+async function readFeed(
+  userId: string,
+  conversationId: string,
+  limit: number,
+): Promise<{ turns: LedgerTurn[]; totalTurns: number; truncated: boolean }> {
+  const [turns, totalTurns] = await Promise.all([
+    listChatTurns({ userId, conversationId, includeAgentThreads: true, limit }),
+    countChatTurns({ userId, conversationId, includeAgentThreads: true }),
+  ]);
+  return {
+    turns: withAgentIds(conversationId, turns),
+    totalTurns,
+    truncated: totalTurns > turns.length,
+  };
+}
+
 function withAgentIds(rootId: string, turns: ChatTurn[]): LedgerTurn[] {
   const prefix = `${rootId}${AGENT_THREAD_SEP}`;
   return turns.map((t) => {
@@ -440,8 +470,8 @@ multichatRouter.get("/conversations/:id", async (req, res) => {
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation not found" });
-    const turns = await listChatTurns({ userId, conversationId: id, includeAgentThreads: true, limit: 200 });
-    res.json({ conversation: conv, turns: withAgentIds(id, turns) });
+    const feed = await readFeed(userId, id, FEED_LIMIT);
+    res.json({ conversation: conv, ...feed });
   } catch (err: any) {
     captureMultichatError(err, { route: "get-conversation", entityId: id });
     res.status(500).json({ error: "fetch failed", });
@@ -669,10 +699,10 @@ multichatRouter.get("/conversations/:id/export.json", async (req, res) => {
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation_not_found" });
-    const turns = await listChatTurns({ userId, conversationId: id, includeAgentThreads: true, limit: 5000 });
+    const feed = await readFeed(userId, id, FULL_READ_LIMIT);
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Disposition", `attachment; filename="multichat-${id}.json"`);
-    res.json({ conversation: conv, turns: withAgentIds(id, turns), exportedAt: new Date().toISOString() });
+    res.json({ conversation: conv, ...feed, exportedAt: new Date().toISOString() });
   } catch (err: any) {
     captureMultichatError(err, { route: "export-json", entityId: id });
     res.status(500).json({ error: "export_failed", });
@@ -686,10 +716,7 @@ multichatRouter.get("/conversations/:id/export.csv", async (req, res) => {
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation_not_found" });
-    const turns = withAgentIds(
-      id,
-      await listChatTurns({ userId, conversationId: id, includeAgentThreads: true, limit: 5000 }),
-    );
+    const { turns, totalTurns, truncated } = await readFeed(userId, id, FULL_READ_LIMIT);
     // Выгружается content — текст сообщений, который пишет пользователь. Гашение
     // формул берём из общего lib/csv: значение с ведущим = + - @ Excel исполняет
     // при открытии файла.
@@ -707,8 +734,23 @@ multichatRouter.get("/conversations/:id/export.csv", async (req, res) => {
     for (const t of turns) {
       lines.push([esc(t.createdAt), esc(t.agentId ?? ""), esc(t.role), esc(t.content)].join(","));
     }
+    // Неполная выгрузка говорит о себе строкой в самом файле, а не только
+    // заголовком ответа: человек открывает CSV в Excel и заголовков не видит,
+    // а недостающие реплики отличить не от чего.
+    if (truncated) {
+      lines.push(
+        [
+          esc(new Date().toISOString()),
+          "",
+          "system",
+          esc(`выгружены последние ${turns.length} реплик из ${totalTurns}`),
+        ].join(","),
+      );
+    }
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="multichat-${id}.csv"`);
+    res.setHeader("X-Aevion-Total-Turns", String(totalTurns));
+    res.setHeader("X-Aevion-Truncated", truncated ? "true" : "false");
     res.send(lines.join("\n") + "\n");
   } catch (err: any) {
     captureMultichatError(err, { route: "export-csv", entityId: id });
@@ -726,8 +768,10 @@ multichatRouter.get("/conversations/:id/usage", async (req, res) => {
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation_not_found" });
-    const turns = await listChatTurns({ userId, conversationId: id, includeAgentThreads: true, limit: 5000 });
-    res.json({ conversationId: id, ...aggregateUsage(turns) });
+    const { turns, totalTurns, truncated } = await readFeed(userId, id, FULL_READ_LIMIT);
+    // truncated здесь — не косметика: расход при обрыве ЗАНИЖЕН, а число без
+    // признака неполноты выглядит как окончательное.
+    res.json({ conversationId: id, ...aggregateUsage(turns), totalTurns, truncated });
   } catch (err: any) {
     captureMultichatError(err, { route: "usage", entityId: id });
     res.status(500).json({ error: "usage_failed", });
@@ -1097,16 +1141,11 @@ multichatPublicRouter.get("/shared/:token", async (req, res) => {
   try {
     const conv = await findByShareToken(token);
     if (!conv) return res.status(404).json({ error: "not_found_or_revoked" });
-    const turns = await listChatTurns({
-      userId: conv.userId,
-      conversationId: conv.id,
-      includeAgentThreads: true,
-      limit: 200,
-    });
+    const { turns, totalTurns, truncated } = await readFeed(conv.userId, conv.id, FEED_LIMIT);
     // Публично отдаём разговор, но не счётчик: токены — это расход владельца.
     // Текст несостоявшегося ответа тоже подменяем: причина отказа провайдера
     // может нести внутренний адрес или код, а получателю ссылки важен сам факт.
-    const safeTurns = withAgentIds(conv.id, turns).map((t) => {
+    const safeTurns = turns.map((t) => {
       const { tokensIn, tokensOut, userId, ...rest } = t;
       void tokensIn;
       void tokensOut;
@@ -1118,6 +1157,8 @@ multichatPublicRouter.get("/shared/:token", async (req, res) => {
     res.json({
       conversation: { id: conv.id, title: conv.title, createdAt: conv.createdAt },
       turns: safeTurns,
+      totalTurns,
+      truncated,
     });
   } catch (err: any) {
     captureMultichatError(err, { route: "shared-view" });

@@ -140,6 +140,80 @@ function likeEscape(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/**
+ * Потолок выборки.
+ *
+ * Был 500 и стоял ЖЁСТКО: сколько бы вызывающий ни попросил, приезжало 500.
+ * Выгрузка беседы просит 5000 и заявлена как «полный дамп для compliance»,
+ * счётчик расхода просит 5000 — оба молча получали пятую часть. Консилиум из
+ * четырёх агентов пишет пять реплик за круг, то есть 500 — это сотый круг.
+ *
+ * Потолок нужен (лента целиком в память ради одного ответа — плохая идея), но
+ * он обязан совпадать с тем, что просят честные вызывающие, а превышение —
+ * называться вслух: для этого есть countChatTurns и поле truncated в ответах.
+ */
+const MAX_LIST_LIMIT = 5000;
+
+function clampLimit(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 100;
+  return Math.max(1, Math.min(Math.floor(n), MAX_LIST_LIMIT));
+}
+
+export function maxChatTurnsPerRead(): number {
+  return MAX_LIST_LIMIT;
+}
+
+/**
+ * Сколько всего реплик в беседе — чтобы ответ мог сказать, что показывает не
+ * всё. Без этого числа обрезанная лента и обрезанная выгрузка выглядят точно
+ * так же, как полные.
+ */
+export async function countChatTurns(opts: {
+  userId?: string;
+  conversationId?: string;
+  includeAgentThreads?: boolean;
+}): Promise<number> {
+  if (isPg()) {
+    await ensureSchema();
+    const where: string[] = [];
+    const args: unknown[] = [];
+    if (opts.userId) {
+      where.push(`user_id = $${args.length + 1}`);
+      args.push(opts.userId);
+    }
+    if (opts.conversationId) {
+      if (opts.includeAgentThreads) {
+        where.push(
+          `(conversation_id = $${args.length + 1} OR conversation_id LIKE $${args.length + 2} ESCAPE '\\')`,
+        );
+        args.push(opts.conversationId, `${likeEscape(opts.conversationId)}:%`);
+      } else {
+        where.push(`conversation_id = $${args.length + 1}`);
+        args.push(opts.conversationId);
+      }
+    }
+    const r = await getPool().query(
+      `SELECT COUNT(*)::int AS n FROM chat_turns ${where.length ? "WHERE " + where.join(" AND ") : ""}`,
+      args,
+    );
+    return Number(r.rows[0]?.n ?? 0) || 0;
+  }
+
+  const data = await readJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] });
+  let items = Array.isArray(data.items) ? data.items : [];
+  if (opts.userId) items = items.filter((t) => t.userId === opts.userId);
+  if (opts.conversationId) {
+    const root = opts.conversationId;
+    items = items.filter((t) =>
+      opts.includeAgentThreads
+        ? t.conversationId === root || (t.conversationId ?? "").startsWith(`${root}:`)
+        : t.conversationId === root,
+    );
+  }
+  return items.length;
+}
+
 export async function listChatTurns(opts: {
   userId?: string;
   conversationId?: string;
@@ -154,7 +228,7 @@ export async function listChatTurns(opts: {
   includeAgentThreads?: boolean;
   limit?: number;
 }): Promise<ChatTurn[]> {
-  const limit = Math.max(1, Math.min(opts.limit ?? 100, 500));
+  const limit = clampLimit(opts.limit);
   if (isPg()) {
     await ensureSchema();
     const where: string[] = [];
@@ -175,6 +249,16 @@ export async function listChatTurns(opts: {
       }
     }
     args.push(limit);
+    // DESC + разворот, а не ASC.
+    //
+    // Было `ORDER BY created_at ASC LIMIT n` — то есть при упоре в потолок
+    // приезжали САМЫЕ СТАРЫЕ n реплик. Файловая ветка ниже берёт последние
+    // (`slice(-limit)`), и ветки расходились в противоположные стороны. На
+    // проде стоит Postgres: после 200-й реплики консоль замирала на начале
+    // разговора и переставала показывать новые ответы, а у разработчика на
+    // файловом хранилище всё выглядело исправно.
+    //
+    // Индекс idx_chat_turns_conv_created годится и для обратного обхода.
     const sql = `
       SELECT id, user_id AS "userId", conversation_id AS "conversationId",
              role, content, provider, model,
@@ -182,11 +266,12 @@ export async function listChatTurns(opts: {
              created_at AS "createdAt"
       FROM chat_turns
       ${where.length ? "WHERE " + where.join(" AND ") : ""}
-      ORDER BY created_at ASC
+      ORDER BY created_at DESC
       LIMIT $${args.length}
     `;
     const r = await getPool().query(sql, args);
-    return r.rows.map((row: any) => ({ ...row, createdAt: toIso(row.createdAt) })) as ChatTurn[];
+    const rows = r.rows.map((row: any) => ({ ...row, createdAt: toIso(row.createdAt) })) as ChatTurn[];
+    return rows.reverse(); // наружу — хронологический порядок, как и раньше
   }
 
   const data = await readJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] });

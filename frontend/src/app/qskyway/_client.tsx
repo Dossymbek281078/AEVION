@@ -173,7 +173,7 @@ export default function QSkywayClient() {
 
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", buildings: 0, heightConfidencePct: null as number | null, avgConfClearM: null as number | null, etaStill: null as number | null, obstacleSegments: null as number | null, measuredObstacleSegments: null as number | null });
+  const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", heightConfidencePct: null as number | null, avgConfClearM: null as number | null, etaStill: null as number | null, obstacleSegments: null as number | null, measuredObstacleSegments: null as number | null });
   const [booking, setBooking] = useState<string>("");
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
@@ -379,7 +379,7 @@ export default function QSkywayClient() {
       taxisRef.current = []; heroRef.current = null; conflictsRef.current = 0;
       let mh = 0; for (const h of city.grid.heights) if (h > mh) mh = h;
       altMaxRef.current = FLOOR + Math.ceil((mh + CLEAR - FLOOR) / BAND) * BAND + BAND;
-      setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, buildings: city.buildings.length, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null });
+      setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null });
       setMeta({
         wind: city.wind ? `${city.wind.groundMs}→${city.wind.topMs} м/с (от ${city.wind.fromDeg}°)` : "—",
         windSource: city.wind?.source ?? "illustrative",

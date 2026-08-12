@@ -88,6 +88,49 @@ const bothNegate = m.buildDissentMap([
 ok("оба отрицают одно и то же — противоречия нет", (bothNegate.contradictions || []).length === 0,
   JSON.stringify(bothNegate.contradictions));
 
+// Обороты, где «не» — усилитель, а не отрицание. «Не только в цене» не спорит
+// с «только цена и решает», «не менее 300» не отрицает «менее 300»: это
+// конструкции «X и сверх того» и «не ниже границы». Без этого разбора
+// детектор противоречий сам становится источником ложных конфликтов — того
+// самого шума, ради устранения которого он и заведён.
+const notOnly = m.buildDissentMap([
+  A("gpt", "Проблема не только в цене: людям неясна сама польза продукта."),
+  A("claude", "Только цена и решает: остальное вторично для этой аудитории."),
+]);
+ok("«не только» противоречием не считается", notOnly.contradictions.length === 0,
+  JSON.stringify(notOnly.contradictions));
+
+const notLess = m.buildDissentMap([
+  A("gpt", "Нужен трафик не менее 300 визитов в месяц, иначе выборка бессмысленна."),
+  A("claude", "При трафике менее 300 визитов запускать тариф рано."),
+]);
+ok("«не менее» противоречием не считается", notLess.contradictions.length === 0,
+  JSON.stringify(notLess.contradictions));
+
+const notJust = m.buildDissentMap([
+  A("gpt", "Это не просто скидка, а изменение модели монетизации."),
+  A("claude", "Просто дайте скидку и посмотрите на отклик."),
+]);
+ok("«не просто» противоречием не считается", notJust.contradictions.length === 0,
+  JSON.stringify(notJust.contradictions));
+
+// А вот усилитель степени отрицание пропускает дальше: спорят о «хорошо», а не
+// о слове «очень».
+const notVery = m.buildDissentMap([
+  A("gpt", "Идея не очень удачная при текущем позиционировании продукта."),
+  A("claude", "Идея удачная при текущем позиционировании продукта."),
+]);
+ok("«не очень удачная» спорит с «удачная»", notVery.contradictions.some((c) => c.word === "удачная"),
+  JSON.stringify(notVery.contradictions));
+
+// Настоящие противоречия от этого разбора не пострадали.
+const stillReal = m.buildDissentMap([
+  A("gpt", "На текущем трафике выборки не хватит, вывод будет шумом."),
+  A("claude", "Выборки хватит: 300 визитов достаточно для первой проверки."),
+]);
+ok("«не хватит» против «хватит» осталось противоречием",
+  stillReal.contradictions.some((c) => c.word === "хватит"), JSON.stringify(stillReal.contradictions));
+
 /* ── 2. Нечего сравнивать — не выдавать консенсус ───────────────────────── */
 
 ok("один ответ → insufficient", m.buildDissentMap([A("gpt", "Ответ")]).verdict === "insufficient");

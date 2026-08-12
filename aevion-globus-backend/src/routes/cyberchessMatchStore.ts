@@ -95,7 +95,7 @@ export async function ensureDb(): Promise<void> {
       CREATE INDEX IF NOT EXISTS "cybermatch_black_idx" ON "CyberMatch" ("blackUserId","createdAt" DESC);
       CREATE INDEX IF NOT EXISTS "cybermatch_status_idx" ON "CyberMatch" ("status");
 
-      -- Server-authoritative Chessy wallet — see creditWallet() below. Only
+      -- Server-authoritative Chessy wallet — see awardMatchChessy() below. Only
       -- finalizeMatch() (real matchmaking games, server-verified result post
       -- move-legality hardening) writes to this today; the existing 60+
       -- addChessy() call sites in the frontend remain client-side/localStorage
@@ -109,6 +109,25 @@ export async function ensureDb(): Promise<void> {
         "updatedAt"   TIMESTAMP NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS "cyberwallet_leaderboard_idx" ON "CyberWallet" ("balance" DESC);
+
+      -- Одна строка на (партия, игрок) — доказательство, что за эту партию
+      -- этому игроку уже заплачено. Пишется ТЕМ ЖЕ запросом, что и изменение
+      -- баланса (см. awardMatchChessy), поэтому ведомость и кошелёк не могут
+      -- разойтись. Нужна для двух вещей сразу:
+      --   * первичный ключ делает повторную выплату невозможной на уровне БД,
+      --     а не только на уровне захвата строки матча;
+      --   * закрытая партия БЕЗ своих строк — это и есть след неудавшегося
+      --     начисления. Раньше следа не было вовсе: q() ловит ошибку запроса,
+      --     пишет warning и возвращает пустой массив, так что провал выплаты
+      --     ничем не отличался от успеха.
+      CREATE TABLE IF NOT EXISTS "CyberWalletAward" (
+        "matchId" TEXT NOT NULL,
+        "userId"  TEXT NOT NULL,
+        "amount"  INTEGER NOT NULL,
+        "paidAt"  TIMESTAMP NOT NULL DEFAULT now(),
+        PRIMARY KEY ("matchId","userId")
+      );
+      CREATE INDEX IF NOT EXISTS "cyberwalletaward_match_idx" ON "CyberWalletAward" ("matchId");
     `);
     pool = p;
     dbReady = true;
@@ -263,12 +282,21 @@ export async function finalizeMatch(
   // finalize corrupting Glicko-2 (the in-memory MATCHES guard is volatile and
   // is wiped on process restart while the DB row persists).
   const existing = await q(
-    `SELECT "status","whiteRatingBefore","blackRatingBefore","whiteRatingAfter","blackRatingAfter"
+    `SELECT "status","result","whiteUserId","blackUserId","whiteName","blackName",
+            "whiteRatingBefore","blackRatingBefore","whiteRatingAfter","blackRatingAfter"
        FROM "CyberMatch" WHERE "id"=$1`,
     [matchId],
   );
   const prior = existing?.[0];
   if (prior && prior.status === "ended") {
+    // Рейтинг здесь не пересчитывается — он уже применён. А вот выплату
+    // повторить НАДО: ведомость делает её идемпотентной, поэтому этот проход
+    // либо не делает ничего (уже заплачено), либо доплачивает то, что не
+    // прошло в первый раз. Плательщики и исход берутся из СТРОКИ, а не из
+    // аргументов: второй отчёт присылает другой клиент, и его версия исхода
+    // не должна решать, кому сколько причитается.
+    await settleAwards(matchId, prior);
+
     const wb = Number(prior.whiteRatingBefore), wa = Number(prior.whiteRatingAfter);
     const bb = Number(prior.blackRatingBefore), ba = Number(prior.blackRatingAfter);
     if ([wb, wa, bb, ba].every(Number.isFinite)) {
@@ -335,12 +363,17 @@ export async function finalizeMatch(
   await upsertRating(wRow);
   await upsertRating(bRow);
   // Small, trustworthy Chessy award straight off the server-verified result —
-  // this function only runs once per match (idempotency guard above) and
   // info.result comes from settleMatch()'s authoritative board/clock logic
-  // (see cyberchessMatchmaking.ts), not a client claim.
-  const CHESSY_WIN = 10, CHESSY_DRAW = 3, CHESSY_PLAYED = 1;
-  await creditWallet(info.whiteUserId, wWin ? CHESSY_WIN : draw ? CHESSY_DRAW : CHESSY_PLAYED, info.whiteName);
-  await creditWallet(info.blackUserId, bWin ? CHESSY_WIN : draw ? CHESSY_DRAW : CHESSY_PLAYED, info.blackName);
+  // (see cyberchessMatchmaking.ts), not a client claim. Выплата проходит через
+  // ведомость: захват строки матча защищает от повтора, а ведомость — ещё и от
+  // потери, если сам запрос начисления не пройдёт.
+  await settleAwards(matchId, {
+    whiteUserId: info.whiteUserId,
+    blackUserId: info.blackUserId,
+    whiteName: info.whiteName,
+    blackName: info.blackName,
+    result: info.result,
+  });
   // Статус и исход уже записаны захватом выше — здесь только колонки рейтинга.
   await q(
     `UPDATE "CyberMatch" SET
@@ -356,21 +389,130 @@ export async function finalizeMatch(
   };
 }
 
-/** Credit `amount` Chessy to the server-authoritative wallet. Silent no-op
- * offline/on error (same fire-and-forget discipline as the rest of this
- * store) — never blocks or throws into the match-settle path. */
-export async function creditWallet(userId: string, amount: number, displayName?: string | null): Promise<void> {
-  if (!Number.isFinite(amount) || amount <= 0) return;
-  await q(
-    `INSERT INTO "CyberWallet" ("userId","displayName","balance","earnedTotal","updatedAt")
-     VALUES ($1,$2,$3,$3,now())
-     ON CONFLICT ("userId") DO UPDATE SET
-       "displayName"=COALESCE(EXCLUDED."displayName","CyberWallet"."displayName"),
-       "balance"="CyberWallet"."balance"+$3,
-       "earnedTotal"="CyberWallet"."earnedTotal"+$3,
-       "updatedAt"=now()`,
-    [userId, displayName ?? null, Math.floor(amount)],
+/** Чем кончилась попытка выплаты. Три исхода, а не два, потому что «уже
+ * заплачено» и «не смогли заплатить» — разные вещи, а раньше и то и другое
+ * выглядело как успешно завершившийся await. */
+export type AwardOutcome = "credited" | "already" | "failed";
+
+/**
+ * Начислить игроку Chessy за партию — ровно один раз за (партия, игрок).
+ *
+ * Ведомость и баланс меняются ОДНИМ запросом: внешняя вставка в
+ * `CyberWalletAward` служит замком, а кошелёк пополняется только на строках,
+ * которые этот замок отдал. Отсюда три свойства:
+ *   * повтор ничего не платит (конфликт по первичному ключу → claim пуст →
+ *     во вставку в кошелёк не приходит ни одной строки);
+ *   * ведомость не может утверждать выплату, которой не было, и наоборот —
+ *     обе вставки живут или падают вместе;
+ *   * отказ БД отличим от «уже заплачено»: успешный запрос ВСЕГДА возвращает
+ *     ровно одну строку со счётчиком, поэтому пустой ответ q() — это провал.
+ *
+ * Сумма передаётся двумя параметрами намеренно: `amount` в ведомости —
+ * INTEGER, а balance/earnedTotal — BIGINT. Один и тот же плейсхолдер в двух
+ * колонках разного типа заставляет Postgres выводить тип параметра, и на этом
+ * можно налететь на «inconsistent types deduced». Проверить это здесь нечем —
+ * в рабочем каталоге нет базы, — поэтому выбрана форма, где выводить нечего.
+ *
+ * Не бросает: путь закрытия партии не должен падать из-за кошелька. Но и не
+ * молчит — исход возвращается вызывающему.
+ */
+export async function awardMatchChessy(
+  matchId: string,
+  userId: string,
+  amount: number,
+  displayName?: string | null,
+): Promise<AwardOutcome> {
+  const value = Math.floor(amount);
+  if (!Number.isFinite(value) || value <= 0) return "already"; // платить нечего — долга нет
+  const rows = await q(
+    `WITH claim AS (
+       INSERT INTO "CyberWalletAward" ("matchId","userId","amount")
+       VALUES ($1,$2,$3)
+       ON CONFLICT ("matchId","userId") DO NOTHING
+       RETURNING "userId"
+     ), paid AS (
+       INSERT INTO "CyberWallet" ("userId","displayName","balance","earnedTotal","updatedAt")
+       SELECT $2,$4,$5,$5,now() FROM claim
+       ON CONFLICT ("userId") DO UPDATE SET
+         "displayName"=COALESCE(EXCLUDED."displayName","CyberWallet"."displayName"),
+         "balance"="CyberWallet"."balance"+EXCLUDED."balance",
+         "earnedTotal"="CyberWallet"."earnedTotal"+EXCLUDED."earnedTotal",
+         "updatedAt"=now()
+       RETURNING "userId"
+     )
+     SELECT (SELECT count(*) FROM paid) AS credited`,
+    [matchId, userId, value, displayName ?? null, value],
   );
+  if (rows.length === 0) return "failed"; // q() проглотил ошибку — ответа нет
+  return Number(rows[0]?.credited) > 0 ? "credited" : "already";
+}
+
+const CHESSY_WIN = 10, CHESSY_DRAW = 3, CHESSY_PLAYED = 1;
+
+function chessyFor(result: string, side: "white" | "black"): number {
+  if (result === "draw") return CHESSY_DRAW;
+  return result === side ? CHESSY_WIN : CHESSY_PLAYED;
+}
+
+/**
+ * Расплатиться с обоими игроками закрытой партии.
+ *
+ * Идемпотентна благодаря ведомости, поэтому её МОЖНО и НУЖНО звать и на пути
+ * повтора — в этом и состоит починка. Конец партии сообщают оба клиента; если
+ * первая попытка не смогла начислить, второй отчёт доплатит. Раньше замок на
+ * строке матча закрывал и повтор тоже: неудачная выплата терялась навсегда,
+ * оставляя после себя одну строку warning в логах.
+ */
+async function settleAwards(
+  matchId: string,
+  m: {
+    whiteUserId?: string | null;
+    blackUserId?: string | null;
+    whiteName?: string | null;
+    blackName?: string | null;
+    result?: string | null;
+  },
+): Promise<void> {
+  const result = m.result;
+  if (result !== "white" && result !== "black" && result !== "draw") return;
+  for (const side of ["white", "black"] as const) {
+    const userId = side === "white" ? m.whiteUserId : m.blackUserId;
+    if (!userId) continue;
+    const amount = chessyFor(result, side);
+    const outcome = await awardMatchChessy(matchId, userId, amount, side === "white" ? m.whiteName : m.blackName);
+    if (outcome === "failed") {
+      // Не «warning где-то в потоке»: строки в ведомости нет, поэтому партия
+      // остаётся видимой в countUnpaidAwards() и будет доплачена следующим
+      // отчётом о конце этой же партии.
+      console.error(
+        `[CyberMatchStore] award UNPAID match=${matchId} user=${userId} amount=${amount} — ведомость пуста, доплата ожидается следующим отчётом`,
+      );
+    }
+  }
+}
+
+/**
+ * Сколько закрытых партий не имеют полной пары строк в ведомости — то есть
+ * сколько выплат зависло. `null` означает «спросить не удалось», и это НЕ то
+ * же самое, что 0: отдавать ноль на упавшем запросе значит докладывать, что
+ * долгов нет, когда на самом деле ничего не проверено.
+ *
+ * Нижняя граница по первой выплате в ведомости — чтобы счётчик не краснел на
+ * партиях, закрытых ДО появления таблицы: они все без строк, и без границы
+ * показатель был бы навсегда красным, а такой показатель перестают читать.
+ * Пустая ведомость → граница now() → ноль, а не вся история.
+ */
+export async function countUnpaidAwards(): Promise<number | null> {
+  const rows = await q(
+    `SELECT count(*) AS n FROM "CyberMatch" m
+      WHERE m."status"='ended'
+        AND m."endedAt" >= COALESCE((SELECT min("paidAt") FROM "CyberWalletAward"), now())
+        AND (SELECT count(*) FROM "CyberWalletAward" a WHERE a."matchId"=m."id") < 2`,
+    [],
+  );
+  if (rows.length === 0) return null;
+  const n = Number(rows[0]?.n);
+  return Number.isFinite(n) ? n : null;
 }
 
 export interface WalletRow { userId: string; displayName: string | null; balance: number; earnedTotal: number }

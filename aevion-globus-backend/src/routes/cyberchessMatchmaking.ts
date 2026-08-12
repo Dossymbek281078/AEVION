@@ -36,6 +36,7 @@ import {
   getHistory,
   getWallet,
   getWalletLeaderboard,
+  countUnpaidAwards,
 } from "./cyberchessMatchStore";
 import { computeServerTimeStats, classifyServerTimeSignal } from "../lib/cyberchessServerTimeSignal";
 import { submitServerReport } from "./cyberchessAnticheat";
@@ -1336,7 +1337,7 @@ router.get("/leaderboard", async (req: Request, res: Response): Promise<void> =>
 });
 
 // GET /wallet?userId=X — server-authoritative Chessy balance (see
-// creditWallet() in cyberchessMatchStore.ts). Only credited today from real
+// awardMatchChessy() in cyberchessMatchStore.ts). Only credited today from real
 // matchmaking games via finalizeMatch's server-verified result — the
 // existing client-side Chessy (60+ addChessy() call sites in the frontend
 // for puzzles/lessons/cosmetics) is a separate, unrelated balance and is
@@ -1382,9 +1383,15 @@ router.get("/history", async (req: Request, res: Response): Promise<void> => {
 });
 
 // GET /debug/stats — diagnostic
-router.get("/debug/stats", (_req: Request, res: Response): void => {
+router.get("/debug/stats", async (_req: Request, res: Response): Promise<void> => {
+  // Зависшие выплаты: закрытые партии, за которые в ведомости нет пары строк.
+  // Показатель существует ради читателя — без него провал начисления виден
+  // только строкой в логе, а логи никто не открывает. Число, не список: имена
+  // и суммы наружу не нужны. null = спросить не удалось (это не «ноль долгов»).
+  const unpaidAwards = await countUnpaidAwards().catch(() => null);
   res.json({
     ok: true,
+    awards: { unpaid: unpaidAwards },
     queue: {
       total: QUEUE.size,
       waiting: [...QUEUE.values()].filter((e) => e.status === "waiting").length,

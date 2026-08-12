@@ -453,16 +453,31 @@ function suspectCellsOf(city: CityData): Map<number, number> {
 // синтетический город, и кэш по строке отдал бы ему чужую подложку (а хуже —
 // оставил бы свою в кэше настоящей Астаны).
 const reviewedTwinCache = new WeakMap<CityData, CityData | null>();
+
+/**
+ * Разбор для здания твина — ОДИН способ на весь модуль.
+ *
+ * Вынесено 12.08.2026 при вычитке собственного дифа: `heightDisputeFor` уже
+ * искал разбор по элементу OSM, а теневой твин ниже — всё ещё по индексу.
+ * Пережила бы такая пара ровно до следующей пересборки: карточка нашла бы
+ * разбор и назвала опубликованную высоту, а подстановка высот молча не
+ * сработала бы, и «каким был бы коридор» уехало бы в null. Тот самый класс
+ * дефекта, который этот же код и ловит, — два наших ответа на один вопрос.
+ */
+function reviewForBuilding(cityId: string, city: CityData, buildingIdx: number) {
+  const suspectEntry = (city.dataQuality?.suspect ?? []).find((s) => s.i === buildingIdx);
+  return heightReviewFor(cityId, buildingIdx, suspectEntry?.osm);
+}
+
 function reviewedTwin(cityId: string, city: CityData): CityData | null {
   const hit = reviewedTwinCache.get(city);
   if (hit !== undefined) return hit;
-  const reviews = heightReviewsForCity(cityId).filter((r) => r.verdict !== "confirmed");
   const cells = suspectCellsOf(city);
   let patched = 0;
   const heights = city.grid.heights.slice();
   for (const [cellIdx, buildingIdx] of cells) {
-    const rev = reviews.find((r) => r.index === buildingIdx);
-    if (!rev) continue;
+    const rev = reviewForBuilding(cityId, city, buildingIdx);
+    if (!rev || rev.verdict === "confirmed") continue;
     heights[cellIdx] = Math.round(rev.publishedM);
     patched++;
   }
@@ -529,10 +544,7 @@ function heightDisputeFor(
   const building = ranked[0][0];
   const segments = ranked[0][1];
   const alsoDisputed = ranked.slice(1).map(([bi]) => bi);
-  // Ищем разбор по элементу OSM, если твин его везёт: индекс здания пересборку
-  // не переживает, идентификатор источника — переживает.
-  const suspectEntry = (city.dataQuality?.suspect ?? []).find((s) => s.i === building);
-  const rev = heightReviewFor(cityId, building, suspectEntry?.osm);
+  const rev = reviewForBuilding(cityId, city, building);
   const shadowTwin = reviewedTwin(cityId, city);
   const shadow = shadowTwin ? buildRoute(cityId, shadowTwin, route.from, route.to, route.respectCeiling) : null;
   const cruiseIf = shadow ? shadow.cruiseAltM : null;
@@ -1045,7 +1057,7 @@ qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
   }
   const disputed = [...new Set(cells.values())].map((bi) => {
     const suspectEntry = (city.dataQuality?.suspect ?? []).find((s) => s.i === bi);
-    const rev = heightReviewFor(id, bi, suspectEntry?.osm);
+    const rev = reviewForBuilding(id, city, bi);
     const cellCount = [...cells.values()].filter((v) => v === bi).length;
     return {
       building: bi,

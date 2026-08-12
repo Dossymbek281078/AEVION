@@ -54,12 +54,19 @@ const DEAD_KEYS = ["aevion_token", "aevion_jwt", "qcoreai_token"];
 const mentions = (text, key) => new RegExp(`["']${key}["']`).test(text);
 const CANONICAL = /aevion_auth_token_v1|getAuthToken|getAuthHeaders/;
 
+// Тесты пропускаем намеренно. Проверка охраняет СТРАНИЦЫ, а тест, который
+// доказывает, что мёртвый ключ никого не пускает, обязан назвать его вслух и
+// даже записать. Без этого исключения проверка запрещала бы ровно то
+// доказательство, ради которого заведена, — и первым же её нарушителем стал
+// собственный тест ZTideRankPill.auth.test.tsx.
+const isTest = (name) => /\.test\.(ts|tsx)$/.test(name);
+
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
-    if (entry === "node_modules" || entry === ".next") continue;
+    if (entry === "node_modules" || entry === ".next" || entry === "__tests__") continue;
     const full = path.join(dir, entry);
     if (statSync(full).isDirectory()) walk(full, out);
-    else if (/\.(ts|tsx)$/.test(entry)) out.push(full);
+    else if (/\.(ts|tsx)$/.test(entry) && !isTest(entry)) out.push(full);
   }
   return out;
 }

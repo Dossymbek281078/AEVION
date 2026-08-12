@@ -21,13 +21,36 @@ const APP_LINKS: Record<string, { name: string; href: string }> = {
   platform:   { name: "QRight", href: "/qright" },
 };
 
+/** Как называется платёжный сервис на экране. Имена не склоняются, поэтому
+ *  подставляются во все три языка без переделки фразы. */
+const PROCESSOR_LABEL: Record<string, string> = {
+  lemonsqueezy: "Lemon Squeezy",
+  gumroad: "Gumroad",
+  paypal: "PayPal",
+  paybox: "PayBox",
+};
+
 function SuccessInner() {
   const { t } = useI18n();
   const sp = useSearchParams();
   const sessionId = sp.get("session_id");
   // Gumroad redirects back with ?sale_id=...; keep _ptxn as a legacy fallback.
   const saleId = sp.get("sale_id") ?? sp.get("_ptxn");
-  const provider = sp.get("provider") ?? "gumroad";
+  // Кто именно принял платёж. Раньше здесь стояло `?? "gumroad"`, и страница
+  // писала «квитанция от Gumroad», «управление подпиской в аккаунте Gumroad»
+  // ВСЕМ — включая тех, кто заплатил через Lemon Squeezy (сейчас это основной
+  // провайдер подписок) или PayPal. Человека отправляли искать подписку в
+  // аккаунт, которого у него нет. Определяем по тем меткам, которые реально
+  // приходят: PayPal и PayBox возвращают ?paypal=1 / ?paybox=1, Gumroad —
+  // ?sale_id, Lemon Squeezy — ?provider=lemonsqueezy.
+  const provider =
+    sp.get("provider") ??
+    (sp.get("paypal") ? "paypal" : null) ??
+    (sp.get("paybox") ? "paybox" : null) ??
+    (sp.get("gumroad") || saleId ? "gumroad" : null);
+  // Название сервиса пишем, только если знаем его наверняка. Не знаем —
+  // строка без названия: выдуманное имя хуже отсутствующего.
+  const processor = provider ? (PROCESSOR_LABEL[provider] ?? null) : null;
   const stub = sp.get("stub") === "true";
   const tier = sp.get("tier") ?? sp.get("tierId");
   const period = sp.get("period");
@@ -129,14 +152,16 @@ function SuccessInner() {
             fontSize: 12, marginBottom: 24, border: "1px solid rgba(255,255,255,0.2)",
           }}>
             <span>🔒</span>
-            <span>{t("pricing.checkoutSuccess.providerBadge")}{period ? ` · ${period === "annual" ? t("pricing.checkoutSuccess.periodAnnual") : t("pricing.checkoutSuccess.periodMonthly")}` : ""}</span>
+            <span>{processor
+              ? t("pricing.checkoutSuccess.providerBadge", { processor })
+              : t("pricing.checkoutSuccess.providerBadgeNoName")}{period ? ` · ${period === "annual" ? t("pricing.checkoutSuccess.periodAnnual") : t("pricing.checkoutSuccess.periodMonthly")}` : ""}</span>
           </div>
         )}
 
         {/* Transaction ID */}
         {(saleId || sessionId) && (
           <p style={{ fontSize: 11, opacity: 0.6, margin: "0 0 20px" }}>
-            {saleId ? "Gumroad" : "Session"}: <code style={{ fontFamily: "monospace" }}>{saleId ?? sessionId}</code>
+            {processor ?? "Session"}: <code style={{ fontFamily: "monospace" }}>{saleId ?? sessionId}</code>
           </p>
         )}
 
@@ -180,9 +205,15 @@ function SuccessInner() {
           </h3>
           <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
             {[
-              { icon: "📧", text: t("pricing.checkoutSuccess.nextEmail") },
+              { icon: "📧", text: processor
+                  ? t("pricing.checkoutSuccess.nextEmail", { processor })
+                  : t("pricing.checkoutSuccess.nextEmailNoName") },
               { icon: "🚀", text: t("pricing.checkoutSuccess.nextOpenApp", { app: appLink.name }) },
-              { icon: "⚙️", text: t("pricing.checkoutSuccess.nextManage") },
+              // Куда идти управлять подпиской, можно сказать только зная сервис.
+              // Не знаем — пункт не показываем, а не отправляем наугад.
+              ...(processor
+                ? [{ icon: "⚙️", text: t("pricing.checkoutSuccess.nextManage", { processor }) }]
+                : []),
               { icon: "💬", text: t("pricing.checkoutSuccess.nextQuestions") },
             ].map((item, i) => (
               <li key={i} style={{ display: "flex", gap: 10, fontSize: 13, color: "#475569" }}>

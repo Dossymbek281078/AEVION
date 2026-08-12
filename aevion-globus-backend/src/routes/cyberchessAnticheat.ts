@@ -295,19 +295,51 @@ router.get("/stats/:userId", (req: Request, res: Response) => {
     .sort((a, b) => b.analysedAt - a.analysedAt)
     .slice(0, MAX_PER_USER);
 
-  const totalGames = reports.length;
-  const flaggedGames = reports.filter(r => r.verdict === "flagged").length;
-  const suspiciousGames = reports.filter(r => r.verdict === "suspicious").length;
+  // Вердикт складывается ТОЛЬКО из серверных сигналов.
+  //
+  // Клиентский отчёт присылает браузер, и в нём произвольный userId: кто угодно
+  // мог отправить «flagged» про любого игрока, и это попадало в его статистику
+  // наравне с измерениями сервера. Соседняя админская ручка /flagged прямо
+  // пишет, что серверные сигналы «unspoofable, a cheating client can't fake or
+  // suppress them» — то есть про клиентские там уже знали, а здесь считали
+  // вровень. Обвинение, которое может выписать любой прохожий, не должно
+  // выглядеть как вывод системы.
+  const serverReports = reports.filter(r => r.source === "server");
+  const clientReports = reports.filter(r => r.source !== "server");
+
+  const totalGames = serverReports.length;
+  const flaggedGames = serverReports.filter(r => r.verdict === "flagged").length;
+  const suspiciousGames = serverReports.filter(r => r.verdict === "suspicious").length;
   const avgSuspicionScore = totalGames
-    ? Math.round(reports.reduce((s, r) => s + r.suspicionScore, 0) / totalGames)
+    ? Math.round(serverReports.reduce((s, r) => s + r.suspicionScore, 0) / totalGames)
     : 0;
-  const latestVerdict = reports[0]?.verdict ?? "none";
+  const latestVerdict = serverReports[0]?.verdict ?? "none";
+
+  // Клиентские отчёты не выбрасываем — они полезны как сигнал, — но называем
+  // тем, что они есть: непроверенные заявления.
+  const unverified = {
+    total: clientReports.length,
+    flagged: clientReports.filter(r => r.verdict === "flagged").length,
+    suspicious: clientReports.filter(r => r.verdict === "suspicious").length,
+  };
+
+  // Наружу — без поля `ip`. Оно попадало в ПУБЛИЧНЫЙ ответ: по номеру игрока
+  // можно было прочитать адреса тех, чьи браузеры присылали отчёты. Хранить его
+  // для разбора злоупотреблений нормально, отдавать всем — нет.
+  const publicReports = reports.map(({ ip: _ip, ...rest }) => rest);
 
   res.json({
     ok: true,
     userId,
-    reports,
-    summary: { totalGames, flaggedGames, suspiciousGames, avgSuspicionScore, latestVerdict },
+    reports: publicReports,
+    summary: {
+      totalGames,
+      flaggedGames,
+      suspiciousGames,
+      avgSuspicionScore,
+      latestVerdict,
+      unverified,
+    },
   });
 });
 

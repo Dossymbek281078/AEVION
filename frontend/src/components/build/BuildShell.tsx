@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useBuildAuth } from "@/lib/build/auth";
 import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
-import { ToastProvider } from "./Toast";
 import { HeaderSearch } from "./HeaderSearch";
 import { CompareBar } from "./CompareBar";
 
@@ -124,8 +123,9 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
 
   const visibleNav = NAV.filter((n) => !n.authOnly || !!user);
 
+  // The provider moved up to app/build/layout.tsx so the shell-less pages get
+  // toasts too; a second one here would just add an empty viewport.
   return (
-    <ToastProvider>
     <div className={`min-h-screen ${skin.root}`}>
       <header className={`border-b backdrop-blur ${skin.header}`}>
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-2 px-4 py-3">
@@ -240,7 +240,6 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
         </div>
       </footer>
     </div>
-    </ToastProvider>
   );
 }
 

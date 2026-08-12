@@ -57,12 +57,23 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastCtx);
   // No-op fallback so callers don't need to be inside a provider in tests.
+  //
+  // It has to be loud outside tests: a component that lands on a page without
+  // the provider keeps calling toast.error() and the user sees nothing, which
+  // is the exact failure this component exists to prevent. That happened to
+  // ProfileShareQR on /build/u/[id] until the provider moved to the /build
+  // layout — "Link copied" and "Clipboard blocked" both went nowhere.
   if (!ctx) {
+    const warn = (text: string) => {
+      if (process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "test") {
+        console.warn(`[build/Toast] Сообщение потеряно — нет ToastProvider: ${text}`);
+      }
+    };
     return {
-      push: () => {},
-      success: () => {},
-      error: () => {},
-      info: () => {},
+      push: warn,
+      success: warn,
+      error: warn,
+      info: warn,
     };
   }
   return ctx;

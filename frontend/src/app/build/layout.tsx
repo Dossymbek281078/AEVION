@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { ServiceWorkerRegister } from "@/components/build/ServiceWorkerRegister";
+import { ToastProvider } from "@/components/build/Toast";
 import { AutoTranslate } from "@/components/AutoTranslate";
 
 export const metadata: Metadata = {
@@ -79,7 +80,14 @@ export default function BuildLayout({ children }: { children: React.ReactNode })
           observe=false. Re-enable a live observer scoped to /build so every
           page (and async-loaded content) translates into all 11 AEVION
           languages when the user switches via the app-shell language pill. */}
-      <AutoTranslate observe>{children}</AutoTranslate>
+      {/* Toasts live at the section level, not inside BuildShell: 15 /build
+          pages render without the shell (public profiles, guides, the
+          leaderboard), and components they mount — ProfileShareQR,
+          BookmarkButton — called useToast there and got the silent no-op
+          fallback. "Link copied" and "Clipboard blocked" both went nowhere. */}
+      <ToastProvider>
+        <AutoTranslate observe>{children}</AutoTranslate>
+      </ToastProvider>
     </>
   );
 }

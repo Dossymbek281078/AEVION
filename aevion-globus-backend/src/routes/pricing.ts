@@ -197,8 +197,13 @@ pricingRouter.post("/quote", (req, res) => {
   }
   const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
   const period: BillingPeriod = body.period === "annual" ? "annual" : "monthly";
+  // hasOwnProperty, а не `in`: оператор `in` идёт по цепочке прототипов, и
+  // currency:"constructor" проходил проверку. Дальше курс брался у функции
+  // Object, умножение давало NaN, и человек получал смету БЕЗ ЦИФР вместо
+  // честного отката на USD. Отказа не было — ответ 200 и пустые суммы.
   const currency: CurrencyCode =
-    typeof body.currency === "string" && body.currency in CURRENCY_RATES
+    typeof body.currency === "string" &&
+    Object.prototype.hasOwnProperty.call(CURRENCY_RATES, body.currency)
       ? (body.currency as CurrencyCode)
       : "USD";
   const modules = Array.isArray(body.modules) ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string") : [];

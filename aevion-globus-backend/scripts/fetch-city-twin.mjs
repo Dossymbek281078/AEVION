@@ -14,6 +14,13 @@
  * Usage:
  *   node scripts/fetch-city-twin.mjs astana --compare   (diff vs committed, writes nothing)
  *   node scripts/fetch-city-twin.mjs astana --write     (replace the committed twin)
+ *   node scripts/fetch-city-twin.mjs tokyo --compare --plateau-cache .aevion-data/plateau-cache
+ *
+ * Про Токио отдельной строкой, потому что на этом спотыкаются: без
+ * `--plateau-cache` каждый прогон тянет ~420 МБ CityGML заново, и на занятой
+ * машине это упирается в память (12.08.2026 проверка Токио так и осталась
+ * несделанной — `aevion-commit-check.ps1` дважды сказал «подожди»). С кэшем
+ * первый прогон платит один раз, остальные бесплатны.
  *
  * NOTE: `> src/routes/qskyway.city.ts` looks equivalent to --write and is NOT.
  * The shell truncates the target before node starts, and this script READS the

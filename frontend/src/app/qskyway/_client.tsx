@@ -213,6 +213,10 @@ export default function QSkywayClient() {
   const [ceilingBlocked, setCeilingBlocked] = useState<string | null>(null);
   const [heightDispute, setHeightDispute] = useState<HeightDispute | null>(null);
   const [disputeImpact, setDisputeImpact] = useState<{ available: boolean; routable: number; affectedPairs: number; maxCruiseDeltaM: number; note: string } | null>(null);
+  // Второй ответ того же рода: доходит ли ПОДСТАВЛЕННАЯ высота до маршрутов.
+  // Ответ у него другой, чем у спорной, — поэтому отдельное состояние, а не
+  // общий флаг «с высотами что-то не так».
+  const [substImpact, setSubstImpact] = useState<{ available: boolean; routable: number; affectedPairs: number; buildings: number; buildingsUnderRoutes: number; note: string } | null>(null);
   const [heroPair, setHeroPair] = useState<{ from: number; to: number } | null>(null);
   const [justification, setJustification] = useState<{ doc: JustDoc; attestation: JustAttestation; scope: string } | null>(null);
   const [justState, setJustState] = useState<"idle" | "busy" | "verified" | "invalid">("idle");
@@ -393,6 +397,10 @@ export default function QSkywayClient() {
     // Тем же движком и по тем же парам площадок: влияет ли спорная высота на
     // коридоры на самом деле. Отдельный запрос, потому что ответ дорогой (все
     // пары) и кэшируется на бэкенде.
+    fetch(apiUrl(`/api/qskyway/height-substitution?city=${encodeURIComponent(id)}`))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setSubstImpact(j?.available ? j : null))
+      .catch(() => setSubstImpact(null));
     fetch(apiUrl(`/api/qskyway/height-dispute?city=${encodeURIComponent(id)}`))
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => setDisputeImpact(j?.available ? j : null))
@@ -935,6 +943,17 @@ export default function QSkywayClient() {
                       style={{ color: "#c8964f", textDecoration: "underline dotted", cursor: "help" }}
                     >
                       ▨ подставлено по типу: {plural(meta.substituted.length, "здание", "здания", "зданий")}
+                      {/* Тот же вопрос, что у спорной высоты: доходит ли она до
+                          полётов. Ответы у них РАЗНЫЕ — спорная высота Астаны не
+                          задевает ни одного маршрута, а подстановка больше
+                          половины, — поэтому оба замера показаны, а не один. */}
+                      {substImpact?.available && (
+                        <span style={{ color: substImpact.affectedPairs > 0 ? "#fb7185" : "#5f7086" }}>
+                          {substImpact.affectedPairs > 0
+                            ? ` · под коридорами ${substImpact.buildingsUnderRoutes} из ${substImpact.buildings}, задето маршрутов ${substImpact.affectedPairs} из ${substImpact.routable}`
+                            : ` · на маршруты не влияет (0 из ${substImpact.routable})`}
+                        </span>
+                      )}
                     </span>
                   )}
                   {/* «Годна» здесь было сильнее, чем подпись той же площадки в

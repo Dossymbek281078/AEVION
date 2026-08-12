@@ -17,9 +17,28 @@ import { degraded } from "../lib/degradedResponse";
 
 const capture = makeServiceCapture("provisioning");
 
-const SUBS_FILE = process.env.SUBSCRIPTIONS_FILE
-  ? process.env.SUBSCRIPTIONS_FILE
-  : join(process.cwd(), "data", "subscriptions.jsonl");
+/**
+ * Where subscription records live. Resolved on every call, not bound once at
+ * import.
+ *
+ * Binding it at import time made the env unusable from anywhere that sets it
+ * after the module graph is built — which is every test file, because `import`
+ * is hoisted above the `process.env.SUBSCRIPTIONS_FILE = ...` line that means
+ * to redirect it. The paywall suite believed it was writing to a scratch file
+ * and was in fact appending paid subscriptions to the real
+ * data/subscriptions.jsonl, then failing on its own leftovers: its second test
+ * asserts the buyer is denied BEFORE purchasing, and after one previous run
+ * that buyer already had a paid record. Green on a fresh machine, red forever
+ * after, for a reason nothing in the failure pointed at.
+ *
+ * Reading it per call also means an env change takes effect without a restart,
+ * which is how planGate already reads PAYWALL_MODULES.
+ */
+function subsFile(): string {
+  return process.env.SUBSCRIPTIONS_FILE
+    ? process.env.SUBSCRIPTIONS_FILE
+    : join(process.cwd(), "data", "subscriptions.jsonl");
+}
 
 const RESEND_KEY = process.env.RESEND_API_KEY?.trim();
 const FROM_EMAIL = process.env.FROM_EMAIL?.trim() || "AEVION <hello@aevion.io>";
@@ -43,14 +62,14 @@ export interface Subscription {
 }
 
 function ensureDir() {
-  const dir = dirname(SUBS_FILE);
+  const dir = dirname(subsFile());
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
 export function writeSubscription(sub: Subscription): void {
   try {
     ensureDir();
-    appendFileSync(SUBS_FILE, JSON.stringify(sub) + "\n", "utf8");
+    appendFileSync(subsFile(), JSON.stringify(sub) + "\n", "utf8");
   } catch (e) {
     capture(e);
     console.error("[provisioning] writeSubscription failed", e);
@@ -69,8 +88,8 @@ export function writeSubscription(sub: Subscription): void {
 export function purgeSubscriptions(email: string): { removed: number; remaining: number } {
   const target = email.trim().toLowerCase();
   if (!target) return { removed: 0, remaining: 0 };
-  if (!existsSync(SUBS_FILE)) return { removed: 0, remaining: 0 };
-  const lines = readFileSync(SUBS_FILE, "utf8").split("\n").filter((l) => l.trim().length > 0);
+  if (!existsSync(subsFile())) return { removed: 0, remaining: 0 };
+  const lines = readFileSync(subsFile(), "utf8").split("\n").filter((l) => l.trim().length > 0);
   const kept: string[] = [];
   let removed = 0;
   for (const line of lines) {
@@ -86,18 +105,18 @@ export function purgeSubscriptions(email: string): { removed: number; remaining:
     }
     kept.push(line);
   }
-  const tmp = SUBS_FILE + ".tmp";
+  const tmp = subsFile() + ".tmp";
   const out = kept.length === 0 ? "" : kept.join("\n") + "\n";
   ensureDir();
   writeFileSync(tmp, out, "utf8");
-  renameSync(tmp, SUBS_FILE);
+  renameSync(tmp, subsFile());
   return { removed, remaining: kept.length };
 }
 
 export function countSubscriptions(): number {
   try {
-    if (!existsSync(SUBS_FILE)) return 0;
-    const content = readFileSync(SUBS_FILE, "utf8");
+    if (!existsSync(subsFile())) return 0;
+    const content = readFileSync(subsFile(), "utf8");
     return content.split("\n").filter((l) => l.trim().length > 0).length;
   } catch {
     return 0;
@@ -114,8 +133,8 @@ export function readLatestSubscription(email: string): Subscription | null {
   const target = email.trim().toLowerCase();
   if (!target) return null;
   try {
-    if (!existsSync(SUBS_FILE)) return null;
-    const lines = readFileSync(SUBS_FILE, "utf8").split("\n").filter((l) => l.trim().length > 0);
+    if (!existsSync(subsFile())) return null;
+    const lines = readFileSync(subsFile(), "utf8").split("\n").filter((l) => l.trim().length > 0);
     let latest: Subscription | null = null;
     for (const line of lines) {
       try {

@@ -87,16 +87,20 @@ interface Taxi { path: Cell[]; alts: number[]; seg: number; u: number; speed: nu
 interface VertiportRow { id: string; suitability: number; cls: string; openRadiusM: number | null; clearanceM: number | null; distNoFlyM: number | null; ceilingM: number | null; needsAtc: boolean; }
 interface Slot { id: string; routeId: string; t0: string; t1: string; holder: string; issued: string; receipt: string; }
 
-const VP_CLASS_LABEL: Record<string, string> = {
+// Без прототипа: класс приходит строкой из ответа бэкенда, и у обычного объекта
+// `VP_CLASS_COLOR["constructor"]` вернул бы функцию — то есть непустое значение
+// вместо «класса нет», и запасной вариант не сработал бы (см. разбор
+// `feedback_prototype_keys_in_lookups`). Обращение при этом не меняется.
+const VP_CLASS_LABEL: Record<string, string> = Object.assign(Object.create(null), {
   "candidate-pad": "кандидат на площадку",
   "needs-infrastructure": "нужна инфраструктура",
   unsuitable: "непригодна",
-};
-const VP_CLASS_COLOR: Record<string, string> = {
+});
+const VP_CLASS_COLOR: Record<string, string> = Object.assign(Object.create(null), {
   "candidate-pad": "#2dd4bf",
   "needs-infrastructure": "#fbbf24",
   unsuitable: "#fb7185",
-};
+});
 
 /** Map the backend's airspace block onto the platform-wide regulatory vocabulary. */
 function airspaceRegSource(a: AirspaceSummary | undefined): RegulatorySource {
@@ -535,7 +539,10 @@ export default function QSkywayClient() {
     if (city.vertiportScores) for (const s of city.vertiportScores) scoreOf.set(s.c + "," + s.r, s.class);
     for (const v of city.vertiports) {
       const cls = scoreOf.get(v.c + "," + v.r);
-      const col = cls === "candidate-pad" ? "#2dd4bf" : cls === "needs-infrastructure" ? "#fbbf24" : cls === "unsuitable" ? "#fb7185" : "#22d3ee";
+      // Из той же таблицы, что список и легенда: цвет класса жил здесь третьей
+      // копией, и перекрасить класс в одном месте значило разойтись с картой.
+      // `#22d3ee` — это «не оценена», у которой своего класса нет.
+      const col = (cls && VP_CLASS_COLOR[cls]) || "#22d3ee";
       const r = Math.max(5, CELL * SC * 0.9);
       ctx.strokeStyle = col; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(cX(v.c), cY(v.r), r, 0, 7); ctx.stroke();

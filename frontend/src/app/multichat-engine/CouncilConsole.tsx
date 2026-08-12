@@ -45,6 +45,8 @@ type Dissent = {
     values: Array<{ agentId: string; raw: string; value: number }>;
     spread: number;
   }>;
+  /** Слово, которое одни агенты утверждают, а другие при нём же отрицают. */
+  contradictions?: Array<{ word: string; affirms: string[]; denies: string[] }>;
   hedges: Array<{ agentId: string; kind: "failed" | "hedged"; note: string }>;
   verdict: "consensus" | "split" | "insufficient";
   note: string;
@@ -142,6 +144,14 @@ function buildReport(
     L.push(`## Итог: ${verdict}`, "", dissent.note, "");
     if (dissent.agreement != null) L.push(`Схожесть ответов: ${dissent.agreement}`, "");
     if (dissent.outlier) L.push(`Дальше всех от остальных: **${dissent.outlier.agentId}**`, "");
+
+    if (dissent.contradictions?.length) {
+      L.push("### Прямое противоречие", "");
+      for (const c of dissent.contradictions) {
+        L.push(`- «${c.word}»: ${c.affirms.join(", ")} утверждает, ${c.denies.join(", ")} отрицает`);
+      }
+      L.push("");
+    }
 
     if (dissent.numericConflicts.length) {
       L.push("### Расхождения в числах", "");
@@ -354,6 +364,28 @@ export function CouncilConsole() {
             )}
             <span style={{ fontSize: 12, color: T.textMute }}>{dissent.note}</span>
           </div>
+
+          {/* Прямое отрицание — выше чисел: «делать» против «не делать» решает
+              больше, чем разница в цифре. И оно единственное разногласие, при
+              котором схожесть остаётся высокой: ответы состоят из одних и тех
+              же слов. Без этой строки человек читает «схожесть 1» и уходит. */}
+          {dissent.contradictions && dissent.contradictions.length > 0 && (
+            <>
+              <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, margin: "14px 0 6px" }}>
+                Прямое противоречие
+              </p>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 14 }}>
+                {dissent.contradictions.slice(0, 5).map((c, i) => (
+                  <li key={i} style={{ borderBottom: `1px dotted ${T.lineSoft}`, padding: "5px 0", color: T.text }}>
+                    <span style={{ color: T.bad, fontWeight: 600 }}>«{c.word}»</span>
+                    <span style={{ color: T.textDim }}>
+                      {" "}— {c.affirms.join(", ")} утверждает, {c.denies.join(", ")} отрицает
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
           {dissent.numericConflicts.length > 0 && (
             <>

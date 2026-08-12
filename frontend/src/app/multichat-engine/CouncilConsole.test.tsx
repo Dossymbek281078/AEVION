@@ -38,6 +38,38 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("Консилиум: прямое отрицание", () => {
+  test("показано отдельно и первым — это самое сильное разногласие", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/dissent/preview")) {
+          return okJson({
+            dissent: {
+              ...DISSENT,
+              agreement: 1,
+              note: "Расхождение, включая прямое отрицание по «стоит».",
+              contradictions: [{ word: "стоит", affirms: ["analyst"], denies: ["skeptic"] }],
+            },
+          });
+        }
+        return okJson({});
+      }) as unknown as typeof fetch,
+    );
+
+    render(<CouncilConsole />);
+    fireEvent.click(screen.getByText("Показать на примере"));
+
+    // Схожесть 1.0 при прямом противоречии — ровно тот случай, когда голое
+    // число «схожесть» вводит в заблуждение. Рядом обязана стоять причина.
+    expect(await screen.findByText("Прямое противоречие")).toBeTruthy();
+    expect(screen.getByText("«стоит»")).toBeTruthy();
+    // Обе стороны названы поимённо: «где-то есть противоречие» без имён
+    // заставляет перечитывать все ответы заново.
+    expect(screen.getByText(/analyst утверждает, skeptic отрицает/)).toBeTruthy();
+  });
+});
+
 beforeEach(() => {
   localStorage.clear();
 });

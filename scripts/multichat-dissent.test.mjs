@@ -42,6 +42,52 @@ const split = m.buildDissentMap([
 ]);
 ok("противоположные ответы → split", split.verdict === "split", `${split.verdict} (${split.agreement})`);
 
+/* ── 1б. Прямое отрицание — не консенсус ────────────────────────────────── */
+//
+// Худший из возможных отказов этой карты. Схожесть считается по общим словам, а
+// «не» лежит в стоп-словах — то есть слово, переворачивающее смысл, выбрасывали
+// ДО сравнения. «Стоит запускать» и «не стоит запускать» давали схожесть 1.0 и
+// вердикт «агенты сошлись»: продукт, вся ценность которого в показе
+// разногласия, на самом ярком разногласии молчал.
+
+const negated = m.buildDissentMap([
+  A("gpt", "Да, стоит запускать платный тариф до первой продажи на текущем трафике."),
+  A("claude", "Нет, не стоит запускать платный тариф до первой продажи на текущем трафике."),
+]);
+ok("прямое отрицание → split, а не консенсус", negated.verdict === "split",
+  `${negated.verdict} (схожесть ${negated.agreement})`);
+ok("противоречие названо словом, по которому оно найдено",
+  negated.contradictions?.some((c) => c.word === "стоит"),
+  JSON.stringify(negated.contradictions));
+ok("названы обе стороны", negated.contradictions?.[0]?.affirms.includes("gpt") && negated.contradictions?.[0]?.denies.includes("claude"),
+  JSON.stringify(negated.contradictions?.[0]));
+ok("противоречие попало в «что проверить»",
+  (negated.checks || []).some((c) => c.kind === "contradiction"),
+  JSON.stringify((negated.checks || []).map((c) => c.kind)));
+
+const notRecommended = m.buildDissentMap([
+  A("gpt", "Мы рекомендуем подписывать этот договор в текущей редакции."),
+  A("claude", "Мы не рекомендуем подписывать этот договор в текущей редакции."),
+]);
+ok("«рекомендуем» против «не рекомендуем» → split", notRecommended.verdict === "split",
+  `${notRecommended.verdict} (${notRecommended.agreement})`);
+
+const canCannot = m.buildDissentMap([
+  A("gpt", "Данные пользователей можно передавать подрядчику при наличии согласия."),
+  A("claude", "Данные пользователей нельзя передавать подрядчику даже при наличии согласия."),
+]);
+ok("«можно» против «нельзя» → split", canCannot.verdict === "split",
+  `${canCannot.verdict} (${canCannot.agreement})`);
+
+// Обратная ошибка так же вредна: отрицание в ОДНОМ ответе (или в обоих) не
+// делает ответы противоречащими друг другу.
+const bothNegate = m.buildDissentMap([
+  A("gpt", "Нет, не стоит запускать платный тариф до первой продажи."),
+  A("claude", "Не стоит запускать платный тариф до первой продажи."),
+]);
+ok("оба отрицают одно и то же — противоречия нет", (bothNegate.contradictions || []).length === 0,
+  JSON.stringify(bothNegate.contradictions));
+
 /* ── 2. Нечего сравнивать — не выдавать консенсус ───────────────────────── */
 
 ok("один ответ → insufficient", m.buildDissentMap([A("gpt", "Ответ")]).verdict === "insufficient");

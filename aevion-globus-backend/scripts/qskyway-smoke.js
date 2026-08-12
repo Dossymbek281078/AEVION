@@ -232,6 +232,23 @@ async function main() {
   assert(disputeSeen === hd.json?.affectedPairs,
     "[astana] every route answers the same as the network-wide measurement",
     `routes=${disputeSeen} measured=${hd.json?.affectedPairs}`);
+  // Та же сверка для подстановки, и она СИЛЬНЕЕ соседней: у спорной высоты обе
+  // стороны сегодня равны нулю, а здесь затронуто 23 маршрута из 42 — значит
+  // проверка ловит расхождение в обе стороны, а не только ложное срабатывание.
+  // Считаем по подписанным документам: именно они уедут регулятору, и если
+  // сводка города и бумага разойдутся, заметить это должен смок, а не читатель.
+  let substSeen = 0, substRoutes = 0;
+  for (let i = 0; i < astPads; i++) for (let j = 0; j < astPads; j++) {
+    if (i === j) continue;
+    const d = await jpost("/api/qskyway/route/justification", { from: i, to: j, city: "astana" });
+    if (!d.json?.document) continue;
+    substRoutes++;
+    if (d.json.document.substitutedHeights) substSeen++;
+  }
+  assert(substSeen === hs.json?.affectedPairs && substRoutes === hs.json?.routable,
+    "[astana] every signed document agrees with the network-wide substitution measurement",
+    `documents=${substSeen}/${substRoutes} measured=${hs.json?.affectedPairs}/${hs.json?.routable}`);
+
   const hdTk = await jget("/api/qskyway/height-dispute?city=tokyo");
   assert(hdTk.json?.available === false,
     "[tokyo] a height the engine already overrode is not paraded as an open dispute",

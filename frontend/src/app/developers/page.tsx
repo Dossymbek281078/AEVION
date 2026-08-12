@@ -518,8 +518,17 @@ export default function DevelopersPage() {
                 Pick modules → copy Markdown/HTML for shields.io-style status badges. Auto-refreshes when status changes.
               </div>
             </Link>
+            {/*
+              Ссылка ведёт в npm, а не в репозиторий на GitHub. Репозиторий
+              отдаёт 404 (проверено 12.08.2026) — аккаунт отключён с 27.07, и
+              внешний человек видит битую ссылку на странице, которая продаёт
+              доступ к API. Пакет при этом опубликован и живой, а npm для
+              разработчика и есть естественный адрес: там версия, установка и
+              readme. Ещё 24 файла фронтенда ссылаются на тот же мёртвый
+              репозиторий — это отдельное решение, куда их вести.
+            */}
             <a
-              href="https://github.com/Dossymbek281078/AEVION/tree/main/packages/aevion-catalog-client"
+              href="https://www.npmjs.com/package/@aevion-io/catalog-client"
               target="_blank"
               rel="noreferrer"
               style={{

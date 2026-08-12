@@ -97,6 +97,10 @@ export default function ProvisioningPage() {
   const [history, setHistory] = useState<HistoryResp | null>(null);
   const [stats, setStats] = useState<StatsResp | null>(null);
   const [loading, setLoading] = useState(false);
+  // Токен из письма держим в состоянии: без него «обновить» перестало бы
+  // работать — история теперь не открывается по одному адресу.
+  const [token, setToken] = useState<string>("");
+  const [linkSent, setLinkSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Подтянем агрегат при mount — это публично и быстро.
@@ -115,7 +119,45 @@ export default function ProvisioningPage() {
     };
   }, []);
 
-  const lookup = useCallback(async (rawEmail: string) => {
+  // История открывается только по ссылке из письма. Отдавать чужие покупки
+  // всякому, кто знает адрес, нельзя — поэтому форма больше не ищет сразу, а
+  // просит ссылку, и она же приносит токен в адресной строке.
+  const loadHistory = useCallback(async (e: string, tok: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const url = apiUrl(
+        `/api/pricing/provisioning/history?email=${encodeURIComponent(e)}&token=${encodeURIComponent(tok)}`,
+      );
+      const r = await fetch(url);
+      const j = (await r.json()) as HistoryResp | { error: string };
+      if (!r.ok || "error" in j) {
+        setError(t("pricing.provisioning.error.historyFailed"));
+        return;
+      }
+      setHistory(j as HistoryResp);
+      setSubmittedEmail(e);
+    } catch {
+      setError(t("pricing.provisioning.error.historyFailed"));
+    } finally {
+      setLoading(false);
+    }
+  }, [t]);
+
+  // Пришли по ссылке из письма — открываем историю сразу, без второго шага.
+  // useSearchParams потребовал бы Suspense вокруг всей страницы ради двух
+  // параметров, а эффект и так выполняется только в браузере.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const e = (q.get("email") ?? "").trim().toLowerCase();
+    const tok = (q.get("token") ?? "").trim();
+    if (!e || !tok) return;
+    setEmail(e);
+    setToken(tok);
+    void loadHistory(e, tok);
+  }, [loadHistory]);
+
+  const requestLink = useCallback(async (rawEmail: string) => {
     const e = rawEmail.trim().toLowerCase();
     if (!e || !e.includes("@") || e.length < 5) {
       setError(t("pricing.provisioning.error.invalidEmail"));
@@ -124,18 +166,22 @@ export default function ProvisioningPage() {
     setLoading(true);
     setError(null);
     setHistory(null);
+    setLinkSent(false);
     try {
-      const url = apiUrl(`/api/pricing/provisioning/history?email=${encodeURIComponent(e)}`);
-      const r = await fetch(url);
-      const j = (await r.json()) as HistoryResp | { error: string };
-      if (!r.ok || "error" in j) {
-        setError("error" in j ? j.error : `HTTP ${r.status}`);
+      const r = await fetch(apiUrl("/api/pricing/provisioning/magic-link"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: e }),
+      });
+      // 204 — единственный успешный ответ, и он одинаков для всех: по разнице
+      // ответов иначе можно было бы перебором узнать, кто у нас покупал.
+      if (r.status === 204) {
+        setLinkSent(true);
         return;
       }
-      setHistory(j as HistoryResp);
-      setSubmittedEmail(e);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(t("pricing.provisioning.error.historyFailed"));
+    } catch {
+      setError(t("pricing.provisioning.error.historyFailed"));
     } finally {
       setLoading(false);
     }
@@ -143,7 +189,7 @@ export default function ProvisioningPage() {
 
   const handleSubmit = (ev: React.FormEvent<HTMLFormElement>) => {
     ev.preventDefault();
-    void lookup(email);
+    void requestLink(email);
   };
 
   return (
@@ -211,7 +257,11 @@ export default function ProvisioningPage() {
               disabled={loading || !email.trim()}
               className="rounded-xl bg-gradient-to-br from-teal-500 to-sky-500 px-6 py-3 text-sm font-extrabold text-white shadow-lg shadow-teal-900/40 hover:from-teal-400 hover:to-sky-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
-              {loading ? t("pricing.provisioning.form.searching") : t("pricing.provisioning.form.searchCta")}
+              {/* Кнопка больше не ищет, а отправляет ссылку — подпись должна
+                  говорить то, что произойдёт. Ключи взяты у портала партнёров:
+                  текст там ровно про это и уже переведён на все языки. Когда
+                  зона i18n освободится, их стоит вынести в общий раздел. */}
+              {loading ? t("pricing.partnersPortal.sendingLink") : t("pricing.partnersPortal.sendLink")}
             </button>
           </div>
           <p className="mt-3 text-[11px] text-slate-500 leading-relaxed">
@@ -223,6 +273,16 @@ export default function ProvisioningPage() {
               {error === "invalid_email" && t("pricing.provisioning.error.invalidEmail")}
               {error === "history_failed" && t("pricing.provisioning.error.historyFailed")}
               {!["missing_email", "invalid_email", "history_failed"].includes(error) && error}
+            </div>
+          )}
+          {linkSent && !error && (
+            <div className="mt-4 rounded-lg border border-teal-500/40 bg-teal-500/10 px-4 py-3">
+              <div className="text-sm font-bold text-teal-200">
+                {t("pricing.partnersPortal.linkSent.title")}
+              </div>
+              <p className="mt-1 text-[13px] leading-relaxed text-teal-100/80">
+                {t("pricing.partnersPortal.linkSent.body")}
+              </p>
             </div>
           )}
         </form>
@@ -258,7 +318,7 @@ export default function ProvisioningPage() {
             <div className="mt-6 flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={() => void lookup(submittedEmail)}
+                onClick={() => void loadHistory(submittedEmail, token)}
                 className="text-xs font-bold text-teal-300 hover:text-teal-200"
               >
                 ↻ {t("pricing.provisioning.results.refresh")}

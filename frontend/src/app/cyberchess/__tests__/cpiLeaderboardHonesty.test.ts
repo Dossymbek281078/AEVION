@@ -50,3 +50,25 @@ describe("страница не выдаёт образец за рейтинг"
     }
   });
 });
+
+describe("страница «Экономика» не выдаёт макетные лоты за настоящие", () => {
+  const ECONOMY = "src/app/cyberchess/economy/page.tsx";
+
+  it("оговорка стоит ПЕРЕД списком лотов, а не в конце страницы", () => {
+    /* Оговорка была — строкой «F7 · Mock-режим» в самом низу. Человек читает
+       лоты сверху вниз и до неё не доходит. */
+    const src = read(ECONOMY);
+    const noticeAt = src.indexOf("economy-demo-notice");
+    const lotsAt = src.indexOf("MOCK_AUCTIONS.map");
+    expect(noticeAt).toBeGreaterThanOrEqual(0);
+    expect(lotsAt).toBeGreaterThanOrEqual(0);
+    expect(noticeAt).toBeLessThan(lotsAt);
+  });
+
+  it("сказано, что выдуманы именно цены и ставки, а не «режим»", () => {
+    /* «Mock-режим» ничего не сообщает игроку о числах на экране. */
+    const src = read(ECONOMY);
+    expect(src).toMatch(/выдуман/i);
+    expect(src).toMatch(/ставок|ставк/i);
+  });
+});

@@ -371,6 +371,23 @@ export default function EconomyHubPage() {
               · annotated PGN + анализ за Chessy
             </span>
           </h2>
+          {/* Оговорка стоит ЗДЕСЬ, а не внизу страницы. Внизу она была — строкой
+              «F7 · Mock-режим… Backend-интеграция — следующая фаза», то есть на
+              языке разработчика и после самих лотов. Человек читает лоты сверху
+              вниз и до неё не доходит, а если доходит — не узнаёт из неё, что
+              имена продавцов, цены и число ставок выдуманы. */}
+          <div
+            data-testid="economy-demo-notice"
+            style={{
+              marginBottom: 14, padding: "10px 14px", borderRadius: 8,
+              border: `1px solid ${C.border}`, background: "rgba(234,179,8,0.10)",
+              fontSize: 13, lineHeight: 1.5, color: C.text,
+            }}
+          >
+            <b>Лоты ниже — образец оформления.</b> Имена продавцов, цены и число
+            ставок выдуманы, настоящих аукционов пока нет. Ставка сохранится
+            только в этом браузере и ничего не купит.
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {MOCK_AUCTIONS.map((a) => {
               const currentPrice = bids[a.id] ?? a.startPrice;

@@ -18,6 +18,7 @@ import { tiktokRouter } from "./routes/tiktok";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { statusRouter } from "./routes/status";
+import { helpRouter } from "./routes/help";
 import { entitlementsRouter } from "./routes/entitlements";
 import { requireModule } from "./lib/planGate";
 import { awardsRouter } from "./routes/awards";
@@ -308,6 +309,9 @@ app.get("/api/globus/projects/:id", (req, res) => {
 
 app.use("/api/modules", modulesRouter);
 app.use("/api/status", statusRouter);
+// Форма обратной связи на /help отправляла сюда с самого начала, а ручки не было:
+// прод отвечал 404, и форма уходила в запасной mailto на домен без записи MX.
+app.use("/api/help", helpRouter);
 
 // Module paywall — dormant unless the module id is listed in PAYWALL_MODULES
 // (see lib/planGate.ts). qcoreai is the flagship AI-compute module (real

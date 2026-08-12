@@ -72,6 +72,16 @@ describe("регистрация уходит под личностью игро
     expect(read(DETAIL)).not.toMatch(/function genLocalUserId/);
   });
 
+  it("создатель турнира опознаётся тем же ключом, что и участник", () => {
+    /* Бэкенд по userId создателя записывает его ПЕРВЫМ УЧАСТНИКОМ. Пока форма
+       создания читала ключ задачи дня, а кнопка Register — турнирный, один
+       человек занимал в своём турнире два места под двумя id. */
+    const src = read(LIST);
+    expect(src).not.toMatch(/localStorage\.getItem\("cyberchess\.userId"\)/);
+    // Личность берётся выше по функции, поэтому проверяем файл целиком.
+    expect(src).toMatch(/const userId = tournamentUserId\(\)/);
+  });
+
   it("ключ id не менялся при переносе", () => {
     /* Смена ключа переназначила бы личность всем, у кого уже есть история. */
     expect(read(SHARED)).toMatch(/"cc_user_id"/);

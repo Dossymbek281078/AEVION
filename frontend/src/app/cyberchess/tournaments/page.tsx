@@ -803,14 +803,16 @@ function CreateTournamentModal({
     }
     setBusy(true);
     setErr(null);
-    let userId = "";
-    let displayName = "";
-    try {
-      userId = window.localStorage.getItem("cyberchess.userId") || "";
-      displayName = window.localStorage.getItem("cyberchess.displayName") || "";
-    } catch {
-      /* ignore */
-    }
+    /* Тот же источник личности, что и у кнопки «Register» на этой странице.
+       Раньше здесь читался ключ `cyberchess.userId` — тот, которым живёт задача
+       дня, — а регистрация идёт под `cc_user_id`. Бэкенд по userId создателя
+       записывает его ПЕРВЫМ УЧАСТНИКОМ, поэтому один человек занимал в своём же
+       турнире два места под двумя id, и свести их было нечем. А если ключ
+       задачи дня пуст (в турнирном потоке его никто не пишет), создатель не
+       попадал в участники вовсе. Прав creatorId не даёт — проверено, он нужен
+       ровно для этой автозаписи. */
+    const userId = tournamentUserId();
+    const displayName = tournamentDisplayName();
     try {
       // No trailing slash — hit the route directly and avoid a 308 POST redirect.
       const r = await fetch("/api-backend/api/cyberchess-tournaments", {

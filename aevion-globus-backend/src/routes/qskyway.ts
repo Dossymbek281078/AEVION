@@ -1179,12 +1179,12 @@ function scopeTexts(hasCeilingFeed: boolean, perm: CityPermission | undefined): 
     if (perm.kind === "prohibition") {
       return {
         ru: `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирована ЗАПРЕТНАЯ зона (${perm.authority}): полёты в ней запрещены, а не разрешены по согласованию. Документ фиксирует, по каким данным построен коридор, и служит основанием НЕ для полёта, а для обращения об изменении статуса зоны.`,
-        en: `The regulator publishes no ceiling grid for this city, so this document carries no altitude verdict. What is recorded is a PROHIBITED area (${perm.authority}): flights inside it are forbidden, not permitted subject to coordination. The document records which data the corridor was built against, and is grounds NOT for a flight but for a request to change the status of the area.`,
+        en: `The regulator publishes no ceiling grid for this city, so this document carries no altitude verdict. What is recorded is a PROHIBITED area (${perm.authorityEn ?? perm.authority}): flights inside it are forbidden, not permitted subject to coordination. The document records which data the corridor was built against, and is grounds NOT for a flight but for a request to change the status of the area.`,
       };
     }
     return {
       ru: `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирован режим разрешений (${perm.authority}): полёт требует индивидуального разрешения. Это НЕ само разрешение — документ фиксирует, по каким данным и правилам построен коридор и какое согласование требуется.`,
-      en: `The regulator publishes no ceiling grid for this city, so this document carries no altitude verdict. What is recorded is a permission regime (${perm.authority}): a flight requires individual authorization. This is NOT that authorization — the document records which data and rules the corridor was built against, and which approval is required.`,
+      en: `The regulator publishes no ceiling grid for this city, so this document carries no altitude verdict. What is recorded is a permission regime (${perm.authorityEn ?? perm.authority}): a flight requires individual authorization. This is NOT that authorization — the document records which data and rules the corridor was built against, and which approval is required.`,
     };
   }
   return {

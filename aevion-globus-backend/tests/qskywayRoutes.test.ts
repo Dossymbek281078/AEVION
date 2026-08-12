@@ -152,6 +152,12 @@ describe("POST /route/justification — the filing", () => {
     const astana = await request(app).post("/api/qskyway/route/justification").send({ from: 0, to: 1, city: "astana" });
     expect(astana.body.document.scopeEn).toContain("PROHIBITED area");
     expect(astana.body.document.scopeEn).toContain("not permitted subject to coordination");
+    // Имя ведомства в английском тексте — латиницей: документ читают там, где
+    // кириллица не читается. Русская версия при этом называет его как публикует
+    // сам регулятор.
+    expect(astana.body.document.scopeEn).toContain("Kazaeronavigatsia");
+    expect(astana.body.document.scopeEn).not.toContain("Казаэронавигация");
+    expect(astana.body.document.scope).toContain("Казаэронавигация");
 
     const tokyo = await request(app).post("/api/qskyway/route/justification").send({ from: 0, to: 1, city: "tokyo" });
     expect(tokyo.body.document.scopeEn).toContain("permission regime");

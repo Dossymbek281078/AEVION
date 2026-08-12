@@ -28,6 +28,15 @@ import { PERMISSION_ASTANA } from "./qskyway.permission.astana";
 
 export interface CityPermission {
   authority: string;
+  /**
+   * Имя ведомства латиницей — для англоязычной оговорки в подписанном
+   * обосновании. У Токио и Нью-Йорка `authority` и так латиницей, у Астаны это
+   * «Казаэронавигация / AIP KZ»: английский документ с кириллическим именем
+   * адресата читается хуже ровно там, где его будут читать. Не перевод, а
+   * официальное самоназвание (Kazaeronavigatsia — как в документах ИКАО).
+   * Необязательное: если не задано, берётся `authority` как опубликовано.
+   */
+  authorityEn?: string;
   source: string;
   sourceUrl: string;
   /** the rule in one line, as the law states it */

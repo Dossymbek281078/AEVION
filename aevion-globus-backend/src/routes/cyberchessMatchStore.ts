@@ -183,11 +183,21 @@ export interface RatingRow extends GlickoState {
 }
 
 /** Текущий рейтинг игрока в данной скорости; дефолт (1500/350) если строки нет. */
-export async function getRating(userId: string, speed: string): Promise<RatingRow> {
-  const rows = await q(
+/**
+ * Рейтинг игрока. `null` — «спросить не удалось».
+ *
+ * Разница здесь дороже, чем на чтениях для экрана. Отсутствие строки — законный
+ * случай: новичок начинает с 1500. Но при отказе запроса функция возвращала ТЕ
+ * ЖЕ 1500 — и finalizeMatch считал на них новый рейтинг и записывал результат.
+ * Один сбой сети на этом SELECT молча превращал игрока с 1900 в новичка, причём
+ * не на экране, а в базе.
+ */
+export async function getRating(userId: string, speed: string): Promise<RatingRow | null> {
+  const rows = await qOrNull(
     `SELECT * FROM "CyberRating" WHERE "userId"=$1 AND "speed"=$2`,
     [userId, speed],
   );
+  if (rows === null) return null;
   if (rows.length === 0) {
     return {
       userId,
@@ -365,6 +375,27 @@ export async function finalizeMatch(
   const speed = speedOf(info.timeControl);
   const wRat = await getRating(info.whiteUserId, speed);
   const bRat = await getRating(info.blackUserId, speed);
+
+  if (!wRat || !bRat) {
+    // Прежний рейтинг неизвестен — считать не на чем. Раньше сюда приходили
+    // подставные 1500, и результат этого счёта записывался поверх настоящего
+    // рейтинга: сбой чтения стирал силу игрока.
+    //
+    // Партия остаётся закрытой (она действительно закончилась) и оплаченной —
+    // выплата от рейтинга не зависит. Теряется только изменение рейтинга за эту
+    // партию, и об этом сказано вслух.
+    console.error(
+      `[CyberMatchStore] rating skipped match=${matchId} — не удалось прочитать прежний рейтинг; изменение за эту партию не применено`,
+    );
+    await settleAwards(matchId, {
+      whiteUserId: info.whiteUserId,
+      blackUserId: info.blackUserId,
+      whiteName: info.whiteName,
+      blackName: info.blackName,
+      result: info.result,
+    });
+    return null;
+  }
 
   const resultForWhite: GameResult = info.result === "white" ? 1 : info.result === "black" ? 0 : 0.5;
   const { a: wNext, b: bNext } = rateMatch(
@@ -602,11 +633,13 @@ export async function getWalletLeaderboard(limit = 50): Promise<WalletRow[] | nu
   return rows.map((r) => ({ userId: r.userId, displayName: r.displayName, balance: Number(r.balance), earnedTotal: Number(r.earnedTotal) }));
 }
 
-export async function getLeaderboard(speed: string, limit = 50): Promise<RatingRow[]> {
-  const rows = await q(
+/** Таблица рейтингов. `null` — спросить не удалось (пустой список значит «пусто»). */
+export async function getLeaderboard(speed: string, limit = 50): Promise<RatingRow[] | null> {
+  const rows = await qOrNull(
     `SELECT * FROM "CyberRating" WHERE "speed"=$1 AND "games">0 ORDER BY "rating" DESC LIMIT $2`,
     [speed, Math.min(200, Math.max(1, limit))],
   );
+  if (rows === null) return null;
   return rows.map((r) => ({
     userId: r.userId, speed: r.speed, displayName: r.displayName,
     rating: Number(r.rating), rd: Number(r.rd), vol: Number(r.vol),
@@ -615,8 +648,9 @@ export async function getLeaderboard(speed: string, limit = 50): Promise<RatingR
   }));
 }
 
-export async function getHistory(userId: string, limit = 30): Promise<any[]> {
-  return q(
+/** История партий. `null` — спросить не удалось; пустой список значит «партий нет». */
+export async function getHistory(userId: string, limit = 30): Promise<any[] | null> {
+  return qOrNull(
     `SELECT "id","whiteUserId","whiteName","blackUserId","blackName","timeControl","speed",
             "status","result","termination","ply","movesSan","whiteRatingBefore","blackRatingBefore",
             "whiteRatingAfter","blackRatingAfter","createdAt","endedAt"

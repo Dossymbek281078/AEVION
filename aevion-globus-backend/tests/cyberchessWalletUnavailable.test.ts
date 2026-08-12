@@ -67,6 +67,31 @@ describe("отказ базы не выдаётся за факт о деньг�
     expect(res.body.count).toBeUndefined();
   });
 
+  test("рейтинг игрока: 503, а не новичковые 1500", async () => {
+    // Пустой ответ здесь означал бы «игрок не играл», а сильному игроку —
+    // что его рейтинга не существует.
+    const res = await request(app).get("/api/cyberchess/matchmaking/rating?userId=strong");
+
+    expect(res.status).toBe(503);
+    expect(res.body.ratings).toBeUndefined();
+  });
+
+  test("таблица рейтингов: 503, а не «игроков нет»", async () => {
+    const res = await request(app).get("/api/cyberchess/matchmaking/leaderboard?speed=blitz");
+
+    expect(res.status).toBe(503);
+    expect(res.body.count).toBeUndefined();
+  });
+
+  test("история партий: 503, а не «партий нет»", async () => {
+    // У человека может быть двести партий; «пусто» тут — заявление о его жизни
+    // в игре, а не о состоянии базы.
+    const res = await request(app).get("/api/cyberchess/matchmaking/history?userId=strong");
+
+    expect(res.status).toBe(503);
+    expect(res.body.matches).toBeUndefined();
+  });
+
   test("когда база отвечает, честный ноль остаётся нулём", async () => {
     // Обратная сторона: сторож не должен превращать нормальный ответ в отказ.
     // Игрок без строки в кошельке — это настоящий ноль, и он должен доехать.

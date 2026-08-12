@@ -1308,15 +1308,26 @@ router.get("/rating", async (req: Request, res: Response): Promise<void> => {
   }
   const speedQ = String(req.query.speed || "").trim();
   const speeds = speedQ ? [speedQ] : ["bullet", "blitz", "rapid", "classical"];
+  // null от getRating означает «спросить не удалось». Отфильтровать его молча
+  // нельзя: пустой список рейтингов читается как «игрок не играл», а сильному
+  // игроку это показало бы, что его рейтинга не существует.
   const ratings = await Promise.all(speeds.map((s) => getRating(userId, s).catch(() => null)));
-  res.json({ ok: true, userId, ratings: ratings.filter(Boolean) });
+  if (ratings.some((r) => !r)) {
+    res.status(503).json({ ok: false, error: "rating_unavailable" });
+    return;
+  }
+  res.json({ ok: true, userId, ratings });
 });
 
 // GET /leaderboard?speed=blitz&limit=50 — top players by rating in a speed.
 router.get("/leaderboard", async (req: Request, res: Response): Promise<void> => {
   const speed = String(req.query.speed || "blitz").trim();
   const limit = parseInt(String(req.query.limit || "50"), 10) || 50;
-  const rows = await getLeaderboard(speed, limit).catch(() => []);
+  const rows = await getLeaderboard(speed, limit).catch(() => null);
+  if (!rows) {
+    res.status(503).json({ ok: false, error: "leaderboard_unavailable" });
+    return;
+  }
   res.json({
     ok: true,
     speed,
@@ -1393,7 +1404,13 @@ router.get("/history", async (req: Request, res: Response): Promise<void> => {
     return;
   }
   const limit = parseInt(String(req.query.limit || "30"), 10) || 30;
-  const rows = await getHistory(userId, limit).catch(() => []);
+  // Пустая история значит «партий нет» — на экране это так и написано. Отказ
+  // базы такой фразой прикрывать нельзя: у человека может быть двести партий.
+  const rows = await getHistory(userId, limit).catch(() => null);
+  if (!rows) {
+    res.status(503).json({ ok: false, error: "history_unavailable" });
+    return;
+  }
   res.json({ ok: true, userId, count: rows.length, matches: rows });
 });
 

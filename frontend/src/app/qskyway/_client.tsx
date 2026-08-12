@@ -170,7 +170,7 @@ export default function QSkywayClient() {
 
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", buildings: 0, corridors: 0, heightConfidencePct: null as number | null, avgConfClearM: null as number | null, etaStill: null as number | null });
+  const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", buildings: 0, corridors: 0, heightConfidencePct: null as number | null, avgConfClearM: null as number | null, etaStill: null as number | null, obstacleSegments: null as number | null, measuredObstacleSegments: null as number | null });
   const [booking, setBooking] = useState<string>("");
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
@@ -286,7 +286,7 @@ export default function QSkywayClient() {
     const city = cityRef.current!;
     const distKm = t.alts.length * city.grid.cell / 1000;
     const cruise = t.alts.reduce((m, v) => Math.max(m, v), 0);
-    setStats((s) => ({ ...s, distKm: +distKm.toFixed(2), cruiseAlt: Math.round(cruise), eta: +((distKm / 90) * 60).toFixed(1), heightConfidencePct: null, avgConfClearM: null, etaStill: null }));
+    setStats((s) => ({ ...s, distKm: +distKm.toFixed(2), cruiseAlt: Math.round(cruise), eta: +((distKm / 90) * 60).toFixed(1), heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null }));
   }, [makeTaxi]);
 
   // ── hero route: real backend A* (obeys no-fly + wind ETA), falls back to
@@ -324,7 +324,7 @@ export default function QSkywayClient() {
           setJustState("idle");
           // There is no flight — leaving the previous route's telemetry on screen
           // next to a "refused" banner would read as if those numbers described it.
-          setStats((s) => ({ ...s, distKm: 0, cruiseAlt: 0, eta: 0, heightConfidencePct: null, avgConfClearM: null, etaStill: null }));
+          setStats((s) => ({ ...s, distKm: 0, cruiseAlt: 0, eta: 0, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null }));
           return;
         }
       }
@@ -339,7 +339,7 @@ export default function QSkywayClient() {
       setJustification(null);
       setJustState("idle");
       heroRef.current = { path: r.path, alts: r.alts, seg: 0, u: 0, speed: 1.1 + Math.random() * 0.5, hero: true, slow: 0 };
-      setStats((s) => ({ ...s, distKm: r.distanceKm, cruiseAlt: Math.round(r.cruiseAltM), eta: r.etaMinWind, heightConfidencePct: r.heightConfidencePct ?? null, avgConfClearM: r.avgConfClearM ?? null, etaStill: r.etaMinStill ?? null }));
+      setStats((s) => ({ ...s, distKm: r.distanceKm, cruiseAlt: Math.round(r.cruiseAltM), eta: r.etaMinWind, heightConfidencePct: r.heightConfidencePct ?? null, avgConfClearM: r.avgConfClearM ?? null, etaStill: r.etaMinStill ?? null, obstacleSegments: r.obstacleSegments ?? null, measuredObstacleSegments: r.measuredObstacleSegments ?? null }));
     } catch {
       setCeilingBlocked(null);
       setAirspaceRoute(null);
@@ -377,7 +377,7 @@ export default function QSkywayClient() {
       let mh = 0; for (const h of city.grid.heights) if (h > mh) mh = h;
       altMaxRef.current = FLOOR + Math.ceil((mh + CLEAR - FLOOR) / BAND) * BAND + BAND;
       const cols = Math.floor(city.grid.cols / 3), rows = Math.floor(city.grid.rows / 3);
-      setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, buildings: city.buildings.length, corridors: cols * rows * 2, heightConfidencePct: null, avgConfClearM: null, etaStill: null });
+      setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, buildings: city.buildings.length, corridors: cols * rows * 2, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null });
       setMeta({
         wind: city.wind ? `${city.wind.groundMs}→${city.wind.topMs} м/с (от ${city.wind.fromDeg}°)` : "—",
         windSource: city.wind?.source ?? "illustrative",
@@ -912,7 +912,26 @@ export default function QSkywayClient() {
                       </>
                     )],
                     ["Разведено бортов", String(stats.conflicts)],
-                    ["Увер. высоты (маршрут)", stats.heightConfidencePct == null ? "—" : stats.heightConfidencePct + "%"],
+                    // Две цифры рядом, и это не дублирование. Первая считает все
+                    // участки, включая открытую землю (её высота известна — там
+                    // ничего не стоит), вторая — только те, где под крылом
+                    // действительно здание. В Астане первая даёт 78–97%, вторая
+                    // ноль: городского обмера нет ни у одного дома. Одна первая
+                    // читалась как «с высотами всё хорошо» и спорила с чипом
+                    // города «0% обмерено» — замер 12.08.2026.
+                    ["Увер. высоты (маршрут)", stats.heightConfidencePct == null ? "—" : (
+                      <>
+                        {stats.heightConfidencePct}%
+                        {stats.obstacleSegments != null && stats.obstacleSegments > 0 && (
+                          <span
+                            title={`Из ${stats.obstacleSegments} участков со зданием под крылом на обмеренной городом высоте стоят ${stats.measuredObstacleSegments ?? 0}. Остальные — вывод из тега или счёта этажей OSM, либо слепой дефолт; за неуверенность коридор платит запасом по высоте.`}
+                            style={{ fontSize: 11, fontWeight: 400, color: (stats.measuredObstacleSegments ?? 0) === 0 ? "#fbbf24" : "#5f7086", marginLeft: 5, cursor: "help" }}
+                          >
+                            (по зданиям {Math.round(100 * (stats.measuredObstacleSegments ?? 0) / stats.obstacleSegments)}%)
+                          </span>
+                        )}
+                      </>
+                    )],
                     ["Запас на неувер-ть", stats.avgConfClearM == null ? "—" : stats.avgConfClearM + " м"],
                   ] as [string, React.ReactNode][]).map(([k, v]) => (
                     <div key={k} style={{ background: "#0e141f", padding: "12px 14px" }}>

@@ -193,3 +193,50 @@ describe("живая Астана — предупреждение только 
     expect(v.body.valid).toBe(true);
   }, 30000);
 });
+
+/**
+ * Замер 12.08.2026, из-за которого появился второй показатель уверенности:
+ * маршруты Астаны отдавали `heightConfidencePct` 78–97%, при том что в твине
+ * города ОБМЕРЕНО НОЛЬ зданий (все высоты — вывод из тега/этажей или слепой
+ * дефолт 12 м). Причина не в ошибке: показатель считает по всем участкам, а
+ * открытая земля идёт как «известно». Но рядом с чипом города «0% обмерено»
+ * это два наших же ответа, спорящих между собой, и читается высокая цифра как
+ * «с данными всё хорошо».
+ */
+describe("уверенность по зданиям — отдельно от уверенности по всему коридору", () => {
+  test("[astana] коридор не может заявлять обмеренные здания там, где их ноль", async () => {
+    let checked = 0;
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        if (i === j) continue;
+        const r = await request(app).post("/api/qskyway/route").send({ from: i, to: j, city: "astana" });
+        expect(r.status).toBe(200);
+        checked++;
+        // участков со зданием под крылом меньше, чем всего участков, и они есть
+        expect(r.body.obstacleSegments).toBeGreaterThan(0);
+        expect(r.body.obstacleSegments).toBeLessThanOrEqual(r.body.alts.length);
+        // в Астане городского обмера нет ни у одного здания
+        expect(r.body.measuredObstacleSegments).toBe(0);
+        // а общий показатель при этом высокий — ровно то расхождение, ради
+        // которого второе число и заведено
+        expect(r.body.heightConfidencePct).toBeGreaterThan(50);
+      }
+    }
+    expect(checked).toBe(12);
+  }, 60000);
+
+  test("[nyc] город с городским обмером даёт ненулевую цифру по зданиям", async () => {
+    const r = await request(app).post("/api/qskyway/route").send({ from: 0, to: 3, city: "nyc" });
+    expect(r.status).toBe(200);
+    expect(r.body.obstacleSegments).toBeGreaterThan(0);
+    expect(r.body.measuredObstacleSegments).toBeGreaterThan(0);
+  }, 30000);
+
+  test("подписанное обоснование несёт обе цифры, а не только удобную", async () => {
+    const j = await request(app).post("/api/qskyway/route/justification").send({ from: 0, to: 3, city: "astana" });
+    expect(j.status).toBe(200);
+    expect(j.body.document.heightConfidencePct).toBeGreaterThan(50);
+    expect(j.body.document.measuredObstacleSegments).toBe(0);
+    expect(j.body.document.obstacleSegments).toBeGreaterThan(0);
+  }, 30000);
+});

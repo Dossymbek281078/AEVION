@@ -326,6 +326,16 @@ interface RouteResult {
   etaMinStill: number; etaMinWind: number; avgWindMs: number; windFromDeg: number;
   avoidsNoFly: boolean;
   avgConfClearM: number; heightConfidencePct: number;
+  /**
+   * Участков коридора, у которых под крылом ВООБЩЕ есть здание, и сколько из
+   * них стоят на обмеренной высоте.
+   *
+   * Зачем отдельно от heightConfidencePct: тот считает по ВСЕМ участкам, а
+   * открытая земля (высота 0) идёт как «известно» — физически верно, но в
+   * Астане, где обмера нет ни у одного здания, он показывал 78–97%. Рядом с
+   * чипом города «0% обмерено» это два наших же ответа, спорящих друг с другом.
+   */
+  obstacleSegments: number; measuredObstacleSegments: number;
   respectCeiling: boolean;
   airspace: AirspaceCompliance;
 }
@@ -352,13 +362,21 @@ function buildRoute(
   const alts: number[] = [];
   const obstacles: number[] = [];
   let timeStill = 0, timeWind = 0, windSum = 0, confSum = 0, measuredEdges = 0;
+  let obstacleSegments = 0, measuredObstacleSegments = 0;
   for (let k = 0; k < path.length - 1; k++) {
     const alt = edgeAlt(path[k].c, path[k].r, path[k + 1].c, path[k + 1].r);
     alts.push(alt);
-    obstacles.push(Math.max(obst(path[k].c, path[k].r), obst(path[k + 1].c, path[k + 1].r)));
+    const maxObst = Math.max(obst(path[k].c, path[k].r), obst(path[k + 1].c, path[k + 1].r));
+    obstacles.push(maxObst);
     const worstSrc = Math.max(src(path[k].c, path[k].r), src(path[k + 1].c, path[k + 1].r));
     confSum += confClear(worstSrc);
     if (worstSrc === 0) measuredEdges++;
+    // Участок с настоящим препятствием — только там вопрос «а обмерена ли эта
+    // высота?» вообще имеет смысл.
+    if (maxObst > 0) {
+      obstacleSegments++;
+      if (worstSrc === 0) measuredObstacleSegments++;
+    }
     const segLen = Math.hypot(path[k + 1].c - path[k].c, path[k + 1].r - path[k].r) * cell;
     const tw = tailwind(cityId, path[k].c, path[k].r, path[k + 1].c, path[k + 1].r, alt);
     const eff = Math.max(MIN_SPEED_MS, Math.min(MAX_SPEED_MS, AVG_SPEED_MS + tw));
@@ -379,6 +397,7 @@ function buildRoute(
     avoidsNoFly: zones.length > 0,
     avgConfClearM: +(confSum / Math.max(1, alts.length)).toFixed(1),
     heightConfidencePct: Math.round(100 * measuredEdges / Math.max(1, alts.length)),
+    obstacleSegments, measuredObstacleSegments,
     respectCeiling,
     airspace: assessCeiling(field, path, alts),
   };
@@ -1147,6 +1166,12 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
       : null,
     windSource: windSourceOf(resolved.id),
     heightConfidencePct: route.heightConfidencePct,
+    // Та же величина, но по участкам, где под крылом действительно есть здание.
+    // В городе без городского обмера первая цифра высокая (открытая земля
+    // известна), а эта — ноль. В бумаге, по которой судят о качестве данных,
+    // должны стоять обе, иначе первая читается как «данные хорошие».
+    obstacleSegments: route.obstacleSegments,
+    measuredObstacleSegments: route.measuredObstacleSegments,
     // A permission regime belongs on the paperwork even though it never touched
     // the routing — "this corridor is legal geometry" and "this flight may take
     // place at all" are both things the filing has to answer.

@@ -388,6 +388,30 @@ async function findByShareToken(token: string): Promise<Conversation | null> {
   return items.find((c) => c.shareToken === token) ?? null;
 }
 
+/** Неотрицательное целое из query-параметра. `null` — значение задано и негодно. */
+function parseCount(raw: unknown, fallback: number): number | null {
+  if (raw === undefined || raw === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.floor(n);
+}
+
+/** Сколько бесед совпало с запросом — без пагинации. */
+async function countConvs(userId: string, q: string): Promise<number> {
+  if (isPg()) {
+    await ensureSchema();
+    const r = await getPool().query(
+      `SELECT COUNT(*)::int AS n FROM multichat_conversations WHERE user_id = $1 AND title ILIKE $2`,
+      [userId, `%${q}%`],
+    );
+    return Number(r.rows[0]?.n ?? 0) || 0;
+  }
+  const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
+  const items = Array.isArray(data.items) ? data.items : [];
+  const needle = q.toLowerCase();
+  return items.filter((c) => c.userId === userId && c.title.toLowerCase().includes(needle)).length;
+}
+
 async function searchConvs(userId: string, q: string, limit: number, offset: number): Promise<Conversation[]> {
   const lim = Math.max(1, Math.min(200, limit));
   const off = Math.max(0, offset);
@@ -504,6 +528,18 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
   const agents = Array.isArray(req.body?.agents) ? req.body.agents : [];
   if (agents.length === 0) return res.status(400).json({ error: "agents required" });
   if (agents.length > 8) return res.status(400).json({ error: "max 8 agents per dispatch" });
+
+  // Одинаковые id — отказ, а не тихая потеря ответа.
+  //
+  // Ответ каждого агента пишется в подветку `${conversationId}:${agentId}`.
+  // Два агента с одним id пишут в одну: вызовы оплачены, реплики сохранены, а
+  // всё, что раскладывает ленту ПО АГЕНТУ (публичная страница, карта
+  // разногласий), видит одного — второй ответ пропадает с экрана без следа.
+  const ids = (agents as Array<{ id?: unknown }>).map((a, i) => (typeof a.id === "string" ? a.id : `agent_${i}`));
+  const duplicate = ids.find((id, i) => ids.indexOf(id) !== i);
+  if (duplicate) {
+    return res.status(400).json({ error: `duplicate agent id: ${duplicate}` });
+  }
 
   // Persist the user prompt once at the conversation level.
   await recordChatTurn({
@@ -836,12 +872,23 @@ multichatRouter.delete("/conversations/:id/share", async (req, res) => {
 multichatRouter.get("/search", async (req, res) => {
   const userId = req.auth!.sub;
   const q = (req.query.q as string | undefined)?.trim() ?? "";
-  const limit = Number(req.query.limit ?? 50);
-  const offset = Number(req.query.offset ?? 0);
+  // Нечисловой параметр — отказ с причиной. Раньше Number("abc") давал NaN,
+  // выборка молча возвращала пустой список, и это читалось как «ничего не
+  // найдено»: человек уходит искать в другое место вместо того, чтобы
+  // исправить запрос.
+  const limit = parseCount(req.query.limit, 50);
+  if (limit === null) return res.status(400).json({ error: "limit must be a non-negative number" });
+  const offset = parseCount(req.query.offset, 0);
+  if (offset === null) return res.status(400).json({ error: "offset must be a non-negative number" });
   if (!q) return res.json({ items: [], total: 0 });
   try {
-    const items = await searchConvs(userId, q, limit, offset);
-    res.json({ items, total: items.length, q });
+    // total — сколько СОВПАЛО, а не сколько уместилось на странице. Длина
+    // страницы в поле с именем total превращает «показано 2 из 3» в «найдено 2».
+    const [items, total] = await Promise.all([
+      searchConvs(userId, q, limit, offset),
+      countConvs(userId, q),
+    ]);
+    res.json({ items, total, q });
   } catch (err: any) {
     captureMultichatError(err, { route: "search" });
     res.status(500).json({ error: "search_failed", });

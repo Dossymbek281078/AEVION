@@ -10,12 +10,15 @@ import { rateLimit } from "../src/lib/rateLimit";
 // that expression were wrong in a way nothing could see from the outside — the
 // endpoints kept answering, they just refused the wrong callers:
 //
-//   1. keyPrefix defaulted to a single shared literal ("rl"). 45 of the 115
-//      call sites omit it, so all 45 incremented ONE counter per address while
-//      each compared that counter against its own `max`. z-tide's 300/min read
-//      limit and qsign's 60/min signing limit are two of them: 61 z-tide reads
-//      left signing refused for the rest of the minute, and the 429 named the
-//      limit that had not been reached.
+//   1. keyPrefix defaulted to a single shared literal ("rl"). 6 of the 77 call
+//      sites on THIS helper omit it (most routers use the express-rate-limit
+//      package instead and were never affected), so those 6 incremented ONE
+//      counter per address while each compared it against its own `max`.
+//      qsign's verifyLimiter (240/min) and signLimiter (60/min) are two of them:
+//      61 verifies left signing refused for the rest of the minute, and the 429
+//      named a limit that had not been reached. The strictest of the six fared
+//      worst — qcoreai's evalRunLimiter (10/min) died once any of the other five
+//      had served 10 requests.
 //
 //   2. keyFn was accepted by the options type and then dropped on the floor
 //      ("per-request key customisation not supported in this impl"). multichat's
@@ -33,13 +36,14 @@ function appWith(...mws: express.RequestHandler[]) {
 }
 
 describe("rateLimit — one limiter must not spend another limiter's budget", () => {
-  test("a busy 300/min endpoint does not exhaust an unrelated 60/min endpoint", async () => {
-    // Two limiters written the way 45 call sites write them: no keyPrefix.
-    const readLimiter = rateLimit({ windowMs: 60_000, max: 300 });
+  test("a busy 240/min endpoint does not exhaust an unrelated 60/min endpoint", async () => {
+    // The real qsign pair, written the way those call sites write them: no
+    // keyPrefix.
+    const verifyLimiter = rateLimit({ windowMs: 60_000, max: 240 });
     const signLimiter = rateLimit({ windowMs: 60_000, max: 60 });
-    const app = appWith(readLimiter, signLimiter);
+    const app = appWith(verifyLimiter, signLimiter);
 
-    // 61 reads — well inside the read limiter's own 300/min allowance.
+    // 61 verifies — well inside the verify limiter's own 240/min allowance.
     for (let i = 0; i < 61; i++) {
       const r = await request(app).get("/r0");
       expect(r.status).toBe(200);

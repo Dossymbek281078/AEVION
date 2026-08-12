@@ -11,11 +11,21 @@ export interface RateLimitOptions {
    * Namespace this limiter counts in.
    *
    * Omitting it used to mean "share one bucket with every other limiter that
-   * also omitted it" — 45 of the 115 call sites do, so all 45 incremented a
-   * single counter per address while each compared it against its own `max`.
+   * also omitted it" — 6 of the 77 call sites on this helper do, so those 6
+   * incremented a single counter per address while each compared it against its
+   * own `max`. qsign's verifyLimiter (240/min) and signLimiter (60/min) were two
+   * of them: 61 verifies left signing refused for the rest of the minute, and
+   * the 429 named a limit that had not been reached. The strictest of the six
+   * fared worst — qcoreai's evalRunLimiter (10/min) died once any of the other
+   * five had served 10 requests.
+   *
    * The default is now unique per limiter instance, so omitting it isolates.
    * Pass the SAME value from two call sites only when you want one shared
    * budget across them.
+   *
+   * (Most routers use the express-rate-limit package instead of this helper and
+   * were never affected — count call sites of THIS module, not every
+   * `rateLimit({...})` in src/.)
    */
   keyPrefix?: string;
   message?: string;

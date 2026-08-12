@@ -251,7 +251,16 @@ qmelaninRouter.post("/plan", (req: Request, res: Response) => {
   let deficientKeys: BiomarkerKey[] = [];
 
   if (Array.isArray(b.deficientKeys)) {
-    deficientKeys = b.deficientKeys.filter((k: string): k is BiomarkerKey => k in BIOMARKER_BY_KEY);
+    // Ключи приходят из тела запроса, а BIOMARKER_BY_KEY собран через
+    // Object.fromEntries — то есть обычный объект с прототипом. Оператор `in`
+    // видит унаследованные ключи, поэтому "constructor", "__proto__",
+    // "toString", "valueOf" и "hasOwnProperty" проходили этот фильтр как
+    // валидные биомаркеры. Дальше BIOMARKER_BY_KEY[k].label давал undefined,
+    // и в план питания попадал нутриент без названия и без продуктов —
+    // ответ 200, дефект молчаливый (проверено пробником 04.08.2026).
+    deficientKeys = b.deficientKeys.filter((k: string): k is BiomarkerKey =>
+      Object.prototype.hasOwnProperty.call(BIOMARKER_BY_KEY, k),
+    );
   } else if (b.values) {
     deficientKeys = BIOMARKERS.filter((spec) => {
       const v = num(b.values[spec.key]);
@@ -356,7 +365,16 @@ qmelaninRouter.post("/ai-plan", async (req: Request, res: Response) => {
   const b = req.body || {};
   let deficientKeys: BiomarkerKey[] = [];
   if (Array.isArray(b.deficientKeys)) {
-    deficientKeys = b.deficientKeys.filter((k: string): k is BiomarkerKey => k in BIOMARKER_BY_KEY);
+    // Ключи приходят из тела запроса, а BIOMARKER_BY_KEY собран через
+    // Object.fromEntries — то есть обычный объект с прототипом. Оператор `in`
+    // видит унаследованные ключи, поэтому "constructor", "__proto__",
+    // "toString", "valueOf" и "hasOwnProperty" проходили этот фильтр как
+    // валидные биомаркеры. Дальше BIOMARKER_BY_KEY[k].label давал undefined,
+    // и в план питания попадал нутриент без названия и без продуктов —
+    // ответ 200, дефект молчаливый (проверено пробником 04.08.2026).
+    deficientKeys = b.deficientKeys.filter((k: string): k is BiomarkerKey =>
+      Object.prototype.hasOwnProperty.call(BIOMARKER_BY_KEY, k),
+    );
   } else if (b.values) {
     deficientKeys = BIOMARKERS.filter((spec) => {
       const v = num(b.values[spec.key]);

@@ -41,12 +41,27 @@ export const GUMROAD_PERMALINKS: Record<string, string> = {
   // PaddleUpgradeButton (legacy-имя, ~11 импортов).
 };
 
+/**
+ * Своё ли это свойство словаря.
+ *
+ * Прямая индексация находит и унаследованное: GUMROAD_PERMALINKS["constructor"]
+ * — это функция Object, она истинна, и она возвращалась ВМЕСТО permalink. Дальше
+ * из неё собирался URL чекаута вида
+ * `gumroad.com/l/function Object() { [native code] }?wanted=true`.
+ *
+ * Сейчас словарь ПУСТ (все записи закомментированы), поэтому любой ключ уходит на
+ * ссылку по умолчанию — любой, кроме ключа прототипа. То есть пустой словарь вёл
+ * себя хуже, чем отсутствующий ключ, и заметить это можно было только на оплате.
+ */
+const permalinkFor = (k: string): string | undefined =>
+  Object.prototype.hasOwnProperty.call(GUMROAD_PERMALINKS, k) ? GUMROAD_PERMALINKS[k] : undefined;
+
 export function gumroadPermalink(opts: { key?: string; tier?: string } = {}): string {
   const { key, tier } = opts;
-  if (key && tier && GUMROAD_PERMALINKS[`${key}:${tier}`]) return GUMROAD_PERMALINKS[`${key}:${tier}`];
-  if (key && GUMROAD_PERMALINKS[key]) return GUMROAD_PERMALINKS[key];
-  if (tier && GUMROAD_PERMALINKS[tier]) return GUMROAD_PERMALINKS[tier];
-  return GUMROAD_DEFAULT_PERMALINK;
+  return (key && tier ? permalinkFor(`${key}:${tier}`) : undefined)
+    ?? (key ? permalinkFor(key) : undefined)
+    ?? (tier ? permalinkFor(tier) : undefined)
+    ?? GUMROAD_DEFAULT_PERMALINK;
 }
 
 /**

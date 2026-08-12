@@ -197,8 +197,14 @@ pricingRouter.post("/quote", (req, res) => {
   }
   const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
   const period: BillingPeriod = body.period === "annual" ? "annual" : "monthly";
+  // `currency` приходит из тела запроса, а CURRENCY_RATES — обычный объектный
+  // литерал. `in` пропускал ключи прототипа: при currency=constructor проверка
+  // считала валюту известной, откат на USD не срабатывал, и дальше в расчёт
+  // уходил не курс, а функция — смета возвращалась без цифр. Это денежный путь,
+  // поэтому отсекаем по собственному ключу, а не по наличию в цепочке.
   const currency: CurrencyCode =
-    typeof body.currency === "string" && body.currency in CURRENCY_RATES
+    typeof body.currency === "string" &&
+    Object.prototype.hasOwnProperty.call(CURRENCY_RATES, body.currency)
       ? (body.currency as CurrencyCode)
       : "USD";
   const modules = Array.isArray(body.modules) ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string") : [];

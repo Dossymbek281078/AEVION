@@ -27,8 +27,16 @@ import {
   type TimeControl as MmTimeControl,
 } from "./cyberchessMatchmaking";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { verifyWebhookSig } from "../lib/webhookSig";
+import { requireProdSecret } from "../lib/qsignSecret";
 
 const capture = makeServiceCapture("cyberchessTournaments");
+
+// Result reporting shares the CyberChess webhook secret — same service, same
+// sender as /api/cyberchess/tournament-finalized, so no second secret to
+// rotate. Resolved lazily: throwing at module load would take the whole
+// server down on a misconfigured deploy.
+const getResultSecret = () => requireProdSecret("CYBERCHESS_WEBHOOK_SECRET", "dev-chess-webhook");
 
 const router = Router();
 
@@ -99,6 +107,13 @@ export interface Tournament {
   swissRounds?: number; // total rounds for swiss
   currentRound?: number; // 1-based, points to round currently in play / next
   registeredUserIds: string[]; // duplicate-check
+  /**
+   * userId → ticket issued at registration. Persisted with the tournament:
+   * the ticket is shown to the player as proof they are in, so it has to be
+   * something the server can still recognise afterwards. Optional because
+   * tournaments stored before this existed have no tickets.
+   */
+  tickets?: Record<string, string>;
   roster: Player[]; // active player roster (for swiss/RR)
   rounds: BracketRound[]; // all generated rounds so far
   // real-player extension (default false → legacy behaviour preserved)
@@ -107,7 +122,12 @@ export interface Tournament {
 
 // ── persistence layer ──────────────────────────────────────────────
 
-const DATA_DIR = path.resolve(process.cwd(), "data");
+// Overridable so a test run can point the store at a scratch directory. The
+// real file is committed to the repository and holds live registrations and
+// results — a suite that rewrites it would look green while destroying data.
+const DATA_DIR = process.env.CYBERCHESS_TOURNAMENTS_DIR
+  ? path.resolve(process.env.CYBERCHESS_TOURNAMENTS_DIR)
+  : path.resolve(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "cyberchess-tournaments.json");
 
 let PERSIST_OK = true;
@@ -1100,7 +1120,15 @@ router.post("/:id/register", (req: Request, res: Response): void => {
     (typeof req.body?.displayName === "string" && req.body.displayName.trim()) ||
     `Player_${userId.slice(-4)}`;
   if (t.registeredUserIds.includes(userId)) {
-    res.status(409).json({ ok: false, error: "already_registered", userId });
+    // The ticket comes back with the refusal. Without it a player who cleared
+    // the browser had no way to recover it: registering again is refused, and
+    // the ticket lived only in that one tab.
+    res.status(409).json({
+      ok: false,
+      error: "already_registered",
+      userId,
+      ticketId: t.tickets?.[userId] ?? null,
+    });
     return;
   }
   t.registeredUserIds.push(userId);
@@ -1130,8 +1158,16 @@ router.post("/:id/register", (req: Request, res: Response): void => {
     }
   }
 
-  tryWriteToDisk();
+  // The ticket is issued BEFORE the write, so what the player is shown is what
+  // was stored. It used to be minted after it, purely for the response, and
+  // was then thrown away: the page printed "ticket tkt_…" as proof of entry
+  // while the server had never heard of that string and could not confirm it
+  // for the player, for support, or at the door of the tournament.
   const ticketId = `tkt_${randomUUID()}`;
+  if (!t.tickets) t.tickets = {};
+  t.tickets[userId] = ticketId;
+
+  tryWriteToDisk();
   res.json({
     ok: true,
     ticketId,
@@ -1212,7 +1248,33 @@ router.get("/:id/next-round", (req: Request, res: Response): void => {
 });
 
 // POST /:id/result   { matchId, winner: "white"|"black"|"draw" }
+// POST /:id/result — closes a bracket pair and recomputes standings.
+//
+// Signed, unlike the rest of this router. The other endpoints are open on
+// purpose: CyberChess has no accounts, so a player registers under an id their
+// own browser generates and there is nothing to authenticate against. This one
+// is different in kind — it decides who won, which drives standings, placement
+// and the prize podium. Left open, anyone who knows a tournament id could hand
+// themselves the tournament from outside the product.
+//
+// Nothing in the product calls it: real games settle through
+// onMatchSettled() inside the matchmaking module, an in-process call that does
+// not pass through here. It exists for the tournament service to report
+// results, and that sender can sign — same secret and same verification chain
+// as /api/cyberchess/tournament-finalized.
 router.post("/:id/result", (req: Request, res: Response): void => {
+  const verdict = verifyWebhookSig({
+    signature: req.headers["x-aevion-signature"],
+    timestamp: req.headers["x-aevion-timestamp"],
+    legacySecret: req.headers["x-cyberchess-secret"],
+    body: req.body,
+    secret: getResultSecret(),
+  });
+  if (!verdict.ok) {
+    res.status(401).json({ ok: false, error: "invalid_signature", reason: verdict.reason });
+    return;
+  }
+
   const t = TOURNAMENTS.find((x) => x.id === req.params.id);
   if (!t) {
     res.status(404).json({ ok: false, error: "tournament_not_found", id: req.params.id });

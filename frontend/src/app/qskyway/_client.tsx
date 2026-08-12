@@ -11,6 +11,10 @@ import type { DataQuality } from "@/lib/dataQuality";
 import type { RegulatorySource } from "@/lib/regulatorySource";
 import { resolveStartCity } from "./startCity";
 import { isSmokeSlot, countSmokeSlots } from "./slotSource";
+// Цена спорной высоты для ЭТОГО рейса. Отдельным файлом, потому что на живых
+// городах блок не появляется (0 из 42 пар Астаны) — увидеть его можно только
+// в тесте, а для этого он должен рендериться отдельно от канваса.
+import { HeightDisputePanel, type HeightDispute } from "./HeightDisputePanel";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
 // Клиент рисует реальный цифровой двойник Астаны (318 зданий из OpenStreetMap,
@@ -181,6 +185,8 @@ export default function QSkywayClient() {
   const strictRef = useRef(false);
   const [airspaceRoute, setAirspaceRoute] = useState<AirspaceCompliance | null>(null);
   const [ceilingBlocked, setCeilingBlocked] = useState<string | null>(null);
+  const [heightDispute, setHeightDispute] = useState<HeightDispute | null>(null);
+  const [disputeImpact, setDisputeImpact] = useState<{ available: boolean; routable: number; affectedPairs: number; maxCruiseDeltaM: number; note: string } | null>(null);
   const [heroPair, setHeroPair] = useState<{ from: number; to: number } | null>(null);
   const [justification, setJustification] = useState<{ doc: JustDoc; attestation: JustAttestation; scope: string } | null>(null);
   const [justState, setJustState] = useState<"idle" | "busy" | "verified" | "invalid">("idle");
@@ -308,6 +314,10 @@ export default function QSkywayClient() {
           // needs ATC coordination. Show it instead of silently faking a route.
           setCeilingBlocked(`H-${from + 1} → H-${to + 1}: ${j.note ?? "нет коридора в пределах опубликованного потолка"}`);
           setAirspaceRoute(j.airspaceIfUnrestricted ?? null);
+          // Рейса нет — значит нет и коридора, про который можно сказать, что он
+          // поднят спорной высотой. Старое предупреждение тут читалось бы как
+          // причина отказа.
+          setHeightDispute(null);
           heroRef.current = null;
           setHeroPair(null);
           setJustification(null);
@@ -322,6 +332,7 @@ export default function QSkywayClient() {
       const r = await res.json();
       setCeilingBlocked(null);
       setAirspaceRoute(r.airspace ?? null);
+      setHeightDispute(r.heightDispute ?? null);
       setHeroPair({ from, to });
       // A justification describes one specific flight. Carrying the previous
       // one over to a new route would attach a signed document to the wrong trip.
@@ -332,6 +343,7 @@ export default function QSkywayClient() {
     } catch {
       setCeilingBlocked(null);
       setAirspaceRoute(null);
+      setHeightDispute(null);
       localHero();
     } finally {
       heroBusyRef.current = false;
@@ -342,13 +354,20 @@ export default function QSkywayClient() {
   const loadCity = useCallback(async (id: string) => {
     cityIdRef.current = id;
     setLoaded(false); setErr(null); setVerify("idle");
-    setAirspaceRoute(null); setCeilingBlocked(null); setImpact(null);
+    setAirspaceRoute(null); setCeilingBlocked(null); setImpact(null); setHeightDispute(null); setDisputeImpact(null);
     // Measured server-side across every pair, never typed in by hand: the whole
     // point of this figure is that it comes from the same engine the routes do.
     fetch(apiUrl(`/api/qskyway/airspace/impact?city=${encodeURIComponent(id)}`))
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => setImpact(j?.available ? j : null))
       .catch(() => setImpact(null));
+    // Тем же движком и по тем же парам площадок: влияет ли спорная высота на
+    // коридоры на самом деле. Отдельный запрос, потому что ответ дорогой (все
+    // пары) и кэшируется на бэкенде.
+    fetch(apiUrl(`/api/qskyway/height-dispute?city=${encodeURIComponent(id)}`))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setDisputeImpact(j?.available ? j : null))
+      .catch(() => setDisputeImpact(null));
     try {
       const res = await fetch(apiUrl(`/api/qskyway/city?city=${encodeURIComponent(id)}`));
       if (!res.ok) throw new Error("city " + res.status);
@@ -854,6 +873,18 @@ export default function QSkywayClient() {
                             : `${o.h} м — ×${o.times} к застройке`;
                         })
                         .join(" · ")}
+                      {/* Доходит ли спорная высота до маршрутов — измерено движком по
+                          всем парам площадок, а не выведено рассуждением. Без этой
+                          строки чип оставлял человека наедине с вопросом «а летаем-то
+                          мы по ней?», и естественный ответ («максимум сетки — она,
+                          значит подняты все») оказался неверным. */}
+                      {disputeImpact?.available && (
+                        <span style={{ color: disputeImpact.affectedPairs > 0 ? "#fb7185" : "#5f7086" }}>
+                          {disputeImpact.affectedPairs > 0
+                            ? ` · на маршруты влияет: ${disputeImpact.affectedPairs} из ${disputeImpact.routable}`
+                            : ` · на маршруты не влияет (0 из ${disputeImpact.routable})`}
+                        </span>
+                      )}
                     </span>
                   )}
                   <span>площадки: <span style={{ color: "#2dd4bf" }}>●</span> годна · <span style={{ color: "#fbbf24" }}>●</span> нужна инфра · <span style={{ color: "#fb7185" }}>●</span> непригодна · <span style={{ color: "#c8964f" }}>▨</span> высота угадана</span>
@@ -903,6 +934,11 @@ export default function QSkywayClient() {
                     <div style={{ color: "#5f7086", fontSize: 10.5, marginTop: 3, whiteSpace: "normal" }}>{airspaceRoute.note}</div>
                   </div>
                 )}
+                {/* Расхождение двух наших же ответов: чип в шапке говорит «высоте
+                    не верим», а коридор на неё закладывается. Пока это было видно
+                    только по городу, рейс молчал — здесь названа цена именно для
+                    него. Высоту при этом не переписываем: починка принадлежит OSM. */}
+                <HeightDisputePanel dispute={heightDispute} />
                 <div style={{ padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
                   <button style={btnPri} onClick={bookSlot} disabled={!loaded}>Забронировать слот (QRight)</button>
                   {booking && <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.startsWith("✓") ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>{booking}</div>}

@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 import { catalogWithToken } from "@/lib/aevionCatalog";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -48,13 +49,10 @@ type Goal = {
 };
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
-// AEVION-wide standard key (see frontend/src/lib/aevionCatalog.ts:getAuthToken).
-const AUTH_TOKEN_KEY = "aevion_auth_token";
-
-function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(AUTH_TOKEN_KEY);
-}
+// Токен берём из общего lib/auth, а НЕ объявляем ключ заново. Здесь стояло
+// собственное объявление со старым ключом `aevion_auth_token`, который не пишет
+// никто, — поэтому вошедший человек выглядел в «Коуче» гостем. Второе
+// «каноническое» объявление и есть то место, где дрейф ключей начинается.
 
 // ─── Time helpers ────────────────────────────────────────────────────────────
 function formatElapsed(startedAt: string, endedAt?: string): string {

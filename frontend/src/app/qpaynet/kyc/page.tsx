@@ -51,7 +51,7 @@ export default function KycPage() {
   const [address, setAddress] = useState("");
 
   useEffect(() => {
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     setToken(saved);
     if (!saved) { setLoading(false); return; }
     refresh(saved).finally(() => setLoading(false));

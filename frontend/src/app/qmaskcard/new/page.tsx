@@ -45,7 +45,7 @@ export default function NewMaskPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    try { setToken(localStorage.getItem("aevion_token")); } catch { setToken(null); } finally { setTokenChecked(true); }
+    try { setToken((localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token"))); } catch { setToken(null); } finally { setTokenChecked(true); }
   }, []);
 
   const spendLimitCents = useMemo(() => {

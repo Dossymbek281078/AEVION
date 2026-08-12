@@ -39,7 +39,7 @@ export default function AdminReconcilePage() {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    const t = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     setToken(t);
     if (!t) { setLoading(false); return; }
     void refresh(t);

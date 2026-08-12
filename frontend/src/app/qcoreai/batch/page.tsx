@@ -8,7 +8,7 @@ import { apiUrl } from "@/lib/apiBase";
 
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
-  const token = localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
+  const token = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) || sessionStorage.getItem("aevion_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

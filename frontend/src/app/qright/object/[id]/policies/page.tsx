@@ -40,7 +40,7 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 function authHeaders(): HeadersInit {
-  const tok = typeof window !== "undefined" ? localStorage.getItem("aevion_token") : null;
+  const tok = typeof window !== "undefined" ? (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) : null;
   return tok ? { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 }
 

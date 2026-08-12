@@ -19,7 +19,7 @@ import { apiUrl } from "@/lib/apiBase";
  */
 function bearerHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};
-  const t = localStorage.getItem("aevion_token") ?? sessionStorage.getItem("qcoreai_token") ?? "";
+  const t = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? sessionStorage.getItem("qcoreai_token") ?? "";
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 

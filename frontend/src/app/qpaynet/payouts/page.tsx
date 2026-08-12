@@ -64,7 +64,7 @@ export default function PayoutsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     setToken(saved);
     if (!saved) { setLoading(false); return; }
     Promise.all([

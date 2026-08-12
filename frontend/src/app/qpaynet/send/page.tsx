@@ -35,7 +35,7 @@ function SendForm() {
   }, [toWalletId]);
 
   async function handleSend() {
-    const token = localStorage.getItem("aevion_token") ?? "";
+    const token = (localStorage.getItem("aevion_auth_token_v1") ?? localStorage.getItem("aevion_token")) ?? "";
     if (!token) { setError(t("qpaynet.send.err.auth")); return; }
     if (!toWalletId.trim()) { setError(t("qpaynet.send.err.noRecipient")); return; }
     if (!amount || parseFloat(amount) <= 0) { setError(t("qpaynet.send.err.noAmount")); return; }

@@ -52,6 +52,39 @@ describe("HeightDisputePanel", () => {
     expect(container.innerHTML).toBe("");
   });
 
+  /**
+   * Спорная высота может подняться раньше, чем до неё дойдёт человек: твин
+   * помечает здание подозрительным сам, а разбор по опубликованным данным
+   * появляется отдельной работой. До 12.08.2026 бэкенд подставлял на это место
+   * ноль и прочерк, и карточка печатала «382 м в теге OSM против 0 м в статье
+   * объекта» — правдоподобное число вместо «не знаем», в модуле, который ровно
+   * такую подмену и ищет в чужих данных.
+   */
+  test("без разбора не выдумывает второе число", () => {
+    render(
+      <HeightDisputePanel
+        dispute={{ ...ABU_DHABI_PLAZA, publishedM: null, publishedSource: null, cruiseAltMIfPublished: null, cruiseDeltaM: null, distanceKmIfPublished: null }}
+      />,
+    );
+    const panel = screen.getByTestId("height-dispute");
+    const text = panel.textContent ?? "";
+
+    expect(text).toContain("382");
+    expect(text).toContain("разбора по опубликованным данным ещё нет");
+    // Ни подставленного нуля, ни утёкшего null — обе формы одинаково врут.
+    expect(text).not.toContain("против 0 м");
+    expect(text).not.toContain("null");
+    // Элемент источника назван даже без разбора: по нему высоту можно проверить.
+    expect(panel.querySelector("a")?.getAttribute("href")).toBe("https://www.openstreetmap.org/way/486561786");
+  });
+
+  test("не делает ссылку, когда элемент источника неизвестен", () => {
+    render(<HeightDisputePanel dispute={{ ...ABU_DHABI_PLAZA, osm: null }} />);
+    const panel = screen.getByTestId("height-dispute");
+    expect(panel.querySelector("a")).toBeNull();
+    expect(panel.textContent ?? "").not.toContain("null");
+  });
+
   test("молчит про крюк, когда путь не изменился, и про эшелон, когда он совпал", () => {
     render(
       <HeightDisputePanel

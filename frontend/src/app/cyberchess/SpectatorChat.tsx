@@ -19,6 +19,12 @@ interface Props {
   gameId: string;
   hostName?: string;
   isHost?: boolean;
+  /**
+   * Секрет ведущего, выданный сервером при публикации стрима. Только он даёт
+   * корону: раньше клиент просто присылал `isHost: true`, и любой зритель мог
+   * выглядеть ведущим в чужой трансляции. Сервер теперь решает это сам.
+   */
+  hostToken?: string | null;
   surface1: string;
   surface2: string;
   border: string;
@@ -75,6 +81,7 @@ export default function SpectatorChat(props: Props) {
     gameId,
     hostName,
     isHost = false,
+    hostToken,
     surface1,
     surface2,
     border,
@@ -201,11 +208,13 @@ export default function SpectatorChat(props: Props) {
         `/api-backend/api/cyberchess-spectator/chat/${encodeURIComponent(gameId)}`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(hostToken ? { "x-host-token": hostToken } : {}),
+          },
           body: JSON.stringify({
             author,
             text: trimmedDraft,
-            isHost: isHost ? true : undefined,
           }),
         },
       );

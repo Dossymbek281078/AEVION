@@ -34,6 +34,14 @@ import crypto from "crypto";
 type LiveGame = {
   gameId: string;
   hostName?: string;
+  /**
+   * Secret handed to whoever first published this game, and the only thing
+   * that says "this is the same broadcaster". The gameId cannot serve: it is
+   * printed in the viewer link the host shares, so everyone watching knows it.
+   * Never sent to viewers — only in the response to the publish that created
+   * the game.
+   */
+  hostToken?: string;
   fen: string;
   hist: string[];
   fenSnapshots?: string[]; // optional per-ply FEN trail if host pushes it
@@ -493,6 +501,31 @@ const router = Router();
  * POST /publish
  * Host upserts current state of a live game.
  */
+/** Токен ведущего из заголовка или тела — клиенту удобнее и так, и так. */
+function providedHostToken(req: Request): string {
+  const h = req.headers["x-host-token"];
+  if (typeof h === "string" && h) return h;
+  const b = (req.body || {}) as { hostToken?: unknown };
+  return typeof b.hostToken === "string" ? b.hostToken : "";
+}
+
+/**
+ * Is this request the broadcaster of `game`?
+ *
+ * Games created before this existed carry no token. They live only in memory
+ * and disappear on the next restart, so the window is short and closes on its
+ * own; treating them as open keeps a stream that is running during a deploy
+ * from dying mid-broadcast.
+ */
+function isTheHost(game: LiveGame, req: Request): boolean {
+  if (!game.hostToken) return true;
+  const given = providedHostToken(req);
+  if (!given) return false;
+  const a = crypto.createHash("sha256").update(given).digest();
+  const b = crypto.createHash("sha256").update(game.hostToken).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
 router.post("/publish", (req: Request, res: Response) => {
   const ip = clientIp(req);
   if (!rateLimitOk(ip)) {
@@ -530,8 +563,21 @@ router.post("/publish", (req: Request, res: Response) => {
   const now = Date.now();
   const existing = liveGames.get(gameId);
 
+  // Publishing into an existing game rewrites the board every viewer is
+  // watching — and, with `result`, ends it and files a replay under whatever
+  // outcome the caller names. The gameId is public (it is the viewer link), so
+  // without this check any viewer could do both to someone else's broadcast.
+  if (existing && !isTheHost(existing, req)) {
+    res.status(403).json({ ok: false, error: "not_the_host" });
+    return;
+  }
+
+  // A brand-new game mints the secret; an existing one keeps the one it has.
+  const hostToken = existing?.hostToken ?? crypto.randomUUID();
+
   const game: LiveGame = {
     gameId,
+    hostToken,
     hostName: sanitizeHostName(body.hostName) ?? existing?.hostName,
     fen: body.fen,
     hist,
@@ -578,6 +624,10 @@ router.post("/publish", (req: Request, res: Response) => {
   res.json({
     ok: true,
     gameId,
+    // The publisher gets it back on every publish of their own game, so a
+    // reload that still holds the gameId can carry on. Viewers never see it:
+    // no read endpoint returns the field.
+    hostToken,
     viewerUrl: `/cyberchess/spectator/${gameId}`,
     replayUrl: game.result ? `/cyberchess/replays/${gameId}` : undefined,
   });
@@ -598,6 +648,14 @@ router.delete("/:gameId", (req: Request, res: Response) => {
   }
   if (!validGameId(gameId)) {
     res.status(400).json({ ok: false, error: "bad_game_id" });
+    return;
+  }
+
+  // Ending a broadcast is the host's call. The gameId is public, so anyone who
+  // opened the viewer link could otherwise cut the stream off mid-game.
+  const target = liveGames.get(gameId);
+  if (target && !isTheHost(target, req)) {
+    res.status(403).json({ ok: false, error: "not_the_host" });
     return;
   }
 
@@ -744,7 +802,8 @@ router.post("/chat/:gameId", (req: Request, res: Response) => {
     return;
   }
 
-  if (!liveGames.has(gameId)) {
+  const game = liveGames.get(gameId);
+  if (!game) {
     res.status(404).json({ ok: false, error: "not_found" });
     return;
   }
@@ -774,7 +833,10 @@ router.post("/chat/:gameId", (req: Request, res: Response) => {
     author,
     text,
     ts: Date.now(),
-    isHost: body.isHost === true ? true : undefined,
+    // Decided here, never taken from the body. `isHost: true` used to be a
+    // field anyone could send, and the chat draws a crown and the brand colour
+    // for it — so any viewer could appear as the broadcaster in their stream.
+    isHost: game && isTheHost(game, req) && !!game.hostToken ? true : undefined,
   };
 
   appendChatMessage(gameId, msg);

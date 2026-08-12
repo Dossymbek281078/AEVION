@@ -2183,6 +2183,11 @@ export default function CyberChessPage(){
   });
   useEffect(()=>{try{localStorage.setItem("cc_spectator_publish_v1",spectatorPublish?"1":"0")}catch{}},[spectatorPublish]);
   const spectatorGameIdRef=useRef<string|null>(null);
+  /* Секрет ведущего: сервер выдаёт его при первой публикации и требует при
+     всех следующих, при остановке стрима и для короны в чате. Без него любой
+     зритель мог переписать чужую доску, завершить партию выдуманным исходом
+     или оборвать трансляцию — gameId лежит прямо в ссылке для зрителей. */
+  const spectatorHostTokenRef=useRef<string|null>(null);
   // Publish current state на каждое изменение позиции/хода (если on && spectatorPublish).
   // `on` alone would miss the FINAL publish: every game-ending call site sets
   // sOver(result) and sOn(false) together (same statement), so by the time
@@ -2210,10 +2215,13 @@ export default function CyberChessPage(){
       result:over||undefined,
     };
     fetch("/api-backend/api/cyberchess-spectator/publish",{
-      method:"POST",headers:{"Content-Type":"application/json"},
+      method:"POST",
+      headers:{"Content-Type":"application/json",
+        ...(spectatorHostTokenRef.current?{"x-host-token":spectatorHostTokenRef.current}:{})},
       body:JSON.stringify(payload),
     }).then(r=>r.ok?r.json():null).then(d=>{
       if(d?.gameId)spectatorGameIdRef.current=d.gameId;
+      if(d?.hostToken)spectatorHostTokenRef.current=d.hostToken;
       // Best-effort AI VoiceCoach broadcast — only when game is live, has a
       // last move, and isn't already finished. Backend throttles per gameId
       // (≤ 6/min) + soft 4s min-gap, so it's safe to fire on every publish.
@@ -2307,6 +2315,7 @@ export default function CyberChessPage(){
        • AI Voice Coach broadcasts commentary after each move
      No extra backend routes needed — everything chains through existing APIs. */
   const mmSpectatorGameIdRef=useRef<string|null>(null);
+  const mmSpectatorHostTokenRef=useRef<string|null>(null);
   useEffect(()=>{
     if(!matchmakingId||!on||hist.length===0)return;
     const candidateId=`mm_${matchmakingId}`;
@@ -2323,10 +2332,13 @@ export default function CyberChessPage(){
       result:over||undefined,
     };
     fetch("/api-backend/api/cyberchess-spectator/publish",{
-      method:"POST",headers:{"Content-Type":"application/json"},
+      method:"POST",
+      headers:{"Content-Type":"application/json",
+        ...(mmSpectatorHostTokenRef.current?{"x-host-token":mmSpectatorHostTokenRef.current}:{})},
       body:JSON.stringify(payload),
     }).then(r=>r.ok?r.json():null).then(d=>{
       if(d?.gameId)mmSpectatorGameIdRef.current=d.gameId;
+      if(d?.hostToken)mmSpectatorHostTokenRef.current=d.hostToken;
       const gid=d?.gameId||mmSpectatorGameIdRef.current||candidateId;
       if(!gid||over||hist.length===0)return;
       // Voice coach broadcast for the matchmaking game
@@ -2352,7 +2364,12 @@ export default function CyberChessPage(){
     if(spectatorPublish||!spectatorGameIdRef.current)return;
     const id=spectatorGameIdRef.current;
     spectatorGameIdRef.current=null;
-    fetch(`/api-backend/api/cyberchess-spectator/${id}`,{method:"DELETE"}).catch(()=>{});
+    const tok=spectatorHostTokenRef.current;
+    spectatorHostTokenRef.current=null;
+    fetch(`/api-backend/api/cyberchess-spectator/${id}`,{
+      method:"DELETE",
+      headers:tok?{"x-host-token":tok}:undefined,
+    }).catch(()=>{});
   },[spectatorPublish]);
   // Avatar emoji picker (shop v2 — owned.avatar_emoji)
   const[avatarEmoji,sAvatarEmoji]=useState<string>(()=>{
@@ -15266,6 +15283,7 @@ ${question.trim()}`;
       <SpectatorChat
         gameId={spectatorGameIdRef.current}
         isHost={true}
+        hostToken={spectatorHostTokenRef.current}
         surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
         text={CC.text} textDim={CC.textDim} brand={CC.brand}
       />

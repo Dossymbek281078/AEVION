@@ -1166,6 +1166,27 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   const asSig = signAirspace(resolved.id);
   const dispute = heightDisputeFor(resolved.id, resolved.city, route);
 
+  // Оговорка о границах документа. Считается ДО него, потому что теперь входит
+  // в подписываемый JSON.
+  //
+  // До 12.08.2026 она лежала полем ответа рядом с `document`, и защиты не
+  // давала: пара `{document, attestation}`, переданная дальше без третьего
+  // поля, проверяется как подлинная — уже без единой оговорки. Комментарий на
+  // прежнем месте обещал ровно обратное («едет ВМЕСТЕ с документом, иначе
+  // „построено по данным FAA“ превращается в „FAA согласовало“»): инвариант был
+  // назван, но структурой не обеспечен. Под подписью — обеспечен.
+  //
+  // Покрывает все три случая. У города может быть режим разрешений без сетки
+  // потолков, и «регуляторного вердикта нет» рядом с режимом в самом документе
+  // сделало бы подписанный артефакт противоречащим собственной оговорке.
+  const scopeText = src
+    ? "Ограничения взяты из публикации регулятора (сетка допусков Part 107 для малых БВС). Это НЕ разрешение на полёт и НЕ сертификация аэротакси — документ фиксирует, по каким данным и правилам построен коридор."
+    : PERMISSION[resolved.id]
+      ? PERMISSION[resolved.id].kind === "prohibition"
+        ? `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирована ЗАПРЕТНАЯ зона (${PERMISSION[resolved.id].authority}): полёты в ней запрещены, а не разрешены по согласованию. Документ фиксирует, по каким данным построен коридор, и служит основанием НЕ для полёта, а для обращения об изменении статуса зоны.`
+        : `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирован режим разрешений (${PERMISSION[resolved.id].authority}): полёт требует индивидуального разрешения. Это НЕ само разрешение — документ фиксирует, по каким данным и правилам построен коридор и какое согласование требуется.`
+      : "Для этого города открытого фида регулятора нет: документ фиксирует геометрию и двойник, но НЕ содержит регуляторного вердикта.";
+
   // ASCII-only and explicitly ordered: this is the byte sequence the signature
   // covers, so it must not depend on locale, key order, or JSON escaping
   // (the transport bug in #712).
@@ -1229,6 +1250,8 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
           cruiseDeltaM: dispute.cruiseDeltaM,
         }
       : null,
+    // Под подписью, а не рядом с ней: см. разбор над `scopeText`.
+    scope: scopeText,
     issuedAt: new Date().toISOString(),
   };
   const canonical = JSON.stringify(document);
@@ -1238,20 +1261,9 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   res.json({
     document,
     attestation: { alg: "Ed25519", contentHash, signature, publicKey: SIGN_PK_B64, ephemeral: SIGN_EPHEMERAL },
-    // The scope limit travels WITH the document. A justification that gets
-    // forwarded without it is exactly how "routed against FAA data" turns into
-    // "FAA approved".
-    // Must cover all three cases. A city can have a permission regime without a
-    // ceiling grid, and saying "no regulatory verdict" while the document itself
-    // carries the regime would make the signed artifact contradict its own
-    // disclaimer — in the one document meant to be handed to a regulator.
-    scope: src
-      ? "Ограничения взяты из публикации регулятора (сетка допусков Part 107 для малых БВС). Это НЕ разрешение на полёт и НЕ сертификация аэротакси — документ фиксирует, по каким данным и правилам построен коридор."
-      : PERMISSION[resolved.id]
-        ? PERMISSION[resolved.id].kind === "prohibition"
-          ? `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирована ЗАПРЕТНАЯ зона (${PERMISSION[resolved.id].authority}): полёты в ней запрещены, а не разрешены по согласованию. Документ фиксирует, по каким данным построен коридор, и служит основанием НЕ для полёта, а для обращения об изменении статуса зоны.`
-          : `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирован режим разрешений (${PERMISSION[resolved.id].authority}): полёт требует индивидуального разрешения. Это НЕ само разрешение — документ фиксирует, по каким данным и правилам построен коридор и какое согласование требуется.`
-        : "Для этого города открытого фида регулятора нет: документ фиксирует геометрию и двойник, но НЕ содержит регуляторного вердикта.",
+    // Та же оговорка полем ответа — для совместимости с теми, кто читает её
+    // здесь. Источник один (`scopeText`), настоящее место — внутри документа.
+    scope: scopeText,
     verify: "POST /api/qskyway/route/justification/verify {document, attestation}",
   });
 });

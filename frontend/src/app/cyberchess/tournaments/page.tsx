@@ -137,7 +137,14 @@ export default function TournamentsHubPage() {
       const r = await fetch("/api-backend/api/cyberchess-tournaments/list", { cache: "no-store" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
-      if (data?.ok && Array.isArray(data.tournaments)) setTournaments(data.tournaments);
+      /* Ветка «пришло, но не то» раньше молчала: при 200 с телом без списка
+         состояние оставалось на MOCK_FALLBACK, ошибка не ставилась, и человек
+         видел выдуманные турниры вообще без признака. Отправляем в тот же
+         catch, что и недоступный сервер — сообщение внизу уже есть. */
+      if (!data?.ok || !Array.isArray(data.tournaments)) {
+        throw new Error("ответ без списка турниров");
+      }
+      setTournaments(data.tournaments);
     } catch (e) {
       setErrorMsg((e as Error).message);
     } finally {

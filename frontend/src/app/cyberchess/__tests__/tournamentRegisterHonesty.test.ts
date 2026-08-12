@@ -88,3 +88,24 @@ describe("регистрация уходит под личностью игро
     expect(read(SHARED)).toMatch(/"cyberchess\.displayName"/);
   });
 });
+
+describe("список турниров не показывает выдуманные молча", () => {
+  const LIST = "src/app/cyberchess/tournaments/page.tsx";
+
+  it("ответ без списка не оставляет макет без признака", () => {
+    /* Была тихая ветка: сервер ответил 200, но тело пришло не с тем — состояние
+       оставалось на MOCK_FALLBACK, ошибка не ставилась, и человек видел
+       выдуманные турниры вообще без пометки. Теперь этот случай идёт в тот же
+       catch, что и недоступный сервер. */
+    const src = read(LIST);
+    const at = src.indexOf("cyberchess-tournaments/list");
+    const block = src.slice(at, at + 900);
+    expect(block).toMatch(/throw new Error/);
+    expect(block).not.toMatch(/if \(data\?\.ok && Array\.isArray\(data\.tournaments\)\) setTournaments/);
+  });
+
+  it("сообщение про подменённые данные на месте", () => {
+    /* Обратная сторона: чинить тишину нельзя ценой пропажи самой надписи. */
+    expect(read(LIST)).toMatch(/Бэкенд недоступен/);
+  });
+});

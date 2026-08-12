@@ -60,6 +60,7 @@ import { rateLimit } from "../lib/rateLimit";
  *   POST /route/justification — один подписанный документ «почему рейс обоснован»
  *   GET  /verify?city=id  — проверка подписей Ed25519 (двойник + слой ограничений)
  *   GET  /airspace/impact — сколько маршрутов между площадками реально укладывается в потолок
+ *   GET  /height-dispute  — опирается ли хоть один коридор на высоту, которой твин сам не верит
  *   POST /airspace/anchor — Bitcoin-якорь (OpenTimestamps) на слой ограничений
  *   GET  /airspace/proof  — вшитый Bitcoin-пруф текущей редакции + его проверка
  *   GET  /slots  · POST /slots — рынок 4D-слотов прав (QRight)

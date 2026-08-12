@@ -575,6 +575,8 @@ async function dbSaveCheckpoint(c: DevHubCheckpoint): Promise<void> {
      VALUES ($1,$2,$3,$4,$5,$6)`,
     [c.id, c.projectId, c.userId, c.label, JSON.stringify(c.files), c.createdAt]
   );
+  // The row is the truth again; drop the parked copy so it cannot shadow it.
+  memCheckpoints.delete(c.id);
 }
 
 async function dbLatestCheckpoint(projectId: string): Promise<DevHubCheckpoint | null> {
@@ -588,11 +590,27 @@ async function dbLatestCheckpoint(projectId: string): Promise<DevHubCheckpoint |
     `SELECT * FROM "DevHubCheckpoint" WHERE "projectId"=$1 ORDER BY "createdAt" DESC LIMIT 1`,
     [projectId]
   );
-  return r.rows[0] ? rowToCheckpoint(r.rows[0]) : null;
+  const row = r.rows[0] ? rowToCheckpoint(r.rows[0]) : null;
+  // A checkpoint whose save failed is parked in memCheckpoints, which used to
+  // be read only with the database KNOWN to be down. Undo would then restore an
+  // OLDER checkpoint over the user's work — the safety net doing the damage.
+  const parked = newestParkedCheckpoint(projectId);
+  if (!parked) return row;
+  if (!row) return parked;
+  return parked.createdAt.localeCompare(row.createdAt) >= 0 ? parked : row;
+}
+
+function newestParkedCheckpoint(projectId: string): DevHubCheckpoint | null {
+  return [...memCheckpoints.values()]
+    .filter((c) => c.projectId === projectId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
 }
 
 async function dbDeleteCheckpoint(id: string): Promise<void> {
   if (!isDevHubDbReady()) { memCheckpoints.delete(id); return; }
+  // Consumed checkpoints must go from both places, or a reverted one comes
+  // back as the newest undo point.
+  memCheckpoints.delete(id);
   await pool.query(`DELETE FROM "DevHubCheckpoint" WHERE "id"=$1`, [id]);
 }
 
@@ -609,7 +627,17 @@ async function dbListCheckpoints(projectId: string, limit = 20): Promise<DevHubC
     `SELECT * FROM "DevHubCheckpoint" WHERE "projectId"=$1 ORDER BY "createdAt" DESC LIMIT $2`,
     [projectId, limit]
   );
-  return r.rows.map(rowToCheckpoint);
+  const rows: DevHubCheckpoint[] = r.rows.map(rowToCheckpoint);
+  // Same overlay as dbLatestCheckpoint: the history and the restore-to-a-point
+  // walk both read this list, so a parked checkpoint missing from it would make
+  // restore skip the very state it was taken to protect.
+  const parked = [...memCheckpoints.values()].filter((c) => c.projectId === projectId);
+  if (parked.length === 0) return rows;
+  const byId = new Map<string, DevHubCheckpoint>(rows.map((c) => [c.id, c]));
+  for (const c of parked) byId.set(c.id, c);
+  return [...byId.values()]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit);
 }
 
 function rowToCheckpoint(row: any): DevHubCheckpoint {

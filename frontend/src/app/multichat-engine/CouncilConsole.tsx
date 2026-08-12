@@ -202,6 +202,17 @@ export function CouncilConsole() {
     setBusy(true);
     setError(null);
     setIsExample(false);
+    // Прошлый результат снимаем ДО запроса, а не после успешного ответа.
+    //
+    // Иначе так: гость смотрит пример, входит, задаёт свой вопрос — пометка
+    // «это пример» гаснет сразу, а ответы примера остаются висеть. Если
+    // запрос не прошёл, он читает чужой заранее заданный текст как ответ на
+    // свой вопрос: сверху полная карта разногласий, внизу мелкая строка
+    // ошибки. То же между двумя своими вопросами — в поле новый, на экране
+    // ответы на старый.
+    setResults(null);
+    setDissent(null);
+    setReceipt(null);
     try {
       const conv = await fetch(apiUrl("/api/multichat/conversations"), {
         method: "POST",
@@ -235,6 +246,12 @@ export function CouncilConsole() {
     if (busy) return;
     setBusy(true);
     setError(null);
+    // Симметрично ask(): если пример не загрузится, на экране не должен
+    // остаться прошлый настоящий прогон — он там уже без своего вопроса.
+    setResults(null);
+    setDissent(null);
+    setReceipt(null);
+    setIsExample(false);
     try {
       const r = await fetch(apiUrl("/api/multichat/dissent/preview"), {
         method: "POST",

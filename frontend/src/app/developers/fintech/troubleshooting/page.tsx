@@ -451,8 +451,8 @@ export default function TroubleshootingPage() {
           <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 8 }}>Still stuck?</div>
           <div style={{ fontSize: 13, color: C.dim, lineHeight: 1.65 }}>
             File an issue at{" "}
-            <a href="https://github.com/Dossymbek281078/AEVION/issues" style={{ color: C.accent, textDecoration: "none" }}>
-              github.com/Dossymbek281078/AEVION/issues
+            <a href="/help" style={{ color: C.accent, textDecoration: "none" }}>
+              aevion.app/help
             </a>
             {" "}with tag <code style={{ background: "rgba(255,255,255,0.05)", padding: "1px 5px", borderRadius: 3 }}>fintech-bug</code>.
             Include: timestamp (UTC), affected endpoint, request body (redact secrets), response body, and which playbook step you reached.

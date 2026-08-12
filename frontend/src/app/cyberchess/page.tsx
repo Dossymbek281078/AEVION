@@ -2242,7 +2242,9 @@ export default function CyberChessPage(){
         tts:true,
       };
       fetch("/api-backend/api/cyberchess-voice-coach/broadcast",{
-        method:"POST",headers:{"Content-Type":"application/json"},
+        method:"POST",
+        headers:{"Content-Type":"application/json",
+          ...(spectatorHostTokenRef.current?{"x-host-token":spectatorHostTokenRef.current}:{})},
         body:JSON.stringify(broadcastBody),
       }).catch(()=>{/* best-effort */});
     }).catch(()=>{});
@@ -2343,7 +2345,9 @@ export default function CyberChessPage(){
       if(!gid||over||hist.length===0)return;
       // Voice coach broadcast for the matchmaking game
       fetch("/api-backend/api/cyberchess-voice-coach/broadcast",{
-        method:"POST",headers:{"Content-Type":"application/json"},
+        method:"POST",
+        headers:{"Content-Type":"application/json",
+          ...(mmSpectatorHostTokenRef.current?{"x-host-token":mmSpectatorHostTokenRef.current}:{})},
         body:JSON.stringify({
           gameId:gid,
           fen:payload.fen,

@@ -22,8 +22,20 @@ import request from "supertest";
 // Imported statically: a cold dynamic import does not fit the per-test timeout.
 import spectatorRouter from "../src/routes/cyberchessSpectator";
 
+/** Адрес, с которого якобы пришёл запрос. null = как есть (петля). */
+let peerAddress: string | null = null;
+
 const app = express();
 app.use(express.json());
+app.use((req, _res, next) => {
+  if (peerAddress) {
+    Object.defineProperty(req.socket, "remoteAddress", {
+      value: peerAddress,
+      configurable: true,
+    });
+  }
+  next();
+});
 app.use("/api/cyberchess-spectator", spectatorRouter);
 
 const FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -57,6 +69,7 @@ async function startStream() {
 
 beforeEach(() => {
   n += 1;
+  peerAddress = null;
 });
 
 describe("a stream belongs to whoever started it", () => {
@@ -179,5 +192,52 @@ describe("viewers are never shown the secret", () => {
 
     const list = await request(app).get("/api/cyberchess-spectator/list");
     expect(JSON.stringify(list.body)).not.toContain(token);
+  });
+});
+
+describe("commentary is not something a viewer can put in someone's stream", () => {
+  const voice = (gameId: string, token?: string) => {
+    const r = request(app).post(`/api/cyberchess-spectator/voice/${gameId}`);
+    if (token) r.set("x-host-token", token);
+    return r.send({ text: "белые зевнули ферзя", fromHost: true });
+  };
+
+  test("an outside caller is refused", async () => {
+    const { gameId } = await startStream();
+    // The endpoint is internal — our own voice coach calls it over loopback —
+    // but it is mounted publicly, so anyone holding the viewer link could
+    // broadcast text and an audio link into the stream, marked as the host's.
+    peerAddress = "203.0.113.7";
+    const res = await voice(gameId);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("not_the_host");
+  });
+
+  test("the host, carrying the secret, may speak from outside", async () => {
+    const { gameId, token } = await startStream();
+    peerAddress = "203.0.113.7";
+    const res = await voice(gameId, token);
+
+    expect(res.status).toBe(200);
+  });
+
+  test("our own in-process call still works — it has no token to give", async () => {
+    const { gameId } = await startStream();
+    peerAddress = null; // loopback, as the voice coach calls it
+    const res = await voice(gameId);
+
+    expect(res.status).toBe(200);
+  });
+
+  test("a forwarded header cannot pass for the in-process call", async () => {
+    const { gameId } = await startStream();
+    peerAddress = "203.0.113.7";
+    const res = await request(app)
+      .post(`/api/cyberchess-spectator/voice/${gameId}`)
+      .set("x-forwarded-for", "127.0.0.1")
+      .send({ text: "я тут главный" });
+
+    expect(res.status).toBe(403);
   });
 });

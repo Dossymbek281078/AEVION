@@ -443,6 +443,22 @@ function archiveFinishedGame(g: LiveGame, endedAt: number): void {
 // ---------- Public getter for cross-router integration ----------
 // Used by cyberchessVoiceCoach.ts to validate that a gameId refers to a
 // currently-live game before broadcasting AI commentary into its SSE stream.
+/**
+ * Владеет ли вызывающий стримом `gameId`? Для соседних роутеров, которым нужно
+ * то же решение (голосовой тренер вещает в чужой эфир и тратит на это деньги
+ * на LLM и озвучку). Игры, заведённые до появления токена, остаются открытыми —
+ * они живут только в памяти и исчезают с ближайшим рестартом.
+ */
+export function isStreamHostToken(gameId: string, token: string): boolean {
+  const game = liveGames.get(gameId);
+  if (!game) return false;
+  if (!game.hostToken) return true;
+  if (!token) return false;
+  const a = crypto.createHash("sha256").update(token).digest();
+  const b = crypto.createHash("sha256").update(game.hostToken).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
 export function isLiveGame(gameId: string): boolean {
   if (!validGameId(gameId)) return false;
   return liveGames.has(gameId);
@@ -890,8 +906,22 @@ router.post("/voice/:gameId", (req: Request, res: Response) => {
     return;
   }
 
-  if (!liveGames.has(gameId)) {
+  const voiceGame = liveGames.get(gameId);
+  if (!voiceGame) {
     res.status(404).json({ ok: false, error: "not_found" });
+    return;
+  }
+
+  // Спикером в чужом эфире стать нельзя. Ручка внутренняя: её зовёт наш же
+  // голосовой тренер по петле (127.0.0.1), из браузера — никто. Но смонтирована
+  // она публично, поэтому любой, кто видел ссылку зрителя, мог вещать в стрим
+  // текст и ссылку на аудио, да ещё и с пометкой «от ведущего».
+  // Адрес берём у СОКЕТА: req.ip при `trust proxy` читается из заголовка,
+  // который присылает сам вызывающий.
+  const peer = req.socket?.remoteAddress || "";
+  const internal = peer === "::1" || peer === "::ffff:127.0.0.1" || peer.startsWith("127.");
+  if (!internal && !isTheHost(voiceGame, req)) {
+    res.status(403).json({ ok: false, error: "not_the_host" });
     return;
   }
 

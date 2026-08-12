@@ -45,7 +45,7 @@ import buildComment, {
   buildCommentLLM,
   answerQuestion,
 } from '../lib/voiceCoachPrompt';
-import { isLiveGame } from './cyberchessSpectator';
+import { isLiveGame, isStreamHostToken } from './cyberchessSpectator';
 
 const router = Router();
 
@@ -551,6 +551,18 @@ router.post('/broadcast', async (req: Request, res: Response) => {
       typeof body.gameId === 'string' ? body.gameId.trim() : '';
     if (!gameId) {
       return res.status(400).json({ ok: false, error: 'missing_game_id' });
+    }
+    // Комментарий уходит зрителям чужого эфира и стоит настоящих денег: этот
+    // путь дёргает LLM и синтез речи. Без доказательства владения стримом любой,
+    // кто открыл ссылку зрителя, мог и говорить от лица ведущего, и тратить на
+    // это чужой бюджет.
+    const hostToken =
+      (typeof req.headers['x-host-token'] === 'string' ? req.headers['x-host-token'] : '') ||
+      (typeof (body as { hostToken?: unknown }).hostToken === 'string'
+        ? ((body as { hostToken?: string }).hostToken as string)
+        : '');
+    if (isLiveGame(gameId) && !isStreamHostToken(gameId, hostToken)) {
+      return res.status(403).json({ ok: false, error: 'not_the_host' });
     }
     if (!isLiveGame(gameId)) {
       return res

@@ -944,14 +944,28 @@ function dashboardSecret(): string {
   );
 }
 
-function dashboardToken(email: string, scope: "affiliate" | "partners"): string {
+// Область токена входит в подпись, поэтому ссылка на партнёрский дашборд не
+// открывает историю подписок и наоборот.
+type DashboardScope = "affiliate" | "partners" | "provisioning";
+
+/** a@b.com → a***@b.com. Ответ не должен возвращать адрес целиком. */
+function maskEmail(email: string): string {
+  const at = email.indexOf("@");
+  if (at < 1) return "***";
+  const name = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const head = name.slice(0, 1);
+  return `${head}${"*".repeat(Math.max(2, name.length - 1))}@${domain}`;
+}
+
+function dashboardToken(email: string, scope: DashboardScope): string {
   return createHmac("sha256", dashboardSecret())
     .update(`${email.toLowerCase()}:${scope}`)
     .digest("hex")
     .slice(0, 32);
 }
 
-function verifyDashboardToken(email: string, scope: "affiliate" | "partners", got: string): boolean {
+function verifyDashboardToken(email: string, scope: DashboardScope, got: string): boolean {
   const want = dashboardToken(email, scope);
   if (want.length !== got.length) return false;
   try {
@@ -1426,6 +1440,107 @@ pricingRouter.get("/provisioning/stats", (_req, res) => {
     }));
 
   return res.json({ total: subs.length, byTier, last7d, trialsActive, recent });
+});
+
+/**
+ * POST /api/pricing/provisioning/magic-link   { email }
+ *
+ * Первый шаг обещанного соседним комментарием флоу: историю подписок нельзя
+ * отдавать всякому, кто знает адрес, поэтому доступ подтверждается письмом.
+ * Отвечаем 204 ВСЕГДА — иначе по разнице ответов можно перебором выяснить,
+ * кто у нас покупал.
+ */
+pricingRouter.post("/provisioning/magic-link", (req, res) => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  if (programRateLimited(ip, "provisioning")) {
+    return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+  }
+  const body = req.body ?? {};
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: "invalid_email" });
+  }
+
+  const has = readSubscriptions().some((s) => (s.email ?? "").toLowerCase() === email);
+  if (has) {
+    const token = dashboardToken(email, "provisioning");
+    const link = `${SITE_BASE}/pricing/provisioning?email=${encodeURIComponent(email)}&token=${token}`;
+    sendEmail({
+      to: email,
+      subject: "AEVION — история ваших подписок",
+      html: magicLinkHtml(maskEmail(email), link, "Partner"),
+      text: `Ссылка для просмотра истории подписок:\n${link}\n\n— AEVION`,
+    }).catch((e) => console.error("[provisioning/magic-link] email failed", e));
+  }
+
+  return res.status(204).end();
+});
+
+/**
+ * GET /api/pricing/provisioning/history?email=&token=
+ *
+ * Страница /pricing/provisioning звала этот путь, которого не существовало:
+ * человек вводил почту, жал «Найти» и получал ошибку — то есть весь смысл
+ * страницы не работал (замер 12.08.2026 через scripts/build-contract-check).
+ *
+ * Адрес в ответе замаскирован, а сам ответ ограничен сотней записей — ровно
+ * то, что странице обещает её собственная подпись под формой.
+ */
+pricingRouter.get("/provisioning/history", (req, res) => {
+  const email = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+
+  if (!email || !isValidEmail(email)) return res.status(400).json({ error: "invalid_email" });
+  if (!token || !verifyDashboardToken(email, "provisioning", token)) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+
+  const LIMIT = 100;
+  const mine = readSubscriptions()
+    .filter((s) => (s.email ?? "").toLowerCase() === email)
+    .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts));
+
+  const now = Date.now();
+  const items = mine.slice(0, LIMIT).map((s) => {
+    const until = s.validUntil ? Date.parse(s.validUntil) : NaN;
+    const alive = Number.isFinite(until) ? until > now : true;
+    // Без срока запись считается действующей: так ведёт себя бессрочная
+    // покупка, и красить её в «истекла» было бы враньём.
+    const daysLeft = Number.isFinite(until)
+      ? Math.max(0, Math.ceil((until - now) / 86_400_000))
+      : null;
+    const status: "active" | "trial" | "expired" = !alive
+      ? "expired"
+      : (s.trialDays ?? 0) > 0
+        ? "trial"
+        : "active";
+
+    return {
+      id: s.id,
+      ts: s.ts,
+      tierId: s.tierId,
+      period: s.period,
+      seats: s.seats,
+      modules: s.modules ?? [],
+      trialDays: s.trialDays ?? 0,
+      validUntil: s.validUntil ?? null,
+      amountUsd: s.amountUsd ?? null,
+      promoCode: s.promoCode ?? null,
+      source: s.source ?? null,
+      daysLeft,
+      status,
+      emailMasked: maskEmail(email),
+      // stripeSessionId сознательно НЕ отдаём: подпись под формой обещает,
+      // что сессии Stripe видны только администраторам.
+    };
+  });
+
+  return res.json({
+    email: maskEmail(email),
+    count: mine.length,
+    truncated: mine.length > LIMIT,
+    items,
+  });
 });
 
 /**

@@ -69,6 +69,25 @@ function shorten(line) {
 }
 
 const out = lines.map(shorten);
+
+/**
+ * "0 dropped" is a count, and a count is not a guarantee — the same number of
+ * lines can come out with a mangled link, which loses the memory just as
+ * thoroughly as deleting the line. So the targets themselves are compared, and
+ * a mismatch refuses to write rather than reporting success.
+ */
+function linkTargets(arr) {
+  return arr.flatMap((l) => [...l.matchAll(/\]\(([^)]+)\)/g)].map((m) => m[1]));
+}
+const before_targets = linkTargets(lines);
+const after_targets = linkTargets(out);
+const lost = before_targets.filter((t, i) => after_targets[i] !== t);
+
+if (lines.length !== out.length || lost.length > 0) {
+  console.error("REFUSING: the transform changed line count or link targets.");
+  console.error(`lines ${lines.length} → ${out.length}, first differing target: ${lost[0] ?? "-"}`);
+  process.exit(1);
+}
 const before = Buffer.byteLength(original, "utf8");
 const after = Buffer.byteLength(out.join("\n"), "utf8");
 const touched = out.filter((l, i) => l !== lines[i]).length;

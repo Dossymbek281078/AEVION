@@ -143,7 +143,15 @@ const DATA_DIR = process.env.CYBERCHESS_TOURNAMENTS_DIR
   : path.resolve(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "cyberchess-tournaments.json");
 
-let PERSIST_OK = true;
+/**
+ * Пауза записи после отказа. Ноль — пишем. См. tryWriteToDisk: раньше здесь
+ * стояла защёлка «больше не пытаться», из-за которой один временный сбой
+ * оставлял все последующие регистрации только в памяти.
+ */
+let persistPausedUntil = 0;
+/** Подряд идущие отказы — чтобы жаловаться в лог не один раз и всё громче. */
+let persistFailures = 0;
+const PERSIST_RETRY_MS = 60_000;
 let TOURNAMENTS: Tournament[] = [];
 
 function tryLoadFromDisk(): Tournament[] | null {
@@ -161,7 +169,16 @@ function tryLoadFromDisk(): Tournament[] | null {
 }
 
 function tryWriteToDisk(): void {
-  if (!PERSIST_OK) return;
+  // Пауза после отказа, а не отключение навсегда.
+  //
+  // Раньше первая же неудачная запись ставила PERSIST_OK в false «graceful
+  // no-op for subsequent writes» — и с этой секунды регистрации и результаты
+  // жили только в памяти процесса. Отличить это состояние снаружи нельзя:
+  // ручки отвечают 200, игрок видит себя в списке участников, а после
+  // перезапуска не находит ни себя, ни турнира. Причина отказа обычно
+  // временная (полный диск, права, гонка на переименовании), но защёлка
+  // не давала попробовать снова НИ РАЗУ до перезапуска.
+  if (persistPausedUntil > Date.now()) return;
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -176,13 +193,30 @@ function tryWriteToDisk(): void {
       "utf-8",
     );
     fs.renameSync(tmp, DATA_FILE);
+    // Запись удалась — прошлые отказы больше ничего не значат.
+    persistFailures = 0;
+    persistPausedUntil = 0;
   } catch (e) {
-    console.warn(
-      "[cyberchess-tournaments] persistence disabled (write failed):",
+    persistFailures += 1;
+    persistPausedUntil = Date.now() + PERSIST_RETRY_MS;
+    // Жалуемся КАЖДЫЙ раз, а не единожды при переходе в отказ: пока запись не
+    // проходит, турнирные данные живут только в памяти этого процесса, и
+    // молчание после первой строки читалось бы как «всё наладилось».
+    console.error(
+      `[cyberchess-tournaments] запись не прошла (${persistFailures} подряд), следующая попытка через ${PERSIST_RETRY_MS / 1000} с — регистрации и результаты сейчас только в памяти процесса:`,
       (e as Error).message,
     );
-    PERSIST_OK = false; // graceful no-op for subsequent writes
   }
+}
+
+/** Состояние записи на диск — для диагностики; читает, ничего не меняет. */
+export function tournamentPersistenceState(): {
+  healthy: boolean;
+  consecutiveFailures: number;
+  pausedForMs: number;
+} {
+  const pausedForMs = Math.max(0, persistPausedUntil - Date.now());
+  return { healthy: persistFailures === 0, consecutiveFailures: persistFailures, pausedForMs };
 }
 
 function initStore(): void {

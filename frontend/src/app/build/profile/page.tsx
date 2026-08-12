@@ -846,7 +846,7 @@ function VerificationWidget() {
 function ShareLinkBlock({ userId }: { userId: string }) {
   const { t } = useI18n();
   const toast = useToast();
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.tech";
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.app";
   const url = `${origin}/build/r/${encodeURIComponent(userId)}`;
 
   function copy() {

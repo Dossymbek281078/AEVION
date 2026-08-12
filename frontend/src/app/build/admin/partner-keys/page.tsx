@@ -154,7 +154,7 @@ function Body() {
      data-limit="6"
      data-city="Astana"
      data-skill="welding"></div>
-<script src="https://aevion.tech/api/build/public/widget.js" defer></script>`}</pre>
+<script src="https://aevion.app/api-backend/api/build/public/widget.js" defer></script>`}</pre>
         <p className="mt-2 text-slate-400">
           One <code className="rounded bg-white/5 px-1 py-0.5">&lt;script&gt;</code>, no framework
           deps, no bundler. The widget queries the public feed using the key you provide and

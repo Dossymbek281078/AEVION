@@ -80,7 +80,7 @@ export default async function VacancyOgImage({ params }: { params: Promise<{ id:
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 20, color: "#64748b" }}>
           <span>construction recruiting</span>
-          <span style={{ fontWeight: 700, color: "#e2e8f0" }}>aevion.tech/build</span>
+          <span style={{ fontWeight: 700, color: "#e2e8f0" }}>aevion.app/build</span>
         </div>
       </div>
     ),

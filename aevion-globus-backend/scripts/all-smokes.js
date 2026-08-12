@@ -59,6 +59,11 @@ const SMOKES = [
   // и это ничего не ломало: интерфейс фильтрует темы у себя, пустого экрана
   // никто не видел. Только чтение.
   { name: "cyberchess-coach-bank", script: "cyberchess-coach-vs-bank-smoke.js", readOnly: true },
+  // Домены, на которые ссылается сайт: существуют ли они вообще. 12.08.2026 нашёл
+  // четыре несуществующих (aevion.tech/.kz/.bank), на которых висели QR-код на
+  // сертификате, реферальные ссылки банка, виджет для партнёров и разметка для
+  // поисковиков. Только DNS, прод не трогает.
+  { name: "dead-domains", script: "dead-domain-sweep.mjs", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).

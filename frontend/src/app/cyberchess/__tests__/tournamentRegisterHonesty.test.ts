@@ -48,3 +48,33 @@ describe("список турниров не сообщает об успехе,
     expect(block).toMatch(/Registered\. Ticket/);
   });
 });
+
+describe("регистрация уходит под личностью игрока, а не анонимом", () => {
+  const LIST = "src/app/cyberchess/tournaments/page.tsx";
+  const DETAIL = "src/app/cyberchess/tournaments/[id]/page.tsx";
+  const SHARED = "src/app/cyberchess/tournaments/playerIdentity.ts";
+
+  it("список шлёт userId, а не пустое тело", () => {
+    /* С пустым телом сервер выдаёт `anon_…`: место в турнире занято, а связать
+       его с человеком нечем — и билет, который сервер теперь хранит, записан на
+       этот одноразовый id. */
+    const src = read(LIST);
+    const at = src.indexOf("/register`");
+    const block = src.slice(at, at + 900);
+    expect(block).toMatch(/tournamentUserId\(\)/);
+    expect(block).not.toMatch(/JSON\.stringify\(\{\}\)/);
+  });
+
+  it("обе страницы берут личность из одного модуля", () => {
+    /* Иначе они снова разойдутся, и человек окажется двумя игроками. */
+    expect(read(LIST)).toMatch(/from "\.\/playerIdentity"/);
+    expect(read(DETAIL)).toMatch(/from "\.\.\/playerIdentity"/);
+    expect(read(DETAIL)).not.toMatch(/function genLocalUserId/);
+  });
+
+  it("ключ id не менялся при переносе", () => {
+    /* Смена ключа переназначила бы личность всем, у кого уже есть история. */
+    expect(read(SHARED)).toMatch(/"cc_user_id"/);
+    expect(read(SHARED)).toMatch(/"cyberchess\.displayName"/);
+  });
+});

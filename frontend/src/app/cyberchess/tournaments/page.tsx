@@ -15,6 +15,7 @@
 //   • Live indicator with pulse dot for status === "live" tournaments
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { tournamentUserId, tournamentDisplayName } from "./playerIdentity";
 import Link from "next/link";
 
 const T = {
@@ -676,7 +677,15 @@ function TournamentCard({ t }: { t: Tournament }) {
                     {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({}),
+                      /* Пустое тело заставляло сервер выдать `anon_…`: место
+                         занято, а связать его с человеком нечем. Шлём ту же
+                         личность, что и детальная страница турнира. */
+                      body: JSON.stringify({
+                        userId: tournamentUserId(),
+                        ...(tournamentDisplayName()
+                          ? { displayName: tournamentDisplayName() }
+                          : {}),
+                      }),
                     },
                   );
                   const data = await r.json();

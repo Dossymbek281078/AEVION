@@ -16,6 +16,7 @@
 //      auto-trigger queue-match on round completion for realPlayers tournaments
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
+import { tournamentUserId, tournamentDisplayName } from "../playerIdentity";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -107,29 +108,6 @@ type RegState =
 
 type SortKey = "score" | "buchholz" | "rating" | "games";
 type SortDir = "asc" | "desc";
-
-function genLocalUserId(tournamentId: string): string {
-  if (typeof window === "undefined") return `anon_${Math.random().toString(36).slice(2, 10)}`;
-  const key = `cc_user_id`;
-  let id = window.localStorage.getItem(key);
-  if (!id) {
-    id =
-      `u_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    try {
-      window.localStorage.setItem(key, id);
-    } catch {
-      // ignore
-    }
-  }
-  void tournamentId;
-  return id;
-}
-
-function getDisplayName(): string {
-  if (typeof window === "undefined") return "";
-  // Тот же ключ, что пишет матчмейкинг и читают остальные страницы турниров.
-  return window.localStorage.getItem("cyberchess.displayName") || "";
-}
 
 export default function TournamentDetailPage({
   params,
@@ -285,8 +263,8 @@ export default function TournamentDetailPage({
     if (!meta) return;
     if (reg.phase === "registering" || reg.phase === "waiting") return;
     setReg({ phase: "registering" });
-    const userId = genLocalUserId(tournamentId);
-    const displayName = getDisplayName();
+    const userId = tournamentUserId();
+    const displayName = tournamentDisplayName();
     try {
       const r = await fetch(`/api-backend/api/cyberchess-tournaments/${tournamentId}/register`, {
         method: "POST",

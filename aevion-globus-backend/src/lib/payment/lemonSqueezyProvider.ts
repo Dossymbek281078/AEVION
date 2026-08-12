@@ -62,6 +62,32 @@ function publicBaseUrl(): string {
   return (process.env.AEVION_PUBLIC_BASE_URL || "https://aevion.app").replace(/\/+$/, "");
 }
 
+/**
+ * Куда вернуть человека после успешной оплаты.
+ *
+ * 🔴 Было `${base}/payment/success` — страницы с таким адресом не существует
+ * ни в репозитории, ни на проде (замер 12.08.2026: `aevion.app/payment/success`
+ * → 404, при том что `/pricing/checkout/success`, `/pricing/checkout/cancel`
+ * и `/bureau` отвечают 200). То есть человек платил за подписку и попадал на
+ * страницу ошибки. Деньги при этом списывались и доступ выдавался — ломался
+ * только последний экран, поэтому дефект не проявлял себя ничем, кроме
+ * впечатления покупателя.
+ *
+ * Ведём на существующую страницу успеха — ту же, что уже используют PayPal и
+ * PayBox. Она читает tier/period/total/provider и показывает, что делать
+ * дальше, так что параметры передаём, а не теряем.
+ */
+export function successRedirectUrl(base: string, intentId: string, input: PaymentIntentInput): string {
+  const m = /^tier_([a-z]+)_(monthly|annual)$/.exec(input.reference ?? "");
+  const q = new URLSearchParams({ provider: "lemonsqueezy", intentId });
+  if (m) {
+    q.set("tier", m[1]);
+    q.set("period", m[2]);
+  }
+  if (typeof input.amountCents === "number") q.set("total", String(input.amountCents));
+  return `${base}/pricing/checkout/success?${q.toString()}`;
+}
+
 // In-memory cache: our intentId → LS checkout id (so getIntent can fetch the
 // right LS order). Rebuilds on process restart; webhook-driven status is the
 // source of truth, so a cache miss just means we can't poll until next webhook.
@@ -131,7 +157,7 @@ export const lemonSqueezyPaymentProvider: PaymentProvider = {
           product_options: {
             name: input.description,
             description: input.description,
-            redirect_url: `${base}/payment/success?intentId=${encodeURIComponent(intentId)}`,
+            redirect_url: successRedirectUrl(base, intentId, input),
             receipt_button_text: "Back to AEVION",
             enabled_variants: [Number.parseInt(variantId, 10)],
           },

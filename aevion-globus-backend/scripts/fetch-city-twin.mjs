@@ -43,6 +43,9 @@ const TYPE_MEDIAN_MIN_SAMPLES = 3;
 // Берём 75-й процентиль распределения этого типа, не медиану: см. замер в блоке
 // подстановки перед rasterize.
 const TYPE_QUANTILE = 0.75;
+// Подстановка больше этого — называется поимённо в выводе: она заметно двигает
+// коридоры, и узнавать о ней из карты человек не должен.
+const BIG_SUBSTITUTION_M = 30;
 // Типы, которые о высоте не сообщают ничего.
 const UNINFORMATIVE_TYPES = new Set(["yes", "building", "construction", "roof"]);
 
@@ -470,6 +473,7 @@ const quantile = (xs, p) => {
 // OSM, а `--compare` показывает их одной цифрой «ячеек различается».
 const noTypeMedian = process.argv.includes("--no-type-median");
 let typedGuesses = 0, typedRaised = 0, typedLowered = 0, typedMaxDelta = 0;
+const bigSubstitutions = [];
 for (let i = 0; !noTypeMedian && i < buildings.length; i++) {
   const b = buildings[i];
   if (b.hs !== 2) continue;
@@ -494,6 +498,7 @@ for (let i = 0; !noTypeMedian && i < buildings.length; i++) {
   if (h === b.h) continue;
   if (h > b.h) typedRaised++; else typedLowered++;
   typedMaxDelta = Math.max(typedMaxDelta, Math.abs(h - b.h));
+  if (h - b.h > BIG_SUBSTITUTION_M) bigSubstitutions.push({ i, type, from: b.h, to: h, samples: xs.length });
   b.h = h;
   typedGuesses++;
 }
@@ -503,6 +508,20 @@ if (typedGuesses) {
     + `(поднято ${typedRaised}, опущено ${typedLowered}, макс. сдвиг ${typedMaxDelta} м); `
     + `класс остался guessed\n`,
   );
+  // Крупная подстановка называется поимённо, а не прячется за «макс. сдвиг».
+  // Повод конкретный: прогон по Нью-Йорку 12.08.2026 поднял ОДНО здание сразу
+  // на 159 м — в Мидтауне 75-й процентиль коммерческой застройки такой и есть.
+  // Формально это ответ города о себе, но 170-метровая догадка на месте
+  // неизвестного дома заметно двигает коридоры вокруг, и человек, который
+  // пересобирает твин, должен увидеть её списком, а не узнать из карты.
+  for (const s of bigSubstitutions.slice(0, 5)) {
+    process.stderr.write(
+      `    ⚠ здание ${s.i} (${s.type}): ${s.from} → ${s.to} м по ${s.samples} известным высотам этого типа\n`,
+    );
+  }
+  if (bigSubstitutions.length > 5) {
+    process.stderr.write(`    … и ещё ${bigSubstitutions.length - 5} подстановок больше ${BIG_SUBSTITUTION_M} м\n`);
+  }
   provenanceNote = provenanceNote.replace(
     "2=угадано(дефолт 12м)",
     `2=угадано(75-й процентиль высот этого же типа зданий в этом же городе, при ${TYPE_MEDIAN_MIN_SAMPLES}+ известных высотах и только для типов, которые о высоте что-то говорят; иначе дефолт ${DEFAULT_HEIGHT_M}м)`,

@@ -136,11 +136,20 @@ console.log(
 const TWIN_FILE = { astana: "qskyway.city.ts", nyc: "qskyway.city.nyc.ts", tokyo: "qskyway.city.tokyo.ts" };
 try {
   const twinPath = new URL(`../src/routes/${TWIN_FILE[city]}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
-  const dq = JSON.parse(fs.readFileSync(twinPath, "utf8").match(/"dataQuality":(\{.*?\})(?:,"heightReview"|\})/s)?.[1] ?? "null");
+  const twinSrc = fs.readFileSync(twinPath, "utf8");
+  const dq = JSON.parse(twinSrc.match(/"dataQuality":(\{.*?\})(?:,"heightReview"|\})/s)?.[1] ?? "null");
+  // Сколько угаданных высот ОСТАЛИСЬ на слепом дефолте, а сколько получили
+  // процентиль своего типа. Без этой строки «угадано 237» читается как «237
+  // домов по 12 метров», а это с 12.08.2026 уже неправда.
+  const twin = JSON.parse(twinSrc.match(/= (\{[\s\S]*\});\s*$/m)?.[1] ?? "null");
+  const guessedBuildings = (twin?.buildings ?? []).filter((b) => b.hs === 2);
+  const stillDefault = guessedBuildings.filter((b) => b.h === BLIND_DEFAULT).length;
+  const typed = guessedBuildings.length - stillDefault;
   if (dq) {
     console.log(
       `\n── а доходит ли это до коридоров ──\n`
-      + `  в ТВИНЕ ${city}: обмерено ${dq.measured}, выведено ${dq.derived}, угадано ${dq.guessed} (из ${dq.total}).`,
+      + `  в ТВИНЕ ${city}: обмерено ${dq.measured}, выведено ${dq.derived}, угадано ${dq.guessed} (из ${dq.total}).\n`
+      + `  из угаданных: ${typed} получили процентиль своего типа, ${stillDefault} остались на слепых ${BLIND_DEFAULT} м.`,
     );
     console.log(
       dq.guessed > 0 && dq.measured === 0

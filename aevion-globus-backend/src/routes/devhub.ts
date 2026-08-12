@@ -256,6 +256,9 @@ function deferred(fn: () => void | Promise<void>, ms: number): void {
     deferredTimers.delete(t);
     void fn();
   }, ms);
+  // A pending timer keeps Node alive on its own. A post-deploy check should
+  // never be the reason a process refuses to exit.
+  t.unref?.();
   deferredTimers.add(t);
 }
 

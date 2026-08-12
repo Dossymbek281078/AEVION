@@ -4370,24 +4370,23 @@ describe("Deleting a project takes its Railway service with it", () => {
   });
 });
 
-// ─── Why this file fails in the full suite and nowhere else ──────────────────
+// ─── The timers behind the suite's drifting failures ─────────────────────────
 //
-// 2026-08-12. Isolated, this file is 238/238 green three runs in a row. In the
-// full 114-file suite it fails 1-3 assertions, a different set every run.
-// Raising testTimeout removed every timeout in the suite but not these.
+// Deploy routes answer immediately and schedule the "does the page actually
+// serve" check on a timer — 4s for CF Pages, 5s for Vercel — after which
+// verifyDeploymentServes() fetches up to 5 times, 5s apart. Those fetches read
+// globalThis.fetch when they finally run, which by then belongs to a LATER
+// test, and they take mockResolvedValueOnce answers off its queue. That test
+// then reads somebody else's response and fails an assertion unrelated to what
+// it tests — a different one every run.
 //
-// The mechanism: the deploy routes answer immediately and schedule the
-// "does the page actually serve" check on a timer — 4s for CF Pages, 5s for
-// Vercel — and verifyDeploymentServes() then fetches up to 5 times, 5s apart.
-// Those fetches read globalThis.fetch when they finally run, which by then is
-// the NEXT test's fetchMock, and take mockResolvedValueOnce answers off its
-// queue. The test that queued them gets somebody else's response and fails an
-// assertion unrelated to what it tests.
+// Fixed by tracking them (see `deferred` in devhub.ts) and dropping them in
+// afterEach. These two tests hold that in place: the first shows the stray
+// traffic is real, the second shows the cleanup stops it. Without the cleanup
+// the second one fails.
 //
-// Isolated the file finishes in ~2s and the process exits before any timer
-// fires, which is exactly why isolation hides this. In the suite the file
-// lives 13-30s, so the timers do fire — and which test they land on depends on
-// machine load. Hence the drifting set.
+// Isolated, this file finishes in ~2s and the process exits before any timer
+// fires — which is why isolation hid the problem for weeks.
 describe("deploy verification timers outlive the test that started them", () => {
   test("a CF Pages deploy leaves a timer that fetches after the response", async () => {
     process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
@@ -4413,6 +4412,34 @@ describe("deploy verification timers outlive the test that started them", () => 
       // This is the stray traffic. In a real run it lands on whichever test is
       // executing 4 seconds later.
       expect(afterTimer).toBeGreaterThan(afterResponse);
+    } finally {
+      vi.useRealTimers();
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_API_TOKEN;
+    }
+  });
+
+  test("__clearDeferredDevHubWork disarms it, which is what afterEach does", async () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    vi.useFakeTimers();
+    try {
+      const app = makeApp();
+      const created = await request(app).post("/api/devhub/projects").send({ name: "timer-probe-2" });
+      const id = created.body.project.id as string;
+      await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>x</h1>" });
+
+      fetchMock.mockResolvedValue(jsonResp(200, { success: true }));
+      mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://probe2.pages.dev", output: "" });
+      await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
+
+      __clearDeferredDevHubWork();
+      const afterClear = fetchMock.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      // Untracked, this kept climbing — and every one of those calls was taken
+      // from a later test's queue.
+      expect(fetchMock.mock.calls.length).toBe(afterClear);
     } finally {
       vi.useRealTimers();
       delete process.env.CLOUDFLARE_ACCOUNT_ID;

@@ -113,6 +113,30 @@ describe("POST /route/justification — the filing", () => {
     expect(v.body).toMatchObject({ valid: false, hashValid: false });
   });
 
+  /**
+   * До 12.08.2026 оговорка о границах документа лежала ПОЛЕМ ОТВЕТА рядом с
+   * `document`, а не внутри него. Комментарий в коде обещал обратное: «едет
+   * вместе с документом, иначе „построено по данным FAA“ превращается в „FAA
+   * согласовало“». На деле пара `{document, attestation}`, переданная дальше
+   * без третьего поля, проверялась как подлинная — уже без единой оговорки.
+   */
+  test("оговорка о границах — внутри подписи, а не рядом с ней", async () => {
+    const j = await request(app).post("/api/qskyway/route/justification").send({ from: 1, to: 2, city: "nyc" });
+    // Она в самом документе, значит уедет с ним куда угодно.
+    expect(j.body.document.scope).toContain("НЕ сертификация");
+    // Поле ответа осталось для прежних читателей, но это тот же текст.
+    expect(j.body.scope).toBe(j.body.document.scope);
+
+    // И главное: подделать её молча нельзя — подпись покрывает.
+    const v = await request(app)
+      .post("/api/qskyway/route/justification/verify")
+      .send({
+        document: { ...j.body.document, scope: "Полёт согласован регулятором." },
+        attestation: j.body.attestation,
+      });
+    expect(v.body).toMatchObject({ valid: false, hashValid: false });
+  });
+
   test("for a prohibited city it never says the flight merely needs permission", async () => {
     // The worst defect this module has had: a signed document telling a
     // regulator that a banned flight could be authorized on request.

@@ -110,6 +110,17 @@ export function isSeededEntry(e: { userId?: string }): boolean {
   return typeof e.userId === 'string' && e.userId.startsWith('seed_');
 }
 
+/**
+ * Файл есть, но прочитать его не удалось. Это НЕ пустая таблица.
+ *
+ * Раньше оба случая давали `[]`, и последствие было куда хуже показа: пустой
+ * список становился состоянием в памяти, а первое же сохранение записывало эту
+ * пустоту ПОВЕРХ файла. То есть одна временная ошибка чтения — недописанный
+ * JSON, гонка на подмене, нехватка прав — стирала таблицу целиком и навсегда,
+ * без единого сообщения.
+ */
+let leaderboardReadable = true;
+
 function loadLeaderboard(): LeaderEntry[] {
   try {
     ensureDataDir();
@@ -117,22 +128,51 @@ function loadLeaderboard(): LeaderEntry[] {
       const raw = fs.readFileSync(LB_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
+        leaderboardReadable = true;
         return (parsed as LeaderEntry[]).filter((e) => !isSeededEntry(e));
       }
+      // Файл есть, но внутри не список — содержимое неизвестно, значит не пусто.
+      leaderboardReadable = false;
+      console.error('[cyberchess-daily] таблица лидеров не разобрана — запись заблокирована, чтобы не стереть её пустотой');
+      return [];
     }
-  } catch {
-    // unreadable file → start empty rather than invent entries
+    // Файла нет — честная пустая таблица: её никто ещё не заполнял.
+    leaderboardReadable = true;
+  } catch (e) {
+    leaderboardReadable = false;
+    console.error(
+      '[cyberchess-daily] таблицу лидеров не прочитать — запись заблокирована, чтобы не стереть её пустотой:',
+      (e as Error).message,
+    );
   }
   return [];
 }
 
 function saveLeaderboard(entries: LeaderEntry[]): void {
+  if (!leaderboardReadable) {
+    // Пробуем ещё раз: причина обычно временная, и как только файл читается,
+    // работа возобновляется сама. Прочитанное берём за основу и накатываем на
+    // него то, что накопилось в памяти, — иначе сохранение снова затрёт диск.
+    const recovered = loadLeaderboard();
+    if (!leaderboardReadable) {
+      console.error('[cyberchess-daily] сохранение пропущено: файл по-прежнему не читается, в памяти', entries.length, 'строк');
+      return;
+    }
+    LEADERBOARD = recovered;
+    for (const e of entries) upsertLeaderboard(e.userId, e.name, e.country, e.streak, e.score);
+    return; // upsertLeaderboard уже сохранил
+  }
   try {
     ensureDataDir();
     fs.writeFileSync(LB_FILE, JSON.stringify(entries, null, 2), 'utf-8');
-  } catch {
-    // ignore
+  } catch (e) {
+    console.error('[cyberchess-daily] запись таблицы лидеров не прошла:', (e as Error).message);
   }
+}
+
+/** Состояние хранилища таблицы — для диагностики и для ответа ручки. */
+export function dailyLeaderboardReadable(): boolean {
+  return leaderboardReadable;
 }
 
 // In-memory mirror (fallback when fs unavailable)
@@ -347,6 +387,11 @@ router.post('/solve', (req: Request, res: Response) => {
  * Returns top-N entries sorted by score desc.
  */
 router.get('/leaderboard', (req: Request, res: Response) => {
+  // Пустой список на этой ручке страница подписывает словами «Пока никто не
+  // решал». Если файл не прочитан, мы этого не знаем — и говорить не вправе.
+  if (!leaderboardReadable) {
+    return res.status(503).json({ ok: false, error: 'leaderboard_unavailable' });
+  }
   const rawLimit = parseInt(String(req.query.limit || '100'), 10);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, LB_MAX) : 100;
   return res.json({

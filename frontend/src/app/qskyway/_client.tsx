@@ -181,7 +181,9 @@ function altColor(alt: number, altMax: number, a = 1): string {
 }
 
 export default function QSkywayClient() {
-  const { t } = useI18n();
+  // `lang` нужен ровно для одного места: русское числительное склоняется, и
+  // общий ключ этого не умеет (см. чип подстановки ниже).
+  const { t, lang } = useI18n();
   const mapRef = useRef<HTMLCanvasElement | null>(null);
   const profRef = useRef<HTMLCanvasElement | null>(null);
   const cityRef = useRef<CityData | null>(null);
@@ -942,7 +944,11 @@ export default function QSkywayClient() {
                       }
                       style={{ color: "#c8964f", textDecoration: "underline dotted", cursor: "help" }}
                     >
-                      ▨ подставлено по типу: {plural(meta.substituted.length, "здание", "здания", "зданий")}
+                      {/* Русская форма склоняется числительным, остальные языки —
+                          нет: `plural` даёт «38 зданий», ключ для en/kk несёт число сам. */}
+                      ▨ {lang === "ru"
+                        ? `подставлено по типу: ${plural(meta.substituted.length, "здание", "здания", "зданий")}`
+                        : t("qskyway.subst.head", { n: meta.substituted.length })}
                       {/* Тот же вопрос, что у спорной высоты: доходит ли она до
                           полётов. Ответы у них РАЗНЫЕ — спорная высота Астаны не
                           задевает ни одного маршрута, а подстановка больше
@@ -950,8 +956,8 @@ export default function QSkywayClient() {
                       {substImpact?.available && (
                         <span style={{ color: substImpact.affectedPairs > 0 ? "#fb7185" : "#5f7086" }}>
                           {substImpact.affectedPairs > 0
-                            ? ` · под коридорами ${substImpact.buildingsUnderRoutes} из ${substImpact.buildings}, задето маршрутов ${substImpact.affectedPairs} из ${substImpact.routable}`
-                            : ` · на маршруты не влияет (0 из ${substImpact.routable})`}
+                            ? t("qskyway.subst.underRoutes", { under: substImpact.buildingsUnderRoutes, total: substImpact.buildings, pairs: substImpact.affectedPairs, routable: substImpact.routable })
+                            : t("qskyway.subst.noRoutes", { routable: substImpact.routable })}
                         </span>
                       )}
                     </span>

@@ -197,5 +197,65 @@ legacyBoy.canonical = "7yo boy, tousled hair, oversized sweater, childlike gait"
 ok("запись без aliases падает на canonical, а не ломается",
   m.matchCharacter(drifting[0].subjects[0], legacy)?.id === legacyBoy.id);
 
+/* ── Различитель, отменяющий склейку ────────────────────────────────────── */
+//
+// Мера схожести делит общие слова на размер МЕНЬШЕГО набора — так «7yo boy» и
+// «7yo boy, tousled hair, sweater» узнают друг друга, и это правильно. Но у
+// такой нормировки есть следствие: любое описание-надмножество получает 1.0,
+// сколько бы слов в него ни добавили — включая слово, которое делает героя
+// ДРУГИМ. Замер до правки: «7yo boy with glasses» против «7yo boy without
+// glasses» → 1.000 при пороге склейки 0.34.
+//
+// Цена ошибки прямая: два разных персонажа сливаются в одного, и генератор
+// берёт для обоих кадров одну референсную картинку — тот самый дрейф
+// внешности, ради устранения которого реестр и написан.
+
+// Саму меру схожести не трогаем: порог 0.34 подобран под свою задачу, а
+// «7yo boy» и «7yo boy, tousled hair, sweater» обязаны узнавать друг друга.
+// Поэтому она по-прежнему говорит 1.0 — и именно поэтому решение принимает не
+// она одна. Проверка закрепляет разделение обязанностей, а не «улучшение» меры.
+ok("схожесть слов сама по себе различитель не видит",
+  m.similarity("7yo boy with glasses", "7yo boy without glasses") === 1,
+  String(m.similarity("7yo boy with glasses", "7yo boy without glasses")));
+ok("различитель виден отдельным сигналом",
+  m.contradictsFeature("7yo boy with glasses", "7yo boy without glasses"));
+
+const glasses = m.deriveCharacters([
+  { id: "s1", subjects: [{ kind: "human", description: "7yo boy with glasses" }] },
+  { id: "s2", subjects: [{ kind: "human", description: "7yo boy without glasses" }] },
+]);
+ok("мальчик в очках и без очков — два персонажа", glasses.length === 2,
+  `получил ${glasses.length}: ${glasses.map((c) => c.canonical).join(" | ")}`);
+
+const noBeard = m.deriveCharacters([
+  { id: "s1", subjects: [{ kind: "human", description: "tall man with beard, dark coat" }] },
+  { id: "s2", subjects: [{ kind: "human", description: "tall man, no beard, dark coat" }] },
+]);
+ok("«с бородой» и «без бороды» — два персонажа", noBeard.length === 2,
+  `получил ${noBeard.length}: ${noBeard.map((c) => c.canonical).join(" | ")}`);
+
+// Обратная ошибка так же вредна: отрицание в ОБОИХ описаниях различителем не
+// является, и дробить одного героя на двоих нельзя.
+const bothWithout = m.deriveCharacters([
+  { id: "s1", subjects: [{ kind: "human", description: "7yo boy without glasses" }] },
+  { id: "s2", subjects: [{ kind: "human", description: "7yo boy without glasses, red sweater" }] },
+]);
+ok("оба «без очков» — один персонаж", bothWithout.length === 1,
+  `получил ${bothWithout.length}: ${bothWithout.map((c) => c.canonical).join(" | ")}`);
+
+// Умолчание — не отрицание: если во втором кадре про очки просто не сказано,
+// это тот же герой, а не новый.
+const silent = m.deriveCharacters([
+  { id: "s1", subjects: [{ kind: "human", description: "7yo boy with glasses, red sweater" }] },
+  { id: "s2", subjects: [{ kind: "human", description: "7yo boy, red sweater" }] },
+]);
+ok("умолчание про очки персонажа не раздваивает", silent.length === 1,
+  `получил ${silent.length}: ${silent.map((c) => c.canonical).join(" | ")}`);
+
+// И то же самое на распознавании субъекта кадра, а не только на сборке.
+ok("субъект «без очков» не признаётся персонажем в очках",
+  m.matchCharacter({ kind: "human", description: "7yo boy without glasses" },
+    [{ id: "ch-1", kind: "human", canonical: "7yo boy with glasses", aliases: ["7yo boy with glasses"], shotIds: [] }]) === null);
+
 console.log(failed ? `\n${failed} проверок упало` : `\nвсе проверки прошли`);
 process.exitCode = failed ? 1 : 0;

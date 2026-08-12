@@ -529,7 +529,10 @@ function heightDisputeFor(
   const building = ranked[0][0];
   const segments = ranked[0][1];
   const alsoDisputed = ranked.slice(1).map(([bi]) => bi);
-  const rev = heightReviewFor(cityId, building);
+  // Ищем разбор по элементу OSM, если твин его везёт: индекс здания пересборку
+  // не переживает, идентификатор источника — переживает.
+  const suspectEntry = (city.dataQuality?.suspect ?? []).find((s) => s.i === building);
+  const rev = heightReviewFor(cityId, building, suspectEntry?.osm);
   const shadowTwin = reviewedTwin(cityId, city);
   const shadow = shadowTwin ? buildRoute(cityId, shadowTwin, route.from, route.to, route.respectCeiling) : null;
   const cruiseIf = shadow ? shadow.cruiseAltM : null;
@@ -1041,13 +1044,16 @@ qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
     if (d.cruiseDeltaM !== null) maxCruiseDeltaM = Math.max(maxCruiseDeltaM, d.cruiseDeltaM);
   }
   const disputed = [...new Set(cells.values())].map((bi) => {
-    const rev = heightReviewFor(id, bi);
+    const suspectEntry = (city.dataQuality?.suspect ?? []).find((s) => s.i === bi);
+    const rev = heightReviewFor(id, bi, suspectEntry?.osm);
     const cellCount = [...cells.values()].filter((v) => v === bi).length;
     return {
       building: bi,
       taggedM: city.buildings[bi]?.h ?? 0,
       cells: cellCount,
-      osm: rev?.osm ?? null,
+      // Элемент источника называем даже без разбора: по нему можно проверить
+      // высоту и завести замечание, а разбор появится потом.
+      osm: rev?.osm ?? suspectEntry?.osm ?? null,
       publishedM: rev?.publishedM ?? null,
       publishedSource: rev?.publishedSource ?? null,
       verdict: rev?.verdict ?? "unreviewed",

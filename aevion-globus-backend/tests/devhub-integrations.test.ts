@@ -4365,3 +4365,54 @@ describe("Deleting a project takes its Railway service with it", () => {
     expect(still.status).toBe(200);
   });
 });
+
+// ─── Why this file fails in the full suite and nowhere else ──────────────────
+//
+// 2026-08-12. Isolated, this file is 238/238 green three runs in a row. In the
+// full 114-file suite it fails 1-3 assertions, a different set every run.
+// Raising testTimeout removed every timeout in the suite but not these.
+//
+// The mechanism: the deploy routes answer immediately and schedule the
+// "does the page actually serve" check on a timer — 4s for CF Pages, 5s for
+// Vercel — and verifyDeploymentServes() then fetches up to 5 times, 5s apart.
+// Those fetches read globalThis.fetch when they finally run, which by then is
+// the NEXT test's fetchMock, and take mockResolvedValueOnce answers off its
+// queue. The test that queued them gets somebody else's response and fails an
+// assertion unrelated to what it tests.
+//
+// Isolated the file finishes in ~2s and the process exits before any timer
+// fires, which is exactly why isolation hides this. In the suite the file
+// lives 13-30s, so the timers do fire — and which test they land on depends on
+// machine load. Hence the drifting set.
+describe("deploy verification timers outlive the test that started them", () => {
+  test("a CF Pages deploy leaves a timer that fetches after the response", async () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    vi.useFakeTimers();
+    try {
+      const app = makeApp();
+      const created = await request(app).post("/api/devhub/projects").send({ name: "timer-probe" });
+      const id = created.body.project.id as string;
+      await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>x</h1>" });
+
+      fetchMock.mockResolvedValue(jsonResp(200, { success: true }));
+      mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://probe.pages.dev", output: "" });
+      const dep = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
+      expect(dep.status).toBe(200);
+
+      const afterResponse = fetchMock.mock.calls.length;
+      // The route has answered. Nothing is pending from the caller's point of
+      // view — but a timer is armed.
+      await vi.advanceTimersByTimeAsync(4_100);
+      const afterTimer = fetchMock.mock.calls.length;
+
+      // This is the stray traffic. In a real run it lands on whichever test is
+      // executing 4 seconds later.
+      expect(afterTimer).toBeGreaterThan(afterResponse);
+    } finally {
+      vi.useRealTimers();
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_API_TOKEN;
+    }
+  });
+});

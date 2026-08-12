@@ -137,6 +137,37 @@ describe("POST /route/justification — the filing", () => {
     expect(v.body).toMatchObject({ valid: false, hashValid: false });
   });
 
+  /**
+   * Документ адресован регулятору того города, для которого построен коридор:
+   * Нью-Йорк — FAA, Токио — MLIT/JCAB. Оговорка, которую они не прочтут, не
+   * защищает ни от чего, а защищает она от главного — прочтения «построено по
+   * данным FAA» как «FAA согласовало».
+   */
+  test("английская оговорка есть, различает запрет и разрешение и тоже под подписью", async () => {
+    const nyc = await request(app).post("/api/qskyway/route/justification").send({ from: 1, to: 2, city: "nyc" });
+    expect(nyc.body.document.scopeEn).toContain("NOT a flight authorization");
+    expect(nyc.body.document.scopeEn).toContain("NOT an air-taxi certification");
+
+    // Запрет и режим разрешений — разные ответы регулятора, и в переводе тоже.
+    const astana = await request(app).post("/api/qskyway/route/justification").send({ from: 0, to: 1, city: "astana" });
+    expect(astana.body.document.scopeEn).toContain("PROHIBITED area");
+    expect(astana.body.document.scopeEn).toContain("not permitted subject to coordination");
+
+    const tokyo = await request(app).post("/api/qskyway/route/justification").send({ from: 0, to: 1, city: "tokyo" });
+    expect(tokyo.body.document.scopeEn).toContain("permission regime");
+    expect(tokyo.body.document.scopeEn).not.toContain("PROHIBITED");
+
+    // Английская версия защищена ровно так же, как русская: иначе смягчить
+    // можно было бы именно ту, которую читает регулятор.
+    const v = await request(app)
+      .post("/api/qskyway/route/justification/verify")
+      .send({
+        document: { ...nyc.body.document, scopeEn: "Flight approved by the regulator." },
+        attestation: nyc.body.attestation,
+      });
+    expect(v.body).toMatchObject({ valid: false, hashValid: false });
+  });
+
   test("for a prohibited city it never says the flight merely needs permission", async () => {
     // The worst defect this module has had: a signed document telling a
     // regulator that a banned flight could be authorized on request.

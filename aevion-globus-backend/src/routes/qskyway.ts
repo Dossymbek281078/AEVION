@@ -9,7 +9,7 @@ import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt
 import { airspaceFreshness } from "./qskyway.airspace.freshness";
 import { anchorAirspace, verifyAnchoredAirspace } from "./qskyway.airspace.anchor";
 import { AIRSPACE_PROOFS } from "./qskyway.airspace.proof";
-import { PERMISSION, permissionSummary } from "./qskyway.permission";
+import { PERMISSION, permissionSummary, type CityPermission } from "./qskyway.permission";
 import { getPool } from "../lib/dbPool";
 import { isSmokeSlot, countLiveSlots } from "../lib/slotOrigin";
 import { heightReviewFor, heightReviewsForCity } from "../data/qskywayHeightReview";
@@ -1152,6 +1152,47 @@ qskywayRouter.post("/route", (req: Request, res: Response) => {
  * Honest by construction: it states the verdict, including a non-compliant one.
  * A justification that can only come out green is not a justification.
  */
+/**
+ * Оговорка о границах документа — на двух языках, обе под подписью.
+ *
+ * Документ адресован регулятору того города, для которого построен коридор:
+ * Нью-Йорк — FAA, Токио — MLIT/JCAB. До 12.08.2026 оговорка была только
+ * русской, а держит она ровно то, ради чего написана: не дать прочитать
+ * «построено по данным FAA» как «FAA согласовало». Непонятая оговорка не
+ * работает вовсе, поэтому английская версия — не удобство, а та же защита.
+ *
+ * Русский текст оставлен слово в слово: он уже ездит в выданных документах, и
+ * менять его заодно значило бы спрятать одну правку внутри другой.
+ *
+ * Перевод буквальный, без смягчений. Особенно в запретном случае: «flights are
+ * forbidden, not permitted subject to coordination» — именно это различие
+ * модуль и защищает от размывания.
+ */
+function scopeTexts(hasCeilingFeed: boolean, perm: CityPermission | undefined): { ru: string; en: string } {
+  if (hasCeilingFeed) {
+    return {
+      ru: "Ограничения взяты из публикации регулятора (сетка допусков Part 107 для малых БВС). Это НЕ разрешение на полёт и НЕ сертификация аэротакси — документ фиксирует, по каким данным и правилам построен коридор.",
+      en: "Constraints are taken from the regulator's own publication (the Part 107 small-UAS LAANC ceiling grid). This is NOT a flight authorization and NOT an air-taxi certification — the document records which data and which rules the corridor was built against.",
+    };
+  }
+  if (perm) {
+    if (perm.kind === "prohibition") {
+      return {
+        ru: `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирована ЗАПРЕТНАЯ зона (${perm.authority}): полёты в ней запрещены, а не разрешены по согласованию. Документ фиксирует, по каким данным построен коридор, и служит основанием НЕ для полёта, а для обращения об изменении статуса зоны.`,
+        en: `The regulator publishes no ceiling grid for this city, so this document carries no altitude verdict. What is recorded is a PROHIBITED area (${perm.authority}): flights inside it are forbidden, not permitted subject to coordination. The document records which data the corridor was built against, and is grounds NOT for a flight but for a request to change the status of the area.`,
+      };
+    }
+    return {
+      ru: `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирован режим разрешений (${perm.authority}): полёт требует индивидуального разрешения. Это НЕ само разрешение — документ фиксирует, по каким данным и правилам построен коридор и какое согласование требуется.`,
+      en: `The regulator publishes no ceiling grid for this city, so this document carries no altitude verdict. What is recorded is a permission regime (${perm.authority}): a flight requires individual authorization. This is NOT that authorization — the document records which data and rules the corridor was built against, and which approval is required.`,
+    };
+  }
+  return {
+    ru: "Для этого города открытого фида регулятора нет: документ фиксирует геометрию и двойник, но НЕ содержит регуляторного вердикта.",
+    en: "There is no open regulator feed for this city: the document records the geometry and the twin, but carries NO regulatory verdict.",
+  };
+}
+
 qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   const { from, to, city, respectCeiling } = req.body ?? {};
   if (typeof from !== "number" || typeof to !== "number")
@@ -1179,13 +1220,7 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   // Покрывает все три случая. У города может быть режим разрешений без сетки
   // потолков, и «регуляторного вердикта нет» рядом с режимом в самом документе
   // сделало бы подписанный артефакт противоречащим собственной оговорке.
-  const scopeText = src
-    ? "Ограничения взяты из публикации регулятора (сетка допусков Part 107 для малых БВС). Это НЕ разрешение на полёт и НЕ сертификация аэротакси — документ фиксирует, по каким данным и правилам построен коридор."
-    : PERMISSION[resolved.id]
-      ? PERMISSION[resolved.id].kind === "prohibition"
-        ? `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирована ЗАПРЕТНАЯ зона (${PERMISSION[resolved.id].authority}): полёты в ней запрещены, а не разрешены по согласованию. Документ фиксирует, по каким данным построен коридор, и служит основанием НЕ для полёта, а для обращения об изменении статуса зоны.`
-        : `Сетки потолков для этого города регулятор не публикует, поэтому высотного вердикта в документе нет. Зафиксирован режим разрешений (${PERMISSION[resolved.id].authority}): полёт требует индивидуального разрешения. Это НЕ само разрешение — документ фиксирует, по каким данным и правилам построен коридор и какое согласование требуется.`
-      : "Для этого города открытого фида регулятора нет: документ фиксирует геометрию и двойник, но НЕ содержит регуляторного вердикта.";
+  const scopeText = scopeTexts(!!src, PERMISSION[resolved.id]);
 
   // ASCII-only and explicitly ordered: this is the byte sequence the signature
   // covers, so it must not depend on locale, key order, or JSON escaping
@@ -1250,8 +1285,10 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
           cruiseDeltaM: dispute.cruiseDeltaM,
         }
       : null,
-    // Под подписью, а не рядом с ней: см. разбор над `scopeText`.
-    scope: scopeText,
+    // Под подписью, а не рядом с ней: см. разбор над `scopeTexts`.
+    // Обе версии, потому что защищает та, которую читатель понимает.
+    scope: scopeText.ru,
+    scopeEn: scopeText.en,
     issuedAt: new Date().toISOString(),
   };
   const canonical = JSON.stringify(document);
@@ -1262,8 +1299,9 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
     document,
     attestation: { alg: "Ed25519", contentHash, signature, publicKey: SIGN_PK_B64, ephemeral: SIGN_EPHEMERAL },
     // Та же оговорка полем ответа — для совместимости с теми, кто читает её
-    // здесь. Источник один (`scopeText`), настоящее место — внутри документа.
-    scope: scopeText,
+    // здесь. Источник один (`scopeTexts`), настоящее место — внутри документа.
+    scope: scopeText.ru,
+    scopeEn: scopeText.en,
     verify: "POST /api/qskyway/route/justification/verify {document, attestation}",
   });
 });

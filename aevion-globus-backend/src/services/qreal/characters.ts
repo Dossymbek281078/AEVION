@@ -73,6 +73,66 @@ export function similarity(a: string, b: string): number {
 
 const MATCH_THRESHOLD = 0.34;
 
+/* ── Различители ──────────────────────────────────────────────────────────
+ *
+ * У нормировки на min(|A|,|B|) есть следствие, которого в формуле не видно:
+ * ЛЮБОЕ описание-надмножество получает 1.0, сколько бы слов в него ни
+ * добавили — включая слово, делающее героя другим. Замер до этой правки:
+ *
+ *   «7yo boy with glasses» vs «7yo boy without glasses» → 1.000
+ *
+ * При пороге 0.34 они сливались в одного персонажа, и генератор брал для
+ * обоих кадров одну референсную картинку — тот самый дрейф внешности, ради
+ * устранения которого реестр и написан.
+ *
+ * Лечим не поправкой к схожести (порог подобран под свою задачу и трогать его
+ * нельзя), а отдельным условием: если признак в одном описании отрицается, а в
+ * другом присутствует — это разные персонажи, какой бы ни была схожесть.
+ *
+ * Границы намеренно узкие: ловится ЯВНОЕ отрицание признака. Пары-антонимы
+ * («long hair» против «short hair») сюда не входят — там без знания сцены
+ * нельзя отличить двух героев от одного, сменившего причёску, и угадывание
+ * вернуло бы дробление вместо склейки. Это осознанный пропуск, а не забытый
+ * случай.
+ */
+const NEGATORS = new Set(["without", "no", "non", "sans", "без", "не"]);
+
+/** Признаки, которые описание ОТРИЦАЕТ: «without glasses» → «glasses». */
+export function negatedFeatures(text: string): Set<string> {
+  const raw = String(text || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  const out = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    if (!NEGATORS.has(raw[i])) continue;
+    for (let j = i + 1; j < Math.min(raw.length, i + 3); j++) {
+      const w = raw[j];
+      if (NEGATORS.has(w) || w.length <= 2 || STOP.has(w)) continue;
+      out.add(w);
+      break;
+    }
+  }
+  return out;
+}
+
+/** Разные ли это герои по явному признаку — независимо от схожести.
+ *
+ *  Умолчание отрицанием НЕ считается: если во втором кадре про очки просто не
+ *  сказано, это тот же мальчик. Отрицание в обоих описаниях — тоже не
+ *  различитель: они согласны. */
+export function contradictsFeature(a: string, b: string): boolean {
+  const negA = negatedFeatures(a);
+  const negB = negatedFeatures(b);
+  if (!negA.size && !negB.size) return false;
+  const wordsA = new Set(tokens(a));
+  const wordsB = new Set(tokens(b));
+  for (const w of negA) if (!negB.has(w) && wordsB.has(w)) return true;
+  for (const w of negB) if (!negA.has(w) && wordsA.has(w)) return true;
+  return false;
+}
+
 /** Каноническим считаем самое ПОДРОБНОЕ описание группы: оно несёт больше
  *  зацепок для модели (возраст, одежда, повадка), а короткое всегда можно
  *  вывести из подробного, наоборот — нет. */
@@ -110,7 +170,11 @@ export function deriveCharacters(shots: ShotLike[]): Character[] {
       const human = subj.kind === "human" || subj.kind === "child";
       const g = groups.find((x) => {
         const sameFamily = human ? x.kind === "human" || x.kind === "child" : x.kind === subj.kind;
-        return sameFamily && x.descriptions.some((d) => similarity(d, desc) >= MATCH_THRESHOLD);
+        return (
+          sameFamily &&
+          !x.descriptions.some((d) => contradictsFeature(d, desc)) &&
+          x.descriptions.some((d) => similarity(d, desc) >= MATCH_THRESHOLD)
+        );
       });
 
       if (g) {
@@ -150,6 +214,9 @@ export function matchCharacter(subj: SubjectLike, characters: Character[]): Char
     // Сравниваем с исходными описаниями (aliases), а не с правленым каноном.
     // У старых записей без aliases падаем на canonical, чтобы не потерять их.
     const texts = c.aliases?.length ? c.aliases : [c.canonical];
+    // Явный различитель отменяет узнавание целиком: «без очков» — не тот же
+    // герой, что «в очках», какой бы высокой ни была схожесть слов.
+    if (texts.some((t) => contradictsFeature(t, subj.description))) continue;
     const score = Math.max(...texts.map((t) => similarity(t, subj.description)));
     if (score >= MATCH_THRESHOLD && (!best || score > best.score)) best = { c, score };
   }

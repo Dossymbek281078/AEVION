@@ -19,8 +19,12 @@ import {
   type GameResult,
 } from "./cyberchessRating";
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pg = require("pg") as typeof import("pg");
+// Обычный импорт, а не require: под `require` подмена драйвера в тестах не
+// действует (проверено 12.08 — в подделку приходило НОЛЬ запросов, а часть
+// тестов при этом «зеленела», потому что не выполнялось вообще ничего). Форма
+// принята в репозитории — так же берёт пул `lib/dbPool.ts`, а esModuleInterop
+// включён, поэтому под CommonJS это тот же объект модуля.
+import pg from "pg";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pool: any = null;
@@ -276,6 +280,31 @@ export async function finalizeMatch(
     return null; // finalized but deltas unknown — do not double-apply
   }
 
+  // Захват строки ДО любых начислений.
+  //
+  // Раньше пометка `ended` ставилась ПОСЛЕДНЕЙ: сперва рейтинг, потом Chessy
+  // обоим, и только затем UPDATE. Крэш для беды не нужен — обёртка q() ловит
+  // ошибку запроса, пишет warning и возвращает пустой массив, так что одного
+  // обычного отказа на этом UPDATE хватало: функция возвращалась как успешная,
+  // игроки уже начислены, строка осталась открытой. Следующий вызов проходил
+  // проверку заново и платил второй раз. А следующий вызов — это норма: конец
+  // партии сообщают ОБА клиента, а внутрипроцессная защита стирается рестартом,
+  // то есть ровно тогда, когда повторы и приходят.
+  //
+  // Условие `"status" <> 'ended'` делает захват атомарным: из двух
+  // одновременных вызовов строку получает ровно один. RETURNING — потому что
+  // q() отдаёт только rows и теряет rowCount.
+  const claimed = await q(
+    `UPDATE "CyberMatch" SET "status"='ended',"result"=$2,"termination"=$3,"endedAt"=now()
+      WHERE "id"=$1 AND "status" <> 'ended' RETURNING "id"`,
+    [matchId, info.result, info.termination ?? null],
+  );
+  if (claimed.length === 0) {
+    // Строку закрыл кто-то другой между нашим SELECT и этим UPDATE — либо она
+    // была закрыта раньше, а SELECT не дошёл. Ничего не начисляем.
+    return null;
+  }
+
   const speed = speedOf(info.timeControl);
   const wRat = await getRating(info.whiteUserId, speed);
   const bRat = await getRating(info.blackUserId, speed);
@@ -312,12 +341,13 @@ export async function finalizeMatch(
   const CHESSY_WIN = 10, CHESSY_DRAW = 3, CHESSY_PLAYED = 1;
   await creditWallet(info.whiteUserId, wWin ? CHESSY_WIN : draw ? CHESSY_DRAW : CHESSY_PLAYED, info.whiteName);
   await creditWallet(info.blackUserId, bWin ? CHESSY_WIN : draw ? CHESSY_DRAW : CHESSY_PLAYED, info.blackName);
+  // Статус и исход уже записаны захватом выше — здесь только колонки рейтинга.
   await q(
-    `UPDATE "CyberMatch" SET "status"='ended',"result"=$2,"termination"=$3,
-       "whiteRatingBefore"=COALESCE("whiteRatingBefore",$4),"blackRatingBefore"=COALESCE("blackRatingBefore",$5),
-       "whiteRatingAfter"=$6,"blackRatingAfter"=$7,"endedAt"=now()
+    `UPDATE "CyberMatch" SET
+       "whiteRatingBefore"=COALESCE("whiteRatingBefore",$2),"blackRatingBefore"=COALESCE("blackRatingBefore",$3),
+       "whiteRatingAfter"=$4,"blackRatingAfter"=$5
      WHERE "id"=$1`,
-    [matchId, info.result, info.termination ?? null, wRat.rating, bRat.rating, wNext.rating, bNext.rating],
+    [matchId, wRat.rating, bRat.rating, wNext.rating, bNext.rating],
   );
 
   return {

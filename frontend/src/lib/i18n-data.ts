@@ -12956,7 +12956,7 @@ const BANK_EXTRA_EN: Record<string, string> = {
 
   // Leaderboard /bank/leaderboard
   "leaderboard.title": "AEVION Network Leaderboard",
-  "leaderboard.subtitle": "Top creators, chess champions, and referrers powering the trust graph. Updated daily.",
+  "leaderboard.subtitle": "Top creators, chess champions, and referrers powering the trust graph.",
   "leaderboard.backToBank": "Back to AEVION Bank",
   "leaderboard.tab.creators": "Creators",
   "leaderboard.tab.chess": "CyberChess",
@@ -16266,7 +16266,7 @@ const BANK_EXTRA_RU: Record<string, string> = {
 
   // Leaderboard /bank/leaderboard
   "leaderboard.title": "\u041b\u0438\u0434\u0435\u0440\u0431\u043e\u0440\u0434 \u0441\u0435\u0442\u0438 AEVION",
-  "leaderboard.subtitle": "\u0422\u043e\u043f \u0441\u043e\u0437\u0434\u0430\u0442\u0435\u043b\u0435\u0439, \u0447\u0435\u043c\u043f\u0438\u043e\u043d\u043e\u0432 CyberChess \u0438 \u043f\u0440\u0438\u0433\u043b\u0430\u0441\u0438\u0432\u0448\u0438\u0445. \u041e\u0431\u043d\u043e\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u0435\u0436\u0435\u0434\u043d\u0435\u0432\u043d\u043e.",
+  "leaderboard.subtitle": "\u0422\u043e\u043f \u0441\u043e\u0437\u0434\u0430\u0442\u0435\u043b\u0435\u0439, \u0447\u0435\u043c\u043f\u0438\u043e\u043d\u044b CyberChess \u0438 \u0440\u0435\u0444\u0435\u0440\u0435\u0440\u044b.",
   "leaderboard.backToBank": "\u041d\u0430\u0437\u0430\u0434 \u0432 AEVION Bank",
   "leaderboard.tab.creators": "\u0410\u0432\u0442\u043e\u0440\u044b",
   "leaderboard.tab.chess": "CyberChess",
@@ -19426,7 +19426,7 @@ const BANK_EXTRA_KK: Record<string, string> = {
 
   // Leaderboard /bank/leaderboard
   "leaderboard.title": "AEVION \u0436\u0435\u043b\u0456 \u043b\u0438\u0434\u0435\u0440\u0431\u043e\u0440\u0434\u044b",
-  "leaderboard.subtitle": "\u04ae\u0437\u0434\u0456\u043a \u0430\u0432\u0442\u043e\u0440\u043b\u0430\u0440, CyberChess \u0447\u0435\u043c\u043f\u0438\u043e\u043d\u0434\u0430\u0440\u044b \u0436\u04d9\u043d\u0435 \u0448\u0430\u049b\u044b\u0440\u0443\u0448\u044b\u043b\u0430\u0440. \u041a\u04af\u043d \u0441\u0430\u0439\u044b\u043d \u0436\u0430\u04a3\u0430\u0440\u0430\u0434\u044b.",
+  "leaderboard.subtitle": "\u04ae\u0437\u0434\u0456\u043a \u0430\u0432\u0442\u043e\u0440\u043b\u0430\u0440, CyberChess \u0447\u0435\u043c\u043f\u0438\u043e\u043d\u0434\u0430\u0440\u044b \u0436\u04d9\u043d\u0435 \u0448\u0430\u049b\u044b\u0440\u0443\u0448\u044b\u043b\u0430\u0440.",
   "leaderboard.backToBank": "AEVION Bank-\u049b\u0430 \u049b\u0430\u0439\u0442\u0443",
   "leaderboard.tab.creators": "\u0410\u0432\u0442\u043e\u0440\u043b\u0430\u0440",
   "leaderboard.tab.chess": "CyberChess",

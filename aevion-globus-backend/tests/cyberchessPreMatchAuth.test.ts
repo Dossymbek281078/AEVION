@@ -30,6 +30,10 @@ vi.mock("../src/routes/cyberchessMatchStore", () => ({
   getHistory: vi.fn().mockResolvedValue([]),
   getWallet: vi.fn().mockResolvedValue(null),
   getWalletLeaderboard: vi.fn().mockResolvedValue([]),
+  // Мок обязан покрывать ВСЕ импорты роутера: пропущенный экспорт приходит как
+  // undefined и падает вызовом, а не отсутствием — то есть ломается ручка, к
+  // этому тесту отношения не имеющая (здесь — /debug/stats).
+  countUnpaidAwards: vi.fn().mockResolvedValue(0),
 }));
 
 vi.mock("../src/routes/cyberchessAnticheat", () => ({

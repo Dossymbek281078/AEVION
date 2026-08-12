@@ -2,8 +2,10 @@ import { Router, type Request, type Response } from "express";
 import { clientIp } from "../lib/rateLimit";
 import { randomUUID } from "node:crypto";
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pg = require("pg") as typeof import("pg");
+// Обычный импорт, а не require: под `require` подмена драйвера в тестах не
+// действует — хранилище выглядит недоступным, и тест проходит, не выполнив ни
+// одного запроса. Последний шахматный файл, где оставалась эта форма (12.08).
+import pg from "pg";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

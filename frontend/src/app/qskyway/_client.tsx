@@ -893,7 +893,15 @@ export default function QSkywayClient() {
                       )}
                     </span>
                   )}
-                  <span>площадки: <span style={{ color: "#2dd4bf" }}>●</span> годна · <span style={{ color: "#fbbf24" }}>●</span> нужна инфра · <span style={{ color: "#fb7185" }}>●</span> непригодна · <span style={{ color: "#c8964f" }}>▨</span> высота угадана</span>
+                  {/* «Годна» здесь было сильнее, чем подпись той же площадки в
+                      списке справа («кандидат на площадку»): один и тот же класс,
+                      два разных слова, и самое сильное стояло там, где нет ни
+                      одной оговорки. Легенда говорит теми же словами, что список. */}
+                  <span>площадки: <span style={{ color: "#2dd4bf" }}>●</span> кандидат · <span style={{ color: "#fbbf24" }}>●</span> нужна инфра · <span style={{ color: "#fb7185" }}>●</span> непригодна · <span style={{ color: "#c8964f" }}>▨</span> высота угадана
+                    {padBan && (
+                      <span style={{ color: "#fb7185" }} title={padBan.rule}> · 🚫 {t("qskyway.pad.cityProhibited")}</span>
+                    )}
+                  </span>
                 </div>
               )}
             </section>
@@ -1040,8 +1048,9 @@ export default function QSkywayClient() {
                           </div>
                         )}
                         {/* Оценка отвечает «сядет ли сюда аппарат», а не «можно ли
-                            отсюда лететь». Без этой строки «пригодна · 78» в
-                            городе под сплошным запретом читалось как разрешение. */}
+                            отсюда лететь». Без этой строки «кандидат на площадку · 78»
+                            в городе под сплошным запретом оставалось единственным,
+                            что человек здесь читает о полёте. */}
                         {padBan && (
                           <div style={{ color: "#fb7185", fontSize: 10, marginTop: 2 }} title={padBan.rule}>
                             🚫 {t("qskyway.pad.prohibited", { authority: padBan.authority })}

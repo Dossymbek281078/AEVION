@@ -529,6 +529,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // GitHub state
   const [githubStatus, setGithubStatus] = useState<{ exists: boolean; stars?: number; openIssues?: number; lastPush?: string } | null>(null);
   const [githubBranches, setGithubBranches] = useState<Array<{ name: string; sha: string }>>([]);
+  // Why this is state and not a swallowed field: both GitHub reads used to
+  // discard the failure, so a revoked token drew the same screen as a repo with
+  // no branches — a link that reads "connected" while nothing behind it works.
+  const [githubIssue, setGithubIssue] = useState<{ errorKind?: string; error?: string } | null>(null);
+  // The banner used to pick its colour by looking for "failed"/"error" inside
+  // the text, so the Russian degraded-push warning and every non-English
+  // failure rendered green — a refusal shown as a success. The caller says
+  // which it is instead of the styling guessing.
+  const [githubMsgTone, setGithubMsgTone] = useState<"success" | "warning" | "error">("success");
   const [githubPushing, setGithubPushing] = useState(false);
   const [githubSyncing, setGithubSyncing] = useState(false);
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
@@ -1856,7 +1865,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/status`), { cache: "no-store" });
       const d = await r.json();
       setGithubStatus(d);
-    } catch { setGithubStatus(null); }
+      // Deliberately does NOT write githubIssue. Both reads fire together and
+      // unordered, so two writers meant a successful status could erase the
+      // branch read's failure. They ask the same API about the same repo with
+      // the same token, so one owner loses nothing — and it is the branch list,
+      // whose emptiness is the thing that needs explaining.
+    } catch {
+      setGithubStatus(null);
+    }
   }, [project]);
 
   const fetchGithubBranches = useCallback(async () => {
@@ -1865,7 +1881,21 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/branches`), { cache: "no-store" });
       const d = await r.json();
       setGithubBranches(d.branches || []);
-    } catch { setGithubBranches([]); }
+      // An empty list is only meaningful together with WHY it is empty. The
+      // reason is also returned, so a caller can refuse to report success.
+      if (d.error) {
+        const issue = { errorKind: d.errorKind as string | undefined, error: d.error as string };
+        setGithubIssue(issue);
+        return issue;
+      }
+      setGithubIssue(null);
+      return null;
+    } catch {
+      setGithubBranches([]);
+      const issue = { errorKind: "unavailable", error: "Не удалось загрузить список веток" };
+      setGithubIssue(issue);
+      return issue;
+    }
   }, [project]);
 
   useEffect(() => {
@@ -1887,41 +1917,46 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // incomplete repo passed for a complete one — and it is the repo a
         // deploy would build from.
         setGithubMsg(`⚠ Отправлено ${d.pushedFiles} из ${d.pushedFiles + (d.failedFiles?.length ?? 0)} файлов. ${d.degradedReason}`);
+        setGithubMsgTone("warning");
         showToast("Часть файлов не попала в репозиторий", "warning");
         setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
         await fetchGithubStatus();
         await fetchGithubBranches();
       } else if (d.ok) {
         setGithubMsg(`Pushed ${d.pushedFiles} files to GitHub: ${d.repoUrl}`);
+        setGithubMsgTone("success");
         setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
         await fetchGithubStatus();
         await fetchGithubBranches();
       } else {
         setGithubMsg(d.message || "Push failed");
+        setGithubMsgTone("error");
       }
     } catch (e: any) {
       setGithubMsg(e?.message || "Push failed");
+      setGithubMsgTone("error");
     } finally {
       setGithubPushing(false);
     }
   };
 
+  // "Sync branches" used to POST /github/sync — the SAME endpoint as "Pull from
+  // repo", which overwrites the project's files from the repository. A button
+  // promising a branch refresh was quietly replacing the user's work, and then
+  // printed "Default branch: undefined" because it read a response shape that
+  // handler never returned (it was written for a duplicate route that Express
+  // never reached; that dead route is now gone). It re-reads the lists, which
+  // is what its label says and all it ever needed to do.
   const syncGithub = async () => {
     if (!project) return;
     setGithubSyncing(true);
     setGithubMsg(null);
     try {
-      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/sync`), { method: "POST" });
-      const d = await r.json();
-      if (d.ok) {
-        setGithubMsg(`Synced. Default branch: ${d.defaultBranch} · Last push: ${d.lastPush ? new Date(d.lastPush).toLocaleDateString() : "—"}`);
-        await fetchGithubStatus();
-        await fetchGithubBranches();
-      } else {
-        setGithubMsg(d.message || "Sync failed");
-      }
-    } catch (e: any) {
-      setGithubMsg(e?.message || "Sync failed");
+      await fetchGithubStatus();
+      const issue = await fetchGithubBranches();
+      // Reporting "updated" after a refusal is the same lie one layer up.
+      setGithubMsg(issue ? issue.error : "Список веток обновлён");
+      setGithubMsgTone(issue ? (issue.errorKind === "unavailable" || issue.errorKind === "rate_limit" ? "warning" : "error") : "success");
     } finally {
       setGithubSyncing(false);
     }
@@ -4140,6 +4175,30 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     ) : (
                       <div style={{ fontSize: 13, color: "#94a3b8" }}>No repository linked yet. Push to create one.</div>
                     )}
+
+                    {/* The reason the repo could not be read. Without it, a
+                        revoked token looked exactly like an empty repository:
+                        a link, no stars, no branches, nothing said. Red is the
+                        reader's to fix, amber passes on its own. */}
+                    {project?.repoUrl && githubIssue?.error && (() => {
+                      const passes = githubIssue.errorKind === "unavailable" || githubIssue.errorKind === "rate_limit";
+                      return (
+                        <div
+                          data-testid="github-connection-issue"
+                          style={{
+                            marginTop: 10, padding: "9px 12px", borderRadius: 8, fontSize: 12.5, lineHeight: 1.45,
+                            background: passes ? "#fffbeb" : "#fef2f2",
+                            border: `1px solid ${passes ? "#fde68a" : "#fecaca"}`,
+                            color: passes ? "#92400e" : "#991b1b",
+                          }}
+                        >
+                          <strong style={{ fontWeight: 700 }}>
+                            {passes ? "Не удалось проверить связь. " : "Репозиторий недоступен. "}
+                          </strong>
+                          {githubIssue.error}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {project?.repoUrl && (
@@ -4175,12 +4234,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
                   {/* Message */}
                   {githubMsg && (
-                    <div style={{
-                      padding: "10px 14px", borderRadius: 8, fontSize: 13,
-                      background: githubMsg.includes("failed") || githubMsg.includes("error") ? "#fee2e2" : "#d1fae5",
-                      color: githubMsg.includes("failed") || githubMsg.includes("error") ? "#991b1b" : "#065f46",
-                      wordBreak: "break-all",
-                    }}>
+                    <div
+                      data-testid="github-message"
+                      data-tone={githubMsgTone}
+                      style={{
+                        padding: "10px 14px", borderRadius: 8, fontSize: 13,
+                        background: githubMsgTone === "error" ? "#fee2e2" : githubMsgTone === "warning" ? "#fffbeb" : "#d1fae5",
+                        color: githubMsgTone === "error" ? "#991b1b" : githubMsgTone === "warning" ? "#92400e" : "#065f46",
+                        wordBreak: "break-all",
+                      }}
+                    >
                       {githubMsg}
                     </div>
                   )}

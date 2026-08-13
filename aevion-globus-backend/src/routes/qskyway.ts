@@ -66,6 +66,7 @@ import { rateLimit } from "../lib/rateLimit";
  *   POST /airspace/anchor — Bitcoin-якорь (OpenTimestamps) на слой ограничений
  *   GET  /airspace/proof  — вшитый Bitcoin-пруф текущей редакции + его проверка
  *   GET  /slots  · POST /slots — рынок 4D-слотов прав (QRight)
+ *   GET  /slots/:id/verify — сходится ли квитанция с записью (не якорь, см. ручку)
  */
 
 export const qskywayRouter = Router();
@@ -716,7 +717,7 @@ function allPairRoutes(cityId: string, city: CityData): (RouteResult | null)[] {
  * от того, работает он или сломан. Проверять сам факт молчания — значит принять
  * тихий no-op за фичу, поэтому тест подставляет сюда синтетический твин.
  */
-export const __engineForTests = { buildRoute, heightDisputeFor, suspectCellsOf };
+export const __engineForTests = { buildRoute, heightDisputeFor, suspectCellsOf, slotReceipt };
 
 // ── vertiport suitability (шаг к муниципальным площадкам) ──────────────────────
 interface VertiportScore {
@@ -883,6 +884,19 @@ class SlotStoreUnavailable extends Error {
   }
 }
 
+/**
+ * Квитанция слота — SHA-256 от самой записи с пустым полем квитанции.
+ *
+ * Одна функция на три места (запись в Postgres, запись в память, проверка):
+ * формула была написана трижды, и разойдись они — проверка начала бы объявлять
+ * подделкой честные записи. Порядок ключей важен: считается по
+ * `JSON.stringify`, а он идёт по порядку вставки.
+ */
+function slotReceipt(rec: Slot): string {
+  return "qright:" + crypto.createHash("sha256")
+    .update(JSON.stringify({ ...rec, receipt: "" })).digest("hex").slice(0, 32);
+}
+
 const overlaps = (a0: number, a1: number, b0: number, b1: number): boolean => a0 < b1 && b0 < a1;
 
 async function ensureSlotTable(): Promise<void> {
@@ -966,7 +980,7 @@ async function bookSlot(
         return { ok: false, reason: "capacity", concurrent };
       }
       const rec: Slot = { id: "slot-" + crypto.randomUUID().slice(0, 8), routeId, t0, t1, holder, issued: new Date().toISOString().slice(0, 10), receipt: "" };
-      rec.receipt = "qright:" + crypto.createHash("sha256").update(JSON.stringify(rec)).digest("hex").slice(0, 32);
+      rec.receipt = slotReceipt(rec);
       await client.query(
         `INSERT INTO qskyway_slots (id, route_id, t0, t1, holder, issued, receipt) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         [rec.id, rec.routeId, rec.t0, rec.t1, rec.holder, rec.issued, rec.receipt],
@@ -987,7 +1001,7 @@ async function bookSlot(
   const concurrent = memSlots.filter((s) => s.routeId === routeId && overlaps(a0, a1, Date.parse(s.t0), Date.parse(s.t1))).length;
   if (concurrent >= SLOT_CAPACITY) return { ok: false, reason: "capacity", concurrent };
   const rec: Slot = { id: "slot-" + (memSlots.length + 1), routeId, t0, t1, holder, issued: new Date().toISOString().slice(0, 10), receipt: "" };
-  rec.receipt = "qright:" + crypto.createHash("sha256").update(JSON.stringify(rec)).digest("hex").slice(0, 32);
+  rec.receipt = slotReceipt(rec);
   memSlots.push(rec);
   return { ok: true, slot: rec };
 }
@@ -1774,6 +1788,56 @@ qskywayRouter.get("/slots", async (_req: Request, res: Response) => {
   });
 });
 
+/**
+ * Проверка квитанции слота — против нашего же хранилища.
+ *
+ * Квитанция считалась при записи и до 13.08.2026 не проверялась НИЧЕМ: поля не
+ * с чем было сверить, а на странице она называлась «SHA-256-якорем», то есть
+ * словом, которым в этом модуле названа привязка к Bitcoin. Непроверяемая
+ * величина с сильным именем — украшение, а не гарантия.
+ *
+ * Что эта ручка доказывает: запись в нашем хранилище не менялась с момента
+ * выдачи. Чего НЕ доказывает: ничего постороннему без нашей базы, и ничего о
+ * времени — для этого в модуле есть отдельный якорь слоя ограничений в Bitcoin.
+ * Оба ответа сказаны в самом ответе, чтобы разница не терялась при пересылке.
+ */
+qskywayRouter.get("/slots/:id/verify", async (req: Request, res: Response) => {
+  let slots: Slot[];
+  try {
+    slots = await listSlots();
+  } catch (e) {
+    return res.status(503).json({
+      error: "проверка невозможна: хранилище слотов недоступно",
+      errorEn: "verification is impossible: the slot store is unavailable",
+      detail: e instanceof Error ? e.message : String(e),
+    });
+  }
+  const slot = slots.find((s) => s.id === String(req.params.id));
+  if (!slot) {
+    return res.status(404).json({
+      error: "слот не найден",
+      errorEn: "slot not found",
+      // «Не найден» и «подделан» — разные ответы; сливать их нельзя.
+      note: "Это не признак подделки: слота с таким идентификатором в хранилище нет.",
+    });
+  }
+  const expected = slotReceipt(slot);
+  const matches = expected === slot.receipt;
+  res.json({
+    id: slot.id,
+    receipt: slot.receipt,
+    matches,
+    note: matches
+      ? "Запись не изменялась с момента выдачи квитанции."
+      : "Содержимое записи не сходится с квитанцией — запись изменена после выдачи.",
+    noteEn: matches
+      ? "The record has not been altered since the receipt was issued."
+      : "The record does not match its receipt — it was altered after issuance.",
+    scope: "Проверка идёт против нашего же хранилища. Это НЕ якорь во внешнем реестре и НЕ доказательство времени: для этого в модуле есть привязка слоя ограничений к Bitcoin (OpenTimestamps).",
+    scopeEn: "Verification runs against our own store. This is NOT an external-ledger anchor and NOT a proof of time: for that the module anchors the airspace layer to Bitcoin (OpenTimestamps).",
+  });
+});
+
 qskywayRouter.post("/slots", async (req: Request, res: Response) => {
   const { routeId, t0, t1, holder } = req.body ?? {};
   if (!routeId || !t0 || !t1 || !holder) return res.status(400).json({ error: "нужны routeId, t0, t1, holder" });
@@ -1791,5 +1855,26 @@ qskywayRouter.post("/slots", async (req: Request, res: Response) => {
     });
   }
   if (!result.ok) return res.status(409).json({ error: "слот занят", routeId, capacity: SLOT_CAPACITY, concurrent: result.concurrent });
-  res.status(201).json({ ok: true, slot: result.slot, note: "Право на 4D-слот зафиксировано (QRight). receipt = SHA-256-якорь." });
+  res.status(201).json({
+    ok: true,
+    slot: result.slot,
+    // Слово «якорь» в этом модуле занято: им называется привязка слоя
+    // ограничений к Bitcoin через OpenTimestamps — она проверяется третьей
+    // стороной и доказывает ВРЕМЯ. Квитанция слота — SHA-256 от нашей же записи
+    // в нашей же базе: она фиксирует содержимое (подмена станет видна), но не
+    // доказывает ничего постороннему без нашей базы. Называть их одним словом
+    // значит занять чужой вес.
+    note: "Право на 4D-слот зафиксировано (QRight). receipt — контрольная сумма записи (SHA-256): по ней видно, что запись не изменена. Проверка: GET /api/qskyway/slots/{id}/verify.",
+    noteEn: "The 4D-slot right is recorded (QRight). The receipt is a SHA-256 checksum of the record: it shows the record has not been altered. Verify with GET /api/qskyway/slots/{id}/verify.",
+    scope: "Это НЕ якорь во внешнем реестре: в отличие от слоя ограничений, привязанного к Bitcoin через OpenTimestamps, квитанция слота проверяется только против нашего же хранилища.",
+    scopeEn: "This is NOT an anchor in an external ledger: unlike the airspace layer, which is anchored to Bitcoin via OpenTimestamps, a slot receipt is verifiable only against our own store.",
+  });
 });
+
+/**
+ * Хранимые брони — тестам. Открыто намеренно и только для одного: без доступа к
+ * ХРАНИМОЙ записи нельзя проверить само сравнение внутри `/slots/:id/verify`,
+ * можно лишь формулу рядом с ним. Мутация «ручка всегда отвечает „сходится“»
+ * иначе проходит незамеченной — проверено.
+ */
+export const __slotStoreForTests = { memSlots };

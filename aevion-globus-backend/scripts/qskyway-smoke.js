@@ -206,6 +206,29 @@ async function main() {
     "[astana] substitution impact counts both directions of every pad pair",
     `${hs.json?.affectedPairs}/${hs.json?.routable} of ${hs.json?.pairs}`);
 
+  // Те же утверждения по ОСТАЛЬНЫМ городам. Астана здесь богатая (38
+  // подстановок), а Нью-Йорк и Токио — по одной, и это не мелочь: дефект
+  // счётчика зданий 13.08.2026 не проявлялся именно на городе с единственной
+  // подстановкой, где «одно здание» и «одна высота» неразличимы. Проверять
+  // надо и вырожденный случай, и богатый.
+  for (const c of ["nyc", "tokyo"]) {
+    const h = await jget(`/api/qskyway/height-substitution?city=${c}`);
+    assert(h.status === 200, `[${c}] substitution impact answers`, `status=${h.status}`);
+    if (h.json?.available) {
+      assert(h.json.buildingsUnderRoutes <= h.json.buildings && h.json.buildings > 0,
+        `[${c}] buildings in the data and buildings under corridors are counted separately`,
+        `${h.json.buildingsUnderRoutes} of ${h.json.buildings}`);
+      assert(h.json.affectedPairs <= h.json.routable && h.json.pairs === 42,
+        `[${c}] substitution impact counts both directions of every pad pair`,
+        `${h.json.affectedPairs}/${h.json.routable} of ${h.json.pairs}`);
+    } else {
+      // Город без подстановок — законный случай, но он обязан объясниться,
+      // а не отвечать пустым успехом.
+      assert(String(h.json?.note ?? "").length > 0,
+        `[${c}] a city without substitutions says so instead of answering blank`);
+    }
+  }
+
   const hd = await jget("/api/qskyway/height-dispute?city=astana");
   assert(hd.status === 200 && hd.json?.available === true,
     "[astana] the height the twin distrusts is measured against the routes, not just displayed",

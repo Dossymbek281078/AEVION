@@ -18,7 +18,7 @@
 
 import { Router, type Request, type Response } from "express";
 import { clientIp } from "../lib/rateLimit";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash, timingSafeEqual } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getPool } from "../lib/dbPool";
@@ -292,8 +292,10 @@ async function saveToDb(list: Tournament[], stamp: number): Promise<void> {
     // прихода сохранений не в том порядке (запись намеренно не блокирует
     // ответ игроку).
     //
-    // Удаления нет намеренно: строку, которой нет в памяти ЭТОГО процесса,
-    // нельзя считать лишней — её мог только что завести сосед.
+    // Здесь удаления нет намеренно: строку, которой нет в памяти ЭТОГО
+    // процесса, нельзя считать лишней — её мог только что завести сосед.
+    // Удаление живёт отдельно, по явной команде: см. deleteFromDb и
+    // DELETE /:id ниже.
     for (const t of list) {
       await pool.query(
         `INSERT INTO "CyberTournament" ("id","data","savedAtMs") VALUES ($1,$2,$3)
@@ -343,6 +345,25 @@ function tryLoadFromDisk(): LoadResult {
     console.error("[cyberchess-tournaments] файл не прочитан — запись заблокирована, чтобы не заменить его фикстурами:", (e as Error).message);
     capture(e);
     return { ok: false };
+  }
+}
+
+/**
+ * Удалить турнир из базы. Отдельная функция и отдельный путь — потому что
+ * «нет в памяти этого процесса» никогда не значит «лишний»: строку мог секунду
+ * назад завести сосед. Удаление происходит только по явной команде человека
+ * (админская ручка ниже), и только по конкретному идентификатору.
+ */
+async function deleteFromDb(id: string): Promise<void> {
+  if (dbHealth.abandoned) return;
+  const pool = await ensureTournamentDb();
+  if (!pool) return;
+  try {
+    await pool.query(`DELETE FROM "CyberTournament" WHERE "id"=$1`, [id]);
+  } catch (e) {
+    dbHealth.saveErrors += 1;
+    dbHealth.lastErrorKind = dbErrorKind(e);
+    console.error("[cyberchess-tournaments] удаление строки из базы не прошло:", (e as Error).message);
   }
 }
 
@@ -1417,6 +1438,22 @@ onMatchSettled(({ matchId, tournamentId, result }) => {
   tryWriteToDisk();
 });
 
+// DELETE /:id (админ) — убрать турнир.
+//
+// Ключ тот же, что у остальных админских ручек шахмат: заголовок `X-Admin-Key`
+// против `CYBERCHESS_ADMIN_KEY`. Сравнение постоянного времени — как в
+// матчмейкинге; по HTTP тайминг-атака непрактична, но одинаковый приём в
+// одинаковых местах дешевле, чем помнить, где он слабее.
+//
+// Зачем ручка вообще. Создание турнира открыто (без входа, пять штук за десять
+// минут с адреса), а способа убрать не было ни одного: чтобы вычистить мусор,
+// приходилось идти руками в базу и в файл на томе. Теперь есть путь, и он
+// закрывает три вещи сразу — уборку чужого мусора, проверку записи в базу с
+// уборкой за собой и недостающую половину хранилища.
+//
+// Удаляется ровно один турнир по идентификатору: из памяти, из файла и из
+// базы. Никаких «удалить всё, что похоже на тестовое» — под такой шаблон
+// однажды попадёт живое событие.
 // GET /_persistence — диагностика хранилища: только числа и признаки, никаких
 // данных игроков. Существует ради одного вопроса, на который иначе пришлось бы
 // отвечать верой: работает ли перенос состояния в базу на реальном сервере.
@@ -1479,6 +1516,39 @@ router.get("/:id", (req: Request, res: Response): void => {
 });
 
 // POST /:id/register
+router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
+  const expected = process.env.CYBERCHESS_ADMIN_KEY || "";
+  if (!expected) {
+    res.status(503).json({ ok: false, error: "admin_delete_disabled", hint: "CYBERCHESS_ADMIN_KEY не задан" });
+    return;
+  }
+  const provided = String(req.headers["x-admin-key"] || "");
+  const a = createHash("sha256").update(provided).digest();
+  const b = createHash("sha256").update(expected).digest();
+  if (!provided || !timingSafeEqual(a, b)) {
+    res.status(403).json({ ok: false, error: "forbidden" });
+    return;
+  }
+
+  const id = String(req.params.id ?? "");
+  const idx = TOURNAMENTS.findIndex((t) => t.id === id);
+  if (idx < 0) {
+    res.status(404).json({ ok: false, error: "tournament_not_found", id });
+    return;
+  }
+
+  const [removed] = TOURNAMENTS.splice(idx, 1);
+  tryWriteToDisk();
+  await deleteFromDb(id);
+
+  console.log(`[cyberchess-tournaments] удалён турнир ${id} («${removed.title}») по админской команде`);
+  res.json({
+    ok: true,
+    deleted: { id: removed.id, title: removed.title, origin: removed.origin ?? null },
+    remaining: TOURNAMENTS.length,
+  });
+});
+
 router.post("/:id/register", (req: Request, res: Response): void => {
   const t = TOURNAMENTS.find((x) => x.id === req.params.id);
   if (!t) {

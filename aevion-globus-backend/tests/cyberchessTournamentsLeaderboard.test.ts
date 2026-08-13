@@ -121,13 +121,59 @@ describe("computeCrossTournamentLeaderboard", () => {
 
 describe("tournaments router wiring", () => {
   test("/leaderboard route is registered before /:id", () => {
-    const stack = (tournamentsRouter as any).stack as Array<{ route?: { path?: string } }>;
-    const paths = stack.filter((l) => l.route?.path).map((l) => l.route!.path);
-    expect(paths).toContain("/leaderboard");
-    const lbIdx = paths.indexOf("/leaderboard");
-    const idIdx = paths.indexOf("/:id");
+    // Перехват возможен только ВНУТРИ одного метода: GET /:id съедает
+    // GET /leaderboard, а DELETE /:id — нет. Прежняя версия сравнивала голые
+    // строки путей и 13.08.2026 покраснела на добавленном DELETE /:id, где
+    // перехвата не было. Считаем порядок отдельно по каждому методу.
+    const stack = (tournamentsRouter as any).stack as Array<{
+      route?: { path?: string; methods?: Record<string, boolean> };
+    }>;
+    const pathsFor = (method: string) =>
+      stack
+        .filter((l) => l.route?.path && l.route.methods?.[method])
+        .map((l) => l.route!.path as string);
+
+    const getPaths = pathsFor("get");
+    expect(getPaths).toContain("/leaderboard");
+    const lbIdx = getPaths.indexOf("/leaderboard");
+    const idIdx = getPaths.indexOf("/:id");
     expect(lbIdx).toBeGreaterThanOrEqual(0);
     expect(idIdx).toBeGreaterThanOrEqual(0);
     expect(lbIdx).toBeLessThan(idIdx);
+  });
+
+  test("ни один буквальный маршрут не стоит после /:id в своём методе", () => {
+    // Обобщение того же правила: сторож выше защищал ровно один путь, а
+    // буквальных маршрутов в роутере уже пять (/list, /_persistence,
+    // /leaderboard, /__meta/time-controls). Любой из них, оказавшись ниже
+    // параметрического /:id того же метода, тихо станет «турниром с таким
+    // идентификатором» — ответ 200 с чужим содержимым, а не ошибка.
+    const stack = (tournamentsRouter as any).stack as Array<{
+      route?: { path?: string; methods?: Record<string, boolean> };
+    }>;
+    // Сравнивать надо посегментно, а не по строке: `/:id` — один сегмент и
+    // двухсегментный `/__meta/time-controls` не перехватывает. Первая версия
+    // этой проверки этого не учла и покраснела на безобидном пути — сторож,
+    // краснеющий там, где перехвата нет, отучает на себя смотреть.
+    const seg = (p: string) => p.split("/").filter(Boolean);
+    const captures = (pattern: string, literal: string) => {
+      const a = seg(pattern);
+      const b = seg(literal);
+      if (a.length !== b.length) return false;
+      return a.every((s, i) => s.startsWith(":") || s === b[i]);
+    };
+
+    const shadowed: string[] = [];
+    for (const method of ["get", "post", "delete", "put", "patch"]) {
+      const paths = stack
+        .filter((l) => l.route?.path && l.route.methods?.[method])
+        .map((l) => l.route!.path as string);
+      paths.forEach((literal, i) => {
+        if (literal.includes(":")) return;
+        const eater = paths.find((p, j) => j < i && p.includes(":") && captures(p, literal));
+        if (eater) shadowed.push(`${method.toUpperCase()} ${literal} перехватывается ${eater}`);
+      });
+    }
+    expect(shadowed).toEqual([]);
   });
 });

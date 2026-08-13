@@ -21,6 +21,9 @@ import { clientIp } from "../lib/rateLimit";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+// Обычный импорт, а не require: под `require` подмена драйвера в тестах не
+// действует — тест «зеленеет», не выполнив ни одного запроса (12.08).
+import pg from "pg";
 import {
   createPreMatchedMatch,
   onMatchSettled,
@@ -154,6 +157,88 @@ let persistFailures = 0;
 const PERSIST_RETRY_MS = 60_000;
 let TOURNAMENTS: Tournament[] = [];
 
+// ── Postgres как основное хранилище, файл — запасное ────────────────
+//
+// ЗАЧЕМ. Файловая система контейнера временная: при каждом деплое Railway
+// поднимает новый контейнер из образа, то есть с той версией файла, что лежит в
+// репозитории. Всё, что игроки нарегистрировали и наиграли с прошлого деплоя,
+// откатывалось к состоянию из git — не с ошибкой, а молча. Плюс реплик бывает
+// больше одной (замер в docs/RATELIMIT_KNOWN_LIMITATIONS.md), и тогда
+// регистрация, попавшая в один процесс, невидима другому.
+//
+// УСТРОЙСТВО. Состояние хранится целиком, одной строкой JSONB, — той же
+// гранулярностью, что и файл, чтобы не заводить второй способ описывать одно и
+// то же. `savedAt` решает, кто свежее: база или файл. Без DATABASE_URL всё
+// работает ровно как раньше, на файле.
+//
+// ЧЕГО ЭТО НЕ РЕШАЕТ, честно: одновременная запись из двух реплик по-прежнему
+// "кто последний, тот и прав" на уровне всего состояния. Это следующий шаг —
+// построчное хранение турниров; сейчас закрыта потеря при деплое, которая
+// случается каждый день, а не гонка, которая требует совпадения по секундам.
+let dbPool: any = null;
+let dbTried = false;
+/** Момент последнего сохранения состояния — по нему выбирается свежая копия. */
+let savedAtMs = 0;
+
+async function ensureTournamentDb(): Promise<any> {
+  if (dbTried) return dbPool;
+  dbTried = true;
+  if (!process.env.DATABASE_URL) return null;
+  try {
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "CyberTournamentState" (
+        "id"      TEXT PRIMARY KEY,
+        "state"   JSONB NOT NULL,
+        "savedAt" TIMESTAMP NOT NULL DEFAULT now()
+      );
+    `);
+    dbPool = pool;
+    console.log("[cyberchess-tournaments] pg connected — состояние турниров переживёт деплой");
+    return pool;
+  } catch (e) {
+    console.warn("[cyberchess-tournaments] pg init failed:", (e as Error).message);
+    return null;
+  }
+}
+
+/** Прочитать состояние из базы. null — нечего или не смогли (это разные вещи в логе). */
+async function loadFromDb(): Promise<{ tournaments: Tournament[]; savedAtMs: number } | null> {
+  const pool = await ensureTournamentDb();
+  if (!pool) return null;
+  try {
+    const r = await pool.query(`SELECT "state","savedAt" FROM "CyberTournamentState" WHERE "id"='singleton'`);
+    const row = r.rows?.[0];
+    if (!row) return null;
+    const list = Array.isArray(row.state?.tournaments) ? (row.state.tournaments as Tournament[]) : null;
+    if (!list) {
+      console.error("[cyberchess-tournaments] строка в базе не той формы — беру файл");
+      return null;
+    }
+    const t = row.savedAt ? new Date(row.savedAt).getTime() : 0;
+    return { tournaments: list, savedAtMs: Number.isFinite(t) ? t : 0 };
+  } catch (e) {
+    console.error("[cyberchess-tournaments] чтение состояния из базы не прошло:", (e as Error).message);
+    return null;
+  }
+}
+
+/** Зеркалировать состояние в базу. Не бросает: путь регистрации не должен падать из-за базы. */
+async function saveToDb(list: Tournament[], stamp: number): Promise<void> {
+  const pool = await ensureTournamentDb();
+  if (!pool) return;
+  try {
+    await pool.query(
+      `INSERT INTO "CyberTournamentState" ("id","state","savedAt") VALUES ('singleton',$1,to_timestamp($2/1000.0))
+       ON CONFLICT ("id") DO UPDATE SET "state"=EXCLUDED."state","savedAt"=EXCLUDED."savedAt"`,
+      [JSON.stringify({ tournaments: list }), stamp],
+    );
+  } catch (e) {
+    console.error("[cyberchess-tournaments] запись состояния в базу не прошла:", (e as Error).message);
+  }
+}
+
+
 /**
  * Файл есть, но прочитать его не удалось. Это НЕ «файла нет».
  *
@@ -173,6 +258,10 @@ function tryLoadFromDisk(): LoadResult {
     if (!fs.existsSync(DATA_FILE)) return { ok: true, tournaments: null }; // файла нет — честно пусто
     const raw = fs.readFileSync(DATA_FILE, "utf-8");
     const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed?.tournaments)) {
+      const t = parsed.savedAt ? new Date(parsed.savedAt).getTime() : 0;
+      savedAtMs = Number.isFinite(t) ? t : 0;
+    }
     if (!Array.isArray(parsed?.tournaments)) {
       console.error("[cyberchess-tournaments] файл есть, но не той формы — содержимое неизвестно, запись заблокирована");
       return { ok: false };
@@ -227,12 +316,17 @@ function tryWriteToDisk(): void {
     // crash/redeploy mid-write can never leave a truncated JSON that silently
     // falls back to seed fixtures (losing every registration/result).
     const tmp = `${DATA_FILE}.tmp`;
+    savedAtMs = Date.now();
     fs.writeFileSync(
       tmp,
-      JSON.stringify({ tournaments: TOURNAMENTS }, null, 2),
+      // savedAt едет в самом файле: по нему решается, что свежее — он или база.
+      JSON.stringify({ savedAt: new Date(savedAtMs).toISOString(), tournaments: TOURNAMENTS }, null, 2),
       "utf-8",
     );
     fs.renameSync(tmp, DATA_FILE);
+    // Зеркало в базе: файловая система контейнера временная, база переживает
+    // деплой. Не ждём — путь регистрации не должен зависеть от скорости базы.
+    void saveToDb(TOURNAMENTS, savedAtMs);
     // Запись удалась — прошлые отказы больше ничего не значат.
     persistFailures = 0;
     persistPausedUntil = 0;
@@ -1126,6 +1220,39 @@ function publishRoundToMatchmaking(t: Tournament, matches: BracketMatch[]): void
 // ── routes ─────────────────────────────────────────────────────────
 
 initStore();
+
+/**
+ * Догрузка из базы — асинхронная, поэтому маршруты её ЖДУТ.
+ *
+ * Соблазн был сделать «загрузили файл синхронно, а базу подхватим когда
+ * придёт». Так нельзя: между стартом и приходом ответа кто-то успевает
+ * зарегистрироваться, его запись ложится поверх файловой копии, а потом
+ * прилетает состояние из базы и стирает её. Дефект того же класса, что чинили
+ * весь вчерашний день, только рождённый починкой.
+ *
+ * Поэтому ожидание стоит перед всеми маршрутами (ниже), а не «где-нибудь».
+ * После первого запроса промис уже разрешён и стоит наносекунды.
+ */
+const storeReady: Promise<void> = (async () => {
+  const fromDb = await loadFromDb();
+  if (!fromDb) return; // базы нет или в ней пусто — живём на файле, как раньше
+  if (fromDb.savedAtMs <= savedAtMs) return; // файл свежее или ровесник — не трогаем
+  TOURNAMENTS = fromDb.tournaments;
+  savedAtMs = fromDb.savedAtMs;
+  for (const t of TOURNAMENTS) {
+    if (typeof t.realPlayers === "undefined") t.realPlayers = false;
+    if (typeof t.origin === "undefined") t.origin = t.id.startsWith("usr-") ? "user" : "seed";
+  }
+  console.log(`[cyberchess-tournaments] состояние взято из базы (${TOURNAMENTS.length} турниров) — она свежее файла`);
+})().catch((e) => {
+  console.error("[cyberchess-tournaments] догрузка из базы не удалась, остаёмся на файле:", (e as Error).message);
+});
+
+// Ожидание готовности — ДО всех маршрутов, включая degradedGuard.
+router.use(async (_req: Request, _res: Response, next: () => void) => {
+  await storeReady;
+  next();
+});
 
 // Пока файл турниров не прочитан, ни один маршрут не работает: отдавать
 // фикстуры под видом настоящих турниров и копить изменения, которые некуда

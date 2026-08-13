@@ -239,6 +239,8 @@ eventsRouter.get("/summary", (req, res) => {
       bySource: {},
       byTier: {},
       byIndustry: {},
+      byChannel: {},
+      byProduct: {},
       sessionCount: 0,
       windowHours: 24,
     });
@@ -265,6 +267,13 @@ eventsRouter.get("/summary", (req, res) => {
   const bySource: Record<string, number> = {};
   const byTier: Record<string, number> = {};
   const byIndustry: Record<string, number> = {};
+  // Канал (tt / ig / yt …) — единственный ответ на вопрос «какая раздача
+  // принесла людей». Он приезжает в meta, а сводка до 13.08.2026 считала
+  // только поля верхнего уровня: метка доезжала и НЕ показывалась никому.
+  const byChannel: Record<string, number> = {};
+  // Товар, по которому нажали «купить». Без него видно «клики были», но не
+  // видно, что именно хотели купить.
+  const byProduct: Record<string, number> = {};
   const sids = new Set<string>();
   let total = 0;
 
@@ -277,6 +286,11 @@ eventsRouter.get("/summary", (req, res) => {
       if (ev.source) bySource[ev.source] = (bySource[ev.source] ?? 0) + 1;
       if (ev.tier) byTier[ev.tier] = (byTier[ev.tier] ?? 0) + 1;
       if (ev.industry) byIndustry[ev.industry] = (byIndustry[ev.industry] ?? 0) + 1;
+      const meta = (ev as { meta?: Record<string, unknown> }).meta;
+      const channel = typeof meta?.channel === "string" ? meta.channel : null;
+      if (channel) byChannel[channel] = (byChannel[channel] ?? 0) + 1;
+      const product = typeof meta?.product === "string" ? meta.product : null;
+      if (product) byProduct[product] = (byProduct[product] ?? 0) + 1;
       if (ev.sid) sids.add(ev.sid);
     } catch {
       // skip malformed line
@@ -289,6 +303,8 @@ eventsRouter.get("/summary", (req, res) => {
     bySource,
     byTier,
     byIndustry,
+    byChannel,
+    byProduct,
     sessionCount: sids.size,
     windowHours: sinceHours,
   });

@@ -51,6 +51,10 @@ interface EventsSummary {
   bySource: Record<string, number>;
   byTier: Record<string, number>;
   byIndustry: Record<string, number>;
+  /** Канал раздачи (tt / ig / yt …) — по нему видно, какая раздача привела людей. */
+  byChannel?: Record<string, number>;
+  /** Товар, по которому нажали «купить». */
+  byProduct?: Record<string, number>;
   sessionCount: number;
   windowHours: number;
 }
@@ -493,6 +497,11 @@ export default function PricingAdminPage() {
               <Breakdown title={t("pricing.admin.breakdown.byTier")} data={summary.byTier} />
               <Breakdown title={t("pricing.admin.breakdown.byIndustry")} data={summary.byIndustry} />
               <Breakdown title={t("pricing.admin.breakdown.bySource")} data={summary.bySource} />
+              {/* Канал и товар приезжают в meta. Без этих двух блоков метка ?c=tt
+                  собиралась бы и не показывалась никому — а она и есть
+                  единственный ответ на вопрос «сработала ли раздача». */}
+              <Breakdown title="По каналу раздачи" data={summary.byChannel ?? {}} />
+              <Breakdown title="Клики «купить» по товарам" data={summary.byProduct ?? {}} />
             </section>
           )}
 

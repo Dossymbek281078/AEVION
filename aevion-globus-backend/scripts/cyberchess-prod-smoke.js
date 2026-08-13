@@ -95,9 +95,9 @@ async function run() {
       // На проде DATABASE_URL есть — значит модуль его не увидел.
       bad(`хранилище ${label}: база не настроена`, "данные живут на файле и теряются при деплое");
     } else if (!db.connected) {
-      bad(`хранилище ${label}: подключиться не вышло`, String(db.lastError || "").slice(0, 60));
+      bad(`хранилище ${label}: подключиться не вышло`, `причина: ${db.lastErrorKind || "неизвестна"}`);
     } else if (Number(db.saveErrors) > 0) {
-      bad(`хранилище ${label}: ошибки записи`, `${db.saveErrors}, последняя: ${String(db.lastError || "").slice(0, 50)}`);
+      bad(`хранилище ${label}: ошибки записи`, `${db.saveErrors}, причина: ${db.lastErrorKind || "неизвестна"}`);
     } else {
       ok(`хранилище ${label}`, `подключено, записей ${db.saves}, из базы поднято: ${db.adoptedFromDb}`);
     }

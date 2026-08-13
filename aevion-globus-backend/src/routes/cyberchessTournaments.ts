@@ -176,9 +176,27 @@ let TOURNAMENTS: Tournament[] = [];
 let dbPool: any = null;
 let dbTried = false;
 /** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
-const dbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, saveErrors: 0, lastError: null as string | null };
+const dbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, saveErrors: 0, lastErrorKind: null as string | null };
 /** Момент последнего сохранения состояния — по нему выбирается свежая копия. */
 let savedAtMs = 0;
+
+/**
+ * Ошибка базы, сведённая к КАТЕГОРИИ.
+ *
+ * Ручка `_persistence` публичная, а сырое сообщение pg содержит инфраструктуру:
+ * «connect ECONNREFUSED 10.0.0.5:5432», «password authentication failed for
+ * user "aevion"», «database "x" does not exist». Я сам написал в коммите, что
+ * диагностика не должна выдавать то, что считает, — и тут же оставил текст
+ * ошибки наружу. Полное сообщение уходит в лог, наружу едет только слово.
+ */
+function dbErrorKind(e: unknown): "connect" | "auth" | "timeout" | "schema" | "query" {
+  const m = (e as Error)?.message?.toLowerCase() ?? "";
+  if (m.includes("econnrefused") || m.includes("enotfound") || m.includes("ehostunreach")) return "connect";
+  if (m.includes("password") || m.includes("authentication") || m.includes("role ")) return "auth";
+  if (m.includes("timeout") || m.includes("terminated")) return "timeout";
+  if (m.includes("does not exist") || m.includes("column") || m.includes("relation")) return "schema";
+  return "query";
+}
 
 async function ensureTournamentDb(): Promise<any> {
   if (dbTried) return dbPool;
@@ -275,7 +293,7 @@ async function saveToDb(list: Tournament[], stamp: number): Promise<void> {
     dbHealth.saves += 1;
   } catch (e) {
     dbHealth.saveErrors += 1;
-    dbHealth.lastError = (e as Error).message.slice(0, 200);
+    dbHealth.lastErrorKind = dbErrorKind(e);
     console.error("[cyberchess-tournaments] запись состояния в базу не прошла:", (e as Error).message);
   }
 }

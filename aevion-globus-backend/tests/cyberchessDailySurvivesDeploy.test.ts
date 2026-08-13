@@ -226,3 +226,19 @@ describe("истёкший таймер не выключает запись п�
     expect(res.body.db.abandoned).toBe(false);
   });
 });
+
+describe("публичная диагностика не выдаёт устройство системы", () => {
+  /* Ручка `_persistence` открыта, а сырое сообщение pg содержит адрес хоста,
+     порт, имя пользователя базы: «connect ECONNREFUSED 10.0.0.5:5432»,
+     «password authentication failed for user "aevion"». Наружу едет только
+     категория, полный текст остаётся в логе. */
+
+  test("в ответе нет сырого текста ошибки", async () => {
+    const res = await request(app).get("/api/cyberchess-daily/_persistence");
+    const asText = JSON.stringify(res.body);
+
+    expect(asText).not.toMatch(/ECONNREFUSED|password|postgres:\/\/|5432/i);
+    // Поле категории существует — иначе при отказе сказать было бы нечем.
+    expect(res.body.db).toHaveProperty("lastErrorKind");
+  });
+});

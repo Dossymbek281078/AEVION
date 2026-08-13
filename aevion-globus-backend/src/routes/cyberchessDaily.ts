@@ -239,7 +239,25 @@ const solveStore = new Map<string, SolveRecord>(); // key: `${userId}:${day}`
 let dailyPool: any = null;
 let dailyDbTried = false;
 /** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
-const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, saveErrors: 0, lastError: null as string | null };
+const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, saveErrors: 0, lastErrorKind: null as string | null };
+
+/**
+ * Ошибка базы, сведённая к КАТЕГОРИИ.
+ *
+ * Ручка `_persistence` публичная, а сырое сообщение pg содержит инфраструктуру:
+ * «connect ECONNREFUSED 10.0.0.5:5432», «password authentication failed for
+ * user "aevion"», «database "x" does not exist». Я сам написал в коммите, что
+ * диагностика не должна выдавать то, что считает, — и тут же оставил текст
+ * ошибки наружу. Полное сообщение уходит в лог, наружу едет только слово.
+ */
+function dbErrorKind(e: unknown): "connect" | "auth" | "timeout" | "schema" | "query" {
+  const m = (e as Error)?.message?.toLowerCase() ?? "";
+  if (m.includes("econnrefused") || m.includes("enotfound") || m.includes("ehostunreach")) return "connect";
+  if (m.includes("password") || m.includes("authentication") || m.includes("role ")) return "auth";
+  if (m.includes("timeout") || m.includes("terminated")) return "timeout";
+  if (m.includes("does not exist") || m.includes("column") || m.includes("relation")) return "schema";
+  return "query";
+}
 
 async function ensureDailyDb(): Promise<any> {
   if (dailyDbTried) return dailyPool;
@@ -343,7 +361,7 @@ async function saveDailyToDb(stamp: number): Promise<void> {
     dailyDbHealth.saves += 1;
   } catch (e) {
     dailyDbHealth.saveErrors += 1;
-    dailyDbHealth.lastError = (e as Error).message.slice(0, 200);
+    dailyDbHealth.lastErrorKind = dbErrorKind(e);
     console.error('[cyberchess-daily] запись записей в базу не прошла:', (e as Error).message);
   }
 }

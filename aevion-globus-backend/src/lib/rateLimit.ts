@@ -63,6 +63,25 @@ export interface RateLimitOptions {
   keyFn?: (req: import("express").Request) => string;
 }
 
+/**
+ * Нормализация адреса для ключа лимитера.
+ *
+ * Своей реализации здесь намеренно нет — берём ту же, которой уже пользуются
+ * `qpaynet`, `build/public` и `cyberchessTournaments`. Обёртка нужна только
+ * ради одного: сбой нормализации не должен ронять запрос. Если она бросит на
+ * неожидаемом входе, лимит останется работать по сырому адресу — это хуже
+ * нормализованного, но лучше отказа.
+ */
+export function normalizeAddressForKey(ip: string): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ipKeyGenerator } = require("express-rate-limit") as typeof import("express-rate-limit");
+    return ipKeyGenerator(ip) || ip;
+  } catch {
+    return ip;
+  }
+}
+
 const GLOBAL_BUCKETS = new Map<string, Bucket>();
 let lastSweep = 0;
 
@@ -153,7 +172,21 @@ export function rateLimit(opts: RateLimitOptions) {
         warnKeyFnFallback(keyPrefix, String((err as Error)?.message || err).slice(0, 120));
       }
     }
-    const key = `${keyPrefix}:${counted}`;
+    // Адрес в ключе — нормализованный, иначе IPv6-клиент обходит любой лимит
+    // по адресу, просто меняя адрес: провайдер выдаёт клиенту целый префикс
+    // (/64), то есть 18 квинтиллионов адресов, и каждый давал бы свой счётчик.
+    //
+    // Нормализация берётся из `express-rate-limit`, а не пишется своя: пакет уже
+    // в зависимостях, три файла бэкенда (`qpaynet`, `build/public`,
+    // `cyberchessTournaments`) нормализуют именно им, и второй способ делать то
+    // же самое разошёлся бы с первым на первом же краевом случае. Проверено:
+    // два адреса из одного префикса дают один ключ, `::ffff:127.0.0.1`
+    // разворачивается в `127.0.0.1`, а «unknown» и пустая строка проходят без
+    // исключения.
+    //
+    // На аккаунтные ключи (из keyFn) нормализация НЕ распространяется — там в
+    // ключе не адрес, и трогать его нечем.
+    const key = `${keyPrefix}:${counted === ip ? normalizeAddressForKey(ip) : counted}`;
 
     const existing = GLOBAL_BUCKETS.get(key);
 

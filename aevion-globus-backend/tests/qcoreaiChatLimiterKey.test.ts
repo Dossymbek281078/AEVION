@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll } from "vitest";
+import { describe, test, expect, beforeAll, afterEach, vi } from "vitest";
 import request from "supertest";
 import express from "express";
 import jwt from "jsonwebtoken";
@@ -57,8 +57,30 @@ function tokenFor(sub: string): string {
   });
 }
 
+/**
+ * Замораживаем часы на время случаев, которые тратят весь бюджет.
+ *
+ * Первая версия этого файла ставила на то, что 30 последовательных запросов
+ * через supertest уложатся в минуту. В одиночном прогоне укладывались, в полном
+ * (114 файлов параллельно) — упало один раз из четырёх: окно успевало истечь
+ * между первым и тридцатым запросом, счётчик сбрасывался, и «перебор» проходил.
+ * Падало при этом не там, где причина, — выглядело как дефект изоляции.
+ *
+ * Ставка на скорость машины убирается заморозкой, а не увеличением лимита:
+ * лимит здесь боевой, ради него тест и написан.
+ */
+function freezeClock() {
+  const t = 1_762_000_000_000; // произвольная фиксированная метка
+  vi.spyOn(Date, "now").mockReturnValue(t);
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("chatLimiter — единица счёта", () => {
   test("два аккаунта с одного адреса не делят бюджет", async () => {
+    freezeClock();
     const app = await mount();
     const a = tokenFor("acct-a");
     const b = tokenFor("acct-b");
@@ -81,6 +103,7 @@ describe("chatLimiter — единица счёта", () => {
   });
 
   test("аноним по-прежнему ограничен, и считается по адресу", async () => {
+    freezeClock();
     const app = await mount();
     const anon = () => request(app).post("/chat").set("X-Forwarded-For", "203.0.113.2");
     for (let i = 0; i < 30; i++) {
@@ -92,6 +115,7 @@ describe("chatLimiter — единица счёта", () => {
   test("негодный токен считается анонимом, а не отдельным ключом на токен", async () => {
     // Иначе счёт обходится генерацией мусорных токенов: каждый новый мусор —
     // новый ключ и новые 30 запросов.
+    freezeClock();
     const app = await mount();
     // Свой адрес: у негодного токена ключ тот же, что у анонима, и бюджет
     // 203.0.113.2 уже потратил предыдущий случай.

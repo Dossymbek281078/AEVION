@@ -32,8 +32,11 @@ const POLICY_URL = `${PROD_BASE}/api-backend/api/paywall/policy`;
 // отдельного списка: иначе появится второй источник правды и они разойдутся.
 const VARIANTS_FILE = resolve(process.cwd(), "aevion-globus-backend/src/data/lemonSqueezyVariants.ts");
 
+let SLUG_TO_MODULE = {};
+
 function soldModuleSlugs() {
   const src = readFileSync(VARIANTS_FILE, "utf8");
+  SLUG_TO_MODULE = slugToModuleFromSource(src);
   // Берём ключи вида `app_<slug>:` из таблицы соответствия переменных.
   const slugs = new Set();
   for (const m of src.matchAll(/^\s*app_([a-z_]+)\s*:/gm)) slugs.add(m[1]);
@@ -49,13 +52,21 @@ const OWN_GATE = {
   devhub: "свой тариф в DevHubTier/DevHubEmailTier — покупка открывает Pro",
 };
 
-/** Названия модулей в пейволле и в таблице вариантов совпадают не буквально. */
-const SLUG_TO_MODULE = {
-  ip_bureau: "aevion-ip-bureau",
-  smeta: "smeta-trainer",
-  constitution: "constitution",
-  devhub: "devhub",
-};
+/**
+ * Соответствие «slug подписки → id модуля» живёт ОДНОЙ таблицей в
+ * `lemonSqueezyVariants.ts` — той же, которой пользуется гейт доступа. Своей
+ * копии здесь намеренно нет: два списка разошлись бы молча, а расхождение
+ * видно только на пересечении, то есть ровно там, где его никто не смотрит.
+ * Читаем ту таблицу текстом, потому что скрипт запускается без сборки TS.
+ */
+function slugToModuleFromSource(src) {
+  const block = src.match(/APP_SLUG_TO_MODULE_ID[^=]*=\s*\{([\s\S]*?)\}/);
+  const map = {};
+  if (block) {
+    for (const m of block[1].matchAll(/([a-z_]+)\s*:\s*"([^"]+)"/g)) map[m[1]] = m[2];
+  }
+  return map;
+}
 
 async function main() {
   const sold = soldModuleSlugs();

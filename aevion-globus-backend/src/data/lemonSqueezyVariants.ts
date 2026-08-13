@@ -139,3 +139,30 @@ export function appSlugForReference(ref: LemonSqueezyReference | null): string |
   if (!ref?.startsWith("app_")) return null;
   return ref.slice(4);
 }
+
+/**
+ * Slug купленной подписки (то, что вебхук пишет в `AppSubscription`) → id модуля
+ * в реестре и в политике пейволла. Совпадают не все: `ip_bureau` против
+ * `aevion-ip-bureau`, `smeta` против `smeta-trainer`.
+ *
+ * Держим ОДНОЙ таблицей рядом со ссылками на товары. Второй такой список
+ * (в гейте, в отчёте, в UI) через месяц разошёлся бы с этим — и разошёлся бы
+ * молча, потому что расхождение видно только на пересечении.
+ */
+const APP_SLUG_TO_MODULE_ID: Record<string, string> = {
+  ip_bureau: "aevion-ip-bureau",
+  smeta: "smeta-trainer",
+};
+
+/** "ip_bureau" → "aevion-ip-bureau"; для совпадающих имён вернёт как есть. */
+export function moduleIdForAppSlug(slug: string): string {
+  return APP_SLUG_TO_MODULE_ID[slug] ?? slug;
+}
+
+/** Обратное: id модуля → slug подписки, если такой модуль вообще продаётся. */
+export function appSlugForModuleId(moduleId: string): string | null {
+  for (const [slug, id] of Object.entries(APP_SLUG_TO_MODULE_ID)) {
+    if (id === moduleId) return slug;
+  }
+  return isReference(`app_${moduleId}`) ? moduleId : null;
+}

@@ -42,6 +42,67 @@ async function run() {
   if (r.status === 400) ok("GET /cyberchess/cpi/me (no userId) → 400", r.body?.error ? String(r.body.error).slice(0, 40) : "");
   else bad("cpi/me validation gate", `got=${r.status}`);
 
+  // Server-authoritative reads. Added 2026-08-12, when these four learned to
+  // answer 503 instead of an invented zero on a database outage: an outage used
+  // to arrive as "you have 0 Chessy", "no games", "no players" — statements
+  // nobody had verified. Nothing here checked them at all, so the change would
+  // have shipped unwatched. A live prod answers, so 200 is the expectation;
+  // a 503 from this smoke means the store is genuinely unavailable, which is
+  // exactly what we want to hear about.
+  r = await req("GET", "/api/cyberchess/matchmaking/wallet/leaderboard?limit=5");
+  if (r.status === 200 && r.body?.ok && Array.isArray(r.body?.leaderboard)) ok("GET /matchmaking/wallet/leaderboard", `count=${r.body.count}`);
+  else bad("matchmaking/wallet/leaderboard", `${r.status} ${JSON.stringify(r.body).slice(0, 60)}`);
+
+  r = await req("GET", "/api/cyberchess/matchmaking/leaderboard?speed=blitz&limit=5");
+  if (r.status === 200 && r.body?.ok && Array.isArray(r.body?.leaderboard)) ok("GET /matchmaking/leaderboard", `speed=blitz count=${r.body.count}`);
+  else bad("matchmaking/leaderboard", `${r.status} ${JSON.stringify(r.body).slice(0, 60)}`);
+
+  // Validation gate, not a data check: without userId the answer must be 400
+  // rather than a balance for nobody.
+  r = await req("GET", "/api/cyberchess/matchmaking/wallet");
+  if (r.status === 400) ok("GET /matchmaking/wallet (no userId) → 400");
+  else bad("matchmaking/wallet validation gate", `got=${r.status}`);
+
+  // Daily leaderboard — public. An empty board is honest; a 503 means the file
+  // behind it could not be read, which since 12.08 is said out loud instead of
+  // being served as "nobody has solved it yet".
+  r = await req("GET", "/api/cyberchess-daily/leaderboard?limit=5");
+  if (r.status === 200 && Array.isArray(r.body?.leaderboard)) ok("GET /cyberchess-daily/leaderboard", `total=${r.body.total}`);
+  else bad("cyberchess-daily/leaderboard", `${r.status} ${JSON.stringify(r.body).slice(0, 60)}`);
+
+  // Хранилище турниров и задачи дня: работает ли перенос в Postgres.
+  //
+  // Проверка НАМЕРЕННО мягкая к 404: на момент её написания перенос лежит в
+  // невлитой ветке, и жёсткое требование сделало бы смок красным до самой
+  // выкатки. Красный по расписанию перестают читать вместе с настоящей находкой
+  // внутри. Как только код доедет — ручка появится, и проверка станет строгой
+  // сама собой, без правок.
+  for (const [label, path_] of [
+    ["турниры", "/api/cyberchess-tournaments/_persistence"],
+    ["задача дня", "/api/cyberchess-daily/_persistence"],
+  ]) {
+    r = await req("GET", path_);
+    if (r.status === 404) {
+      ok(`хранилище ${label}: ручки ещё нет на проде`, "перенос не выкачен");
+      continue;
+    }
+    if (r.status !== 200) {
+      bad(`хранилище ${label}`, `${r.status}`);
+      continue;
+    }
+    const db = r.body?.db || r.body?.persistence?.db || {};
+    if (!db.configured) {
+      // На проде DATABASE_URL есть — значит модуль его не увидел.
+      bad(`хранилище ${label}: база не настроена`, "данные живут на файле и теряются при деплое");
+    } else if (!db.connected) {
+      bad(`хранилище ${label}: подключиться не вышло`, `причина: ${db.lastErrorKind || "неизвестна"}`);
+    } else if (Number(db.saveErrors) > 0) {
+      bad(`хранилище ${label}: ошибки записи`, `${db.saveErrors}, причина: ${db.lastErrorKind || "неизвестна"}`);
+    } else {
+      ok(`хранилище ${label}`, `подключено, записей ${db.saves}, из базы поднято: ${db.adoptedFromDb}`);
+    }
+  }
+
   // Upcoming events — public.
   r = await req("GET", "/api/cyberchess/upcoming");
   if (r.status === 200) ok("GET /cyberchess/upcoming → 200");

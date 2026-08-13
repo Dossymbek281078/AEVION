@@ -17,17 +17,28 @@
 // notification + redirect URL.
 
 import { Router, type Request, type Response } from "express";
+import { clientIp } from "../lib/rateLimit";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { getPool } from "../lib/dbPool";
 import {
   createPreMatchedMatch,
+  onMatchSettled,
   ALLOWED_TIME_CONTROLS,
   type TimeControl as MmTimeControl,
 } from "./cyberchessMatchmaking";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { verifyWebhookSig } from "../lib/webhookSig";
+import { requireProdSecret } from "../lib/qsignSecret";
 
 const capture = makeServiceCapture("cyberchessTournaments");
+
+// Result reporting shares the CyberChess webhook secret — same service, same
+// sender as /api/cyberchess/tournament-finalized, so no second secret to
+// rotate. Resolved lazily: throwing at module load would take the whole
+// server down on a misconfigured deploy.
+const getResultSecret = () => requireProdSecret("CYBERCHESS_WEBHOOK_SECRET", "dev-chess-webhook");
 
 const router = Router();
 
@@ -98,36 +109,277 @@ export interface Tournament {
   swissRounds?: number; // total rounds for swiss
   currentRound?: number; // 1-based, points to round currently in play / next
   registeredUserIds: string[]; // duplicate-check
+  /**
+   * userId → ticket issued at registration. Persisted with the tournament:
+   * the ticket is shown to the player as proof they are in, so it has to be
+   * something the server can still recognise afterwards. Optional because
+   * tournaments stored before this existed have no tickets.
+   */
+  tickets?: Record<string, string>;
   roster: Player[]; // active player roster (for swiss/RR)
   rounds: BracketRound[]; // all generated rounds so far
   // real-player extension (default false → legacy behaviour preserved)
   realPlayers?: boolean;
+  /**
+   * Кто завёл турнир: `seed` — фикстура из кода, `user` — кто угодно через
+   * POST /. Создание открыто и не требует входа (ограничено пятью в десять
+   * минут с адреса), а приз объявляется в теле запроса — до десяти миллионов
+   * Chessy. Платит призы только подписанный вебхук, то есть объявленное число
+   * ничем не обеспечено; на публичной странице такой турнир при этом несёт
+   * самую сильную подпись — «настоящие игроки».
+   *
+   * Отличать по префиксу `usr-` в идентификаторе нельзя: это совпадение имени,
+   * а не признак. Отсутствует у турниров, сохранённых до появления поля.
+   */
+  origin?: "seed" | "user";
 }
 
 // ── persistence layer ──────────────────────────────────────────────
 
-const DATA_DIR = path.resolve(process.cwd(), "data");
+// Overridable so a test run can point the store at a scratch directory. The
+// real file is committed to the repository and holds live registrations and
+// results — a suite that rewrites it would look green while destroying data.
+const DATA_DIR = process.env.CYBERCHESS_TOURNAMENTS_DIR
+  ? path.resolve(process.env.CYBERCHESS_TOURNAMENTS_DIR)
+  : path.resolve(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "cyberchess-tournaments.json");
 
-let PERSIST_OK = true;
+/**
+ * Пауза записи после отказа. Ноль — пишем. См. tryWriteToDisk: раньше здесь
+ * стояла защёлка «больше не пытаться», из-за которой один временный сбой
+ * оставлял все последующие регистрации только в памяти.
+ */
+let persistPausedUntil = 0;
+/** Подряд идущие отказы — чтобы жаловаться в лог не один раз и всё громче. */
+let persistFailures = 0;
+const PERSIST_RETRY_MS = 60_000;
 let TOURNAMENTS: Tournament[] = [];
 
-function tryLoadFromDisk(): Tournament[] | null {
+// ⚠️ ПОПРАВКА 13.08 (вечер): причина ниже описана НЕВЕРНО.
+// У сервиса на Railway примонтирован постоянный том `aevion-volume` по пути
+// `/app/aevion-globus-backend/data` — ровно туда, где лежит этот файл. Проверено
+// командой `railway volume list`. Значит деплой файл НЕ стирает, и мотивировка
+// «файловая система контейнера временная» к нам не относится.
+//
+// Что остаётся верным и ради чего этот код всё же нужен:
+//   * вторая копия в базе, независимая от тома (том привязан к сервису: пересоздали
+//     сервис — тома нет);
+//   * состояние становится запрашиваемым и попадает в бэкапы Postgres;
+//   * при нескольких процессах строка-на-объект корректна, а файл целиком — нет.
+// Срочности, которую я приписал этой работе, не было. Полезность осталась.
+// ── Postgres как основное хранилище, файл — запасное ────────────────
+//
+// ЗАЧЕМ. Файловая система контейнера временная: при каждом деплое Railway
+// поднимает новый контейнер из образа, то есть с той версией файла, что лежит в
+// репозитории. Всё, что игроки нарегистрировали и наиграли с прошлого деплоя,
+// откатывалось к состоянию из git — не с ошибкой, а молча. Плюс реплик бывает
+// больше одной (замер в docs/RATELIMIT_KNOWN_LIMITATIONS.md), и тогда
+// регистрация, попавшая в один процесс, невидима другому.
+//
+// УСТРОЙСТВО. Состояние хранится целиком, одной строкой JSONB, — той же
+// гранулярностью, что и файл, чтобы не заводить второй способ описывать одно и
+// то же. `savedAt` решает, кто свежее: база или файл. Без DATABASE_URL всё
+// работает ровно как раньше, на файле.
+//
+// ЧЕГО ЭТО НЕ РЕШАЕТ, честно: одновременная запись из двух реплик по-прежнему
+// "кто последний, тот и прав" на уровне всего состояния. Это следующий шаг —
+// построчное хранение турниров; сейчас закрыта потеря при деплое, которая
+// случается каждый день, а не гонка, которая требует совпадения по секундам.
+let dbPool: any = null;
+let dbTried = false;
+/** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
+const dbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, saveErrors: 0, lastErrorKind: null as string | null };
+/** Момент последнего сохранения состояния — по нему выбирается свежая копия. */
+let savedAtMs = 0;
+
+/**
+ * Ошибка базы, сведённая к КАТЕГОРИИ.
+ *
+ * Ручка `_persistence` публичная, а сырое сообщение pg содержит инфраструктуру:
+ * «connect ECONNREFUSED 10.0.0.5:5432», «password authentication failed for
+ * user "aevion"», «database "x" does not exist». Я сам написал в коммите, что
+ * диагностика не должна выдавать то, что считает, — и тут же оставил текст
+ * ошибки наружу. Полное сообщение уходит в лог, наружу едет только слово.
+ */
+function dbErrorKind(e: unknown): "connect" | "auth" | "timeout" | "schema" | "query" {
+  const m = (e as Error)?.message?.toLowerCase() ?? "";
+  if (m.includes("econnrefused") || m.includes("enotfound") || m.includes("ehostunreach")) return "connect";
+  if (m.includes("password") || m.includes("authentication") || m.includes("role ")) return "auth";
+  if (m.includes("timeout") || m.includes("terminated")) return "timeout";
+  if (m.includes("does not exist") || m.includes("column") || m.includes("relation")) return "schema";
+  return "query";
+}
+
+async function ensureTournamentDb(): Promise<any> {
+  if (dbTried) return dbPool;
+  dbTried = true;
+  if (!process.env.DATABASE_URL) return null;
+  dbHealth.configured = true;
   try {
-    if (!fs.existsSync(DATA_FILE)) return null;
-    const raw = fs.readFileSync(DATA_FILE, "utf-8");
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed?.tournaments)) return null;
-    return parsed.tournaments as Tournament[];
+    // Общий пул из lib/dbPool, а не свой: в нём уже настроены таймауты
+    // (подключение 5 с, запрос 10 с) и keep-alive. Свой пул без них означал
+    // бы, что при недоступной базе запрос висит сколько угодно — а ожидание
+    // готовности стоит перед ВСЕМИ маршрутами модуля, то есть повис бы весь
+    // модуль вместо того, чтобы честно работать на файле. Плюс это второй
+    // способ делать то, что в репозитории уже делается одним.
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "CyberTournament" (
+        "id"        TEXT PRIMARY KEY,
+        "data"      JSONB NOT NULL,
+        -- Миллисекунды числом, а не TIMESTAMP. У колонки без часового пояса
+        -- смысл зависит от того, кто её читает: драйвер разбирает такое
+        -- значение в поясе КЛИЕНТА, а писал его сервер в своём. Разница в часах
+        -- — и сравнение «что свежее, файл или база» молча даёт неверный ответ:
+        -- старая копия побеждает новую. Число не зависит ни от чьего пояса.
+        "savedAtMs" BIGINT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS "cybertournament_savedat_idx" ON "CyberTournament" ("savedAtMs" DESC);
+    `);
+    dbPool = pool;
+    dbHealth.connected = true;
+    console.log("[cyberchess-tournaments] pg connected — состояние турниров переживёт деплой");
+    return pool;
   } catch (e) {
-    console.warn("[cyberchess-tournaments] load failed:", (e as Error).message);
-    capture(e);
+    console.warn("[cyberchess-tournaments] pg init failed:", (e as Error).message);
     return null;
   }
 }
 
+/** Прочитать состояние из базы. null — нечего или не смогли (это разные вещи в логе). */
+async function loadFromDb(): Promise<{ tournaments: Tournament[]; savedAtMs: number } | null> {
+  const pool = await ensureTournamentDb();
+  if (!pool) return null;
+  try {
+    const r = await pool.query(`SELECT "data","savedAtMs" FROM "CyberTournament"`);
+    const rows = r.rows ?? [];
+    if (rows.length === 0) return null;
+    const list: Tournament[] = [];
+    let newest = 0;
+    for (const row of rows) {
+      if (!row?.data || typeof row.data.id !== "string") continue; // строка не той формы — пропускаем её, а не весь набор
+      list.push(row.data as Tournament);
+      const t = Number(row.savedAtMs);
+      if (Number.isFinite(t) && t > newest) newest = t;
+    }
+    if (list.length === 0) {
+      console.error("[cyberchess-tournaments] в базе есть строки, но ни одной разобранной — беру файл");
+      return null;
+    }
+    return { tournaments: list, savedAtMs: newest };
+  } catch (e) {
+    console.error("[cyberchess-tournaments] чтение состояния из базы не прошло:", (e as Error).message);
+    return null;
+  }
+}
+
+/** Зеркалировать состояние в базу. Не бросает: путь регистрации не должен падать из-за базы. */
+async function saveToDb(list: Tournament[], stamp: number): Promise<void> {
+  if (dbHealth.abandoned) return; // см. storeReadyBounded: писать поверх неизвестного нельзя
+  const pool = await ensureTournamentDb();
+  if (!pool) return;
+  try {
+    // СТРОКА НА ТУРНИР, а не одно состояние целиком.
+    //
+    // Целиком было структурно неверно при двух живых процессах — а это каждый
+    // деплой, пока старая реплика ещё дослуживает. Обе держат ПОЛНУЮ копию в
+    // памяти: реплика A записывает свой набор со своим новым турниром,
+    // реплика B следом записывает свой — без него. Турнир исчезает, и это не
+    // редкая гонка, а обычный ход событий.
+    //
+    // По строкам конфликтуют только правки ОДНОГО турнира; разные турниры
+    // независимы. Условие на savedAt оставлено и здесь: оно защищает от
+    // прихода сохранений не в том порядке (запись намеренно не блокирует
+    // ответ игроку).
+    //
+    // Удаления нет намеренно: строку, которой нет в памяти ЭТОГО процесса,
+    // нельзя считать лишней — её мог только что завести сосед.
+    for (const t of list) {
+      await pool.query(
+        `INSERT INTO "CyberTournament" ("id","data","savedAtMs") VALUES ($1,$2,$3)
+         ON CONFLICT ("id") DO UPDATE SET "data"=EXCLUDED."data","savedAtMs"=EXCLUDED."savedAtMs"
+         WHERE "CyberTournament"."savedAtMs" <= EXCLUDED."savedAtMs"`,
+        [t.id, JSON.stringify(t), stamp],
+      );
+    }
+    dbHealth.saves += 1;
+  } catch (e) {
+    dbHealth.saveErrors += 1;
+    dbHealth.lastErrorKind = dbErrorKind(e);
+    console.error("[cyberchess-tournaments] запись состояния в базу не прошла:", (e as Error).message);
+  }
+}
+
+
+/**
+ * Файл есть, но прочитать его не удалось. Это НЕ «файла нет».
+ *
+ * Раньше оба случая возвращали null, а initStore на null писал на диск
+ * ФИКСТУРЫ. То есть одна ошибка чтения — испорченный JSON, нехватка прав,
+ * неожиданная форма содержимого — заменяла все регистрации и результаты
+ * демо-турнирами прямо на старте процесса, без чьего-либо участия и без единого
+ * сообщения. Атомарная запись через переименование, о которой сказано ниже,
+ * защищает только от обрыва посреди записи, а не от остальных причин.
+ */
+let storeDegraded = false;
+
+type LoadResult = { ok: true; tournaments: Tournament[] | null } | { ok: false };
+
+function tryLoadFromDisk(): LoadResult {
+  try {
+    if (!fs.existsSync(DATA_FILE)) return { ok: true, tournaments: null }; // файла нет — честно пусто
+    const raw = fs.readFileSync(DATA_FILE, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed?.tournaments)) {
+      const t = parsed.savedAt ? new Date(parsed.savedAt).getTime() : 0;
+      savedAtMs = Number.isFinite(t) ? t : 0;
+    }
+    if (!Array.isArray(parsed?.tournaments)) {
+      console.error("[cyberchess-tournaments] файл есть, но не той формы — содержимое неизвестно, запись заблокирована");
+      return { ok: false };
+    }
+    return { ok: true, tournaments: parsed.tournaments as Tournament[] };
+  } catch (e) {
+    console.error("[cyberchess-tournaments] файл не прочитан — запись заблокирована, чтобы не заменить его фикстурами:", (e as Error).message);
+    capture(e);
+    return { ok: false };
+  }
+}
+
+/** Состояние хранилища турниров — читает, ничего не меняет. */
+export function tournamentStoreDegraded(): boolean {
+  return storeDegraded;
+}
+
+/**
+ * Пока файл не читается, модуль не работает целиком: отдавать фикстуры вместо
+ * настоящих турниров нельзя (это выдуманные данные под видом живых), а копить
+ * изменения в памяти бессмысленно — сохранить их всё равно некуда. Каждый
+ * запрос сначала пробует перечитать: причина обычно временная.
+ */
+function degradedGuard(_req: Request, res: Response, next: () => void): void {
+  if (!storeDegraded) return next();
+  const retry = tryLoadFromDisk();
+  if (retry.ok) {
+    storeDegraded = false;
+    TOURNAMENTS = retry.tournaments && retry.tournaments.length > 0 ? retry.tournaments : buildSeedFixtures();
+    return next();
+  }
+  res.status(503).json({ ok: false, error: "tournaments_store_unavailable" });
+}
+
 function tryWriteToDisk(): void {
-  if (!PERSIST_OK) return;
+  // Пауза после отказа, а не отключение навсегда.
+  //
+  // Раньше первая же неудачная запись ставила PERSIST_OK в false «graceful
+  // no-op for subsequent writes» — и с этой секунды регистрации и результаты
+  // жили только в памяти процесса. Отличить это состояние снаружи нельзя:
+  // ручки отвечают 200, игрок видит себя в списке участников, а после
+  // перезапуска не находит ни себя, ни турнира. Причина отказа обычно
+  // временная (полный диск, права, гонка на переименовании), но защёлка
+  // не давала попробовать снова НИ РАЗУ до перезапуска.
+  if (persistPausedUntil > Date.now()) return;
+  if (storeDegraded) return; // содержимое файла неизвестно — не затираем его
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -136,29 +388,75 @@ function tryWriteToDisk(): void {
     // crash/redeploy mid-write can never leave a truncated JSON that silently
     // falls back to seed fixtures (losing every registration/result).
     const tmp = `${DATA_FILE}.tmp`;
+    savedAtMs = Date.now();
     fs.writeFileSync(
       tmp,
-      JSON.stringify({ tournaments: TOURNAMENTS }, null, 2),
+      // savedAt едет в самом файле: по нему решается, что свежее — он или база.
+      JSON.stringify({ savedAt: new Date(savedAtMs).toISOString(), tournaments: TOURNAMENTS }, null, 2),
       "utf-8",
     );
     fs.renameSync(tmp, DATA_FILE);
+    // Зеркало в базе: файловая система контейнера временная, база переживает
+    // деплой. Не ждём — путь регистрации не должен зависеть от скорости базы.
+    void saveToDb(TOURNAMENTS, savedAtMs);
+    // Запись удалась — прошлые отказы больше ничего не значат.
+    persistFailures = 0;
+    persistPausedUntil = 0;
   } catch (e) {
-    console.warn(
-      "[cyberchess-tournaments] persistence disabled (write failed):",
+    persistFailures += 1;
+    persistPausedUntil = Date.now() + PERSIST_RETRY_MS;
+    // Жалуемся КАЖДЫЙ раз, а не единожды при переходе в отказ: пока запись не
+    // проходит, турнирные данные живут только в памяти этого процесса, и
+    // молчание после первой строки читалось бы как «всё наладилось».
+    console.error(
+      `[cyberchess-tournaments] запись не прошла (${persistFailures} подряд), следующая попытка через ${PERSIST_RETRY_MS / 1000} с — регистрации и результаты сейчас только в памяти процесса:`,
       (e as Error).message,
     );
-    PERSIST_OK = false; // graceful no-op for subsequent writes
   }
 }
 
+/** Состояние записи на диск — для диагностики; читает, ничего не меняет. */
+export function tournamentPersistenceState(): {
+  healthy: boolean;
+  consecutiveFailures: number;
+  pausedForMs: number;
+  db: typeof dbHealth;
+} {
+  const pausedForMs = Math.max(0, persistPausedUntil - Date.now());
+  return {
+    healthy: persistFailures === 0,
+    consecutiveFailures: persistFailures,
+    pausedForMs,
+    // Состояние базы отдаётся наружу намеренно: запросы к Postgres здесь ни
+    // разу не выполнялись на настоящем сервере — локально его нет. Значит
+    // ответить, работает ли перенос, должен первый же деплой, а не наша вера в
+    // правильность SQL. Числа, не данные: имён и содержимого тут нет.
+    db: { ...dbHealth },
+  };
+}
+
 function initStore(): void {
-  // try filesystem first; if unavailable, fall back to seed fixtures in memory
-  const loaded = tryLoadFromDisk();
+  const result = tryLoadFromDisk();
+  if (!result.ok) {
+    // Содержимое файла неизвестно. Ни писать поверх, ни выдавать фикстуры за
+    // настоящие турниры нельзя — модуль отвечает отказом, пока файл не
+    // прочитается (см. degradedGuard).
+    storeDegraded = true;
+    TOURNAMENTS = [];
+    return;
+  }
+  const loaded = result.tournaments;
   if (loaded && loaded.length > 0) {
     TOURNAMENTS = loaded;
     // backfill new fields on legacy persisted data
     for (const t of TOURNAMENTS) {
       if (typeof t.realPlayers === "undefined") t.realPlayers = false;
+      // Происхождение дозаполняется ЗДЕСЬ, а не в каждом читателе. Список
+      // считал запасное значение сам, а ручка одного турнира отдаёт объект как
+      // есть — и страница этого турнира осталась бы без подписи именно у тех
+      // записей, ради которых запасное правило и писалось. Один раз при
+      // загрузке — и все читатели видят одно и то же.
+      if (typeof t.origin === "undefined") t.origin = t.id.startsWith("usr-") ? "user" : "seed";
     }
     return;
   }
@@ -200,6 +498,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: buildLegacyElimRounds(),
     realPlayers: false,
+    origin: "seed",
   };
 
   const elim2: Tournament = {
@@ -219,6 +518,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: buildLegacyElimRounds(),
     realPlayers: false,
+    origin: "seed",
   };
 
   // --- swiss #1 (8-player, 5 rounds) ---
@@ -251,6 +551,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: swissRoster1,
     rounds: [],
     realPlayers: false,
+    origin: "seed",
   };
   // generate first round so /next-round and /standings have data
   swiss1.rounds = [
@@ -296,6 +597,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: swissRoster2,
     rounds: [],
     realPlayers: false,
+    origin: "seed",
   };
 
   // --- round-robin #1 (8-player) ---
@@ -327,6 +629,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: rrRoster1,
     rounds: buildRoundRobinSchedule(rr1RosterToIds(rrRoster1), "classic-rr-may"),
     realPlayers: false,
+    origin: "seed",
   };
 
   // --- round-robin #2 (6-player rapid) ---
@@ -356,6 +659,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: rrRoster2,
     rounds: buildRoundRobinSchedule(rr1RosterToIds(rrRoster2), "rapid-rr-mini"),
     realPlayers: false,
+    origin: "seed",
   };
 
   // --- extras kept from legacy mock list (single elim) ---
@@ -375,6 +679,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: buildLegacyElimRounds(),
     realPlayers: false,
+    origin: "seed",
   };
   const elimLegacy4: Tournament = {
     id: "bullet-storm-7",
@@ -392,6 +697,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: [],
     realPlayers: false,
+    origin: "seed",
   };
   const elimLegacy5: Tournament = {
     id: "veterans-cup",
@@ -409,6 +715,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: [],
     realPlayers: false,
+    origin: "seed",
   };
   const elimLegacy6: Tournament = {
     id: "winter-arena-12",
@@ -426,6 +733,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: buildLegacyElimRounds(),
     realPlayers: false,
+    origin: "seed",
   };
   const elimLegacy7: Tournament = {
     id: "newbies-rapid",
@@ -443,6 +751,7 @@ function buildSeedFixtures(): Tournament[] {
     roster: [],
     rounds: [],
     realPlayers: false,
+    origin: "seed",
   };
 
   // --- real-player demo tournament (small swiss, realPlayers=true) ---
@@ -994,6 +1303,128 @@ function publishRoundToMatchmaking(t: Tournament, matches: BracketMatch[]): void
 
 initStore();
 
+/**
+ * Догрузка из базы — асинхронная, поэтому маршруты её ЖДУТ.
+ *
+ * Соблазн был сделать «загрузили файл синхронно, а базу подхватим когда
+ * придёт». Так нельзя: между стартом и приходом ответа кто-то успевает
+ * зарегистрироваться, его запись ложится поверх файловой копии, а потом
+ * прилетает состояние из базы и стирает её. Дефект того же класса, что чинили
+ * весь вчерашний день, только рождённый починкой.
+ *
+ * Поэтому ожидание стоит перед всеми маршрутами (ниже), а не «где-нибудь».
+ * После первого запроса промис уже разрешён и стоит наносекунды.
+ */
+/**
+ * Сколько ждём базу на старте. У общего пула свои таймауты (5 с подключение,
+ * 10 с запрос), поэтому в норме сюда не упирается никогда. Это страховка от
+ * патологии: ожидание стоит перед ВСЕМИ маршрутами, и без предела один
+ * зависший сокет повесил бы модуль целиком.
+ */
+const READY_MAX_MS = Number(process.env.CYBERCHESS_DB_READY_MS ?? 20_000);
+
+const storeReady: Promise<void> = (async () => {
+  const fromDb = await loadFromDb();
+  // Пока ждали, ожидание могли бросить по времени. Подхватывать состояние
+  // ПОСЛЕ того, как маршруты начали отвечать, нельзя: между этими моментами
+  // кто-то успевает записаться, и прилетевшая копия его сотрёт.
+  if (dbHealth.abandoned) {
+    console.error("[cyberchess-tournaments] ответ базы пришёл слишком поздно — состояние не подхватываю, работаю на файле");
+    return;
+  }
+  if (!fromDb) return; // базы нет или в ней пусто — живём на файле, как раньше
+  if (fromDb.savedAtMs <= savedAtMs) return; // файл свежее или ровесник — не трогаем
+  TOURNAMENTS = fromDb.tournaments;
+  savedAtMs = fromDb.savedAtMs;
+  dbHealth.adoptedFromDb = true;
+  for (const t of TOURNAMENTS) {
+    if (typeof t.realPlayers === "undefined") t.realPlayers = false;
+    if (typeof t.origin === "undefined") t.origin = t.id.startsWith("usr-") ? "user" : "seed";
+  }
+  console.log(`[cyberchess-tournaments] состояние взято из базы (${TOURNAMENTS.length} турниров) — она свежее файла`);
+})().catch((e) => {
+  console.error("[cyberchess-tournaments] догрузка из базы не удалась, остаёмся на файле:", (e as Error).message);
+});
+
+// Ожидание готовности — ДО всех маршрутов, включая degradedGuard.
+/**
+ * Признак «ожидание уже завершилось». Без него таймер срабатывал ВСЕГДА — и
+ * через 20 секунд после старта выключал запись в базу даже при полностью
+ * здоровой базе. Поймано живым прогоном: диагностика показала `abandoned: true`
+ * при мгновенно ответившем модуле. Гонка выиграна — таймер надо снимать, а не
+ * оставлять тикать.
+ */
+let readySettled = false;
+
+const storeReadyBounded: Promise<void> = Promise.race([
+  storeReady.then(() => {
+    readySettled = true;
+  }),
+  new Promise<void>((resolve) => {
+    const t = setTimeout(() => {
+      if (readySettled) return resolve(); // успели — бросать нечего
+      // База не ответила за отведённое время. Дальше работаем на файле и
+      // БОЛЬШЕ НЕ ПИШЕМ в базу: наша файловая копия свежее по метке, и запись
+      // затёрла бы то, что там лежит, — а лежать может всё, что наиграли.
+      dbHealth.abandoned = true;
+      console.error(`[cyberchess-tournaments] база не ответила за ${READY_MAX_MS} мс — работаю на файле, запись в базу выключена`);
+      resolve();
+    }, READY_MAX_MS);
+    (t as unknown as { unref?: () => void }).unref?.(); // таймер не держит процесс
+  }),
+]);
+
+router.use(async (_req: Request, _res: Response, next: () => void) => {
+  await storeReadyBounded;
+  next();
+});
+
+// Пока файл турниров не прочитан, ни один маршрут не работает: отдавать
+// фикстуры под видом настоящих турниров и копить изменения, которые некуда
+// сохранить, — хуже честного отказа. Страж сам пробует перечитать файл.
+router.use(degradedGuard);
+
+/* Партия турнира кончилась — закрываем пару в сетке.
+ *
+ * До 10.08.2026 этого звена не было. Пары публиковались в матчмейкинг
+ * (`publishRoundToMatchmaking` → `createPreMatchedMatch`), партии игрались,
+ * сервер сам определял исход и пересчитывал рейтинг — а сетка об этом не узнавала.
+ * Закрыть пару умеет только `applyResultToMatch`, а единственный путь к ней,
+ * `POST /:id/result`, не звал НИКТО: ни клиент (ни одного обращения во всём
+ * фронтенде), ни сервер. Настоящий турнир навсегда застревал на первом круге;
+ * выглядел он при этом здоровым, потому что показательный турнир зашит уже
+ * сыгранным.
+ *
+ * Цвета не переставляем: белые в паре становятся белыми в матче — так их передаёт
+ * `publishRoundToMatchmaking` в `createPreMatchedMatch`, — поэтому исход матчмейкинга
+ * ложится на пару один в один. Связь ищем по `liveMatchId`, который проставила
+ * публикация круга.
+ */
+onMatchSettled(({ matchId, tournamentId, result }) => {
+  if (!tournamentId) return;
+  const t = TOURNAMENTS.find((x) => x.id === tournamentId);
+  if (!t) return;
+  let match: BracketMatch | undefined;
+  for (const r of t.rounds) {
+    match = r.matches.find((m) => m.liveMatchId === matchId);
+    if (match) break;
+  }
+  // Пары нет или её уже закрыли вручную через /result — второй раз не считаем.
+  if (!match || match.status === "done") return;
+  applyResultToMatch(t, match, result);
+  maybeAdvanceSwiss(t);
+  maybeAdvanceRR(t);
+  tryWriteToDisk();
+});
+
+// GET /_persistence — диагностика хранилища: только числа и признаки, никаких
+// данных игроков. Существует ради одного вопроса, на который иначе пришлось бы
+// отвечать верой: работает ли перенос состояния в базу на реальном сервере.
+// После деплоя достаточно одного GET.
+router.get("/_persistence", (_req: Request, res: Response): void => {
+  res.json({ ok: true, tournaments: TOURNAMENTS.length, persistence: tournamentPersistenceState() });
+});
+
 // GET /list
 router.get("/list", (req: Request, res: Response): void => {
   const format = String(req.query.format || "").toLowerCase();
@@ -1018,6 +1449,9 @@ router.get("/list", (req: Request, res: Response): void => {
     swissRounds: t.swissRounds,
     currentRound: t.currentRound,
     realPlayers: !!t.realPlayers,
+    // Происхождение едет в списке: страница рисует приз именно отсюда, и без
+    // этого поля не может сказать, объявил его создатель или это наша фикстура.
+    origin: t.origin ?? (t.id.startsWith("usr-") ? "user" : "seed"),
   }));
   res.json({ ok: true, count: slim.length, tournaments: slim });
 });
@@ -1066,7 +1500,15 @@ router.post("/:id/register", (req: Request, res: Response): void => {
     (typeof req.body?.displayName === "string" && req.body.displayName.trim()) ||
     `Player_${userId.slice(-4)}`;
   if (t.registeredUserIds.includes(userId)) {
-    res.status(409).json({ ok: false, error: "already_registered", userId });
+    // The ticket comes back with the refusal. Without it a player who cleared
+    // the browser had no way to recover it: registering again is refused, and
+    // the ticket lived only in that one tab.
+    res.status(409).json({
+      ok: false,
+      error: "already_registered",
+      userId,
+      ticketId: t.tickets?.[userId] ?? null,
+    });
     return;
   }
   t.registeredUserIds.push(userId);
@@ -1096,8 +1538,16 @@ router.post("/:id/register", (req: Request, res: Response): void => {
     }
   }
 
-  tryWriteToDisk();
+  // The ticket is issued BEFORE the write, so what the player is shown is what
+  // was stored. It used to be minted after it, purely for the response, and
+  // was then thrown away: the page printed "ticket tkt_…" as proof of entry
+  // while the server had never heard of that string and could not confirm it
+  // for the player, for support, or at the door of the tournament.
   const ticketId = `tkt_${randomUUID()}`;
+  if (!t.tickets) t.tickets = {};
+  t.tickets[userId] = ticketId;
+
+  tryWriteToDisk();
   res.json({
     ok: true,
     ticketId,
@@ -1178,7 +1628,33 @@ router.get("/:id/next-round", (req: Request, res: Response): void => {
 });
 
 // POST /:id/result   { matchId, winner: "white"|"black"|"draw" }
+// POST /:id/result — closes a bracket pair and recomputes standings.
+//
+// Signed, unlike the rest of this router. The other endpoints are open on
+// purpose: CyberChess has no accounts, so a player registers under an id their
+// own browser generates and there is nothing to authenticate against. This one
+// is different in kind — it decides who won, which drives standings, placement
+// and the prize podium. Left open, anyone who knows a tournament id could hand
+// themselves the tournament from outside the product.
+//
+// Nothing in the product calls it: real games settle through
+// onMatchSettled() inside the matchmaking module, an in-process call that does
+// not pass through here. It exists for the tournament service to report
+// results, and that sender can sign — same secret and same verification chain
+// as /api/cyberchess/tournament-finalized.
 router.post("/:id/result", (req: Request, res: Response): void => {
+  const verdict = verifyWebhookSig({
+    signature: req.headers["x-aevion-signature"],
+    timestamp: req.headers["x-aevion-timestamp"],
+    legacySecret: req.headers["x-cyberchess-secret"],
+    body: req.body,
+    secret: getResultSecret(),
+  });
+  if (!verdict.ok) {
+    res.status(401).json({ ok: false, error: "invalid_signature", reason: verdict.reason });
+    return;
+  }
+
   const t = TOURNAMENTS.find((x) => x.id === req.params.id);
   if (!t) {
     res.status(404).json({ ok: false, error: "tournament_not_found", id: req.params.id });
@@ -1426,12 +1902,10 @@ function createRateOk(ip: string): boolean {
 
 // POST / — create a tournament
 router.post("/", (req: Request, res: Response): void => {
-  const ip =
-    (typeof req.headers["x-forwarded-for"] === "string"
-      ? (req.headers["x-forwarded-for"] as string).split(",")[0].trim()
-      : "") ||
-    req.ip ||
-    "unknown";
+  // clientIp, not the raw header: the leftmost X-Forwarded-For entry is written
+  // by the caller, so varying it gave every request a fresh bucket and this
+  // creation limit never fired.
+  const ip = clientIp(req);
   if (!createRateOk(ip)) {
     res.status(429).json({ ok: false, error: "rate_limited", hint: "too many tournaments created; try later" });
     return;
@@ -1481,6 +1955,7 @@ router.post("/", (req: Request, res: Response): void => {
     roster: [],
     rounds: [],
     realPlayers: true, // user-created events are joinable, not cosmetic seeds
+    origin: "user",
   };
 
   // Auto-register the creator as the first participant when identified.

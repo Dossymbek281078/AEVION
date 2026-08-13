@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
+import { emailSenderStatus } from "./routes/provisioning";
 dotenv.config();
 
 import express from "express";
@@ -203,6 +204,11 @@ function healthPayload() {
     // без него прод отдаёт SHA-512, который наше же описание API называет
     // «NOT a cryptographic signature». Теперь проверяется одним запросом.
     qsign: safeDilithiumStatus(),
+    // Письмо после покупки. Без ключа отправка «успешна» и молча уходит в лог:
+    // покупатель не получает ни что он купил, ни как этим пользоваться, а
+    // снаружи это неотличимо от исправной работы. Признак и адрес отправителя,
+    // ключ не отдаём.
+    emailSender: safeEmailSenderStatus(),
   };
 }
 
@@ -212,6 +218,15 @@ function safeDilithiumStatus() {
     return dilithiumStatus();
   } catch {
     return { mode: null, reason: null };
+  }
+}
+
+/** health не должен падать из-за диагностики. */
+function safeEmailSenderStatus() {
+  try {
+    return emailSenderStatus();
+  } catch {
+    return { configured: null, from: null, mode: null };
   }
 }
 

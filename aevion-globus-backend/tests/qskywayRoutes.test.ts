@@ -117,6 +117,40 @@ describe("POST /route/justification — the filing", () => {
     expect(j.body.document).toHaveProperty("substitutedHeights");
   });
 
+  /**
+   * Документы версии /1 уже выданы. Они проверяются как подлинные — и это
+   * верно, — но в ТОЙ версии оговорка о границах лежала СНАРУЖИ подписи:
+   * её можно было отбросить при пересылке, и документ всё равно прошёл бы
+   * проверку. Ответ обязан это называть, иначе сегодняшняя починка защищает
+   * только новые бумаги.
+   */
+  test("проверка называет версию формата и оговаривает старую", async () => {
+    const fresh = await request(app).post("/api/qskyway/route/justification").send({ from: 1, to: 2, city: "nyc" });
+    const vNew = await request(app).post("/api/qskyway/route/justification/verify")
+      .send({ document: fresh.body.document, attestation: fresh.body.attestation });
+    expect(vNew.body.documentFormat).toBe("qskyway.route.justification/2");
+    expect(vNew.body.scopeUnderSignature).toBe(true);
+    expect(String(vNew.body.formatNote)).toContain("покрыта подписью");
+
+    // Документ прежнего формата. Подписывать заново не нужно и нечем: ключ
+    // модуля наружу не экспортируется, а проверяемые здесь поля считаются по
+    // САМОМУ документу и от подписи не зависят — что и требуется утверждать.
+    const legacy = { ...fresh.body.document, kind: "qskyway.route.justification/1" };
+    const vOld = await request(app).post("/api/qskyway/route/justification/verify")
+      .send({ document: legacy, attestation: fresh.body.attestation });
+    expect(vOld.body.documentFormat).toBe("qskyway.route.justification/1");
+    expect(vOld.body.scopeUnderSignature).toBe(false);
+    expect(String(vOld.body.formatNote)).toContain("НЕ покрыта подписью");
+
+    // Бланк без версии — отдельный случай, его нельзя путать со старым форматом.
+    const noKind = { ...fresh.body.document };
+    delete (noKind as Record<string, unknown>).kind;
+    const vNone = await request(app).post("/api/qskyway/route/justification/verify")
+      .send({ document: noKind, attestation: fresh.body.attestation });
+    expect(vNone.body.documentFormat).toBeNull();
+    expect(String(vNone.body.formatNote)).toContain("не указана");
+  });
+
   test("a tampered value is reported as a content change, not a bad signature", async () => {
     const j = await request(app).post("/api/qskyway/route/justification").send({ from: 1, to: 2, city: "nyc" });
     const v = await request(app)

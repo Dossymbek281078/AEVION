@@ -1554,11 +1554,36 @@ qskywayRouter.post("/route/justification/verify", (req: Request, res: Response) 
   } catch { signatureValid = false; }
   // Reported separately on purpose: a tampered value and a forged signature are
   // different failures, and one verdict would hide which happened.
+  // Версия формата проверяемого документа — и оговорка, если она старая.
+  //
+  // До 13.08.2026 ручка на `kind` не смотрела вовсе. Документ версии /1
+  // проходил проверку как валидный, и ничто не говорило, что в ТОЙ версии
+  // оговорка о границах лежала СНАРУЖИ подписи: её можно было отбросить при
+  // пересылке, а документ всё равно проверился бы подлинным. Сегодняшняя
+  // починка (перенос `scope` внутрь) защищает только новые бумаги — старые уже
+  // выданы, и проверяющий должен знать, что держит в руках.
+  const kind = typeof document.kind === "string" ? document.kind : null;
+  const legacyScope = kind !== "qskyway.route.justification/2";
+  const formatNote = !kind
+    ? "Версия формата в документе не указана — это не наш бланк либо он изменён."
+    : legacyScope
+      ? `Формат ${kind}: в этой версии оговорка о границах НЕ покрыта подписью — она передавалась рядом с документом и могла быть отброшена при пересылке. Подлинность содержимого это не отменяет, но отсутствие оговорки в такой бумаге ничего не доказывает.`
+      : `Формат ${kind}: оговорка о границах покрыта подписью и не могла быть отброшена по дороге.`;
+  const formatNoteEn = !kind
+    ? "The document states no format version — this is not our form, or it was altered."
+    : legacyScope
+      ? `Format ${kind}: in this version the scope disclaimer is NOT covered by the signature — it travelled next to the document and may have been dropped in transit. That does not affect authenticity of the contents, but the absence of a disclaimer in such a document proves nothing.`
+      : `Format ${kind}: the scope disclaimer is covered by the signature and could not be dropped in transit.`;
+
   res.json({
     valid: hashValid && signatureValid,
     hashValid,
     signatureValid,
     isPlatformKey: signatureValid,
+    documentFormat: kind,
+    scopeUnderSignature: !legacyScope && !!kind,
+    formatNote,
+    formatNoteEn,
     note: hashValid
       ? signatureValid ? "Документ подписан ключом платформы и не изменён." : "Содержимое цело, но подпись не принадлежит ключу платформы."
       : "Содержимое документа изменено — хэш не совпадает.",

@@ -61,11 +61,20 @@ vi.mock("pg", () => {
   class Pool {
     async query(text: string, params: unknown[] = []) {
       if (/CREATE TABLE/i.test(text)) return { rows: [] };
-      if (/SELECT "state","savedAt"/i.test(text)) {
+      if (/SELECT "userId","entry","stats","savedAt" FROM "CyberDailyEntry"/i.test(text)) {
         await new Promise((r) => setTimeout(r, db.readDelayMs));
-        return { rows: [{ state: db.state, savedAt: db.savedAt }] };
+        // Строка на игрока — так теперь и хранится: два процесса, пишущие
+        // РАЗНЫХ игроков, не стирают друг друга.
+        return {
+          rows: db.state.leaderboard.map((e) => ({
+            userId: e.userId,
+            entry: e,
+            stats: db.state.stats.find((s) => s.userId === e.userId) ?? null,
+            savedAt: db.savedAt,
+          })),
+        };
       }
-      if (/INSERT INTO "CyberDailyState"/i.test(text)) {
+      if (/INSERT INTO "CyberDailyEntry"/i.test(text)) {
         db.writes.push(params);
         return { rows: [] };
       }
@@ -129,21 +138,21 @@ describe("новый контейнер не откатывает игроков
 
     await new Promise((r) => setTimeout(r, 20));
     expect(db.writes.length).toBeGreaterThan(before);
-    const lastState = JSON.parse(String(db.writes[db.writes.length - 1][0])) as {
-      leaderboard: Array<{ userId: string }>;
-      stats: Array<{ userId: string }>;
-    };
-    // В базу едет и таблица, и статистика — иначе на следующем деплое
-    // вернулись бы нули у того, кто только что решил.
-    expect(lastState.leaderboard.map((e) => e.userId)).toContain("newbie");
-    expect(lastState.stats.map((e) => e.userId)).toContain("newbie");
+    // Строка на игрока: свой ищем среди записанных. В той же строке едут и
+    // место в таблице, и статистика — иначе на следующем деплое у решившего
+    // вернулись бы нули.
+    const mine = db.writes.filter((w) => String(w[0]) === "newbie");
+    expect(mine.length).toBeGreaterThan(0);
+    const last = mine[mine.length - 1];
+    expect(JSON.parse(String(last[1])).userId).toBe("newbie"); // строка таблицы
+    expect(JSON.parse(String(last[2])).userId).toBe("newbie"); // его статистика
   });
 });
 
 describe("опоздавшая запись не затирает более свежую", () => {
   test("запрос обновляет строку только если он свежее записанного", () => {
     const src = require("node:fs").readFileSync("src/routes/cyberchessDaily.ts", "utf-8") as string;
-    expect(src).toMatch(/ON CONFLICT[\s\S]{0,900}WHERE "CyberDailyState"\."savedAt" <= EXCLUDED\."savedAt"/);
+    expect(src).toMatch(/ON CONFLICT[\s\S]{0,900}WHERE "CyberDailyEntry"\."savedAt" <= EXCLUDED\."savedAt"/);
   });
 });
 
@@ -171,5 +180,19 @@ describe("после деплоя можно СПРОСИТЬ, а не пред�
 
     expect(asText).not.toContain("Ветеран");
     expect(asText).not.toContain("veteran");
+  });
+});
+
+describe("две живые реплики не стирают решателей друг друга", () => {
+  test("каждая запись адресована своему игроку, а не общей строке", async () => {
+    // Раньше таблица писалась целиком: реплика B перезаписывала её своим
+    // набором, и человек, только что решивший задачу на реплике A, исчезал.
+    const ids = db.writes.map((w) => String(w[0]));
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids).not.toContain("singleton");
+    for (const w of db.writes) {
+      const entry = w[1] ? (JSON.parse(String(w[1])) as { userId: string }) : null;
+      if (entry) expect(entry.userId).toBe(String(w[0]));
+    }
   });
 });

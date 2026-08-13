@@ -251,9 +251,10 @@ async function ensureDailyDb(): Promise<any> {
   try {
     const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS "CyberDailyState" (
-        "id"      TEXT PRIMARY KEY,
-        "state"   JSONB NOT NULL,
+      CREATE TABLE IF NOT EXISTS "CyberDailyEntry" (
+        "userId"  TEXT PRIMARY KEY,
+        "entry"   JSONB,
+        "stats"   JSONB,
         "savedAt" TIMESTAMP NOT NULL DEFAULT now()
       );
     `);
@@ -273,17 +274,26 @@ async function loadDailyFromDb(): Promise<{ state: DailyState; savedAtMs: number
   const pool = await ensureDailyDb();
   if (!pool) return null;
   try {
-    const r = await pool.query(`SELECT "state","savedAt" FROM "CyberDailyState" WHERE "id"='singleton'`);
-    const row = r.rows?.[0];
-    if (!row) return null;
-    const lb = Array.isArray(row.state?.leaderboard) ? (row.state.leaderboard as LeaderEntry[]) : null;
-    if (!lb) {
-      console.error('[cyberchess-daily] строка в базе не той формы — беру файл');
+    const r = await pool.query(`SELECT "userId","entry","stats","savedAt" FROM "CyberDailyEntry"`);
+    const rows = r.rows ?? [];
+    if (rows.length === 0) return null;
+    const lb: LeaderEntry[] = [];
+    const stats: UserStats[] = [];
+    let newest = 0;
+    for (const row of rows) {
+      if (row?.entry && typeof row.entry.userId === 'string') lb.push(row.entry as LeaderEntry);
+      if (row?.stats && typeof row.stats.userId === 'string') stats.push(row.stats as UserStats);
+      const t = row?.savedAt ? new Date(row.savedAt).getTime() : 0;
+      if (Number.isFinite(t) && t > newest) newest = t;
+    }
+    if (lb.length === 0 && stats.length === 0) {
+      console.error('[cyberchess-daily] в базе есть строки, но ни одной разобранной — беру файл');
       return null;
     }
-    const stats = Array.isArray(row.state?.stats) ? (row.state.stats as UserStats[]) : [];
-    const t = row.savedAt ? new Date(row.savedAt).getTime() : 0;
-    return { state: { leaderboard: lb, stats }, savedAtMs: Number.isFinite(t) ? t : 0 };
+    // Порядок таблицы восстанавливается тем же правилом, что и в памяти:
+    // строки в базе независимы и своего порядка не несут.
+    lb.sort((a, b) => b.score - a.score);
+    return { state: { leaderboard: lb.slice(0, LB_MAX), stats }, savedAtMs: newest };
   } catch (e) {
     console.error('[cyberchess-daily] чтение записей из базы не прошло:', (e as Error).message);
     return null;
@@ -295,17 +305,32 @@ async function saveDailyToDb(stamp: number): Promise<void> {
   const pool = await ensureDailyDb();
   if (!pool) return;
   try {
-    await pool.query(
-      `INSERT INTO "CyberDailyState" ("id","state","savedAt") VALUES ('singleton',$1,to_timestamp($2/1000.0))
-       ON CONFLICT ("id") DO UPDATE SET "state"=EXCLUDED."state","savedAt"=EXCLUDED."savedAt"
-       -- Условие делает запись МОНОТОННОЙ: строку обновляет только более
-       -- свежее состояние. Без него два сохранения, отправленные подряд и не
-       -- дождавшиеся друг друга (запись в базу намеренно не блокирует ответ
-       -- игроку), могут прийти в обратном порядке — и старое состояние затрёт
-       -- новое. Ровно та тихая потеря, ради устранения которой всё писалось.
-       WHERE "CyberDailyState"."savedAt" <= EXCLUDED."savedAt"`,
-      [JSON.stringify({ leaderboard: LEADERBOARD, stats: [...userStats.values()] }), stamp],
-    );
+    // СТРОКА НА ИГРОКА, а не вся таблица целиком.
+    //
+    // Целиком было структурно неверно при двух живых процессах — а это каждый
+    // деплой, пока старая реплика дослуживает. Обе держат полную копию:
+    // реплика A пишет таблицу со своим новым решателем, реплика B следом пишет
+    // свою — без него. Человек, решивший задачу, просто исчезает из таблицы.
+    //
+    // По строкам конфликтуют только правки ОДНОГО игрока. Условие на savedAt
+    // оставлено: сохранения не блокируют ответ и могут прийти не по порядку.
+    const byUser = new Map<string, { entry: LeaderEntry | null; stats: UserStats | null }>();
+    for (const e of LEADERBOARD) byUser.set(e.userId, { entry: e, stats: null });
+    for (const st of userStats.values()) {
+      const slot = byUser.get(st.userId) ?? { entry: null, stats: null };
+      slot.stats = st;
+      byUser.set(st.userId, slot);
+    }
+    for (const [uid, slot] of byUser) {
+      await pool.query(
+        `INSERT INTO "CyberDailyEntry" ("userId","entry","stats","savedAt")
+         VALUES ($1,$2,$3,to_timestamp($4/1000.0))
+         ON CONFLICT ("userId") DO UPDATE SET
+           "entry"=EXCLUDED."entry","stats"=EXCLUDED."stats","savedAt"=EXCLUDED."savedAt"
+         WHERE "CyberDailyEntry"."savedAt" <= EXCLUDED."savedAt"`,
+        [uid, slot.entry ? JSON.stringify(slot.entry) : null, slot.stats ? JSON.stringify(slot.stats) : null, stamp],
+      );
+    }
     dailyDbHealth.saves += 1;
   } catch (e) {
     dailyDbHealth.saveErrors += 1;

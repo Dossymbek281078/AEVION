@@ -127,4 +127,28 @@ describe("Lemon Squeezy: заплатил → получил именно куп
     expect(res.status).toBe(500);
     expect(res.body.ok).toBe(false);
   });
+
+  test("возврат ЗАБИРАЕТ доступ к DevHub, а не оставляет его навсегда", async () => {
+    // До 13.08.2026 слова «refund» в обработчике не было вовсе: деньги вернули,
+    // доступ остался. У Gumroad это обработано, у Lemon Squeezy не было —
+    // асимметрия нашлась сверкой двух рельсов.
+    const res = await post({
+      meta: { event_name: "order_refunded" },
+      data: { id: "ord_1", attributes: { user_email: "buyer@test.aev", variant_id: "9001" } },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.action).toBe("devhub_studio_pro_revoked");
+    expect(devhubTiersWritten()).toContain("free");
+  });
+
+  test("разовая покупка по-прежнему открывает доступ", async () => {
+    const res = await post({
+      meta: { event_name: "order_created" },
+      data: { id: "ord_2", attributes: { user_email: "buyer@test.aev", variant_id: "9001" } },
+    });
+
+    expect(res.body.action).toBe("devhub_studio_pro_activated");
+    expect(devhubTiersWritten()).toContain("pro");
+  });
 });

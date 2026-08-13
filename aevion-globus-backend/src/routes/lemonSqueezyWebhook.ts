@@ -185,7 +185,17 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
   const attrs = payload.data?.attributes ?? {};
   const email = (attrs.user_email ?? payload.meta?.custom_data?.email ?? "").trim().toLowerCase();
 
-  if (event === "order_created") {
+  if (event === "order_created" || event === "order_refunded") {
+    // Возврат ЗАБИРАЕТ то, что выдала покупка. До 13.08.2026 слова «refund» в
+    // этом обработчике не было вовсе: деньги вернули, а доступ к DevHub Pro
+    // оставался навсегда. У Gumroad это обработано (`refunded → free`), у
+    // Lemon Squeezy — нет; асимметрия нашлась сверкой двух рельсов.
+    //
+    // Осознанно НЕ трогаем `subscription_payment_refunded`: возврат одного
+    // платежа не означает конца подписки (продавец может вернуть один счёт и
+    // продолжить обслуживание), и снимать доступ по нему — значит отключать
+    // платящего. Это решение о политике, а не о коде.
+    const revoke = event === "order_refunded";
     // DevHub Studio Pro. В магазине это ПОДПИСКА, поэтому основной путь выдачи
     // доступа — ветка subscription_* ниже; здесь остаётся разовая покупка того
     // же варианта. Оба пути ведут в одну и ту же выдачу, повтор безвреден
@@ -193,15 +203,20 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     const studioVariant = process.env.LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO?.trim();
     const variantId = String(attrs.variant_id ?? "");
     if (studioVariant && variantId === studioVariant && email) {
+      const tier = revoke ? "free" : "pro";
       try {
-        await upgradeDevHubByEmail(email, "pro");
+        await upgradeDevHubByEmail(email, tier);
       } catch (err) {
         capture(err);
-        console.error("[ls/webhook] order_created devhub upgrade failed:", err instanceof Error ? err.message : err);
+        console.error(`[ls/webhook] ${event} devhub tier NOT set for ${email}:`, err instanceof Error ? err.message : err);
         return res.status(500).json({ ok: false, error: "devhub_upgrade_failed" });
       }
-      console.log(`[ls/webhook] order_created devhub-studio-pro → pro for ${email}`);
-      return res.json({ ok: true, action: "devhub_studio_pro_activated", email });
+      console.log(`[ls/webhook] ${event} devhub-studio-pro → ${tier} for ${email}`);
+      return res.json({
+        ok: true,
+        action: revoke ? "devhub_studio_pro_revoked" : "devhub_studio_pro_activated",
+        email,
+      });
     }
     return res.json({ ok: true, ignored: event });
   }

@@ -22,11 +22,19 @@ const SRC = path.join(__dirname, "..", "src");
 const routerSrc = fs.readFileSync(path.join(SRC, "routes", "qskyway.ts"), "utf8");
 const specSrc = fs.readFileSync(path.join(SRC, "lib", "openapiSpec.ts"), "utf8");
 
+/**
+ * Express и OpenAPI пишут параметр по-разному: `/slots/:id/verify` против
+ * `/slots/{id}/verify`. Сводим к одной форме, иначе первый же параметрический
+ * путь выглядит одновременно «не описанным» и «лишним» — тест краснеет дважды
+ * на одном и том же эндпоинте и не говорит правды ни в одном из двух случаев.
+ */
+const normalize = (p: string): string => p.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
+
 /** Пути, объявленные роутером, в форме `/cities`, `/airspace/impact`. */
 function routerPaths(): string[] {
   const out = new Set<string>();
   for (const m of routerSrc.matchAll(/qskywayRouter\.(?:get|post|put|delete)\(\s*"([^"]+)"/g)) {
-    out.add(m[1]);
+    out.add(normalize(m[1]));
   }
   return [...out].sort();
 }

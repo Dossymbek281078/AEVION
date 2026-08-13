@@ -375,7 +375,7 @@ async function main() {
   // One signed document an operator can actually file, instead of stitching
   // three responses together by hand.
   const just = await jpost("/api/qskyway/route/justification", { from: 1, to: 2, city: "nyc" });
-  assert(just.status === 200 && just.json?.document?.kind === "qskyway.route.justification/1", "[nyc] route justification issued", `status=${just.status}`);
+  assert(just.status === 200 && just.json?.document?.kind === "qskyway.route.justification/2", "[nyc] route justification issued", `status=${just.status}`);
   const jd = just.json.document;
   assert(jd.twinContentHash === cityNyc.json._signature.contentHash, "justification binds the twin actually routed over");
   assert(jd.airspace?.contentHash === asN._signature.contentHash, "justification binds the airspace edition actually obeyed");

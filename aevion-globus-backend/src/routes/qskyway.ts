@@ -1776,8 +1776,14 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
       note: "Редакция ограничений внесена в реестр QRight как датированный объект.",
     });
   } catch (err) {
-    // QSkyway is deliberately DB-optional (see the slot market). The registry is
-    // not, so say so plainly instead of pretending the registration happened.
+    // Реестр QRight — не опциональная база: сказать «не выполнено» честнее, чем
+    // сделать вид, что регистрация прошла.
+    //
+    // Ссылка «см. рынок слотов» здесь устарела 13.08.2026 и вводила в
+    // заблуждение: рынок действительно работает без Postgres, но ТОЛЬКО когда
+    // база не настроена вовсе. Подмену хранилища на ходу оттуда убрали — при
+    // сбое он тоже отказывает, а не пишет в память. Оставлять ссылку на прежнее
+    // поведение значит предлагать его как образец.
     console.warn("[qskyway] airspace register failed:", err instanceof Error ? err.message : err);
     res.status(503).json({
       error: "реестр QRight недоступен — регистрация не выполнена",

@@ -28,6 +28,7 @@ import { provisionSubscription, writeSubscription, type Subscription } from "./p
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { upsertAppSubscription } from "../lib/appEntitlements";
 
 // DevHub Studio Pro: upgrade DevHubTier + DevHubEmailTier on purchase
 async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
@@ -171,6 +172,17 @@ function tierForReference(ref: string): TierId {
 
 function isConstitutionProduct(ref: string): boolean {
   return ref.includes("constitution");
+}
+
+/**
+ * Ссылка товара → slug модуля, если товар продаёт ровно один модуль.
+ * Пока это только Конституция; список явный, чтобы новый товар не попал сюда
+ * случайно по совпадению подстроки.
+ */
+function moduleSlugForReference(ref: string): string | null {
+  const r = ref.toLowerCase();
+  if (r === "constitution-pro") return "constitution";
+  return null;
 }
 
 // Liveness probe — Gumroad sends only POST, but a GET in the browser used to
@@ -337,6 +349,24 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   }
 
   try {
+    // Товар, который продаёт ОДИН модуль, и должен давать этот модуль. Раньше
+    // Constitution Pro за $9 превращался в тариф lite ($19) со свободным
+    // выбором ЛЮБОГО модуля — включая те, что стоят $29–49. Человек платил за
+    // одну вещь и получал право на другую, более дорогую, а по логам это
+    // выглядело как обычная успешная выдача.
+    const moduleSlug = moduleSlugForReference(reference);
+    if (moduleSlug) {
+      const active = result.status === "paid";
+      await upsertAppSubscription(email, moduleSlug, active ? "active" : "cancelled", saleId);
+      console.log(`[gumroad/webhook] ${result.status} → app_sub ${active ? "active" : "cancelled"}: ${moduleSlug} for ${email}`);
+      return res.json({
+        ok: true,
+        action: active ? "app_activated" : "app_cancelled",
+        appSlug: moduleSlug,
+        email,
+      });
+    }
+
     if (refunded || failed) {
       // Downgrade to free
       const downgrade: Subscription = {

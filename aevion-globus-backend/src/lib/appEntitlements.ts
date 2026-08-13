@@ -79,3 +79,36 @@ export async function hasActiveAppSubscription(email: string | null, moduleId: s
   if (apps === null) return false;
   return apps.has(slug);
 }
+
+/**
+ * Записать/снять подписку на отдельный модуль.
+ *
+ * Живёт здесь, а не в вебхуке: её нужны ОБА рельса — Lemon Squeezy и Gumroad.
+ * Копия в каждом вебхуке разошлась бы молча, а расхождение видно только при
+ * сравнении, то есть там, куда никто не смотрит.
+ */
+export async function upsertAppSubscription(
+  email: string,
+  appSlug: string,
+  status: "active" | "cancelled",
+  externalSubId?: string,
+): Promise<void> {
+  const pool = getPool();
+  try {
+    await pool.query(
+      `INSERT INTO "AppSubscription" ("id","email","appSlug","lsSubId","status","createdAt","updatedAt")
+       VALUES (gen_random_uuid(),$1,$2,$3,$4,NOW(),NOW())
+       ON CONFLICT ("email","appSlug") DO UPDATE
+         SET "status"=$4, "lsSubId"=COALESCE($3,"AppSubscription"."lsSubId"), "updatedAt"=NOW()`,
+      [email.trim().toLowerCase(), appSlug, externalSubId ?? null, status],
+    );
+  } catch (err) {
+    console.error("[appEntitlements] upsert failed:", err instanceof Error ? err.message : err);
+    // Не глотаем: молчаливый 200 при неудавшейся записи означает «заплатил,
+    // доступа нет, следов нет».
+    throw err;
+  }
+  // Кэш прав держит до минуты — после записи он обязан устареть немедленно,
+  // иначе только что купивший упрётся в отказ.
+  cache.delete(email.trim().toLowerCase());
+}

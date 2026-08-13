@@ -48,7 +48,7 @@ describe("Библиотека мультичата", () => {
     render(<MultichatLibraryPage />);
 
     expect(await screen.findByText("Цена тарифа medium")).toBeTruthy();
-    expect(screen.queryByText(/Войдите, чтобы видеть/i)).toBeNull();
+    expect(screen.queryByText(/Войдите, чтобы увидеть/i)).toBeNull();
 
     // И запрос ушёл ПОДПИСАННЫМ — иначе сервер отдал бы чужой/пустой список.
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -58,7 +58,7 @@ describe("Библиотека мультичата", () => {
   test("без входа приглашение остаётся", async () => {
     vi.stubGlobal("fetch", vi.fn(() => json({ items: [] })));
     render(<MultichatLibraryPage />);
-    expect(await screen.findByText(/Войдите, чтобы видеть свои беседы/i)).toBeTruthy();
+    expect(await screen.findByText(/Войдите, чтобы увидеть свои беседы/i)).toBeTruthy();
   });
 
   test("сбой сети не выглядит как пустая библиотека", async () => {
@@ -100,15 +100,18 @@ describe("Библиотека мультичата", () => {
       ...navigator,
       clipboard: { writeText: () => Promise.reject(new Error("denied")) },
     });
+    // Страница сообщает через alert — перехватываем его, а не ищем текст в DOM.
+    const said: string[] = [];
+    vi.stubGlobal("alert", (m: string) => said.push(String(m)));
 
     render(<MultichatLibraryPage />);
-    const btn = await screen.findByRole("button", { name: /открыть ссылку/i });
+    const btn = await screen.findByRole("button", { name: /поделиться/i });
     btn.click();
 
-    // Адрес обязан быть В САМОМ сообщении: рядом появляется и укороченный
-    // токен в карточке, поэтому ищем строку целиком, а не «где-то tok-abc».
-    await waitFor(() =>
-      expect(screen.getByText(/скопируйте вручную:.*multichat-engine\/shared\/tok-abc/i)).toBeTruthy(),
-    );
+    // Адрес обязан быть В САМОМ сообщении: сказать «скопировано», когда копирование
+    // не удалось, значит потерять ссылку молча.
+    await waitFor(() => expect(said.length).toBeGreaterThan(0));
+    expect(said.join("\n")).toMatch(/вручную/i);
+    expect(said.join("\n")).toContain("multichat-engine/shared/tok-abc");
   });
 });

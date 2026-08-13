@@ -46,6 +46,8 @@ type Dissent = {
     values: Array<{ agentId: string; raw: string; value: number }>;
     spread: number;
   }>;
+  /** Слово, которое одни агенты утверждают, а другие при нём же отрицают. */
+  contradictions?: Array<{ word: string; affirms: string[]; denies: string[] }>;
   hedges: Array<{ agentId: string; kind: "failed" | "hedged"; note: string }>;
   verdict: "consensus" | "split" | "insufficient";
   note: string;
@@ -144,6 +146,14 @@ function buildReport(
     if (dissent.agreement != null) L.push(`Схожесть ответов: ${dissent.agreement}`, "");
     if (dissent.outlier) L.push(`Дальше всех от остальных: **${dissent.outlier.agentId}**`, "");
 
+    if (dissent.contradictions?.length) {
+      L.push("### Прямое противоречие", "");
+      for (const c of dissent.contradictions) {
+        L.push(`- «${c.word}»: ${c.affirms.join(", ")} утверждает, ${c.denies.join(", ")} отрицает`);
+      }
+      L.push("");
+    }
+
     if (dissent.numericConflicts.length) {
       L.push("### Расхождения в числах", "");
       for (const c of dissent.numericConflicts) {
@@ -162,8 +172,8 @@ function buildReport(
 
   L.push("## Ответы агентов", "");
   for (const r of results) {
-    // Роль и человеческая причина — те же, что на экране. Отчёт уходит коллеге,
-    // и «rate_limit_exceeded ... per IP» в нём читается как вина отправителя.
+    // Роль и человеческая причина: отчёт уходит коллеге, и «rate_limit_exceeded
+    // ... per IP» в нём читается как вина отправителя.
     L.push(`### ${agentTitle(r.role, r.agentId)}${r.provider ? ` · ${r.provider}` : ""}`, "");
     if (r.ok) {
       L.push(String(r.reply || "").trim(), "");
@@ -186,7 +196,7 @@ function buildReport(
   return L.join("\n");
 }
 
-export function CouncilConsole() {
+export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<AgentResult[] | null>(null);
@@ -202,6 +212,14 @@ export function CouncilConsole() {
   // setState во время рендера работает, но остаётся источником тихих циклов.
   useEffect(() => setAuthed(isAuthenticated()), []);
 
+  // Задание из витрины выше кладётся в поле здесь, а не уводит на другую
+  // страницу. Затираем только пустое поле: если человек уже что-то написал,
+  // его текст важнее выбранной карточки.
+  useEffect(() => {
+    if (!seed) return;
+    setPrompt((cur) => (cur.trim() ? cur : seed));
+  }, [seed]);
+
   const disabled = busy || prompt.trim().length < 5 || authed !== true;
 
   async function ask() {
@@ -210,6 +228,17 @@ export function CouncilConsole() {
     setBusy(true);
     setError(null);
     setIsExample(false);
+    // Прошлый результат снимаем ДО запроса, а не после успешного ответа.
+    //
+    // Иначе так: гость смотрит пример, входит, задаёт свой вопрос — пометка
+    // «это пример» гаснет сразу, а ответы примера остаются висеть. Если
+    // запрос не прошёл, он читает чужой заранее заданный текст как ответ на
+    // свой вопрос: сверху полная карта разногласий, внизу мелкая строка
+    // ошибки. То же между двумя своими вопросами — в поле новый, на экране
+    // ответы на старый.
+    setResults(null);
+    setDissent(null);
+    setReceipt(null);
     try {
       const conv = await fetch(apiUrl("/api/multichat/conversations"), {
         method: "POST",
@@ -225,9 +254,9 @@ export function CouncilConsole() {
       });
       const d = await r.json();
       if (!r.ok) {
-        // Сервер присылает retryAfterSec рядом с отказом — не показать его
-        // значит заставить человека угадывать, когда пробовать снова.
-        const f = agentFailure(d?.error || `сервер ответил ${r.status}`);
+        // retryAfterSec сервер присылает рядом с отказом — не показать его значит
+        // заставить человека угадывать, когда пробовать снова.
+        const f = agentFailure(d?.error || `upstream ${r.status}`);
         throw new Error(f.human + retryHint(d?.retryAfterSec));
       }
       setResults(d.results || []);
@@ -248,6 +277,12 @@ export function CouncilConsole() {
     if (busy) return;
     setBusy(true);
     setError(null);
+    // Симметрично ask(): если пример не загрузится, на экране не должен
+    // остаться прошлый настоящий прогон — он там уже без своего вопроса.
+    setResults(null);
+    setDissent(null);
+    setReceipt(null);
+    setIsExample(false);
     try {
       const r = await fetch(apiUrl("/api/multichat/dissent/preview"), {
         method: "POST",
@@ -350,6 +385,28 @@ export function CouncilConsole() {
             )}
             <span style={{ fontSize: 12, color: T.textMute }}>{dissent.note}</span>
           </div>
+
+          {/* Прямое отрицание — выше чисел: «делать» против «не делать» решает
+              больше, чем разница в цифре. И оно единственное разногласие, при
+              котором схожесть остаётся высокой: ответы состоят из одних и тех
+              же слов. Без этой строки человек читает «схожесть 1» и уходит. */}
+          {dissent.contradictions && dissent.contradictions.length > 0 && (
+            <>
+              <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, margin: "14px 0 6px" }}>
+                Прямое противоречие
+              </p>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 14 }}>
+                {dissent.contradictions.slice(0, 5).map((c, i) => (
+                  <li key={i} style={{ borderBottom: `1px dotted ${T.lineSoft}`, padding: "5px 0", color: T.text }}>
+                    <span style={{ color: T.bad, fontWeight: 600 }}>«{c.word}»</span>
+                    <span style={{ color: T.textDim }}>
+                      {" "}— {c.affirms.join(", ")} утверждает, {c.denies.join(", ")} отрицает
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
           {dissent.numericConflicts.length > 0 && (
             <>
@@ -459,35 +516,34 @@ export function CouncilConsole() {
 
       {results && (
         <div style={{ marginTop: 16, display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
-          {results.map((r) => {
-            const fail = r.ok ? null : agentFailure(r.error);
-            return (
+          {results.map((r) => (
             <article key={r.agentId} style={{ background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 14 }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", borderBottom: `1px solid ${T.surfaceSoft}`, paddingBottom: 6 }}>
+                {/* Роль, а не внутренний id: «analyst» в русском интерфейсе выглядит
+                    утечкой кода, а роль сервер и так присылает в ответе. */}
                 <h4 style={{ fontSize: 15, margin: 0, color: T.text }}>{agentTitle(r.role, r.agentId)}</h4>
                 <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded }}>
                   {r.provider || "—"}
                 </span>
               </div>
               <p style={{ marginTop: 10, whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.65, color: T.textDim }}>
-                {fail === null ? (
+                {r.ok ? (
                   r.reply
                 ) : (
-                  // Причина по-русски, а исходная строка сервера — мелким рядом:
-                  // прятать её нельзя, иначе отчёт об ошибке от человека бесполезен.
+                  // Причина по-русски, исходная строка сервера мелким рядом:
+                  // прятать её нельзя, иначе отчёт человека об ошибке бесполезен.
                   <span style={{ color: T.bad }}>
-                    {fail.human}
-                    {fail.technical && (
+                    {agentFailure(r.error).human}
+                    {agentFailure(r.error).technical && (
                       <span style={{ display: "block", marginTop: 6, fontSize: 11, color: T.textFaded }}>
-                        {fail.technical}
+                        {agentFailure(r.error).technical}
                       </span>
                     )}
                   </span>
                 )}
               </p>
             </article>
-            );
-          })}
+          ))}
         </div>
       )}
     </section>

@@ -555,7 +555,13 @@ export default function QSkywayClient() {
     ctx.fillStyle = "#0a121d"; ctx.fillRect(0, 0, W, H);
     // buildings
     let maxH = 1; for (const b of city.buildings) if (b.h > maxH) maxH = b.h;
-    for (const b of city.buildings) {
+    // Дома, высота которых ПОДСТАВЛЕНА по типу застройки. Тёплый оттенок ниже
+    // означает «угадано» и достаётся им наравне со слепым дефолтом 12 м — то
+    // есть на карте они неотличимы, хотя утверждения разные: дефолт занижает и
+    // виден по абсурдности, а подстановка выглядит замером. Обводим пунктиром.
+    const substituted = new Set((city.dataQuality?.substituted ?? []).map((x) => x.i));
+    for (let bi = 0; bi < city.buildings.length; bi++) {
+      const b = city.buildings[bi];
       const t = Math.min(1, b.h / maxH);
       const g = Math.round(24 + t * 90);
       // guessed height (blind default) → warm/amber tint so data uncertainty is visible;
@@ -567,6 +573,10 @@ export default function QSkywayClient() {
       const rr = b.r; ctx.moveTo(rr[0][0] * SC, rr[0][1] * SC);
       for (let i = 1; i < rr.length; i++) ctx.lineTo(rr[i][0] * SC, rr[i][1] * SC);
       ctx.closePath(); ctx.fill();
+      if (substituted.has(bi)) {
+        ctx.strokeStyle = "rgba(200,150,79,0.95)"; ctx.lineWidth = 1;
+        ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
+      }
     }
     // no-fly zones
     if (city.nofly) for (const z of city.nofly) {
@@ -973,7 +983,7 @@ export default function QSkywayClient() {
                         "Высота взята из статистики домов того же типа в этом городе, а не измерена и не выведена из этажности самого дома. "
                         + "Занижать нельзя: коридор пройдёт ниже крыши, поэтому берётся 75-й процентиль, а не медиана. Примеры: "
                         + meta.substituted.slice(0, 3).map((o) => `дом ${o.i} (${o.type}) вместо ${o.from} м, по ${o.n} известным высотам`).join("; ")
-                        + "."
+                        + ". На карте такие дома обведены пунктиром: тёплый оттенок значит «угадано» и достаётся им наравне со слепым дефолтом 12 м, хотя утверждения разные."
                       }
                       style={{ color: "#c8964f", textDecoration: "underline dotted", cursor: "help" }}
                     >

@@ -96,6 +96,40 @@ describe("rateLimit — keyFn counts the caller the call site names", () => {
     expect((await request(app).get("/dispatch?user=b")).status).toBe(200);
   });
 
+  test("сломанный keyFn не молчит: подмена единицы счёта видна в логе", async () => {
+    // Молчаливый откат на адрес возвращает ровно тот дефект, ради которого keyFn и
+    // появился: счёт по аккаунту становится счётом по адресу, и все за одним NAT
+    // снова делят один бюджет. Ни отказа, ни следа — значит и не заметят.
+    const said: string[] = [];
+    const realError = console.error;
+    console.error = (...a: unknown[]) => void said.push(a.join(" "));
+    try {
+      const limiter = rateLimit({
+        windowMs: 60_000,
+        max: 5,
+        keyPrefix: "broken-keyfn",
+        keyFn: () => {
+          throw new Error("req.auth ещё не разрешён");
+        },
+      });
+      const app = appWith(limiter);
+
+      // Запрос обслуживается — лимитер не должен быть причиной отказа.
+      expect((await request(app).get("/r0")).status).toBe(200);
+      // Но предупреждение обязано быть, и в нём — что именно подменилось.
+      expect(said.join("\n")).toMatch(/broken-keyfn/);
+      expect(said.join("\n")).toMatch(/по адресу/);
+
+      // И ровно один раз на лимитер: тревога, которую заглушают, хуже отсутствующей.
+      const before = said.length;
+      await request(app).get("/r0");
+      await request(app).get("/r0");
+      expect(said.length).toBe(before);
+    } finally {
+      console.error = realError;
+    }
+  });
+
   test("without keyFn the address is still what gets counted", async () => {
     const limiter = rateLimit({ windowMs: 60_000, max: 1, keyPrefix: "by-ip" });
     const app = appWith(limiter);

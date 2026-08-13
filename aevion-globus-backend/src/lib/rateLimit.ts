@@ -74,6 +74,23 @@ let lastSweep = 0;
 let limiterSeq = 0;
 
 /**
+ * Уже предупреждённые лимитеры: сообщение печатается ОДИН раз на лимитер, а не на
+ * каждый запрос. Иначе сломанный keyFn на горячей ручке зальёт лог и его отключат
+ * вместе с полезными записями — тревога, которую заглушают, хуже отсутствующей.
+ */
+const keyFnWarned = new Set<string>();
+
+function warnKeyFnFallback(prefix: string, why: string): void {
+  if (keyFnWarned.has(prefix)) return;
+  keyFnWarned.add(prefix);
+  console.error(
+    `[rateLimit] keyFn лимитера "${prefix}" не дал ключа (${why}) — считаю по адресу. ` +
+      `Это НЕ то же самое: счёт по аккаунту заменён счётом по адресу, и все за одним ` +
+      `NAT снова делят один бюджет. Проверь, разрешён ли req.auth к моменту лимитера.`,
+  );
+}
+
+/**
  * In-process rate limiter. No external deps. Fixed window by default; a token
  * bucket when the call site passes `refillPerSec`.
  * Good enough for public read-only endpoints; replace with Redis-backed
@@ -126,8 +143,14 @@ export function rateLimit(opts: RateLimitOptions) {
       try {
         const named = keyFn(req);
         if (typeof named === "string" && named.trim()) counted = named.trim();
-      } catch {
-        // A limiter must not be the reason a request fails. Count by address.
+        else warnKeyFnFallback(keyPrefix, "вернул не строку или пусто");
+      } catch (err) {
+        // Лимитер не должен быть причиной отказа запроса — считаем по адресу.
+        // Но МОЛЧА этого делать нельзя: подмена единицы счёта незаметно
+        // возвращает тот самый дефект, ради которого keyFn и появился. Пример:
+        // multichat считает по аккаунту, keyFn падает — и все, кто за одним
+        // адресом, снова делят один бюджет. Ни отказа, ни следа в логах.
+        warnKeyFnFallback(keyPrefix, String((err as Error)?.message || err).slice(0, 120));
       }
     }
     const key = `${keyPrefix}:${counted}`;

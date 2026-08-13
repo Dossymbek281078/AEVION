@@ -59,7 +59,7 @@ const { scratch, db } = vi.hoisted(() => {
     scratch: dir,
     db: {
       state,
-      savedAt: new Date(Date.now() - 60_000),
+      savedAtMs: Date.now() - 60_000,
       writes: [] as unknown[][],
       failRead: false,
       // База отвечает не мгновенно. Без задержки догрузка успевает сама собой,
@@ -74,12 +74,12 @@ vi.mock("pg", () => {
   class Pool {
     async query(text: string, params: unknown[] = []) {
       if (/CREATE TABLE/i.test(text)) return { rows: [] };
-      if (/SELECT "data","savedAt" FROM "CyberTournament"/i.test(text)) {
+      if (/SELECT "data","savedAtMs" FROM "CyberTournament"/i.test(text)) {
         await new Promise((r) => setTimeout(r, db.readDelayMs));
         if (db.failRead) throw new Error("connection reset by peer");
         // Строка на турнир — так теперь и хранится: разные турниры не мешают
         // друг другу, когда их пишут два процесса одновременно.
-        return { rows: db.state.tournaments.map((t) => ({ data: t, savedAt: db.savedAt })) };
+        return { rows: db.state.tournaments.map((t) => ({ data: t, savedAtMs: db.savedAtMs })) };
       }
       if (/INSERT INTO "CyberTournament"/i.test(text)) {
         db.writes.push(params);
@@ -175,7 +175,7 @@ describe("опоздавшая запись не затирает более с�
 
     // Проверка по тексту запроса: настоящей базы здесь нет, а подделка сравнение
     // внутри Postgres не выполняет. Условие обязано стоять именно в UPDATE.
-    expect(src).toMatch(/ON CONFLICT[\s\S]{0,900}WHERE "CyberTournament"\."savedAt" <= EXCLUDED\."savedAt"/);
+    expect(src).toMatch(/ON CONFLICT[\s\S]{0,900}WHERE "CyberTournament"\."savedAtMs" <= EXCLUDED\."savedAtMs"/);
   });
 });
 

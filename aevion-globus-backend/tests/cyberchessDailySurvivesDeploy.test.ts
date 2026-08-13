@@ -48,7 +48,7 @@ const { scratch, db } = vi.hoisted(() => {
     scratch: dir,
     db: {
       state,
-      savedAt: new Date(Date.now() - 60_000),
+      savedAtMs: Date.now() - 60_000,
       writes: [] as unknown[][],
       // База отвечает не мгновенно — иначе догрузка успевает сама собой и
       // проверка ожидания перед маршрутами ничего не доказывает.
@@ -61,7 +61,7 @@ vi.mock("pg", () => {
   class Pool {
     async query(text: string, params: unknown[] = []) {
       if (/CREATE TABLE/i.test(text)) return { rows: [] };
-      if (/SELECT "userId","entry","stats","savedAt" FROM "CyberDailyEntry"/i.test(text)) {
+      if (/SELECT "userId","entry","stats","savedAtMs" FROM "CyberDailyEntry"/i.test(text)) {
         await new Promise((r) => setTimeout(r, db.readDelayMs));
         // Строка на игрока — так теперь и хранится: два процесса, пишущие
         // РАЗНЫХ игроков, не стирают друг друга.
@@ -70,7 +70,7 @@ vi.mock("pg", () => {
             userId: e.userId,
             entry: e,
             stats: db.state.stats.find((s) => s.userId === e.userId) ?? null,
-            savedAt: db.savedAt,
+            savedAtMs: db.savedAtMs,
           })),
         };
       }
@@ -152,7 +152,7 @@ describe("новый контейнер не откатывает игроков
 describe("опоздавшая запись не затирает более свежую", () => {
   test("запрос обновляет строку только если он свежее записанного", () => {
     const src = require("node:fs").readFileSync("src/routes/cyberchessDaily.ts", "utf-8") as string;
-    expect(src).toMatch(/ON CONFLICT[\s\S]{0,900}WHERE "CyberDailyEntry"\."savedAt" <= EXCLUDED\."savedAt"/);
+    expect(src).toMatch(/ON CONFLICT[\s\S]{0,900}WHERE "CyberDailyEntry"\."savedAtMs" <= EXCLUDED\."savedAtMs"/);
   });
 });
 

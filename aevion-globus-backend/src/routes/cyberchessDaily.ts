@@ -252,10 +252,14 @@ async function ensureDailyDb(): Promise<any> {
     const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "CyberDailyEntry" (
-        "userId"  TEXT PRIMARY KEY,
-        "entry"   JSONB,
-        "stats"   JSONB,
-        "savedAt" TIMESTAMP NOT NULL DEFAULT now()
+        "userId"    TEXT PRIMARY KEY,
+        "entry"     JSONB,
+        "stats"     JSONB,
+        -- Миллисекунды числом, а не TIMESTAMP: у колонки без часового пояса
+        -- смысл зависит от читателя (драйвер разберёт её в поясе клиента), и
+        -- сравнение «что свежее» молча ошибётся на часы. Тот же разбор — в
+        -- cyberchessTournaments.ts.
+        "savedAtMs" BIGINT NOT NULL
       );
     `);
     dailyPool = pool;
@@ -274,7 +278,7 @@ async function loadDailyFromDb(): Promise<{ state: DailyState; savedAtMs: number
   const pool = await ensureDailyDb();
   if (!pool) return null;
   try {
-    const r = await pool.query(`SELECT "userId","entry","stats","savedAt" FROM "CyberDailyEntry"`);
+    const r = await pool.query(`SELECT "userId","entry","stats","savedAtMs" FROM "CyberDailyEntry"`);
     const rows = r.rows ?? [];
     if (rows.length === 0) return null;
     const lb: LeaderEntry[] = [];
@@ -283,7 +287,7 @@ async function loadDailyFromDb(): Promise<{ state: DailyState; savedAtMs: number
     for (const row of rows) {
       if (row?.entry && typeof row.entry.userId === 'string') lb.push(row.entry as LeaderEntry);
       if (row?.stats && typeof row.stats.userId === 'string') stats.push(row.stats as UserStats);
-      const t = row?.savedAt ? new Date(row.savedAt).getTime() : 0;
+      const t = Number(row?.savedAtMs);
       if (Number.isFinite(t) && t > newest) newest = t;
     }
     if (lb.length === 0 && stats.length === 0) {
@@ -323,11 +327,11 @@ async function saveDailyToDb(stamp: number): Promise<void> {
     }
     for (const [uid, slot] of byUser) {
       await pool.query(
-        `INSERT INTO "CyberDailyEntry" ("userId","entry","stats","savedAt")
-         VALUES ($1,$2,$3,to_timestamp($4/1000.0))
+        `INSERT INTO "CyberDailyEntry" ("userId","entry","stats","savedAtMs")
+         VALUES ($1,$2,$3,$4)
          ON CONFLICT ("userId") DO UPDATE SET
-           "entry"=EXCLUDED."entry","stats"=EXCLUDED."stats","savedAt"=EXCLUDED."savedAt"
-         WHERE "CyberDailyEntry"."savedAt" <= EXCLUDED."savedAt"`,
+           "entry"=EXCLUDED."entry","stats"=EXCLUDED."stats","savedAtMs"=EXCLUDED."savedAtMs"
+         WHERE "CyberDailyEntry"."savedAtMs" <= EXCLUDED."savedAtMs"`,
         [uid, slot.entry ? JSON.stringify(slot.entry) : null, slot.stats ? JSON.stringify(slot.stats) : null, stamp],
       );
     }

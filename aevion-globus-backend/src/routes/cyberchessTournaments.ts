@@ -191,11 +191,16 @@ async function ensureTournamentDb(): Promise<any> {
     const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "CyberTournament" (
-        "id"      TEXT PRIMARY KEY,
-        "data"    JSONB NOT NULL,
-        "savedAt" TIMESTAMP NOT NULL DEFAULT now()
+        "id"        TEXT PRIMARY KEY,
+        "data"      JSONB NOT NULL,
+        -- Миллисекунды числом, а не TIMESTAMP. У колонки без часового пояса
+        -- смысл зависит от того, кто её читает: драйвер разбирает такое
+        -- значение в поясе КЛИЕНТА, а писал его сервер в своём. Разница в часах
+        -- — и сравнение «что свежее, файл или база» молча даёт неверный ответ:
+        -- старая копия побеждает новую. Число не зависит ни от чьего пояса.
+        "savedAtMs" BIGINT NOT NULL
       );
-      CREATE INDEX IF NOT EXISTS "cybertournament_savedat_idx" ON "CyberTournament" ("savedAt" DESC);
+      CREATE INDEX IF NOT EXISTS "cybertournament_savedat_idx" ON "CyberTournament" ("savedAtMs" DESC);
     `);
     dbPool = pool;
     dbHealth.connected = true;
@@ -212,7 +217,7 @@ async function loadFromDb(): Promise<{ tournaments: Tournament[]; savedAtMs: num
   const pool = await ensureTournamentDb();
   if (!pool) return null;
   try {
-    const r = await pool.query(`SELECT "data","savedAt" FROM "CyberTournament"`);
+    const r = await pool.query(`SELECT "data","savedAtMs" FROM "CyberTournament"`);
     const rows = r.rows ?? [];
     if (rows.length === 0) return null;
     const list: Tournament[] = [];
@@ -220,7 +225,7 @@ async function loadFromDb(): Promise<{ tournaments: Tournament[]; savedAtMs: num
     for (const row of rows) {
       if (!row?.data || typeof row.data.id !== "string") continue; // строка не той формы — пропускаем её, а не весь набор
       list.push(row.data as Tournament);
-      const t = row.savedAt ? new Date(row.savedAt).getTime() : 0;
+      const t = Number(row.savedAtMs);
       if (Number.isFinite(t) && t > newest) newest = t;
     }
     if (list.length === 0) {
@@ -256,9 +261,9 @@ async function saveToDb(list: Tournament[], stamp: number): Promise<void> {
     // нельзя считать лишней — её мог только что завести сосед.
     for (const t of list) {
       await pool.query(
-        `INSERT INTO "CyberTournament" ("id","data","savedAt") VALUES ($1,$2,to_timestamp($3/1000.0))
-         ON CONFLICT ("id") DO UPDATE SET "data"=EXCLUDED."data","savedAt"=EXCLUDED."savedAt"
-         WHERE "CyberTournament"."savedAt" <= EXCLUDED."savedAt"`,
+        `INSERT INTO "CyberTournament" ("id","data","savedAtMs") VALUES ($1,$2,$3)
+         ON CONFLICT ("id") DO UPDATE SET "data"=EXCLUDED."data","savedAtMs"=EXCLUDED."savedAtMs"
+         WHERE "CyberTournament"."savedAtMs" <= EXCLUDED."savedAtMs"`,
         [t.id, JSON.stringify(t), stamp],
       );
     }

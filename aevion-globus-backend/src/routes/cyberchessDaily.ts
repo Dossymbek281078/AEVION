@@ -293,7 +293,13 @@ async function saveDailyToDb(stamp: number): Promise<void> {
   try {
     await pool.query(
       `INSERT INTO "CyberDailyState" ("id","state","savedAt") VALUES ('singleton',$1,to_timestamp($2/1000.0))
-       ON CONFLICT ("id") DO UPDATE SET "state"=EXCLUDED."state","savedAt"=EXCLUDED."savedAt"`,
+       ON CONFLICT ("id") DO UPDATE SET "state"=EXCLUDED."state","savedAt"=EXCLUDED."savedAt"
+       -- Условие делает запись МОНОТОННОЙ: строку обновляет только более
+       -- свежее состояние. Без него два сохранения, отправленные подряд и не
+       -- дождавшиеся друг друга (запись в базу намеренно не блокирует ответ
+       -- игроку), могут прийти в обратном порядке — и старое состояние затрёт
+       -- новое. Ровно та тихая потеря, ради устранения которой всё писалось.
+       WHERE "CyberDailyState"."savedAt" <= EXCLUDED."savedAt"`,
       [JSON.stringify({ leaderboard: LEADERBOARD, stats: [...userStats.values()] }), stamp],
     );
   } catch (e) {

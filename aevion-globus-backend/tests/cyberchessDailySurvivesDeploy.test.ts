@@ -139,3 +139,10 @@ describe("новый контейнер не откатывает игроков
     expect(lastState.stats.map((e) => e.userId)).toContain("newbie");
   });
 });
+
+describe("опоздавшая запись не затирает более свежую", () => {
+  test("запрос обновляет строку только если он свежее записанного", () => {
+    const src = require("node:fs").readFileSync("src/routes/cyberchessDaily.ts", "utf-8") as string;
+    expect(src).toMatch(/ON CONFLICT[\s\S]{0,900}WHERE "CyberDailyState"\."savedAt" <= EXCLUDED\."savedAt"/);
+  });
+});

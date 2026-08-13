@@ -83,8 +83,14 @@ describe("нечитаемый файл таблицы не превращает
     expect(res.status).toBe(200);
     expect(dailyLeaderboardReadable()).toBe(true);
 
-    const saved = JSON.parse(fileRaw()) as Array<{ userId: string }>;
-    expect(saved.map((e) => e.userId)).toContain("u2");
+    // Файл пишется в новой форме — с меткой времени, по которой состояние
+    // сравнивается с копией в базе (13.08). Голый массив прежней формы
+    // по-прежнему ЧИТАЕТСЯ: этот тест кладёт именно его строкой выше, и если бы
+    // старая форма перестала пониматься, таблица потерялась бы на первой же
+    // выкатке нового кода.
+    const saved = JSON.parse(fileRaw()) as { savedAt: string; leaderboard: Array<{ userId: string }> };
+    expect(saved.savedAt).toBeTruthy();
+    expect(saved.leaderboard.map((e) => e.userId)).toContain("u2");
   });
 
   test("после починки таблица снова отдаётся, а не 503", async () => {

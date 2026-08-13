@@ -4,6 +4,9 @@ import * as path from 'path';
 import { pickDailyPuzzle } from '../lib/cyberchessDailyPuzzle';
 import { createInMemoryRateLimiter } from '../lib/rateLimit/inMemoryWindow';
 import { clientIp } from '../lib/rateLimit';
+// Обычный импорт, а не require: под `require` подмена драйвера в тестах не
+// действует, и тест «зеленеет», не выполнив ни одного запроса (12.08).
+import pg from 'pg';
 
 const router = Router();
 
@@ -91,6 +94,16 @@ const DATA_DIR = process.env.CYBERCHESS_DAILY_DIR
 const LB_FILE = path.join(DATA_DIR, 'cyberchess-daily-leaderboard.json');
 const LB_MAX = 1000;
 
+/**
+ * Момент последнего сохранения — по нему выбирается свежая копия: файл или
+ * база. Объявлено ЗДЕСЬ, выше loadLeaderboard, не для красоты: эта функция
+ * вызывается при загрузке модуля, и при объявлении ниже она падала на
+ * «Cannot access before initialization». Падение ловил try/catch, файл
+ * считался нечитаемым, и таблица лидеров отвечала 503 — на самом
+ * посещаемом экране. Поймано тестом, не типами.
+ */
+let dailySavedAtMs = 0;
+
 function ensureDataDir(): void {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -127,9 +140,21 @@ function loadLeaderboard(): LeaderEntry[] {
     if (fs.existsSync(LB_FILE)) {
       const raw = fs.readFileSync(LB_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
+      // Две формы файла: голый массив (как писали раньше) и объект с меткой
+      // времени. Метка нужна, чтобы сравнивать файл с копией в базе; старую
+      // форму продолжаем читать, иначе первая же выкатка потеряла бы таблицу.
+      const list = Array.isArray(parsed)
+        ? (parsed as LeaderEntry[])
+        : Array.isArray(parsed?.leaderboard)
+          ? (parsed.leaderboard as LeaderEntry[])
+          : null;
+      if (list) {
         leaderboardReadable = true;
-        return (parsed as LeaderEntry[]).filter((e) => !isSeededEntry(e));
+        if (!Array.isArray(parsed) && parsed.savedAt) {
+          const t = new Date(parsed.savedAt).getTime();
+          if (Number.isFinite(t)) dailySavedAtMs = t;
+        }
+        return list.filter((e) => !isSeededEntry(e));
       }
       // Файл есть, но внутри не список — содержимое неизвестно, значит не пусто.
       leaderboardReadable = false;
@@ -164,7 +189,16 @@ function saveLeaderboard(entries: LeaderEntry[]): void {
   }
   try {
     ensureDataDir();
-    fs.writeFileSync(LB_FILE, JSON.stringify(entries, null, 2), 'utf-8');
+    dailySavedAtMs = Date.now();
+    fs.writeFileSync(
+      LB_FILE,
+      JSON.stringify({ savedAt: new Date(dailySavedAtMs).toISOString(), leaderboard: entries }, null, 2),
+      'utf-8',
+    );
+    // Зеркало в базе — вместе с личной статистикой: она жила только в памяти и
+    // обнулялась на каждом рестарте, из-за чего человек видел «решено: 0»,
+    // стоя в таблице со своей серией.
+    void saveDailyToDb(dailySavedAtMs);
   } catch (e) {
     console.error('[cyberchess-daily] запись таблицы лидеров не прошла:', (e as Error).message);
   }
@@ -191,6 +225,81 @@ const userStats = new Map<string, UserStats>();
 // Per-day record (one solve per user per day, deduped)
 type SolveRecord = { day: string; streak: number; userId: string; timeMs: number; hintsUsed: number; score: number };
 const solveStore = new Map<string, SolveRecord>(); // key: `${userId}:${day}`
+
+// ── Postgres: записи задачи дня переживают деплой ───────────────────
+//
+// ЗАЧЕМ. Таблица лидеров лежит в файле, который ЗАКОММИЧЕН в репозиторий, а
+// файловая система контейнера временная. Значит при каждом деплое таблица
+// откатывается к версии из git — всё, что игроки заработали с прошлой выкатки,
+// исчезает молча. Личная статистика (сколько решено, история по дням) и того
+// хуже: она жила только в памяти процесса и обнулялась при любом рестарте,
+// из-за чего человек видел «решено: 0», стоя в таблице со своей серией.
+//
+// УСТРОЙСТВО такое же, как у турниров (cyberchessTournaments.ts): одна строка
+// JSONB со всем состоянием, `savedAt` решает, кто свежее — база или файл. Без
+// DATABASE_URL всё работает как раньше, на файле и в памяти.
+let dailyPool: any = null;
+let dailyDbTried = false;
+
+async function ensureDailyDb(): Promise<any> {
+  if (dailyDbTried) return dailyPool;
+  dailyDbTried = true;
+  if (!process.env.DATABASE_URL) return null;
+  try {
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "CyberDailyState" (
+        "id"      TEXT PRIMARY KEY,
+        "state"   JSONB NOT NULL,
+        "savedAt" TIMESTAMP NOT NULL DEFAULT now()
+      );
+    `);
+    dailyPool = pool;
+    console.log('[cyberchess-daily] pg connected — записи задачи дня переживут деплой');
+    return pool;
+  } catch (e) {
+    console.warn('[cyberchess-daily] pg init failed:', (e as Error).message);
+    return null;
+  }
+}
+
+type DailyState = { leaderboard: LeaderEntry[]; stats: UserStats[] };
+
+async function loadDailyFromDb(): Promise<{ state: DailyState; savedAtMs: number } | null> {
+  const pool = await ensureDailyDb();
+  if (!pool) return null;
+  try {
+    const r = await pool.query(`SELECT "state","savedAt" FROM "CyberDailyState" WHERE "id"='singleton'`);
+    const row = r.rows?.[0];
+    if (!row) return null;
+    const lb = Array.isArray(row.state?.leaderboard) ? (row.state.leaderboard as LeaderEntry[]) : null;
+    if (!lb) {
+      console.error('[cyberchess-daily] строка в базе не той формы — беру файл');
+      return null;
+    }
+    const stats = Array.isArray(row.state?.stats) ? (row.state.stats as UserStats[]) : [];
+    const t = row.savedAt ? new Date(row.savedAt).getTime() : 0;
+    return { state: { leaderboard: lb, stats }, savedAtMs: Number.isFinite(t) ? t : 0 };
+  } catch (e) {
+    console.error('[cyberchess-daily] чтение записей из базы не прошло:', (e as Error).message);
+    return null;
+  }
+}
+
+/** Зеркалирование в базу. Не бросает: путь решения задачи не должен падать из-за базы. */
+async function saveDailyToDb(stamp: number): Promise<void> {
+  const pool = await ensureDailyDb();
+  if (!pool) return;
+  try {
+    await pool.query(
+      `INSERT INTO "CyberDailyState" ("id","state","savedAt") VALUES ('singleton',$1,to_timestamp($2/1000.0))
+       ON CONFLICT ("id") DO UPDATE SET "state"=EXCLUDED."state","savedAt"=EXCLUDED."savedAt"`,
+      [JSON.stringify({ leaderboard: LEADERBOARD, stats: [...userStats.values()] }), stamp],
+    );
+  } catch (e) {
+    console.error('[cyberchess-daily] запись записей в базу не прошла:', (e as Error).message);
+  }
+}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -224,6 +333,37 @@ function upsertLeaderboard(uid: string, name: string, country: string, streak: n
   if (LEADERBOARD.length > LB_MAX) LEADERBOARD = LEADERBOARD.slice(0, LB_MAX);
   saveLeaderboard(LEADERBOARD);
 }
+
+/**
+ * Догрузка из базы — асинхронная, поэтому маршруты её ЖДУТ.
+ *
+ * «Отдаём файл сейчас, базу подхватим когда придёт» съедает данные: между
+ * стартом и ответом базы кто-то решает задачу, его строка ложится поверх
+ * файловой копии, а прилетевшее состояние её стирает. Проверено мутацией на
+ * соседнем модуле турниров: без ожидания тест краснеет.
+ */
+const dailyReady: Promise<void> = (async () => {
+  const fromDb = await loadDailyFromDb();
+  if (!fromDb) return; // базы нет или в ней пусто — живём на файле, как раньше
+  if (fromDb.savedAtMs <= dailySavedAtMs) return; // файл свежее или ровесник
+  LEADERBOARD = fromDb.state.leaderboard.filter((e) => !isSeededEntry(e));
+  userStats.clear();
+  for (const st of fromDb.state.stats) {
+    if (st && typeof st.userId === 'string') userStats.set(st.userId, st);
+  }
+  dailySavedAtMs = fromDb.savedAtMs;
+  console.log(
+    `[cyberchess-daily] записи взяты из базы (${LEADERBOARD.length} в таблице, ${userStats.size} игроков) — она свежее файла`,
+  );
+})().catch((e) => {
+  console.error('[cyberchess-daily] догрузка из базы не удалась, остаёмся на файле:', (e as Error).message);
+});
+
+// Ожидание готовности — до всех маршрутов модуля.
+router.use(async (_req: Request, _res: Response, next: () => void) => {
+  await dailyReady;
+  next();
+});
 
 // ============================================================================
 // ROUTES

@@ -509,6 +509,19 @@ async function main() {
   assert(before.status === 200 && typeof before.json?.count === "number" && Array.isArray(before.json?.slots), "GET /slots lists the market", `count=${before.json?.count}`);
   assert(["postgres", "memory"].includes(before.json?.store), "GET /slots reports its store backend", `store=${before.json?.store}`);
   if (READ_ONLY) {
+    // Квитанцию можно проверить и без записи, если рынок не пуст: ручка только
+    // читает. Пустой рынок — законный случай, тогда честно пропускаем.
+    const any = (before.json?.slots ?? [])[0];
+    if (any) {
+      const v = await jget(`/api/qskyway/slots/${encodeURIComponent(any.id)}/verify`);
+      assert(v.status === 200 && v.json?.matches === true,
+        "receipt of an existing slot verifies against the stored record",
+        `status=${v.status} matches=${v.json?.matches}`);
+      assert(/НЕ якорь/.test(v.json?.scope ?? ""),
+        "receipt verification states it is not an external-ledger anchor");
+    } else {
+      skip("slot receipt verification", "рынок пуст — проверять нечего");
+    }
     skip("slot market capacity gate", "READ_ONLY — booking writes skipped");
     console.log(`\n${summary()}`);
     process.exit(failed === 0 ? 0 : 1);
@@ -523,6 +536,15 @@ async function main() {
   const late = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T10:00:00Z", t1: "2026-07-11T10:03:00Z", holder: "late" });
   assert(late.status === 201, "non-overlapping window bookable", `status=${late.status}`);
   assert(typeof late.json?.slot?.receipt === "string" && late.json.slot.receipt.startsWith("qright:"), "slot issues QRight receipt");
+  // Квитанция только что выданной брони обязана сходиться, а несуществующий
+  // слот — отвечать «не найден», а не «не сходится»: это разные ответы.
+  const vOk = await jget(`/api/qskyway/slots/${encodeURIComponent(late.json.slot.id)}/verify`);
+  assert(vOk.status === 200 && vOk.json?.matches === true,
+    "fresh receipt verifies against the stored record", `status=${vOk.status} matches=${vOk.json?.matches}`);
+  const vMissing = await jget("/api/qskyway/slots/slot-does-not-exist/verify");
+  assert(vMissing.status === 404,
+    "unknown slot is 'not found', not 'tampered'", `status=${vMissing.status}`);
+
   const after = await jget("/api/qskyway/slots");
   assert(after.json?.count === before.json.count + okCount + 1, "GET /slots count reflects new bookings", `${before.json.count} → ${after.json?.count}`);
   assert(after.json.slots.some((s) => s.id === late.json.slot.id), "GET /slots list includes the just-booked slot");

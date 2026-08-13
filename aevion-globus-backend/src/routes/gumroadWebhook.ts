@@ -46,6 +46,11 @@ async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promis
     }
   } catch (err) {
     console.error("[gumroad/devhub] upgradeByEmail error:", err instanceof Error ? err.message : err);
+    // Ошибку НЕ глотаем. Раньше сбой записи оставался здесь, а вызывающий печатал
+    // «devhub-studio-pro → tier=pro» и отвечал 200 с action "devhub_tier_set" —
+    // оба утверждения ложные. Gumroad считал доставку успешной и не повторял её:
+    // человек заплатил, доступа не получил, следов нет.
+    throw err;
   }
 }
 
@@ -271,7 +276,15 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   if (reference === "devhub-studio-pro") {
     const devhubTier = (refunded || failed) ? "free" : result.status === "paid" ? "pro" : null;
     if (devhubTier) {
-      await upgradeDevHubByEmail(email, devhubTier);
+      try {
+        await upgradeDevHubByEmail(email, devhubTier);
+      } catch (err) {
+        capture(err);
+        console.error(`[gumroad/webhook] devhub tier NOT set for ${email}:`, err instanceof Error ? err.message : err);
+        // 500, чтобы доставка повторилась и событие осталось видимым у Gumroad.
+        // Сообщить «успех» здесь — значит закрыть вопрос, не решив его.
+        return res.status(500).json({ ok: false, error: "devhub_tier_failed" });
+      }
       console.log(`[gumroad/webhook] devhub-studio-pro → tier=${devhubTier} for ${email}`);
       return res.json({ ok: true, action: "devhub_tier_set", tier: devhubTier, email });
     }

@@ -1,4 +1,4 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -36,5 +36,26 @@ describe("вердикт проверки подписи везёт свою о�
     expect(String(r.body.keyNoteEn)).toContain("ephemeral");
     // И вердикт по-прежнему на месте: оговорка его дополняет, а не заменяет.
     expect(r.body.valid).toBe(true);
+  });
+
+  test("повреждённый ключ считается временным, а не постоянным", async () => {
+    // Признак раньше считался по НАЛИЧИЮ переменной. Повреждённое значение
+    // (обрезанный base64, лишний перевод строки при вставке в Railway) молча
+    // уходило в ветку с временным ключом, а модуль отвечал `ephemeral: false` —
+    // обещал постоянный ключ ровно там, где человек ошибся руками.
+    vi.resetModules();
+    const prev = process.env.QSKYWAY_SIGN_SK;
+    process.env.QSKYWAY_SIGN_SK = "это-не-base64-ключ";
+    try {
+      const { qskywayRouter: freshRouter } = await import("../src/routes/qskyway");
+      const fresh = express().use(express.json()).use("/api/qskyway", freshRouter);
+      const r = await request(fresh).get("/api/qskyway/verify?city=astana");
+      expect(r.status).toBe(200);
+      expect(r.body.ephemeral, "повреждённый ключ выдан за постоянный").toBe(true);
+      expect(String(r.body.keyNote)).toContain("временный");
+    } finally {
+      if (prev === undefined) delete process.env.QSKYWAY_SIGN_SK; else process.env.QSKYWAY_SIGN_SK = prev;
+      vi.resetModules();
+    }
   });
 });

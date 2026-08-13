@@ -247,6 +247,10 @@ export default function QSkywayClient() {
   // считается здесь и ставится в строку, а не только в регуляторную карточку.
   const padBan = padProhibition(meta?.airspace?.permission);
   const [verify, setVerify] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
+  // Оговорка о ключе приходит вместе с вердиктом и показывается рядом с ним:
+  // без `QSKYWAY_SIGN_SK` ключ подписи генерируется при старте процесса, и
+  // «подпись верна» тогда означает лишь «в этом процессе двойник не менялся».
+  const [verifyKey, setVerifyKey] = useState<{ ephemeral: boolean; note: string } | null>(null);
 
   // ── engine (pure over the loaded city) ──────────────────────────────────────
   const obst = useCallback((c: number, r: number): number => {
@@ -404,7 +408,7 @@ export default function QSkywayClient() {
   // ── city loading (switchable) ─────────────────────────────────────────────────
   const loadCity = useCallback(async (id: string) => {
     cityIdRef.current = id;
-    setLoaded(false); setErr(null); setVerify("idle");
+    setLoaded(false); setErr(null); setVerify("idle"); setVerifyKey(null);
     setAirspaceRoute(null); setCeilingBlocked(null); setImpact(null); setHeightDispute(null); setDisputeImpact(null);
     // Measured server-side across every pair, never typed in by hand: the whole
     // point of this figure is that it comes from the same engine the routes do.
@@ -665,8 +669,13 @@ export default function QSkywayClient() {
       const res = await fetch(apiUrl(`/api/qskyway/verify?city=${encodeURIComponent(cityIdRef.current)}`));
       const j = await res.json();
       setVerify(res.ok && j.valid === true ? "valid" : "invalid");
-    } catch { setVerify("invalid"); }
-  }, []);
+      setVerifyKey(typeof j.ephemeral === "boolean"
+        ? { ephemeral: j.ephemeral, note: String(lang === "ru" ? j.keyNote : (j.keyNoteEn ?? j.keyNote)) }
+        : null);
+    } catch { setVerify("invalid"); setVerifyKey(null); }
+    // `lang` в зависимостях, а не через ref: список был пустым, и колбэк
+    // запомнил бы язык, выбранный при монтировании.
+  }, [lang]);
 
   // ── slot booking (real backend) ──────────────────────────────────────────────
   const bookSlot = useCallback(async () => {
@@ -899,6 +908,14 @@ export default function QSkywayClient() {
                     🔏 Ed25519 · {meta.signed}…
                     {verify === "checking" && " · проверка…"}
                     {verify === "valid" && " · ✓ подпись верна"}
+                    {/* Вердикт без этой приписки читается сильнее, чем есть:
+                        временный ключ никто раньше не видел, и связи со вчерашним
+                        двойником подпись не даёт. На проде ключ именно такой. */}
+                    {verify === "valid" && verifyKey?.ephemeral && (
+                      <span style={{ color: "#fbbf24" }} title={verifyKey.note}>
+                        {" "}· ключ временный
+                      </span>
+                    )}
                     {verify === "invalid" && " · ✗ проверка не прошла"}
                   </span>
                   <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: "зданий" }} />

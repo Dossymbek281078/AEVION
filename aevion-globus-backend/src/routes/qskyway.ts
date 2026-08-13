@@ -770,18 +770,33 @@ function suitability(cityId: string, city: CityData): VertiportScore[] {
 }
 
 // ── Ed25519 signing (QSign-style attestation over the immutable twin) ──────────
-function loadSignKey(): crypto.KeyObject {
+/**
+ * Ключ подписи и ЧЕСТНЫЙ признак того, временный ли он.
+ *
+ * Признак считался как `!process.env.QSKYWAY_SIGN_SK` — по наличию переменной,
+ * а не по тому, удалось ли её разобрать. Повреждённое значение (обрезанный
+ * base64, ключ не того формата, лишний перевод строки при вставке в Railway)
+ * молча уходило в ветку `catch`, ключ становился временным, а модуль продолжал
+ * утверждать `ephemeral: false` — то есть ровно там, где человек ошибся руками,
+ * мы обещали бы постоянный ключ. Теперь признак берётся из фактического исхода
+ * загрузки, и о неразобранном значении сказано в логе: молчать о нём нельзя,
+ * иначе переменная «задана», а работает всё как без неё.
+ */
+function loadSignKey(): { key: crypto.KeyObject; ephemeral: boolean } {
   const env = process.env.QSKYWAY_SIGN_SK;
   if (env) {
-    try { return crypto.createPrivateKey({ key: Buffer.from(env, "base64"), format: "der", type: "pkcs8" }); }
-    catch { /* fall through to ephemeral */ }
+    try {
+      return { key: crypto.createPrivateKey({ key: Buffer.from(env, "base64"), format: "der", type: "pkcs8" }), ephemeral: false };
+    } catch (e) {
+      console.warn("[qskyway] QSKYWAY_SIGN_SK задана, но не разобрана — подпись уходит на ВРЕМЕННЫЙ ключ:",
+        e instanceof Error ? e.message : e);
+    }
   }
-  return crypto.generateKeyPairSync("ed25519").privateKey;
+  return { key: crypto.generateKeyPairSync("ed25519").privateKey, ephemeral: true };
 }
-const SIGN_SK = loadSignKey();
+const { key: SIGN_SK, ephemeral: SIGN_EPHEMERAL } = loadSignKey();
 const SIGN_PK = crypto.createPublicKey(SIGN_SK);
 const SIGN_PK_B64 = SIGN_PK.export({ type: "spki", format: "der" }).toString("base64");
-const SIGN_EPHEMERAL = !process.env.QSKYWAY_SIGN_SK;
 
 interface Signature { alg: string; contentHash: string; signature: string; publicKey: string; note: string; }
 const sigCache = new Map<string, Signature>();

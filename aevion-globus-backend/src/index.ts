@@ -94,6 +94,7 @@ import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } 
 import { NEW_WAVE_OPENAPI_PATHS, NEW_WAVE_OPENAPI_SCHEMAS, NEW_WAVE_OPENAPI_TAGS } from "./lib/openapiNewWaveSpec";
 import { isSentryEnabled, captureException } from "./lib/sentry";
 import { makeHttpErrorHandler } from "./lib/httpErrorHandler";
+import { bodyLimitByPath } from "./lib/bodyLimitByPath";
 import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
 import { paymentsRouter } from "./routes/payments";
@@ -152,6 +153,9 @@ app.use(
 // `verify` stashes the raw bytes on req.rawBody for paths that need exact-byte
 // signature verification (Stripe webhooks: /api/qpaynet/deposit/webhook,
 // /api/checkout/webhook, etc.). All other handlers ignore rawBody.
+// Узкие пределы по путям — ОБЯЗАТЕЛЬНО до общего разбора: после него тело уже
+// прочитано, и меньший предел ставить поздно. Список и замеры — в модуле.
+app.use(bodyLimitByPath);
 app.use(express.json({
   limit: "10mb",
   verify: (req, _res, buf) => {

@@ -286,6 +286,8 @@ interface AirspaceCompliance {
   maxExceedanceM: number;
   lowestCeilingM: number | null;
   note: string;
+  /** тот же вердикт по-английски: страница показывает его как есть */
+  noteEn: string;
 }
 
 function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[]): AirspaceCompliance {
@@ -294,6 +296,7 @@ function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[])
       available: false, compliant: null, coveragePct: 0, exceedingSegments: 0,
       zeroCeilingSegments: 0, maxExceedanceM: 0, lowestCeilingM: null,
       note: "Регуляторный фид для этого города не подключён — соответствие потолку не проверялось.",
+      noteEn: "No regulator feed is wired for this city — compliance with a ceiling was not checked.",
     };
   }
   let covered = 0, exceeding = 0, zeroSegs = 0, maxExc = 0;
@@ -319,6 +322,9 @@ function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[])
     note: compliant
       ? "Коридор укладывается в опубликованный потолок — автоматический допуск (LAANC) применим на всём протяжении."
       : `${exceeding} из ${alts.length} участков выше опубликованного потолка (макс. превышение ${Math.round(maxExc)} м) — нужна координация с УВД, автоматического допуска недостаточно.`,
+    noteEn: compliant
+      ? "The corridor stays within the published ceiling — automatic authorization (LAANC) applies along its whole length."
+      : `${exceeding} of ${alts.length} segments are above the published ceiling (max exceedance ${Math.round(maxExc)} m) — ATC coordination is required, automatic authorization is not enough.`,
   };
 }
 
@@ -1271,6 +1277,7 @@ qskywayRouter.post("/route", (req: Request, res: Response) => {
           airspaceIfUnrestricted: relaxed.airspace,
           cruiseAltMIfUnrestricted: relaxed.cruiseAltM,
           note: "Физически маршрут существует, но требует высоты выше автоматически разрешённой. Полёт возможен только по координации с УВД (вне LAANC).",
+          noteEn: "The corridor exists physically, but requires an altitude above the automatically authorized one. The flight is possible only with ATC coordination (outside LAANC).",
         });
       }
     }

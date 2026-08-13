@@ -38,6 +38,7 @@ interface AirspaceSummary {
   maxCeilingM?: number | null;
   zeroCeilingCells?: number;
   note?: string;
+  noteEn?: string;
   freshness?: { checked: boolean; upToDate: boolean | null; publishedEffective: string | null; cellsChanged: number; checkedAt: string | null };
   /** a regulator gate on the operation, published separately from any ceiling */
   permission?: { available: boolean; authority?: string; regime?: string; regimeEn?: string; kind?: "permission" | "prohibition"; basis?: string; effective?: string; sampled?: string; coveragePct?: number; uniform?: boolean; note?: string; noteEn?: string; provenanceNote?: string; provenanceNoteEn?: string };
@@ -52,6 +53,8 @@ interface AirspaceCompliance {
   maxExceedanceM: number;
   lowestCeilingM: number | null;
   note: string;
+  /** тот же вердикт по-английски: приходит с сервера, `t()` до него не достаёт */
+  noteEn?: string;
 }
 interface CityData {
   city: string;
@@ -155,7 +158,7 @@ function airspaceRegSource(a: AirspaceSummary | undefined, ru: boolean): Regulat
         attested: false,
       };
     }
-    return { tier: "none", scopeNote: a?.note };
+    return { tier: "none", scopeNote: ru ? a?.note : (a?.noteEn ?? a?.note) };
   }
   const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} м` : "";
   return {
@@ -360,7 +363,7 @@ export default function QSkywayClient() {
         if (j.reason === "airspace-ceiling") {
           // Not an error to swallow: this IS the answer — the corridor exists but
           // needs ATC coordination. Show it instead of silently faking a route.
-          setCeilingBlocked(`H-${from + 1} → H-${to + 1}: ${j.note ?? "нет коридора в пределах опубликованного потолка"}`);
+          setCeilingBlocked(`H-${from + 1} → H-${to + 1}: ${(lang === "ru" ? j.note : (j.noteEn ?? j.note)) ?? (lang === "ru" ? "нет коридора в пределах опубликованного потолка регулятора" : "no corridor within the regulator's published ceiling")}`);
           setAirspaceRoute(j.airspaceIfUnrestricted ?? null);
           // Рейса нет — значит нет и коридора, про который можно сказать, что он
           // поднят спорной высотой. Старое предупреждение тут читалось бы как
@@ -1046,7 +1049,7 @@ export default function QSkywayClient() {
                     {airspaceRoute.lowestCeilingM != null && (
                       <span style={{ color: "#5f7086" }}> · мин. потолок по трассе {airspaceRoute.lowestCeilingM} м</span>
                     )}
-                    <div style={{ color: "#5f7086", fontSize: 10.5, marginTop: 3, whiteSpace: "normal" }}>{airspaceRoute.note}</div>
+                    <div style={{ color: "#5f7086", fontSize: 10.5, marginTop: 3, whiteSpace: "normal" }}>{lang === "ru" ? airspaceRoute.note : (airspaceRoute.noteEn ?? airspaceRoute.note)}</div>
                   </div>
                 )}
                 {/* Расхождение двух наших же ответов: чип в шапке говорит «высоте

@@ -147,7 +147,36 @@ function stubSuggest(description: string): { sliders: Sliders; explanation: stri
   };
 }
 
-async function callQCoreAiChat(description: string): Promise<{
+/**
+ * Заголовки, по которым внутренний вызов остаётся УЗНАВАЕМЫМ на принимающей
+ * стороне.
+ *
+ * Без них все обращения конституции приходят в лимитер `/api/qcoreai/chat`
+ * анонимными и с адресом петли — то есть под ОДНИМ ключом на всех
+ * пользователей. Симптом: человек, не сделавший ни одного запроса, получает
+ * отказ, потому что бюджет минуты израсходовал кто-то другой; см. замер в
+ * коммите про chatLimiter (13.08.2026, там же починен сам лимитер).
+ *
+ * Починка лимитера сама по себе этот путь не закрывает: он считает по аккаунту
+ * ТОЛЬКО когда вызывающий передал токен. MultiChat передаёт, конституция — нет.
+ *
+ * `x-forwarded-for` нужен для анонимов: аккаунта у них нет, и различить их
+ * можно лишь по настоящему адресу. Заголовок ставится от адреса, который уже
+ * определил express на входе конституции (`trust proxy` учтён), так что
+ * подделать его отсюда нельзя — снаружи он и так влиял бы на входной лимитер.
+ */
+export function internalIdentityHeaders(req: Request): Record<string, string> {
+  const out: Record<string, string> = { "Content-Type": "application/json" };
+  const auth = req.headers.authorization;
+  if (typeof auth === "string" && auth) out.Authorization = auth;
+  if (req.ip) out["X-Forwarded-For"] = req.ip;
+  return out;
+}
+
+async function callQCoreAiChat(
+  description: string,
+  req: Request,
+): Promise<{
   reply: string;
   mode: string;
 }> {
@@ -161,7 +190,7 @@ async function callQCoreAiChat(description: string): Promise<{
   };
   const r = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: internalIdentityHeaders(req),
     body: JSON.stringify(body),
   });
   if (!r.ok) {
@@ -242,7 +271,9 @@ constitutionAiRouter.post(
       const port = process.env.PORT || 4001;
       const upstream = await fetch(`http://127.0.0.1:${port}/api/qcoreai/chat-stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // Тот же внутренний вызов, та же слепота: без этих заголовков поток
+        // считается анонимом с адреса петли, общим на всех пользователей.
+        headers: internalIdentityHeaders(req),
         body: JSON.stringify({
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
@@ -345,7 +376,7 @@ constitutionAiRouter.post(
       const { description } = req.body as { description: string };
       let qc: { reply: string; mode: string };
       try {
-        qc = await callQCoreAiChat(description);
+        qc = await callQCoreAiChat(description, req);
       } catch (err) {
         const stub = stubSuggest(description);
         return res.json({

@@ -70,6 +70,39 @@ async function run() {
   if (r.status === 200 && Array.isArray(r.body?.leaderboard)) ok("GET /cyberchess-daily/leaderboard", `total=${r.body.total}`);
   else bad("cyberchess-daily/leaderboard", `${r.status} ${JSON.stringify(r.body).slice(0, 60)}`);
 
+  // Хранилище турниров и задачи дня: работает ли перенос в Postgres.
+  //
+  // Проверка НАМЕРЕННО мягкая к 404: на момент её написания перенос лежит в
+  // невлитой ветке, и жёсткое требование сделало бы смок красным до самой
+  // выкатки. Красный по расписанию перестают читать вместе с настоящей находкой
+  // внутри. Как только код доедет — ручка появится, и проверка станет строгой
+  // сама собой, без правок.
+  for (const [label, path_] of [
+    ["турниры", "/api/cyberchess-tournaments/_persistence"],
+    ["задача дня", "/api/cyberchess-daily/_persistence"],
+  ]) {
+    r = await req("GET", path_);
+    if (r.status === 404) {
+      ok(`хранилище ${label}: ручки ещё нет на проде`, "перенос не выкачен");
+      continue;
+    }
+    if (r.status !== 200) {
+      bad(`хранилище ${label}`, `${r.status}`);
+      continue;
+    }
+    const db = r.body?.db || r.body?.persistence?.db || {};
+    if (!db.configured) {
+      // На проде DATABASE_URL есть — значит модуль его не увидел.
+      bad(`хранилище ${label}: база не настроена`, "данные живут на файле и теряются при деплое");
+    } else if (!db.connected) {
+      bad(`хранилище ${label}: подключиться не вышло`, String(db.lastError || "").slice(0, 60));
+    } else if (Number(db.saveErrors) > 0) {
+      bad(`хранилище ${label}: ошибки записи`, `${db.saveErrors}, последняя: ${String(db.lastError || "").slice(0, 50)}`);
+    } else {
+      ok(`хранилище ${label}`, `подключено, записей ${db.saves}, из базы поднято: ${db.adoptedFromDb}`);
+    }
+  }
+
   // Upcoming events — public.
   r = await req("GET", "/api/cyberchess/upcoming");
   if (r.status === 200) ok("GET /cyberchess/upcoming → 200");

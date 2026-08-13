@@ -913,7 +913,7 @@ export default function QSkywayClient() {
                         двойником подпись не даёт. На проде ключ именно такой. */}
                     {verify === "valid" && verifyKey?.ephemeral && (
                       <span style={{ color: "#fbbf24" }} title={verifyKey.note}>
-                        {" "}· ключ временный
+                        {t("qskyway.verify.ephemeralKey")}
                       </span>
                     )}
                     {verify === "invalid" && " · ✗ проверка не прошла"}
@@ -1218,11 +1218,7 @@ export default function QSkywayClient() {
                       Bitcoin через OpenTimestamps: её проверяет третья сторона и она
                       доказывает время. Квитанция слота — SHA-256 от нашей же записи в
                       нашей же базе. Одно слово на две разные гарантии занимало чужой вес. */}
-                  Ёмкость на маршрут: {slots.capacityPerRoute || "—"}. У брони есть контрольная
-                  сумма записи (receipt, SHA-256): по ней видно, что запись не изменена —
-                  <code style={{ color: "#9fb0c4" }}> GET /api/qskyway/slots/&#123;id&#125;/verify</code>.
-                  Это не якорь во внешнем реестре: в отличие от слоя ограничений, привязанного
-                  к Bitcoin, квитанция проверяется только против нашего хранилища.
+                  {t("qskyway.slots.capacity", { n: String(slots.capacityPerRoute || "—") })} {t("qskyway.slots.receipt")}
                 </div>
               </section>
             </aside>

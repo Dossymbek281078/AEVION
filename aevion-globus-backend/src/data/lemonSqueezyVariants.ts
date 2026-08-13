@@ -106,6 +106,41 @@ export function lemonSqueezyTiersConfigured(): boolean {
 }
 
 /**
+ * Название товара на витрине магазина → ссылка в коде.
+ *
+ * ЗАЧЕМ. Витрина `aevion.lemonsqueezy.com` перечисляет живые товары, а код
+ * знает ссылки — но связать одно с другим было нечем: 13.08.2026 я сопоставлял
+ * семнадцать товаров вручную, глазами. Пока такой таблицы нет, вопрос «этот
+ * товар вообще кто-нибудь выдаёт?» решается только покупкой.
+ *
+ * Сопоставляем по НАЗВАНИЮ, а не по идентификатору варианта: идентификаторы
+ * живут в переменных Railway, и держать их копию в коде значило бы завести
+ * второго писателя для одного числа. Названия мы задаём сами, и они устойчивы.
+ *
+ * Товар, которого здесь нет, — не ошибка сам по себе, но и выдать его нечем:
+ * сверка скажет об этом до того, как его кто-то купит.
+ */
+export const STOREFRONT_NAME_TO_REFERENCE: Record<string, LemonSqueezyReference> = {
+  "AEVION Lite — Monthly": "tier_lite_monthly",
+  "AEVION Lite — Annual": "tier_lite_annual",
+  "AEVION Medium — Monthly": "tier_medium_monthly",
+  "AEVION Medium — Annual": "tier_medium_annual",
+  "AEVION Full — Monthly": "tier_full_monthly",
+  "AEVION Full — Annual": "tier_full_annual",
+  "AEVION Planet — Monthly": "tier_planet_monthly",
+  "AEVION Planet — Annual": "tier_planet_annual",
+  "AEVION DevHub Studio Pro": "app_devhub",
+  "AEVION Smeta Trainer": "app_smeta",
+  "AEVION QVenture": "app_qventure",
+  "AEVION QPayNet": "app_qpaynet",
+  "AEVION QContract": "app_qcontract",
+  "AEVION IP Bureau": "app_ip_bureau",
+  "AEVION CyberChess Pro": "app_cyberchess",
+  "AEVION QRenew": "app_qrenew",
+  "AEVION Constitution Lab": "app_constitution",
+};
+
+/**
  * Какие товары РЕАЛЬНО можно выдать: у каких ссылок задан вариант в окружении.
  *
  * Зачем наружу. Соответствие «товар → модуль» держится на переменных Railway.

@@ -383,7 +383,9 @@ function degradedGuard(_req: Request, res: Response, next: () => void): void {
   const retry = tryLoadFromDisk();
   if (retry.ok) {
     storeDegraded = false;
-    TOURNAMENTS = retry.tournaments && retry.tournaments.length > 0 ? retry.tournaments : buildSeedFixtures();
+    // Та же развилка, что и при первой загрузке: фикстуры только если файла
+    // нет вовсе (`null`). Пустой список — сохранённое состояние.
+    TOURNAMENTS = retry.tournaments ?? buildSeedFixtures();
     return next();
   }
   res.status(503).json({ ok: false, error: "tournaments_store_unavailable" });
@@ -467,7 +469,12 @@ function initStore(): void {
     return;
   }
   const loaded = result.tournaments;
-  if (loaded && loaded.length > 0) {
+  // `null` — файла нет, состояния никогда не было: тогда и только тогда
+  // фикстуры. Пустой массив — это СОСТОЯНИЕ: человек удалил последний турнир.
+  // Пока здесь стояло `length > 0`, оба случая означали «подставить двенадцать
+  // демо-турниров», то есть уборка отменяла сама себя при следующем запуске —
+  // молча, без единой ошибки в логе.
+  if (loaded) {
     TOURNAMENTS = loaded;
     // backfill new fields on legacy persisted data
     for (const t of TOURNAMENTS) {

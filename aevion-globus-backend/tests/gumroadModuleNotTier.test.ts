@@ -110,4 +110,38 @@ describe("Gumroad: за $9 дают Конституцию, а не право �
     expect(mockProvision).toHaveBeenCalledTimes(1);
     expect(appSubWrites()).toEqual([]);
   });
+
+  test("Constitution Team тоже даёт модуль, а не проваливается в общую ветку", async () => {
+    const r = await request(app())
+      .post("/api/gumroad/webhook")
+      .type("form")
+      .send({
+        sale_id: "sale_team",
+        email: "buyer@test.aev",
+        product_permalink: "https://aevion.gumroad.com/l/wjvquw", // Constitution Team $49
+        price: "4900",
+      });
+
+    expect(r.body.appSlug).toBe("constitution");
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  test("НЕИЗВЕСТНЫЙ товар не выдаёт ничего и отвечает 500", async () => {
+    // Раньше он проваливался в общую ветку и получал подарок наугад: сначала
+    // тариф, а после правки — модуль. Оба варианта одинаково неверны.
+    const r = await request(app())
+      .post("/api/gumroad/webhook")
+      .type("form")
+      .send({
+        sale_id: "sale_unknown",
+        email: "buyer@test.aev",
+        product_permalink: "https://aevion.gumroad.com/l/zzzznew",
+        price: "1900",
+      });
+
+    expect(r.status).toBe(500);
+    expect(r.body.error).toBe("unmapped_product");
+    expect(mockProvision).not.toHaveBeenCalled();
+    expect(appSubWrites()).toEqual([]);
+  });
 });

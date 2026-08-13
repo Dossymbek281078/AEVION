@@ -109,6 +109,12 @@ const KNOWN_PERMALINK_REFERENCE: Record<string, string> = {
   xpxzam: "tier_full_monthly", // AEVION All-Access $59/mo
   // Constitution entry tier — same as the legacy default, made explicit.
   pyiaz: "constitution-pro", // Constitution Pro $9/mo
+  // Team задан ЯВНО с 13.08.2026. Раньше он проваливался в общую ветку, и это
+  // было осознанным решением — пока общая ветка вела в тариф. Теперь она ведёт
+  // в модуль, и молчаливое падение сюда делало бы Team за $49 равным Pro за $9.
+  // Что именно Team добавляет (места? модули?) — вопрос к продукту, но
+  // «неявно то же самое» ответом быть не может.
+  wjvquw: "constitution-team", // Constitution Team $49/mo
 };
 
 /** Last path segment of a Gumroad permalink or full product URL, lowercased.
@@ -157,8 +163,12 @@ function resolveReference(raw: Record<string, string>): string {
     return KNOWN_PERMALINK_REFERENCE[pingSlug];
   }
 
-  // 5. Legacy catch-all — keep Constitution Pro working without explicit mapping.
-  return "constitution-pro";
+  // 5. Неизвестный товар. Раньше здесь стоял catch-all "constitution-pro" — он
+  //    существовал, чтобы Pro работал без явной строки в карте. Pro теперь задан
+  //    явно, а молчаливая выдача чего-либо незнакомому товару — ровно тот
+  //    шаблон, что запрещён в вебхуке Lemon Squeezy: «мы не знаем, что человек
+  //    купил» обязано быть видно, а не превращаться в подарок.
+  return "unknown";
 }
 
 function tierForReference(ref: string): TierId {
@@ -181,7 +191,7 @@ function isConstitutionProduct(ref: string): boolean {
  */
 function moduleSlugForReference(ref: string): string | null {
   const r = ref.toLowerCase();
-  if (r === "constitution-pro") return "constitution";
+  if (r === "constitution-pro" || r === "constitution-team") return "constitution";
   return null;
 }
 
@@ -349,6 +359,16 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   }
 
   try {
+    // Неизвестный товар: деньги пришли, а что за них выдать — неизвестно.
+    // Молчать нельзя (получится подарок наугад), и выдавать наугад тоже.
+    // 500 — доставка повторится, событие останется видимым в панели Gumroad.
+    if (reference === "unknown") {
+      const err = new Error(`неизвестный товар Gumroad: permalink=${raw.product_permalink ?? raw.permalink ?? "?"} product=${productId} email=${email}`);
+      capture(err);
+      console.error(`[gumroad/webhook] ${err.message}`);
+      return res.status(500).json({ ok: false, error: "unmapped_product", permalink: String(raw.product_permalink ?? raw.permalink ?? "") });
+    }
+
     // Товар, который продаёт ОДИН модуль, и должен давать этот модуль. Раньше
     // Constitution Pro за $9 превращался в тариф lite ($19) со свободным
     // выбором ЛЮБОГО модуля — включая те, что стоят $29–49. Человек платил за

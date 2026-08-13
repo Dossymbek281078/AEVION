@@ -95,6 +95,7 @@ import { NEW_WAVE_OPENAPI_PATHS, NEW_WAVE_OPENAPI_SCHEMAS, NEW_WAVE_OPENAPI_TAGS
 import { isSentryEnabled, captureException } from "./lib/sentry";
 import { makeHttpErrorHandler } from "./lib/httpErrorHandler";
 import { bodyLimitByPath } from "./lib/bodyLimitByPath";
+import { needsRawBody } from "./lib/rawBodyPolicy";
 import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
 import { paymentsRouter } from "./routes/payments";
@@ -150,16 +151,28 @@ app.use(
 // 10mb to accommodate base64-encoded resume scans posted to /api/build/ai/parse-resume.
 // Plain JSON payloads everywhere else stay tiny — limit is just a ceiling.
 //
-// `verify` stashes the raw bytes on req.rawBody for paths that need exact-byte
-// signature verification (Stripe webhooks: /api/qpaynet/deposit/webhook,
-// /api/checkout/webhook, etc.). All other handlers ignore rawBody.
 // Узкие пределы по путям — ОБЯЗАТЕЛЬНО до общего разбора: после него тело уже
 // прочитано, и меньший предел ставить поздно. Список и замеры — в модуле.
 app.use(bodyLimitByPath);
+
+// `verify` сохраняет сырые байты на req.rawBody для обработчиков, которые
+// проверяют подпись побайтно (платёжные вебхуки: /api/qpaynet/deposit/webhook,
+// /api/paypal/webhook и ещё семь — полный список и замеры в lib/rawBodyPolicy).
+//
+// Сохраняется НЕ на всех путях: ссылка на буфер продлевает ему жизнь до конца
+// запроса, и на медиа-путях (тела в мегабайтах) это стоит десятков мегабайт при
+// небольшой параллельности. Правило двойное — «мало ИЛИ вебхук» — чтобы
+// устаревший список путей не сломал проверку подписи молча.
+//
+// Прежний комментарий здесь называл читателем /api/checkout/webhook — тот
+// обработчик rawBody не читает вовсе (проверено грепом по src/).
 app.use(express.json({
   limit: "10mb",
   verify: (req, _res, buf) => {
-    (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    const r = req as { originalUrl?: string; url?: string };
+    if (needsRawBody(r.originalUrl ?? r.url, buf.length)) {
+      (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    }
   },
 }));
 // Gumroad pings arrive as application/x-www-form-urlencoded. express.json
@@ -170,8 +183,13 @@ app.use(express.json({
 app.use(express.urlencoded({
   extended: false,
   limit: "1mb",
+  // Та же политика, что у JSON: путь Gumroad в списке, поэтому его пинг получит
+  // байты при любом размере, а прочие form-посты — только пока они малы.
   verify: (req, _res, buf) => {
-    (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    const r = req as { originalUrl?: string; url?: string };
+    if (needsRawBody(r.originalUrl ?? r.url, buf.length)) {
+      (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    }
   },
 }));
 

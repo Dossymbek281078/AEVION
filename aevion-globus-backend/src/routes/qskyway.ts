@@ -861,6 +861,28 @@ interface Slot { id: string; routeId: string; t0: string; t1: string; holder: st
 const memSlots: Slot[] = [];
 let slotsTablesReady = false;
 let slotsDbAvailable = false;
+/**
+ * Хранилище слотов недоступно — и это НЕ то же самое, что «слотов нет».
+ *
+ * До 13.08.2026 при ошибке базы все три операции молча уходили в память:
+ * чтение возвращало пустой массив (то есть упавший запрос показывался как
+ * «рынок пуст»), счёт возвращал ноль, а бронь ЗАПИСЫВАЛАСЬ В ПАМЯТЬ и выдавала
+ * квитанцию «право зафиксировано». При этом поле `store` продолжало говорить
+ * `postgres`, список читался из базы (значит записи там не было), а лимит на
+ * следующий запрос считался тоже по базе — то есть право выдано, но система
+ * его не покажет и не учтёт.
+ *
+ * Память остаётся законным режимом ровно в одном случае: Postgres не настроен
+ * вовсе, `slotsDbAvailable === false` с самого начала, и `store: "memory"`
+ * говорит об этом прямо. Подмена хранилища НА ХОДУ запрещена.
+ */
+class SlotStoreUnavailable extends Error {
+  constructor(cause: unknown) {
+    super("хранилище слотов недоступно: " + (cause instanceof Error ? cause.message : String(cause)));
+    this.name = "SlotStoreUnavailable";
+  }
+}
+
 const overlaps = (a0: number, a1: number, b0: number, b1: number): boolean => a0 < b1 && b0 < a1;
 
 async function ensureSlotTable(): Promise<void> {
@@ -901,7 +923,10 @@ async function listSlots(): Promise<Slot[]> {
         `SELECT id, route_id, t0, t1, holder, issued, receipt FROM qskyway_slots ORDER BY created_at ASC LIMIT 500`,
       );
       return r.rows.map(rowToSlot);
-    } catch { /* fall through */ }
+    } catch (e) {
+      // Не `return memSlots`: пустой рынок и нечитаемый рынок — разные ответы.
+      throw new SlotStoreUnavailable(e);
+    }
   }
   return memSlots;
 }
@@ -912,7 +937,9 @@ async function countSlots(): Promise<number> {
     try {
       const r = await getPool().query(`SELECT COUNT(*)::int AS c FROM qskyway_slots`);
       return (r.rows[0] as { c: number }).c;
-    } catch { /* fall through */ }
+    } catch (e) {
+      throw new SlotStoreUnavailable(e);
+    }
   }
   return memSlots.length;
 }
@@ -921,7 +948,7 @@ async function countSlots(): Promise<number> {
 // advisory lock so concurrent bookings can't both slip past the capacity gate.
 async function bookSlot(
   routeId: string, t0: string, t1: string, holder: string,
-): Promise<{ ok: true; slot: Slot } | { ok: false; concurrent: number }> {
+): Promise<{ ok: true; slot: Slot } | { ok: false; reason: "capacity"; concurrent: number } | { ok: false; reason: "store" }> {
   const a0 = Date.parse(t0), a1 = Date.parse(t1);
   await ensureSlotTable();
   if (slotsDbAvailable) {
@@ -936,7 +963,7 @@ async function bookSlot(
       const concurrent = existing.rows.filter((s: { t0: unknown; t1: unknown }) => overlaps(a0, a1, Date.parse(String(s.t0)), Date.parse(String(s.t1)))).length;
       if (concurrent >= SLOT_CAPACITY) {
         await client.query("ROLLBACK");
-        return { ok: false, concurrent };
+        return { ok: false, reason: "capacity", concurrent };
       }
       const rec: Slot = { id: "slot-" + crypto.randomUUID().slice(0, 8), routeId, t0, t1, holder, issued: new Date().toISOString().slice(0, 10), receipt: "" };
       rec.receipt = "qright:" + crypto.createHash("sha256").update(JSON.stringify(rec)).digest("hex").slice(0, 32);
@@ -948,14 +975,17 @@ async function bookSlot(
       return { ok: true, slot: rec };
     } catch (e) {
       try { await client.query("ROLLBACK"); } catch { /* ignore */ }
-      console.warn("[qskyway] bookSlot DB error — falling back to memory:", e instanceof Error ? e.message : e);
-      // fall through to memory path below
+      // НЕ уходим в память: квитанция говорит «право зафиксировано», а запись в
+      // памяти не попадёт ни в список (он читается из базы), ни в проверку
+      // лимита на следующий запрос. Выдать её значит соврать про право.
+      console.warn("[qskyway] bookSlot DB error — отказ вместо тихой записи в память:", e instanceof Error ? e.message : e);
+      return { ok: false, reason: "store" };
     } finally {
       client.release();
     }
   }
   const concurrent = memSlots.filter((s) => s.routeId === routeId && overlaps(a0, a1, Date.parse(s.t0), Date.parse(s.t1))).length;
-  if (concurrent >= SLOT_CAPACITY) return { ok: false, concurrent };
+  if (concurrent >= SLOT_CAPACITY) return { ok: false, reason: "capacity", concurrent };
   const rec: Slot = { id: "slot-" + (memSlots.length + 1), routeId, t0, t1, holder, issued: new Date().toISOString().slice(0, 10), receipt: "" };
   rec.receipt = "qright:" + crypto.createHash("sha256").update(JSON.stringify(rec)).digest("hex").slice(0, 32);
   memSlots.push(rec);
@@ -1714,7 +1744,19 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
 });
 
 qskywayRouter.get("/slots", async (_req: Request, res: Response) => {
-  const slots = await listSlots();
+  let slots: Slot[];
+  try {
+    slots = await listSlots();
+  } catch (e) {
+    // Пустой рынок и нечитаемый рынок выглядели одинаково: «слотов пока не
+    // забронировано». Теперь второе называется вслух.
+    return res.status(503).json({
+      error: "рынок слотов недоступен: не удалось прочитать хранилище",
+      errorEn: "the slot market is unavailable: the store could not be read",
+      store: "postgres",
+      detail: e instanceof Error ? e.message : String(e),
+    });
+  }
   // `count` остаётся прежним (все записи) — на него опирается прод-смок и
   // внешние читатели. Рядом появляются два честных поля: `liveCount` — глубина
   // рынка без наших же тестовых броней, и `test` у каждой записи.
@@ -1738,6 +1780,16 @@ qskywayRouter.post("/slots", async (req: Request, res: Response) => {
   const a0 = Date.parse(t0), a1 = Date.parse(t1);
   if (isNaN(a0) || isNaN(a1) || a1 <= a0) return res.status(400).json({ error: "некорректное окно времени (ISO-8601, t1>t0)" });
   const result = await bookSlot(String(routeId), String(t0), String(t1), String(holder));
+  // Две причины отказа — два разных ответа. «Слот занят» (409) говорит о рынке,
+  // «хранилище недоступно» (503) — о нас, и путать их нельзя: первое читается
+  // как «приходите позже», второе требует чинить сервис.
+  if (!result.ok && result.reason === "store") {
+    return res.status(503).json({
+      error: "право не зафиксировано: хранилище слотов недоступно",
+      errorEn: "the right was not recorded: the slot store is unavailable",
+      note: "Квитанция не выдана намеренно. Записать бронь в память было бы хуже отказа: она не попала бы ни в список, ни в проверку лимита, а квитанция утверждала бы обратное.",
+    });
+  }
   if (!result.ok) return res.status(409).json({ error: "слот занят", routeId, capacity: SLOT_CAPACITY, concurrent: result.concurrent });
   res.status(201).json({ ok: true, slot: result.slot, note: "Право на 4D-слот зафиксировано (QRight). receipt = SHA-256-якорь." });
 });

@@ -93,6 +93,7 @@ import { qchaingovRouter } from "./routes/qchaingov";
 import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } from "./lib/openapiFintechSpec";
 import { NEW_WAVE_OPENAPI_PATHS, NEW_WAVE_OPENAPI_SCHEMAS, NEW_WAVE_OPENAPI_TAGS } from "./lib/openapiNewWaveSpec";
 import { isSentryEnabled, captureException } from "./lib/sentry";
+import { makeHttpErrorHandler } from "./lib/httpErrorHandler";
 import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
 import { paymentsRouter } from "./routes/payments";
@@ -1239,23 +1240,10 @@ startQpaynetRetryWorker();
 // QTradeOffline — offline-first P2P AEV payments (ECDSA P-256, /sync batch)
 app.use("/api/qtradeoffline", qtradeOfflineRouter);
 
-app.use(
-  (
-    err: unknown,
-    req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction,
-  ) => {
-    console.error("[express]", err);
-    captureException(err, {
-      url: req.originalUrl ?? req.url,
-      method: req.method,
-      ip: req.ip,
-    });
-    if (res.headersSent) return;
-    res.status(500).json({ error: "internal_error" });
-  },
-);
+// Обработчик ошибок живёт в src/lib/httpErrorHandler.ts — вынесен туда, чтобы
+// его можно было проверить тестом, не поднимая весь сервер. Разбор клиентских
+// отказов (413/400 вместо 500 и без Sentry) описан там же.
+app.use(makeHttpErrorHandler());
 
 // QSign v2 — Sentry init (no-op when SENTRY_DSN unset). Must run before
 // the listener binds so any startup failures are captured too.

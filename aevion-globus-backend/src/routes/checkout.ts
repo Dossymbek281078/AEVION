@@ -5,7 +5,7 @@ import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/paybox
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
 import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
 import {
-  TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO,
+  TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
   type TierId, type BillingPeriod, type CurrencyCode,
 } from "../data/pricing";
 import { provisionSubscription, countSubscriptions } from "./provisioning";
@@ -46,6 +46,8 @@ function gumroadPermalinkConfigured(reference: string): boolean {
 interface CheckoutBody {
   tierId: TierId;
   period?: "monthly" | "annual";
+  /** Срок обязательства в месяцах: 24 и 36 дают ступень веерной скидки. */
+  commitmentMonths?: number;
   seats?: number;
   modules?: string[];
   promoCode?: string;
@@ -83,48 +85,21 @@ checkoutRouter.post("/session", async (req, res) => {
       });
     }
 
-    const tierUsd = period === "annual" ? (tier.priceAnnualTotal ?? 0) : (tier.priceMonthly ?? 0);
-
-    let totalUsd = tierUsd;
-
-    // Extra seats
-    const baseSeats = tier.limits.seats ?? 1;
-    const extraSeats = Math.max(0, seats - baseSeats);
-    if (extraSeats > 0) {
-      totalUsd += 5 * extraSeats * (period === "annual" ? 12 : 1);
-    }
-
-    // Add-on modules.
-    //
-    // Lite grants "1 product of your choice" with full access to it (see its
-    // tagline/features in data/pricing.ts). The chosen module covered by Lite's
-    // module allowance must NOT also be billed its à-la-carte add-on — that
-    // would double-charge the very thing Lite buys (e.g. Lite + qsign would
-    // wrongly come to $19 + $9 = $28 instead of $19). Modules beyond the
-    // allowance, or on tiers without a free-choice slot, still incur the add-on.
-    const freeChoiceSlots = tier.id === "lite" ? (tier.limits.modules ?? 0) : 0;
-    let usedChoiceSlots = 0;
-    for (const mid of body.modules ?? []) {
-      const m = getModulePrice(mid);
-      if (!m || m.includedIn.includes(tier.id)) continue;
-      if (usedChoiceSlots < freeChoiceSlots) { usedChoiceSlots++; continue; }
-      if (!m.addonMonthly) continue;
-      totalUsd += m.addonMonthly * (period === "annual" ? 12 : 1);
-    }
-
-    // Promo code discount
-    let discountUsd = 0;
-    if (body.promoCode) {
-      const { promo } = resolvePromoCode(body.promoCode, tier.id, period);
-      if (promo) {
-        const subtotal = totalUsd;
-        const rawDiscount = promo.kind === "percent"
-          ? Math.round(subtotal * promo.amount) / 100
-          : Math.min(subtotal, promo.amount * (period === "annual" ? 12 : 1));
-        discountUsd = Math.min(rawDiscount, subtotal * MAX_PROMO_DISCOUNT_RATIO);
-        totalUsd = Math.max(0, totalUsd - discountUsd);
-      }
-    }
+    // Единый расчёт. До 13.08.2026 здесь была СВОЯ арифметика — тариф, места,
+    // модули и промо считались заново, отдельно от buildQuote. Из-за этого
+    // веерные скидки не доезжали до кассы: витрина показывала одну сумму, а
+    // списывали другую, и разойтись эти два расчёта могли молча в любой момент.
+    // Валюта здесь всегда USD: KZT конвертируется ниже из этих же центов.
+    const quote = buildQuote({
+      tierId: tier.id,
+      modules: body.modules,
+      seats,
+      period,
+      currency: "USD",
+      promoCode: body.promoCode,
+      commitmentMonths: body.commitmentMonths,
+    });
+    const totalUsd = quote.total;
 
     const trialDays = body.trial && (tier.id === "lite" || tier.id === "medium" || tier.id === "full") ? 14 : 0;
     const totalCents = Math.round(totalUsd * 100);

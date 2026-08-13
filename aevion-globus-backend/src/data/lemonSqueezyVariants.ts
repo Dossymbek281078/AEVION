@@ -106,6 +106,25 @@ export function lemonSqueezyTiersConfigured(): boolean {
 }
 
 /**
+ * Какие товары РЕАЛЬНО можно выдать: у каких ссылок задан вариант в окружении.
+ *
+ * Зачем наружу. Соответствие «товар → модуль» держится на переменных Railway.
+ * Снаружи не видно, какие из них заданы, поэтому вопрос «что случится, если это
+ * купят» до сих пор не имел ответа иначе как покупкой. Отдаём ТОЛЬКО признаки,
+ * сами идентификаторы остаются в процессе.
+ *
+ * Отсюда же считается сверка с витриной магазина: товар в продаже, у которого
+ * здесь `false`, — это будущий отказ на живом покупателе.
+ */
+export function lemonSqueezyVariantStatus(): Record<LemonSqueezyReference, boolean> {
+  const out = {} as Record<LemonSqueezyReference, boolean>;
+  for (const ref of Object.keys(TIER_VARIANT_ENV) as LemonSqueezyReference[]) {
+    out[ref] = Boolean(process.env[TIER_VARIANT_ENV[ref]]?.trim());
+  }
+  return out;
+}
+
+/**
  * Reverse lookup: a numeric LS variant_id from a webhook payload → the
  * checkout reference it belongs to. Returns null for an unrecognised id.
  */

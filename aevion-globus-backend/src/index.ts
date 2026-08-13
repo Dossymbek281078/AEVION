@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
 import { emailSenderStatus } from "./routes/provisioning";
+import { lemonSqueezyVariantStatus } from "./data/lemonSqueezyVariants";
 dotenv.config();
 
 import express from "express";
@@ -209,6 +210,10 @@ function healthPayload() {
     // снаружи это неотличимо от исправной работы. Признак и адрес отправителя,
     // ключ не отдаём.
     emailSender: safeEmailSenderStatus(),
+    // Какие товары магазина реально можно выдать. Товар в продаже с `false`
+    // здесь — это будущий отказ на живом покупателе. Только признаки, без
+    // самих идентификаторов вариантов.
+    lsVariants: safeLsVariantStatus(),
   };
 }
 
@@ -218,6 +223,15 @@ function safeDilithiumStatus() {
     return dilithiumStatus();
   } catch {
     return { mode: null, reason: null };
+  }
+}
+
+/** health не должен падать из-за диагностики. */
+function safeLsVariantStatus() {
+  try {
+    return lemonSqueezyVariantStatus();
+  } catch {
+    return null;
   }
 }
 

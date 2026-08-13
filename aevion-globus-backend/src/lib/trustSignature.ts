@@ -31,8 +31,14 @@ function loadSignKey(): { key: crypto.KeyObject; ephemeral: boolean } {
         key: crypto.createPrivateKey({ key: Buffer.from(env, "base64"), format: "der", type: "pkcs8" }),
         ephemeral: false,
       };
-    } catch {
-      /* malformed env → fall through to ephemeral */
+    } catch (e) {
+      // Раньше здесь была тишина. Признак `ephemeral` при этом честный, то есть
+      // соврать наружу нельзя — но человек, который ВСТАВИЛ ключ в Railway и
+      // ошибся (обрезал base64, оставил перевод строки), об этом не узнает
+      // ниоткуда: переменная задана, а подпись всей платформы работает как без
+      // неё. Одна строка в логе отделяет «не настроили» от «настроили с ошибкой».
+      console.warn("[trust] ключ подписи задан, но не разобран — подпись уходит на ВРЕМЕННЫЙ ключ:",
+        e instanceof Error ? e.message : e);
     }
   }
   return { key: crypto.generateKeyPairSync("ed25519").privateKey, ephemeral: true };

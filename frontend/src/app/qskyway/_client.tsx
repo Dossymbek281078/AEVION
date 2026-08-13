@@ -38,9 +38,10 @@ interface AirspaceSummary {
   maxCeilingM?: number | null;
   zeroCeilingCells?: number;
   note?: string;
+  noteEn?: string;
   freshness?: { checked: boolean; upToDate: boolean | null; publishedEffective: string | null; cellsChanged: number; checkedAt: string | null };
   /** a regulator gate on the operation, published separately from any ceiling */
-  permission?: { available: boolean; authority?: string; regime?: string; kind?: "permission" | "prohibition"; basis?: string; effective?: string; sampled?: string; coveragePct?: number; uniform?: boolean; note?: string; provenanceNote?: string };
+  permission?: { available: boolean; authority?: string; regime?: string; regimeEn?: string; kind?: "permission" | "prohibition"; basis?: string; effective?: string; sampled?: string; coveragePct?: number; uniform?: boolean; note?: string; noteEn?: string; provenanceNote?: string; provenanceNoteEn?: string };
   _signature?: { alg: string; contentHash: string };
 }
 /** Per-route verdict against that ceiling. compliant=null → no feed, no verdict. */
@@ -52,6 +53,8 @@ interface AirspaceCompliance {
   maxExceedanceM: number;
   lowestCeilingM: number | null;
   note: string;
+  /** тот же вердикт по-английски: приходит с сервера, `t()` до него не достаёт */
+  noteEn?: string;
 }
 interface CityData {
   city: string;
@@ -121,7 +124,13 @@ const VP_CLASS_COLOR: Record<string, string> = Object.assign(Object.create(null)
 });
 
 /** Map the backend's airspace block onto the platform-wide regulatory vocabulary. */
-function airspaceRegSource(a: AirspaceSummary | undefined): RegulatorySource {
+/**
+ * Язык нужен здесь, а не только в разметке: правило регулятора приходит С
+ * СЕРВЕРА, и `t()` до него не достаёт. До 12.08.2026 это значило, что казахский
+ * и английский посетитель читал русскую оговорку — а у Токио наоборот, русский
+ * читал английскую, потому что поле `regime` там было заполнено по-английски.
+ */
+function airspaceRegSource(a: AirspaceSummary | undefined, ru: boolean): RegulatorySource {
   if (!a?.available) {
     // No ceiling grid does not mean no regulator. Tokyo publishes no altitudes
     // but governs every flight over the twin, and calling that "no source"
@@ -135,7 +144,10 @@ function airspaceRegSource(a: AirspaceSummary | undefined): RegulatorySource {
         // across the toolbar. The chip line answers "whose rule", the hover
         // answers "which rule".
         effective: perm.effective,
-        scopeNote: [perm.regime, perm.note, perm.provenanceNote].filter(Boolean).join(" "),
+        scopeNote: (ru
+          ? [perm.regime, perm.note, perm.provenanceNote]
+          : [perm.regimeEn ?? perm.regime, perm.noteEn ?? perm.note, perm.provenanceNoteEn ?? perm.provenanceNote]
+        ).filter(Boolean).join(" "),
         upToDate: null,
         // Астана и Токио стоят не на фиде, а на документе: eAIP цикла AIRAC и
         // растровый слой ведомства. Опрашивать нечего, поэтому «сверка ещё не
@@ -146,7 +158,7 @@ function airspaceRegSource(a: AirspaceSummary | undefined): RegulatorySource {
         attested: false,
       };
     }
-    return { tier: "none", scopeNote: a?.note };
+    return { tier: "none", scopeNote: ru ? a?.note : (a?.noteEn ?? a?.note) };
   }
   const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} м` : "";
   return {
@@ -154,7 +166,11 @@ function airspaceRegSource(a: AirspaceSummary | undefined): RegulatorySource {
     authority: a.authority,
     title: (a.source ?? "") + range,
     effective: a.effective,
-    scopeNote: a.regime ? `${a.regime} — не сертификация аэротакси` : undefined,
+    // Правило FAA приходит по-английски (так его публикует регулятор), а
+    // приписка была русской: строка получалась на двух языках сразу.
+    scopeNote: a.regime
+      ? `${a.regime} — ${ru ? "не сертификация аэротакси" : "not an air-taxi certification"}`
+      : undefined,
     upToDate: a.freshness?.checked ? a.freshness.upToDate : null,
     // Редакция, которую регулятор публикует ПРЯМО СЕЙЧАС. Отличается от нашей,
     // когда карту переиздали без изменения потолков: маршрут по-прежнему верен,
@@ -347,7 +363,7 @@ export default function QSkywayClient() {
         if (j.reason === "airspace-ceiling") {
           // Not an error to swallow: this IS the answer — the corridor exists but
           // needs ATC coordination. Show it instead of silently faking a route.
-          setCeilingBlocked(`H-${from + 1} → H-${to + 1}: ${j.note ?? "нет коридора в пределах опубликованного потолка"}`);
+          setCeilingBlocked(`H-${from + 1} → H-${to + 1}: ${(lang === "ru" ? j.note : (j.noteEn ?? j.note)) ?? (lang === "ru" ? "нет коридора в пределах опубликованного потолка регулятора" : "no corridor within the regulator's published ceiling")}`);
           setAirspaceRoute(j.airspaceIfUnrestricted ?? null);
           // Рейса нет — значит нет и коридора, про который можно сказать, что он
           // поднят спорной высотой. Старое предупреждение тут читалось бы как
@@ -861,7 +877,7 @@ export default function QSkywayClient() {
                             ? "qskyway.reg.subject.prohibition"
                             : "qskyway.reg.subject.permission")
                         : t("qskyway.reg.subject.ceilings")}
-                    source={airspaceRegSource(meta.airspace)}
+                    source={airspaceRegSource(meta.airspace, lang === "ru")}
                     labels={{ none: t("qskyway.reg.nofeed") }}
                   />
                   <RegulatorySourceChip
@@ -1033,7 +1049,7 @@ export default function QSkywayClient() {
                     {airspaceRoute.lowestCeilingM != null && (
                       <span style={{ color: "#5f7086" }}> · мин. потолок по трассе {airspaceRoute.lowestCeilingM} м</span>
                     )}
-                    <div style={{ color: "#5f7086", fontSize: 10.5, marginTop: 3, whiteSpace: "normal" }}>{airspaceRoute.note}</div>
+                    <div style={{ color: "#5f7086", fontSize: 10.5, marginTop: 3, whiteSpace: "normal" }}>{lang === "ru" ? airspaceRoute.note : (airspaceRoute.noteEn ?? airspaceRoute.note)}</div>
                   </div>
                 )}
                 {/* Расхождение двух наших же ответов: чип в шапке говорит «высоте

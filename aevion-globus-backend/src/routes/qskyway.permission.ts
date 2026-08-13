@@ -39,8 +39,16 @@ export interface CityPermission {
   authorityEn?: string;
   source: string;
   sourceUrl: string;
-  /** the rule in one line, as the law states it */
+  /** правило одной строкой, как его формулирует закон (по-русски) */
   regime: string;
+  /**
+   * То же правило по-английски. Нужно по той же причине, что и `authorityEn`:
+   * оговорку читает тот, кому её показали, и непонятая оговорка не работает.
+   * До 12.08.2026 у Токио поле `regime` было ЗАПОЛНЕНО ПО-АНГЛИЙСКИ, то есть
+   * русскому читателю показывали английский, а у Астаны — наоборот. Теперь у
+   * обоих городов есть обе версии, и язык выбирает интерфейс.
+   */
+  regimeEn: string;
   /**
    * "permission" — flight is allowed with an individual authorization (Tokyo/DID).
    * "prohibition" — flight is barred outright in that volume (Astana/UAP28).
@@ -73,6 +81,7 @@ export function permissionSummary(cityId: string) {
     source: p.source,
     sourceUrl: p.sourceUrl,
     regime: p.regime,
+    regimeEn: p.regimeEn,
     kind: p.kind,
     basis: p.basis,
     effective: p.effective,
@@ -86,6 +95,21 @@ export function permissionSummary(cityId: string) {
       : uniform
         ? "Весь твин попадает под режим: каждый полёт здесь требует индивидуального разрешения. Обходить нечего — это условие операции, а не геометрии маршрута."
         : `Под режим попадает ${p.coveragePct}% твина — часть полётов требует индивидуального разрешения.`,
+    // Английские версии тех же двух примечаний. Разведены по тем же четырём
+    // случаям: запрет/разрешение × весь твин/часть. Перевод буквальный —
+    // «forbidden, not permitted subject to coordination» держит ровно то
+    // различие, ради которого разделены `kind`.
+    noteEn: p.kind === "prohibition"
+      ? uniform
+        ? "The entire twin lies inside a published PROHIBITED area: flights here are forbidden, not permitted subject to coordination. The routing demonstration remains valid as a calculation, but an actual flight along it is not admissible unless the status of the area changes."
+        : `${p.coveragePct}% of the twin lies inside a published prohibited area — flights in that part are forbidden.`
+      : uniform
+        ? "The entire twin falls under the regime: every flight here requires an individual authorization. There is nothing to route around — this is a condition on the operation, not on the geometry of the route."
+        : `${p.coveragePct}% of the twin falls under the regime — some flights require an individual authorization.`,
+    provenanceNoteEn:
+      p.basis === "raster-sampled"
+        ? "The value was sampled from the regulator's own published raster tiles at grid-cell centres, not from a vector dataset — the regulator publishes this layer only as a map."
+        : "The value was ingested from the regulator's vector publication.",
     provenanceNote:
       p.basis === "raster-sampled"
         ? "Значение получено выборкой по опубликованным растровым тайлам регулятора в центрах ячеек сетки, а не из векторного датасета — регулятор публикует этот слой только картой."

@@ -152,7 +152,30 @@ export function appSlugForReference(ref: LemonSqueezyReference | null): string |
 const APP_SLUG_TO_MODULE_ID: Record<string, string> = {
   ip_bureau: "aevion-ip-bureau",
   smeta: "smeta-trainer",
+  // Найдено 13.08.2026 сверкой с реестром модулей: в `MODULES_PRICING` он
+  // называется `qpaynet-embedded`. Без этой строки гейт не нашёл бы покупку и
+  // развернул бы заплатившего за QPayNet — ровно тот же класс дефекта, ради
+  // которого таблица и заведена. Охраняется тестом appSlugModuleIds.
+  qpaynet: "qpaynet-embedded",
 };
+
+/**
+ * Модули со СВОИМ механизмом доступа, мимо `MODULES_PRICING` и общего гейта.
+ * Их отсутствие в реестре — не ошибка сопоставления.
+ */
+const OWN_GATE_SLUGS = new Set(["devhub"]);
+
+/** Продаётся ли модуль поштучно и не имеет ли он собственного гейта. */
+export function appSlugHasOwnGate(slug: string): boolean {
+  return OWN_GATE_SLUGS.has(slug);
+}
+
+/** Все slug'и, которые продаются отдельной подпиской. */
+export function allAppSlugs(): string[] {
+  return (Object.keys(TIER_VARIANT_ENV) as LemonSqueezyReference[])
+    .filter((r) => r.startsWith("app_"))
+    .map((r) => r.slice(4));
+}
 
 /** "ip_bureau" → "aevion-ip-bureau"; для совпадающих имён вернёт как есть. */
 export function moduleIdForAppSlug(slug: string): string {

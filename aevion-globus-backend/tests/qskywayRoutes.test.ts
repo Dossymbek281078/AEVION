@@ -92,7 +92,7 @@ describe("POST /route/justification — the filing", () => {
   test("binds the twin, the airspace edition and the verdict, and verifies", async () => {
     const j = await request(app).post("/api/qskyway/route/justification").send({ from: 1, to: 2, city: "nyc" });
     expect(j.status).toBe(200);
-    expect(j.body.document.kind).toBe("qskyway.route.justification/1");
+    expect(j.body.document.kind).toBe("qskyway.route.justification/2");
     expect(j.body.document.airspace.authority).toBe("FAA");
     expect(j.body.document.twinContentHash).toMatch(/^[0-9a-f]{64}$/);
 
@@ -100,6 +100,21 @@ describe("POST /route/justification — the filing", () => {
       .post("/api/qskyway/route/justification/verify")
       .send({ document: j.body.document, attestation: j.body.attestation });
     expect(v.body).toMatchObject({ valid: true, hashValid: true, signatureValid: true });
+  });
+
+  /**
+   * Версия формата обязана двигаться, когда меняется то, ЧТО покрывает подпись.
+   * 13.08.2026 `scope` переехал внутрь документа: в /1 он лежал полем ответа
+   * рядом и подписью не покрывался. Оставить прежний номер значило бы отдать
+   * противоположное устройство под тем же именем.
+   */
+  test("документ несёт версию формата, и оговорка лежит ВНУТРИ неё", async () => {
+    const j = await request(app).post("/api/qskyway/route/justification").send({ from: 1, to: 2, city: "nyc" });
+    expect(j.body.document.kind).toBe("qskyway.route.justification/2");
+    // Именно это отличает /2 от /1 — проверяем свойство, а не только строку.
+    expect(typeof j.body.document.scope).toBe("string");
+    expect(typeof j.body.document.scopeEn).toBe("string");
+    expect(j.body.document).toHaveProperty("substitutedHeights");
   });
 
   test("a tampered value is reported as a content change, not a bad signature", async () => {

@@ -74,12 +74,14 @@ vi.mock("pg", () => {
   class Pool {
     async query(text: string, params: unknown[] = []) {
       if (/CREATE TABLE/i.test(text)) return { rows: [] };
-      if (/SELECT "state","savedAt"/i.test(text)) {
+      if (/SELECT "data","savedAt" FROM "CyberTournament"/i.test(text)) {
         await new Promise((r) => setTimeout(r, db.readDelayMs));
         if (db.failRead) throw new Error("connection reset by peer");
-        return { rows: db.state ? [{ state: db.state, savedAt: db.savedAt }] : [] };
+        // Строка на турнир — так теперь и хранится: разные турниры не мешают
+        // друг другу, когда их пишут два процесса одновременно.
+        return { rows: db.state.tournaments.map((t) => ({ data: t, savedAt: db.savedAt })) };
       }
-      if (/INSERT INTO "CyberTournamentState"/i.test(text)) {
+      if (/INSERT INTO "CyberTournament"/i.test(text)) {
         db.writes.push(params);
         return { rows: [] };
       }
@@ -152,8 +154,10 @@ describe("новый контейнер не откатывает игроков
     // В базу — следом, не блокируя ответ игроку.
     await new Promise((r) => setTimeout(r, 20));
     expect(db.writes.length).toBeGreaterThan(before);
-    const lastState = JSON.parse(String(db.writes[db.writes.length - 1][0]));
-    expect(lastState.tournaments.map((t: { title: string }) => t.title)).toContain("Заведён после деплоя");
+    // Строка на турнир: каждый уходит отдельным запросом, поэтому ищем свой
+    // среди записанных, а не разбираем один общий кусок.
+    const written = db.writes.map((w) => JSON.parse(String(w[1])) as { title: string });
+    expect(written.map((t) => t.title)).toContain("Заведён после деплоя");
   });
 });
 
@@ -171,7 +175,7 @@ describe("опоздавшая запись не затирает более с�
 
     // Проверка по тексту запроса: настоящей базы здесь нет, а подделка сравнение
     // внутри Postgres не выполняет. Условие обязано стоять именно в UPDATE.
-    expect(src).toMatch(/ON CONFLICT[\s\S]{0,900}WHERE "CyberTournamentState"\."savedAt" <= EXCLUDED\."savedAt"/);
+    expect(src).toMatch(/ON CONFLICT[\s\S]{0,900}WHERE "CyberTournament"\."savedAt" <= EXCLUDED\."savedAt"/);
   });
 });
 
@@ -190,5 +194,34 @@ describe("после деплоя можно СПРОСИТЬ, а не пред�
   test("названий турниров в диагностике нет — только счётчики", async () => {
     const res = await request(app).get("/api/cyberchess-tournaments/_persistence");
     expect(JSON.stringify(res.body)).not.toContain("Живой турнир");
+  });
+});
+
+describe("две живые реплики не стирают турниры друг друга", () => {
+  /* Раньше состояние писалось ОДНОЙ строкой целиком. При двух живых процессах —
+     а это каждый деплой, пока старая реплика дослуживает, — обе держат полную
+     копию в памяти: A записывает свой набор со своим новым турниром, B следом
+     записывает свой, без него. Турнир исчезает, и это обычный ход событий, а не
+     редкая гонка. */
+
+  test("каждая запись адресована своему турниру, а не общей строке", async () => {
+    await request(app)
+      .post("/api/cyberchess-tournaments/")
+      .send({ title: "Проверка адресации", format: "swiss", timeControl: "blitz", maxPlayers: 8 });
+    await new Promise((r) => setTimeout(r, 20));
+
+    const ids = db.writes.map((w) => String(w[0]));
+    expect(ids.length).toBeGreaterThan(0);
+    // Ключевое: ни одна запись не идёт в фиксированный ключ вроде 'singleton',
+    // иначе соседний процесс перезапишет её целиком вместе со своим набором.
+    expect(ids).not.toContain("singleton");
+    for (const id of ids) expect(id.length).toBeGreaterThan(3);
+
+    // И идентификатор строки совпадает с идентификатором турнира в её теле —
+    // иначе строки разъедутся с данными.
+    for (const w of db.writes) {
+      const body = JSON.parse(String(w[1])) as { id: string };
+      expect(String(w[0])).toBe(body.id);
+    }
   });
 });

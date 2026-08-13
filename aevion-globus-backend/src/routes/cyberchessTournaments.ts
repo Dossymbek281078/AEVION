@@ -190,11 +190,12 @@ async function ensureTournamentDb(): Promise<any> {
   try {
     const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS "CyberTournamentState" (
+      CREATE TABLE IF NOT EXISTS "CyberTournament" (
         "id"      TEXT PRIMARY KEY,
-        "state"   JSONB NOT NULL,
+        "data"    JSONB NOT NULL,
         "savedAt" TIMESTAMP NOT NULL DEFAULT now()
       );
+      CREATE INDEX IF NOT EXISTS "cybertournament_savedat_idx" ON "CyberTournament" ("savedAt" DESC);
     `);
     dbPool = pool;
     dbHealth.connected = true;
@@ -211,16 +212,22 @@ async function loadFromDb(): Promise<{ tournaments: Tournament[]; savedAtMs: num
   const pool = await ensureTournamentDb();
   if (!pool) return null;
   try {
-    const r = await pool.query(`SELECT "state","savedAt" FROM "CyberTournamentState" WHERE "id"='singleton'`);
-    const row = r.rows?.[0];
-    if (!row) return null;
-    const list = Array.isArray(row.state?.tournaments) ? (row.state.tournaments as Tournament[]) : null;
-    if (!list) {
-      console.error("[cyberchess-tournaments] строка в базе не той формы — беру файл");
+    const r = await pool.query(`SELECT "data","savedAt" FROM "CyberTournament"`);
+    const rows = r.rows ?? [];
+    if (rows.length === 0) return null;
+    const list: Tournament[] = [];
+    let newest = 0;
+    for (const row of rows) {
+      if (!row?.data || typeof row.data.id !== "string") continue; // строка не той формы — пропускаем её, а не весь набор
+      list.push(row.data as Tournament);
+      const t = row.savedAt ? new Date(row.savedAt).getTime() : 0;
+      if (Number.isFinite(t) && t > newest) newest = t;
+    }
+    if (list.length === 0) {
+      console.error("[cyberchess-tournaments] в базе есть строки, но ни одной разобранной — беру файл");
       return null;
     }
-    const t = row.savedAt ? new Date(row.savedAt).getTime() : 0;
-    return { tournaments: list, savedAtMs: Number.isFinite(t) ? t : 0 };
+    return { tournaments: list, savedAtMs: newest };
   } catch (e) {
     console.error("[cyberchess-tournaments] чтение состояния из базы не прошло:", (e as Error).message);
     return null;
@@ -232,17 +239,29 @@ async function saveToDb(list: Tournament[], stamp: number): Promise<void> {
   const pool = await ensureTournamentDb();
   if (!pool) return;
   try {
-    await pool.query(
-      `INSERT INTO "CyberTournamentState" ("id","state","savedAt") VALUES ('singleton',$1,to_timestamp($2/1000.0))
-       ON CONFLICT ("id") DO UPDATE SET "state"=EXCLUDED."state","savedAt"=EXCLUDED."savedAt"
-       -- Условие делает запись МОНОТОННОЙ: строку обновляет только более
-       -- свежее состояние. Без него два сохранения, отправленные подряд и не
-       -- дождавшиеся друг друга (запись в базу намеренно не блокирует ответ
-       -- игроку), могут прийти в обратном порядке — и старое состояние затрёт
-       -- новое. Ровно та тихая потеря, ради устранения которой всё писалось.
-       WHERE "CyberTournamentState"."savedAt" <= EXCLUDED."savedAt"`,
-      [JSON.stringify({ tournaments: list }), stamp],
-    );
+    // СТРОКА НА ТУРНИР, а не одно состояние целиком.
+    //
+    // Целиком было структурно неверно при двух живых процессах — а это каждый
+    // деплой, пока старая реплика ещё дослуживает. Обе держат ПОЛНУЮ копию в
+    // памяти: реплика A записывает свой набор со своим новым турниром,
+    // реплика B следом записывает свой — без него. Турнир исчезает, и это не
+    // редкая гонка, а обычный ход событий.
+    //
+    // По строкам конфликтуют только правки ОДНОГО турнира; разные турниры
+    // независимы. Условие на savedAt оставлено и здесь: оно защищает от
+    // прихода сохранений не в том порядке (запись намеренно не блокирует
+    // ответ игроку).
+    //
+    // Удаления нет намеренно: строку, которой нет в памяти ЭТОГО процесса,
+    // нельзя считать лишней — её мог только что завести сосед.
+    for (const t of list) {
+      await pool.query(
+        `INSERT INTO "CyberTournament" ("id","data","savedAt") VALUES ($1,$2,to_timestamp($3/1000.0))
+         ON CONFLICT ("id") DO UPDATE SET "data"=EXCLUDED."data","savedAt"=EXCLUDED."savedAt"
+         WHERE "CyberTournament"."savedAt" <= EXCLUDED."savedAt"`,
+        [t.id, JSON.stringify(t), stamp],
+      );
+    }
     dbHealth.saves += 1;
   } catch (e) {
     dbHealth.saveErrors += 1;

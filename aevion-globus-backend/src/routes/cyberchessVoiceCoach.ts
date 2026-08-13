@@ -206,6 +206,26 @@ const broadcastGc = setInterval(() => {
 }, BROADCAST_GC_INTERVAL_MS);
 if (typeof broadcastGc.unref === 'function') broadcastGc.unref();
 
+/**
+ * Ошибка внешнего сервиса, сведённая к КАТЕГОРИИ.
+ *
+ * Эти ручки ходят в языковую модель и синтез речи, а их сообщения содержат
+ * чужое устройство: адрес апстрима, имя провайдера, подробности запроса, иногда
+ * кусок ключа в тексте отказа. Отдавать это вызывающему незачем: ведущему нужно
+ * знать, что чинить, а не как устроен наш бэкенд. Полное сообщение уходит в
+ * capture() и в лог. Тот же разбор, что у `_persistence` в хранилищах (13.08).
+ */
+function upstreamErrorKind(err: unknown): string {
+  const m = (err as Error)?.message?.toLowerCase() ?? '';
+  if (!m) return 'unknown';
+  if (m.includes('timeout') || m.includes('aborted')) return 'timeout';
+  if (m.includes('econnrefused') || m.includes('enotfound') || m.includes('fetch failed')) return 'upstream_unreachable';
+  if (m.includes('401') || m.includes('403') || m.includes('unauthor') || m.includes('api key')) return 'upstream_auth';
+  if (m.includes('429') || m.includes('rate')) return 'upstream_rate_limited';
+  if (m.includes('quota') || m.includes('billing') || m.includes('credit')) return 'upstream_quota';
+  return 'upstream_error';
+}
+
 // ─── POST /comment ──────────────────────────────────────────────────────
 // Body: BuildCommentInput + optional { model?, temperature?, llm?: boolean }
 // Tries LLM via QCoreAI first; on any failure → rule-based fallback.
@@ -262,7 +282,7 @@ router.post('/comment', async (req: Request, res: Response) => {
     capture(err);
     res.status(500).json({
       error: 'comment_generation_failed',
-      message: (err as Error)?.message ?? 'unknown error',
+      reason: upstreamErrorKind(err),
     });
   }
 });
@@ -335,7 +355,7 @@ router.post('/ask', async (req: Request, res: Response) => {
       capture(err);
       return res.status(502).json({
         error: 'llm_unavailable',
-        message: (err as Error)?.message ?? 'QCoreAI is not reachable',
+        reason: upstreamErrorKind(err),
         sessionId: sid,
       });
     }
@@ -348,7 +368,7 @@ router.post('/ask', async (req: Request, res: Response) => {
     capture(err);
     res.status(500).json({
       error: 'ask_failed',
-      message: (err as Error)?.message ?? 'unknown error',
+      reason: upstreamErrorKind(err),
     });
   }
 });
@@ -442,7 +462,7 @@ router.post('/tts', async (req: Request, res: Response) => {
       return res.status(upstream.status).json({
         error: 'elevenlabs_error',
         status: upstream.status,
-        detail: errText.slice(0, 500),
+        reason: 'upstream_error', // подробности — в логе, не в ответе
       });
     }
 
@@ -458,7 +478,7 @@ router.post('/tts', async (req: Request, res: Response) => {
     capture(err);
     return res.status(502).json({
       error: 'elevenlabs_proxy_failed',
-      message: (err as Error)?.message ?? 'unknown error',
+      reason: upstreamErrorKind(err),
     });
   }
 });
@@ -679,7 +699,7 @@ router.post('/broadcast', async (req: Request, res: Response) => {
       return res.status(502).json({
         ok: false,
         error: 'spectator_unreachable',
-        message: (err as Error)?.message ?? 'unknown',
+        reason: upstreamErrorKind(err),
         text,
         source,
         audioUrl,
@@ -692,7 +712,7 @@ router.post('/broadcast', async (req: Request, res: Response) => {
     res.status(500).json({
       ok: false,
       error: 'broadcast_failed',
-      message: (err as Error)?.message ?? 'unknown error',
+      reason: upstreamErrorKind(err),
     });
   }
 });

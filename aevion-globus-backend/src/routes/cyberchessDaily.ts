@@ -419,10 +419,17 @@ const dailyReady: Promise<void> = (async () => {
 });
 
 // Ожидание готовности — до всех маршрутов модуля.
+/** Признак «ожидание уже завершилось»: без него таймер срабатывал всегда и
+ *  через 20 с выключал запись в базу даже при здоровой базе. См. турниры. */
+let dailyReadySettled = false;
+
 const dailyReadyBounded: Promise<void> = Promise.race([
-  dailyReady,
+  dailyReady.then(() => {
+    dailyReadySettled = true;
+  }),
   new Promise<void>((resolve) => {
     const t = setTimeout(() => {
+      if (dailyReadySettled) return resolve(); // успели — бросать нечего
       // База не ответила. Работаем на файле и больше НЕ ПИШЕМ в базу: наша
       // копия свежее по метке и затёрла бы то, что там лежит.
       dailyDbHealth.abandoned = true;

@@ -23,6 +23,10 @@ const { scratch, db } = vi.hoisted(() => {
   const dir = fs.mkdtempSync(p.join(os.tmpdir(), "cc-daily-deploy-"));
   process.env.CYBERCHESS_DAILY_DIR = dir;
   process.env.DATABASE_URL = "postgres://test/test";
+  // Предел ожидания: длиннее ответа базы в подделке (300 мс), но достаточно
+  // короткий, чтобы ИСТЕЧЬ по ходу теста при здоровой базе и при этом ничего
+  // не сломать. Раньше ломал — выключал запись насовсем.
+  process.env.CYBERCHESS_DB_READY_MS = "600";
 
   // Файл из образа: вчерашняя метка, один игрок.
   fs.writeFileSync(
@@ -92,6 +96,7 @@ app.use(express.json());
 app.use("/api/cyberchess-daily", dailyRouter);
 
 afterAll(() => {
+  delete process.env.CYBERCHESS_DB_READY_MS;
   delete process.env.CYBERCHESS_DAILY_DIR;
   delete process.env.DATABASE_URL;
   try {
@@ -194,5 +199,30 @@ describe("две живые реплики не стирают решателе�
       const entry = w[1] ? (JSON.parse(String(w[1])) as { userId: string }) : null;
       if (entry) expect(entry.userId).toBe(String(w[0]));
     }
+  });
+});
+
+describe("истёкший таймер не выключает запись при здоровой базе", () => {
+  /* Дефект, найденный живым прогоном: таймер пределa срабатывал ВСЕГДА, даже
+     когда база ответила мгновенно, и через отведённое время выключал запись —
+     то есть персистентность умирала через двадцать секунд после старта на
+     любом сервере. Гонку выигрывает ожидание, но таймер надо снимать. */
+
+  test("после истечения предела записи по-прежнему уходят в базу", async () => {
+    await new Promise((r) => setTimeout(r, 900)); // предел (600 мс) заведомо истёк
+    const before = db.writes.length;
+
+    const res = await request(app)
+      .post("/api/cyberchess-daily/solve")
+      .send({ streak: 2, day: "2026-08-14", timeMs: 5000, hintsUsed: 0, userId: "later", name: "Позже" });
+    expect(res.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 30));
+    expect(db.writes.length).toBeGreaterThan(before);
+  });
+
+  test("диагностика не считает ожидание брошенным", async () => {
+    const res = await request(app).get("/api/cyberchess-daily/_persistence");
+    expect(res.body.db.abandoned).toBe(false);
   });
 });

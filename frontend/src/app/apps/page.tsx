@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { productById } from "@/lib/products";
+import { PageTracking } from "@/components/PageTracking";
 
 type Billing = "monthly" | "annual";
 
@@ -214,6 +215,7 @@ export default function AppsPage() {
         color: "#f1f5f9",
       }}
     >
+      <PageTracking page="apps" />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 16px 80px" }}>
         <Wave1Nav />
 

@@ -8,6 +8,7 @@ import {
   withChannel,
   type Product,
 } from "@/lib/products";
+import { PageTracking } from "@/components/PageTracking";
 
 // AEVION Shop — единая витрина всех покупаемых товаров.
 //
@@ -111,6 +112,7 @@ export default async function ShopPage({
   const channel = channelFrom((await searchParams).c);
   return (
     <main style={styles.page}>
+      <PageTracking page="shop" />
       <div style={styles.wrap}>
         <div style={styles.eyebrow}>AEVION · Магазин</div>
         <h1 style={styles.h1}>Всё, что можно купить в AEVION</h1>

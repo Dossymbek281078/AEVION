@@ -275,6 +275,12 @@ function initStore(): void {
     // backfill new fields on legacy persisted data
     for (const t of TOURNAMENTS) {
       if (typeof t.realPlayers === "undefined") t.realPlayers = false;
+      // Происхождение дозаполняется ЗДЕСЬ, а не в каждом читателе. Список
+      // считал запасное значение сам, а ручка одного турнира отдаёт объект как
+      // есть — и страница этого турнира осталась бы без подписи именно у тех
+      // записей, ради которых запасное правило и писалось. Один раз при
+      // загрузке — и все читатели видят одно и то же.
+      if (typeof t.origin === "undefined") t.origin = t.id.startsWith("usr-") ? "user" : "seed";
     }
     return;
   }

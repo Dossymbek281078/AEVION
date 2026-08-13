@@ -107,3 +107,25 @@ describe("происхождение доезжает и у записей бе�
     expect(row.origin).toBe("user");
   });
 });
+
+describe("ручка одного турнира тоже отдаёт происхождение", () => {
+  /* Список считал запасное значение сам, а `GET /:id` отдаёт объект как есть —
+     и страница отдельного турнира осталась бы без подписи именно у записей,
+     сохранённых до появления поля, то есть ровно у тех, ради которых запасное
+     правило и писалось. Дозаполнение перенесено в загрузку хранилища: один раз,
+     и все читатели видят одно и то же. */
+
+  test("у старой фикстуры в ответе есть origin", async () => {
+    const res = await request(app).get("/api/cyberchess-tournaments/winter-arena-12");
+
+    expect(res.status).toBe(200);
+    expect(res.body.tournament.origin).toBe("seed");
+  });
+
+  test("у старого пользовательского турнира — тоже", async () => {
+    const res = await request(app).get("/api/cyberchess-tournaments/usr-my-event-ab12cd");
+
+    expect(res.status).toBe(200);
+    expect(res.body.tournament.origin).toBe("user");
+  });
+});

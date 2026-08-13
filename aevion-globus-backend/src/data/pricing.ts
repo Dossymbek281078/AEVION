@@ -141,6 +141,32 @@ export interface PricingBundle {
  */
 export const MAX_PROMO_DISCOUNT_RATIO = 0.5;
 
+/**
+ * Тарифы Конституции. Живут ЗДЕСЬ, а не в маршруте оплаты.
+ *
+ * До 13.08.2026 `routes/constitutionCheckout.ts` держал собственную таблицу
+ * `{ pro: 9, team: 49 }`. Итого цена Конституции существовала в трёх местах:
+ * этот прайс (модуль `constitution`, $9), таблица маршрута и панель магазина.
+ * Три источника одного числа расходятся молча — сегодня этот класс сработал
+ * трижды за день, поэтому таблицу свели сюда.
+ *
+ * `pro` обязан совпадать с ценой модуля `constitution` в MODULES_PRICING:
+ * это один и тот же товар, проданный двумя путями. Совпадение проверяется
+ * тестом, а не надеждой.
+ */
+export const CONSTITUTION_TIERS = {
+  pro: { name: "Constitution Pro", priceUsd: 9 },
+  team: { name: "Constitution Team", priceUsd: 49 },
+} as const;
+
+export type ConstitutionTier = keyof typeof CONSTITUTION_TIERS;
+
+/** Подпись с ценой — чтобы её тоже не собирали руками в каждом месте. */
+export function constitutionTierLabel(tier: ConstitutionTier): string {
+  const t = CONSTITUTION_TIERS[tier];
+  return `${t.name} · $${t.priceUsd}/mo`;
+}
+
 // Веерные скидки живут отдельным файлом: лестницы — это данные о продажах, а не
 // про арифметику счёта, и меняются они чаще формулы.
 

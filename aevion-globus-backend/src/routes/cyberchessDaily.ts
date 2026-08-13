@@ -240,11 +240,14 @@ const solveStore = new Map<string, SolveRecord>(); // key: `${userId}:${day}`
 // DATABASE_URL всё работает как раньше, на файле и в памяти.
 let dailyPool: any = null;
 let dailyDbTried = false;
+/** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
+const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, saves: 0, saveErrors: 0, lastError: null as string | null };
 
 async function ensureDailyDb(): Promise<any> {
   if (dailyDbTried) return dailyPool;
   dailyDbTried = true;
   if (!process.env.DATABASE_URL) return null;
+  dailyDbHealth.configured = true;
   try {
     const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
     await pool.query(`
@@ -255,6 +258,7 @@ async function ensureDailyDb(): Promise<any> {
       );
     `);
     dailyPool = pool;
+    dailyDbHealth.connected = true;
     console.log('[cyberchess-daily] pg connected — записи задачи дня переживут деплой');
     return pool;
   } catch (e) {
@@ -302,7 +306,10 @@ async function saveDailyToDb(stamp: number): Promise<void> {
        WHERE "CyberDailyState"."savedAt" <= EXCLUDED."savedAt"`,
       [JSON.stringify({ leaderboard: LEADERBOARD, stats: [...userStats.values()] }), stamp],
     );
+    dailyDbHealth.saves += 1;
   } catch (e) {
+    dailyDbHealth.saveErrors += 1;
+    dailyDbHealth.lastError = (e as Error).message.slice(0, 200);
     console.error('[cyberchess-daily] запись записей в базу не прошла:', (e as Error).message);
   }
 }
@@ -358,6 +365,7 @@ const dailyReady: Promise<void> = (async () => {
     if (st && typeof st.userId === 'string') userStats.set(st.userId, st);
   }
   dailySavedAtMs = fromDb.savedAtMs;
+  dailyDbHealth.adoptedFromDb = true;
   console.log(
     `[cyberchess-daily] записи взяты из базы (${LEADERBOARD.length} в таблице, ${userStats.size} игроков) — она свежее файла`,
   );
@@ -532,6 +540,20 @@ router.post('/solve', (req: Request, res: Response) => {
  * GET /leaderboard?limit=100
  * Returns top-N entries sorted by score desc.
  */
+// GET /_persistence — диагностика хранилища: только числа и признаки, без
+// данных игроков. Нужна ровно для одного: запросы к Postgres здесь не
+// выполнялись на настоящем сервере (локально его нет), поэтому ответить,
+// работает ли перенос, должен первый деплой, а не наша вера в правильность SQL.
+router.get('/_persistence', (_req: Request, res: Response) => {
+  return res.json({
+    ok: true,
+    leaderboard: LEADERBOARD.length,
+    players: userStats.size,
+    fileReadable: leaderboardReadable,
+    db: { ...dailyDbHealth },
+  });
+});
+
 router.get('/leaderboard', (req: Request, res: Response) => {
   // Пустой список на этой ручке страница подписывает словами «Пока никто не
   // решал». Если файл не прочитан, мы этого не знаем — и говорить не вправе.

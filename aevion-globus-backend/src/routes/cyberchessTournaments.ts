@@ -177,6 +177,8 @@ let TOURNAMENTS: Tournament[] = [];
 // случается каждый день, а не гонка, которая требует совпадения по секундам.
 let dbPool: any = null;
 let dbTried = false;
+/** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
+const dbHealth = { configured: false, connected: false, adoptedFromDb: false, saves: 0, saveErrors: 0, lastError: null as string | null };
 /** Момент последнего сохранения состояния — по нему выбирается свежая копия. */
 let savedAtMs = 0;
 
@@ -184,6 +186,7 @@ async function ensureTournamentDb(): Promise<any> {
   if (dbTried) return dbPool;
   dbTried = true;
   if (!process.env.DATABASE_URL) return null;
+  dbHealth.configured = true;
   try {
     const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
     await pool.query(`
@@ -194,6 +197,7 @@ async function ensureTournamentDb(): Promise<any> {
       );
     `);
     dbPool = pool;
+    dbHealth.connected = true;
     console.log("[cyberchess-tournaments] pg connected — состояние турниров переживёт деплой");
     return pool;
   } catch (e) {
@@ -239,7 +243,10 @@ async function saveToDb(list: Tournament[], stamp: number): Promise<void> {
        WHERE "CyberTournamentState"."savedAt" <= EXCLUDED."savedAt"`,
       [JSON.stringify({ tournaments: list }), stamp],
     );
+    dbHealth.saves += 1;
   } catch (e) {
+    dbHealth.saveErrors += 1;
+    dbHealth.lastError = (e as Error).message.slice(0, 200);
     console.error("[cyberchess-tournaments] запись состояния в базу не прошла:", (e as Error).message);
   }
 }
@@ -354,9 +361,19 @@ export function tournamentPersistenceState(): {
   healthy: boolean;
   consecutiveFailures: number;
   pausedForMs: number;
+  db: typeof dbHealth;
 } {
   const pausedForMs = Math.max(0, persistPausedUntil - Date.now());
-  return { healthy: persistFailures === 0, consecutiveFailures: persistFailures, pausedForMs };
+  return {
+    healthy: persistFailures === 0,
+    consecutiveFailures: persistFailures,
+    pausedForMs,
+    // Состояние базы отдаётся наружу намеренно: запросы к Postgres здесь ни
+    // разу не выполнялись на настоящем сервере — локально его нет. Значит
+    // ответить, работает ли перенос, должен первый же деплой, а не наша вера в
+    // правильность SQL. Числа, не данные: имён и содержимого тут нет.
+    db: { ...dbHealth },
+  };
 }
 
 function initStore(): void {
@@ -1245,6 +1262,7 @@ const storeReady: Promise<void> = (async () => {
   if (fromDb.savedAtMs <= savedAtMs) return; // файл свежее или ровесник — не трогаем
   TOURNAMENTS = fromDb.tournaments;
   savedAtMs = fromDb.savedAtMs;
+  dbHealth.adoptedFromDb = true;
   for (const t of TOURNAMENTS) {
     if (typeof t.realPlayers === "undefined") t.realPlayers = false;
     if (typeof t.origin === "undefined") t.origin = t.id.startsWith("usr-") ? "user" : "seed";
@@ -1296,6 +1314,14 @@ onMatchSettled(({ matchId, tournamentId, result }) => {
   maybeAdvanceSwiss(t);
   maybeAdvanceRR(t);
   tryWriteToDisk();
+});
+
+// GET /_persistence — диагностика хранилища: только числа и признаки, никаких
+// данных игроков. Существует ради одного вопроса, на который иначе пришлось бы
+// отвечать верой: работает ли перенос состояния в базу на реальном сервере.
+// После деплоя достаточно одного GET.
+router.get("/_persistence", (_req: Request, res: Response): void => {
+  res.json({ ok: true, tournaments: TOURNAMENTS.length, persistence: tournamentPersistenceState() });
 });
 
 // GET /list

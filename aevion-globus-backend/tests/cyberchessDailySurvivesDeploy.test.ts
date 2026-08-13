@@ -146,3 +146,30 @@ describe("опоздавшая запись не затирает более с�
     expect(src).toMatch(/ON CONFLICT[\s\S]{0,900}WHERE "CyberDailyState"\."savedAt" <= EXCLUDED\."savedAt"/);
   });
 });
+
+describe("после деплоя можно СПРОСИТЬ, а не предполагать", () => {
+  /* Запросы к Postgres здесь ни разу не выполнялись на настоящем сервере —
+     локально его нет. Значит ответить, работает ли перенос, должен первый
+     деплой. Для этого и заведена ручка: одним GET видно, подключилась ли база,
+     взято ли из неё состояние и сколько записей прошло. */
+
+  test("диагностика показывает, что состояние взято из базы и запись идёт", async () => {
+    const res = await request(app).get("/api/cyberchess-daily/_persistence");
+
+    expect(res.status).toBe(200);
+    expect(res.body.db.configured).toBe(true);
+    expect(res.body.db.connected).toBe(true);
+    expect(res.body.db.adoptedFromDb).toBe(true);
+    expect(res.body.db.saves).toBeGreaterThan(0);
+    expect(res.body.db.saveErrors).toBe(0);
+  });
+
+  test("данных игроков в диагностике нет — только числа", async () => {
+    // Ручка публичная; имена и содержимое таблицы здесь не нужны.
+    const res = await request(app).get("/api/cyberchess-daily/_persistence");
+    const asText = JSON.stringify(res.body);
+
+    expect(asText).not.toContain("Ветеран");
+    expect(asText).not.toContain("veteran");
+  });
+});

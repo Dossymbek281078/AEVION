@@ -174,3 +174,21 @@ describe("опоздавшая запись не затирает более с�
     expect(src).toMatch(/ON CONFLICT[\s\S]{0,900}WHERE "CyberTournamentState"\."savedAt" <= EXCLUDED\."savedAt"/);
   });
 });
+
+describe("после деплоя можно СПРОСИТЬ, а не предполагать", () => {
+  test("диагностика показывает подключение, усыновление и запись", async () => {
+    const res = await request(app).get("/api/cyberchess-tournaments/_persistence");
+
+    expect(res.status).toBe(200);
+    expect(res.body.persistence.db.configured).toBe(true);
+    expect(res.body.persistence.db.connected).toBe(true);
+    expect(res.body.persistence.db.adoptedFromDb).toBe(true);
+    expect(res.body.persistence.db.saves).toBeGreaterThan(0);
+    expect(res.body.persistence.db.saveErrors).toBe(0);
+  });
+
+  test("названий турниров в диагностике нет — только счётчики", async () => {
+    const res = await request(app).get("/api/cyberchess-tournaments/_persistence");
+    expect(JSON.stringify(res.body)).not.toContain("Живой турнир");
+  });
+});

@@ -33,10 +33,21 @@ const POLICY_URL = `${PROD_BASE}/api-backend/api/paywall/policy`;
 const VARIANTS_FILE = resolve(process.cwd(), "aevion-globus-backend/src/data/lemonSqueezyVariants.ts");
 
 let SLUG_TO_MODULE = {};
+let OWN_GATE = new Set();
 
 function soldModuleSlugs() {
   const src = readFileSync(VARIANTS_FILE, "utf8");
   SLUG_TO_MODULE = slugToModuleFromSource(src);
+  OWN_GATE = ownGateFromSource(src);
+  // Разбор TypeScript регуляркой хрупок по своей природе. Если в файле список
+  // есть, а разобрать не вышло — молчать нельзя: отчёт решит, что исключений
+  // нет, и объявит «открытым всем» модуль, у которого свой механизм доступа.
+  if (src.includes("OWN_GATE_SLUGS") && OWN_GATE.size === 0) {
+    console.log("⚠️  Не удалось разобрать OWN_GATE_SLUGS — отчёт ниже может занижать. Проверьте разбор.");
+  }
+  if (src.includes("APP_SLUG_TO_MODULE_ID") && Object.keys(SLUG_TO_MODULE).length === 0) {
+    console.log("⚠️  Не удалось разобрать APP_SLUG_TO_MODULE_ID — имена модулей ниже могут не совпасть.");
+  }
   // Берём ключи вида `app_<slug>:` из таблицы соответствия переменных.
   const slugs = new Set();
   for (const m of src.matchAll(/^\s*app_([a-z_]+)\s*:/gm)) slugs.add(m[1]);
@@ -47,10 +58,19 @@ function soldModuleSlugs() {
  * Модули со СВОИМ механизмом доступа, мимо общего пейволла. Их отсутствие в
  * политике не означает «открыт всем» — иначе отчёт соврал бы ровно там, где
  * покупка как раз работает.
+ *
+ * Список читаем из того же файла, что и сопоставление: своя копия здесь уже
+ * была и была бы вторым источником правды. 13.08 я сам на этом попался в
+ * соседнем месте — дефект жил на пересечении двух исправных списков.
  */
-const OWN_GATE = {
-  devhub: "свой тариф в DevHubTier/DevHubEmailTier — покупка открывает Pro",
-};
+function ownGateFromSource(src) {
+  const block = src.match(/OWN_GATE_SLUGS[^=]*=\s*new Set(?:<[^>]*>)?\(\[([^\]]*)\]/);
+  const set = new Set();
+  if (block) {
+    for (const m of block[1].matchAll(/"([a-z_]+)"/g)) set.add(m[1]);
+  }
+  return set;
+}
 
 /**
  * Соответствие «slug подписки → id модуля» живёт ОДНОЙ таблицей в
@@ -103,11 +123,11 @@ async function main() {
     const id = SLUG_TO_MODULE[slug] ?? slug;
     const m = byId.get(id);
     let state;
-    if (OWN_GATE[slug]) state = `закрыт своим механизмом ✓ (${OWN_GATE[slug]})`;
+    if (OWN_GATE.has(slug)) state = "закрыт своим механизмом ✓ (см. OWN_GATE_SLUGS в lemonSqueezyVariants.ts)";
     else if (!m) state = "в политике пейволла его нет и своего механизма не найдено";
     else if (m.enforced) state = "закрыт платным доступом ✓";
     else state = "ОТКРЫТ ВСЕМ — покупка ничего не добавляет";
-    if (!OWN_GATE[slug] && (!m || !m.enforced)) soldNotEnforced.push(id);
+    if (!OWN_GATE.has(slug) && (!m || !m.enforced)) soldNotEnforced.push(id);
     console.log(`  ${id.padEnd(20)} ${state}`);
   }
 

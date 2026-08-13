@@ -7,6 +7,7 @@ import {
   withChannel,
   type Product,
 } from "@/lib/products";
+import { GoPageTracking } from "./_track";
 
 // /go — страница-хаб под ссылку в профиле соцсетей.
 //
@@ -99,6 +100,8 @@ export default async function GoPage({
 
   return (
     <main style={styles.page}>
+      {/* Без этого нельзя ответить даже на «приходил ли кто-нибудь» — см. _track.tsx */}
+      <GoPageTracking channel={channel} />
       <div style={styles.wrap}>
         <header style={styles.head}>
           <div style={styles.brand}>AEVION</div>

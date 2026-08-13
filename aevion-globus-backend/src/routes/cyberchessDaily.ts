@@ -4,9 +4,7 @@ import * as path from 'path';
 import { pickDailyPuzzle } from '../lib/cyberchessDailyPuzzle';
 import { createInMemoryRateLimiter } from '../lib/rateLimit/inMemoryWindow';
 import { clientIp } from '../lib/rateLimit';
-// Обычный импорт, а не require: под `require` подмена драйвера в тестах не
-// действует, и тест «зеленеет», не выполнив ни одного запроса (12.08).
-import pg from 'pg';
+import { getPool } from '../lib/dbPool';
 
 const router = Router();
 
@@ -241,7 +239,7 @@ const solveStore = new Map<string, SolveRecord>(); // key: `${userId}:${day}`
 let dailyPool: any = null;
 let dailyDbTried = false;
 /** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
-const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, saves: 0, saveErrors: 0, lastError: null as string | null };
+const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, saveErrors: 0, lastError: null as string | null };
 
 async function ensureDailyDb(): Promise<any> {
   if (dailyDbTried) return dailyPool;
@@ -249,7 +247,13 @@ async function ensureDailyDb(): Promise<any> {
   if (!process.env.DATABASE_URL) return null;
   dailyDbHealth.configured = true;
   try {
-    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+    // Общий пул из lib/dbPool, а не свой: в нём уже настроены таймауты
+    // (подключение 5 с, запрос 10 с) и keep-alive. Свой пул без них означал
+    // бы, что при недоступной базе запрос висит сколько угодно — а ожидание
+    // готовности стоит перед ВСЕМИ маршрутами модуля, то есть повис бы весь
+    // модуль вместо того, чтобы честно работать на файле. Плюс это второй
+    // способ делать то, что в репозитории уже делается одним.
+    const pool = getPool();
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "CyberDailyEntry" (
         "userId"    TEXT PRIMARY KEY,
@@ -306,6 +310,7 @@ async function loadDailyFromDb(): Promise<{ state: DailyState; savedAtMs: number
 
 /** Зеркалирование в базу. Не бросает: путь решения задачи не должен падать из-за базы. */
 async function saveDailyToDb(stamp: number): Promise<void> {
+  if (dailyDbHealth.abandoned) return; // см. dailyReadyBounded
   const pool = await ensureDailyDb();
   if (!pool) return;
   try {
@@ -384,8 +389,19 @@ function upsertLeaderboard(uid: string, name: string, country: string, streak: n
  * файловой копии, а прилетевшее состояние её стирает. Проверено мутацией на
  * соседнем модуле турниров: без ожидания тест краснеет.
  */
+/** Предел ожидания базы на старте — страховка от зависшего сокета: ожидание
+ *  стоит перед всеми маршрутами модуля. См. тот же разбор у турниров. */
+const DAILY_READY_MAX_MS = Number(process.env.CYBERCHESS_DB_READY_MS ?? 20_000);
+
 const dailyReady: Promise<void> = (async () => {
   const fromDb = await loadDailyFromDb();
+  // Ответ мог прийти после того, как ожидание бросили по времени. Подхватывать
+  // состояние на ходу нельзя: кто-то уже мог решить задачу, и прилетевшая
+  // копия его сотрёт.
+  if (dailyDbHealth.abandoned) {
+    console.error('[cyberchess-daily] ответ базы пришёл слишком поздно — записи не подхватываю, работаю на файле');
+    return;
+  }
   if (!fromDb) return; // базы нет или в ней пусто — живём на файле, как раньше
   if (fromDb.savedAtMs <= dailySavedAtMs) return; // файл свежее или ровесник
   LEADERBOARD = fromDb.state.leaderboard.filter((e) => !isSeededEntry(e));
@@ -403,8 +419,22 @@ const dailyReady: Promise<void> = (async () => {
 });
 
 // Ожидание готовности — до всех маршрутов модуля.
+const dailyReadyBounded: Promise<void> = Promise.race([
+  dailyReady,
+  new Promise<void>((resolve) => {
+    const t = setTimeout(() => {
+      // База не ответила. Работаем на файле и больше НЕ ПИШЕМ в базу: наша
+      // копия свежее по метке и затёрла бы то, что там лежит.
+      dailyDbHealth.abandoned = true;
+      console.error(`[cyberchess-daily] база не ответила за ${DAILY_READY_MAX_MS} мс — работаю на файле, запись в базу выключена`);
+      resolve();
+    }, DAILY_READY_MAX_MS);
+    (t as unknown as { unref?: () => void }).unref?.();
+  }),
+]);
+
 router.use(async (_req: Request, _res: Response, next: () => void) => {
-  await dailyReady;
+  await dailyReadyBounded;
   next();
 });
 

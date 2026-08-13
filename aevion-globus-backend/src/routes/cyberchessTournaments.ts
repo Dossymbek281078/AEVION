@@ -21,9 +21,7 @@ import { clientIp } from "../lib/rateLimit";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-// Обычный импорт, а не require: под `require` подмена драйвера в тестах не
-// действует — тест «зеленеет», не выполнив ни одного запроса (12.08).
-import pg from "pg";
+import { getPool } from "../lib/dbPool";
 import {
   createPreMatchedMatch,
   onMatchSettled,
@@ -178,7 +176,7 @@ let TOURNAMENTS: Tournament[] = [];
 let dbPool: any = null;
 let dbTried = false;
 /** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
-const dbHealth = { configured: false, connected: false, adoptedFromDb: false, saves: 0, saveErrors: 0, lastError: null as string | null };
+const dbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, saveErrors: 0, lastError: null as string | null };
 /** Момент последнего сохранения состояния — по нему выбирается свежая копия. */
 let savedAtMs = 0;
 
@@ -188,7 +186,13 @@ async function ensureTournamentDb(): Promise<any> {
   if (!process.env.DATABASE_URL) return null;
   dbHealth.configured = true;
   try {
-    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+    // Общий пул из lib/dbPool, а не свой: в нём уже настроены таймауты
+    // (подключение 5 с, запрос 10 с) и keep-alive. Свой пул без них означал
+    // бы, что при недоступной базе запрос висит сколько угодно — а ожидание
+    // готовности стоит перед ВСЕМИ маршрутами модуля, то есть повис бы весь
+    // модуль вместо того, чтобы честно работать на файле. Плюс это второй
+    // способ делать то, что в репозитории уже делается одним.
+    const pool = getPool();
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "CyberTournament" (
         "id"        TEXT PRIMARY KEY,
@@ -241,6 +245,7 @@ async function loadFromDb(): Promise<{ tournaments: Tournament[]; savedAtMs: num
 
 /** Зеркалировать состояние в базу. Не бросает: путь регистрации не должен падать из-за базы. */
 async function saveToDb(list: Tournament[], stamp: number): Promise<void> {
+  if (dbHealth.abandoned) return; // см. storeReadyBounded: писать поверх неизвестного нельзя
   const pool = await ensureTournamentDb();
   if (!pool) return;
   try {
@@ -1280,8 +1285,23 @@ initStore();
  * Поэтому ожидание стоит перед всеми маршрутами (ниже), а не «где-нибудь».
  * После первого запроса промис уже разрешён и стоит наносекунды.
  */
+/**
+ * Сколько ждём базу на старте. У общего пула свои таймауты (5 с подключение,
+ * 10 с запрос), поэтому в норме сюда не упирается никогда. Это страховка от
+ * патологии: ожидание стоит перед ВСЕМИ маршрутами, и без предела один
+ * зависший сокет повесил бы модуль целиком.
+ */
+const READY_MAX_MS = Number(process.env.CYBERCHESS_DB_READY_MS ?? 20_000);
+
 const storeReady: Promise<void> = (async () => {
   const fromDb = await loadFromDb();
+  // Пока ждали, ожидание могли бросить по времени. Подхватывать состояние
+  // ПОСЛЕ того, как маршруты начали отвечать, нельзя: между этими моментами
+  // кто-то успевает записаться, и прилетевшая копия его сотрёт.
+  if (dbHealth.abandoned) {
+    console.error("[cyberchess-tournaments] ответ базы пришёл слишком поздно — состояние не подхватываю, работаю на файле");
+    return;
+  }
   if (!fromDb) return; // базы нет или в ней пусто — живём на файле, как раньше
   if (fromDb.savedAtMs <= savedAtMs) return; // файл свежее или ровесник — не трогаем
   TOURNAMENTS = fromDb.tournaments;
@@ -1297,8 +1317,23 @@ const storeReady: Promise<void> = (async () => {
 });
 
 // Ожидание готовности — ДО всех маршрутов, включая degradedGuard.
+const storeReadyBounded: Promise<void> = Promise.race([
+  storeReady,
+  new Promise<void>((resolve) => {
+    const t = setTimeout(() => {
+      // База не ответила за отведённое время. Дальше работаем на файле и
+      // БОЛЬШЕ НЕ ПИШЕМ в базу: наша файловая копия свежее по метке, и запись
+      // затёрла бы то, что там лежит, — а лежать может всё, что наиграли.
+      dbHealth.abandoned = true;
+      console.error(`[cyberchess-tournaments] база не ответила за ${READY_MAX_MS} мс — работаю на файле, запись в базу выключена`);
+      resolve();
+    }, READY_MAX_MS);
+    (t as unknown as { unref?: () => void }).unref?.(); // таймер не держит процесс
+  }),
+]);
+
 router.use(async (_req: Request, _res: Response, next: () => void) => {
-  await storeReady;
+  await storeReadyBounded;
   next();
 });
 

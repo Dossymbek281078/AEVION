@@ -1,3 +1,4 @@
+import { computeFan, fanTotalUsd, capTotalDiscount, type AppliedFan } from "./discounts";
 /**
  * AEVION Pricing — единый источник тарифов и матрицы модулей.
  *
@@ -139,6 +140,9 @@ export interface PricingBundle {
  * скидки (нашли на TEAM100 −$100 против Full $89/890 — оба periода ≥ него).
  */
 export const MAX_PROMO_DISCOUNT_RATIO = 0.5;
+
+// Веерные скидки живут отдельным файлом: лестницы — это данные о продажах, а не
+// про арифметику счёта, и меняются они чаще формулы.
 
 /** Курсы для отображения на фронте (фиксированные, обновляются вручную). */
 export const CURRENCY_RATES: Record<CurrencyCode, { rate: number; symbol: string; label: string }> = {
@@ -823,6 +827,10 @@ export interface Quote {
   notes: string[];
   /** null = промо не применён или невалиден; reason — в notes[] */
   promo: AppliedPromo | null;
+  /** Ступени веера, каждая отдельной строкой: за что именно дана скидка. */
+  fans: AppliedFan[];
+  /** Сколько скидки срезал общий потолок (0 = не срезал). */
+  discountCappedBy: number;
 }
 
 export function buildQuote(input: {
@@ -832,6 +840,8 @@ export function buildQuote(input: {
   period?: BillingPeriod;
   currency?: CurrencyCode;
   promoCode?: string;
+  /** Срок обязательства в месяцах: 24 и 36 дают ступень веера. */
+  commitmentMonths?: number;
 }): Quote {
   const period: BillingPeriod = input.period ?? "monthly";
   const currency: CurrencyCode = input.currency ?? "USD";
@@ -851,6 +861,8 @@ export function buildQuote(input: {
       total: 0,
       notes: [`Tier "${input.tierId}" not found`],
       promo: null,
+      fans: [],
+      discountCappedBy: 0,
     };
   }
 
@@ -926,7 +938,24 @@ export function buildQuote(input: {
     }
   }
 
-  // 5) Промо-код применяется на (subtotal - discount)
+  // 5) Веер: ступени за объём модулей, мест и срок обязательства. Считается
+  //    ПОСЛЕ годовой скидки и ДО промо-кода: годовая — свойство тарифа, веер —
+  //    награда за объём, промо — разовый повод. Каждая ступень возвращается
+  //    отдельной строкой, чтобы покупатель видел, за что именно ему скидка.
+  const moduleLines = lines.filter((l) => l.kind === "addon");
+  const seatLines = lines.filter((l) => l.kind === "seat");
+  const fans = computeFan({
+    modulesUsd: moduleLines.reduce((x, l) => x + l.total, 0),
+    moduleCount: moduleLines.length,
+    seatsUsd: seatLines.reduce((x, l) => x + l.total, 0),
+    seatCount: seats,
+    commitmentMonths: input.commitmentMonths,
+    subtotalUsd: subtotal,
+  });
+  const fanUsd = fanTotalUsd(fans);
+  discount += fanUsd;
+
+  // 6) Промо-код применяется на (subtotal - discount)
   let promoApplied: AppliedPromo | null = null;
   let promoUsd = 0;
   if (input.promoCode) {
@@ -956,7 +985,14 @@ export function buildQuote(input: {
     }
   }
 
-  const totalUSD = Math.max(0, subtotal - discount - promoUsd);
+  // 7) Потолок на СУММУ всех скидок. Каждая ступень по отдельности выглядит
+  //    скромно, а вместе с промо-кодом они способны отдать товар почти даром —
+  //    и по одной цифре итога это не заметить.
+  const capped = capTotalDiscount(subtotal, discount + promoUsd);
+  const totalUSD = Math.max(0, subtotal - capped.applied);
+  if (capped.cappedBy > 0) {
+    notes.push(`Скидки срезаны потолком: −$${capped.cappedBy} сверх допустимого`);
+  }
   const rate = CURRENCY_RATES[currency].rate;
 
   return {
@@ -969,9 +1005,15 @@ export function buildQuote(input: {
       total: Math.round(l.total * rate * 100) / 100,
     })),
     subtotal: Math.round(subtotal * rate * 100) / 100,
-    discount: Math.round((discount + promoUsd) * rate * 100) / 100,
+    discount: Math.round(capped.applied * rate * 100) / 100,
     total: Math.round(totalUSD * rate * 100) / 100,
     notes,
     promo: promoApplied,
+    fans: fans.map((f) => ({
+      ...f,
+      baseUsd: Math.round(f.baseUsd * rate * 100) / 100,
+      amountUsd: Math.round(f.amountUsd * rate * 100) / 100,
+    })),
+    discountCappedBy: Math.round(capped.cappedBy * rate * 100) / 100,
   };
 }

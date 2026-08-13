@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 
 import { captureException } from "./sentry";
+import { BODY_LIMITS, GLOBAL_BODY_LIMIT_BYTES, requestPath } from "./bodyLimitByPath";
 
 /**
  * Единый обработчик ошибок Express.
@@ -42,13 +43,35 @@ export function clientErrorStatus(err: unknown): number | null {
   return raw !== null && raw >= 400 && raw <= 499 ? raw : null;
 }
 
-/** Стабильная категория для клиента: без текста библиотеки и без внутренних путей. */
-export function clientErrorBody(err: unknown, status: number): { error: string; message: string } {
+/** Человеку — размер в тех единицах, в которых он думает о файле. */
+function humanBytes(n: number): string {
+  if (n >= 1024 * 1024) {
+    const mb = n / (1024 * 1024);
+    return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} МБ`;
+  }
+  return `${Math.round(n / 1024)} КБ`;
+}
+
+/**
+ * Стабильная категория для клиента: без текста библиотеки и без внутренних путей.
+ *
+ * `requestUrl` нужен, чтобы назвать НАСТОЯЩИЙ предел этого пути. Первая версия
+ * писала число прямо в текст — «предел 10 МБ» — и текст соврал в тот же день,
+ * когда на проверку чека поставили узкий предел 256 КБ: человек читал неверное
+ * число и делал вывод, что дело не в размере. Число теперь берётся из того же
+ * источника, что и решение об отказе, поэтому разойтись с ним не может.
+ */
+export function clientErrorBody(
+  err: unknown,
+  status: number,
+  requestUrl?: string,
+): { error: string; message: string } {
   const type = String((err as { type?: unknown } | null)?.type || "");
   if (type === "entity.too.large") {
+    const limit = BODY_LIMITS[requestPath(requestUrl)] ?? GLOBAL_BODY_LIMIT_BYTES;
     return {
       error: "payload_too_large",
-      message: "Тело запроса больше допустимого. Для чека мультичата предел — 10 МБ.",
+      message: `Тело запроса больше допустимого. Предел для этого адреса — ${humanBytes(limit)}.`,
     };
   }
   if (type === "entity.parse.failed") {
@@ -76,7 +99,7 @@ export function makeHttpErrorHandler(capture: typeof captureException = captureE
         ).slice(0, 200)}`,
       );
       if (res.headersSent) return;
-      res.status(clientStatus).json(clientErrorBody(err, clientStatus));
+      res.status(clientStatus).json(clientErrorBody(err, clientStatus, req.originalUrl ?? req.url));
       return;
     }
 

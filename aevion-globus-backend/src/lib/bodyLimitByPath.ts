@@ -27,6 +27,22 @@ import type { Request, Response, NextFunction } from "express";
  * увидел 413 с внятной причиной, а не 500.
  */
 
+/**
+ * Общий предел `express.json` в байтах — тот же, что стоит в index.ts.
+ *
+ * Дублировать число нельзя: текст отказа называет предел человеку, и разойдись
+ * оно с настоящим — сообщение станет ложью (так уже случилось: текст обещал
+ * 10 МБ, когда на чек поставили 256 КБ). Меняете limit в index.ts — меняйте и
+ * здесь; сторож в тестах сверяет две записи.
+ */
+export const GLOBAL_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
+
+/** Нормализованный путь запроса: без строки запроса и без хвостовых слешей. */
+export function requestPath(url: string | undefined): string {
+  const p = (url || "").split("?")[0].replace(/\/+$/, "");
+  return p || "/";
+}
+
 /** Путь → предел в байтах. Точное совпадение, без префиксов: правило должно быть видно целиком. */
 export const BODY_LIMITS: Record<string, number> = {
   "/api/multichat/receipt/verify": 256 * 1024,
@@ -34,10 +50,9 @@ export const BODY_LIMITS: Record<string, number> = {
 
 export function bodyLimitByPath(req: Request, _res: Response, next: NextFunction): void {
   // `req.path` здесь недоступен так же надёжно, как в роутере (мидлвара стоит на
-  // приложении), поэтому режем строку запроса сами.
-  const url = req.originalUrl || req.url || "";
-  const path = url.split("?")[0].replace(/\/+$/, "") || "/";
-  const limit = BODY_LIMITS[path];
+  // приложении), поэтому нормализуем сами — той же функцией, что и остальные
+  // проверки по путям.
+  const limit = BODY_LIMITS[requestPath(req.originalUrl || req.url)];
   if (limit === undefined) {
     next();
     return;

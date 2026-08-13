@@ -199,12 +199,44 @@ app.use(express.urlencoded({
 // Build/version marker so a post-deploy check can confirm exactly which commit
 // is live instead of guessing from a 200. Railway injects RAILWAY_GIT_COMMIT_SHA
 // at build time; falls back to GIT_SHA / SOURCE_VERSION, or "unknown" in local dev.
-const BUILD_COMMIT = (
-  process.env.RAILWAY_GIT_COMMIT_SHA ||
-  process.env.GIT_SHA ||
-  process.env.SOURCE_VERSION ||
-  "unknown"
-).slice(0, 12);
+/**
+ * Развёрнутый коммит. Переменных окружения оказалось недостаточно: проверено на
+ * живом проде 13.08.2026 — /health отдавал "unknown", потому что
+ * RAILWAY_GIT_COMMIT_SHA подставляется при сборке из подключённого репозитория, а
+ * тот недоступен с 27.07. Поэтому сборка дополнительно пишет dist/build-info.json
+ * (scripts/write-build-info.js), и он читается, когда переменных нет.
+ *
+ * Читаем синхронно и один раз при старте: файл рядом с dist/index.js, размером в
+ * несколько строк, и цена — доли миллисекунды на запуск против невозможности
+ * узнать, какой код работает.
+ */
+function readBuildInfo(): { commit: string; source: string; branch: string } {
+  const envCommit =
+    process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || process.env.SOURCE_VERSION;
+  if (envCommit) {
+    return {
+      commit: envCommit.slice(0, 12),
+      source: "env",
+      branch: process.env.RAILWAY_GIT_BRANCH || "unknown",
+    };
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const info = require("./build-info.json") as { commit?: string; source?: string; branch?: string };
+    return {
+      commit: String(info.commit || "unknown").slice(0, 12),
+      source: String(info.source || "build-info"),
+      branch: String(info.branch || "unknown"),
+    };
+  } catch {
+    // Файла нет — это dev-запуск через ts-node-dev (dist не собран). Отвечаем
+    // "unknown" явно, а не выдумываем: ложный коммит хуже отсутствующего.
+    return { commit: "unknown", source: "none", branch: "unknown" };
+  }
+}
+
+const BUILD_INFO = readBuildInfo();
+const BUILD_COMMIT = BUILD_INFO.commit;
 const BOOT_TIME = new Date().toISOString();
 
 function healthPayload() {
@@ -213,6 +245,11 @@ function healthPayload() {
     service: "AEVION Globus Backend",
     timestamp: new Date().toISOString(),
     commit: BUILD_COMMIT,
+    // Откуда взят коммит и какая ветка: "unknown" при source "none" значит
+    // «маркер не собрался», а при source "env" — «переменная пустая». Разные
+    // неисправности, и различать их надо не догадками.
+    commitSource: BUILD_INFO.source,
+    branch: BUILD_INFO.branch,
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
     // Аналитика пишется в файл. Если её самое старое событие всегда моложе

@@ -2,7 +2,10 @@ import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 import express from "express";
 
-import { makeHttpErrorHandler, clientErrorStatus } from "../src/lib/httpErrorHandler";
+import { makeHttpErrorHandler, clientErrorStatus, clientErrorBody } from "../src/lib/httpErrorHandler";
+import { BODY_LIMITS, GLOBAL_BODY_LIMIT_BYTES } from "../src/lib/bodyLimitByPath";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // Обработчик ошибок Express — 13.08.2026.
 //
@@ -116,5 +119,53 @@ describe("clientErrorStatus — что считается клиентским",
     expect(clientErrorStatus({ status: "413" })).toBeNull();
     expect(clientErrorStatus(new Error("без полей"))).toBeNull();
     expect(clientErrorStatus(null)).toBeNull();
+  });
+});
+
+describe("текст 413 называет настоящий предел этого пути", () => {
+  // Первая версия писала число прямо в текст — «предел 10 МБ» — и соврала в тот
+  // же день, когда на проверку чека поставили 256 КБ. Человек читал неверное
+  // число и делал вывод, что дело не в размере. Число берётся из того же
+  // источника, что и решение об отказе.
+  const tooLarge = { type: "entity.too.large", status: 413 };
+
+  test("на пути с узким пределом называется узкий предел", () => {
+    const body = clientErrorBody(tooLarge, 413, "/api/multichat/receipt/verify");
+    expect(body.message).toMatch(/256 КБ/);
+    expect(body.message).not.toMatch(/10 МБ/);
+  });
+
+  test("на прочих путях называется общий предел", () => {
+    const body = clientErrorBody(tooLarge, 413, "/api/build/ai/parse-resume");
+    expect(body.message).toMatch(/10 МБ/);
+  });
+
+  test("строка запроса и слеш не сбивают выбор числа", () => {
+    for (const u of ["/api/multichat/receipt/verify?x=1", "/api/multichat/receipt/verify/"]) {
+      expect(clientErrorBody(tooLarge, 413, u).message, u).toMatch(/256 КБ/);
+    }
+  });
+
+  test("без пути — общий предел, а не пустое место", () => {
+    expect(clientErrorBody(tooLarge, 413).message).toMatch(/10 МБ/);
+  });
+});
+
+describe("сторож: два числа общего предела не должны разойтись", () => {
+  test("GLOBAL_BODY_LIMIT_BYTES совпадает с limit в index.ts", () => {
+    // Комментарий в bodyLimitByPath.ts обещает эту сверку — обещание без
+    // проверки и есть тот класс дефектов, из-за которого текст соврал.
+    const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+    const m = src.match(/express\.json\(\{\s*limit:\s*"(\d+)(mb|kb)"/i);
+    expect(m, "не нашёл limit у express.json — сверять нечего").toBeTruthy();
+    const n = Number(m![1]);
+    const bytes = m![2].toLowerCase() === "mb" ? n * 1024 * 1024 : n * 1024;
+    expect(bytes).toBe(GLOBAL_BODY_LIMIT_BYTES);
+  });
+
+  test("узкие пределы меньше общего — иначе запись бессмысленна", () => {
+    for (const [path, limit] of Object.entries(BODY_LIMITS)) {
+      expect(limit, `предел ${path} не меньше общего`).toBeLessThan(GLOBAL_BODY_LIMIT_BYTES);
+    }
   });
 });

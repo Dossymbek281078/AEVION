@@ -39,6 +39,8 @@
  */
 
 /** Тело такого размера удерживать не жаль: платёжные вебхуки — единицы килобайт. */
+import { requestPath } from "./bodyLimitByPath";
+
 export const RAW_BODY_SMALL_LIMIT = 64 * 1024;
 
 /**
@@ -61,11 +63,10 @@ export const RAW_BODY_PATHS: readonly string[] = [
   "/api/build/webhooks/payment",
 ];
 
-/** Нормализованный путь запроса: без строки запроса и без хвостовых слешей. */
-export function requestPath(url: string | undefined): string {
-  const p = (url || "").split("?")[0].replace(/\/+$/, "");
-  return p || "/";
-}
+// Нормализация пути одна на бэкенд — своей копии здесь нет намеренно: два
+// способа резать путь разойдутся на первом же краевом случае (хвостовой слеш,
+// строка запроса), а расхождение здесь означает, что вебхук не узнан.
+export { requestPath } from "./bodyLimitByPath";
 
 export function needsRawBody(url: string | undefined, byteLength: number): boolean {
   if (byteLength <= RAW_BODY_SMALL_LIMIT) return true;

@@ -51,9 +51,23 @@ describe("promo discount cap (MAX_PROMO_DISCOUNT_RATIO)", () => {
   });
 
   it("does not affect a small fixed discount that's already under the cap", () => {
+    // Проверяется именно «маленькая фиксированная скидка НЕ обрезается».
+    // Раньше брали Lite: при цене $24 потолок был $12 и $10 проходили. После
+    // переоценки 13.08 Lite стоит $19, потолок $9.50 — предпосылка перестала
+    // держаться, и тест начал мерить обрезание вместо его отсутствия.
+    // Берём Medium ($29, потолок $14.50): смысл случая сохранён.
+    const medium = getTier("medium")!;
+    const discount = discountFor(medium.priceMonthly!, 10, "monthly"); // FRIEND10
+    expect(discount).toBe(10); // unclamped — 10 < 29*0.5
+  });
+
+  it("FRIEND10 на Lite теперь ОБРЕЗАЕТСЯ потолком — следствие переоценки", () => {
+    // Не побочный эффект правки теста, а зафиксированное поведение: при цене
+    // $19 скидка в $10 больше половины чека, и потолок обязан её срезать.
     const lite = getTier("lite")!;
-    const discount = discountFor(lite.priceMonthly!, 10, "monthly"); // FRIEND10
-    expect(discount).toBe(10); // unclamped — 10 < 24*0.5
+    const discount = discountFor(lite.priceMonthly!, 10, "monthly");
+    expect(discount).toBe(lite.priceMonthly! * MAX_PROMO_DISCOUNT_RATIO); // 9.5
+    expect(discount).toBeLessThan(10);
   });
 
   it("does not affect a percent discount already at exactly the cap", () => {

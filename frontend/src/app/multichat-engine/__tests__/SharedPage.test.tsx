@@ -31,7 +31,7 @@ describe("Публичная ссылка на консилиум", () => {
 
     render(<SharedConversationPage />);
 
-    expect(await screen.findByText(/общий предел, а не ваш личный/i)).toBeTruthy();
+    expect(await screen.findByText(/личный счёт/i)).toBeTruthy();
     // Именно этого не должно быть: голый код вместо объяснения.
     expect(screen.queryByText(/^Ошибка 429$/)).toBeNull();
   });

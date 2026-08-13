@@ -78,7 +78,7 @@ describe("Библиотека мультичата", () => {
 
     render(<MultichatLibraryPage />);
 
-    expect(await screen.findByText(/общий предел, а не ваш личный/i)).toBeTruthy();
+    expect(await screen.findByText(/личный счёт/i)).toBeTruthy();
   });
 
   test("если ссылку не удалось скопировать, её показывают, а не теряют", async () => {

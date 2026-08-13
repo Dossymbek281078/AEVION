@@ -86,8 +86,9 @@ describe("Консилиум — отказ агента на экране", () 
     render(<CouncilConsole />);
     await ask();
 
-    // Человеку — причина по-русски, и именно «общий», а не личный предел.
-    expect(await screen.findByText(/общий предел, а не ваш личный/i)).toBeTruthy();
+    // Человеку — причина по-русски, и предел назван ЛИЧНЫМ: лимитер считает по
+    // аккаунту с 13.08.2026, и «виноват кто-то другой» было бы неправдой.
+    expect(await screen.findByText(/личный счёт/i)).toBeTruthy();
     // Техническая строка не спрятана — иначе отчёт пользователя бесполезен.
     expect(screen.getByText(/max 30 chat requests per minute per IP/)).toBeTruthy();
     // И в заголовке карточки — роль, а не внутренний id.
@@ -159,7 +160,7 @@ describe("Консилиум — отказ агента на экране", () 
 
     expect(written).toContain("### Аналитик");
     expect(written).not.toContain("### analyst");
-    expect(written).toContain("общий предел, а не ваш личный");
+    expect(written).toMatch(/личный счёт/);
     // Правда не спрятана и здесь.
     expect(written).toContain("max 30 chat requests per minute per IP");
   });

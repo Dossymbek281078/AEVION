@@ -5,13 +5,19 @@ import { agentFailure, agentTitle, retryHint } from "./failureText";
 // сообщение должно быть по-русски и не должно врать про причину.
 
 describe("agentFailure — человеку понятно, правда не спрятана", () => {
-  test("предел частоты назван общим, а не личным", () => {
+  test("предел частоты назван личным — и это проверяется по смыслу, а не по фразе", () => {
     // Ровно та строка, которую отдаёт chatLimiter бэкенда.
-    const f = agentFailure("rate_limit_exceeded: max 30 chat requests per minute per IP");
-    expect(f.human).toContain("общий предел");
+    //
+    // До 13.08.2026 здесь проверялось «общий предел»: лимитер считал по адресу
+    // петли, и предел ДЕЙСТВИТЕЛЬНО был общим на всю платформу. Лимитер починен,
+    // и этот тест ровно на один день охранял утверждение, ставшее ложным.
+    // Отсюда форма проверки: смысл (личный / не чужой), а не точная формулировка.
+    const f = agentFailure("rate_limit_exceeded: max 30 chat requests per minute");
+    expect(f.human).toMatch(/личн/i);
+    expect(f.human).not.toMatch(/общий предел|не ваш личный/i);
     expect(f.human).not.toMatch(/[a-z]{4,}/); // без английских слов в тексте для глаза
     // Исходная строка сохранена — отчёт пользователя остаётся полезным.
-    expect(f.technical).toBe("rate_limit_exceeded: max 30 chat requests per minute per IP");
+    expect(f.technical).toBe("rate_limit_exceeded: max 30 chat requests per minute");
   });
 
   test("исчерпанная квота не обещает, что поможет ожидание", () => {

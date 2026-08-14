@@ -88,3 +88,6 @@ benchmark-out/
 # data/subscriptions.jsonl выше: защита не должна зависеть от того, из какой
 # папки запустили.
 **/.aevion-data/
+
+.vercel
+.env*

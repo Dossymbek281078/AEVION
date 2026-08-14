@@ -146,6 +146,48 @@ BASE=https://aevion.app/api-backend READ_ONLY=1 node scripts/qskyway-smoke.js
 
 14.08.2026 после первой такой выкатки прод дал 135 из 135 (до неё — 115 из 123).
 
+### 1.4в. Фронтенд на Vercel — тем же способом (проверено 14.08.2026)
+
+Проект `aevion` тоже привязан к GitHub, поэтому и он простоял на июльской
+сборке. Рабочий путь — заливка каталога:
+
+```
+cd C:\Users\user\aevion-qskyway
+vercel link --yes --scope aevion --project aevion
+vercel --prod --yes
+```
+
+Заливать из КОРНЯ: у проекта задан Root Directory = `frontend`, сборка сама
+войдёт в эту папку.
+
+**`.vercelignore` обязателен, и в нём есть ловушка.** Без него уходит 644 МБ —
+вместе с кэшем PLATEAU (`aevion-globus-backend/.aevion-data/`, 400 МБ). Но
+исключать `**/dist/` НЕЛЬЗЯ: фронтенд импортирует собранный пакет из
+`packages/aevion-catalog-client/dist/`, и с общим шаблоном сборка падает с
+`Module not found`. Локально это не проявляется — файл лежит на диске.
+14.08 на этом потеряна одна попытка.
+
+Проверять результат фактом, а не кодом возврата: `vercel --prod` может
+завершиться нулём, а домен остаться на прежней сборке. Сравнение, которое
+отвечает однозначно:
+
+```
+curl -s https://aevion.app/ | grep -oE '/_next/static/chunks/[^"]+\.js' | head -3
+curl -s https://<новый-адрес>.vercel.app/ | grep -oE '/_next/static/chunks/[^"]+\.js' | head -3
+```
+
+Имена чанков хешированные — если совпали, домен на новой сборке. Сравнивать
+`/_next/static/media/` бесполезно: этот путь одинаков у любой сборки.
+
+Функциональная проверка после выкатки:
+
+```
+cd aevion-globus-backend
+PAGES_BASE=https://aevion.app node scripts/pages-live-smoke.js
+```
+
+14.08.2026 после выкатки: 21/21.
+
 ### 1.5. Переменные окружения (Variables)
 
 Откройте сервис API → **Variables** (или **Environment**).

@@ -36,16 +36,26 @@ export function createInMemoryRateLimiter(opts: RateLimiterOptions): {
   };
 }
 
+/**
+ * The address to count a caller by. Same rule as clientIp() in lib/rateLimit.ts
+ * — this is the second copy, kept only because its callers pass a plain
+ * `{ ip, headers }` object rather than an express Request.
+ *
+ * It used to read the LEFTMOST X-Forwarded-For entry. A proxy appends on the
+ * right, so the leftmost value is written by the caller and verified by
+ * nothing: varying it per request handed every request a fresh window, and the
+ * limits built on this helper counted to one forever while looking, from
+ * outside, exactly like limits that work.
+ *
+ * `ip` is req.ip, which express derives from the same header but only across
+ * the hops the app declares trusted (`app.set("trust proxy", 1)` in index.ts),
+ * so it is the address the front proxy actually observed. The header is not
+ * consulted here at all — there is nothing this function could learn from it
+ * that req.ip has not already decided more carefully.
+ */
 export function clientIp(req: {
   ip?: string;
   headers: Record<string, string | string[] | undefined>;
 }): string {
-  const xf = req.headers["x-forwarded-for"];
-  if (typeof xf === "string" && xf.length > 0) {
-    return xf.split(",")[0].trim();
-  }
-  if (Array.isArray(xf) && xf.length > 0) {
-    return xf[0].split(",")[0].trim();
-  }
   return req.ip || "unknown";
 }

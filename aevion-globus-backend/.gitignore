@@ -17,3 +17,6 @@ data/partner-deals.jsonl
 
 /src/generated/prisma
 data/qreal-render-journal.jsonl
+
+# Отметка сборки — кладётся при выкатке, частью исходника не является
+build-info.json

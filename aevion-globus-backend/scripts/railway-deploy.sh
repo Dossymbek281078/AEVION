@@ -46,7 +46,9 @@ echo "повод:  $MSG"
 # продолжал называть мой коммит. Проверка отвечала «сборка совпадает» при
 # полностью подменённом проде.
 #
-# build-info.json в .gitignore: он часть артефакта, а не исходника.
+# ВАЖНО: build-info.json НЕ в .gitignore. `railway up` уважает .gitignore,
+# и первая версия правила отправляла в образ всё, кроме самой отметки —
+# /health честно отвечал "unknown". Файл убирается сразу после загрузки.
 cat > build-info.json <<JSON
 {
   "commit": "$SHA",
@@ -54,6 +56,8 @@ cat > build-info.json <<JSON
   "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 JSON
+
+trap 'rm -f "$(dirname "$0")/../build-info.json"' EXIT
 
 env -u RAILWAY_TOKEN railway up -c -m "$MSG"
 

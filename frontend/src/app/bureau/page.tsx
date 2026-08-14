@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -81,7 +81,20 @@ const WAITLIST_KEY = "aevion_notarized_waitlist_v1";
 
 type SortMode = "newest" | "oldest" | "verified";
 
+// useSearchParams заставляет Next вычислять страницу на запрос, и без границы
+// Suspense сборка падает на этапе пре-рендера — «Export encountered an error on
+// /bureau/page», то есть красной становится ВСЯ выкатка фронта, а не одна
+// страница. Образец границы взят из smeta-trainer/calc (5bc68b11e), где тот же
+// дефект чинили 21.05.
 export default function BureauPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "60vh", padding: 24, color: "#64748b", fontSize: 14 }}>Загрузка…</div>}>
+      <BureauPageInner />
+    </Suspense>
+  );
+}
+
+function BureauPageInner() {
   const { showToast } = useToast();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);

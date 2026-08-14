@@ -28,6 +28,12 @@ const KEYS = [
   "qskyway.verify.failed",
   "qskyway.verify.unknown",
   "qskyway.just.unknown",
+<<<<<<< HEAD
+=======
+  "qskyway.tip.verifySig",
+  "qskyway.tip.noAutoClearance",
+  "qskyway.tip.smokeBooking",
+>>>>>>> feat/qskyway-airspace-trust
   "qskyway.slots.receipt",
   "qskyway.slots.capacity",
   "qskyway.reg.subject.prohibition",

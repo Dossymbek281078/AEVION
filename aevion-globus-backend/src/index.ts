@@ -177,12 +177,36 @@ app.use(express.urlencoded({
 // Build/version marker so a post-deploy check can confirm exactly which commit
 // is live instead of guessing from a 200. Railway injects RAILWAY_GIT_COMMIT_SHA
 // at build time; falls back to GIT_SHA / SOURCE_VERSION, or "unknown" in local dev.
-const BUILD_COMMIT = (
-  process.env.RAILWAY_GIT_COMMIT_SHA ||
-  process.env.GIT_SHA ||
-  process.env.SOURCE_VERSION ||
-  "unknown"
-).slice(0, 12);
+// 14.08.2026: отметку сборки НЕЛЬЗЯ брать из переменной окружения. Переменные
+// живут в сервисе, а не в образе, и переживают чужую выкатку: 13.08 я выставил
+// GIT_SHA при своей выкатке, ночью соседняя сессия выкатила в тот же сервис
+// AEVION свою ветку — и /health продолжил уверенно называть МОЙ коммит,
+// которого на проде уже не было. Проверка сборки отвечала «совпадает», пока
+// прод работал на другом коде.
+//
+// Поэтому отметка едет ВНУТРИ артефакта: scripts/railway-deploy.sh кладёт
+// build-info.json рядом с кодом перед загрузкой. Нет файла — честное
+// "unknown", а не унаследованное чужое значение.
+function readBuildInfo(): { commit: string; branch?: string; builtAt?: string } {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fsMod = require("node:fs") as typeof import("node:fs");
+    const pathMod = require("node:path") as typeof import("node:path");
+    const raw = fsMod.readFileSync(pathMod.join(__dirname, "..", "build-info.json"), "utf-8");
+    const j = JSON.parse(raw);
+    if (typeof j?.commit === "string" && j.commit) return j;
+  } catch {
+    /* файла нет — это нормально для локального запуска */
+  }
+  // Railway подставляет своё только когда собирает из git-репозитория; у нас
+  // так не выходит с 27.07, но если когда-нибудь выйдет — это честный источник,
+  // он приходит вместе со сборкой.
+  if (process.env.RAILWAY_GIT_COMMIT_SHA) return { commit: process.env.RAILWAY_GIT_COMMIT_SHA };
+  return { commit: "unknown" };
+}
+
+const BUILD_INFO = readBuildInfo();
+const BUILD_COMMIT = BUILD_INFO.commit.slice(0, 12);
 const BOOT_TIME = new Date().toISOString();
 
 function healthPayload() {
@@ -191,6 +215,10 @@ function healthPayload() {
     service: "AEVION Globus Backend",
     timestamp: new Date().toISOString(),
     commit: BUILD_COMMIT,
+    // Ветка и время сборки — чтобы «на проде не моё» читалось сразу, а не через
+    // расследование: сервис AEVION общий, в него выкатывают несколько сессий.
+    branch: BUILD_INFO.branch ?? null,
+    builtAt: BUILD_INFO.builtAt ?? null,
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
     // Аналитика пишется в файл. Если её самое старое событие всегда моложе

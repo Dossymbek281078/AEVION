@@ -251,15 +251,13 @@ qmelaninRouter.post("/plan", (req: Request, res: Response) => {
   let deficientKeys: BiomarkerKey[] = [];
 
   if (Array.isArray(b.deficientKeys)) {
-    // Ключи приходят из тела запроса, а BIOMARKER_BY_KEY собран через
-    // Object.fromEntries — то есть обычный объект с прототипом. Оператор `in`
-    // видит унаследованные ключи, поэтому "constructor", "__proto__",
-    // "toString", "valueOf" и "hasOwnProperty" проходили этот фильтр как
-    // валидные биомаркеры. Дальше BIOMARKER_BY_KEY[k].label давал undefined,
-    // и в план питания попадал нутриент без названия и без продуктов —
-    // ответ 200, дефект молчаливый (проверено пробником 04.08.2026).
-    deficientKeys = b.deficientKeys.filter((k: string): k is BiomarkerKey =>
-      Object.prototype.hasOwnProperty.call(BIOMARKER_BY_KEY, k),
+    deficientKeys = b.deficientKeys.filter(
+      // hasOwnProperty.call, а не `in`: `in` идёт по цепочке прототипов, поэтому
+      // "constructor" проходил фильтр, а BIOMARKER_BY_KEY["constructor"] — функция.
+      // Падения не было: .label и .drives у функции просто undefined — и человек
+      // получал рекомендацию С ПУСТЫМ НАЗВАНИЕМ нутриента. Тихий неверный ответ в
+      // модуле про здоровье хуже отказа: отказ видно, пустую строку принимают.
+      (k: string): k is BiomarkerKey => Object.prototype.hasOwnProperty.call(BIOMARKER_BY_KEY, k),
     );
   } else if (b.values) {
     deficientKeys = BIOMARKERS.filter((spec) => {
@@ -365,15 +363,13 @@ qmelaninRouter.post("/ai-plan", async (req: Request, res: Response) => {
   const b = req.body || {};
   let deficientKeys: BiomarkerKey[] = [];
   if (Array.isArray(b.deficientKeys)) {
-    // Ключи приходят из тела запроса, а BIOMARKER_BY_KEY собран через
-    // Object.fromEntries — то есть обычный объект с прототипом. Оператор `in`
-    // видит унаследованные ключи, поэтому "constructor", "__proto__",
-    // "toString", "valueOf" и "hasOwnProperty" проходили этот фильтр как
-    // валидные биомаркеры. Дальше BIOMARKER_BY_KEY[k].label давал undefined,
-    // и в план питания попадал нутриент без названия и без продуктов —
-    // ответ 200, дефект молчаливый (проверено пробником 04.08.2026).
-    deficientKeys = b.deficientKeys.filter((k: string): k is BiomarkerKey =>
-      Object.prototype.hasOwnProperty.call(BIOMARKER_BY_KEY, k),
+    deficientKeys = b.deficientKeys.filter(
+      // hasOwnProperty.call, а не `in`: `in` идёт по цепочке прототипов, поэтому
+      // "constructor" проходил фильтр, а BIOMARKER_BY_KEY["constructor"] — функция.
+      // Падения не было: .label и .drives у функции просто undefined — и человек
+      // получал рекомендацию С ПУСТЫМ НАЗВАНИЕМ нутриента. Тихий неверный ответ в
+      // модуле про здоровье хуже отказа: отказ видно, пустую строку принимают.
+      (k: string): k is BiomarkerKey => Object.prototype.hasOwnProperty.call(BIOMARKER_BY_KEY, k),
     );
   } else if (b.values) {
     deficientKeys = BIOMARKERS.filter((spec) => {

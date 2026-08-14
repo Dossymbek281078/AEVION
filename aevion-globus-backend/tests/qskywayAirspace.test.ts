@@ -14,6 +14,7 @@ import { CITY_NYC } from "../src/routes/qskyway.city.nyc";
 import { CITY as CITY_ASTANA } from "../src/routes/qskyway.city";
 import { NOFLY } from "../src/routes/qskyway.zones";
 import { AIRSPACE_PROOFS } from "../src/routes/qskyway.airspace.proof";
+import { stableCellId } from "../src/lib/airspaceCellId";
 
 /**
  * QSkyway had 112 smoke assertions and ZERO tests in the CI job: the smoke needs
@@ -95,8 +96,15 @@ describe("qskyway airspace — what the signature actually covers", () => {
 
 describe("qskyway airspace — drift detection against the live feed", () => {
   const src = AIRSPACE.nyc;
+  // Живая ячейка приходит с ключом, выведенным из ГЕОМЕТРИИ: `OBJECTID`, из
+  // которого ключ брался раньше, — номер строки в базе публикатора, и он менялся
+  // при каждой перепубликации. Поэтому фикстура обязана строить id так же, как
+  // ингест, а не копировать `c.id` из отгруженного слоя: в слое там всё ещё
+  // лежит старый `faa-<OBJECTID>` (пересобрать его дёшево нельзя — id входит в
+  // подписываемое содержимое). Сверка это переживает, выводя ключ из геометрии
+  // с обеих сторон, и именно это здесь и проверяется.
   const asLive = (): LiveCell[] =>
-    src.cells.map((c) => ({ id: c.id, ceilingFt: c.ceilingFt, effective: c.effective }));
+    src.cells.map((c) => ({ id: stableCellId(c), ceilingFt: c.ceilingFt, effective: c.effective }));
 
   test("an identical feed is up to date", () => {
     const d = compareSnapshot(src, asLive());
@@ -114,7 +122,11 @@ describe("qskyway airspace — drift detection against the live feed", () => {
   test("withdrawn and newly published cells are detected separately", () => {
     expect(compareSnapshot(src, asLive().slice(1))).toMatchObject({ cellsRemoved: 1, cellsAdded: 0 });
     expect(
-      compareSnapshot(src, [...asLive(), { id: "faa-999999999", ceilingFt: 200, effective: src.effective }]),
+      compareSnapshot(src, [
+        ...asLive(),
+        // Новая ячейка — это новый участок неба, а не новый номер строки.
+        { id: stableCellId({ minLat: 41.5, minLon: -73.1, airportIcao: "KHPN" }), ceilingFt: 200, effective: src.effective },
+      ]),
     ).toMatchObject({ cellsAdded: 1, cellsRemoved: 0 });
   });
 
@@ -194,5 +206,19 @@ describe("qskyway — the shipped Bitcoin proof must match the edition we serve"
       expect(AIRSPACE[city], `${city} has a snapshot`).toBeDefined();
       expect(proof.city).toBe(city);
     }
+  });
+});
+
+describe("покрытие регуляторным слоем названо тем, что считает", () => {
+  // `withFeed` считал `AIRSPACE || PERMISSION`, то есть любой слой, и отдавал 3
+  // при одном настоящем фиде: у Астаны правило в документе eAIP, у Токио — в
+  // растровом слое MLIT. Читающий API напрямую делал вывод, что фид есть у всех.
+  test("фид считается только там, где он действительно есть", () => {
+    const ids = ["astana", "nyc", "tokyo"];
+    const withFeed = ids.filter((id) => AIRSPACE[id]).length;
+    const withLayer = ids.filter((id) => AIRSPACE[id] || PERMISSION[id]).length;
+    expect(withFeed).toBe(1);            // только Нью-Йорк
+    expect(withLayer).toBe(3);           // + Астана и Токио, но не фидом
+    expect(withLayer).toBeGreaterThan(withFeed);
   });
 });

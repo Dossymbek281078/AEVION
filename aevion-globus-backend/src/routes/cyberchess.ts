@@ -1,6 +1,9 @@
 import { Router, type Request, type Response } from "express";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pg = require("pg") as typeof import("pg");
+// Обычный импорт, а не require: под `require` подмена драйвера в тестах не
+// действует — тест «зеленеет», не выполнив ни одного запроса. Та же правка
+// уже сделана в cyberchessMatchStore.ts (12.08); esModuleInterop включён,
+// поэтому под CommonJS это тот же объект модуля.
+import pg from "pg";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
 const captureCyberChessError = makeServiceCapture("cyberchess");
@@ -304,6 +307,13 @@ async function ensureCpiDb(): Promise<void> {
     // Create table if not exists (idempotent — mirrors Prisma schema migration)
     // Ensure updatedAt has a default (table may have been created by prisma db push without one)
     await pool.query(`ALTER TABLE IF EXISTS "CyberchessCpiState" ALTER COLUMN "updatedAt" SET DEFAULT now()`).catch(() => {});
+    // Таблица могла быть создана раньше — тогда CREATE TABLE IF NOT EXISTS ниже
+    // ничего не добавит, и колонка происхождения не появится. Строки, лежащие
+    // там с прошлых версий, тоже прислал клиент, поэтому значение по умолчанию
+    // для них верное.
+    await pool
+      .query(`ALTER TABLE IF EXISTS "CyberchessCpiState" ADD COLUMN IF NOT EXISTS "source" TEXT NOT NULL DEFAULT 'self_reported'`)
+      .catch(() => {});
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "CyberchessCpiState" (
         "userId"            TEXT PRIMARY KEY,
@@ -321,6 +331,13 @@ async function ensureCpiDb(): Promise<void> {
         "endgameTechnique"  DOUBLE PRECISION NOT NULL DEFAULT 0,
         "psychology"        DOUBLE PRECISION NOT NULL DEFAULT 0,
         "gamesPlayed"       INTEGER NOT NULL DEFAULT 0,
+        -- Откуда взялись числа. Сегодня их считает браузер игрока и присылает
+        -- о себе сам, поэтому единственное честное значение — 'self_reported'.
+        -- Признак живёт В ДАННЫХ, а не в голове у того, кто будет подключать
+        -- страницу: иначе самооценка попадёт на публичную витрину как
+        -- измеренная сервером. Появится серверный расчёт — у его строк будет
+        -- своё значение, и отличить одно от другого можно будет запросом.
+        "source"            TEXT NOT NULL DEFAULT 'self_reported',
         "updatedAt"         TIMESTAMP NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS "cpi_overall_idx"     ON "CyberchessCpiState" ("overall" DESC);
@@ -377,9 +394,12 @@ cyberchessRouter.get("/cpi/leaderboard", async (req: Request, res: Response) => 
   try {
     const col = PG_COL[factor] ?? '"overall"';
     const { rows } = await cpiPool!.query(
-      `SELECT "userId","displayName",${col} AS value,"gamesPlayed" FROM "CyberchessCpiState" ORDER BY ${col} DESC LIMIT $1`,
+      `SELECT "userId","displayName",${col} AS value,"gamesPlayed","source" FROM "CyberchessCpiState" ORDER BY ${col} DESC LIMIT $1`,
       [limit],
     );
+    // Происхождение едет вместе со значением. Признак, который есть в базе, но
+    // не доходит до читателя, ничем не отличается от отсутствующего: страница
+    // всё равно покажет самооценку игрока как измеренную величину.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items = rows.map((r: any, idx: number) => ({
       userId: r.userId,
@@ -387,6 +407,7 @@ cyberchessRouter.get("/cpi/leaderboard", async (req: Request, res: Response) => 
       value: r.value ?? 0,
       rank: idx + 1,
       gamesPlayed: r.gamesPlayed ?? 0,
+      source: r.source ?? "self_reported",
     }));
     res.json({ data: { items, factor, limit } });
   } catch (err) {
@@ -397,24 +418,48 @@ cyberchessRouter.get("/cpi/leaderboard", async (req: Request, res: Response) => 
 });
 
 // POST /api/cyberchess/cpi/upsert
-// Body: { userId, factors: {...11 floats...}, gamesPlayed, displayName? }
-// Trust-based MVP (no auth) — upserts the row idempotently.
-cyberchessRouter.post("/cpi/upsert", async (req: Request, res: Response) => {
-  await ensureCpiDb();
-  if (!cpiDbReady) {
-    return res.status(503).json({ error: "cpi_db_not_ready" });
+// Body: { factors: {...11 floats...}, gamesPlayed, displayName? }
+//
+// БЕЗОПАСНОСТЬ: чья это строка — решает JWT (req.auth.sub через requireAuth), а
+// НЕ тело запроса. Та же дисциплина, что у /state ниже в этом файле.
+//
+// Как было до 12.08.2026: ручка помечена «Trust-based MVP (no auth)» и брала
+// `userId` прямо из тела. То есть кто угодно, без единого заголовка, мог
+// поднять себя на вершину рейтинга силы и испортить строку любому игроку по
+// его номеру. Мера силы игрока — это то, что видно публично и на что смотрят
+// при подборе соперника и в турнирах; писать её должен только сервер от имени
+// того, кто вошёл.
+//
+// Закрыто ДО подключения страницы к настоящим данным, а не после: сегодня у
+// ручки нет ни одного вызывающего (страница CPI-лидерборда рисует макет), и
+// именно поэтому цена правки сейчас нулевая. Когда появится первый вызывающий,
+// он будет писать уже по правилам, а не переучиваться.
+cyberchessRouter.post("/cpi/upsert", requireAuth, async (req: Request, res: Response) => {
+  const authUserId = String((req as { auth?: { sub?: string } }).auth?.sub || "");
+  if (!authUserId) {
+    return res.status(401).json({ error: "unauthorized" });
   }
 
-  const { userId, factors, gamesPlayed, displayName } = (req.body ?? {}) as {
+  const { userId: bodyUserId, factors, gamesPlayed, displayName } = (req.body ?? {}) as {
     userId?: unknown;
     factors?: Record<string, unknown>;
     gamesPlayed?: unknown;
     displayName?: unknown;
   };
 
-  if (typeof userId !== "string" || userId.length === 0) {
-    return res.status(400).json({ error: "userId (string) required" });
+  // Явный отказ, а не молчаливая подстановка своего номера: клиент, который
+  // прислал чужой userId, должен узнать, что его запись не состоялась. Тихо
+  // записать «на себя» и ответить 200 значит соврать о том, что произошло.
+  if (typeof bodyUserId === "string" && bodyUserId.length > 0 && bodyUserId !== authUserId) {
+    return res.status(403).json({ error: "userId_mismatch" });
   }
+  const userId = authUserId;
+
+  await ensureCpiDb();
+  if (!cpiDbReady) {
+    return res.status(503).json({ error: "cpi_db_not_ready" });
+  }
+
   if (!factors || typeof factors !== "object") {
     return res.status(400).json({ error: "factors (object) required" });
   }
@@ -436,6 +481,9 @@ cyberchessRouter.post("/cpi/upsert", async (req: Request, res: Response) => {
     endgameTechnique: clampFactorValue(factors.endgameTechnique),
     psychology: clampFactorValue(factors.psychology),
     gamesPlayed: gp,
+    // Единственный сегодняшний писатель — браузер игрока. Значение ставит
+    // сервер, а не тело запроса: иначе клиент объявит свои числа проверенными.
+    source: "self_reported",
   };
   if (typeof displayName === "string" && displayName.length > 0) {
     data.displayName = displayName.slice(0, 120);

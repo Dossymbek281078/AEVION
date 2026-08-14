@@ -81,3 +81,16 @@ benchmark-out/
 # из корня репозитория без AEVION_DATA_DIR — и он появится здесь. Внутри
 # бывают секреты вебхуков, так что попасть в коммит он не должен.
 .aevion-data/
+# Хранилище подписок (PII). Внутрипакетный путь закрыт в
+# aevion-globus-backend/.gitignore; этот шаблон закрывает файл ГДЕ УГОДНО в
+# дереве — 10.08.2026 записи попали в коммиты через корневой data/, куда их клал
+# прогон тестов не из каталога бэкенда (см. tests/subscriptionStorePath.test.ts).
+**/data/subscriptions.jsonl
+**/data/subscriptions.jsonl.tmp
+
+# Рабочее состояние QTrade (тестовые счета и .tmp от прогонов). Внутрипакетный
+# путь закрыт в aevion-globus-backend/.gitignore, корневой — не был, и 0ff550de6
+# утащил в git и qtrade.json, и временный файл. Тот же случай, что с
+# data/subscriptions.jsonl выше: защита не должна зависеть от того, из какой
+# папки запустили.
+**/.aevion-data/

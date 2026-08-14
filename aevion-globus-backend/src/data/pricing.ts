@@ -185,7 +185,17 @@ export const CURRENCY_RATES: Record<CurrencyCode, { rate: number; symbol: string
 
 /** Годовая сумма = -2 месяца (платишь за 10, получаешь 12). */
 const annualTotal = (m: number) => m * 10;
-/** Эффективная цена/мес при годовой оплате. */
+/**
+ * Эффективная цена/мес при годовой оплате.
+ *
+ * ВАЖНО: аргумент здесь и у annualTotal — ОДНА И ТА ЖЕ месячная цена. 13.08.2026
+ * цены снизили ($24/$39/$89/$249.99 → $19/$29/$49/$149), поправили priceMonthly
+ * и annualTotal, а здесь остались старые числа — и каждый годовой план стал
+ * выглядеть ДОРОЖЕ месячного: Lite показывал $20/мес при месячной цене $19,
+ * Universe — $208 при $149. Та же карточка рядом обещала «2 месяца в подарок»
+ * и «$190 в год», то есть противоречила сама себе тремя числами.
+ * Сторож в tests/singlePriceSource.test.ts теперь этого не пропустит.
+ */
 const annualPerMonth = (m: number) => Math.round((m * 10) / 12);
 
 export const TIERS: PricingTier[] = [
@@ -220,7 +230,7 @@ export const TIERS: PricingTier[] = [
     name: "Lite",
     tagline: "Один продукт AEVION на твой выбор",
     priceMonthly: 19,
-    priceAnnualPerMonth: annualPerMonth(24),
+    priceAnnualPerMonth: annualPerMonth(19),
     priceAnnualTotal: annualTotal(19),
     features: [
       "1 любой продукт AEVION на выбор",
@@ -246,7 +256,7 @@ export const TIERS: PricingTier[] = [
     name: "Medium",
     tagline: "Бандл готовых продуктов AEVION",
     priceMonthly: 29,
-    priceAnnualPerMonth: annualPerMonth(39),
+    priceAnnualPerMonth: annualPerMonth(29),
     priceAnnualTotal: annualTotal(29),
     features: [
       "10 готовых продуктов AEVION в одной подписке",
@@ -273,7 +283,7 @@ export const TIERS: PricingTier[] = [
     name: "Full",
     tagline: "Вся экосистема AEVION без ограничений",
     priceMonthly: 49,
-    priceAnnualPerMonth: annualPerMonth(89),
+    priceAnnualPerMonth: annualPerMonth(49),
     priceAnnualTotal: annualTotal(49),
     features: [
       "Все продукты AEVION (30+)",
@@ -300,7 +310,7 @@ export const TIERS: PricingTier[] = [
     name: "Universe",
     tagline: "Всё AEVION в одном месте — флагман экосистемы (Apple-style)",
     priceMonthly: 149,
-    priceAnnualPerMonth: annualPerMonth(249.99),
+    priceAnnualPerMonth: annualPerMonth(149),
     priceAnnualTotal: annualTotal(149),
     features: [
       "Всё из Full + приоритетный доступ ко всем новым модулям",

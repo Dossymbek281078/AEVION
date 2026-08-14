@@ -106,6 +106,46 @@ npm start
 
 Сохраните настройки.
 
+### 1.4б. Как выкатывать, пока GitHub отключён (проверено 14.08.2026)
+
+Сервис **AEVION** (`api.aevion.app`) привязан к GitHub, а аккаунт отключён с
+27.07.2026. Поэтому кнопка **Redeploy** в панели пересобирает ТОТ ЖЕ старый
+коммит — новый код она принести не может. Именно из-за этого прод простоял на
+июльской сборке две недели.
+
+Рабочий путь — заливка каталога напрямую, мимо GitHub и GitLab:
+
+```
+cd C:\Users\user\aevion-qskyway
+git checkout <ветка, которую выкатываем>
+railway login                 # один раз, через браузер
+railway link --project 9d891410-4379-40e3-97ee-619f868ac5d4 --service AEVION --environment production
+railway up --service AEVION
+```
+
+Важные детали, на которых легко споткнуться:
+
+- **Заливать из КОРНЯ репозитория**, не из `aevion-globus-backend`. У сервиса не
+  задан root directory, а команда сборки сама делает `cd aevion-globus-backend`.
+- **Устаревшая переменная `RAILWAY_TOKEN` в окружении перебивает вход через
+  браузер** — CLI отвечает `Unauthorized`. Лечится запуском без неё:
+  `env -u RAILWAY_TOKEN railway up ...`.
+- **`.railwayignore` в корне обязателен.** Без него уходит весь монорепозиторий
+  (2147 файлов одного фронтенда против 712 у бэкенда), и заливка падает по
+  таймауту отправки — так и случилось с первой попыткой 14.08.
+- Команда сборки сервиса — `cd aevion-globus-backend && npm install && npm run
+  build`. **`prisma db push` в ней нет**, схему базы выкатка не трогает.
+
+После выкатки проверять не статусом сборки, а фактом:
+
+```
+curl https://aevion.app/api-backend/health          # bootedAt должен обновиться
+cd aevion-globus-backend
+BASE=https://aevion.app/api-backend READ_ONLY=1 node scripts/qskyway-smoke.js
+```
+
+14.08.2026 после первой такой выкатки прод дал 135 из 135 (до неё — 115 из 123).
+
 ### 1.5. Переменные окружения (Variables)
 
 Откройте сервис API → **Variables** (или **Environment**).

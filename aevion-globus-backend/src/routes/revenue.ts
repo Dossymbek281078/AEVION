@@ -141,23 +141,34 @@ async function lsOrders(force = false): Promise<LsOrder[] | null> {
 /** Built-in permalink -> appId fallback (aevion.gumroad.com/l/<permalink>).
  *  Railway env vars with the GUMROAD_APP_ or GUMROAD_PRODUCT_ prefix still win;
  *  this only ensures known products attribute correctly even if their env var
- *  isn't set. Keep in sync with the Gumroad catalog. */
-const GUMROAD_PERMALINK_APP: Record<string, string> = {
-  orcfbo: "gratitude-book",     // Gratitude ∞ Forever Young — Book (PDF + EPUB)
-  ghvzq: "gratitude-book",      // Gratitude ∞ Forever Young — Complete Pack
-  lelzw: "gratitude-book",      // Gratitude ∞ Forever Young — Book + Audiobook
-  pyiaz: "constitution",        // Constitution Pro ($9/mo)
-  wjvquw: "constitution",       // Constitution Team ($49/mo)
-  xpxzam: "aevion-all-access",  // AEVION All-Access ($59/mo, platform bundle)
-  tmuyxw: "qrenew",             // Протокол «Анти-седина» (RU)
-  kkiavh: "qrenew",             // The Anti-Grey Protocol (EN)
-};
+ *  isn't set. Keep in sync with the Gumroad catalog.
+ *
+ *  Null prototype on purpose: the lookup below feeds a `||` chain, so a
+ *  permalink named "constructor" or "__proto__" would otherwise resolve to an
+ *  inherited member and pass as a perfectly truthy "appId". Those two and no
+ *  others: the lookup lowercases first, so "toString" arrives as "tostring"
+ *  and misses the prototype. Measured by reverting this line — the two named
+ *  keys went red, the rest stayed green. */
+const GUMROAD_PERMALINK_APP: Record<string, string> = Object.assign(
+  Object.create(null) as Record<string, string>,
+  {
+    orcfbo: "gratitude-book",     // Gratitude ∞ Forever Young — Book (PDF + EPUB)
+    ghvzq: "gratitude-book",      // Gratitude ∞ Forever Young — Complete Pack
+    lelzw: "gratitude-book",      // Gratitude ∞ Forever Young — Book + Audiobook
+    pyiaz: "constitution",        // Constitution Pro ($9/mo)
+    wjvquw: "constitution",       // Constitution Team ($49/mo)
+    xpxzam: "aevion-all-access",  // AEVION All-Access ($59/mo, platform bundle)
+    tmuyxw: "qrenew",             // Протокол «Анти-седина» (RU)
+    kkiavh: "qrenew",             // The Anti-Grey Protocol (EN)
+    oijxmq: "qrenew",             // Протокол долголетия — 12 недель (RU, $19)
+  },
+);
 
 /** Permalink → appId. Set GUMROAD_APP_<PERMALINK>=<appId> to attribute a
  *  product's sales to a specific AEVION app. Falls back to the checkout layer's
  *  GUMROAD_PRODUCT_<PERMALINK> mapping (already set on Railway), then the
  *  built-in GUMROAD_PERMALINK_APP catalog; otherwise "platform". */
-function appIdForPermalink(permalink?: string | null): string {
+export function appIdForPermalink(permalink?: string | null): string {
   if (!permalink) return "platform";
   const slug = permalink.toUpperCase().replace(/[^A-Z0-9]/g, "_");
   return (
@@ -196,10 +207,12 @@ const LS_VARIANT_APP_ENV_SUFFIXES: Record<string, string> = {
 
 let lsVariantAppCache: Record<string, string> | null = null;
 
-function appIdForLsVariant(variantId?: string | null): string {
+export function appIdForLsVariant(variantId?: string | null): string {
   if (!variantId) return "platform";
   if (!lsVariantAppCache) {
-    lsVariantAppCache = {};
+    // Null prototype по той же причине, что у GUMROAD_PERMALINK_APP выше:
+    // кэш читается прямой индексацией внутри `||`-цепочки.
+    lsVariantAppCache = Object.create(null) as Record<string, string>;
     for (const [suffix, appId] of Object.entries(LS_VARIANT_APP_ENV_SUFFIXES)) {
       const v = process.env[`LEMON_SQUEEZY_VARIANT_${suffix}`]?.trim();
       if (v) lsVariantAppCache[v] = appId;

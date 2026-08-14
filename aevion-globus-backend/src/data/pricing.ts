@@ -435,7 +435,7 @@ export const MODULES_PRICING: ModulePrice[] = [
   },
   {
     id: "aevion-ip-bureau",
-    addonMonthly: 19,
+    addonMonthly: 29,
     includedIn: ["full", "enterprise"],
     availability: "live",
     oneLiner: "Электронное бюро авторства + сертификаты",
@@ -451,7 +451,7 @@ export const MODULES_PRICING: ModulePrice[] = [
   },
   {
     id: "qpaynet-embedded",
-    addonMonthly: 49,
+    addonMonthly: 29,
     includedIn: ["full", "enterprise"],
     availability: "beta",
     oneLiner: "Платёжное ядро для встраивания",
@@ -477,7 +477,7 @@ export const MODULES_PRICING: ModulePrice[] = [
     // ~50% below chess.com Diamond (~$20/mo monthly billing) — penetration
     // pricing against the direct single-purpose rival while it's still
     // building traction. See docs/PRICING_STRATEGY_2026-07.md.
-    addonMonthly: 9.99,
+    addonMonthly: 19,
     includedIn: ["medium", "full", "enterprise"],
     availability: "live",
     oneLiner: "Шахматная платформа нового поколения",
@@ -505,7 +505,7 @@ export const MODULES_PRICING: ModulePrice[] = [
   },
   {
     id: "smeta-trainer",
-    addonMonthly: 19,
+    addonMonthly: 49,
     includedIn: ["medium", "full", "enterprise"],
     availability: "beta",
     oneLiner: "AI-тренажёр сметного дела РК",
@@ -770,7 +770,9 @@ export const BUNDLES: PricingBundle[] = [
     description: "QRight + QSign + IP Bureau — полный контур цифровой собственности",
     modules: ["qright", "qsign", "aevion-ip-bureau"],
     priceMonthly: 29,
-    savingsPercent: 20,
+    // Пересчитано 14.08.2026 после сведения цены IP Bureau с кассой ($19 -> $29):
+    // по частям стало $47, значит скидка на деле 38%, а не 20%.
+    savingsPercent: 38,
   },
   {
     id: "ai-suite",
@@ -787,8 +789,14 @@ export const BUNDLES: PricingBundle[] = [
     name: "Fintech Suite",
     description: "QTradeOffline + QPayNet + QContract — финансовый стек",
     modules: ["qtradeoffline", "qpaynet-embedded", "qcontract"],
-    priceMonthly: 79,
-    savingsPercent: 8,
+    // 14.08.2026: было $79 при заявленных -8%. К этому моменту цены свелись к
+    // кассе (qpaynet $49 -> $29), и по частям стек стал стоить $63 — то есть
+    // "скидка" превратилась в НАЦЕНКУ +25%. Хуже того, тариф Full за $49 прямо
+    // перечисляет "Финтех-стек: QTrade, QPayNet, QContract", то есть сборка за
+    // $79 давала МЕНЬШЕ за БОЛЬШЕ. Сборка обязана быть дешевле тарифа, который
+    // её содержит, иначе это предложение, которое нельзя выбрать разумно.
+    priceMonthly: 39,
+    savingsPercent: 38,
   },
 ];
 

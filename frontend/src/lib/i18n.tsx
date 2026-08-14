@@ -42,6 +42,16 @@ type I18nContextValue = {
   lang: Lang;
   setLang: (l: Lang) => void;
   t: (key: string, vars?: Record<string, string | number>) => string;
+  /**
+   * Определён ли язык окончательно.
+   *
+   * Первый рендер обязан совпасть с сервером, поэтому `lang` стартует с "en"
+   * и только потом эффект подставляет сохранённый или язык браузера. До этого
+   * момента "en" — не выбор пользователя, а заглушка, и потребителям, которые
+   * на смене языка делают что-то дорогое (AutoTranslate перемонтирует всё
+   * поддерево), нужно уметь отличать заглушку от настоящего значения.
+   */
+  langReady: boolean;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -76,16 +86,19 @@ function detectBrowserLang(): Lang {
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>("en");
+  const [langReady, setLangReady] = useState(false);
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (isLang(saved)) {
         setLangState(saved);
+        setLangReady(true);
         return;
       }
     } catch {}
     setLangState(detectBrowserLang());
+    setLangReady(true);
   }, []);
 
   const setLang = useCallback((l: Lang) => {
@@ -118,7 +131,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     [lang],
   );
 
-  const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
+  const value = useMemo(() => ({ lang, setLang, t, langReady }), [lang, setLang, t, langReady]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

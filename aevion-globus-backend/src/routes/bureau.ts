@@ -1498,15 +1498,32 @@ bureauRouter.get("/kyc-stub/:sessionId", (req: Request, res: Response) => {
   }
   const { sessionId } = req.params;
   const back = String(req.query.return || "/bureau");
+
+  // sessionId приходит из пути и попадал в HTML СЫРЫМ — отражённая XSS на живом
+  // прод-эндпоинте (проверено 26.07.2026: `/kyc-stub/%3Cb%3E…%3C%2Fb%3E` возвращал
+  // тег неэкранированным). Страница задумана как dev-only, но условие выше
+  // fail-open: переменной BUREAU_KYC_PROVIDER в проде нет, поэтому заглушка
+  // отдаётся всем. Экранируем независимо от того, где она включена.
+  const esc = (v: string) =>
+    v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+  // `back` уходит внутрь <script>. JSON.stringify недостаточно: строку он экранирует,
+  // но последовательность `</script>` внутри неё всё равно закрывает блок для HTML-парсера,
+  // и остаток пути становится разметкой. Плюс сам адрес ограничиваем относительным —
+  // иначе параметр превращается в открытый редирект на чужой домен.
+  const relativeBack = /^\/[^/\\]/.test(back) ? back : "/bureau";
+  const safeBack = JSON.stringify(relativeBack).replace(/</g, "\\u003c");
+
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(`<!doctype html><html><head><title>AEVION KYC (stub)</title>
   <meta charset="utf-8"/></head><body style="font-family:system-ui;padding:40px;background:#0f172a;color:#fff;">
   <h1>AEVION Bureau — KYC stub</h1>
-  <p>Session: <code>${sessionId}</code></p>
+  <p>Session: <code>${esc(String(sessionId))}</code></p>
   <p>This is a development-only stub. In production, you'd be uploading
   your ID to a real KYC provider (Sumsub / Veriff / etc). Returning to
   the upgrade page in 1 second...</p>
-  <script>setTimeout(() => { window.location.href = ${JSON.stringify(back)}; }, 1000);</script>
+  <script>setTimeout(() => { window.location.href = ${safeBack}; }, 1000);</script>
   </body></html>`);
 });
 

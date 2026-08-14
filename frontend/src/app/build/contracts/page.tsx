@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { apiUrl } from "@/lib/apiBase";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type BuildApplication } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
@@ -82,7 +83,7 @@ function Body() {
   async function generateContract(appId: string) {
     setGenerating(appId);
     try {
-      const res = await fetch(`/api/build/applications/${appId}/contract`, {
+      const res = await fetch(apiUrl(`/api/build/applications/${appId}/contract`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

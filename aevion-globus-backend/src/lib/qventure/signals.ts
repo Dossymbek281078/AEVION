@@ -18,6 +18,40 @@
 
 import { mentionsUnnegated } from "../textNegation";
 
+/**
+ * Period a churn figure is quoted over. Decks quote churn monthly *or* annually
+ * and rarely say which explicitly — but 4% means "excellent" annually and
+ * "the company is bleeding out" monthly (4%/mo ≈ 39%/yr). Reading every figure
+ * as monthly punished plans that disclosed a good annual number and let bad
+ * annual numbers pass as fine. So the period is parsed and the rate is
+ * normalized to monthly before anything scores it.
+ */
+export type ChurnPeriod = "monthly" | "quarterly" | "annual" | "weekly" | "unspecified";
+
+/** Compounding periods per month, used to normalize a churn rate to monthly. */
+const PERIODS_PER_MONTH: Record<Exclude<ChurnPeriod, "unspecified">, number> = {
+  weekly: 52 / 12,
+  monthly: 1,
+  quarterly: 1 / 3,
+  annual: 1 / 12,
+};
+
+/**
+ * Convert a churn rate quoted over `period` into its monthly equivalent,
+ * compounding properly (20%/yr is 1.84%/mo, not 1.67%/mo).
+ * An unspecified period is read as monthly — the deck convention — and the
+ * engine says so in its assumptions instead of hiding the choice.
+ */
+export function monthlyChurnFrom(pct: number, period: ChurnPeriod | null): number {
+  if (!isFinite(pct) || pct <= 0) return 0;
+  if (pct >= 100) return 100;
+  const p = period && period !== "unspecified" ? period : "monthly";
+  const perMonth = PERIODS_PER_MONTH[p];
+  if (perMonth === 1) return Math.round(pct * 100) / 100;
+  const survivalPerPeriod = 1 - pct / 100;
+  const monthly = 1 - Math.pow(survivalPerPeriod, perMonth);
+  return Math.round(monthly * 10000) / 100;
+}
 
 export interface PlanSignals {
   revenueUsd: number | null;
@@ -30,7 +64,12 @@ export interface PlanSignals {
   ltvUsd: number | null;
   ltvCacRatio: number | null;
   paybackMonths: number | null;
+  /** Churn exactly as disclosed, in the period stated by `churnPeriod`. */
   churnPct: number | null;
+  /** Period the churn figure is quoted over. "unspecified" is read as monthly. */
+  churnPeriod: ChurnPeriod | null;
+  /** Churn normalized to a monthly rate — this is what the engine scores. */
+  churnMonthlyPct: number | null;
   retentionPct: number | null;
   customers: number | null;
   bottomUpTamUsd: number | null;
@@ -60,6 +99,8 @@ export interface StructuredFinancials {
   ltvCacRatio?: number;
   paybackMonths?: number;
   churnPct?: number;
+  /** Period the supplied churn is quoted over (defaults to monthly). */
+  churnPeriod?: ChurnPeriod;
   retentionPct?: number;
   customers?: number;
   bottomUpTamUsd?: number;
@@ -87,7 +128,11 @@ export function mergeStructuredSignals(parsed: PlanSignals, f: StructuredFinanci
   set("ltvUsd", numOrNull(f.ltvUsd));
   set("ltvCacRatio", numOrNull(f.ltvCacRatio));
   set("paybackMonths", numOrNull(f.paybackMonths));
-  set("churnPct", numOrNull(f.churnPct));
+  if (numOrNull(f.churnPct) !== null) {
+    s.churnPct = f.churnPct as number;
+    s.churnPeriod = f.churnPeriod ?? "unspecified";
+    s.churnMonthlyPct = monthlyChurnFrom(f.churnPct as number, s.churnPeriod);
+  }
   set("retentionPct", numOrNull(f.retentionPct));
   set("customers", numOrNull(f.customers) !== null ? Math.round(f.customers as number) : null);
   set("bottomUpTamUsd", numOrNull(f.bottomUpTamUsd));
@@ -110,7 +155,8 @@ export function emptySignals(): PlanSignals {
   return {
     revenueUsd: null, revenueBasis: null, growthPct: null, growthPeriod: null,
     grossMarginPct: null, cacUsd: null, ltvUsd: null, ltvCacRatio: null,
-    paybackMonths: null, churnPct: null, retentionPct: null, customers: null,
+    paybackMonths: null, churnPct: null, churnPeriod: null, churnMonthlyPct: null,
+    retentionPct: null, customers: null,
     bottomUpTamUsd: null, mentionsRevenueNoNumber: false, mentionsPatent: false,
     fieldsFound: 0,
   };
@@ -137,7 +183,14 @@ function firstMatch(text: string, re: RegExp): RegExpMatchArray | null {
 }
 
 const NUM = String.raw`(\d[\d,]*(?:\.\d+)?)`;
-const UNIT = String.raw`(k|m|b|bn|t|tn|thousand|million|billion|trillion)?`;
+/**
+ * Money multiplier. The `(?![a-z])` guard is load-bearing: without it the single
+ * letters k/m/b/t matched the START of the next word, so "CAC $3, LTV $2, monthly
+ * churn 14%" read LTV as $2 **m**illion (ratio 666,666:1 instead of 0.7) and
+ * "$50 tests" would have been fifty trillion. Alternation backtracks, so
+ * "million"/"billion" still match — only a bare letter glued to a word is rejected.
+ */
+const UNIT = String.raw`(?:(k|m|b|bn|t|tn|thousand|million|billion|trillion)(?![a-z]))?`;
 
 export function parsePlanSignals(text: string): PlanSignals {
   const s = emptySignals();
@@ -166,14 +219,23 @@ export function parsePlanSignals(text: string): PlanSignals {
     s.mentionsRevenueNoNumber = true;
   }
 
-  // ── Growth: "growing 20% MoM" / "30% month-over-month" / "3x YoY" ──
-  const growth = firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(mom|yoy|wow|month[- ]over[- ]month|year[- ]over[- ]year|week[- ]over[- ]week|monthly|annually|per month|per year)`, "i"))
-    || firstMatch(t, new RegExp(String.raw`grow(?:ing|th)?\s*(?:of|at|by)?\s*${NUM}\s*%`, "i"));
+  // ── Growth: "growing 20% MoM" / "30% month-over-month growth" / "up 15% MoM" ──
+  // A bare "<n>% monthly" is NOT growth: "20% monthly churn" used to be read as
+  // 20% MoM growth, handing a dying company +14 execution points for a metric it
+  // never claimed. So a period word alone no longer qualifies — the match needs a
+  // growth verb, the word "growth", or a growth-specific token (MoM/YoY/WoW).
+  const PERIOD_WORD = String.raw`(mom|yoy|wow|month[- ]over[- ]month|year[- ]over[- ]year|week[- ]over[- ]week|monthly|annually|annual|yearly|per month|per year|per week)`;
+  const NOT_ANOTHER_METRIC = String.raw`(?!\s*(?:churn|attrition|retention|margin|discount|fee|interest|refund|conversion))`;
+  const growth = firstMatch(t, new RegExp(String.raw`(?:grow(?:ing|th|s|n)?|up|increas(?:ing|ed|e)|expand(?:ing|ed))\s*(?:by|at|of|to)?\s*${NUM}\s*%\s*${PERIOD_WORD}?${NOT_ANOTHER_METRIC}`, "i"))
+    || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*${PERIOD_WORD}\s*(?:revenue\s*)?growth`, "i"))
+    || firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(mom|yoy|wow|month[- ]over[- ]month|year[- ]over[- ]year|week[- ]over[- ]week)${NOT_ANOTHER_METRIC}`, "i"));
   if (growth) {
-    const g = parseFloat(growth[1].replace(/,/g, ""));
+    const groups = growth.slice(1).filter((g): g is string => typeof g === "string");
+    const value = groups.find((g) => /^\d/.test(g));
+    const g = value !== undefined ? parseFloat(value.replace(/,/g, "")) : NaN;
     if (isFinite(g)) {
       s.growthPct = g;
-      const p = (growth[2] || "").toLowerCase();
+      const p = groups.filter((x) => !/^\d/.test(x)).join(" ").toLowerCase();
       s.growthPeriod = /mom|month/.test(p) ? "MoM" : /yoy|year|annual/.test(p) ? "YoY" : /wow|week/.test(p) ? "WoW" : "unspecified";
     }
   }
@@ -210,9 +272,25 @@ export function parsePlanSignals(text: string): PlanSignals {
   if (pb) { const v = parseFloat(pb[1].replace(/,/g, "")); if (isFinite(v) && v > 0 && v < 240) s.paybackMonths = v; }
 
   // ── Churn / retention / NRR ──
-  const churn = firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:monthly|annual)?\s*churn`, "i"))
-    || firstMatch(t, new RegExp(String.raw`churn\s*(?:of|=|:|at|is)?\s*${NUM}\s*%`, "i"));
-  if (churn) { const v = parseFloat(churn[1].replace(/,/g, "")); if (isFinite(v) && v >= 0 && v <= 100) s.churnPct = v; }
+  // The period matters as much as the number: "4% annual churn" is excellent,
+  // "4% churn" read as monthly is ~39%/yr. Capture whichever side states it.
+  const churn = firstMatch(t, new RegExp(String.raw`(?:(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)\s+)?${NUM}\s*%\s*(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn(?:\s*(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"))
+    || firstMatch(t, new RegExp(String.raw`(monthly|quarterly|annual(?:ised|ized)?|yearly|weekly)?\s*churn\s*(?:rate)?\s*(?:of|=|:|at|is)?\s*${NUM}\s*%\s*(?:(?:per|a|\/)\s*(month|quarter|year|week))?`, "i"));
+  if (churn) {
+    const groups = churn.slice(1).filter((g): g is string => typeof g === "string");
+    const value = groups.find((g) => /^\d/.test(g));
+    const v = value !== undefined ? parseFloat(value.replace(/,/g, "")) : NaN;
+    if (isFinite(v) && v >= 0 && v <= 100) {
+      const words = groups.filter((g) => !/^\d/.test(g)).join(" ").toLowerCase();
+      s.churnPct = v;
+      s.churnPeriod = /annual|yearly|year/.test(words) ? "annual"
+        : /quarter/.test(words) ? "quarterly"
+          : /week/.test(words) ? "weekly"
+            : /month/.test(words) ? "monthly"
+              : "unspecified";
+      s.churnMonthlyPct = monthlyChurnFrom(v, s.churnPeriod);
+    }
+  }
   const ret = firstMatch(t, new RegExp(String.raw`${NUM}\s*%\s*(?:net\s*)?(?:revenue\s*)?retention`, "i"))
     || firstMatch(t, new RegExp(String.raw`(?:net\s*revenue\s*retention|nrr|retention)\s*(?:of|=|:|at|is)?\s*${NUM}\s*%`, "i"));
   if (ret) { const v = parseFloat(ret[1].replace(/,/g, "")); if (isFinite(v) && v > 0 && v <= 500) s.retentionPct = v; }

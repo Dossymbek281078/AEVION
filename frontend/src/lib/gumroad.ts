@@ -23,9 +23,22 @@ export const GUMROAD_DEFAULT_PERMALINK = "xpxzam";
  * Раскомментировать/добавлять по мере создания продуктов в Gumroad.
  */
 export const GUMROAD_PERMALINKS: Record<string, string> = {
-  // "all-access":      "xpxzam",
-  // "cyberchess:pro":  "aevion-cyberchess-pro",
-  // "healthai:pro":    "aevion-healthai-pro",
+  // Заполнено 2026-07-26 по живому дашборду Gumroad. До этого вся карта была
+  // закомментирована, из-за чего gumroadPermalink() ВСЕГДА отдавала дефолт
+  // `xpxzam` — то есть кнопка «улучшить» в любом модуле вела покупателя в
+  // подписку All-Access $59/мес вместо продукта, который он смотрел.
+  "all-access": "xpxzam",     // AEVION All-Access $59/мес
+  constitution: "pyiaz",      // Constitution Pro $9/мес
+  "constitution:team": "wjvquw", // Constitution Team $49/мес
+  qrenew: "kkiavh",           // The Anti-Grey Protocol $19 (EN)
+  "qrenew:ru": "tmuyxw",      // Протокол «Анти-седина» $9 (RU)
+  "gratitude-book": "ghvzq",  // Gratitude ∞ Forever Young — полный пакет $29.99
+  // ВАЖНО: остальные модули (devhub, smeta, qventure, bureau, qpaynet,
+  // cyberchess, qcontract) продаются НЕ через Gumroad, а через LemonSqueezy —
+  // см. `@/lib/products`. Для них gumroadCheckoutUrl() по-прежнему отдаст
+  // дефолтный `xpxzam`; правильный чекаут этих модулей брать из каталога
+  // products.ts, а не отсюда. Развести это — отдельная задача по
+  // PaddleUpgradeButton (legacy-имя, ~11 импортов).
 };
 
 /**

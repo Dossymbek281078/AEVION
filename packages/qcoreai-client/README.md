@@ -240,6 +240,54 @@ app.post("/qcore-webhook", express.raw({ type: "*/*" }), async (req, res) => {
 
 `verifyWebhookHmac` uses Web Crypto SubtleCrypto + constant-time comparison. Works in Node 18+, Cloudflare Workers, Vercel Edge.
 
+## Multichat: council, dissent, receipt
+
+Any fan-out can make N agents answer at once. What this exposes instead is the
+part everyone throws away: **where the agents disagreed**, and a receipt that
+lets whoever receives the answer check it.
+
+Agreement between models proves very little — they trained on overlapping data
+and tend to fail the same way. So the disagreement map comes first.
+
+```ts
+const { results, dissent, receipt } = await client.council("conv-123", "Ship the paid tier now?", [
+  { id: "analyst", role: "Facts and numbers only" },
+  { id: "skeptic", role: "Find where the reasoning breaks" },
+  { id: "practic", role: "What to do tomorrow on limited resources" },
+]);
+
+console.log(dissent.verdict);          // "consensus" | "split" | "insufficient"
+console.log(dissent.numericConflicts); // where they contradict each other in numbers
+console.log(dissent.outlier);          // which agent is furthest from the rest
+```
+
+`verdict` is `"insufficient"` when fewer than two agents actually answered — a
+cheerful "consensus" from a single reply would be a lie.
+
+### Free, no token
+
+Two of the three calls need no authentication, and that is a consequence of how
+they work rather than a promotional offer.
+
+```ts
+// The map is derived from the text of answers you already have — from this SDK,
+// from your own models, from anywhere. No extra model call, so nothing to meter.
+const dissent = await client.dissentPreview([
+  { agentId: "gpt",    ok: true, reply: "The run will cost about $36." },
+  { agentId: "claude", ok: true, reply: "The run will cost about $15." },
+]);
+// → verdict "split", one numeric conflict, spread 21
+
+// Requiring an account to check somebody else's receipt would defeat the point
+// of issuing one.
+const v = await client.verifyReceipt(JSON.parse(downloadedReceiptFile));
+console.log(v.hashMatches, v.signature); // true | false, and "valid" / "absent" / …
+```
+
+`verifyReceipt` is a convenience, **not** the proof. The proof is that the spec
+is open — RFC8785 canonicalisation, sha256 digest, ed25519 signature — so the
+hash can be recomputed by any implementation without trusting this call at all.
+
 ## API reference
 
 | Method | HTTP | Notes |
@@ -268,6 +316,9 @@ app.post("/qcore-webhook", express.raw({ type: "*/*" }), async (req, res) => {
 | `getEvalRun(id)` | `GET /api/qcoreai/eval/runs/:id` | Poll for progress |
 | `listSuiteRuns(id, limit?)` | `GET /api/qcoreai/eval/suites/:id/runs` | Regression history |
 | `runEvalSuiteAndWait(id, opts?)` | — | Convenience: kick off + poll until done |
+| `council(convId, prompt, agents)` | `POST /api/multichat/conversations/:id/dispatch` | Auth — spends credits |
+| `dissentPreview(answers)` | `POST /api/multichat/dissent/preview` | **No auth** — no model call, nothing to meter |
+| `verifyReceipt(signed)` | `POST /api/multichat/receipt/verify` | **No auth** — checking a receipt must not need an account |
 
 ## Browser usage
 

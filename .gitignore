@@ -89,3 +89,6 @@ page_v*_backup.*
 
 .vercel
 .env*
+
+# Прогоны бенчмарка QReal: ссылки на рендеры, судейские листы, ключ плеч.
+benchmark-out/

@@ -7,34 +7,19 @@
 // desync server/client hydration; renders nothing until the first successful
 // read AND at least one routed run exists.
 import { useEffect, useState } from "react";
-import { getClientApiBase } from "@/lib/apiBase";
+import { fetchAiSavings, type AiSavings } from "@/lib/aiSavings";
 
-type Savings = {
-  runs: number;
-  facts: number;
-  light: number;
-  deep: number;
-  totalCostUsd: number;
-  estAlwaysCouncilUsd: number;
-  savedUsd: number;
-  savedPct: number;
-};
 
 export default function PlatformAiSavings() {
-  const [data, setData] = useState<Savings | null>(null);
+  const [data, setData] = useState<AiSavings | null>(null);
 
   useEffect(() => {
     let alive = true;
     const load = async () => {
-      try {
-        const base = getClientApiBase();
-        const r = await fetch(`${base}/api/qcoreai/smart/savings`, { cache: "no-store" });
-        if (!r.ok) return;
-        const j = (await r.json()) as Savings;
-        if (alive && j && typeof j.runs === "number") setData(j);
-      } catch {
-        /* silent — the widget is non-critical */
-      }
+      // Через общий загрузчик: тот же счётчик независимо просят /pricing,
+      // /pitch, /acquire и /studio, а число у него одно на всех.
+      const j = await fetchAiSavings();
+      if (alive && j) setData(j);
     };
     load();
     const t = setInterval(load, 30_000);

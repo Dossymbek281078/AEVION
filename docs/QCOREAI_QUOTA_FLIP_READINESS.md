@@ -14,8 +14,13 @@
 > - `QCOREAI_PREMIUM_QUOTA=1` — 🔴 **OFF.** Enforces a smaller sub-cap
 >   (~10% of the overall cap) on premium/frontier-model usage specifically
 >   (`isPremiumModel()`, `services/qcoreai/pricing.ts`). Added 2026-07-22.
->   Only wired into `/chat` + `/chat-stream` — the multi-agent orchestrator's
->   dispatch points are NOT covered yet (known gap, see strategy doc).
+>   Wired into `/chat` + `/chat-stream` (402 pre-dispatch) AND, since
+>   2026-07-26, into the multi-agent orchestrator's `streamAgent()` choke
+>   point (all strategies + `/smart` + WS + batch/chains/ab-tests): a blocked
+>   premium dispatch yields a `premium_quota_exceeded` SSE/WS event and the
+>   run degrades gracefully, keeping partial output (mirrors
+>   `budget_exceeded`). Background scheduler ticks (no request context)
+>   remain ungated.
 
 ## Why these are separate from the module paywall
 
@@ -84,31 +89,22 @@ no-op instantly, same as `PAYWALL_MODULES`.
 
 ## Open follow-up
 
-- `QCOREAI_PREMIUM_QUOTA` only covers `/chat` + `/chat-stream` — extending
-  it to the multi-agent orchestrator is separate work. Scoped (not yet
-  implemented) 2026-07-24:
-  - `services/qcoreai/orchestrator.ts`'s `streamAgent()` (~line 196) is the
-    **single choke point** every strategy (sequential/parallel/debate/
-    moderator/judge/etc.) funnels through — good news, only one function
-    needs the check, not a dozen call sites.
-  - The hard part: `streamAgent()` is an async generator with **no user/tier
-    context at all** today — `OrchestratorInput` doesn't carry a userId or
-    resolved tier. Adding the check means threading that through
-    `OrchestratorInput` → every strategy function → `streamAgent()`, not a
-    one-line addition.
-  - There's already a directly-analogous precedent to mirror instead of
-    inventing a new mechanism: `effectiveBudget()`/`bailBudget()` (same
-    file, ~line 266) already gracefully stops a run mid-stream when a
-    per-run `maxCostUsd` cap is crossed, yielding a `budget_exceeded` event
-    the route handler forwards to the client. A premium-quota check should
-    yield an equivalent `premium_quota_exceeded` event via the same
-    generator-yield idiom, NOT try to call `res.status(402)` directly from
-    inside the generator (it has no `res`).
-  - Open design question that needs a real decision before implementing,
-    not a code change: if agent A already produced output before agent B's
-    call would exceed the quota, does the run keep A's partial output (like
-    `bailBudget` does — it yields `final` with `lastContent`) or discard
-    it? Recommend following `bailBudget`'s existing precedent (keep partial
-    output) for consistency, but confirm before implementing.
+- ✅ **CLOSED 2026-07-26** — `QCOREAI_PREMIUM_QUOTA` now also covers the
+  multi-agent orchestrator, implemented per the 2026-07-24 scoping (kept in
+  git history of this section): a `premiumGate` callback on
+  `OrchestratorInput` (same idiom as `guidanceProvider` — no raw
+  userId/tier threading needed), checked in the `streamAgent()` choke point
+  before every dispatch. A blocked premium call yields a
+  `premium_quota_exceeded` event, then aborts that one call with
+  `PremiumQuotaError`; each strategy's existing failure fallback keeps
+  partial output (the recommended `bailBudget` precedent — e.g. a blocked
+  council Synthesizer degrades to the longest crowd draft, a blocked Critic
+  ships the Writer draft). Gate builders live in `lib/qcoreQuota.ts`
+  (`premiumQuotaGateForRequest` / `premiumQuotaGateForPayload`) and share
+  the exact policy code with the `/chat` 402 path. Wired at: `/multi-agent`
+  SSE, `/smart` (smartComplete), `/batch`, schedules run-now, prompt-chain
+  runs, A/B-test runs, and the WS server. Deliberately NOT gated:
+  background scheduler ticks and the internal eval runner (no request
+  context to resolve a plan from).
 
-— written 2026-07-23, smoke script added 2026-07-23, orchestrator scoped 2026-07-24
+— written 2026-07-23, smoke script added 2026-07-23, orchestrator scoped 2026-07-24, orchestrator gate shipped 2026-07-26

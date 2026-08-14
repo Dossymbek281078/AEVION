@@ -7,6 +7,8 @@ const captureEventsError = makeServiceCapture("qevents");
 
 export const eventsRouter = Router();
 
+
+
 /**
  * GTM analytics events — простой ingest без внешних трекеров.
  * Хранение: JSONL append-only в data/events.jsonl
@@ -19,10 +21,85 @@ const EVENTS_FILE = process.env.EVENTS_FILE
   ? process.env.EVENTS_FILE
   : join(process.cwd(), "data", "events.jsonl");
 
+// Фиксируем РЯДОМ с путём и в тот же момент. Если читать env при вызове, поле
+// могло бы сказать "persisted", пока путь остаётся дефолтным — статус, который
+// врёт, хуже отсутствующего статуса.
+const EVENTS_FILE_FROM_ENV = Boolean(process.env.EVENTS_FILE);
+
 function ensureDir() {
   const dir = dirname(EVENTS_FILE);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
+/**
+ * Состояние хранилища событий — для /api/health, без аутентификации.
+ *
+ * Зачем: события пишутся в JSONL на файловой системе. Если EVENTS_FILE не
+ * указывает на смонтированный том, на Railway это файловая система контейнера,
+ * и каждый деплой начинает счёт заново. Снаружи это неотличимо от «событий
+ * пока не было»: пустой лог и свежий лог выглядят одинаково.
+ *
+ * Отдаём только счётчики и метку самого старого события — ни одного поля
+ * самих событий, никаких PII. Если oldest всегда оказывается моложе
+ * bootedAt из того же ответа, данные не переживают перезапуск, и это видно
+ * с первого взгляда вместо того, чтобы лезть в переменные окружения.
+ */
+type EventsStoreStatus = {
+  persistedByEnv: boolean;
+  exists: boolean;
+  count: number;
+  oldest: string | null;
+};
+
+// Файл событий append-only и не ротируется, а health опрашивают постоянно —
+// Railway своей проверкой, CI в цикле, любой аптайм-монитор. Читать весь файл
+// на каждый вызов означает, что через сутки работы health начнёт тянуть
+// мегабайты, замедлится и Railway сочтёт сервис больным. Кэшируем: цифры в
+// диагностике не обязаны быть посекундными.
+const STORE_STATUS_TTL_MS = 30_000;
+let storeStatusCache: { at: number; value: EventsStoreStatus } | null = null;
+
+export function eventsStoreStatus(): EventsStoreStatus {
+  const now = Date.now();
+  if (storeStatusCache && now - storeStatusCache.at < STORE_STATUS_TTL_MS) {
+    return storeStatusCache.value;
+  }
+  const value = readEventsStoreStatus();
+  storeStatusCache = { at: now, value };
+  return value;
+}
+
+function readEventsStoreStatus(): EventsStoreStatus {
+  // Путь наружу не отдаём — он раскрывает раскладку файловой системы сервера.
+  // Для ответа на вопрос «переживают ли события деплой» достаточно флага и
+  // метки самого старого события.
+  const persistedByEnv = EVENTS_FILE_FROM_ENV;
+  if (!existsSync(EVENTS_FILE)) {
+    return { persistedByEnv, exists: false, count: 0, oldest: null };
+  }
+  try {
+    const lines = readFileSync(EVENTS_FILE, "utf8").split("\n").filter(Boolean);
+    let oldest: string | null = null;
+    for (const line of lines) {
+      try {
+        const ts = JSON.parse(line)?.ts;
+        if (typeof ts === "string" && (oldest === null || ts < oldest)) oldest = ts;
+      } catch {
+        // Битую строку пропускаем: одна порча не должна ронять health.
+      }
+    }
+    return { persistedByEnv, exists: true, count: lines.length, oldest };
+  } catch (e) {
+    captureEventsError(e, { route: "events/storeStatus" });
+    return { persistedByEnv, exists: true, count: -1, oldest: null };
+  }
+}
+
+/** Для тестов: сбросить кэш, чтобы следующий вызов прочитал файл заново. */
+export function __resetEventsStoreStatusCache() {
+  storeStatusCache = null;
+}
+
+
 
 interface AnalyticsEvent {
   ts: string;

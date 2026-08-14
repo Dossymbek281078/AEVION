@@ -11,7 +11,8 @@
     "lint:frontend": "npm run lint --prefix frontend",
     "test": "node scripts/run-all-tests.mjs",
     "test:backend": "node scripts/run-all-tests.mjs aevion-globus-backend",
-    "test:frontend": "node scripts/run-all-tests.mjs frontend"
+    "test:frontend": "node scripts/run-all-tests.mjs frontend",
+  "test:qreal": "node scripts/qreal-judge.test.mjs && node scripts/qreal-characters.test.mjs && node scripts/qreal-continuity.test.mjs && node scripts/qreal-sync-rubric.mjs --check"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

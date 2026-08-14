@@ -66,8 +66,28 @@ export function pickVideoEngine(preferred?: string): RenderEngine | null {
   return engines.find((e) => e.id === preferred) || engines[0];
 }
 
+/** Reference-to-video вариант модели: тот же движок, но принимает опорные
+ *  изображения персонажей. Схема сверена по каталогу fal 2026-07-26 —
+ *  `image_urls` (до 9), картинки адресуются В ПРОМТЕ как @Image1, @Image2.
+ *  Возвращаем null, если у движка такого варианта нет: подменять модель
+ *  наугад значит платить за отказ. */
+export function referenceModelId(engine: RenderEngine): string | null {
+  if (engine.id !== "seedance") return null;
+  return process.env.QREAL_FAL_MODEL_SEEDANCE_REF?.trim() || "bytedance/seedance-2.0/reference-to-video";
+}
+
 /** Входной payload под конкретный движок (форматы полей у моделей различаются). */
-function buildFalInput(engineId: string, prompt: string, durationSec: number): Record<string, unknown> {
+function buildFalInput(engineId: string, prompt: string, durationSec: number, imageUrls?: string[]): Record<string, unknown> {
+  if (imageUrls?.length && engineId === "seedance") {
+    return {
+      prompt,
+      image_urls: imageUrls.slice(0, 9),
+      duration: Math.max(4, Math.min(15, Math.round(durationSec))),
+      resolution: "720p",
+      aspect_ratio: "16:9",
+      generate_audio: true,
+    };
+  }
   if (engineId === "kling") {
     // Kling принимает дискретные длительности.
     return {
@@ -89,9 +109,18 @@ function buildFalInput(engineId: string, prompt: string, durationSec: number): R
 
 export type FalSubmit = { ok: true; requestId: string } | { ok: false; error: string };
 
-export async function falSubmit(engine: RenderEngine, prompt: string, durationSec: number): Promise<FalSubmit> {
-  if (!engine.falModelId) return { ok: false, error: "engine has no fal model" };
-  return falQueueSubmit(engine.falModelId, buildFalInput(engine.id, prompt, durationSec));
+export async function falSubmit(
+  engine: RenderEngine,
+  prompt: string,
+  durationSec: number,
+  imageUrls?: string[]
+): Promise<FalSubmit> {
+  // Есть референсы персонажей — уходим на reference-вариант модели: только он
+  // умеет image_urls. Нет варианта или нет картинок — обычный text-to-video.
+  const refModel = imageUrls?.length ? referenceModelId(engine) : null;
+  const modelId = refModel || engine.falModelId;
+  if (!modelId) return { ok: false, error: "engine has no fal model" };
+  return falQueueSubmit(modelId, buildFalInput(engine.id, prompt, durationSec, refModel ? imageUrls : undefined));
 }
 
 export type FalPoll =
@@ -99,9 +128,12 @@ export type FalPoll =
   | { state: "completed"; videoUrl: string | null }
   | { state: "failed"; error: string };
 
-export async function falPoll(engine: RenderEngine, requestId: string): Promise<FalPoll> {
-  if (!engine.falModelId) return { state: "failed", error: "engine has no fal model" };
-  const poll = await falQueuePoll(engine.falModelId, requestId);
+export async function falPoll(engine: RenderEngine, requestId: string, usedReference = false): Promise<FalPoll> {
+  // Опрашивать надо ТУ модель, в которую сабмитили: у reference-варианта свой
+  // requests-путь, и опрос по text-to-video отдаст 404 на живую задачу.
+  const modelId = (usedReference ? referenceModelId(engine) : null) || engine.falModelId;
+  if (!modelId) return { state: "failed", error: "engine has no fal model" };
+  const poll = await falQueuePoll(modelId, requestId);
   if (poll.state === "completed") return { state: "completed", videoUrl: falExtractVideoUrl(poll.result) };
   return poll;
 }

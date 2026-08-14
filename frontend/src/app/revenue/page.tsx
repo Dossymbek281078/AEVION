@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { externalRevenueAt } from "./externalRevenue";
 import { useI18n } from "@/lib/i18n";
 import { etaLabel, type GoalPace } from "@/lib/goalEta";
 import { fmtNum, intlLocale, type NumLang } from "@/lib/locale";
@@ -35,6 +36,9 @@ interface GumroadSale {
 interface GumroadRecent {
   sales: GumroadSale[];
   byApp: Record<string, { count: number; totalUsd: number }>;
+  /** Разрез по ИСТОЧНИКУ ТРАФИКА (метка ?c= со страницы /go), не по платёжке.
+   *  Продажи без метки приходят под ключом "unattributed". */
+  bySource?: Record<string, { count: number; totalUsd: number }>;
   stub?: boolean;
   message?: string;
 }
@@ -75,6 +79,9 @@ interface GumroadBalance {
   currency?: string;
   saleCount?: number;
   refundedCount?: number;
+  /** Покупки с внутренних адресов: входят в gross канала, но не в выручку. */
+  internalUsd?: number;
+  internalCount?: number;
   stub?: boolean;
   error?: string;
   message?: string;
@@ -207,6 +214,14 @@ export default function RevenuePage() {
   const lsCount = lsBalance?.saleCount ?? 0;
   const totalGross = gGross + lsGross;
   const totalCount = gCount + lsCount;
+  // Свои проверочные покупки входят в gross канала (он обязан сходиться с
+  // кабинетом провайдера), но выручкой не являются. 27.07.2026 их было две
+  // на $158.99 — 89% валовой суммы, и без этого разделения дашборд говорил
+  // «$178.97 выручки» там, где снаружи пришло $19.98.
+  const totalInternal = (balance?.internalUsd ?? 0) + (lsBalance?.internalUsd ?? 0);
+  const totalInternalCount = (balance?.internalCount ?? 0) + (lsBalance?.internalCount ?? 0);
+  const externalGross = totalGross - totalInternal;
+  const externalCount = totalCount - totalInternalCount;
   const daysLeft = daysUntil(goals.deadline);
 
   // Merge both channels' recent sales — the backend now attributes LS
@@ -233,6 +248,21 @@ export default function RevenuePage() {
   for (const s of (lsRecent?.sales ?? []).filter((sale) => !sale.refunded)) {
     addByApp(s.appId, 1, s.amountUsd);
   }
+
+  // Источники: размеченные вперёд и по убыванию суммы, «без метки» всегда последним —
+  // он почти всегда крупнейший и, стоя первым, оттеснял бы то, ради чего блок нужен.
+  const sourceEntries = Object.entries(recent?.bySource ?? {});
+  const sourceRows = [
+    ...sourceEntries.filter(([k]) => k !== "unattributed").sort((a, b) => b[1].totalUsd - a[1].totalUsd),
+    ...sourceEntries.filter(([k]) => k === "unattributed"),
+  ];
+  const attributed = sourceEntries.filter(([k]) => k !== "unattributed");
+  const attributedUsd = attributed.reduce((sum, [, d]) => sum + d.totalUsd, 0);
+  // Видимость блока — по ЧИСЛУ размеченных продаж, а не по сумме: бесплатный лид-магнит
+  // с меткой даёт totalUsd = 0, и условие «есть выручка» спрятало бы факт, что канал
+  // вообще приводит людей. Сумма нужна только для долей ниже.
+  const attributedCount = attributed.reduce((sum, [, d]) => sum + d.count, 0);
+  const unattributedUsd = recent?.bySource?.unattributed?.totalUsd ?? 0;
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -275,17 +305,17 @@ export default function RevenuePage() {
               <GoalBar
                 label="$1M — первая цель"
                 target={goals.primaryUsd}
-                current={totalGross}
+                current={externalGross}
                 colorClass="bg-gradient-to-r from-sky-500 to-cyan-300"
-                eta={etaLabel(goals.primaryUsd, totalGross, pace, numLang)}
+                eta={etaLabel(goals.primaryUsd, externalGross, pace, numLang)}
                 lang={numLang}
               />
               <GoalBar
                 label="$20M — стретч-цель"
                 target={goals.stretchUsd}
-                current={totalGross}
+                current={externalGross}
                 colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-400"
-                eta={etaLabel(goals.stretchUsd, totalGross, pace, numLang)}
+                eta={etaLabel(goals.stretchUsd, externalGross, pace, numLang)}
                 lang={numLang}
               />
             </div>
@@ -312,14 +342,24 @@ export default function RevenuePage() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <div className="bg-gray-900 border border-emerald-500/25 rounded-xl p-5">
-                <div className="text-xs text-gray-400 mb-2">Валовая выручка · все каналы</div>
+                <div className="text-xs text-gray-400 mb-2">Выручка снаружи · все каналы</div>
                 <div className="text-3xl font-semibold text-white">
-                  ${totalGross.toFixed(2)}<span className="text-sm text-gray-400 ml-2">USD</span>
+                  ${externalGross.toFixed(2)}<span className="text-sm text-gray-400 ml-2">USD</span>
                 </div>
+                {totalInternal > 0 && (
+                  <div className="text-xs text-amber-400/90 mt-1">
+                    + ${totalInternal.toFixed(2)} свои проверочные покупки (не в выручке)
+                  </div>
+                )}
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                <div className="text-xs text-gray-400 mb-2">Продаж всего</div>
-                <div className="text-3xl font-semibold text-white">{totalCount}</div>
+                <div className="text-xs text-gray-400 mb-2">Продаж снаружи</div>
+                <div className="text-3xl font-semibold text-white">{externalCount}</div>
+                {totalInternalCount > 0 && (
+                  <div className="text-xs text-amber-400/90 mt-1">
+                    + {totalInternalCount} своих
+                  </div>
+                )}
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                 <div className="text-xs text-gray-400 mb-2">По каналам (gross · продажи)</div>
@@ -446,6 +486,42 @@ export default function RevenuePage() {
           </section>
         )}
 
+        {/* Источники трафика — ради этого и заводились метки ?c= на /go.
+            Показываем ТОЛЬКО когда есть хоть одна РАЗМЕЧЕННАЯ продажа: пока весь оборот
+            без метки, блок сообщал бы одно «источник неизвестен» и занимал место.
+            Он появится сам, когда первая продажа придёт с /go?c=. Долю считаем от
+            размеченных, а не от всех — иначе доля канала падала бы просто потому,
+            что много старых продаж пришло без метки. */}
+        {attributedCount > 0 && (
+          <section>
+            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
+              Источники трафика
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {sourceRows.map(([source, data]) => (
+                <div key={source} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                  <div className="text-xs text-gray-400 mb-1">
+                    {source === "unattributed" ? "без метки" : source}
+                  </div>
+                  <div className="text-lg font-semibold text-white">${data.totalUsd.toFixed(2)}</div>
+                  <div className="text-xs text-gray-500">
+                    {data.count} продаж
+                    {source !== "unattributed" && attributedUsd > 0 && (
+                      <> · {Math.round((data.totalUsd / attributedUsd) * 100)}% размеченных</>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {unattributedUsd > 0 && (
+              <p className="text-xs text-gray-500 mt-2">
+                Без метки — продажи до введения атрибуции и прямые заходы мимо /go.
+                Доли считаются от размеченных, поэтому эта сумма их не размывает.
+              </p>
+            )}
+          </section>
+        )}
+
         {/* Apps Registry */}
         <section>
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
@@ -484,7 +560,16 @@ export default function RevenuePage() {
   );
 }
 
-interface TrendPoint { capturedAt: string; netUsd: number; grossUsd: number; saleCount: number }
+interface TrendPoint {
+  capturedAt: string;
+  netUsd: number;
+  grossUsd: number;
+  saleCount: number;
+  /** true у снимков до 27.07.2026: в их суммах ещё сидели свои покупки. */
+  includesInternal?: boolean;
+  /** Сумма своих покупок на момент снимка; null — ещё не досчитана. */
+  internalUsd?: number | null;
+}
 interface TrendResp {
   windowDays: number;
   points: number;
@@ -541,6 +626,29 @@ function RevenueTrend() {
 
   const series = trend?.series ?? [];
   const change = trend?.change;
+  // Снимки до 27.07.2026 считали свои проверочные покупки выручкой. Линия на
+  // их границе падает не потому, что деньги ушли, а потому что их перестали
+  // приписывать. Без подписи это читается как обвал — а Δ за окно уже читается
+  // как убыток.
+  // Линия рисуется по деньгам СНАРУЖИ на каждой точке: у снимков до правки
+  // internalUsd досчитан по датам заказов, поэтому ступеньки нет — она была
+  // артефактом того, что в старых точках свои покупки сидели внутри суммы.
+  // Логика вынесена в externalRevenueAt и покрыта тестом на реальных строках
+  // из прод-таблицы: вычитание внутри JSX уже дважды за день давало дефект,
+  // который ловился только глазами на задеплоенной странице.
+  const externalAt = externalRevenueAt;
+  // Подпись остаётся, только пока есть точки, для которых свои покупки НЕ
+  // досчитаны: там линия по-прежнему завышена, и молчать об этом нельзя.
+  const unresolved = series.filter((p) => p.includesInternal && p.internalUsd == null).length;
+  const externalFirst = series.length ? externalAt(series[0]) : 0;
+  const externalLast = series.length ? externalAt(series[series.length - 1]) : 0;
+  const externalChange = Math.round((externalLast - externalFirst) * 100) / 100;
+  const externalGrowthPct =
+    externalFirst === 0
+      ? externalLast > 0
+        ? 100
+        : 0
+      : Math.round(((externalLast - externalFirst) / externalFirst) * 10000) / 100;
 
   return (
     <section>
@@ -560,6 +668,13 @@ function RevenueTrend() {
         </div>
       )}
 
+      {unresolved > 0 && (
+        <div className="mb-3 text-xs rounded-lg px-3 py-2 border bg-amber-500/10 border-amber-500/30 text-amber-200">
+          У {unresolved} точек свои проверочные покупки не досчитаны — там линия
+          завышена на их сумму. Досчитать: POST /api/revenue/snapshots/backfill-internal.
+        </div>
+      )}
+
       {loading ? (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-sm text-gray-500 animate-pulse">Загружаем тренд…</div>
       ) : series.length < 2 ? (
@@ -572,19 +687,21 @@ function RevenueTrend() {
         <div className="bg-gray-900 border border-emerald-500/20 rounded-xl p-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
             <div>
-              <div className="text-xs text-gray-400 mb-1">Net сейчас</div>
-              <div className="text-2xl font-semibold text-white">${(trend?.latest?.netUsd ?? 0).toFixed(2)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-400 mb-1">Δ Net за окно</div>
-              <div className={`text-2xl font-semibold ${(change?.netUsd ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                {(change?.netUsd ?? 0) >= 0 ? "+" : ""}${(change?.netUsd ?? 0).toFixed(2)}
+              <div className="text-xs text-gray-400 mb-1">Снаружи сейчас</div>
+              <div className="text-2xl font-semibold text-white">
+                ${(series.length ? externalAt(series[series.length - 1]) : 0).toFixed(2)}
               </div>
             </div>
             <div>
-              <div className="text-xs text-gray-400 mb-1">Рост Net</div>
-              <div className={`text-2xl font-semibold ${(change?.netGrowthPct ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                {(change?.netGrowthPct ?? 0) >= 0 ? "▲" : "▼"} {Math.abs(change?.netGrowthPct ?? 0).toFixed(1)}%
+              <div className="text-xs text-gray-400 mb-1">Δ снаружи за окно</div>
+              <div className={`text-2xl font-semibold ${externalChange >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                {externalChange >= 0 ? "+" : ""}${externalChange.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-400 mb-1">Рост снаружи</div>
+              <div className={`text-2xl font-semibold ${externalGrowthPct >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                {externalGrowthPct >= 0 ? "▲" : "▼"} {Math.abs(externalGrowthPct).toFixed(1)}%
               </div>
             </div>
             <div>
@@ -597,7 +714,7 @@ function RevenueTrend() {
               </div>
             </div>
           </div>
-          <Sparkline points={series.map((s) => s.netUsd)} />
+          <Sparkline points={series.map(externalAt)} />
           <div className="flex justify-between text-[10px] text-gray-500 mt-1.5 font-mono">
             <span>{trend?.first ? new Date(trend.first.capturedAt).toLocaleDateString("ru") : ""}</span>
             <span>{trend?.points ?? 0} точек</span>

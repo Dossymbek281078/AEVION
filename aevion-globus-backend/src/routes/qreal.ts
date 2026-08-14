@@ -29,6 +29,11 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { callProvider, pickConfiguredProvider, getProviders } from "../services/qcoreai/providers";
 import { renderEngines, pickVideoEngine, falSubmit, falPoll } from "../services/qreal/engines";
+import { REALISM_ANCHORS, scoreCriteria, buildJudgePrompt, autoRegenPolicy, acceptThreshold, type JudgeVerdict } from "../services/qreal/judge";
+import { judgeRender, vlmJudgeConfigured, vlmJudgeModel } from "../services/qreal/vlmJudge";
+import { deriveCharacters, subjectLines, consistencyDirective, charactersInShot, referenceCast, type Character } from "../services/qreal/characters";
+import { REALISM_DIRECTIVES } from "../services/qreal/directives";
+import { CONTINUITY_CRITERIA, CONTINUITY_ANCHORS, continuityThreshold, buildContinuityPrompt, scoreContinuity, isMeasurable } from "../services/qreal/continuity";
 import { ensureQRealTables } from "../lib/ensureQRealTables";
 import { getPool } from "../lib/dbPool";
 
@@ -53,6 +58,9 @@ type QcReport = {
   method: "vlm-judge" | "manual" | "pending";
   criteria: QcCriterion[];
   checkedAt: string;
+  /** Итог судьи: принять кадр, перегенерировать или «нечем судить».
+   *  Появляется после реального скоринга; у пустого чеклиста его нет. */
+  verdict?: JudgeVerdict;
 };
 
 type ShotStatus = "draft" | "prompt_ready" | "queued" | "rendered" | "failed";
@@ -72,6 +80,12 @@ type Shot = {
   status: ShotStatus;
   resultUrl: string | null;
   qc: QcReport | null;
+  /** Сколько раз кадр уже перегенерировали по вердикту судьи — ограничитель
+   *  для авто-режима, чтобы петля «не нравится → рендерь ещё» не жгла бюджет. */
+  qcAttempts?: number;
+  /** Ушёл ли кадр в reference-вариант модели. Нужно при опросе: у него свой
+   *  requests-путь, и опрос по text-to-video отдаст 404 на живую задачу. */
+  usedReference?: boolean;
 };
 
 type ProjectFormat = "short" | "scene" | "film" | "music-video";
@@ -87,6 +101,9 @@ type Project = {
   consentConfirmed: boolean;
   status: "draft" | "storyboarded" | "rendering" | "done";
   shots: Shot[];
+  /** Реестр персонажей сцены: одно каноническое описание на героя, чтобы он
+   *  не менял лицо между кадрами. Пересобирается вместе с раскадровкой. */
+  characters?: Character[];
   filmPath: string | null;
   assembledAt: string | null;
   qrightObjectId: string | null;
@@ -151,29 +168,44 @@ async function warmFromDb(): Promise<void> {
 
 qrealRouter.use((_req, _res, next) => { warmFromDb().finally(() => next()); });
 
-function renderCacheKey(engineId: string, prompt: string, durationSec: number): string {
-  return crypto.createHash("sha256").update(`${engineId}|${durationSec}|${prompt}`).digest("hex");
+/** Ключ кэша рендеров.
+ *
+ *  Референс-картинки ОБЯЗАНЫ входить в ключ. В промте от них остаётся только
+ *  маркер «@Image1» — при смене ссылки на другое лицо текст промта не меняется,
+ *  и без URL в ключе повторный рендер вернул бы СТАРОЕ видео из кэша. Режиссёр
+ *  поменял бы референс, увидел прежний ролик и решил, что референсы не
+ *  работают. (Найдено вычиткой собственного дифа 2026-07-26.) */
+function renderCacheKey(engineId: string, prompt: string, durationSec: number, imageUrls: string[] = []): string {
+  const refs = imageUrls.length ? `|refs:${imageUrls.join(",")}` : "";
+  return crypto.createHash("sha256").update(`${engineId}|${durationSec}|${prompt}${refs}`).digest("hex");
 }
 
 // Append-only журнал рендеров на диске: {submitted|completed}-строки.
 // Урок 2026-07-21: рестарт процесса стёр in-memory проекты, оплаченные
 // джобы спас только ручной лог request_id. Журнал закрывает эту дыру и
 // восстанавливает кэш готовых рендеров при старте.
-const JOURNAL_PATH = process.env.QREAL_JOURNAL_PATH
-  || path.join(process.cwd(), "data", "qreal-render-journal.jsonl");
+// Resolved per call, not at import. Binding a file path once at import is how
+// the paywall suite ended up writing its fixtures into the real
+// data/subscriptions.jsonl: whichever module got imported first decided the
+// path, before the test could point it at a temp dir. Same shape here, so the
+// same guard.
+function journalPath(): string {
+  return process.env.QREAL_JOURNAL_PATH
+    || path.join(process.cwd(), "data", "qreal-render-journal.jsonl");
+}
 
 function journalAppend(entry: Record<string, unknown>): void {
   try {
-    fs.mkdirSync(path.dirname(JOURNAL_PATH), { recursive: true });
-    fs.appendFileSync(JOURNAL_PATH, JSON.stringify({ ts: nowIso(), ...entry }) + "\n");
+    fs.mkdirSync(path.dirname(journalPath()), { recursive: true });
+    fs.appendFileSync(journalPath(), JSON.stringify({ ts: nowIso(), ...entry }) + "\n");
   } catch { /* журнал best-effort, рендер важнее */ }
 }
 
 function restoreRenderCacheFromJournal(): number {
   try {
-    if (!fs.existsSync(JOURNAL_PATH)) return 0;
+    if (!fs.existsSync(journalPath())) return 0;
     let restored = 0;
-    for (const line of fs.readFileSync(JOURNAL_PATH, "utf8").split("\n")) {
+    for (const line of fs.readFileSync(journalPath(), "utf8").split("\n")) {
       if (!line.trim()) continue;
       try {
         const e = JSON.parse(line);
@@ -199,45 +231,64 @@ const RENDER_IP_DAILY_LIMIT = Math.max(1, Number(process.env.QREAL_RENDER_IP_DAI
 const RENDER_GLOBAL_DAILY_CAP = Math.max(1, Number(process.env.QREAL_RENDER_GLOBAL_DAILY_CAP) || 20);
 const renderCounters = { day: "", byIp: new Map<string, number>(), total: 0 };
 
-async function takeRenderQuota(req: { ip?: string; headers: Record<string, unknown> }): Promise<{ ok: true } | { ok: false; error: string }> {
+/** Судейство VLM тоже платное, но дешевле рендера — своё ведро со своими
+ *  лимитами. Без него два публичных эндпоинта (POST /qc и /continuity с
+ *  {"judge":true}) позволяли бы анониму жечь баланс в цикле: демо на проде
+ *  открыто без логина. Найдено вычиткой дифа 2026-07-26. */
+const JUDGE_IP_DAILY_LIMIT = Math.max(1, Number(process.env.QREAL_JUDGE_IP_DAILY_LIMIT) || 10);
+const JUDGE_GLOBAL_DAILY_CAP = Math.max(1, Number(process.env.QREAL_JUDGE_GLOBAL_DAILY_CAP) || 60);
+const judgeCounters = { day: "", byIp: new Map<string, number>(), total: 0 };
+
+async function takeRenderQuota(
+  req: { ip?: string; headers: Record<string, unknown> },
+  bucket: "render" | "judge" = "render"
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const isJudge = bucket === "judge";
+  const IP_LIMIT = isJudge ? JUDGE_IP_DAILY_LIMIT : RENDER_IP_DAILY_LIMIT;
+  const GLOBAL_CAP = isJudge ? JUDGE_GLOBAL_DAILY_CAP : RENDER_GLOBAL_DAILY_CAP;
+  const counters = isJudge ? judgeCounters : renderCounters;
+  const what = isJudge ? "судейств" : "рендеров";
   const today = nowIso().slice(0, 10);
-  if (renderCounters.day !== today) {
-    renderCounters.day = today;
-    renderCounters.byIp.clear();
-    renderCounters.total = 0;
+  if (counters.day !== today) {
+    counters.day = today;
+    counters.byIp.clear();
+    counters.total = 0;
   }
   const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  const ip = fwd || req.ip || "unknown";
+  // Ключ ведра входит в ip-ключ: у рендера и судейства раздельные счётчики,
+  // иначе судейство съедало бы квоту рендера и наоборот.
+  const ip = (isJudge ? "judge:" : "") + (fwd || req.ip || "unknown");
   // Postgres-счётчики (переживают редеплой); при недоступной БД — in-memory.
   try {
     const r = await pool.query(
-      `SELECT "ip","count" FROM "QRealQuota" WHERE "day"=$1 AND "ip" IN ($2,'__global__')`,
-      [today, ip]
+      `SELECT "ip","count" FROM "QRealQuota" WHERE "day"=$1 AND "ip" IN ($2,$3)`,
+      [today, ip, isJudge ? "__global_judge__" : "__global__"]
     );
+    const globalKey = isJudge ? "__global_judge__" : "__global__";
     const ipCount = r.rows.find((x: any) => x.ip === ip)?.count ?? 0;
-    const globalCount = r.rows.find((x: any) => x.ip === "__global__")?.count ?? 0;
-    if (globalCount >= RENDER_GLOBAL_DAILY_CAP) {
-      return { ok: false, error: `Суточный лимит рендеров платформы исчерпан (${RENDER_GLOBAL_DAILY_CAP}/день) — попробуйте завтра.` };
+    const globalCount = r.rows.find((x: any) => x.ip === globalKey)?.count ?? 0;
+    if (globalCount >= GLOBAL_CAP) {
+      return { ok: false, error: `Суточный лимит ${what} платформы исчерпан (${GLOBAL_CAP}/день) — попробуйте завтра.` };
     }
-    if (ipCount >= RENDER_IP_DAILY_LIMIT) {
-      return { ok: false, error: `Лимит бесплатных рендеров на сегодня исчерпан (${RENDER_IP_DAILY_LIMIT}/день).` };
+    if (ipCount >= IP_LIMIT) {
+      return { ok: false, error: `Лимит бесплатных ${what} на сегодня исчерпан (${IP_LIMIT}/день).` };
     }
     await pool.query(
-      `INSERT INTO "QRealQuota" ("day","ip","count") VALUES ($1,$2,1),($1,'__global__',1)
+      `INSERT INTO "QRealQuota" ("day","ip","count") VALUES ($1,$2,1),($1,$3,1)
        ON CONFLICT ("day","ip") DO UPDATE SET "count"="QRealQuota"."count"+1`,
-      [today, ip]
+      [today, ip, globalKey]
     );
     return { ok: true };
   } catch { /* БД недоступна — считаем в памяти */ }
-  if (renderCounters.total >= RENDER_GLOBAL_DAILY_CAP) {
-    return { ok: false, error: `Суточный лимит рендеров платформы исчерпан (${RENDER_GLOBAL_DAILY_CAP}/день) — попробуйте завтра.` };
+  if (counters.total >= GLOBAL_CAP) {
+    return { ok: false, error: `Суточный лимит ${what} платформы исчерпан (${GLOBAL_CAP}/день) — попробуйте завтра.` };
   }
-  const used = renderCounters.byIp.get(ip) || 0;
-  if (used >= RENDER_IP_DAILY_LIMIT) {
-    return { ok: false, error: `Лимит бесплатных рендеров на сегодня исчерпан (${RENDER_IP_DAILY_LIMIT}/день).` };
+  const used = counters.byIp.get(ip) || 0;
+  if (used >= IP_LIMIT) {
+    return { ok: false, error: `Лимит бесплатных ${what} на сегодня исчерпан (${IP_LIMIT}/день).` };
   }
-  renderCounters.byIp.set(ip, used + 1);
-  renderCounters.total += 1;
+  counters.byIp.set(ip, used + 1);
+  counters.total += 1;
   return { ok: true };
 }
 
@@ -271,21 +322,23 @@ function emptyQcReport(): QcReport {
 
 /* ── Директивы реализма, вшиваемые в каждый render-промт ── */
 
-const REALISM_DIRECTIVES =
-  "Shot on ARRI Alexa 35, 24fps, 180-degree shutter, natural motion blur. " +
-  "Skin with subsurface scattering, visible pores, slight asymmetry. Involuntary " +
-  "micro-expressions; irregular blinking every 3-6s including partial blinks. " +
-  "Hands anatomically correct. Handheld micro-jitter (sub-pixel), camera has body weight. " +
-  "Species-accurate animal behavior. Natural ambient sound bed (room tone), " +
-  "material-true foley, dialogue with real room acoustics. No slow-motion look, " +
-  "no beauty filter, no digital sharpness.";
 
 function buildRenderPrompt(p: Project, s: Shot): string {
-  const subj = s.subjects.map((x) => `${x.kind}: ${x.description}`).join("; ");
+  // Описания субъектов берём из реестра персонажей, а не из кадра: LLM пишет
+  // раскадровку покадрово и переописывает того же героя каждый раз — отсюда
+  // разные лица между кадрами. Реестр подставляет ОДИН канонический текст.
+  const cast = p.characters || [];
+  // Если у персонажей есть опорные картинки, строки несут маркеры @Image1/@Image2 —
+  // Seedance адресует image_urls именно из текста промта, без ссылки они не
+  // применяются. Без картинок referenceCast возвращает те же строки, что и
+  // subjectLines, поэтому ветвление не нужно.
+  const { imageUrls, lines } = referenceCast(s.subjects, cast);
+  const subj = (imageUrls.length ? lines : subjectLines(s.subjects, cast)).join("; ");
   const dial = s.dialogue ? ` Dialogue (${p.language}): "${s.dialogue}".` : "";
+  const continuity = consistencyDirective(charactersInShot(s.subjects, cast));
   return (
     `${s.description} Subjects — ${subj}. Camera: ${s.camera}. ` +
-    `Sound: ${s.soundscape}.${dial} ${REALISM_DIRECTIVES}`
+    `Sound: ${s.soundscape}.${dial} ${REALISM_DIRECTIVES}${continuity}`
   );
 }
 
@@ -539,7 +592,9 @@ qrealRouter.get("/engines", (_req, res) => {
 });
 
 qrealRouter.get("/realism-criteria", (_req, res) => {
-  res.json({ criteria: REALISM_CRITERIA });
+  // Якоря 1/3/5 отдаются вместе с критериями: продуктовый судья, слепой
+  // бенчмарк и фронт обязаны мерить одной линейкой, а не тремя копиями шкалы.
+  res.json({ criteria: REALISM_CRITERIA, anchors: REALISM_ANCHORS, scale: "1..5 по якорям; наружу score = (оценка-1)/4", threshold: acceptThreshold() });
 });
 
 qrealRouter.get("/demo", (_req, res) => {
@@ -604,6 +659,8 @@ qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
     const variation = Math.min(5, Math.max(1, Number(req.body?.variation) || 1));
     const viaAi = await aiStoryboard(p, variation);
     p.shots = viaAi?.shots ?? stubStoryboard(p);
+    // Каст выводим ДО промтов: buildRenderPrompt читает p.characters.
+    p.characters = deriveCharacters(p.shots);
     for (const s of p.shots) s.prompt = buildRenderPrompt(p, s);
     p.status = "storyboarded";
     p.updatedAt = nowIso();
@@ -615,18 +672,30 @@ qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
 function isCachedShot(p: Project, s: Shot, engine: ReturnType<typeof pickVideoEngine>): boolean {
   if (!engine) return false;
   const prompt = s.prompt || buildRenderPrompt(p, s);
-  return memRenderCache.has(renderCacheKey(engine.id, prompt, s.durationSec));
+  const { imageUrls } = referenceCast(s.subjects, p.characters || []);
+  return memRenderCache.has(renderCacheKey(engine.id, prompt, s.durationSec, imageUrls));
 }
 
 /** Один кадр: кэш → мгновенно; иначе submit в движок с одним ретраем. */
 async function submitShot(p: Project, s: Shot, engine: ReturnType<typeof pickVideoEngine>): Promise<string> {
+  // Перерендер кадра, который судья уже забраковал, — это следующая попытка.
+  // Считаем её здесь, а не в /qc: лимит должен ограничивать РЕНДЕРЫ (деньги),
+  // а не пересуждения одного и того же файла.
+  if (s.qc?.verdict?.verdict === "regenerate") s.qcAttempts = (s.qcAttempts || 0) + 1;
   s.prompt = buildRenderPrompt(p, s);
   if (!engine) {
     s.engine = null;
     s.status = "prompt_ready"; // честно: промт собран, FAL_KEY не задан
     return "Render-промт готов. Прямой видеодвижок не сконфигурирован (env FAL_KEY) — задайте ключ fal.ai, и рендер пойдёт без посредников.";
   }
-  const cacheKey = renderCacheKey(engine.id, s.prompt, s.durationSec);
+  // Есть ли у персонажей кадра опорные картинки — тогда уходим в
+  // reference-вариант модели и ссылаемся на них прямо в промте (@Image1).
+  // Считаем ДО кэша: ссылки входят в ключ, иначе смена референса вернула бы
+  // старое видео.
+  const { imageUrls } = referenceCast(s.subjects, p.characters || []);
+  s.usedReference = imageUrls.length > 0;
+
+  const cacheKey = renderCacheKey(engine.id, s.prompt, s.durationSec, imageUrls);
   const cached = memRenderCache.get(cacheKey);
   if (cached) {
     s.engine = engine.id;
@@ -635,8 +704,9 @@ async function submitShot(p: Project, s: Shot, engine: ReturnType<typeof pickVid
     s.status = "rendered";
     return "Кадр взят из кэша рендеров — $0.";
   }
-  let sub = await falSubmit(engine, s.prompt, s.durationSec);
-  if (!sub.ok) sub = await falSubmit(engine, s.prompt, s.durationSec); // один ретрай (fal бывает 5xx)
+
+  let sub = await falSubmit(engine, s.prompt, s.durationSec, imageUrls);
+  if (!sub.ok) sub = await falSubmit(engine, s.prompt, s.durationSec, imageUrls); // один ретрай (fal бывает 5xx)
   if (!sub.ok) {
     s.engine = engine.id;
     s.status = "failed";
@@ -650,6 +720,115 @@ async function submitShot(p: Project, s: Shot, engine: ReturnType<typeof pickVid
   return `Кадр в очереди: ${engine.label}, ~$${estUsd}.`;
 }
 
+qrealRouter.get("/projects/:id/characters", (req, res) => {
+  const p = memProjects.get(req.params.id);
+  if (!p) return res.status(404).json({ error: "not found" });
+  // Каст мог быть выведен до появления реестра (старые проекты в БД) —
+  // считаем на лету, чтобы не отдавать пустоту там, где персонажи есть.
+  const characters = p.characters?.length ? p.characters : deriveCharacters(p.shots);
+  res.json({ characters, note: "canonical — единственное описание, которое уходит во ВСЕ кадры персонажа" });
+});
+
+/** Правка каста человеком. Автовывод хорош, но режиссёр знает лучше: «алабай»
+ *  вместо «shepherd dog», конкретный возраст, порода, шрам. После правки промты
+ *  ПЕРЕСОБИРАЮТСЯ — иначе canonical поменялся бы, а в движок ушёл старый текст. */
+qrealRouter.patch("/projects/:id/characters/:cid", (req, res) => {
+  try {
+    const p = memProjects.get(req.params.id);
+    if (!p) return res.status(404).json({ error: "not found" });
+    if (!p.characters?.length) p.characters = deriveCharacters(p.shots);
+    const c = p.characters.find((x) => x.id === req.params.cid);
+    if (!c) return res.status(404).json({ error: "character not found" });
+
+    const { canonical, name, refImages } = req.body || {};
+    if (typeof canonical === "string" && canonical.trim().length >= 3) c.canonical = canonical.trim().slice(0, 600);
+    if (typeof name === "string" && name.trim()) c.name = name.trim().slice(0, 80);
+    if (Array.isArray(refImages)) {
+      // Движки принимают ограниченное число референсов (Seedance — до 9).
+      c.refImages = refImages.filter((u) => typeof u === "string" && /^https?:\/\//.test(u)).slice(0, 9);
+    }
+
+    for (const s of p.shots) s.prompt = buildRenderPrompt(p, s);
+    p.updatedAt = nowIso();
+    saveProject(p);
+    res.json({ character: c, characters: p.characters, note: "Промты кадров пересобраны под новое описание." });
+  } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "character update failed" }); }
+});
+
+/** Непрерывность персонажа между кадрами — то, что реестр персонажей чинит,
+ *  а покадровый QC измерить не может в принципе: на одиночном клипе не видно,
+ *  что во втором и четвёртом кадре разные мальчики. Судим собранный фильм. */
+qrealRouter.post("/projects/:id/continuity", async (req, res) => {
+  try {
+    const p = memProjects.get(req.params.id);
+    if (!p) return res.status(404).json({ error: "not found" });
+    if (!p.characters?.length) p.characters = deriveCharacters(p.shots);
+
+    // Ни один герой не появляется дважды — сравнивать нечего. Отдать здесь
+    // бодрое «непрерывно» значило бы подтвердить непроверенное заявление.
+    if (!isMeasurable(p.characters)) {
+      return res.status(409).json({
+        error: "not_measurable",
+        message: "Ни один персонаж не появляется в двух кадрах — непрерывность измерять не на чем.",
+        characters: p.characters,
+      });
+    }
+
+    const shots = p.shots.map((s) => ({ order: s.order, title: s.title }));
+    const prompt = buildContinuityPrompt(p.characters, shots);
+    let raw = Array.isArray(req.body?.scores) ? req.body.scores : null;
+
+    if (!raw && req.body?.judge === true) {
+      if (!vlmJudgeConfigured()) return res.status(503).json({ error: "vlm_not_configured", message: "FAL_KEY не задан." });
+
+      // Судья смотрит фильм по публичному URL, а /film отдаёт 404, пока не
+      // отрендерены ВСЕ кадры. Без этой проверки платный вызов ушёл бы на
+      // заведомо мёртвую ссылку — деньги за гарантированный провал.
+      const unrendered = p.shots.filter((s) => !s.resultUrl);
+      if (!p.filmPath && unrendered.length) {
+        return res.status(409).json({
+          error: "film_not_ready",
+          message: `Фильм не собран: не отрендерено кадров — ${unrendered.length} из ${p.shots.length}. Судить нечего, платный вызов не делаю.`,
+          unrenderedShots: unrendered.map((s) => s.order),
+        });
+      }
+
+      // Судейство платное, а демо на проде открыто без логина — без квоты
+      // аноним жёг бы баланс в цикле.
+      const quota = await takeRenderQuota(req as any, "judge");
+      if (!quota.ok) return res.status(429).json({ error: "judge_quota_exceeded", message: quota.error });
+
+      const base = (process.env.PUBLIC_BASE_URL || "https://aevion.vercel.app/api-backend").replace(/\/+$/, "");
+      const filmUrl = `${base}/api/qreal/projects/${p.id}/film`;
+      const out = await judgeRender(filmUrl, CONTINUITY_CRITERIA, { description: p.brief }, { prompt });
+      if (!out.ok) return res.status(502).json({ error: "vlm_judge_failed", message: out.error, filmUrl });
+      raw = out.scores;
+    }
+
+    if (!raw) {
+      return res.json({
+        criteria: CONTINUITY_CRITERIA,
+        anchors: CONTINUITY_ANCHORS,
+        threshold: continuityThreshold(),
+        characters: p.characters,
+        judgePrompt: prompt,
+        note: "Пришли оценки в {scores:[{id,score:1-5|null}]} — от человека по якорям или от VLM через {\"judge\":true} (платно, по собранному фильму).",
+      });
+    }
+
+    const result = scoreContinuity(raw);
+    res.json({
+      continuity: result,
+      note:
+        result.verdict === "consistent"
+          ? `Персонаж держится: ${(result.totalScore as number).toFixed(2)} ≥ ${result.threshold}.`
+          : result.verdict === "drifting"
+            ? `Дрейф: ${(result.totalScore as number).toFixed(2)} < ${result.threshold}. Разошлось: ${result.weakest.map((w) => w.id).join(", ")}. Уточни канон персонажа или добавь референс-кадр.`
+            : `Оценено ${result.judgedCriteria} из ${CONTINUITY_CRITERIA.length} — мало для вердикта.`,
+    });
+  } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "continuity failed" }); }
+});
+
 qrealRouter.get("/projects/:id/estimate", (req, res) => {
   const p = memProjects.get(req.params.id);
   if (!p) return res.status(404).json({ error: "not found" });
@@ -657,7 +836,8 @@ qrealRouter.get("/projects/:id/estimate", (req, res) => {
   const cachedSec = p.shots.reduce((a, s) => {
     const engine = pickVideoEngine() || renderEngines().find((e) => e.modality.includes("video"))!;
     const prompt = s.prompt || buildRenderPrompt(p, s);
-    return a + (memRenderCache.has(renderCacheKey(engine.id, prompt, s.durationSec)) ? s.durationSec : 0);
+    const { imageUrls } = referenceCast(s.subjects, p.characters || []);
+    return a + (memRenderCache.has(renderCacheKey(engine.id, prompt, s.durationSec, imageUrls)) ? s.durationSec : 0);
   }, 0);
   const engines = renderEngines()
     .filter((e) => e.modality.includes("video") && e.usdPerSecond != null)
@@ -721,12 +901,15 @@ qrealRouter.get("/projects/:id/shots/:sid/render-status", async (req, res) => {
     if (s.status === "rendered" || !s.engineRequestId) return res.json({ shot: s });
     const engine = renderEngines().find((e) => e.id === s.engine);
     if (!engine) return res.json({ shot: s });
-    const poll = await falPoll(engine, s.engineRequestId);
+    const poll = await falPoll(engine, s.engineRequestId, s.usedReference === true);
     if (poll.state === "completed") {
       s.resultUrl = poll.videoUrl;
       s.status = poll.videoUrl ? "rendered" : "failed";
       if (poll.videoUrl && s.prompt) {
-        const cacheKey = renderCacheKey(engine.id, s.prompt, s.durationSec);
+        // Ключ записи обязан совпадать с ключом чтения, иначе кэш не попадёт
+        // никогда и каждый повтор будет платным.
+        const { imageUrls } = referenceCast(s.subjects, p.characters || []);
+        const cacheKey = renderCacheKey(engine.id, s.prompt, s.durationSec, imageUrls);
         memRenderCache.set(cacheKey, poll.videoUrl);
         saveCacheEntry(cacheKey, poll.videoUrl);
         journalAppend({ type: "completed", projectId: p.id, shotId: s.id, requestId: s.engineRequestId, cacheKey, url: poll.videoUrl });
@@ -740,18 +923,75 @@ qrealRouter.get("/projects/:id/shots/:sid/render-status", async (req, res) => {
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "render-status failed" }); }
 });
 
-qrealRouter.post("/projects/:id/shots/:sid/qc", (req, res) => {
+qrealRouter.post("/projects/:id/shots/:sid/qc", async (req, res) => {
   try {
     const p = memProjects.get(req.params.id);
     const s = p?.shots.find((x) => x.id === req.params.sid);
     if (!p || !s) return res.status(404).json({ error: "not found" });
-    // MVP: без прикреплённого рендера отчёт остаётся pending/manual —
-    // VLM-judge подключается вместе с движком (кадры → судья → скор).
-    s.qc = emptyQcReport();
-    s.qc.method = s.resultUrl ? "vlm-judge" : "manual";
+
+    // Оценки приходят снаружи: от VLM-судьи или от человека по тем же якорям.
+    // Шкала 1..5, null = критерий неприменим к этому кадру.
+    let raw = Array.isArray(req.body?.scores) ? req.body.scores : null;
+    let judgeNote: string | null = null;
+
+    // Позвать VLM-судью можно только явно: вызов платный, и неявный запуск
+    // из «просто открыл вкладку QC» жёг бы деньги на каждом рендере.
+    if (!raw && req.body?.judge === true) {
+      if (!s.resultUrl) return res.status(409).json({ error: "no_render", message: "Судить нечего: у кадра нет рендера." });
+      if (!vlmJudgeConfigured()) return res.status(503).json({ error: "vlm_not_configured", message: "FAL_KEY не задан — VLM-судья недоступен." });
+      const quota = await takeRenderQuota(req as any, "judge");
+      if (!quota.ok) return res.status(429).json({ error: "judge_quota_exceeded", message: quota.error });
+      const verdictRaw = await judgeRender(s.resultUrl, REALISM_CRITERIA, s);
+      if (!verdictRaw.ok) return res.status(502).json({ error: "vlm_judge_failed", message: verdictRaw.error });
+      raw = verdictRaw.scores;
+      judgeNote = verdictRaw.dropped.length ? `Судья вернул неизвестные критерии и они отброшены: ${verdictRaw.dropped.join(", ")}.` : null;
+    }
+
+    if (!raw) {
+      // Судить нечем — отдаём якорный чеклист, а не пустой «vlm-judge»,
+      // который раньше выглядел как проведённая проверка.
+      s.qc = emptyQcReport();
+      s.qc.method = "manual";
+      p.updatedAt = nowIso();
+      saveProject(p);
+      return res.json({
+        qc: s.qc,
+        anchors: REALISM_ANCHORS,
+        threshold: acceptThreshold(),
+        judgePrompt: s.resultUrl ? buildJudgePrompt(REALISM_CRITERIA, s) : null,
+        vlm: { configured: vlmJudgeConfigured(), model: vlmJudgeModel(), note: "Платный вызов. Запуск: POST {\"judge\":true}" },
+        note: s.resultUrl
+          ? "Рендер есть. Пришли оценки в POST {scores:[{id,score:1-5|null,note}]} — от VLM по judgePrompt или от человека по якорям."
+          : "Рендера ещё нет: чеклист с якорями для ручной проверки.",
+      });
+    }
+
+    const { criteria, verdict } = scoreCriteria(REALISM_CRITERIA, raw);
+    s.qc = {
+      totalScore: verdict.totalScore,
+      method: req.body?.method === "manual" ? "manual" : "vlm-judge",
+      criteria,
+      checkedAt: nowIso(),
+      verdict,
+    };
     p.updatedAt = nowIso();
     saveProject(p);
-    res.json({ qc: s.qc, note: s.resultUrl ? "Рендер найден — очередь VLM-судьи." : "Рендера ещё нет: чеклист для ручной проверки." });
+
+    // Перегенерация — это деньги. По умолчанию отдаём рекомендацию, а не жжём
+    // бюджет молча; авто-режим включается явно и ограничен по попыткам.
+    const policy = verdict.verdict === "regenerate" ? autoRegenPolicy(s.qcAttempts || 0) : null;
+    res.json({
+      qc: s.qc,
+      threshold: acceptThreshold(),
+      autoRegen: policy,
+      judgeNote,
+      note:
+        verdict.verdict === "pass"
+          ? `Кадр принят: ${(verdict.totalScore as number).toFixed(2)} ≥ ${acceptThreshold()}.`
+          : verdict.verdict === "regenerate"
+            ? `Ниже порога (${(verdict.totalScore as number).toFixed(2)} < ${acceptThreshold()}). Слабее всего: ${verdict.weakest.map((w) => w.id).join(", ")}. ${policy?.reason ?? ""}`
+            : `Оценено ${verdict.judgedCriteria} из ${REALISM_CRITERIA.length} критериев — этого мало для вердикта.`,
+    });
   } catch (err) { captureQRealError(err, { route: "qreal" }); res.status(500).json({ error: "qc failed" }); }
 });
 

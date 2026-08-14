@@ -25,6 +25,7 @@
     "smoke:qbuild-prod": "node scripts/qbuild-prod-smoke.js",
     "audit:projects-pricing": "node scripts/projects-pricing-audit.js",
     "audit:paywall-coverage": "node scripts/paywall-coverage-audit.js",
+    "money:health": "node scripts/money-health.js",
     "smoke:paywall-policy": "node scripts/paywall-policy-smoke.js",
     "paywall:flip": "node scripts/paywall-flip-helper.js",
     "seo:gsc-verify": "node scripts/gsc-pre-submit-verify.js",
@@ -59,7 +60,8 @@
     "coord:update": "node scripts/coord-update.js",
     "coord:update-commit": "node scripts/coord-update.js --commit",
     "wait-for-deploy": "node scripts/wait-for-deploy.js",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:qreal-suite",
+    "test:qreal-suite": "node ../scripts/qreal-judge.test.mjs && node ../scripts/qreal-characters.test.mjs && node ../scripts/qreal-continuity.test.mjs && node ../scripts/qreal-sync-rubric.mjs --check && node ../scripts/multichat-dissent.test.mjs && node ../scripts/multichat-receipt.test.mjs && node ../scripts/multichat-contrast.test.mjs",
     "test:watch": "vitest"
   },
   "keywords": [],

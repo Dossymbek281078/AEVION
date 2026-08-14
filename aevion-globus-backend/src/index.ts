@@ -221,8 +221,16 @@ function readBuildInfo(): { commit: string; source: string; branch: string } {
     };
   }
   try {
+    // Файл лежит РЯДОМ С КОДОМ, а не в dist: `railway up` уважает .gitignore, и
+    // отметка из игнорируемого каталога в образ не уезжает. Это уже проверено
+    // на реальной выкатке в ветке deploy/combined (6a30a9bd8) — там маркер
+    // сначала писали в игнорируемое место, выкатили, получили "unknown" и
+    // перенесли. Повторять тот же путь не нужно.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const info = require("./build-info.json") as { commit?: string; source?: string; branch?: string };
+    const fsMod = require("node:fs") as typeof import("node:fs");
+    const pathMod = require("node:path") as typeof import("node:path");
+    const raw = fsMod.readFileSync(pathMod.join(__dirname, "..", "build-info.json"), "utf-8");
+    const info = JSON.parse(raw) as { commit?: string; source?: string; branch?: string };
     return {
       commit: String(info.commit || "unknown").slice(0, 12),
       source: String(info.source || "build-info"),

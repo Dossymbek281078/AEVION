@@ -22,7 +22,7 @@
  */
 
 const { execFileSync } = require("node:child_process");
-const { writeFileSync, mkdirSync } = require("node:fs");
+const { writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 
 function fromGit() {
@@ -70,8 +70,11 @@ const info = {
   builtAt: new Date().toISOString(),
 };
 
-const out = join(__dirname, "..", "dist");
-mkdirSync(out, { recursive: true });
+// Рядом с кодом, НЕ в dist: `railway up` исключает игнорируемое, и отметка из
+// dist в образ не уезжает — это уже проверено на реальной выкатке (6a30a9bd8 в
+// ветке deploy/combined). Скрипт выкатки scripts/railway-deploy.sh пишет этот
+// же файл сам и убирает за собой; здесь он появляется при обычной сборке.
+const out = join(__dirname, "..");
 writeFileSync(join(out, "build-info.json"), JSON.stringify(info, null, 2), "utf8");
 
 // Печатаем в лог сборки: если маркер не собрался, это должно быть видно в

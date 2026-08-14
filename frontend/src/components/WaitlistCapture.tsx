@@ -124,7 +124,16 @@ export function WaitlistCapture({
           inputMode="email"
           placeholder="вы@почта.рф"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            // Ответ прошлой отправки убираем, как только человек начал вводить
+            // следующий адрес. Иначе зелёное «Готово» висит над пустым полем и
+            // подписывает собой ввод, к которому не относится.
+            if (status !== "idle") {
+              setStatus("idle");
+              setMessage("");
+            }
+          }}
           disabled={status === "sending"}
           aria-invalid={status === "error"}
           aria-describedby={message ? `waitlist-msg-${source}` : undefined}

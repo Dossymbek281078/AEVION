@@ -95,6 +95,9 @@ import { qchaingovRouter } from "./routes/qchaingov";
 import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } from "./lib/openapiFintechSpec";
 import { NEW_WAVE_OPENAPI_PATHS, NEW_WAVE_OPENAPI_SCHEMAS, NEW_WAVE_OPENAPI_TAGS } from "./lib/openapiNewWaveSpec";
 import { isSentryEnabled, captureException } from "./lib/sentry";
+import { makeHttpErrorHandler } from "./lib/httpErrorHandler";
+import { bodyLimitByPath } from "./lib/bodyLimitByPath";
+import { needsRawBody } from "./lib/rawBodyPolicy";
 import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
 import { paymentsRouter } from "./routes/payments";
@@ -150,13 +153,28 @@ app.use(
 // 10mb to accommodate base64-encoded resume scans posted to /api/build/ai/parse-resume.
 // Plain JSON payloads everywhere else stay tiny — limit is just a ceiling.
 //
-// `verify` stashes the raw bytes on req.rawBody for paths that need exact-byte
-// signature verification (Stripe webhooks: /api/qpaynet/deposit/webhook,
-// /api/checkout/webhook, etc.). All other handlers ignore rawBody.
+// Узкие пределы по путям — ОБЯЗАТЕЛЬНО до общего разбора: после него тело уже
+// прочитано, и меньший предел ставить поздно. Список и замеры — в модуле.
+app.use(bodyLimitByPath);
+
+// `verify` сохраняет сырые байты на req.rawBody для обработчиков, которые
+// проверяют подпись побайтно (платёжные вебхуки: /api/qpaynet/deposit/webhook,
+// /api/paypal/webhook и ещё семь — полный список и замеры в lib/rawBodyPolicy).
+//
+// Сохраняется НЕ на всех путях: ссылка на буфер продлевает ему жизнь до конца
+// запроса, и на медиа-путях (тела в мегабайтах) это стоит десятков мегабайт при
+// небольшой параллельности. Правило двойное — «мало ИЛИ вебхук» — чтобы
+// устаревший список путей не сломал проверку подписи молча.
+//
+// Прежний комментарий здесь называл читателем /api/checkout/webhook — тот
+// обработчик rawBody не читает вовсе (проверено грепом по src/).
 app.use(express.json({
   limit: "10mb",
   verify: (req, _res, buf) => {
-    (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    const r = req as { originalUrl?: string; url?: string };
+    if (needsRawBody(r.originalUrl ?? r.url, buf.length)) {
+      (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    }
   },
 }));
 // Gumroad pings arrive as application/x-www-form-urlencoded. express.json
@@ -167,8 +185,13 @@ app.use(express.json({
 app.use(express.urlencoded({
   extended: false,
   limit: "1mb",
+  // Та же политика, что у JSON: путь Gumroad в списке, поэтому его пинг получит
+  // байты при любом размере, а прочие form-посты — только пока они малы.
   verify: (req, _res, buf) => {
-    (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    const r = req as { originalUrl?: string; url?: string };
+    if (needsRawBody(r.originalUrl ?? r.url, buf.length)) {
+      (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    }
   },
 }));
 
@@ -178,12 +201,52 @@ app.use(express.urlencoded({
 // Build/version marker so a post-deploy check can confirm exactly which commit
 // is live instead of guessing from a 200. Railway injects RAILWAY_GIT_COMMIT_SHA
 // at build time; falls back to GIT_SHA / SOURCE_VERSION, or "unknown" in local dev.
-const BUILD_COMMIT = (
-  process.env.RAILWAY_GIT_COMMIT_SHA ||
-  process.env.GIT_SHA ||
-  process.env.SOURCE_VERSION ||
-  "unknown"
-).slice(0, 12);
+/**
+ * Развёрнутый коммит. Переменных окружения оказалось недостаточно: проверено на
+ * живом проде 13.08.2026 — /health отдавал "unknown", потому что
+ * RAILWAY_GIT_COMMIT_SHA подставляется при сборке из подключённого репозитория, а
+ * тот недоступен с 27.07. Поэтому сборка дополнительно пишет dist/build-info.json
+ * (scripts/write-build-info.js), и он читается, когда переменных нет.
+ *
+ * Читаем синхронно и один раз при старте: файл рядом с dist/index.js, размером в
+ * несколько строк, и цена — доли миллисекунды на запуск против невозможности
+ * узнать, какой код работает.
+ */
+function readBuildInfo(): { commit: string; source: string; branch: string } {
+  const envCommit =
+    process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || process.env.SOURCE_VERSION;
+  if (envCommit) {
+    return {
+      commit: envCommit.slice(0, 12),
+      source: "env",
+      branch: process.env.RAILWAY_GIT_BRANCH || "unknown",
+    };
+  }
+  try {
+    // Файл лежит РЯДОМ С КОДОМ, а не в dist: `railway up` уважает .gitignore, и
+    // отметка из игнорируемого каталога в образ не уезжает. Это уже проверено
+    // на реальной выкатке в ветке deploy/combined (6a30a9bd8) — там маркер
+    // сначала писали в игнорируемое место, выкатили, получили "unknown" и
+    // перенесли. Повторять тот же путь не нужно.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fsMod = require("node:fs") as typeof import("node:fs");
+    const pathMod = require("node:path") as typeof import("node:path");
+    const raw = fsMod.readFileSync(pathMod.join(__dirname, "..", "build-info.json"), "utf-8");
+    const info = JSON.parse(raw) as { commit?: string; source?: string; branch?: string };
+    return {
+      commit: String(info.commit || "unknown").slice(0, 12),
+      source: String(info.source || "build-info"),
+      branch: String(info.branch || "unknown"),
+    };
+  } catch {
+    // Файла нет — это dev-запуск через ts-node-dev (dist не собран). Отвечаем
+    // "unknown" явно, а не выдумываем: ложный коммит хуже отсутствующего.
+    return { commit: "unknown", source: "none", branch: "unknown" };
+  }
+}
+
+const BUILD_INFO = readBuildInfo();
+const BUILD_COMMIT = BUILD_INFO.commit;
 const BOOT_TIME = new Date().toISOString();
 
 function healthPayload() {
@@ -192,6 +255,11 @@ function healthPayload() {
     service: "AEVION Globus Backend",
     timestamp: new Date().toISOString(),
     commit: BUILD_COMMIT,
+    // Откуда взят коммит и какая ветка: "unknown" при source "none" значит
+    // «маркер не собрался», а при source "env" — «переменная пустая». Разные
+    // неисправности, и различать их надо не догадками.
+    commitSource: BUILD_INFO.source,
+    branch: BUILD_INFO.branch,
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
     // Аналитика пишется в файл. Если её самое старое событие всегда моложе
@@ -1268,23 +1336,10 @@ startQpaynetRetryWorker();
 // QTradeOffline — offline-first P2P AEV payments (ECDSA P-256, /sync batch)
 app.use("/api/qtradeoffline", qtradeOfflineRouter);
 
-app.use(
-  (
-    err: unknown,
-    req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction,
-  ) => {
-    console.error("[express]", err);
-    captureException(err, {
-      url: req.originalUrl ?? req.url,
-      method: req.method,
-      ip: req.ip,
-    });
-    if (res.headersSent) return;
-    res.status(500).json({ error: "internal_error" });
-  },
-);
+// Обработчик ошибок живёт в src/lib/httpErrorHandler.ts — вынесен туда, чтобы
+// его можно было проверить тестом, не поднимая весь сервер. Разбор клиентских
+// отказов (413/400 вместо 500 и без Sentry) описан там же.
+app.use(makeHttpErrorHandler());
 
 // QSign v2 — Sentry init (no-op when SENTRY_DSN unset). Must run before
 // the listener binds so any startup failures are captured too.

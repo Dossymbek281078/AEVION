@@ -10,11 +10,87 @@
 
 | Tier | Module | RTO | RPO | Snapshot frequency | Notes |
 |---|---|---|---|---|---|
-| 1 | Postgres (all modules) | 30 min | 24 h | Railway daily auto-backup + pg_dump weekly | RPO drops to 1 h once we wire WAL to S3 |
-| 1 | JSON file store (legacy: leads, newsletter, partners) | 15 min | 24 h | Manual `npm run backup` daily | Migrate to Postgres before public launch — Railway fs is ephemeral |
+| 1 | Postgres — **platform** instance (`DATABASE_URL`) | 30 min | 24 h | Railway daily auto-backup + pg_dump weekly | RPO drops to 1 h once we wire WAL to S3 |
+| 1 | Postgres — **DevHub project** instance (`DEVHUB_DB_ADMIN_URL`) | **unknown** | **∞ — no backup** | **none** | 🔴 Not backed up in any form (issue #957). See § 1.1 — do not read the row above as covering it |
+| 1 | JSON file store (`AEVION_DATA_DIR`) — **включая кошельки и реестр AEV** | 15 min | 24 h | `npm run backup` вручную; расписания нет | См. § 1.2 — команда была потеряна из package.json с 30.04 по 14.08 |
 | 2 | Sentry events | n/a | n/a | Sentry retention (90d) | No restore — outbound only |
 | 2 | Vercel build artefacts | 5 min | n/a | Re-trigger build from main | Build is reproducible from git |
 | 3 | Crypto secrets (`QSIGN_*`, `SHARD_HMAC_SECRET`) | 0 (don't lose them) | 0 | 1Password vault + offline paper | **Losing these invalidates every signed cert** |
+
+### § 1.1 🔴 Two Postgres instances, only one of them is backed up
+
+This section exists because the table above used to say **“Postgres (all
+modules)”** in a single row, and the backup procedure in § 2.1 dumps exactly one
+connection string. Anyone reading it during an incident would conclude that
+DevHub project data is covered. It is not.
+
+**There are two separate instances, deliberately:**
+
+| | connection string | what lives there |
+|---|---|---|
+| platform | `DATABASE_URL` | our own tables — all modules of the ecosystem |
+| DevHub projects | `DEVHUB_DB_ADMIN_URL` | one schema + one role **per user project**, created by `lib/devhubDbProvision.ts` |
+
+The separation is enforced in code: provisioning **refuses** to run when
+`DEVHUB_DB_ADMIN_URL` points at the platform database (“must point at an instance
+dedicated to user projects”). So a dump of `DATABASE_URL` cannot contain project
+data — not partially, not at all.
+
+**State as of 14.08.2026:** the project instance has no backup of any kind
+(issue #957). Every user project shares that one instance, isolated only by
+schema and role — so losing it loses every project at once, not one of them.
+
+What is already done and should not be redone: the provisioning response and the
+DevHub project page tell the user, at the moment they receive the database, that
+project databases are not backed up yet (commit `c5dae3446`). The silence was
+fixed; the absence was not, on purpose — choosing between a separately billed
+service and a permanently larger attack surface is the owner's call.
+
+**How to check the current state in two clicks** (this file cannot know it):
+Railway → project → service `devhub-projects-db` → Backups. If a schedule now
+exists, the row above must be updated together with a restore rehearsal — an
+unrehearsed backup is a belief, not a backup. The condition for removing the
+warning from the UI is written next to it in `lib/devhubDbProvision.ts`.
+
+**Manual dump until then** (needs the admin URL, produces one file per instance):
+
+```bash
+DEVHUB_DB_ADMIN_URL=postgres://...   pg_dump --format=custom --no-owner --no-privileges     --file=devhub-projects-$(date -u +%Y-%m-%dT%H-%M-%SZ).pgdump
+```
+
+Store it **outside** the same Railway volume, same rule as § 2.1.
+
+### § 1.2 Файловое хранилище: что в нём лежит и почему это не «legacy»
+
+Строка выше называла его «legacy: leads, newsletter, partners». Фактический
+состав шире, и часть его — денежная:
+
+* `aev_wallets.json`, `aev_ledger.json` — кошельки и append-only реестр AEV.
+  Единственное хранилище: Postgres для них только в планах, см. шапку
+  `src/routes/aev.ts` («Prisma схема готова для миграции когда DATABASE_URL
+  будет задан»).
+* `qtrade.json`, `multichat-conversations.json`, `chat-history.json`,
+  `cyberchess-tournaments.json`, `smeta_*.json`.
+
+**«Railway fs is ephemeral» больше не соответствует факту.** Замер прода
+14.08.2026: `/health` отдаёт `eventsStore.oldest = 2026-05-26` при `uptimeSec`
+в 206 секунд — то есть данные переживают перезапуск, у сервиса есть том. Но том
+сервиса и том Postgres — разные, а PITR настроен на второй.
+
+**Команда бэкапа существует, но была недоступна четыре месяца.** Коммит
+`8d152a864` (30.04) добавил `scripts/backup.mjs`, `scripts/restore.mjs` и три
+записи в `package.json`: `backup`, `backup:list`, `restore`. К 14.08 файлы
+остались, а записей не было ни одной — ни здесь, ни в пяти других ветках, где
+`package.json` правили. Ничего не падало: сборка и тесты зелёные, просто
+резервного копирования не было. Записи возвращены; сторож
+`tests/scriptEntryPoints.guard.test.ts` не даст им исчезнуть снова.
+
+Проверено на фактических данных: `npm run backup` копирует хранилище в
+`.aevion-backups/<UTC>/`, `npm run backup:list` показывает снимки, копия сверена
+с источником побайтно.
+
+**Чего по-прежнему нет:** расписания. Команда запускается только руками, и это
+надо либо завести задачей, либо не называть в § 1 частотой «daily».
 
 Definitions:
 - **RTO** = maximum acceptable time to restore service after an outage.
@@ -22,7 +98,11 @@ Definitions:
 
 ## § 2 Backup procedures
 
-### 2.1 Postgres (Tier 1 — all modules)
+### 2.1 Postgres — platform instance (Tier 1)
+
+> Covers `DATABASE_URL` only. The DevHub project instance
+> (`DEVHUB_DB_ADMIN_URL`) is a separate server and is **not** included — see
+> § 1.1. This heading used to say “all modules”, which read as coverage of both.
 
 **Production:** Railway takes a daily snapshot automatically. Manual override:
 

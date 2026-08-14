@@ -10,22 +10,33 @@
 # оказалось, что задеплоена не та ветка.
 #
 # Запасное поле GIT_SHA в коде было всегда, выставлять его было некому. Теперь
-# выставляется здесь, одним заходом с выкаткой, — забыть нельзя.
+# отметка кладётся сюда файлом, одним заходом с выкаткой, — забыть нельзя.
+#
+# ВТОРАЯ ЗАДАЧА СКРИПТА (14.08.2026): не дать стереть чужую работу. Сервис
+# AEVION один на всю платформу, вкладок до десяти, и выкатка заменяет образ
+# ЦЕЛИКОМ. 14.08 соседняя сессия выкатила свою ветку и унесла с прода всю
+# шахматную работу — не ошибкой, а успешной выкаткой. Правило «посмотри, чья
+# ветка на проде» записано в общий CLAUDE.md, но текст забывается ровно так же,
+# как забывалась проверка занятости пути. Поэтому спрашивает скрипт.
 #
 # Использование:
 #   bash scripts/railway-deploy.sh "короткое описание выкатки"
+#   bash scripts/railway-deploy.sh --check          # только проверить, чьё на проде
+#   ALLOW_OVERWRITE=1 bash scripts/railway-deploy.sh "..."   # осознанно поверх чужого
 #
 # Только выкатка. Ничего не удаляет, наружу в git не ходит.
 
 set -euo pipefail
 
 MSG="${1:-выкатка без описания}"
+CHECK_ONLY=""
+if [ "${1:-}" = "--check" ]; then CHECK_ONLY=1; MSG="(только проверка)"; fi
 cd "$(dirname "$0")/.."
 
 SHA="$(git rev-parse HEAD)"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 DIRTY=""
-if ! git diff --quiet || ! git diff --cached --quiet; then
+if [ -z "$CHECK_ONLY" ] && { ! git diff --quiet || ! git diff --cached --quiet; }; then
   # Незакоммиченные правки означают, что отметка коммита будет ВРАТЬ: уедет
   # рабочая копия, а /health назовёт последний коммит. Лучше остановиться.
   echo "ОСТАНОВКА: в рабочей копии есть незакоммиченные изменения." >&2
@@ -37,6 +48,65 @@ fi
 echo "ветка:  $BRANCH"
 echo "коммит: ${SHA:0:12}"
 echo "повод:  $MSG"
+echo
+
+# ── чьё сейчас на проде ────────────────────────────────────────────────
+#
+# Три исхода, и их НАДО различать (иначе повторим тот же дефект, что чинили
+# сегодня в самом /health): «там моя ветка», «там чужая», «спросить не удалось».
+# Третий — не разрешение: неотвеченный вопрос это не ответ «свободно».
+PROD_URL="${PROD_HEALTH_URL:-https://api.aevion.app/health}"
+PROD_JSON="$(curl -s --max-time 20 "$PROD_URL" 2>/dev/null || true)"
+PROD_BRANCH="$(printf '%s' "$PROD_JSON" | node -pe \
+  "try{JSON.parse(require('fs').readFileSync(0,'utf8')).branch||''}catch(e){''}" 2>/dev/null || true)"
+PROD_COMMIT="$(printf '%s' "$PROD_JSON" | node -pe \
+  "try{(JSON.parse(require('fs').readFileSync(0,'utf8')).commit||'')}catch(e){''}" 2>/dev/null || true)"
+
+if [ -z "$PROD_JSON" ]; then
+  PROD_STATE="не ответил"
+elif [ -z "$PROD_BRANCH" ] || [ "$PROD_BRANCH" = "null" ]; then
+  # Ветку не называет либо старая сборка (до 14.08), либо сборка не через этот
+  # скрипт. И то и другое означает: чьё там — неизвестно.
+  PROD_STATE="ветку не называет (сборка старше 14.08 или выкачена мимо скрипта); коммит ${PROD_COMMIT:-неизвестен}"
+elif [ "$PROD_BRANCH" = "$BRANCH" ]; then
+  PROD_STATE="своя"
+else
+  PROD_STATE="чужая: $PROD_BRANCH"
+fi
+echo "на проде: $PROD_STATE"
+
+if [ -n "$CHECK_ONLY" ]; then
+  exit 0
+fi
+
+if [ "$PROD_STATE" != "своя" ] && [ -z "${ALLOW_OVERWRITE:-}" ]; then
+  cat >&2 <<TXT
+
+ОСТАНОВКА: выкатка заменит образ целиком, а на проде сейчас не ваша ветка.
+
+  на проде: ${PROD_BRANCH:-неизвестна}   (${PROD_COMMIT:-без отметки})
+  у вас:    $BRANCH
+
+Так 14.08 с прода исчезла вся дневная работа по шахматам. Не выкатывайте
+поверх — соберите ветку, где живёт и та работа, и ваша:
+
+  git checkout -b deploy/combined ${PROD_BRANCH:-<их-ветка>}
+  git checkout $BRANCH -- \$(git diff --name-only main $BRANCH)
+  # затем: tsc, весь набор тестов, и уже эту ветку выкатывать
+
+Файлы, которые правите вы ОБА, ищите так (их берите ЗА ОСНОВУ, свою правку
+кладите поверх — иначе унесёте чужое):
+
+  comm -12 <(git diff --name-only main $BRANCH | sort) \\
+           <(git diff --name-only main ${PROD_BRANCH:-<их-ветка>} | sort)
+
+Если объединение уже сделано и вы понимаете, что делаете:
+
+  ALLOW_OVERWRITE=1 bash scripts/railway-deploy.sh "$MSG"
+
+TXT
+  exit 1
+fi
 
 # Отметка едет ВНУТРИ загружаемой папки, а не в переменных сервиса.
 #

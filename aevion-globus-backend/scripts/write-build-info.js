@@ -22,7 +22,7 @@
  */
 
 const { execFileSync } = require("node:child_process");
-const { writeFileSync } = require("node:fs");
+const { writeFileSync, readFileSync, existsSync } = require("node:fs");
 const { join } = require("node:path");
 
 function fromGit() {
@@ -75,7 +75,32 @@ const info = {
 // ветке deploy/combined). Скрипт выкатки scripts/railway-deploy.sh пишет этот
 // же файл сам и убирает за собой; здесь он появляется при обычной сборке.
 const out = join(__dirname, "..");
-writeFileSync(join(out, "build-info.json"), JSON.stringify(info, null, 2), "utf8");
+const target = join(out, "build-info.json");
+
+// НЕ затирать готовую отметку. Тот же файл кладёт scripts/railway-deploy.sh
+// перед загрузкой — там ещё есть .git и настоящий коммит. Здесь, внутри образа,
+// .git отсутствует и переменных нет, поэтому мы бы записали поверх "unknown".
+//
+// Проверено на живой выкатке 14.08.2026 (f0c1620ceac2): код доехал, поля branch
+// и commitSource появились, а commit остался "unknown" — ровно потому, что этот
+// шаг сборки шёл последним и стирал уехавшую отметку. Два механизма писали в
+// один файл, и побеждал тот, кто знает меньше.
+if (info.source === "none" && existsSync(target)) {
+  try {
+    const prev = JSON.parse(readFileSync(target, "utf8"));
+    if (prev && prev.commit && prev.commit !== "unknown") {
+      console.log(
+        `[build-info] сохраняю отметку выкатки: commit=${prev.commit} branch=${prev.branch || "unknown"} ` +
+          `(своего источника здесь нет — .git в образ не попадает)`,
+      );
+      process.exit(0);
+    }
+  } catch {
+    // Битый файл — перезапишем своим, это лучше неразбираемого.
+  }
+}
+
+writeFileSync(target, JSON.stringify(info, null, 2), "utf8");
 
 // Печатаем в лог сборки: если маркер не собрался, это должно быть видно в
 // логах деплоя, а не только запросом к /health после него.

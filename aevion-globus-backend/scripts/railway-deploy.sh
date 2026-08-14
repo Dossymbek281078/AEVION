@@ -69,6 +69,7 @@ cat > "$BACKEND_DIR/build-info.json" <<JSON
 {
   "commit": "$SHA",
   "branch": "$BRANCH",
+  "source": "railway-deploy.sh",
   "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 JSON

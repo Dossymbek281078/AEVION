@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 import {
   GUIDES,
   SUBSCRIPTIONS,
@@ -239,6 +240,14 @@ export default async function GoPage({
               price={priceOf(allAccess)}
             />
           )}
+        </section>
+
+        <section style={styles.section}>
+          <WaitlistCapture
+            source="go"
+            title="Написать вам, когда выйдет следующее"
+            description="Модули выходят по одному. Оставьте адрес — придёт письмо в день запуска и условия раннего доступа, пока цена стартовая."
+          />
         </section>
 
         <p style={styles.foot}>

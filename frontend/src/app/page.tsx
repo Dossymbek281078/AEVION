@@ -20,6 +20,7 @@ const Globus3D = dynamic(() => import("./components/Globus3D"), {
 });
 import { PlanetPulse } from "./components/PlanetPulse";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { countryByGlobusName } from "@/lib/constitution";
 import { MODULE_NODES, TAM, BOTTOM_UP_REGIONAL_ARR, BOTTOM_UP_BEACHHEAD_ARR } from "@/data/pitchFacts";
 
@@ -1145,6 +1146,10 @@ export default function HomePage() {
               })()}
             </div>
           </section>
+        </div>
+
+        <div style={{ maxWidth: 1200, margin: "32px auto 8px" }}>
+          <WaitlistCapture source="home" />
         </div>
 
         <section

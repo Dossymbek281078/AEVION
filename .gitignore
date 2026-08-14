@@ -86,3 +86,6 @@ page_v*_backup.*
 # data/subscriptions.jsonl выше: защита не должна зависеть от того, из какой
 # папки запустили.
 **/.aevion-data/
+
+.vercel
+.env*

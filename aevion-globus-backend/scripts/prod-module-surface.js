@@ -54,6 +54,21 @@ function coverage(probes) {
   // Оба вида кавычек: половина index.ts пишет одинарные, и счётчик точек
   // монтирования занижался — покрытие выглядело лучше, чем есть.
   for (const m of idx.matchAll(/app\.use\(["'](\/api\/[^"']+)["']/g)) mounted.add(m[1]);
+
+  // ВТОРОЙ источник монтирования. Новые модули добавляют строку в EXTRA_MOUNTS
+  // (moduleManifest.ts), а не правят index.ts — там живут qventure, qskyway,
+  // qevents, qreal, data-quality. Считая только app.use, я делил на заниженный
+  // знаменатель, то есть проверка покрытия страдала ровно тем, что призвана
+  // ловить: отвечала «88 из 95», не зная про ещё пять точек.
+  try {
+    const man = fs.readFileSync(
+      path.join(__dirname, "..", "src", "routes", "moduleManifest.ts"),
+      "utf-8",
+    );
+    for (const m of man.matchAll(/path:\s*["'](\/api\/[^"']+)["']/g)) mounted.add(m[1]);
+  } catch {
+    /* манифеста нет — тогда просто не добавляем, а не выдумываем */
+  }
   const watched = new Set(probes.map((p) => p.base));
   const unwatched = [...mounted].filter((b) => !watched.has(b)).sort();
   return { mounted: mounted.size, watched: watched.size, unwatched };

@@ -42,20 +42,48 @@ for (const m of idx.matchAll(
   }
 }
 
+function routesOf(file) {
+  if (!file || !fs.existsSync(file)) return [];
+  return [...fs.readFileSync(file, "utf-8").matchAll(/[\w$]+\.get\(\s*["']([^"']+)["']/g)]
+    .map((r) => r[1])
+    .filter((p) => p.startsWith("/") && !p.includes(":") && !p.includes("*"));
+}
+
 const modules = [];
 for (const m of idx.matchAll(/app\.use\(["'](\/api\/[^"']+)["']\s*,([^;]*?)\);/g)) {
   const ids = [...m[2].matchAll(/([A-Za-z_$][\w$]*)\s*(?:,|$)/g)].map((x) => x[1]);
-  const file = imports.get(ids[ids.length - 1] || "");
-  let routes = [];
-  if (file && fs.existsSync(file)) {
-    routes = [...fs.readFileSync(file, "utf-8").matchAll(/[\w$]+\.get\(\s*["']([^"']+)["']/g)]
-      .map((r) => r[1])
-      .filter((p) => p.startsWith("/") && !p.includes(":") && !p.includes("*"));
-  }
+  const routes = routesOf(imports.get(ids[ids.length - 1] || ""));
   modules.push({
     base: m[1],
     candidates: [...new Set(routes)].slice(0, 6).map((p) => m[1] + (p === "/" ? "" : p)),
   });
+}
+
+// ВТОРОЙ источник монтирования, и его легко не заметить: новые модули добавляют
+// строку в EXTRA_MOUNTS (moduleManifest.ts), а index.ts не трогают вовсе —
+// «New modules add ONE entry to EXTRA_MOUNTS instead of editing this file».
+// Считая только app.use, я не сделал проб пяти живым модулям (qventure,
+// qskyway, qevents, qreal, data-quality) и при этом отчитывался о покрытии.
+try {
+  const manPath = path.join(ROOT, "src", "routes", "moduleManifest.ts");
+  const man = fs.readFileSync(manPath, "utf-8");
+  const manImports = new Map();
+  for (const m of man.matchAll(
+    /import\s+(?:\{\s*([\w,\s]+?)\s*\}|(\w+))\s+from\s+["']\.\/([\w-]+)["']/g,
+  )) {
+    for (const n of (m[1] || m[2] || "").split(",").map((s) => s.trim()).filter(Boolean)) {
+      manImports.set(n, path.join(ROOT, "src", "routes", `${m[3]}.ts`));
+    }
+  }
+  for (const m of man.matchAll(/path:\s*["'](\/api\/[^"']+)["']\s*,\s*router:\s*(\w+)/g)) {
+    const routes = routesOf(manImports.get(m[2]));
+    modules.push({
+      base: m[1],
+      candidates: [...new Set(routes)].slice(0, 6).map((p) => m[1] + (p === "/" ? "" : p)),
+    });
+  }
+} catch {
+  /* манифеста нет — работаем с тем, что есть, а не выдумываем */
 }
 
 (async () => {
@@ -83,11 +111,25 @@ for (const m of idx.matchAll(/app\.use\(["'](\/api\/[^"']+)["']\s*,([^;]*?)\);/g
     return;
   }
 
+  // Годность пробы имеет ДВА уровня, и это не педантизм. Первый набор снимался
+  // во время моей же выкатки, и /api/build/jobs/types попал в него с ответом
+  // 502 — то есть в эталон записалось мгновение перезапуска. Потом проверка
+  // честно кричала «ответ изменился: было 502, стало 200», хотя изменился не
+  // прод, а неверно снятый эталон. К такому «⚠️» привыкают и перестают читать.
+  //
+  // 5xx доказывает, что роутер смонтирован (иначе был бы 404), но эталоном быть
+  // не может: это состояние, а не свойство модуля.
+  const rank = (s) => (s === 0 || s === 404 ? 0 : s >= 500 ? 1 : 2);
   const best = new Map();
   for (const r of res) {
-    const good = r.status !== 404 && r.status !== 0;
     const cur = best.get(r.base);
-    if (!cur || (good && !cur.good)) best.set(r.base, { ...r, good });
+    if (!cur || rank(r.status) > rank(cur.status)) best.set(r.base, { ...r, good: rank(r.status) > 0 });
+  }
+  const shaky = [...best.values()].filter((x) => x.good && x.status >= 500);
+  if (shaky.length) {
+    console.log(`\n⚠️  У ${shaky.length} проб(ы) эталон получился 5xx — вероятно, прод перезапускался.`);
+    for (const s of shaky) console.log(`   ${s.url}: ${s.status}`);
+    console.log("   Пересоберите позже: 5xx в эталоне даст ложное «ответ изменился».");
   }
   const probes = [...best.values()]
     .filter((x) => x.good)

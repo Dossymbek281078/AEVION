@@ -26,7 +26,7 @@
  },
  {
   "base": "/api/agent-runtime",
-  "url": "/api/agent-runtime/health",
+  "url": "/api/agent-runtime/mcp-selftest",
   "expect": 200
  },
  {
@@ -66,8 +66,8 @@
  },
  {
   "base": "/api/coach",
-  "url": "/api/coach/health",
-  "expect": 200
+  "url": "/api/coach/sessions",
+  "expect": 401
  },
  {
   "base": "/api/constitution",
@@ -91,8 +91,8 @@
  },
  {
   "base": "/api/cyberchess-anticheat",
-  "url": "/api/cyberchess-anticheat/health",
-  "expect": 200
+  "url": "/api/cyberchess-anticheat/flagged",
+  "expect": 403
  },
  {
   "base": "/api/cyberchess-daily",
@@ -111,7 +111,7 @@
  },
  {
   "base": "/api/cyberchess-spectator",
-  "url": "/api/cyberchess-spectator/list",
+  "url": "/api/cyberchess-spectator/replays",
   "expect": 200
  },
  {
@@ -128,6 +128,11 @@
   "base": "/api/cyberchess/matchmaking",
   "url": "/api/cyberchess/matchmaking/queue/status",
   "expect": 400
+ },
+ {
+  "base": "/api/data-quality",
+  "url": "/api/data-quality",
+  "expect": 200
  },
  {
   "base": "/api/deepsan",
@@ -161,12 +166,12 @@
  },
  {
   "base": "/api/keys",
-  "url": "/api/keys/verify",
+  "url": "/api/keys",
   "expect": 401
  },
  {
   "base": "/api/kids-ai",
-  "url": "/api/kids-ai/stats",
+  "url": "/api/kids-ai/health",
   "expect": 200
  },
  {
@@ -176,7 +181,7 @@
  },
  {
   "base": "/api/longevity",
-  "url": "/api/longevity/panel",
+  "url": "/api/longevity/health",
   "expect": 200
  },
  {
@@ -186,12 +191,12 @@
  },
  {
   "base": "/api/metrics",
-  "url": "/api/metrics",
+  "url": "/api/metrics/json",
   "expect": 200
  },
  {
   "base": "/api/modules",
-  "url": "/api/modules/status",
+  "url": "/api/modules/registry",
   "expect": 200
  },
  {
@@ -226,7 +231,7 @@
  },
  {
   "base": "/api/planet/constitution-artifacts",
-  "url": "/api/planet/constitution-artifacts",
+  "url": "/api/planet/constitution-artifacts/stats",
   "expect": 200
  },
  {
@@ -241,12 +246,12 @@
  },
  {
   "base": "/api/pricing/events",
-  "url": "/api/pricing/events/recent",
+  "url": "/api/pricing/events/summary",
   "expect": 401
  },
  {
   "base": "/api/psyapp-deps",
-  "url": "/api/psyapp-deps/affirmations",
+  "url": "/api/psyapp-deps/health",
   "expect": 200
  },
  {
@@ -261,7 +266,7 @@
  },
  {
   "base": "/api/qchaingov",
-  "url": "/api/qchaingov/proposals",
+  "url": "/api/qchaingov/health",
   "expect": 200
  },
  {
@@ -271,7 +276,12 @@
  },
  {
   "base": "/api/qcoreai",
-  "url": "/api/qcoreai/pricing",
+  "url": "/api/qcoreai/me/webhook",
+  "expect": 401
+ },
+ {
+  "base": "/api/qevents",
+  "url": "/api/qevents/health",
   "expect": 200
  },
  {
@@ -281,22 +291,22 @@
  },
  {
   "base": "/api/qgood",
-  "url": "/api/qgood/health",
+  "url": "/api/qgood/matching-pools",
   "expect": 200
  },
  {
   "base": "/api/qjobs",
-  "url": "/api/qjobs/health",
+  "url": "/api/qjobs/types",
   "expect": 200
  },
  {
   "base": "/api/qlearn",
-  "url": "/api/qlearn/health",
-  "expect": 200
+  "url": "/api/qlearn/categories",
+  "expect": 402
  },
  {
   "base": "/api/qlife",
-  "url": "/api/qlife/stats",
+  "url": "/api/qlife/health",
   "expect": 200
  },
  {
@@ -316,8 +326,8 @@
  },
  {
   "base": "/api/qnews",
-  "url": "/api/qnews/categories",
-  "expect": 402
+  "url": "/api/qnews/health",
+  "expect": 200
  },
  {
   "base": "/api/qpaynet",
@@ -326,7 +336,12 @@
  },
  {
   "base": "/api/qpersona",
-  "url": "/api/qpersona/health",
+  "url": "/api/qpersona/stats",
+  "expect": 200
+ },
+ {
+  "base": "/api/qreal",
+  "url": "/api/qreal/health",
   "expect": 200
  },
  {
@@ -346,7 +361,12 @@
  },
  {
   "base": "/api/qsign/v2",
-  "url": "/api/qsign/v2/openapi.json",
+  "url": "/api/qsign/v2/metrics",
+  "expect": 200
+ },
+ {
+  "base": "/api/qskyway",
+  "url": "/api/qskyway/cities",
   "expect": 200
  },
  {
@@ -361,7 +381,7 @@
  },
  {
   "base": "/api/qtrade",
-  "url": "/api/qtrade/transfers",
+  "url": "/api/qtrade/accounts",
   "expect": 401
  },
  {
@@ -380,6 +400,11 @@
   "expect": 200
  },
  {
+  "base": "/api/qventure",
+  "url": "/api/qventure/health",
+  "expect": 200
+ },
+ {
   "base": "/api/revenue",
   "url": "/api/revenue/health",
   "expect": 200
@@ -391,7 +416,7 @@
  },
  {
   "base": "/api/shadownet",
-  "url": "/api/shadownet/health",
+  "url": "/api/shadownet/threat-models",
   "expect": 200
  },
  {
@@ -401,7 +426,7 @@
  },
  {
   "base": "/api/startupx",
-  "url": "/api/startupx/health",
+  "url": "/api/startupx/ideas",
   "expect": 200
  },
  {
@@ -426,7 +451,7 @@
  },
  {
   "base": "/api/ventures",
-  "url": "/api/ventures/stats",
+  "url": "/api/ventures/health",
   "expect": 200
  },
  {

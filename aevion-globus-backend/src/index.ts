@@ -212,7 +212,14 @@ app.use(express.urlencoded({
  * несколько строк, и цена — доли миллисекунды на запуск против невозможности
  * узнать, какой код работает.
  */
-function readBuildInfo(): { commit: string; source: string; branch: string } {
+/**
+ * builtAt отвечает на вопрос, который bootedAt не покрывает: контейнер Railway
+ * перезапускается сам по себе, и тогда «поднялся 10 минут назад» относится к
+ * образу недельной давности. Проверка выкатки (aevion-deploy-check.mjs) поле
+ * уже печатает — и до 14.08.2026 печатала «собрана ?», потому что отдавать его
+ * было некому.
+ */
+function readBuildInfo(): { commit: string; source: string; branch: string; builtAt: string | null } {
   const envCommit =
     process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || process.env.SOURCE_VERSION;
   if (envCommit) {
@@ -220,6 +227,9 @@ function readBuildInfo(): { commit: string; source: string; branch: string } {
       commit: envCommit.slice(0, 12),
       source: "env",
       branch: process.env.RAILWAY_GIT_BRANCH || "unknown",
+      // Метку времени даёт только файл; из переменных её взять неоткуда, и
+      // выдумывать «сейчас» нельзя — это назвало бы старт контейнера сборкой.
+      builtAt: null,
     };
   }
   try {
@@ -232,16 +242,17 @@ function readBuildInfo(): { commit: string; source: string; branch: string } {
     const fsMod = require("node:fs") as typeof import("node:fs");
     const pathMod = require("node:path") as typeof import("node:path");
     const raw = fsMod.readFileSync(pathMod.join(__dirname, "..", "build-info.json"), "utf-8");
-    const info = JSON.parse(raw) as { commit?: string; source?: string; branch?: string };
+    const info = JSON.parse(raw) as { commit?: string; source?: string; branch?: string; builtAt?: string };
     return {
       commit: String(info.commit || "unknown").slice(0, 12),
       source: String(info.source || "build-info"),
       branch: String(info.branch || "unknown"),
+      builtAt: info.builtAt ? String(info.builtAt) : null,
     };
   } catch {
     // Файла нет — это dev-запуск через ts-node-dev (dist не собран). Отвечаем
     // "unknown" явно, а не выдумываем: ложный коммит хуже отсутствующего.
-    return { commit: "unknown", source: "none", branch: "unknown" };
+    return { commit: "unknown", source: "none", branch: "unknown", builtAt: null };
   }
 }
 
@@ -260,6 +271,10 @@ function healthPayload() {
     // неисправности, и различать их надо не догадками.
     commitSource: BUILD_INFO.source,
     branch: BUILD_INFO.branch,
+    // Когда СОБРАН образ. Не то же, что bootedAt: Railway перезапускает
+    // контейнер сам, и «поднялся 10 минут назад» бывает у образа недельной
+    // давности. null — честнее выдуманного времени.
+    builtAt: BUILD_INFO.builtAt,
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
     // Аналитика пишется в файл. Если её самое старое событие всегда моложе

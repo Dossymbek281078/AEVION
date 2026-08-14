@@ -98,4 +98,33 @@ describe("цена имеет один источник", () => {
       expect(t?.priceMonthly, `${id} без цены`).toBeGreaterThan(0);
     }
   });
+
+  test("шапка pricing.ts называет ТЕ ЖЕ цены, что и тарифы под ней", () => {
+    // Комментарий — пересказ, и 13.08.2026 он разошёлся с делом: цены снизили
+    // ($24/$39/$89/$249.99 → $19/$29/$49/$149), а шапку не тронули. Читатель
+    // (и я сам) верит первому, что видит, — то есть враньё стояло в самом
+    // начале файла-источника истины по ценам.
+    const src = readFileSync(join(__dirname, "..", "src", "data", "pricing.ts"), "utf8");
+    const head = src.slice(0, src.indexOf("export const TIERS"));
+
+    for (const id of ["lite", "medium", "full", "pro"] as const) {
+      const price = getTier(id)?.priceMonthly;
+      expect(price, `${id} без цены`).toBeGreaterThan(0);
+
+      // Разбираем построчно, а не одной регуляркой: в шаблонной строке `\s`
+      // означает букву s, и собранное так выражение молча не находит ничего —
+      // сторож стал бы вечно зелёным. Проверено: на верной шапке он краснел.
+      const line = head
+        .split("\n")
+        .find((l) => l.includes(`- ${id} `) && l.includes("$"));
+      expect(line, `в шапке нет строки про ${id} — сторож ослеп`).toBeTruthy();
+
+      const claimed = /\$([\d.]+)/.exec(line as string)?.[1];
+      expect(claimed, `в строке про ${id} нет цены`).toBeTruthy();
+      expect(
+        Number(claimed),
+        `шапка обещает $${claimed} за ${id}, а тариф стоит $${price}`,
+      ).toBe(price);
+    }
+  });
 });

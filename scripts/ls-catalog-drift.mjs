@@ -38,6 +38,63 @@ function nameMapFromSource(src) {
   return map;
 }
 
+/**
+ * Цены, которые ОБЕЩАЕТ сайт. Два независимых источника, оба в коде:
+ *   - тарифы платформы — TIERS в pricing.ts (priceMonthly / priceAnnualTotal);
+ *   - модули — записи с processor "lemonsqueezy" в frontend/src/lib/products.ts.
+ *
+ * Возвращаем Map «ссылка → {usd, откуда}». Чего сопоставить не смогли — просто
+ * нет в Map, и про такой товар скрипт скажет «сверить не с чем», а не промолчит.
+ */
+function sitePrices() {
+  const out = new Map();
+
+  try {
+    const src = readFileSync(resolve(process.cwd(), "aevion-globus-backend/src/data/pricing.ts"), "utf8");
+    for (const m of src.matchAll(/id:\s*"(lite|medium|full|pro)"[\s\S]{0,600}?priceMonthly:\s*([\d.]+)[\s\S]{0,300}?priceAnnualTotal:\s*[^\n]*?\(?\s*([\d.]+)\s*\)?/g)) {
+      const [, id, monthly] = m;
+      out.set(`tier_${id}_monthly`, { usd: Number(monthly), from: "pricing.ts" });
+      // Годовая = ×10 (два месяца в подарок) — правило объявлено там же.
+      out.set(`tier_${id}_annual`, { usd: Number(monthly) * 10, from: "pricing.ts ×10" });
+    }
+  } catch { /* ниже скажем честно */ }
+
+  try {
+    const src = readFileSync(resolve(process.cwd(), "frontend/src/lib/products.ts"), "utf8");
+    for (const m of src.matchAll(/\{[^{}]*processor:\s*"lemonsqueezy"[^{}]*\}/gs)) {
+      const body = m[0];
+      const title = /title:\s*"([^"]+)"/.exec(body)?.[1];
+      const price = /priceUsd:\s*([\d.]+)/.exec(body)?.[1];
+      const appId = /appId:\s*"([^"]+)"/.exec(body)?.[1];
+      if (!price) continue;
+      const entry = { usd: Number(price), from: "products.ts" };
+      if (title) out.set(`title:${normalizeTitle(title)}`, entry);
+      // Связь по appId надёжнее названия: в магазине товар зовётся «AEVION
+      // CyberChess Pro», а на сайте «CyberChess» — по имени они не сходятся,
+      // хотя это один товар. Мост «ссылка → модуль» уже есть в коде
+      // (APP_SLUG_TO_MODULE_ID), новую таблицу не заводим.
+      if (appId) out.set(`app:${appId}`, entry);
+    }
+  } catch { /* ниже скажем честно */ }
+
+  return out;
+}
+
+/** app_<slug> → id модуля, как это делает бэкенд. Читаем его таблицу, не свою. */
+function moduleIdBySlug(variantsSrc) {
+  const block = variantsSrc.match(/APP_SLUG_TO_MODULE_ID[^=]*=\s*\{([\s\S]*?)\n\};/);
+  const map = {};
+  if (block) {
+    for (const m of block[1].matchAll(/(\w+)\s*:\s*"([^"]+)"/g)) map[m[1]] = m[2];
+  }
+  return map;
+}
+
+/** «AEVION DevHub Studio Pro» и «DevHub Studio Pro» — один товар. */
+function normalizeTitle(s) {
+  return s.replace(/^AEVION\s+/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 /** Названия товаров с витрины. Берём из текста страницы, рядом с ценой. */
 function storefrontNames(html) {
   const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
@@ -55,6 +112,19 @@ function storefrontNames(html) {
   return [...out];
 }
 
+/** Название → цена на витрине магазина, в долларах. */
+function storefrontPrices(html) {
+  const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const out = new Map();
+  for (const m of plain.matchAll(/(AEVION [A-Za-z0-9 —\-]{2,60}?)\s\$([\d.,]+)\/(month|year)/g)) {
+    let name = m[1].trim();
+    const afterButton = name.lastIndexOf("Subscribe ");
+    if (afterButton >= 0) name = name.slice(afterButton + "Subscribe ".length).trim();
+    out.set(name, { usd: Number(m[2].replace(/,/g, "")), period: m[3] });
+  }
+  return out;
+}
+
 async function main() {
   let map;
   try {
@@ -69,13 +139,15 @@ async function main() {
   }
 
   let names;
+  let html = "";
   try {
     const res = await fetch(STORE, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(25_000) });
     if (!(res.status >= 200 && res.status < 300)) {
       console.log(`Витрина ответила ${res.status} — это НЕ «товаров нет», просто не проверено.`);
       return;
     }
-    names = storefrontNames(await res.text());
+    html = await res.text();
+    names = storefrontNames(html);
   } catch (e) {
     console.log(`Витрина не открылась: ${e.message}. Это НЕ «товаров нет», просто не проверено.`);
     return;
@@ -117,6 +189,47 @@ async function main() {
     console.log(`  ${name.padEnd(30)} ${state}`);
   }
 
+  // ── Цены ──────────────────────────────────────────────────────────────────
+  //
+  // Состав сходится, а цена может расходиться молча: покупатель видит на
+  // странице $39, платит в магазине $149 и открывает спор. Сверяем то, что
+  // обещает сайт, с тем, что берёт магазин, и отдельно называем товары, по
+  // которым сверить не с чем — «не проверено» это не «совпало».
+  const site = sitePrices();
+  const shop = storefrontPrices(html);
+  const slugToModule = moduleIdBySlug(readFileSync(VARIANTS_FILE, "utf8"));
+  const priceMismatch = [];
+  const priceUnknown = [];
+
+  if (site.size === 0 || shop.size === 0) {
+    console.log("\n⚠️  Цены сверить не удалось: не прочитались источники (сайт или витрина).");
+    console.log("    Это НЕ «цены совпадают».");
+  } else {
+    console.log("\nЦЕНЫ (сайт обещает → магазин берёт):");
+    for (const name of [...shop.keys()].sort()) {
+      const ref = map[name];
+      const shopPrice = shop.get(name);
+      const slug = ref && ref.startsWith("app_") ? ref.slice("app_".length) : null;
+      const moduleId = slug ? slugToModule[slug] || slug : null;
+      const expected =
+        (ref && site.get(ref)) ||
+        (moduleId && site.get(`app:${moduleId}`)) ||
+        site.get(`title:${normalizeTitle(name)}`);
+
+      if (!expected) {
+        priceUnknown.push(name);
+        console.log(`  ${name.padEnd(30)} магазин $${shopPrice.usd}/${shopPrice.period} · сверить не с чем`);
+        continue;
+      }
+      const ok = Math.abs(expected.usd - shopPrice.usd) < 0.01;
+      if (!ok) priceMismatch.push(`${name}: сайт $${expected.usd}, магазин $${shopPrice.usd}`);
+      console.log(
+        `  ${name.padEnd(30)} сайт $${expected.usd} (${expected.from}) → магазин $${shopPrice.usd}` +
+          (ok ? " · совпадает" : "  ← РАСХОЖДЕНИЕ"),
+      );
+    }
+  }
+
   const missingOnStore = Object.keys(map).filter((n) => !names.includes(n));
   if (missingOnStore.length) {
     console.log("\nЕСТЬ В ТАБЛИЦЕ, НО НЕТ НА ВИТРИНЕ (товар сняли, код не знает):");
@@ -124,13 +237,18 @@ async function main() {
   }
 
   console.log("");
-  if (!unknown.length && !notConfigured.length && !missingOnStore.length) {
-    console.log("Расхождений нет: витрина и код совпадают.");
+  if (!unknown.length && !notConfigured.length && !missingOnStore.length && !priceMismatch.length) {
+    const tail = priceUnknown.length ? ` По ${priceUnknown.length} товар(ам) цену сверить не с чем.` : "";
+    console.log(`Расхождений нет: витрина и код совпадают.${tail}`);
     return;
   }
   if (unknown.length) console.log(`РАСХОЖДЕНИЕ: ${unknown.length} товар(ов) на витрине не сопоставлены — ${unknown.join(", ")}.`);
   if (notConfigured.length) console.log(`РАСХОЖДЕНИЕ: ${notConfigured.length} товар(ов) продаются, но переменная не задана — покупка вернёт 500.`);
   if (missingOnStore.length) console.log(`РАСХОЖДЕНИЕ: ${missingOnStore.length} строк(и) таблицы без товара на витрине.`);
+  if (priceMismatch.length) {
+    console.log(`РАСХОЖДЕНИЕ В ЦЕНЕ: ${priceMismatch.length} товар(ов) — покупатель видит одно, платит другое:`);
+    for (const p of priceMismatch) console.log(`  ${p}`);
+  }
   process.exitCode = 2;
 }
 

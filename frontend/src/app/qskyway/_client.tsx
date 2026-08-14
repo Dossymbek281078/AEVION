@@ -16,6 +16,7 @@ import { isSmokeSlot, countSmokeSlots } from "./slotSource";
 // в тесте, а для этого он должен рендериться отдельно от канваса.
 import { HeightDisputePanel, type HeightDispute } from "./HeightDisputePanel";
 import { padProhibition } from "./padPermission";
+import { verifyVerdict } from "./verifyVerdict";
 import { measuredObstaclePct } from "./heightQuality";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
@@ -237,7 +238,7 @@ export default function QSkywayClient() {
   const [substImpact, setSubstImpact] = useState<{ available: boolean; routable: number; affectedPairs: number; buildings: number; buildingsUnderRoutes: number; note: string } | null>(null);
   const [heroPair, setHeroPair] = useState<{ from: number; to: number } | null>(null);
   const [justification, setJustification] = useState<{ doc: JustDoc; attestation: JustAttestation; scope: string } | null>(null);
-  const [justState, setJustState] = useState<"idle" | "busy" | "verified" | "invalid">("idle");
+  const [justState, setJustState] = useState<"idle" | "busy" | "verified" | "invalid" | "unknown">("idle");
   const [vpRows, setVpRows] = useState<VertiportRow[]>([]);
   const [slots, setSlots] = useState<{ list: Slot[]; count: number; liveCount: number | null; capacityPerRoute: number; store: string }>({ list: [], count: 0, liveCount: null, capacityPerRoute: 0, store: "" });
   // Считаем по загруженному списку, а не по `count` с сервера: сервер отдаёт
@@ -246,7 +247,7 @@ export default function QSkywayClient() {
   // Запрет, накрывающий город целиком, — свойство каждой площадки, поэтому
   // считается здесь и ставится в строку, а не только в регуляторную карточку.
   const padBan = padProhibition(meta?.airspace?.permission);
-  const [verify, setVerify] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
+  const [verify, setVerify] = useState<"idle" | "checking" | "valid" | "invalid" | "unknown">("idle");
   // Оговорка о ключе приходит вместе с вердиктом и показывается рядом с ним:
   // без `QSKYWAY_SIGN_SK` ключ подписи генерируется при старте процесса, и
   // «подпись верна» тогда означает лишь «в этом процессе двойник не менялся».
@@ -678,11 +679,17 @@ export default function QSkywayClient() {
     try {
       const res = await fetch(apiUrl(`/api/qskyway/verify?city=${encodeURIComponent(cityIdRef.current)}`));
       const j = await res.json();
-      setVerify(res.ok && j.valid === true ? "valid" : "invalid");
+      // Три исхода, а не два. Раньше здесь стояло
+      // `res.ok && j.valid === true ? "valid" : "invalid"`, и в «недействительна»
+      // сваливались упавшая сеть, ответ 500 и `valid: null` — принятое на
+      // платформе значение «подтверждать нечего» (см. переход qsignV2 на
+      // valid:null в preview-режиме). То есть сбой связи объявлял документ
+      // поддельным. Обвинение в подделке нельзя выводить из неполученного ответа.
+      setVerify(verifyVerdict(res.ok, j.valid));
       setVerifyKey(typeof j.ephemeral === "boolean"
         ? { ephemeral: j.ephemeral, note: String(lang === "ru" ? j.keyNote : (j.keyNoteEn ?? j.keyNote)) }
         : null);
-    } catch { setVerify("invalid"); setVerifyKey(null); }
+    } catch { setVerify("unknown"); setVerifyKey(null); }
     // `lang` в зависимостях, а не через ref: список был пустым, и колбэк
     // запомнил бы язык, выбранный при монтировании.
   }, [lang]);
@@ -731,8 +738,12 @@ export default function QSkywayClient() {
         body: JSON.stringify({ document: justification.doc, attestation: justification.attestation }),
       });
       const j = await res.json();
-      setJustState(j?.valid === true ? "verified" : "invalid");
-    } catch { setJustState("invalid"); }
+      // Тот же разбор, что и у подписи двойника; здесь вдобавок не смотрели
+      // на res.ok вовсе, поэтому 500 от бэкенда читался как «обоснование
+      // недействительно».
+      const v = verifyVerdict(res.ok, j?.valid);
+      setJustState(v === "valid" ? "verified" : v);
+    } catch { setJustState("unknown"); }
   }, [justification]);
 
   const downloadJustification = useCallback(() => {
@@ -912,12 +923,12 @@ export default function QSkywayClient() {
                     style={{
                       cursor: verify === "checking" ? "wait" : "pointer",
                       textDecoration: "underline dotted",
-                      color: verify === "valid" ? "#2dd4bf" : verify === "invalid" ? "#fb7185" : "#2dd4bf",
+                      color: verify === "valid" ? "#2dd4bf" : verify === "invalid" ? "#fb7185" : verify === "unknown" ? "#94a3b8" : "#2dd4bf",
                     }}
                   >
                     🔏 Ed25519 · {meta.signed}…
-                    {verify === "checking" && " · проверка…"}
-                    {verify === "valid" && " · ✓ подпись верна"}
+                    {verify === "checking" && t("qskyway.verify.checking")}
+                    {verify === "valid" && t("qskyway.verify.ok")}
                     {/* Вердикт без этой приписки читается сильнее, чем есть:
                         временный ключ никто раньше не видел, и связи со вчерашним
                         двойником подпись не даёт. На проде ключ именно такой. */}
@@ -926,7 +937,12 @@ export default function QSkywayClient() {
                         {t("qskyway.verify.ephemeralKey")}
                       </span>
                     )}
-                    {verify === "invalid" && " · ✗ проверка не прошла"}
+                    {verify === "invalid" && t("qskyway.verify.failed")}
+                    {/* Серым и отдельным словом: «не смогли проверить» — не то же,
+                        что «подпись не сошлась». Раньше оба вида читались как второй. */}
+                    {verify === "unknown" && (
+                      <span style={{ color: "#94a3b8" }}>{t("qskyway.verify.unknown")}</span>
+                    )}
                   </span>
                   <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: "зданий" }} />
                   {meta.suspect.length > 0 && (
@@ -1125,6 +1141,7 @@ export default function QSkywayClient() {
                           <button style={btn} onClick={downloadJustification}>{t("qskyway.just.download")}</button>
                           <button style={btn} onClick={verifyJustification} disabled={justState === "busy"}>
                             {justState === "verified" ? "✓ " + t("qskyway.just.verified")
+                              : justState === "unknown" ? "— " + t("qskyway.just.unknown")
                               : justState === "invalid" ? "✗ " + t("qskyway.just.invalid")
                               : t("qskyway.just.verify")}
                           </button>

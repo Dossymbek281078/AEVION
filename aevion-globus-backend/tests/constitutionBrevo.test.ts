@@ -6,7 +6,7 @@
  * itself isn't exported.
  */
 import { describe, test, expect, afterEach, vi } from "vitest";
-import { sendWaitlistConfirm, sendWeeklyDigestEmail } from "../src/lib/constitutionBrevo";
+import { sendWaitlistConfirm, sendWeeklyDigestEmail, buildWaitlistConfirmEmail } from "../src/lib/constitutionBrevo";
 
 describe("constitutionBrevo — degraded convention", () => {
   const originalFetch = globalThis.fetch;
@@ -56,5 +56,49 @@ describe("constitutionBrevo — degraded convention", () => {
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/degraded/i));
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("constitutionBrevo — письмо соответствует источнику подписки", () => {
+  // Таблица constitution_waitlist принимает адреса и с главной, и с /go
+  // (14.08.2026). До этой правки все получали письмо про Constitution Pro со
+  // скидкой на продукт, о котором не просили, и с подписью «вы подписались на
+  // aevion.app/constitution/pricing» — неправдой для всех, кроме конституции.
+
+  test("подписка с главной: письмо про ранний доступ, без конституции", () => {
+    const p = buildWaitlistConfirmEmail("a@b.com", "home");
+
+    expect(p.subject).not.toMatch(/Constitution/i);
+    expect(p.htmlContent).not.toMatch(/Constitution Pro/i);
+    expect(p.htmlContent).not.toMatch(/constitution\/pricing/i);
+    expect(p.subject).toMatch(/раннего доступа/i);
+    expect(p.htmlContent).toContain("главной странице aevion.app");
+  });
+
+  test("подписка с /go: письмо называет именно ту страницу", () => {
+    const p = buildWaitlistConfirmEmail("a@b.com", "go");
+
+    expect(p.htmlContent).toContain("странице aevion.app/go");
+    expect(p.htmlContent).not.toMatch(/Constitution Pro/i);
+  });
+
+  test("подписка со страницы конституции остаётся прежней", () => {
+    const p = buildWaitlistConfirmEmail("a@b.com", "constitution-pricing");
+
+    expect(p.subject).toMatch(/Constitution Pro/);
+    expect(p.htmlContent).toMatch(/30% скидкой/);
+  });
+
+  test("источник не указан — прежнее поведение, конституционное письмо", () => {
+    const p = buildWaitlistConfirmEmail("a@b.com");
+
+    expect(p.subject).toMatch(/Constitution Pro/);
+  });
+
+  test("адрес для отписки подставлен в обе ветки", () => {
+    for (const src of ["home", "constitution-pricing"]) {
+      const p = buildWaitlistConfirmEmail("a+b@c.com", src);
+      expect(p.htmlContent).toContain("unsubscribe?email=a%2Bb%40c.com");
+    }
   });
 });

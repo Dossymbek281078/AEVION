@@ -29,7 +29,14 @@ import { fileURLToPath } from "node:url";
 // Путь от самого файла теста, а не от process.cwd(): при полном прогоне
 // достаточно одного теста, сменившего рабочую папку, чтобы сканирование
 // ушло не в тот каталог (эти грабли уже ловил qsignClaims.guard).
-const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
+// Корень — `src`, а не `src/app`. Первая версия сканировала только страницы,
+// и компонент, положенный в `src/components` или `src/lib`, проходил мимо.
+// Нарушений там сейчас нет, но защита, охватывающая часть дерева, читается
+// как охватывающая всё — и это ровно то, из-за чего проверки годами
+// «работают», покрывая одну страницу из двадцати одной.
+// Замер после расширения: за пределами `app/` нарушений НЕ нашлось — те же
+// шесть, только путь длиннее. Ноль тут проверен, а не предположен.
+const SRC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const ATTR = /\b(title|aria-label|placeholder|alt)\s*=\s*"([^"]*[А-Яа-яЁё][^"]*)"/g;
 const USES_T = /\bt\(\s*"/;
@@ -44,12 +51,12 @@ type Hit = { file: string; attr: string; text: string };
  * вечно, замораживает ровно то, что должно было беречь.
  */
 const KNOWN: Hit[] = [
-  { file: "bank/page.tsx", attr: "title", text: "Конституция Bank" },
-  { file: "cyberchess/AiPersonalityPicker.tsx", attr: "aria-label", text: "Выбор стиля AI" },
-  { file: "cyberchess/AntiCheatPanel.tsx", attr: "aria-label", text: "Закрыть" },
-  { file: "cyberchess/FideCalibrationPanel.tsx", attr: "aria-label", text: "Закрыть" },
-  { file: "cyberchess/matchmaking/page.tsx", attr: "placeholder", text: "Игрок" },
-  { file: "cyberchess/replays/page.tsx", attr: "title", text: "Обновить" },
+  { file: "app/bank/page.tsx", attr: "title", text: "Конституция Bank" },
+  { file: "app/cyberchess/AiPersonalityPicker.tsx", attr: "aria-label", text: "Выбор стиля AI" },
+  { file: "app/cyberchess/AntiCheatPanel.tsx", attr: "aria-label", text: "Закрыть" },
+  { file: "app/cyberchess/FideCalibrationPanel.tsx", attr: "aria-label", text: "Закрыть" },
+  { file: "app/cyberchess/matchmaking/page.tsx", attr: "placeholder", text: "Игрок" },
+  { file: "app/cyberchess/replays/page.tsx", attr: "title", text: "Обновить" },
 ];
 
 function collectSourceFiles(dir: string): string[] {
@@ -70,7 +77,7 @@ function scan(files: string[]): Hit[] {
     if (!USES_T.test(text)) continue; // одноязычная страница — русский там правилен
     for (const m of text.matchAll(ATTR)) {
       hits.push({
-        file: relative(APP_DIR, full).replace(/\\/g, "/"),
+        file: relative(SRC_DIR, full).replace(/\\/g, "/"),
         attr: m[1],
         text: m[2].slice(0, 40),
       });
@@ -87,14 +94,17 @@ const key = (h: Hit) => `${h.file} [${h.attr}] ${h.text}`;
 let files: string[] = [];
 let hits: Hit[] = [];
 beforeAll(() => {
-  files = collectSourceFiles(APP_DIR);
+  files = collectSourceFiles(SRC_DIR);
   hits = scan(files);
 });
 
 describe("переводимые страницы: кириллица в атрибутах", () => {
   it("сканирует настоящий, непустой набор файлов", () => {
     // Без этого «нарушений нет» верно и при сломанном обходе.
-    expect(files.length).toBeGreaterThan(200);
+    // Порог под фактический охват (1495 файлов на 14.08.2026). Прежние 200
+    // прошли бы и при обвале обхода до одного каталога — то есть предохранитель
+    // от пустого набора не срабатывал бы ровно тогда, когда нужен.
+    expect(files.length).toBeGreaterThan(1200);
   });
 
   it("новых мест не появилось", () => {

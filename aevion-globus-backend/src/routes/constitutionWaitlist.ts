@@ -108,7 +108,7 @@ constitutionWaitlistRouter.post(
       if (!memList.has(row.email)) memList.set(row.email, row);
 
       // Fire-and-forget confirmation email via Brevo
-      void sendWaitlistConfirm(row.email).catch(() => { /* ignore */ });
+      void sendWaitlistConfirm(row.email, row.source).catch(() => { /* ignore */ });
 
       res.status(201).json({ ok: true, storage });
     } catch (err) {

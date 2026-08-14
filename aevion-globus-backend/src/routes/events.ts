@@ -44,7 +44,11 @@ function ensureDir() {
  * с первого взгляда вместо того, чтобы лезть в переменные окружения.
  */
 type EventsStoreStatus = {
+  /** Задана ли переменная EVENTS_FILE. НЕ отвечает на вопрос «переживут ли выкатку». */
   persistedByEnv: boolean;
+  /** Лежит ли файл на смонтированном томе. Вот это и есть ответ про сохранность.
+   *  null = том не объявлен окружением, судить не по чему. */
+  onVolume: boolean | null;
   exists: boolean;
   count: number;
   oldest: string | null;
@@ -73,8 +77,16 @@ function readEventsStoreStatus(): EventsStoreStatus {
   // Для ответа на вопрос «переживают ли события деплой» достаточно флага и
   // метки самого старого события.
   const persistedByEnv = EVENTS_FILE_FROM_ENV;
+  // ЧТО ИМЕННО СПРАШИВАЮТ. `persistedByEnv` отвечает «задана ли переменная», а
+  // читается как «переживут ли события выкатку» — 14.08.2026 я сам прочёл его
+  // именно так, написал основателю тревогу «первая же выкатка сотрёт замер» и
+  // просил настроить переменную. Выкатка в тот же день доказала обратное: 562
+  // события с 26 мая целы, потому что каталог лежит на смонтированном томе.
+  // Поэтому отдаём ФАКТ: попадает ли путь под точку монтирования тома.
+  const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim() || null;
+  const onVolume = mount ? EVENTS_FILE.replace(/\\/g, "/").startsWith(mount.replace(/\\/g, "/")) : null;
   if (!existsSync(EVENTS_FILE)) {
-    return { persistedByEnv, exists: false, count: 0, oldest: null };
+    return { persistedByEnv, onVolume, exists: false, count: 0, oldest: null };
   }
   try {
     const lines = readFileSync(EVENTS_FILE, "utf8").split("\n").filter(Boolean);
@@ -87,10 +99,10 @@ function readEventsStoreStatus(): EventsStoreStatus {
         // Битую строку пропускаем: одна порча не должна ронять health.
       }
     }
-    return { persistedByEnv, exists: true, count: lines.length, oldest };
+    return { persistedByEnv, onVolume, exists: true, count: lines.length, oldest };
   } catch (e) {
     captureEventsError(e, { route: "events/storeStatus" });
-    return { persistedByEnv, exists: true, count: -1, oldest: null };
+    return { persistedByEnv, onVolume, exists: true, count: -1, oldest: null };
   }
 }
 

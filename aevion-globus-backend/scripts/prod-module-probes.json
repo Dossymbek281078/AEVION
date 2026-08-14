@@ -51,13 +51,13 @@
  },
  {
   "base": "/api/build/jobs",
-  "url": "/api/build/jobs/types",
-  "expect": 502
+  "url": "/api/build/jobs/health",
+  "expect": 200
  },
  {
   "base": "/api/build/social",
-  "url": "/api/build/social/me/feed",
-  "expect": 401
+  "url": "/api/build/social/health",
+  "expect": 200
  },
  {
   "base": "/api/bureau",
@@ -66,8 +66,8 @@
  },
  {
   "base": "/api/coach",
-  "url": "/api/coach/sessions",
-  "expect": 401
+  "url": "/api/coach/health",
+  "expect": 200
  },
  {
   "base": "/api/constitution",
@@ -95,13 +95,18 @@
   "expect": 200
  },
  {
+  "base": "/api/cyberchess-daily",
+  "url": "/api/cyberchess-daily/puzzle",
+  "expect": 200
+ },
+ {
   "base": "/api/cyberchess-opening",
   "url": "/api/cyberchess-opening",
   "expect": 200
  },
  {
   "base": "/api/cyberchess-puzzles",
-  "url": "/api/cyberchess-puzzles/themes",
+  "url": "/api/cyberchess-puzzles",
   "expect": 200
  },
  {
@@ -111,7 +116,12 @@
  },
  {
   "base": "/api/cyberchess-tournaments",
-  "url": "/api/cyberchess-tournaments/leaderboard",
+  "url": "/api/cyberchess-tournaments/list",
+  "expect": 200
+ },
+ {
+  "base": "/api/cyberchess-voice-coach",
+  "url": "/api/cyberchess-voice-coach/voices",
   "expect": 200
  },
  {
@@ -121,7 +131,7 @@
  },
  {
   "base": "/api/deepsan",
-  "url": "/api/deepsan/tasks",
+  "url": "/api/deepsan/health",
   "expect": 200
  },
  {
@@ -151,12 +161,12 @@
  },
  {
   "base": "/api/keys",
-  "url": "/api/keys",
+  "url": "/api/keys/verify",
   "expect": 401
  },
  {
   "base": "/api/kids-ai",
-  "url": "/api/kids-ai/health",
+  "url": "/api/kids-ai/stats",
   "expect": 200
  },
  {
@@ -166,7 +176,7 @@
  },
  {
   "base": "/api/longevity",
-  "url": "/api/longevity/health",
+  "url": "/api/longevity/panel",
   "expect": 200
  },
  {
@@ -186,7 +196,7 @@
  },
  {
   "base": "/api/multichat",
-  "url": "/api/multichat/search",
+  "url": "/api/multichat/conversations",
   "expect": 402
  },
  {
@@ -231,17 +241,17 @@
  },
  {
   "base": "/api/pricing/events",
-  "url": "/api/pricing/events/summary",
+  "url": "/api/pricing/events/recent",
   "expect": 401
  },
  {
   "base": "/api/psyapp-deps",
-  "url": "/api/psyapp-deps/health",
+  "url": "/api/psyapp-deps/affirmations",
   "expect": 200
  },
  {
   "base": "/api/puzzles",
-  "url": "/api/puzzles",
+  "url": "/api/puzzles/themes",
   "expect": 200
  },
  {
@@ -251,12 +261,17 @@
  },
  {
   "base": "/api/qchaingov",
-  "url": "/api/qchaingov/health",
+  "url": "/api/qchaingov/proposals",
   "expect": 200
  },
  {
   "base": "/api/qcontract",
   "url": "/api/qcontract/templates",
+  "expect": 200
+ },
+ {
+  "base": "/api/qcoreai",
+  "url": "/api/qcoreai/pricing",
   "expect": 200
  },
  {
@@ -270,13 +285,18 @@
   "expect": 200
  },
  {
+  "base": "/api/qjobs",
+  "url": "/api/qjobs/health",
+  "expect": 200
+ },
+ {
   "base": "/api/qlearn",
   "url": "/api/qlearn/health",
   "expect": 200
  },
  {
   "base": "/api/qlife",
-  "url": "/api/qlife/health",
+  "url": "/api/qlife/stats",
   "expect": 200
  },
  {
@@ -311,7 +331,7 @@
  },
  {
   "base": "/api/qrenew",
-  "url": "/api/qrenew/stack",
+  "url": "/api/qrenew/health",
   "expect": 200
  },
  {
@@ -326,7 +346,7 @@
  },
  {
   "base": "/api/qsign/v2",
-  "url": "/api/qsign/v2/metrics",
+  "url": "/api/qsign/v2/openapi.json",
   "expect": 200
  },
  {
@@ -336,7 +356,7 @@
  },
  {
   "base": "/api/qstore",
-  "url": "/api/qstore/categories",
+  "url": "/api/qstore/health",
   "expect": 200
  },
  {
@@ -346,13 +366,13 @@
  },
  {
   "base": "/api/qtradeoffline",
-  "url": "/api/qtradeoffline/stats",
+  "url": "/api/qtradeoffline/health",
   "expect": 200
  },
  {
   "base": "/api/quantum-shield",
-  "url": "/api/quantum-shield/health",
-  "expect": 200
+  "url": "/api/quantum-shield/webhooks",
+  "expect": 401
  },
  {
   "base": "/api/quotas",
@@ -386,7 +406,7 @@
  },
  {
   "base": "/api/status",
-  "url": "/api/status/incidents",
+  "url": "/api/status/subscribers/count",
   "expect": 200
  },
  {
@@ -406,7 +426,7 @@
  },
  {
   "base": "/api/ventures",
-  "url": "/api/ventures/health",
+  "url": "/api/ventures/stats",
   "expect": 200
  },
  {

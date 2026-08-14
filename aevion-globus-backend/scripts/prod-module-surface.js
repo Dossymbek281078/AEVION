@@ -34,6 +34,31 @@ const PROBES = JSON.parse(
   fs.readFileSync(path.join(__dirname, "prod-module-probes.json"), "utf-8"),
 );
 
+/**
+ * Сколько модулей ВООБЩЕ не под наблюдением.
+ *
+ * Набор проб собран из index.ts на день сборки. Появится новый модуль — пробы у
+ * него не будет, и его пропажа снова пройдёт незамеченной, а отчёт останется
+ * зелёным: проверка честно скажет «все 84 на месте», просто их станет не 84 из
+ * 105, а 84 из 130. Покрытие обязано называть себя само, иначе оно тихо едет
+ * вниз — это тот же класс, что и «проверка охватывала одну страницу из 21».
+ */
+function coverage(probes) {
+  let idx = "";
+  try {
+    idx = fs.readFileSync(path.join(__dirname, "..", "src", "index.ts"), "utf-8");
+  } catch {
+    return null; // исходника рядом нет (запуск не из репозитория) — молчим, а не выдумываем
+  }
+  const mounted = new Set();
+  // Оба вида кавычек: половина index.ts пишет одинарные, и счётчик точек
+  // монтирования занижался — покрытие выглядело лучше, чем есть.
+  for (const m of idx.matchAll(/app\.use\(["'](\/api\/[^"']+)["']/g)) mounted.add(m[1]);
+  const watched = new Set(probes.map((p) => p.base));
+  const unwatched = [...mounted].filter((b) => !watched.has(b)).sort();
+  return { mounted: mounted.size, watched: watched.size, unwatched };
+}
+
 async function probe(p) {
   try {
     const r = await fetch(BASE + p.url, { signal: AbortSignal.timeout(15000) });
@@ -91,7 +116,20 @@ async function main() {
     console.log(`\n… не ответили: ${unreachable.length} (сеть, а не модули)`);
   }
 
-  if (!missing.length && !changed.length) console.log("\nВсе модули на месте, ответы прежние.");
+  if (!missing.length && !changed.length) console.log("\nВсе модули под наблюдением на месте, ответы прежние.");
+
+  const cov = coverage(PROBES);
+  if (cov) {
+    console.log(`\nпокрытие: ${cov.watched} проб на ${cov.mounted} точек монтирования в коде`);
+    if (cov.unwatched.length) {
+      console.log(`\n⚠️  БЕЗ ПРОБЫ (${cov.unwatched.length}) — их пропажу проверка не заметит:`);
+      for (const b of cov.unwatched.slice(0, 25)) console.log(`   ${b}`);
+      if (cov.unwatched.length > 25) console.log(`   …и ещё ${cov.unwatched.length - 25}`);
+      console.log(`\nПересобрать набор: см. шапку файла (пробы берутся из роутеров и`);
+      console.log(`проверяются на живом проде; годится ответ, отличный от 404).`);
+    }
+  }
+
   process.exitCode = missing.length ? 1 : 0;
 }
 

@@ -919,7 +919,7 @@ export default function QSkywayClient() {
                   />
                   <span
                     onClick={verify === "checking" ? undefined : verifySignature}
-                    title="Проверить подпись двойника на бэкенде (GET /verify)"
+                    title={t("qskyway.tip.verifySig")}
                     style={{
                       cursor: verify === "checking" ? "wait" : "pointer",
                       textDecoration: "underline dotted",
@@ -1172,7 +1172,7 @@ export default function QSkywayClient() {
                           </div>
                         )}
                         {v.needsAtc && (
-                          <div style={{ color: "#fda4af", fontSize: 10, marginTop: 2 }} title="В этой ячейке регулятор не даёт автоматического допуска (потолок 0 ft) — вылет только по координации с УВД.">
+                          <div style={{ color: "#fda4af", fontSize: 10, marginTop: 2 }} title={t("qskyway.tip.noAutoClearance")}>
                             🛂 нужна координация с УВД — автоматического допуска нет
                           </div>
                         )}
@@ -1227,7 +1227,7 @@ export default function QSkywayClient() {
                             {isSmokeSlot(s) && (
                               <span
                                 style={{ color: "#fbbf24", marginLeft: 6 }}
-                                title="Бронь оставлена смоук-прогоном, а не человеком. Право зафиксировано по-настоящему, но рыночной активностью это не является."
+                                title={t("qskyway.tip.smokeBooking")}
                               >
                                 тест
                               </span>

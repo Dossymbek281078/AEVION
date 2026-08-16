@@ -498,7 +498,7 @@ export const MODULES_PRICING: ModulePrice[] = [
   },
   {
     id: "qrenew",
-    addonMonthly: 19,
+    addonMonthly: 29,
     includedIn: ["medium", "full", "enterprise"],
     availability: "beta",
     oneLiner: "Клеточное обновление: биовозраст + стек (информационно)",

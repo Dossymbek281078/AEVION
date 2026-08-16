@@ -60,6 +60,9 @@ async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise<{
         Accept: "application/json",
       },
       body: JSON.stringify(body),
+      // Без таймаута зависший Brevo держал запрос бесконечно и вместе с ним
+      // соединение из пула. Письмо не критично, ждать его нечего.
+      signal: AbortSignal.timeout(10_000),
     });
     if (!r.ok) {
       const text = await r.text().catch(() => "");
@@ -78,7 +81,25 @@ async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise<{
 
 /* ─── Constitution-specific email templates ──────────────────────── */
 
-export function buildWaitlistConfirmEmail(email: string): ConstitutionEmailPayload {
+/**
+ * Письмо подписчику зависит от того, где он подписался.
+ *
+ * Таблица `constitution_waitlist` перестала быть только конституционной: с
+ * 14.08.2026 в неё пишет и общая форма на главной и на /go, потому что заводить
+ * второе хранилище адресов ради тех же трёх полей — дороже, чем поле `source`.
+ * Но письмо оставалось одно, конституционное, и человек, оставивший адрес на
+ * главной ради «раннего доступа к модулям», получал «Ты в листе ожидания
+ * Constitution Pro» с обещанием скидки на продукт, которого не просил, и с
+ * подписью «вы подписались на aevion.app/constitution/pricing» — неправдой.
+ * Замер в журнале Brevo показал, что письма реально уходят, то есть неправда
+ * доезжала бы до каждого настоящего подписчика.
+ *
+ * Развилка идёт по `source`, а не по отдельному флагу: source уже хранится в
+ * строке и уже отвечает на вопрос «откуда человек».
+ */
+export function buildWaitlistConfirmEmail(email: string, source?: string): ConstitutionEmailPayload {
+  const fromConstitution = !source || /^constitution/i.test(source);
+  if (!fromConstitution) return buildPlatformWaitlistEmail(email, source);
   const html = `
     <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf8;border-radius:12px">
       <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION Constitution</div>
@@ -103,6 +124,41 @@ export function buildWaitlistConfirmEmail(email: string): ConstitutionEmailPaylo
     htmlContent: html,
     textContent: `Ты в списке ожидания Constitution Pro. Откроем — сразу письмо с 30% скидкой. Пока: aevion.app/constitution`,
     tags: ["constitution", "waitlist-confirm"],
+  };
+}
+
+/**
+ * Письмо тому, кто оставил адрес на главной или на /go: ранний доступ к модулям
+ * платформы, без обещаний по конкретному продукту, которых мы не давали на той
+ * странице. Никаких скидок здесь не обещаем — цену и условия решает основатель.
+ */
+export function buildPlatformWaitlistEmail(email: string, source?: string): ConstitutionEmailPayload {
+  const where = source === "go" ? "странице aevion.app/go" : "главной странице aevion.app";
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf8;border-radius:12px">
+      <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION</div>
+      <p style="margin:0 0 16px">Адрес записан — вы в списке раннего доступа.</p>
+      <p style="color:#9aa3c0;margin:0 0 16px">
+        Платформа выпускает модули по одному. Как только выйдет следующий, вы получите
+        письмо в день запуска — с условиями раннего доступа, пока цена стартовая.
+      </p>
+      <p style="color:#9aa3c0;margin:0 0 24px">
+        Пока можно посмотреть, что уже работает:
+        <a href="https://aevion.app/go" style="color:#22d3ee">aevion.app/go</a>
+      </p>
+      <hr style="border:none;border-top:1px solid rgba(212,175,55,0.2);margin-bottom:16px">
+      <p style="color:#64748b;font-size:11px;margin:0">
+        Вы получили это письмо, потому что оставили адрес на ${where}.<br>
+        <a href="https://aevion.app/constitution/waitlist/unsubscribe?email=${encodeURIComponent(email)}" style="color:#64748b">Отписаться</a>
+      </p>
+    </div>
+  `;
+  return {
+    to: [{ email }],
+    subject: "Вы в списке раннего доступа AEVION",
+    htmlContent: html,
+    textContent: `Адрес записан — вы в списке раннего доступа AEVION. Напишем в день запуска следующего модуля. Что уже работает: aevion.app/go`,
+    tags: ["platform", "waitlist-confirm"],
   };
 }
 
@@ -163,8 +219,8 @@ export function buildWeeklyDigestEmail(
 
 /* ─── Exported send functions ─────────────────────────────────────── */
 
-export async function sendWaitlistConfirm(email: string): Promise<void> {
-  const payload = buildWaitlistConfirmEmail(email);
+export async function sendWaitlistConfirm(email: string, source?: string): Promise<void> {
+  const payload = buildWaitlistConfirmEmail(email, source);
   const result = await sendBrevoEmail(payload);
   if (!result.ok) {
     console.error("[Brevo] waitlist-confirm failed:", result.error);

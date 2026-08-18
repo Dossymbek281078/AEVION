@@ -44,7 +44,11 @@ function ensureDir() {
  * с первого взгляда вместо того, чтобы лезть в переменные окружения.
  */
 type EventsStoreStatus = {
+  /** Задана ли переменная EVENTS_FILE. НЕ отвечает на вопрос «переживут ли выкатку». */
   persistedByEnv: boolean;
+  /** Лежит ли файл на смонтированном томе. Вот это и есть ответ про сохранность.
+   *  null = том не объявлен окружением, судить не по чему. */
+  onVolume: boolean | null;
   exists: boolean;
   count: number;
   oldest: string | null;
@@ -73,8 +77,16 @@ function readEventsStoreStatus(): EventsStoreStatus {
   // Для ответа на вопрос «переживают ли события деплой» достаточно флага и
   // метки самого старого события.
   const persistedByEnv = EVENTS_FILE_FROM_ENV;
+  // ЧТО ИМЕННО СПРАШИВАЮТ. `persistedByEnv` отвечает «задана ли переменная», а
+  // читается как «переживут ли события выкатку» — 14.08.2026 я сам прочёл его
+  // именно так, написал основателю тревогу «первая же выкатка сотрёт замер» и
+  // просил настроить переменную. Выкатка в тот же день доказала обратное: 562
+  // события с 26 мая целы, потому что каталог лежит на смонтированном томе.
+  // Поэтому отдаём ФАКТ: попадает ли путь под точку монтирования тома.
+  const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim() || null;
+  const onVolume = mount ? EVENTS_FILE.replace(/\\/g, "/").startsWith(mount.replace(/\\/g, "/")) : null;
   if (!existsSync(EVENTS_FILE)) {
-    return { persistedByEnv, exists: false, count: 0, oldest: null };
+    return { persistedByEnv, onVolume, exists: false, count: 0, oldest: null };
   }
   try {
     const lines = readFileSync(EVENTS_FILE, "utf8").split("\n").filter(Boolean);
@@ -87,10 +99,10 @@ function readEventsStoreStatus(): EventsStoreStatus {
         // Битую строку пропускаем: одна порча не должна ронять health.
       }
     }
-    return { persistedByEnv, exists: true, count: lines.length, oldest };
+    return { persistedByEnv, onVolume, exists: true, count: lines.length, oldest };
   } catch (e) {
     captureEventsError(e, { route: "events/storeStatus" });
-    return { persistedByEnv, exists: true, count: -1, oldest: null };
+    return { persistedByEnv, onVolume, exists: true, count: -1, oldest: null };
   }
 }
 
@@ -272,6 +284,8 @@ eventsRouter.get("/summary", (req, res) => {
       checkoutBySource: {},
       checkoutByChannel: {},
       byIndustry: {},
+      byChannel: {},
+      byProduct: {},
       sessionCount: 0,
       windowHours: 24,
     });
@@ -300,6 +314,13 @@ eventsRouter.get("/summary", (req, res) => {
   const byIndustry: Record<string, number> = {};
   /** Разбивку по ним считает summarizeCheckoutStarts — см. её комментарий. */
   const checkoutEvents: AnalyticsEvent[] = [];
+  // Канал (tt / ig / yt …) — единственный ответ на вопрос «какая раздача
+  // принесла людей». Он приезжает в meta, а сводка до 13.08.2026 считала
+  // только поля верхнего уровня: метка доезжала и НЕ показывалась никому.
+  const byChannel: Record<string, number> = {};
+  // Товар, по которому нажали «купить». Без него видно «клики были», но не
+  // видно, что именно хотели купить.
+  const byProduct: Record<string, number> = {};
   const sids = new Set<string>();
   let total = 0;
 
@@ -312,6 +333,11 @@ eventsRouter.get("/summary", (req, res) => {
       if (ev.source) bySource[ev.source] = (bySource[ev.source] ?? 0) + 1;
       if (ev.tier) byTier[ev.tier] = (byTier[ev.tier] ?? 0) + 1;
       if (ev.industry) byIndustry[ev.industry] = (byIndustry[ev.industry] ?? 0) + 1;
+      const meta = (ev as { meta?: Record<string, unknown> }).meta;
+      const channel = typeof meta?.channel === "string" ? meta.channel : null;
+      if (channel) byChannel[channel] = (byChannel[channel] ?? 0) + 1;
+      const product = typeof meta?.product === "string" ? meta.product : null;
+      if (product) byProduct[product] = (byProduct[product] ?? 0) + 1;
       if (ev.sid) sids.add(ev.sid);
       if (ev.type === "checkout_start") checkoutEvents.push(ev);
     } catch {
@@ -329,6 +355,8 @@ eventsRouter.get("/summary", (req, res) => {
     byIndustry,
     checkoutBySource: checkoutSummary.bySource,
     checkoutByChannel: checkoutSummary.byChannel,
+    byChannel,
+    byProduct,
     sessionCount: sids.size,
     windowHours: sinceHours,
   });

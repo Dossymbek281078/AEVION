@@ -151,6 +151,12 @@ const GUMROAD_PERMALINK_APP: Record<string, string> = {
   xpxzam: "aevion-all-access",  // AEVION All-Access ($59/mo, platform bundle)
   tmuyxw: "qrenew",             // Протокол «Анти-седина» (RU)
   kkiavh: "qrenew",             // The Anti-Grey Protocol (EN)
+  // Протокол долголетия — 12 недель ($19). Отсутствовал здесь, хотя витрина
+  // (frontend/src/lib/products.ts) с самого начала объявляет ему appId "qrenew".
+  // Продажи молча падали бы в "platform", то есть выручка модуля выглядела бы
+  // меньше настоящей, а платформа — больше. Сверено 14.08.2026 с живым
+  // каталогом Gumroad: товаров ровно девять, восемь были здесь.
+  oijxmq: "qrenew",
 };
 
 /** Permalink → appId. Set GUMROAD_APP_<PERMALINK>=<appId> to attribute a

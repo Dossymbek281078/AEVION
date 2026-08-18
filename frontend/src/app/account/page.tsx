@@ -117,6 +117,11 @@ export default function AccountPage() {
     validUntil: string | null; trialDays: number; amountUsd: number | null;
     source: string | null; createdAt: string; modules: string[];
   } | null>(null);
+  // Модули, купленные ОТДЕЛЬНОЙ подпиской. Без них страница говорила
+  // «Free plan — no active subscription» человеку, который платит $29/мес за
+  // QVenture: тариф у него действительно free, а покупка живёт в другой
+  // таблице, и кабинет её не читал.
+  const [ownedApps, setOwnedApps] = useState<string[]>([]);
   // Lite = 1 продукт на выбор: список доступных модулей + выбор + busy
   const [allModules, setAllModules] = useState<{ id: string; name: string }[]>([]);
   const [liteChoice, setLiteChoice] = useState<string>("");
@@ -154,6 +159,18 @@ export default function AccountPage() {
         const d = await meRes.json();
         setMe(d.user || null);
         setName(d.user?.name || "");
+        // Купленные поштучно модули лежат отдельно от тарифа. Ручка публичная и
+        // работает по почте, поэтому спрашиваем сразу, как почта стала известна.
+        const email = d.user?.email;
+        if (email) {
+          try {
+            const ar = await fetch(apiUrl(`/api/apps/access?email=${encodeURIComponent(email)}`));
+            if (ar.ok) {
+              const aj = await ar.json();
+              setOwnedApps(Array.isArray(aj.apps) ? aj.apps : []);
+            }
+          } catch { /* ignore */ }
+        }
       } else if (meRes.status === 401) {
         setMe(null);
         try {
@@ -637,7 +654,7 @@ export default function AccountPage() {
                     </div>
                   )}
                   </>
-                ) : (
+                ) : ownedApps.length === 0 ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                     <span style={{ fontSize: 13, color: "#64748b" }}>Free plan — no active subscription.</span>
                     <Link
@@ -646,6 +663,30 @@ export default function AccountPage() {
                     >
                       Upgrade
                     </Link>
+                  </div>
+                ) : null}
+
+                {/* Модули, купленные отдельной подпиской. Показываются и при
+                    тарифе free: без этого блока страница сообщала «нет активной
+                    подписки» человеку, который платит за модуль каждый месяц. */}
+                {ownedApps.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>
+                      Оплачено отдельно — доступ активен:
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {ownedApps.map((slug) => (
+                        <span
+                          key={slug}
+                          style={{
+                            padding: "4px 12px", background: "#ecfdf5", color: "#065f46",
+                            border: "1px solid #a7f3d0", borderRadius: 999, fontSize: 13, fontWeight: 700,
+                          }}
+                        >
+                          {slug}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

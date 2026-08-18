@@ -56,7 +56,8 @@ export type LemonSqueezyReference =
   | "app_ip_bureau"
   | "app_qrenew"
   | "app_smeta"
-  | "app_cyberchess";
+  | "app_cyberchess"
+  | "app_devhub";
 
 /** reference → env var holding the LS variant id. */
 const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
@@ -76,6 +77,12 @@ const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
   app_qrenew:      "LEMON_SQUEEZY_VARIANT_QRENEW",
   app_smeta:       "LEMON_SQUEEZY_VARIANT_SMETA",
   app_cyberchess:  "LEMON_SQUEEZY_VARIANT_CYBERCHESS",
+  // DevHub Studio Pro продаётся в магазине ПОДПИСКОЙ ($149/мес, is_subscription:
+  // true, interval: month — проверено на витрине 12.08.2026), а не разовой
+  // покупкой. Переменная та же, что использовал разовый путь `order_created`, —
+  // новой настройки на Railway не требуется. Без этой строки обратный поиск
+  // возвращал null, и подписка за $149 провижинила тариф «lite» ($19).
+  app_devhub:      "LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO",
 };
 
 function isReference(s: string): s is LemonSqueezyReference {
@@ -112,6 +119,60 @@ export function lemonSqueezyTiersConfigured(): boolean {
 }
 
 /**
+ * Название товара на витрине магазина → ссылка в коде.
+ *
+ * ЗАЧЕМ. Витрина `aevion.lemonsqueezy.com` перечисляет живые товары, а код
+ * знает ссылки — но связать одно с другим было нечем: 13.08.2026 я сопоставлял
+ * семнадцать товаров вручную, глазами. Пока такой таблицы нет, вопрос «этот
+ * товар вообще кто-нибудь выдаёт?» решается только покупкой.
+ *
+ * Сопоставляем по НАЗВАНИЮ, а не по идентификатору варианта: идентификаторы
+ * живут в переменных Railway, и держать их копию в коде значило бы завести
+ * второго писателя для одного числа. Названия мы задаём сами, и они устойчивы.
+ *
+ * Товар, которого здесь нет, — не ошибка сам по себе, но и выдать его нечем:
+ * сверка скажет об этом до того, как его кто-то купит.
+ */
+export const STOREFRONT_NAME_TO_REFERENCE: Record<string, LemonSqueezyReference> = {
+  "AEVION Lite — Monthly": "tier_lite_monthly",
+  "AEVION Lite — Annual": "tier_lite_annual",
+  "AEVION Medium — Monthly": "tier_medium_monthly",
+  "AEVION Medium — Annual": "tier_medium_annual",
+  "AEVION Full — Monthly": "tier_full_monthly",
+  "AEVION Full — Annual": "tier_full_annual",
+  "AEVION Planet — Monthly": "tier_planet_monthly",
+  "AEVION Planet — Annual": "tier_planet_annual",
+  "AEVION DevHub Studio Pro": "app_devhub",
+  "AEVION Smeta Trainer": "app_smeta",
+  "AEVION QVenture": "app_qventure",
+  "AEVION QPayNet": "app_qpaynet",
+  "AEVION QContract": "app_qcontract",
+  "AEVION IP Bureau": "app_ip_bureau",
+  "AEVION CyberChess Pro": "app_cyberchess",
+  "AEVION QRenew": "app_qrenew",
+  "AEVION Constitution Lab": "app_constitution",
+};
+
+/**
+ * Какие товары РЕАЛЬНО можно выдать: у каких ссылок задан вариант в окружении.
+ *
+ * Зачем наружу. Соответствие «товар → модуль» держится на переменных Railway.
+ * Снаружи не видно, какие из них заданы, поэтому вопрос «что случится, если это
+ * купят» до сих пор не имел ответа иначе как покупкой. Отдаём ТОЛЬКО признаки,
+ * сами идентификаторы остаются в процессе.
+ *
+ * Отсюда же считается сверка с витриной магазина: товар в продаже, у которого
+ * здесь `false`, — это будущий отказ на живом покупателе.
+ */
+export function lemonSqueezyVariantStatus(): Record<LemonSqueezyReference, boolean> {
+  const out = {} as Record<LemonSqueezyReference, boolean>;
+  for (const ref of Object.keys(TIER_VARIANT_ENV) as LemonSqueezyReference[]) {
+    out[ref] = Boolean(process.env[TIER_VARIANT_ENV[ref]]?.trim());
+  }
+  return out;
+}
+
+/**
  * Reverse lookup: a numeric LS variant_id from a webhook payload → the
  * checkout reference it belongs to. Returns null for an unrecognised id.
  */
@@ -144,4 +205,54 @@ export function isAppReference(ref: LemonSqueezyReference | null): boolean {
 export function appSlugForReference(ref: LemonSqueezyReference | null): string | null {
   if (!ref?.startsWith("app_")) return null;
   return ref.slice(4);
+}
+
+/**
+ * Slug купленной подписки (то, что вебхук пишет в `AppSubscription`) → id модуля
+ * в реестре и в политике пейволла. Совпадают не все: `ip_bureau` против
+ * `aevion-ip-bureau`, `smeta` против `smeta-trainer`.
+ *
+ * Держим ОДНОЙ таблицей рядом со ссылками на товары. Второй такой список
+ * (в гейте, в отчёте, в UI) через месяц разошёлся бы с этим — и разошёлся бы
+ * молча, потому что расхождение видно только на пересечении.
+ */
+const APP_SLUG_TO_MODULE_ID: Record<string, string> = {
+  ip_bureau: "aevion-ip-bureau",
+  smeta: "smeta-trainer",
+  // Найдено 13.08.2026 сверкой с реестром модулей: в `MODULES_PRICING` он
+  // называется `qpaynet-embedded`. Без этой строки гейт не нашёл бы покупку и
+  // развернул бы заплатившего за QPayNet — ровно тот же класс дефекта, ради
+  // которого таблица и заведена. Охраняется тестом appSlugModuleIds.
+  qpaynet: "qpaynet-embedded",
+};
+
+/**
+ * Модули со СВОИМ механизмом доступа, мимо `MODULES_PRICING` и общего гейта.
+ * Их отсутствие в реестре — не ошибка сопоставления.
+ */
+const OWN_GATE_SLUGS = new Set(["devhub"]);
+
+/** Продаётся ли модуль поштучно и не имеет ли он собственного гейта. */
+export function appSlugHasOwnGate(slug: string): boolean {
+  return OWN_GATE_SLUGS.has(slug);
+}
+
+/** Все slug'и, которые продаются отдельной подпиской. */
+export function allAppSlugs(): string[] {
+  return (Object.keys(TIER_VARIANT_ENV) as LemonSqueezyReference[])
+    .filter((r) => r.startsWith("app_"))
+    .map((r) => r.slice(4));
+}
+
+/** "ip_bureau" → "aevion-ip-bureau"; для совпадающих имён вернёт как есть. */
+export function moduleIdForAppSlug(slug: string): string {
+  return APP_SLUG_TO_MODULE_ID[slug] ?? slug;
+}
+
+/** Обратное: id модуля → slug подписки, если такой модуль вообще продаётся. */
+export function appSlugForModuleId(moduleId: string): string | null {
+  for (const [slug, id] of Object.entries(APP_SLUG_TO_MODULE_ID)) {
+    if (id === moduleId) return slug;
+  }
+  return isReference(`app_${moduleId}`) ? moduleId : null;
 }

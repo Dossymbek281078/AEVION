@@ -1,9 +1,15 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cyberchessRouter = void 0;
 const express_1 = require("express");
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pg = require("pg");
+// Обычный импорт, а не require: под `require` подмена драйвера в тестах не
+// действует — тест «зеленеет», не выполнив ни одного запроса. Та же правка
+// уже сделана в cyberchessMatchStore.ts (12.08); esModuleInterop включён,
+// поэтому под CommonJS это тот же объект модуля.
+const pg_1 = __importDefault(require("pg"));
 const platform_1 = require("../lib/sentry/platform");
 const captureCyberChessError = (0, platform_1.makeServiceCapture)("cyberchess");
 const node_crypto_1 = require("node:crypto");
@@ -123,12 +129,27 @@ exports.cyberchessRouter.post("/tournament-finalized", async (req, res) => {
     const entries = podium;
     const recorded = [];
     const replayed = [];
+    // A podium spot whose credit did not go through, and one we could not read
+    // at all. Both used to vanish without a trace — see the two comments below.
+    const failed = [];
+    const skipped = [];
     for (const e of entries) {
-        if (typeof e.email !== "string" || typeof e.place !== "number")
+        // A malformed entry used to be dropped in silence while the response still
+        // said 201: a winner could disappear from a podium and nothing anywhere
+        // said so. Retrying cannot repair bad input, so this does not fail the
+        // delivery — it just stops being invisible.
+        if (typeof e.email !== "string" || typeof e.place !== "number") {
+            skipped.push({
+                place: typeof e.place === "number" ? e.place : null,
+                reason: "email (string) and place (number) required",
+            });
             continue;
+        }
         const amt = Number(e.amount);
-        if (!Number.isFinite(amt) || amt <= 0)
+        if (!Number.isFinite(amt) || amt <= 0) {
+            skipped.push({ place: e.place, reason: "amount must be a positive number" });
             continue;
+        }
         const dup = ecosystem_1.chessPrizes.find((x) => x.tournamentId === tournamentId &&
             x.place === e.place &&
             x.email === e.email.toLowerCase());
@@ -139,11 +160,32 @@ exports.cyberchessRouter.post("/tournament-finalized", async (req, res) => {
         // Credit the winner's QTrade account, same pattern as the QRight royalty
         // webhook (auto-provisions an account, not subject to the daily topup
         // cap since this is a verified external payout).
-        const credit = await (0, qtrade_1.internalCreditAccount)({
-            owner: e.email,
-            amount: amt,
-            memo: `Chess prize · ${tournamentId} · place ${e.place}`,
-        });
+        // A throw here is treated exactly like ok:false. Letting it escape would
+        // abandon the loop before scheduleEcosystemPersist() below, so prizes
+        // already credited in this batch would be missing from the stored ledger
+        // after a restart — and the retry, finding no record, would pay them twice.
+        let credit;
+        try {
+            credit = await (0, qtrade_1.internalCreditAccount)({
+                owner: e.email,
+                amount: amt,
+                memo: `Chess prize · ${tournamentId} · place ${e.place}`,
+            });
+        }
+        catch (err) {
+            credit = { ok: false, error: err?.message ? String(err.message) : "credit threw" };
+            captureCyberChessError(err, { route: "tournament-finalized", tournamentId, place: String(e.place) });
+        }
+        if (!credit.ok) {
+            // The money did not move. Recording the prize anyway and answering 201
+            // told the sender "delivered", so it never retried and the winner's
+            // prize quietly never existed — while /ecosystem and the bank's
+            // ChessWinnings listed it as paid, transferId null. Record nothing and
+            // report the failure, so the retry credits this spot exactly once (the
+            // dedup above keeps the spots that did go through from paying twice).
+            failed.push({ email: e.email.toLowerCase(), place: e.place, reason: credit.error });
+            continue;
+        }
         const prize = {
             id: `prize_${(0, node_crypto_1.randomUUID)()}`,
             email: e.email.toLowerCase(),
@@ -151,11 +193,14 @@ exports.cyberchessRouter.post("/tournament-finalized", async (req, res) => {
             place: e.place,
             amount: amt,
             finalizedAt: new Date().toISOString(),
-            transferId: credit.ok ? credit.operationId : null,
+            transferId: credit.operationId,
             source: "cyberchess",
         };
         ecosystem_1.chessPrizes.push(prize);
-        recorded.push({ id: prize.id, email: prize.email, place: prize.place, amount: prize.amount, transferId: prize.transferId });
+        // credit.operationId, not prize.transferId: the stored field is nullable
+        // for rows written before this endpoint refused to record an unpaid prize,
+        // but everything reported here as recorded was paid this request.
+        recorded.push({ id: prize.id, email: prize.email, place: prize.place, amount: prize.amount, transferId: credit.operationId });
     }
     // Mark the tournament finalized in persistent storage so it stops
     // appearing in /upcoming. Idempotent — safe even if the same webhook
@@ -164,12 +209,30 @@ exports.cyberchessRouter.post("/tournament-finalized", async (req, res) => {
     await (0, ecosystemStore_1.markTournamentFinalized)(tournamentId).catch((err) => {
         console.error("[cyberchess] markTournamentFinalized failed", err);
     });
+    // Persist before answering on either path: the spots that were credited must
+    // be in the stored ledger before the sender is told anything, otherwise a
+    // restart loses the record while the QTrade credit itself survives.
     if (recorded.length > 0)
         (0, ecosystem_1.scheduleEcosystemPersist)();
+    if (failed.length > 0) {
+        // Senders act on the status, not the body. 502 so the delivery is retried;
+        // the spots already paid come back as `replayed`, only the failed ones are
+        // attempted again.
+        return res.status(502).json({
+            error: "credit_failed",
+            tournamentId,
+            recorded,
+            replayed,
+            skipped,
+            failed,
+            finalizedAt: new Date().toISOString(),
+        });
+    }
     res.status(201).json({
         tournamentId,
         recorded,
         replayed,
+        skipped,
         finalizedAt: new Date().toISOString(),
     });
 });
@@ -208,10 +271,17 @@ async function ensureCpiDb() {
         return;
     }
     try {
-        const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+        const pool = new pg_1.default.Pool({ connectionString: process.env.DATABASE_URL });
         // Create table if not exists (idempotent — mirrors Prisma schema migration)
         // Ensure updatedAt has a default (table may have been created by prisma db push without one)
         await pool.query(`ALTER TABLE IF EXISTS "CyberchessCpiState" ALTER COLUMN "updatedAt" SET DEFAULT now()`).catch(() => { });
+        // Таблица могла быть создана раньше — тогда CREATE TABLE IF NOT EXISTS ниже
+        // ничего не добавит, и колонка происхождения не появится. Строки, лежащие
+        // там с прошлых версий, тоже прислал клиент, поэтому значение по умолчанию
+        // для них верное.
+        await pool
+            .query(`ALTER TABLE IF EXISTS "CyberchessCpiState" ADD COLUMN IF NOT EXISTS "source" TEXT NOT NULL DEFAULT 'self_reported'`)
+            .catch(() => { });
         await pool.query(`
       CREATE TABLE IF NOT EXISTS "CyberchessCpiState" (
         "userId"            TEXT PRIMARY KEY,
@@ -229,6 +299,13 @@ async function ensureCpiDb() {
         "endgameTechnique"  DOUBLE PRECISION NOT NULL DEFAULT 0,
         "psychology"        DOUBLE PRECISION NOT NULL DEFAULT 0,
         "gamesPlayed"       INTEGER NOT NULL DEFAULT 0,
+        -- Откуда взялись числа. Сегодня их считает браузер игрока и присылает
+        -- о себе сам, поэтому единственное честное значение — 'self_reported'.
+        -- Признак живёт В ДАННЫХ, а не в голове у того, кто будет подключать
+        -- страницу: иначе самооценка попадёт на публичную витрину как
+        -- измеренная сервером. Появится серверный расчёт — у его строк будет
+        -- своё значение, и отличить одно от другого можно будет запросом.
+        "source"            TEXT NOT NULL DEFAULT 'self_reported',
         "updatedAt"         TIMESTAMP NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS "cpi_overall_idx"     ON "CyberchessCpiState" ("overall" DESC);
@@ -279,7 +356,10 @@ exports.cyberchessRouter.get("/cpi/leaderboard", async (req, res) => {
     }
     try {
         const col = PG_COL[factor] ?? '"overall"';
-        const { rows } = await cpiPool.query(`SELECT "userId","displayName",${col} AS value,"gamesPlayed" FROM "CyberchessCpiState" ORDER BY ${col} DESC LIMIT $1`, [limit]);
+        const { rows } = await cpiPool.query(`SELECT "userId","displayName",${col} AS value,"gamesPlayed","source" FROM "CyberchessCpiState" ORDER BY ${col} DESC LIMIT $1`, [limit]);
+        // Происхождение едет вместе со значением. Признак, который есть в базе, но
+        // не доходит до читателя, ничем не отличается от отсутствующего: страница
+        // всё равно покажет самооценку игрока как измеренную величину.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const items = rows.map((r, idx) => ({
             userId: r.userId,
@@ -287,6 +367,7 @@ exports.cyberchessRouter.get("/cpi/leaderboard", async (req, res) => {
             value: r.value ?? 0,
             rank: idx + 1,
             gamesPlayed: r.gamesPlayed ?? 0,
+            source: r.source ?? "self_reported",
         }));
         res.json({ data: { items, factor, limit } });
     }
@@ -297,16 +378,38 @@ exports.cyberchessRouter.get("/cpi/leaderboard", async (req, res) => {
     }
 });
 // POST /api/cyberchess/cpi/upsert
-// Body: { userId, factors: {...11 floats...}, gamesPlayed, displayName? }
-// Trust-based MVP (no auth) — upserts the row idempotently.
-exports.cyberchessRouter.post("/cpi/upsert", async (req, res) => {
+// Body: { factors: {...11 floats...}, gamesPlayed, displayName? }
+//
+// БЕЗОПАСНОСТЬ: чья это строка — решает JWT (req.auth.sub через requireAuth), а
+// НЕ тело запроса. Та же дисциплина, что у /state ниже в этом файле.
+//
+// Как было до 12.08.2026: ручка помечена «Trust-based MVP (no auth)» и брала
+// `userId` прямо из тела. То есть кто угодно, без единого заголовка, мог
+// поднять себя на вершину рейтинга силы и испортить строку любому игроку по
+// его номеру. Мера силы игрока — это то, что видно публично и на что смотрят
+// при подборе соперника и в турнирах; писать её должен только сервер от имени
+// того, кто вошёл.
+//
+// Закрыто ДО подключения страницы к настоящим данным, а не после: сегодня у
+// ручки нет ни одного вызывающего (страница CPI-лидерборда рисует макет), и
+// именно поэтому цена правки сейчас нулевая. Когда появится первый вызывающий,
+// он будет писать уже по правилам, а не переучиваться.
+exports.cyberchessRouter.post("/cpi/upsert", authJwt_1.requireAuth, async (req, res) => {
+    const authUserId = String(req.auth?.sub || "");
+    if (!authUserId) {
+        return res.status(401).json({ error: "unauthorized" });
+    }
+    const { userId: bodyUserId, factors, gamesPlayed, displayName } = (req.body ?? {});
+    // Явный отказ, а не молчаливая подстановка своего номера: клиент, который
+    // прислал чужой userId, должен узнать, что его запись не состоялась. Тихо
+    // записать «на себя» и ответить 200 значит соврать о том, что произошло.
+    if (typeof bodyUserId === "string" && bodyUserId.length > 0 && bodyUserId !== authUserId) {
+        return res.status(403).json({ error: "userId_mismatch" });
+    }
+    const userId = authUserId;
     await ensureCpiDb();
     if (!cpiDbReady) {
         return res.status(503).json({ error: "cpi_db_not_ready" });
-    }
-    const { userId, factors, gamesPlayed, displayName } = (req.body ?? {});
-    if (typeof userId !== "string" || userId.length === 0) {
-        return res.status(400).json({ error: "userId (string) required" });
     }
     if (!factors || typeof factors !== "object") {
         return res.status(400).json({ error: "factors (object) required" });
@@ -327,6 +430,9 @@ exports.cyberchessRouter.post("/cpi/upsert", async (req, res) => {
         endgameTechnique: clampFactorValue(factors.endgameTechnique),
         psychology: clampFactorValue(factors.psychology),
         gamesPlayed: gp,
+        // Единственный сегодняшний писатель — браузер игрока. Значение ставит
+        // сервер, а не тело запроса: иначе клиент объявит свои числа проверенными.
+        source: "self_reported",
     };
     if (typeof displayName === "string" && displayName.length > 0) {
         data.displayName = displayName.slice(0, 120);
@@ -385,7 +491,7 @@ async function ensureStateDb() {
         return null;
     }
     try {
-        const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+        const pool = new pg_1.default.Pool({ connectionString: process.env.DATABASE_URL });
         await pool.query(`
       CREATE TABLE IF NOT EXISTS "CyberchessUserState" (
         "userId"    TEXT PRIMARY KEY,

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useFunnel } from "@/lib/useFunnel";
 import { useI18n } from "@/lib/i18n";
+import { PageTracking } from "@/components/PageTracking";
 
 type Tier = {
   id: "free" | "pro" | "team";
@@ -153,6 +154,13 @@ export default function ConstitutionPricingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
+      {/* Общий замер платформы. Свою подробную воронку модуль ведёт сам
+          (useFunnel → /api/constitution/funnel/track), но она отдельная: в
+          сводке платформы посещения Конституции не появлялись ВООБЩЕ, хотя
+          это страница с кнопкой покупки. Два канала намеренно: этот отвечает
+          на «сколько человек пришло на AEVION и сколько ушло платить»,
+          складывать их между собой нельзя. */}
+      <PageTracking page="constitution-pricing" />
       <div className="max-w-6xl mx-auto">
         <header className="mb-10 text-center">
           <Link href="/constitution" className="text-[#d4af37] hover:underline text-sm">

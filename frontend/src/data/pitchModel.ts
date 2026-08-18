@@ -125,14 +125,14 @@ export const unitEconomics = {
     {
       module: "Ecosystem All-Access",
       market: "Creators & professionals wanting IP + wallet + AI in one place.",
-      price: "$89/mo ($74/mo annual = $890/yr) — the real published Full-tier price (repriced 2026-07-22)",
+      price: "$49/mo ($41/mo annual = $490/yr) — the real published Full-tier price (repriced 2026-08-13)",
       assumptions: [
         "Consumer subscription, converts off free ecosystem usage",
         "Distribution-gated — modelled at modest penetration",
-        "Subscriber counts unchanged from the $49 version of this model — only the price input moved",
+        "Subscriber counts never moved — only the price input. The ladder came DOWN on 2026-08-13, so this line came down with it",
       ],
-      beachhead: { unit: "1,000 subscribers", arr: "$890K" },
-      regional: { unit: "10,000 subscribers", arr: "$8.9M" },
+      beachhead: { unit: "1,000 subscribers", arr: "$490K" },
+      regional: { unit: "10,000 subscribers", arr: "$4.9M" },
     },
     {
       module: "QCoreAI — AI API for gov/enterprise",
@@ -146,13 +146,14 @@ export const unitEconomics = {
       regional: { unit: "200 orgs × ~$1k/mo", arr: "$2.4M" },
     },
   ],
-  totals: { beachhead: "≈ $1.2M ARR", regional: "≈ $13.7M ARR" },
+  totals: { beachhead: "≈ $0.85M ARR", regional: "≈ $9.65M ARR" },
   note:
     "Three flagships only — the other 38 modules are upside, not in this figure. Deliberately modest " +
     "and defensible: a first-question-of-due-diligence model, not a hockey stick. Market-size and " +
-    "conversion inputs are the assumptions most worth challenging. Totals moved up from ≈$0.8M / ≈$9.4M " +
-    "on 2026-08-10 for one reason only — the All-Access flagship is the live Full tier, repriced " +
-    "$49 → $89/mo. No conversion or reach assumption was loosened to get there.",
+    "conversion inputs are the assumptions most worth challenging. Totals moved DOWN from ≈$1.2M / ≈$13.7M " +
+    "on 2026-08-18 for one reason only — the All-Access flagship is the live Full tier, repriced " +
+    "$89 → $49/mo. No conversion or reach assumption was touched in either direction; the model follows " +
+    "the published price, not the other way round.",
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -164,18 +165,19 @@ export const unitEconomics = {
 export const launchGrowth = {
   title: "The Universe Seat — one price, the whole ecosystem",
   seat: {
-    headline: "$249.99 / mo",
+    headline: "$149 / mo",
     annual: "One premium seat — no tiers. Introductory price for the first 6–12 months; rises as the ecosystem matures.",
     what: "One seat unlocks every module today + everything shipped next. A free tier sits underneath as the on-ramp.",
     anchor:
-      "Priced against the stack, not a single tool — we set the price, Apple-style. Serious usage on any one " +
-      "tool already runs $100–200/mo (Claude Max $200, ChatGPT Pro $200, Gemini Ultra ~$250), and a working " +
-      "creator stacks several — Claude + Midjourney + ElevenLabs + Higgsfield easily clears $200–400/mo across " +
-      "four logins. AEVION is one seat at $249.99 — priced deliberately above any single premium tool, because " +
-      "one seat carries the whole platform, and still a deep discount to the stack it replaces.",
+      "Priced against the stack, not a single tool. Serious usage on any one tool already runs $100–200/mo " +
+      "(Claude Max $200, ChatGPT Pro $200, Gemini Ultra ~$250), and a working creator stacks several — " +
+      "Claude + Midjourney + ElevenLabs + Higgsfield easily clears $200–400/mo across four logins. AEVION is " +
+      "one seat at $149, BELOW any single one of those, for the whole platform. The earlier version of this " +
+      "paragraph argued the opposite — that the flagship must sit ABOVE a premium tool — and that argument " +
+      "died with the 2026-08-13 reprice. Keeping it would have left a false claim in the pitch.",
     honesty:
-      "$249.99 is a real \"Universe\" tier in the live plan (repriced from $149.99 on 2026-07-22), sitting above " +
-      "the kept on-ramps ($0/$24/$39/$89) — it has no Lemon Squeezy variant yet, so its checkout falls through " +
+      "$149 is a real \"Universe\" tier in the live plan (repriced $249.99 → $149 on 2026-08-13), sitting above " +
+      "the kept on-ramps ($0/$19/$29/$49) — it has no Lemon Squeezy variant yet, so its checkout falls through " +
       "to Gumroad/stub until one is configured. Most modules are early " +
       "MVPs and the cross-module agent layer is still early, so \"replaces your stack\" is the promise the " +
       "price rests on — which is why the intro price + a free tier underneath are there to earn the upgrade " +
@@ -190,7 +192,7 @@ export const launchGrowth = {
       "LM Studio, $0 marginal) models. A single-vendor AI product cannot arbitrage cost this way.",
     margin:
       "At efficient routing (~$0.5/1M blended) and ~15% allowance utilisation, gross margin is ~85–95% " +
-      "across paid tiers (Lite $24/2M · Medium $39/10M · Full $89/50M · Universe $249.99/200M tokens/mo). " +
+      "across paid tiers (Lite $19/2M · Medium $29/10M · Full $49/50M · Universe $149/200M tokens/mo). " +
       "Each tier also carries a premium-model sub-cap at 10% of its overall allowance, so the worst case is " +
       "bounded, not open-ended. The tail risk is a " +
       "power user maxing the cap on a frontier model — which is why margin depends on two levers, not luck.",
@@ -209,7 +211,7 @@ export const launchGrowth = {
     "Distribution: a launch with Anthropic reaches ~1.5M Claude users over year 1 (a small slice of their base) — the single biggest assumption, and unproven until a deal is signed.",
     "Reach → free signup: 4% (conservative for a cross-promo CTA).",
     "Free → paid seat: ramps 0.4% (M1) → 1.0% (M6) → 1.3% (M12) — premium price + early-MVP depth means cold conversion is deliberately low.",
-    "Seat ARPU: ~$2,500/yr (annual-leaning — the annual plan is list × 10, i.e. $249.99 × 10 ≈ $2,500).",
+    "Seat ARPU: ~$1,490/yr (annual-leaning — the annual plan is list × 10, i.e. $149 × 10 = $1,490).",
     "Reach front-loads: 20% lands by M1, 60% by M6, 100% by M12.",
   ],
   // Growth dynamics at the base scenario (1.5M reach).

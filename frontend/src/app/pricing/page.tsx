@@ -272,6 +272,31 @@ export default function PricingPage() {
     }
   }
 
+  // Настроен ли PayBox НА САМОМ ДЕЛЕ. null = ещё не спросили.
+  //
+  // Подпись под ценой обещала «KZT -> локальные карты КЗ + Kaspi (PayBox)», и
+  // это было неправдой: 18.08.2026 проверено запросом — paybox configured=false,
+  // а запрос чекаута с currency=KZT молча возвращает долларовую ссылку
+  // LemonSqueezy. Покупатель из Казахстана читал про Kaspi и попадал на оплату
+  // в долларах. Обещание теперь следует за фактом, а не наоборот.
+  const [payboxLive, setPayboxLive] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(apiUrl("/api/pricing/checkout/healthz"));
+        if (!r.ok) return;
+        const j = await r.json();
+        if (!cancelled) setPayboxLive(Boolean(j?.providers?.paybox?.configured));
+      } catch {
+        // Не спросили - значит не знаем. Оставляем null: обещать нельзя,
+        // но и пугать «не работает» на основании сетевого сбоя тоже нельзя.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -485,7 +510,10 @@ export default function PricingPage() {
                 )}
               </div>
               <div style={{ fontSize: 12, color: "#64748b" }}>
-                {t("pricing.home.heroModule.paymentCard")} {currency === "KZT" ? t("pricing.home.heroModule.kztNote") : t("pricing.home.heroModule.usdNote")}
+                {t("pricing.home.heroModule.paymentCard")}{" "}
+                {currency === "KZT"
+                  ? (payboxLive ? t("pricing.home.heroModule.kztNote") : t("pricing.home.heroModule.kztFallbackNote"))
+                  : t("pricing.home.heroModule.usdNote")}
               </div>
             </div>
             <button

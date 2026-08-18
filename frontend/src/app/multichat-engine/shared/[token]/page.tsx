@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { T } from "../../theme";
+import { agentFailure } from "../../failureText";
 
 interface Turn {
   role: "user" | "assistant" | "system";
@@ -70,7 +71,11 @@ export default function SharedConversationPage() {
         return;
       }
       if (!r.ok) {
-        setError(`Ошибка ${r.status}`);
+        // Это самый внешний экран модуля: его открывает человек без аккаунта.
+        // «Ошибка 429» ему ничего не говорит, а «per IP» из ответа сервера
+        // звучит как его вина, хотя предел общий для всех в эту минуту.
+        const body = (await r.json().catch(() => null)) as { error?: unknown } | null;
+        setError(agentFailure(body?.error ?? `upstream ${r.status}`).human);
         return;
       }
       setData(await r.json());

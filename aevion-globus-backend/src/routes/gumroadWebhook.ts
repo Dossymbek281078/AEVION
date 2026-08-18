@@ -29,6 +29,7 @@ import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
+import { upsertAppSubscription } from "../lib/appEntitlements";
 
 // DevHub Studio Pro: upgrade DevHubTier + DevHubEmailTier on purchase
 async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
@@ -47,6 +48,11 @@ async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promis
     }
   } catch (err) {
     console.error("[gumroad/devhub] upgradeByEmail error:", err instanceof Error ? err.message : err);
+    // Ошибку НЕ глотаем. Раньше сбой записи оставался здесь, а вызывающий печатал
+    // «devhub-studio-pro → tier=pro» и отвечал 200 с action "devhub_tier_set" —
+    // оба утверждения ложные. Gumroad считал доставку успешной и не повторял её:
+    // человек заплатил, доступа не получил, следов нет.
+    throw err;
   }
 }
 
@@ -103,6 +109,12 @@ const KNOWN_PERMALINK_REFERENCE: Record<string, string> = {
   xpxzam: "tier_full_monthly", // AEVION All-Access $59/mo
   // Constitution entry tier — same as the legacy default, made explicit.
   pyiaz: "constitution-pro", // Constitution Pro $9/mo
+  // Team задан ЯВНО с 13.08.2026. Раньше он проваливался в общую ветку, и это
+  // было осознанным решением — пока общая ветка вела в тариф. Теперь она ведёт
+  // в модуль, и молчаливое падение сюда делало бы Team за $49 равным Pro за $9.
+  // Что именно Team добавляет (места? модули?) — вопрос к продукту, но
+  // «неявно то же самое» ответом быть не может.
+  wjvquw: "constitution-team", // Constitution Team $49/mo
 };
 
 /** Last path segment of a Gumroad permalink or full product URL, lowercased.
@@ -151,8 +163,12 @@ function resolveReference(raw: Record<string, string>): string {
     return KNOWN_PERMALINK_REFERENCE[pingSlug];
   }
 
-  // 5. Legacy catch-all — keep Constitution Pro working without explicit mapping.
-  return "constitution-pro";
+  // 5. Неизвестный товар. Раньше здесь стоял catch-all "constitution-pro" — он
+  //    существовал, чтобы Pro работал без явной строки в карте. Pro теперь задан
+  //    явно, а молчаливая выдача чего-либо незнакомому товару — ровно тот
+  //    шаблон, что запрещён в вебхуке Lemon Squeezy: «мы не знаем, что человек
+  //    купил» обязано быть видно, а не превращаться в подарок.
+  return "unknown";
 }
 
 function tierForReference(ref: string): TierId {
@@ -166,6 +182,17 @@ function tierForReference(ref: string): TierId {
 
 function isConstitutionProduct(ref: string): boolean {
   return ref.includes("constitution");
+}
+
+/**
+ * Ссылка товара → slug модуля, если товар продаёт ровно один модуль.
+ * Пока это только Конституция; список явный, чтобы новый товар не попал сюда
+ * случайно по совпадению подстроки.
+ */
+function moduleSlugForReference(ref: string): string | null {
+  const r = ref.toLowerCase();
+  if (r === "constitution-pro" || r === "constitution-team") return "constitution";
+  return null;
 }
 
 // Liveness probe — Gumroad sends only POST, but a GET in the browser used to
@@ -271,7 +298,15 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   if (reference === "devhub-studio-pro") {
     const devhubTier = (refunded || failed) ? "free" : result.status === "paid" ? "pro" : null;
     if (devhubTier) {
-      await upgradeDevHubByEmail(email, devhubTier);
+      try {
+        await upgradeDevHubByEmail(email, devhubTier);
+      } catch (err) {
+        capture(err);
+        console.error(`[gumroad/webhook] devhub tier NOT set for ${email}:`, err instanceof Error ? err.message : err);
+        // 500, чтобы доставка повторилась и событие осталось видимым у Gumroad.
+        // Сообщить «успех» здесь — значит закрыть вопрос, не решив его.
+        return res.status(500).json({ ok: false, error: "devhub_tier_failed" });
+      }
       console.log(`[gumroad/webhook] devhub-studio-pro → tier=${devhubTier} for ${email}`);
       return res.json({ ok: true, action: "devhub_tier_set", tier: devhubTier, email });
     }
@@ -324,6 +359,34 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   }
 
   try {
+    // Неизвестный товар: деньги пришли, а что за них выдать — неизвестно.
+    // Молчать нельзя (получится подарок наугад), и выдавать наугад тоже.
+    // 500 — доставка повторится, событие останется видимым в панели Gumroad.
+    if (reference === "unknown") {
+      const err = new Error(`неизвестный товар Gumroad: permalink=${raw.product_permalink ?? raw.permalink ?? "?"} product=${productId} email=${email}`);
+      capture(err);
+      console.error(`[gumroad/webhook] ${err.message}`);
+      return res.status(500).json({ ok: false, error: "unmapped_product", permalink: String(raw.product_permalink ?? raw.permalink ?? "") });
+    }
+
+    // Товар, который продаёт ОДИН модуль, и должен давать этот модуль. Раньше
+    // Constitution Pro за $9 превращался в тариф lite ($19) со свободным
+    // выбором ЛЮБОГО модуля — включая те, что стоят $29–49. Человек платил за
+    // одну вещь и получал право на другую, более дорогую, а по логам это
+    // выглядело как обычная успешная выдача.
+    const moduleSlug = moduleSlugForReference(reference);
+    if (moduleSlug) {
+      const active = result.status === "paid";
+      await upsertAppSubscription(email, moduleSlug, active ? "active" : "cancelled", saleId);
+      console.log(`[gumroad/webhook] ${result.status} → app_sub ${active ? "active" : "cancelled"}: ${moduleSlug} for ${email}`);
+      return res.json({
+        ok: true,
+        action: active ? "app_activated" : "app_cancelled",
+        appSlug: moduleSlug,
+        email,
+      });
+    }
+
     if (refunded || failed) {
       // Downgrade to free
       const downgrade: Subscription = {

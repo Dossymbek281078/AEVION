@@ -17,7 +17,16 @@
  *   - LEMON_SQUEEZY_VARIANT_MEDIUM_* → "medium" (modules = MEDIUM_BUNDLE)
  *   - LEMON_SQUEEZY_VARIANT_FULL_*   → "full"   (modules = [] == all)
  *   - LEMON_SQUEEZY_VARIANT_LITE_*   → "lite"   (modules = [], 1 product chosen in cabinet)
- *   - unrecognised variant id        → "lite"   (safest paid entry)
+ *   - LEMON_SQUEEZY_VARIANT_<app>_*  → app_*    (доступ к одному модулю)
+ *   - unrecognised variant id        → 500 `unmapped_variant`, НИЧЕГО не выдаём
+ *
+ * 🔴 Про «unrecognised → lite» (было до 12.08.2026). Дефолт выглядел
+ * безопасным, а был самым дорогим: DevHub Studio Pro продаётся подпиской
+ * $149/мес, ссылки `app_devhub` в таблице не было, обратный поиск возвращал
+ * null — и покупатель за $149 получал доступ уровня $19. Ответ при этом 200,
+ * то есть магазин не повторял доставку и следа не оставалось. Тариф наугад
+ * не выдаём: неизвестный вариант — это «мы не знаем, что человек купил»,
+ * и это должно быть видно. Охраняется `tests/lemonSqueezyWebhookEntitlement.test.ts`.
  *
  * Signature: HMAC-SHA256(rawBody, LEMON_SQUEEZY_WEBHOOK_SECRET) compared to
  * the x-signature header (hex). See
@@ -60,6 +69,11 @@ async function upsertAppSubscription(
     );
   } catch (err) {
     console.error("[ls/app-sub] upsertAppSubscription error:", err instanceof Error ? err.message : err);
+    // Ошибку НЕ глотаем: раньше сбой записи давал ответ 200 с action
+    // "app_activated". Магазин считал доставку успешной и не повторял её —
+    // человек заплатил, доступа не получил, следов нет. Пробрасываем наверх,
+    // там ответ 500 и повторная доставка.
+    throw err;
   }
 }
 
@@ -79,6 +93,7 @@ async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promis
     }
   } catch (err) {
     console.error("[ls/devhub] upgradeByEmail error:", err instanceof Error ? err.message : err);
+    throw err; // см. комментарий в upsertAppSubscription — молчаливый 200 недопустим
   }
 }
 
@@ -173,14 +188,38 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
   const attrs = payload.data?.attributes ?? {};
   const email = (attrs.user_email ?? payload.meta?.custom_data?.email ?? "").trim().toLowerCase();
 
-  if (event === "order_created") {
-    // DevHub Studio Pro one-time purchase (not a subscription)
+  if (event === "order_created" || event === "order_refunded") {
+    // Возврат ЗАБИРАЕТ то, что выдала покупка. До 13.08.2026 слова «refund» в
+    // этом обработчике не было вовсе: деньги вернули, а доступ к DevHub Pro
+    // оставался навсегда. У Gumroad это обработано (`refunded → free`), у
+    // Lemon Squeezy — нет; асимметрия нашлась сверкой двух рельсов.
+    //
+    // Осознанно НЕ трогаем `subscription_payment_refunded`: возврат одного
+    // платежа не означает конца подписки (продавец может вернуть один счёт и
+    // продолжить обслуживание), и снимать доступ по нему — значит отключать
+    // платящего. Это решение о политике, а не о коде.
+    const revoke = event === "order_refunded";
+    // DevHub Studio Pro. В магазине это ПОДПИСКА, поэтому основной путь выдачи
+    // доступа — ветка subscription_* ниже; здесь остаётся разовая покупка того
+    // же варианта. Оба пути ведут в одну и ту же выдачу, повтор безвреден
+    // (upgradeDevHubByEmail — upsert).
     const studioVariant = process.env.LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO?.trim();
     const variantId = String(attrs.variant_id ?? "");
     if (studioVariant && variantId === studioVariant && email) {
-      await upgradeDevHubByEmail(email, "pro");
-      console.log(`[ls/webhook] order_created devhub-studio-pro → pro for ${email}`);
-      return res.json({ ok: true, action: "devhub_studio_pro_activated", email });
+      const tier = revoke ? "free" : "pro";
+      try {
+        await upgradeDevHubByEmail(email, tier);
+      } catch (err) {
+        capture(err);
+        console.error(`[ls/webhook] ${event} devhub tier NOT set for ${email}:`, err instanceof Error ? err.message : err);
+        return res.status(500).json({ ok: false, error: "devhub_upgrade_failed" });
+      }
+      console.log(`[ls/webhook] ${event} devhub-studio-pro → ${tier} for ${email}`);
+      return res.json({
+        ok: true,
+        action: revoke ? "devhub_studio_pro_revoked" : "devhub_studio_pro_activated",
+        email,
+      });
     }
     return res.json({ ok: true, ignored: event });
   }
@@ -208,11 +247,17 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       const appSlug = appSlugForReference(ref)!;
       if (ACTIVATE_EVENTS.has(event)) {
         await upsertAppSubscription(email, appSlug, "active", lsSubId);
+        // У DevHub доступ открывает не строка AppSubscription (её пока никто не
+        // читает), а тариф в DevHubTier/DevHubEmailTier — его и ставим.
+        if (appSlug === "devhub") await upgradeDevHubByEmail(email, "pro");
         console.log(`[ls/webhook] ${event} → app_sub activated: ${appSlug} for ${email}`);
         return res.json({ ok: true, action: "app_activated", appSlug, email });
       }
       if (DEACTIVATE_EVENTS.has(event)) {
         await upsertAppSubscription(email, appSlug, "cancelled", lsSubId);
+        // Без этого отмена подписки за $149 не забирала доступ: строка
+        // помечалась cancelled, а тариф DevHub оставался "pro" навсегда.
+        if (appSlug === "devhub") await upgradeDevHubByEmail(email, "free");
         console.log(`[ls/webhook] ${event} → app_sub cancelled: ${appSlug} for ${email}`);
         return res.json({ ok: true, action: "app_cancelled", appSlug, email });
       }
@@ -221,6 +266,27 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
 
     // ── Platform tier subscription (tier_* variants) ─────────────────
     if (ACTIVATE_EVENTS.has(event)) {
+      // Товар, которого нет ни в одной переменной окружения, — это НЕ повод
+      // выдать тариф наугад. Прежде здесь срабатывал дефолт "lite": подписка за
+      // $149 или $250 молча превращалась в доступ уровня $19, и магазин получал
+      // 200 OK, то есть повтора и следа не было. Отвечаем 500 — доставка
+      // повторится, событие останется видимым в панели магазина.
+      if (!ref) {
+        const err = new Error(
+          `unmapped LS variant_id=${String(attrs.variant_id ?? "?")} (email=${email}, event=${event}) — ` +
+          `добавьте переменную варианта в data/lemonSqueezyVariants.ts, тариф наугад не выдаём`,
+        );
+        capture(err);
+        console.error(`[ls/webhook] ${err.message}`);
+        // Отпускаем ключ дедупликации: иначе повторная доставка после
+        // нашего 500 была бы отброшена как «уже видели», и покупка
+        // осталась бы без выдачи навсегда. Тот же вызов, что в общем
+        // обработчике ошибок ниже — хранилище дедупликации теперь
+        // переживает перезапуск (lib/webhookDedup), и in-memory Set,
+        // на который эта строка ссылалась, больше не существует.
+        releaseWebhookKey("lemonsqueezy", dedupKey);
+        return res.status(500).json({ ok: false, error: "unmapped_variant", variantId: String(attrs.variant_id ?? "") });
+      }
       const tierId = tierForLemonSqueezyReference(ref);
       // Lite = 1 продукт на выбор: берём его из custom_data (передан на чекауте).
       const customModule = payload.meta?.custom_data?.module;

@@ -19,6 +19,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Один файл дедупликации на прогон — см. vitest.setup.ts.
+    setupFiles: ["./vitest.setup.ts"],
     include: ["tests/**/*.test.ts"],
     globals: false,
     // 10s was not enough for the files that `await import()` a router inside

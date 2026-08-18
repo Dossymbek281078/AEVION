@@ -6,6 +6,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import { productById } from "@/lib/products";
 import { track } from "@/lib/track";
+import { PageTracking } from "@/components/PageTracking";
 
 interface Capability {
   id: string;
@@ -159,6 +160,9 @@ export default function StudioPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
+      {/* Замер посещения и ухода к оплате — см. components/PageTracking.
+          До 14.08.2026 страница не считала НИЧЕГО, хотя ведёт к покупке. */}
+      <PageTracking page="studio" />
       <Wave1Nav />
 
       {/* Hero */}

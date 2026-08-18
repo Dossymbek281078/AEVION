@@ -100,10 +100,10 @@ export default async function Image() {
                 Until 2026-08-10 this card still showed the long-dead FREE/PRO $19/BUSINESS $99
                 ladder — a plan that no longer exists in any form. */}
             <Tier name="FREE" price="$0" highlight={false} />
-            <Tier name="LITE" price="$24" highlight={false} />
-            <Tier name="MEDIUM" price="$39" highlight />
-            <Tier name="FULL" price="$89" highlight={false} />
-            <Tier name="UNIVERSE" price="$249.99" highlight={false} />
+            <Tier name="LITE" price="$19" highlight={false} />
+            <Tier name="MEDIUM" price="$29" highlight />
+            <Tier name="FULL" price="$49" highlight={false} />
+            <Tier name="UNIVERSE" price="$149" highlight={false} />
           </div>
           <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/compare</div>
         </div>

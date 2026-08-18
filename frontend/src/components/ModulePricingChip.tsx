@@ -9,7 +9,7 @@ import { track } from "@/lib/track";
 // tiers (Lite / Medium / Full) from /api/pricing — the same prices the checkout
 // actually charges — so what a visitor sees equals what they pay.
 //
-// "Купить" opens the live LemonSqueezy checkout for Lite + this module: $24/mo,
+// "Купить" opens the live LemonSqueezy checkout for Lite + this module: $19/mo,
 // "one product of your choice" with full access to it (the backend skips the
 // per-module add-on for Lite's chosen module, so the charge is exactly Lite's
 // price). "сравнить тарифы →" leads to /pricing?module=<id> with the product

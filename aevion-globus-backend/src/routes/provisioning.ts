@@ -192,6 +192,21 @@ interface EmailPayload {
   text: string;
 }
 
+/**
+ * Состояние отправки писем — для `/api/health`, без секретов.
+ *
+ * Зачем. Без `RESEND_API_KEY` функция ниже возвращает `{ok: true, mode:"stub"}`
+ * и просто пишет в лог: провижининг «успешен», а покупатель не получает от нас
+ * НИЧЕГО — ни что он купил, ни как этим пользоваться. Снаружи это неотличимо
+ * от исправной отправки: тот же 200, та же запись в журнале подписок.
+ *
+ * Отдаём только признак и адрес отправителя (он и так виден в любом письме).
+ * Ключ не покидает процесс.
+ */
+export function emailSenderStatus(): { configured: boolean; from: string; mode: "real" | "stub" } {
+  return { configured: Boolean(RESEND_KEY), from: FROM_EMAIL, mode: RESEND_KEY ? "real" : "stub" };
+}
+
 export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; mode: "real" | "stub"; id?: string; error?: string; degraded?: boolean; degradedReason?: string }> {
   if (!RESEND_KEY) {
     console.log(`[email/STUB] To: ${payload.to} | Subject: ${payload.subject}`);

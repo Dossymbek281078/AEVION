@@ -33,6 +33,7 @@ import { verifyBearerOptional } from "./authJwt";
 import { readLatestSubscription } from "../routes/provisioning";
 import { MODULES_PRICING, type TierId } from "../data/pricing";
 import { recordDeny } from "./paywallDenyLog";
+import { hasActiveAppSubscription } from "./appEntitlements";
 
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 
@@ -283,11 +284,19 @@ function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan): v
  * always safe; flip the env to switch enforcement on.
  */
 export function requireModule(moduleId: string) {
-  return function moduleGate(req: Request, res: Response, next: NextFunction): void {
+  return async function moduleGate(req: Request, res: Response, next: NextFunction): Promise<void> {
     if (!paywallEnabledFor(moduleId)) { next(); return; }
     if (isExemptPath(req)) { next(); return; }
     const plan = resolveUserPlan(req);
     if (isModuleEntitled(plan, moduleId)) { next(); return; }
+
+    // Модуль мог быть куплен ОТДЕЛЬНОЙ подпиской — это второй источник прав,
+    // до 13.08.2026 гейт про него не знал, и купивший модуль упирался в отказ
+    // наравне с гостем. Спрашиваем базу только здесь: до этой строки доходят
+    // лишь те, кому иначе отказали бы, поэтому обычный путь остаётся без
+    // запросов. Права только добавляются — отнять этот источник ничего не может.
+    if (await hasActiveAppSubscription(plan.email, moduleId)) { next(); return; }
+
     upgradeResponse(res, moduleId, plan);
   };
 }

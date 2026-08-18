@@ -34,6 +34,24 @@ export function GET() {
       uptime_ms: uptimeMs,
       uptime_human: formatUptime(uptimeMs),
       version: "v1.3",
+      // Какой код сейчас на САЙТЕ. Поле version выше — зашитая строка: она
+      // выглядит заполненной и не отвечает ни на что. У бэкенда та же дыра
+      // стоила 14.08.2026 половины дня: /health говорил "unknown", и нельзя
+      // было сказать, чья выкатка живёт на проде, — а выкатывают его семь
+      // сессий подряд, каждая заменяя предыдущую целиком. Фронт правят как
+      // минимум три ветки, и опознать его нечем до сих пор.
+      //
+      // Vercel подставляет эти переменные и на сборке из git, и при загрузке
+      // папкой через CLI. Нет их — говорим "unknown" ЯВНО: выдуманная метка
+      // хуже отсутствующей, потому что ей верят.
+      build: {
+        commit: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 12) || "unknown",
+        branch: process.env.VERCEL_GIT_COMMIT_REF || "unknown",
+        // Окружение Vercel: production или preview. Их деплои легко спутать.
+        env: process.env.VERCEL_ENV || "local",
+        // Идентификатор сборки — он есть всегда, даже когда git-метки нет.
+        deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
+      },
       runtime: typeof process !== "undefined" ? process.version : "edge",
       memory_rss_mb: memUsed,
       persistence: kvBackend(),

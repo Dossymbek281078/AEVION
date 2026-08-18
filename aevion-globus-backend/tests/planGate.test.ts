@@ -120,7 +120,10 @@ describe("requireModule middleware", () => {
     else process.env.PAYWALL_MODULES = saved;
   });
 
-  function run(mw: ReturnType<typeof requireModule>, req: any) {
+  // Гейт стал асинхронным 13.08.2026: получив отказ по тарифу, он спрашивает
+  // базу про отдельную подписку на этот модуль. Промис надо дождаться, иначе
+  // утверждения читают состояние раньше, чем гейт успел ответить.
+  async function run(mw: ReturnType<typeof requireModule>, req: any) {
     let nexted = false;
     let status = 0;
     let body: any = null;
@@ -128,36 +131,36 @@ describe("requireModule middleware", () => {
       status(c: number) { status = c; return this; },
       json(b: any) { body = b; return this; },
     };
-    mw(req as any, res, () => { nexted = true; });
+    await mw(req as any, res, () => { nexted = true; });
     return { nexted, status, body };
   }
 
-  it("is a no-op when paywall is dormant", () => {
+  it("is a no-op when paywall is dormant", async () => {
     delete process.env.PAYWALL_MODULES;
-    const r = run(requireModule("qcoreai"), { method: "GET", path: "/chat", headers: {} });
+    const r = await run(requireModule("qcoreai"), { method: "GET", path: "/chat", headers: {} });
     expect(r.nexted).toBe(true);
   });
 
-  it("402s an unentitled free caller when enforced", () => {
+  it("402s an unentitled free caller when enforced", async () => {
     process.env.PAYWALL_MODULES = "healthai";
-    const r = run(requireModule("healthai"), { method: "GET", path: "/chat", headers: {} });
+    const r = await run(requireModule("healthai"), { method: "GET", path: "/chat", headers: {} });
     expect(r.nexted).toBe(false);
     expect(r.status).toBe(402);
     expect(r.body.error).toBe("upgrade_required");
     expect(r.body.module).toBe("healthai");
   });
-  it("never 402s qcoreai even when explicitly listed in PAYWALL_MODULES", () => {
+  it("never 402s qcoreai even when explicitly listed in PAYWALL_MODULES", async () => {
     process.env.PAYWALL_MODULES = "qcoreai";
-    const r = run(requireModule("qcoreai"), { method: "GET", path: "/chat", headers: {} });
+    const r = await run(requireModule("qcoreai"), { method: "GET", path: "/chat", headers: {} });
     expect(r.nexted).toBe(true);
   });
 
-  it("lets health/plan introspection through even when enforced", () => {
+  it("lets health/plan introspection through even when enforced", async () => {
     // Uses healthai, not qcoreai — qcoreai is never actually enforced (see
     // the UNSAFE_TO_GATE tests above), so this needs a module that can be
     // to genuinely exercise the exempt-path bypass rather than the guard.
     process.env.PAYWALL_MODULES = "healthai";
-    const r = run(requireModule("healthai"), { method: "GET", path: "/health", headers: {} });
+    const r = await run(requireModule("healthai"), { method: "GET", path: "/health", headers: {} });
     expect(r.nexted).toBe(true);
   });
 });

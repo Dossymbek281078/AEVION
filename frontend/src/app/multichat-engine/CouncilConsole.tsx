@@ -24,6 +24,7 @@ import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
 import { T } from "./theme";
+import { agentFailure, agentTitle, retryHint } from "./failureText";
 
 type AgentResult = {
   agentId: string;
@@ -171,8 +172,15 @@ function buildReport(
 
   L.push("## Ответы агентов", "");
   for (const r of results) {
-    L.push(`### ${r.agentId}${r.provider ? ` · ${r.provider}` : ""}`, "");
-    L.push(r.ok ? String(r.reply || "").trim() : `_Не ответил: ${r.error || "вызов не удался"}_`, "");
+    // Роль и человеческая причина: отчёт уходит коллеге, и «rate_limit_exceeded
+    // ... per IP» в нём читается как вина отправителя.
+    L.push(`### ${agentTitle(r.role, r.agentId)}${r.provider ? ` · ${r.provider}` : ""}`, "");
+    if (r.ok) {
+      L.push(String(r.reply || "").trim(), "");
+    } else {
+      const f = agentFailure(r.error);
+      L.push(`_Не ответил: ${f.human}_${f.technical ? ` (${f.technical})` : ""}`, "");
+    }
   }
 
   if (receipt) {
@@ -245,7 +253,12 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
         body: JSON.stringify({ prompt: q, agents: PANEL }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d?.error || `сервер ответил ${r.status}`);
+      if (!r.ok) {
+        // retryAfterSec сервер присылает рядом с отказом — не показать его значит
+        // заставить человека угадывать, когда пробовать снова.
+        const f = agentFailure(d?.error || `upstream ${r.status}`);
+        throw new Error(f.human + retryHint(d?.retryAfterSec));
+      }
       setResults(d.results || []);
       setDissent(d.dissent || null);
       setReceipt(d.receipt || null);
@@ -506,13 +519,28 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {results.map((r) => (
             <article key={r.agentId} style={{ background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 14 }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", borderBottom: `1px solid ${T.surfaceSoft}`, paddingBottom: 6 }}>
-                <h4 style={{ fontSize: 15, margin: 0, color: T.text }}>{r.agentId}</h4>
+                {/* Роль, а не внутренний id: «analyst» в русском интерфейсе выглядит
+                    утечкой кода, а роль сервер и так присылает в ответе. */}
+                <h4 style={{ fontSize: 15, margin: 0, color: T.text }}>{agentTitle(r.role, r.agentId)}</h4>
                 <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded }}>
                   {r.provider || "—"}
                 </span>
               </div>
               <p style={{ marginTop: 10, whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.65, color: T.textDim }}>
-                {r.ok ? r.reply : <span style={{ color: T.bad }}>{r.error || "не ответил"}</span>}
+                {r.ok ? (
+                  r.reply
+                ) : (
+                  // Причина по-русски, исходная строка сервера мелким рядом:
+                  // прятать её нельзя, иначе отчёт человека об ошибке бесполезен.
+                  <span style={{ color: T.bad }}>
+                    {agentFailure(r.error).human}
+                    {agentFailure(r.error).technical && (
+                      <span style={{ display: "block", marginTop: 6, fontSize: 11, color: T.textFaded }}>
+                        {agentFailure(r.error).technical}
+                      </span>
+                    )}
+                  </span>
+                )}
               </p>
             </article>
           ))}

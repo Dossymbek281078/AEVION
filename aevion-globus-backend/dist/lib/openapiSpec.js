@@ -578,6 +578,27 @@ exports.openapiSpec = {
         },
         "/api/qsign/sign": { post: { summary: "Sign payload (legacy)" } },
         "/api/qsign/verify": { post: { summary: "Verify signature (legacy)" } },
+        // QSkyway — air-corridor navigation. Documented in full rather than only the
+        // newest routes: the justification and verify endpoints exist to be handed to
+        // an outside party, and an endpoint absent from the public spec cannot be
+        // discovered by the person it was built for.
+        "/api/qskyway/health": { get: { summary: "QSkyway status: cities, altitude model, regulator feeds, slot store", security: [] } },
+        "/api/qskyway/cities": { get: { summary: "City registry + airspaceCoverage (how many cities have a regulator feed at all)", security: [] } },
+        "/api/qskyway/city": { get: { summary: "City twin: buildings, height field, no-fly zones, wind, published ceilings, Ed25519 signature (?city=astana|nyc|tokyo)", security: [] } },
+        "/api/qskyway/vertiports": { get: { summary: "Pad suitability scoring + published ceiling per pad (?city=)", security: [] } },
+        "/api/qskyway/route": { post: { summary: "4D route between pads. {from,to,city?,respectCeiling?} — respectCeiling makes the regulator's ceiling a hard constraint; 422 reason 'airspace-ceiling' when only the ceiling blocks it", security: [] } },
+        "/api/qskyway/route/justification": { post: { summary: "Signed single document: twin hash + airspace hash + published edition + ceiling verdict, for attaching to a filing", security: [] } },
+        "/api/qskyway/route/justification/verify": { post: { summary: "Verify a justification document {document, attestation}; reports content-tamper and signature failure separately", security: [] } },
+        "/api/qskyway/verify": { get: { summary: "Verify Ed25519 over the city twin AND the airspace layer (?city=)", security: [] } },
+        "/api/qskyway/airspace/anchor": { post: { summary: "Submit the airspace layer's content hash to OpenTimestamps (Bitcoin) — trustless proof of when the edition was in use", security: [] } },
+        "/api/qskyway/airspace/anchor/verify": { post: { summary: "Verify an OTS proof {city, contentHash, otsProofB64}; reports Bitcoin anchoring and current-snapshot match separately", security: [] } },
+        "/api/qskyway/airspace/proof": { get: { summary: "The shipped Bitcoin (OpenTimestamps) proof for the airspace edition in use, verified on the fly; says separately whether it still covers the current edition", security: [] } },
+        "/api/qskyway/airspace/register": { post: { summary: "Register the signed airspace edition in the QRight registry (idempotent on content hash)", security: [] } },
+        "/api/qskyway/airspace/impact": { get: { summary: "How many pad-to-pad routes fit under the published ceiling: both directions counted separately, plus how many stay flyable when the ceiling is a hard constraint and how many pads the regulator authorizes nothing over", security: [] } },
+        "/api/qskyway/height-substitution": { get: { summary: "Whether heights taken from the city's own type statistics (75th percentile of the same building type) actually sit under any corridor: how many such buildings exist, how many stand under routes, and how many pad-to-pad routes pass over one", security: [] } },
+        "/api/qskyway/height-dispute": { get: { summary: "Whether a height the twin itself distrusts actually raises any corridor: disputed buildings (OSM tag vs the figure published by the object's own article) and how many pad-to-pad routes rest on one, measured by the routing engine", security: [] } },
+        "/api/qskyway/slots/{id}/verify": { get: { summary: "Recompute a slot receipt against the stored record: says whether the record was altered since issuance, and states plainly that this is not an external-ledger anchor and not a proof of time", security: [] } },
+        "/api/qskyway/slots": { get: { summary: "4D slot market (QRight receipts); POST books {routeId,t0,t1,holder}, 409 over capacity", security: [] } },
         "/api/qtrade/cap-status": { get: { summary: "Daily-cap headroom for caller (used / cap / remainingSec)" } },
         "/api/qtrade/receipt/{opId}.pdf": { get: { summary: "Server-rendered single-page PDF receipt (auth, scoped)" } },
         "/api/qtrade/statement.pdf": { get: { summary: "Multi-page PDF statement (auth; ?period=30d|90d|ytd|all)" } },
@@ -777,7 +798,36 @@ exports.openapiSpec = {
                 },
             },
         },
-        "/api/bureau/cert/{certId}/public": {
+        "/api/bureau/waitlist": {
+            post: {
+                summary: "Join the Notarized-tier waitlist (no auth)",
+                description: "Public on purpose — the people who want Notarized mostly do not have an account yet. Re-submitting the same address is a no-op, so a second click still answers 201.",
+                security: [],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["email"],
+                                properties: {
+                                    email: { type: "string", format: "email" },
+                                    source: { type: "string", maxLength: 60, default: "bureau-notarized" },
+                                },
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    "201": { description: "{ ok: true, total: number }" },
+                    "400": { description: "valid email required" },
+                },
+            },
+        },
+        // Was documented at /cert/{certId}/public, which no route ever served. The
+        // public no-auth view it describes is the embed endpoint, and its body is a
+        // sanitized slice rather than the full BureauCert schema.
+        "/api/bureau/cert/{certId}/embed": {
             get: {
                 summary: "Public verification view of a Bureau cert (no auth)",
                 security: [],
@@ -1251,37 +1301,9 @@ exports.openapiSpec = {
                 },
             },
         },
-        // ──────────────────────────────────────────────────────────────────────
-        // Paddle Billing v2
-        // ──────────────────────────────────────────────────────────────────────
-        "/api/paddle/health": { get: { summary: "Paddle API health — configured/sandbox/webhookConfigured/apiReachable", security: [] } },
-        "/api/paddle/plans": { get: { summary: "AEVION Paddle price catalog for frontend", security: [] } },
-        "/api/paddle/products": { get: { summary: "Paddle products + prices from dashboard (live mode)", security: [] } },
-        "/api/paddle/transactions": { get: { summary: "Recent Paddle transactions grouped by appId", security: [] } },
-        "/api/paddle/setup-guide": { get: { summary: "Step-by-step Paddle setup guide for KZ accounts", security: [] } },
-        "/api/paddle/checkout": {
-            post: {
-                summary: "Create Paddle transaction → returns checkout URL",
-                requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { priceId: { type: "string" }, quantity: { type: "integer" }, email: { type: "string" }, tierId: { type: "string" }, appId: { type: "string" } }, required: ["priceId"] } } } },
-                responses: {
-                    "200": { description: "{ mode, url, transactionId, sandbox }" },
-                    "400": { description: "priceId required" },
-                    "502": { description: "Paddle API error" },
-                },
-            },
-        },
-        "/api/paddle/webhook": {
-            post: {
-                summary: "Paddle webhook — verifies Paddle-Signature HMAC, provisions subscription on transaction.completed",
-                security: [],
-                responses: {
-                    "200": { description: "{ received: true }" },
-                    "400": { description: "missing signature or invalid_signature" },
-                },
-            },
-        },
-        "/api/paddle/subscription/{id}": { get: { summary: "Paddle subscription status by ID" } },
-        "/api/paddle/customer/{email}": { get: { summary: "Paddle customer lookup by email" } },
+        // Paddle Billing removed 2026-07-22 — /api/paddle/* routes no longer
+        // exist (payments = Gumroad MoR); the spec advertising them made the
+        // phantom-endpoint audit fail with a confirmed phantom.
         // ──────────────────────────────────────────────────────────────────────
         // Pricing — subscription self-service
         // ──────────────────────────────────────────────────────────────────────

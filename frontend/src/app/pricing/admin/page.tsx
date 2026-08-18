@@ -55,6 +55,10 @@ interface EventsSummary {
   /** Канал привлечения из метки ?c= (BuyLink кладёт его в meta.channel). */
   checkoutByChannel?: Record<string, number>;
   byIndustry: Record<string, number>;
+  /** Канал раздачи (tt / ig / yt …) — по нему видно, какая раздача привела людей. */
+  byChannel?: Record<string, number>;
+  /** Товар, по которому нажали «купить». */
+  byProduct?: Record<string, number>;
   sessionCount: number;
   windowHours: number;
 }
@@ -509,6 +513,16 @@ export default function PricingAdminPage() {
                 title={t("pricing.admin.breakdown.checkoutByChannel")}
                 data={summary.checkoutByChannel ?? {}}
                 accent="#7c3aed"
+              />
+              {/* Их две панели выше считают НАЧАЛА ОПЛАТЫ. Эта — клики по кнопке
+                  «купить» в разрезе товаров: при 26 товарах и трёх продажах за
+                  всё время это единственный способ понять, что вообще пробуют
+                  купить, а что не трогают. Срез другой, поэтому панель третья,
+                  а не вместо. */}
+              <Breakdown
+                title={t("pricing.admin.breakdown.byProduct")}
+                data={summary.byProduct ?? {}}
+                accent="#b45309"
               />
             </section>
           )}

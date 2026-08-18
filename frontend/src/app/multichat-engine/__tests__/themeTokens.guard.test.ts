@@ -1,0 +1,136 @@
+import { describe, test, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+
+// Сторож темы зоны multichat-engine.
+//
+// Модуль перевели на светлый газетный эталон 26–27.07.2026 и вынесли 118 цветовых
+// литералов в ./theme.ts. Но перевели ДВА экрана из пяти, и заметить это было
+// нечем: проверка искала сырые hex, а имя класса Tailwind (`bg-slate-950`) для
+// неё не цвет. Публичная страница расшаренного консилиума — та, которую
+// открывает посторонний по ссылке — оставалась тёмной три недели.
+//
+// Поэтому сторож смотрит ОБА способа покрасить: hex-литералы и цветовые классы
+// Tailwind.
+//
+// Храповик, а не запрет. Два файла ещё не переведены, и их счётчики записаны
+// ниже как база: она может только уменьшаться. Так непереведённое видно
+// поимённо, новое нарушение падает сразу, а дошедший до нуля файл просто
+// вычёркивается из списка. Замороженного исключения «этот файл можно» здесь
+// нет намеренно: именно такое исключение и держало тёмную страницу.
+
+const ZONE = path.resolve(__dirname, "..");
+
+const TAILWIND_COLOR =
+  /\b(?:bg|text|border|from|to|via|ring|divide|placeholder)-(?:slate|gray|zinc|neutral|stone|violet|purple|indigo|emerald|green|red|rose|amber|yellow|blue|sky|cyan|teal|orange|pink|fuchsia|lime)-[0-9]{2,3}(?:\/[0-9]{1,3})?\b/g;
+const RAW_HEX = /#[0-9a-fA-F]{3,8}\b/g;
+
+/**
+ * Сколько нарушений ещё разрешено файлу. Уменьшать можно, увеличивать нельзя.
+ *
+ * opengraph-image.tsx — карточка для мессенджеров и соцсетей. Тёмная намеренно
+ *   или нет — вопрос БРЕНДА, а не кода: решает основатель, поэтому здесь она
+ *   зафиксирована, а не переписана молча.
+ *
+ * library/page.tsx стоял здесь с 41 и вычеркнут в том же окне: файл переведён,
+ * нарушений 0. Так храповик и должен пустеть.
+ */
+const BASELINE: Record<string, number> = {
+  "opengraph-image.tsx": 14,
+};
+
+// Числа обязаны быть ВПЛОТНУЮ к фактическим. Первая версия писала 62 вместо 41
+// (счёт шёл по всему тексту, вместе с комментариями), и такой зазор пропустил бы
+// двадцать новых нарушений молча — храповик со щелью не храповик. Уменьшили
+// нарушения — уменьшите и число здесь тем же коммитом.
+
+function walk(dir: string, out: string[] = []): string[] {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === "__tests__") continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walk(p, out);
+    else if (/\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name)) out.push(p);
+  }
+  return out;
+}
+
+/**
+ * Содержимое строковых литералов файла.
+ *
+ * Считать по всему тексту нельзя: первая версия сторожа покраснела на файле,
+ * который я только что перевёл на токены, — в его КОММЕНТАРИИ приведены примеры
+ * `bg-slate-950` и `text-slate-400` как описание прежней болезни. Упоминание не
+ * есть использование.
+ *
+ * Вырезать комментарии — соблазн, но именно вырезалка комментариев уже была
+ * источником ложного зелёного (регулярка съедала лишнее и прятала реальный код).
+ * Поэтому идём с другой стороны: в разметку цвет попадает ТОЛЬКО через литерал,
+ * так что смотрим литералы, а всё вне них не смотрим вовсе.
+ *
+ * Чего этот способ не увидит: цвет, собранный из переменной (`bg-${c}-500`).
+ * Такого в зоне нет; появится — заметит обзор дифа, не сторож.
+ */
+function stringLiterals(src: string): string[] {
+  const out: string[] = [];
+  for (const raw of src.split("\n")) {
+    // Строка комментария не задаёт цвет. Проверка построчная и потому дешёвая:
+    // цельного «вырезания комментариев» из файла здесь нет намеренно — именно
+    // такая регулярка однажды съела 77 строк кода и дала ложное зелёное.
+    if (/^\s*(?:\/\/|\*|\/\*)/.test(raw)) continue;
+    const re = /"([^"\\\n]*)"|'([^'\\\n]*)'|`([^`\\\n]*)`/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(raw)) !== null) out.push(m[1] ?? m[2] ?? m[3] ?? "");
+  }
+  return out;
+}
+
+function violations(file: string): number {
+  const rel = path.relative(ZONE, file).replace(/\\/g, "/");
+  const lits = stringLiterals(fs.readFileSync(file, "utf8")).join("\n");
+  // theme.ts — единственное место, где цвет и должен быть литералом.
+  const hex = rel === "theme.ts" ? [] : lits.match(RAW_HEX) ?? [];
+  const tw = lits.match(TAILWIND_COLOR) ?? [];
+  return hex.length + tw.length;
+}
+
+const FILES = walk(ZONE);
+const counted = FILES.map((f) => ({
+  rel: path.relative(ZONE, f).replace(/\\/g, "/"),
+  n: violations(f),
+})).filter((x) => x.n > 0);
+
+describe("multichat-engine — цвет только через токены ./theme", () => {
+  test("сканирование действительно нашло файлы зоны", () => {
+    // Сторож, молча совпавший с нулём файлов, хуже отсутствующего.
+    expect(FILES.length).toBeGreaterThan(6);
+    expect(FILES.some((f) => f.endsWith("theme.ts"))).toBe(true);
+  });
+
+  test("ни один файл вне базы не красит напрямую", () => {
+    const unexpected = counted.filter((x) => !(x.rel in BASELINE)).map((x) => `${x.rel}: ${x.n}`);
+    expect(
+      unexpected,
+      `\nЦвет задан напрямую (hex или класс Tailwind) вне списка:\n${unexpected.join("\n")}\n` +
+        `Красьте через T из ./theme — иначе смена темы пройдёт мимо этого экрана.\n`,
+    ).toEqual([]);
+  });
+
+  test("у файлов из базы нарушений не стало больше", () => {
+    const grown: string[] = [];
+    for (const [rel, allowed] of Object.entries(BASELINE)) {
+      const now = counted.find((x) => x.rel === rel)?.n ?? 0;
+      if (now > allowed) grown.push(`${rel}: было ${allowed}, стало ${now}`);
+    }
+    expect(grown, `\nХраповик крутится только вниз:\n${grown.join("\n")}\n`).toEqual([]);
+  });
+
+  test("база не устарела: дошедший до нуля файл надо вычеркнуть", () => {
+    const stale = Object.entries(BASELINE)
+      .filter(([rel]) => (counted.find((x) => x.rel === rel)?.n ?? 0) === 0)
+      .map(([rel]) => rel);
+    expect(
+      stale,
+      `\nЭти файлы переведены — уберите их из BASELINE, иначе список превратится в вечное исключение:\n${stale.join("\n")}\n`,
+    ).toEqual([]);
+  });
+});

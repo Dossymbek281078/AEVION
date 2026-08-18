@@ -1,3 +1,4 @@
+import { computeFan, fanTotalUsd, capTotalDiscount, type AppliedFan } from "./discounts";
 /**
  * AEVION Pricing — единый источник тарифов и матрицы модулей.
  *
@@ -19,11 +20,16 @@ export type BillingPeriod = "monthly" | "annual";
 
 /**
  * Публичные тарифы: free / lite / medium / full / pro / enterprise.
- *   - lite   = 1 любой продукт на выбор ($24)
- *   - medium = куратор-бандл готовых апп ($39)
- *   - full   = все продукты ($89)
- *   - pro    = "Universe" — флагман, все продукты + расширенные лимиты ($249.99)
+ *   - lite   = 1 любой продукт на выбор ($19)
+ *   - medium = куратор-бандл готовых апп ($29)
+ *   - full   = все продукты ($49)
+ *   - pro    = "Universe" — флагман, все продукты + расширенные лимиты ($149)
  * Годовая оплата = -2 месяца (×10).
+ *
+ * Числа здесь — ПЕРЕСКАЗ значений из TIERS ниже, и 13.08.2026 они разошлись:
+ * цены снизили ($24/$39/$89/$249.99 → $19/$29/$49/$149), а шапку не тронули.
+ * Живут они в `priceMonthly` каждого тарифа; если правите цену — правьте и эти
+ * четыре числа, либо не пишите их здесь вовсе.
  *
  * Репрайсинг 2026-07-22 (см. docs/PRICING_STRATEGY_2026-07.md): платформенные
  * тарифы подняты так, чтобы Universe/Full/Medium стоили выше эквивалентной
@@ -161,6 +167,35 @@ export interface PricingBundle {
  */
 export const MAX_PROMO_DISCOUNT_RATIO = 0.5;
 
+/**
+ * Тарифы Конституции. Живут ЗДЕСЬ, а не в маршруте оплаты.
+ *
+ * До 13.08.2026 `routes/constitutionCheckout.ts` держал собственную таблицу
+ * `{ pro: 9, team: 49 }`. Итого цена Конституции существовала в трёх местах:
+ * этот прайс (модуль `constitution`, $9), таблица маршрута и панель магазина.
+ * Три источника одного числа расходятся молча — сегодня этот класс сработал
+ * трижды за день, поэтому таблицу свели сюда.
+ *
+ * `pro` обязан совпадать с ценой модуля `constitution` в MODULES_PRICING:
+ * это один и тот же товар, проданный двумя путями. Совпадение проверяется
+ * тестом, а не надеждой.
+ */
+export const CONSTITUTION_TIERS = {
+  pro: { name: "Constitution Pro", priceUsd: 9 },
+  team: { name: "Constitution Team", priceUsd: 49 },
+} as const;
+
+export type ConstitutionTier = keyof typeof CONSTITUTION_TIERS;
+
+/** Подпись с ценой — чтобы её тоже не собирали руками в каждом месте. */
+export function constitutionTierLabel(tier: ConstitutionTier): string {
+  const t = CONSTITUTION_TIERS[tier];
+  return `${t.name} · $${t.priceUsd}/mo`;
+}
+
+// Веерные скидки живут отдельным файлом: лестницы — это данные о продажах, а не
+// про арифметику счёта, и меняются они чаще формулы.
+
 /** Курсы для отображения на фронте (фиксированные, обновляются вручную). */
 export const CURRENCY_RATES: Record<CurrencyCode, { rate: number; symbol: string; label: string }> = {
   USD: { rate: 1, symbol: "$", label: "US Dollar" },
@@ -190,7 +225,17 @@ export function currencyRate(currency: string): number {
 
 /** Годовая сумма = -2 месяца (платишь за 10, получаешь 12). */
 const annualTotal = (m: number) => m * 10;
-/** Эффективная цена/мес при годовой оплате. */
+/**
+ * Эффективная цена/мес при годовой оплате.
+ *
+ * ВАЖНО: аргумент здесь и у annualTotal — ОДНА И ТА ЖЕ месячная цена. 13.08.2026
+ * цены снизили ($24/$39/$89/$249.99 → $19/$29/$49/$149), поправили priceMonthly
+ * и annualTotal, а здесь остались старые числа — и каждый годовой план стал
+ * выглядеть ДОРОЖЕ месячного: Lite показывал $20/мес при месячной цене $19,
+ * Universe — $208 при $149. Та же карточка рядом обещала «2 месяца в подарок»
+ * и «$190 в год», то есть противоречила сама себе тремя числами.
+ * Сторож в tests/singlePriceSource.test.ts теперь этого не пропустит.
+ */
 const annualPerMonth = (m: number) => Math.round((m * 10) / 12);
 
 export const TIERS: PricingTier[] = [
@@ -224,9 +269,9 @@ export const TIERS: PricingTier[] = [
     id: "lite",
     name: "Lite",
     tagline: "Один продукт AEVION на твой выбор",
-    priceMonthly: 24,
-    priceAnnualPerMonth: annualPerMonth(24),
-    priceAnnualTotal: annualTotal(24),
+    priceMonthly: 19,
+    priceAnnualPerMonth: annualPerMonth(19),
+    priceAnnualTotal: annualTotal(19),
     features: [
       "1 любой продукт AEVION на выбор",
       "Полный доступ к выбранному продукту",
@@ -250,9 +295,9 @@ export const TIERS: PricingTier[] = [
     id: "medium",
     name: "Medium",
     tagline: "Бандл готовых продуктов AEVION",
-    priceMonthly: 39,
-    priceAnnualPerMonth: annualPerMonth(39),
-    priceAnnualTotal: annualTotal(39),
+    priceMonthly: 29,
+    priceAnnualPerMonth: annualPerMonth(29),
+    priceAnnualTotal: annualTotal(29),
     features: [
       "10 готовых продуктов AEVION в одной подписке",
       "CyberChess, HealthAI, Multichat, QCoreAI, Smeta",
@@ -277,9 +322,9 @@ export const TIERS: PricingTier[] = [
     id: "full",
     name: "Full",
     tagline: "Вся экосистема AEVION без ограничений",
-    priceMonthly: 89,
-    priceAnnualPerMonth: annualPerMonth(89),
-    priceAnnualTotal: annualTotal(89),
+    priceMonthly: 49,
+    priceAnnualPerMonth: annualPerMonth(49),
+    priceAnnualTotal: annualTotal(49),
     features: [
       "Все продукты AEVION (30+)",
       "QRight + QSign + IP Bureau (полный доступ)",
@@ -304,9 +349,9 @@ export const TIERS: PricingTier[] = [
     id: "pro",
     name: "Universe",
     tagline: "Всё AEVION в одном месте — флагман экосистемы (Apple-style)",
-    priceMonthly: 249.99,
-    priceAnnualPerMonth: annualPerMonth(249.99),
-    priceAnnualTotal: annualTotal(249.99),
+    priceMonthly: 149,
+    priceAnnualPerMonth: annualPerMonth(149),
+    priceAnnualTotal: annualTotal(149),
     features: [
       "Всё из Full + приоритетный доступ ко всем новым модулям",
       "QCoreAI: 200 000 000 токенов / месяц",
@@ -430,7 +475,7 @@ export const MODULES_PRICING: ModulePrice[] = [
   },
   {
     id: "aevion-ip-bureau",
-    addonMonthly: 19,
+    addonMonthly: 29,
     includedIn: ["full", "enterprise"],
     availability: "live",
     oneLiner: "Электронное бюро авторства + сертификаты",
@@ -446,7 +491,7 @@ export const MODULES_PRICING: ModulePrice[] = [
   },
   {
     id: "qpaynet-embedded",
-    addonMonthly: 49,
+    addonMonthly: 29,
     includedIn: ["full", "enterprise"],
     availability: "beta",
     oneLiner: "Платёжное ядро для встраивания",
@@ -472,7 +517,7 @@ export const MODULES_PRICING: ModulePrice[] = [
     // ~50% below chess.com Diamond (~$20/mo monthly billing) — penetration
     // pricing against the direct single-purpose rival while it's still
     // building traction. See docs/PRICING_STRATEGY_2026-07.md.
-    addonMonthly: 9.99,
+    addonMonthly: 19,
     includedIn: ["medium", "full", "enterprise"],
     availability: "live",
     oneLiner: "Шахматная платформа нового поколения",
@@ -510,14 +555,14 @@ export const MODULES_PRICING: ModulePrice[] = [
   },
   {
     id: "qrenew",
-    addonMonthly: 19,
+    addonMonthly: 29,
     includedIn: ["medium", "full", "enterprise"],
     availability: "beta",
     oneLiner: "Клеточное обновление: биовозраст + стек (информационно)",
   },
   {
     id: "smeta-trainer",
-    addonMonthly: 19,
+    addonMonthly: 49,
     includedIn: ["medium", "full", "enterprise"],
     availability: "beta",
     oneLiner: "AI-тренажёр сметного дела РК",
@@ -782,7 +827,9 @@ export const BUNDLES: PricingBundle[] = [
     description: "QRight + QSign + IP Bureau — полный контур цифровой собственности",
     modules: ["qright", "qsign", "aevion-ip-bureau"],
     priceMonthly: 29,
-    savingsPercent: 20,
+    // Пересчитано 14.08.2026 после сведения цены IP Bureau с кассой ($19 -> $29):
+    // по частям стало $47, значит скидка на деле 38%, а не 20%.
+    savingsPercent: 38,
   },
   {
     id: "ai-suite",
@@ -799,8 +846,14 @@ export const BUNDLES: PricingBundle[] = [
     name: "Fintech Suite",
     description: "QTradeOffline + QPayNet + QContract — финансовый стек",
     modules: ["qtradeoffline", "qpaynet-embedded", "qcontract"],
-    priceMonthly: 79,
-    savingsPercent: 8,
+    // 14.08.2026: было $79 при заявленных -8%. К этому моменту цены свелись к
+    // кассе (qpaynet $49 -> $29), и по частям стек стал стоить $63 — то есть
+    // "скидка" превратилась в НАЦЕНКУ +25%. Хуже того, тариф Full за $49 прямо
+    // перечисляет "Финтех-стек: QTrade, QPayNet, QContract", то есть сборка за
+    // $79 давала МЕНЬШЕ за БОЛЬШЕ. Сборка обязана быть дешевле тарифа, который
+    // её содержит, иначе это предложение, которое нельзя выбрать разумно.
+    priceMonthly: 39,
+    savingsPercent: 38,
   },
 ];
 
@@ -880,6 +933,10 @@ export interface Quote {
   notes: string[];
   /** null = промо не применён или невалиден; reason — в notes[] */
   promo: AppliedPromo | null;
+  /** Ступени веера, каждая отдельной строкой: за что именно дана скидка. */
+  fans: AppliedFan[];
+  /** Сколько скидки срезал общий потолок (0 = не срезал). */
+  discountCappedBy: number;
 }
 
 export function buildQuote(input: {
@@ -889,6 +946,8 @@ export function buildQuote(input: {
   period?: BillingPeriod;
   currency?: CurrencyCode;
   promoCode?: string;
+  /** Срок обязательства в месяцах: 24 и 36 дают ступень веера. */
+  commitmentMonths?: number;
 }): Quote {
   const period: BillingPeriod = input.period ?? "monthly";
   const currency: CurrencyCode = input.currency ?? "USD";
@@ -908,6 +967,8 @@ export function buildQuote(input: {
       total: 0,
       notes: [`Tier "${input.tierId}" not found`],
       promo: null,
+      fans: [],
+      discountCappedBy: 0,
     };
   }
 
@@ -983,7 +1044,24 @@ export function buildQuote(input: {
     }
   }
 
-  // 5) Промо-код применяется на (subtotal - discount)
+  // 5) Веер: ступени за объём модулей, мест и срок обязательства. Считается
+  //    ПОСЛЕ годовой скидки и ДО промо-кода: годовая — свойство тарифа, веер —
+  //    награда за объём, промо — разовый повод. Каждая ступень возвращается
+  //    отдельной строкой, чтобы покупатель видел, за что именно ему скидка.
+  const moduleLines = lines.filter((l) => l.kind === "addon");
+  const seatLines = lines.filter((l) => l.kind === "seat");
+  const fans = computeFan({
+    modulesUsd: moduleLines.reduce((x, l) => x + l.total, 0),
+    moduleCount: moduleLines.length,
+    seatsUsd: seatLines.reduce((x, l) => x + l.total, 0),
+    seatCount: seats,
+    commitmentMonths: input.commitmentMonths,
+    subtotalUsd: subtotal,
+  });
+  const fanUsd = fanTotalUsd(fans);
+  discount += fanUsd;
+
+  // 6) Промо-код применяется на (subtotal - discount)
   let promoApplied: AppliedPromo | null = null;
   let promoUsd = 0;
   if (input.promoCode) {
@@ -1013,7 +1091,14 @@ export function buildQuote(input: {
     }
   }
 
-  const totalUSD = Math.max(0, subtotal - discount - promoUsd);
+  // 7) Потолок на СУММУ всех скидок. Каждая ступень по отдельности выглядит
+  //    скромно, а вместе с промо-кодом они способны отдать товар почти даром —
+  //    и по одной цифре итога это не заметить.
+  const capped = capTotalDiscount(subtotal, discount + promoUsd);
+  const totalUSD = Math.max(0, subtotal - capped.applied);
+  if (capped.cappedBy > 0) {
+    notes.push(`Скидки срезаны потолком: −$${capped.cappedBy} сверх допустимого`);
+  }
   const rate = currencyRate(currency);
 
   return {
@@ -1026,9 +1111,15 @@ export function buildQuote(input: {
       total: Math.round(l.total * rate * 100) / 100,
     })),
     subtotal: Math.round(subtotal * rate * 100) / 100,
-    discount: Math.round((discount + promoUsd) * rate * 100) / 100,
+    discount: Math.round(capped.applied * rate * 100) / 100,
     total: Math.round(totalUSD * rate * 100) / 100,
     notes,
     promo: promoApplied,
+    fans: fans.map((f) => ({
+      ...f,
+      baseUsd: Math.round(f.baseUsd * rate * 100) / 100,
+      amountUsd: Math.round(f.amountUsd * rate * 100) / 100,
+    })),
+    discountCappedBy: Math.round(capped.cappedBy * rate * 100) / 100,
   };
 }

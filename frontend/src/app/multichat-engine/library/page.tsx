@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getAuthToken } from "@/lib/auth";
 import { T } from "../theme";
+import { agentFailure } from "../failureText";
 
 interface Conversation {
   id: string;
@@ -132,12 +133,18 @@ export default function MultichatLibraryPage() {
         : apiUrl(`/api/multichat/conversations`);
       const r = await fetch(url, { headers: { Authorization: `Bearer ${t}` } });
       if (!r.ok) {
+        // Голое «Ошибка: 429» человеку ничего не говорит и звучит как его вина:
+        // предел общий для всех, кто пользуется сервисом в эту минуту.
         const d = await r.json().catch(() => ({}));
-        setError(`Ошибка: ${d.error ?? r.status}`);
+        setError(agentFailure(d?.error ?? `upstream ${r.status}`).human);
         return;
       }
       const d = await r.json();
       setItems(d.items ?? []);
+    } catch {
+      // Без этого сбой сети уходил в finally, «Загрузка» гасла, и экран уверенно
+      // писал «У вас пока нет чатов» — упавшее чтение становилось фактом.
+      setError("Не удалось получить список. Проверьте соединение и попробуйте снова.");
     } finally {
       setLoading(false);
     }
@@ -212,8 +219,13 @@ export default function MultichatLibraryPage() {
         return;
       }
       const url = `${window.location.origin}${d.shareUrl}`;
-      await navigator.clipboard.writeText(url).catch(() => {});
-      alert(`Public URL скопирован:\n${url}`);
+      // Копирование может быть запрещено (нет разрешения, не тот контекст). Тогда
+      // ссылку надо ПОКАЗАТЬ, а не сказать «скопировано» и потерять её.
+      const copied = await navigator.clipboard
+        .writeText(url)
+        .then(() => true)
+        .catch(() => false);
+      alert(copied ? `Ссылка скопирована:\n${url}` : `Скопируйте ссылку вручную:\n${url}`);
       setItems(prev => prev.map(i => (i.id === id ? { ...i, shareToken: d.shareToken } : i)));
     } finally {
       setBusyId(null);

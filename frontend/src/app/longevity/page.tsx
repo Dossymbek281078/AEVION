@@ -2,6 +2,7 @@ import { fetchOrPaywall } from "@/lib/paywall";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import { channelFrom } from "@/lib/products";
 import LongevityClient from "./_client";
+import { PageTracking } from "@/components/PageTracking";
 
 export default async function Page({
   searchParams,
@@ -14,5 +15,10 @@ export default async function Page({
   // неё ведут ролики про долголетие напрямую, и без проброса метки покупка
   // отсюда приходила бы в отчёт как «источник неизвестен».
   const channel = channelFrom((await searchParams).c);
-  return <LongevityClient channel={channel} />;
+  return (
+    <>
+      <PageTracking page="longevity" />
+      <LongevityClient channel={channel} />
+    </>
+  );
 }

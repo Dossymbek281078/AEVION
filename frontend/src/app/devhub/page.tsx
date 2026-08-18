@@ -9,6 +9,7 @@ import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
 import { productById } from "@/lib/products";
+import { PageTracking } from "@/components/PageTracking";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -272,6 +273,9 @@ export default function DevHubPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "system-ui, sans-serif", overflowX: "hidden" }}>
+      {/* Замер посещения и ухода к оплате — см. components/PageTracking.
+          До 14.08.2026 страница не считала НИЧЕГО, хотя ведёт к покупке. */}
+      <PageTracking page="devhub" />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 16px" }}>
         <Wave1Nav />
 

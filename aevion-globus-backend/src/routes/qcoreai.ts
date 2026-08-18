@@ -43,6 +43,7 @@ import { ensureQCoreTables, getDbError, isDbReady } from "../lib/ensureQCoreTabl
 import { getPool } from "../lib/dbPool";
 const pool = getPool();
 import { rateLimit } from "../lib/rateLimit";
+import { clientIp } from "../lib/rateLimit/inMemoryWindow";
 import { isWebhookConfigured, listWebhookLogs, notifyEvent, notifyRunCompleted } from "../lib/qcoreWebhook";
 import {
   fetchQRightAttachments,
@@ -282,13 +283,46 @@ function pruneExpiredCollabs(): void {
 
 // Bound /chat to defend our LLM provider bills. Without this anyone could
 // hit /api/qcoreai/chat in a loop and run up Anthropic/OpenAI charges.
-// Per-IP cap is conservative; signed-in users get their own limiter
-// downstream (sharedLimiter), so a real product flow isn't constrained.
-const chatLimiter = rateLimit({
+//
+// Считаем по АККАУНТУ, когда он назван токеном, и только иначе — по адресу.
+//
+// Раньше здесь был счёт исключительно по адресу, и на самом частом пути это
+// означало один общий счётчик на всю платформу. MultiChat зовёт эту ручку
+// внутренним fetch на 127.0.0.1 (multichat.ts, `internalBase`), так что ВСЕ
+// пользователи приходили сюда под одним адресом `::ffff:127.0.0.1`.
+//
+// Замерено на боевом коде 13.08.2026: user-A делает 29 вызовов (свой личный
+// предел 12 фан-аутов в минуту при этом не тронут), после чего user-B, не
+// сделавший НИ ОДНОГО вызова, получает 429 на первом же запросе. Совет из 8
+// агентов расходует 8 из 30, то есть четвёртый совет в минуту на всей
+// платформе отказывал — и отказ доходил до человека как «агент не ответил»,
+// потому что для MultiChat это неудачный внутренний вызов, а не лимит.
+//
+// Комментарий выше обещал «signed-in users get their own limiter downstream» —
+// обещание не выполнялось: downstream-лимитер считает фан-ауты, а провайдерские
+// вызовы упирались в этот общий потолок раньше.
+//
+// keyFn разбирает токен САМ, а не читает req.auth: лимитер стоит перед
+// verifyBearerOptional (ниже, в самой ручке), поэтому к этому моменту req.auth
+// ещё не разрешён. jwt.verify на HMAC стоит микросекунды — дешевле, чем
+// пропустить лишний вызов к платному провайдеру.
+// Экспортируется ради теста. Прежний тест этого файла писал про лимитер:
+// «not unit-testable without spinning up Express» — и потому не проверял его
+// вовсе. Проверять было чем: мидлвара обычная, ей нужен не весь роутер, а
+// четыре строки express. Непроверяемым он был не по природе, а по решению —
+// и дефект прожил в нём с 09.05 по 13.08.
+export const chatLimiter = rateLimit({
   windowMs: 60_000,
   max: 30,
   keyPrefix: "qcoreai:chat",
-  message: "rate_limit_exceeded: max 30 chat requests per minute per IP",
+  keyFn: (req) => {
+    const auth = verifyBearerOptional(req);
+    // Аноним считается по адресу — иначе его не отличить. Ключ возвращаем
+    // непустым в обоих случаях: пустая строка включила бы предупреждение
+    // лимитера о сломанном keyFn, а это штатный путь, не сбой.
+    return auth?.sub ? `u:${auth.sub}` : `ip:${clientIp(req)}`;
+  },
+  message: "rate_limit_exceeded: max 30 chat requests per minute",
 });
 
 // Clamp temperature into the range every provider documents. Negative values

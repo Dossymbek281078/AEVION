@@ -15,7 +15,7 @@
  *
  * ЧТО ИМЕННО ЛОВИМ. Не «любую цену» — их во фронтенде больше тысячи, и
  * почти все чужие (цены конкурентов, суммы сделок, аванс $10M). Ловим
- * ровно ЧЕТЫРЕ отставные цены тарифов: 19 / 29 / 49 / 149.99. Набор
+ * ровно ЧЕТЫРЕ отставные цены тарифов: 24 / 39 / 89 / 249.99. Набор
  * маленький и точный, поэтому список исключений можно собрать по фактам,
  * а не на глаз. Каждое исключение ниже сверено 10.08.2026 с кодом, который
  * реально списывает деньги, либо с каталогом `lib/products.ts` (его цены
@@ -47,10 +47,16 @@ const SKIP_DIRS = new Set([
  * в реестре нет и цен Bureau, Constitution, API — они законные.
  */
 const RETIRED: Array<{ amount: string; was: string }> = [
-  { amount: "19", was: "Lite (стал $24 22.07.2026)" },
-  { amount: "29", was: "Medium (стал $39 22.07.2026)" },
-  { amount: "49", was: "Full (стал $89 22.07.2026)" },
-  { amount: "149.99", was: "Universe/pro (стал $249.99 22.07.2026)" },
+  // 13.08.2026 прайс опустили обратно: 24/39/89/249.99 → 19/29/49/149. То есть
+  // отставными стали ровно те числа, что 22.07 были живыми, а прежние отставные
+  // (19/29/49) вернулись в строй. Список перевёрнут целиком, а не дополнен:
+  // держать в нём и старые, и новые значило бы ловить живую цену как мёртвую —
+  // сторож бы краснел на исправном коде, и его отключили бы (см. правило
+  // «аудит, который всегда красный»).
+  { amount: "24", was: "Lite (стал $19 13.08.2026)" },
+  { amount: "39", was: "Medium (стал $29 13.08.2026)" },
+  { amount: "89", was: "Full (стал $49 13.08.2026)" },
+  { amount: "249.99", was: "Universe/pro (стал $149 13.08.2026)" },
 ];
 
 /**
@@ -58,130 +64,34 @@ const RETIRED: Array<{ amount: string; was: string }> = [
  * исходника. Причина обязательна.
  */
 const ALLOWED: Array<{ fragment: string; reason: string }> = [
-  // ── AEVION IP Bureau: Verified-сертификат, живое списание ────────────────
+  // ⚠️ СПИСОК ПЕРЕБРАН ЦЕЛИКОМ 18.08.2026 вместе с переворотом RETIRED.
+  //
+  // Прежние 37 исключений закрывали номиналы 19 / 29 / 49 / 149.99. После
+  // репрайса 13.08 эти числа снова стали ЖИВЫМИ ценами, то есть 36 из 37 строк
+  // перестали что-либо исключать. Оставить их значило бы держать сторожа с
+  // мёртвым списком: он бы зеленел, а проверка «каждое исключение действительно
+  // что-то исключает» — краснела. Старые строки не потеряны, они в истории git
+  // рядом с этим коммитом.
+  //
+  // Ниже — только законные вхождения НОВЫХ отставных номиналов: 24 / 39 / 89 /
+  // 249.99. Каждое сверено глазами по файлу, а не по памяти.
+
+  // ── AEVION IP Bureau: своя лестница сертификатов, не тарифы платформы ────
   {
-    fragment: "verifiedTierCents",
-    reason: "цена Verified приходит с бэкенда; $19 — фолбэк, равный дефолту getVerifiedTierPriceCents()",
-  },
-  { fragment: '"$19 / cert"', reason: "Bureau Verified — живой чек $19/сертификат" },
-  { fragment: "Pay $19", reason: "тот же Bureau Verified, шаг оплаты" },
-  { fragment: "$19 for the Verified-tier", reason: "тот же Bureau Verified, пояснение шага" },
-  { fragment: "Continue to payment ($19)", reason: "тот же Bureau Verified, кнопка" },
-  { fragment: "Upgrade to Verified ($19)", reason: "тот же Bureau Verified, вход из QRight" },
-  {
-    fragment: '{ tier: "Verified", price: "$19"',
-    reason: "тот же Bureau Verified на /investor; закреплён отдельно в pitchNumbers.guard",
-  },
-  {
-    fragment: '{ tier: "Notarized (planned)", price: "$49"',
-    reason: "Notarized ещё не продаётся — помечен planned, ценой тарифа не притворяется",
+    fragment: 'price: "From $89 / cert"',
+    reason: "Bureau Notarized — цена СЕРТИФИКАТА с нотариусом, к тарифам платформы отношения не имеет",
   },
 
-  // ── AEVION Constitution: свой продукт, свои тарифы ───────────────────────
+  // ── Продающая модель: исторические утверждения о самом репрайсе ──────────
+  // Это не «цена на странице», а объяснение, откуда взялись новые числа.
+  // Убрать их — значит скрыть, что модель следует за ценой в обе стороны.
   {
-    fragment: "Team $49",
-    reason: "Constitution Team $49/мес — сверено с constitutionCheckout.ts (team: 49)",
-  },
-  { fragment: "Team ($49/mo)", reason: "тот же Constitution Team" },
-  { fragment: "$49/mo (5 seats", reason: "тот же Constitution Team, SEO-описание" },
-  {
-    fragment: "live charge: $19/cert",
-    reason: "комментарий на /investor, объясняющий, откуда взята цена Bureau Verified",
-  },
-  { fragment: "$0 → $9 → $49", reason: "лестница Constitution целиком" },
-  {
-    fragment: "$49/mo — for teams",
-    reason: "Constitution Team в i18n (en)",
-  },
-  { fragment: "$49/мес — для команды", reason: "Constitution Team в i18n (ru)" },
-  { fragment: "$49/ай — команда үшін", reason: "Constitution Team в i18n (kk)" },
-  {
-    fragment: 'price: "$49",',
-    reason: "карточка тарифа Constitution Team на /constitution/pricing",
+    fragment: "$89 → $49/mo",
+    reason: "pitchModel: фраза о самом репрайсе 13.08.2026, а не действующая цена",
   },
   {
-    fragment: '"constitution:team"',
-    reason: "permalink Constitution Team в каталоге Gumroad",
-  },
-  {
-    fragment: "подписка · $49 / мес",
-    reason: "Constitution Team в lib/products — сверено с дашбордом Gumroad 26.07.2026",
-  },
-  { fragment: "Pro ($9) и Team ($49)", reason: "комментарий о совпадающих описаниях на Gumroad" },
-
-  // ── Тарифы API / финтеха: своя лестница, не платформенная ────────────────
-  {
-    fragment: 'name: "Build",     price: "$49/mo"',
-    reason: "тариф Build в API-лимитах — своя лестница (/developers/fintech/rate-limits)",
-  },
-  { fragment: 'price: "$49/mo",', reason: "тот же тариф Build на /fintech/compare" },
-  { fragment: 'priceAmount: "$49"', reason: "тот же тариф Build на /pricing/api-pricing" },
-  {
-    fragment: 'e.g. "$49"',
-    reason: "пример формата в комментарии к типу, не цена",
-  },
-
-  // ── Add-on'ы модулей: цены из MODULES_PRICING, не из тарифов ─────────────
-  {
-    fragment: "$19/мес add-on (IP Bureau)",
-    reason: "aevion-ip-bureau addonMonthly = 19 в data/pricing.ts",
-  },
-  {
-    fragment: "$19/mo add-on (IP Bureau)",
-    reason: "то же самое, английская версия",
-  },
-  {
-    fragment: "Paid add-on $29/mo",
-    reason: "qreal addonMonthly = 29 в data/pricing.ts",
-  },
-
-  // ── Отдельные товары Gumroad ─────────────────────────────────────────────
-  {
-    fragment: "Anti-Grey Protocol $19",
-    reason: "английское издание гайда qrenew — priceUsd 19 в lib/products",
-  },
-  {
-    fragment: "Get for&nbsp;$19",
-    reason: "кнопка того же английского издания на /qmelanin",
-  },
-  {
-    fragment: "($59/$49/$9 в мес)",
-    reason: "комментарий о трёх живых подписках Gumroad",
-  },
-
-  // ── Прочее ───────────────────────────────────────────────────────────────
-  {
-    fragment: "Additional seats are $49/user/month",
-    reason: "доп-места Planet — своя цена, не тариф платформы",
-  },
-  {
-    fragment: "Create a $29 payment link",
-    reason: "текст демонстрационного промта для AI-агента, не цена AEVION",
-  },
-  {
-    fragment: "4 990 ₽/mo Pro (≈$49",
-    reason: "пересчёт рублёвого тарифа QBuild в доллары по названному курсу",
-  },
-
-  // ── Видимый пользователю текст, который НАМЕРЕННО называет старую цену ───
-  // Это не комментарии, а строки инвесторской модели: они объясняют читателю,
-  // что выросли только цены, а допущения не трогали. Убрать их — значит
-  // спрятать от диligence именно то, что делает пересчёт честным.
-  {
-    fragment: "Subscriber counts unchanged from the $49 version",
-    reason: "модель прямо говорит, что двинулась только цена — иначе рост ARR выглядит подгонкой",
-  },
-  {
-    fragment: "$49 → $89/mo. No conversion or reach assumption",
-    reason: "то же самое в примечании к итогам bottom-up",
-  },
-  {
-    fragment: "(repriced from $149.99 on 2026-07-22)",
-    reason: "честная пометка о репрайсинге рядом с ценой места Universe",
-  },
-  {
-    fragment: "unchanged from the $149.99 version of this model",
-    reason: "то же самое для допущений сценария роста",
+    fragment: "repriced $249.99 → $149 on 2026-08-13",
+    reason: "pitchModel: та же история по флагману",
   },
 ];
 

@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
+import { emailSenderStatus } from "./routes/provisioning";
+import { lemonSqueezyVariantStatus } from "./data/lemonSqueezyVariants";
 dotenv.config();
 
 import express from "express";
@@ -94,6 +96,9 @@ import { qchaingovRouter } from "./routes/qchaingov";
 import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } from "./lib/openapiFintechSpec";
 import { NEW_WAVE_OPENAPI_PATHS, NEW_WAVE_OPENAPI_SCHEMAS, NEW_WAVE_OPENAPI_TAGS } from "./lib/openapiNewWaveSpec";
 import { isSentryEnabled, captureException } from "./lib/sentry";
+import { makeHttpErrorHandler } from "./lib/httpErrorHandler";
+import { bodyLimitByPath } from "./lib/bodyLimitByPath";
+import { needsRawBody } from "./lib/rawBodyPolicy";
 import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
 import { paymentsRouter } from "./routes/payments";
@@ -149,13 +154,28 @@ app.use(
 // 10mb to accommodate base64-encoded resume scans posted to /api/build/ai/parse-resume.
 // Plain JSON payloads everywhere else stay tiny — limit is just a ceiling.
 //
-// `verify` stashes the raw bytes on req.rawBody for paths that need exact-byte
-// signature verification (Stripe webhooks: /api/qpaynet/deposit/webhook,
-// /api/checkout/webhook, etc.). All other handlers ignore rawBody.
+// Узкие пределы по путям — ОБЯЗАТЕЛЬНО до общего разбора: после него тело уже
+// прочитано, и меньший предел ставить поздно. Список и замеры — в модуле.
+app.use(bodyLimitByPath);
+
+// `verify` сохраняет сырые байты на req.rawBody для обработчиков, которые
+// проверяют подпись побайтно (платёжные вебхуки: /api/qpaynet/deposit/webhook,
+// /api/paypal/webhook и ещё семь — полный список и замеры в lib/rawBodyPolicy).
+//
+// Сохраняется НЕ на всех путях: ссылка на буфер продлевает ему жизнь до конца
+// запроса, и на медиа-путях (тела в мегабайтах) это стоит десятков мегабайт при
+// небольшой параллельности. Правило двойное — «мало ИЛИ вебхук» — чтобы
+// устаревший список путей не сломал проверку подписи молча.
+//
+// Прежний комментарий здесь называл читателем /api/checkout/webhook — тот
+// обработчик rawBody не читает вовсе (проверено грепом по src/).
 app.use(express.json({
   limit: "10mb",
   verify: (req, _res, buf) => {
-    (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    const r = req as { originalUrl?: string; url?: string };
+    if (needsRawBody(r.originalUrl ?? r.url, buf.length)) {
+      (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    }
   },
 }));
 // Gumroad pings arrive as application/x-www-form-urlencoded. express.json
@@ -166,8 +186,13 @@ app.use(express.json({
 app.use(express.urlencoded({
   extended: false,
   limit: "1mb",
+  // Та же политика, что у JSON: путь Gumroad в списке, поэтому его пинг получит
+  // байты при любом размере, а прочие form-посты — только пока они малы.
   verify: (req, _res, buf) => {
-    (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    const r = req as { originalUrl?: string; url?: string };
+    if (needsRawBody(r.originalUrl ?? r.url, buf.length)) {
+      (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    }
   },
 }));
 
@@ -177,36 +202,62 @@ app.use(express.urlencoded({
 // Build/version marker so a post-deploy check can confirm exactly which commit
 // is live instead of guessing from a 200. Railway injects RAILWAY_GIT_COMMIT_SHA
 // at build time; falls back to GIT_SHA / SOURCE_VERSION, or "unknown" in local dev.
-// 14.08.2026: отметку сборки НЕЛЬЗЯ брать из переменной окружения. Переменные
-// живут в сервисе, а не в образе, и переживают чужую выкатку: 13.08 я выставил
-// GIT_SHA при своей выкатке, ночью соседняя сессия выкатила в тот же сервис
-// AEVION свою ветку — и /health продолжил уверенно называть МОЙ коммит,
-// которого на проде уже не было. Проверка сборки отвечала «совпадает», пока
-// прод работал на другом коде.
-//
-// Поэтому отметка едет ВНУТРИ артефакта: scripts/railway-deploy.sh кладёт
-// build-info.json рядом с кодом перед загрузкой. Нет файла — честное
-// "unknown", а не унаследованное чужое значение.
-function readBuildInfo(): { commit: string; branch?: string; builtAt?: string } {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+/**
+ * Развёрнутый коммит: что за код сейчас работает.
+ *
+ * ПОРЯДОК ИСТОЧНИКОВ ВАЖЕН, и он такой не случайно. Отметку НЕЛЬЗЯ брать из
+ * переменной окружения первой: переменные живут в СЕРВИСЕ, а не в образе, и
+ * переживают чужую выкатку. 13.08.2026 GIT_SHA была выставлена при одной
+ * выкатке, ночью соседняя сессия выкатила в тот же сервис свою ветку — и
+ * /health продолжал уверенно называть прежний коммит, которого на проде уже не
+ * было. Проверка отвечала «сборка совпадает» при полностью подменённом проде.
+ *
+ * Поэтому сначала читается build-info.json, который едет ВНУТРИ артефакта
+ * (его кладёт scripts/railway-deploy.sh перед загрузкой). Переменные остаются
+ * запасным путём — на случай, когда сборка когда-нибудь снова пойдёт из
+ * git-репозитория и подставит их сама.
+ *
+ * Поле builtAt отвечает на вопрос, который bootedAt не покрывает: контейнер
+ * Railway перезапускается сам, и «поднялся 10 минут назад» бывает у образа
+ * недельной давности.
+ */
+function readBuildInfo(): { commit: string; source: string; branch: string; builtAt: string | null } {
+  try {    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const fsMod = require("node:fs") as typeof import("node:fs");
     const pathMod = require("node:path") as typeof import("node:path");
     const raw = fsMod.readFileSync(pathMod.join(__dirname, "..", "build-info.json"), "utf-8");
-    const j = JSON.parse(raw);
-    if (typeof j?.commit === "string" && j.commit) return j;
+    const info = JSON.parse(raw) as { commit?: string; source?: string; branch?: string; builtAt?: string };
+    if (info.commit) {
+      return {
+        commit: String(info.commit).slice(0, 12),
+        source: String(info.source || "build-info"),
+        branch: String(info.branch || "unknown"),
+        builtAt: info.builtAt ? String(info.builtAt) : null,
+      };
+    }
   } catch {
-    /* файла нет — это нормально для локального запуска */
+    /* файла нет — ниже пробуем переменные, затем честное "unknown" */
   }
-  // Railway подставляет своё только когда собирает из git-репозитория; у нас
-  // так не выходит с 27.07, но если когда-нибудь выйдет — это честный источник,
-  // он приходит вместе со сборкой.
-  if (process.env.RAILWAY_GIT_COMMIT_SHA) return { commit: process.env.RAILWAY_GIT_COMMIT_SHA };
-  return { commit: "unknown" };
+  // Запасной путь: сборка из подключённого репозитория подставляет метку сама.
+  const envCommit =
+    process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || process.env.SOURCE_VERSION;
+  if (envCommit) {
+    return {
+      commit: envCommit.slice(0, 12),
+      source: "env",
+      branch: process.env.RAILWAY_GIT_BRANCH || "unknown",
+      // Времени сборки в переменных нет, а выдумывать «сейчас» нельзя: это
+      // назвало бы старт контейнера сборкой.
+      builtAt: null,
+    };
+  }
+  // Ни файла, ни переменных — dev-запуск. Отвечаем явно: ложный коммит хуже
+  // отсутствующего, потому что ему верят.
+  return { commit: "unknown", source: "none", branch: "unknown", builtAt: null };
 }
 
 const BUILD_INFO = readBuildInfo();
-const BUILD_COMMIT = BUILD_INFO.commit.slice(0, 12);
+const BUILD_COMMIT = BUILD_INFO.commit;
 const BOOT_TIME = new Date().toISOString();
 
 function healthPayload() {
@@ -215,10 +266,15 @@ function healthPayload() {
     service: "AEVION Globus Backend",
     timestamp: new Date().toISOString(),
     commit: BUILD_COMMIT,
-    // Ветка и время сборки — чтобы «на проде не моё» читалось сразу, а не через
-    // расследование: сервис AEVION общий, в него выкатывают несколько сессий.
-    branch: BUILD_INFO.branch ?? null,
-    builtAt: BUILD_INFO.builtAt ?? null,
+    // Откуда взят коммит и какая ветка: "unknown" при source "none" значит
+    // «маркер не собрался», а при source "env" — «переменная пустая». Разные
+    // неисправности, и различать их надо не догадками.
+    commitSource: BUILD_INFO.source,
+    branch: BUILD_INFO.branch,
+    // Когда СОБРАН образ. Не то же, что bootedAt: Railway перезапускает
+    // контейнер сам, и «поднялся 10 минут назад» бывает у образа недельной
+    // давности. null — честнее выдуманного времени.
+    builtAt: BUILD_INFO.builtAt,
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
     // Аналитика пишется в файл. Если её самое старое событие всегда моложе
@@ -232,6 +288,15 @@ function healthPayload() {
     // без него прод отдаёт SHA-512, который наше же описание API называет
     // «NOT a cryptographic signature». Теперь проверяется одним запросом.
     qsign: safeDilithiumStatus(),
+    // Письмо после покупки. Без ключа отправка «успешна» и молча уходит в лог:
+    // покупатель не получает ни что он купил, ни как этим пользоваться, а
+    // снаружи это неотличимо от исправной работы. Признак и адрес отправителя,
+    // ключ не отдаём.
+    emailSender: safeEmailSenderStatus(),
+    // Какие товары магазина реально можно выдать. Товар в продаже с `false`
+    // здесь — это будущий отказ на живом покупателе. Только признаки, без
+    // самих идентификаторов вариантов.
+    lsVariants: safeLsVariantStatus(),
   };
 }
 
@@ -241,6 +306,24 @@ function safeDilithiumStatus() {
     return dilithiumStatus();
   } catch {
     return { mode: null, reason: null };
+  }
+}
+
+/** health не должен падать из-за диагностики. */
+function safeLsVariantStatus() {
+  try {
+    return lemonSqueezyVariantStatus();
+  } catch {
+    return null;
+  }
+}
+
+/** health не должен падать из-за диагностики. */
+function safeEmailSenderStatus() {
+  try {
+    return emailSenderStatus();
+  } catch {
+    return { configured: null, from: null, mode: null };
   }
 }
 
@@ -1271,23 +1354,10 @@ startQpaynetRetryWorker();
 // QTradeOffline — offline-first P2P AEV payments (ECDSA P-256, /sync batch)
 app.use("/api/qtradeoffline", qtradeOfflineRouter);
 
-app.use(
-  (
-    err: unknown,
-    req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction,
-  ) => {
-    console.error("[express]", err);
-    captureException(err, {
-      url: req.originalUrl ?? req.url,
-      method: req.method,
-      ip: req.ip,
-    });
-    if (res.headersSent) return;
-    res.status(500).json({ error: "internal_error" });
-  },
-);
+// Обработчик ошибок живёт в src/lib/httpErrorHandler.ts — вынесен туда, чтобы
+// его можно было проверить тестом, не поднимая весь сервер. Разбор клиентских
+// отказов (413/400 вместо 500 и без Sentry) описан там же.
+app.use(makeHttpErrorHandler());
 
 // QSign v2 — Sentry init (no-op when SENTRY_DSN unset). Must run before
 // the listener binds so any startup failures are captured too.

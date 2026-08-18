@@ -251,7 +251,7 @@ const solveStore = new Map<string, SolveRecord>(); // key: `${userId}:${day}`
 let dailyPool: any = null;
 let dailyDbTried = false;
 /** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
-const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, saveErrors: 0, lastErrorKind: null as string | null };
+const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, rowsWritten: 0, saveErrors: 0, lastErrorKind: null as string | null };
 
 /**
  * Ошибка базы, сведённая к КАТЕГОРИИ.
@@ -360,8 +360,18 @@ async function saveDailyToDb(stamp: number): Promise<void> {
       slot.stats = st;
       byUser.set(st.userId, slot);
     }
+    // Считаем ЗАПИСАННЫЕ СТРОКИ, а не проходы функции.
+    //
+    // Раньше saves увеличивался один раз за вызов, если тот не бросил
+    // исключение. Поймано мутацией 18.08.2026: выключил запись в базу целиком —
+    // строка в базе не появилась, а диагностика бодро отчиталась «записей 1».
+    // То есть счётчик доказывал не запись, а отсутствие исключения; на пустом
+    // наборе игроков или при отклонённой сторожем savedAtMs записи он рос бы
+    // ровно так же. Диагностика, отвечающая на другой вопрос, хуже её
+    // отсутствия — на неё уже смотрят как на доказательство.
+    let written = 0;
     for (const [uid, slot] of byUser) {
-      await pool.query(
+      const r = await pool.query(
         `INSERT INTO "CyberDailyEntry" ("userId","entry","stats","savedAtMs")
          VALUES ($1,$2,$3,$4)
          ON CONFLICT ("userId") DO UPDATE SET
@@ -369,8 +379,10 @@ async function saveDailyToDb(stamp: number): Promise<void> {
          WHERE "CyberDailyEntry"."savedAtMs" <= EXCLUDED."savedAtMs"`,
         [uid, slot.entry ? JSON.stringify(slot.entry) : null, slot.stats ? JSON.stringify(slot.stats) : null, stamp],
       );
+      written += r.rowCount ?? 0;
     }
-    dailyDbHealth.saves += 1;
+    dailyDbHealth.rowsWritten += written;
+    if (written > 0) dailyDbHealth.saves += 1;
   } catch (e) {
     dailyDbHealth.saveErrors += 1;
     dailyDbHealth.lastErrorKind = dbErrorKind(e);

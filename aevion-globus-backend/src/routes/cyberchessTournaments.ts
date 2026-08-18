@@ -188,7 +188,7 @@ let TOURNAMENTS: Tournament[] = [];
 let dbPool: any = null;
 let dbTried = false;
 /** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
-const dbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, saveErrors: 0, lastErrorKind: null as string | null };
+const dbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, rowsWritten: 0, saveErrors: 0, lastErrorKind: null as string | null };
 /** Момент последнего сохранения состояния — по нему выбирается свежая копия. */
 let savedAtMs = 0;
 
@@ -296,15 +296,24 @@ async function saveToDb(list: Tournament[], stamp: number): Promise<void> {
     // процесса, нельзя считать лишней — её мог только что завести сосед.
     // Удаление живёт отдельно, по явной команде: см. deleteFromDb и
     // DELETE /:id ниже.
+    // Считаем ЗАПИСАННЫЕ СТРОКИ, а не проходы функции. Тот же дефект, что
+    // найден мутацией в задаче дня 18.08.2026: saves рос один раз за вызов,
+    // если тот не бросил исключение, — то есть подтверждал отсутствие
+    // исключения, а не запись. На пустом списке турниров или при отклонённой
+    // сторожем savedAtMs записи он рос бы ровно так же, и диагностика отвечала
+    // бы «записей N» при нетронутой базе.
+    let written = 0;
     for (const t of list) {
-      await pool.query(
+      const r = await pool.query(
         `INSERT INTO "CyberTournament" ("id","data","savedAtMs") VALUES ($1,$2,$3)
          ON CONFLICT ("id") DO UPDATE SET "data"=EXCLUDED."data","savedAtMs"=EXCLUDED."savedAtMs"
          WHERE "CyberTournament"."savedAtMs" <= EXCLUDED."savedAtMs"`,
         [t.id, JSON.stringify(t), stamp],
       );
+      written += r.rowCount ?? 0;
     }
-    dbHealth.saves += 1;
+    dbHealth.rowsWritten += written;
+    if (written > 0) dbHealth.saves += 1;
   } catch (e) {
     dbHealth.saveErrors += 1;
     dbHealth.lastErrorKind = dbErrorKind(e);

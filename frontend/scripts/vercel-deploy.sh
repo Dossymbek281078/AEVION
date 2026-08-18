@@ -57,12 +57,27 @@ trap cleanup EXIT
 
 cat > "$STAMP" <<TS
 /** Проставлено scripts/vercel-deploy.sh при выкатке. В git лежат заглушки. */
-export const BUILD_STAMP = {
+export type BuildStamp = {
+  commit: string;
+  branch: string;
+  builtAt: string | null;
+};
+
+export const BUILD_STAMP: BuildStamp = {
   commit: "${SHA:0:12}",
   branch: "$BRANCH",
-  builtAt: "$(date -u +%Y-%m-%dT%H:%M:%SZ)" as string | null,
-} as const;
+  builtAt: "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+};
 TS
+
+# Типы проверяем ПОСЛЕ подстановки отметки и ДО загрузки.
+#
+# 18.08.2026 первая версия писала отметку с `as const`, и типы сужались до
+# литералов: сравнение с "unknown" в /api/health становилось ошибкой ровно
+# тогда, когда отметка заполнена. На заглушке всё компилировалось, а выкатка
+# падала на сборке. Проверять надо ТО, ЧТО УЕЗЖАЕТ, а не то, что лежит в git.
+echo "проверяю типы с подставленной отметкой…"
+( cd "$FRONT_DIR" && npx tsc --noEmit )
 
 npx vercel deploy --prod --yes
 

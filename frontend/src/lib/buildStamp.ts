@@ -13,8 +13,22 @@
  * Заглушки остаются в git намеренно: сборка не должна падать оттого, что кто-то
  * собрал сайт не через скрипт, — она должна честно сказать "unknown".
  */
-export const BUILD_STAMP = {
+export type BuildStamp = {
+  commit: string;
+  branch: string;
+  builtAt: string | null;
+};
+
+/**
+ * Тип объявлен ЯВНО и без `as const`. С `as const` типы сужаются до литералов,
+ * и сравнение `BUILD_STAMP.commit !== "unknown"` в /api/health становится
+ * ошибкой типов ровно тогда, когда отметка ЗАПОЛНЕНА, — то есть сборка падает
+ * только на настоящей выкатке и проходит на заглушке. Проверено 18.08.2026:
+ * так и вышло, выкатка упала на сборке (прод при этом не пострадал —
+ * Vercel оставляет прежнюю версию, пока новая не собралась).
+ */
+export const BUILD_STAMP: BuildStamp = {
   commit: "unknown",
   branch: "unknown",
-  builtAt: null as string | null,
-} as const;
+  builtAt: null,
+};

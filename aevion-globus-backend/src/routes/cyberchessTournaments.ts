@@ -467,6 +467,13 @@ export function tournamentPersistenceState(): {
   };
 }
 
+/**
+ * Показанные сейчас турниры — это заглушка (фикстуры на пустом томе), а не
+ * сохранённое состояние. Пока признак стоит, писать их никуда нельзя: они
+ * затрут настоящие данные в базе.
+ */
+let seedsArePlaceholder = false;
+
 function initStore(): void {
   const result = tryLoadFromDisk();
   if (!result.ok) {
@@ -497,8 +504,21 @@ function initStore(): void {
     }
     return;
   }
+  // Файла нет вовсе — так выглядит СВЕЖИЙ КОНТЕЙНЕР: том пуст, а база жива.
+  // Фикстуры здесь не состояние, а заглушка на те секунды, пока не ответила
+  // база. Поэтому:
+  //   • savedAtMs остаётся 0 — иначе заглушка объявляет себя свежее базы;
+  //   • на диск и в базу ничего не пишем, пока база не ответила.
+  //
+  // Раньше здесь стоял tryWriteToDisk(), и он ставил savedAtMs = Date.now().
+  // Живой прогон 18.08.2026 показал последствие: на пустом томе модуль не
+  // поднимал состояние из базы (adoptedFromDb: false), показывал двенадцать
+  // фикстур и ЗАПИСЫВАЛ их в базу поверх настоящих турниров — у фикстур штамп
+  // всегда новее. То есть ровно та потеря, ради предотвращения которой всё
+  // хранилище и делалось.
   TOURNAMENTS = buildSeedFixtures();
-  tryWriteToDisk();
+  seedsArePlaceholder = true;
+  savedAtMs = 0;
 }
 
 // ── seed fixtures (2 per format) ───────────────────────────────────
@@ -1369,10 +1389,20 @@ const storeReady: Promise<void> = (async () => {
     console.error("[cyberchess-tournaments] ответ базы пришёл слишком поздно — состояние не подхватываю, работаю на файле");
     return;
   }
-  if (!fromDb) return; // базы нет или в ней пусто — живём на файле, как раньше
+  if (!fromDb) {
+    // База пуста или недоступна. Только теперь заглушка становится настоящим
+    // состоянием — и её надо записать, иначе свежая установка потеряет
+    // фикстуры при перезапуске.
+    if (seedsArePlaceholder) {
+      seedsArePlaceholder = false;
+      tryWriteToDisk();
+    }
+    return;
+  }
   if (fromDb.savedAtMs <= savedAtMs) return; // файл свежее или ровесник — не трогаем
   TOURNAMENTS = fromDb.tournaments;
   savedAtMs = fromDb.savedAtMs;
+  seedsArePlaceholder = false; // заглушку заменили настоящими данными
   dbHealth.adoptedFromDb = true;
   for (const t of TOURNAMENTS) {
     if (typeof t.realPlayers === "undefined") t.realPlayers = false;

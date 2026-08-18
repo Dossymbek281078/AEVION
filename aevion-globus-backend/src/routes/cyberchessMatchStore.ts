@@ -340,7 +340,15 @@ export async function finalizeMatch(
   // finalize corrupting Glicko-2 (the in-memory MATCHES guard is volatile and
   // is wiped on process restart while the DB row persists).
   const existing = await q(
-    `SELECT "status","result","endedAt","whiteUserId","blackUserId","whiteName","blackName",
+    // endedAt отдаём ЭПОХОЙ, а не датой. Колонка TIMESTAMP (без зоны), и
+    // драйвер читает её как МЕСТНОЕ время процесса: на машине в UTC+5 значение
+    // оказывается на пять часов раньше, чем Date.now(). Сравнивать такую дату
+    // с границей, посчитанной по часам процесса, — сравнивать разные шкалы.
+    // Замерено 18.08.2026: из-за этого сеть безопасности (момент старта
+    // хранилища) не срабатывала никогда, и доплата молча выключалась.
+    `SELECT "status","result","endedAt",
+            EXTRACT(EPOCH FROM "endedAt")*1000 AS "endedAtMs",
+            "whiteUserId","blackUserId","whiteName","blackName",
             "whiteRatingBefore","blackRatingBefore","whiteRatingAfter","blackRatingAfter"
        FROM "CyberMatch" WHERE "id"=$1`,
     [matchId],
@@ -357,7 +365,7 @@ export async function finalizeMatch(
     // Только для партий, закрытых после появления ведомости: у остальных строк
     // в ней нет не потому, что им не заплатили, а потому, что её тогда не было
     // (см. repairBoundMs).
-    const endedAtMs = prior.endedAt ? new Date(prior.endedAt).getTime() : NaN;
+    const endedAtMs = Number(prior.endedAtMs);
     if (Number.isFinite(endedAtMs) && endedAtMs >= (await repairBoundMs())) {
       await settleAwards(matchId, prior);
     }
@@ -579,8 +587,9 @@ function chessyFor(result: string, side: "white" | "black"): number {
  */
 async function repairBoundMs(): Promise<number> {
   if (ledgerStartAt == null) {
-    const rows = await qOrNull(`SELECT min("paidAt") AS t FROM "CyberWalletAward"`, []);
-    const t = rows && rows[0]?.t ? new Date(rows[0].t).getTime() : NaN;
+    // Тоже эпохой — по той же причине, что и endedAt выше.
+    const rows = await qOrNull(`SELECT EXTRACT(EPOCH FROM min("paidAt"))*1000 AS t FROM "CyberWalletAward"`, []);
+    const t = rows && rows[0]?.t != null ? Number(rows[0].t) : NaN;
     ledgerStartAt = Number.isFinite(t) ? t : null;
   }
   const fromLedger = ledgerStartAt == null ? Number.POSITIVE_INFINITY : ledgerStartAt;

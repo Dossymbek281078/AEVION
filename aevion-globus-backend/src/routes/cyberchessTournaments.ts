@@ -188,7 +188,35 @@ let TOURNAMENTS: Tournament[] = [];
 let dbPool: any = null;
 let dbTried = false;
 /** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
-const dbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, rowsWritten: 0, saveErrors: 0, lastErrorKind: null as string | null };
+const dbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, rowsWritten: 0, saveErrors: 0, retries: 0, lastErrorKind: null as string | null };
+
+/**
+ * Повтор зеркалирования в базу после сбоя.
+ *
+ * Запись в базу не ждут (void saveToDb) — путь регистрации не должен зависеть
+ * от скорости базы. Обратная сторона: единичный обрыв сети раньше означал, что
+ * зеркало молча отстало, и узнать об этом можно было только по счётчику ошибок,
+ * на который никто не смотрит. У файла повтор был всегда (PERSIST_RETRY_MS), у
+ * базы — нет.
+ *
+ * Повторяем ТЕКУЩЕЕ состояние, а не упавший снимок: пока ждали, могли прийти
+ * новые изменения, и запись старого снимка либо была бы отклонена сторожем
+ * savedAtMs, либо (что хуже) откатила бы свежее.
+ */
+const DB_RETRY_MS = Number(process.env.CYBERCHESS_DB_RETRY_MS ?? 20_000);
+let dbRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleDbRetry(): void {
+  if (dbRetryTimer) return; // одна попытка в полёте: иначе каждая ошибка плодит свой таймер
+  dbRetryTimer = setTimeout(() => {
+    dbRetryTimer = null;
+    dbHealth.retries += 1;
+    void saveToDb(TOURNAMENTS, savedAtMs);
+  }, DB_RETRY_MS);
+  // unref: таймер не должен держать процесс живым — иначе скрипты проверки и
+  // тесты перестанут завершаться, а причина будет выглядеть как зависание.
+  dbRetryTimer.unref?.();
+}
 /** Момент последнего сохранения состояния — по нему выбирается свежая копия. */
 let savedAtMs = 0;
 
@@ -317,7 +345,11 @@ async function saveToDb(list: Tournament[], stamp: number): Promise<void> {
   } catch (e) {
     dbHealth.saveErrors += 1;
     dbHealth.lastErrorKind = dbErrorKind(e);
-    console.error("[cyberchess-tournaments] запись состояния в базу не прошла:", (e as Error).message);
+    console.error(
+      `[cyberchess-tournaments] запись состояния в базу не прошла, повтор через ${DB_RETRY_MS / 1000} с:`,
+      (e as Error).message,
+    );
+    scheduleDbRetry();
   }
 }
 

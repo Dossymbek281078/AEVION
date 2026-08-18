@@ -251,7 +251,25 @@ const solveStore = new Map<string, SolveRecord>(); // key: `${userId}:${day}`
 let dailyPool: any = null;
 let dailyDbTried = false;
 /** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
-const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, rowsWritten: 0, saveErrors: 0, lastErrorKind: null as string | null };
+const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, rowsWritten: 0, saveErrors: 0, retries: 0, lastErrorKind: null as string | null };
+
+/**
+ * Повтор зеркалирования в базу после сбоя — как в турнирах и по той же
+ * причине: запись не ждут, поэтому единичный обрыв сети означал бы, что
+ * зеркало молча отстало. Повторяем ТЕКУЩЕЕ состояние, а не упавший снимок.
+ */
+const DAILY_DB_RETRY_MS = Number(process.env.CYBERCHESS_DB_RETRY_MS ?? 20_000);
+let dailyDbRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleDailyDbRetry(): void {
+  if (dailyDbRetryTimer) return; // одна попытка в полёте
+  dailyDbRetryTimer = setTimeout(() => {
+    dailyDbRetryTimer = null;
+    dailyDbHealth.retries += 1;
+    void saveDailyToDb(Date.now());
+  }, DAILY_DB_RETRY_MS);
+  dailyDbRetryTimer.unref?.(); // таймер не должен держать процесс живым
+}
 
 /**
  * Ошибка базы, сведённая к КАТЕГОРИИ.
@@ -386,7 +404,11 @@ async function saveDailyToDb(stamp: number): Promise<void> {
   } catch (e) {
     dailyDbHealth.saveErrors += 1;
     dailyDbHealth.lastErrorKind = dbErrorKind(e);
-    console.error('[cyberchess-daily] запись записей в базу не прошла:', (e as Error).message);
+    console.error(
+      `[cyberchess-daily] запись записей в базу не прошла, повтор через ${DAILY_DB_RETRY_MS / 1000} с:`,
+      (e as Error).message,
+    );
+    scheduleDailyDbRetry();
   }
 }
 

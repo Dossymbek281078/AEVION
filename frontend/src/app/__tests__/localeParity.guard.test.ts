@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { translations, LANGS } from "@/lib/i18n-data";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { allTranslations, allLangs, FALLBACK_LANG } from "./localeSource";
 
 /**
  * Ключ, которого нет в английском словаре, показывает пользователю СВОЁ ИМЯ.
@@ -22,16 +26,16 @@ import { translations, LANGS } from "@/lib/i18n-data";
  * Импорт снимает все три ловушки сразу.
  */
 describe("паритет локалей: английский как последний рубеж", () => {
-  const tbl = translations as Record<string, Record<string, string>>;
+  const tbl = allTranslations();
 
   it("английский словарь непустой", () => {
     // Без этого «сирот нет» верно и при развалившемся импорте.
-    expect(Object.keys(tbl.en ?? {}).length).toBeGreaterThan(1000);
+    expect(Object.keys(tbl[FALLBACK_LANG] ?? {}).length).toBeGreaterThan(1000);
   });
 
   it("ни в одном языке нет ключа, которого нет в английском", () => {
-    const en = new Set(Object.keys(tbl.en ?? {}));
-    const orphans = LANGS.flatMap((l) =>
+    const en = new Set(Object.keys(tbl[FALLBACK_LANG] ?? {}));
+    const orphans = allLangs().flatMap((l) =>
       Object.keys(tbl[l] ?? {})
         .filter((k) => !en.has(k))
         .map((k) => `${l}: ${k}`),
@@ -39,6 +43,29 @@ describe("паритет локалей: английский как после�
     expect(
       orphans,
       "ключ без английской версии покажет пользователю своё имя — заведите строку в en",
+    ).toEqual([]);
+  });
+
+  it("словари читаются из ОДНОГО места — иначе перестройку придётся вспоминать трижды", () => {
+    // Правило «единственная точка» без проверки живёт до первого нового теста.
+    // Проверено на себе: зная о перестройке, я сам завёл вторую копию импорта,
+    // а третья уже лежала в тестах компонентов.
+    const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((e) => {
+        if (e === "node_modules" || e === ".next") return [];
+        const full = join(dir, e);
+        return statSync(full).isDirectory() ? walk(full) : /\.test\.tsx?$/.test(e) ? [full] : [];
+      });
+    const tests = walk(SRC);
+    expect(tests.length, "тестовых файлов не найдено — обход сломан").toBeGreaterThan(30);
+
+    const direct = tests
+      .filter((f) => /from ["'][^"']*lib\/i18n-data["']/.test(readFileSync(f, "utf8")))
+      .map((f) => relative(SRC, f).split("\\").join("/"));
+    expect(
+      direct,
+      "берите словари через app/__tests__/localeSource — там одна точка правки на всю перестройку",
     ).toEqual([]);
   });
 

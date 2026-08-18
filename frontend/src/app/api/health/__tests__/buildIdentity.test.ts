@@ -76,3 +76,27 @@ describe("health сайта называет свою сборку", () => {
     expect(b.build?.commit).toBe("222222222222");
   });
 });
+
+describe("отметка внутри сборки главнее переменных", () => {
+  test("когда buildStamp заполнен, он и отвечает", async () => {
+    // Переменные Vercel живут в ПРОЕКТЕ и переживают чужую выкатку: на Railway
+    // ровно это привело к тому, что /health уверенно называл коммит, которого
+    // на проде уже не было. Поэтому первым спрашиваем то, что уехало внутри
+    // артефакта.
+    vi.resetModules();
+    vi.doMock("@/lib/buildStamp", () => ({
+      BUILD_STAMP: { commit: "aaaaaaaaaaaa", branch: "deploy/test", builtAt: "2026-08-18T00:00:00Z" },
+    }));
+    process.env.VERCEL_GIT_COMMIT_SHA = "bbbbbbbbbbbbbbbb";
+    process.env.VERCEL_GIT_COMMIT_REF = "other-branch";
+
+    const mod = await import("../route");
+    const j = (await (await mod.GET()).json()) as { build?: { commit: string; branch: string; builtAt: string | null } };
+
+    expect(j.build?.commit).toBe("aaaaaaaaaaaa");
+    expect(j.build?.branch).toBe("deploy/test");
+    expect(j.build?.builtAt).toBe("2026-08-18T00:00:00Z");
+    vi.doUnmock("@/lib/buildStamp");
+    vi.resetModules();
+  });
+});

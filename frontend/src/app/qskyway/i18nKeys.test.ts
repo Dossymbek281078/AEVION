@@ -18,7 +18,7 @@ import { describe, test, expect } from "vitest";
  * по-прежнему зелёный. Удалять список — нельзя: он и есть доказательство,
  * что перенос ничего не потерял.
  */
-import { translations } from "@/lib/i18n-data";
+import { allTranslations } from "../__tests__/localeSource";
 
 /**
  * Ключи модуля живут ровно в трёх локалях — en, ru, kk (остальные восемь в
@@ -63,7 +63,7 @@ describe("ключи перевода qskyway", () => {
   for (const key of KEYS) {
     test(`${key} — есть во всех трёх языках и с теми же подстановками`, () => {
       const values = LOCALES.map((l) => {
-        const dict = (translations as Record<string, Record<string, string>>)[l];
+        const dict = (allTranslations() as Record<string, Record<string, string>>)[l];
         return dict?.[key];
       });
       for (const [i, v] of values.entries()) {

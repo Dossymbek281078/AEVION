@@ -166,9 +166,35 @@ async function qOrNull(text: string, params: unknown[]): Promise<any[] | null> {
   }
 }
 
-/** Пишущий/фоновый вариант: отказ — тихий no-op, поток матчей не блокируется. */
+/**
+ * Учёт записи в хранилище партий.
+ *
+ * До 18.08.2026 его не было вовсе: отказ записи превращался в тихий no-op с
+ * одной строкой в console.warn. Так пишутся партии, ходы, рейтинги и НАЧИСЛЕНИЯ
+ * CHESSY — то есть денежный путь работал без единого счётчика, и «всё хорошо»
+ * нельзя было отличить от «половина записей не доехала».
+ */
+export const matchStoreHealth = {
+  writes: 0,
+  writeErrors: 0,
+  /** Захват партии не выполнен, потому что база не ответила (НЕ «уже закрыта»). */
+  claimUnknown: 0,
+  lastErrorKind: null as string | null,
+};
+
+/**
+ * Пишущий/фоновый вариант: отказ не блокирует поток матчей, но БОЛЬШЕ НЕ
+ * молчит. Пустой список по-прежнему возвращается ради совместимости с
+ * вызывающими, а факт отказа теперь виден в счётчике.
+ */
 async function q(text: string, params: unknown[]): Promise<any[]> {
-  return (await qOrNull(text, params)) ?? [];
+  const rows = await qOrNull(text, params);
+  if (rows === null) {
+    matchStoreHealth.writeErrors += 1;
+    return [];
+  }
+  matchStoreHealth.writes += 1;
+  return rows;
 }
 
 export interface RatingRow extends GlickoState {
@@ -361,11 +387,29 @@ export async function finalizeMatch(
   // Условие `"status" <> 'ended'` делает захват атомарным: из двух
   // одновременных вызовов строку получает ровно один. RETURNING — потому что
   // q() отдаёт только rows и теряет rowCount.
-  const claimed = await q(
+  // qOrNull, а НЕ q: здесь пустой список и отказ базы означают разное, а q()
+  // отдаёт [] в обоих случаях.
+  //
+  // Найдено 18.08.2026. Отказ на этом запросе читался как «строку закрыл кто-то
+  // другой» — и функция молча не начисляла Chessy, отвечая игроку ok. То есть
+  // сбой сети выглядел как штатный повтор, а деньги не приходили, и в системе
+  // не оставалось ни счётчика, ни строки об этом.
+  const claimed = await qOrNull(
     `UPDATE "CyberMatch" SET "status"='ended',"result"=$2,"termination"=$3,"endedAt"=now()
       WHERE "id"=$1 AND "status" <> 'ended' RETURNING "id"`,
     [matchId, info.result, info.termination ?? null],
   );
+  if (claimed === null) {
+    // Спросить не удалось — это НЕ «уже закрыта». Строка осталась незакрытой,
+    // поэтому повтор (конец партии сообщают оба клиента) захватит её честно.
+    // Молчать нельзя: без этой строки отказ неотличим от нормы.
+    matchStoreHealth.claimUnknown += 1;
+    matchStoreHealth.lastErrorKind = "query";
+    console.error(
+      `[CyberMatchStore] захват партии ${matchId} не выполнен — база не ответила. Начисление НЕ сделано; ждём повтора от второго клиента.`,
+    );
+    return null;
+  }
   if (claimed.length === 0) {
     // Строку закрыл кто-то другой между нашим SELECT и этим UPDATE — либо она
     // была закрыта раньше, а SELECT не дошёл. Ничего не начисляем.

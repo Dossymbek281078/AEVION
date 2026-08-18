@@ -80,6 +80,12 @@ vi.mock("pg", () => {
               status: state.ended ? "ended" : "live",
               result: state.result,
               endedAt: state.ended ? new Date(state.endedAtMs || Date.now()) : null,
+              // Настоящий запрос с 18.08.2026 просит ещё и эпоху:
+              // EXTRACT(EPOCH FROM "endedAt")*1000 AS "endedAtMs". Колонка
+              // TIMESTAMP без зоны, и дата из неё несравнима с Date.now() —
+              // из-за этого путь доплаты молча не выполнялся. Подделка,
+              // не отдающая это поле, перестала быть похожей на базу.
+              endedAtMs: state.ended ? state.endedAtMs || Date.now() : null,
               whiteUserId: "white-player",
               blackUserId: "black-player",
               whiteName: "White",

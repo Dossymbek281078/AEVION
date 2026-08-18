@@ -32,7 +32,7 @@
 import { analyze, type AnalysisInput } from "../src/lib/qventure/engine";
 
 /** outcome: "failed" = wound down / fire-sale / fraud finding. "succeeded" = durable large outcome. */
-const CASES: Array<AnalysisInput & { outcome: "failed" | "succeeded" }> = [
+export const CASES: Array<AnalysisInput & { outcome: "failed" | "succeeded" }> = [
   // ── Outcome: failed ───────────────────────────────────────────────────────
   { name: "Quibi", sector: "consumer", stage: "series-a", geography: "US", askUsd: 750_000_000, outcome: "failed",
     description: "Short-form premium video for mobile: professionally produced shows in under-10-minute chapters, built for commuting and queueing. Founded by a studio chairman and a former tech CEO, with major studio content commitments and a subscription model.",
@@ -108,6 +108,42 @@ const CASES: Array<AnalysisInput & { outcome: "failed" | "succeeded" }> = [
   { name: "Airbnb", sector: "marketplace", stage: "seed", geography: "US", askUsd: 600_000, outcome: "succeeded",
     description: "Marketplace for booking rooms and homes from private hosts, with payments, reviews and identity handled by the platform so strangers can transact on accommodation.",
     tractionNotes: "Bookings growing week over week off a small base; repeat booking behaviour visible. Two-sided liquidity building city by city." },
+
+  // ── Capital-intensive arm ─────────────────────────────────────────────────
+  // Added 2026-07-26. The corpus had exactly ONE capital-intensive success
+  // (Anduril) against five failures, so the "separation by business type" line
+  // was reporting a difference of means computed on n=1 — a number with no
+  // information in it. These cases carry the disclosure such companies actually
+  // put in front of investors (contracts, plants, clearances, offtake), which is
+  // also what rubric v5 learned to read.
+  //
+  // Northvolt is deliberately included: at the round described it held one of
+  // the largest order books in the industry and still failed. If contracted
+  // backlog is over-credited by the engine, this is the case that shows it.
+  { name: "SpaceX", sector: "space", stage: "series-a", geography: "US", askUsd: 50_000_000, outcome: "succeeded",
+    description: "Reusable orbital launch vehicles built and flown in-house, priced per kilogram to orbit well below incumbent expendable rockets, with a common engine family across vehicles.",
+    tractionNotes: "Falcon 1 reached orbit. NASA resupply contract awarded worth $1.6B in contracted revenue. Flight-tested hardware; vertical manufacturing carries heavy capital intensity." },
+  { name: "Moderna", sector: "biotech", stage: "series-a", geography: "US", askUsd: 110_000_000, outcome: "succeeded",
+    description: "Messenger-RNA platform instructing cells to produce therapeutic proteins in vivo, applied across a pipeline of vaccines and rare-disease programmes from one delivery and manufacturing stack.",
+    tractionNotes: "Preclinical across several programmes. Pharmaceutical partnership signed with $240M upfront, peer-reviewed results published on the delivery chemistry. No approved product." },
+  { name: "First Solar", sector: "climate", stage: "growth", geography: "US", askUsd: 400_000_000, outcome: "succeeded",
+    description: "Thin-film cadmium-telluride photovoltaic modules manufactured on a continuous line at a materials cost per watt below crystalline silicon, sold to utility-scale project developers.",
+    tractionNotes: "Production line running at commercial volume. Multi-year offtake agreements with project developers; contracted revenue of $1.2B. Gross margin 30%." },
+  { name: "Enphase", sector: "climate", stage: "series-a", geography: "US", askUsd: 30_000_000, outcome: "succeeded",
+    description: "Module-level microinverters that convert DC to AC at each solar panel, removing the single-point failure of a string inverter and giving per-panel monitoring.",
+    tractionNotes: "Design wins with several installers and module makers. Field-tested units deployed; revenue growing with residential solar attach. Hardware gross margin thinner than software." },
+  { name: "Illumina", sector: "biotech", stage: "series-a", geography: "US", askUsd: 28_000_000, outcome: "succeeded",
+    description: "Bead-array platform for high-throughput genetic analysis, driving cost per genotype down an order of magnitude by parallelising chemistry on a microscopic array.",
+    tractionNotes: "Peer-reviewed validation of the array chemistry published. Early instrument placements with research institutions; consumables revenue per instrument recurring." },
+  { name: "Northvolt", sector: "climate", stage: "growth", geography: "SE", askUsd: 1_100_000_000, outcome: "failed",
+    description: "European lithium-ion cell gigafactory supplying automakers seeking a local, low-carbon alternative to Asian cell suppliers, with in-house cathode production and recycling.",
+    tractionNotes: "Order book of $55B in contracted offtake with automakers. First plant ramping; yields below plan. Capital requirement in the tens of billions before full capacity." },
+  { name: "Solyndra", sector: "climate", stage: "growth", geography: "US", askUsd: 535_000_000, outcome: "failed",
+    description: "Cylindrical thin-film solar modules using copper-indium-gallium-selenide, designed to capture light from any angle on flat commercial rooftops without mounting hardware.",
+    tractionNotes: "$535M non-dilutive loan guarantee awarded. Pilot plant running. Cost per watt above conventional silicon panels at current silicon prices." },
+  { name: "Nikola", sector: "logistics", stage: "growth", geography: "US", askUsd: 250_000_000, outcome: "failed",
+    description: "Hydrogen fuel-cell and battery-electric class-8 trucks sold as a bundled lease including fuel and maintenance, alongside a planned hydrogen refuelling network.",
+    tractionNotes: "Large non-binding reservation book stated. Working prototype shown; no production trucks delivered, refuelling network not built." },
 ];
 
 function pct(n: number, d: number) { return d === 0 ? "0.0" : ((n / d) * 100).toFixed(1); }
@@ -179,4 +215,4 @@ function run() {
   console.log(`\n── Range used ──\n  ${Math.min(...all)}–${Math.max(...all)} of a nominal 0–100 scale (${(Math.max(...all) - Math.min(...all)).toFixed(1)} points of ${100} used)\n`);
 }
 
-run();
+if (require.main === module) run();

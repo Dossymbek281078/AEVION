@@ -532,6 +532,30 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
       node.childNodes.forEach(walk);
     };
 
+    /**
+     * True when `node` sits inside a `translate="no"` / `.notranslate` subtree.
+     *
+     * `walk()` only checks the element it is entering, which is right for the
+     * initial top-down pass: it starts at the root and stops at the opted-out
+     * wrapper. But the observer hands us nodes that were added *inside* that
+     * wrapper, so walking them directly bypassed the opt-out entirely — every
+     * module that opted out (QVenture, QRight, QSign, /build) kept its static
+     * shell in English while everything rendered after hydration got
+     * translated. QVenture's batch table showed it plainly: one verdict column
+     * with "WATCH" on the first row and "НАБЛЮДЕНИЕ" on the next two.
+     */
+    const optedOut = (node: Node): boolean => {
+      let el: HTMLElement | null = node.nodeType === Node.ELEMENT_NODE
+        ? (node as HTMLElement)
+        : node.parentElement;
+      while (el) {
+        if (el.getAttribute?.("translate") === "no" || el.classList?.contains("notranslate")) return true;
+        if (el === root) return false;
+        el = el.parentElement;
+      }
+      return false;
+    };
+
     // Disconnect while we mutate so our own writes don't re-trigger the observer.
     const apply = (node: Node) => {
       obs?.disconnect();
@@ -610,8 +634,8 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
       obs = new MutationObserver((muts) => {
         obs?.disconnect();
         for (const m of muts) {
-          if (m.type === "childList") m.addedNodes.forEach(walk);
-          else if (m.type === "characterData") walk(m.target);
+          if (m.type === "childList") m.addedNodes.forEach((n) => { if (!optedOut(n)) walk(n); });
+          else if (m.type === "characterData") { if (!optedOut(m.target)) walk(m.target); }
         }
         if (!destroyed && obs) obs.observe(root, { childList: true, subtree: true, characterData: true });
         if (pending.size > 0) scheduleFlush();

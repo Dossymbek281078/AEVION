@@ -34,8 +34,15 @@ describe("rubric versioning", () => {
   // are weighted. v4 is such a bump: churn is now read in its stated period and a
   // bare "<n>% monthly" no longer counts as growth, so execution scores moved
   // without a single weight changing.
+  // v5 is another read-side bump: the engine now scores GMV × take rate,
+  // contracted backlog, non-dilutive awards, pilots, regulatory milestones held
+  // and technical validation, so composites move while the weights do not.
+  // v6 is a third: the readers themselves were wrong on real filing prose — a
+  // negative gross margin parsed to null and the factor silently fell back to
+  // the sector prior. Fixing what the engine can see moved composites (Solyndra
+  // 68.5 → 63.6) without touching a weight.
   const EXPECTED_FINGERPRINT = "612b62dfb60afcf6";
-  const EXPECTED_VERSION = 4;
+  const EXPECTED_VERSION = 6;
 
   test("weights have not changed without a version bump", () => {
     expect(weightFingerprint()).toBe(EXPECTED_FINGERPRINT);

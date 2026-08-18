@@ -18,6 +18,7 @@ import { stressTest, type StressResult } from "./stress";
 import { triangulateTam, type TamAnalysis } from "./tam";
 import { analyzeProjections, type ProjectionPoint, type ProjectionAnalysis } from "./projections";
 import { defineBands } from "../verdictBands";
+import { conversionNote } from "../metrics/currency";
 
 /**
  * Rubric version — bump on any change that moves a composite for unchanged input.
@@ -33,8 +34,25 @@ import { defineBands } from "../verdictBands";
  *     company evidence (execution 0.12 -> 0.28); orphan metric flags weighted
  * v4  churn read in its stated period (annual != monthly) and a bare "<n>%
  *     monthly" no longer counted as growth — both moved execution scores
+ * v5  non-SaaS evidence is read and scored: GMV × take rate, contracted
+ *     backlog, non-dilutive awards, pilots/design wins, regulatory milestones
+ *     held and technical validation. Science and legal can now be company
+ *     evidence instead of always sector constants. Money is also read in the
+ *     currency it was quoted in and converted to USD (EUR/GBP/KZT/… were
+ *     previously scored as if the number were dollars).
+ *
+ *   v6 — read-side only, no weight moved: the readers were measured against real
+ *     filing prose for the first time (`scripts/qventure-disclosed.ts`) and
+ *     missed 6 of 31 stated figures. A negative gross margin is now read at its
+ *     sign instead of dropped (a company selling below cost previously scored on
+ *     its sector's margin prior), "net dollar expansion" and "retention rate of"
+ *     are read as retention, memberships and other non-SaaS customer nouns are
+ *     counted, units delivered to customers count as deployments, and
+ *     reservations/pre-orders are parsed into a field that backs no factor and
+ *     raises a flag — a reservation book is not a backlog. Composites moved
+ *     (Solyndra 68.5 → 63.6), so the version moves with them.
  */
-export const RUBRIC_VERSION = 4;
+export const RUBRIC_VERSION = 6;
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -242,7 +260,9 @@ function fmtMoney(n: number): string {
  *  customers, retention). Returns null when no quantitative traction is parsed,
  *  so the caller falls back to the qualitative tractionSignal heuristic. */
 function quantifiedExecution(sig: PlanSignals): { score: number; note: string } | null {
-  if (sig.revenueUsd === null && sig.customers === null && sig.growthPct === null) return null;
+  const nonSaasEvidence = sig.contractedRevenueUsd !== null || sig.pilots !== null
+    || sig.nonDilutiveUsd !== null || sig.gmvUsd !== null;
+  if (sig.revenueUsd === null && sig.customers === null && sig.growthPct === null && !nonSaasEvidence) return null;
   let s = 50;
   const notes: string[] = [];
   if (sig.revenueUsd !== null) {
@@ -257,18 +277,65 @@ function quantifiedExecution(sig: PlanSignals): { score: number; note: string } 
       : sig.growthPeriod === "YoY"
         ? (g >= 100 ? 12 : g >= 50 ? 8 : g >= 20 ? 3 : 1)
         : (g >= 50 ? 8 : g >= 20 ? 4 : 1);
+    // A disclosed DECLINE fell into the trailing `: 1` and earned a point, so a
+    // shrinking company scored above one that disclosed no growth figure at all.
+    // Charged like high churn instead, and named, because it is the plan's own
+    // statement about itself.
+    if (g < 0) {
+      s -= 6;
+      notes.push(`revenue declining ${Math.abs(g)}% ${sig.growthPeriod ?? ""}`.replace(/\s+/g, " ").trim());
+    } else {
     s += add;
-    notes.push(`${g}% ${sig.growthPeriod ?? ""} growth`.replace(/\s+/g, " ").trim());
+    // Name the metric when the disclosed rate is not revenue growth: "up 64.3%"
+    // on gross transaction value is a different fact from revenue up 64.3%, and
+    // a report that prints only "64.3% growth" hides which one it scored.
+    const basisLabel = sig.growthBasis === "gmv" ? " GMV" : sig.growthBasis === "customers" ? " customer" : "";
+    notes.push(`${g}% ${sig.growthPeriod ?? ""}${basisLabel} growth`.replace(/\s+/g, " ").trim());
+    }
   }
   if (sig.customers !== null) {
     s += sig.customers >= 1000 ? 8 : sig.customers >= 100 ? 5 : sig.customers >= 10 ? 2 : 1;
     notes.push(`${sig.customers.toLocaleString("en-US")} customers`);
   }
-  if (sig.retentionPct !== null) s += sig.retentionPct >= 120 ? 6 : sig.retentionPct >= 90 ? 3 : 0;
+  // Every other line in this block records what it awarded. This one did not,
+  // so up to 6 points appeared in the execution factor with nothing in the
+  // report that mentions retention at all — the reader saw the points and not
+  // the reason, which is the same defect as an unexplained deduction.
+  if (sig.retentionPct !== null) {
+    s += sig.retentionPct >= 120 ? 6 : sig.retentionPct >= 90 ? 3 : 0;
+    // Say which retention the plan named. Net, gross and logo are three
+    // different numbers — net can exceed 100% and routinely does, gross and
+    // logo cannot — and this line used to call all three "net revenue
+    // retention", describing a disclosure the plan had not made.
+    const retLabel = sig.retentionKind === "gross" ? "gross retention"
+      : sig.retentionKind === "logo" ? "logo retention"
+      : sig.retentionKind === "net" ? "net revenue retention"
+      : "retention";
+    notes.push(`${sig.retentionPct}% ${retLabel}`);
+  }
   // Scored on the monthly-equivalent rate, so "20% annual churn" (1.8%/mo, fine)
   // is not punished like "20% monthly churn" (92%/yr, fatal).
   const churnMonthly = sig.churnMonthlyPct ?? sig.churnPct;
   if (churnMonthly !== null && churnMonthly > 5) { s -= 6; notes.push(`${churnMonthly}%/mo churn`); }
+
+  // Evidence from non-subscription business models. Contracted revenue is
+  // demand a counterparty signed for but has not yet paid, so it earns roughly
+  // two-thirds of what the same figure would earn as realised revenue.
+  if (sig.contractedRevenueUsd !== null) {
+    const c = sig.contractedRevenueUsd;
+    s += c >= 100e6 ? 20 : c >= 10e6 ? 15 : c >= 1e6 ? 10 : 5;
+    notes.push(`${fmtMoney(c)} contracted / backlog`);
+  }
+  if (sig.pilots !== null) {
+    s += sig.pilots >= 10 ? 8 : sig.pilots >= 3 ? 5 : 2;
+    notes.push(`${sig.pilots} pilot${sig.pilots === 1 ? "" : "s"} / design win${sig.pilots === 1 ? "" : "s"}`);
+  }
+  if (sig.nonDilutiveUsd !== null) {
+    // A grant board or defence programme did its own diligence before wiring money.
+    s += sig.nonDilutiveUsd >= 10e6 ? 8 : sig.nonDilutiveUsd >= 1e6 ? 5 : 2;
+    notes.push(`${fmtMoney(sig.nonDilutiveUsd)} non-dilutive`);
+  }
+  if (sig.gmvUsd !== null) notes.push(`${fmtMoney(sig.gmvUsd)} GMV${sig.takeRatePct !== null ? ` at ${sig.takeRatePct}% take rate` : ""}`);
   return { score: clamp(s), note: `Quantified traction: ${notes.join("; ")}.` };
 }
 
@@ -331,7 +398,7 @@ function detectAdverseDisclosures(text: string, stage: Stage, sector: SectorProf
   if (/\b(founders?|co-?founders?|cto|ceo)\b[^.]{0,60}\b(left|departed|quit|resigned|exited)\b|\b(lost|losing)\b[^.]{0,20}\bfounders?\b/.test(t)) {
     add("execution", 15, "Plan discloses founder or key-executive departure — a material team-continuity risk at this stage.");
   }
-  if (/\b(runway|cash)\b[^.]{0,40}\b([0-5]\s*months?|out|depleted|exhausted)\b|\bout of (cash|money|runway)\b/.test(t)) {
+  if (/\b(runway|cash)\b[^.]{0,40}\b([0-5]\s*months?|out|depleted|exhausted)\b|\b([0-5]\s*months?)\b[^.]{0,20}\bof (?:runway|cash)\b|\bout of (cash|money|runway)\b/.test(t)) {
     add("execution", 14, "Plan discloses six months or less of runway — the round is a rescue, which changes the terms materially.");
   }
 
@@ -361,6 +428,50 @@ function detectAdverseDisclosures(text: string, stage: Stage, sector: SectorProf
     add("economics", 20, "Plan discloses negative unit economics — growth compounds the loss rather than the return.");
   }
 
+  // ── Science-gated models: absent technical evidence is the missing benchmark.
+  // In a therapeutics, device, deep-tech or infrastructure company, revenue is
+  // not the stage benchmark — cleared trials, validation data, working hardware
+  // and signed offtake are. Charging only "no revenue" left those plans looking
+  // merely early when what they had disclosed was no evidence of any kind.
+  // There is no "hardware" or "deeptech" sector — both resolve to "other", and
+  // "other" was not gated. So "we have no working prototype" and "yields are
+  // below plan" — the two disclosures that matter most for a company that has
+  // to build something — never fired for the sector such a company lands in.
+  const SCIENCE_GATED = new Set(["biotech", "healthtech", "space", "climate", "ai_infra", "agtech", "other"]);
+  if (SCIENCE_GATED.has(sector.id) && (stage === "series-a" || stage === "growth")) {
+    if (/\bno (?:clinical|trial|efficacy|safety|validation) data\b|\bno clinical (?:evidence|results?)\b/.test(t)) {
+      add("execution", 14, "Plan states it has no clinical or validation data at a stage where that evidence is the benchmark — the core technical risk is entirely unretired.");
+    }
+    if (/\bno (?:ind\b|510\(k\)|ce mark\b|clearances?\b|regulatory (?:approvals?|clearances?)\b)|\bno approvals?\b/.test(t)) {
+      add("legal", 12, "Plan states no regulatory clearance has been obtained — the approval path remains a gating, unpriced risk.");
+    }
+    if (/\bno (?:publications?|peer[- ]reviewed (?:results?|data))\b|\bnot (?:yet )?peer[- ]reviewed\b/.test(t)) {
+      add("moat", 8, "Plan states its results are unpublished and unreviewed — the technical claim rests on internal assertion only.");
+    }
+    if (/\bno (?:working )?(?:prototype|silicon|hardware|plant|units? (?:built|shipped))\b|\bprototype (?:is )?not (?:yet )?(?:built|tested|field[- ]tested)\b|\bno plant has been built\b/.test(t)) {
+      add("execution", 12, "Plan states no working hardware exists yet — at this stage the build risk is still ahead of the company, not behind it.");
+    }
+  }
+  // ── Ramp and financing risk on capital-heavy plans. ──────────────────────
+  // A large order book is demand, not delivery. Northvolt held one of the
+  // biggest contracted backlogs in its industry and still failed, and its own
+  // disclosure said why: yields below plan, and a capital requirement an order
+  // of magnitude past the round. Crediting the backlog while ignoring both
+  // stated negatives is how a screening tool talks itself into a hard deal.
+  if (/\b(yields?|output|production|deliveries|ramp|milestones?)\b[^.]{0,40}\b(below plan|behind (?:plan|schedule)|missed|short of)\b|\bbehind schedule\b|\bcost overruns?\b/.test(t)) {
+    add("execution", 12, "Plan discloses production or schedule shortfall against its own plan — the ramp is already slipping before this capital is deployed.");
+  }
+  if (/\bcapital (?:requirement|requirements|need|needs)\b[^.]{0,60}\b(billions|tens of billions)\b|\b(?:requires|needs)\b[^.]{0,40}\b(?:billions|tens of billions)\b[^.]{0,40}\bbefore\b/.test(t)) {
+    add("economics", 10, "Plan discloses a capital requirement far beyond this round before the asset produces at scale — financing and dilution risk sit ahead of any return.");
+  }
+
+  // Signed demand is how contract-shaped businesses show traction; its explicit
+  // absence is as informative as an empty revenue line in a subscription model.
+  if ((stage === "series-a" || stage === "growth")
+    && /\bno (?:signed )?(?:contracts?|offtake|purchase orders?|design wins?|deployments?|interconnection agreements?)\b|\bno contracts? (?:signed|awarded)\b/.test(t)) {
+    add("execution", 12, "Plan states it has no signed contracts, offtake or design wins — for a contract-driven model that is the demand evidence, and it is absent.");
+  }
+
   return out;
 }
 
@@ -379,8 +490,14 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   const signals = mergeStructuredSignals(parsedSignals, rawInput.financials);
   const sectorTamUsd = sector.tamUsdBn * 1e9;
 
-  // ── Market: sector-anchored; a credible bottom-up TAM earns a small rigor
-  //    credit, an inflated one earns none (and a red flag). ─────────────────
+  // ── Market: sector-anchored. Disclosing a bottom-up TAM earns a small rigor
+  //    credit for having done the exercise; an inflated one earns none (and a
+  //    red flag). The credit is deliberately independent of the FIGURE — $10M
+  //    and $900B both earn +3 — because what is being credited is the working,
+  //    not the market. The rationale used to call the figure "credible", which
+  //    claimed an assessment that never happened; it now states the disclosure
+  //    and nothing more. A TAM too small to carry the round is called out
+  //    separately below, where it belongs. ─────────────────────────────────
   const sectorMarketScore = clamp(35 + Math.log10(Math.max(1, sector.tamUsdBn)) * 12);
   let marketScore = sectorMarketScore;
   let marketCompany = false;
@@ -398,7 +515,7 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
 
   // ── Unit economics: actual gross margin & LTV/CAC when disclosed. ────────
   let econScoreRaw = sector.grossMargin * 100 * 0.7 + (1 - sector.capitalIntensity) * 30;
-  let econCompany = false;
+  let econCompany = false; // set below, or by an adverse disclosure charging "economics"
   const econNotes: string[] = [];
   if (signals.grossMarginPct !== null) {
     econScoreRaw = signals.grossMarginPct * 0.7 + (1 - sector.capitalIntensity) * 30;
@@ -415,6 +532,13 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
     econCompany = true;
     econNotes.push(`${signals.paybackMonths}mo payback`);
   }
+  // A marketplace prices itself with a take rate, not a gross margin line. Only
+  // used when no margin was disclosed, so an explicit margin still wins.
+  if (signals.grossMarginPct === null && signals.takeRatePct !== null) {
+    econScoreRaw += signals.takeRatePct >= 15 ? 8 : signals.takeRatePct >= 8 ? 4 : signals.takeRatePct >= 3 ? 0 : -6;
+    econCompany = true;
+    econNotes.push(`${signals.takeRatePct}% take rate${signals.gmvUsd !== null ? ` on ${fmtMoney(signals.gmvUsd)} GMV` : ""}`);
+  }
   const econScore = clamp(econScoreRaw);
 
   // ── Moat: archetype ceiling × realization (from stage & the now-company-
@@ -425,15 +549,31 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   const moatScore = clamp(MOAT_FLOOR + (moatCeiling - MOAT_FLOOR) * moatRealized);
   const moatCompany = execCompany || signals.mentionsPatent;
 
-  const scienceScore = clamp(48 + (sector.cagr - 0.1) * 180 - (sector.capitalIntensity - 0.5) * 20);
-  const legalScore = clamp(100 - sector.regulatoryIntensity * 65); // higher = less legal drag
+  // ── Science: sector frontier, plus what THIS company has actually proven. ──
+  // A deep-tech or therapeutics company's evidence is a cleared trial phase, a
+  // peer-reviewed result, a running pilot plant — never ARR. Scoring those as
+  // "no evidence" left science a constant for exactly the companies whose whole
+  // risk is technical, which is why capital-intensive deals barely separated.
+  const sectorScienceScore = clamp(48 + (sector.cagr - 0.1) * 180 - (sector.capitalIntensity - 0.5) * 20);
+  const proofCount = signals.technicalProof.length;
+  const clearedTrial = signals.regulatoryMilestones.filter((m) => /clinical|clearance|approval|certification/i.test(m));
+  const scienceCompany = proofCount > 0 || clearedTrial.length > 0;
+  const scienceScore = clamp(sectorScienceScore + Math.min(18, proofCount * 7) + Math.min(12, clearedTrial.length * 8));
+
+  // ── Legal: sector regulatory drag, minus the drag already discharged. ──
+  // A licence held or a clearance granted is regulatory risk that has been
+  // retired, not risk that remains. Held approvals are the only thing credited —
+  // an application in progress is still an open risk.
+  const heldApprovals = signals.regulatoryMilestones.filter((m) => /licence|clearance|approval|certification|contracting status|agreement/i.test(m));
+  const legalCompany = heldApprovals.length > 0;
+  const legalScore = clamp(100 - sector.regulatoryIntensity * 65 + Math.min(20, heldApprovals.length * 10)); // higher = less legal drag
   const competitionScore = clamp(100 - sector.competitiveIntensity * 70); // higher = less crowded
 
   const factors: ScoreFactor[] = [
     { key: "market", label: "Market size & growth", weight: 0.14, score: round(marketScore),
       basis: marketCompany ? "company-evidence" : "sector-prior",
       rationale: marketCompany
-        ? `~$${sector.tamUsdBn}B sector TAM, ${round(sector.cagr * 100)}% CAGR; plan discloses a credible bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd as number)}.`
+        ? `~$${sector.tamUsdBn}B sector TAM, ${round(sector.cagr * 100)}% CAGR; plan discloses a bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd as number)}.`
         : `~$${sector.tamUsdBn}B TAM, ${round(sector.cagr * 100)}% CAGR (${sector.label}).` },
     { key: "timing", label: "Timing / tailwinds", weight: 0.05, score: round(timing),
       basis: "sector-prior",
@@ -450,13 +590,17 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
       basis: execCompany ? "company-evidence" : ((rawInput.tractionNotes || "").trim() ? "company-evidence" : "no-evidence"),
       rationale: traction.note },
     { key: "science", label: "Scientific / tech feasibility", weight: 0.07, score: round(scienceScore),
-      basis: "sector-prior",
-      rationale: sector.scienceFrontier },
+      basis: scienceCompany ? "company-evidence" : "sector-prior",
+      rationale: scienceCompany
+        ? `${sector.scienceFrontier} Plan evidences: ${[...signals.technicalProof, ...clearedTrial].join("; ")}.`
+        : sector.scienceFrontier },
     { key: "legal", label: "Regulatory / legal headroom", weight: 0.07, score: round(legalScore),
-      basis: "sector-prior",
-      rationale: `Regulatory intensity ${round(sector.regulatoryIntensity * 100)}% (higher = more legal drag).` },
+      basis: legalCompany ? "company-evidence" : "sector-prior",
+      rationale: legalCompany
+        ? `Regulatory intensity ${round(sector.regulatoryIntensity * 100)}%, partly discharged — plan holds: ${heldApprovals.join("; ")}.`
+        : `Regulatory intensity ${round(sector.regulatoryIntensity * 100)}% (higher = more legal drag).` },
     { key: "competition", label: "Competitive headroom", weight: 0.08, score: round(competitionScore),
-      basis: "sector-prior",
+      basis: "sector-prior", // may be corrected below once adverse disclosures are known
       rationale: `Competitive intensity ${round(sector.competitiveIntensity * 100)}%. ${sector.structuralRisk}.` },
   ];
 
@@ -471,7 +615,18 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   // below, so a disclosure is never charged twice.
   const metricFlags: AdverseSignal[] = [];
   const sectorGmPct = round(sector.grossMargin * 100);
-  if (signals.grossMarginPct !== null && signals.grossMarginPct > sectorGmPct + 25) {
+  // The rule was "twenty-five points above the sector norm", which for a sector
+  // whose norm is already 76% means a threshold of 101% — a margin no company
+  // can report. This flag could therefore never fire for B2B SaaS or biotech,
+  // two of the sectors this tool sees most. Dead in the same way the intention
+  // gate was dead: it reads like a protection and could not act as one.
+  //
+  // 90% is an absolute ceiling on top of the relative rule. The best gross
+  // margins in software are mid-to-high eighties, so a claim above ninety is
+  // worth checking in ANY sector; below-average sectors keep their relative
+  // threshold unchanged, since 90 is above it anyway.
+  const gmFlagAt = Math.min(sectorGmPct + 25, 90);
+  if (signals.grossMarginPct !== null && signals.grossMarginPct > gmFlagAt) {
     metricFlags.push({ factor: "economics", penalty: 10,
       flag: `Claimed ${signals.grossMarginPct}% gross margin is well above the ~${sectorGmPct}% ${sector.label} norm — verify against actuals.` });
   }
@@ -492,15 +647,55 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   //   LTV/CAC < 1  → econScoreRaw already takes -18 in the unit-economics factor
   //   churn > 5    → quantifiedExecution already takes -6 in the execution factor
   const textOnlyFlags: string[] = [];
+  // A reservation book is the largest number a pre-revenue hardware plan has,
+  // and it is the one number the customer can cancel. It backs no factor, so it
+  // is stated rather than scored — and stated loudest when there is no revenue
+  // and no contracted backlog standing behind it.
+  if (signals.reservations !== null) {
+    const backing = signals.contractedRevenueUsd !== null || signals.revenueUsd !== null;
+    textOnlyFlags.push(
+      `${signals.reservations.toLocaleString("en-US")} reservations / pre-orders are disclosed as demand, not as contracted revenue` +
+      (backing ? "." : " — and no revenue or signed backlog is disclosed behind them."),
+    );
+  }
+  // A market smaller than a plausible outcome for the round. A $10M bottom-up
+  // TAM against a $5M ask means the entire market is twice the money going in,
+  // so even total dominance cannot return the fund. The engine used to score
+  // that identically to a $900B TAM and describe it as "credible".
+  //
+  // Text, not score: the ratio a fund needs is a mandate question, not
+  // something this rubric should decide, and nothing here is recalibrated.
+  if (signals.bottomUpTamUsd !== null && rawInput.askUsd && signals.bottomUpTamUsd < rawInput.askUsd * 10) {
+    textOnlyFlags.push(
+      `Bottom-up TAM of ${fmtMoney(signals.bottomUpTamUsd)} is less than 10x the ${fmtMoney(rawInput.askUsd)} raise — the whole market may be too small to return this round.`,
+    );
+  }
   if (signals.ltvCacRatio !== null && signals.ltvCacRatio < 1) {
     textOnlyFlags.push(`LTV/CAC of ${signals.ltvCacRatio} is below 1 — the company currently loses money on each customer acquired.`);
   }
+  // Contradictions in the plan's own numbers: shown, never silently scored.
+  // Which figure is right is the reader's call, not the engine's.
+  textOnlyFlags.push(...(signals.conflicts ?? []));
+
   const churnMonthlyPct = signals.churnMonthlyPct ?? signals.churnPct;
   if (churnMonthlyPct !== null && churnMonthlyPct > 8) {
     const asStated = signals.churnPeriod && signals.churnPeriod !== "monthly" && signals.churnPeriod !== "unspecified"
       ? ` (stated as ${signals.churnPct}% ${signals.churnPeriod})`
       : "";
     textOnlyFlags.push(`${churnMonthlyPct}% monthly churn${asStated} is high — retention is a material risk to the model.`);
+  }
+
+  // A factor an adverse disclosure charged was moved by the PLAN'S OWN WORDS,
+  // and was still labelled "sector-prior" — telling a reader the number is an
+  // industry average when the company's own sentence changed it by twenty
+  // points, and leaving it out of the coverage figure entirely. The label and
+  // the code disagreed, which is the defect this whole branch exists to catch.
+  //
+  // Applied here rather than at the factor list because the factors are built
+  // before the disclosures are read.
+  for (const a of adverse) {
+    const f = factors.find((x) => x.key === a.factor);
+    if (f && f.basis === "sector-prior") f.basis = "company-evidence";
   }
 
   const redFlags: string[] = [...adverse.map((a) => a.flag), ...metricFlags.map((f) => f.flag), ...textOnlyFlags];
@@ -521,7 +716,8 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
   // ── Signal coverage: share of the composite weight backed by company data. ──
   const companyWeight =
     (marketCompany ? 0.14 : 0) + (econCompany ? 0.15 : 0) +
-    (execCompany ? 0.28 : 0) + (moatCompany ? 0.16 : 0);
+    (execCompany ? 0.28 : 0) + (moatCompany ? 0.16 : 0) +
+    (scienceCompany ? 0.07 : 0) + (legalCompany ? 0.07 : 0);
   const signalCoverage = round(companyWeight, 2);
 
 
@@ -537,6 +733,10 @@ export function analyze(rawInput: AnalysisInput, signalsOverride?: PlanSignals):
     ...(signals.churnPct !== null && (signals.churnPeriod === null || signals.churnPeriod === "unspecified")
       ? [`Churn of ${signals.churnPct}% was disclosed without a period and is read as monthly (the deck convention). State it as monthly or annual to remove the assumption.`]
       : []),
+    // A converted figure must never be presented as if it were native.
+    ...(signals.currency && signals.currency !== "USD" ? [conversionNote(signals.currency)] : []),
+    // Every ambiguity the parser resolved on the reader's behalf, stated.
+    ...(signals.parseNotes ?? []),
     `Score is a screening signal, not a substitute for legal, financial, and technical due diligence.`,
   ];
 

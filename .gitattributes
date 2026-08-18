@@ -9,3 +9,9 @@
 *.woff2 binary
 *.ttf binary
 *.otf binary
+
+# A source file is always reviewable. deckExtract.ts carried a literal NUL byte
+# inside a regex (now escaped), which made git classify it as binary and hide its
+# diff in review — a file nobody can read is a file nobody checks.
+*.ts diff
+*.tsx diff

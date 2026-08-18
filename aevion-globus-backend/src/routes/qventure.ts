@@ -22,13 +22,14 @@ import {
 } from "../lib/ensureQVentureTables";
 import { analyze, STAGES, RUBRIC_VERSION, type AnalysisInput, type Stage } from "../lib/qventure/engine";
 import type { StructuredFinancials } from "../lib/qventure/signals";
+import { asRatePeriod } from "../lib/metrics/periods";
 import type { ProjectionPoint } from "../lib/qventure/projections";
 import { runCouncil, type MemoOutput } from "../lib/qventure/lenses";
 import { listSectors } from "../lib/qventure/sectors";
 import { extractPdfText, extractDeckFields } from "../lib/qventure/deckExtract";
 import { fetchComparables } from "../lib/qventure/comparables";
 import { computeBenchmark, type BenchmarkSample } from "../lib/qventure/benchmark";
-import { EXAMPLE_SEEDS, EXAMPLE_ID_PREFIX } from "../lib/qventure/examples";
+import { EXAMPLE_SEEDS, EXAMPLE_ID_PREFIX, type ExampleSeed } from "../lib/qventure/examples";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { csvNeutralizeFormula } from "../lib/csv";
 
@@ -255,19 +256,24 @@ function sanitizeFinancials(raw: unknown): StructuredFinancials | undefined {
   const r = raw as Record<string, unknown>;
   const num = (v: unknown): number | undefined =>
     typeof v === "number" && isFinite(v) && v >= 0 ? Math.min(v, 1e15) : undefined;
+  // A margin is the one field here that is legitimately negative — a company
+  // selling below cost. `num` rejects negatives, so the precise input path
+  // silently dropped the most adverse figure a plan can state while the prose
+  // path reads it, making structured input strictly worse than typing it in a
+  // sentence. Money and counts keep the non-negative guard.
+  const signedPct = (v: unknown, min = -100, max = 100): number | undefined =>
+    typeof v === "number" && isFinite(v) && v >= min && v <= max ? v : undefined;
   const f: StructuredFinancials = {
     revenueUsd: num(r.revenueUsd), mrrUsd: num(r.mrrUsd), arrUsd: num(r.arrUsd),
-    growthPct: num(r.growthPct), grossMarginPct: num(r.grossMarginPct),
+    growthPct: signedPct(r.growthPct, -100, 100_000), grossMarginPct: signedPct(r.grossMarginPct),
     cacUsd: num(r.cacUsd), ltvUsd: num(r.ltvUsd), ltvCacRatio: num(r.ltvCacRatio),
     paybackMonths: num(r.paybackMonths), churnPct: num(r.churnPct),
     retentionPct: num(r.retentionPct), customers: num(r.customers), bottomUpTamUsd: num(r.bottomUpTamUsd),
   };
   const period = r.growthPeriod;
   if (period === "MoM" || period === "YoY" || period === "WoW" || period === "unspecified") f.growthPeriod = period;
-  const churnPeriod = r.churnPeriod;
-  if (churnPeriod === "monthly" || churnPeriod === "quarterly" || churnPeriod === "annual" || churnPeriod === "weekly" || churnPeriod === "unspecified") {
-    f.churnPeriod = churnPeriod;
-  }
+  const churnPeriod = asRatePeriod(r.churnPeriod);
+  if (churnPeriod) f.churnPeriod = churnPeriod;
   const hasAny = Object.values(f).some((v) => v !== undefined);
   return hasAny ? f : undefined;
 }
@@ -365,6 +371,84 @@ qventureRouter.get("/examples", async (_req: Request, res: Response) => {
   } catch (e: unknown) {
     captureQVentureError(e);
     res.status(500).json({ ok: false, error: "examples_failed" });
+  }
+});
+
+/**
+ * Public showcase: conclusions for everyone, reasoning behind a sign-in.
+ *
+ * A visitor should be able to see the tool decide on an easy plan AND on one
+ * where the evidence is contracts, clearances or offtake — that difference is
+ * the product. What they should not get for free is the work: the factor
+ * reasoning, the four-role council, the entry strategy and the diligence panels.
+ *
+ * The split is enforced here rather than in the UI, because a public payload
+ * that merely goes unrendered is still published.
+ */
+export function showcasePublicView(r: StoredAnalysis, seed: ExampleSeed | undefined) {
+  const result = r.result;
+  const flags = Array.isArray(result?.redFlags) ? result.redFlags.length : 0;
+  return {
+    id: r.id,
+    slug: seed?.slug ?? r.id.replace(EXAMPLE_ID_PREFIX, ""),
+    name: r.name,
+    sector: result?.sector?.label ?? r.sector,
+    stage: r.stage,
+    geography: r.geography,
+    complexity: seed?.complexity ?? "medium",
+    whyThisOne: seed?.whyThisOne ?? "",
+    // The conclusions themselves — the verdict, how much of it rests on the
+    // company's own disclosure, and how many things the engine took issue with.
+    composite: r.composite,
+    verdict: r.verdict,
+    signalCoveragePct: typeof result?.signalCoverage === "number" ? Math.round(result.signalCoverage * 100) : null,
+    redFlagCount: flags,
+    rubricVersion: result?.rubricVersion ?? null,
+    /** What a signed-in reader gets, named so the gate is honest about itself. */
+    locked: [
+      "Score breakdown across all eight factors, each with its reasoning and whether the number came from this company or its sector",
+      "The four-role council memo (scientist, data analyst, economist, lawyer)",
+      "Entry strategy: ticket, ownership, valuation band, tranches, risk-adjusted return",
+      "Evidence read from the plan, red-flag text, financial stress test, TAM triangulation, revenue-plan check",
+      "PDF export of the full memo",
+    ],
+  };
+}
+
+// GET /showcase — the curated set as public conclusions, grouped client-side.
+qventureRouter.get("/showcase", async (_req: Request, res: Response) => {
+  try {
+    const rows = await listExamples();
+    const bySlug = new Map(EXAMPLE_SEEDS.map((s) => [`${EXAMPLE_ID_PREFIX}${s.slug}`, s]));
+    const data = rows
+      .map((r) => showcasePublicView(r, bySlug.get(r.id)))
+      .sort((a, b) => b.composite - a.composite);
+    res.json({ ok: true, data, count: data.length });
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    res.status(500).json({ ok: false, error: "showcase_failed" });
+  }
+});
+
+// GET /showcase/:slug — conclusions publicly; the full analysis with a Bearer token.
+qventureRouter.get("/showcase/:slug", async (req: Request, res: Response) => {
+  try {
+    const slug = String(req.params.slug || "").replace(/[^a-z0-9-]/gi, "").slice(0, 60);
+    const seed = EXAMPLE_SEEDS.find((s) => s.slug === slug);
+    const record = await getById(`${EXAMPLE_ID_PREFIX}${slug}`);
+    if (!record) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const auth = verifyBearerOptional(req);
+    if (auth) {
+      return res.json({
+        ok: true, unlocked: true,
+        data: { ...redactInput(record), showcase: showcasePublicView(record, seed) },
+      });
+    }
+    res.json({ ok: true, unlocked: false, data: showcasePublicView(record, seed) });
+  } catch (e: unknown) {
+    captureQVentureError(e);
+    res.status(500).json({ ok: false, error: "showcase_failed" });
   }
 });
 
@@ -599,6 +683,55 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
     doc.moveDown(0.2);
     doc.fillColor("#166534").text(`Portfolio: ${s.portfolioNote}`, { width: W });
     doc.moveDown(0.8);
+
+    // Evidence read from the plan — the same list the on-screen report shows, so
+    // an exported memo never looks thinner than the page it was exported from.
+    // Read defensively: records stored before rubric v5 lack the newer keys, so
+    // the runtime shape is a subset of the current type.
+    const sig = r.signals as unknown as Record<string, unknown> | undefined;
+    if (sig) {
+      const m = (n: unknown): string | null => {
+        const v = typeof n === "number" && isFinite(n) && n > 0 ? n : null;
+        if (v === null) return null;
+        return v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `$${Math.round(v / 1e3)}k` : `$${Math.round(v)}`;
+      };
+      const lines: string[] = [];
+      const rev = m(sig.revenueUsd);
+      if (rev) lines.push(`${sig.revenueBasis === "MRR" ? "Revenue (from MRR)" : sig.revenueBasis === "ARR" ? "ARR" : "Revenue"}: ${rev}`);
+      const gmv = m(sig.gmvUsd);
+      if (gmv) lines.push(`GMV: ${gmv}${typeof sig.takeRatePct === "number" ? ` at ${sig.takeRatePct}% take rate` : ""}`);
+      const backlog = m(sig.contractedRevenueUsd);
+      if (backlog) lines.push(`Contracted / backlog: ${backlog}`);
+      const grant = m(sig.nonDilutiveUsd);
+      if (grant) lines.push(`Non-dilutive awarded: ${grant}`);
+      if (typeof sig.pilots === "number") lines.push(`Pilots / design wins: ${sig.pilots}`);
+      if (typeof sig.capacityDeployedMw === "number") {
+        lines.push(`Capacity deployed: ${sig.capacityDeployedMw.toLocaleString("en-US")} MW`);
+      }
+      if (typeof sig.reservations === "number") {
+        lines.push(`Reservations / pre-orders: ${sig.reservations.toLocaleString("en-US")} (uncommitted demand, not backlog)`);
+      }
+      if (typeof sig.churnPct === "number") {
+        const period = typeof sig.churnPeriod === "string" && sig.churnPeriod !== "unspecified" ? sig.churnPeriod : "monthly (period not stated)";
+        const monthly = typeof sig.churnMonthlyPct === "number" && sig.churnMonthlyPct !== sig.churnPct ? ` -> ${sig.churnMonthlyPct}%/mo` : "";
+        lines.push(`Churn: ${sig.churnPct}% ${period}${monthly}`);
+      }
+      const badges = [
+        ...(Array.isArray(sig.regulatoryMilestones) ? sig.regulatoryMilestones as string[] : []),
+        ...(Array.isArray(sig.technicalProof) ? sig.technicalProof as string[] : []),
+      ];
+      if (lines.length || badges.length) {
+        doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text("Evidence read from the plan");
+        doc.moveDown(0.2);
+        doc.fontSize(9.5).font("Helvetica").fillColor("#334155");
+        for (const l of lines) doc.text(`  • ${l}`, { width: W });
+        if (badges.length) doc.text(`  • Milestones / validation: ${badges.join("; ")}`, { width: W });
+        if (typeof sig.currency === "string" && sig.currency && sig.currency !== "USD") {
+          doc.fillColor("#475569").text(`  • Disclosed in ${sig.currency}; converted to USD at the rate stated under assumptions.`, { width: W });
+        }
+        doc.moveDown(0.7);
+      }
+    }
 
     // Bottom-up TAM triangulation
     if (r.tam && r.tam.mode !== "insufficient") {

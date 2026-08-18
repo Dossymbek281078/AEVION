@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { MetricWithPeriod, RATE_PERIOD_OPTIONS, RATE_PERIOD_LABELS, GROWTH_PERIOD_OPTIONS } from "@/components/MetricWithPeriod";
 import { apiUrl } from "@/lib/apiBase";
 import paper from "@/styles/aevionPaper.module.css";
 import {
@@ -63,7 +64,17 @@ async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisRe
     if (isFinite(ask) && ask > 0) payload.askUsd = ask;
 
     // Optional exact financials → override the text parser.
-    const num = (s: string) => { const v = parseFloat((s || "").replace(/[^0-9.]/g, "")); return isFinite(v) && v > 0 ? v : undefined; };
+    // Stripping non-digits turned a range typed into an exact field into a
+    // different number entirely: "2-4" became 24, "8 to 12" became 812. These
+    // fields mean one figure, so a range is dropped here and left to the plan
+    // text, where the parser reads bands properly and says which end it used.
+    const RANGE_IN_ONE_FIELD = /\d\s*(?:-|–|—|to|\.\.)\s*\d/i;
+    const num = (s: string) => {
+      const raw = (s || "").trim();
+      if (RANGE_IN_ONE_FIELD.test(raw)) return undefined;
+      const v = parseFloat(raw.replace(/[^0-9.]/g, ""));
+      return isFinite(v) && v > 0 ? v : undefined;
+    };
     const financials: Record<string, number> = {};
     const map: [string, string][] = [
       ["arrUsd", data.finArr], ["grossMarginPct", data.finGrossMargin], ["ltvCacRatio", data.finLtvCac],
@@ -156,8 +167,8 @@ export default function QVenturePage() {
             <Link href="/qventure/batch" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none" }}>
               ☰ Batch funnel →
             </Link>
-            <Link href="/qventure/gallery" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none" }}>
-              ▦ Examples →
+            <Link href="/qventure/showcase" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none" }}>
+              ▦ Worked examples →
             </Link>
             <Link href="/qventure/watchlist" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none" }}>
               ★ Watchlist →
@@ -584,34 +595,30 @@ function FormFields({ form, set, sectors, full = false }: {
           <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#334155" }}>
             Exact financials & projections (optional — precise numbers beat parsing the text)
           </summary>
+          <p style={{ margin: "10px 0 0", fontSize: 12.5, lineHeight: 1.55, color: "var(--ink-faint, #74767c)" }}>
+            One figure per field. If a number is a range, write it in the description
+            instead (&ldquo;ARR between $2M and $4M&rdquo;) — the engine reads bands there and states
+            which end the score used.
+          </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
             <div><label style={LABEL}>ARR (USD)</label><input style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
             <div><label style={LABEL}>Gross margin (%)</label><input style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
             <div><label style={LABEL}>LTV / CAC ratio</label><input style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
-            <div>
-              <label style={LABEL}>Churn (%)</label>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" />
-                <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label="Churn period">
-                  <option value="weekly">/ week</option>
-                  <option value="monthly">/ month</option>
-                  <option value="quarterly">/ quarter</option>
-                  <option value="annual">/ year</option>
-                </select>
-              </div>
-            </div>
+            <MetricWithPeriod
+              label="Churn (%)" placeholder="3"
+              value={form.finChurn} onValueChange={set("finChurn")}
+              period={form.finChurnPeriod} onPeriodChange={set("finChurnPeriod")}
+              periods={RATE_PERIOD_OPTIONS} periodLabels={RATE_PERIOD_LABELS}
+              inputStyle={INPUT} labelStyle={LABEL}
+            />
             <div><label style={LABEL}>Customers</label><input style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
-            <div>
-              <label style={LABEL}>Growth (%)</label>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} placeholder="15" inputMode="numeric" />
-                <select style={{ ...INPUT, width: 104 }} value={form.finGrowthPeriod} onChange={set("finGrowthPeriod")} aria-label="Growth period">
-                  <option value="WoW">WoW</option>
-                  <option value="MoM">MoM</option>
-                  <option value="YoY">YoY</option>
-                </select>
-              </div>
-            </div>
+            <MetricWithPeriod
+              label="Growth (%)" placeholder="15"
+              value={form.finGrowth} onValueChange={set("finGrowth")}
+              period={form.finGrowthPeriod} onPeriodChange={set("finGrowthPeriod")}
+              periods={GROWTH_PERIOD_OPTIONS}
+              inputStyle={INPUT} labelStyle={LABEL}
+            />
             <div><label style={LABEL}>Bottom-up TAM (USD)</label><input style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
           </div>
           <div style={{ marginTop: 14 }}>

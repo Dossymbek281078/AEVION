@@ -28,7 +28,7 @@ const UA = "aevion-launch-readiness";
 const MODULES = [
   { id: "cyberchess", name: "CyberChess", date: "30.08", page: "/cyberchess", landing: "/cyberchess/launch", price: 19 },
   { id: "qright", name: "QRight", date: "06.09", page: "/qright", landing: null, price: null },
-  { id: "bureau", name: "IP Bureau", date: "06.09", page: "/bureau", landing: null, price: 29 },
+  { id: "bureau", name: "IP Bureau", date: "06.09", page: "/bureau", landing: "/bureau/launch", price: 29 },
   { id: "devhub", name: "DevHub", date: "13.09", page: "/devhub", landing: null, price: 149 },
   { id: "multichat-engine", name: "Multichat", date: "20.09", page: "/multichat-engine", landing: null, price: null },
 ];

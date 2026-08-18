@@ -1,0 +1,69 @@
+import { describe, test, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+/**
+ * Не обещать канал оплаты, которого нет.
+ *
+ * Подпись под ценой говорила «KZT → локальные карты КЗ + Kaspi (PayBox)» на
+ * всех трёх языках. 18.08.2026 проверено запросами к живому проду:
+ *
+ *   /api/pricing/checkout/healthz  → paybox.configured = false
+ *   POST /api/pricing/checkout/session с currency=KZT
+ *                                  → ссылка на LemonSqueezy, оплата в долларах
+ *
+ * То есть покупатель из Казахстана читал про Kaspi и попадал на долларовый
+ * чекаут. Продажа при этом не ломается — запасной путь работает, — и именно
+ * поэтому дефект был невидим: ничего не падало, просто обещание не совпадало
+ * с делом.
+ *
+ * Сторож держит связь в обе стороны: обещание про Kaspi показывается только
+ * когда сервер подтвердил, что PayBox включён, и для случая «не подтвердил»
+ * есть отдельный честный текст на каждом языке.
+ */
+
+const SRC = join(__dirname, "..", "page.tsx");
+const I18N = join(__dirname, "..", "..", "..", "lib", "i18n-data.ts");
+
+describe("обещание про Kaspi следует за фактом", () => {
+  const page = readFileSync(SRC, "utf8");
+  const i18n = readFileSync(I18N, "utf8");
+
+  test("контроль: страница и словарь прочитались", () => {
+    // Пустые файлы дали бы зелёный на любом состоянии кода.
+    expect(page.length).toBeGreaterThan(1000);
+    expect(i18n).toContain("pricing.home.heroModule.kztNote");
+  });
+
+  test("страница спрашивает сервер, включён ли PayBox", () => {
+    expect(page).toContain("/api/pricing/checkout/healthz");
+    expect(page).toMatch(/providers\??\.\s*paybox/);
+  });
+
+  test("обещание про Kaspi показывается только при подтверждении", () => {
+    // Ключевое: kztNote не должен появляться в разметке безусловно.
+    const unconditional = /\?\s*t\("pricing\.home\.heroModule\.kztNote"\)\s*:\s*t\("pricing\.home\.heroModule\.usdNote"\)/;
+    expect(
+      unconditional.test(page),
+      "подпись про Kaspi выводится без проверки, включён ли PayBox",
+    ).toBe(false);
+
+    expect(page).toContain("payboxLive");
+    expect(page).toContain("kztFallbackNote");
+  });
+
+  test("честный текст есть на всех трёх языках", () => {
+    const count = (i18n.match(/"pricing\.home\.heroModule\.kztFallbackNote"/g) || []).length;
+    const promised = (i18n.match(/"pricing\.home\.heroModule\.kztNote"/g) || []).length;
+
+    expect(promised, "ключ обещания пропал — сторож ослеп").toBeGreaterThanOrEqual(3);
+    expect(count, `запасной текст есть только для ${count} языков из ${promised}`).toBe(promised);
+  });
+
+  test("запасной текст не обещает Kaspi", () => {
+    // Иначе «честная» подпись повторила бы то же самое обещание.
+    for (const m of i18n.matchAll(/"pricing\.home\.heroModule\.kztFallbackNote":\s*"([^"]+)"/g)) {
+      expect(m[1].toLowerCase(), `запасной текст всё ещё обещает Kaspi: ${m[1]}`).not.toContain("kaspi (paybox)");
+    }
+  });
+});

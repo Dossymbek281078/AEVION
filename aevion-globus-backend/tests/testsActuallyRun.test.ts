@@ -53,7 +53,15 @@ describe("тесты, которые мы написали, кто-то дейс
 
   it("CI-job frontend запускает фронтовые тесты, а не только сборку", () => {
     const block = jobBlock("frontend");
-    expect(block).toMatch(/run:\s*npm run test:run/);
+    // Форм вызова у одного и того же набора две, и обе законные:
+    // `npm run test:run` и `npm run test -- --run`. 14.08.2026 сторож требовал
+    // ПЕРВУЮ дословно и покраснел, когда ветка подтянула вторую из main, —
+    // проверка смысла не нарушена, нарушено совпадение по букве. Требуем то,
+    // что действительно важно: вызов есть И он не в watch-режиме (голый
+    // `npm run test` повис бы в CI до таймаута job'а).
+    expect(block, "фронтовый набор не вызывается в job'е frontend").toMatch(
+      /run:\s*npm run (?:test:run|test\s+--\s+--run)(?:\s|$)/m,
+    );
     expect(block).toMatch(/run:\s*npm run build/);
   });
 

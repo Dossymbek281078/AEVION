@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { RegulatorySourceChip } from "../RegulatorySourceChip";
-import { translations } from "@/lib/i18n-data";
+import { allTranslations } from "../../app/__tests__/localeSource";
 
 // Чип отвечает на вопрос «чьё это правило» — то есть ровно то место, где
 // формулировка обязана выдерживать проверку регулятором. 10.08.2026 живая
@@ -116,7 +116,7 @@ describe("словарь: формулировка переиздания ест
   // общей и недоказуемой.
   for (const lang of ["en", "ru", "kk"] as const) {
     it(`${lang} — ключи есть и несут свои подстановки`, () => {
-      const dict = (translations as Record<string, Record<string, string>>)[lang];
+      const dict = (allTranslations() as Record<string, Record<string, string>>)[lang];
       expect(dict["reg.tip.reissued"]).toBeDefined();
       expect(dict["reg.tip.reissued"]).toContain("{edition}");
       expect(dict["reg.tip.nofeed"]).toBeDefined();

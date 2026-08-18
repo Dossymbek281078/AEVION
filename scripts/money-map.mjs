@@ -105,6 +105,23 @@ function gumroadFromSite() {
   return rows;
 }
 
+/**
+ * Какие кассы РЕАЛЬНО включены на проде.
+ *
+ * Карта отвечала «сколько стоит», но не отвечала «можно ли за это заплатить».
+ * 18.08.2026 оказалось, что PayBox и PayPal не настроены вовсе, при том что
+ * сайт обещал Kaspi, а страница интеграций показывала его как доступный.
+ * Теперь состояние касс — часть карты, и берётся оно запросом, а не из памяти.
+ */
+async function cashDesks() {
+  try {
+    const j = await getJson(`${API}/api/pricing/checkout/healthz`);
+    return { primary: j.primaryProvider || null, providers: j.providers || {} };
+  } catch {
+    return null; // «не спросили» — не то же, что «не работает»
+  }
+}
+
 /** Ссылка магазина → id модуля, как это делает бэкенд. Своей таблицы не заводим. */
 function storeNameToModule() {
   const src = readFileSync(resolve(REPO, "aevion-globus-backend/src/data/lemonSqueezyVariants.ts"), "utf8");
@@ -129,7 +146,7 @@ function row(cells) {
 }
 
 function main(data) {
-  const { pricing, shop, gum, nameToModule, measuredAt } = data;
+  const { pricing, shop, gum, nameToModule, measuredAt, desks } = data;
 
   const tierPrice = new Map(pricing.tiers.map((t) => [t.id, t.priceMonthly]));
 
@@ -231,6 +248,39 @@ function main(data) {
     ]);
   });
 
+  // ── Блок Ж: кассы
+  const DESK_RU = {
+    lemonsqueezy: ["Lemon Squeezy", "подписки и модули, карты мира"],
+    gumroad: ["Gumroad", "книги и разовые товары"],
+    paybox: ["PayBox", "карты Казахстана и Kaspi"],
+    paypal: ["PayPal", "регионы без Stripe"],
+  };
+  let deskRows;
+  if (!desks) {
+    deskRows = row([`<td colspan="4"><span class="dim">Прод не ответил — состояние касс не проверено. Это НЕ «всё работает».</span></td>`]);
+  } else {
+    deskRows = Object.entries(DESK_RU).map(([id, [name, what]]) => {
+      const p = desks.providers[id];
+      const on = p && p.configured;
+      const state = on
+        ? '<span class="chip chip-ok">принимает</span>'
+        : '<span class="chip chip-bad">не настроена</span>';
+      const main = desks.primary === id ? '<span class="sub">основная</span>' : "";
+      return row([
+        `<th scope="row">${esc(name)}${main}</th>`,
+        `<td>${esc(what)}</td>`,
+        `<td>${esc((p && p.trigger) || "—")}</td>`,
+        `<td>${state}</td>`,
+      ]);
+    }).join("\n");
+  }
+
+  // Сколько касс РЕАЛЬНО принимает. Было зашито «3», и 18.08.2026 это оказалось
+  // неправдой: принимают две. Зашитое число на карте — та же болезнь, что и
+  // зашитая версия в /health: выглядит ответом, а ответом не является.
+  const deskAll = desks ? Object.keys(desks.providers).length : 0;
+  const deskOn = desks ? Object.values(desks.providers).filter((p) => p && p.configured).length : 0;
+
   const totalProducts = shop.size + gum.length;
 
   const tpl = readFileSync(resolve(HERE, "money-map.tpl.html"), "utf8");
@@ -247,7 +297,10 @@ function main(data) {
     .replace("__MODS__", modRows.join("\n"))
     .replace("__BUNDLES__", bundleRows.join("\n"))
     .replace("__GUM__", gumRows.join("\n"))
-    .replace("__PROMOS__", promoRows.join("\n"));
+    .replace("__PROMOS__", promoRows.join("\n"))
+    .replace("__DESKS__", deskRows)
+    .replace(/__NDESKS__/g, desks ? String(deskOn) : "?")
+    .replace(/__NDESKS_ALL__/g, desks ? String(deskAll) : "?");
 
   const left = html.match(/__[A-Z_]+__/g);
   if (left) throw new Error(`в шаблоне остались подстановки: ${[...new Set(left)].join(", ")}`);
@@ -270,6 +323,7 @@ try {
     shop,
     gum: gumroadFromSite(),
     nameToModule: storeNameToModule(),
+    desks: await cashDesks(),
     measuredAt: new Date().toISOString().slice(0, 10),
   });
 } catch (e) {

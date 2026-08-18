@@ -204,7 +204,7 @@
   </header>
 
   <div class="facts">
-    <div class="fact"><b>3</b><span>кассы принимают деньги</span></div>
+    <div class="fact"><b>__NDESKS__</b><span>из __NDESKS_ALL__ касс принимают деньги</span></div>
     <div class="fact"><b>__NPRODUCTS__</b><span>товаров выставлено</span></div>
     <div class="fact"><b>__NMODS__</b><span>модулей с ценой</span></div>
     <div class="fact alert"><b>__EARNED__</b><span>заработано, замер __SALES_AT__</span></div>
@@ -309,6 +309,27 @@ __GUM__
         </thead>
         <tbody>
 __PROMOS__
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="tag">блок Ж</span> Кассы</h2>
+    <p class="note">Куда физически уходят деньги. Состояние берётся запросом к проду при каждой сборке карты: «настроена» значит, что ключи на месте и касса примет платёж, а не что о ней есть планы.</p>
+    <div class="scroll">
+      <table>
+        <caption>Проверено запросом к api.aevion.app/api/pricing/checkout/healthz</caption>
+        <thead>
+          <tr>
+            <th scope="col">Касса</th>
+            <th scope="col">Для чего</th>
+            <th scope="col">Когда включается</th>
+            <th scope="col">Состояние</th>
+          </tr>
+        </thead>
+        <tbody>
+__DESKS__
         </tbody>
       </table>
     </div>

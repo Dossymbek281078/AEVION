@@ -48,7 +48,13 @@ const INTEGRATIONS: Integration[] = [
   // Payments
   { id: "stripe", name: "Stripe", category: "payments", status: "live", modules: ["qpaynet-embedded", "qsign"], initials: "St", color: "#635bff", oneLinerKey: "stripe", },
   { id: "paypal", name: "PayPal", category: "payments", status: "soon", modules: ["qpaynet-embedded"], initials: "Pp", color: "#003087", oneLinerKey: "paypal", },
-  { id: "kaspi", name: "Kaspi Pay", category: "payments", status: "beta", modules: ["qpaynet-embedded"], initials: "Ka", color: "#e10000", oneLinerKey: "kaspi", },
+  // 18.08.2026: было "beta", то есть «доступно» — фильтр «скрыть недоступные»
+  // прячет только "soon". Проверено запросом к живому проду:
+  // /api/pricing/checkout/healthz → paybox.configured = false, а запрос чекаута
+  // с currency=KZT молча возвращает долларовую ссылку LemonSqueezy. Kaspi не
+  // работает ни в каком виде, значит "soon". Вернуть "beta" можно тогда, когда
+  // тот же запрос ответит true, а не когда появятся планы.
+  { id: "kaspi", name: "Kaspi Pay", category: "payments", status: "soon", modules: ["qpaynet-embedded"], initials: "Ka", color: "#e10000", oneLinerKey: "kaspi", },
 
   // Developer
   { id: "github", name: "GitHub", category: "developer", status: "live", modules: ["qright", "qsign"], initials: "Gh", color: "#181717", oneLinerKey: "github", setupUrl: "https://github.com/marketplace/aevion" },

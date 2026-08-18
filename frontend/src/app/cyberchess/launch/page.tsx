@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
+import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 
 // Посадочная страница запуска CyberChess — 30 августа 2026.
@@ -69,9 +70,24 @@ function daysUntilLaunch(): number {
   return Math.round((launch - today) / 86_400_000);
 }
 
-export default async function CyberChessLaunchPage() {
+export default async function CyberChessLaunchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
   const [bank, tournaments] = await Promise.all([fetchPuzzleBank(), fetchTournamentCount()]);
   const left = daysUntilLaunch();
+
+  // Метка канала из адреса: /cyberchess/launch?c=tt в подписи ролика TikTok,
+  // ?c=ig в шапке Instagram. Без неё все адреса лягут с одинаковым
+  // source="cyberchess", и после запуска на вопрос «какой ролик привёл людей»
+  // ответа не будет вовсе — а именно он решает, куда вкладывать следующий.
+  //
+  // Через channelFrom, а не напрямую: неизвестное значение превращается в null
+  // и метки не будет. Иначе первый же чужой параметр в ссылке заведёт в
+  // выгрузке подписчиков мусорный канал, который потом не отличить от нашего.
+  const channel = channelFrom((await searchParams).c);
+  const source = channel ? `cyberchess-${channel}` : "cyberchess";
   const bankLabel = bank ? new Intl.NumberFormat("ru-RU").format(bank) : null;
 
   return (
@@ -100,7 +116,7 @@ export default async function CyberChessLaunchPage() {
         </header>
 
         <WaitlistCapture
-          source="cyberchess"
+          source={source}
           tone="light"
           title="Написать вам в день запуска"
           description="Одно письмо на запуск и условия раннего доступа. Ничего больше."

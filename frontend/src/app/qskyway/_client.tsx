@@ -161,7 +161,7 @@ function airspaceRegSource(a: AirspaceSummary | undefined, ru: boolean): Regulat
     }
     return { tier: "none", scopeNote: ru ? a?.note : (a?.noteEn ?? a?.note) };
   }
-  const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} м` : "";
+  const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} ${ru ? "м" : "m"}` : "";
   return {
     tier: "official",
     authority: a.authority,
@@ -216,13 +216,23 @@ export default function QSkywayClient() {
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", heightConfidencePct: null as number | null, avgConfClearM: null as number | null, etaStill: null as number | null, obstacleSegments: null as number | null, measuredObstacleSegments: null as number | null });
-  const [booking, setBooking] = useState<string>("");
+  /**
+   * Исход бронирования хранится РАЗОБРАННЫМ, а не готовой строкой.
+   *
+   * Раньше здесь лежал текст, и цвет выбирался по первому символу
+   * (`startsWith("✓")`). Два следствия: русская фраза «ошибка сети» оседала в
+   * состоянии и не менялась при переключении языка, а смысл исхода держался
+   * на значке внутри строки — то есть на её оформлении.
+   */
+  const [booking, setBooking] = useState<
+    { kind: "ok" | "err"; text: string } | { kind: "net"; detail: string } | null
+  >(null);
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [coverage, setCoverage] = useState<{ withFeed: number; withRegulatoryLayer?: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
   const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
   const [cityId, setCityId] = useState<string>("astana");
-  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; substituted: { i: number; type: string; from: number; n: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
+  const [meta, setMeta] = useState<{ wind: { groundMs: number; topMs: number; fromDeg: number } | null; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; substituted: { i: number; type: string; from: number; n: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
   // Strict mode asks the backend to treat the published ceiling as a hard
   // constraint instead of an advisory verdict. Off by default: the honest
   // default is "fly the corridor and tell me what it would require".
@@ -438,7 +448,13 @@ export default function QSkywayClient() {
       altMaxRef.current = FLOOR + Math.ceil((mh + CLEAR - FLOOR) / BAND) * BAND + BAND;
       setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null });
       setMeta({
-        wind: city.wind ? `${city.wind.groundMs}→${city.wind.topMs} м/с (от ${city.wind.fromDeg}°)` : "—",
+        // Храним ЧИСЛА, а не готовую строку. Раньше здесь собирался текст с
+        // русскими единицами и он оседал в состоянии: переключение языка его
+        // уже не обновляло, потому что строка сложена один раз при загрузке
+        // города. Формат теперь берётся в отрисовке и знает текущий язык.
+        wind: city.wind
+          ? { groundMs: city.wind.groundMs, topMs: city.wind.topMs, fromDeg: city.wind.fromDeg }
+          : null,
         windSource: city.wind?.source ?? "illustrative",
         signed: city._signature ? city._signature.contentHash.slice(0, 12) : "—",
         nofly: city.nofly?.length ?? 0,
@@ -706,9 +722,13 @@ export default function QSkywayClient() {
         body: JSON.stringify({ routeId, t0, t1, holder: "AEVION demo" }),
       });
       const j = await res.json();
-      setBooking(j.ok ? `✓ ${j.slot.id} · ${j.slot.receipt}` : `✗ ${j.error}`);
+      setBooking(
+        j.ok
+          ? { kind: "ok", text: `✓ ${j.slot.id} · ${j.slot.receipt}` }
+          : { kind: "err", text: `✗ ${j.error}` },
+      );
       if (j.ok) fetchSlots();
-    } catch (e) { setBooking("ошибка сети: " + String(e)); }
+    } catch (e) { setBooking({ kind: "net", detail: String(e) }); }
   }, [cityId, fetchSlots]);
 
   // ── filing document ────────────────────────────────────────────────────────
@@ -884,7 +904,11 @@ export default function QSkywayClient() {
               {meta && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 14, padding: "0 14px 12px", fontFamily: "monospace", fontSize: 11, color: "#9fb0c4" }}>
                   <span>
-                    {t("qskyway.wind.label", { wind: meta.wind })}
+                    {t("qskyway.wind.label", {
+                      wind: meta.wind
+                        ? t("qskyway.wind.value", { ground: meta.wind.groundMs, top: meta.wind.topMs, deg: meta.wind.fromDeg })
+                        : "—",
+                    })}
                     <span
                       title={meta.windSource === "metar" ? t("qskyway.wind.metarTip") : t("qskyway.wind.demoTip")}
                       style={{ marginLeft: 6, color: meta.windSource === "metar" ? "#2dd4bf" : "#5f7086" }}
@@ -948,12 +972,7 @@ export default function QSkywayClient() {
                   {meta.suspect.length > 0 && (
                     <span
                       title={
-                        "Высоту из источника мы не считаем достоверной. Либо она в разы выше всей остальной " +
-                        "застройки, либо тег высоты спорит с числом этажей в том же источнике. " +
-                        "Молча мы ничего не переписываем: где источник противоречит сам себе, берём его же счёт " +
-                        "этажей вместо спорной высоты, а где высота просто выделяется — оставляем как " +
-                        "опубликовано и показываем расхождение. Страховочный запас коридор получает в обоих " +
-                        "случаях: высота из OpenStreetMap — заявление участника проекта, а не обмер службы."
+                        t("qskyway.height.suspectTip")
                       }
                       style={{ color: "#fbbf24", textDecoration: "underline dotted", cursor: "help" }}
                     >
@@ -962,7 +981,7 @@ export default function QSkywayClient() {
                         .map((o) => {
                           if (o.was !== undefined) {
                             // источник спорит сам с собой: тег высоты против собственного счёта этажей
-                            return `${o.h} м вместо ${o.was} м — тег спорит с ${o.levels} этажами`;
+                            return t("qskyway.dispute.tagVsLevels", { h: o.h, was: o.was, levels: o.levels ?? "?" });
                           }
                           // Высота, которая в разы выше остальной застройки. Если такой
                           // случай уже разобран человеком — называем ЧИСЛО из статьи
@@ -970,8 +989,8 @@ export default function QSkywayClient() {
                           // проверить его нельзя, а «310.8 м в статье» можно.
                           const rev = meta.heightReview.find((r) => r.index === o.i);
                           return rev
-                            ? `${o.h} м — в статье объекта ${rev.publishedM} м`
-                            : `${o.h} м — ×${o.times} к застройке`;
+                            ? t("qskyway.dispute.published", { h: o.h, published: rev.publishedM })
+                            : t("qskyway.dispute.ratio", { h: o.h, times: o.times ?? "?" });
                         })
                         .join(" · ")}
                       {/* Доходит ли спорная высота до маршрутов — измерено движком по
@@ -982,8 +1001,8 @@ export default function QSkywayClient() {
                       {disputeImpact?.available && (
                         <span style={{ color: disputeImpact.affectedPairs > 0 ? "#fb7185" : "#5f7086" }}>
                           {disputeImpact.affectedPairs > 0
-                            ? ` · на маршруты влияет: ${disputeImpact.affectedPairs} из ${disputeImpact.routable}`
-                            : ` · на маршруты не влияет (0 из ${disputeImpact.routable})`}
+                            ? t("qskyway.dispute.affects", { n: disputeImpact.affectedPairs, total: disputeImpact.routable })
+                            : t("qskyway.dispute.noEffect", { total: disputeImpact.routable })}
                         </span>
                       )}
                     </span>
@@ -996,17 +1015,19 @@ export default function QSkywayClient() {
                   {meta.substituted.length > 0 && (
                     <span
                       title={
-                        "Высота взята из статистики домов того же типа в этом городе, а не измерена и не выведена из этажности самого дома. "
-                        + "Занижать нельзя: коридор пройдёт ниже крыши, поэтому берётся 75-й процентиль, а не медиана. Примеры: "
-                        + meta.substituted.slice(0, 3).map((o) => `дом ${o.i} (${o.type}) вместо ${o.from} м, по ${o.n} известным высотам`).join("; ")
-                        + ". На карте такие дома обведены пунктиром: тёплый оттенок значит «угадано» и достаётся им наравне со слепым дефолтом 12 м, хотя утверждения разные."
+                        t("qskyway.subst.tipHead")
+                        + meta.substituted
+                            .slice(0, 3)
+                            .map((o) => t("qskyway.subst.tipExample", { i: o.i, type: o.type, from: o.from, n: o.n }))
+                            .join("; ")
+                        + t("qskyway.subst.tipTail")
                       }
                       style={{ color: "#c8964f", textDecoration: "underline dotted", cursor: "help" }}
                     >
                       {/* Русская форма склоняется числительным, остальные языки —
                           нет: `plural` даёт «38 зданий», ключ для en/kk несёт число сам. */}
                       ▨ {lang === "ru"
-                        ? `подставлено по типу: ${plural(meta.substituted.length, "здание", "здания", "зданий")}`
+                        ? t("qskyway.subst.byType", { n: meta.substituted.length })
                         : t("qskyway.subst.head", { n: meta.substituted.length })}
                       {/* Тот же вопрос, что у спорной высоты: доходит ли она до
                           полётов. Ответы у них РАЗНЫЕ — спорная высота Астаны не
@@ -1071,7 +1092,7 @@ export default function QSkywayClient() {
                             где он недостижим. */}
                         {measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) != null && (
                           <span
-                            title={`Из ${stats.obstacleSegments} участков со зданием под крылом на обмеренной городом высоте стоят ${stats.measuredObstacleSegments ?? 0}. Остальные — вывод из тега или счёта этажей OSM, либо слепой дефолт; за неуверенность коридор платит запасом по высоте.`}
+                            title={t("qskyway.tel.obstacleTip", { total: stats.obstacleSegments ?? 0, measured: stats.measuredObstacleSegments ?? 0 })}
                             style={{ fontSize: 11, fontWeight: 400, color: (stats.measuredObstacleSegments ?? 0) === 0 ? "#fbbf24" : "#5f7086", marginLeft: 5, cursor: "help" }}
                           >
                             {t("qskyway.tel.byBuildings", { pct: measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) ?? 0 })}
@@ -1107,7 +1128,13 @@ export default function QSkywayClient() {
                 <HeightDisputePanel dispute={heightDispute} />
                 <div style={{ padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
                   <button style={btnPri} onClick={bookSlot} disabled={!loaded}>{t("qskyway.btn.bookSlot")}</button>
-                  {booking && <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.startsWith("✓") ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>{booking}</div>}
+                  {booking && (
+                    <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.kind === "ok" ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>
+                      {booking.kind === "net"
+                        ? t("qskyway.booking.netError", { detail: booking.detail })
+                        : booking.text}
+                    </div>
+                  )}
 
                   {/* The filing document. Until now it existed only as an endpoint,
                       which is the same as not existing for the person who has to
@@ -1138,7 +1165,7 @@ export default function QSkywayClient() {
                         {justification.doc.obstacleSegments != null && justification.doc.obstacleSegments > 0 && (
                           <div style={{ marginTop: 3, color: justification.doc.measuredObstacleSegments === 0 ? "#fbbf24" : "#5f7086" }}>
                             {t("qskyway.just.heights", { pct: justification.doc.heightConfidencePct })}{" "}
-                            {measuredObstaclePct(justification.doc.obstacleSegments, justification.doc.measuredObstacleSegments)}% по зданиям
+                            {measuredObstaclePct(justification.doc.obstacleSegments, justification.doc.measuredObstacleSegments)}{t("qskyway.just.byBuildingsSuffix")}
                             {justification.doc.measuredObstacleSegments === 0 && t("qskyway.just.noCityMeasure")}
                           </div>
                         )}
@@ -1172,7 +1199,7 @@ export default function QSkywayClient() {
                         </div>
                         {v.openRadiusM != null && (
                           <div style={{ color: "#5f7086", fontSize: 10, marginTop: 2 }}>
-                            {t("qskyway.pad.rowDetails", { r: v.openRadiusM ?? "—", c: v.clearanceM ?? "—", d: v.distNoFlyM! >= 9999 ? "—" : v.distNoFlyM + "м" })}
+                            {t("qskyway.pad.rowDetails", { r: v.openRadiusM ?? "—", c: v.clearanceM ?? "—", d: v.distNoFlyM! >= 9999 ? "—" : v.distNoFlyM + t("qskyway.unit.m") })}
                             {v.ceilingM != null && <>{t("qskyway.pad.ceiling", { m: v.ceilingM })}</>}
                           </div>
                         )}

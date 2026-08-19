@@ -110,6 +110,20 @@ const KEYS = [
   "qskyway.slots.storeDurable",
   "qskyway.slots.storeMemory",
   "qskyway.slots.testBadge",
+  "qskyway.dispute.tagVsLevels",
+  "qskyway.dispute.published",
+  "qskyway.dispute.ratio",
+  "qskyway.dispute.affects",
+  "qskyway.dispute.noEffect",
+  "qskyway.subst.byType",
+  "qskyway.wind.value",
+  "qskyway.subst.tipHead",
+  "qskyway.subst.tipExample",
+  "qskyway.subst.tipTail",
+  "qskyway.height.suspectTip",
+  "qskyway.tel.obstacleTip",
+  "qskyway.just.byBuildingsSuffix",
+  "qskyway.booking.netError",
   "qskyway.slots.receipt",
   "qskyway.slots.capacity",
   "qskyway.reg.subject.prohibition",
@@ -119,6 +133,21 @@ const KEYS = [
 ];
 
 const placeholders = (s: string): string[] => (s.match(/\{(\w+)\}/g) ?? []).sort();
+
+/**
+ * Совпадение английского значения с русским — почти всегда копипаста при
+ * добавлении ключа: ключ есть во всех локалях, подстановки совпадают, все
+ * прежние проверки зелёные, а англоязычный читатель видит кириллицу.
+ *
+ * Замер 19.08.2026 на 95 ключах: таких случаев НОЛЬ. Проверка заведена,
+ * чтобы так и осталось.
+ *
+ * Казахский сюда НЕ включён намеренно: там шесть значений законно совпадают
+ * с русскими («трафик», «демо», «телеметрия», «км», «м», «мин» — заимствования
+ * и сокращения, которые в казахском пишутся так же). Требовать различий
+ * значило бы заставлять переводить то, что перевода не требует.
+ */
+const SAME_EN_RU_ALLOWED: string[] = [];
 
 describe("ключи перевода qskyway", () => {
   for (const key of KEYS) {
@@ -136,4 +165,14 @@ describe("ключи перевода qskyway", () => {
       }
     });
   }
+
+  test("английский перевод не равен русскому (ловит копипасту)", () => {
+    const tbl = allTranslations() as Record<string, Record<string, string>>;
+    const same = KEYS.filter((k) => {
+      const ru = tbl.ru?.[k];
+      const en = tbl.en?.[k];
+      return ru != null && en != null && ru === en && !SAME_EN_RU_ALLOWED.includes(k);
+    });
+    expect(same, "английское значение совпало с русским — похоже, ключ скопировали").toEqual([]);
+  });
 });

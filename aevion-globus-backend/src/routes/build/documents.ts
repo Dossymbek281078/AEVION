@@ -57,7 +57,12 @@ documentsRouter.get("/user/:userId", async (req, res) => {
   try {
     const userId = String(req.params.userId);
     const result = await pool.query(
-      `SELECT "id","docType","status","verifiedAt"
+      // Колонок "verifiedAt"/"verifiedBy"/"rejectReason" в "BuildDocument" НЕТ
+      // и никогда не было — таблица ведёт процесс как "reviewed*"/"reviewNote".
+      // Все три ручки документов падали 500 с первого дня (найдено 19.08.2026
+      // сверкой запрашиваемых колонок против CREATE TABLE). Прежнее имя
+      // сохранено псевдонимом: вдруг клиент его ждёт.
+      `SELECT "id","docType","status","reviewedAt" AS "verifiedAt"
        FROM "BuildDocument"
        WHERE "userId" = $1 AND "status" = 'VERIFIED'
        ORDER BY "docType" ASC`,
@@ -96,7 +101,7 @@ documentsRouter.patch("/:id/verify", async (req, res) => {
     if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
     const id = String(req.params.id);
     const result = await pool.query(
-      `UPDATE "BuildDocument" SET "status" = 'VERIFIED', "verifiedBy" = $2, "verifiedAt" = NOW()
+      `UPDATE "BuildDocument" SET "status" = 'VERIFIED', "reviewedBy" = $2, "reviewedAt" = NOW()
        WHERE "id" = $1 RETURNING *`,
       [id, auth.sub],
     );
@@ -116,7 +121,7 @@ documentsRouter.patch("/:id/reject", async (req, res) => {
     const id = String(req.params.id);
     const reason = req.body?.reason == null ? null : String(req.body.reason).trim().slice(0, 500) || null;
     const result = await pool.query(
-      `UPDATE "BuildDocument" SET "status" = 'REJECTED', "verifiedBy" = $2, "verifiedAt" = NOW(), "rejectReason" = $3
+      `UPDATE "BuildDocument" SET "status" = 'REJECTED', "reviewedBy" = $2, "reviewedAt" = NOW(), "reviewNote" = $3
        WHERE "id" = $1 RETURNING *`,
       [id, auth.sub, reason],
     );

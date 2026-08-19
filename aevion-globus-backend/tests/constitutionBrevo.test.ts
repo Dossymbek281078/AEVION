@@ -102,3 +102,33 @@ describe("constitutionBrevo — письмо соответствует исто
     }
   });
 });
+
+/**
+ * До 19.08 sendWaitlistConfirm возвращала void, а вызывающий гасил результат
+ * через .catch(() => {}). Провал отправки был снаружи неотличим от задержки
+ * почты: человек подписан, письма нет, тревоги нет. Проверяем именно ОТВЕТ.
+ */
+describe("sendWaitlistConfirm — отвечает, дошло ли", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    delete process.env.BREVO_API_KEY;
+    vi.restoreAllMocks();
+  });
+
+  test("отказ Brevo даёт false, а не молчание", async () => {
+    process.env.BREVO_API_KEY = "test-key";
+    globalThis.fetch = vi.fn(async () => ({ ok: false, status: 402, text: async () => "quota exceeded" })) as unknown as typeof fetch;
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(sendWaitlistConfirm("a@b.com", "go")).resolves.toBe(false);
+  });
+
+  test("успешная отправка даёт true", async () => {
+    process.env.BREVO_API_KEY = "test-key";
+    globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ messageId: "msg-9" }) })) as unknown as typeof fetch;
+
+    await expect(sendWaitlistConfirm("a@b.com", "go")).resolves.toBe(true);
+  });
+});

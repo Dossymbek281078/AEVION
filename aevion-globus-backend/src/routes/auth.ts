@@ -7,12 +7,50 @@ import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import {
+  canSendEmail,
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+} from "../lib/build/email";
 
 const captureAuthError = makeServiceCapture("auth");
 
 export const authRouter = Router();
 
 const pool = getPool();
+
+/**
+ * GET /api/auth/email/healthz — настроена ли отправка писем.
+ *
+ * Зачем. 19.08.2026 выяснилось, что зарегистрироваться нельзя ни одним путём:
+ * оба OAuth-провайдера не настроены, а подтверждение адреса создаёт токен и
+ * возвращает `{ok:true}`, не отправляя письма. При этом узнать СНАРУЖИ, настроен
+ * ли вообще почтовый транспорт, было невозможно — ручки состояния не было, в
+ * отличие от оплаты, где `/api/pricing/checkout/healthz` есть и работает.
+ *
+ * Вопрос «может ли новый человек зарегистрироваться» не должен требовать
+ * пробной отправки письма или похода в панель хостинга. Здесь он получает ответ
+ * одним запросом.
+ *
+ * Секретов не отдаём: только признак наличия, без значений и без имён хостов.
+ */
+authRouter.get("/email/healthz", (_req, res) => {
+  const smtp = Boolean(
+    process.env.SMTP_HOST?.trim() &&
+      process.env.SMTP_USER?.trim() &&
+      process.env.SMTP_PASS?.trim(),
+  );
+  const resend = Boolean(process.env.RESEND_API_KEY?.trim() || process.env.RESEND_KEY?.trim());
+  res.json({
+    ok: true,
+    transports: { smtp: { configured: smtp }, resend: { configured: resend } },
+    canSend: smtp || resend,
+      // Это факт КОДА, а не настройки: ручка подтверждения зовёт отправщик.
+      // Держится не на слове — тест authEmailSends.test.ts краснеет, если
+      // вызов убрать, поэтому флаг не может тихо разойтись с поведением.
+      emailVerifySendsMail: true,
+  });
+});
 
 authRouter.get("/health", (_req, res) => {
   res.json({
@@ -625,11 +663,22 @@ authRouter.post("/password/reset/request", passwordResetRateLimit, async (req, r
     const email = String(req.body?.email || "").trim().toLowerCase();
     if (!email) return res.status(400).json({ error: "email required" });
 
+    // Проверка транспорта СТОИТ ДО поиска пользователя, и это существенно:
+    // ответ не должен зависеть от того, найден адрес или нет. Сообщение
+    // говорит только о НАШЕЙ настройке и ничего не сообщает об аккаунте.
+    if (!canSendEmail()) {
+      return res.status(503).json({
+        error: "email_not_configured",
+        message: "Отправка писем на сервере не настроена — письмо не отправлено.",
+      });
+    }
+
     const r = await pool.query(
-      `SELECT "id" FROM "AEVIONUser" WHERE LOWER("email") = $1 AND "deletedAt" IS NULL LIMIT 1`,
+      `SELECT "id", "name" FROM "AEVIONUser" WHERE LOWER("email") = $1 AND "deletedAt" IS NULL LIMIT 1`,
       [email]
     );
-    const userId = (r.rows[0] as { id: string } | undefined)?.id || null;
+    const row = r.rows[0] as { id: string; name: string | null } | undefined;
+    const userId = row?.id || null;
 
     let plaintext: string | null = null;
     if (userId) {
@@ -643,6 +692,22 @@ authRouter.post("/password/reset/request", passwordResetRateLimit, async (req, r
         [id, userId, minted.hash, expiresAt]
       );
       recordAuthAudit(userId, "password.reset.request", req, { tokenId: id });
+
+      // ЗДЕСЬ, в отличие от подтверждения адреса, неудачу отправки НЕ
+      // возвращаем. Ручка анонимная: ответ «письмо не ушло» приходил бы
+      // только для существующих адресов и тем самым выдавал бы, кто у нас
+      // зарегистрирован. Поэтому пишем в журнал и отвечаем одинаково всем.
+      // Один класс дефекта, но две разные починки — у ручек разная модель
+      // угроз.
+      const sentReset = await sendPasswordResetEmail({
+        to: email,
+        name: row?.name || email,
+        token: minted.plaintext,
+      });
+      if (!sentReset) {
+        console.warn("[auth] password reset email not delivered", { tokenId: id });
+        recordAuthAudit(userId, "password.reset.email.failed", req, { tokenId: id });
+      }
     } else {
       // Audit the attempt anyway — useful for spotting enumeration sweeps.
       recordAuthAudit(null, "password.reset.request.unknown", req, { email });
@@ -651,7 +716,9 @@ authRouter.post("/password/reset/request", passwordResetRateLimit, async (req, r
     const dev = process.env.NODE_ENV !== "production";
     res.json({
       ok: true,
-      // Only echo the token in dev — prod must email it out-of-band.
+      // В деве токен возвращаем, чтобы поток проверялся без почты.
+      // В проде он уходит письмом выше — намерение из комментария
+      // наконец стало вызовом.
       ...(dev && plaintext ? { devToken: plaintext } : {}),
     });
   } catch (err: any) {
@@ -736,11 +803,16 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
     await ensureAuthTier2Tables();
 
     const u = await pool.query(
-      `SELECT "id", "email", "emailVerifiedAt" FROM "AEVIONUser" WHERE "id" = $1`,
+      `SELECT "id", "email", "name", "emailVerifiedAt" FROM "AEVIONUser" WHERE "id" = $1`,
       [payload.sub]
     );
     if (u.rowCount === 0) return res.status(404).json({ error: "user not found" });
-    const user = u.rows[0] as { id: string; email: string; emailVerifiedAt: Date | null };
+    const user = u.rows[0] as {
+      id: string;
+      email: string;
+      name: string | null;
+      emailVerifiedAt: Date | null;
+    };
     if (user.emailVerifiedAt) {
       return res.json({ ok: true, alreadyVerified: true });
     }
@@ -755,10 +827,39 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
     );
     recordAuthAudit(user.id, "email.verify.request", req, { tokenId: id });
 
+    // ОТПРАВКА ПИСЬМА. До 19.08.2026 её здесь не было вовсе: ручка создавала
+    // токен, писала запись в журнал аудита и отвечала `{ok:true}`. В проде
+    // токен не попадал НИКУДА — ни в ответ, ни в почту, — то есть подтвердить
+    // адрес было нельзя, а ответ выглядел успешным. Отправщик при этом лежал
+    // готовым в `lib/build/email.ts` и не вызывался ни из одного файла.
+    //
+    // Отвечаем честно. Если транспорт не настроен — это наша неисправность, и
+    // человек должен узнать о ней сразу, а не ждать письма, которого не будет.
+    // Пользователь здесь уже авторизован и просит письмо СЕБЕ, поэтому честный
+    // ответ ничего не разглашает.
+    if (!canSendEmail()) {
+      return res.status(503).json({
+        error: "email_not_configured",
+        message: "Отправка писем на сервере не настроена — письмо не отправлено.",
+      });
+    }
+    const sent = await sendVerificationEmail({
+      to: user.email,
+      name: user.name || user.email,
+      token: minted.plaintext,
+    });
+    if (!sent) {
+      return res.status(502).json({
+        error: "email_send_failed",
+        message: "Не удалось отправить письмо. Попробуйте ещё раз.",
+      });
+    }
+
     const dev = process.env.NODE_ENV !== "production";
     res.json({
       ok: true,
       email: user.email,
+      sent: true,
       ...(dev ? { devToken: minted.plaintext } : {}),
     });
   } catch (err: any) {

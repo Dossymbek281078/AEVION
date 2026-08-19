@@ -115,6 +115,23 @@ function warnKeyFnFallback(prefix: string, why: string): void {
  * Good enough for public read-only endpoints; replace with Redis-backed
  * limiter if the app ever runs on multiple instances.
  */
+/**
+ * Адрес клиента как КЛЮЧ ограничителя.
+ *
+ * Возвращён 19.08.2026 при объединении веток: пять шахматных модулей зовут эту
+ * функцию, а в версии из ветки прода её не было — проверка типов поймала это
+ * до выкатки. Восстановлена поверх ИХ файла, а не заменой файла целиком: там
+ * живёт нормализация адреса, закрывающая обход ограничителя по IPv6.
+ *
+ * Нормализуем тем же helper-ом, что и сам ограничитель. Иначе один и тот же
+ * человек получал бы РАЗНЫЕ корзины в шахматах и в остальной платформе — а
+ * это и есть обход: две записи одного адреса считаются двумя посетителями.
+ */
+export function clientIp(req: { ip?: string; socket?: { remoteAddress?: string } }): string {
+  const raw = req.ip || req.socket?.remoteAddress || "unknown";
+  return raw === "unknown" ? raw : normalizeAddressForKey(raw);
+}
+
 export function rateLimit(opts: RateLimitOptions) {
   const windowMs = opts.windowMs ?? 60_000;
   const max = opts.max ?? opts.capacity ?? 60;

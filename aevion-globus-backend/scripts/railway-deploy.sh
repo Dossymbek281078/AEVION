@@ -48,6 +48,46 @@ echo "ветка:  $BRANCH"
 echo "коммит: ${SHA:0:12}"
 echo "повод:  $MSG"
 
+# ── чья ветка сейчас на проде ──────────────────────────────────────────
+#
+# Сервис AEVION один на всю платформу, а выкатка заменяет образ ЦЕЛИКОМ.
+# 14.08.2026 в него выкатились пять разных сессий подряд, и каждая унесла
+# работу предыдущей — ни одна выкатка при этом не была ошибкой, просто никто
+# не спрашивал, чьё там сейчас.
+#
+# Три исхода различаются намеренно: своя ветка, чужая, и «спросить не удалось».
+# Последний — НЕ разрешение: неотвеченный вопрос не равен ответу «свободно».
+PROD_URL="${PROD_HEALTH_URL:-https://api.aevion.app/health}"
+PROD_JSON="$(curl -s --max-time 20 "$PROD_URL" 2>/dev/null || true)"
+PROD_BRANCH="$(printf '%s' "$PROD_JSON" | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).branch||''}catch(e){''}" 2>/dev/null || true)"
+
+if [ -z "$PROD_JSON" ]; then
+  PROD_STATE="не ответил"
+elif [ -z "$PROD_BRANCH" ] || [ "$PROD_BRANCH" = "null" ]; then
+  PROD_STATE="ветку не называет"
+elif [ "$PROD_BRANCH" = "$BRANCH" ]; then
+  PROD_STATE="своя"
+else
+  PROD_STATE="чужая: $PROD_BRANCH"
+fi
+echo "на проде: $PROD_STATE"
+
+if [ "$PROD_STATE" != "своя" ] && [ -z "${ALLOW_OVERWRITE:-}" ]; then
+  {
+    echo ""
+    echo "ОСТАНОВКА: выкатка заменит образ целиком, а на проде не ваша ветка."
+    echo "  на проде: ${PROD_BRANCH:-неизвестна}"
+    echo "  у вас:    $BRANCH"
+    echo ""
+    echo "Соберите ветку, где живёт и та работа, и ваша. Подробности и готовые"
+    echo "команды: node C:\Users\user\aevion-deploy-check.mjs"
+    echo "Если объединение уже сделано и вы понимаете, что делаете:"
+    echo "  ALLOW_OVERWRITE=1 bash scripts/railway-deploy.sh \"$MSG\""
+  } >&2
+  exit 1
+fi
+
+
 # Отметка едет ВНУТРИ загружаемой папки, а не в переменных сервиса.
 #
 # Первая версия ставила GIT_SHA переменной — и это оказалось хуже отсутствия

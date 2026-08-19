@@ -1,6 +1,10 @@
 import { Router, Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
+import { pickDailyPuzzle } from '../lib/cyberchessDailyPuzzle';
+import { createInMemoryRateLimiter } from '../lib/rateLimit/inMemoryWindow';
+import { clientIp } from '../lib/rateLimit';
+import { getPool } from '../lib/dbPool';
 
 const router = Router();
 
@@ -13,19 +17,21 @@ type Puzzle = {
 };
 
 // ============================================================================
-// PUZZLE POOL — 365 entries (30 hand-crafted + 335 procedurally generated)
+// PUZZLE POOL — 30 hand-crafted entries
 // ============================================================================
 //
-// The 30 hand-crafted puzzles below mirror the frontend pool and provide real,
-// tested FEN/solution pairs across varied tactical themes (Fork, Pin, Skewer,
-// Sacrifice, Discovered Attack, Greek Gift, Mate-in-N, etc.).
+// ⚠️ This is NOT the product's puzzle of the day. The daily puzzle every player
+// sees comes from the real puzzle bank: GET /api/cyberchess-puzzles/daily,
+// which picks from the imported corpus via the shared `pickDailyPuzzle`.
+// The pool below only backs this router's own /puzzle and /history, kept so an
+// operator can query a day→puzzle mapping without loading the whole bank.
+// If you are wiring a client, call the bank — not this.
 //
-// The remaining 335 are procedurally generated using a small template library:
-// a handful of base positions parameterised over piece colours, side-to-move
-// and small perturbations. They are intentionally lower-fidelity ("detection
-// puzzles" — find the candidate move) and ratings/themes are varied via a
-// deterministic generator so the daily rotation is well-distributed across the
-// full Glicko-like 800–2400 range.
+// Until 2026-08-10 this pool also held 335 "procedurally generated" puzzles.
+// They were fiction: 10 base positions repeated 33× each, with `theme` and
+// `rating` drawn from a PRNG and pinned onto positions they did not describe —
+// an Italian opening served as "Mate in 2, rating 2350". Numbers shown to a
+// learner have to come from the position, so they are gone.
 // ============================================================================
 
 const HAND_CRAFTED: Puzzle[] = [
@@ -61,63 +67,7 @@ const HAND_CRAFTED: Puzzle[] = [
   { id: 'p030', fen: 'rnbqk2r/pp2bppp/4pn2/2pp4/3P4/2N1PN2/PPP1BPPP/R1BQK2R w KQkq - 0 1', sol: ['d4c5', 'b8d7', 'b2b4'], theme: 'Pawn grab', rating: 1300 },
 ];
 
-// Procedural generator: synthesises 335 additional "detection" puzzles using a
-// small set of base templates. Each base is a known-legal opening/middlegame
-// FEN. The solution is the first canonical tactical try for that template;
-// theme + rating vary deterministically by index so the rotation is diverse.
-const TEMPLATE_BASES: { fen: string; sol: string[] }[] = [
-  { fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4', sol: ['c4f7', 'e8f7', 'f3e5'] },
-  { fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 2', sol: ['f1c4', 'g8f6', 'f3g5'] },
-  { fen: 'rnbqkb1r/ppp1pppp/5n2/3p4/3P4/2N5/PPP1PPPP/R1BQKBNR w KQkq - 2 2', sol: ['c1f4', 'c7c6', 'e2e3'] },
-  { fen: 'rnbqkbnr/ppp2ppp/4p3/3p4/3PP3/8/PPP2PPP/RNBQKBNR w KQkq - 0 3', sol: ['e4d5', 'e6d5', 'b1c3'] },
-  { fen: 'r1bqkb1r/pp1p1ppp/2n1pn2/2p5/2P5/2N2NP1/PP1PPP1P/R1BQKB1R w KQkq - 0 5', sol: ['f1g2', 'd7d5', 'c4d5'] },
-  { fen: 'rnbqkb1r/pp2pppp/3p1n2/2p5/3P4/2N2N2/PPP1PPPP/R1BQKB1R w KQkq - 0 4', sol: ['d4c5', 'd6c5', 'e2e4'] },
-  { fen: 'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 4 5', sol: ['b1c3', 'd7d6', 'c1g5'] },
-  { fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2', sol: ['g1f3', 'b8c6', 'd2d4'] },
-  { fen: 'rnbqkb1r/pp2pp1p/3p1np1/8/3NP3/2N5/PPP2PPP/R1BQKB1R w KQkq - 0 6', sol: ['f1e2', 'f8g7', 'c1e3'] },
-  { fen: 'r1bqkb1r/pp1ppppp/2n2n2/2p5/2P5/2N2N2/PP1PPPPP/R1BQKB1R w KQkq - 4 4', sol: ['d2d4', 'c5d4', 'f3d4'] },
-];
-
-const THEMES = [
-  'Mate in 1', 'Mate in 2', 'Mate in 3',
-  'Fork', 'Pin', 'Skewer', 'Discovered attack', 'Double attack',
-  'Remove defender', 'Deflection', 'Decoy', 'Zugzwang',
-  'Sacrifice', 'Combination', 'Tactic',
-];
-
-// Deterministic PRNG (Mulberry32) — same seed → same pool every boot
-function mulberry32(seed: number) {
-  let t = seed >>> 0;
-  return () => {
-    t = (t + 0x6d2b79f5) >>> 0;
-    let r = Math.imul(t ^ (t >>> 15), 1 | t);
-    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function generateProcedural(count: number): Puzzle[] {
-  const rng = mulberry32(0xc0ffee);
-  const out: Puzzle[] = [];
-  for (let i = 0; i < count; i++) {
-    const base = TEMPLATE_BASES[i % TEMPLATE_BASES.length];
-    const theme = THEMES[Math.floor(rng() * THEMES.length)];
-    // Rating: spread 800–2400 in 50-point buckets, biased mildly to middle.
-    const ratingBucket = Math.floor(rng() * 33); // 0..32
-    const rating = 800 + ratingBucket * 50;
-    const idStr = `g${String(i + 1).padStart(3, '0')}`;
-    out.push({
-      id: idStr,
-      fen: base.fen,
-      sol: [...base.sol],
-      theme,
-      rating,
-    });
-  }
-  return out;
-}
-
-const POOL: Puzzle[] = [...HAND_CRAFTED, ...generateProcedural(335)];
+const POOL: Puzzle[] = HAND_CRAFTED;
 
 // ============================================================================
 // PERSISTENT LEADERBOARD (file-backed, top-1000)
@@ -132,12 +82,25 @@ type LeaderEntry = {
   updatedAt: string;
 };
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+// Overridable so a test run can point the store at a scratch directory. The
+// leaderboard file is committed to the repository, so a suite that wrote to
+// the real one would dirty tracked data while reporting green — which is
+// exactly what the paywall suite did to data/subscriptions.jsonl.
+const DATA_DIR = process.env.CYBERCHESS_DAILY_DIR
+  ? path.resolve(process.env.CYBERCHESS_DAILY_DIR)
+  : path.resolve(process.cwd(), 'data');
 const LB_FILE = path.join(DATA_DIR, 'cyberchess-daily-leaderboard.json');
 const LB_MAX = 1000;
 
-const COUNTRIES = ['🇷🇺', '🇺🇸', '🇩🇪', '🇫🇷', '🇪🇸', '🇮🇹', '🇰🇿', '🇺🇦', '🇵🇱', '🇧🇷', '🇨🇳', '🇯🇵', '🇮🇳', '🇬🇧', '🇰🇷', '🇳🇱', '🇸🇪', '🇳🇴', '🇫🇮', '🇦🇷'];
-const NAMES = ['Magnus', 'Hikaru', 'Fabiano', 'Ding', 'Anish', 'Ian', 'Levon', 'Wesley', 'Maxime', 'Alireza', 'Praggnanandhaa', 'Gukesh', 'Erigaisi', 'Nakamura', 'Carlsen', 'Caruana', 'Liren', 'Giri', 'Vachier', 'Firouzja', 'Karjakin', 'Aronian', 'So', 'MVL', 'Pragg', 'Dommaraju', 'Niemann', 'Abdusattorov', 'Esipenko', 'Sarana'];
+/**
+ * Момент последнего сохранения — по нему выбирается свежая копия: файл или
+ * база. Объявлено ЗДЕСЬ, выше loadLeaderboard, не для красоты: эта функция
+ * вызывается при загрузке модуля, и при объявлении ниже она падала на
+ * «Cannot access before initialization». Падение ловил try/catch, файл
+ * считался нечитаемым, и таблица лидеров отвечала 503 — на самом
+ * посещаемом экране. Поймано тестом, не типами.
+ */
+let dailySavedAtMs = 0;
 
 function ensureDataDir(): void {
   try {
@@ -147,25 +110,27 @@ function ensureDataDir(): void {
   }
 }
 
-function seedLeaderboard(): LeaderEntry[] {
-  const out: LeaderEntry[] = [];
-  const now = new Date().toISOString();
-  for (let i = 0; i < 100; i++) {
-    const name = `${NAMES[i % NAMES.length]}${i < NAMES.length ? '' : '_' + Math.floor(i / NAMES.length)}`;
-    const country = COUNTRIES[i % COUNTRIES.length];
-    const streak = Math.max(1, 365 - i * 3);
-    const score = streak * 100 + Math.max(0, 200 - i);
-    out.push({
-      name,
-      country,
-      streak,
-      score,
-      userId: `seed_${i.toString().padStart(3, '0')}`,
-      updatedAt: now,
-    });
-  }
-  return out.sort((a, b) => b.score - a.score);
+/* Until 2026-08-10 an empty leaderboard was filled with 100 invented players —
+ * "Magnus", "Hikaru", "Carlsen" with streaks counting down from 365 — and
+ * written to disk under userId `seed_000`…`seed_099`. Nobody had solved
+ * anything; the table was decoration. A leaderboard that shows strangers ahead
+ * of a real player who just took first place is worse than an empty one, so the
+ * seeding is gone and legacy seed rows are dropped on load. An empty board is
+ * the honest state of a board nobody has climbed yet. */
+export function isSeededEntry(e: { userId?: string }): boolean {
+  return typeof e.userId === 'string' && e.userId.startsWith('seed_');
 }
+
+/**
+ * Файл есть, но прочитать его не удалось. Это НЕ пустая таблица.
+ *
+ * Раньше оба случая давали `[]`, и последствие было куда хуже показа: пустой
+ * список становился состоянием в памяти, а первое же сохранение записывало эту
+ * пустоту ПОВЕРХ файла. То есть одна временная ошибка чтения — недописанный
+ * JSON, гонка на подмене, нехватка прав — стирала таблицу целиком и навсегда,
+ * без единого сообщения.
+ */
+let leaderboardReadable = true;
 
 function loadLeaderboard(): LeaderEntry[] {
   try {
@@ -173,28 +138,73 @@ function loadLeaderboard(): LeaderEntry[] {
     if (fs.existsSync(LB_FILE)) {
       const raw = fs.readFileSync(LB_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed as LeaderEntry[];
+      // Две формы файла: голый массив (как писали раньше) и объект с меткой
+      // времени. Метка нужна, чтобы сравнивать файл с копией в базе; старую
+      // форму продолжаем читать, иначе первая же выкатка потеряла бы таблицу.
+      const list = Array.isArray(parsed)
+        ? (parsed as LeaderEntry[])
+        : Array.isArray(parsed?.leaderboard)
+          ? (parsed.leaderboard as LeaderEntry[])
+          : null;
+      if (list) {
+        leaderboardReadable = true;
+        if (!Array.isArray(parsed) && parsed.savedAt) {
+          const t = new Date(parsed.savedAt).getTime();
+          if (Number.isFinite(t)) dailySavedAtMs = t;
+        }
+        return list.filter((e) => !isSeededEntry(e));
+      }
+      // Файл есть, но внутри не список — содержимое неизвестно, значит не пусто.
+      leaderboardReadable = false;
+      console.error('[cyberchess-daily] таблица лидеров не разобрана — запись заблокирована, чтобы не стереть её пустотой');
+      return [];
     }
+    // Файла нет — честная пустая таблица: её никто ещё не заполнял.
+    leaderboardReadable = true;
   } catch (e) {
-    // fall through to seed
+    leaderboardReadable = false;
+    console.error(
+      '[cyberchess-daily] таблицу лидеров не прочитать — запись заблокирована, чтобы не стереть её пустотой:',
+      (e as Error).message,
+    );
   }
-  const seeded = seedLeaderboard();
-  try {
-    ensureDataDir();
-    fs.writeFileSync(LB_FILE, JSON.stringify(seeded, null, 2), 'utf-8');
-  } catch {
-    // ignore — in-memory fallback only
-  }
-  return seeded;
+  return [];
 }
 
 function saveLeaderboard(entries: LeaderEntry[]): void {
+  if (!leaderboardReadable) {
+    // Пробуем ещё раз: причина обычно временная, и как только файл читается,
+    // работа возобновляется сама. Прочитанное берём за основу и накатываем на
+    // него то, что накопилось в памяти, — иначе сохранение снова затрёт диск.
+    const recovered = loadLeaderboard();
+    if (!leaderboardReadable) {
+      console.error('[cyberchess-daily] сохранение пропущено: файл по-прежнему не читается, в памяти', entries.length, 'строк');
+      return;
+    }
+    LEADERBOARD = recovered;
+    for (const e of entries) upsertLeaderboard(e.userId, e.name, e.country, e.streak, e.score);
+    return; // upsertLeaderboard уже сохранил
+  }
   try {
     ensureDataDir();
-    fs.writeFileSync(LB_FILE, JSON.stringify(entries, null, 2), 'utf-8');
-  } catch {
-    // ignore
+    dailySavedAtMs = Date.now();
+    fs.writeFileSync(
+      LB_FILE,
+      JSON.stringify({ savedAt: new Date(dailySavedAtMs).toISOString(), leaderboard: entries }, null, 2),
+      'utf-8',
+    );
+    // Зеркало в базе — вместе с личной статистикой: она жила только в памяти и
+    // обнулялась на каждом рестарте, из-за чего человек видел «решено: 0»,
+    // стоя в таблице со своей серией.
+    void saveDailyToDb(dailySavedAtMs);
+  } catch (e) {
+    console.error('[cyberchess-daily] запись таблицы лидеров не прошла:', (e as Error).message);
   }
+}
+
+/** Состояние хранилища таблицы — для диагностики и для ответа ручки. */
+export function dailyLeaderboardReadable(): boolean {
+  return leaderboardReadable;
 }
 
 // In-memory mirror (fallback when fs unavailable)
@@ -213,6 +223,194 @@ const userStats = new Map<string, UserStats>();
 // Per-day record (one solve per user per day, deduped)
 type SolveRecord = { day: string; streak: number; userId: string; timeMs: number; hintsUsed: number; score: number };
 const solveStore = new Map<string, SolveRecord>(); // key: `${userId}:${day}`
+
+// ⚠️ ПОПРАВКА 13.08 (вечер): причина ниже описана НЕВЕРНО.
+// У сервиса на Railway примонтирован постоянный том `aevion-volume` по пути
+// `/app/aevion-globus-backend/data` — ровно туда, где лежит этот файл. Проверено
+// командой `railway volume list`. Значит деплой файл НЕ стирает, и мотивировка
+// «файловая система контейнера временная» к нам не относится.
+//
+// Что остаётся верным и ради чего этот код всё же нужен:
+//   * вторая копия в базе, независимая от тома (том привязан к сервису: пересоздали
+//     сервис — тома нет);
+//   * состояние становится запрашиваемым и попадает в бэкапы Postgres;
+//   * при нескольких процессах строка-на-объект корректна, а файл целиком — нет.
+// Срочности, которую я приписал этой работе, не было. Полезность осталась.
+// ── Postgres: записи задачи дня переживают деплой ───────────────────
+//
+// ЗАЧЕМ. Таблица лидеров лежит в файле, который ЗАКОММИЧЕН в репозиторий, а
+// файловая система контейнера временная. Значит при каждом деплое таблица
+// откатывается к версии из git — всё, что игроки заработали с прошлой выкатки,
+// исчезает молча. Личная статистика (сколько решено, история по дням) и того
+// хуже: она жила только в памяти процесса и обнулялась при любом рестарте,
+// из-за чего человек видел «решено: 0», стоя в таблице со своей серией.
+//
+// УСТРОЙСТВО такое же, как у турниров (cyberchessTournaments.ts): одна строка
+// JSONB со всем состоянием, `savedAt` решает, кто свежее — база или файл. Без
+// DATABASE_URL всё работает как раньше, на файле и в памяти.
+let dailyPool: any = null;
+let dailyDbTried = false;
+/** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
+const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, rowsWritten: 0, saveErrors: 0, retries: 0, lastErrorKind: null as string | null };
+
+/**
+ * Повтор зеркалирования в базу после сбоя — как в турнирах и по той же
+ * причине: запись не ждут, поэтому единичный обрыв сети означал бы, что
+ * зеркало молча отстало. Повторяем ТЕКУЩЕЕ состояние, а не упавший снимок.
+ */
+const DAILY_DB_RETRY_MS = Number(process.env.CYBERCHESS_DB_RETRY_MS ?? 20_000);
+let dailyDbRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleDailyDbRetry(): void {
+  if (dailyDbRetryTimer) return; // одна попытка в полёте
+  dailyDbRetryTimer = setTimeout(() => {
+    dailyDbRetryTimer = null;
+    dailyDbHealth.retries += 1;
+    void saveDailyToDb(Date.now());
+  }, DAILY_DB_RETRY_MS);
+  dailyDbRetryTimer.unref?.(); // таймер не должен держать процесс живым
+}
+
+/**
+ * Ошибка базы, сведённая к КАТЕГОРИИ.
+ *
+ * Ручка `_persistence` публичная, а сырое сообщение pg содержит инфраструктуру:
+ * «connect ECONNREFUSED 10.0.0.5:5432», «password authentication failed for
+ * user "aevion"», «database "x" does not exist». Я сам написал в коммите, что
+ * диагностика не должна выдавать то, что считает, — и тут же оставил текст
+ * ошибки наружу. Полное сообщение уходит в лог, наружу едет только слово.
+ */
+function dbErrorKind(e: unknown): "connect" | "auth" | "timeout" | "schema" | "query" {
+  const m = (e as Error)?.message?.toLowerCase() ?? "";
+  if (m.includes("econnrefused") || m.includes("enotfound") || m.includes("ehostunreach")) return "connect";
+  if (m.includes("password") || m.includes("authentication") || m.includes("role ")) return "auth";
+  if (m.includes("timeout") || m.includes("terminated")) return "timeout";
+  if (m.includes("does not exist") || m.includes("column") || m.includes("relation")) return "schema";
+  return "query";
+}
+
+async function ensureDailyDb(): Promise<any> {
+  if (dailyDbTried) return dailyPool;
+  dailyDbTried = true;
+  if (!process.env.DATABASE_URL) return null;
+  dailyDbHealth.configured = true;
+  try {
+    // Общий пул из lib/dbPool, а не свой: в нём уже настроены таймауты
+    // (подключение 5 с, запрос 10 с) и keep-alive. Свой пул без них означал
+    // бы, что при недоступной базе запрос висит сколько угодно — а ожидание
+    // готовности стоит перед ВСЕМИ маршрутами модуля, то есть повис бы весь
+    // модуль вместо того, чтобы честно работать на файле. Плюс это второй
+    // способ делать то, что в репозитории уже делается одним.
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "CyberDailyEntry" (
+        "userId"    TEXT PRIMARY KEY,
+        "entry"     JSONB,
+        "stats"     JSONB,
+        -- Миллисекунды числом, а не TIMESTAMP: у колонки без часового пояса
+        -- смысл зависит от читателя (драйвер разберёт её в поясе клиента), и
+        -- сравнение «что свежее» молча ошибётся на часы. Тот же разбор — в
+        -- cyberchessTournaments.ts.
+        "savedAtMs" BIGINT NOT NULL
+      );
+    `);
+    dailyPool = pool;
+    dailyDbHealth.connected = true;
+    console.log('[cyberchess-daily] pg connected — записи задачи дня переживут деплой');
+    return pool;
+  } catch (e) {
+    console.warn('[cyberchess-daily] pg init failed:', (e as Error).message);
+    return null;
+  }
+}
+
+type DailyState = { leaderboard: LeaderEntry[]; stats: UserStats[] };
+
+async function loadDailyFromDb(): Promise<{ state: DailyState; savedAtMs: number } | null> {
+  const pool = await ensureDailyDb();
+  if (!pool) return null;
+  try {
+    const r = await pool.query(`SELECT "userId","entry","stats","savedAtMs" FROM "CyberDailyEntry"`);
+    const rows = r.rows ?? [];
+    if (rows.length === 0) return null;
+    const lb: LeaderEntry[] = [];
+    const stats: UserStats[] = [];
+    let newest = 0;
+    for (const row of rows) {
+      if (row?.entry && typeof row.entry.userId === 'string') lb.push(row.entry as LeaderEntry);
+      if (row?.stats && typeof row.stats.userId === 'string') stats.push(row.stats as UserStats);
+      const t = Number(row?.savedAtMs);
+      if (Number.isFinite(t) && t > newest) newest = t;
+    }
+    if (lb.length === 0 && stats.length === 0) {
+      console.error('[cyberchess-daily] в базе есть строки, но ни одной разобранной — беру файл');
+      return null;
+    }
+    // Порядок таблицы восстанавливается тем же правилом, что и в памяти:
+    // строки в базе независимы и своего порядка не несут.
+    lb.sort((a, b) => b.score - a.score);
+    return { state: { leaderboard: lb.slice(0, LB_MAX), stats }, savedAtMs: newest };
+  } catch (e) {
+    console.error('[cyberchess-daily] чтение записей из базы не прошло:', (e as Error).message);
+    return null;
+  }
+}
+
+/** Зеркалирование в базу. Не бросает: путь решения задачи не должен падать из-за базы. */
+async function saveDailyToDb(stamp: number): Promise<void> {
+  if (dailyDbHealth.abandoned) return; // см. dailyReadyBounded
+  const pool = await ensureDailyDb();
+  if (!pool) return;
+  try {
+    // СТРОКА НА ИГРОКА, а не вся таблица целиком.
+    //
+    // Целиком было структурно неверно при двух живых процессах — а это каждый
+    // деплой, пока старая реплика дослуживает. Обе держат полную копию:
+    // реплика A пишет таблицу со своим новым решателем, реплика B следом пишет
+    // свою — без него. Человек, решивший задачу, просто исчезает из таблицы.
+    //
+    // По строкам конфликтуют только правки ОДНОГО игрока. Условие на savedAt
+    // оставлено: сохранения не блокируют ответ и могут прийти не по порядку.
+    const byUser = new Map<string, { entry: LeaderEntry | null; stats: UserStats | null }>();
+    for (const e of LEADERBOARD) byUser.set(e.userId, { entry: e, stats: null });
+    for (const st of userStats.values()) {
+      const slot = byUser.get(st.userId) ?? { entry: null, stats: null };
+      slot.stats = st;
+      byUser.set(st.userId, slot);
+    }
+    // Считаем ЗАПИСАННЫЕ СТРОКИ, а не проходы функции.
+    //
+    // Раньше saves увеличивался один раз за вызов, если тот не бросил
+    // исключение. Поймано мутацией 18.08.2026: выключил запись в базу целиком —
+    // строка в базе не появилась, а диагностика бодро отчиталась «записей 1».
+    // То есть счётчик доказывал не запись, а отсутствие исключения; на пустом
+    // наборе игроков или при отклонённой сторожем savedAtMs записи он рос бы
+    // ровно так же. Диагностика, отвечающая на другой вопрос, хуже её
+    // отсутствия — на неё уже смотрят как на доказательство.
+    let written = 0;
+    for (const [uid, slot] of byUser) {
+      const r = await pool.query(
+        `INSERT INTO "CyberDailyEntry" ("userId","entry","stats","savedAtMs")
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT ("userId") DO UPDATE SET
+           "entry"=EXCLUDED."entry","stats"=EXCLUDED."stats","savedAtMs"=EXCLUDED."savedAtMs"
+         WHERE "CyberDailyEntry"."savedAtMs" <= EXCLUDED."savedAtMs"`,
+        [uid, slot.entry ? JSON.stringify(slot.entry) : null, slot.stats ? JSON.stringify(slot.stats) : null, stamp],
+      );
+      written += r.rowCount ?? 0;
+    }
+    dailyDbHealth.rowsWritten += written;
+    if (written > 0) dailyDbHealth.saves += 1;
+  } catch (e) {
+    dailyDbHealth.saveErrors += 1;
+    dailyDbHealth.lastErrorKind = dbErrorKind(e);
+    console.error(
+      `[cyberchess-daily] запись записей в базу не прошла, повтор через ${DAILY_DB_RETRY_MS / 1000} с:`,
+      (e as Error).message,
+    );
+    scheduleDailyDbRetry();
+  }
+}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -247,27 +445,102 @@ function upsertLeaderboard(uid: string, name: string, country: string, streak: n
   saveLeaderboard(LEADERBOARD);
 }
 
+/**
+ * Догрузка из базы — асинхронная, поэтому маршруты её ЖДУТ.
+ *
+ * «Отдаём файл сейчас, базу подхватим когда придёт» съедает данные: между
+ * стартом и ответом базы кто-то решает задачу, его строка ложится поверх
+ * файловой копии, а прилетевшее состояние её стирает. Проверено мутацией на
+ * соседнем модуле турниров: без ожидания тест краснеет.
+ */
+/** Предел ожидания базы на старте — страховка от зависшего сокета: ожидание
+ *  стоит перед всеми маршрутами модуля. См. тот же разбор у турниров. */
+const DAILY_READY_MAX_MS = Number(process.env.CYBERCHESS_DB_READY_MS ?? 20_000);
+
+const dailyReady: Promise<void> = (async () => {
+  const fromDb = await loadDailyFromDb();
+  // Ответ мог прийти после того, как ожидание бросили по времени. Подхватывать
+  // состояние на ходу нельзя: кто-то уже мог решить задачу, и прилетевшая
+  // копия его сотрёт.
+  if (dailyDbHealth.abandoned) {
+    console.error('[cyberchess-daily] ответ базы пришёл слишком поздно — записи не подхватываю, работаю на файле');
+    return;
+  }
+  if (!fromDb) return; // базы нет или в ней пусто — живём на файле, как раньше
+  if (fromDb.savedAtMs <= dailySavedAtMs) return; // файл свежее или ровесник
+  LEADERBOARD = fromDb.state.leaderboard.filter((e) => !isSeededEntry(e));
+  userStats.clear();
+  for (const st of fromDb.state.stats) {
+    if (st && typeof st.userId === 'string') userStats.set(st.userId, st);
+  }
+  dailySavedAtMs = fromDb.savedAtMs;
+  dailyDbHealth.adoptedFromDb = true;
+  console.log(
+    `[cyberchess-daily] записи взяты из базы (${LEADERBOARD.length} в таблице, ${userStats.size} игроков) — она свежее файла`,
+  );
+})().catch((e) => {
+  console.error('[cyberchess-daily] догрузка из базы не удалась, остаёмся на файле:', (e as Error).message);
+});
+
+// Ожидание готовности — до всех маршрутов модуля.
+/** Признак «ожидание уже завершилось»: без него таймер срабатывал всегда и
+ *  через 20 с выключал запись в базу даже при здоровой базе. См. турниры. */
+let dailyReadySettled = false;
+
+const dailyReadyBounded: Promise<void> = Promise.race([
+  dailyReady.then(() => {
+    dailyReadySettled = true;
+  }),
+  new Promise<void>((resolve) => {
+    const t = setTimeout(() => {
+      if (dailyReadySettled) return resolve(); // успели — бросать нечего
+      // База не ответила. Работаем на файле и больше НЕ ПИШЕМ в базу: наша
+      // копия свежее по метке и затёрла бы то, что там лежит.
+      dailyDbHealth.abandoned = true;
+      console.error(`[cyberchess-daily] база не ответила за ${DAILY_READY_MAX_MS} мс — работаю на файле, запись в базу выключена`);
+      resolve();
+    }, DAILY_READY_MAX_MS);
+    (t as unknown as { unref?: () => void }).unref?.();
+  }),
+]);
+
+router.use(async (_req: Request, _res: Response, next: () => void) => {
+  await dailyReadyBounded;
+  next();
+});
+
 // ============================================================================
 // ROUTES
 // ============================================================================
 
 /**
  * GET /puzzle
- * Returns today's puzzle (deterministic by ISO date).
+ * Today's puzzle out of THIS router's own 30-entry pool.
+ *
+ * ⚠️ Not the puzzle players see — that is GET /api/cyberchess-puzzles/daily.
+ * `source` says so in the payload so a caller cannot mistake one for the other.
+ *
+ * Selection goes through the shared `pickDailyPuzzle` rather than
+ * `POOL[day % POOL.length]`: index arithmetic ties the answer to pool length, so
+ * the page's 10-entry copy and this pool disagreed on 355 days out of 365 while
+ * both looked like "day modulo pool".
  */
 router.get('/puzzle', (_req: Request, res: Response) => {
-  const idx = dayIndex() % POOL.length;
-  const p = POOL[idx];
+  const p = pickDailyPuzzle(POOL, dayIndex());
+  if (!p) return res.status(503).json({ ok: false, error: 'pool_empty' });
   return res.json({
     day: todayIso(),
     poolSize: POOL.length,
+    source: 'cyberchess-daily fallback pool — the live daily puzzle is /api/cyberchess-puzzles/daily',
     puzzle: {
       id: p.id,
       fen: p.fen,
       theme: p.theme,
       rating: p.rating,
       solLength: p.sol.length,
-      // Solution hint: only the first move (client validates rest via chess.js)
+      // Full line: the client has to validate every reply, not just the first
+      // move, and this pool ships in the client bundle anyway.
+      sol: p.sol,
       solHint: p.sol[0],
     },
   });
@@ -275,7 +548,8 @@ router.get('/puzzle', (_req: Request, res: Response) => {
 
 /**
  * GET /history?days=7
- * Returns the last N daily puzzles (defaults to 7, max 30).
+ * Returns the last N daily puzzles (defaults to 7, max 30) from the same pool
+ * and the same selection function as /puzzle.
  */
 router.get('/history', (req: Request, res: Response) => {
   const rawDays = parseInt(String(req.query.days || '7'), 10);
@@ -285,7 +559,8 @@ router.get('/history', (req: Request, res: Response) => {
   for (let i = 0; i < days; i++) {
     const di = today - i;
     const date = new Date(di * 86400000).toISOString().slice(0, 10);
-    const p = POOL[di % POOL.length];
+    const p = pickDailyPuzzle(POOL, di);
+    if (!p) continue;
     out.push({ day: date, id: p.id, theme: p.theme, rating: p.rating });
   }
   return res.json({ days, history: out });
@@ -296,16 +571,58 @@ router.get('/history', (req: Request, res: Response) => {
  * Body: { streak: number, day: string, timeMs?: number, hintsUsed?: number, userId?: string, name?: string, country?: string }
  * Records the solve and updates leaderboard + user stats.
  */
+// Bounds on what a client may claim. There are no accounts here, so /solve
+// takes the player's word for their run — these exist so a wrong or invented
+// word cannot become permanent. The leaderboard is sorted by score, an entry is
+// only ever replaced by a HIGHER score, and the whole table is written to disk:
+// one request claiming a streak of a billion took first place for good — no
+// honest run can produce a higher score, and nothing lowers an existing one.
+// (NaN and Infinity are not reachable here: JSON has neither, so they arrive as
+// null and are already refused by the type check above.)
+const MAX_STREAK = 3650; // ten years of consecutive daily puzzles
+const MAX_TIME_MS = 24 * 60 * 60 * 1000;
+const MAX_HINTS = 20;
+const MAX_NAME_LEN = 40;
+const MAX_COUNTRY_LEN = 8;
+
+// The bounds below stop one absurd claim. They do not stop a thousand
+// believable ones: user ids are whatever the caller invents, the board holds
+// 1000 rows sorted by score, and it is written to disk — so a script posting
+// the maximum allowed streak under fresh ids fills every place and the real
+// players are pushed off a leaderboard that persists. Solving a daily puzzle
+// happens once a day, so this ceiling is far above any honest use and only
+// bites a flood. Shared addresses (an office, a household, a mobile carrier)
+// have room to spare.
+const solveLimiter = createInMemoryRateLimiter({ max: 30, windowMs: 60_000 });
+
 router.post('/solve', (req: Request, res: Response) => {
+  const gate = solveLimiter.check(clientIp(req));
+  if (!gate.allowed) {
+    res.setHeader('Retry-After', String(Math.max(1, Math.ceil(gate.retryAfterMs / 1000))));
+    return res.status(429).json({
+      ok: false,
+      error: 'rate_limited',
+      retryAfterSec: Math.max(1, Math.ceil(gate.retryAfterMs / 1000)),
+    });
+  }
+
   const { streak, day, timeMs, hintsUsed, userId, name, country } = req.body || {};
   if (typeof streak !== 'number' || typeof day !== 'string') {
     return res.status(400).json({ ok: false, error: 'streak (number) and day (string) required' });
   }
-  const tMs = typeof timeMs === 'number' && timeMs >= 0 ? timeMs : 0;
-  const hUsed = typeof hintsUsed === 'number' && hintsUsed >= 0 ? Math.floor(hintsUsed) : 0;
+  // Whole, non-negative, and within a range a real player could reach.
+  if (!Number.isInteger(streak) || streak < 0 || streak > MAX_STREAK) {
+    return res.status(400).json({
+      ok: false,
+      error: 'invalid_streak',
+      hint: `streak must be a whole number between 0 and ${MAX_STREAK}`,
+    });
+  }
+  const tMs = typeof timeMs === 'number' && timeMs >= 0 ? Math.min(timeMs, MAX_TIME_MS) : 0;
+  const hUsed = typeof hintsUsed === 'number' && hintsUsed >= 0 ? Math.min(Math.floor(hintsUsed), MAX_HINTS) : 0;
   const uid = typeof userId === 'string' && userId.length > 0 ? userId : 'anonymous';
-  const uname = typeof name === 'string' && name.length > 0 ? name : `Player_${uid.slice(0, 6)}`;
-  const uctry = typeof country === 'string' && country.length > 0 ? country : '🌍';
+  const uname = typeof name === 'string' && name.length > 0 ? name.slice(0, MAX_NAME_LEN) : `Player_${uid.slice(0, 6)}`;
+  const uctry = typeof country === 'string' && country.length > 0 ? country.slice(0, MAX_COUNTRY_LEN) : '🌍';
 
   const score = computeScore(streak, tMs, hUsed);
   const key = `${uid}:${day}`;
@@ -353,7 +670,26 @@ router.post('/solve', (req: Request, res: Response) => {
  * GET /leaderboard?limit=100
  * Returns top-N entries sorted by score desc.
  */
+// GET /_persistence — диагностика хранилища: только числа и признаки, без
+// данных игроков. Нужна ровно для одного: запросы к Postgres здесь не
+// выполнялись на настоящем сервере (локально его нет), поэтому ответить,
+// работает ли перенос, должен первый деплой, а не наша вера в правильность SQL.
+router.get('/_persistence', (_req: Request, res: Response) => {
+  return res.json({
+    ok: true,
+    leaderboard: LEADERBOARD.length,
+    players: userStats.size,
+    fileReadable: leaderboardReadable,
+    db: { ...dailyDbHealth },
+  });
+});
+
 router.get('/leaderboard', (req: Request, res: Response) => {
+  // Пустой список на этой ручке страница подписывает словами «Пока никто не
+  // решал». Если файл не прочитан, мы этого не знаем — и говорить не вправе.
+  if (!leaderboardReadable) {
+    return res.status(503).json({ ok: false, error: 'leaderboard_unavailable' });
+  }
   const rawLimit = parseInt(String(req.query.limit || '100'), 10);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, LB_MAX) : 100;
   return res.json({
@@ -370,12 +706,22 @@ router.get('/user/:userId/stats', (req: Request, res: Response) => {
   const uid = String(req.params.userId);
   const stats = userStats.get(uid);
   if (!stats) {
+    // Записи нет — но это НЕ то же самое, что «человек ничего не решал».
+    // userStats живёт только в памяти процесса: любой перезапуск обнуляет её,
+    // а таблица лидеров сохраняется на диск. Отдавая здесь нули, сервер
+    // сообщал «решено: 0» тому, кто в тот же момент стоит в таблице со своей
+    // серией — два числа об одном человеке на одном экране, и оба наши.
+    //
+    // Что знаем достоверно, то и отдаём: лучшая серия есть в сохранённой
+    // таблице. Остальное помечено как неизвестное, а не как ноль.
+    const known = LEADERBOARD.find((e) => e.userId === uid);
     return res.json({
       userId: uid,
-      bestStreak: 0,
-      totalSolved: 0,
-      avgTimeMs: 0,
+      bestStreak: known ? known.streak : 0,
+      totalSolved: null,
+      avgTimeMs: null,
       history: [],
+      statsKnown: false,
     });
   }
   const avg = stats.totalSolved > 0 ? Math.round(stats.totalTimeMs / stats.totalSolved) : 0;
@@ -384,6 +730,7 @@ router.get('/user/:userId/stats', (req: Request, res: Response) => {
     bestStreak: stats.bestStreak,
     totalSolved: stats.totalSolved,
     avgTimeMs: avg,
+    statsKnown: true,
     history: stats.history.slice(-30), // last 30 days
   });
 });
@@ -402,7 +749,7 @@ router.post('/reset', (req: Request, res: Response) => {
   if (!provided || provided !== expected) {
     return res.status(403).json({ ok: false, error: 'forbidden' });
   }
-  LEADERBOARD = seedLeaderboard();
+  LEADERBOARD = [];
   saveLeaderboard(LEADERBOARD);
   userStats.clear();
   solveStore.clear();

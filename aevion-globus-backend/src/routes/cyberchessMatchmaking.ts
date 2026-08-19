@@ -23,7 +23,8 @@
 //    set; otherwise loopback-only).
 
 import { Router, type Request, type Response } from "express";
-import { randomUUID } from "node:crypto";
+import { clientIp as sharedClientIp } from "../lib/rateLimit";
+import { randomUUID, timingSafeEqual, createHash } from "node:crypto";
 import { Chess } from "chess.js";
 import {
   ensureDb as ensureMatchDb,
@@ -35,6 +36,9 @@ import {
   getHistory,
   getWallet,
   getWalletLeaderboard,
+  countUnpaidAwards,
+  matchStoreHealth,
+  countWalletsWithoutRatedGames,
 } from "./cyberchessMatchStore";
 import { computeServerTimeStats, classifyServerTimeSignal } from "../lib/cyberchessServerTimeSignal";
 import { submitServerReport } from "./cyberchessAnticheat";
@@ -271,6 +275,47 @@ function submitServerAnticheatSignals(m: Match): void {
   }
 }
 
+/**
+ * Кто хочет знать, чем кончилась партия.
+ *
+ * Заведено для турнирной сетки: пары публикуются сюда через
+ * `createPreMatchedMatch`, партия играется и засчитывается здесь — а обратно в
+ * сетку результат не возвращался НИКАК. Единственный, кто закрывает пару,
+ * `POST /api/cyberchess-tournaments/:id/result`, не вызывался ни клиентом, ни
+ * сервером, поэтому у настоящего турнира сетка застывала на «идёт» навсегда:
+ * партии игрались, рейтинг менялся, а следующий круг не наступал.
+ *
+ * Подписка, а не прямой вызов, потому что зависимость уже направлена в другую
+ * сторону — турниры импортируют матчмейкинг, и обратный импорт замкнул бы круг.
+ */
+export type SettledMatchInfo = {
+  matchId: string;
+  tournamentId?: string;
+  round?: number;
+  result: "white" | "black" | "draw";
+  reason: string;
+};
+
+const settledListeners: ((info: SettledMatchInfo) => void)[] = [];
+
+export function onMatchSettled(fn: (info: SettledMatchInfo) => void): void {
+  settledListeners.push(fn);
+}
+
+function notifyMatchSettled(info: SettledMatchInfo): void {
+  for (const fn of settledListeners) {
+    try {
+      fn(info);
+    } catch (e) {
+      // Подписчик не вправе сорвать засчитывание партии игрокам.
+      console.warn(
+        "[cyberchess matchmaking] settled listener failed:",
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+}
+
 async function settleMatch(
   m: Match,
   result: "white" | "black" | "draw",
@@ -290,6 +335,15 @@ async function settleMatch(
   }
   m.subscribers.clear();
   if (!firstEnd) return null;
+  // Строго после проверки firstEnd: повторный /end от второго клиента не должен
+  // засчитать сетке тот же результат дважды.
+  notifyMatchSettled({
+    matchId: m.matchId,
+    tournamentId: m.tournamentId,
+    round: m.tournamentRound,
+    result,
+    reason,
+  });
   submitServerAnticheatSignals(m);
   return finalizeMatch(m.matchId, {
     whiteUserId: m.white.userId,
@@ -318,12 +372,12 @@ function safeRating(n: unknown): number | null {
   return Math.round(r);
 }
 
+// Reads req.ip through the shared helper. This used to take the LEFTMOST
+// X-Forwarded-For entry, which a proxy never writes — the caller does. Varying
+// that header per request handed every request its own bucket, so the limit
+// below could not fire while looking, from outside, exactly like one that works.
 function clientIp(req: Request): string {
-  const fwd = req.headers["x-forwarded-for"];
-  if (typeof fwd === "string" && fwd.length > 0) {
-    return fwd.split(",")[0].trim();
-  }
-  return req.ip || req.socket?.remoteAddress || "unknown";
+  return sharedClientIp(req);
 }
 
 function purgeStaleQueue(): void {
@@ -877,6 +931,21 @@ router.get("/queue/stream", (req: Request, res: Response): void => {
   });
 });
 
+/**
+ * Constant-time secret comparison. `===` returns as soon as two bytes differ,
+ * so the time it takes to answer leaks how much of the token was right, and a
+ * token can be recovered a character at a time. Same reason webhookSig.ts uses
+ * timingSafeEqual.
+ */
+function sameSecret(provided: string, expected: string): boolean {
+  // Digests rather than the raw strings: timingSafeEqual throws when the two
+  // buffers differ in length, and catching that would leak the token's length
+  // on its own. SHA-256 output is always 32 bytes.
+  const a = createHash("sha256").update(provided).digest();
+  const b = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(a, b);
+}
+
 // POST /internal/pre-match — tournament → matchmaking bridge (HTTP form)
 //
 // Direct in-process callers should use createPreMatchedMatch() instead.
@@ -889,17 +958,24 @@ router.post("/internal/pre-match", (req: Request, res: Response): void => {
   const expected = process.env.INTERNAL_TOKEN || "";
   const provided = String(req.headers["x-internal-token"] || "");
   if (expected) {
-    if (provided !== expected) {
+    if (!sameSecret(provided, expected)) {
       res.status(403).json({ ok: false, error: "forbidden" });
       return;
     }
   } else {
-    const ip = req.ip || req.socket?.remoteAddress || "";
-    const isLoopback =
-      ip === "127.0.0.1" ||
-      ip === "::1" ||
-      ip === "::ffff:127.0.0.1" ||
-      ip.startsWith("127.");
+    // req.socket.remoteAddress, NOT req.ip. index.ts sets `trust proxy`, so
+    // req.ip is read from X-Forwarded-For — a header the caller writes. This
+    // check exists to prove the call came from this machine, and anyone on the
+    // internet could satisfy it by sending `X-Forwarded-For: 127.0.0.1`, then
+    // create matches between any user ids they named. The socket peer is the
+    // address the connection actually came from and cannot be set by headers.
+    //
+    // Consequence worth knowing: behind a proxy the peer is the proxy, never
+    // loopback, so with no INTERNAL_TOKEN set this endpoint is closed in
+    // production. That is the intended direction to fail — in-process callers
+    // use createPreMatchedMatch() directly and never come through here.
+    const ip = req.socket?.remoteAddress || "";
+    const isLoopback = ip === "::1" || ip === "::ffff:127.0.0.1" || ip.startsWith("127.");
     if (!isLoopback) {
       res
         .status(403)
@@ -1234,15 +1310,26 @@ router.get("/rating", async (req: Request, res: Response): Promise<void> => {
   }
   const speedQ = String(req.query.speed || "").trim();
   const speeds = speedQ ? [speedQ] : ["bullet", "blitz", "rapid", "classical"];
+  // null от getRating означает «спросить не удалось». Отфильтровать его молча
+  // нельзя: пустой список рейтингов читается как «игрок не играл», а сильному
+  // игроку это показало бы, что его рейтинга не существует.
   const ratings = await Promise.all(speeds.map((s) => getRating(userId, s).catch(() => null)));
-  res.json({ ok: true, userId, ratings: ratings.filter(Boolean) });
+  if (ratings.some((r) => !r)) {
+    res.status(503).json({ ok: false, error: "rating_unavailable" });
+    return;
+  }
+  res.json({ ok: true, userId, ratings });
 });
 
 // GET /leaderboard?speed=blitz&limit=50 — top players by rating in a speed.
 router.get("/leaderboard", async (req: Request, res: Response): Promise<void> => {
   const speed = String(req.query.speed || "blitz").trim();
   const limit = parseInt(String(req.query.limit || "50"), 10) || 50;
-  const rows = await getLeaderboard(speed, limit).catch(() => []);
+  const rows = await getLeaderboard(speed, limit).catch(() => null);
+  if (!rows) {
+    res.status(503).json({ ok: false, error: "leaderboard_unavailable" });
+    return;
+  }
   res.json({
     ok: true,
     speed,
@@ -1263,7 +1350,7 @@ router.get("/leaderboard", async (req: Request, res: Response): Promise<void> =>
 });
 
 // GET /wallet?userId=X — server-authoritative Chessy balance (see
-// creditWallet() in cyberchessMatchStore.ts). Only credited today from real
+// awardMatchChessy() in cyberchessMatchStore.ts). Only credited today from real
 // matchmaking games via finalizeMatch's server-verified result — the
 // existing client-side Chessy (60+ addChessy() call sites in the frontend
 // for puzzles/lessons/cosmetics) is a separate, unrelated balance and is
@@ -1275,14 +1362,29 @@ router.get("/wallet", async (req: Request, res: Response): Promise<void> => {
     res.status(400).json({ ok: false, error: "userId_required" });
     return;
   }
-  const wallet = await getWallet(userId).catch(() => ({ userId, displayName: null, balance: 0, earnedTotal: 0 }));
+  // Отказ базы отвечает 503, а не нулевым балансом. Раньше и падение запроса, и
+  // отсутствие DATABASE_URL превращались в `ok:true, balance:0` — то есть
+  // сервер утверждал, что человек ничего не заработал, ни разу этого не
+  // проверив. Экран показывает такому ответу «не удалось запросить».
+  const wallet = await getWallet(userId).catch(() => null);
+  if (!wallet) {
+    res.status(503).json({ ok: false, error: "wallet_unavailable" });
+    return;
+  }
   res.json({ ok: true, ...wallet });
 });
 
 // GET /wallet/leaderboard?limit=50 — public, top Chessy balances.
 router.get("/wallet/leaderboard", async (req: Request, res: Response): Promise<void> => {
   const limit = parseInt(String(req.query.limit || "50"), 10) || 50;
-  const rows = await getWalletLeaderboard(limit).catch(() => []);
+  // То же самое: пустая таблица на экране подписана «никто ещё не заработал
+  // Chessy в реальных матчах». Это утверждение обо ВСЕХ игроках, и получать его
+  // из упавшего запроса нельзя.
+  const rows = await getWalletLeaderboard(limit).catch(() => null);
+  if (!rows) {
+    res.status(503).json({ ok: false, error: "wallet_leaderboard_unavailable" });
+    return;
+  }
   res.json({
     ok: true,
     count: rows.length,
@@ -1304,14 +1406,48 @@ router.get("/history", async (req: Request, res: Response): Promise<void> => {
     return;
   }
   const limit = parseInt(String(req.query.limit || "30"), 10) || 30;
-  const rows = await getHistory(userId, limit).catch(() => []);
+  // Пустая история значит «партий нет» — на экране это так и написано. Отказ
+  // базы такой фразой прикрывать нельзя: у человека может быть двести партий.
+  const rows = await getHistory(userId, limit).catch(() => null);
+  if (!rows) {
+    res.status(503).json({ ok: false, error: "history_unavailable" });
+    return;
+  }
   res.json({ ok: true, userId, count: rows.length, matches: rows });
 });
 
 // GET /debug/stats — diagnostic
-router.get("/debug/stats", (_req: Request, res: Response): void => {
+router.get("/debug/stats", async (_req: Request, res: Response): Promise<void> => {
+  // Зависшие выплаты: закрытые партии, за которые в ведомости нет пары строк.
+  // Показатель существует ради читателя — без него провал начисления виден
+  // только строкой в логе, а логи никто не открывает. Число, не список: имена
+  // и суммы наружу не нужны. null = спросить не удалось (это не «ноль долгов»).
+  const unpaidAwards = await countUnpaidAwards().catch(() => null);
+  // Сверка: баланс есть, рейтинговых партий нет. Кошелёк пополняется только на
+  // закрытии партии, где пишется и рейтинг, — расхождение значит либо синтетику
+  // в боевых данных, либо пропущенную запись рейтинга при прошедшей выплате.
+  const walletsWithoutRatedGames = await countWalletsWithoutRatedGames().catch(() => null);
   res.json({
     ok: true,
+    awards: { unpaid: unpaidAwards },
+    wallets: { withoutRatedGames: walletsWithoutRatedGames },
+    // Учёт записи в хранилище партий. Заведён 18.08.2026: до него отказ записи
+    // давал одну строку в логе и никакого следа в системе, хотя через этот путь
+    // идут партии, ходы, рейтинги и начисления Chessy.
+    //
+    // Только числа: имён, сумм и текста ошибок здесь нет — ручка публичная, а
+    // сообщение базы выдаёт адрес, порт и пользователя.
+    //
+    // claimUnknown отдельно от writeErrors намеренно: это случаи, когда конец
+    // партии не удалось захватить из-за отказа базы. Раньше они были
+    // неотличимы от штатного «партию уже закрыл второй клиент» — и начисление
+    // молча не происходило.
+    storage: {
+      writes: matchStoreHealth.writes,
+      writeErrors: matchStoreHealth.writeErrors,
+      claimUnknown: matchStoreHealth.claimUnknown,
+      lastErrorKind: matchStoreHealth.lastErrorKind,
+    },
     queue: {
       total: QUEUE.size,
       waiting: [...QUEUE.values()].filter((e) => e.status === "waiting").length,

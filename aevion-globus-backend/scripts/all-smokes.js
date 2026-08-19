@@ -37,6 +37,18 @@ const SMOKES = [
   // Webhook signing — pure-crypto sign+verify roundtrip + rotation + replay rejection.
   // No backend needed; deterministic, always safe.
   { name: "webhook-sig", script: "webhook-sig-smoke.js", readOnly: true },
+
+  // Денежный путь на проде. Замер 19.08.2026: файл существовал, работал
+  // (17 assertions, 17 PASS) и НЕ ЗАПУСКАЛСЯ НИГДЕ — ни здесь, ни в
+  // .github/workflows, ни в задачах планировщика. Ноль упоминаний во всём
+  // репозитории, кроме самого файла.
+  //
+  // Проверяет то, что ломается тише всего: чекаут по шести сочетаниям
+  // тариф×период, живость вебхуков PayBox и PayPal, отклонение поддельной
+  // подписи (401) и корректную деградацию в каскад по умолчанию, когда
+  // переменные окружения не заданы. Сломайся любое — покупатель упирается в
+  // тупик, а мы узнаём из выручки, которой нет.
+  { name: "checkout-rails", script: "checkout-rails-prod-smoke.js", readOnly: true },
   // Hub catalog: read-only unified module discovery endpoint.
   { name: "hub-catalog", script: "hub-catalog-smoke.js", readOnly: true },
   // Waitlist unsubscribe: validates HMAC token rejection paths.

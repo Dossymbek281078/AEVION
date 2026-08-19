@@ -283,13 +283,19 @@ qtradeRouter.get("/accounts/lookup", async (req, res) => {
   }
   const email = emailRaw.trim().toLowerCase();
 
-  // Try users table first — confirms that email actually corresponds to a
-  // registered user, even if no account has been provisioned yet.
+  // Confirms that the email actually corresponds to a registered user, even if
+  // no account has been provisioned yet.
+  //
+  // Таблица называется "AEVIONUser"; таблицы `users` в платформе нет и не было.
+  // Запрос падал ВСЕГДА, мягкий catch это прятал, и поле userExists уходило в
+  // ответ вечным false — то есть про настоящего зарегистрированного человека мы
+  // отвечали «не зарегистрирован». Найдено 19.08.2026 сверкой запрашиваемых
+  // таблиц против CREATE TABLE.
   let userExists = false;
   try {
     const pool = getPool();
     const r = await pool.query(
-      "SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(email) = $1) AS exists",
+      'SELECT EXISTS(SELECT 1 FROM "AEVIONUser" WHERE LOWER("email") = $1) AS exists',
       [email],
     );
     userExists = !!(r.rows[0] as { exists?: boolean } | undefined)?.exists;

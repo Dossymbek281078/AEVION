@@ -1586,6 +1586,14 @@ awardsRouter.get("/health", async (_req, res) => {
     const r = await pool.query(`SELECT COUNT(*)::int AS c FROM "AwardSeason"`);
     res.json({ status: "ok", service: "AEVION Awards", seasons: r.rows[0].c, timestamp: new Date().toISOString() });
   } catch {
-    res.json({ status: "ok", service: "AEVION Awards", timestamp: new Date().toISOString() });
+    // A liveness probe that answers "ok" when it could not reach storage is worse
+    // than no probe at all: whoever wires it up gets confidence it cannot back.
+    // Category only, never the driver message - that leaks host, port and db user.
+    res.status(503).json({
+      status: "error",
+      service: "AEVION Awards",
+      reason: "storage_unreachable",
+      timestamp: new Date().toISOString(),
+    });
   }
 });

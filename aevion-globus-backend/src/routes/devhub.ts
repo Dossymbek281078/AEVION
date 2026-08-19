@@ -1,6 +1,35 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+// Ограничитель дорогих ручек. Тот же помощник, что стоит на 27 соседних ручках в
+// коммите d9cc19ce0 (28.07) — он ждёт мержа 22 дня, поэтому здесь пока только две
+// ручки, которые тогда пропустили: /ask и /media/upload-image.
+import { rateLimit } from "../lib/rateLimit";
+
+/**
+ * Предел для дорогих ручек этого модуля.
+ *
+ * Намеренно НЕ новый экспорт в lib: коммит d9cc19ce0 (28.07) вводит там
+ * `generationLimit` и переводит на него 27 ручек, но ждёт мержа 22 дня. Свой
+ * одноимённый помощник поспорил бы с ним при сведении, а локальная функция — нет.
+ * Когда тот коммит придёт, эти два вызова заменяются на `generationLimit(...)`.
+ *
+ * Значение берётся из той же переменной, что и у него, чтобы поведение совпало.
+ */
+function dhCostlyLimit(keyPrefix: string) {
+  const raw = Number(process.env.GENERATION_RATE_LIMIT);
+  // Тернарник ВЫНЕСЕН из объекта намеренно. Внутри литерала опций
+  // `raw > 0 ? raw : 30` выглядит для разборщика как поле «raw: 30», и сторож
+  // rateLimitOptionsGuard справедливо по своему шаблону, но ложно по смыслу
+  // сообщил о «лишней опции raw». Заодно читается лучше.
+  const max = Number.isFinite(raw) && raw > 0 ? raw : 30;
+  return rateLimit({
+    windowMs: 60_000,
+    max,
+    keyPrefix,
+    message: "Слишком много запросов к генерации. Подождите минуту.",
+  });
+}
 import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders, type ChatImage } from "../services/qcoreai/providers";
@@ -14,6 +43,30 @@ import { validateGeneratedFiles } from "../lib/syntaxCheck";
 import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
 
 export const devhubRouter = Router();
+
+/**
+ * Предел на ОТПРАВЛЯЮЩИЕ ручки — одним объявлением, а не по одной.
+ *
+ * Что закрывает: аноним мог отправлять письма, SMS и сообщения WhatsApp с нашего
+ * аккаунта произвольным получателям, без предела. Это не «дорого», это возможность
+ * рассылать спам нашим именем, и от продуктового вопроса «DevHub — продукт или
+ * внутренний инструмент» она не зависит: посторонним нельзя ни в одном из ответов.
+ *
+ * Почему списком, а не построчно у каждой ручки: коммит d9cc19ce0 (28.07) ставит
+ * ограничитель ровно этим ручкам построчно и ждёт мержа 22 дня. Правка в те же
+ * строки дала бы конфликт на его патче; отдельное объявление — нет. Когда он
+ * придёт, оба предела просто сложатся, и это безвредно (сработает строгий).
+ *
+ * Ограничитель, а НЕ авторизация: авторизация решает, КОМУ можно, и это решение
+ * основателя. Предел не решает ничего — он лишь не даёт злоупотреблять.
+ *
+ * Стоит ДО объявления маршрутов намеренно: express выполняет middleware в порядке
+ * регистрации, и ниже маршрутов он бы не сработал вовсе.
+ */
+devhubRouter.use(
+  ["/media/email", "/media/email-template-send", "/media/sms", "/media/whatsapp"],
+  dhCostlyLimit("dhsend"),
+);
 
 // GET /api/devhub/health — module health probe for aevion hub
 devhubRouter.get("/health", (_req, res) => {
@@ -31,7 +84,13 @@ devhubRouter.get("/health", (_req, res) => {
 // feeds the shared cross-module savings tally. Returns { answer, routing } so
 // the caller sees the cost/route. Distinct from /projects/:id/generate, which
 // emits structured code JSON; this answers questions in prose.
-devhubRouter.post("/ask", async (req, res) => {
+// `/ask` зовёт платное дополнение (smartComplete) с входом до 16 000 знаков и была
+// БЕЗ ограничителя, тогда как 27 соседних дорогих ручек его получили ещё 28.07 —
+// эту просто пропустили. Ограничитель, а не авторизация, выбран намеренно: он не
+// решает продуктовый вопрос «кому можно», он лишь не даёт анониму жечь наш бюджет
+// ИИ без предела. Ключ отдельный: общий на все генерации означал бы, что один
+// модуль расходует лимит другого (см. feedback_default_that_means_share).
+devhubRouter.post("/ask", dhCostlyLimit("dhask"), async (req, res) => {
   const question = typeof req.body?.question === "string" ? req.body.question.trim().slice(0, 8000) : "";
   const context = typeof req.body?.context === "string" ? req.body.context.trim().slice(0, 8000) : "";
   if (!question) return res.status(400).json({ error: "question required" });
@@ -4583,7 +4642,15 @@ devhubRouter.post("/media/gumroad-checkout", async (req, res) => {
 
 // POST /api/devhub/media/upload-image — upload image to Cloudflare Images (permanent CDN URL)
 // Body: { sourceUrl?: string } OR { base64: string, mimeType?: string }
-devhubRouter.post("/media/upload-image", async (req, res) => {
+// Загрузка в Cloudflare Images — платная услуга, а ручка была анонимной и без
+// предела: расход и квоту мог жечь кто угодно. Ограничитель, как у соседних
+// дорогих ручек.
+//
+// Отдельно, чтобы следующий читатель не искал того, чего нет: `sourceUrl` НЕ даёт
+// обхода в нашу сеть. Адрес уходит в Cloudflare полем формы `url`, и по нему идёт
+// ИХ сервис, а не наш сервер. Я начинал разбор с обратной гипотезы и проверил её
+// прежде, чем записывать.
+devhubRouter.post("/media/upload-image", dhCostlyLimit("dhmedia_upload"), async (req, res) => {
   const { sourceUrl, base64, mimeType = "image/png" } = req.body || {};
   if (!sourceUrl && !base64) {
     return res.status(400).json({ error: "sourceUrl or base64 required" });

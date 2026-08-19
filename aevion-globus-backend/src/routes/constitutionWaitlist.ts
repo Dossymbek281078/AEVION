@@ -30,6 +30,37 @@ type WaitlistRow = {
 };
 
 const memList = new Map<string, WaitlistRow>();
+
+/**
+ * Склейка меток источника — та же логика, что в SQL при ON CONFLICT.
+ *
+ * Держать её здесь И в запросе — вынужденное повторение: SQL нельзя вызвать без
+ * базы, а память обязана вести себя одинаково с ней, иначе запасной путь молча
+ * теряет интерес подписчика. Правило одно, записано дважды, и оба места помечены
+ * ссылкой друг на друга.
+ *
+ * Новая метка дописывается В КОНЕЦ (первый интерес остаётся первым), уже
+ * существующая не дублируется, обрезка идёт по последней ЦЕЛОЙ метке: обрубленная
+ * посередине не совпала бы ни с чем при отборе получателей.
+ */
+export function mergeSources(prev: string, next: string, limit = 250): string {
+  const parts = String(prev || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const add = String(next || "").trim();
+  if (!add) return parts.join(",");
+  if (parts.some((p) => p.toLowerCase() === add.toLowerCase())) return parts.join(",");
+
+  parts.push(add);
+  let out = parts.join(",");
+  while (out.length > limit && parts.length > 1) {
+    // Выбрасываем самую позднюю метку, а не режем строку: у обрубка нет смысла.
+    parts.pop();
+    out = parts.join(",");
+  }
+  return out.slice(0, limit);
+}
 let tableReady = false;
 let dbAvailable = false;
 
@@ -143,7 +174,15 @@ constitutionWaitlistRouter.post(
           );
         }
       }
-      if (!memList.has(row.email)) memList.set(row.email, row);
+      // Память ведёт себя КАК БАЗА: метка дописывается, а не игнорируется.
+      //
+      // Прежняя строка была `if (!memList.has(...))` — то есть повторная подписка
+      // в памяти не меняла ничего, тогда как в Postgres источник (до 19.08)
+      // перезаписывался. Два хранилища с разной семантикой: на запасном пути
+      // интерес не накапливался вовсе, и никакой тест этого не показывал, потому
+      // что в тестах база недоступна и работает как раз память.
+      const prev = memList.get(row.email);
+      memList.set(row.email, prev ? { ...prev, source: mergeSources(prev.source, row.source) } : row);
 
       // Fire-and-forget confirmation email via Brevo
       // source передаётся обязательно: без него развилка в письме считает

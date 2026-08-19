@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { buildWaitlistConfirmEmail } from "../src/lib/constitutionBrevo";
+import { mergeSources } from "../src/routes/constitutionWaitlist";
 
 // Интерес накапливается, а не затирается — 19.08.2026.
 //
@@ -98,5 +99,58 @@ describe("SQL дописывает метку, а не затирает", () => 
     // получателей — то есть тихо выкинула бы человека из рассылки.
     expect(route).toMatch(/position\(','/);
     expect(route).not.toMatch(/DO UPDATE SET "source" = left\(EXCLUDED/);
+  });
+});
+
+describe("mergeSources — то же правило, что в SQL, но для запасного пути", () => {
+  // Память обязана вести себя как база. Прежде повторная подписка в памяти не
+  // меняла НИЧЕГО (`if (!memList.has(...))`), тогда как в Postgres источник
+  // перезаписывался: два хранилища с разной семантикой. И проверить это было
+  // нечем — в тестах база недоступна, работает как раз память.
+
+  test("новая метка дописывается в конец, первая остаётся первой", () => {
+    expect(mergeSources("cyberchess", "devhub")).toBe("cyberchess,devhub");
+  });
+
+  test("существующая метка не дублируется, в том числе в другом регистре", () => {
+    expect(mergeSources("devhub", "devhub")).toBe("devhub");
+    expect(mergeSources("devhub,cyberchess", "DevHub")).toBe("devhub,cyberchess");
+  });
+
+  test("пустое не добавляется и не портит список", () => {
+    expect(mergeSources("devhub", "")).toBe("devhub");
+    expect(mergeSources("", "devhub")).toBe("devhub");
+    expect(mergeSources("", "")).toBe("");
+  });
+
+  test("пробелы вокруг меток срезаются", () => {
+    expect(mergeSources(" cyberchess , bureau ", " devhub ")).toBe("cyberchess,bureau,devhub");
+  });
+
+  test("при переполнении выбрасывается ПОЗДНЯЯ метка, а не режется строка", () => {
+    // Обрубок вида «devh» не совпал бы ни с чем при отборе получателей, то есть
+    // тихо выкинул бы человека из рассылки. Лучше потерять самый свежий интерес,
+    // чем испортить все.
+    const out = mergeSources("aaaaaaaa,bbbbbbbb", "cccccccc", 20);
+    expect(out.length).toBeLessThanOrEqual(20);
+    // Ни одна метка в результате не обрублена: каждая целиком из исходных.
+    for (const p of out.split(",")) {
+      expect(["aaaaaaaa", "bbbbbbbb", "cccccccc"]).toContain(p);
+    }
+  });
+
+  test("одна слишком длинная метка не роняет функцию", () => {
+    const out = mergeSources("", "x".repeat(400), 250);
+    expect(out.length).toBeLessThanOrEqual(250);
+  });
+
+  test("результат пригоден для отбора получателей", async () => {
+    // Сквозная проверка: то, что склеила память, обязано находиться отбором
+    // рассылки. Иначе накопление интереса ничего не даёт.
+    const { matchesModule } = await import("../src/lib/launchAnnounce");
+    const merged = mergeSources("cyberchess-instagram", "devhub");
+    expect(matchesModule(merged, "cyberchess")).toBe(true);
+    expect(matchesModule(merged, "devhub")).toBe(true);
+    expect(matchesModule(merged, "multichat")).toBe(false);
   });
 });

@@ -161,7 +161,7 @@ function airspaceRegSource(a: AirspaceSummary | undefined, ru: boolean): Regulat
     }
     return { tier: "none", scopeNote: ru ? a?.note : (a?.noteEn ?? a?.note) };
   }
-  const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} м` : "";
+  const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} ${ru ? "м" : "m"}` : "";
   return {
     tier: "official",
     authority: a.authority,
@@ -1199,7 +1199,7 @@ export default function QSkywayClient() {
                         </div>
                         {v.openRadiusM != null && (
                           <div style={{ color: "#5f7086", fontSize: 10, marginTop: 2 }}>
-                            {t("qskyway.pad.rowDetails", { r: v.openRadiusM ?? "—", c: v.clearanceM ?? "—", d: v.distNoFlyM! >= 9999 ? "—" : v.distNoFlyM + "м" })}
+                            {t("qskyway.pad.rowDetails", { r: v.openRadiusM ?? "—", c: v.clearanceM ?? "—", d: v.distNoFlyM! >= 9999 ? "—" : v.distNoFlyM + t("qskyway.unit.m") })}
                             {v.ceilingM != null && <>{t("qskyway.pad.ceiling", { m: v.ceilingM })}</>}
                           </div>
                         )}

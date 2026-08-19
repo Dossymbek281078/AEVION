@@ -769,19 +769,19 @@ export default function QSkywayClient() {
   return (
     <div style={{ background: "#070b12", minHeight: "100vh" }}>
       <div style={wrap}>
-        <div style={{ fontFamily: "monospace", fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", color: "#5f7086" }}>AEVION · планета городского неба</div>
+        <div style={{ fontFamily: "monospace", fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", color: "#5f7086" }}>{t("qskyway.hero.eyebrow")}</div>
         <h1 style={{ fontFamily: "monospace", fontSize: 24, margin: "2px 0 4px" }}><span style={{ color: "#fbbf24" }}>Q</span>Skyway</h1>
         <p style={{ color: "#9fb0c4", fontSize: 14, margin: "0 0 4px", maxWidth: 720 }}>
-          3D-аэрокоридоры и авто-навигация для аэротакси поверх реального цифрового двойника города.
-          Здания — OpenStreetMap, ограничения — из публикаций самих регуляторов там, где они существуют.
+          {t("qskyway.hero.lede1")}{" "}
+          {t("qskyway.hero.lede2")}
         </p>
         <p style={{ color: "#5f7086", fontSize: 12, margin: "0 0 18px" }}>
-          Движок и доказательство концепции, не сертифицированное авиационное ПО. Полёты в реальном небе требуют допуска регулятора (U-space / UTM / CAAC). Данные зданий — OpenStreetMap (открытые, ODbL).
+          {t("qskyway.hero.disclaimer")}
         </p>
 
         {cities.length > 1 && (
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "0 0 16px" }}>
-            <span style={{ fontFamily: "monospace", fontSize: 11, letterSpacing: 1, color: "#5f7086" }}>ГОРОД:</span>
+            <span style={{ fontFamily: "monospace", fontSize: 11, letterSpacing: 1, color: "#5f7086" }}>{t("qskyway.city.label")}</span>
             {cities.map((c) => (
               <button key={c.id} onClick={() => { setCityId(c.id); loadCity(c.id); }}
                 style={{ fontSize: 13, borderRadius: 8, padding: "7px 13px", cursor: "pointer", ...(cityId === c.id ? { background: "#22d3ee", color: "#04212a", border: "none", fontWeight: 600 } : { background: "transparent", color: "#9fb0c4", border: "1px solid #1e2836" }) }}>
@@ -830,13 +830,13 @@ export default function QSkywayClient() {
           </div>
         )}
 
-        {err && <div style={{ ...card, padding: 16, color: "#fb7185" }}>Не удалось загрузить город: {err}. Проверь, что бэкенд поднят (/api/qskyway/city).</div>}
+        {err && <div style={{ ...card, padding: 16, color: "#fb7185" }}>{t("qskyway.err.cityLoad", { err: String(err) })}</div>}
 
         {!err && (
           <div className="qsky-grid" style={{ display: "grid", gap: 14 }}>
             <style>{`.qsky-grid { grid-template-columns: 1fr; } @media (min-width: 900px) { .qsky-grid { grid-template-columns: 1.55fr 1fr; } }`}</style>
             <section style={card}>
-              <div style={cardH}>Аэрокарта · реальные здания{stats.city ? " · " + stats.city : ""}</div>
+              <div style={cardH}>{t("qskyway.map.head")}{stats.city ? " · " + stats.city : ""}</div>
               {/*
                 Пока город грузится, страница выглядела ТОЧНО как сломанная:
                 пустая чёрная карта и нули в телеметрии, без единого признака,
@@ -856,24 +856,24 @@ export default function QSkywayClient() {
                     borderBottom: "1px solid #1e2836", fontFamily: "monospace",
                   }}
                 >
-                  Загружаю город: {cityId} — здания, сетка высот и правила регулятора…
+                  {t("qskyway.loading.city", { city: cityId })}
                 </div>
               )}
               <canvas ref={mapRef} style={{ display: "block", width: "100%", background: "#0a121d" }} />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
-                <button style={btnPri} onClick={newHero} disabled={!loaded}>↻ Новый рейс</button>
+                <button style={btnPri} onClick={newHero} disabled={!loaded}>{t("qskyway.btn.newFlight")}</button>
                 <button style={btn} onClick={() => { runningRef.current = !runningRef.current; setPlaying(runningRef.current); }}>{playing ? "⏸ Пауза" : "▶ Пуск"}</button>
                 <button style={btn} onClick={() => { for (let i = 0; i < 3; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); } }}>＋ Трафик</button>
-                <button style={btn} onClick={() => { showColorRef.current = !showColorRef.current; }}>Высотная раскраска</button>
+                <button style={btn} onClick={() => { showColorRef.current = !showColorRef.current; }}>{t("qskyway.btn.heightColors")}</button>
                 <button
                   style={strictCeiling ? { ...btn, borderColor: "#2dd4bf", color: "#2dd4bf" } : btn}
                   disabled={!meta?.airspace?.available}
                   title={meta?.airspace?.available
-                    ? "Строгий режим: маршрут строится только в пределах опубликованного потолка регулятора. Часть пар площадок станет недостижимой — это и есть реальная картина допусков."
-                    : "Для этого города нет открытого фида регулятора — строгий режим неприменим."}
+                    ? t("qskyway.strict.tipOn")
+                    : t("qskyway.strict.tipOff")}
                   onClick={() => { const v = !strictCeiling; setStrictCeiling(v); strictRef.current = v; newHero(); }}
                 >
-                  {strictCeiling ? "🛂 Строго по потолку: вкл" : "🛂 Строго по потолку: выкл"}
+                  {strictCeiling ? t("qskyway.strict.on") : t("qskyway.strict.off")}
                 </button>
               </div>
               {ceilingBlocked && (

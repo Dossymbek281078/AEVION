@@ -42,11 +42,21 @@
 //   TIKTOK_REDIRECT_URI   — must EXACTLY match a redirect URI registered in
 //                           the TikTok app, e.g.
 //                           https://aevion.app/api-backend/api/tiktok/auth/callback
-//                           NB 19.08.2026: prod still pointed at the old
-//                           aevion.vercel.app host. TikTok requires the domain
-//                           shown in the review demo video to match the site
-//                           URL in the application, so a stale host here fails
-//                           the review even when every form field is right.
+//                           ⚠️ 19.08.2026, найдено двумя сессиями независимо.
+//                           На проде переменная указывает на aevion.vercel.app.
+//                           Вход оттуда работает только потому, что алиас Vercel
+//                           ещё жив, — то есть починка не срочная лишь до тех пор,
+//                           пока его не убрали.
+//                           Менять надо ПАРОЙ и в этом порядке: сперва добавить
+//                           новый URI в кабинете TikTok, затем переключить
+//                           переменную. TikTok сверяет строку дословно.
+//                           Первая половина сделана: новый URI зарегистрирован и
+//                           в production, и в песочнице, домен aevion.app
+//                           подтверждён (URL prefix — Verified). Осталось
+//                           переключить переменную.
+//                           Отдельно: домен в демо-ролике для ревью обязан
+//                           совпадать с сайтом в заявке, поэтому устаревший адрес
+//                           здесь заваливает ревью даже при верно заполненной форме.
 //   TIKTOK_SCOPES         — optional, default
 //                           "user.info.basic,video.publish,video.upload".
 //                           video.upload was MISSING until 19.08.2026: the app

@@ -798,7 +798,7 @@ qrealRouter.post("/projects/:id/continuity", async (req, res) => {
       const quota = await takeRenderQuota(req as any, "judge");
       if (!quota.ok) return res.status(429).json({ error: "judge_quota_exceeded", message: quota.error });
 
-      const base = (process.env.PUBLIC_BASE_URL || "https://aevion.vercel.app/api-backend").replace(/\/+$/, "");
+      const base = (process.env.PUBLIC_BASE_URL || "https://aevion.app/api-backend").replace(/\/+$/, "");
       const filmUrl = `${base}/api/qreal/projects/${p.id}/film`;
       const out = await judgeRender(filmUrl, CONTINUITY_CRITERIA, { description: p.brief }, { prompt });
       if (!out.ok) return res.status(502).json({ error: "vlm_judge_failed", message: out.error, filmUrl });

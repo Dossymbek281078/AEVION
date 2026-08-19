@@ -382,7 +382,7 @@ qventureRouter.get("/examples.csv", async (_req: Request, res: Response) => {
     for (const r of rows) {
       lines.push([
         esc(r.name), esc(r.sector), esc(r.stage), esc(r.geography ?? ""),
-        esc(r.composite), esc(r.verdict), esc(`https://aevion.vercel.app/qventure/a/${r.id}`),
+        esc(r.composite), esc(r.verdict), esc(`https://aevion.app/qventure/a/${r.id}`),
       ].join(","));
     }
     res.setHeader("Content-Type", "text/csv; charset=utf-8");

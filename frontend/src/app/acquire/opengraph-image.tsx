@@ -73,7 +73,7 @@ export default function AcquireOg() {
           </div>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 20, color: "#94a3b8", display: "flex" }}>aevion.vercel.app/acquire</div>
+          <div style={{ fontSize: 20, color: "#94a3b8", display: "flex" }}>aevion.app/acquire</div>
           <div style={{ fontSize: 20, fontWeight: 800, color: "#10b981", display: "flex" }}>Astana → the world</div>
         </div>
       </div>

@@ -958,12 +958,7 @@ export default function QSkywayClient() {
                   {meta.suspect.length > 0 && (
                     <span
                       title={
-                        "Высоту из источника мы не считаем достоверной. Либо она в разы выше всей остальной " +
-                        "застройки, либо тег высоты спорит с числом этажей в том же источнике. " +
-                        "Молча мы ничего не переписываем: где источник противоречит сам себе, берём его же счёт " +
-                        "этажей вместо спорной высоты, а где высота просто выделяется — оставляем как " +
-                        "опубликовано и показываем расхождение. Страховочный запас коридор получает в обоих " +
-                        "случаях: высота из OpenStreetMap — заявление участника проекта, а не обмер службы."
+                        t("qskyway.height.suspectTip")
                       }
                       style={{ color: "#fbbf24", textDecoration: "underline dotted", cursor: "help" }}
                     >
@@ -1083,7 +1078,7 @@ export default function QSkywayClient() {
                             где он недостижим. */}
                         {measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) != null && (
                           <span
-                            title={`Из ${stats.obstacleSegments} участков со зданием под крылом на обмеренной городом высоте стоят ${stats.measuredObstacleSegments ?? 0}. Остальные — вывод из тега или счёта этажей OSM, либо слепой дефолт; за неуверенность коридор платит запасом по высоте.`}
+                            title={t("qskyway.tel.obstacleTip", { total: stats.obstacleSegments ?? 0, measured: stats.measuredObstacleSegments ?? 0 })}
                             style={{ fontSize: 11, fontWeight: 400, color: (stats.measuredObstacleSegments ?? 0) === 0 ? "#fbbf24" : "#5f7086", marginLeft: 5, cursor: "help" }}
                           >
                             {t("qskyway.tel.byBuildings", { pct: measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) ?? 0 })}
@@ -1150,7 +1145,7 @@ export default function QSkywayClient() {
                         {justification.doc.obstacleSegments != null && justification.doc.obstacleSegments > 0 && (
                           <div style={{ marginTop: 3, color: justification.doc.measuredObstacleSegments === 0 ? "#fbbf24" : "#5f7086" }}>
                             {t("qskyway.just.heights", { pct: justification.doc.heightConfidencePct })}{" "}
-                            {measuredObstaclePct(justification.doc.obstacleSegments, justification.doc.measuredObstacleSegments)}% по зданиям
+                            {measuredObstaclePct(justification.doc.obstacleSegments, justification.doc.measuredObstacleSegments)}{t("qskyway.just.byBuildingsSuffix")}
                             {justification.doc.measuredObstacleSegments === 0 && t("qskyway.just.noCityMeasure")}
                           </div>
                         )}

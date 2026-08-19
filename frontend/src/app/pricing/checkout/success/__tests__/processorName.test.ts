@@ -1,5 +1,7 @@
 import { describe, test, expect } from "vitest";
-import { translations } from "@/lib/i18n-data";
+// Словари берутся через общую точку: при разбиении i18n-data на файлы
+// по языкам правится ОДИН модуль, а не каждый тест (см. localeSource).
+import { allTranslations } from "../../../../__tests__/localeSource";
 
 /**
  * Экран после оплаты не должен называть платёжный сервис, которым человек не
@@ -20,7 +22,7 @@ const PROCESSOR_NAMES = ["Gumroad", "Lemon Squeezy", "LemonSqueezy", "PayPal", "
 const SCREEN_PREFIX = "pricing.checkoutSuccess.";
 
 type Table = Record<string, Record<string, string>>;
-const tables = translations as unknown as Table;
+const tables = allTranslations() as unknown as Table;
 
 describe("страница успеха не называет чужой платёжный сервис", () => {
   test("ни в одном языке имя сервиса не зашито в перевод", () => {

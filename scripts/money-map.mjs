@@ -242,6 +242,43 @@ async function prodRegressions() {
   return out;
 }
 
+/**
+ * Что ждёт решения основателя — читается ИЗ СТОРОЖЕЙ, а не пишется руками.
+ *
+ * Блок «что противоречит» я написал 14.08 текстом и 19.08 нашёл в нём протухший
+ * пункт: карта звала чинить расхождение цены QRenew, которое к тому времени
+ * было сведено, а настоящая проблема стала другой. Документ, который правят
+ * руками, расходится с делом ровно так же, как любой другой.
+ *
+ * Теперь список берётся из AWAITING_FOUNDER в тестах-сторожах. У них есть
+ * проверка на протухание: как только расхождение уйдёт, тест потребует убрать
+ * строку — и она исчезнет отсюда сама.
+ */
+function awaitingFounder() {
+  const files = [
+    "aevion-globus-backend/tests/priceLadderCoherence.test.ts",
+    "aevion-globus-backend/tests/sameEntitlementSamePrice.test.ts",
+  ];
+  const out = [];
+  for (const rel of files) {
+    const abs = resolve(REPO, rel);
+    if (!existsSync(abs)) continue;
+    const src = readFileSync(abs, "utf8");
+    // Закрывающая скобка бывает С ОТСТУПОМ: в одном файле список объявлен на
+    // верхнем уровне, в другом — внутри describe. Шаблон, требовавший `};` в
+    // начале строки, молча пропускал второй файл, и блок показывал один пункт
+    // из трёх — то есть выглядел рабочим и врал недосказанностью.
+    const block = /AWAITING_FOUNDER[^=]*=\s*\{([\s\S]*?)\n\s*\};/.exec(src)?.[1];
+    if (!block) continue;
+    // Записи вида `ключ:` или `"ключ":` с текстом причины из склеенных строк.
+    for (const m of block.matchAll(/(?:^|\n)\s*"?([\w-]+)"?:\s*((?:"[^"]*"\s*\+?\s*)+),/g)) {
+      const reason = [...m[2].matchAll(/"([^"]*)"/g)].map((x) => x[1]).join("");
+      out.push({ key: m[1], reason, from: rel.split("/").pop() });
+    }
+  }
+  return out;
+}
+
 /** Ссылка магазина → id модуля, как это делает бэкенд. Своей таблицы не заводим. */
 function storeNameToModule() {
   const src = readFileSync(resolve(REPO, "aevion-globus-backend/src/data/lemonSqueezyVariants.ts"), "utf8");
@@ -266,7 +303,7 @@ function row(cells) {
 }
 
 function main(data) {
-  const { pricing, shop, gum, nameToModule, measuredAt, desks, claims, regressions } = data;
+  const { pricing, shop, gum, nameToModule, measuredAt, desks, claims, regressions, pending } = data;
 
   const tierPrice = new Map(pricing.tiers.map((t) => [t.id, t.priceMonthly]));
 
@@ -438,6 +475,14 @@ function main(data) {
     ]);
   }).join("\n") || row([`<td colspan="3"><span class="dim">Прод не ответил — не проверено. Это НЕ «всё в порядке».</span></td>`]);
 
+  // ── Блок Е: ждёт решения основателя (из сторожей)
+  const pendingRows = (pending ?? []).length
+    ? pending.map((x) => row([
+        `<th scope="row">${esc(x.key)}<span class="sub">${esc(x.from)}</span></th>`,
+        `<td>${esc(x.reason)}</td>`,
+      ])).join("\n")
+    : row([`<td colspan="2"><span class="dim">Список сторожей пуст — либо всё решено, либо файлы не прочитались.</span></td>`]);
+
   const totalProducts = shop.size + gum.length;
 
   const tpl = readFileSync(resolve(HERE, "money-map.tpl.html"), "utf8");
@@ -458,6 +503,7 @@ function main(data) {
     .replace("__DESKS__", deskRows)
     .replace("__CLAIMS__", claimRows)
     .replace("__REGRESSIONS__", regRows)
+    .replace("__PENDING__", pendingRows)
     .replace(/__NDESKS__/g, desks ? String(deskOn) : "?")
     .replace(/__NDESKS_ALL__/g, desks ? String(deskAll) : "?");
 
@@ -485,6 +531,7 @@ try {
     desks: await cashDesks(),
     claims: await scaleClaims(),
     regressions: await prodRegressions(),
+    pending: awaitingFounder(),
     measuredAt: new Date().toISOString().slice(0, 10),
   });
 } catch (e) {

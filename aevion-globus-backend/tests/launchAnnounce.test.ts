@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import {
@@ -94,7 +96,9 @@ describe("текст письма — обещает только то, что �
     const m = LAUNCH_MODULES[slug];
 
     expect(mail.subject).toContain(m.name);
-    expect(mail.subject).toContain(m.date);
+    // Дата в теме — только когда она у нас есть. У четырёх модулей из пяти её
+    // нет, и это осознанно: см. шапку LAUNCH_MODULES.
+    if (m.date) expect(mail.subject).toContain(m.date);
     expect(mail.htmlContent).toContain(`https://aevion.app${m.page}`);
     // Отписка обязательна в каждом письме — иначе рассылка становится спамом
     // юридически, а не только по ощущению.
@@ -129,16 +133,59 @@ describe("текст письма — обещает только то, что �
   });
 });
 
-describe("даты запуска взяты из одного места", () => {
-  test("все пять модулей описаны и даты непустые", () => {
-    // Если модуль появится в плане запуска, но не здесь, рассылка о нём просто
-    // не уйдёт — тихо. Пусть отсутствие будет видно счётом.
+describe("дата запуска обязана называть свой источник", () => {
+  // Прежний тест требовал у всех пяти модулей непустую дату — и был зелёным на
+  // трёх ВЫДУМАННЫХ датах. Он проверял длину строки, а не происхождение, то есть
+  // наказывал бы за честное «дата не объявлена» и одобрял любую подставленную.
+  //
+  // Новое правило: дата не обязательна, но неподтверждённой быть не может.
+
+  test("модулей не меньше пяти, у каждого страница и описание", () => {
     const slugs = Object.keys(LAUNCH_MODULES);
     expect(slugs.length).toBeGreaterThanOrEqual(5);
     for (const s of slugs) {
-      expect(LAUNCH_MODULES[s].date.length).toBeGreaterThan(3);
       expect(LAUNCH_MODULES[s].page.startsWith("/")).toBe(true);
       expect(LAUNCH_MODULES[s].opens.length).toBeGreaterThan(10);
     }
+  });
+
+  test("есть дата — есть и названный источник; нет даты — источник пуст", () => {
+    for (const [slug, m] of Object.entries(LAUNCH_MODULES)) {
+      if (m.date) {
+        expect(m.date.length, `${slug}: дата слишком короткая`).toBeGreaterThan(3);
+        // Ровно та проверка, которой не было: дата без источника — выдумка.
+        expect(m.dateSource.length, `${slug}: дата без источника`).toBeGreaterThan(10);
+      } else {
+        expect(m.date).toBeNull();
+        expect(m.dateSource).toBe("");
+      }
+    }
+  });
+
+  test("хотя бы у одного модуля дата подтверждена — иначе проверка выше пуста", () => {
+    // Отрицательный контроль: без него все `date: null` дали бы зелёный тест,
+    // ничего не проверяющий.
+    const withDate = Object.values(LAUNCH_MODULES).filter((m) => m.date);
+    expect(withDate.length).toBeGreaterThanOrEqual(1);
+    expect(withDate[0].dateSource).toMatch(/launch\/2026-08-30|CyberChess/);
+  });
+
+  test("ни одно письмо не печатает null или undefined вместо даты", () => {
+    // Шаблонная строка `${m.date}` при null молча вставляет слово «null» — в
+    // тему письма живому человеку. Проверяем все модули, включая бездатные.
+    for (const slug of Object.keys(LAUNCH_MODULES)) {
+      const mail = buildLaunchEmail(slug, "kto@primer.ru");
+      const all = `${mail.subject} ${mail.htmlContent} ${mail.textContent}`;
+      expect(all, `${slug}: в письме утекло служебное значение`).not.toMatch(
+        /null|undefined|NaN/,
+      );
+    }
+  });
+
+  test("реестр не ссылается на несуществующий источник дат", () => {
+    // Шапка ссылалась на scripts/launch-readiness.mjs — файла нет ни в одной
+    // ветке, а ссылка на него придавала выдуманным датам вид выверенных.
+    const src = readFileSync(join(__dirname, "..", "src", "lib", "launchAnnounce.ts"), "utf8");
+    expect(src).not.toMatch(/launch-readiness/);
   });
 });

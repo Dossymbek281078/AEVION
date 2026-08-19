@@ -42,7 +42,9 @@ export async function probeLive(path: string, init?: RequestInit): Promise<boole
  *
  * Считается по UTC-полуночи с обеих сторон: иначе страница, собранная вечером,
  * и страница, собранная утром того же дня, показали бы разное число дней.
- * Даты запуска модулей — в scripts/launch-readiness.mjs, там же они и решаются.
+ * Даты запуска модулей — в aevion-globus-backend/src/lib/launchAnnounce.ts, и у
+ * четырёх из пяти они НЕ подтверждены (стоят null). Подтверждена только дата
+ * шахмат. Не подставляйте дату, которой основатель не называл.
  */
 export function daysUntil(year: number, monthIndex: number, day: number): number {
   const launch = Date.UTC(year, monthIndex, day);

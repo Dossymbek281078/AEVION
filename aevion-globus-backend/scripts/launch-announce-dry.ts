@@ -38,7 +38,9 @@ if (!slug) {
 if (!LAUNCH_MODULES[slug]) {
   fail(
     `Неизвестный модуль «${slug}». Известные: ${Object.keys(LAUNCH_MODULES).join(", ")}\n` +
-      `Даты и состав решаются в scripts/launch-readiness.mjs и src/lib/launchAnnounce.ts.`,
+      `Состав и даты — в src/lib/launchAnnounce.ts. Дата там может быть null: у
+` +
+      `четырёх модулей из пяти она не подтверждена, и подставлять её нельзя.`,
     1,
   );
 }

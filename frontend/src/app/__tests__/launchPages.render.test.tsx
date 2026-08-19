@@ -238,3 +238,48 @@ describe("метка канала ?c= — по ней после запуска 
     }
   });
 });
+
+describe("неподтверждённая дата запуска не попадает на страницу", () => {
+  // Первая версия обеих посадочных объявляла дату — в заголовке, в OG-карточке и
+  // обратным отсчётом «через N дн.». Опоры вне моей собственной работы у этих дат
+  // не нашлось, и я их убрал. А тесты тогда были ЗЕЛЁНЫМИ: ни один не смотрел на
+  // заголовок, поэтому выдуманная дата уехала бы к людям, оставившим адрес.
+  //
+  // Ратчет простой: названия месяцев на этих двух страницах запрещены. Подтверждена
+  // на платформе одна дата (30 августа у шахмат), и она живёт на своей странице,
+  // не на этих. Появится решение основателя — тест правится вместе с датой, и
+  // правка будет осознанной, а не молчаливой.
+  const MONTHS = /(январ|феврал|март|апрел|ма[йя]|июн|июл|август|сентябр|октябр|ноябр|декабр)/i;
+
+  test("прибор ловит месяц, если он там есть", () => {
+    // Отрицательный контроль: без него «месяцев нет» могло бы означать, что
+    // регулярка не работает вовсе.
+    expect(MONTHS.test("открываем 13 сентября")).toBe(true);
+    expect(MONTHS.test("напишем в день запуска")).toBe(false);
+  });
+
+  for (const mod of ["devhub", "multichat"] as const) {
+    test(`${mod}: в разметке нет обещания месяца`, async () => {
+      vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ status: 400, ok: false } as Response)));
+      const html = await renderLaunch(mod, {});
+      const hit = html.match(MONTHS);
+      expect(hit?.[0] ?? null, `${mod}: на странице обещан месяц «${hit?.[0]}»`).toBeNull();
+    });
+
+    test(`${mod}: в метаданных и OG нет обещания месяца`, async () => {
+      const page =
+        mod === "multichat"
+          ? await import("../multichat-engine/launch/page")
+          : await import("../devhub/launch/page");
+      const m = page.metadata as {
+        title?: string;
+        description?: string;
+        openGraph?: { title?: string; description?: string };
+      };
+      const fields = [m.title, m.description, m.openGraph?.title, m.openGraph?.description];
+      // Проверка покрытия: поля обязаны быть непустыми, иначе тест зелен впустую.
+      expect(fields.filter((f) => typeof f === "string" && f.length > 10)).toHaveLength(4);
+      for (const f of fields) expect(MONTHS.test(String(f))).toBe(false);
+    });
+  }
+});

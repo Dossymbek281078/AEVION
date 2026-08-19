@@ -21,38 +21,70 @@ import type { ConstitutionEmailPayload } from "./constitutionBrevo";
  * обещания: человек уже впустил нас в почту.
  */
 
-/** Модули с датой запуска. Даты — из scripts/launch-readiness.mjs, единственного места, где они решаются. */
+/**
+ * Модули, о запуске которых мы обещали написать.
+ *
+ * ⚠️ ДАТА МОЖЕТ БЫТЬ `null`, И ЭТО НЕ НЕДОРАБОТКА, А ЧЕСТНОСТЬ.
+ *
+ * Прежняя версия этого файла (моя же, 19.08.2026) объявляла даты всем пятерым и
+ * ссылалась на скрипт готовности запуска как на «единственное место, где они
+ * решаются». Такого файла в репозитории НЕТ — ни в одной ветке, имя я привёл
+ * по памяти, и это придавало выдуманным датам вид выверенных. Я проверил
+ * происхождение каждой даты, и вот что вышло:
+ *
+ *   30 августа (шахматы) — опора есть ВНЕ моей работы: ветка `launch/2026-08-30`
+ *                          названа этой датой, и вкладка CyberChess независимо
+ *                          пишет «запуск назначен на 30 августа»;
+ *   6 / 13 / 20 сентября — опоры НЕТ. Каждое вхождение ведёт в файлы, которые
+ *                          написал я сам в тот же день: этот реестр, мои
+ *                          посадочные и строка, которую я сам добавил в
+ *                          AEVION_COORDINATION.md. Круговое доказательство.
+ *
+ * Единственное найденное «2026-09-13» вне моих файлов — дата ПУБЛИКАЦИИ поста про
+ * QVenture в очереди контента от 13.07, к запуску DevHub отношения не имеющая.
+ *
+ * Поэтому даты, которых я не могу подтвердить, стоят `null`, а не «примерно».
+ * Дата запуска — продуктовое решение основателя (цена, позиционирование, состав),
+ * и выдуманная дата на странице, где у человека просят адрес, — обещание, которое
+ * платформа не давала. Пишите сюда дату, только когда её назвал основатель, и
+ * назовите источник в `dateSource`.
+ */
 export const LAUNCH_MODULES: Record<
   string,
-  { name: string; date: string; page: string; opens: string }
+  { name: string; date: string | null; dateSource: string; page: string; opens: string }
 > = {
   cyberchess: {
     name: "CyberChess",
     date: "30 августа",
+    dateSource: "ветка launch/2026-08-30 + сводка вкладки CyberChess от 19.08.2026",
     page: "/cyberchess",
     opens: "задача дня, рейтинг и турниры",
   },
   qright: {
     name: "QRight",
-    date: "6 сентября",
+    date: null,
+    dateSource: "",
     page: "/qright",
     opens: "реестр объектов с фиксацией по хешу содержимого",
   },
   bureau: {
     name: "AEVION IP Bureau",
-    date: "6 сентября",
+    date: null,
+    dateSource: "",
     page: "/bureau",
     opens: "сертификат с публичной проверкой по ссылке",
   },
   devhub: {
     name: "AEVION DevHub",
-    date: "13 сентября",
+    date: null,
+    dateSource: "",
     page: "/devhub",
     opens: "сборка приложения по описанию — вместе с картинками и озвучкой",
   },
   multichat: {
     name: "AEVION Multichat",
-    date: "20 сентября",
+    date: null,
+    dateSource: "",
     page: "/multichat-engine",
     opens: "совет моделей с картой расхождений и чеком, проверяемым по ссылке",
   },
@@ -94,7 +126,7 @@ export function buildLaunchEmail(moduleSlug: string, email: string): Constitutio
       <div style="font-family:monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#a9781a">AEVION</div>
       <h1 style="font-size:26px;line-height:1.2;margin:10px 0 14px">${m.name} открыт</h1>
       <p style="margin:0 0 14px;font-size:15px;line-height:1.6">
-        Вы оставляли адрес, чтобы узнать о запуске — ${m.date} он состоялся.
+        Вы оставляли адрес, чтобы узнать о запуске — он состоялся${m.date ? ` ${m.date}` : ""}.
         Доступно: ${m.opens}.
       </p>
       <p style="margin:0 0 22px">
@@ -110,7 +142,9 @@ export function buildLaunchEmail(moduleSlug: string, email: string): Constitutio
   `;
   return {
     to: [{ email }],
-    subject: `${m.name} открыт — ${m.date}`,
+    // Без даты в теме, если даты нет. Шаблонная строка напечатала бы «null»
+    // прямо в теме письма живому человеку — молча и убедительно.
+    subject: m.date ? `${m.name} открыт — ${m.date}` : `${m.name} открыт`,
     htmlContent: html,
     textContent: `${m.name} открыт. Доступно: ${m.opens}. Открыть: ${url}\n\nВы подписались на странице запуска ${m.name}. Отписаться: ${unsubscribeUrl(email)}`,
     tags: ["launch", `launch-${moduleSlug}`],

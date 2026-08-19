@@ -2,6 +2,7 @@
 // CyberChess Daily Puzzle — real chess.js + 365 pool + leaderboard + streak
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { tournamentUserId, tournamentDisplayName } from '../tournaments/playerIdentity';
 import { Chess, Square } from 'chess.js';
 
 type Puzzle = {
@@ -371,18 +372,41 @@ export default function DailyPuzzlePage() {
         : `Поздравляем! Решено за ${formatTime(totalMs)}. Streak +1 = ${newStreak}. Best: ${newBest}`
     );
 
-    // Send to backend (best-effort, ignore failures — UI doesn't block)
+    // Отправка на сервер. Изменилось два раза за 19.08.2026, и оба важны.
+    //
+    // 1. Шлём ХОДЫ, а не длину серии. Прежде сервер брал `streak` числом на
+    //    веру — проверено на проде: запрос со «серией 364» без единого хода
+    //    ставил отправителя первым в таблице. Теперь сервер сверяет решение и
+    //    считает серию сам.
+    // 2. Шлём userId. Без него сервер считал игрока анонимом и В ТАБЛИЦУ НЕ
+    //    ЗАНОСИЛ вовсе: человек решал задачу и не появлялся в списке никогда.
+    //    Личность — из общего источника модуля, а не своя четвёртая.
     try {
-      await fetch('/api-backend/api/cyberchess-daily/solve', {
+      const r = await fetch('/api-backend/api/cyberchess-daily/solve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          streak: newStreak,
           day: today,
+          moves: puzzle.sol,
           timeMs: totalMs,
           hintsUsed: hUsed,
+          userId: tournamentUserId(),
+          name: tournamentDisplayName() || undefined,
         }),
       });
+      // Серию показываем ТУ, что признал сервер: иначе на экране одно число, а
+      // в таблице лидеров другое — два писателя одного значения.
+      if (r.ok) {
+        const j = (await r.json()) as { streak?: number; bestStreak?: number };
+        if (typeof j.streak === 'number') {
+          setStreak(j.streak);
+          try { localStorage.setItem('cc_daily_streak', String(j.streak)); } catch {}
+        }
+        if (typeof j.bestStreak === 'number') {
+          setBestStreak(j.bestStreak);
+          try { localStorage.setItem('cc_daily_best_streak', String(j.bestStreak)); } catch {}
+        }
+      }
     } catch {
       // ignore network errors — local state already saved
     }

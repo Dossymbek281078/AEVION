@@ -55,8 +55,12 @@ function ping(extra: Record<string, string> = {}) {
 
 /** Какие подписки на модули записаны и с каким статусом. */
 function appSubWrites(): Array<{ slug: string; status: string }> {
+  // Только ЗАПИСИ: среди вызовов с этим именем есть и создание таблицы, у
+  // которого второго аргумента нет вовсе. Разбор вслепую падал на нём с
+  // TypeError — тест краснел не на дефекте, а на соседнем запросе (19.08,
+  // после того как SQL уехал в lib/appEntitlements).
   return mockQuery.mock.calls
-    .filter((c) => String(c[0]).includes("AppSubscription"))
+    .filter((c) => String(c[0]).includes("AppSubscription") && Array.isArray(c[1]))
     .map((c) => {
       const p = c[1] as unknown[];
       return { slug: String(p[1]), status: String(p[3]) };

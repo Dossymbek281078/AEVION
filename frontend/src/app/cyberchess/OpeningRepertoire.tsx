@@ -1188,6 +1188,16 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
   }, [branch.id, branch.moves]);
 
   const streak = recentStreak(branch);
+  /**
+   * Пока настоящая статистика не пришла, показываем ОЦЕНОЧНУЮ — но говорим об
+   * этом. Раньше подстановка была молчаливой: человек видел «партий 1240, белые
+   * 54%» и выбирал дебют по цифрам, которых никто не считал.
+   *
+   * Ряд не убираем: пустая таблица на месте статистики хуже честной оценки —
+   * человек решит, что дебют не изучен вовсе. Разница делается подписью, а не
+   * исчезновением данных.
+   */
+  const usingSample = !replies;
   const stats = replies || mockBookStats(branch);
   const avgRating = stats.find((s) => s.averageRating)?.averageRating;
 
@@ -1274,6 +1284,20 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
               · средний рейтинг ~{avgRating}
             </span>
           )}
+        </div>
+      )}
+
+      {/* Подпись обязана стоять НА оценочных данных, а не только на настоящих.
+          Раньше подстановка была молчаливой: человек видел «партий 1240, белые
+          54%» и выбирал дебют по цифрам, которых никто не считал. Отсутствие
+          пометки читается как «это факт», а не как «это прикидка». */}
+      {usingSample && !loading && (
+        <div
+          data-testid="book-stats-sample"
+          style={{ fontSize: 12, color: COLORS.yellow, marginBottom: 8 }}
+        >
+          Цифры оценочные: статистика партий не загрузилась. Проценты и число партий
+          здесь рассчитаны примерно, а не взяты из базы.
         </div>
       )}
 

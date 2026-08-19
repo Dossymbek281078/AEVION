@@ -8,6 +8,7 @@
  * с тем же контролем времени.
  */
 
+import { knownUserId } from "../tournaments/playerIdentity";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Chess } from "chess.js";
@@ -114,7 +115,7 @@ export default function CyberChessHistoryPage() {
 
   useEffect(() => {
     try {
-      setUserId(window.localStorage.getItem("cyberchess.userId") || "");
+      setUserId(knownUserId());
     } catch {
       /* ignore */
     }

@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCcI18n } from "../i18n";
 import { loadEstimateFromStorage } from "../ratingCalibration";
+import { tournamentUserId } from "../tournaments/playerIdentity";
 
 type TimeControl = "60+0" | "180+0" | "300+5" | "600+10" | "1800+0";
 
@@ -46,16 +47,10 @@ type QueueState =
     }
   | { phase: "error"; message: string };
 
-function getOrCreateUserId(): string {
-  if (typeof window === "undefined") return "anon_ssr";
-  const k = "cyberchess.userId";
-  let id = window.localStorage.getItem(k);
-  if (!id) {
-    id = `u_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
-    window.localStorage.setItem(k, id);
-  }
-  return id;
-}
+// Четвёртая по счёту собственная реализация одного и того же была здесь.
+// Ключ тот же, формат id почти тот же — и именно «почти» опасно: расхождение
+// таких копий не падает, оно тихо делает одного человека несколькими.
+const getOrCreateUserId = tournamentUserId;
 
 function getDisplayName(): string {
   if (typeof window === "undefined") return "Игрок";

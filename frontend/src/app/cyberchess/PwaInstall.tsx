@@ -1,7 +1,39 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import { useChessNotifications } from './useChessNotifications';
+
+/**
+ * Страницы, где человек ЗАНЯТ, и предложение установить приложение мешает.
+ *
+ * Найдено окном запуска 18.08.2026 живым прохождением пути новичка: плашка
+ * установки не уходила во время партии и закрывала левую панель с оценкой и
+ * материалом — прямо во время игры. Плюс на первом экране она была одной из
+ * ТРЁХ накладок сразу. Для страницы, куда поведёт платный трафик 30.08, это и
+ * есть первое впечатление.
+ *
+ * Предложение не выбрасывается, а переносится: на страницах истории, рейтинга,
+ * экономики и репертуара оно по-прежнему показывается. Человек, который дошёл
+ * до них, уже заинтересован — там просьба уместна, а посреди партии нет.
+ */
+const BUSY_PATHS = [
+  '/cyberchess',              // главная — здесь идёт партия с ИИ
+  '/cyberchess/daily',        // задача дня
+  '/cyberchess/matchmaking',  // поиск соперника и партия
+  '/cyberchess/tournament',   // турнирная сетка
+  '/cyberchess/tournaments',
+  '/cyberchess/training',
+  '/cyberchess/studio',
+];
+
+function isBusyPath(pathname: string | null): boolean {
+  if (!pathname) return false;
+  // Точное совпадение либо вложенный путь: /cyberchess/tournaments/<id> тоже
+  // занят. Сравнение по префиксу без разделителя дало бы ложное срабатывание
+  // на несуществующем /cyberchess-something.
+  return BUSY_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
 
 /**
  * BeforeInstallPromptEvent — нестандартный, типизируем минимально.
@@ -238,6 +270,9 @@ export default function PwaInstall() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [showNotifyPrompt, setShowNotifyPrompt] = useState(false);
 
+  const pathname = usePathname();
+  const busy = isBusyPath(pathname);
+
   const notifications = useChessNotifications();
 
   useEffect(() => {
@@ -363,6 +398,9 @@ export default function PwaInstall() {
   }, []);
 
   if (!mounted) return null;
+  // На занятых страницах не показываем ничего — ни плашку установки, ни просьбу
+  // про уведомления. Партия важнее нашего предложения.
+  if (busy) return null;
 
   // На посадочной запуска плашку не показываем. Она живёт в layout, то есть
   // висит на всех страницах /cyberchess/*, и 19.08.2026 накрывала левый нижний

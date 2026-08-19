@@ -15,6 +15,7 @@
 //   • Live indicator with pulse dot for status === "live" tournaments
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { tournamentUserId, tournamentDisplayName } from "./playerIdentity";
 import Link from "next/link";
 
 const T = {
@@ -53,6 +54,8 @@ interface Tournament {
   swissRounds?: number;
   currentRound?: number;
   realPlayers?: boolean;
+  /** "user" — турнир завёл кто угодно через открытую ручку; "seed" — фикстура. */
+  origin?: "seed" | "user";
 }
 
 interface StandingRow {
@@ -136,7 +139,14 @@ export default function TournamentsHubPage() {
       const r = await fetch("/api-backend/api/cyberchess-tournaments/list", { cache: "no-store" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
-      if (data?.ok && Array.isArray(data.tournaments)) setTournaments(data.tournaments);
+      /* Ветка «пришло, но не то» раньше молчала: при 200 с телом без списка
+         состояние оставалось на MOCK_FALLBACK, ошибка не ставилась, и человек
+         видел выдуманные турниры вообще без признака. Отправляем в тот же
+         catch, что и недоступный сервер — сообщение внизу уже есть. */
+      if (!data?.ok || !Array.isArray(data.tournaments)) {
+        throw new Error("ответ без списка турниров");
+      }
+      setTournaments(data.tournaments);
     } catch (e) {
       setErrorMsg((e as Error).message);
     } finally {
@@ -575,7 +585,23 @@ function TournamentCard({ t }: { t: Tournament }) {
         <Tag color={full ? T.red : T.accent}>
           {t.players}/{t.maxPlayers} игроков
         </Tag>
-        {t.realPlayers && <Tag color={T.yellow}>⚡ real players</Tag>}
+        {/* Признак — ПРОИСХОЖДЕНИЕ, а не внутренний флаг realPlayers.
+            Пометка обязана быть НА образце, а не только на настоящем: рядом с
+            честно подписанным соседом непомеченный образец берёт его доверие.
+            На проде 12.08 таких было 11 из 13, включая «Winter Arena #12» со
+            статусом «завершён» — с результатами, которых не было.
+
+            19.08 на проде нашёлся тринадцатый случай, ломавший прежнюю логику:
+            посевной турнир real-swiss-demo помечен realPlayers: true. По
+            прежнему условию он получал ярлык «⚡ real players» — то есть
+            фикстура рекламировалась как турнир с живыми игроками. Флаг внутри
+            фикстуры описывает её содержимое, а не происхождение; спрашивать
+            надо у сервера, откуда запись. */}
+        {t.origin === 'seed' ? (
+          <Tag color={T.dim}>образец</Tag>
+        ) : t.realPlayers ? (
+          <Tag color={T.yellow}>⚡ real players</Tag>
+        ) : null}
       </div>
 
       {/* Standings preview (hover) */}
@@ -642,6 +668,16 @@ function TournamentCard({ t }: { t: Tournament }) {
       >
         <span style={{ fontSize: 14, color: T.yellow, fontWeight: 700 }}>
           💎 {t.prizeChessy.toLocaleString("ru-RU")} Chessy
+          {t.origin === "user" && t.prizeChessy > 0 && (
+            // Турнир может завести кто угодно, без входа, и приз он объявляет
+            // сам — до десяти миллионов. Платит призы только подписанный
+            // вебхук, то есть за этим числом никто не стоит. Без оговорки оно
+            // выглядит как обязательство площадки, да ещё и рядом с самой
+            // сильной подписью «настоящие игроки».
+            <span style={{ fontSize: 11.5, fontWeight: 400, color: T.dim, marginLeft: 6 }}>
+              объявлен создателем
+            </span>
+          )}
         </span>
         <div style={{ display: "flex", gap: 8 }}>
           <Link
@@ -676,7 +712,15 @@ function TournamentCard({ t }: { t: Tournament }) {
                     {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({}),
+                      /* Пустое тело заставляло сервер выдать `anon_…`: место
+                         занято, а связать его с человеком нечем. Шлём ту же
+                         личность, что и детальная страница турнира. */
+                      body: JSON.stringify({
+                        userId: tournamentUserId(),
+                        ...(tournamentDisplayName()
+                          ? { displayName: tournamentDisplayName() }
+                          : {}),
+                      }),
                     },
                   );
                   const data = await r.json();
@@ -685,8 +729,17 @@ function TournamentCard({ t }: { t: Tournament }) {
                   } else {
                     alert(`Error: ${data?.error || "unknown"}`);
                   }
-                } catch (e) {
-                  alert(`Registered (offline mock) for ${t.title}`);
+                } catch {
+                  /* Здесь стояло «Registered (offline mock)» — то есть при
+                     упавшем запросе человеку СООБЩАЛИ, что он зарегистрирован.
+                     Он его не был: на сервер ничего не дошло, места в турнире
+                     за ним нет, и узнал бы он об этом, только не найдя себя в
+                     списке участников. Молчание было бы лучше этого, а правда
+                     лучше молчания. */
+                  alert(
+                    `Не удалось зарегистрироваться на «${t.title}»: нет связи с сервером. ` +
+                      `Вы НЕ записаны — попробуйте ещё раз.`,
+                  );
                 }
               }}
               style={btnPrimary(full ? T.faint : T.accent)}
@@ -785,14 +838,16 @@ function CreateTournamentModal({
     }
     setBusy(true);
     setErr(null);
-    let userId = "";
-    let displayName = "";
-    try {
-      userId = window.localStorage.getItem("cyberchess.userId") || "";
-      displayName = window.localStorage.getItem("cyberchess.displayName") || "";
-    } catch {
-      /* ignore */
-    }
+    /* Тот же источник личности, что и у кнопки «Register» на этой странице.
+       Раньше здесь ключ читался напрямую и НЕ совпадал с тем, под которым идёт
+       регистрация. Бэкенд по userId создателя
+       записывает его ПЕРВЫМ УЧАСТНИКОМ, поэтому один человек занимал в своём же
+       турнире два места под двумя id, и свести их было нечем. А если ключ
+       задачи дня пуст (в турнирном потоке его никто не пишет), создатель не
+       попадал в участники вовсе. Прав creatorId не даёт — проверено, он нужен
+       ровно для этой автозаписи. */
+    const userId = tournamentUserId();
+    const displayName = tournamentDisplayName();
     try {
       // No trailing slash — hit the route directly and avoid a 308 POST redirect.
       const r = await fetch("/api-backend/api/cyberchess-tournaments", {

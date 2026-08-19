@@ -85,7 +85,10 @@ describe("the store under test is the scratch one", () => {
 
 describe("a claim that cannot be true is refused", () => {
   test("a billion-day streak does not take first place", async () => {
-    const res = await solve({ streak: 1_000_000_000, day, userId: freshUser(), name: "Cheater" });
+    // Дату НЕ шлём: с 19.08.2026 её называет сервер, а расхождение — отдельный
+    // отказ (wrong_day). Здесь проверяется другое: без сыгранных ходов
+    // заявление не рассматривается вообще.
+    const res = await solve({ streak: 1_000_000_000, userId: freshUser(), name: "Cheater" });
 
     expect(res.status).toBe(400);
     // Причина теперь другая, свойство — то же и сильнее: без сыгранных ходов

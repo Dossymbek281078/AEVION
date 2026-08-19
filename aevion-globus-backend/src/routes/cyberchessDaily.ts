@@ -756,9 +756,27 @@ router.post('/solve', async (req: Request, res: Response) => {
     });
   }
 
-  const { day, timeMs, hintsUsed, userId, name, country, moves } = req.body || {};
-  if (typeof day !== 'string' || !day) {
-    return res.status(400).json({ ok: false, error: 'day (string) required' });
+  const { day: claimedDay, timeMs, hintsUsed, userId, name, country, moves } = req.body || {};
+
+  // День — СЕРВЕРНЫЙ, а не из тела запроса.
+  //
+  // Найдено вычиткой собственного дифа 19.08.2026, уже после починки подделки
+  // серии. Дыра оставалась открытой с другой стороны: приняв `day` от клиента,
+  // сервер позволял «дорешать» прошлые дни — прислать по запросу на каждую дату
+  // и набить серию за один заход, не возвращаясь ни разу.
+  //
+  // Смысл ежедневной задачи именно в возвращении, поэтому дата обязана быть
+  // нашей. Присланная не игнорируется молча: расхождение — это отказ, иначе
+  // клиент с разъехавшимися часами будет думать, что решил, а мы запишем другой
+  // день.
+  const day = todayIso();
+  if (typeof claimedDay === 'string' && claimedDay && claimedDay !== day) {
+    return res.status(400).json({
+      ok: false,
+      error: 'wrong_day',
+      hint: `задача дня решается в свой день; сегодня ${day}`,
+      today: day,
+    });
   }
 
   // ── Решение ПРОВЕРЯЕТСЯ, а не принимается на слово ───────────────────────

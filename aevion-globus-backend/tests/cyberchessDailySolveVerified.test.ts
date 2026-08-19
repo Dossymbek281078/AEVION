@@ -1,4 +1,4 @@
-import { describe, test, expect, vi } from "vitest";
+import { describe, test, expect, vi, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -55,6 +55,9 @@ async function app() {
 }
 
 const DAY = "2026-08-19";
+vi.useFakeTimers({ shouldAdvanceTime: true });
+
+afterEach(() => { vi.useRealTimers(); });
 
 describe("серию нельзя объявить, её можно только заработать", () => {
   test("без ходов — отказ, и он говорит, чего не хватает", async () => {
@@ -82,13 +85,26 @@ describe("серию нельзя объявить, её можно только
   });
 
   test("серия растёт за подряд идущие дни и рвётся на пропуске", async () => {
+    // Дни переключаются ЧАСАМИ, а не полем запроса: с 19.08.2026 сервер берёт
+    // дату сам, и «дорешать» прошлый день нельзя. Тест обязан ходить тем же
+    // путём, что человек, иначе он проверял бы несуществующий способ.
     const a = await app();
-    const send = (day: string) => request(a).post("/api/cyberchess-daily/solve")
-      .send({ day, userId: "u4", moves: SOL });
+    const send = async (день: string) => {
+      vi.setSystemTime(new Date(`${день}T12:00:00Z`));
+      return request(a).post("/api/cyberchess-daily/solve").send({ userId: "u4", moves: SOL });
+    };
     expect((await send("2026-08-17")).body.streak).toBe(1);
     expect((await send("2026-08-18")).body.streak).toBe(2);
     expect((await send("2026-08-19")).body.streak).toBe(3);
     // Пропуск 20-го: 21-е начинает заново, а не продолжает.
     expect((await send("2026-08-21")).body.streak).toBe(1);
+  });
+
+  test("чужой день отвергается, а не записывается", async () => {
+    vi.setSystemTime(new Date("2026-08-19T12:00:00Z"));
+    const r = await request(await app()).post("/api/cyberchess-daily/solve")
+      .send({ day: "2026-08-10", userId: "u5", moves: SOL });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe("wrong_day");
   });
 });

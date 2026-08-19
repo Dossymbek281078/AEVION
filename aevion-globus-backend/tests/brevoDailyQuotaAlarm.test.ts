@@ -144,3 +144,24 @@ describe("охват: второй письменный путь DevHub тоже
     expect(__emailCounter().count, "письмо по шаблону не попало в общую квоту").toBe(1);
   });
 });
+
+describe("тревога называет себя предупреждением, а не аварией", () => {
+  // Уходит через captureException, поэтому в Sentry ляжет ошибкой, а утренняя
+  // сводка считает ошибками прода письма с темой «проект - ТипОшибки». Значит
+  // человек увидит это в списке аварий. Выбор осознанный (видимость важнее
+  // ярлыка — captureMessage мог вообще не дать письма), но тогда сообщение
+  // ОБЯЗАНО само говорить, чем оно является. Иначе предупреждение о квоте
+  // читается как падение прода.
+  test("в тексте есть признак «не авария» и оба числа", async () => {
+    const { sendWaitlistConfirm } = await import("../src/lib/constitutionBrevo");
+    const { __resetEmailCounter } = await import("../src/lib/brevoQuota");
+    __resetEmailCounter();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (let i = 0; i < 21; i++) await sendWaitlistConfirm(`w${i}@primer.test`, "devhub");
+    const quota = warn.mock.calls.map((c) => String(c[0])).filter((s) => s.includes("из 30"));
+    expect(quota.length).toBe(1);
+    expect(quota[0], "тревога не говорит, что это не авария").toMatch(/не авария/i);
+    expect(quota[0], "в тревоге нет обоих чисел — сколько ушло и каков потолок").toMatch(/20|21/);
+    warn.mockRestore();
+  });
+});

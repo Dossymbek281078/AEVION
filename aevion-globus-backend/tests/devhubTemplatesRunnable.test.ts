@@ -91,6 +91,24 @@ describe("готовые начала действительно начинаю�
     expect(outDir, `${t.id}: start ждёт ${m[1]}/, а сборка кладёт в «${outDir}»`).toBe(m[1]);
   });
 
+  test.each(templates.map((t) => [t.id, t] as const))("%s: точка входа HTML ведёт на существующий файл", (_id, t) => {
+    // Пробел в моём же тесте: проверка ниже смотрит ОТНОСИТЕЛЬНЫЕ ссылки, а
+    // index.html ссылается на скрипт абсолютным путём от корня («/src/main.tsx»).
+    // Эту связь не проверял никто, а именно она делает начало запускаемым: файл есть,
+    // ссылка есть, но если они не совпадают — Vite отдаст пустую страницу.
+    const paths = new Set(t.files.map((f) => f.path));
+    const html = t.files.find((f) => f.path === "index.html");
+    if (!html) return;
+    const refs = [...html.content.matchAll(/(?:src|href)="\/([^"]+)"/g)].map((m) => m[1]);
+    const missing = refs.filter((r) => !paths.has(r));
+    expect(missing, `${t.id}: index.html ссылается на отсутствующее: ${missing.join(", ")}`).toEqual([]);
+    // И обратный конец: если ссылок нет вовсе, проверка пуста — у Vite-начала
+    // скрипт обязателен.
+    if (t.stack === "react") {
+      expect(refs.some((r) => /main\.(tsx|ts|jsx|js)$/.test(r)), `${t.id}: index.html не подключает точку входа`).toBe(true);
+    }
+  });
+
   test.each(templates.map((t) => [t.id, t] as const))("%s: относительные ссылки разрешаются внутри начала", (_id, t) => {
     const paths = new Set(t.files.map((f) => f.path));
     const missing: string[] = [];

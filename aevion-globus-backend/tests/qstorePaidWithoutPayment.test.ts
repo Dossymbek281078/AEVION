@@ -18,6 +18,9 @@ import jwt from "jsonwebtoken";
  * Здесь применён их приём: в проде честный отказ, в разработке — как было.
  */
 
+const capture = vi.fn();
+vi.mock("../src/lib/sentry/platform", () => ({ makeServiceCapture: () => (...a: unknown[]) => capture(...a) }));
+
 const query = vi.fn();
 const dbReady = vi.fn(() => true);
 const createIntent = vi.fn();
@@ -85,6 +88,7 @@ describe("В проде платный товар без процессинга 
     expect(r.status).toBe(503);
     expect(r.body.error).toBe("no_payment_provider");
     expect(paidRowWritten()).toBe(false);          // ← суть проверки
+    expect(String(capture.mock.calls[0][0])).toContain("permalink_not_configured");
   });
 
   test("провайдер бросил исключение — тоже отказ, а не бесплатная выдача", async () => {
@@ -95,6 +99,12 @@ describe("В проде платный товар без процессинга 
 
     expect(r.status).toBe(503);
     expect(paidRowWritten()).toBe(false);
+    // ПРИЧИНА обязана отличаться от «не настроено». Без этой проверки верхний
+    // сторож можно убрать, и все тесты останутся зелёными — проверено
+    // мутацией: нижняя проверка перехватывает тот же случай, но назвала бы
+    // его permalink_not_configured. Для дежурного это разные аварии:
+    // «провайдер лежит» чинится ожиданием, «не настроено» — руками.
+    expect(String(capture.mock.calls[0][0])).toContain("provider_error");
   });
 
   test("база недоступна — запасной путь тоже не отдаёт платный товар", async () => {

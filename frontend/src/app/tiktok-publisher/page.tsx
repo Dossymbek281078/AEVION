@@ -111,6 +111,56 @@ export default function TikTokPublisherPage() {
     setCfg((c) => (c ? { ...c, connected: false } : c));
   };
 
+  // Опрос состояния публикации. TikTok отвечает не сразу: ролик сначала
+  // скачивается, потом обрабатывается.
+  const trackStatus = (publishId?: string) => {
+    if (!publishId) return;
+    let left = 10; // ~50 секунд. Дальше молчим, а не опрашиваем вечно.
+    const tick = async () => {
+      left -= 1;
+      try {
+        const r = await fetch(`${API}/publish/status?publishId=${encodeURIComponent(publishId)}`, {
+          credentials: "include",
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "status_failed");
+
+        if (j.status === "PUBLISH_COMPLETE" || j.status === "SEND_TO_USER_INBOX") {
+          const where =
+            j.status === "SEND_TO_USER_INBOX"
+              ? "Готово: ролик в ваших черновиках TikTok — откройте приложение, чтобы дописать и опубликовать."
+              : "Готово: ролик опубликован.";
+          return setPostMsg({ kind: "ok", text: where });
+        }
+        if (j.status === "FAILED") {
+          // Причину показываем как есть: без неё «не получилось» не даёт
+          // человеку ни одного следующего шага.
+          return setPostMsg({
+            kind: "err",
+            text: `TikTok отклонил: ${j.failReason || "причина не названа"}`,
+          });
+        }
+        if (left <= 0) {
+          // Честно говорим, что перестали спрашивать, а не выдаём молчание за
+          // успех.
+          return setPostMsg({
+            kind: "ok",
+            text: `Отправлено, TikTok ещё обрабатывает (${j.status || "в работе"}). Проверьте приложение через минуту.`,
+          });
+        }
+        setPostMsg({ kind: "ok", text: `Отправлено. Состояние: ${j.status || "в работе"}…` });
+        window.setTimeout(tick, 5000);
+      } catch {
+        // Сбой опроса не означает, что публикация не удалась — так и пишем.
+        setPostMsg({
+          kind: "ok",
+          text: "Отправлено, но узнать состояние не удалось. Проверьте приложение TikTok.",
+        });
+      }
+    };
+    window.setTimeout(tick, 3000);
+  };
+
   const publish = async () => {
     setPostMsg(null);
     if (!videoUrl.trim()) return setPostMsg({ kind: "err", text: "Укажите публичный URL видео (mp4)." });
@@ -150,7 +200,11 @@ export default function TikTokPublisherPage() {
         const detail = typeof d === "object" ? `${d.code || ""} ${d.message || ""}`.trim() : String(d || j.error || "");
         setPostMsg({ kind: "err", text: `Не удалось отправить: ${detail || "ошибка"}` });
       } else {
-        setPostMsg({ kind: "ok", text: `Отправлено в TikTok. publish_id: ${j.publishId}. Проверьте уведомления в приложении.` });
+        setPostMsg({ kind: "ok", text: "Отправлено в TikTok. Узнаём состояние…" });
+        // Каталог обещает отслеживание статуса, а страница до 19.08 печатала
+        // publish_id и советовала «посмотрите уведомления». Ручка при этом
+        // существовала и просто никем не звалась.
+        trackStatus(j.publishId);
       }
     } catch (e: any) {
       setPostMsg({ kind: "err", text: e?.message || "Сбой отправки" });

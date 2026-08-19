@@ -49,11 +49,32 @@ const PATTERNS = [
   { name: "Stripe live key",    re: "[sr]k_live_[A-Za-z0-9]{20,}" },
   { name: "Приватный ключ",     re: "BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY" },
   { name: "Пароль в строке БД", re: "(postgres|postgresql|mysql|mongodb)[a-z+]*://[A-Za-z0-9_.-]+:[A-Za-z0-9_.!%*+~-]{6,}@" },
+  // Все шаблоны выше опознают ключ по ФОРМАТУ провайдера (xkeysib-, sk-, AKIA…).
+  // У наших собственных секретов формата нет: это случайная строка без
+  // префикса, и сканер её не видел. 19.08.2026 он ответил «ключей в рабочих
+  // файлах не найдено», пока в all-smokes.js лежал живой
+  // BUILD_PAYMENT_WEBHOOK_SECRET на 48 символов — а им подписывается вебхук,
+  // помечающий заказ оплаченным.
+  //
+  // Опознаём по СОСЕДСТВУ: имя, кончающееся на SECRET/TOKEN/KEY/PASSWORD, и
+  // тут же длинный литерал. Длина от 24 отсекает «changeme», "test", "***".
+  // Ищем по СОСЕДСТВУ, а не по структуре присваивания: настоящий случай
+  // выглядел как `SECRET: process.env.SECRET || "4wSq…"`, то есть между именем
+  // и литералом стоит запасной путь. Шаблон «имя = литерал» его не поймал —
+  // проверено на нём же, прежде чем поверить.
+  { name: "Свой секрет в коде", re: "(SECRET|TOKEN|PASSWORD|API_?KEY|PASSWD).*[\"'][A-Za-z0-9+/=_-]{24,}[\"']", placeholders: true },
 ];
 
 // Совпадение здесь почти всегда пример, а не ключ. Не пропускаем молча:
 // считаем отдельно и печатаем числом, иначе «чисто» станет неправдой.
 const EXAMPLE_HINTS = /(\.md$|\.test\.|__tests__|\.example|\.sample|fixtures?\/)/i;
+
+// Заглушка называет себя сама, настоящий секрет — случайная строка. Отсев по
+// самоописанию, а не по длине: из четырёх совпадений шаблона «свой секрет»
+// настоящим оказалось одно, три были `dev-only-key`, `change-in-prod` и
+// `0123456789abcdef…`. Без этого отсева сканер тонет в собственном шуме и его
+// перестают читать.
+const PLACEHOLDER_HINTS = /(dev-only|change-?in-?prod|changeme|placeholder|example|sample|dummy|your-|test-key|fake|0123456789|abcdef0123|fedcba98|76543210|deadbeef|xxxx|\.\.\.)/i;
 
 const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
 
@@ -95,6 +116,8 @@ function grepRef(ref) {
     for (const line of res.split("\n").filter(Boolean)) {
       const rest = line.slice(ref.length + 1);
       const file = rest.slice(0, rest.indexOf(":"));
+      const text = rest.slice(0, 300);
+      if (p.placeholders && PLACEHOLDER_HINTS.test(text)) continue;
       out.push({ ref, file, kind: p.name, line: rest.slice(0, 120) });
     }
   }

@@ -78,8 +78,14 @@ child.on("exit", (code) => {
     process.exit(0);
   }
 
+  // Хвост режем от строки «запускаю» — это отметка, после которой начинается
+  // сам смоук. До неё идёт стартовый вывод бэкенда (нет соединения с узлом
+  // Bitcoin, база недоступна, очередь вебхуков) — шум, который человеку
+  // ничего не говорит о причине падения и вытесняет полезное.
   const outLines = captured.join("").split("\n");
-  const tail = outLines.length > 1 ? outLines.slice(-25).join("\n") : "(прогон не дал вывода)";
+  const startAt = outLines.findIndex((l) => l.includes("запускаю"));
+  const meaningful = startAt >= 0 ? outLines.slice(startAt) : outLines;
+  const tail = meaningful.length > 1 ? meaningful.slice(-25).join("\n") : "(прогон не дал вывода)";
 
   const what =
     code === 2

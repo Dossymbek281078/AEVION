@@ -81,9 +81,18 @@ async function waitForHealth(timeoutMs = 120_000) {
 }
 
 console.log(`[smoke] поднимаю бэкенд на ${BASE}`);
-server = spawn("npx", ["ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"], {
-  cwd: ROOT,
+// Команда ОДНОЙ СТРОКОЙ с оболочкой, а не массивом аргументов.
+//
+// Два неверных варианта, оба проверены 19.08.2026:
+//   shell:true + массив аргументов → предупреждение DEP0190 в каждом выводе,
+//     оно засоряет лог и отчёт, который читает человек;
+//   npx.cmd напрямую без оболочки → «Error: spawn EINVAL», на Windows .cmd
+//     без оболочки не запускается вовсе. Эта «починка» сломала запуск, и
+//     поймала её проверка, а не внимательность.
+const CMD = "npx ts-node-dev --respawn --transpile-only src/index.ts";
+server = spawn(CMD, {
   shell: true,
+  cwd: ROOT,
   stdio: ["ignore", "ignore", "inherit"],
   detached: process.platform !== "win32",
   env: { ...process.env, PORT },
@@ -97,9 +106,9 @@ if (secs === null) {
 }
 console.log(`[smoke] поднялся за ~${secs} с, запускаю ${scriptFile}`);
 
-const smoke = spawn("node", [join(HERE, scriptFile)], {
+// Node зовём напрямую: это .exe, оболочка ему не нужна, и предупреждения нет.
+const smoke = spawn(process.execPath, [join(HERE, scriptFile)], {
   cwd: ROOT,
-  shell: true,
   stdio: "inherit",
   env: { ...process.env, BASE },
 });

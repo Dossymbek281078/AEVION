@@ -67,7 +67,11 @@ function isAdmin(req: Request): boolean {
   return false;
 }
 
-const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,24}$/;
+// Формат email проверяется Zod-схемой WaitlistSubscribeSchema
+// (z.string().email().max(120)) на входе в маршрут. Здесь раньше лежала
+// вторая, НИКЕМ НЕ ВЫЗЫВАЕМАЯ регулярка: читающий видел её и считал, что
+// есть ещё один слой проверки, которого не было. Убрана, чтобы код не
+// обещал того, чего не делает.
 
 export const constitutionWaitlistRouter = Router();
 export const constitutionWaitlistAdminRouter = Router();
@@ -103,7 +107,23 @@ constitutionWaitlistRouter.post(
             [row.email, row.source, row.createdAt],
           );
           storage = "postgres";
-        } catch { /* fall through */ }
+        } catch (dbErr) {
+          // Раньше тут стоял молчаливый провал в память. Человек получал
+          // «вы записаны» и письмо-подтверждение, а запись жила в памяти
+          // одного инстанса — до ближайшего перезапуска. Никто об этом не
+          // узнавал: заявки просто испарялись. Запись в память оставляем
+          // (в пределах жизни процесса это лучше, чем потерять сразу), но
+          // теперь об этом кричим.
+          capture(dbErr, {
+            route: "constitution/waitlist/subscribe",
+            severity: "leads-at-risk",
+            note: "запись в Postgres не удалась — заявка лежит только в памяти инстанса и будет потеряна при перезапуске",
+          });
+          console.error(
+            "[Constitution] ЗАЯВКА НЕ СОХРАНЕНА В БАЗУ — только в памяти, будет потеряна при перезапуске.",
+            dbErr instanceof Error ? dbErr.message : dbErr,
+          );
+        }
       }
       if (!memList.has(row.email)) memList.set(row.email, row);
 
@@ -129,6 +149,13 @@ constitutionWaitlistAdminRouter.get(
     try {
       await ensureWaitlistTable();
       let rows: WaitlistRow[] = [];
+      // Откуда список и не обрезан ли он. Без этого выгрузка при сбое базы
+      // отдавала почти пустой список из памяти КАК ПОЛНЫЙ: владелец видел три
+      // строки и делал вывод, что заявок нет. Решение принимается по этому
+      // файлу, значит он обязан говорить о себе правду.
+      const ROW_CAP = 5000;
+      let source: "postgres" | "memory" = "memory";
+      let dbQueryFailed = false;
       if (dbAvailable) {
         try {
           const pool = getPool();
@@ -136,7 +163,7 @@ constitutionWaitlistAdminRouter.get(
             `SELECT "email","source","createdAt"
              FROM constitution_waitlist
              ORDER BY "createdAt" DESC
-             LIMIT 5000`,
+             LIMIT ${ROW_CAP}`,
           );
           rows = r.rows.map((x: Record<string, unknown>) => ({
             email: String(x.email),
@@ -145,9 +172,28 @@ constitutionWaitlistAdminRouter.get(
               ? x.createdAt.toISOString()
               : String(x.createdAt),
           }));
-        } catch { /* fall through */ }
+          source = "postgres";
+        } catch (dbErr) {
+          dbQueryFailed = true;
+          capture(dbErr, {
+            route: "constitution/waitlist/list",
+            note: "список заявок не прочитан из Postgres — выгрузка идёт из памяти и полной не является",
+          });
+          console.error(
+            "[Constitution] ВЫГРУЗКА ЗАЯВОК ИЗ ПАМЯТИ, НЕ ИЗ БАЗЫ — список неполный:",
+            dbErr instanceof Error ? dbErr.message : dbErr,
+          );
+        }
       }
-      if (rows.length === 0) rows = Array.from(memList.values());
+      if (rows.length === 0) {
+        rows = Array.from(memList.values());
+        source = "memory";
+      }
+      const truncated = source === "postgres" && rows.length >= ROW_CAP;
+      // Для CSV поля в тело не положить — поэтому признаки уходят заголовками:
+      // файл сам по себе выглядит одинаково полным в любом случае.
+      res.setHeader("X-Data-Source", source);
+      res.setHeader("X-Data-Truncated", String(truncated));
       const fmt = String(req.query.format ?? "json");
       if (fmt === "csv") {
         // Экранирования тут не было ВООБЩЕ: поля клеились в строку как есть.
@@ -166,6 +212,13 @@ constitutionWaitlistAdminRouter.get(
         total: rows.length,
         items: rows,
         bySource: aggregateBySource(rows),
+        // `total` — это столько, сколько отдали, а не сколько есть. При
+        // truncated=true или source="memory" по нему нельзя судить о размере
+        // списка заявок.
+        source,
+        dbQueryFailed,
+        truncated,
+        rowCap: ROW_CAP,
       });
     } catch (err) {
       capture(err);
@@ -192,7 +245,12 @@ function aggregateBySource(rows: WaitlistRow[]): Array<{ source: string; count: 
  *
  * Call from cron scheduler (already exists in qcoreai.ts) every Sunday.
  */
-export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: number }> {
+/**
+ * `aborted` отличает «рассылать было некому» от «список не прочитался».
+ * Без этого флага вызывающий видит одинаковый ноль в обоих случаях, а это
+ * разные вещи: во втором подписчики есть, просто мы их не увидели.
+ */
+export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: number; aborted?: boolean }> {
   try {
     // 1. Get top-5 artifacts by votes in last 7 days
     await ensureWaitlistTable();
@@ -227,7 +285,23 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
         const pool = getPool();
         const r = await pool.query(`SELECT "email" FROM constitution_waitlist ORDER BY "createdAt" ASC LIMIT 5000`);
         subscribers = r.rows.map((x: Record<string, unknown>) => ({ email: String(x.email) }));
-      } catch { /* fall through */ }
+      } catch (dbErr) {
+        // Раньше при сбое базы дайджест уходил по списку из ПАМЯТИ — в проде
+        // это почти пустой список, — и функция рапортовала об успехе. То есть
+        // недельная рассылка считалась отправленной, не дойдя ни до кого.
+        // Отправка по неполному списку хуже неотправки: письмо нельзя послать
+        // второй раз «уже правильно», а отчёт врёт.
+        capture(dbErr, {
+          route: "constitution/digest",
+          severity: "digest-aborted",
+          note: "список подписчиков не прочитан из Postgres — рассылка отменена, чтобы не уйти по неполному списку из памяти",
+        });
+        console.error(
+          "[Constitution] ДАЙДЖЕСТ ОТМЕНЁН: список подписчиков не прочитан из базы.",
+          dbErr instanceof Error ? dbErr.message : dbErr,
+        );
+        return { sent: 0, skipped: 0, aborted: true };
+      }
     }
     if (!subscribers.length) return { sent: 0, skipped: 0 };
 

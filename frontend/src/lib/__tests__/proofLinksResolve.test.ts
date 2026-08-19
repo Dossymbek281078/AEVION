@@ -137,6 +137,13 @@ function citedPaths(source: string): { p: string; line: number }[] {
     // Both the clickable form and the address printed as plain text: the PDF
     // briefs told an investor to open aevion.app/transparency by typing it.
     for (const m of text.matchAll(/(?:https:\/\/)?aevion\.app(\/[^"'\s#?)<·]*)/g)) {
+      // Многоточие — заглушка в образце, а не адрес. /build/developers печатает
+      // пример ответа API со строкой "url": "https://aevion.app/build/vacancy/...",
+      // и срезка точек как пунктуации превращала её в /build/vacancy — путь,
+      // которого страница никогда не обещала. Сторож обвинял в мёртвой ссылке
+      // документацию. Отличается от настоящей точки в конце фразы тем, что
+      // точек три и они идут после слэша.
+      if (/\.\.\.$/.test(m[1])) continue;
       const p = m[1].replace(/[.,;:]+$/, "");
       if (p !== "/") out.push({ p, line: i + 1 });
     }
@@ -175,6 +182,22 @@ describe("proof links on audience-facing pages resolve", () => {
     // Address printed as text for someone to type — the PDF briefs.
     expect(
       citedPaths("<strong>aevion.app/transparency</strong> — health-board").map((c) => c.p),
+    ).toEqual(["/transparency"]);
+
+    // Образец в документации — НЕ ссылка. 19.08.2026 сторож краснел на
+    // /build/developers, где в примере ответа API стоит "url": ".../vacancy/...".
+    // Точки срезались как пунктуация, и заглушка превращалась в /build/vacancy.
+    expect(
+      citedPaths('"url": "https://aevion.app/build/vacancy/...",').map((c) => c.p),
+    ).toEqual([]);
+    // Контроль, чтобы починка не ослепила сторожа: настоящая точка в конце
+    // фразы по-прежнему срезается, и путь проверяется.
+    expect(
+      citedPaths("Откройте aevion.app/transparency.").map((c) => c.p),
+    ).toEqual(["/transparency"]);
+    // И многоточие НЕ должно глушить путь, у которого оно не на конце.
+    expect(
+      citedPaths('aevion.app/transparency и aevion.app/build/vacancy/...').map((c) => c.p),
     ).toEqual(["/transparency"]);
     // The caption under a counter.
     expect(citedPaths('sub="/api/aevion/registry"').map((c) => c.p)).toEqual([

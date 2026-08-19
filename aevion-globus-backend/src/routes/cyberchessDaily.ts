@@ -919,9 +919,13 @@ router.get('/leaderboard', (req: Request, res: Response) => {
   }
   const rawLimit = parseInt(String(req.query.limit || '100'), 10);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, LB_MAX) : 100;
+  // Записи с нечитаемым именем не показываем. Приём таких имён закрыт выше, но
+  // четыре штуки успели попасть в боевую таблицу 19.08 — витрина показывала
+  // «████████3 — 100 200 очков». Данные не трогаем: скрыть обратимо, удалить нет.
+  const readable = LEADERBOARD.filter((e) => !String(e.name || '').includes('�'));
   return res.json({
-    leaderboard: LEADERBOARD.slice(0, limit),
-    total: LEADERBOARD.length,
+    leaderboard: readable.slice(0, limit),
+    total: readable.length,
   });
 });
 

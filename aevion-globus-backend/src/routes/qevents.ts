@@ -464,6 +464,17 @@ qeventsRouter.get("/me/rsvps", async (req: Request, res: Response) => {
 qeventsRouter.get("/calendar", async (_req: Request, res: Response) => {
   const year = parseInt(String(_req.query.year ?? new Date().getFullYear()), 10);
   const month = parseInt(String(_req.query.month ?? new Date().getMonth() + 1), 10);
+  // Негодный год или месяц — ошибка ЗАПРОСА, а не сервера. Без этой проверки
+  // parseInt("abc") даёт NaN, ниже new Date(Date.UTC(NaN, …)) бросает
+  // RangeError, мягкий catch отвечает 500 — и обычный обход роботом выглядит
+  // как настоящая авария. Замер на проде 20.08.2026: ?year= , ?year=abc и
+  // ?year=99999999999 давали 500; без параметра и с верным годом — 200.
+  if (
+    !Number.isInteger(year) || year < 1970 || year > 2100 ||
+    !Number.isInteger(month) || month < 1 || month > 12
+  ) {
+    return res.status(400).json({ error: "invalid_year_or_month" });
+  }
   const ym = `${year}-${String(month).padStart(2, "0")}`;
   const days: Record<string, QEvent[]> = {};
   try {

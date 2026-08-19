@@ -53,7 +53,47 @@ export function similarity(a: string, b: string): number {
 
 /* ── Числа: самая проверяемая форма разногласия ───────────────────────── */
 
-export type NumericClaim = { value: number; raw: string; context: string };
+export type NumericClaim = { value: number; raw: string; context: string; unit: string | null };
+
+/**
+ * Единица измерения рядом с числом — валюта, срок, доля, штуки.
+ *
+ * Зачем. Без неё «12000 долларов» и «6 недель» из одного предложения попадали в
+ * ОДИН конфликт с разбросом 11994, и человек видел «сверить число: 12000 против 6».
+ * Сравнивать деньги со сроком бессмысленно, а такой разброс ещё и ставил шум на
+ * первое место в сортировке. Замер на проде 19.08.2026 — ровно этот случай.
+ *
+ * Нормализация грубая и намеренно такая: ключ нужен только чтобы СГРУППИРОВАТЬ
+ * сравнимое, а не чтобы понять смысл. Незнакомое слово даёт ключ из своей основы,
+ * поэтому «попугаев» сравнится с «попугаями», но не с долларами.
+ */
+const UNIT_ALIASES: Array<[RegExp, string]> = [
+  [/^(доллар|usd|бакс)/i, "usd"],
+  [/^(евро|eur)/i, "eur"],
+  [/^(тенге|тг|kzt)/i, "kzt"],
+  [/^(рубл|руб|rub)/i, "rub"],
+  [/^(процент|proc|pct)/i, "pct"],
+  [/^(недел|week)/i, "week"],
+  [/^(месяц|мес|month)/i, "month"],
+  [/^(дн|день|дня|дней|сут|day)/i, "day"],
+  [/^(час|hour)/i, "hour"],
+  [/^(год|лет|года|year)/i, "year"],
+  [/^(человек|людей|сотрудник|people|person)/i, "people"],
+  [/^(штук|шт|piece|item)/i, "piece"],
+];
+
+export function normalizeUnit(word: string | null | undefined): string | null {
+  const w = String(word || "").trim().toLowerCase();
+  if (!w) return null;
+  if (w === "%" ) return "pct";
+  if (w === "$") return "usd";
+  if (w === "€") return "eur";
+  if (w === "₸") return "kzt";
+  for (const [re, key] of UNIT_ALIASES) if (re.test(w)) return key;
+  // Незнакомое слово: берём основу, чтобы падежи сошлись. Латиницу не режем —
+  // там окончаний нет, и обрезка склеила бы разные слова.
+  return /^[a-z]+$/.test(w) ? w : w.slice(0, 5);
+}
 
 const MAX_CONTEXT = 180;
 
@@ -107,7 +147,13 @@ export function numericClaims(text: string): NumericClaim[] {
     if (!Number.isFinite(num)) continue;
     // Годы и порядковые номера шумят и почти никогда не являются предметом спора.
     if (num >= 1900 && num <= 2100 && !/[$€₸%]/.test(raw)) continue;
-    out.push({ value: num, raw, context: sentenceAround(src, m.index, raw.length) });
+    // Единицу ищем сразу за числом: маркер из самой регулярки (%, $, USD) или
+    // следующее слово («долларов», «недель»). Русские слова регулярка не ловит —
+    // именно поэтому деньги и сроки раньше оказывались в одной группе.
+    const after = src.slice(m.index + m[0].length, m.index + m[0].length + 24);
+    const word = /^\s*([\p{L}%$€₸]+)/u.exec(after);
+    const unit = normalizeUnit(m[2] || (word ? word[1] : null));
+    out.push({ value: num, raw, context: sentenceAround(src, m.index, raw.length), unit });
   }
   return out;
 }
@@ -127,26 +173,81 @@ export function numericConflicts(answers: AgentAnswer[], minContextSim = 0.3): N
     if (!a.ok || !a.reply) continue;
     for (const c of numericClaims(a.reply)) all.push({ agentId: a.agentId, ...c });
   }
-  const used = new Set<number>();
-  const conflicts: NumericConflict[] = [];
-  for (let i = 0; i < all.length; i++) {
-    if (used.has(i)) continue;
-    const group = [i];
-    for (let j = i + 1; j < all.length; j++) {
-      if (used.has(j)) continue;
-      if (all[i].agentId === all[j].agentId) continue; // спорят агенты, не абзацы
-      if (similarity(all[i].context, all[j].context) >= minContextSim) group.push(j);
+
+  // Один агент — одно значение в группе. Прежде проверка «тот же агент» сравнивала
+  // кандидата только с ЗАТРАВКОЙ, поэтому два разных числа одного агента спокойно
+  // попадали в одну группу: замер на проде 19.08.2026 дал «analyst: 12000 против
+  // writer: 12000 против writer: 6» — то есть согласие двух агентов, выданное за
+  // спор, и срок, сравнённый с деньгами.
+  const pickOnePerAgent = (idx: number[]): number[] => {
+    const seen = new Set<string>();
+    const out: number[] = [];
+    for (const k of idx) {
+      if (seen.has(all[k].agentId)) continue;
+      seen.add(all[k].agentId);
+      out.push(k);
     }
-    if (group.length < 2) continue;
-    const values = group.map((k) => ({ agentId: all[k].agentId, raw: all[k].raw, value: all[k].value }));
+    return out;
+  };
+
+  const build = (idx: number[], context: string): NumericConflict | null => {
+    const chosen = pickOnePerAgent(idx);
+    if (chosen.length < 2) return null;
+    const values = chosen.map((k) => ({ agentId: all[k].agentId, raw: all[k].raw, value: all[k].value }));
     const nums = values.map((v) => v.value);
     const spread = Math.max(...nums) - Math.min(...nums);
-    if (spread === 0) continue; // сошлись — это согласие, а не конфликт
-    group.forEach((k) => used.add(k));
-    conflicts.push({ context: all[i].context, values, spread });
+    if (spread === 0) return null; // сошлись — это согласие, а не конфликт
+    return { context, values, spread };
+  };
+
+  const used = new Set<number>();
+  const conflicts: NumericConflict[] = [];
+
+  // 1. Сначала по ЕДИНИЦЕ измерения. Несогласный агент формулирует иначе, поэтому
+  //    сходство предложений у него низкое — и настоящее расхождение раньше просто
+  //    не находилось: «12000 долларов» и «реально 30000 долларов» не сгруппировались.
+  //    Одинаковая единица — куда более надёжный признак сравнимости, чем общие слова.
+  const byUnit = new Map<string, number[]>();
+  all.forEach((c, k) => {
+    if (!c.unit) return;
+    const list = byUnit.get(c.unit);
+    if (list) list.push(k); else byUnit.set(c.unit, [k]);
+  });
+  for (const [, idx] of byUnit) {
+    const fresh = idx.filter((k) => !used.has(k));
+    const conflict = build(fresh, all[fresh[0] ?? idx[0]].context);
+    if (!conflict) continue;
+    // Помечаем использованными только те, что реально вошли в конфликт.
+    for (const k of pickOnePerAgent(fresh)) used.add(k);
+    conflicts.push(conflict);
   }
-  return conflicts.sort((a, b) => b.spread - a.spread);
+
+  // 2. Остальные — прежним путём, по сходству предложений: у числа без узнаваемой
+  //    единицы («выросло до 40») сравнить не с чем, кроме контекста.
+  for (let i = 0; i < all.length; i++) {
+    if (used.has(i) || all[i].unit) continue;
+    const group = [i];
+    for (let j = i + 1; j < all.length; j++) {
+      if (used.has(j) || all[j].unit) continue;
+      if (all[i].agentId === all[j].agentId) continue;
+      if (similarity(all[i].context, all[j].context) >= minContextSim) group.push(j);
+    }
+    const conflict = build(group, all[i].context);
+    if (!conflict) continue;
+    for (const k of pickOnePerAgent(group)) used.add(k);
+    conflicts.push(conflict);
+  }
+
+  // Сортировка по ОТНОСИТЕЛЬНОМУ разбросу: абсолютный несравним между единицами —
+  // 6 недель против 12 важнее, чем 12000 долларов против 12100, хотя абсолютный
+  // разброс в тысячу раз меньше.
+  const rel = (c: NumericConflict) => {
+    const max = Math.max(...c.values.map((v) => Math.abs(v.value)), 1);
+    return c.spread / max;
+  };
+  return conflicts.sort((a, b) => rel(b) - rel(a) || b.spread - a.spread);
 }
+
 
 /* ── Отказы и хеджи ───────────────────────────────────────────────────── */
 

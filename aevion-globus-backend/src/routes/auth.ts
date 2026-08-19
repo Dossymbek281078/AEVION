@@ -14,6 +14,38 @@ export const authRouter = Router();
 
 const pool = getPool();
 
+/**
+ * GET /api/auth/email/healthz — настроена ли отправка писем.
+ *
+ * Зачем. 19.08.2026 выяснилось, что зарегистрироваться нельзя ни одним путём:
+ * оба OAuth-провайдера не настроены, а подтверждение адреса создаёт токен и
+ * возвращает `{ok:true}`, не отправляя письма. При этом узнать СНАРУЖИ, настроен
+ * ли вообще почтовый транспорт, было невозможно — ручки состояния не было, в
+ * отличие от оплаты, где `/api/pricing/checkout/healthz` есть и работает.
+ *
+ * Вопрос «может ли новый человек зарегистрироваться» не должен требовать
+ * пробной отправки письма или похода в панель хостинга. Здесь он получает ответ
+ * одним запросом.
+ *
+ * Секретов не отдаём: только признак наличия, без значений и без имён хостов.
+ */
+authRouter.get("/email/healthz", (_req, res) => {
+  const smtp = Boolean(
+    process.env.SMTP_HOST?.trim() &&
+      process.env.SMTP_USER?.trim() &&
+      process.env.SMTP_PASS?.trim(),
+  );
+  const resend = Boolean(process.env.RESEND_API_KEY?.trim() || process.env.RESEND_KEY?.trim());
+  res.json({
+    ok: true,
+    transports: { smtp: { configured: smtp }, resend: { configured: resend } },
+    canSend: smtp || resend,
+    // Отдельно от настроек транспорта: подтверждение адреса письма НЕ шлёт.
+    // Это факт кода, а не конфигурации, и он не меняется от переменных.
+    emailVerifySendsMail: false,
+  });
+});
+
 authRouter.get("/health", (_req, res) => {
   res.json({
     status: "ok",

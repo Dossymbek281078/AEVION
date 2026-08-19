@@ -23,11 +23,20 @@ const args = Object.fromEntries(
 const LIMIT = Number(args.limit || 30);
 const MIN_STRINGS = Number(args["min-strings"] || 3);
 
+// `page.tsx` мало. Принятый в проекте приём — серверная страница делегирует
+// клиентскому компоненту рядом (`page.tsx` → `_client.tsx`), и весь видимый
+// текст живёт во втором файле. Аудит его не читал, поэтому такой модуль выходил
+// «переведённым»: у qskyway он видел 1 строку с кириллицей вместо 205, всего по
+// семи `_client.tsx` мимо счёта шло 677 строк (замер 12.08.2026). Считаем и их —
+// иначе цифра улучшается ровно тогда, когда страницу переписывают на клиентский
+// компонент, то есть отчёт вознаграждает за то, чего не делали.
+const COUNTED = new Set(["page.tsx", "_client.tsx"]);
+
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
     if (e.isDirectory()) walk(p, out);
-    else if (e.name === "page.tsx") out.push(p);
+    else if (COUNTED.has(e.name)) out.push(p);
   }
   return out;
 }
@@ -80,7 +89,7 @@ const totalTCalls = rows.reduce((s, r) => s + r.tCalls, 0);
 const pagesWithI18nHook = rows.filter((r) => r.hasI18nHook).length;
 
 console.log(`\n=== AEVION i18n coverage audit ===`);
-console.log(`Total page.tsx files: ${files.length}`);
+console.log(`Total files scanned (page.tsx + _client.tsx): ${files.length}`);
 console.log(`Pages with ≥${MIN_STRINGS} hardcoded RU lines: ${total}`);
 console.log(`Pages using i18n hooks (t/useT/etc): ${pagesWithI18nHook}`);
 console.log(`Sum hardcoded lines: ${totalHardcoded}`);

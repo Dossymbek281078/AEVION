@@ -280,6 +280,20 @@ const SMOKES = [
   { name: "lifebox", script: "lifebox-smoke.js", readOnly: false },
   { name: "psyapp-deps", script: "psyapp-deps-smoke.js", readOnly: false },
   { name: "shadownet", script: "shadownet-smoke.js", readOnly: false },
+  // ⚠️ `ots-smoke.ts` СПЕЦИАЛЬНО не в этом списке, это не пропуск. Он штампует
+  // новый хеш в публичные календари OpenTimestamps — то есть пишет во внешний
+  // мир — и по построению не может быть зелёным сразу: свежий штамп часами ждёт
+  // блока Bitcoin, поэтому verify всегда false с PendingAttestation. Подключение
+  // его сюда засорило бы чужие календари на каждом прогоне и дало бы вечно
+  // красный смок. Запускать руками, когда нужно проверить якорение целиком.
+  //
+  // Слой доверия FAA: три проверки, которые до 28.07 не запускались ни разу —
+  // их npm-команды ссылались на несуществующий `tsx`, а сюда они подключены не
+  // были. Все три читают только локальные данные и живой фид FAA, ничего не
+  // пишут, поэтому readOnly.
+  { name: "qskyway-airspace-freshness", script: "airspace-freshness-smoke.ts", readOnly: true },
+  { name: "qskyway-trust-anchor", script: "trust-anchor-smoke.ts", readOnly: true },
+  { name: "qskyway-trust-signature", script: "trust-signature-smoke.ts", readOnly: true },
   // qcore needs an LLM provider key for the run step. Default to skipping
   // those legs so the smoke validates plumbing (auth + history + analytics)
   // without burning provider tokens. Override via env if you want the full pass.
@@ -377,10 +391,21 @@ for (const sm of eligible) {
   // work on Windows and avoid backslash escaping inside NODE_OPTIONS.
   const preload = path.join(__dirname, "lib", "fetch-retry.cjs").replace(/\\/g, "/");
   const childNodeOptions = `${process.env.NODE_OPTIONS ? process.env.NODE_OPTIONS + " " : ""}--require ${preload}`;
-  const runChild = () => spawnSync("node", [path.join(__dirname, sm.script)], {
+  // Смок на TypeScript запускается через ts-node: `node` файл .ts в этом пакете
+  // не берёт (проверено на v24 — ESM-импорты в CJS-пакете), а ставить tsx ради
+  // трёх скриптов не нужно, ts-node в проекте уже есть. Раньше эти три смока не
+  // были подключены сюда ВООБЩЕ и вдобавок их npm-команды ссылались на
+  // отсутствующий раннер, поэтому они не выполнялись ни разу с момента появления.
+  const isTs = sm.script.endsWith(".ts");
+  const tsNode = path.join(__dirname, "..", "node_modules", ".bin", process.platform === "win32" ? "ts-node.cmd" : "ts-node");
+  const runChild = () => spawnSync(
+    isTs ? tsNode : "node",
+    isTs ? ["-T", path.join(__dirname, sm.script)] : [path.join(__dirname, sm.script)],
+    {
     env: { ...process.env, BASE, NODE_OPTIONS: childNodeOptions, ...(sm.env || {}) },
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
+    shell: isTs,
   });
   let child = runChild();
   let note = "";

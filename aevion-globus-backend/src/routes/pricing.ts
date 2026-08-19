@@ -197,8 +197,18 @@ pricingRouter.post("/quote", (req, res) => {
   }
   const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
   const period: BillingPeriod = body.period === "annual" ? "annual" : "monthly";
+  // `in` идёт по цепочке прототипов, поэтому `"constructor" in CURRENCY_RATES`
+  // истинно — и валютой становилось само слово `constructor`, а курсом функция
+  // Object.prototype.constructor. Смета уходила клиенту БЕЗ ЦИФР: HTTP 200,
+  // total и subtotal пустые. Живой прод отвечал так 28.07.2026 на constructor,
+  // __proto__, toString, valueOf и hasOwnProperty — пять ключей, которые есть у
+  // любого объекта.
+  //
+  // hasOwnProperty.call, а не `obj.hasOwnProperty(...)`: у самого CURRENCY_RATES
+  // этот метод может быть перекрыт ключом валюты.
   const currency: CurrencyCode =
-    typeof body.currency === "string" && body.currency in CURRENCY_RATES
+    typeof body.currency === "string"
+    && Object.prototype.hasOwnProperty.call(CURRENCY_RATES, body.currency)
       ? (body.currency as CurrencyCode)
       : "USD";
   const modules = Array.isArray(body.modules) ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string") : [];

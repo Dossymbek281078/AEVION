@@ -20,7 +20,15 @@ let skipped = 0;
 const skip = (n, why) => { skipped++; console.log(`  ${String(++step).padStart(2, "0")}  SKIP  ${n}  — ${why}`); };
 // A skipped write leg did not pass — folding it into the pass count would make
 // a prod run look like it verified more than it actually did.
-const summary = () => `${failed === 0 ? "ALL PASS" : failed + " FAILED"}  (${step - skipped}/${step} checks${skipped ? `, ${skipped} skipped` : ""})`;
+// Считается ПРОЙДЕННОЕ, а не «выполненное». Прогон против прода 12.08.2026
+// напечатал «8 FAILED (123/125 checks)» — и вторая половина строки читается как
+// «123 прошли», хотя прошли 115. Числа в сводке о качестве не имеют права
+// требовать расшифровки.
+const summary = () => {
+  const ran = step - skipped;
+  const passed = ran - failed;
+  return `${failed === 0 ? "ALL PASS" : failed + " FAILED"}  (${passed}/${ran} passed${skipped ? `, ${skipped} skipped` : ""})`;
+};
 const ok = (n, x) => console.log(`  ${String(++step).padStart(2, "0")}  PASS  ${n}${x ? "  " + x : ""}`);
 const fail = (n, r) => { step++; failed++; console.error(`  ${String(step).padStart(2, "0")}  FAIL  ${n}${r ? "  — " + r : ""}`); };
 const assert = (c, n, r) => (c ? ok(n) : fail(n, r));
@@ -134,6 +142,140 @@ async function main() {
   // Ed25519 verify
   const ver = await jget("/api/qskyway/verify?city=nyc");
   assert(ver.status === 200 && ver.json?.valid === true && ver.json?.alg === "Ed25519", "Ed25519 twin signature verifies");
+
+  // ── heights the generator could not vouch for ─────────────────────────────
+  // A wrong height tag enters the twin as MEASURED and therefore flies with zero
+  // safety clearance: Astana carries height=382 on a 75-storey tower, 4.7x the
+  // rest of the city. The product must not present that as an ordinary fact, so
+  // the flag has to survive all the way to /city — silently dropping it is the
+  // regression this guards.
+  const asDq = (await jget("/api/qskyway/city?city=astana")).json?.dataQuality;
+  assert(Array.isArray(asDq?.suspect) && asDq.suspect.length >= 1,
+    "[astana] height that towers over the city is published, not hidden",
+    `suspect=${JSON.stringify(asDq?.suspect)}`);
+  assert((asDq?.suspect ?? []).every((o) => o.times > 1 && o.h > 0 && Number.isInteger(o.i)),
+    "[astana] each flagged height names the building and how far it stands out");
+  // The second shape of the same field, and the one the UI got wrong first: a
+  // contradiction record carries `was`/`levels` and no `times`. The page renders
+  // the two reasons differently, so an entry missing its discriminator printed
+  // "27 m (xundefined)" on Tokyo — a defect no unit test saw, because the data
+  // was right and only the pairing of shape to wording was wrong.
+  const tkDq = (await jget("/api/qskyway/city?city=tokyo")).json?.dataQuality;
+  const contradictions = (tkDq?.suspect ?? []).filter((o) => o.was !== undefined);
+  assert(contradictions.length >= 1,
+    "[tokyo] a height its own floor count contradicted is reported with what the tag claimed",
+    `suspect=${JSON.stringify(tkDq?.suspect)}`);
+  assert(contradictions.every((o) => o.levels > 0 && o.h > o.was && o.times === undefined),
+    "[tokyo] a contradiction record says was/levels and does NOT pretend to be an outlier");
+
+  // Проверка «городу нечего пометить — он молчит». До 12.08.2026 она была
+  // прибита к Нью-Йорку, а он 28.07 получил свои три записи «тег спорит со
+  // счётом этажей» (коммит bba3b3e61) — и с тех пор ежедневный смок краснел на
+  // ней при исправном продукте. Красная проверка при живой системе хуже
+  // отсутствующей: к ней привыкают. Проверяем теперь то, ради чего она писалась,
+  // и по всем городам сразу: пустого предупреждения быть не должно, а у каждой
+  // записи должен быть ровно один признак — выброс (times) ИЛИ противоречие
+  // (was/levels). Именно потеря признака когда-то напечатала «27 м (xundefined)».
+  for (const cityId of ["astana", "nyc", "tokyo"]) {
+    const dq = (await jget(`/api/qskyway/city?city=${cityId}`)).json?.dataQuality;
+    const sus = dq?.suspect;
+    assert(sus === undefined || (Array.isArray(sus) && sus.length > 0),
+      `[${cityId}] nothing to flag means no field at all, never an empty warning`,
+      `suspect=${JSON.stringify(sus)}`);
+    assert((sus ?? []).every((o) => (o.times !== undefined) !== (o.was !== undefined)),
+      `[${cityId}] every flagged height says WHY in exactly one way — outlier or self-contradiction`,
+      `suspect=${JSON.stringify(sus)}`);
+  }
+
+  // ── спорная высота против МАРШРУТОВ: два ответа, обязанные совпадать ──────
+  // До 12.08.2026 чип в шапке говорил «высоте не верим», а коридор молча на неё
+  // закладывался. Само по себе предупреждение теперь есть; здесь проверяется,
+  // что оно сходится с тем, что отдаёт движок, — иначе продукт снова начнёт
+  // отвечать по-разному в двух местах, и заметит это опять человек.
+  // Подстановка по типу застройки — вторая половина того же вопроса о доверии к
+  // высотам, и ответ у неё ДРУГОЙ: спорная высота Астаны не задевает ни одного
+  // маршрута, а подстановка — больше половины. Догадаться нельзя, поэтому мерим.
+  const hs = await jget("/api/qskyway/height-substitution?city=astana");
+  assert(hs.status === 200 && hs.json?.available === true,
+    "[astana] type-substituted heights are measured against the routes, not just listed",
+    `status=${hs.status} available=${hs.json?.available}`);
+  assert(hs.json?.buildingsUnderRoutes <= hs.json?.buildings && hs.json?.buildings > 0,
+    "[astana] buildings in the data and buildings under corridors are counted separately",
+    `${hs.json?.buildingsUnderRoutes} of ${hs.json?.buildings}`);
+  assert(hs.json?.pairs === 42 && hs.json?.affectedPairs <= hs.json?.routable,
+    "[astana] substitution impact counts both directions of every pad pair",
+    `${hs.json?.affectedPairs}/${hs.json?.routable} of ${hs.json?.pairs}`);
+
+  // Те же утверждения по ОСТАЛЬНЫМ городам. Астана здесь богатая (38
+  // подстановок), а Нью-Йорк и Токио — по одной, и это не мелочь: дефект
+  // счётчика зданий 13.08.2026 не проявлялся именно на городе с единственной
+  // подстановкой, где «одно здание» и «одна высота» неразличимы. Проверять
+  // надо и вырожденный случай, и богатый.
+  for (const c of ["nyc", "tokyo"]) {
+    const h = await jget(`/api/qskyway/height-substitution?city=${c}`);
+    assert(h.status === 200, `[${c}] substitution impact answers`, `status=${h.status}`);
+    if (h.json?.available) {
+      assert(h.json.buildingsUnderRoutes <= h.json.buildings && h.json.buildings > 0,
+        `[${c}] buildings in the data and buildings under corridors are counted separately`,
+        `${h.json.buildingsUnderRoutes} of ${h.json.buildings}`);
+      assert(h.json.affectedPairs <= h.json.routable && h.json.pairs === 42,
+        `[${c}] substitution impact counts both directions of every pad pair`,
+        `${h.json.affectedPairs}/${h.json.routable} of ${h.json.pairs}`);
+    } else {
+      // Город без подстановок — законный случай, но он обязан объясниться,
+      // а не отвечать пустым успехом.
+      assert(String(h.json?.note ?? "").length > 0,
+        `[${c}] a city without substitutions says so instead of answering blank`);
+    }
+  }
+
+  const hd = await jget("/api/qskyway/height-dispute?city=astana");
+  assert(hd.status === 200 && hd.json?.available === true,
+    "[astana] the height the twin distrusts is measured against the routes, not just displayed",
+    `status=${hd.status} available=${hd.json?.available}`);
+  assert((hd.json?.disputed ?? []).some((d) => d.publishedM > 0 && d.osm),
+    "[astana] a disputed height names the OSM object and the figure its own article publishes",
+    JSON.stringify(hd.json?.disputed));
+  assert(hd.json?.routable > 0 && hd.json.affectedPairs <= hd.json.routable,
+    "[astana] the measurement covers every routable pair",
+    `${hd.json?.affectedPairs}/${hd.json?.routable}`);
+  // Сверка ответов: сколько маршрутов САМИ признают, что подняты спорной
+  // высотой, против сетевого замера. Честно про её силу сегодня: обе стороны
+  // равны нулю, поэтому проверка ловит ЛОЖНОЕ предупреждение на рейсе (его
+  // сетевой замер не подтвердит) и не может поймать пропущенное. Станет
+  // двусторонней, как только появится хоть одна затронутая пара — например,
+  // если рядом с башней заведут площадку.
+  let disputeSeen = 0;
+  const astPads = (await jget("/api/qskyway/vertiports?city=astana")).json?.count ?? 0;
+  for (let i = 0; i < astPads; i++) for (let j = 0; j < astPads; j++) {
+    if (i === j) continue;
+    const r = await jpost("/api/qskyway/route", { from: i, to: j, city: "astana" });
+    if (r.json?.heightDispute) disputeSeen++;
+  }
+  assert(disputeSeen === hd.json?.affectedPairs,
+    "[astana] every route answers the same as the network-wide measurement",
+    `routes=${disputeSeen} measured=${hd.json?.affectedPairs}`);
+  // Та же сверка для подстановки, и она СИЛЬНЕЕ соседней: у спорной высоты обе
+  // стороны сегодня равны нулю, а здесь затронуто 23 маршрута из 42 — значит
+  // проверка ловит расхождение в обе стороны, а не только ложное срабатывание.
+  // Считаем по подписанным документам: именно они уедут регулятору, и если
+  // сводка города и бумага разойдутся, заметить это должен смок, а не читатель.
+  let substSeen = 0, substRoutes = 0;
+  for (let i = 0; i < astPads; i++) for (let j = 0; j < astPads; j++) {
+    if (i === j) continue;
+    const d = await jpost("/api/qskyway/route/justification", { from: i, to: j, city: "astana" });
+    if (!d.json?.document) continue;
+    substRoutes++;
+    if (d.json.document.substitutedHeights) substSeen++;
+  }
+  assert(substSeen === hs.json?.affectedPairs && substRoutes === hs.json?.routable,
+    "[astana] every signed document agrees with the network-wide substitution measurement",
+    `documents=${substSeen}/${substRoutes} measured=${hs.json?.affectedPairs}/${hs.json?.routable}`);
+
+  const hdTk = await jget("/api/qskyway/height-dispute?city=tokyo");
+  assert(hdTk.json?.available === false,
+    "[tokyo] a height the engine already overrode is not paraded as an open dispute",
+    `available=${hdTk.json?.available}`);
 
   // ── Tokyo (third city): no-fly exposed, avoided, twin signs + verifies ────
   const tk = await jget("/api/qskyway/city?city=tokyo");
@@ -256,7 +398,7 @@ async function main() {
   // One signed document an operator can actually file, instead of stitching
   // three responses together by hand.
   const just = await jpost("/api/qskyway/route/justification", { from: 1, to: 2, city: "nyc" });
-  assert(just.status === 200 && just.json?.document?.kind === "qskyway.route.justification/1", "[nyc] route justification issued", `status=${just.status}`);
+  assert(just.status === 200 && just.json?.document?.kind === "qskyway.route.justification/2", "[nyc] route justification issued", `status=${just.status}`);
   const jd = just.json.document;
   assert(jd.twinContentHash === cityNyc.json._signature.contentHash, "justification binds the twin actually routed over");
   assert(jd.airspace?.contentHash === asN._signature.contentHash, "justification binds the airspace edition actually obeyed");
@@ -309,7 +451,7 @@ async function main() {
   assert(gov && /демо/i.test(gov.name ?? ""), "[astana] the placeholder zone is named as a placeholder", gov?.name);
   assert(gov && /UAP28/.test(gov.realityNote ?? "") && /4\.5/.test(gov.realityNote ?? ""), "[astana] the placeholder points at the real published zone it stands in for");
   const cov = cs2.json?.airspaceCoverage ?? (await jget("/api/qskyway/cities")).json?.airspaceCoverage;
-  assert(cov?.withFeed === 3 && cov?.withCeilings === 1 && cov?.withPermissionRegime === 2, "every city now has a published rule of some kind", `feed=${cov?.withFeed} ceil=${cov?.withCeilings} perm=${cov?.withPermissionRegime}`);
+  assert(cov?.withRegulatoryLayer === 3 && cov?.withFeed === 1 && cov?.withCeilings === 1 && cov?.withPermissionRegime === 2, "every city has a published rule, and only one of them publishes a feed", `layer=${cov?.withRegulatoryLayer} feed=${cov?.withFeed} ceil=${cov?.withCeilings} perm=${cov?.withPermissionRegime}`);
   assert(Array.isArray(cov?.missing) && cov.missing.length === 0, "nothing is left claiming no regulator source", (cov?.missing ?? []).join(","));
   const justTk = await jpost("/api/qskyway/route/justification", { from: 0, to: 1, city: "tokyo" });
   assert(justTk.json?.document?.permission?.authority && /MLIT/.test(justTk.json.document.permission.authority), "[tokyo] justification carries the permission regime it must disclose");
@@ -329,7 +471,17 @@ async function main() {
 
   // The shipped Bitcoin proof: a proof nobody keeps is a proof that does not
   // exist, so the one for the edition in use must verify with no arguments.
-  const pf = await jget("/api/qskyway/airspace/proof?city=nyc");
+  // The verdict is computed on first ask, not at boot: the route has to reach the
+  // OpenTimestamps calendars, and until one answers it legitimately reports
+  // pending. Only after bitcoin-confirmed is the verdict cached. Asserting on a
+  // cold first request therefore fails on a freshly restarted server and passes
+  // on a warm one — which is a property of the clock, not of the code. Poll a
+  // bounded number of times, and let the assertions below judge the result.
+  let pf = await jget("/api/qskyway/airspace/proof?city=nyc");
+  for (let i = 0; i < 12 && pf.json?.verification?.fullyProven !== true; i++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    pf = await jget("/api/qskyway/airspace/proof?city=nyc");
+  }
   assert(pf.status === 200 && pf.json?.contentHash === asN._signature.contentHash, "[nyc] shipped proof is for the edition actually served", `${pf.status}`);
   assert(pf.json?.coversCurrentEdition === true, "[nyc] shipped proof still covers the current edition");
   assert(pf.json?.verification?.ots?.verified === true && pf.json?.verification?.ots?.status === "bitcoin-confirmed", "[nyc] shipped proof verifies against Bitcoin", `block=${pf.json?.verification?.ots?.bitcoinBlockHeight}`);
@@ -380,6 +532,19 @@ async function main() {
   assert(before.status === 200 && typeof before.json?.count === "number" && Array.isArray(before.json?.slots), "GET /slots lists the market", `count=${before.json?.count}`);
   assert(["postgres", "memory"].includes(before.json?.store), "GET /slots reports its store backend", `store=${before.json?.store}`);
   if (READ_ONLY) {
+    // Квитанцию можно проверить и без записи, если рынок не пуст: ручка только
+    // читает. Пустой рынок — законный случай, тогда честно пропускаем.
+    const any = (before.json?.slots ?? [])[0];
+    if (any) {
+      const v = await jget(`/api/qskyway/slots/${encodeURIComponent(any.id)}/verify`);
+      assert(v.status === 200 && v.json?.matches === true,
+        "receipt of an existing slot verifies against the stored record",
+        `status=${v.status} matches=${v.json?.matches}`);
+      assert(/НЕ якорь/.test(v.json?.scope ?? ""),
+        "receipt verification states it is not an external-ledger anchor");
+    } else {
+      skip("slot receipt verification", "рынок пуст — проверять нечего");
+    }
     skip("slot market capacity gate", "READ_ONLY — booking writes skipped");
     console.log(`\n${summary()}`);
     process.exit(failed === 0 ? 0 : 1);
@@ -394,6 +559,15 @@ async function main() {
   const late = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T10:00:00Z", t1: "2026-07-11T10:03:00Z", holder: "late" });
   assert(late.status === 201, "non-overlapping window bookable", `status=${late.status}`);
   assert(typeof late.json?.slot?.receipt === "string" && late.json.slot.receipt.startsWith("qright:"), "slot issues QRight receipt");
+  // Квитанция только что выданной брони обязана сходиться, а несуществующий
+  // слот — отвечать «не найден», а не «не сходится»: это разные ответы.
+  const vOk = await jget(`/api/qskyway/slots/${encodeURIComponent(late.json.slot.id)}/verify`);
+  assert(vOk.status === 200 && vOk.json?.matches === true,
+    "fresh receipt verifies against the stored record", `status=${vOk.status} matches=${vOk.json?.matches}`);
+  const vMissing = await jget("/api/qskyway/slots/slot-does-not-exist/verify");
+  assert(vMissing.status === 404,
+    "unknown slot is 'not found', not 'tampered'", `status=${vMissing.status}`);
+
   const after = await jget("/api/qskyway/slots");
   assert(after.json?.count === before.json.count + okCount + 1, "GET /slots count reflects new bookings", `${before.json.count} → ${after.json?.count}`);
   assert(after.json.slots.some((s) => s.id === late.json.slot.id), "GET /slots list includes the just-booked slot");

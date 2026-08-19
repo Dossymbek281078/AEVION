@@ -88,6 +88,68 @@ const PAGES = [
   // ровно так же, как пропажа /go в июле.
   "/devhub/launch",           // запуск 13.09, самый дорогой чек платформы
   "/multichat-engine/launch", // запуск 20.09
+  // Добавлено 19.08.2026. Замер покрытия: сторож смотрел 39 публичных
+  // страниц верхнего уровня из 92 — то есть был зелёным, наблюдая меньше
+  // половины сайта. Среди невидимых оказались условия и приватность (их
+  // чинили в тот же день), поддержка, магазин, страница состояния и почти
+  // все страницы модулей: сломайся любая, узнали бы от посетителя.
+  //
+  // Все 53 проверены ПЕРЕД добавлением: 200, больше 5000 байт, бренд на
+  // месте. Сторож, который краснеет с первого дня, отключают в тот же день,
+  // поэтому список не «на будущее», а по факту.
+  "/account",
+  "/aev",
+  "/agent",
+  "/api-explorer",
+  "/auth",
+  "/changelog",
+  "/coach",
+  "/data-deletion",
+  "/deepsan",
+  "/demo",
+  "/developers",
+  "/ecosystem",
+  "/fintech",
+  "/healthai",
+  "/help",
+  "/keys",
+  "/kids-ai-content",
+  "/launch-status",
+  "/lifebox",
+  "/mapreality",
+  "/modules",
+  "/payments",
+  "/pilot",
+  "/press",
+  "/privacy",
+  "/psyapp-deps",
+  "/qai",
+  "/qfusionai",
+  "/qgood",
+  "/qjobs",
+  "/qlearn",
+  "/qlife",
+  "/qmedia",
+  "/qnews",
+  "/qpersona",
+  "/qreal",
+  "/qstore",
+  "/qtradeoffline",
+  "/quantum-shield",
+  "/reconstruct-demo",
+  "/sdk",
+  "/sdks",
+  "/security",
+  "/shadownet",
+  "/startup-exchange",
+  "/status",
+  "/support",
+  "/terms",
+  "/tiktok-publisher",
+  "/ventures",
+  "/verify-offline",
+  "/voice-of-earth",
+  "/z-tide",
 ];
 
 let pass = 0;

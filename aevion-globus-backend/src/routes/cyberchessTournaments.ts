@@ -573,6 +573,26 @@ function mkPlayer(name: string, rating: number, idx: number): Player {
   };
 }
 
+
+/**
+ * Дата заготовки — ОТНОСИТЕЛЬНО сегодняшнего дня, а не зашитая.
+ *
+ * Замер 19.08.2026 на проде: семь турниров из двенадцати числились
+ * «предстоящими», а время старта у них прошло 88–94 дня назад. Даты были
+ * записаны в мае и с тех пор протухли. Человек, открывший страницу, видит
+ * «Скоро» и дату из мая — и справедливо решает, что здесь всё заброшено.
+ *
+ * Зашитая дата в образце протухает ВСЕГДА, вопрос только когда. Поэтому она
+ * считается от текущего момента, а смысл статуса сохраняется: предстоящий
+ * турнир в будущем, идущий начался недавно, завершённый — в прошлом.
+ *
+ * @param часов смещение от сейчас: отрицательное — в прошлое.
+ */
+function seedDate(часов: number): string {
+  return new Date(Date.now() + часов * 3600_000).toISOString();
+}
+
+
 function buildSeedFixtures(): Tournament[] {
   // --- single elimination #1 (legacy) ---
   const elim1: Tournament = {
@@ -586,7 +606,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 128,
     prizeChessy: 50_000,
     status: "upcoming",
-    startsAt: "2026-05-18T19:00:00Z",
+    startsAt: seedDate(3 * 24 + 5),
     description: "Открытый блиц-турнир с накопительным призовым фондом в Chessy.",
     registeredUserIds: [],
     roster: [],
@@ -606,7 +626,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 64,
     prizeChessy: 25_000,
     status: "live",
-    startsAt: "2026-05-15T18:30:00Z",
+    startsAt: seedDate(-2),
     description: "Еженедельный рапид-турнир. Идёт прямо сейчас.",
     registeredUserIds: [],
     roster: [],
@@ -637,7 +657,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 16,
     prizeChessy: 40_000,
     status: "live",
-    startsAt: "2026-05-16T18:00:00Z",
+    startsAt: seedDate(-1),
     description: "Швейцарка на 5 туров с buchholz-тайбрейком.",
     swissRounds: 5,
     currentRound: 1,
@@ -683,7 +703,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 32,
     prizeChessy: 18_000,
     status: "upcoming",
-    startsAt: "2026-05-22T20:00:00Z",
+    startsAt: seedDate(6 * 24 + 6),
     description: "7 туров швейцарки, блиц 3+2.",
     swissRounds: 7,
     currentRound: 0,
@@ -716,7 +736,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 8,
     prizeChessy: 120_000,
     status: "live",
-    startsAt: "2026-05-14T12:00:00Z",
+    startsAt: seedDate(-3),
     description: "Полный круг 8 игроков, классический контроль.",
     currentRound: 1,
     registeredUserIds: [],
@@ -746,7 +766,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 6,
     prizeChessy: 22_000,
     status: "upcoming",
-    startsAt: "2026-05-19T16:00:00Z",
+    startsAt: seedDate(4 * 24 + 2),
     description: "6 игроков, круговая система, рапид 10+5.",
     currentRound: 0,
     registeredUserIds: [],
@@ -768,7 +788,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 32,
     prizeChessy: 120_000,
     status: "live",
-    startsAt: "2026-05-14T12:00:00Z",
+    startsAt: seedDate(-3),
     registeredUserIds: [],
     roster: [],
     rounds: buildLegacyElimRounds(),
@@ -786,7 +806,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 256,
     prizeChessy: 15_000,
     status: "upcoming",
-    startsAt: "2026-05-16T21:00:00Z",
+    startsAt: seedDate(1 * 24 + 6),
     registeredUserIds: [],
     roster: [],
     rounds: [],
@@ -804,7 +824,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 64,
     prizeChessy: 35_000,
     status: "upcoming",
-    startsAt: "2026-05-20T17:00:00Z",
+    startsAt: seedDate(5 * 24 + 3),
     registeredUserIds: [],
     roster: [],
     rounds: [],
@@ -822,7 +842,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 16,
     prizeChessy: 80_000,
     status: "finished",
-    startsAt: "2026-04-30T15:00:00Z",
+    startsAt: seedDate(-7 * 24),
     registeredUserIds: [],
     roster: [],
     rounds: buildLegacyElimRounds(),
@@ -840,7 +860,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 64,
     prizeChessy: 5_000,
     status: "upcoming",
-    startsAt: "2026-05-17T14:00:00Z",
+    startsAt: seedDate(2 * 24 + 4),
     registeredUserIds: [],
     roster: [],
     rounds: [],
@@ -866,7 +886,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 8,
     prizeChessy: 1_000,
     status: "upcoming",
-    startsAt: "2026-05-19T18:00:00Z",
+    startsAt: seedDate(4 * 24 + 6),
     description: "Демо-турнир с реальными игроками. Регистрация открыта.",
     swissRounds: 3,
     currentRound: 0,
@@ -1353,6 +1373,40 @@ function resolveRating(t: Tournament, playerId: string | null | undefined): numb
  * Errors are isolated per-pairing — one failure must not abort the
  * whole round.
  */
+
+/**
+ * Обновляет даты ОБРАЗЦОВ из кода после подъёма состояния из базы.
+ *
+ * Зачем отдельный шаг. Даты заготовок стали относительными, но на проде они
+ * лежат В БАЗЕ, записанные в мае: правка кода их не касается. Замер 19.08.2026:
+ * семь турниров из двенадцати числились «предстоящими» с временем старта
+ * 88–94 дня назад, и человек видел заброшенный раздел.
+ *
+ * Что трогаем и чего НЕ трогаем — граница важна:
+ *   • только `origin === "seed"` — образцы принадлежат коду, а не людям;
+ *   • только `startsAt` — регистрации, сетка, счёт и статус остаются как есть;
+ *   • турниры, заведённые людьми (`origin === "user"`), не трогаются ВООБЩЕ.
+ *
+ * Без этой границы обновление превратилось бы в перезапись чужих данных.
+ */
+function refreshSeedDates(): void {
+  const свежие = new Map(buildSeedFixtures().map((t) => [t.id, t.startsAt]));
+  let обновлено = 0;
+  for (const t of TOURNAMENTS) {
+    if (t.origin !== "seed") continue;
+    const дата = свежие.get(t.id);
+    if (!дата || дата === t.startsAt) continue;
+    t.startsAt = дата;
+    обновлено += 1;
+  }
+  if (обновлено > 0) {
+    savedAtMs = Date.now();
+    tryWriteToDisk();
+    void saveToDb(TOURNAMENTS, savedAtMs);
+    console.log(`[cyberchess-tournaments] обновлены даты образцов: ${обновлено}`);
+  }
+}
+
 function publishRoundToMatchmaking(t: Tournament, matches: BracketMatch[]): void {
   if (!t.realPlayers) return;
   const mmTc = mapTimeControl(t.timeControl);
@@ -1445,6 +1499,7 @@ const storeReady: Promise<void> = (async () => {
     if (typeof t.realPlayers === "undefined") t.realPlayers = false;
     if (typeof t.origin === "undefined") t.origin = t.id.startsWith("usr-") ? "user" : "seed";
   }
+  refreshSeedDates();
   console.log(`[cyberchess-tournaments] состояние взято из базы (${TOURNAMENTS.length} турниров) — она свежее файла`);
 })().catch((e) => {
   console.error("[cyberchess-tournaments] догрузка из базы не удалась, остаёмся на файле:", (e as Error).message);

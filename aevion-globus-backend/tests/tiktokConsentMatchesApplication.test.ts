@@ -115,3 +115,39 @@ describe("TikTok consent asks for what the application declares", () => {
     expect(res.body.redirectUri).not.toMatch(/\.up\.railway\.app/);
   });
 });
+
+describe("commercial content disclosure", () => {
+  // The application tells the reviewer that branded content which leaves no
+  // usable privacy level is refused with an explanation, rather than quietly
+  // downgraded. Until 19.08.2026 the product did neither: it had no disclosure
+  // at all, so the sentence described nothing.
+  test("branded content plus SELF_ONLY is refused, and the reason names both sides", async () => {
+    const { disclosureConflict } = await import("../src/routes/tiktok");
+    const reason = disclosureConflict({
+      privacyLevel: "SELF_ONLY",
+      brandedContent: true,
+    });
+    expect(reason).toBeTruthy();
+    // A refusal the creator cannot act on is only half a refusal, so the text
+    // has to name the two settings that conflict.
+    expect(reason).toMatch(/SELF_ONLY/);
+    expect(reason).toMatch(/branded content/i);
+  });
+
+  test("branded content with a public audience is allowed", async () => {
+    const { disclosureConflict } = await import("../src/routes/tiktok");
+    expect(
+      disclosureConflict({ privacyLevel: "PUBLIC_TO_EVERYONE", brandedContent: true }),
+    ).toBeNull();
+  });
+
+  test("a private post that is NOT branded content stays allowed", async () => {
+    // Guards the obvious over-correction: refusing every SELF_ONLY post would
+    // break the safest path we have, which is exactly what unapproved apps are
+    // restricted to.
+    const { disclosureConflict } = await import("../src/routes/tiktok");
+    expect(
+      disclosureConflict({ privacyLevel: "SELF_ONLY", brandedContent: false }),
+    ).toBeNull();
+  });
+});

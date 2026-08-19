@@ -89,6 +89,28 @@ type TikTokConfig = {
   configured: boolean;
 };
 
+/**
+ * Which commercial-content disclosure combinations TikTok will accept.
+ *
+ * Exported because the rule is the part worth testing, and inside the route it
+ * sits behind ensureToken() — unreachable without a live session, which is how
+ * it went unwritten in the first place.
+ *
+ * Returns null when the combination is allowed, or the reason it is not.
+ */
+export function disclosureConflict(opts: {
+  privacyLevel: string;
+  brandedContent: boolean;
+}): string | null {
+  if (opts.brandedContent && opts.privacyLevel === "SELF_ONLY") {
+    return (
+      "Branded content cannot be posted with the SELF_ONLY privacy level. " +
+      "Choose a public audience, or turn off the branded content disclosure."
+    );
+  }
+  return null;
+}
+
 function getConfig(): TikTokConfig {
   const clientKey = process.env.TIKTOK_CLIENT_KEY?.trim() || "";
   const clientSecret = process.env.TIKTOK_CLIENT_SECRET?.trim() || "";
@@ -379,12 +401,30 @@ tiktokRouter.post("/publish", async (req, res) => {
     disableComment = false,
     disableDuet = false,
     disableStitch = false,
+    // Commercial content disclosure. brandOrganic = "promoting my own brand";
+    // brandedContent = "promoting a third party in a paid partnership". They
+    // are independent: a creator may declare either, both, or neither.
+    brandOrganic = false,
+    brandedContent = false,
   } = (req.body || {}) as Record<string, any>;
   if (!videoUrl || typeof videoUrl !== "string") {
     return res.status(400).json({ error: "video_url_required" });
   }
   if (!privacyLevel || typeof privacyLevel !== "string") {
     return res.status(400).json({ error: "privacy_level_required" });
+  }
+  // Branded content may not be private. TikTok rejects the combination, and a
+  // tool that silently downgraded the privacy the creator picked would be
+  // publishing something they did not agree to — so refuse and say which two
+  // choices conflict, rather than choosing for them.
+  const conflict = disclosureConflict({
+    privacyLevel,
+    brandedContent: !!brandedContent,
+  });
+  if (conflict) {
+    return res
+      .status(400)
+      .json({ error: "branded_content_cannot_be_private", message: conflict });
   }
   try {
     const r = await fetch(PUBLISH_INIT_URL, {
@@ -400,6 +440,11 @@ tiktokRouter.post("/publish", async (req, res) => {
           disable_comment: !!disableComment,
           disable_duet: !!disableDuet,
           disable_stitch: !!disableStitch,
+          // Sent on every post, not only when true: TikTok reads the absence
+          // of these flags as "not commercial", so omitting them when the
+          // creator said yes is an undisclosed ad, not a missing field.
+          brand_organic_toggle: !!brandOrganic,
+          brand_content_toggle: !!brandedContent,
         },
         source_info: { source: "PULL_FROM_URL", video_url: videoUrl },
       }),

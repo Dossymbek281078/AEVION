@@ -321,10 +321,28 @@ async function callSSE(path, body) {
   if (waitlistBad.status === 400) ok("POST /waitlist/subscribe invalid email → 400");
   else fail("POST /waitlist/subscribe invalid email → 400", `status ${waitlistBad.status}`);
 
-  // Waitlist — valid email
-  const waitlistOk = await call("POST", "/api/constitution/waitlist/subscribe", { body: { email: `smoke-${ts}@test.aevion.app`, source: "smoke" } });
+  // Waitlist — valid email.
+  //
+  // Адрес ПОСТОЯННЫЙ, а не `smoke-${ts}@…`. Прежняя версия при каждом прогоне
+  // заводила новую строку в боевой таблице подписчиков и никогда её не убирала:
+  // к 19.08.2026 там накопилось 233 таких строки при примерно 12 настоящих
+  // подписчиках. Цена не в замусоренном счётчике, а в том, что вставка шлёт
+  // письмо-подтверждение через Brevo (ключ на проде выставлен), а выгрузка для
+  // недельной рассылки берёт таблицу целиком, без отбора. При потолке тарифа в
+  // 300 писем в сутки настоящий список утонул бы в служебных адресах.
+  //
+  // Повтор того же адреса ручка принимает так же (ON CONFLICT DO UPDATE → 201),
+  // поэтому проверка не ослабла — наоборот, ниже добавлено утверждение об
+  // идемпотентности, которого раньше не было ни у кого.
+  const SMOKE_EMAIL = "smoke-fixed@test.aevion.app";
+  const waitlistOk = await call("POST", "/api/constitution/waitlist/subscribe", { body: { email: SMOKE_EMAIL, source: "smoke" } });
   if (waitlistOk.status === 201 && waitlistOk.json?.ok) ok("POST /waitlist/subscribe valid email → 201");
   else fail("POST /waitlist/subscribe valid email → 201", `status ${waitlistOk.status}`);
+
+  // Waitlist — повтор не заводит второго подписчика и не отвергается.
+  const waitlistAgain = await call("POST", "/api/constitution/waitlist/subscribe", { body: { email: SMOKE_EMAIL, source: "smoke" } });
+  if (waitlistAgain.status === 201 && waitlistAgain.json?.ok) ok("POST /waitlist/subscribe повтор того же адреса → 201, без второй строки");
+  else fail("POST /waitlist/subscribe повтор того же адреса → 201", `status ${waitlistAgain.status}`);
 
   // Artifact publish — missing signature
   const artifactNoSig = await call("POST", "/api/planet/constitution-artifacts", {

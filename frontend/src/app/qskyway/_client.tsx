@@ -1244,8 +1244,13 @@ export default function QSkywayClient() {
                             что человек здесь читает о полёте. */}
                         {padBan && (
                           <div style={{ color: "#fb7185", fontSize: 10, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                            {/* Кнопки объяснения здесь НЕТ намеренно. Запрет городской:
+                                правило одно и то же для всех площадок, и повторять его в
+                                каждой карточке значит поставить второй «?» рядом с
+                                предыдущим (у площадок Астаны истинны оба условия сразу).
+                                Само правило открывается нажатием ОДИН раз — в легенде
+                                карты, где оно и относится ко всему городу. */}
                             🚫 {t("qskyway.pad.prohibited", { authority: padBan.authority })}
-                            <InfoTip label={t("qskyway.pad.cityProhibited")} text={padBan.rule} size={11} />
                           </div>
                         )}
                       </div>

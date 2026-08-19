@@ -1036,24 +1036,24 @@ export default function QSkywayClient() {
 
             <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <section style={card}>
-                <div style={cardH}>Профиль высот рейса</div>
+                <div style={cardH}>{t("qskyway.panel.heightProfile")}</div>
                 <canvas ref={profRef} style={{ display: "block", width: "100%", height: 190, background: "#0a121d" }} />
               </section>
               <section style={card}>
-                <div style={cardH}>Телеметрия</div>
+                <div style={cardH}>{t("qskyway.panel.telemetry")}</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: "#1e2836" }}>
                   {([
-                    ["Дистанция", stats.distKm + " км"],
-                    ["Крейсер. высота", stats.cruiseAlt + " м"],
-                    ["Расч. время", stats.etaStill == null ? stats.eta + " мин" : (
+                    [t("qskyway.tel.distance"), stats.distKm + " " + t("qskyway.unit.km")],
+                    [t("qskyway.tel.cruiseAlt"), stats.cruiseAlt + " " + t("qskyway.unit.m")],
+                    [t("qskyway.tel.eta"), stats.etaStill == null ? stats.eta + " " + t("qskyway.unit.min") : (
                       <>
-                        {stats.eta} мин
+                        {stats.eta} {t("qskyway.unit.min")}
                         <span style={{ fontSize: 11, fontWeight: 400, color: "#5f7086", marginLeft: 5 }}>
-                          ({stats.eta - stats.etaStill >= 0 ? "+" : ""}{(stats.eta - stats.etaStill).toFixed(2)} ветер)
+                          ({stats.eta - stats.etaStill >= 0 ? "+" : ""}{(stats.eta - stats.etaStill).toFixed(2)} {t("qskyway.tel.windSuffix")})
                         </span>
                       </>
                     )],
-                    ["Разведено бортов", String(stats.conflicts)],
+                    [t("qskyway.tel.separated"), String(stats.conflicts)],
                     // Две цифры рядом, и это не дублирование. Первая считает все
                     // участки, включая открытую землю (её высота известна — там
                     // ничего не стоит), вторая — только те, где под крылом
@@ -1061,15 +1061,20 @@ export default function QSkywayClient() {
                     // ноль: городского обмера нет ни у одного дома. Одна первая
                     // читалась как «с высотами всё хорошо» и спорила с чипом
                     // города «0% обмерено» — замер 12.08.2026.
-                    ["Увер. высоты (маршрут)", stats.heightConfidencePct == null ? "—" : (
+                    [t("qskyway.tel.heightConfidence"), stats.heightConfidencePct == null ? "—" : (
                       <>
                         {stats.heightConfidencePct}%
-                        {stats.obstacleSegments != null && stats.obstacleSegments > 0 && (
+                        {/* Условие тут одно, а было два: сама функция отдаёт null
+                            ровно при отсутствии участков, и отдельная проверка
+                            `obstacleSegments > 0` её дублировала. TypeScript
+                            дубликат не связывал и требовал разбирать null там,
+                            где он недостижим. */}
+                        {measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) != null && (
                           <span
                             title={`Из ${stats.obstacleSegments} участков со зданием под крылом на обмеренной городом высоте стоят ${stats.measuredObstacleSegments ?? 0}. Остальные — вывод из тега или счёта этажей OSM, либо слепой дефолт; за неуверенность коридор платит запасом по высоте.`}
                             style={{ fontSize: 11, fontWeight: 400, color: (stats.measuredObstacleSegments ?? 0) === 0 ? "#fbbf24" : "#5f7086", marginLeft: 5, cursor: "help" }}
                           >
-                            (по зданиям {measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments)}%)
+                            {t("qskyway.tel.byBuildings", { pct: measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) ?? 0 })}
                           </span>
                         )}
                       </>

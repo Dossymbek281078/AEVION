@@ -254,7 +254,8 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   // Аварийный выключатель: GUMROAD_VERIFY_SALES=0.
   const signatureEnforced = Boolean(process.env.GUMROAD_WEBHOOK_SECRET);
   if (!signatureEnforced && process.env.GUMROAD_VERIFY_SALES !== "0") {
-    const { verdict, sale } = await verifyGumroadSaleDetailed(saleId);
+    // eslint-disable-next-line prefer-const
+    let { verdict, sale } = await verifyGumroadSaleDetailed(saleId);
     // Флаг, а не ранний выход. Причина техническая и важная: освобождение
     // ключа дедупликации живёт в ОДНОЙ строке ниже, и ветка
     // launch/2026-08-30 заменяет её на общий модуль (`releaseWebhookKey`),
@@ -286,14 +287,20 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         claimMismatch = "product";
     }
 
+    // Несовпадение заявки ПРИРАВНИВАЕТСЯ к «такой продажи нет»: продажи,
+    // отвечающей этой заявке, действительно не существует. Так блок отказа
+    // ниже остаётся байт в байт как в main — а его переписывает ветка
+    // launch/2026-08-30, переводя освобождение ключа на общий модуль.
+    // Точная причина уходит в Sentry выше, наружу её не отдаём.
     if (claimMismatch) {
       console.warn(`[gumroad/webhook] ${claimMismatch} в пинге не совпал с продажей ${saleId} — отказ`);
       capture(new Error(`gumroad_ping_${claimMismatch}_mismatch`), { route: "gumroad/webhook" });
+      verdict = "not_found";
     }
-    if (verdict === "not_found" || claimMismatch) {
-      if (!claimMismatch) console.warn(`[gumroad/webhook] sale ${saleId} not found in Gumroad API — rejecting 401`);
+    if (verdict === "not_found") {
+      console.warn(`[gumroad/webhook] sale ${saleId} not found in Gumroad API — rejecting 401`);
       SEEN.delete(dedupKey); // не занимать ключ отклонённым пингом
-      return res.status(401).json({ ok: false, error: claimMismatch ? "claim_mismatch" : "sale_not_found" });
+      return res.status(401).json({ ok: false, error: "sale_not_found" });
     }
     if (verdict === "unverifiable") {
       console.warn(

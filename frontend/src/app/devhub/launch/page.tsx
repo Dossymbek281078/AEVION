@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import paper from "@/styles/aevionPaper.module.css";
-import { probeLive } from "@/lib/probeLive";
+import { probeJson } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 
@@ -70,11 +70,18 @@ export default async function DevhubLaunchPage({
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
-  const [tplUp, agentsUp, mediaUp] = await Promise.all([
-    probeLive("/api/devhub/templates"),
-    probeLive("/api/devhub/agent/templates"),
-    probeLive("/api/devhub/media/video/models"),
+  // Обещание опирается на СОДЕРЖИМОЕ ответа, а не на то, что маршрут ответил:
+  // пустой список начал тоже вернул бы 200, а каталог видеомоделей отдаётся
+  // статически всегда и сам сообщает, настроен ли провайдер (`configured`).
+  const [tpl, agents, media] = await Promise.all([
+    probeJson<{ templates?: unknown[] }>("/api/devhub/templates"),
+    probeJson<{ templates?: unknown[] }>("/api/devhub/agent/templates"),
+    probeJson<{ models?: unknown[]; configured?: boolean }>("/api/devhub/media/video/models"),
   ]);
+  const tplUp = Array.isArray(tpl?.templates) && tpl.templates.length > 0;
+  const agentsUp = Array.isArray(agents?.templates) && agents.templates.length > 0;
+  // Каталог без ключа провайдера — не возможность, а список названий.
+  const mediaUp = media?.configured === true && Array.isArray(media.models) && media.models.length > 0;
 
   // Метка канала — та же механика, что на посадочных бюро, шахмат и мультичата:
   // без неё после запуска не ответить, какой источник привёл людей именно сюда.

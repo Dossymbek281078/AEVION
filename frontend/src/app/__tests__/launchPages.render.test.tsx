@@ -59,7 +59,29 @@ afterEach(() => {
  * неверный пакет, и заодно проверяется, что страница считает его живым.
  */
 function stubProdAlive() {
-  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ status: 400, ok: false } as Response)));
+  // Подмена отдаёт ТЕЛО, а не только статус. Так теперь работают обе пробы:
+  // probeLive различает случаи по телу (один и тот же 404 бывает и живым, и
+  // мёртвым), а probeJson читает содержимое — пустой список начал тоже дал бы 200,
+  // и обещание «работает» опиралось бы на факт ответа, а не на факт наличия.
+  //
+  // `configured: true` здесь обязателен: каталог видеомоделей отдаётся статически
+  // всегда, и единственный настоящий признак — этот флаг из тела.
+  const body = JSON.stringify({
+    templates: [{ id: "next-app" }],
+    models: [{ id: "video-1" }],
+    configured: true,
+    error: "not_a_receipt",
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() =>
+      Promise.resolve({
+        status: 400,
+        ok: false,
+        text: () => Promise.resolve(body),
+      } as unknown as Response),
+    ),
+  );
 }
 
 /** Прод недоступен — пробы падают в catch. Страница обязана отрисоваться всё равно. */
@@ -282,4 +304,49 @@ describe("неподтверждённая дата запуска не попа
       for (const f of fields) expect(MONTHS.test(String(f))).toBe(false);
     });
   }
+});
+
+describe("обещание опирается на содержимое, а не на факт ответа", () => {
+  // Суть починки 19.08.2026. Каталог видеомоделей отдаётся СТАТИЧЕСКИ всегда и сам
+  // сообщает `configured: !!REPLICATE_API_TOKEN`. Прежняя проба читала только
+  // живость, поэтому страница обещала бы «картинки, видео и голос внутри» и без
+  // ключа провайдера — на странице, которая клянётся, что отметка ставится по
+  // ответу боевого сервера.
+
+  function stubProd(body: Record<string, unknown>) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          status: 200,
+          ok: true,
+          text: () => Promise.resolve(JSON.stringify(body)),
+        } as unknown as Response),
+      ),
+    );
+  }
+
+  test("ключ провайдера не задан — на одну метку «работает» меньше", async () => {
+    stubProd({ templates: [{ id: "a" }], models: [{ id: "m" }], configured: true });
+    const withKey = statusMarks(await renderLaunch("devhub")).filter((m) => m === "работает").length;
+
+    vi.unstubAllGlobals();
+    stubProd({ templates: [{ id: "a" }], models: [{ id: "m" }], configured: false });
+    const without = statusMarks(await renderLaunch("devhub")).filter((m) => m === "работает").length;
+
+    // Сравнение, а не абсолютное число: оно не сломается от добавления шага.
+    expect(without).toBe(withKey - 1);
+  });
+
+  test("пустой список начал — обещание про готовые начала не ставится", async () => {
+    stubProd({ templates: [], models: [{ id: "m" }], configured: true });
+    const marks = statusMarks(await renderLaunch("devhub")).filter((m) => m === "работает").length;
+
+    vi.unstubAllGlobals();
+    stubProd({ templates: [{ id: "a" }], models: [{ id: "m" }], configured: true });
+    const full = statusMarks(await renderLaunch("devhub")).filter((m) => m === "работает").length;
+
+    // Пустой список бьёт по двум шагам: начала и сценарии читают одно и то же поле.
+    expect(marks).toBeLessThan(full);
+  });
 });

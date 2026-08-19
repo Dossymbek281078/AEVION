@@ -56,6 +56,41 @@ export async function probeLive(path: string, init?: RequestInit): Promise<boole
 }
 
 /**
+ * Читает ответ пробы как JSON — чтобы обещание опиралось на СОДЕРЖИМОЕ, а не на то,
+ * что маршрут ответил.
+ *
+ * Зачем помимо `probeLive`. Живость доказывает, что путь ведёт к обработчику. Но
+ * посадочная обещает человеку возможность, а не маршрут, и здесь наличие ответа не
+ * равно наличию содержимого:
+ *
+ *   /api/devhub/templates            — пустой список тоже 200, а начал бы не было;
+ *   /api/devhub/media/video/models   — отдаёт СТАТИЧЕСКИЙ каталог всегда и сам
+ *                                      сообщает `configured: !!REPLICATE_API_TOKEN`.
+ *                                      То есть 200 не говорит о генерации ничего, а
+ *                                      настоящий ответ лежит в теле.
+ *
+ * Замер 19.08.2026: на проде `configured: true`, моделей 6 — обещание верно
+ * сегодня. Но проба его не читала, поэтому уберите токен, и страница продолжила бы
+ * обещать; а она прямым текстом говорит, что отметка ставится по ответу боевого
+ * сервера. Это тот же класс, что «наличие ≠ содержимое».
+ *
+ * Возвращает `null` при любом сомнении — мертво, стена, не-JSON, сетевая ошибка.
+ * Вызывающий обязан трактовать `null` как «не подтвердилось», а не как пустоту.
+ */
+export async function probeJson<T>(path: string, init?: RequestInit): Promise<T | null> {
+  try {
+    const r = await fetch(`${getApiBase()}${path}`, { ...init, next: { revalidate: 1800 } });
+    const body = typeof r.text === "function" ? await r.text() : "";
+    if (!body) return null;
+    if (/Cannot (GET|POST|PUT|DELETE|PATCH)/i.test(body)) return null;
+    if (/"error"\s*:\s*"upgrade_required"/.test(body)) return null;
+    return JSON.parse(body) as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Сколько дней осталось до даты запуска.
  *
  * Считается по UTC-полуночи с обеих сторон: иначе страница, собранная вечером,

@@ -74,7 +74,7 @@ const EXAMPLE_HINTS = /(\.md$|\.test\.|__tests__|\.example|\.sample|fixtures?\/)
 // настоящим оказалось одно, три были `dev-only-key`, `change-in-prod` и
 // `0123456789abcdef…`. Без этого отсева сканер тонет в собственном шуме и его
 // перестают читать.
-const PLACEHOLDER_HINTS = /(dev-only|change-?in-?prod|changeme|placeholder|example|sample|dummy|your-|test-key|fake|0123456789|abcdef0123|deadbeef|xxxx|\.\.\.)/i;
+const PLACEHOLDER_HINTS = /(dev-only|change-?in-?prod|changeme|placeholder|example|sample|dummy|your-|test-key|fake|0123456789|abcdef0123|fedcba98|76543210|deadbeef|xxxx|\.\.\.)/i;
 
 const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
 

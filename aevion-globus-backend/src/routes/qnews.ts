@@ -194,7 +194,11 @@ qnewsRouter.get("/trending", async (_req: Request, res: Response) => {
 // ─── GET /api/qnews/articles ─────────────────────────────────────────────────
 qnewsRouter.get("/articles", async (req: Request, res: Response) => {
   const { category, q, limit } = req.query as Record<string, string | undefined>;
-  const limitN = Math.min(Number(limit) || 20, 100);
+  // Тот же класс, что 40 мест выше, но в другой одежде: limit разбирается из
+  // req.query ЗАРАНЕЕ, и в этой строке его происхождения уже не видно. Мой
+  // первый шаблон искал `req.query.limit` рядом с Math.min и три таких места
+  // пропустил — нашлись они только по ошибкам с прода.
+  const limitN = Math.min(Math.max(Number(limit) || 20, 1), 100);
 
   try {
     if (isQNewsDbReady()) {

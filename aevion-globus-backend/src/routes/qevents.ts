@@ -99,7 +99,11 @@ qeventsRouter.get("/categories", (_req: Request, res: Response) => {
 // Query: ?category=&location=&limit=&when=upcoming|past|all (default upcoming)
 qeventsRouter.get("/events", async (req: Request, res: Response) => {
   const { category, location, limit, when } = req.query as Record<string, string | undefined>;
-  const limitN = Math.min(Number(limit) || 20, 100);
+  // Тот же класс, что 40 мест выше, но в другой одежде: limit разбирается из
+  // req.query ЗАРАНЕЕ, и в этой строке его происхождения уже не видно. Мой
+  // первый шаблон искал `req.query.limit` рядом с Math.min и три таких места
+  // пропустил — нашлись они только по ошибкам с прода.
+  const limitN = Math.min(Math.max(Number(limit) || 20, 1), 100);
   const now = new Date().toISOString();
   const whenFilter = (when ?? "upcoming").toLowerCase();
 

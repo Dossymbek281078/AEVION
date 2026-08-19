@@ -26,14 +26,25 @@ const ROOT = join(__dirname, "..", "src", "routes");
 
 /** Строки, где limit из запроса зажимается только сверху. */
 function halfBounded(src: string): string[] {
+  // Файл, где limit пришёл ДЕСТРУКТУРИЗАЦИЕЙ, проверяем целиком: в самой строке
+  // `req.query` тогда нет. Три места (qjobs, qevents, qnews) прятались именно
+  // так и нашлись только по живым 500 с прода — через сутки после того, как я
+  // объявил класс закрытым.
+  const destructured = /const\s*\{[^}]*\blimit\b[^}]*\}\s*=\s*req\.query/.test(src);
   return src.split("\n").filter((l) => {
+    // Комментарии — не код. Проверка краснела на объяснении, написанном рядом с
+    // починкой: в нём стояли и `req.query.limit`, и `Math.min`. Сканер, читающий
+    // примеры в комментариях, — отдельный класс ложных срабатываний.
+    const t = l.trim();
+    if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return false;
     if (!/\blimit\b/i.test(l)) return false;
-    if (!/req\.query/.test(l)) return false;
+    if (!/req\.query/.test(l) && !destructured) return false;
     const hasUpper = /Math\.min/.test(l);
     const hasLower = /Math\.max/.test(l);
     return hasUpper && !hasLower;
   }).map((l) => l.trim());
 }
+
 
 describe("постраничный вывод зажат с обеих сторон", () => {
   test("контроль: проверка умеет отличать зажатое от незажатого", () => {

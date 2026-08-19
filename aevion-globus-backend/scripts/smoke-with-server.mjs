@@ -97,9 +97,14 @@ async function waitForHealth(timeoutMs = START_TIMEOUT_MS) {
 // (так и было — два падения из четырёх) и зеленеет на сломанном, если поломку
 // внесли после последней сборки.
 //
-// Поэтому по умолчанию собираем, а не предупреждаем: предупреждение в длинном
-// логе никто не читает, а смоук по трёхнедельной сборке бесполезен целиком.
-// Отключить: SMOKE_BUILD=0.
+// Первая версия собирала САМА, по умолчанию. Пришлось передумать: в этом
+// репозитории шесть файлов dist ЛЕЖАТ ПОД КОНТРОЛЕМ ВЕРСИЙ (последний коммит
+// 21.07), и сборка их меняет. Обёртка проверок, молча правящая отслеживаемые
+// файлы, — это подмена: у человека внезапно грязное дерево, а переключение
+// веток отбивается. Поймал на себе: из-за этого не прошёл перенос коммитов.
+//
+// Поэтому предупреждаем, и предупреждение делаем таким, чтобы его нельзя было
+// принять за шум: оно называет РАЗРЫВ и последствие. Собрать — SMOKE_BUILD=1.
 function newestMtime(dir) {
   let newest = 0;
   const walk = (d) => {
@@ -114,7 +119,7 @@ function newestMtime(dir) {
   return newest;
 }
 
-if (process.env.SMOKE_BUILD !== "0") {
+if (true) {
   const srcAt = newestMtime(join(ROOT, "src"));
   const distAt = newestMtime(join(ROOT, "dist"));
   if (srcAt > distAt) {
@@ -124,11 +129,20 @@ if (process.env.SMOKE_BUILD !== "0") {
       gapMs >= 86_400_000 ? `${Math.round(gapMs / 86_400_000)} дн.`
       : gapMs >= 3_600_000 ? `${Math.round(gapMs / 3_600_000)} ч`
       : `${Math.max(1, Math.round(gapMs / 60_000))} мин`;
-    console.log(`[smoke] dist отстал от src на ~${gap} — пересобираю`);
-    const r = spawnSync("npm run build", { shell: true, cwd: ROOT, stdio: "inherit" });
-    if (r.status !== 0) {
-      console.error("[smoke] сборка не удалась — offline-смоуки будут врать про старый код");
-      process.exit(2);
+    if (process.env.SMOKE_BUILD === "1") {
+      console.log(`[smoke] dist отстал от src на ~${gap} — пересобираю`);
+      const r = spawnSync("npm run build", { shell: true, cwd: ROOT, stdio: "inherit" });
+      if (r.status !== 0) {
+        console.error("[smoke] сборка не удалась — offline-смоуки будут врать про старый код");
+        process.exit(2);
+      }
+    } else {
+      console.log(
+        `[smoke] ⚠ dist отстал от src на ~${gap}. Смоуки с пометкой offline ` +
+          "проверяют СКОМПИЛИРОВАННЫЙ код, то есть сейчас — старую сборку: " +
+          "они могут покраснеть на починенном и позеленеть на сломанном. " +
+          "Собрать перед прогоном: SMOKE_BUILD=1",
+      );
     }
   }
 }

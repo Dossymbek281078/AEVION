@@ -1048,13 +1048,23 @@ devhubRouter.post("/projects", async (req, res) => {
     createdAt: now(),
     updatedAt: now(),
   };
+  // Признак хранилища. До 19.08.2026 ответ был одинаков независимо от того,
+  // легло ли сохранение в базу или в память процесса: `catch` тихо клал запись
+  // в Map, и человек видел успех. При следующей выкатке — а их бывает шесть в
+  // сутки — проекта или файла не оказывалось.
+  //
+  // Здесь признак нельзя вычислить из isDbReady(): запасной путь срабатывает по
+  // ИСКЛЮЧЕНИЮ, а не по флагу готовности. Поэтому локальная переменная,
+  // выставляемая ровно там, где подмена и происходит.
+  let storage: "db" | "memory" = "db";
   try {
     await dbSaveProject(project);
   } catch (e: any) {
     captureException(e, { route: "devhub/projects:create", projectId: project.id });
     memProjects.set(project.id, project);
+    storage = "memory";
   }
-  res.status(201).json({ project });
+  res.status(201).json({ project, storage });
 });
 
 // GET /api/devhub/projects
@@ -1128,13 +1138,23 @@ devhubRouter.patch("/projects/:id", async (req, res) => {
   if (repoUrl !== undefined) project.repoUrl = repoUrl ? String(repoUrl) : null;
   if (customDomain !== undefined) project.customDomain = customDomain ? String(customDomain) : null;
   project.updatedAt = now();
+  // Признак хранилища. До 19.08.2026 ответ был одинаков независимо от того,
+  // легло ли сохранение в базу или в память процесса: `catch` тихо клал запись
+  // в Map, и человек видел успех. При следующей выкатке — а их бывает шесть в
+  // сутки — проекта или файла не оказывалось.
+  //
+  // Здесь признак нельзя вычислить из isDbReady(): запасной путь срабатывает по
+  // ИСКЛЮЧЕНИЮ, а не по флагу готовности. Поэтому локальная переменная,
+  // выставляемая ровно там, где подмена и происходит.
+  let storage: "db" | "memory" = "db";
   try {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/projects:update", projectId: project.id });
     memProjects.set(project.id, project);
+    storage = "memory";
   }
-  res.json({ project });
+  res.json({ project, storage });
 });
 
 // DELETE /api/devhub/projects/:id
@@ -1321,6 +1341,10 @@ devhubRouter.put("/projects/:id/file", async (req, res) => {
     language: language ? String(language) : detectLanguage(filePath),
     updatedAt: now(),
   };
+  // Тот же признак: файл при отказе базы уходит в память, и до 19.08.2026
+  // ответ был неотличим от настоящего сохранения. Для DevHub это код, который
+  // человек написал и считает сохранённым.
+  let storage: "db" | "memory" = "db";
   try {
     await dbUpsertFile(file);
   } catch (e) {
@@ -1333,8 +1357,9 @@ devhubRouter.put("/projects/:id/file", async (req, res) => {
     } else {
       memFiles.set(file.id, file);
     }
+    storage = "memory";
   }
-  res.json({ file });
+  res.json({ file, storage });
 });
 
 // PUT /api/devhub/projects/:id/files/:filepath — upsert file with simple single-segment path
@@ -1361,6 +1386,9 @@ devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
     language: language ? String(language) : detectLanguage(filePath),
     updatedAt: now(),
   };
+  // Тот же признак, что у соседней ручки сохранения файла: при отказе базы код
+  // человека уходит в память и исчезает со следующей выкаткой.
+  let storage: "db" | "memory" = "db";
   try {
     await dbUpsertFile(file);
   } catch (e) {
@@ -1373,8 +1401,9 @@ devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
     } else {
       memFiles.set(file.id, file);
     }
+    storage = "memory";
   }
-  res.json({ file });
+  res.json({ file, storage });
 });
 
 // DELETE /api/devhub/projects/:id/file — delete by path query param
@@ -3983,13 +4012,17 @@ devhubRouter.post("/projects/:id/drive/import", async (req, res) => {
       language: detectLanguage(path),
       updatedAt: now(),
     };
+    // Признак хранилища: при отказе базы файл живёт в памяти процесса и
+    // пропадёт со следующей выкаткой, а ответ до 19.08.2026 об этом молчал.
+    let storage: "db" | "memory" = "db";
     try { await dbUpsertFile(file); }
     catch {
       const existing = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === path);
       if (existing) { existing.content = file.content; existing.language = file.language; existing.updatedAt = file.updatedAt; }
       else memFiles.set(file.id, file);
+      storage = "memory";
     }
-    res.json({ ok: true, path, bytes: content.length, mimeType: meta.mimeType });
+    res.json({ ok: true, path, bytes: content.length, mimeType: meta.mimeType, storage });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Drive import failed" });
   }

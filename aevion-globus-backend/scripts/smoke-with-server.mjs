@@ -66,7 +66,14 @@ process.on("SIGINT", () => {
 });
 process.on("exit", stopServer);
 
-async function waitForHealth(timeoutMs = 120_000) {
+// Сколько ждать подъёма. Настраивается, потому что 120 с — предположение о
+// незагруженной машине. 19.08.2026 прогон all-smokes НЕ СОСТОЯЛСЯ именно
+// поэтому: в системе было 121 процессов node от соседних сессий и двух
+// сборок, и ts-node-dev не успел скомпилировать проект. Отказ выглядел как
+// поломка бэкенда, хотя бэкенд был исправен.
+const START_TIMEOUT_MS = Number(process.env.SMOKE_START_TIMEOUT_MS || 120_000);
+
+async function waitForHealth(timeoutMs = START_TIMEOUT_MS) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     try {
@@ -100,7 +107,7 @@ server = spawn(CMD, {
 
 const secs = await waitForHealth();
 if (secs === null) {
-  console.error("[smoke] бэкенд не поднялся за 120 с — прогон не состоялся");
+  console.error(`[smoke] бэкенд не поднялся за ${Math.round(START_TIMEOUT_MS / 1000)} с — прогон не состоялся`);
   stopServer();
   process.exit(2);
 }

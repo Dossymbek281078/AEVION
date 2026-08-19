@@ -99,6 +99,15 @@ const app = express();
 app.use(express.json());
 app.use("/api/cyberchess-daily", dailyRouter);
 
+// Ходы и день берём у самого сервера: с 19.08.2026 /solve сверяет решение, а
+// зашитая дата не совпала бы с задачей, которую сервер выдаёт СЕГОДНЯ.
+// Утверждения ниже — про сохранность и статистику, дата в них роли не играет.
+const тестовыйДень = () => new Date().toISOString().slice(0, 10);
+const тестовыеХоды = async (): Promise<string[]> => {
+  const r = await request(app).get("/api/cyberchess-daily/puzzle");
+  return (r.body?.puzzle?.sol ?? []) as string[];
+};
+
 afterAll(() => {
   delete process.env.CYBERCHESS_DB_READY_MS;
   delete process.env.CYBERCHESS_DAILY_DIR;
@@ -136,7 +145,7 @@ describe("новый контейнер не откатывает игроков
 
     const res = await request(app)
       .post("/api/cyberchess-daily/solve")
-      .send({ streak: 4, day: "2026-08-13", timeMs: 8000, hintsUsed: 0, userId: "newbie", name: "Новичок" });
+      .send({ day: тестовыйДень(), timeMs: 8000, hintsUsed: 0, userId: "newbie", name: "Новичок", moves: await тестовыеХоды() });
     expect(res.status).toBe(200);
 
     const onDisk = JSON.parse(
@@ -218,7 +227,7 @@ describe("истёкший таймер не выключает запись п�
 
     const res = await request(app)
       .post("/api/cyberchess-daily/solve")
-      .send({ streak: 2, day: "2026-08-14", timeMs: 5000, hintsUsed: 0, userId: "later", name: "Позже" });
+      .send({ day: тестовыйДень(), timeMs: 5000, hintsUsed: 0, userId: "later", name: "Позже", moves: await тестовыеХоды() });
     expect(res.status).toBe(200);
 
     await new Promise((r) => setTimeout(r, 30));

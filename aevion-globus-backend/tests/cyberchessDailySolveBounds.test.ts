@@ -18,6 +18,16 @@ import os from "node:os";
 //
 // Auth is deliberately not the answer: CyberChess has no accounts. Bounding
 // what can be claimed is.
+//
+// ОБНОВЛЕНО 19.08.2026. Ограничение осталось, но перестало быть единственной
+// защитой: ручка больше НЕ берёт серию из тела запроса вовсе. Клиент присылает
+// ходы, сервер сверяет их с решением того дня и считает серию по своей истории.
+//
+// Довод «аккаунтов нет» верен и не отменён — проверка ходов аккаунтов и не
+// требует. Проверено на боевом проде, почему одного ограничения мало: запрос
+// `{"streak":364}` (в пределах допустимого!) без единого хода поставил меня
+// первым в таблице со счётом 36700. Ограничение отсекает невозможное, но не
+// отличает игравшего от заявившего.
 
 const { scratchDir } = vi.hoisted(() => {
   const nodeOs = require("node:os") as typeof import("node:os");
@@ -38,12 +48,22 @@ app.use("/api/cyberchess/daily", dailyRouter);
 const solve = (body: Record<string, unknown>) =>
   request(app).post("/api/cyberchess/daily/solve").send(body);
 
+// Ходы спрашиваем у самого сервера, а не зашиваем: иначе тест разъедется с
+// пулом задач при первой же его правке и станет зелёным ни о чём.
+const movesForToday = async (): Promise<string[]> => {
+  const res = await request(app).get("/api/cyberchess/daily/puzzle");
+  return (res.body?.puzzle?.sol ?? []) as string[];
+};
+
 const leaderboard = async () => {
   const res = await request(app).get("/api/cyberchess/daily/leaderboard");
   return (res.body.leaderboard ?? res.body.entries ?? res.body.items ?? []) as any[];
 };
 
 const day = "2026-08-12";
+// GET /puzzle всегда отдаёт задачу СЕГОДНЯШНЕГО дня, поэтому решение сверяется
+// с сегодняшним; зашитая дата выше осталась для случаев, где ходы не нужны.
+const todayForPuzzle = () => new Date().toISOString().slice(0, 10);
 let n = 0;
 const freshUser = () => `player_${++n}_${Date.now()}`;
 
@@ -68,7 +88,9 @@ describe("a claim that cannot be true is refused", () => {
     const res = await solve({ streak: 1_000_000_000, day, userId: freshUser(), name: "Cheater" });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe("invalid_streak");
+    // Причина теперь другая, свойство — то же и сильнее: без сыгранных ходов
+    // заявление не рассматривается вообще, каким бы правдоподобным ни было.
+    expect(res.body.error).toBe("moves_required");
     const board = await leaderboard();
     expect(board.some((e) => e.name === "Cheater")).toBe(false);
   });
@@ -114,23 +136,31 @@ describe("a claim that cannot be true is refused", () => {
 describe("an ordinary run still counts", () => {
   test("a believable streak is accepted and reaches the board", async () => {
     const userId = freshUser();
-    const res = await solve({ streak: 12, day, userId, name: "Honest", timeMs: 45_000 });
+    const moves = await movesForToday();
+    const res = await solve({ day: undefined, userId, name: "Honest", timeMs: 45_000, moves, ...{ day: todayForPuzzle() } });
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
+    // Серию называет сервер: первый решённый день — единица, что бы ни заявили.
+    expect(res.body.streak).toBe(1);
     const board = await leaderboard();
     expect(board.some((e) => e.userId === userId)).toBe(true);
   });
 
-  test("the highest allowed streak is still allowed", async () => {
-    const res = await solve({ streak: 3650, day, userId: freshUser(), name: "Decade" });
+  test("заявленная серия игнорируется, даже допустимая", async () => {
+    // Прежде здесь проверялось, что 3650 (потолок) принимается. Проверять это
+    // больше нечего: число из тела не читается. Вместо него — свойство, ради
+    // которого договор и менялся.
+    const moves = await movesForToday();
+    const res = await solve({ streak: 3650, day: todayForPuzzle(), userId: freshUser(), name: "Decade", moves });
 
     expect(res.status).toBe(200);
+    expect(res.body.streak).toBe(1);
   });
 
   test("an overlong name is stored trimmed, not rejected", async () => {
     const userId = freshUser();
-    await solve({ streak: 5, day, userId, name: "x".repeat(500) });
+    await solve({ day: todayForPuzzle(), userId, name: "x".repeat(500), moves: await movesForToday() });
 
     const board = await leaderboard();
     const mine = board.find((e) => e.userId === userId);
@@ -140,7 +170,7 @@ describe("an ordinary run still counts", () => {
   test("an absurd time is clamped rather than trusted", async () => {
     // timeMs only feeds a bonus that floors at zero, so this cannot move the
     // board — pinned so the clamp is not dropped as pointless later.
-    const res = await solve({ streak: 4, day, userId: freshUser(), timeMs: 1e18 });
+    const res = await solve({ day: todayForPuzzle(), userId: freshUser(), timeMs: 1e18, moves: await movesForToday() });
 
     expect(res.status).toBe(200);
   });
@@ -155,9 +185,13 @@ describe("a flood of believable claims cannot fill the board", () => {
     // ones. User ids are whatever the caller invents and the board holds 1000
     // persisted rows sorted by score, so an unthrottled script filling it with
     // maximum-streak entries pushes every real player off for good.
+    // С настоящими ходами, иначе первый же запрос отвергается по договору и
+    // тест перестаёт проверять ограничитель — он бы «проходил», ничего не измеряя.
+    const moves = await movesForToday();
+    const today = todayForPuzzle();
     const statuses: number[] = [];
     for (let i = 0; i < 40; i++) {
-      const res = await solve({ streak: 3650, day, userId: `flood_${i}`, name: `Flood${i}` });
+      const res = await solve({ day: today, userId: `flood_${i}`, name: `Flood${i}`, moves });
       statuses.push(res.status);
     }
 

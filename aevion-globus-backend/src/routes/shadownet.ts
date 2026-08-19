@@ -455,7 +455,18 @@ shadownetRouter.get("/posts/:alias", async (req: Request, res: Response) => {
         if (result.rows.length > 0) return ok(res, result.rows[0]);
       } catch (e) {
         console.error("[ShadowNet] GET /posts/:id db error:", e);
-        // fall through to memory
+        // Раньше управление уходило ниже, в память (в проде пустую), и запись
+        // объявлялась несуществующей. «Не найдено» на отказ базы законно и
+        // потому незаметно: ни тревоги, ни подозрения у читателя.
+        // Не через fail(): у него в ответе только код, а человеку нужна
+        // фраза — «нет записи» и «не смогли спросить» это разные новости.
+        res.status(503).json({
+          success: false,
+          error: "storage_unavailable",
+          warning:
+            "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.",
+        });
+        return;
       }
     }
     const byId = memPosts.get(Number(alias));

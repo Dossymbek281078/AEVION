@@ -56,15 +56,41 @@ vi.mock("../src/lib/ensureQNewsTables", () => ({
   ensureQNewsTables: async () => {},
   isQNewsDbReady: () => true,
 }));
+vi.mock("../src/lib/ensureQLearnTables", () => ({
+  ensureQLearnTables: async () => {},
+  isQLearnDbReady: () => true,
+  getQLearnDbError: () => null,
+}));
+vi.mock("../src/lib/ensureQStoreTables", () => ({
+  ensureQStoreTables: async () => {},
+  isQStoreDbReady: () => true,
+  getQStoreDbError: () => null,
+}));
+vi.mock("../src/lib/ensureShadowNetTables", () => ({
+  ensureShadowNetTables: async () => {},
+  isShadowNetDbReady: () => true,
+  getShadowNetDbError: () => null,
+}));
 
 import { mapRealityRouter } from "../src/routes/mapReality";
 import { voiceOfEarthRouter } from "../src/routes/voiceOfEarth";
 import { qnewsRouter } from "../src/routes/qnews";
+import { qlearnRouter } from "../src/routes/qlearn";
+import { qstoreRouter } from "../src/routes/qstore";
+import { shadownetRouter } from "../src/routes/shadownet";
 
 const CASES: Array<[string, express.Router, string]> = [
   ["MapReality", mapRealityRouter, "/signals/12345"],
   ["VoiceOfEarth", voiceOfEarthRouter, "/tracks/12345"],
   ["QNews", qnewsRouter, "/articles/qnews-12345"],
+  // Каталоги: «товар не найден» при отказе базы — это несостоявшаяся покупка,
+  // о которой никто не узнает, а «курс не найден» — потерянный ученик.
+  ["QLearn курс", qlearnRouter, "/courses/course-12345"],
+  ["QStore товар", qstoreRouter, "/products/prod-12345"],
+  ["ShadowNet", shadownetRouter, "/posts/12345"],
+  // И списки: пустой каталог во время аварии читается как «у нас ничего нет».
+  ["QLearn список", qlearnRouter, "/courses"],
+  ["QStore список", qstoreRouter, "/products"],
 ];
 
 function mount(router: express.Router) {

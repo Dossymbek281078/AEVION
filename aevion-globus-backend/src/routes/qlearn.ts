@@ -6,6 +6,9 @@ import { getPool } from "../lib/dbPool";
 import { ensureQLearnTables, isQLearnDbReady } from "../lib/ensureQLearnTables";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
 
+const WARN =
+  "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
+
 const captureQLearnError = makeServiceCapture("qlearn");
 
 /**
@@ -222,8 +225,13 @@ qlearnRouter.get("/courses", async (req: Request, res: Response) => {
       );
       res.json({ courses: rows.rows, total: rows.rowCount ?? rows.rows.length });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // Голый catch без возврата уводил управление ниже, в память (в проде
+      // пустую), и курс объявлялся несуществующим. Ответ «Course not found» на
+      // отказ базы — законный и потому незаметный.
+      console.error("[QLearn] GET /courses DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
     }
   }
 
@@ -249,8 +257,13 @@ qlearnRouter.get("/courses/:id", async (req: Request, res: Response) => {
       );
       res.json({ course: row.rows[0], lessons: lessons.rows });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // Голый catch без возврата уводил управление ниже, в память — в
+      // проде она пуста, и запись объявлялась несуществующей. «Не
+      // найдено» на отказ базы законно и потому незаметно.
+      console.error("[QLearn] GET /courses/:id DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
     }
   }
   const course = memCourses.get(id);

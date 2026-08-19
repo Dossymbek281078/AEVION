@@ -161,7 +161,21 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
     trending: `"salesCount" DESC, "createdAt" DESC`,
     rating: `"avgRating" DESC NULLS LAST, "salesCount" DESC`,
   };
-  const orderClause = orderBySql[sort] ?? orderBySql.popular;
+  // `??` здесь НЕ защита: обычный объект наследует ключи прототипа, и
+  // `orderBySql["constructor"]` возвращает функцию `Object` — она не null и не
+  // undefined, поэтому откат на "popular" не срабатывает. Дальше текст функции
+  // уезжает в ORDER BY, запрос падает, и витрина отдаёт ПУСТОЙ список товаров.
+  //
+  // Проверено на живом проде 19.08.2026:
+  //   ?sort=zzqwezzqwez  -> 10924 байта, товары на месте
+  //   ?sort=constructor  -> {"products":[],"total":0,"sort":"constructor"}
+  //   ?sort=__proto__    -> то же
+  //
+  // Контрольное слово той же длины, не являющееся ключом прототипа, работает
+  // правильно — значит дело именно в наследовании, а не в длине или символах.
+  const orderClause = Object.prototype.hasOwnProperty.call(orderBySql, sort)
+    ? orderBySql[sort]
+    : orderBySql.popular;
 
   if (isQStoreDbReady()) {
     try {

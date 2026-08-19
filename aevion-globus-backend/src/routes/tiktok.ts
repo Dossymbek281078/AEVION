@@ -406,6 +406,10 @@ tiktokRouter.post("/publish", async (req, res) => {
     // are independent: a creator may declare either, both, or neither.
     brandOrganic = false,
     brandedContent = false,
+    // Сгенерированное ИИ помечается отдельно от коммерческого: ролик может быть
+    // и тем и другим, и ни тем ни другим. Нам это поле нужно буквально — свои
+    // ролики мы генерируем.
+    isAigc = false,
   } = (req.body || {}) as Record<string, any>;
   if (!videoUrl || typeof videoUrl !== "string") {
     return res.status(400).json({ error: "video_url_required" });
@@ -445,6 +449,7 @@ tiktokRouter.post("/publish", async (req, res) => {
           // creator said yes is an undisclosed ad, not a missing field.
           brand_organic_toggle: !!brandOrganic,
           brand_content_toggle: !!brandedContent,
+          is_aigc: !!isAigc,
         },
         source_info: { source: "PULL_FROM_URL", video_url: videoUrl },
       }),

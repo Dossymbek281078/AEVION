@@ -47,6 +47,12 @@ export default function TikTokPublisherPage() {
   const [disableDuet, setDisableDuet] = useState(false);
   const [disableStitch, setDisableStitch] = useState(false);
 
+  // Раскрытие коммерческого контента. Два независимых признака, а не выбор из
+  // двух: ролик может продвигать и свой бренд, и партнёра одновременно.
+  const [brandOrganic, setBrandOrganic] = useState(false);
+  const [brandedContent, setBrandedContent] = useState(false);
+  const [isAigc, setIsAigc] = useState(false);
+
   const [posting, setPosting] = useState(false);
   const [postMsg, setPostMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
@@ -102,13 +108,32 @@ export default function TikTokPublisherPage() {
     setPostMsg(null);
     if (!videoUrl.trim()) return setPostMsg({ kind: "err", text: "Укажите публичный URL видео (mp4)." });
     if (!privacy) return setPostMsg({ kind: "err", text: "Выберите уровень приватности." });
+    // Не понижаем приватность молча: автор выбрал «только я», и опубликовать
+    // вместо этого на всех — значит выложить то, на что он не соглашался.
+    // Поэтому называем оба несовместимых выбора и оставляем решение ему.
+    if (brandedContent && privacy === "SELF_ONLY") {
+      return setPostMsg({
+        kind: "err",
+        text: "Рекламный контент нельзя публиковать с уровнем «Только я». Выберите открытую аудиторию или снимите отметку о рекламном контенте.",
+      });
+    }
     setPosting(true);
     try {
       const r = await fetch(`${API}/publish`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoUrl: videoUrl.trim(), title, privacyLevel: privacy, disableComment, disableDuet, disableStitch }),
+        body: JSON.stringify({
+          videoUrl: videoUrl.trim(),
+          title,
+          privacyLevel: privacy,
+          disableComment,
+          disableDuet,
+          disableStitch,
+          brandOrganic,
+          brandedContent,
+          isAigc,
+        }),
       });
       const j = await r.json();
       if (!r.ok) {
@@ -263,6 +288,51 @@ export default function TikTokPublisherPage() {
                   </label>
                 </div>
 
+                <div className="ttp-disclose">
+                  <p className="ttp-disclose-title">Это коммерческий контент?</p>
+                  <label className="ttp-toggle">
+                    <input
+                      type="checkbox"
+                      checked={brandOrganic}
+                      onChange={(e) => setBrandOrganic(e.target.checked)}
+                    />
+                    Продвигает мой собственный бренд или товар
+                  </label>
+                  <label className="ttp-toggle">
+                    <input
+                      type="checkbox"
+                      checked={brandedContent}
+                      onChange={(e) => setBrandedContent(e.target.checked)}
+                    />
+                    Рекламирует другой бренд — платное партнёрство
+                  </label>
+                  <label className="ttp-toggle">
+                    <input
+                      type="checkbox"
+                      checked={isAigc}
+                      onChange={(e) => setIsAigc(e.target.checked)}
+                    />
+                    Создан или изменён с помощью ИИ
+                  </label>
+
+                  {(brandOrganic || brandedContent) && (
+                    <p className="ttp-fine ttp-disclose-label">
+                      В TikTok ролик будет помечен:{" "}
+                      <strong>
+                        {brandedContent ? "Paid partnership" : "Promotional content"}
+                      </strong>
+                      .
+                    </p>
+                  )}
+
+                  {brandedContent && privacy === "SELF_ONLY" && (
+                    <p className="ttp-msg ttp-msg-err">
+                      Рекламный контент нельзя публиковать с уровнем «Только я».
+                      Выберите открытую аудиторию или снимите отметку.
+                    </p>
+                  )}
+                </div>
+
                 <button className="ttp-btn ttp-btn-tiktok ttp-post" onClick={publish} disabled={posting}>
                   {posting ? "Отправка…" : "Опубликовать в TikTok"}
                 </button>
@@ -332,4 +402,7 @@ const CSS = `
 .ttp-msg-ok{background:rgba(37,244,238,.12);color:var(--accent);border:1px solid rgba(37,244,238,.3)}
 .ttp-msg-err{background:rgba(254,44,85,.12);color:#ff8fa3;border:1px solid rgba(254,44,85,.3)}
 .ttp-disclosure a{color:var(--accent)}
+.ttp-disclose{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:14px 0;display:flex;flex-direction:column;gap:10px}
+.ttp-disclose-title{margin:0;font-weight:600;font-size:14px}
+.ttp-disclose-label{margin:0}
 `;

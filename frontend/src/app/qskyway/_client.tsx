@@ -1079,7 +1079,7 @@ export default function QSkywayClient() {
                         )}
                       </>
                     )],
-                    ["Запас на неувер-ть", stats.avgConfClearM == null ? "—" : stats.avgConfClearM + " м"],
+                    [t("qskyway.tel.confClearance"), stats.avgConfClearM == null ? "—" : stats.avgConfClearM + " " + t("qskyway.unit.m")],
                   ] as [string, React.ReactNode][]).map(([k, v]) => (
                     <div key={k} style={{ background: "#0e141f", padding: "12px 14px" }}>
                       <div style={{ fontFamily: "monospace", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: "#5f7086" }}>{k}</div>
@@ -1092,10 +1092,10 @@ export default function QSkywayClient() {
                     {/* When the flight was refused, this verdict describes the corridor
                         an unrestricted flight would have needed — say so, don't let it
                         read as the current route. */}
-                    {ceilingBlocked && <span style={{ color: "#5f7086" }}>без ограничения потолком: </span>}
-                    🛂 {airspaceRoute.compliant ? "в пределах потолка регулятора" : `выше потолка на ${airspaceRoute.maxExceedanceM} м · участков ${airspaceRoute.exceedingSegments}`}
+                    {ceilingBlocked && <span style={{ color: "#5f7086" }}>{t("qskyway.route.noCeilingLimit")}</span>}
+                    🛂 {airspaceRoute.compliant ? t("qskyway.route.withinCeiling") : t("qskyway.route.aboveCeiling", { m: airspaceRoute.maxExceedanceM, n: airspaceRoute.exceedingSegments })}
                     {airspaceRoute.lowestCeilingM != null && (
-                      <span style={{ color: "#5f7086" }}> · мин. потолок по трассе {airspaceRoute.lowestCeilingM} м</span>
+                      <span style={{ color: "#5f7086" }}>{t("qskyway.route.lowestCeiling", { m: airspaceRoute.lowestCeilingM })}</span>
                     )}
                     <div style={{ color: "#5f7086", fontSize: 10.5, marginTop: 3, whiteSpace: "normal" }}>{lang === "ru" ? airspaceRoute.note : (airspaceRoute.noteEn ?? airspaceRoute.note)}</div>
                   </div>
@@ -1106,7 +1106,7 @@ export default function QSkywayClient() {
                     него. Высоту при этом не переписываем: починка принадлежит OSM. */}
                 <HeightDisputePanel dispute={heightDispute} />
                 <div style={{ padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
-                  <button style={btnPri} onClick={bookSlot} disabled={!loaded}>Забронировать слот (QRight)</button>
+                  <button style={btnPri} onClick={bookSlot} disabled={!loaded}>{t("qskyway.btn.bookSlot")}</button>
                   {booking && <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.startsWith("✓") ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>{booking}</div>}
 
                   {/* The filing document. Until now it existed only as an endpoint,
@@ -1162,7 +1162,7 @@ export default function QSkywayClient() {
 
               {vpRows.length > 0 && (
                 <section style={card}>
-                  <div style={cardH}>Пригодность площадок · {vpRows.length}</div>
+                  <div style={cardH}>{t("qskyway.panel.padSuitability")} · {vpRows.length}</div>
                   <div style={{ maxHeight: 220, overflowY: "auto" }}>
                     {vpRows.map((v) => (
                       <div key={v.id} style={{ padding: "8px 14px", borderTop: "1px solid #1e2836", fontFamily: "monospace", fontSize: 11.5 }}>
@@ -1178,7 +1178,7 @@ export default function QSkywayClient() {
                         )}
                         {v.needsAtc && (
                           <div style={{ color: "#fda4af", fontSize: 10, marginTop: 2 }} title={t("qskyway.tip.noAutoClearance")}>
-                            🛂 нужна координация с УВД — автоматического допуска нет
+                            {t("qskyway.pad.needsAtc")}
                           </div>
                         )}
                         {/* Оценка отвечает «сядет ли сюда аппарат», а не «можно ли
@@ -1194,7 +1194,7 @@ export default function QSkywayClient() {
                     ))}
                   </div>
                   <div style={{ padding: "8px 14px", borderTop: "1px solid #1e2836", fontSize: 10.5, color: "#5f7086" }}>
-                    Алгоритмические кандидаты по открытому радиусу и просвету — не утверждённые муниципальные площадки.
+                    {t("qskyway.pad.algorithmicNote")}
                   </div>
                 </section>
               )}
@@ -1207,10 +1207,10 @@ export default function QSkywayClient() {
                     квитанции настоящие, отличить нечем. Не прячем — называем.
                   */}
                   <span>
-                    Рынок 4D-слотов (QRight) · {slots.liveCount ?? slots.count}
+                    {t("qskyway.panel.slotMarket")} · {slots.liveCount ?? slots.count}
                     {smokeSlotCount > 0 && (
                       <span style={{ color: "#fbbf24", textTransform: "none", letterSpacing: 0 }}>
-                        {" "}+ {smokeSlotCount} тестовых
+                        {" "}{t("qskyway.slots.testSuffix", { n: smokeSlotCount })}
                       </span>
                     )}
                   </span>
@@ -1221,7 +1221,7 @@ export default function QSkywayClient() {
                   )}
                 </div>
                 {slots.list.length === 0 ? (
-                  <div style={{ padding: "12px 14px", fontSize: 12, color: "#5f7086" }}>Слотов пока не забронировано.</div>
+                  <div style={{ padding: "12px 14px", fontSize: 12, color: "#5f7086" }}>{t("qskyway.slots.empty")}</div>
                 ) : (
                   <div style={{ maxHeight: 220, overflowY: "auto" }}>
                     {[...slots.list].reverse().slice(0, 20).map((s) => (

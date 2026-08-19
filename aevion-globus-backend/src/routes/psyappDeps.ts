@@ -374,10 +374,22 @@ psyappDepsRouter.post("/users/:alias/start", writeLimit, async (req: Request, re
       ? await dbUpsertUser(alias, addiction as Addiction, startedAtIso, sub)
       : memUpsertUser(alias, addiction as Addiction, startedAtIso, sub);
 
+    // Признак хранилища. До 19.08.2026 ответ был одинаков независимо от того,
+    // легла запись в Postgres или в память процесса. Ручка /health при этом
+    // честно говорила db: postgres|memory — то есть ПЛАТФОРМА знать могла, а
+    // человек нет.
+    //
+    // Здесь это дороже, чем в других модулях: дневник срывов и триггеров и есть
+    // продукт, за который платят $19/мес. Потерянная серия воздержания — не
+    // строка в базе, а обесцененный месяц работы над собой.
+    //
+    // Флаг берём тем же вызовом, что выбирал ветку: посчитанный после записи,
+    // он вернул бы "db" на восстановившейся базе и соврал снова.
     return res.status(201).json({
       ok: true,
       user,
       streak_days: streakDays(user.streak_start_at),
+      storage: isPsyAppDbReady() ? "db" : "memory",
     });
   } catch (e: any) {
     return res.status(500).json({ ok: false, error: e?.message || "internal error" });
@@ -426,11 +438,14 @@ psyappDepsRouter.post("/users/:alias/relapse", writeLimit, async (req: Request, 
       : memRelapse(alias, reason);
 
     if (!user) return res.status(404).json({ ok: false, error: "user_not_found" });
+    // Тот же признак: отметка о срыве при недоступной базе живёт в памяти, а
+    // ответ «fresh start» до 19.08.2026 был неотличим от настоящего сохранения.
     return res.json({
       ok: true,
       user,
       streak_days: 0,
       message: "Streak reset. New day, fresh start.",
+      storage: isPsyAppDbReady() ? "db" : "memory",
     });
   } catch (e: any) {
     return res.status(500).json({ ok: false, error: e?.message || "internal error" });

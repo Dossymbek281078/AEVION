@@ -88,6 +88,8 @@ benchmark-out/
 **/data/subscriptions.jsonl
 **/data/subscriptions.jsonl.tmp
 
+# Прогоны бенчмарка QReal: ссылки на рендеры, судейские листы, ключ плеч.
+benchmark-out/
 # Рабочее состояние QTrade (тестовые счета и .tmp от прогонов). Внутрипакетный
 # путь закрыт в aevion-globus-backend/.gitignore, корневой — не был, и 0ff550de6
 # утащил в git и qtrade.json, и временный файл. Тот же случай, что с
@@ -98,3 +100,7 @@ benchmark-out/
 .vercel
 .env*
 
+# Каталоги, которые тесты создают с номером процесса в имени:
+# .aevion-data-test-12348/ и подобные. Правило `.aevion-data/` их НЕ ловит,
+# и 19.08.2026 такой каталог попал под `git add -A` при сборке ветки выкатки.
+.aevion-data-test-*/

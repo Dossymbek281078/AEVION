@@ -45,7 +45,7 @@ jobs:
         run: npm run test:guards
 
   frontend:
-    name: Frontend (unit tests + next build)
+    name: Frontend (next build)
     runs-on: ubuntu-latest
     defaults:
       run:

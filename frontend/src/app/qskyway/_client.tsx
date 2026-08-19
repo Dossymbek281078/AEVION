@@ -114,9 +114,9 @@ function plural(n: number, one: string, few: string, many: string): string {
 }
 
 const VP_CLASS_LABEL: Record<string, string> = Object.assign(Object.create(null), {
-  "candidate-pad": "кандидат на площадку",
-  "needs-infrastructure": "нужна инфраструктура",
-  unsuitable: "непригодна",
+  "candidate-pad": "qskyway.pad.candidate",
+  "needs-infrastructure": "qskyway.pad.needsInfra",
+  unsuitable: "qskyway.pad.unsuitable",
 });
 const VP_CLASS_COLOR: Record<string, string> = Object.assign(Object.create(null), {
   "candidate-pad": "#2dd4bf",
@@ -769,19 +769,19 @@ export default function QSkywayClient() {
   return (
     <div style={{ background: "#070b12", minHeight: "100vh" }}>
       <div style={wrap}>
-        <div style={{ fontFamily: "monospace", fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", color: "#5f7086" }}>AEVION · планета городского неба</div>
+        <div style={{ fontFamily: "monospace", fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", color: "#5f7086" }}>{t("qskyway.hero.eyebrow")}</div>
         <h1 style={{ fontFamily: "monospace", fontSize: 24, margin: "2px 0 4px" }}><span style={{ color: "#fbbf24" }}>Q</span>Skyway</h1>
         <p style={{ color: "#9fb0c4", fontSize: 14, margin: "0 0 4px", maxWidth: 720 }}>
-          3D-аэрокоридоры и авто-навигация для аэротакси поверх реального цифрового двойника города.
-          Здания — OpenStreetMap, ограничения — из публикаций самих регуляторов там, где они существуют.
+          {t("qskyway.hero.lede1")}{" "}
+          {t("qskyway.hero.lede2")}
         </p>
         <p style={{ color: "#5f7086", fontSize: 12, margin: "0 0 18px" }}>
-          Движок и доказательство концепции, не сертифицированное авиационное ПО. Полёты в реальном небе требуют допуска регулятора (U-space / UTM / CAAC). Данные зданий — OpenStreetMap (открытые, ODbL).
+          {t("qskyway.hero.disclaimer")}
         </p>
 
         {cities.length > 1 && (
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "0 0 16px" }}>
-            <span style={{ fontFamily: "monospace", fontSize: 11, letterSpacing: 1, color: "#5f7086" }}>ГОРОД:</span>
+            <span style={{ fontFamily: "monospace", fontSize: 11, letterSpacing: 1, color: "#5f7086" }}>{t("qskyway.city.label")}</span>
             {cities.map((c) => (
               <button key={c.id} onClick={() => { setCityId(c.id); loadCity(c.id); }}
                 style={{ fontSize: 13, borderRadius: 8, padding: "7px 13px", cursor: "pointer", ...(cityId === c.id ? { background: "#22d3ee", color: "#04212a", border: "none", fontWeight: 600 } : { background: "transparent", color: "#9fb0c4", border: "1px solid #1e2836" }) }}>
@@ -830,13 +830,13 @@ export default function QSkywayClient() {
           </div>
         )}
 
-        {err && <div style={{ ...card, padding: 16, color: "#fb7185" }}>Не удалось загрузить город: {err}. Проверь, что бэкенд поднят (/api/qskyway/city).</div>}
+        {err && <div style={{ ...card, padding: 16, color: "#fb7185" }}>{t("qskyway.err.cityLoad", { err: String(err) })}</div>}
 
         {!err && (
           <div className="qsky-grid" style={{ display: "grid", gap: 14 }}>
             <style>{`.qsky-grid { grid-template-columns: 1fr; } @media (min-width: 900px) { .qsky-grid { grid-template-columns: 1.55fr 1fr; } }`}</style>
             <section style={card}>
-              <div style={cardH}>Аэрокарта · реальные здания{stats.city ? " · " + stats.city : ""}</div>
+              <div style={cardH}>{t("qskyway.map.head")}{stats.city ? " · " + stats.city : ""}</div>
               {/*
                 Пока город грузится, страница выглядела ТОЧНО как сломанная:
                 пустая чёрная карта и нули в телеметрии, без единого признака,
@@ -856,24 +856,24 @@ export default function QSkywayClient() {
                     borderBottom: "1px solid #1e2836", fontFamily: "monospace",
                   }}
                 >
-                  Загружаю город: {cityId} — здания, сетка высот и правила регулятора…
+                  {t("qskyway.loading.city", { city: cityId })}
                 </div>
               )}
               <canvas ref={mapRef} style={{ display: "block", width: "100%", background: "#0a121d" }} />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
-                <button style={btnPri} onClick={newHero} disabled={!loaded}>↻ Новый рейс</button>
-                <button style={btn} onClick={() => { runningRef.current = !runningRef.current; setPlaying(runningRef.current); }}>{playing ? "⏸ Пауза" : "▶ Пуск"}</button>
-                <button style={btn} onClick={() => { for (let i = 0; i < 3; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); } }}>＋ Трафик</button>
-                <button style={btn} onClick={() => { showColorRef.current = !showColorRef.current; }}>Высотная раскраска</button>
+                <button style={btnPri} onClick={newHero} disabled={!loaded}>{t("qskyway.btn.newFlight")}</button>
+                <button style={btn} onClick={() => { runningRef.current = !runningRef.current; setPlaying(runningRef.current); }}>{playing ? t("qskyway.btn.pause") : t("qskyway.btn.play")}</button>
+                <button style={btn} onClick={() => { for (let i = 0; i < 3; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); } }}>{t("qskyway.btn.traffic")}</button>
+                <button style={btn} onClick={() => { showColorRef.current = !showColorRef.current; }}>{t("qskyway.btn.heightColors")}</button>
                 <button
                   style={strictCeiling ? { ...btn, borderColor: "#2dd4bf", color: "#2dd4bf" } : btn}
                   disabled={!meta?.airspace?.available}
                   title={meta?.airspace?.available
-                    ? "Строгий режим: маршрут строится только в пределах опубликованного потолка регулятора. Часть пар площадок станет недостижимой — это и есть реальная картина допусков."
-                    : "Для этого города нет открытого фида регулятора — строгий режим неприменим."}
+                    ? t("qskyway.strict.tipOn")
+                    : t("qskyway.strict.tipOff")}
                   onClick={() => { const v = !strictCeiling; setStrictCeiling(v); strictRef.current = v; newHero(); }}
                 >
-                  {strictCeiling ? "🛂 Строго по потолку: вкл" : "🛂 Строго по потолку: выкл"}
+                  {strictCeiling ? t("qskyway.strict.on") : t("qskyway.strict.off")}
                 </button>
               </div>
               {ceilingBlocked && (
@@ -884,12 +884,12 @@ export default function QSkywayClient() {
               {meta && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 14, padding: "0 14px 12px", fontFamily: "monospace", fontSize: 11, color: "#9fb0c4" }}>
                   <span>
-                    🌬 ветер {meta.wind}
+                    {t("qskyway.wind.label", { wind: meta.wind })}
                     <span
-                      title={meta.windSource === "metar" ? "Наземный ветер — реальный METAR ближайшего аэропорта" : "METAR недоступен — используется иллюстративная демо-модель"}
+                      title={meta.windSource === "metar" ? t("qskyway.wind.metarTip") : t("qskyway.wind.demoTip")}
                       style={{ marginLeft: 6, color: meta.windSource === "metar" ? "#2dd4bf" : "#5f7086" }}
                     >
-                      · {meta.windSource === "metar" ? "METAR" : "демо"}
+                      · {meta.windSource === "metar" ? "METAR" : t("qskyway.wind.demo")}
                     </span>
                   </span>
                   {/* Two chips, deliberately side by side: the ceiling layer is a real
@@ -944,7 +944,7 @@ export default function QSkywayClient() {
                       <span style={{ color: "#94a3b8" }}>{t("qskyway.verify.unknown")}</span>
                     )}
                   </span>
-                  <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: "зданий" }} />
+                  <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: t("qskyway.unit.buildings") }} />
                   {meta.suspect.length > 0 && (
                     <span
                       title={
@@ -957,7 +957,7 @@ export default function QSkywayClient() {
                       }
                       style={{ color: "#fbbf24", textDecoration: "underline dotted", cursor: "help" }}
                     >
-                      ⚠ высота под вопросом:{" "}
+                      {t("qskyway.height.suspect")}{" "}
                       {meta.suspect
                         .map((o) => {
                           if (o.was !== undefined) {
@@ -1025,7 +1025,7 @@ export default function QSkywayClient() {
                       списке справа («кандидат на площадку»): один и тот же класс,
                       два разных слова, и самое сильное стояло там, где нет ни
                       одной оговорки. Легенда говорит теми же словами, что список. */}
-                  <span>площадки: <span style={{ color: "#2dd4bf" }}>●</span> кандидат · <span style={{ color: "#fbbf24" }}>●</span> нужна инфра · <span style={{ color: "#fb7185" }}>●</span> непригодна · <span style={{ color: "#c8964f" }}>▨</span> высота угадана
+                  <span>{t("qskyway.legend.pads")} <span style={{ color: "#2dd4bf" }}>●</span> {t("qskyway.pad.candidate")} · <span style={{ color: "#fbbf24" }}>●</span> {t("qskyway.legend.needsInfraShort")} · <span style={{ color: "#fb7185" }}>●</span> {t("qskyway.pad.unsuitable")} · <span style={{ color: "#c8964f" }}>▨</span> {t("qskyway.legend.heightGuessed")}
                     {padBan && (
                       <span style={{ color: "#fb7185" }} title={padBan.rule}> · 🚫 {t("qskyway.pad.cityProhibited")}</span>
                     )}
@@ -1036,24 +1036,24 @@ export default function QSkywayClient() {
 
             <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <section style={card}>
-                <div style={cardH}>Профиль высот рейса</div>
+                <div style={cardH}>{t("qskyway.panel.heightProfile")}</div>
                 <canvas ref={profRef} style={{ display: "block", width: "100%", height: 190, background: "#0a121d" }} />
               </section>
               <section style={card}>
-                <div style={cardH}>Телеметрия</div>
+                <div style={cardH}>{t("qskyway.panel.telemetry")}</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: "#1e2836" }}>
                   {([
-                    ["Дистанция", stats.distKm + " км"],
-                    ["Крейсер. высота", stats.cruiseAlt + " м"],
-                    ["Расч. время", stats.etaStill == null ? stats.eta + " мин" : (
+                    [t("qskyway.tel.distance"), stats.distKm + " " + t("qskyway.unit.km")],
+                    [t("qskyway.tel.cruiseAlt"), stats.cruiseAlt + " " + t("qskyway.unit.m")],
+                    [t("qskyway.tel.eta"), stats.etaStill == null ? stats.eta + " " + t("qskyway.unit.min") : (
                       <>
-                        {stats.eta} мин
+                        {stats.eta} {t("qskyway.unit.min")}
                         <span style={{ fontSize: 11, fontWeight: 400, color: "#5f7086", marginLeft: 5 }}>
-                          ({stats.eta - stats.etaStill >= 0 ? "+" : ""}{(stats.eta - stats.etaStill).toFixed(2)} ветер)
+                          ({stats.eta - stats.etaStill >= 0 ? "+" : ""}{(stats.eta - stats.etaStill).toFixed(2)} {t("qskyway.tel.windSuffix")})
                         </span>
                       </>
                     )],
-                    ["Разведено бортов", String(stats.conflicts)],
+                    [t("qskyway.tel.separated"), String(stats.conflicts)],
                     // Две цифры рядом, и это не дублирование. Первая считает все
                     // участки, включая открытую землю (её высота известна — там
                     // ничего не стоит), вторая — только те, где под крылом
@@ -1061,20 +1061,25 @@ export default function QSkywayClient() {
                     // ноль: городского обмера нет ни у одного дома. Одна первая
                     // читалась как «с высотами всё хорошо» и спорила с чипом
                     // города «0% обмерено» — замер 12.08.2026.
-                    ["Увер. высоты (маршрут)", stats.heightConfidencePct == null ? "—" : (
+                    [t("qskyway.tel.heightConfidence"), stats.heightConfidencePct == null ? "—" : (
                       <>
                         {stats.heightConfidencePct}%
-                        {stats.obstacleSegments != null && stats.obstacleSegments > 0 && (
+                        {/* Условие тут одно, а было два: сама функция отдаёт null
+                            ровно при отсутствии участков, и отдельная проверка
+                            `obstacleSegments > 0` её дублировала. TypeScript
+                            дубликат не связывал и требовал разбирать null там,
+                            где он недостижим. */}
+                        {measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) != null && (
                           <span
                             title={`Из ${stats.obstacleSegments} участков со зданием под крылом на обмеренной городом высоте стоят ${stats.measuredObstacleSegments ?? 0}. Остальные — вывод из тега или счёта этажей OSM, либо слепой дефолт; за неуверенность коридор платит запасом по высоте.`}
                             style={{ fontSize: 11, fontWeight: 400, color: (stats.measuredObstacleSegments ?? 0) === 0 ? "#fbbf24" : "#5f7086", marginLeft: 5, cursor: "help" }}
                           >
-                            (по зданиям {measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments)}%)
+                            {t("qskyway.tel.byBuildings", { pct: measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) ?? 0 })}
                           </span>
                         )}
                       </>
                     )],
-                    ["Запас на неувер-ть", stats.avgConfClearM == null ? "—" : stats.avgConfClearM + " м"],
+                    [t("qskyway.tel.confClearance"), stats.avgConfClearM == null ? "—" : stats.avgConfClearM + " " + t("qskyway.unit.m")],
                   ] as [string, React.ReactNode][]).map(([k, v]) => (
                     <div key={k} style={{ background: "#0e141f", padding: "12px 14px" }}>
                       <div style={{ fontFamily: "monospace", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: "#5f7086" }}>{k}</div>
@@ -1087,10 +1092,10 @@ export default function QSkywayClient() {
                     {/* When the flight was refused, this verdict describes the corridor
                         an unrestricted flight would have needed — say so, don't let it
                         read as the current route. */}
-                    {ceilingBlocked && <span style={{ color: "#5f7086" }}>без ограничения потолком: </span>}
-                    🛂 {airspaceRoute.compliant ? "в пределах потолка регулятора" : `выше потолка на ${airspaceRoute.maxExceedanceM} м · участков ${airspaceRoute.exceedingSegments}`}
+                    {ceilingBlocked && <span style={{ color: "#5f7086" }}>{t("qskyway.route.noCeilingLimit")}</span>}
+                    🛂 {airspaceRoute.compliant ? t("qskyway.route.withinCeiling") : t("qskyway.route.aboveCeiling", { m: airspaceRoute.maxExceedanceM, n: airspaceRoute.exceedingSegments })}
                     {airspaceRoute.lowestCeilingM != null && (
-                      <span style={{ color: "#5f7086" }}> · мин. потолок по трассе {airspaceRoute.lowestCeilingM} м</span>
+                      <span style={{ color: "#5f7086" }}>{t("qskyway.route.lowestCeiling", { m: airspaceRoute.lowestCeilingM })}</span>
                     )}
                     <div style={{ color: "#5f7086", fontSize: 10.5, marginTop: 3, whiteSpace: "normal" }}>{lang === "ru" ? airspaceRoute.note : (airspaceRoute.noteEn ?? airspaceRoute.note)}</div>
                   </div>
@@ -1101,7 +1106,7 @@ export default function QSkywayClient() {
                     него. Высоту при этом не переписываем: починка принадлежит OSM. */}
                 <HeightDisputePanel dispute={heightDispute} />
                 <div style={{ padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
-                  <button style={btnPri} onClick={bookSlot} disabled={!loaded}>Забронировать слот (QRight)</button>
+                  <button style={btnPri} onClick={bookSlot} disabled={!loaded}>{t("qskyway.btn.bookSlot")}</button>
                   {booking && <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.startsWith("✓") ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>{booking}</div>}
 
                   {/* The filing document. Until now it existed only as an endpoint,
@@ -1132,9 +1137,9 @@ export default function QSkywayClient() {
                             обе цифры сразу — иначе на экране остаётся удобная. */}
                         {justification.doc.obstacleSegments != null && justification.doc.obstacleSegments > 0 && (
                           <div style={{ marginTop: 3, color: justification.doc.measuredObstacleSegments === 0 ? "#fbbf24" : "#5f7086" }}>
-                            высоты: {justification.doc.heightConfidencePct}% по коридору ·{" "}
+                            {t("qskyway.just.heights", { pct: justification.doc.heightConfidencePct })}{" "}
                             {measuredObstaclePct(justification.doc.obstacleSegments, justification.doc.measuredObstacleSegments)}% по зданиям
-                            {justification.doc.measuredObstacleSegments === 0 && " — городского обмера нет ни у одного"}
+                            {justification.doc.measuredObstacleSegments === 0 && t("qskyway.just.noCityMeasure")}
                           </div>
                         )}
                         <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
@@ -1157,23 +1162,23 @@ export default function QSkywayClient() {
 
               {vpRows.length > 0 && (
                 <section style={card}>
-                  <div style={cardH}>Пригодность площадок · {vpRows.length}</div>
+                  <div style={cardH}>{t("qskyway.panel.padSuitability")} · {vpRows.length}</div>
                   <div style={{ maxHeight: 220, overflowY: "auto" }}>
                     {vpRows.map((v) => (
                       <div key={v.id} style={{ padding: "8px 14px", borderTop: "1px solid #1e2836", fontFamily: "monospace", fontSize: 11.5 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                           <span style={{ color: "#9fb0c4" }}>{v.id}</span>
-                          <span style={{ color: VP_CLASS_COLOR[v.cls] ?? "#5f7086" }}>{VP_CLASS_LABEL[v.cls] ?? "не оценена"} · {v.suitability}</span>
+                          <span style={{ color: VP_CLASS_COLOR[v.cls] ?? "#5f7086" }}>{t(VP_CLASS_LABEL[v.cls] ?? "qskyway.pad.unrated")} · {v.suitability}</span>
                         </div>
                         {v.openRadiusM != null && (
                           <div style={{ color: "#5f7086", fontSize: 10, marginTop: 2 }}>
-                            откр. радиус {v.openRadiusM}м · просвет {v.clearanceM}м · до запретной зоны {v.distNoFlyM! >= 9999 ? "—" : v.distNoFlyM + "м"}
-                            {v.ceilingM != null && <> · потолок {v.ceilingM}м</>}
+                            {t("qskyway.pad.rowDetails", { r: v.openRadiusM ?? "—", c: v.clearanceM ?? "—", d: v.distNoFlyM! >= 9999 ? "—" : v.distNoFlyM + "м" })}
+                            {v.ceilingM != null && <>{t("qskyway.pad.ceiling", { m: v.ceilingM })}</>}
                           </div>
                         )}
                         {v.needsAtc && (
                           <div style={{ color: "#fda4af", fontSize: 10, marginTop: 2 }} title={t("qskyway.tip.noAutoClearance")}>
-                            🛂 нужна координация с УВД — автоматического допуска нет
+                            {t("qskyway.pad.needsAtc")}
                           </div>
                         )}
                         {/* Оценка отвечает «сядет ли сюда аппарат», а не «можно ли
@@ -1189,7 +1194,7 @@ export default function QSkywayClient() {
                     ))}
                   </div>
                   <div style={{ padding: "8px 14px", borderTop: "1px solid #1e2836", fontSize: 10.5, color: "#5f7086" }}>
-                    Алгоритмические кандидаты по открытому радиусу и просвету — не утверждённые муниципальные площадки.
+                    {t("qskyway.pad.algorithmicNote")}
                   </div>
                 </section>
               )}
@@ -1202,21 +1207,21 @@ export default function QSkywayClient() {
                     квитанции настоящие, отличить нечем. Не прячем — называем.
                   */}
                   <span>
-                    Рынок 4D-слотов (QRight) · {slots.liveCount ?? slots.count}
+                    {t("qskyway.panel.slotMarket")} · {slots.liveCount ?? slots.count}
                     {smokeSlotCount > 0 && (
                       <span style={{ color: "#fbbf24", textTransform: "none", letterSpacing: 0 }}>
-                        {" "}+ {smokeSlotCount} тестовых
+                        {" "}{t("qskyway.slots.testSuffix", { n: smokeSlotCount })}
                       </span>
                     )}
                   </span>
                   {slots.store && (
-                    <span style={{ color: slots.store === "postgres" ? "#2dd4bf" : "#fbbf24", textTransform: "none", letterSpacing: 0 }} title={slots.store === "postgres" ? "Слоты сохраняются в Postgres — переживут рестарт" : "Слоты только в памяти процесса — теряются при рестарте бэкенда"}>
+                    <span style={{ color: slots.store === "postgres" ? "#2dd4bf" : "#fbbf24", textTransform: "none", letterSpacing: 0 }} title={slots.store === "postgres" ? t("qskyway.slots.storeDurable") : t("qskyway.slots.storeMemory")}>
                       {slots.store === "postgres" ? "● persist" : "● ephemeral"}
                     </span>
                   )}
                 </div>
                 {slots.list.length === 0 ? (
-                  <div style={{ padding: "12px 14px", fontSize: 12, color: "#5f7086" }}>Слотов пока не забронировано.</div>
+                  <div style={{ padding: "12px 14px", fontSize: 12, color: "#5f7086" }}>{t("qskyway.slots.empty")}</div>
                 ) : (
                   <div style={{ maxHeight: 220, overflowY: "auto" }}>
                     {[...slots.list].reverse().slice(0, 20).map((s) => (
@@ -1229,7 +1234,7 @@ export default function QSkywayClient() {
                                 style={{ color: "#fbbf24", marginLeft: 6 }}
                                 title={t("qskyway.tip.smokeBooking")}
                               >
-                                тест
+                                {t("qskyway.slots.testBadge")}
                               </span>
                             )}
                           </span>

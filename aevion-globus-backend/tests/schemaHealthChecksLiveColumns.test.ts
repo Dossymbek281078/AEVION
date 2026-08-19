@@ -18,6 +18,7 @@ vi.mock("../src/lib/dbPool", () => ({
       query: async (sql: string) => {
         queries.push(sql);
         behaviour(sql);
+        if (sql.includes("information_schema")) return { rows: [{ n: 87 }], rowCount: 1 };
         return { rows: [], rowCount: 0 };
       },
     };
@@ -34,8 +35,9 @@ describe("schemaHealth — колонки проверяются на живой
     expect(r.ok).toBe(true);
     expect(r.failures).toEqual([]);
     // Без этого тест был бы зелёным и на коде, который ничего не спрашивает.
-    expect(queries.length).toBe(SCHEMA_CHECKS.length);
-    expect(queries.every((q) => /LIMIT 0/i.test(q))).toBe(true);
+    // +1 запрос — знаменатель (сколько таблиц в базе всего)
+    expect(queries.length).toBe(SCHEMA_CHECKS.length + 1);
+    expect(queries.filter((q) => /LIMIT 0/i.test(q)).length).toBe(SCHEMA_CHECKS.length);
   });
 
   test("нет колонки -> НЕ ok, и названа именно она", async () => {
@@ -51,7 +53,7 @@ describe("schemaHealth — колонки проверяются на живой
   test("падает ОДНА проверка — остальные всё равно выполняются", async () => {
     behaviour = (sql) => { if (sql.includes("BuildDocument")) throw new Error("boom"); };
     const r = await checkQueriedSchemas();
-    expect(queries.length).toBe(SCHEMA_CHECKS.length);
+    expect(queries.length).toBe(SCHEMA_CHECKS.length + 1);
     expect(r.failures.length).toBe(1);
   });
 
@@ -65,5 +67,23 @@ describe("schemaHealth — колонки проверяются на живой
   test("список проверок не пуст (контроль прибора)", () => {
     expect(SCHEMA_CHECKS.length).toBeGreaterThan(0);
     expect(SCHEMA_CHECKS.every((c) => /LIMIT 0/i.test(c.sql))).toBe(true);
+  });
+
+  test("охват назван честно: проверено N из ВСЕХ таблиц", () => {
+    // «Проверено 2» звучит как охват. Знаменатель превращает это в выборку,
+    // и по нему сразу видно, насколько она мала.
+    expect(SCHEMA_CHECKS.length).toBeGreaterThan(0);
+  });
+
+  test("знаменатель отдаётся, а при отказе — null, а не ноль", async () => {
+    const good = await checkQueriedSchemas();
+    expect(good.tablesTotal).toBe(87);
+
+    behaviour = (sql) => { if (sql.includes("information_schema")) throw new Error("нет доступа"); };
+    const bad = await checkQueriedSchemas();
+    // Ноль таблиц и «спросить не удалось» — разные вещи. Ноль читался бы
+    // как факт о базе, null честно говорит «охват неизвестен».
+    expect(bad.tablesTotal).toBeNull();
+    expect(bad.ok).toBe(true);   // сам отказ знаменателя не делает базу больной
   });
 });

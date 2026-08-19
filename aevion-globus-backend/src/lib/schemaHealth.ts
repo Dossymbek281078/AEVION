@@ -40,6 +40,14 @@ export const SCHEMA_CHECKS: SchemaCheck[] = [
 export type SchemaHealth = {
   ok: boolean;
   checked: number;
+  /**
+   * Сколько таблиц в базе ВСЕГО. Нужен именно знаменатель, а не только
+   * число проверок: «проверено 2» звучит как охват, «проверено 2 из 87»
+   * честно говорит, что это выборка. Ровно на этом обжигались два наших
+   * сторожа — они проверяли жёсткий список и выглядели полными.
+   * null означает «спросить не удалось», а НЕ ноль таблиц.
+   */
+  tablesTotal: number | null;
   failures: { name: string; error: string }[];
 };
 
@@ -57,6 +65,7 @@ export async function checkQueriedSchemas(timeoutMs = 3000): Promise<SchemaHealt
     return {
       ok: false,
       checked: 0,
+      tablesTotal: null,
       // «Не смог спросить» — это НЕ «всё хорошо». Отдельный текст, чтобы
       // отказ прибора не читался как отсутствие поломок.
       failures: [{ name: "pool", error: "спросить не удалось: " + String((e as Error)?.message ?? e) }],
@@ -72,5 +81,18 @@ export async function checkQueriedSchemas(timeoutMs = 3000): Promise<SchemaHealt
       failures.push({ name: c.name, error: String((e as Error)?.message ?? e).slice(0, 160) });
     }
   }
-  return { ok: failures.length === 0, checked: SCHEMA_CHECKS.length, failures };
+  // Знаменатель. Отказ этого запроса не делает проверку неуспешной — он лишь
+  // оставляет охват неизвестным, и это видно по null.
+  let tablesTotal: number | null = null;
+  try {
+    const r = await pool.query(
+      `SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'public'`,
+    );
+    const n = (r.rows?.[0] as { n?: number } | undefined)?.n;
+    tablesTotal = typeof n === "number" ? n : null;
+  } catch {
+    tablesTotal = null;
+  }
+
+  return { ok: failures.length === 0, checked: SCHEMA_CHECKS.length, tablesTotal, failures };
 }

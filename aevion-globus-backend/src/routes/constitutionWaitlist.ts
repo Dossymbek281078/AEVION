@@ -252,7 +252,7 @@ constitutionWaitlistAdminRouter.get(
         rows = Array.from(memList.values());
         source = "memory";
       }
-      const truncated = source === "postgres" && rows.length >= ROW_CAP;
+      const truncated = exportTruncated(source, rows.length, ROW_CAP);
       // Для CSV поля в тело не положить — поэтому признаки уходят заголовками:
       // файл сам по себе выглядит одинаково полным в любом случае.
       res.setHeader("X-Data-Source", source);
@@ -307,6 +307,22 @@ constitutionWaitlistAdminRouter.get(
  * названо: иначе первый же отчёт, где 12 подписчиков дают 15 по группам,
  * прочитают как ошибку счёта. Поэтому рядом отдаётся `uniqueEmails`.
  */
+/**
+ * Обрезана ли выгрузка. Вынесено из обработчика, чтобы это можно было проверить.
+ *
+ * Замер 19.08.2026 мутациями: одиннадцать тестов «признаки честности выгрузки» НЕ
+ * ловили ни `truncated = false` всегда, ни снижение предела до пяти строк. Тесты не
+ * лгали — в них нет базы, поэтому путь `postgres` не проходится вовсе, а признак
+ * обрезки считался только там. То есть свойство было непроверяемо по ОБСТОЯТЕЛЬСТВАМ,
+ * а не по природе, и это отговорка: решение — чистое, три аргумента.
+ *
+ * Почему `>=`, а не `>`: запрос идёт с `LIMIT cap`, и ровно `cap` строк означает
+ * «возможно, есть ещё» — при `>` последняя страница молча выдавалась бы за полную.
+ */
+export function exportTruncated(source: string, rowCount: number, cap: number): boolean {
+  return source === "postgres" && rowCount >= cap;
+}
+
 function aggregateBySource(rows: WaitlistRow[]): {
   bySource: Array<{ source: string; count: number }>;
   uniqueEmails: number;

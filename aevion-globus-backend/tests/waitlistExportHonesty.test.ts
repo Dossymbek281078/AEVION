@@ -258,3 +258,35 @@ describe("разбивка по источникам после склейки �
     expect(sum).toBeGreaterThanOrEqual(list.body.uniqueEmails);
   }, 20_000);
 });
+
+describe("признак обрезки — проверяемо, а не «нужна база»", () => {
+  // Мутациями 19.08.2026 выяснилось, что одиннадцать тестов выше НЕ ловят ни
+  // `truncated = false` всегда, ни снижение предела строк до пяти. Тесты не лгали: в
+  // них нет базы, путь postgres не проходится, а признак считался только там. Решение
+  // вынесено в чистую функцию — теперь свойство проверяется без всякой базы.
+
+  test("ровно предел — считается обрезанной", async () => {
+    // Граница важнее остального: запрос идёт с LIMIT cap, и ровно cap строк означает
+    // «возможно, есть ещё». При строгом «больше» последняя страница молча выдавалась
+    // бы за полную.
+    const { exportTruncated } = await import("../src/routes/constitutionWaitlist");
+    expect(exportTruncated("postgres", 5000, 5000)).toBe(true);
+    expect(exportTruncated("postgres", 4999, 5000)).toBe(false);
+    expect(exportTruncated("postgres", 5001, 5000)).toBe(true);
+  });
+
+  test("память обрезанной не считается — там предел не применялся", async () => {
+    const { exportTruncated } = await import("../src/routes/constitutionWaitlist");
+    expect(exportTruncated("memory", 99999, 5000)).toBe(false);
+  });
+
+  test("обработчик пользуется этой же функцией, а не своей копией", async () => {
+    // Иначе проверка выше охраняла бы функцию, которую никто не зовёт — класс,
+    // уже пойманный в этом проекте не раз.
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(join(__dirname, "..", "src", "routes", "constitutionWaitlist.ts"), "utf8");
+    expect(src).toMatch(/const truncated = exportTruncated\(source, rows\.length, ROW_CAP\)/);
+    expect(src).not.toMatch(/const truncated = source === "postgres" && rows\.length >= ROW_CAP/);
+  });
+});

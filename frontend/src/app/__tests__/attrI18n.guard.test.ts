@@ -75,6 +75,13 @@ const KNOWN: Hit[] = [
   { file: "components/build/AiResumeBuilder.tsx", attr: "placeholder", text: "Твой ответ… Enter — отправить." },
   { file: "components/build/HelpTip.tsx", attr: "aria-label", text: "Подсказка" },
   { file: "components/build/ReviewsSection.tsx", attr: "placeholder", text: "Что было хорошо и что можно улучшить?" },
+  // Переключатель языка: обе подписи ДВУЯЗЫЧНЫЕ намеренно, это не недоработка.
+  // Он единственная кнопка, которую обязан найти человек, не читающий
+  // по-русски, а перевести его через t() нельзя — он и выбирает язык.
+  // 19.08.2026 aria-label был только русским; починено здесь же, title был
+  // двуязычным изначально.
+  { file: "components/LanguageSwitcher.tsx", attr: "title", text: "Выбрать язык / Select language" },
+  { file: "components/LanguageSwitcher.tsx", attr: "aria-label", text: "Язык интерфейса / Interface language" },
 ];
 
 function collectSourceFiles(dir: string): string[] {
@@ -106,10 +113,28 @@ function translatableSet(files: string[]): Set<string> {
   for (const f of usesT) {
     for (const m of readFileSync(f, "utf8").matchAll(/from "@\/([^"]+)"/g)) specs.add(m[1]);
   }
-  const out = new Set(usesT);
+  const byPath = new Map<string, string>();
   for (const f of files) {
-    const rel = relative(SRC_DIR, f).split(String.fromCharCode(92)).join("/").replace(/\.(tsx|jsx)$/, "");
-    if (specs.has(rel) || specs.has(rel.replace(/\/index$/, ""))) out.add(f);
+    byPath.set(relative(SRC_DIR, f).split(String.fromCharCode(92)).join("/").replace(/\.(tsx|jsx)$/, ""), f);
+  }
+  // Замыкание, а не один уровень: страница импортирует компонент, компонент —
+  // другой компонент. Замер 19.08.2026: глубже первого уровня прятался ровно
+  // один файл — и это оказался сам LanguageSwitcher, единственная кнопка,
+  // которую должен найти человек, не читающий по-русски.
+  const out = new Set(usesT);
+  let frontier = [...usesT];
+  while (frontier.length) {
+    const next: string[] = [];
+    for (const f of frontier) {
+      for (const m of readFileSync(f, "utf8").matchAll(/from "@\/([^"]+)"/g)) {
+        const hit = byPath.get(m[1]) ?? byPath.get(m[1] + "/index");
+        if (hit && !out.has(hit)) {
+          out.add(hit);
+          next.push(hit);
+        }
+      }
+    }
+    frontier = next;
   }
   return out;
 }

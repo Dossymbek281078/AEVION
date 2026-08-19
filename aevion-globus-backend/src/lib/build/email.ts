@@ -83,7 +83,24 @@ async function sendViaResend(to: string, subject: string, html: string): Promise
 async function send(to: string, subject: string, html: string): Promise<boolean> {
   try {
     const transport = getTransport();
-    if (!transport) return sendViaResend(to, subject, html); // SMTP нет — пробуем Resend
+    if (!transport) {
+      // Два намерения, слитые вместе (19.08.2026).
+      //
+      // Из fix/email-silent-skip: молчаливый `return` — худший вид отказа,
+      // ненастроенный SMTP выглядел как успешная отправка. След обязателен,
+      // иначе «письма не дошли» неотличимо от «письма не отправлялись».
+      //
+      // Отсюда: прежде чем признать отправку несостоявшейся, пробуем ВТОРОЙ
+      // транспорт. В routes/build/ пять мест шлют через Resend, то есть
+      // сервер вполне может быть настроен только на него, и жаловаться на
+      // отсутствие SMTP при рабочей почте было бы неправдой.
+      if (await sendViaResend(to, subject, html)) return true;
+      console.warn(
+        `[build/email] письмо «${subject}» для ${to} НЕ отправлено: ни SMTP, ни Resend не настроены. ` +
+          "Задайте SMTP_HOST, SMTP_USER и SMTP_PASS либо RESEND_API_KEY.",
+      );
+      return false;
+    }
     await transport.sendMail({ from: FROM, to, subject, html });
     return true;
   } catch (e) {

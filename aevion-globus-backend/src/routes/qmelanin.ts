@@ -183,21 +183,59 @@ qmelaninRouter.post("/assessment", (req: Request, res: Response) => {
   if (diet === "vegan") { score += 2; factors.push("веган-диета (риск B12/железа/цинка)"); }
   else if (diet === "vegetarian") { score += 1; factors.push("вегетарианство (риск B12/железа)"); }
 
-  const band = score >= 5 ? "high" : score >= 2 ? "moderate" : "low";
+  // Какие поля человек ДЕЙСТВИТЕЛЬНО заполнил.
+  //
+  // У каждого значения выше есть умолчание: возраст 40, стресс 0, сон 7 часов,
+  // питание «смешанное», а familyHistory и smoking — Boolean(undefined), то есть
+  // false. Поэтому пустое тело давало score 0, factors [] и band "low":
+  // «мы проверили, у вас всё хорошо», посчитанное из ничего. Проверено на проде
+  // 20.08.2026 запросом с телом {}.
+  //
+  // В модуле про здоровье это опаснее отказа: отказ видно, а успокаивающий ответ
+  // принимают на веру. Отсутствие данных — не признак благополучия.
+  const RISK_FIELDS = ["onsetAge", "familyHistory", "smoking", "stress", "sleepHours", "diet"] as const;
+  const answered = RISK_FIELDS.filter(
+    (k) => b[k] !== undefined && b[k] !== null && b[k] !== "",
+  );
+  const assumed = RISK_FIELDS.filter((k) => !answered.includes(k));
+
+  // Ни одного поля, влияющего на риск, — оценивать нечего.
+  const band =
+    answered.length === 0
+      ? "unknown"
+      : score >= 5
+        ? "high"
+        : score >= 2
+          ? "moderate"
+          : "low";
   const tier1 = BIOMARKERS.filter((x) => x.tier === 1).map((x) => ({ key: x.key, label: x.label, unit: x.unit }));
   const tier2 = BIOMARKERS.filter((x) => x.tier === 2).map((x) => ({ key: x.key, label: x.label, unit: x.unit }));
+  // При "unknown" отдаётся ПОЛНАЯ панель: не зная ничего, сужать обследование
+  // нельзя. Лишний анализ дешевле пропущенного.
   const recommendedPanel = band === "low" ? tier1 : [...tier1, ...tier2];
 
   res.json({
-    riskScore: score,
+    riskScore: band === "unknown" ? null : score,
     riskBand: band,
     factors,
+    // Что заполнено и что подставлено умолчанием. Без этого ноль в riskScore
+    // неотличим от «ответил, и всё чисто».
+    answered,
+    assumed,
     recommendedPanel,
     extended: band !== "low",
     note:
       onsetAge !== null && age - onsetAge > 25
         ? "Седина давняя — вероятно возрастное истощение McSC (в основном необратимо). Программа целится в замедление и общее клеточное здоровье."
         : "Ранняя/пограничная седина — окно для коррекции дефицитов и снижения окислительной нагрузки.",
+    ...(band === "unknown"
+      ? {
+          warning:
+            "Анкета не заполнена: ни одно поле, влияющее на риск, не передано. " +
+            "Это НЕ значит, что риск низкий — оценить его пока не по чему. " +
+            "Заполните анкету, чтобы получить оценку.",
+        }
+      : {}),
     disclaimer: DISCLAIMER,
     timestamp: nowIso(),
   });

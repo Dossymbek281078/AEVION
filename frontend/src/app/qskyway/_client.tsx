@@ -955,10 +955,24 @@ export default function QSkywayClient() {
                       scopeNote: t("qskyway.reg.zones.scope"),
                     }}
                   />
-                  <span
+                  {/* Кнопка, а не <span> с обработчиком клика.
+                      Раньше подпись проверялась кликом по тексту: с клавиатуры
+                      такой элемент недостижим, диктор не объявляет его кнопкой,
+                      а единственная подсказка о том, что он вообще нажимается,
+                      жила в title — то есть на телефоне не существовала.
+                      Проверка подписи — главное действие этого блока, и прятать
+                      её в наведении мыши нельзя. */}
+                  <button
+                    type="button"
                     onClick={verify === "checking" ? undefined : verifySignature}
+                    disabled={verify === "checking"}
+                    aria-label={t("qskyway.tip.verifySig")}
                     title={t("qskyway.tip.verifySig")}
                     style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      font: "inherit",
                       cursor: verify === "checking" ? "wait" : "pointer",
                       textDecoration: "underline dotted",
                       color: verify === "valid" ? "#2dd4bf" : verify === "invalid" ? "#fb7185" : verify === "unknown" ? "#94a3b8" : "#2dd4bf",
@@ -982,7 +996,7 @@ export default function QSkywayClient() {
                     {verify === "unknown" && (
                       <span style={{ color: "#94a3b8" }}>{t("qskyway.verify.unknown")}</span>
                     )}
-                  </span>
+                  </button>
                   <DataProvenanceChip compact dataQuality={meta.dq} labels={{
                       // Подписи происхождения данных берём из переводов, а не из
                       // умолчаний компонента: они русские, а компонент общий и

@@ -107,4 +107,33 @@ describe("серию нельзя объявить, её можно только
     expect(r.status).toBe(400);
     expect(r.body.error).toBe("wrong_day");
   });
+
+  test("подсказка не растит серию, но и не рвёт её", async () => {
+    // Правило написано на самом экране: «Streak не растёт, но и не сбрасывается».
+    // Перенеся подсчёт на сервер, я стал считать любой решённый день — и серия
+    // росла ВОПРЕКИ надписи. Экран обещал одно, сервер делал другое.
+    const a = await app();
+    const send = async (день: string, подсказок: number) => {
+      vi.setSystemTime(new Date(`${день}T12:00:00Z`));
+      return request(a).post("/api/cyberchess-daily/solve")
+        .send({ userId: "u6", moves: SOL, hintsUsed: подсказок });
+    };
+    expect((await send("2026-09-01", 0)).body.streak).toBe(1);
+    expect((await send("2026-09-02", 0)).body.streak).toBe(2);
+    // С подсказкой — прежнее число, а не три.
+    expect((await send("2026-09-03", 2)).body.streak).toBe(2);
+    // И цепочка не порвана: следующий день без подсказок продолжает её.
+    expect((await send("2026-09-04", 0)).body.streak).toBe(4);
+  });
+
+  test("новичок с подсказкой не получает серию из воздуха", async () => {
+    // streakEndingAt считает переданный день решённым по условию; для вчерашнего
+    // это верно только если вчера действительно решали.
+    const a = await app();
+    vi.setSystemTime(new Date("2026-09-10T12:00:00Z"));
+    const r = await request(a).post("/api/cyberchess-daily/solve")
+      .send({ userId: "новичок-с-подсказкой", moves: SOL, hintsUsed: 1 });
+    expect(r.status).toBe(200);
+    expect(r.body.streak).toBe(0);
+  });
 });

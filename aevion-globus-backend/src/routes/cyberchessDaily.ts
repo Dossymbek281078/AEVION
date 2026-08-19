@@ -731,6 +731,15 @@ async function solutionForDay(day: string): Promise<string[] | null> {
  * Раньше это число присылал клиент, и любой мог объявить себя первым в таблице
  * (проверено на проде: `{"streak":364}` без единого хода → счёт 36700).
  */
+
+/** Предыдущий календарный день в том же виде «ГГГГ-ММ-ДД». */
+function previousDay(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return day;
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 function streakEndingAt(day: string, solvedDays: string[]): number {
   const set = new Set(solvedDays);
   let n = 1; // сегодняшний день засчитан вызовом
@@ -756,9 +765,27 @@ router.post('/solve', async (req: Request, res: Response) => {
     });
   }
 
-  const { day, timeMs, hintsUsed, userId, name, country, moves } = req.body || {};
-  if (typeof day !== 'string' || !day) {
-    return res.status(400).json({ ok: false, error: 'day (string) required' });
+  const { day: claimedDay, timeMs, hintsUsed, userId, name, country, moves } = req.body || {};
+
+  // День — СЕРВЕРНЫЙ, а не из тела запроса.
+  //
+  // Найдено вычиткой собственного дифа 19.08.2026, уже после починки подделки
+  // серии. Дыра оставалась открытой с другой стороны: приняв `day` от клиента,
+  // сервер позволял «дорешать» прошлые дни — прислать по запросу на каждую дату
+  // и набить серию за один заход, не возвращаясь ни разу.
+  //
+  // Смысл ежедневной задачи именно в возвращении, поэтому дата обязана быть
+  // нашей. Присланная не игнорируется молча: расхождение — это отказ, иначе
+  // клиент с разъехавшимися часами будет думать, что решил, а мы запишем другой
+  // день.
+  const day = todayIso();
+  if (typeof claimedDay === 'string' && claimedDay && claimedDay !== day) {
+    return res.status(400).json({
+      ok: false,
+      error: 'wrong_day',
+      hint: `задача дня решается в свой день; сегодня ${day}`,
+      today: day,
+    });
   }
 
   // ── Решение ПРОВЕРЯЕТСЯ, а не принимается на слово ───────────────────────
@@ -795,7 +822,23 @@ router.post('/solve', async (req: Request, res: Response) => {
   // Серия — производное от нашей истории, а не поле запроса. Считается ДО
   // записи сегодняшнего дня: сегодня всегда +1 к тому, что было вчера.
   const priorHistory = userStats.get(uid)?.history ?? [];
-  const streak = streakEndingAt(day, priorHistory.map((h) => h.day));
+  const solvedDays = priorHistory.map((h) => h.day);
+  // Подсказка не растит серию, но и не рвёт её — это правило продукта, и оно
+  // написано на самом экране: «Streak не растёт, но и не сбрасывается».
+  //
+  // Найдено вычиткой: перенеся подсчёт на сервер, я стал считать любой решённый
+  // день, и серия росла ВОПРЕКИ надписи. Экран обещал одно, сервер делал другое,
+  // и заметить это было нечем — числа расходятся молча.
+  //
+  // День всё равно попадает в историю ниже, поэтому цепочка не рвётся: завтра
+  // сегодняшний день уже будет засчитан.
+  // Осторожно: streakEndingAt считает переданный день решённым ПО УСЛОВИЮ. Для
+  // вчерашнего это верно только если вчера действительно решали, иначе новичок
+  // с подсказкой получил бы серию 1 из воздуха.
+  const вчера = previousDay(day);
+  const streak = hUsed > 0
+    ? (solvedDays.includes(вчера) ? streakEndingAt(вчера, solvedDays) : 0)
+    : streakEndingAt(day, solvedDays);
   const score = computeScore(streak, tMs, hUsed);
   const key = `${uid}:${day}`;
   const record: SolveRecord = { day, streak, userId: uid, timeMs: tMs, hintsUsed: hUsed, score };

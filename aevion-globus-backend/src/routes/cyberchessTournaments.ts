@@ -63,6 +63,9 @@ export interface Player {
   blackCount: number;
   opponentIds: string[];
   userId?: string; // when a real registered user is mapped onto this roster slot
+  /** Имя места до того, как его занял живой игрок. Нужно, чтобы выход из
+   *  турнира вернул сетке прежнего участника, а не прочерк. */
+  seedName?: string;
 }
 
 export interface BracketMatch {
@@ -1629,6 +1632,34 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
   });
 });
 
+
+/**
+ * Скорость турнира для поиска рейтинга.
+ *
+ * Найдено вычиткой 19.08.2026, через час после того, как проверка рамок ELO
+ * была написана и покрыта зелёными тестами. Турниры хранят `timeControl` уже
+ * как НАЗВАНИЕ скорости («blitz», «classic», «rapid»), а `speedOf` из хранилища
+ * партий ждёт вид «300+5» и на всё прочее молча возвращает «blitz».
+ *
+ * То есть рамки сверялись по блицу для ВСЕХ турниров: игрок с рейтингом в
+ * рапиде имел в блице ноль партий, считался новичком и проходил куда угодно.
+ * Ни одной ошибки при этом не возникало — проверка просто ничего не проверяла
+ * у девяти турниров из двенадцати.
+ *
+ * Отдельно: у турниров «classic», а у скоростей «classical» — несовпадение,
+ * которое тем же путём давало бы блиц.
+ *
+ * Неизвестное значение возвращает null, а не «blitz»: подстановка чужой
+ * скорости выглядела бы как выполненная проверка. Не знаем — говорим об этом.
+ */
+function tournamentSpeed(timeControl: unknown): string | null {
+  const raw = String(timeControl ?? "").trim().toLowerCase();
+  if (/^\d+\+\d+$/.test(raw)) return speedOf(raw);
+  if (raw === "classic" || raw === "classical") return "classical";
+  if (raw === "bullet" || raw === "blitz" || raw === "rapid") return raw;
+  return null;
+}
+
 router.post("/:id/register", async (req: Request, res: Response): Promise<void> => {
   const t = TOURNAMENTS.find((x) => x.id === req.params.id);
   if (!t) {
@@ -1691,7 +1722,10 @@ router.post("/:id/register", async (req: Request, res: Response): Promise<void> 
   //                                    чтобы «пустили» не выглядело «проверили»
   let eloChecked: "по рейтингу" | "рейтинга нет" | "спросить не удалось" = "рейтинга нет";
   try {
-    const known = await getRating(userId, speedOf(String(t.timeControl)));
+    const speed = tournamentSpeed(t.timeControl);
+    // Скорость не опознана — рейтинг искать негде. Пускаем, но это ЗАПИСАНО:
+    // «пустили, не спросив» и «спросили и пустили» — разные вещи.
+    const known = speed === null ? null : await getRating(userId, speed);
     if (known === null) {
       eloChecked = "спросить не удалось";
     } else if (Number(known.games) > 0) {
@@ -1721,6 +1755,9 @@ router.post("/:id/register", async (req: Request, res: Response): Promise<void> 
   if (t.realPlayers) {
     const freeSlot = t.roster.find((p) => !p.userId);
     if (freeSlot) {
+      // Прежнее имя места запоминается, иначе выход из турнира его теряет:
+      // в сетке лежат демо-имена, и регистрация их затирает.
+      if (freeSlot.seedName === undefined) freeSlot.seedName = freeSlot.name;
       freeSlot.userId = userId;
       freeSlot.name = displayName;
     } else {
@@ -1850,6 +1887,79 @@ router.get("/:id/next-round", (req: Request, res: Response): void => {
 // not pass through here. It exists for the tournament service to report
 // results, and that sender can sign — same secret and same verification chain
 // as /api/cyberchess/tournament-finalized.
+/**
+ * POST /:id/unregister { userId, ticketId } — выйти из турнира до его начала.
+ *
+ * Заведено 19.08.2026. До этого выйти было НЕЛЬЗЯ вообще: записался — значит
+ * навсегда, даже если передумал за неделю до старта. Регистрация без отмены —
+ * это про согласие человека, а не про удобство: он соглашался играть, а не
+ * числиться в списке, из которого нет выхода.
+ *
+ * Право подтверждается БИЛЕТОМ, а не одним userId. Аккаунтов у нас нет, и
+ * идентификатор игрока не секрет — зная его, посторонний вычёркивал бы людей из
+ * турниров. Билет выдаётся при регистрации и есть только у записавшегося.
+ *
+ * После старта выход закрыт: сетка уже построена, и вычеркнутый участник
+ * оставил бы дыру в парах.
+ */
+router.post("/:id/unregister", (req: Request, res: Response): void => {
+  const t = TOURNAMENTS.find((x) => x.id === String(req.params.id ?? ""));
+  if (!t) {
+    res.status(404).json({ ok: false, error: "not_found" });
+    return;
+  }
+  if (t.status !== "upcoming") {
+    res.status(409).json({
+      ok: false,
+      error: "already_started",
+      hint: "выйти можно только до начала турнира",
+    });
+    return;
+  }
+  const userId = String(req.body?.userId ?? "").trim();
+  const ticketId = String(req.body?.ticketId ?? "").trim();
+  if (!userId || !ticketId) {
+    res.status(400).json({ ok: false, error: "userId_and_ticketId_required" });
+    return;
+  }
+  if (!t.registeredUserIds.includes(userId)) {
+    res.status(404).json({ ok: false, error: "not_registered" });
+    return;
+  }
+  if (!t.tickets || t.tickets[userId] !== ticketId) {
+    res.status(403).json({ ok: false, error: "ticket_mismatch" });
+    return;
+  }
+
+  t.registeredUserIds = t.registeredUserIds.filter((u) => u !== userId);
+  t.players = Math.max(0, t.players - 1);
+  delete t.tickets[userId];
+  // Место в сетке освобождается тоже: иначе участник исчезает из списка, но
+  // продолжает занимать слот, и турнир выглядит полнее, чем есть.
+  // Два случая, и они разные. Дописанный игрок (`pl_dyn_…`) появился ТОЛЬКО
+  // из-за регистрации — его надо убрать целиком, иначе сетка копит пустые
+  // строки. Готовое место сетки существовало и до него: ему возвращается
+  // прежнее имя, а не прочерк, иначе демо-участник исчезает навсегда.
+  const оставшиеся: typeof t.roster = [];
+  for (const slot of t.roster) {
+    if (slot.userId !== userId) {
+      оставшиеся.push(slot);
+      continue;
+    }
+    if (String(slot.id).startsWith("pl_dyn_")) continue; // дописанный — убираем
+    slot.userId = undefined;
+    if (slot.seedName !== undefined) {
+      slot.name = slot.seedName;
+      delete slot.seedName;
+    }
+    оставшиеся.push(slot);
+  }
+  t.roster = оставшиеся;
+  tryWriteToDisk();
+
+  res.json({ ok: true, tournamentId: t.id, userId, players: t.players });
+});
+
 router.post("/:id/result", (req: Request, res: Response): void => {
   const verdict = verifyWebhookSig({
     signature: req.headers["x-aevion-signature"],

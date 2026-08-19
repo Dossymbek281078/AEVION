@@ -20,7 +20,15 @@ const BASE = (process.env.BASE || process.env.BACKEND_URL || "https://api.aevion
 // Order matches the user's task spec — keeps the table readable.
 const MODULES = [
   "veilnetx",
-  "qfusionai",
+  // qfusionai убран 19.08.2026. У него собственный роутер, но ручки
+  // /waitlist в нём НЕТ, и её никто не зовёт: по фронтенду ноль обращений
+  // к /api/qfusionai/waitlist, формы на странице модуля тоже нет. То есть
+  // смоук требовал возможности, которую продукт не обещает, и давал
+  // FAIL(404) на ровном месте.
+  //
+  // Как это дожило до сегодня: смоук не входит в оркестратор и не
+  // запускался НИ РАЗУ — непрогоняемая проверка тихо расходится с
+  // действительностью. Появится лист ожидания у qfusionai — вернуть строку.
   "voice-of-earth",
   "kids-ai-content",
   "startup-exchange",

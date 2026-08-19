@@ -34,8 +34,14 @@ const ROOT = join(HERE, "..");
 
 const PORT = process.env.PORT || "4171";
 const BASE = `http://127.0.0.1:${PORT}`;
-const script = process.argv[2] || "qskyway-smoke";
-const scriptFile = script.endsWith(".js") || script.endsWith(".mjs") ? script : `${script}.js`;
+// Можно передать НЕСКОЛЬКО смоуков — они пройдут против одного поднятого
+// сервера. Иначе каждый требует своего подъёма, а он на загруженной машине
+// занимает минуты: девять смоуков превращались в час ожидания.
+const scripts = process.argv.slice(2).filter((a) => !a.startsWith("-"));
+if (scripts.length === 0) scripts.push("qskyway-smoke");
+const script = scripts[0];
+const fileOf = (n) => (n.endsWith(".js") || n.endsWith(".mjs") ? n : `${n}.js`);
+const scriptFile = fileOf(script);
 
 let server = null;
 let stopped = false;
@@ -171,19 +177,31 @@ if (secs === null) {
   stopServer();
   process.exit(2);
 }
-console.log(`[smoke] поднялся за ~${secs} с, запускаю ${scriptFile}`);
+console.log(`[smoke] поднялся за ~${secs} с, запускаю: ${scripts.join(", ")}`);
 
 // Node зовём напрямую: это .exe, оболочка ему не нужна, и предупреждения нет.
-const smoke = spawn(process.execPath, [join(HERE, scriptFile)], {
-  cwd: ROOT,
-  stdio: "inherit",
-  env: { ...process.env, BASE },
-});
+const outcomes = [];
+for (const name of scripts) {
+  if (scripts.length > 1) console.log(`\n========== ${name} ==========`);
+  const r = spawnSync(process.execPath, [join(HERE, fileOf(name))], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: { ...process.env, BASE },
+  });
+  outcomes.push({ name, code: r.status ?? 1 });
+}
+stopServer();
 
-smoke.on("exit", (code) => {
-  stopServer();
-  // Код прогона отдаём наружу как есть: ноль — прошло, иначе упало.
-  // Отдельный код 2 выше означает «прогон НЕ состоялся» — это не то же
-  // самое, что «смоук упал», и различать их надо.
-  process.exit(code ?? 1);
-});
+if (scripts.length > 1) {
+  console.log("\n========== Итог ==========");
+  for (const o of outcomes) {
+    console.log(`  ${o.code === 0 ? "PASS" : "FAIL"}  ${o.name}${o.code === 0 ? "" : ` (код ${o.code})`}`);
+  }
+  const failed = outcomes.filter((o) => o.code !== 0).length;
+  console.log(`\n  всего: ${outcomes.length}, прошло: ${outcomes.length - failed}, упало: ${failed}`);
+}
+
+// Код прогона отдаём наружу как есть: ноль — прошло, иначе упало.
+// Отдельный код 2 выше означает «прогон НЕ состоялся» — это не то же
+// самое, что «смоук упал», и различать их надо.
+process.exit(outcomes.some((o) => o.code !== 0) ? 1 : 0);

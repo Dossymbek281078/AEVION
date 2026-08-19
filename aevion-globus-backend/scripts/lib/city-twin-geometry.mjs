@@ -39,6 +39,31 @@ export const M_PER_LON_EQ = 111320;
  *
  * Returns a reason string when the payload must not be trusted, else null.
  */
+/**
+ * An OVERLOADED Overpass answers with HTTP **200** and an HTML page:
+ *
+ *   <strong style="color:#FF0000">Error</strong>: runtime error: …
+ *   The server is probably too busy to handle your request.
+ *
+ * Checking `res.ok` therefore passes, and `res.json()` then throws
+ * "Unexpected token '<'" — which reads like a bug in our parser rather than a
+ * busy server, and hides the explanation the server actually gave. Markup has to
+ * be stripped before looking for the message, because the word Error sits in its
+ * own tag.
+ *
+ * Returns a reason string when the body is not the JSON we asked for, else null.
+ */
+export function overpassBodyProblem(body) {
+  if (typeof body !== "string" || !body.trimStart().startsWith("{")) {
+    const plain = String(body ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+    const said = /Error:?\s*(.{0,160})/.exec(plain);
+    return said && said[1].trim()
+      ? `Overpass answered with a page, not data — ${said[1].trim()}`
+      : "Overpass answered with a non-JSON body (server busy?)";
+  }
+  return null;
+}
+
 export function overpassProblem(json) {
   if (!json || typeof json !== "object") return "Overpass returned a non-object payload";
   if (!Array.isArray(json.elements)) return "Overpass returned no elements array";
@@ -86,10 +111,77 @@ export function parseMetres(v) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+// The shortest storey anyone builds. Used only to decide whether a `height` tag
+// CONTRADICTS the floor count published beside it — not to estimate anything.
+export const MIN_STOREY_M = 2;
+// Below this many floors the two tags stop disagreeing in any meaningful way: a
+// canopy tagged `building:levels=1, height=1` is a modelling convention, not a
+// hidden tower, and "correcting" it would inflate every awning in the city.
+export const CONTRADICTION_MIN_LEVELS = 3;
+/**
+ * Structures where `building:levels` does not describe the structure at all.
+ *
+ * A `building=roof` is a canopy: an awning over a forecourt, a station platform
+ * cover, a fuel-station shelter. Mappers routinely give it the floor count of
+ * whatever it is attached to. way/572495079 in Nishi-Shinjuku is exactly that —
+ * height=7 with building:levels=47 — and the 7 m is RIGHT: PLATEAU surveyed the
+ * same footprint at 7 m. Treating that as a contradiction would have inflated a
+ * canopy into a 152 m obstacle, and only a second source stood between the rule
+ * and that outcome. Astana has no second source, so this exclusion is what keeps
+ * the rule from inventing towers there. Tokyo alone carries 49 such structures.
+ */
+export const LEVELS_MEANINGLESS_FOR = new Set(["roof", "canopy", "carport"]);
+
 export function heightOf(tags = {}) {
   const explicit = parseMetres(tags.height) ?? parseMetres(tags["building:height"]);
-  if (explicit !== null) return { h: Math.round(explicit), hs: 0 };
   const levels = parseMetres(tags["building:levels"]);
+
+  // A measured tag that its OWN source contradicts is not a measurement.
+  //
+  // In the shipped Tokyo twin: way/144093559 (高倉第一ビル) carries height=14
+  // alongside building:levels=8, i.e. 1.75 m per storey. It entered the obstacle
+  // grid as hs=0, MEASURED, which buys zero safety clearance — so an eight-floor
+  // building was published at fourteen metres and flown over with none.
+  //
+  // Understating an obstacle is the expensive direction of this failure, and no
+  // outside source is needed to see it: the source disagrees with itself, so we
+  // fall back to its other claim and mark the result DERIVED — which is both
+  // honest and buys back the clearance a guess deserves.
+  //
+  // The exclusion below is not a footnote. The first version of this rule had no
+  // exclusion and would have raised a 7 m canopy to 152 m; only PLATEAU, which
+  // had surveyed the same footprint, stood in the way. A rule that needs a
+  // second source to stay safe is not safe in the city that has none.
+  if (explicit !== null && levels !== null && levels >= CONTRADICTION_MIN_LEVELS
+      && explicit / levels < MIN_STOREY_M
+      && !LEVELS_MEANINGLESS_FOR.has(tags.building)) {
+    return { h: Math.round(levels * METRES_PER_LEVEL + PARAPET_M), hs: 1, contradicted: Math.round(explicit) };
+  }
+
+  // Тег `height` из OSM — НЕ обмер, поэтому и не hs=0.
+  //
+  // hs=0 означает «обмерено» и покупает SRC_CLEARANCE[0] = 0 м запаса: твин
+  // доверяет числу полностью. Такое доверие заслуживает обмер властей —
+  // PLATEAU `measuredHeight`, городская съёмка Нью-Йорка. Тег в OSM ставит
+  // волонтёр, и аудит по статьям, на которые ссылаются САМИ элементы, показал
+  // ошибки на порядок в обе стороны: 30 Rockefeller Plaza с height=10 при 70
+  // этажах, здание правительства Токио 133 м против 241.9, Байтерек в Астане
+  // 382 м против 310.8.
+  //
+  // Нью-Йорк и Токио это не задевает: обмер властей проходит ПОСЛЕ и заново
+  // выставляет hs=0 там, где контур опознан уверенно (fetch-city-twin.mjs).
+  // Спасал их обмер, а не тег. У Астаны обмера нет — и её твин вёз 382 м с
+  // высшим классом доверия и нулевым запасом. Сам генератор при этом печатал
+  // «TRUSTED as measured, so flown with zero safety clearance»: код знал и
+  // всё равно отгружал.
+  //
+  // hs=1 (derived) даёт 6 м запаса — ровно тот класс, к которому тег относится:
+  // величина правдоподобна, но никем не подтверждена.
+  // `stated` отделяет «источник назвал число» от «мы прикинули по этажам».
+  // Класс доверия у обоих теперь одинаковый (derived), но при сверке с обмером
+  // это разные вещи: заявленной высоте есть чем спорить с крышной съёмкой —
+  // она часто включает мачту; прикидке по этажам спорить нечем.
+  if (explicit !== null) return { h: Math.round(explicit), hs: 1, stated: true };
   if (levels !== null) return { h: Math.round(levels * METRES_PER_LEVEL + PARAPET_M), hs: 1 };
   return { h: DEFAULT_HEIGHT_M, hs: 2 };
 }

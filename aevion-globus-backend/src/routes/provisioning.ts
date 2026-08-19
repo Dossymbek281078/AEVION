@@ -18,19 +18,34 @@ import { degraded } from "../lib/degradedResponse";
 const capture = makeServiceCapture("provisioning");
 
 /**
- * Resolved per call, not once at import.
+ * Файл-хранилище подписок. Считается ПРИ КАЖДОМ обращении, а не один раз при
+ * импорте, и привязан к каталогу пакета, а не к текущему каталогу процесса.
  *
- * Binding it at import time meant the path was whatever the environment said
- * the first time ANY module pulled this file in. In a full test run another
- * suite imports it first, so the paywall tests — which set
- * SUBSCRIPTIONS_FILE to a temp dir — ended up writing their fixtures into the
- * real data/subscriptions.jsonl. Seventeen `buyer@test.aevion.dev`
- * subscriptions later, that file grants the test user a paid tier, and the
- * suite's own "denied before purchase" assertion fails on every machine that
- * has ever run it.
+ * Обе поправки закрывают один инцидент (10.08.2026). Было
+ * `join(process.cwd(), "data", ...)`, вычисленное на импорте:
+ *
+ *  • Из-за cwd прогон тестов НЕ из каталога бэкенда писал подписки в
+ *    `data/subscriptions.jsonl` в КОРНЕ репозитория. Корневой путь не покрыт
+ *    `.gitignore` (там закрыт `data/subscriptions.jsonl` внутри пакета — как
+ *    PII), поэтому записи попадали в коммиты: 3 строки в 0ff550de6 и ещё 6 в
+ *    7b292af6e. Здесь это оказались синтетические адреса `@test.aevion.dev`,
+ *    но защита от PII не должна зависеть от того, из какой папки запустили.
+ *  • Из-за вычисления на импорте `SUBSCRIPTIONS_FILE`, выставленный тестом до
+ *    импорта, применялся только если тест успевал импортировать модуль ПЕРВЫМ
+ *    в своём воркере. Иначе тест читал и писал общий файл, накопивший записи
+ *    прошлых прогонов, — и `paywallProvisionFlow` падал на «покупатель должен
+ *    быть отклонён ДО покупки»: он уже был оплачен, неделю назад, чужим
+ *    прогоном. Это числилось хронической нестабильностью набора.
+ *
+ * В проде поведение не меняется: сервис стартует из каталога пакета, то есть
+ * тот же `aevion-globus-backend/data/subscriptions.jsonl`.
  */
+const PACKAGE_ROOT = join(__dirname, "..", "..");
+
 function subsFile(): string {
-  return process.env.SUBSCRIPTIONS_FILE || join(process.cwd(), "data", "subscriptions.jsonl");
+  const fromEnv = process.env.SUBSCRIPTIONS_FILE?.trim();
+  if (fromEnv) return fromEnv;
+  return join(PACKAGE_ROOT, "data", "subscriptions.jsonl");
 }
 
 const RESEND_KEY = process.env.RESEND_API_KEY?.trim();
@@ -54,15 +69,16 @@ export interface Subscription {
   source?: string;
 }
 
-function ensureDir() {
-  const dir = dirname(subsFile());
+function ensureDir(file: string) {
+  const dir = dirname(file);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
 export function writeSubscription(sub: Subscription): void {
   try {
-    ensureDir();
-    appendFileSync(subsFile(), JSON.stringify(sub) + "\n", "utf8");
+    const file = subsFile();
+    ensureDir(file);
+    appendFileSync(file, JSON.stringify(sub) + "\n", "utf8");
   } catch (e) {
     capture(e);
     console.error("[provisioning] writeSubscription failed", e);
@@ -81,8 +97,9 @@ export function writeSubscription(sub: Subscription): void {
 export function purgeSubscriptions(email: string): { removed: number; remaining: number } {
   const target = email.trim().toLowerCase();
   if (!target) return { removed: 0, remaining: 0 };
-  if (!existsSync(subsFile())) return { removed: 0, remaining: 0 };
-  const lines = readFileSync(subsFile(), "utf8").split("\n").filter((l) => l.trim().length > 0);
+  const file = subsFile();
+  if (!existsSync(file)) return { removed: 0, remaining: 0 };
+  const lines = readFileSync(file, "utf8").split("\n").filter((l) => l.trim().length > 0);
   const kept: string[] = [];
   let removed = 0;
   for (const line of lines) {
@@ -98,18 +115,19 @@ export function purgeSubscriptions(email: string): { removed: number; remaining:
     }
     kept.push(line);
   }
-  const tmp = subsFile() + ".tmp";
+  const tmp = file + ".tmp";
   const out = kept.length === 0 ? "" : kept.join("\n") + "\n";
-  ensureDir();
+  ensureDir(file);
   writeFileSync(tmp, out, "utf8");
-  renameSync(tmp, subsFile());
+  renameSync(tmp, file);
   return { removed, remaining: kept.length };
 }
 
 export function countSubscriptions(): number {
   try {
-    if (!existsSync(subsFile())) return 0;
-    const content = readFileSync(subsFile(), "utf8");
+    const file = subsFile();
+    if (!existsSync(file)) return 0;
+    const content = readFileSync(file, "utf8");
     return content.split("\n").filter((l) => l.trim().length > 0).length;
   } catch {
     return 0;
@@ -126,8 +144,9 @@ export function readLatestSubscription(email: string): Subscription | null {
   const target = email.trim().toLowerCase();
   if (!target) return null;
   try {
-    if (!existsSync(subsFile())) return null;
-    const lines = readFileSync(subsFile(), "utf8").split("\n").filter((l) => l.trim().length > 0);
+    const file = subsFile();
+    if (!existsSync(file)) return null;
+    const lines = readFileSync(file, "utf8").split("\n").filter((l) => l.trim().length > 0);
     let latest: Subscription | null = null;
     for (const line of lines) {
       try {

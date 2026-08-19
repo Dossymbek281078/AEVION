@@ -1,0 +1,41 @@
+import { describe, it, expect } from "vitest";
+import { isSmokeSlot, countLiveSlots } from "../src/lib/slotOrigin";
+
+// Живой aevion.app 10.08.2026: `GET /api/qskyway/slots` → count 34, и 33 из них
+// оставлены нашим же прод-смоком (`smoke-route-…`, держатели op0..op3 / late /
+// verify / smoke-holder). Он бронирует 5–6 слотов каждый прогон и за собой не
+// убирает, так что число росло бы вечно, а страница выдавала бы его за глубину
+// рынка. Записи не удаляем — право там настоящее; отделяем.
+
+/** Выборка взята с прода как есть, не сочинена. */
+const PROD_SAMPLE = [
+  { id: "slot-b45e5768", routeId: "smoke-route-persist-1", holder: "smoke-holder" },
+  { id: "slot-fee655cc", routeId: "smoke-route-1784717297420-f5f6in", holder: "late" },
+  { id: "slot-67cfbaf7", routeId: "smoke-route-1784717297420-f5f6in", holder: "op3" },
+  { id: "slot-real", routeId: "route-astana-h1-h2", holder: "operator@example.com" },
+];
+
+describe("происхождение брони: смок или человек", () => {
+  it("маршрут смока распознаётся, регистр не мешает", () => {
+    expect(isSmokeSlot({ routeId: "smoke-route-persist-1" })).toBe(true);
+    expect(isSmokeSlot({ routeId: "SMOKE-route-2" })).toBe(true);
+    expect(isSmokeSlot({ routeId: "qskyway-smoke-route-9" })).toBe(true);
+  });
+
+  it("держатели смоук-сценариев распознаются и при обычном маршруте", () => {
+    for (const holder of ["op0", "op3", "late", "verify", "smoke-holder", "h2"]) {
+      expect(isSmokeSlot({ routeId: "route-astana-h1-h2", holder }), holder).toBe(true);
+    }
+  });
+
+  it("настоящая бронь тестовой не считается", () => {
+    expect(isSmokeSlot({ routeId: "route-nyc-h3-h5", holder: "aero-taxi-kz" })).toBe(false);
+    expect(isSmokeSlot({})).toBe(false);
+    expect(isSmokeSlot({ routeId: null, holder: null })).toBe(false);
+  });
+
+  it("живая глубина рынка на прод-выборке — 1 из 4", () => {
+    expect(countLiveSlots(PROD_SAMPLE)).toBe(1);
+    expect(countLiveSlots([])).toBe(0);
+  });
+});

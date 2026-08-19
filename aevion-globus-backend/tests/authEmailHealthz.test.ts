@@ -76,8 +76,11 @@ describe("Состояние отправки писем", () => {
     expect(body).not.toContain("user@secret");
   });
 
-  test("честно сообщает, что подтверждение адреса писем не шлёт", async () => {
+  // 19.08, вечер: отправка ПОДКЛЮЧЕНА (fix/auth-email-actually-sends).
+  // Утверждение перевёрнуто вместе с поведением — тест закреплял факт
+  // кода, а не желаемое; оставить здесь false значило бы охранять ложь.
+  test("ручка сообщает, что подтверждение адреса ОТПРАВЛЯЕТ письмо", async () => {
     const r = await request(app()).get("/email/healthz");
-    expect(r.body.emailVerifySendsMail).toBe(false);
+    expect(r.body.emailVerifySendsMail).toBe(true);
   });
 });

@@ -1312,10 +1312,14 @@ export default function CyberChessPage(){
     let alive=true;
     (async()=>{
       try{
-        const r=await fetch("/api-backend/api/cyberchess-puzzles?limit=1");
+        // /meta, а не ?limit=1: там `total` — это «сколько подошло под фильтр
+        // в ЗАГРУЖЕННОЙ пачке» и упирается в потолок загрузки (500 000).
+        // Размер банка живёт в bankTotal — в самом роутере так и написано:
+        // «для страниц брать ЭТО». Разница видна: 502 584 против 500 000.
+        const r=await fetch("/api-backend/api/cyberchess-puzzles/meta");
         if(!r.ok)return;
         const d=await r.json();
-        const n=Number(d?.total);
+        const n=Number(d?.bankTotal);
         // Отсутствие ответа оставляет null — тогда ниже покажем загруженное,
         // а не выдуманное. Ноль от неудачного чтения не должен стать фактом.
         if(alive&&Number.isFinite(n)&&n>0)sPzTotal(n);

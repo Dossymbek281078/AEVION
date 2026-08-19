@@ -145,6 +145,9 @@ export default function TournamentDetailPage({
   // per transition (instead of every 15s poll).
   const lastDoneCountRef = useRef<number>(0);
   const lastQueueRoundRef = useRef<number>(-1);
+  // Защёлка для ПЕРВОГО круга: общий счётчик кругов здесь не работает —
+  // круга ещё не существует, и сравнивать не с чем.
+  const firstRoundAskedRef = useRef(false);
 
   const fetchAll = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -236,7 +239,30 @@ export default function TournamentDetailPage({
   useEffect(() => {
     if (!meta || !meta.realPlayers) return;
     if (meta.status === "finished") return;
-    if (rounds.length === 0) return;
+
+    // Первый круг: если турнир уже идёт, а сетки нет — построить её.
+    //
+    // Здесь стоял безусловный `if (rounds.length === 0) return;`, и первый круг
+    // не строил НИКТО: сервер только переводит турнир в «идёт», а эта проверка
+    // отсекала единственного, кто умеет позвать построение. Участники видели
+    // «идёт» и пустую сетку.
+    //
+    // Своя защита от повторов: общий счётчик кругов сюда не годится, круга ещё
+    // нет. Без неё каждый перерисованный кадр слал бы запрос.
+    if (rounds.length === 0) {
+      if (meta.status === "live" && (meta.players ?? 0) >= 2 && !firstRoundAskedRef.current) {
+        firstRoundAskedRef.current = true;
+        void fetch(`/api-backend/api/cyberchess-tournaments/${tournamentId}/queue-match`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }).catch(() => {
+          // best-effort: следующий заход страницы попробует снова
+          firstRoundAskedRef.current = false;
+        });
+      }
+      return;
+    }
 
     // Find the latest in-progress round
     const cr = meta.currentRound ?? 0;

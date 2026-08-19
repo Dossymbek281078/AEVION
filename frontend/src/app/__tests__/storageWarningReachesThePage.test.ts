@@ -22,6 +22,14 @@ const PAGES: Array<[string, string[]]> = [
   ["LifeBox", ["lifebox/page.tsx"]],
 ];
 
+// Второй класс на тех же страницах: бэкенд отличает «проверили — чисто» от
+// «проверять было нечего», и страница обязана показать разницу. Молчаливое
+// «отклонений не найдено» на пустой анкете человек читает как хорошую новость.
+const HEALTH_PAGES: Array<[string, string]> = [
+  ["Longevity", "longevity/_client.tsx"],
+  ["QMelanin", "qmelanin/_client.tsx"],
+];
+
 describe("страница показывает признак хранилища", () => {
   test("контроль: файлы читаются и это действительно страницы", () => {
     for (const [, files] of PAGES) {
@@ -61,5 +69,19 @@ describe("страница показывает признак хранилищ�
     // role="alert" — не украшение: без него экранный диктор промолчит.
     expect(all, "нет видимой плашки с role=alert").toMatch(/role="alert"/);
     expect(all, "нет текста про недоступное хранилище").toMatch(/недоступно/);
+  });
+});
+
+describe("health-страница отличает «чисто» от «нечего было проверять»", () => {
+  test.each(HEALTH_PAGES)("%s читает признак и показывает его", (_name, file) => {
+    const src = readFileSync(join(ROOT, file), "utf8");
+    // Контроль: файл действительно та страница, а не заглушка.
+    expect(src.length).toBeGreaterThan(2000);
+    expect(src).toMatch(/useState/);
+
+    const readsFlag = /measuredCount|personalised/.test(src);
+    expect(readsFlag, "признак из ответа не читается вовсе").toBe(true);
+    expect(src, "нет видимой плашки с role=alert").toMatch(/role="alert"/);
+    expect(src, "предупреждение из ответа не выводится").toMatch(/\.warning/);
   });
 });

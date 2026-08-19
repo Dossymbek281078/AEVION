@@ -53,6 +53,10 @@ interface StackItem { id: string; name: string; domain: string; domainLabel: str
 interface Flagged { key: string; name: string; value: number; target: string; grade: string; }
 interface AssessResp {
   flaggedMarkers: Flagged[];
+  /** Сколько маркеров человек ВООБЩЕ прислал. Ноль отклонений при нуле
+   *  измерений — это не хорошая новость, а отсутствие обследования. */
+  measuredCount?: number;
+  warning?: string;
   recommendedStack: StackItem[];
   contraindicationGated: { name: string; reason: string }[];
   informOnly: { name: string; grade: string; note: string }[];
@@ -179,6 +183,15 @@ export default function LongevityClient({ channel = null }: { channel?: string |
 
           {assess && (
             <div style={styles.result}>
+              {/* Бэкенд с 20.08.2026 отличает «сдал анализы, всё в коридоре» от
+                  «не сдавал ничего». До этой вставки страница показывала оба
+                  случая одинаково — пустым списком отклонений, который человек
+                  читает как хорошую новость. */}
+              {assess.measuredCount === 0 && assess.warning && (
+                <div role="alert" style={styles.noDataWarning}>
+                  <b>Оценка не проведена.</b> {assess.warning}
+                </div>
+              )}
               {assess.flaggedMarkers.length > 0 && (
                 <>
                   <div style={styles.blockTitle}>Вне коридора ({assess.flaggedMarkers.length})</div>
@@ -443,4 +456,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     whiteSpace: "nowrap",
   },
+  noDataWarning: {
+    border: "1px solid #fbbf24", background: "#fffbeb", color: "#78350f",
+    borderRadius: 10, padding: "12px 14px", marginBottom: 16,
+    fontSize: 14, lineHeight: 1.55,
+  }
 };

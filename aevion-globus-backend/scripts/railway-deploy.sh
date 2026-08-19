@@ -20,7 +20,17 @@
 set -euo pipefail
 
 MSG="${1:-выкатка без описания}"
-cd "$(dirname "$0")/.."
+BACKEND_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Грузить надо КОРЕНЬ репозитория, а не каталог бэкенда.
+#
+# Проверено 14.08.2026 запросом настроек сервиса: у сервиса AEVION
+# rootDirectory не задан, а сборка идёт командой
+# `cd aevion-globus-backend && npm install && npm run build`. Если залить сам
+# каталог бэкенда, этот `cd` падает первым же шагом — внутри него нет вложенной
+# папки с таким именем. Прежняя версия скрипта заходила в каталог бэкенда, и
+# поэтому отметка коммита ни разу не доехала: сборка не собиралась вовсе.
+REPO_ROOT="$(cd "$BACKEND_DIR/.." && pwd)"
+cd "$REPO_ROOT"
 
 SHA="$(git rev-parse HEAD)"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -38,6 +48,46 @@ echo "ветка:  $BRANCH"
 echo "коммит: ${SHA:0:12}"
 echo "повод:  $MSG"
 
+# ── чья ветка сейчас на проде ──────────────────────────────────────────
+#
+# Сервис AEVION один на всю платформу, а выкатка заменяет образ ЦЕЛИКОМ.
+# 14.08.2026 в него выкатились пять разных сессий подряд, и каждая унесла
+# работу предыдущей — ни одна выкатка при этом не была ошибкой, просто никто
+# не спрашивал, чьё там сейчас.
+#
+# Три исхода различаются намеренно: своя ветка, чужая, и «спросить не удалось».
+# Последний — НЕ разрешение: неотвеченный вопрос не равен ответу «свободно».
+PROD_URL="${PROD_HEALTH_URL:-https://api.aevion.app/health}"
+PROD_JSON="$(curl -s --max-time 20 "$PROD_URL" 2>/dev/null || true)"
+PROD_BRANCH="$(printf '%s' "$PROD_JSON" | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).branch||''}catch(e){''}" 2>/dev/null || true)"
+
+if [ -z "$PROD_JSON" ]; then
+  PROD_STATE="не ответил"
+elif [ -z "$PROD_BRANCH" ] || [ "$PROD_BRANCH" = "null" ]; then
+  PROD_STATE="ветку не называет"
+elif [ "$PROD_BRANCH" = "$BRANCH" ]; then
+  PROD_STATE="своя"
+else
+  PROD_STATE="чужая: $PROD_BRANCH"
+fi
+echo "на проде: $PROD_STATE"
+
+if [ "$PROD_STATE" != "своя" ] && [ -z "${ALLOW_OVERWRITE:-}" ]; then
+  {
+    echo ""
+    echo "ОСТАНОВКА: выкатка заменит образ целиком, а на проде не ваша ветка."
+    echo "  на проде: ${PROD_BRANCH:-неизвестна}"
+    echo "  у вас:    $BRANCH"
+    echo ""
+    echo "Соберите ветку, где живёт и та работа, и ваша. Подробности и готовые"
+    echo "команды: node C:\Users\user\aevion-deploy-check.mjs"
+    echo "Если объединение уже сделано и вы понимаете, что делаете:"
+    echo "  ALLOW_OVERWRITE=1 bash scripts/railway-deploy.sh \"$MSG\""
+  } >&2
+  exit 1
+fi
+
+
 # Отметка едет ВНУТРИ загружаемой папки, а не в переменных сервиса.
 #
 # Первая версия ставила GIT_SHA переменной — и это оказалось хуже отсутствия
@@ -46,21 +96,83 @@ echo "повод:  $MSG"
 # продолжал называть мой коммит. Проверка отвечала «сборка совпадает» при
 # полностью подменённом проде.
 #
-# ВАЖНО: build-info.json НЕ в .gitignore. `railway up` уважает .gitignore,
-# и первая версия правила отправляла в образ всё, кроме самой отметки —
-# /health честно отвечал "unknown". Файл убирается сразу после загрузки.
-cat > build-info.json <<JSON
+# ВАЖНО: отметка не должна быть скрыта от git НИКАКИМ способом.
+#
+# Первая версия правила клала её в .gitignore — и образ уезжал без отметки.
+# Вторая перенесла запись в .git/info/exclude, рассудив, что `railway up`
+# смотрит только в .gitignore. 14.08.2026 проверено: не так. CLI использует
+# полную цепочку git-исключений, info/exclude в неё входит, и отметка снова
+# оставалась дома. Поэтому строка оттуда убрана (см. соседний скрипт-проверку).
+# Файл живёт секунды и убирается сразу после загрузки — засорить рабочие копии
+# соседних сессий он не успевает.
+cat > "$BACKEND_DIR/build-info.json" <<JSON
 {
   "commit": "$SHA",
   "branch": "$BRANCH",
+  "source": "railway-deploy.sh",
   "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 JSON
 
-trap 'rm -f "$(dirname "$0")/../build-info.json"' EXIT
+trap 'rm -f "$BACKEND_DIR/build-info.json"' EXIT
+
+# Отметка обязана быть ВИДНА git, иначе она не уедет. Проверяем до загрузки:
+# молчаливая потеря отметки — ровно та неисправность, ради которой всё это.
+if git check-ignore -q "$BACKEND_DIR/build-info.json"; then
+  echo "ОСТАНОВКА: build-info.json скрыт git-исключением — отметка не уедет." >&2
+  git check-ignore -v "$BACKEND_DIR/build-info.json" >&2
+  exit 1
+fi
 
 env -u RAILWAY_TOKEN railway up -c -m "$MSG"
 
 echo
 echo "Проверить, что доехало именно это (поле commit должно стать ${SHA:0:12}):"
 echo "  curl -s https://api.aevion.app/health"
+
+# ── проверка ПОСЛЕ выкатки ─────────────────────────────────────────────
+#
+# Раньше скрипт заканчивался советом «проверьте сами». Совет — не проверка:
+# 14.08 прод трижды за день оказывался чужим, и каждый раз это выяснялось
+# случайно, часы спустя. Проверка, которую надо не забыть выполнить, ничем не
+# отличается от отсутствующей.
+#
+# Здесь только ЧТЕНИЕ и только универсальное — ничего специфичного для одного
+# модуля: скрипт общий для всех вкладок.
+
+echo
+echo "── проверяю, что доехало именно это ──"
+
+LANDED=""
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  GOT="$(curl -s --max-time 15 "$PROD_URL" 2>/dev/null | node -pe \
+    "try{JSON.parse(require('fs').readFileSync(0,'utf8')).commit||''}catch(e){''}" 2>/dev/null || true)"
+  if [ "$GOT" = "${SHA:0:12}" ]; then LANDED=1; break; fi
+  printf '  попытка %s: на проде %s\n' "$i" "${GOT:-нет ответа}"
+  sleep 6
+done
+
+if [ -n "$LANDED" ]; then
+  echo "  ✓ на проде ${SHA:0:12} — доехало"
+else
+  # Не «наверное, ещё катится»: за минуту контейнер поднимается, а молчание
+  # после выкатки — это как раз то, о чём надо узнать сразу.
+  echo "  ✗ за минуту прод так и не назвал ${SHA:0:12}." >&2
+  echo "    Либо сборка упала, либо выкатился кто-то ещё. Логи: railway logs" >&2
+  exit 1
+fi
+
+# Все ли модули платформы на месте. Проверка читает набор проб из репозитория;
+# нет файла — молча пропускаем, скрипт не должен зависеть от чужой части дерева.
+if [ -f "$BACKEND_DIR/scripts/prod-module-surface.js" ]; then
+  echo
+  echo "── все ли модули на месте ──"
+  ( cd "$BACKEND_DIR" && node scripts/prod-module-surface.js ) || {
+    echo "  ⚠️ проверка модулей нашла расхождение — читайте вывод выше" >&2
+  }
+fi
+
+echo
+echo "Полное доказательство сохранности данных (пишет в базу, ~2 мин):"
+echo "  railway run --service Postgres sh -c 'DATABASE_URL=\"\$DATABASE_PUBLIC_URL\" bash scripts/verify-persistence-live.sh'"
+

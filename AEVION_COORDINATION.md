@@ -824,5 +824,13 @@ push в ЛЮБУЮ ветку — даже без триггера на push. Н
 `s=$(git rev-parse "$b"); git cat-file -e "$s:$путь"`, а на многих ветвях —
 `git for-each-ref --format='%(objectname):путь' | git cat-file --batch-check`.
 
+**5. `next build` в worktree не запускается — и это не ваш код.** Turbopack падает
+внутренней ошибкой `Symlink [project]/frontend/node_modules is invalid, it points out
+of the filesystem root`: в worktree `frontend/node_modules` — симлинк на
+`/c/Users/user/aevion-core/frontend/node_modules`. Падение происходит ДО компиляции,
+поэтому не читайте его как поломку правок. Значит из четырёх шлюзов CI локально
+воспроизводятся три (сборка и тесты бэкенда, модульные тесты фронта, проверка типов),
+а `next build` проверит только CI. Не тратьте время на диагностику своих файлов.
+
 Подробные разборы с замерами — `Desktop/АЕВИОН/000-УКАЗАТЕЛЬ-где-что-лежит.md`,
 раздел «19.08.2026».

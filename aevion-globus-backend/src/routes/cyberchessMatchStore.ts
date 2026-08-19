@@ -46,9 +46,25 @@ export function speedOf(timeControl: string): string {
   return "classical";
 }
 
+/**
+ * Когда можно пробовать подключиться снова.
+ *
+ * Раньше здесь стояла ЗАЩЁЛКА: dbInitTried = true перед попыткой, и больше
+ * никогда. Один обрыв сети в момент первого обращения — и модуль до перезапуска
+ * процесса работал только в памяти: партии, рейтинги и начисления Chessy никуда
+ * не писались, а снаружи это выглядело как обычная работа.
+ *
+ * Защёлка превращает временную неисправность в постоянную, и чинится она только
+ * случайным рестартом. Кулдаун оставляет системе шанс выздороветь сама.
+ */
+const DB_INIT_RETRY_MS = Number(process.env.CYBERCHESS_DB_INIT_RETRY_MS ?? 30_000);
+let dbInitNextTryAt = 0;
+
 export async function ensureDb(): Promise<void> {
-  if (dbInitTried) return;
+  if (dbReady) return;
+  if (Date.now() < dbInitNextTryAt) return; // ещё рано пробовать
   dbInitTried = true;
+  dbInitNextTryAt = Date.now() + DB_INIT_RETRY_MS;
   if (!process.env.DATABASE_URL) {
     console.log("[CyberMatchStore] No DATABASE_URL — offline mode (in-memory only)");
     return;
@@ -68,7 +84,7 @@ export async function ensureDb(): Promise<void> {
         "losses"      INTEGER NOT NULL DEFAULT 0,
         "draws"       INTEGER NOT NULL DEFAULT 0,
         "peak"        DOUBLE PRECISION NOT NULL DEFAULT 1500,
-        "updatedAt"   TIMESTAMP NOT NULL DEFAULT now(),
+        "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT now(),
         PRIMARY KEY ("userId","speed")
       );
       CREATE INDEX IF NOT EXISTS "cyberrating_leaderboard_idx"
@@ -92,8 +108,8 @@ export async function ensureDb(): Promise<void> {
         "whiteRatingAfter"  DOUBLE PRECISION,
         "blackRatingAfter"  DOUBLE PRECISION,
         "tournamentId"      TEXT,
-        "createdAt"         TIMESTAMP NOT NULL DEFAULT now(),
-        "endedAt"           TIMESTAMP
+        "createdAt"         TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "endedAt"           TIMESTAMPTZ
       );
       CREATE INDEX IF NOT EXISTS "cybermatch_white_idx" ON "CyberMatch" ("whiteUserId","createdAt" DESC);
       CREATE INDEX IF NOT EXISTS "cybermatch_black_idx" ON "CyberMatch" ("blackUserId","createdAt" DESC);
@@ -110,7 +126,7 @@ export async function ensureDb(): Promise<void> {
         "displayName" TEXT,
         "balance"     BIGINT NOT NULL DEFAULT 0,
         "earnedTotal" BIGINT NOT NULL DEFAULT 0,
-        "updatedAt"   TIMESTAMP NOT NULL DEFAULT now()
+        "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS "cyberwallet_leaderboard_idx" ON "CyberWallet" ("balance" DESC);
 
@@ -128,20 +144,30 @@ export async function ensureDb(): Promise<void> {
         "matchId" TEXT NOT NULL,
         "userId"  TEXT NOT NULL,
         "amount"  INTEGER NOT NULL,
-        "paidAt"  TIMESTAMP NOT NULL DEFAULT now(),
+        "paidAt"  TIMESTAMPTZ NOT NULL DEFAULT now(),
         PRIMARY KEY ("matchId","userId")
       );
       CREATE INDEX IF NOT EXISTS "cyberwalletaward_match_idx" ON "CyberWalletAward" ("matchId");
     `);
     pool = p;
     dbReady = true;
+    matchStoreHealth.connected = true;
+    matchStoreHealth.lastErrorKind = null;
     // Момент, с которого таблица ведомости заведомо существует в этом процессе
     // (CREATE TABLE IF NOT EXISTS выше). Нужен как граница доплаты — см.
     // repairBoundMs().
     storeReadyAt = Date.now();
     console.log("[CyberMatchStore] pg connected — match/rating store ready");
   } catch (e) {
-    console.warn("[CyberMatchStore] pg init failed:", e instanceof Error ? e.message : e);
+    // Отказ подключения виден снаружи, а не только в логе: без счётчика
+    // «работает на памяти» неотличимо от «работает».
+    matchStoreHealth.connected = false;
+    matchStoreHealth.connectErrors += 1;
+    matchStoreHealth.lastErrorKind = "connect";
+    console.warn(
+      `[CyberMatchStore] pg init failed (следующая попытка через ${DB_INIT_RETRY_MS / 1000} с):`,
+      e instanceof Error ? e.message : e,
+    );
   }
 }
 
@@ -155,7 +181,7 @@ export async function ensureDb(): Promise<void> {
  * из запроса, который не выполнился.
  */
 async function qOrNull(text: string, params: unknown[]): Promise<any[] | null> {
-  if (!dbReady && !dbInitTried) await ensureDb();
+  if (!dbReady) await ensureDb();  // решение о повторе принимает ensureDb по кулдауну
   if (!dbReady || !pool) return null;
   try {
     const r = await pool.query(text, params);
@@ -166,9 +192,39 @@ async function qOrNull(text: string, params: unknown[]): Promise<any[] | null> {
   }
 }
 
-/** Пишущий/фоновый вариант: отказ — тихий no-op, поток матчей не блокируется. */
+/**
+ * Учёт записи в хранилище партий.
+ *
+ * До 18.08.2026 его не было вовсе: отказ записи превращался в тихий no-op с
+ * одной строкой в console.warn. Так пишутся партии, ходы, рейтинги и НАЧИСЛЕНИЯ
+ * CHESSY — то есть денежный путь работал без единого счётчика, и «всё хорошо»
+ * нельзя было отличить от «половина записей не доехала».
+ */
+export const matchStoreHealth = {
+  /** Установлено ли подключение к базе прямо сейчас. */
+  connected: false,
+  /** Сколько раз не удалось подключиться. Отдельно от ошибок записи. */
+  connectErrors: 0,
+  writes: 0,
+  writeErrors: 0,
+  /** Захват партии не выполнен, потому что база не ответила (НЕ «уже закрыта»). */
+  claimUnknown: 0,
+  lastErrorKind: null as string | null,
+};
+
+/**
+ * Пишущий/фоновый вариант: отказ не блокирует поток матчей, но БОЛЬШЕ НЕ
+ * молчит. Пустой список по-прежнему возвращается ради совместимости с
+ * вызывающими, а факт отказа теперь виден в счётчике.
+ */
 async function q(text: string, params: unknown[]): Promise<any[]> {
-  return (await qOrNull(text, params)) ?? [];
+  const rows = await qOrNull(text, params);
+  if (rows === null) {
+    matchStoreHealth.writeErrors += 1;
+    return [];
+  }
+  matchStoreHealth.writes += 1;
+  return rows;
 }
 
 export interface RatingRow extends GlickoState {
@@ -306,7 +362,7 @@ export async function finalizeMatch(
     termination?: string;
   },
 ): Promise<{ white: { before: number; after: number }; black: { before: number; after: number } } | null> {
-  if (!dbReady && !dbInitTried) await ensureDb();
+  if (!dbReady) await ensureDb();  // решение о повторе принимает ensureDb по кулдауну
   if (!dbReady) return null;
 
   // DB-layer idempotency: if this match row is already finalized, return the
@@ -314,7 +370,15 @@ export async function finalizeMatch(
   // finalize corrupting Glicko-2 (the in-memory MATCHES guard is volatile and
   // is wiped on process restart while the DB row persists).
   const existing = await q(
-    `SELECT "status","result","endedAt","whiteUserId","blackUserId","whiteName","blackName",
+    // endedAt отдаём ЭПОХОЙ, а не датой. Колонка TIMESTAMP (без зоны), и
+    // драйвер читает её как МЕСТНОЕ время процесса: на машине в UTC+5 значение
+    // оказывается на пять часов раньше, чем Date.now(). Сравнивать такую дату
+    // с границей, посчитанной по часам процесса, — сравнивать разные шкалы.
+    // Замерено 18.08.2026: из-за этого сеть безопасности (момент старта
+    // хранилища) не срабатывала никогда, и доплата молча выключалась.
+    `SELECT "status","result","endedAt",
+            EXTRACT(EPOCH FROM "endedAt")*1000 AS "endedAtMs",
+            "whiteUserId","blackUserId","whiteName","blackName",
             "whiteRatingBefore","blackRatingBefore","whiteRatingAfter","blackRatingAfter"
        FROM "CyberMatch" WHERE "id"=$1`,
     [matchId],
@@ -331,7 +395,7 @@ export async function finalizeMatch(
     // Только для партий, закрытых после появления ведомости: у остальных строк
     // в ней нет не потому, что им не заплатили, а потому, что её тогда не было
     // (см. repairBoundMs).
-    const endedAtMs = prior.endedAt ? new Date(prior.endedAt).getTime() : NaN;
+    const endedAtMs = Number(prior.endedAtMs);
     if (Number.isFinite(endedAtMs) && endedAtMs >= (await repairBoundMs())) {
       await settleAwards(matchId, prior);
     }
@@ -361,11 +425,29 @@ export async function finalizeMatch(
   // Условие `"status" <> 'ended'` делает захват атомарным: из двух
   // одновременных вызовов строку получает ровно один. RETURNING — потому что
   // q() отдаёт только rows и теряет rowCount.
-  const claimed = await q(
+  // qOrNull, а НЕ q: здесь пустой список и отказ базы означают разное, а q()
+  // отдаёт [] в обоих случаях.
+  //
+  // Найдено 18.08.2026. Отказ на этом запросе читался как «строку закрыл кто-то
+  // другой» — и функция молча не начисляла Chessy, отвечая игроку ok. То есть
+  // сбой сети выглядел как штатный повтор, а деньги не приходили, и в системе
+  // не оставалось ни счётчика, ни строки об этом.
+  const claimed = await qOrNull(
     `UPDATE "CyberMatch" SET "status"='ended',"result"=$2,"termination"=$3,"endedAt"=now()
       WHERE "id"=$1 AND "status" <> 'ended' RETURNING "id"`,
     [matchId, info.result, info.termination ?? null],
   );
+  if (claimed === null) {
+    // Спросить не удалось — это НЕ «уже закрыта». Строка осталась незакрытой,
+    // поэтому повтор (конец партии сообщают оба клиента) захватит её честно.
+    // Молчать нельзя: без этой строки отказ неотличим от нормы.
+    matchStoreHealth.claimUnknown += 1;
+    matchStoreHealth.lastErrorKind = "query";
+    console.error(
+      `[CyberMatchStore] захват партии ${matchId} не выполнен — база не ответила. Начисление НЕ сделано; ждём повтора от второго клиента.`,
+    );
+    return null;
+  }
   if (claimed.length === 0) {
     // Строку закрыл кто-то другой между нашим SELECT и этим UPDATE — либо она
     // была закрыта раньше, а SELECT не дошёл. Ничего не начисляем.
@@ -535,8 +617,9 @@ function chessyFor(result: string, side: "white" | "black"): number {
  */
 async function repairBoundMs(): Promise<number> {
   if (ledgerStartAt == null) {
-    const rows = await qOrNull(`SELECT min("paidAt") AS t FROM "CyberWalletAward"`, []);
-    const t = rows && rows[0]?.t ? new Date(rows[0].t).getTime() : NaN;
+    // Тоже эпохой — по той же причине, что и endedAt выше.
+    const rows = await qOrNull(`SELECT EXTRACT(EPOCH FROM min("paidAt"))*1000 AS t FROM "CyberWalletAward"`, []);
+    const t = rows && rows[0]?.t != null ? Number(rows[0].t) : NaN;
     ledgerStartAt = Number.isFinite(t) ? t : null;
   }
   const fromLedger = ledgerStartAt == null ? Number.POSITIVE_INFINITY : ledgerStartAt;

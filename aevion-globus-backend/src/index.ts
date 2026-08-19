@@ -34,10 +34,10 @@ import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
+import { provisioningRouter } from "./routes/provisioning";
 import { lemonSqueezyWebhookRouter } from "./routes/lemonSqueezyWebhook";
 import { appAccessRouter } from "./routes/appAccess";
 import { gumroadWebhookRouter } from "./routes/gumroadWebhook";
-import { provisioningRouter } from "./routes/provisioning";
 import { payboxWebhookRouter } from "./routes/payboxWebhook";
 import { paypalWebhookRouter } from "./routes/paypalWebhook";
 import { healthaiRouter } from "./routes/healthai";
@@ -203,42 +203,64 @@ app.use(express.urlencoded({
 // is live instead of guessing from a 200. Railway injects RAILWAY_GIT_COMMIT_SHA
 // at build time; falls back to GIT_SHA / SOURCE_VERSION, or "unknown" in local dev.
 /**
- * Развёрнутый коммит: что за код сейчас работает.
+ * Развёрнутый коммит. Переменных окружения оказалось недостаточно: проверено на
+ * живом проде 13.08.2026 — /health отдавал "unknown", потому что
+ * RAILWAY_GIT_COMMIT_SHA подставляется при сборке из подключённого репозитория, а
+ * тот недоступен с 27.07. Поэтому сборка дополнительно пишет dist/build-info.json
+ * (scripts/write-build-info.js), и он читается, когда переменных нет.
  *
- * ПОРЯДОК ИСТОЧНИКОВ ВАЖЕН, и он такой не случайно. Отметку НЕЛЬЗЯ брать из
- * переменной окружения первой: переменные живут в СЕРВИСЕ, а не в образе, и
- * переживают чужую выкатку. 13.08.2026 GIT_SHA была выставлена при одной
- * выкатке, ночью соседняя сессия выкатила в тот же сервис свою ветку — и
- * /health продолжал уверенно называть прежний коммит, которого на проде уже не
- * было. Проверка отвечала «сборка совпадает» при полностью подменённом проде.
- *
- * Поэтому сначала читается build-info.json, который едет ВНУТРИ артефакта
- * (его кладёт scripts/railway-deploy.sh перед загрузкой). Переменные остаются
- * запасным путём — на случай, когда сборка когда-нибудь снова пойдёт из
- * git-репозитория и подставит их сама.
- *
- * Поле builtAt отвечает на вопрос, который bootedAt не покрывает: контейнер
- * Railway перезапускается сам, и «поднялся 10 минут назад» бывает у образа
- * недельной давности.
+ * Читаем синхронно и один раз при старте: файл рядом с dist/index.js, размером в
+ * несколько строк, и цена — доли миллисекунды на запуск против невозможности
+ * узнать, какой код работает.
+ */
+/**
+ * builtAt отвечает на вопрос, который bootedAt не покрывает: контейнер Railway
+ * перезапускается сам по себе, и тогда «поднялся 10 минут назад» относится к
+ * образу недельной давности. Проверка выкатки (aevion-deploy-check.mjs) поле
+ * уже печатает — и до 14.08.2026 печатала «собрана ?», потому что отдавать его
+ * было некому.
  */
 function readBuildInfo(): { commit: string; source: string; branch: string; builtAt: string | null } {
-  try {    // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // ПОРЯДОК ВАЖЕН: сначала файл, переменные — только запасной путь.
+  //
+  // 14.08.2026 отметку ставили переменной сервиса, и она пережила чужую
+  // выкатку: образ сменился целиком, переменная осталась, а /health продолжил
+  // уверенно называть мой коммит. Проверка отвечала «сборка совпадает», пока на
+  // проде не было ни одной моей ручки.
+  //
+  // Причина в принадлежности: переменные принадлежат СЕРВИСУ, файл едет ВНУТРИ
+  // образа. Описывать артефакт может только то, что уезжает вместе с ним.
+  //
+  // Переменную из Railway тогда удалили, но код, читавший её ПЕРВОЙ, остался и
+  // 19.08 обнаружился прямо на проде. Он безвреден лишь пока переменной нет:
+  // вернут её (например, при переподключении источника сборки к GitHub) — и
+  // дефект вернётся в худшем виде, уверенным неправильным ответом вместо
+  // честного «не знаю».
+  try {
+    // Файл лежит РЯДОМ С КОДОМ, а не в dist: `railway up` уважает .gitignore, и
+    // отметка из игнорируемого каталога в образ не уезжает. Это уже проверено
+    // на реальной выкатке в ветке deploy/combined (6a30a9bd8) — там маркер
+    // сначала писали в игнорируемое место, выкатили, получили "unknown" и
+    // перенесли. Повторять тот же путь не нужно.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const fsMod = require("node:fs") as typeof import("node:fs");
     const pathMod = require("node:path") as typeof import("node:path");
     const raw = fsMod.readFileSync(pathMod.join(__dirname, "..", "build-info.json"), "utf-8");
     const info = JSON.parse(raw) as { commit?: string; source?: string; branch?: string; builtAt?: string };
-    if (info.commit) {
-      return {
-        commit: String(info.commit).slice(0, 12),
-        source: String(info.source || "build-info"),
-        branch: String(info.branch || "unknown"),
-        builtAt: info.builtAt ? String(info.builtAt) : null,
-      };
-    }
+    return {
+      commit: String(info.commit || "unknown").slice(0, 12),
+      source: String(info.source || "build-info"),
+      branch: String(info.branch || "unknown"),
+      builtAt: info.builtAt ? String(info.builtAt) : null,
+    };
   } catch {
-    /* файла нет — ниже пробуем переменные, затем честное "unknown" */
+    /* файла нет — идём к запасному пути ниже */
   }
-  // Запасной путь: сборка из подключённого репозитория подставляет метку сама.
+
+  // Запасной путь. Railway подставляет RAILWAY_GIT_COMMIT_SHA, только когда
+  // собирает из подключённого репозитория — тогда переменная приходит ВМЕСТЕ со
+  // сборкой и честна. Источник помечается явно: увидев source: "env", человек
+  // должен проверить, не переживает ли отметка выкатку.
   const envCommit =
     process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || process.env.SOURCE_VERSION;
   if (envCommit) {
@@ -246,13 +268,15 @@ function readBuildInfo(): { commit: string; source: string; branch: string; buil
       commit: envCommit.slice(0, 12),
       source: "env",
       branch: process.env.RAILWAY_GIT_BRANCH || "unknown",
-      // Времени сборки в переменных нет, а выдумывать «сейчас» нельзя: это
-      // назвало бы старт контейнера сборкой.
+      // Метку времени даёт только файл; из переменных её взять неоткуда, и
+      // выдумывать «сейчас» нельзя — это назвало бы старт контейнера сборкой.
       builtAt: null,
     };
   }
-  // Ни файла, ни переменных — dev-запуск. Отвечаем явно: ложный коммит хуже
-  // отсутствующего, потому что ему верят.
+
+  // Ни файла, ни переменных — это dev-запуск через ts-node-dev (dist не
+  // собран). Отвечаем "unknown" явно, а не выдумываем: ложный коммит хуже
+  // отсутствующего.
   return { commit: "unknown", source: "none", branch: "unknown", builtAt: null };
 }
 
@@ -627,12 +651,7 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "Total provisioned subscriptions count" },
       },
       "/api/pricing/roadmap": {
-        // Число берётся из реестра, а не пишется в строке. Здесь стояло «27
-        // modules» — реестр к 16.08.2026 вырос до 41, и публичное описание API
-        // занижало платформу почти вдвое. Тот же класс, что и текст отказа,
-        // называвший неверный предел: как только число попадает в текст, оно
-        // перестаёт меняться вместе с тем, что описывает.
-        get: { summary: `Public roadmap for all ${projects.length} modules with phases and progress` },
+        get: { summary: "Public roadmap for all 27 modules with phases and progress" },
       },
       "/api/pricing/provisioning/history": {
         get: { summary: "Subscription history by email (?email=...) — masked PII, capped at 100" },
@@ -1194,6 +1213,11 @@ app.use("/api/healthai", healthaiRouter);
 // ==========================
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
+// Выдача доступа после оплаты. 19.08.2026 монтирование пропало при слиянии:
+// чужой index.ts взяли целиком, а этой строки в нём не было. Поймал сторож
+// tests/provisioning.routes.test.ts — до выкатки, а не после жалобы
+// покупателя, которому не открылось купленное.
+app.use("/api/pricing/provisioning", provisioningRouter);
 app.use("/api/quotas", apiQuotasRouter);
 // Platform entitlements + paywall policy (GET /api/me/entitlements, /api/paywall/policy)
 app.use("/api", entitlementsRouter);
@@ -1206,9 +1230,6 @@ app.use("/api/qchaingov", qchaingovRouter);
 app.use("/api/pricing/events", eventsRouter);
 app.use("/api/lemonsqueezy", lemonSqueezyWebhookRouter);
 app.use("/api/apps/access", appAccessRouter);
-// Вернулось 12.08.2026: снято 15.05 коммитом e0f5a2327 вместе с чужой починкой,
-// из-за чего страница /pricing/provisioning три месяца показывала пустоту.
-app.use("/api/pricing/provisioning", provisioningRouter);
 app.use("/api/gumroad", gumroadWebhookRouter);
 app.use("/api/paybox", payboxWebhookRouter);
 app.use("/api/paypal", paypalWebhookRouter);

@@ -37,6 +37,7 @@ import {
   getWallet,
   getWalletLeaderboard,
   countUnpaidAwards,
+  matchStoreHealth,
   countWalletsWithoutRatedGames,
 } from "./cyberchessMatchStore";
 import { computeServerTimeStats, classifyServerTimeSignal } from "../lib/cyberchessServerTimeSignal";
@@ -1430,6 +1431,25 @@ router.get("/debug/stats", async (_req: Request, res: Response): Promise<void> =
     ok: true,
     awards: { unpaid: unpaidAwards },
     wallets: { withoutRatedGames: walletsWithoutRatedGames },
+    // Учёт записи в хранилище партий. Заведён 18.08.2026: до него отказ записи
+    // давал одну строку в логе и никакого следа в системе, хотя через этот путь
+    // идут партии, ходы, рейтинги и начисления Chessy.
+    //
+    // Только числа: имён, сумм и текста ошибок здесь нет — ручка публичная, а
+    // сообщение базы выдаёт адрес, порт и пользователя.
+    //
+    // claimUnknown отдельно от writeErrors намеренно: это случаи, когда конец
+    // партии не удалось захватить из-за отказа базы. Раньше они были
+    // неотличимы от штатного «партию уже закрыл второй клиент» — и начисление
+    // молча не происходило.
+    storage: {
+      connected: matchStoreHealth.connected,
+      connectErrors: matchStoreHealth.connectErrors,
+      writes: matchStoreHealth.writes,
+      writeErrors: matchStoreHealth.writeErrors,
+      claimUnknown: matchStoreHealth.claimUnknown,
+      lastErrorKind: matchStoreHealth.lastErrorKind,
+    },
     queue: {
       total: QUEUE.size,
       waiting: [...QUEUE.values()].filter((e) => e.status === "waiting").length,

@@ -72,9 +72,20 @@ let pool: any = null;
 let dbReady = false;
 let dbInitTried = false;
 
+/**
+ * Кулдаун вместо защёлки — по той же причине, что и в хранилище партий
+ * (19.08.2026). Раньше одна неудачная попытка при первом отчёте выключала базу
+ * до перезапуска процесса, и отчёты античита жили только в памяти: снаружи это
+ * выглядело как работающий модуль.
+ */
+const AC_DB_INIT_RETRY_MS = Number(process.env.CYBERCHESS_DB_INIT_RETRY_MS ?? 30_000);
+let dbInitNextTryAt = 0;
+
 async function ensureDb(): Promise<void> {
-  if (dbInitTried) return;
+  if (dbReady) return;
+  if (Date.now() < dbInitNextTryAt) return;
   dbInitTried = true;
+  dbInitNextTryAt = Date.now() + AC_DB_INIT_RETRY_MS;
   if (!process.env.DATABASE_URL) return;
   try {
     const p = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -90,8 +101,8 @@ async function ensureDb(): Promise<void> {
         "fideEstimate"   DOUBLE PRECISION,
         "stats"          JSONB NOT NULL,
         "ip"             TEXT,
-        "analysedAt"     TIMESTAMP NOT NULL,
-        "storedAt"       TIMESTAMP NOT NULL DEFAULT now()
+        "analysedAt"     TIMESTAMPTZ NOT NULL,
+        "storedAt"       TIMESTAMPTZ NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS "cyberanticheat_user_idx" ON "CyberAnticheatReport" ("userId","analysedAt" DESC);
       CREATE INDEX IF NOT EXISTS "cyberanticheat_flag_idx" ON "CyberAnticheatReport" ("verdict","suspicionScore" DESC);
@@ -105,7 +116,9 @@ async function ensureDb(): Promise<void> {
 }
 
 async function persistReport(report: StoredReport): Promise<void> {
-  if (!dbReady && !dbInitTried) await ensureDb();
+  // Зовём всегда: решение «пробовать ли сейчас» принимает сам ensureDb по
+  // кулдауну. Прежнее условие с dbInitTried делало повтор невозможным.
+  if (!dbReady) await ensureDb();
   if (!dbReady || !pool) return;
   try {
     await pool.query(

@@ -188,7 +188,35 @@ let TOURNAMENTS: Tournament[] = [];
 let dbPool: any = null;
 let dbTried = false;
 /** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
-const dbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, saveErrors: 0, lastErrorKind: null as string | null };
+const dbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, rowsWritten: 0, saveErrors: 0, retries: 0, lastErrorKind: null as string | null };
+
+/**
+ * Повтор зеркалирования в базу после сбоя.
+ *
+ * Запись в базу не ждут (void saveToDb) — путь регистрации не должен зависеть
+ * от скорости базы. Обратная сторона: единичный обрыв сети раньше означал, что
+ * зеркало молча отстало, и узнать об этом можно было только по счётчику ошибок,
+ * на который никто не смотрит. У файла повтор был всегда (PERSIST_RETRY_MS), у
+ * базы — нет.
+ *
+ * Повторяем ТЕКУЩЕЕ состояние, а не упавший снимок: пока ждали, могли прийти
+ * новые изменения, и запись старого снимка либо была бы отклонена сторожем
+ * savedAtMs, либо (что хуже) откатила бы свежее.
+ */
+const DB_RETRY_MS = Number(process.env.CYBERCHESS_DB_RETRY_MS ?? 20_000);
+let dbRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleDbRetry(): void {
+  if (dbRetryTimer) return; // одна попытка в полёте: иначе каждая ошибка плодит свой таймер
+  dbRetryTimer = setTimeout(() => {
+    dbRetryTimer = null;
+    dbHealth.retries += 1;
+    void saveToDb(TOURNAMENTS, savedAtMs);
+  }, DB_RETRY_MS);
+  // unref: таймер не должен держать процесс живым — иначе скрипты проверки и
+  // тесты перестанут завершаться, а причина будет выглядеть как зависание.
+  dbRetryTimer.unref?.();
+}
 /** Момент последнего сохранения состояния — по нему выбирается свежая копия. */
 let savedAtMs = 0;
 
@@ -296,19 +324,32 @@ async function saveToDb(list: Tournament[], stamp: number): Promise<void> {
     // процесса, нельзя считать лишней — её мог только что завести сосед.
     // Удаление живёт отдельно, по явной команде: см. deleteFromDb и
     // DELETE /:id ниже.
+    // Считаем ЗАПИСАННЫЕ СТРОКИ, а не проходы функции. Тот же дефект, что
+    // найден мутацией в задаче дня 18.08.2026: saves рос один раз за вызов,
+    // если тот не бросил исключение, — то есть подтверждал отсутствие
+    // исключения, а не запись. На пустом списке турниров или при отклонённой
+    // сторожем savedAtMs записи он рос бы ровно так же, и диагностика отвечала
+    // бы «записей N» при нетронутой базе.
+    let written = 0;
     for (const t of list) {
-      await pool.query(
+      const r = await pool.query(
         `INSERT INTO "CyberTournament" ("id","data","savedAtMs") VALUES ($1,$2,$3)
          ON CONFLICT ("id") DO UPDATE SET "data"=EXCLUDED."data","savedAtMs"=EXCLUDED."savedAtMs"
          WHERE "CyberTournament"."savedAtMs" <= EXCLUDED."savedAtMs"`,
         [t.id, JSON.stringify(t), stamp],
       );
+      written += r.rowCount ?? 0;
     }
-    dbHealth.saves += 1;
+    dbHealth.rowsWritten += written;
+    if (written > 0) dbHealth.saves += 1;
   } catch (e) {
     dbHealth.saveErrors += 1;
     dbHealth.lastErrorKind = dbErrorKind(e);
-    console.error("[cyberchess-tournaments] запись состояния в базу не прошла:", (e as Error).message);
+    console.error(
+      `[cyberchess-tournaments] запись состояния в базу не прошла, повтор через ${DB_RETRY_MS / 1000} с:`,
+      (e as Error).message,
+    );
+    scheduleDbRetry();
   }
 }
 
@@ -458,6 +499,13 @@ export function tournamentPersistenceState(): {
   };
 }
 
+/**
+ * Показанные сейчас турниры — это заглушка (фикстуры на пустом томе), а не
+ * сохранённое состояние. Пока признак стоит, писать их никуда нельзя: они
+ * затрут настоящие данные в базе.
+ */
+let seedsArePlaceholder = false;
+
 function initStore(): void {
   const result = tryLoadFromDisk();
   if (!result.ok) {
@@ -488,8 +536,21 @@ function initStore(): void {
     }
     return;
   }
+  // Файла нет вовсе — так выглядит СВЕЖИЙ КОНТЕЙНЕР: том пуст, а база жива.
+  // Фикстуры здесь не состояние, а заглушка на те секунды, пока не ответила
+  // база. Поэтому:
+  //   • savedAtMs остаётся 0 — иначе заглушка объявляет себя свежее базы;
+  //   • на диск и в базу ничего не пишем, пока база не ответила.
+  //
+  // Раньше здесь стоял tryWriteToDisk(), и он ставил savedAtMs = Date.now().
+  // Живой прогон 18.08.2026 показал последствие: на пустом томе модуль не
+  // поднимал состояние из базы (adoptedFromDb: false), показывал двенадцать
+  // фикстур и ЗАПИСЫВАЛ их в базу поверх настоящих турниров — у фикстур штамп
+  // всегда новее. То есть ровно та потеря, ради предотвращения которой всё
+  // хранилище и делалось.
   TOURNAMENTS = buildSeedFixtures();
-  tryWriteToDisk();
+  seedsArePlaceholder = true;
+  savedAtMs = 0;
 }
 
 // ── seed fixtures (2 per format) ───────────────────────────────────
@@ -1360,10 +1421,20 @@ const storeReady: Promise<void> = (async () => {
     console.error("[cyberchess-tournaments] ответ базы пришёл слишком поздно — состояние не подхватываю, работаю на файле");
     return;
   }
-  if (!fromDb) return; // базы нет или в ней пусто — живём на файле, как раньше
+  if (!fromDb) {
+    // База пуста или недоступна. Только теперь заглушка становится настоящим
+    // состоянием — и её надо записать, иначе свежая установка потеряет
+    // фикстуры при перезапуске.
+    if (seedsArePlaceholder) {
+      seedsArePlaceholder = false;
+      tryWriteToDisk();
+    }
+    return;
+  }
   if (fromDb.savedAtMs <= savedAtMs) return; // файл свежее или ровесник — не трогаем
   TOURNAMENTS = fromDb.tournaments;
   savedAtMs = fromDb.savedAtMs;
+  seedsArePlaceholder = false; // заглушку заменили настоящими данными
   dbHealth.adoptedFromDb = true;
   for (const t of TOURNAMENTS) {
     if (typeof t.realPlayers === "undefined") t.realPlayers = false;

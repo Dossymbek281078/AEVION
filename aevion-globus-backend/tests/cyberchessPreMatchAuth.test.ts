@@ -34,6 +34,10 @@ vi.mock("../src/routes/cyberchessMatchStore", () => ({
   // undefined и падает вызовом, а не отсутствием — то есть ломается ручка, к
   // этому тесту отношения не имеющая (здесь — /debug/stats).
   countUnpaidAwards: vi.fn().mockResolvedValue(0),
+  // Счётчики записи, добавленные 18.08.2026. Заглушка обязана покрывать
+  // ВСЕ импорты роутера — ради этого сам тест и написан: без этой строки
+  // /debug/stats падает на undefined, и падает именно здесь, а не в проде.
+  matchStoreHealth: { connected: false, connectErrors: 0, writes: 0, writeErrors: 0, claimUnknown: 0, lastErrorKind: null },
   countWalletsWithoutRatedGames: vi.fn().mockResolvedValue(0),
 }));
 

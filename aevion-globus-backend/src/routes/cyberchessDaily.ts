@@ -251,7 +251,25 @@ const solveStore = new Map<string, SolveRecord>(); // key: `${userId}:${day}`
 let dailyPool: any = null;
 let dailyDbTried = false;
 /** Что фактически произошло с базой — чтобы первый деплой ОТВЕТИЛ, а не мы предположили. */
-const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, saveErrors: 0, lastErrorKind: null as string | null };
+const dailyDbHealth = { configured: false, connected: false, adoptedFromDb: false, abandoned: false, saves: 0, rowsWritten: 0, saveErrors: 0, retries: 0, lastErrorKind: null as string | null };
+
+/**
+ * Повтор зеркалирования в базу после сбоя — как в турнирах и по той же
+ * причине: запись не ждут, поэтому единичный обрыв сети означал бы, что
+ * зеркало молча отстало. Повторяем ТЕКУЩЕЕ состояние, а не упавший снимок.
+ */
+const DAILY_DB_RETRY_MS = Number(process.env.CYBERCHESS_DB_RETRY_MS ?? 20_000);
+let dailyDbRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleDailyDbRetry(): void {
+  if (dailyDbRetryTimer) return; // одна попытка в полёте
+  dailyDbRetryTimer = setTimeout(() => {
+    dailyDbRetryTimer = null;
+    dailyDbHealth.retries += 1;
+    void saveDailyToDb(Date.now());
+  }, DAILY_DB_RETRY_MS);
+  dailyDbRetryTimer.unref?.(); // таймер не должен держать процесс живым
+}
 
 /**
  * Ошибка базы, сведённая к КАТЕГОРИИ.
@@ -360,8 +378,18 @@ async function saveDailyToDb(stamp: number): Promise<void> {
       slot.stats = st;
       byUser.set(st.userId, slot);
     }
+    // Считаем ЗАПИСАННЫЕ СТРОКИ, а не проходы функции.
+    //
+    // Раньше saves увеличивался один раз за вызов, если тот не бросил
+    // исключение. Поймано мутацией 18.08.2026: выключил запись в базу целиком —
+    // строка в базе не появилась, а диагностика бодро отчиталась «записей 1».
+    // То есть счётчик доказывал не запись, а отсутствие исключения; на пустом
+    // наборе игроков или при отклонённой сторожем savedAtMs записи он рос бы
+    // ровно так же. Диагностика, отвечающая на другой вопрос, хуже её
+    // отсутствия — на неё уже смотрят как на доказательство.
+    let written = 0;
     for (const [uid, slot] of byUser) {
-      await pool.query(
+      const r = await pool.query(
         `INSERT INTO "CyberDailyEntry" ("userId","entry","stats","savedAtMs")
          VALUES ($1,$2,$3,$4)
          ON CONFLICT ("userId") DO UPDATE SET
@@ -369,12 +397,18 @@ async function saveDailyToDb(stamp: number): Promise<void> {
          WHERE "CyberDailyEntry"."savedAtMs" <= EXCLUDED."savedAtMs"`,
         [uid, slot.entry ? JSON.stringify(slot.entry) : null, slot.stats ? JSON.stringify(slot.stats) : null, stamp],
       );
+      written += r.rowCount ?? 0;
     }
-    dailyDbHealth.saves += 1;
+    dailyDbHealth.rowsWritten += written;
+    if (written > 0) dailyDbHealth.saves += 1;
   } catch (e) {
     dailyDbHealth.saveErrors += 1;
     dailyDbHealth.lastErrorKind = dbErrorKind(e);
-    console.error('[cyberchess-daily] запись записей в базу не прошла:', (e as Error).message);
+    console.error(
+      `[cyberchess-daily] запись записей в базу не прошла, повтор через ${DAILY_DB_RETRY_MS / 1000} с:`,
+      (e as Error).message,
+    );
+    scheduleDailyDbRetry();
   }
 }
 

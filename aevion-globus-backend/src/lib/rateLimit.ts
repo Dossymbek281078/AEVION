@@ -85,23 +85,6 @@ export function normalizeAddressForKey(ip: string): string {
 const GLOBAL_BUCKETS = new Map<string, Bucket>();
 let lastSweep = 0;
 
-/**
- * The address to count a caller by.
- *
- * Never read X-Forwarded-For directly. A proxy appends on the right, so the
- * LEFTMOST entry — the one a `split(",")[0]` picks — is whatever the caller
- * wrote and nothing verifies it. Keying a limit on it gives every request its
- * own bucket the moment the caller varies the header, which is a limit that
- * cannot fire while looking from the outside exactly like one that works.
- *
- * req.ip reads the same header, but only across the hops the app declares
- * trusted (`app.set("trust proxy", 1)` in index.ts), so it is the address the
- * front proxy actually observed. With no trust proxy configured it falls back
- * to the socket peer, which is also right.
- */
-export function clientIp(req: Request): string {
-  return req.ip || req.socket?.remoteAddress || "unknown";
-}
 
 /**
  * In-process fixed-window rate limiter. No external deps.
@@ -134,6 +117,32 @@ function warnKeyFnFallback(prefix: string, why: string): void {
  * Good enough for public read-only endpoints; replace with Redis-backed
  * limiter if the app ever runs on multiple instances.
  */
+/**
+ * Адрес клиента как КЛЮЧ ограничителя.
+ *
+ * Возвращён 19.08.2026 при объединении веток: пять шахматных модулей зовут эту
+ * функцию, а в версии из ветки прода её не было — проверка типов поймала это
+ * до выкатки. Восстановлена поверх ИХ файла, а не заменой файла целиком: там
+ * живёт нормализация адреса, закрывающая обход ограничителя по IPv6.
+ *
+ * Почему НЕ читаем X-Forwarded-For напрямую (объяснение из удалённой копии,
+ * оно отвечает на другой вопрос и потерять его нельзя): прокси дописывает
+ * себя справа, поэтому ЛЕВЫЙ элемент — тот, что берёт `split(",")[0]`, —
+ * пишет сам клиент, и его никто не проверяет. Ограничитель по такому ключу
+ * даёт каждому запросу свою корзину, как только клиент меняет заголовок:
+ * снаружи он выглядит работающим и не срабатывает никогда. `req.ip` читает
+ * тот же заголовок, но только по узлам, которые приложение объявило
+ * доверенными (`app.set("trust proxy", 1)`).
+ *
+ * Нормализуем тем же helper-ом, что и сам ограничитель. Иначе один и тот же
+ * человек получал бы РАЗНЫЕ корзины в шахматах и в остальной платформе — а
+ * это и есть обход: две записи одного адреса считаются двумя посетителями.
+ */
+export function clientIp(req: { ip?: string; socket?: { remoteAddress?: string } }): string {
+  const raw = req.ip || req.socket?.remoteAddress || "unknown";
+  return raw === "unknown" ? raw : normalizeAddressForKey(raw);
+}
+
 export function rateLimit(opts: RateLimitOptions) {
   const windowMs = opts.windowMs ?? 60_000;
   const max = opts.max ?? opts.capacity ?? 60;

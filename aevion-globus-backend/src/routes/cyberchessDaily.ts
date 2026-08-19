@@ -525,13 +525,89 @@ router.use(async (_req: Request, _res: Response, next: () => void) => {
  * the page's 10-entry copy and this pool disagreed on 355 days out of 365 while
  * both looked like "day modulo pool".
  */
-router.get('/puzzle', (_req: Request, res: Response) => {
-  const p = pickDailyPuzzle(POOL, dayIndex());
+/**
+ * Задача дня из НАСТОЯЩЕГО банка, детерминированно по дате.
+ *
+ * Замер 19.08.2026: в таблице ChessPuzzle 500 000 записей с живыми темами и
+ * рейтингами, а задача дня отдавалась из тридцати зашитых. Тридцать — это цикл
+ * повтора в месяц, и к публичному запуску 30.08 такой цикл человек заметит на
+ * второй месяц.
+ *
+ * Детерминизм по дате обязателен: у всех игроков в один день должна быть ОДНА
+ * задача, иначе таблица лидеров сравнивает несравнимое. Поэтому смещение
+ * считается из самой даты, а не случайно и не по времени запроса.
+ *
+ * Хэш простой (FNV-1a) намеренно: нужна воспроизводимость, а не стойкость.
+ * Криптографический хэш дал бы то же самое дороже.
+ */
+function dayOffsetHash(day: string, total: number): number {
+  let h = 2166136261;
+  for (let i = 0; i < day.length; i++) {
+    h ^= day.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h) % Math.max(1, total);
+}
+
+/** Кэш на сутки: один запрос к базе в день, а не на каждого игрока. */
+let bankPuzzleCache: { day: string; puzzle: Puzzle | null } | null = null;
+let bankTotalCache: { at: number; total: number } | null = null;
+const BANK_TOTAL_TTL_MS = 6 * 60 * 60 * 1000;
+
+async function dailyFromBank(day: string): Promise<Puzzle | null> {
+  if (bankPuzzleCache && bankPuzzleCache.day === day) return bankPuzzleCache.puzzle;
+  try {
+    const pool = getPool();
+    if (!pool) return null;
+
+    if (!bankTotalCache || Date.now() - bankTotalCache.at > BANK_TOTAL_TTL_MS) {
+      const c = await pool.query('SELECT count(*)::int AS n FROM "ChessPuzzle"');
+      const n = Number(c.rows?.[0]?.n ?? 0);
+      // Ноль — это НЕ «банк пуст, отдадим что есть»: пустой ответ на упавшем
+      // запросе выглядит так же. Пусть решает вызывающий: null = не смогли.
+      if (!Number.isFinite(n) || n <= 0) return null;
+      bankTotalCache = { at: Date.now(), total: n };
+    }
+
+    const offset = dayOffsetHash(day, bankTotalCache.total);
+    const r = await pool.query(
+      `SELECT "id","fen","sol","name","rating","theme" FROM "ChessPuzzle" ORDER BY "id" OFFSET $1 LIMIT 1`,
+      [offset],
+    );
+    const row = r.rows?.[0];
+    if (!row) return null;
+    const sol = Array.isArray(row.sol) ? row.sol : String(row.sol || "").split(/[\s,]+/).filter(Boolean);
+    if (sol.length === 0) return null;
+    const puzzle: Puzzle = {
+      id: String(row.id),
+      fen: String(row.fen),
+      sol,
+      theme: String(row.theme || row.name || "Тактика"),
+      rating: Number(row.rating) || 1200,
+    };
+    bankPuzzleCache = { day, puzzle };
+    return puzzle;
+  } catch (e) {
+    console.error("[cyberchess-daily] банк задач не ответил:", (e as Error).message);
+    return null;
+  }
+}
+
+router.get('/puzzle', async (_req: Request, res: Response) => {
+  const day = todayIso();
+  // Сначала настоящий банк, зашитые тридцать — только если он не ответил.
+  const fromBank = await dailyFromBank(day);
+  const p = fromBank ?? pickDailyPuzzle(POOL, dayIndex());
   if (!p) return res.status(503).json({ ok: false, error: 'pool_empty' });
   return res.json({
-    day: todayIso(),
-    poolSize: POOL.length,
-    source: 'cyberchess-daily fallback pool — the live daily puzzle is /api/cyberchess-puzzles/daily',
+    day,
+    poolSize: fromBank ? bankTotalCache?.total ?? null : POOL.length,
+    // Источник называется ЧЕСТНО. Прежний текст отправлял читателя на
+    // /api/cyberchess-puzzles/daily — ручку, которой не существует (проверено
+    // 19.08: 404). Обещание, которого нет, хуже отсутствия обещания.
+    source: fromBank
+      ? 'ChessPuzzle — настоящий банк задач'
+      : 'резервный пул из 30 задач: банк не ответил',
     puzzle: {
       id: p.id,
       fen: p.fen,

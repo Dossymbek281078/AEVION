@@ -962,7 +962,7 @@ export default function QSkywayClient() {
                         .map((o) => {
                           if (o.was !== undefined) {
                             // источник спорит сам с собой: тег высоты против собственного счёта этажей
-                            return `${o.h} м вместо ${o.was} м — тег спорит с ${o.levels} этажами`;
+                            return t("qskyway.dispute.tagVsLevels", { h: o.h, was: o.was, levels: o.levels ?? "?" });
                           }
                           // Высота, которая в разы выше остальной застройки. Если такой
                           // случай уже разобран человеком — называем ЧИСЛО из статьи
@@ -970,8 +970,8 @@ export default function QSkywayClient() {
                           // проверить его нельзя, а «310.8 м в статье» можно.
                           const rev = meta.heightReview.find((r) => r.index === o.i);
                           return rev
-                            ? `${o.h} м — в статье объекта ${rev.publishedM} м`
-                            : `${o.h} м — ×${o.times} к застройке`;
+                            ? t("qskyway.dispute.published", { h: o.h, published: rev.publishedM })
+                            : t("qskyway.dispute.ratio", { h: o.h, times: o.times ?? "?" });
                         })
                         .join(" · ")}
                       {/* Доходит ли спорная высота до маршрутов — измерено движком по
@@ -982,8 +982,8 @@ export default function QSkywayClient() {
                       {disputeImpact?.available && (
                         <span style={{ color: disputeImpact.affectedPairs > 0 ? "#fb7185" : "#5f7086" }}>
                           {disputeImpact.affectedPairs > 0
-                            ? ` · на маршруты влияет: ${disputeImpact.affectedPairs} из ${disputeImpact.routable}`
-                            : ` · на маршруты не влияет (0 из ${disputeImpact.routable})`}
+                            ? t("qskyway.dispute.affects", { n: disputeImpact.affectedPairs, total: disputeImpact.routable })
+                            : t("qskyway.dispute.noEffect", { total: disputeImpact.routable })}
                         </span>
                       )}
                     </span>
@@ -1006,7 +1006,7 @@ export default function QSkywayClient() {
                       {/* Русская форма склоняется числительным, остальные языки —
                           нет: `plural` даёт «38 зданий», ключ для en/kk несёт число сам. */}
                       ▨ {lang === "ru"
-                        ? `подставлено по типу: ${plural(meta.substituted.length, "здание", "здания", "зданий")}`
+                        ? t("qskyway.subst.byType", { n: meta.substituted.length })
                         : t("qskyway.subst.head", { n: meta.substituted.length })}
                       {/* Тот же вопрос, что у спорной высоты: доходит ли она до
                           полётов. Ответы у них РАЗНЫЕ — спорная высота Астаны не

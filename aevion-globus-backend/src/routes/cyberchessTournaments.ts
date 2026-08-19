@@ -896,6 +896,12 @@ function buildSeedFixtures(): Tournament[] {
     realPlayers: true,
   };
 
+  // Признак образца проставляется ЗДЕСЬ, а не в каждой записи по отдельности.
+  //
+  // Он был у одиннадцати заготовок из двенадцати — кто-то добавил новую и не
+  // повторил поле. Тихо: пропущенная не сдвигалась по времени и не считалась
+  // образцом ни в одной проверке. Тринадцатую добавят так же, поэтому место
+  // одно и забыть его нельзя.
   return [
     elim1,
     elim2,
@@ -909,7 +915,7 @@ function buildSeedFixtures(): Tournament[] {
     elimLegacy6,
     elimLegacy7,
     realDemo,
-  ];
+  ].map((t) => (t.origin ? t : { ...t, origin: "seed" as const }));
 }
 
 function rr1RosterToIds(roster: Player[]): string[] {
@@ -1406,6 +1412,96 @@ function refreshSeedDates(): void {
     console.log(`[cyberchess-tournaments] обновлены даты образцов: ${обновлено}`);
   }
 }
+
+
+/** Как часто смотреть, не пора ли начать турнир. Минута — с запасом: точность
+ *  «плюс-минус минута» человеку незаметна, а нагрузки не создаёт. */
+const TOURNAMENT_TICK_MS = 60_000;
+
+/**
+ * Начать турниры, у которых наступило время, и не дать образцам протухнуть.
+ *
+ * Замер 19.08.2026 на проде: семь турниров из двенадцати числились
+ * «предстоящими», а время старта прошло 88–94 дня назад. Механизма перехода
+ * «предстоит → идёт» не существовало ВООБЩЕ: поле `startsAt` записывалось при
+ * создании и ни разу ни с чем не сравнивалось. Объяви турнир к запуску — он бы
+ * не начался, а зарегистрировавшиеся ждали.
+ *
+ * Две разные задачи в одном тике, и граница между ними важна:
+ *
+ * 1. НАСТОЯЩИЙ турнир (есть хотя бы двое записавшихся) — переводится в «идёт»
+ *    и получает первый круг. Это и есть обещание, данное временем на карточке.
+ *
+ * 2. ОБРАЗЕЦ без записавшихся — даты сдвигаются вперёд, статус НЕ меняется.
+ *    Начать его значило бы показать игру демо-участников как настоящую, а это
+ *    ровно та выдумка, которую мы весь день из модуля вычищали.
+ *
+ * Почему сдвиг нужен и здесь, а не только при загрузке: сервер живёт неделями,
+ * и дата «+1 день», выданная при старте, через двое суток снова окажется в
+ * прошлом. Обновление при подъёме чинит прошлое, тик — будущее.
+ */
+export function tournamentTick(): void {
+  const now = Date.now();
+  let начато = 0;
+  let сдвинуто = 0;
+
+  for (const t of TOURNAMENTS) {
+    if (t.status !== "upcoming") continue;
+    const старт = Date.parse(t.startsAt);
+    if (!Number.isFinite(старт) || старт > now) continue;
+
+    const записавшихся = t.registeredUserIds.length;
+    if (записавшихся >= 2) {
+      t.status = "live";
+      начато += 1;
+      try {
+        const первый = t.rounds?.[0]?.matches ?? [];
+        if (первый.length) publishRoundToMatchmaking(t, первый);
+      } catch (e) {
+        // Публикация круга не должна мешать самому старту: турнир уже идёт,
+        // а пары можно опубликовать следующим тиком или вручную.
+        console.error(`[cyberchess-tournaments] круг не опубликован для ${t.id}:`, e);
+      }
+      continue;
+    }
+
+    if (t.origin === "seed") {
+      // Образец: сдвигаем на неделю вперёд, чтобы раздел не выглядел заброшенным.
+      t.startsAt = new Date(now + 7 * 24 * 3600_000).toISOString();
+      сдвинуто += 1;
+    }
+    // Настоящий турнир без пары участников не начинаем и не сдвигаем: его дату
+    // назначил человек, и молча её менять нельзя. Он останется «предстоящим»,
+    // и это честно — начинать турнир с одним игроком нечего.
+  }
+
+  if (начато || сдвинуто) {
+    savedAtMs = Date.now();
+    tryWriteToDisk();
+    void saveToDb(TOURNAMENTS, savedAtMs);
+    console.log(`[cyberchess-tournaments] тик: начато ${начато}, сдвинуто образцов ${сдвинуто}`);
+  }
+}
+
+/** Обёртка: исключение внутри setInterval минует Express и роняет весь бэкенд. */
+function safeTournamentTick(): void {
+  try {
+    tournamentTick();
+  } catch (e) {
+    console.error("[cyberchess-tournaments] тик стартов сорвался", e);
+  }
+}
+
+// Фоновый цикл — с защитой от двойного запуска при горячей перезагрузке.
+const TG = global as unknown as { __cc_tournament_timer?: NodeJS.Timeout };
+if (!TG.__cc_tournament_timer) {
+  TG.__cc_tournament_timer = setInterval(safeTournamentTick, TOURNAMENT_TICK_MS);
+  // Не держим процесс живым ради одного этого таймера.
+  if (typeof TG.__cc_tournament_timer.unref === "function") {
+    TG.__cc_tournament_timer.unref();
+  }
+}
+
 
 function publishRoundToMatchmaking(t: Tournament, matches: BracketMatch[]): void {
   if (!t.realPlayers) return;

@@ -21,7 +21,7 @@ export function HelpTip({ children }: { children: React.ReactNode }) {
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="inline-grid h-4 w-4 place-items-center rounded-full border border-slate-600 bg-slate-800 text-[10px] font-bold text-slate-400 hover:border-emerald-500/60 hover:text-emerald-300 transition"
-        aria-label="Подсказка"
+        aria-label="Подсказка / Hint"
       >
         ?
       </button>

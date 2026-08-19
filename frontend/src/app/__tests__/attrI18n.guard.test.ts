@@ -73,7 +73,7 @@ const KNOWN: Hit[] = [
   { file: "components/Wave1Nav.tsx", attr: "title", text: "AEV кошелёк / AEV wallet" },
   { file: "components/build/AiCoachChat.tsx", attr: "placeholder", text: "Напиши вопрос. Enter — отправить, Shift+" },
   { file: "components/build/AiResumeBuilder.tsx", attr: "placeholder", text: "Твой ответ… Enter — отправить." },
-  { file: "components/build/HelpTip.tsx", attr: "aria-label", text: "Подсказка" },
+  { file: "components/build/HelpTip.tsx", attr: "aria-label", text: "Подсказка / Hint" },
   { file: "components/build/ReviewsSection.tsx", attr: "placeholder", text: "Что было хорошо и что можно улучшить?" },
   // Переключатель языка: обе подписи ДВУЯЗЫЧНЫЕ намеренно, это не недоработка.
   // Он единственная кнопка, которую обязан найти человек, не читающий

@@ -364,6 +364,15 @@ export default function PwaInstall() {
 
   if (!mounted) return null;
 
+  // На посадочной запуска плашку не показываем. Она живёт в layout, то есть
+  // висит на всех страницах /cyberchess/*, и 19.08.2026 накрывала левый нижний
+  // угол посадочной — там, куда приходит трафик роликов. Человек на ней ещё не
+  // игрок: предлагать «установи приложение» до первой партии рано, а место она
+  // занимает то же, что и в самой игре.
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/cyberchess/launch')) {
+    return null;
+  }
+
   /* ====== Notify-prompt после установки ====== */
   if (installed && showNotifyPrompt) {
     return (

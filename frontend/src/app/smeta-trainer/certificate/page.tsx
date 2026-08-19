@@ -69,7 +69,7 @@ export default function CertificatePage() {
 
   // QR-код с verify URL
   const qrSvg = useMemo(() => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.kz";
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.app";
     const url = `${origin}/smeta-trainer/verify/${certNumber}`;
     try {
       return renderQRSvg(encodeQR(url), 110);
@@ -242,7 +242,7 @@ export default function CertificatePage() {
             <div className="text-right">
               <div className="text-[10px] text-slate-500 uppercase">Выдан</div>
               <div className="text-sm font-semibold text-slate-700">AEVION</div>
-              <div className="text-[10px] text-slate-400">aevion.kz · сметный тренажёр</div>
+              <div className="text-[10px] text-slate-400">aevion.app · сметный тренажёр</div>
             </div>
             {/* QR-код для верификации */}
             {qrSvg && (

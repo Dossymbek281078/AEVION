@@ -104,7 +104,7 @@ export default async function Image() {
             <Stat value={ENTRY_PAID_TIER_MONTHLY} label="от/мес" />
             <Stat value="14" label="дней trial" />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing</div>
         </div>
       </div>
     ),

@@ -42,7 +42,7 @@ const DISABLED = process.env.CYBERCHESS_OPENING_TREE_DISABLED === "1";
 const TREE_PATH = process.env.CYBERCHESS_OPENING_TREE_PATH || "";
 const TREE_URL =
   process.env.CYBERCHESS_OPENING_TREE_URL ||
-  "https://aevion.vercel.app/opening-tree.json.gz";
+  "https://aevion.app/opening-tree.json.gz";
 
 let TREE: Record<string, CompactRow[]> = {};
 let META: Record<string, unknown> = {};

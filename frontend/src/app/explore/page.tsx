@@ -166,7 +166,7 @@ export default function ExplorePlanet() {
       {fromBig6 && (
         <div style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "10px 16px", fontSize: 13, background: "#0E766E", borderBottom: "1px solid #0B5D57", color: "#FFFFFF" }}>
           Came from the benchmark invitation? The partnership brief is here →{" "}
-          <a href="/acquire" style={{ color: "#A7F3D0", fontWeight: 700, textDecoration: "underline" }}>aevion.vercel.app/acquire</a>
+          <a href="/acquire" style={{ color: "#A7F3D0", fontWeight: 700, textDecoration: "underline" }}>aevion.app/acquire</a>
         </div>
       )}
       <div className="aevx-wrap">
@@ -263,7 +263,7 @@ export default function ExplorePlanet() {
           <div className="aevx-links">
             <a href="/terms">Terms</a>
             <a href="/privacy">Privacy</a>
-            <a href="/">aevion.vercel.app</a>
+            <a href="/">aevion.app</a>
           </div>
         </footer>
       </div>

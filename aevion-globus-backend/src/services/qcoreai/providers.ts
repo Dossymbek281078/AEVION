@@ -93,7 +93,7 @@ const OPENAI_COMPAT: Record<string, OpenAICompatCfg> = {
     baseUrl: () => "https://openrouter.ai/api/v1",
     envKey: "OPENROUTER_API_KEY",
     extraHeaders: () => ({
-      "HTTP-Referer": process.env.OPENROUTER_REFERER || "https://aevion.vercel.app",
+      "HTTP-Referer": process.env.OPENROUTER_REFERER || "https://aevion.app",
       "X-Title": "AEVION QCoreAI",
     }),
   },

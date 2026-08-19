@@ -12,7 +12,7 @@
  *   - 6 metrics bars (innovation/stability/legitimacy + eliteFear/conflict/resentment)
  *   - 8 sliders table with values
  *   - QR code (if signature provided) pointing to /api/qsign/verify
- *   - Footer: aevion.io/constitution + signedAt
+ *   - Footer: aevion.app/constitution + signedAt
  *
  * Uses pdfkit + qrcode (both already in deps for Planet certs).
  */

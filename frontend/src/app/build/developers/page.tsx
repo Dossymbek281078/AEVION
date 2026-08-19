@@ -20,7 +20,7 @@ export default function DevelopersPage() {
           <h1 className="text-3xl font-bold text-white">QBuild for developers</h1>
           <p className="mt-2 text-sm text-slate-400">
             Three integration paths: drop-in widget, JSON partner API, RSS feed. All read-only,
-            served from <code className="rounded bg-white/10 px-1">aevion.tech</code>.
+            served from <code className="rounded bg-white/10 px-1">aevion.app</code>.
           </p>
         </header>
 
@@ -34,7 +34,7 @@ export default function DevelopersPage() {
      data-limit="6"
      data-city="Astana"
      data-skill="welding"></div>
-<script src="https://aevion.tech/api/build/public/widget.js" defer></script>`}</Pre>
+<script src="https://aevion.app/api/build/public/widget.js" defer></script>`}</Pre>
           <ul className="mt-2 space-y-1 text-xs text-slate-400">
             <li><code className="text-slate-300">data-key</code> — required, partner API key (mint at <Link href="/build/admin/partner-keys" className="text-emerald-300 underline">admin → partner keys</Link>)</li>
             <li><code className="text-slate-300">data-limit</code> — max vacancies to render, default 6</li>
@@ -65,7 +65,7 @@ export default function DevelopersPage() {
             desc="Sanity check — returns { status: 'ok', apiVersion: 'v1' }."
           />
           <h3 className="mt-4 text-sm font-semibold text-white">Curl</h3>
-          <Pre>{`curl https://aevion.tech/api/build/public/v1/vacancies?limit=10 \\
+          <Pre>{`curl https://aevion.app/api/build/public/v1/vacancies?limit=10 \\
   -H "X-Build-Key: qb_pk_..."`}</Pre>
           <h3 className="mt-3 text-sm font-semibold text-white">Response shape</h3>
           <Pre>{`{
@@ -81,7 +81,7 @@ export default function DevelopersPage() {
         "skills": ["welding", "blueprints"],
         "city": "Astana",
         "project": "Tower 7",
-        "url": "https://aevion.tech/build/vacancy/...",
+        "url": "https://aevion.app/build/vacancy/...",
         "createdAt": "...",
         "expiresAt": "..."
       }
@@ -97,9 +97,9 @@ export default function DevelopersPage() {
           <p className="text-sm text-slate-300">
             Subscribe to the latest open vacancies in any RSS reader. No auth required.
           </p>
-          <Pre>{`https://aevion.tech/api/build/public/rss/vacancies.xml
-https://aevion.tech/api/build/public/rss/vacancies.xml?city=Astana
-https://aevion.tech/api/build/public/rss/vacancies.xml?skill=welding`}</Pre>
+          <Pre>{`https://aevion.app/api/build/public/rss/vacancies.xml
+https://aevion.app/api/build/public/rss/vacancies.xml?city=Astana
+https://aevion.app/api/build/public/rss/vacancies.xml?skill=welding`}</Pre>
         </Section>
 
         <Section title="4 · Sitemap" anchor="sitemap">
@@ -107,7 +107,7 @@ https://aevion.tech/api/build/public/rss/vacancies.xml?skill=welding`}</Pre>
             Standard XML sitemap covering all open vacancies, projects, top employers and product
             pages. 5 000 URLs cap. Refreshed automatically.
           </p>
-          <Pre>{`https://aevion.tech/sitemap.xml`}</Pre>
+          <Pre>{`https://aevion.app/sitemap.xml`}</Pre>
         </Section>
 
         <Section title="Auth & limits" anchor="auth">

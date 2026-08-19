@@ -124,7 +124,7 @@ export default async function EmployerPage({
     itemListElement: vacancies.slice(0, 20).map((v, i) => ({
       "@type": "ListItem",
       position: i + 1,
-      url: `https://aevion.tech/build/vacancy/${encodeURIComponent(v.id)}`,
+      url: `https://aevion.app/build/vacancy/${encodeURIComponent(v.id)}`,
       name: v.title,
     })),
   } : null;

@@ -248,7 +248,7 @@ export default async function GuidePage() {
             {t("build.guide.colophonAskWorker")}
             <Link href="/build/guide-worker">{t("build.guide.colophonWorkerGuideLink")}</Link>
           </span>
-          <Link href="/build">aevion.vercel.app/build</Link>
+          <Link href="/build">aevion.app/build</Link>
         </div>
       </div>
     </main>

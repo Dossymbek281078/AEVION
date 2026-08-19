@@ -36,7 +36,7 @@ interface Puzzle {
 const POOL_PATH = process.env.CYBERCHESS_PUZZLES_PATH || "";
 const POOL_URL =
   process.env.CYBERCHESS_PUZZLES_URL ||
-  "https://aevion.vercel.app/puzzles.json";
+  "https://aevion.app/puzzles.json";
 
 let POOL: Puzzle[] = [];
 // ОТКУДА пул на самом деле. Раньше ответы отдавали адрес бандла

@@ -54,7 +54,7 @@ export function outlookCalendarLink(d: InterviewDraft): string {
 
 export function icsBlob(d: InterviewDraft): Blob {
   const end = new Date(d.startsAt.getTime() + d.durationMinutes * 60_000);
-  const uid = `${Date.now()}@aevion.tech`;
+  const uid = `${Date.now()}@aevion.app`;
   const escape = (s: string) =>
     s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
   const lines = [

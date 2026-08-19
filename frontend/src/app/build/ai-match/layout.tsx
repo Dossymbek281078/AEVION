@@ -4,14 +4,14 @@ export const metadata: Metadata = {
   title: "AI Job Match — AEVION QBuild",
   description:
     "AI-powered vacancy analysis on AEVION QBuild. Paste a job or your profile and get an instant match score, skill-gap breakdown, and tailored application tips.",
-  alternates: { canonical: "https://aevion.com/build/ai-match" },
+  alternates: { canonical: "https://aevion.app/build/ai-match" },
   openGraph: {
     title: "AI Job Match — AEVION QBuild",
     description:
       "AI vacancy analysis — instant match score, skill-gap breakdown, and application tips on AEVION QBuild.",
     type: "website",
     siteName: "AEVION QBuild",
-    url: "https://aevion.com/build/ai-match",
+    url: "https://aevion.app/build/ai-match",
   },
   twitter: {
     card: "summary",
@@ -24,12 +24,12 @@ const BREADCRUMB_LD = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.com/build" },
+    { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.app/build" },
     {
       "@type": "ListItem",
       position: 2,
       name: "AI Job Match",
-      item: "https://aevion.com/build/ai-match",
+      item: "https://aevion.app/build/ai-match",
     },
   ],
 };

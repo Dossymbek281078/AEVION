@@ -63,7 +63,10 @@ const APP_DEFS: AppDef[] = [
       "Monaco IDE (VS Code engine)",
       "AI code generation",
       "Deploy: Railway · Vercel · Cloudflare Pages",
-      "Free *.aevion.build subdomain",
+      // 19.08.2026: домен наш, но зона ещё не делегирована на Cloudflare —
+      // /studio честно пишет «waiting on domain delegation». Пока это так,
+      // обещать поддомен без оговорки нельзя: человек выберет тариф ради него.
+      "Free *.aevion.build subdomain (coming soon)",
       "50 AI videos · 200 images/mo",
       "Team collaborators",
     ],

@@ -85,7 +85,7 @@ export default function QSkywayOg() {
             textTransform: "uppercase",
           }}
         >
-          <div style={{ display: "flex" }}>aevion.vercel.app/qskyway</div>
+          <div style={{ display: "flex" }}>aevion.app/qskyway</div>
           <div style={{ color: "#a78bfa", display: "flex" }}>eVTOL · urban air mobility</div>
         </div>
       </div>

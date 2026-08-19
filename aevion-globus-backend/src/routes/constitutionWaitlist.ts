@@ -274,7 +274,7 @@ constitutionWaitlistAdminRouter.get(
       res.json({
         total: rows.length,
         items: rows,
-        bySource: aggregateBySource(rows),
+        ...aggregateBySource(rows),
         // `total` — это столько, сколько отдали, а не сколько есть. При
         // truncated=true или source="memory" по нему нельзя судить о размере
         // списка заявок.
@@ -293,12 +293,47 @@ constitutionWaitlistAdminRouter.get(
   },
 );
 
-function aggregateBySource(rows: WaitlistRow[]): Array<{ source: string; count: number }> {
+/**
+ * Разбивка по источникам — по ОТДЕЛЬНЫМ меткам, а не по строке целиком.
+ *
+ * С 19.08 источник накапливается: у человека, подписавшегося на шахматах и потом
+ * на DevHub, в поле стоит «cyberchess,devhub». Прежняя версия считала эту строку
+ * отдельным источником, и отчёт распадался на НАБОРЫ интересов: «cyberchess» — 1,
+ * «devhub» — 1, «cyberchess,devhub» — 1. Ответить «сколько людей ждёт шахматы» по
+ * такой разбивке нельзя.
+ *
+ * Сумма по группам теперь МОЖЕТ БЫТЬ БОЛЬШЕ числа подписчиков — один человек
+ * считается в каждой своей группе. Это правильно по смыслу и обязано быть
+ * названо: иначе первый же отчёт, где 12 подписчиков дают 15 по группам,
+ * прочитают как ошибку счёта. Поэтому рядом отдаётся `uniqueEmails`.
+ */
+function aggregateBySource(rows: WaitlistRow[]): {
+  bySource: Array<{ source: string; count: number }>;
+  uniqueEmails: number;
+  note: string;
+} {
   const m = new Map<string, number>();
-  for (const r of rows) m.set(r.source, (m.get(r.source) ?? 0) + 1);
-  return Array.from(m.entries())
-    .map(([source, count]) => ({ source, count }))
-    .sort((a, b) => b.count - a.count);
+  const emails = new Set<string>();
+  for (const r of rows) {
+    emails.add(String(r.email || "").trim().toLowerCase());
+    const marks = String(r.source || "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    // Пустой источник — тоже факт: «неизвестно» лучше молчания, иначе такие
+    // записи просто исчезнут из отчёта.
+    for (const mark of marks.length ? marks : ["unknown"]) {
+      m.set(mark, (m.get(mark) ?? 0) + 1);
+    }
+  }
+  return {
+    bySource: Array.from(m.entries())
+      .map(([source, count]) => ({ source, count }))
+      .sort((a, b) => b.count - a.count),
+    uniqueEmails: emails.size,
+    note:
+      "Счёт по МЕТКАМ: один адрес попадает в каждую свою группу, поэтому сумма по группам может превышать uniqueEmails.",
+  };
 }
 
 /**

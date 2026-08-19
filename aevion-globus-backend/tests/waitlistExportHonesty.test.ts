@@ -48,9 +48,15 @@ function adminToken(): string {
 }
 
 async function mount() {
-  const { constitutionWaitlistAdminRouter } = await import("../src/routes/constitutionWaitlist");
+  const { constitutionWaitlistAdminRouter, constitutionWaitlistRouter } = await import(
+    "../src/routes/constitutionWaitlist"
+  );
   const app = express();
   app.use(express.json());
+  // Публичный роут подписки нужен, чтобы проверить путь целиком: подписка →
+  // склейка метки → разбивка в выгрузке. Письма при этом не уходят — без
+  // BREVO_API_KEY отправка возвращает отказ ещё до сетевого вызова.
+  app.use("/api/constitution/waitlist", constitutionWaitlistRouter);
   app.use("/api/constitution/waitlist", constitutionWaitlistAdminRouter);
   return app;
 }
@@ -191,4 +197,64 @@ describe("недельный дайджест — молчание лучше н
     // молчаливой неполной рассылки.
     expect(src).toMatch(/ДАЙДЖЕСТ ОТМЕНЁН/);
   });
+});
+
+describe("разбивка по источникам после склейки меток", () => {
+  // Источник накапливается с 19.08: у подписавшегося на шахматах и потом на
+  // DevHub в поле стоит «cyberchess,devhub». Группировка по СТРОКЕ дала бы отчёт
+  // из наборов интересов — «cyberchess» 1, «devhub» 1, «cyberchess,devhub» 1, — и
+  // на вопрос «сколько ждёт шахматы» ответить было бы нельзя.
+  //
+  // Побочное следствие правильной группировки: сумма по группам может быть
+  // БОЛЬШЕ числа подписчиков. Это обязано быть названо в самом ответе, иначе
+  // первый же отчёт (12 адресов, 15 по группам) прочитают как ошибку счёта.
+  test("ответ несёт uniqueEmails и пояснение про сумму", async () => {
+    const app = await mount();
+    const r = await request(app)
+      .get("/api/constitution/waitlist/list")
+      .set("Authorization", `Bearer ${adminToken()}`);
+
+    expect(r.status).toBe(200);
+    expect(r.body).toHaveProperty("bySource");
+    expect(Array.isArray(r.body.bySource)).toBe(true);
+    expect(r.body).toHaveProperty("uniqueEmails");
+    expect(typeof r.body.uniqueEmails).toBe("number");
+    // Именно пояснение, а не только число: иначе расхождение придётся объяснять
+    // человеку каждый раз заново.
+    expect(String(r.body.note ?? "")).toMatch(/сумма по группам/i);
+  });
+
+  test("один адрес с двумя интересами даёт ДВЕ группы, а не одну строку-набор", async () => {
+    // Сквозная проверка вместо чтения исходника: подписка → склейка метки →
+    // разбивка. Первая версия этого случая смотрела на текст функции (есть ли
+    // split) и осталась зелёной, когда я мутацией вернул группировку по целой
+    // строке. Наличие вызова не доказывает, что его результат используется.
+    const app = await mount();
+    const email = `dva-interesa-${Date.now()}@primer.test`;
+
+    for (const source of ["cyberchess", "devhub-instagram"]) {
+      const r = await request(app)
+        .post("/api/constitution/waitlist/subscribe")
+        .send({ email, source });
+      expect([200, 201]).toContain(r.status);
+    }
+
+    const list = await request(app)
+      .get("/api/constitution/waitlist/list")
+      .set("Authorization", `Bearer ${adminToken()}`);
+
+    const groups = (list.body.bySource ?? []) as Array<{ source: string; count: number }>;
+    const names = groups.map((g) => g.source);
+    // Обе метки — отдельными группами. Набор «cyberchess,devhub-instagram»
+    // группой быть не должен.
+    expect(names).toContain("cyberchess");
+    expect(names).toContain("devhub-instagram");
+    expect(names.some((n) => n.includes(","))).toBe(false);
+
+    // И то самое расхождение: один человек, две группы.
+    const sum = groups.reduce((a, g) => a + g.count, 0);
+    expect(list.body.uniqueEmails).toBeGreaterThanOrEqual(1);
+    expect(sum).toBeGreaterThan(0);
+    expect(sum).toBeGreaterThanOrEqual(list.body.uniqueEmails);
+  }, 20_000);
 });

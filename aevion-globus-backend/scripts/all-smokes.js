@@ -49,6 +49,21 @@ const SMOKES = [
   // переменные окружения не заданы. Сломайся любое — покупатель упирается в
   // тупик, а мы узнаём из выручки, которой нет.
   { name: "checkout-rails", script: "checkout-rails-prod-smoke.js", readOnly: true },
+
+  // Ещё шесть смоуков, не запускавшихся нигде (замер 19.08.2026: 12 файлов
+  // без единой ссылки в наборе, package.json и CI). Каждый прогнан против
+  // https://api.aevion.app ПЕРЕД добавлением — иначе набор покраснел бы с
+  // первого дня и его отключили бы вместе с полезной частью.
+  //
+  // Долголетие и QRenew делают по одному пишущему запросу, поэтому
+  // readOnly: false — в боевом прогоне (READ_ONLY=1) они пропускаются, а в
+  // локальном работают. Остальные четыре только читают.
+  { name: "longevity", script: "longevity-smoke.js", readOnly: false },       // 15/15
+  { name: "qrenew", script: "qrenew-smoke.js", readOnly: false },             // 27/27
+  { name: "devhub-pages", script: "devhub-smoke.js", readOnly: true },
+  { name: "qsocial", script: "qsocial-smoke.js", readOnly: true },
+  { name: "qtradeoffline", script: "qtradeoffline-smoke.js", readOnly: true },
+  { name: "qventure", script: "qventure-smoke.js", readOnly: true },
   // Hub catalog: read-only unified module discovery endpoint.
   { name: "hub-catalog", script: "hub-catalog-smoke.js", readOnly: true },
   // Waitlist unsubscribe: validates HMAC token rejection paths.

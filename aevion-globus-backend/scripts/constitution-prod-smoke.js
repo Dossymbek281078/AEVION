@@ -339,9 +339,19 @@ async function callSSE(path, body) {
   if (waitlistOk.status === 201 && waitlistOk.json?.ok) ok("POST /waitlist/subscribe valid email → 201");
   else fail("POST /waitlist/subscribe valid email → 201", `status ${waitlistOk.status}`);
 
-  // Waitlist — повтор не заводит второго подписчика и не отвергается.
+  // Waitlist — повтор того же адреса не отвергается.
+  //
+  // Названо ровно тем, что проверяется. Первая редакция утверждала «без второй
+  // строки», хотя строк не считала: выдача списка требует админа, а этот прогон
+  // публичный. Утверждение, обещающее больше проверенного, опаснее его
+  // отсутствия — по нему потом делают вывод, что свойство под охраной.
+  //
+  // Отсутствие второй строки доказано отдельно, запросом к боевой базе
+  // 19.08.2026: после двух отправок подряд `count(*)` по этому адресу равен 1.
+  // Постоянной охраны у этого свойства нет — она невозможна без админского
+  // ключа в смоуке.
   const waitlistAgain = await call("POST", "/api/constitution/waitlist/subscribe", { body: { email: SMOKE_EMAIL, source: "smoke" } });
-  if (waitlistAgain.status === 201 && waitlistAgain.json?.ok) ok("POST /waitlist/subscribe повтор того же адреса → 201, без второй строки");
+  if (waitlistAgain.status === 201 && waitlistAgain.json?.ok) ok("POST /waitlist/subscribe повтор того же адреса → 201");
   else fail("POST /waitlist/subscribe повтор того же адреса → 201", `status ${waitlistAgain.status}`);
 
   // Artifact publish — missing signature

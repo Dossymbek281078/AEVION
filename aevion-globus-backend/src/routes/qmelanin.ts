@@ -304,6 +304,14 @@ qmelaninRouter.post("/plan", (req: Request, res: Response) => {
     }).map((s) => s.key);
   }
 
+  // Прислал ли человек ХОТЬ ЧТО-ТО, по чему можно судить о дефицитах.
+  //
+  // Ни deficientKeys, ни values — и обе ветки выше не выполняются, список
+  // остаётся пустым, а сводка гласит «Явных дефицитов по порогам нет».
+  // Проверено на проде 20.08.2026 телом {}. Отсутствие данных выдавалось за
+  // результат проверки.
+  const hasInput = Array.isArray(b.deficientKeys) || Boolean(b.values);
+
   const targeted = deficientKeys.map((k) => ({
     nutrient: BIOMARKER_BY_KEY[k].label,
     key: k,
@@ -322,10 +330,16 @@ qmelaninRouter.post("/plan", (req: Request, res: Response) => {
 
   res.json({
     summary:
-      deficientKeys.length === 0
+      !hasInput
+        ? "Данные не переданы: ни списка дефицитов, ни значений анализов. Это НЕ значит, что дефицитов нет — судить пока не по чему. План ниже общий, не персональный."
+        : deficientKeys.length === 0
         ? "Явных дефицитов по порогам нет — фокус на поддержке (субстрат + антиоксиданты + сон) и снижении окислительной нагрузки."
         : `Целевая коррекция ${deficientKeys.length} дефицит(а/ов) через доступные продукты + база.`,
     targeted,
+    // Персональный план или общий. Без этого признака человек не отличит
+    // «проверили, дефицитов нет» от «нам нечего было проверять».
+    personalised: hasInput,
+    ...(hasInput ? {} : { warning: "План общий: данные для персонализации не переданы." }),
     foundation,
     interactions,
     schedule: {

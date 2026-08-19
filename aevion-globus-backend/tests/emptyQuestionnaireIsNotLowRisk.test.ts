@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import express from "express";
 import request from "supertest";
 import { qmelaninRouter } from "../src/routes/qmelanin";
+import { longevityRouter } from "../src/routes/longevity";
 
 /**
  * Пустая анкета — не «низкий риск».
@@ -24,6 +25,7 @@ function app() {
   const a = express();
   a.use(express.json());
   a.use("/api/qmelanin", qmelaninRouter);
+  a.use("/api/longevity", longevityRouter);
   return a;
 }
 
@@ -67,5 +69,43 @@ describe("оценка риска не выдумывается из умолч�
     expect(res.body.riskScore).toBeGreaterThanOrEqual(5);
     expect(res.body.factors.length).toBeGreaterThan(3);
     expect(res.body.warning, "предупреждение не должно появляться на полной анкете").toBeUndefined();
+  });
+});
+
+describe("соседние ручки того же класса", () => {
+  test("longevity: пустое тело не выдаётся за «отклонений нет»", async () => {
+    const res = await request(app()).post("/api/longevity/assess").send({});
+    expect(res.status).toBe(200);
+    expect(res.body.flaggedCount).toBe(0); // само по себе верно
+    expect(res.body.measuredCount, "не видно, что мерить было нечего").toBe(0);
+    expect(String(res.body.warning ?? ""), "ноль без пояснения читается как хорошая новость").toMatch(
+      /не передано/,
+    );
+  });
+
+  test("longevity: контроль — с реальными значениями предупреждения нет", async () => {
+    const res = await request(app())
+      .post("/api/longevity/assess")
+      .send({ values: { vitD: 15 } });
+    expect(res.body.measuredCount).toBeGreaterThan(0);
+    expect(res.body.warning).toBeUndefined();
+  });
+
+  test("qmelanin /plan: пустое тело не выдаётся за «дефицитов нет»", async () => {
+    const res = await request(app()).post("/api/qmelanin/plan").send({});
+    expect(res.body.personalised, "общий план выдаётся за персональный").toBe(false);
+    expect(String(res.body.summary ?? ""), "сводка утверждает результат проверки").not.toMatch(
+      /дефицитов по порогам нет/,
+    );
+    expect(String(res.body.warning ?? "")).toMatch(/общий/);
+  });
+
+  test("qmelanin /plan: контроль — со списком дефицитов план персональный", async () => {
+    const res = await request(app())
+      .post("/api/qmelanin/plan")
+      .send({ deficientKeys: ["ferritin"] });
+    expect(res.body.personalised).toBe(true);
+    expect(res.body.targeted.length).toBeGreaterThan(0);
+    expect(res.body.warning).toBeUndefined();
   });
 });

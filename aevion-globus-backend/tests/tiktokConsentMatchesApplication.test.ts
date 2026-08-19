@@ -151,3 +151,53 @@ describe("commercial content disclosure", () => {
     ).toBeNull();
   });
 });
+
+describe("drafts are a real path, not a claim", () => {
+  // The application and the product catalogue both promise "save to drafts or
+  // post directly". Until 19.08.2026 only direct post existed, while
+  // video.upload — the scope that exists precisely for drafts — was already
+  // being requested at consent. Asking for a permission nothing uses is its own
+  // review failure; TikTok asks you to remove unused scopes before submitting.
+  //
+  // The first version of these tests scanned the source for the endpoint URL
+  // and PASSED when the routing was broken, because the strings stayed in the
+  // file. Presence of text is not behaviour. These call the builder instead.
+  test("a draft goes to the inbox endpoint", async () => {
+    const { buildPublishRequest } = await import("../src/routes/tiktok");
+    const r = buildPublishRequest({ target: "draft", videoUrl: "https://x/v.mp4" });
+    expect(r.url).toContain("inbox");
+  });
+
+  test("a direct post goes to the publish endpoint, not the inbox", async () => {
+    const { buildPublishRequest } = await import("../src/routes/tiktok");
+    const r = buildPublishRequest({
+      target: "direct",
+      videoUrl: "https://x/v.mp4",
+      privacyLevel: "PUBLIC_TO_EVERYONE",
+    });
+    expect(r.url).not.toContain("inbox");
+    expect(r.url).toContain("post/publish/video/init");
+  });
+
+  test("a draft carries no post_info — TikTok rejects it there", async () => {
+    const { buildPublishRequest } = await import("../src/routes/tiktok");
+    const r = buildPublishRequest({ target: "draft", videoUrl: "https://x/v.mp4" });
+    expect(r.body.post_info).toBeUndefined();
+    expect(r.body.source_info).toBeTruthy();
+  });
+
+  test("a direct post carries the disclosure flags even when they are false", async () => {
+    // Explicit false is the point: TikTok reads an absent flag as "not
+    // commercial", so the field has to be present either way.
+    const { buildPublishRequest } = await import("../src/routes/tiktok");
+    const r = buildPublishRequest({
+      target: "direct",
+      videoUrl: "https://x/v.mp4",
+      privacyLevel: "PUBLIC_TO_EVERYONE",
+    });
+    const info = r.body.post_info as Record<string, unknown>;
+    expect(info.brand_organic_toggle).toBe(false);
+    expect(info.brand_content_toggle).toBe(false);
+    expect(info.is_aigc).toBe(false);
+  });
+});

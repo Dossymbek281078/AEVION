@@ -270,7 +270,10 @@ export default function PricingAdminPage() {
             Pricing Dashboard
           </h1>
           <p style={{ fontSize: 13, color: "#94a3b8", margin: 0, marginBottom: 24, lineHeight: 1.5 }}>
-            {t("pricing.admin.auth.tokenHintPre")} <code>aevion-globus-backend/.env</code>
+            {/* Файла .env на диске НЕТ — проверено 19.08.2026: токен живёт только в
+                переменных сервиса Railway. Прежняя подсказка отправляла искать
+                несуществующий файл, а в .env.example переменная не упомянута вовсе. */}
+            {t("pricing.admin.auth.tokenHintPre")} <code>railway variables</code>
             {t("pricing.admin.auth.tokenHintPost")}
           </p>
           <input

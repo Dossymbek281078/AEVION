@@ -160,6 +160,125 @@ async function scaleClaims() {
   ];
 }
 
+/**
+ * Проверки САМОГО ПРОДА: не откатилось ли то, что уже чинили.
+ *
+ * 19.08.2026 за один день прод трижды сменил владельца: три сессии выкатывали
+ * свои ветки в один сервис, каждая собранная от своей точки. Дважды это
+ * отбрасывало уже сделанные правки, и оба раза обнаруживалось только потому,
+ * что я спрашивал прод руками. Молча — потому что ничего не падает: сервер
+ * жив, ручки отвечают 200, просто код старее.
+ *
+ * Поэтому две проверки живут здесь, в ежедневной карте, и спрашивают ПРОД, а не
+ * репозиторий. Тесты стерегут код, а карта стережёт то, что реально работает.
+ */
+async function prodRegressions() {
+  const out = [];
+
+  // 1) Ошибка формы подписки на /go должна приходить по-русски.
+  //    Пустое тело записи не создаёт — проверка безопасна.
+  try {
+    const res = await fetch(`${API}/api/constitution/waitlist/subscribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": UA },
+      body: "{}",
+      signal: AbortSignal.timeout(20_000),
+    });
+    const j = JSON.parse(new TextDecoder("utf-8").decode(await res.arrayBuffer()));
+    const msg = j?.fields?.[0]?.message_ru ?? "";
+    const ru = /[а-яё]/i.test(msg);
+    out.push({
+      what: "ошибка формы подписки — по-русски",
+      ok: ru,
+      detail: msg ? `«${msg.slice(0, 60)}»` : "поле message_ru пустое",
+      why: "форма на /go — единственная ссылка из соцсетей",
+    });
+  } catch (e) {
+    out.push({ what: "ошибка формы подписки — по-русски", ok: null, detail: `не спросили: ${e.message}`, why: "" });
+  }
+
+  // 2) Обещание доступности не выше опубликованного договора.
+  try {
+    const [trust, quotas] = await Promise.all([
+      getJson(`${API}/api/pricing/trust`),
+      getJson(`${API}/api/quotas`),
+    ]);
+    const max = Math.max(
+      ...(quotas.tiers ?? []).map((t) => Number(t?.sla?.uptime) || 0),
+    );
+    const rows = trust.numbers ?? trust.trustNumbers ?? [];
+    const sla = rows.find((r) => String(r.label).includes("SLA"));
+    const claimed = String(`${sla?.value ?? ""} ${sla?.hint ?? ""}`)
+      // Здесь стоял невидимый символ. 19.08.2026 регулярка была записана
+      // через heredoc, где обозначение границы слова превратилось в настоящий
+      // BACKSPACE (U+0008) внутри выражения: оно требовало в тексте символ
+      // забоя и не совпадало никогда. Проверка честно отвечала «чисел нет» на
+      // строке «99.5% … 99.95%», которую видно глазами.
+      //
+      // Тот же символ часом раньше сделал слепым сторожа во фронтенде — я снял
+      // его, не найдя причины. Причина была эта. Регулярки правим редактором,
+      // а не генерацией из другого языка.
+      .match(/(9\d(?:\.\d+)?)%/g)
+      ?.map((x) => Number(x.replace("%", ""))) ?? [];
+    const over = claimed.filter((v) => v > max);
+    out.push({
+      what: "SLA на витрине не выше договора",
+      // Пустой список чисел — это НЕ «всё в порядке». Так уже было 19.08:
+      // витрина не отдала ни одного процента, и первая версия проверки
+      // объявила это успехом. Отсутствие находки и отсутствие проблемы —
+      // разные вещи; когда судить не по чему, честный ответ «не проверено».
+      ok: max > 0 && claimed.length > 0 ? over.length === 0 : null,
+      detail: max <= 0
+        ? "договор не отдал ни одного uptime"
+        : claimed.length === 0
+          ? "на витрине не нашлось ни одного процента — судить не по чему"
+          : `витрина: ${claimed.join(", ")} · договор: максимум ${max}%`,
+      why: "обещать сверх контракта — обязательство, которого не брали",
+    });
+  } catch (e) {
+    out.push({ what: "SLA на витрине не выше договора", ok: null, detail: `не спросили: ${e.message}`, why: "" });
+  }
+
+  return out;
+}
+
+/**
+ * Что ждёт решения основателя — читается ИЗ СТОРОЖЕЙ, а не пишется руками.
+ *
+ * Блок «что противоречит» я написал 14.08 текстом и 19.08 нашёл в нём протухший
+ * пункт: карта звала чинить расхождение цены QRenew, которое к тому времени
+ * было сведено, а настоящая проблема стала другой. Документ, который правят
+ * руками, расходится с делом ровно так же, как любой другой.
+ *
+ * Теперь список берётся из AWAITING_FOUNDER в тестах-сторожах. У них есть
+ * проверка на протухание: как только расхождение уйдёт, тест потребует убрать
+ * строку — и она исчезнет отсюда сама.
+ */
+function awaitingFounder() {
+  const files = [
+    "aevion-globus-backend/tests/priceLadderCoherence.test.ts",
+    "aevion-globus-backend/tests/sameEntitlementSamePrice.test.ts",
+  ];
+  const out = [];
+  for (const rel of files) {
+    const abs = resolve(REPO, rel);
+    if (!existsSync(abs)) continue;
+    const src = readFileSync(abs, "utf8");
+    // Закрывающая скобка бывает С ОТСТУПОМ: в одном файле список объявлен на
+    // верхнем уровне, в другом — внутри describe. Шаблон, требовавший `};` в
+    // начале строки, молча пропускал второй файл, и блок показывал один пункт
+    // из трёх — то есть выглядел рабочим и врал недосказанностью.
+    const block = /AWAITING_FOUNDER[^=]*=\s*\{([\s\S]*?)\n\s*\};/.exec(src)?.[1];
+    if (!block) continue;
+    // Записи вида `ключ:` или `"ключ":` с текстом причины из склеенных строк.
+    for (const m of block.matchAll(/(?:^|\n)\s*"?([\w-]+)"?:\s*((?:"[^"]*"\s*\+?\s*)+),/g)) {
+      const reason = [...m[2].matchAll(/"([^"]*)"/g)].map((x) => x[1]).join("");
+      out.push({ key: m[1], reason, from: rel.split("/").pop() });
+    }
+  }
+  return out;
+}
+
 /** Ссылка магазина → id модуля, как это делает бэкенд. Своей таблицы не заводим. */
 function storeNameToModule() {
   const src = readFileSync(resolve(REPO, "aevion-globus-backend/src/data/lemonSqueezyVariants.ts"), "utf8");
@@ -184,7 +303,7 @@ function row(cells) {
 }
 
 function main(data) {
-  const { pricing, shop, gum, nameToModule, measuredAt, desks, claims } = data;
+  const { pricing, shop, gum, nameToModule, measuredAt, desks, claims, regressions, pending } = data;
 
   const tierPrice = new Map(pricing.tiers.map((t) => [t.id, t.priceMonthly]));
 
@@ -342,6 +461,28 @@ function main(data) {
     }).join("\n");
   }
 
+  // ── Блок И: не откатилось ли починенное
+  const regRows = (regressions ?? []).map((r) => {
+    const verdict = r.ok === null
+      ? '<span class="chip chip-off">не проверено</span>'
+      : r.ok
+        ? '<span class="chip chip-ok">в порядке</span>'
+        : '<span class="chip chip-bad">откатилось</span>';
+    return row([
+      `<th scope="row">${esc(r.what)}${r.why ? `<span class="sub">${esc(r.why)}</span>` : ""}</th>`,
+      `<td>${esc(r.detail)}</td>`,
+      `<td>${verdict}</td>`,
+    ]);
+  }).join("\n") || row([`<td colspan="3"><span class="dim">Прод не ответил — не проверено. Это НЕ «всё в порядке».</span></td>`]);
+
+  // ── Блок Е: ждёт решения основателя (из сторожей)
+  const pendingRows = (pending ?? []).length
+    ? pending.map((x) => row([
+        `<th scope="row">${esc(x.key)}<span class="sub">${esc(x.from)}</span></th>`,
+        `<td>${esc(x.reason)}</td>`,
+      ])).join("\n")
+    : row([`<td colspan="2"><span class="dim">Список сторожей пуст — либо всё решено, либо файлы не прочитались.</span></td>`]);
+
   const totalProducts = shop.size + gum.length;
 
   const tpl = readFileSync(resolve(HERE, "money-map.tpl.html"), "utf8");
@@ -361,6 +502,8 @@ function main(data) {
     .replace("__PROMOS__", promoRows.join("\n"))
     .replace("__DESKS__", deskRows)
     .replace("__CLAIMS__", claimRows)
+    .replace("__REGRESSIONS__", regRows)
+    .replace("__PENDING__", pendingRows)
     .replace(/__NDESKS__/g, desks ? String(deskOn) : "?")
     .replace(/__NDESKS_ALL__/g, desks ? String(deskAll) : "?");
 
@@ -387,6 +530,8 @@ try {
     nameToModule: storeNameToModule(),
     desks: await cashDesks(),
     claims: await scaleClaims(),
+    regressions: await prodRegressions(),
+    pending: awaitingFounder(),
     measuredAt: new Date().toISOString().slice(0, 10),
   });
 } catch (e) {

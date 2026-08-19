@@ -1,0 +1,161 @@
+// Страница модуля открывается и показывает консоль.
+//
+// Проверка появилась 12.08.2026 вместе с удалением рабочего стола агентов —
+// из файла ушло около 1600 строк, и «tsc чист + остальные тесты зелёные» это
+// не измеряет: ни один из них страницу не монтирует. Здесь она монтируется
+// целиком, с живыми дочерними компонентами.
+
+import { describe, test, expect, afterEach, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+
+vi.mock("@/lib/auth", () => ({
+  isAuthenticated: () => true,
+  getAuthHeaders: () => ({}),
+}));
+
+import MultichatEnginePage from "./MultichatEngineClient";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe("Страница мультичата", () => {
+  test("монтируется и показывает рабочую консоль первой", async () => {
+    // Полоса провайдеров и витрина пресетов ходят в сеть при монтировании.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ providers: [], presets: [] }) })) as unknown as typeof fetch,
+    );
+
+    render(<MultichatEnginePage />);
+
+    // Консоль — то, ради чего модуль открывают: она обязана быть на экране,
+    // а не за описанием возможностей.
+    expect(await screen.findByText("Консилиум")).toBeTruthy();
+    expect(screen.getByPlaceholderText(/стоит ли запускать платный тариф/i)).toBeTruthy();
+    expect(screen.getByText("AEVION Multichat Engine")).toBeTruthy();
+  });
+});
+
+// Полоса поставщиков утверждала то, чего не измеряла.
+//
+// Она берёт данные из /api/multichat/provider-status, а тот — из
+// /api/qcoreai/providers. Последний СИНХРОННЫЙ: читает переменные окружения и
+// перечисляет провайдеров, у которых задан ключ. Никакого обращения к
+// Anthropic, OpenAI и остальным там нет ни одной строкой.
+//
+// А на экране при этом горел зелёный огонёк, слово «online» и правдоподобная
+// задержка «3ms». Задержка — это время ответа НАШЕГО же localhost, поданное
+// как задержка провайдера, с порогами «⚠ >250ms» и «🐢 >1000ms». Если бы
+// OpenAI лежал, страница всё равно писала бы «online».
+//
+// Наличие ключа — полезный факт, и показывать его надо. Врать про
+// доступность — нет.
+describe("Полоса поставщиков — говорит только то, что измеряет", () => {
+  function stubProviders() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("provider-status")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              providers: [
+                { id: "anthropic", name: "Anthropic", configured: true, reachable: true, latencyMs: 3, defaultModel: "claude-sonnet-4-6" },
+                { id: "openai", name: "OpenAI", configured: false, reachable: false, latencyMs: null, defaultModel: null },
+              ],
+              cachedAt: "2026-08-12T05:00:00.000Z",
+              probed: false,
+            }),
+          };
+        }
+        return { ok: true, status: 200, json: async () => ({ presets: [] }) };
+      }) as unknown as typeof fetch,
+    );
+  }
+
+  test("вместо «online» — «ключ настроен», без выдуманной задержки", async () => {
+    stubProviders();
+    render(<MultichatEnginePage />);
+
+    expect(await screen.findByText(/ключ настроен/i)).toBeTruthy();
+    expect(screen.queryByText("online")).toBeNull();
+    // «3ms» — это наш собственный localhost, а не Anthropic.
+    expect(screen.queryByText(/3ms/)).toBeNull();
+  });
+
+  test("сказано прямо, что доступность самих поставщиков не проверяется", async () => {
+    stubProviders();
+    render(<MultichatEnginePage />);
+
+    expect(await screen.findByText(/доступность.*не провер/i)).toBeTruthy();
+  });
+
+  test("провайдер без ключа так и назван", async () => {
+    stubProviders();
+    render(<MultichatEnginePage />);
+
+    expect(await screen.findByText(/ключа нет/i)).toBeTruthy();
+  });
+});
+
+// Витрина заданий обещала то, чего не происходило.
+//
+// Кнопка «Launch →» создавала на сервере беседу и уводила пользователя на
+// /qcoreai/multi?conv=…&preset=…, а комментарий в коде утверждал, что та
+// страница читает оба параметра и заранее расставляет роли. Проверено по
+// исходнику: /qcoreai/multi разбирает ТОЛЬКО `from=notebook` и `from=pipeline`
+// через sessionStorage. Ни `conv`, ни `preset` там не читаются нигде.
+//
+// Итог для человека: он нажал «запустить миссию», ушёл со страницы модуля,
+// оказался на пустом экране без системного промта и без ролей, а в библиотеке
+// у него появилась пустая беседа «💻 Code review» с нулём реплик.
+//
+// Задание должно наполнять консилиум ЗДЕСЬ ЖЕ — за этим на страницу и пришли.
+describe("Витрина заданий — задание попадает в консоль, а не в никуда", () => {
+  const PRESET = {
+    id: "code-review",
+    name: "Code review",
+    emoji: "💻",
+    description: "Три инженера оценят ваш диф: ясность, корректность, безопасность.",
+    systemPrompt: "Вы старший инженер на ревью. Ищите дефекты корректности и безопасности.",
+    recommendedAgents: [{ role: "Code" }],
+    defaultProvider: "anthropic",
+  };
+
+  function stubPresets() {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/presets")) {
+        return { ok: true, status: 200, json: async () => ({ presets: [PRESET] }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ providers: [] }) };
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    return fetchMock;
+  }
+
+  test("нажатие кладёт задание в поле консилиума на этой же странице", async () => {
+    stubPresets();
+    render(<MultichatEnginePage />);
+
+    const btn = await screen.findByRole("button", { name: /взять в консилиум/i });
+    fireEvent.click(btn);
+
+    const textarea = screen.getByPlaceholderText(/стоит ли запускать платный тариф/i) as HTMLTextAreaElement;
+    await waitFor(() => expect(textarea.value).toContain("ревью"));
+  });
+
+  test("пустая беседа на сервере при этом не заводится", async () => {
+    const fetchMock = stubPresets();
+    render(<MultichatEnginePage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /взять в консилиум/i }));
+
+    await waitFor(() => {
+      const launched = fetchMock.mock.calls.some((c) => String(c[0]).includes("/launch"));
+      expect(launched).toBe(false);
+    });
+  });
+});

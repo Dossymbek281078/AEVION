@@ -1,0 +1,225 @@
+/**
+ * Сторож отставных цен AEVION.
+ *
+ * ЗАЧЕМ. Репрайсинг 22.07.2026 поменял тарифы в реестре
+ * (`aevion-globus-backend/src/data/pricing.ts`) — файл, по которому
+ * `routes/checkout.ts` считает КАЖДОЕ реальное списание, — и больше нигде.
+ * Три недели посетитель читал «$19/мес» в FAQ, а с карты уходило $24.
+ * Ничего не падало, тесты не краснели.
+ *
+ * `pitchNumbers.guard` сверяет цены на ИМЕНОВАННОМ списке поверхностей.
+ * Этого не хватило: баннер «All-Access $59» и ссылка «Upgrade — $149/mo»
+ * в devhub нашлись руками 10.08.2026, а не тестом. Поэтому здесь — как в
+ * соседнем `scaleClaims.guard`: сканируется ВЕСЬ фронтенд, а законные
+ * вхождения перечисляются поимённо и с причиной.
+ *
+ * ЧТО ИМЕННО ЛОВИМ. Не «любую цену» — их во фронтенде больше тысячи, и
+ * почти все чужие (цены конкурентов, суммы сделок, аванс $10M). Ловим
+ * ровно ЧЕТЫРЕ отставные цены тарифов: 24 / 39 / 89 / 249.99. Набор
+ * маленький и точный, поэтому список исключений можно собрать по фактам,
+ * а не на глаз. Каждое исключение ниже сверено 10.08.2026 с кодом, который
+ * реально списывает деньги, либо с каталогом `lib/products.ts` (его цены
+ * сверены с живым дашбордом Gumroad 26.07.2026).
+ *
+ * ЕСЛИ СТОРОЖ УПАЛ. Либо вернулась отставная цена — тогда правь исходник,
+ * а не тест. Либо появилась НОВАЯ законная цена с таким же номиналом —
+ * тогда допиши строку в ALLOWED с причиной и ссылкой на то, что списывает.
+ * Строка без причины — это не исключение, а заглушённый сторож.
+ */
+import { describe, it, expect } from "vitest";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
+
+const SRC_ROOT = path.resolve(__dirname, "../..");
+const REGISTRY = path.resolve(SRC_ROOT, "../../aevion-globus-backend/src/data/pricing.ts");
+
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".next",
+  // Сторожа и их объяснения сами цитируют отставные цены.
+  "__tests__",
+  // Учебные сметы: там суммы работ, а не цены подписок.
+  "drawings-practice",
+]);
+
+/**
+ * Отставные цены тарифов. Держим списком, а не «всё, чего нет в реестре»:
+ * в реестре нет и цен Bureau, Constitution, API — они законные.
+ */
+const RETIRED: Array<{ amount: string; was: string }> = [
+  // 13.08.2026 прайс опустили обратно: 24/39/89/249.99 → 19/29/49/149. То есть
+  // отставными стали ровно те числа, что 22.07 были живыми, а прежние отставные
+  // (19/29/49) вернулись в строй. Список перевёрнут целиком, а не дополнен:
+  // держать в нём и старые, и новые значило бы ловить живую цену как мёртвую —
+  // сторож бы краснел на исправном коде, и его отключили бы (см. правило
+  // «аудит, который всегда красный»).
+  { amount: "24", was: "Lite (стал $19 13.08.2026)" },
+  { amount: "39", was: "Medium (стал $29 13.08.2026)" },
+  { amount: "89", was: "Full (стал $49 13.08.2026)" },
+  { amount: "249.99", was: "Universe/pro (стал $149 13.08.2026)" },
+];
+
+/**
+ * Законные вхождения этих же номиналов. Совпадение по подстроке строки
+ * исходника. Причина обязательна.
+ */
+const ALLOWED: Array<{ fragment: string; reason: string }> = [
+  // ⚠️ СПИСОК ПЕРЕБРАН ЦЕЛИКОМ 18.08.2026 вместе с переворотом RETIRED.
+  //
+  // Прежние 37 исключений закрывали номиналы 19 / 29 / 49 / 149.99. После
+  // репрайса 13.08 эти числа снова стали ЖИВЫМИ ценами, то есть 36 из 37 строк
+  // перестали что-либо исключать. Оставить их значило бы держать сторожа с
+  // мёртвым списком: он бы зеленел, а проверка «каждое исключение действительно
+  // что-то исключает» — краснела. Старые строки не потеряны, они в истории git
+  // рядом с этим коммитом.
+  //
+  // Ниже — только законные вхождения НОВЫХ отставных номиналов: 24 / 39 / 89 /
+  // 249.99. Каждое сверено глазами по файлу, а не по памяти.
+
+  // ── AEVION IP Bureau: своя лестница сертификатов, не тарифы платформы ────
+  {
+    fragment: 'price: "From $89 / cert"',
+    reason: "Bureau Notarized — цена СЕРТИФИКАТА с нотариусом, к тарифам платформы отношения не имеет",
+  },
+
+  // ── Продающая модель: исторические утверждения о самом репрайсе ──────────
+  // Это не «цена на странице», а объяснение, откуда взялись новые числа.
+  // Убрать их — значит скрыть, что модель следует за ценой в обе стороны.
+  {
+    fragment: "$89 → $49/mo",
+    reason: "pitchModel: фраза о самом репрайсе 13.08.2026, а не действующая цена",
+  },
+  {
+    fragment: "repriced $249.99 → $149 on 2026-08-13",
+    reason: "pitchModel: та же история по флагману",
+  },
+];
+
+/**
+ * Строки, которые ОБЪЯСНЯЮТ устаревание, а не утверждают цену: комментарии
+ * вида «было $49 → стало $89». Их запрещать бессмысленно — они и есть
+ * защита от повторения.
+ *
+ * Работает ТОЛЬКО на строках-комментариях. Иначе достаточно дописать слово
+ * «repriced» в обычную строку интерфейса, и живая неверная цена проедет
+ * мимо сторожа — то есть у него появится лазейка ровно того вида, ради
+ * закрытия которого он написан.
+ */
+const LINE_COMMENT = /^\s*(\/\/|\*)/;
+
+/**
+ * Внутри блочного комментария продолжающие строки не начинаются ни с `*`,
+ * ни с `//` — их надо отслеживать состоянием, а не префиксом. Первая версия
+ * этой проверки смотрела только на префикс и объявила нарушениями два
+ * абзаца собственных пояснений.
+ */
+function commentMask(lines: string[]): boolean[] {
+  let inBlock = false;
+  return lines.map((line) => {
+    const opens = line.includes("/*");
+    const closes = line.includes("*/");
+    const wasInBlock = inBlock;
+    if (opens && !closes) inBlock = true;
+    else if (closes) inBlock = false;
+    return wasInBlock || opens || LINE_COMMENT.test(line);
+  });
+}
+const EXPLANATORY =
+  /repriced|moved \$|was\s*≈?\$|used to|long-dead|still quoted|does not exist|→ \$|version of this model|устарев|отставн/i;
+
+/** Суммы сделок и рынков: $29B, $49M. Это не цены. */
+const MAGNITUDE_SUFFIX = /^[BMKbmk]/;
+
+/**
+ * Один обход на модуль. Оба теста здесь читают всё дерево; без кеша под
+ * нагрузкой они выходили за дефолтный таймаут vitest, и сторож падал не по
+ * делу. Сторож, который иногда красный без причины, перестают читать.
+ */
+let corpusCache: Array<{ rel: string; lines: string[] }> | null = null;
+
+function corpus(): Array<{ rel: string; lines: string[] }> {
+  if (!corpusCache) {
+    corpusCache = walk(SRC_ROOT).map((file) => ({
+      rel: path.relative(SRC_ROOT, file).replace(/\\/g, "/"),
+      lines: readFileSync(file, "utf8").split("\n"),
+    }));
+  }
+  return corpusCache;
+}
+
+function walk(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    if (SKIP_DIRS.has(name)) continue;
+    const full = path.join(dir, name);
+    if (statSync(full).isDirectory()) walk(full, out);
+    else if (/\.(ts|tsx)$/.test(name) && !/\.test\./.test(name)) out.push(full);
+  }
+  return out;
+}
+
+/** Текущая цена тарифа в реестре — чтобы сообщение об ошибке было полезным. */
+function registryPrice(tierId: string): string {
+  const src = readFileSync(REGISTRY, "utf8");
+  const start = src.indexOf("export const TIERS");
+  const end = src.indexOf("export const MODULES_PRICING");
+  const slice = src.slice(start, end);
+  const m = slice.match(new RegExp(`id:\\s*"${tierId}",[\\s\\S]*?priceMonthly:\\s*([\\d.]+)`));
+  return m ? `$${m[1]}` : "(не найдена в реестре)";
+}
+
+
+/**
+ * Явный таймаут: это не юнит-тест, а обход ~1000 файлов с чтением каждого.
+ * Дефолтные 5 секунд vitest рассчитаны на юниты, и при полном прогоне (54
+ * файла параллельно на загруженной машине) обход в них не укладывался —
+ * сторож краснел из-за очереди на диск, а не из-за находки. Красный без
+ * причины опаснее отсутствующего теста: его начинают пролистывать.
+ */
+const SWEEP_TIMEOUT_MS = 30_000;
+
+describe("отставные цены тарифов не возвращаются ни на одну поверхность", () => {
+  it("сплошной обход фронтенда не находит ни одной", () => {
+    const amounts = RETIRED.map((r) => r.amount.replace(".", "\\.")).join("|");
+    // $19 — но не $199, не $19.99, не $19B.
+    const re = new RegExp(`\\$(${amounts})(?![\\d.,]*[\\dBMKbmk])`, "g");
+
+    const violations: string[] = [];
+    for (const { rel, lines } of corpus()) {
+      const isComment = commentMask(lines);
+      lines.forEach((line, idx) => {
+          re.lastIndex = 0;
+          let m: RegExpExecArray | null;
+          while ((m = re.exec(line)) !== null) {
+            if (MAGNITUDE_SUFFIX.test(line.slice(m.index + m[0].length))) continue;
+            if (isComment[idx] && EXPLANATORY.test(line)) continue;
+            if (ALLOWED.some((a) => line.includes(a.fragment))) continue;
+            const retired = RETIRED.find((r) => r.amount === m![1])!;
+            violations.push(`${rel}:${idx + 1}  «${line.trim().slice(0, 100)}»  ← $${retired.amount} = ${retired.was}`);
+          }
+        });
+    }
+
+    expect(
+      violations,
+      `Найдены отставные цены тарифов. Живые цены сейчас: Lite ${registryPrice("lite")}, ` +
+        `Medium ${registryPrice("medium")}, Full ${registryPrice("full")}, Universe ${registryPrice("pro")}.\n  ` +
+        violations.join("\n  ") +
+        `\n\nЕсли это НОВАЯ законная цена с тем же номиналом — допиши строку в ALLOWED ` +
+        `с причиной и ссылкой на код, который её списывает. Без причины — это заглушённый сторож.`,
+    ).toEqual([]);
+  }, SWEEP_TIMEOUT_MS);
+
+  it("каждое исключение действительно что-то исключает", () => {
+    // Протухший фрагмент — тихая дыра: он ничего не разрешает, но выглядит как
+    // осознанное решение, и следующий человек не станет его перепроверять.
+    const all = corpus()
+      .map((f) => f.lines.join("\n"))
+      .join("\n");
+    const dead = ALLOWED.filter((a) => !all.includes(a.fragment)).map((a) => a.fragment);
+    expect(
+      dead,
+      `Эти фрагменты ALLOWED больше не встречаются во фронтенде — удали их, ` +
+        `иначе список превращается в свалку:\n  ${dead.join("\n  ")}`,
+    ).toEqual([]);
+  }, SWEEP_TIMEOUT_MS);
+});

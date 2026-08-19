@@ -95,6 +95,50 @@ function sentenceAround(src: string, at: number, len: number): string {
 /** Числа с их окружением. Если один агент говорит «$36», а другой «$50» про то
  *  же — это конкретное расхождение, которое человек проверит за минуту, в
  *  отличие от расхождения в тоне или формулировке. */
+/**
+ * Число из текста ответа модели — с разбором разделителя тысяч.
+ *
+ * Раньше здесь стояло `.replace(",", ".")`, то есть запятая ВСЕГДА считалась
+ * десятичной. «$1,200» превращалось в 1.2, и два агента, назвавшие одну и ту же
+ * сумму разной записью, попадали в карту разногласий с разбросом 1198.8. Ложный
+ * конфликт вреднее пропущенного: он отправляет человека проверять то, чего нет.
+ * «$1,234,567» и вовсе выпадало — Number("1.234,567") даёт NaN, и число молча
+ * не участвовало в сравнении.
+ *
+ * Разбор по структуре, а не по локали (в одном ответе модель мешает обе):
+ *   1 234 / 1,234,567 / 1.234.567 — группы по три цифры → разделитель тысяч;
+ *   1 234,56 / 1,234.56 — последний одиночный разделитель → десятичный;
+ *   2,5 / 1.5 — одиночный разделитель с 1-2 цифрами → десятичный.
+ *
+ * Остаётся неоднозначность «2,500»: три цифры после запятой читаются как
+ * тысячи. В русском тексте десятичную долю пишут одной-двумя цифрами («2,5»),
+ * поэтому такой выбор ошибается реже обратного.
+ */
+export function parseNumeric(raw: string): number {
+  // Валюта, проценты и пробелы-разделители тысяч к значению не относятся.
+  const body = raw.replace(/[^\d.,]/g, "");
+  if (!body) return NaN;
+
+  const groups = /^\d{1,3}([.,]\d{3})+$/;
+  if (groups.test(body)) return Number(body.replace(/[.,]/g, ""));
+
+  // Смешанная запись: последний разделитель — десятичный, остальные — тысячи.
+  const lastDot = body.lastIndexOf(".");
+  const lastComma = body.lastIndexOf(",");
+  if (lastDot >= 0 && lastComma >= 0) {
+    const decAt = Math.max(lastDot, lastComma);
+    const intPart = body.slice(0, decAt).replace(/[.,]/g, "");
+    return Number(`${intPart}.${body.slice(decAt + 1)}`);
+  }
+
+  const sep = lastDot >= 0 ? lastDot : lastComma;
+  if (sep < 0) return Number(body);
+  const tail = body.slice(sep + 1);
+  // Ровно три цифры после одиночного разделителя — разделитель тысяч.
+  if (tail.length === 3 && /^\d{3}$/.test(tail)) return Number(body.slice(0, sep) + tail);
+  return Number(`${body.slice(0, sep)}.${tail}`);
+}
+
 export function numericClaims(text: string): NumericClaim[] {
   const out: NumericClaim[] = [];
   const src = String(text || "");
@@ -103,7 +147,7 @@ export function numericClaims(text: string): NumericClaim[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(src))) {
     const raw = m[0].trim();
-    const num = Number(raw.replace(/[^\d.,-]/g, "").replace(/\s/g, "").replace(",", "."));
+    const num = parseNumeric(raw);
     if (!Number.isFinite(num)) continue;
     // Годы и порядковые номера шумят и почти никогда не являются предметом спора.
     if (num >= 1900 && num <= 2100 && !/[$€₸%]/.test(raw)) continue;
@@ -170,6 +214,115 @@ export function hedges(answers: AgentAnswer[]): Array<{ agentId: string; kind: "
   return out;
 }
 
+/* ── Прямое отрицание ─────────────────────────────────────────────────── */
+
+// Схожесть считается по общим значимым словам, а «не» стоит в STOP — то есть
+// слово, переворачивающее смысл, выбрасывалось ДО сравнения. «Стоит запускать»
+// и «не стоит запускать» давали схожесть 1.0 и вердикт «агенты сошлись».
+// Для продукта, вся ценность которого в показе разногласия, это худший из
+// возможных отказов: на самом ярком разногласии он молчал.
+//
+// Чинится не расширением словаря схожести (тогда любое «не» в длинном ответе
+// начнёт растаскивать похожие тексты), а отдельным сигналом: ищем слово,
+// которое один агент утверждает, а другой при нём же отрицает.
+
+const NEGATORS = new Set(["не", "нет", "ни", "not", "no", "never", "dont", "doesnt", "don't", "doesn't", "cannot"]);
+
+// Пары «утверждение — запрет», где отрицание вшито в само слово и маркера перед
+// ним нет. Список короткий и намеренно узкий: это самые частые слова решения, а
+// не попытка разобрать антонимы вообще.
+const ANTONYMS: Array<[string, string]> = [
+  ["можно", "нельзя"],
+  ["стоит", "нестоит"],
+  ["следует", "неследует"],
+];
+
+// Обороты, в которых «не» усиливает, а не отрицает. «Не только в цене» не
+// спорит с «только цена и решает», «не менее 300» не отрицает «менее 300» —
+// это конструкции «X и сверх того» и «не ниже границы». Без этого списка
+// детектор противоречий сам становится источником ложных конфликтов, то есть
+// ровно того шума, ради устранения которого он и заведён.
+const NEGATION_CANCELS = new Set([
+  "только", "просто", "лишь", "менее", "более",
+  "only", "just", "merely", "less", "fewer",
+]);
+
+// Отрицание проходит СКВОЗЬ служебные слова и усилители к тому слову, о котором
+// на самом деле спорят: «не очень удачная» — об «удачной», «No, you should not
+// launch» — о «launch», а не о «you». Стоп-слова берём те же, что и в мере
+// схожести: список значимых слов в модуле должен быть один.
+const NEGATION_PASSES_THROUGH = new Set([
+  "очень", "слишком", "совсем", "вовсе", "столь", "настолько",
+  "very", "too", "quite", "really",
+  "you", "we", "they", "she", "one",
+]);
+
+/** Слова, которые в этом ответе отрицаются: «не стоит» → «стоит». */
+export function negatedWords(text: string): Set<string> {
+  const raw = String(text || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  const out = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    if (!NEGATORS.has(raw[i])) continue;
+    // Отрицание относится к ближайшему значимому слову справа: «не стоит»,
+    // «не рекомендуем», «нет, не стоит». Окно на слово шире усилителей, чтобы
+    // «не очень удачная» дошло до «удачной».
+    for (let j = i + 1; j < Math.min(raw.length, i + 4); j++) {
+      const w = raw[j];
+      if (NEGATORS.has(w) || w.length <= 2) continue;
+      if (NEGATION_CANCELS.has(w)) break; // «не только», «не менее» — не отрицание
+      if (NEGATION_PASSES_THROUGH.has(w) || STOP.has(w)) continue; // «не очень X» → отрицается X
+      out.add(w);
+      break;
+    }
+  }
+  for (const [yes, no] of ANTONYMS) {
+    if (raw.includes(no)) out.add(yes);
+  }
+  return out;
+}
+
+export type Contradiction = { word: string; affirms: string[]; denies: string[] };
+
+/** Слова, которые одни агенты утверждают, а другие при них же отрицают.
+ *
+ *  Это не «разошлись по смыслу» вообще — на такое без вызова модели честного
+ *  ответа нет. Это узкий и проверяемый случай: одно и то же слово решения у
+ *  одних под отрицанием, у других нет. Зато случай самый дорогой: именно так
+ *  выглядит «делать» против «не делать». */
+export function contradictions(answers: AgentAnswer[]): Contradiction[] {
+  const good = answers.filter((a) => a.ok && a.reply && a.reply.trim());
+  if (good.length < 2) return [];
+
+  const state = good.map((a) => ({
+    agentId: a.agentId,
+    words: new Set(tokens(a.reply as string)),
+    negated: negatedWords(a.reply as string),
+  }));
+
+  const out: Contradiction[] = [];
+  const seen = new Set<string>();
+  for (const s of state) {
+    for (const word of s.negated) {
+      if (seen.has(word)) continue;
+      const denies = state.filter((x) => x.negated.has(word)).map((x) => x.agentId);
+      // Утверждает — тот, у кого слово есть, но НЕ под отрицанием. Слово из
+      // ANTONYMS («нельзя» → «стоит») в наборе words может не встретиться,
+      // поэтому проверяется и оно, и его антонимная пара.
+      const affirms = state
+        .filter((x) => !x.negated.has(word) && (x.words.has(word) || ANTONYMS.some(([y]) => y === word && x.words.has(y))))
+        .map((x) => x.agentId);
+      if (!affirms.length || !denies.length) continue;
+      seen.add(word);
+      out.push({ word, affirms, denies });
+    }
+  }
+  return out;
+}
+
 /* ── Итоговая карта ───────────────────────────────────────────────────── */
 
 export type DissentMap = {
@@ -182,6 +335,8 @@ export type DissentMap = {
   /** Агент, чей ответ дальше всех от остальных. Не «неправ» — «стоит особняком». */
   outlier: { agentId: string; distance: number } | null;
   numericConflicts: NumericConflict[];
+  /** Слова, которые одни агенты утверждают, а другие отрицают. См. contradictions. */
+  contradictions: Contradiction[];
   hedges: Array<{ agentId: string; kind: "failed" | "hedged"; note: string }>;
   /** Куда смотреть человеку в первую очередь. */
   verdict: "consensus" | "split" | "insufficient";
@@ -196,7 +351,7 @@ export type DissentMap = {
  *  пункт проверяем руками, от 1 (нужно суждение) до 3 (можно закрыть за минуту).
  */
 export type Check = {
-  kind: "number" | "outlier" | "hedge" | "failure" | "consensus";
+  kind: "number" | "contradiction" | "outlier" | "hedge" | "failure" | "consensus";
   text: string;
   agents: string[];
   weight: 1 | 2 | 3;
@@ -223,6 +378,17 @@ export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
       kind: "number",
       text: `Сверить число с источником — ${spread}. Контекст: «${c.context}»`,
       agents: c.values.map((v) => v.agentId),
+      weight: 3,
+    });
+  }
+
+  // Вес 3, наравне с числами: «делать» против «не делать» проверяется не
+  // рассуждением, а одним взглядом на два ответа рядом — и решает всё.
+  for (const c of map.contradictions) {
+    out.push({
+      kind: "contradiction",
+      text: `Агенты прямо противоречат друг другу по «${c.word}»: ${c.affirms.join(", ")} утверждает, ${c.denies.join(", ")} отрицает. Прочитать оба ответа рядом.`,
+      agents: [...c.affirms, ...c.denies],
       weight: 3,
     });
   }
@@ -302,19 +468,33 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
   }
 
   const conflicts = numericConflicts(list);
+  const opposed = contradictions(list);
   const hedged = hedges(list);
 
   // Меньше двух содержательных ответов — сравнивать не с чем. Отдавать
   // «консенсус» в этом случае значило бы подтвердить непроверенное.
+  //
+  // Прямое отрицание перевешивает схожесть: «стоит запускать» и «не стоит
+  // запускать» состоят из одних и тех же слов, схожесть у них 1.0, и без этого
+  // условия карта объявляла бы согласие на самом ярком разногласии.
   const verdict: DissentMap["verdict"] =
-    good.length < 2 ? "insufficient" : agreement != null && agreement >= AGREEMENT_THRESHOLD && !conflicts.length ? "consensus" : "split";
+    good.length < 2
+      ? "insufficient"
+      : agreement != null && agreement >= AGREEMENT_THRESHOLD && !conflicts.length && !opposed.length
+        ? "consensus"
+        : "split";
+
+  const parts = [
+    conflicts.length ? `${conflicts.length} числовых` : "",
+    opposed.length ? `прямое отрицание по «${opposed.map((c) => c.word).join("», «")}»` : "",
+  ].filter(Boolean);
 
   const note =
     verdict === "insufficient"
       ? `Содержательных ответов ${good.length} — сравнивать не с чем.`
       : verdict === "consensus"
         ? `Агенты сходятся (${agreement}). Совпадение не доказывает правоту: модели ошибаются похоже.`
-        : `Расхождение${conflicts.length ? `, включая ${conflicts.length} числовых` : ""}. Смотреть в первую очередь сюда.`;
+        : `Расхождение${parts.length ? `, включая ${parts.join(" и ")}` : ""}. Смотреть в первую очередь сюда.`;
 
   const base = {
     agents: list.length,
@@ -323,6 +503,7 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
     pairs,
     outlier,
     numericConflicts: conflicts,
+    contradictions: opposed,
     hedges: hedged,
     verdict,
     note,

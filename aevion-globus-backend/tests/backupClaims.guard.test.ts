@@ -106,3 +106,32 @@ describe("сторож: документация не обещает бэкап,
     expect(runbook, "нет ссылки на issue, по которой отслеживается состояние").toMatch(/#957/);
   });
 });
+
+describe("сторож: каталоги с данными не уезжают наружу", () => {
+  // Дыру открыла собственная починка. Пока команда npm run backup была потеряна,
+  // каталог .aevion-backups/ не создавался, и правил для него не было ни в
+  // .gitignore, ни в .railwayignore. Команду вернули 14.08.2026 — и проверка
+  // показала 8 файлов копий как untracked, то есть они уехали бы и в образ при
+  // заливке, и в коммит при git add -A. А в копиях лежат кошельки и реестр AEV.
+  //
+  // Отдельным правилом, а не расширением шаблона: каталоги называются
+  // по-разному, и **/.aevion-data/ второй не покрывает.
+  const MUST_BE_EXCLUDED = [".aevion-data", ".aevion-backups"];
+
+  test(".gitignore бэкенда исключает и хранилище, и его снимки", () => {
+    const gi = readFileSync(join(__dirname, "..", ".gitignore"), "utf8");
+    for (const dir of MUST_BE_EXCLUDED) {
+      expect(gi, `${dir} не исключён в .gitignore — копии попадут в репозиторий`).toContain(`${dir}/`);
+    }
+  });
+
+  test("список для заливки исключает их же — иначе данные уедут в образ", () => {
+    const ri = readFileSync(join(REPO, ".railwayignore"), "utf8");
+    for (const dir of MUST_BE_EXCLUDED) {
+      expect(ri, `${dir} не исключён в списке заливки`).toContain(`${dir}/`);
+    }
+    // Охват: файл должен содержать хотя бы известные каталоги фронтенда, иначе
+    // «содержит .aevion-data» могло бы пройти на огрызке.
+    expect(ri).toContain("frontend/");
+  });
+});

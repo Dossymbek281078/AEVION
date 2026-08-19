@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { reportError } from "@/lib/reporter";
+import { getAuthToken } from "@/lib/auth";
 
 type ActionKind = "freeze" | "unfreeze";
 
@@ -46,7 +47,7 @@ export default function AdminFreezePage() {
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     try {
       const raw = localStorage.getItem("aevion_admin_freeze_log");

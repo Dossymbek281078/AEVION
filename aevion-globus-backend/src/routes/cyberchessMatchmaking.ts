@@ -1443,6 +1443,8 @@ router.get("/debug/stats", async (_req: Request, res: Response): Promise<void> =
     // неотличимы от штатного «партию уже закрыл второй клиент» — и начисление
     // молча не происходило.
     storage: {
+      connected: matchStoreHealth.connected,
+      connectErrors: matchStoreHealth.connectErrors,
       writes: matchStoreHealth.writes,
       writeErrors: matchStoreHealth.writeErrors,
       claimUnknown: matchStoreHealth.claimUnknown,

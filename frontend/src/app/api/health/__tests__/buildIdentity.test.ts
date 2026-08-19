@@ -34,10 +34,24 @@ afterAll(() => {
   }
 });
 
-async function health() {
+/**
+ * Отметку подменяем ЯВНО, а не полагаемся на то, что лежит в git.
+ *
+ * В файле buildStamp.ts живут заглушки, но скрипт выкатки заполняет его перед
+ * загрузкой. Тест, читающий файл как есть, проходил бы на заглушке и падал бы
+ * ровно во время настоящей выкатки — то есть проверял бы состояние репозитория,
+ * а не поведение кода.
+ */
+async function health(stamp: { commit: string; branch: string; builtAt: string | null } = {
+  commit: "unknown",
+  branch: "unknown",
+  builtAt: null,
+}) {
+  vi.resetModules();
+  vi.doMock("@/lib/buildStamp", () => ({ BUILD_STAMP: stamp }));
   const mod = await import("../route");
   const res = await mod.GET();
-  return (await res.json()) as { build?: { commit: string; branch: string; env: string; deploymentId: string | null } };
+  return (await res.json()) as { build?: { commit: string; branch: string; env: string; deploymentId: string | null; builtAt: string | null } };
 }
 
 describe("health сайта называет свою сборку", () => {
@@ -74,5 +88,22 @@ describe("health сайта называет свою сборку", () => {
 
     expect(a.build?.commit).toBe("111111111111");
     expect(b.build?.commit).toBe("222222222222");
+  });
+});
+
+describe("отметка внутри сборки главнее переменных", () => {
+  test("когда buildStamp заполнен, он и отвечает", async () => {
+    // Переменные Vercel живут в ПРОЕКТЕ и переживают чужую выкатку: на Railway
+    // ровно это привело к тому, что /health уверенно называл коммит, которого
+    // на проде уже не было. Поэтому первым спрашиваем то, что уехало внутри
+    // артефакта.
+    process.env.VERCEL_GIT_COMMIT_SHA = "bbbbbbbbbbbbbbbb";
+    process.env.VERCEL_GIT_COMMIT_REF = "other-branch";
+
+    const j = await health({ commit: "aaaaaaaaaaaa", branch: "deploy/test", builtAt: "2026-08-18T00:00:00Z" });
+
+    expect(j.build?.commit).toBe("aaaaaaaaaaaa");
+    expect(j.build?.branch).toBe("deploy/test");
+    expect(j.build?.builtAt).toBe("2026-08-18T00:00:00Z");
   });
 });

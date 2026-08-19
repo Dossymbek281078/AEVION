@@ -34,6 +34,7 @@ import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
+import { provisioningRouter } from "./routes/provisioning";
 import { lemonSqueezyWebhookRouter } from "./routes/lemonSqueezyWebhook";
 import { appAccessRouter } from "./routes/appAccess";
 import { gumroadWebhookRouter } from "./routes/gumroadWebhook";
@@ -220,18 +221,21 @@ app.use(express.urlencoded({
  * было некому.
  */
 function readBuildInfo(): { commit: string; source: string; branch: string; builtAt: string | null } {
-  const envCommit =
-    process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || process.env.SOURCE_VERSION;
-  if (envCommit) {
-    return {
-      commit: envCommit.slice(0, 12),
-      source: "env",
-      branch: process.env.RAILWAY_GIT_BRANCH || "unknown",
-      // Метку времени даёт только файл; из переменных её взять неоткуда, и
-      // выдумывать «сейчас» нельзя — это назвало бы старт контейнера сборкой.
-      builtAt: null,
-    };
-  }
+  // ПОРЯДОК ВАЖЕН: сначала файл, переменные — только запасной путь.
+  //
+  // 14.08.2026 отметку ставили переменной сервиса, и она пережила чужую
+  // выкатку: образ сменился целиком, переменная осталась, а /health продолжил
+  // уверенно называть мой коммит. Проверка отвечала «сборка совпадает», пока на
+  // проде не было ни одной моей ручки.
+  //
+  // Причина в принадлежности: переменные принадлежат СЕРВИСУ, файл едет ВНУТРИ
+  // образа. Описывать артефакт может только то, что уезжает вместе с ним.
+  //
+  // Переменную из Railway тогда удалили, но код, читавший её ПЕРВОЙ, остался и
+  // 19.08 обнаружился прямо на проде. Он безвреден лишь пока переменной нет:
+  // вернут её (например, при переподключении источника сборки к GitHub) — и
+  // дефект вернётся в худшем виде, уверенным неправильным ответом вместо
+  // честного «не знаю».
   try {
     // Файл лежит РЯДОМ С КОДОМ, а не в dist: `railway up` уважает .gitignore, и
     // отметка из игнорируемого каталога в образ не уезжает. Это уже проверено
@@ -250,10 +254,30 @@ function readBuildInfo(): { commit: string; source: string; branch: string; buil
       builtAt: info.builtAt ? String(info.builtAt) : null,
     };
   } catch {
-    // Файла нет — это dev-запуск через ts-node-dev (dist не собран). Отвечаем
-    // "unknown" явно, а не выдумываем: ложный коммит хуже отсутствующего.
-    return { commit: "unknown", source: "none", branch: "unknown", builtAt: null };
+    /* файла нет — идём к запасному пути ниже */
   }
+
+  // Запасной путь. Railway подставляет RAILWAY_GIT_COMMIT_SHA, только когда
+  // собирает из подключённого репозитория — тогда переменная приходит ВМЕСТЕ со
+  // сборкой и честна. Источник помечается явно: увидев source: "env", человек
+  // должен проверить, не переживает ли отметка выкатку.
+  const envCommit =
+    process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || process.env.SOURCE_VERSION;
+  if (envCommit) {
+    return {
+      commit: envCommit.slice(0, 12),
+      source: "env",
+      branch: process.env.RAILWAY_GIT_BRANCH || "unknown",
+      // Метку времени даёт только файл; из переменных её взять неоткуда, и
+      // выдумывать «сейчас» нельзя — это назвало бы старт контейнера сборкой.
+      builtAt: null,
+    };
+  }
+
+  // Ни файла, ни переменных — это dev-запуск через ts-node-dev (dist не
+  // собран). Отвечаем "unknown" явно, а не выдумываем: ложный коммит хуже
+  // отсутствующего.
+  return { commit: "unknown", source: "none", branch: "unknown", builtAt: null };
 }
 
 const BUILD_INFO = readBuildInfo();
@@ -1189,6 +1213,11 @@ app.use("/api/healthai", healthaiRouter);
 // ==========================
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
+// Выдача доступа после оплаты. 19.08.2026 монтирование пропало при слиянии:
+// чужой index.ts взяли целиком, а этой строки в нём не было. Поймал сторож
+// tests/provisioning.routes.test.ts — до выкатки, а не после жалобы
+// покупателя, которому не открылось купленное.
+app.use("/api/pricing/provisioning", provisioningRouter);
 app.use("/api/quotas", apiQuotasRouter);
 // Platform entitlements + paywall policy (GET /api/me/entitlements, /api/paywall/policy)
 app.use("/api", entitlementsRouter);

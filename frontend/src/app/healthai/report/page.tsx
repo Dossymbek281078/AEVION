@@ -10,12 +10,16 @@
  */
 
 import { useEffect, useState } from "react";
+import { getApiBase } from "@/lib/apiBase";
 
-const BACKEND =
-  process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() ||
-  (typeof window !== "undefined" && window.location.hostname === "localhost"
-    ? "http://localhost:4001"
-    : "https://aevion-production-a70c.up.railway.app");
+// The rest of the frontend reaches the backend through getApiBase() — the
+// /api-backend proxy in the browser, the internal address on the server. This
+// module had its own second way: a hardcoded Railway host, which put the
+// internal hostname in front of the reader and would break silently the day
+// that domain changes. Prod answers the same either way (402 on
+// /api/healthai/score/x through both). Evaluated lazily so a server render
+// does not bake the internal address into what the browser uses.
+const backendBase = () => process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() || getApiBase();
 
 type Profile = {
   id: string;
@@ -83,7 +87,7 @@ export default function HealthReportPage() {
       setError("Не указан id профиля. Откройте /healthai/report?id=<profileId>.");
       return;
     }
-    fetch(`${BACKEND}/api/healthai/export/${id}`)
+    fetch(`${backendBase()}/api/healthai/export/${id}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();

@@ -42,6 +42,116 @@ const split = m.buildDissentMap([
 ]);
 ok("противоположные ответы → split", split.verdict === "split", `${split.verdict} (${split.agreement})`);
 
+/* ── 1б. Прямое отрицание — не консенсус ────────────────────────────────── */
+//
+// Худший из возможных отказов этой карты. Схожесть считается по общим словам, а
+// «не» лежит в стоп-словах — то есть слово, переворачивающее смысл, выбрасывали
+// ДО сравнения. «Стоит запускать» и «не стоит запускать» давали схожесть 1.0 и
+// вердикт «агенты сошлись»: продукт, вся ценность которого в показе
+// разногласия, на самом ярком разногласии молчал.
+
+const negated = m.buildDissentMap([
+  A("gpt", "Да, стоит запускать платный тариф до первой продажи на текущем трафике."),
+  A("claude", "Нет, не стоит запускать платный тариф до первой продажи на текущем трафике."),
+]);
+ok("прямое отрицание → split, а не консенсус", negated.verdict === "split",
+  `${negated.verdict} (схожесть ${negated.agreement})`);
+ok("противоречие названо словом, по которому оно найдено",
+  negated.contradictions?.some((c) => c.word === "стоит"),
+  JSON.stringify(negated.contradictions));
+ok("названы обе стороны", negated.contradictions?.[0]?.affirms.includes("gpt") && negated.contradictions?.[0]?.denies.includes("claude"),
+  JSON.stringify(negated.contradictions?.[0]));
+ok("противоречие попало в «что проверить»",
+  (negated.checks || []).some((c) => c.kind === "contradiction"),
+  JSON.stringify((negated.checks || []).map((c) => c.kind)));
+
+const notRecommended = m.buildDissentMap([
+  A("gpt", "Мы рекомендуем подписывать этот договор в текущей редакции."),
+  A("claude", "Мы не рекомендуем подписывать этот договор в текущей редакции."),
+]);
+ok("«рекомендуем» против «не рекомендуем» → split", notRecommended.verdict === "split",
+  `${notRecommended.verdict} (${notRecommended.agreement})`);
+
+const canCannot = m.buildDissentMap([
+  A("gpt", "Данные пользователей можно передавать подрядчику при наличии согласия."),
+  A("claude", "Данные пользователей нельзя передавать подрядчику даже при наличии согласия."),
+]);
+ok("«можно» против «нельзя» → split", canCannot.verdict === "split",
+  `${canCannot.verdict} (${canCannot.agreement})`);
+
+// Обратная ошибка так же вредна: отрицание в ОДНОМ ответе (или в обоих) не
+// делает ответы противоречащими друг другу.
+const bothNegate = m.buildDissentMap([
+  A("gpt", "Нет, не стоит запускать платный тариф до первой продажи."),
+  A("claude", "Не стоит запускать платный тариф до первой продажи."),
+]);
+ok("оба отрицают одно и то же — противоречия нет", (bothNegate.contradictions || []).length === 0,
+  JSON.stringify(bothNegate.contradictions));
+
+// Обороты, где «не» — усилитель, а не отрицание. «Не только в цене» не спорит
+// с «только цена и решает», «не менее 300» не отрицает «менее 300»: это
+// конструкции «X и сверх того» и «не ниже границы». Без этого разбора
+// детектор противоречий сам становится источником ложных конфликтов — того
+// самого шума, ради устранения которого он и заведён.
+const notOnly = m.buildDissentMap([
+  A("gpt", "Проблема не только в цене: людям неясна сама польза продукта."),
+  A("claude", "Только цена и решает: остальное вторично для этой аудитории."),
+]);
+ok("«не только» противоречием не считается", notOnly.contradictions.length === 0,
+  JSON.stringify(notOnly.contradictions));
+
+const notLess = m.buildDissentMap([
+  A("gpt", "Нужен трафик не менее 300 визитов в месяц, иначе выборка бессмысленна."),
+  A("claude", "При трафике менее 300 визитов запускать тариф рано."),
+]);
+ok("«не менее» противоречием не считается", notLess.contradictions.length === 0,
+  JSON.stringify(notLess.contradictions));
+
+const notJust = m.buildDissentMap([
+  A("gpt", "Это не просто скидка, а изменение модели монетизации."),
+  A("claude", "Просто дайте скидку и посмотрите на отклик."),
+]);
+ok("«не просто» противоречием не считается", notJust.contradictions.length === 0,
+  JSON.stringify(notJust.contradictions));
+
+// А вот усилитель степени отрицание пропускает дальше: спорят о «хорошо», а не
+// о слове «очень».
+const notVery = m.buildDissentMap([
+  A("gpt", "Идея не очень удачная при текущем позиционировании продукта."),
+  A("claude", "Идея удачная при текущем позиционировании продукта."),
+]);
+ok("«не очень удачная» спорит с «удачная»", notVery.contradictions.some((c) => c.word === "удачная"),
+  JSON.stringify(notVery.contradictions));
+
+// Настоящие противоречия от этого разбора не пострадали.
+const stillReal = m.buildDissentMap([
+  A("gpt", "На текущем трафике выборки не хватит, вывод будет шумом."),
+  A("claude", "Выборки хватит: 300 визитов достаточно для первой проверки."),
+]);
+ok("«не хватит» против «хватит» осталось противоречием",
+  stillReal.contradictions.some((c) => c.word === "хватит"), JSON.stringify(stillReal.contradictions));
+
+// Ответ по-английски. Панель спрашивает по-русски, но модель отвечает на языке
+// вопроса пользователя, а он вправе спросить как угодно. Детектор, работающий
+// только на русском, — это тот же молчащий детектор, просто реже.
+const enOpposite = m.buildDissentMap([
+  A("gpt", "Yes, you should launch the paid tier before the first sale."),
+  A("claude", "No, you should not launch the paid tier before the first sale."),
+]);
+ok("английское отрицание → split", enOpposite.verdict === "split",
+  `${enOpposite.verdict} (${enOpposite.agreement})`);
+ok("английское противоречие названо действием, о котором спор",
+  enOpposite.contradictions.some((c) => c.word === "launch"), JSON.stringify(enOpposite.contradictions));
+ok("местоимение целью отрицания не становится",
+  !enOpposite.contradictions.some((c) => c.word === "you"), JSON.stringify(enOpposite.contradictions));
+
+const enNotOnly = m.buildDissentMap([
+  A("gpt", "The problem is not only price: the value proposition is unclear."),
+  A("claude", "Only price matters here, everything else is secondary."),
+]);
+ok("«not only» противоречием не считается", enNotOnly.contradictions.length === 0,
+  JSON.stringify(enNotOnly.contradictions));
+
 /* ── 2. Нечего сравнивать — не выдавать консенсус ───────────────────────── */
 
 ok("один ответ → insufficient", m.buildDissentMap([A("gpt", "Ответ")]).verdict === "insufficient");
@@ -75,6 +185,29 @@ const sameNumber = m.buildDissentMap([
   A("claude", "Прогон стоит 25 долларов при текущем курсе."),
 ]);
 ok("одинаковые числа конфликтом не считаются", sameNumber.numericConflicts.length === 0);
+
+// Разделитель тысяч. Модели пишут суммы по-разному в одном и том же ответе:
+// «$1,200» и «$1200» — это ОДНА сумма. Запятая читалась как десятичная точка,
+// $1,200 превращалось в 1.2, и два агента, назвавшие одинаковую сумму, попадали
+// в карту разногласий с разбросом 1198.8. Ложный конфликт хуже пропущенного:
+// он отправляет человека проверять то, чего нет, и обесценивает всю карту.
+ok("тысячи через запятую разобраны", m.numericClaims("Бюджет $1,200 в месяц")[0]?.value === 1200,
+  JSON.stringify(m.numericClaims("Бюджет $1,200 в месяц")));
+ok("тысячи в несколько групп разобраны", m.numericClaims("Оборот $1,234,567 за год")[0]?.value === 1234567,
+  JSON.stringify(m.numericClaims("Оборот $1,234,567 за год")));
+ok("десятичная запятая осталась десятичной", m.numericClaims("Рост 2,5 процента")[0]?.value === 2.5,
+  JSON.stringify(m.numericClaims("Рост 2,5 процента")));
+ok("тысячи через точку разобраны", m.numericClaims("Оборот 1.234.567 тенге")[0]?.value === 1234567,
+  JSON.stringify(m.numericClaims("Оборот 1.234.567 тенге")));
+ok("десятичная точка осталась десятичной", m.numericClaims("Коэффициент 1.5 к выручке")[0]?.value === 1.5,
+  JSON.stringify(m.numericClaims("Коэффициент 1.5 к выручке")));
+
+const sameMoney = m.buildDissentMap([
+  A("gpt", "Месячный бюджет на рекламу составит $1,200 при текущих ставках."),
+  A("claude", "Месячный бюджет на рекламу составит $1200 при текущих ставках."),
+]);
+ok("одна сумма в разной записи конфликтом не считается", sameMoney.numericConflicts.length === 0,
+  JSON.stringify(sameMoney.numericConflicts).slice(0, 160));
 
 // Годы — шум, а не предмет спора.
 const years = m.buildDissentMap([

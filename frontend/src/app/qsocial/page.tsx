@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { getAuthToken } from "@/lib/auth";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
@@ -35,14 +36,14 @@ interface Story {
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
   const token =
-    localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
+    getAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function getAuthSub(): string | null {
   if (typeof window === "undefined") return null;
   const token =
-    localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
+    getAuthToken();
   if (!token) return null;
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));

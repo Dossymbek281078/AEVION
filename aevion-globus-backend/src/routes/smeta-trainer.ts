@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
-import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
+import { readJsonFile, updateJsonFile } from "../lib/jsonFileStore";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
 const captureSmetaError = makeServiceCapture("smeta-trainer");
@@ -128,14 +128,41 @@ interface AttemptRecord {
 async function loadStudents(): Promise<Record<string, StudentRecord>> {
   return readJsonFile<Record<string, StudentRecord>>(STUDENTS_FILE, {});
 }
-async function saveStudents(s: Record<string, StudentRecord>): Promise<void> {
-  await writeJsonFile(STUDENTS_FILE, s);
+/**
+ * Изменение карточек студентов — чтение и запись одной операцией.
+ *
+ * Файл студентов ОДИН на всю группу. Раньше каждый обработчик читал его,
+ * менял свою карточку и записывал файл целиком тремя отдельными await:
+ * двое студентов, сдающих одновременно, читали одну и ту же версию, и
+ * второй затирал работу первого. Отказа при этом не было — оба получали
+ * свою карточку в ответе, просто в файле оставалась одна.
+ *
+ * `fn` правит объект на месте и сам отвечает клиенту; запись делается
+ * после него, внутри замка на файл.
+ */
+async function mutateStudents<T>(
+  fn: (students: Record<string, StudentRecord>) => T | Promise<T>,
+): Promise<T> {
+  let out!: T;
+  await updateJsonFile<Record<string, StudentRecord>>(STUDENTS_FILE, {}, async (students) => {
+    out = await fn(students);
+    return students;
+  });
+  return out;
 }
 async function loadAttempts(): Promise<AttemptRecord[]> {
   return readJsonFile<AttemptRecord[]>(ATTEMPTS_FILE, []);
 }
-async function saveAttempts(a: AttemptRecord[]): Promise<void> {
-  await writeJsonFile(ATTEMPTS_FILE, a);
+/** Дозапись попытки. Тоже read-modify-write: без замка из нескольких
+ *  одновременных сдач в файле оставалась одна. */
+async function appendAttempt(rec: AttemptRecord): Promise<void> {
+  await updateJsonFile<AttemptRecord[]>(ATTEMPTS_FILE, [], (current) => {
+    const attempts = Array.isArray(current) ? current : [];
+    attempts.push(rec);
+    // обрезаем до последних 5000 — защита от роста без backup
+    if (attempts.length > 5000) attempts.splice(0, attempts.length - 5000);
+    return attempts;
+  });
 }
 
 // ── Material overrides (shared by curator) ────────────────────────────
@@ -155,9 +182,6 @@ function overrideKey(name: string, unit: string): string {
 }
 async function loadOverrides(): Promise<Record<string, OverrideRecord>> {
   return readJsonFile<Record<string, OverrideRecord>>(OVERRIDES_FILE, {});
-}
-async function saveOverrides(o: Record<string, OverrideRecord>): Promise<void> {
-  await writeJsonFile(OVERRIDES_FILE, o);
 }
 
 function isValidDeviceId(s: unknown): s is string {
@@ -213,8 +237,16 @@ interface WebhookPayload {
 async function loadWebhooks(): Promise<Record<string, WebhookConfig>> {
   return readJsonFile<Record<string, WebhookConfig>>(WEBHOOKS_FILE, {});
 }
-async function saveWebhooks(w: Record<string, WebhookConfig>): Promise<void> {
-  await writeJsonFile(WEBHOOKS_FILE, w);
+/** Изменение конфигов вебхуков под замком на файл. Особенно нужно эмиттеру
+ *  ниже: он обновляет статистику доставки по всем подписчикам параллельно,
+ *  и без замка отчёты о доставке затирали друг друга. */
+async function mutateWebhooks(
+  fn: (webhooks: Record<string, WebhookConfig>) => void,
+): Promise<void> {
+  await updateJsonFile<Record<string, WebhookConfig>>(WEBHOOKS_FILE, {}, (webhooks) => {
+    fn(webhooks);
+    return webhooks;
+  });
 }
 
 /**
@@ -252,8 +284,8 @@ async function emitWebhookEvent(event: WebhookPayload): Promise<void> {
         signal: ctrl.signal,
       });
       clearTimeout(timeout);
-      const fresh = await loadWebhooks();
-      if (fresh[w.id]) {
+      await mutateWebhooks((fresh) => {
+        if (!fresh[w.id]) return;
         fresh[w.id].lastSentAt = Date.now();
         if (!res.ok) fresh[w.id].failureCount = (fresh[w.id].failureCount ?? 0) + 1;
         else fresh[w.id].failureCount = 0;
@@ -267,12 +299,11 @@ async function emitWebhookEvent(event: WebhookPayload): Promise<void> {
           payloadHint: `student=${event.studentId.slice(0, 14)}…${event.level ? ` lvl=${event.level}` : ""}${event.score != null ? ` score=${event.score}` : ""}`,
         });
         fresh[w.id].recentEvents = log.slice(0, 10);
-        await saveWebhooks(fresh);
-      }
+      });
     } catch (e) {
       try {
-        const fresh = await loadWebhooks();
-        if (fresh[w.id]) {
+        await mutateWebhooks((fresh) => {
+          if (!fresh[w.id]) return;
           fresh[w.id].failureCount = (fresh[w.id].failureCount ?? 0) + 1;
           const log = fresh[w.id].recentEvents ?? [];
           log.unshift({
@@ -283,8 +314,7 @@ async function emitWebhookEvent(event: WebhookPayload): Promise<void> {
             payloadHint: `student=${event.studentId.slice(0, 14)}…`,
           });
           fresh[w.id].recentEvents = log.slice(0, 10);
-          await saveWebhooks(fresh);
-        }
+        });
       } catch {}
     }
   }));
@@ -324,57 +354,67 @@ smetaTrainerRouter.post("/student/:deviceId/sync", writeLimiter, async (req, res
     return res.status(400).json({ error: "bad_levels" });
   }
 
-  const students = await loadStudents();
-  const now = Date.now();
-  const existing = students[deviceId];
+  const out = await mutateStudents((students) => {
+    const now = Date.now();
+    const existing = students[deviceId];
 
-  // Валидация уровней — только числовые ключи 1..5 с допустимыми статусами.
-  const cleanLevels: Record<string, LevelProgress> = existing?.levels ?? {};
-  for (const [k, v] of Object.entries(levels as Record<string, unknown>)) {
-    const lvl = Number(k);
-    if (!isValidLevel(lvl)) continue;
-    const lp = v as Partial<LevelProgress>;
-    if (lp.status && !["open", "in-progress", "done"].includes(lp.status)) continue;
-    cleanLevels[String(lvl)] = {
-      level: lvl,
-      status: (lp.status ?? "open") as LevelStatus,
-      score: typeof lp.score === "number" ? Math.max(0, Math.min(100, lp.score)) : undefined,
-      completedAt: typeof lp.completedAt === "number" ? lp.completedAt : undefined,
-      attemptsCnt: typeof lp.attemptsCnt === "number" ? lp.attemptsCnt : 0,
-      lastVisitAt: now,
+    // Снимок ДО изменения. Раньше здесь бралась ссылка на existing.levels,
+    // и cleanLevels правил тот же объект: дифф ниже сравнивал состояние сам
+    // с собой и для вернувшегося студента не находил ни одного нового
+    // зачёта. То есть level.completed уходил в LMS только при самой первой
+    // синхронизации, а дальше молча переставал.
+    const prevLevels: Record<string, LevelProgress> | undefined = existing?.levels
+      ? { ...existing.levels }
+      : undefined;
+
+    // Валидация уровней — только числовые ключи 1..5 с допустимыми статусами.
+    const cleanLevels: Record<string, LevelProgress> = existing?.levels ?? {};
+    for (const [k, v] of Object.entries(levels as Record<string, unknown>)) {
+      const lvl = Number(k);
+      if (!isValidLevel(lvl)) continue;
+      const lp = v as Partial<LevelProgress>;
+      if (lp.status && !["open", "in-progress", "done"].includes(lp.status)) continue;
+      cleanLevels[String(lvl)] = {
+        level: lvl,
+        status: (lp.status ?? "open") as LevelStatus,
+        score: typeof lp.score === "number" ? Math.max(0, Math.min(100, lp.score)) : undefined,
+        completedAt: typeof lp.completedAt === "number" ? lp.completedAt : undefined,
+        attemptsCnt: typeof lp.attemptsCnt === "number" ? lp.attemptsCnt : 0,
+        lastVisitAt: now,
+      };
+    }
+
+    const rec: StudentRecord = {
+      deviceId,
+      userId: userId ?? existing?.userId ?? null,
+      displayName: typeof displayName === "string" ? displayName.slice(0, 80) : (existing?.displayName ?? null),
+      group: typeof group === "string" ? group.slice(0, 40) : (existing?.group ?? null),
+      startedAt: existing?.startedAt ?? now,
+      updatedAt: now,
+      levels: cleanLevels,
+      lessons: existing?.lessons,
+      practice: existing?.practice,
+      capstonePassedAt: existing?.capstonePassedAt,
+      achievements: existing?.achievements,
     };
-  }
+    students[deviceId] = rec;
+    return { rec, newlyDone: findNewlyCompletedLevels(prevLevels, cleanLevels), now };
+  });
 
-  const rec: StudentRecord = {
-    deviceId,
-    userId: userId ?? existing?.userId ?? null,
-    displayName: typeof displayName === "string" ? displayName.slice(0, 80) : (existing?.displayName ?? null),
-    group: typeof group === "string" ? group.slice(0, 40) : (existing?.group ?? null),
-    startedAt: existing?.startedAt ?? now,
-    updatedAt: now,
-    levels: cleanLevels,
-    lessons: existing?.lessons,
-    practice: existing?.practice,
-    capstonePassedAt: existing?.capstonePassedAt,
-    achievements: existing?.achievements,
-  };
-  students[deviceId] = rec;
-  await saveStudents(students);
-
-  // Emit level.completed для каждого нового зачёта
-  const newlyDone = findNewlyCompletedLevels(existing?.levels, cleanLevels);
-  for (const lp of newlyDone) {
+  // Ответ и события — ТОЛЬКО после записи. Ответить раньше значит сказать
+  // студенту «сохранено» до того, как это стало правдой.
+  for (const lp of out.newlyDone) {
     emitWebhookEvent({
       event: "level.completed",
       studentId: deviceId,
-      displayName: rec.displayName,
-      group: rec.group,
+      displayName: out.rec.displayName,
+      group: out.rec.group,
       level: lp.level,
       score: lp.score ?? null,
-      ts: now,
+      ts: out.now,
     });
   }
-  res.json({ student: rec });
+  res.json({ student: out.rec });
 });
 
 // ── POST /student/:deviceId/lessons ────────────────────────────────
@@ -388,9 +428,13 @@ smetaTrainerRouter.post("/student/:deviceId/lessons", writeLimiter, async (req, 
   if (typeof lessons !== "object" || lessons === null) {
     return res.status(400).json({ error: "bad_lessons" });
   }
-  const students = await loadStudents();
+  const out = await mutateStudents((students) => {
   const existing = students[deviceId];
-  if (!existing) return res.status(404).json({ error: "student_not_found" });
+  if (!existing) return null;
+
+  // Снимок ДО слияния. Раньше здесь шло повторное чтение файла — лишний
+  // поход на диск ради того же, что уже лежит в existing.
+  const prevLessons: Record<string, LessonProgressServer> = { ...(existing.lessons ?? {}) };
 
   const merged: Record<string, LessonProgressServer> = { ...(existing.lessons ?? {}) };
   for (const [lessonId, v] of Object.entries(lessons as Record<string, unknown>)) {
@@ -410,7 +454,6 @@ smetaTrainerRouter.post("/student/:deviceId/lessons", writeLimiter, async (req, 
     };
   }
   // Emit lesson.completed для впервые закрытых уроков (по diff completed)
-  const prevLessons = (await loadStudents())[deviceId]?.lessons ?? {};
   const newlyDone: string[] = [];
   for (const [lessonId, l] of Object.entries(merged)) {
     if (l.completed && !prevLessons[lessonId]?.completed) newlyDone.push(lessonId);
@@ -418,19 +461,22 @@ smetaTrainerRouter.post("/student/:deviceId/lessons", writeLimiter, async (req, 
   existing.lessons = merged;
   existing.updatedAt = Date.now();
   students[deviceId] = existing;
-  await saveStudents(students);
-  for (const lessonId of newlyDone) {
+  return { existing, merged, newlyDone };
+  });
+
+  if (!out) return res.status(404).json({ error: "student_not_found" });
+  for (const lessonId of out.newlyDone) {
     emitWebhookEvent({
       event: "lesson.completed",
       studentId: deviceId,
-      displayName: existing.displayName,
-      group: existing.group,
+      displayName: out.existing.displayName,
+      group: out.existing.group,
       lessonId,
-      score: merged[lessonId].quizScore ?? null,
+      score: out.merged[lessonId].quizScore ?? null,
       ts: Date.now(),
     });
   }
-  res.json({ student: existing });
+  res.json({ student: out.existing });
 });
 
 // ── POST /student/:deviceId/practice ───────────────────────────────
@@ -442,27 +488,30 @@ smetaTrainerRouter.post("/student/:deviceId/practice", writeLimiter, async (req,
   if (typeof practice !== "object" || practice === null) {
     return res.status(400).json({ error: "bad_practice" });
   }
-  const students = await loadStudents();
-  const existing = students[deviceId];
-  if (!existing) return res.status(404).json({ error: "student_not_found" });
+  const out = await mutateStudents((students) => {
+    const existing = students[deviceId];
+    if (!existing) return null;
 
-  const merged: Record<string, PracticeAttemptServer> = { ...(existing.practice ?? {}) };
-  for (const [exId, v] of Object.entries(practice as Record<string, unknown>)) {
-    if (typeof exId !== "string" || exId.length < 2 || exId.length > 64) continue;
-    const pa = v as Partial<PracticeAttemptServer>;
-    const prev = merged[exId];
-    merged[exId] = {
-      exerciseId: exId,
-      correct: !!pa.correct || !!prev?.correct,
-      attempts: Math.max(prev?.attempts ?? 0, typeof pa.attempts === "number" ? pa.attempts : 0),
-      ts: typeof pa.ts === "number" ? Math.max(prev?.ts ?? 0, pa.ts) : Date.now(),
-    };
-  }
-  existing.practice = merged;
-  existing.updatedAt = Date.now();
-  students[deviceId] = existing;
-  await saveStudents(students);
-  res.json({ student: existing });
+    const merged: Record<string, PracticeAttemptServer> = { ...(existing.practice ?? {}) };
+    for (const [exId, v] of Object.entries(practice as Record<string, unknown>)) {
+      if (typeof exId !== "string" || exId.length < 2 || exId.length > 64) continue;
+      const pa = v as Partial<PracticeAttemptServer>;
+      const prev = merged[exId];
+      merged[exId] = {
+        exerciseId: exId,
+        correct: !!pa.correct || !!prev?.correct,
+        attempts: Math.max(prev?.attempts ?? 0, typeof pa.attempts === "number" ? pa.attempts : 0),
+        ts: typeof pa.ts === "number" ? Math.max(prev?.ts ?? 0, pa.ts) : Date.now(),
+      };
+    }
+    existing.practice = merged;
+    existing.updatedAt = Date.now();
+    students[deviceId] = existing;
+    return existing;
+  });
+
+  if (!out) return res.status(404).json({ error: "student_not_found" });
+  res.json({ student: out });
 });
 
 // ── POST /student/:deviceId/capstone ───────────────────────────────
@@ -472,26 +521,29 @@ smetaTrainerRouter.post("/student/:deviceId/capstone", writeLimiter, async (req,
   if (!isValidDeviceId(deviceId)) return res.status(400).json({ error: "bad_device_id" });
   const { passed } = req.body ?? {};
   if (typeof passed !== "boolean") return res.status(400).json({ error: "bad_passed" });
-  const students = await loadStudents();
-  const existing = students[deviceId];
-  if (!existing) return res.status(404).json({ error: "student_not_found" });
-  // Не сбрасываем уже сданный капстоун
-  const wasPassed = !!existing.capstonePassedAt;
-  if (passed && !existing.capstonePassedAt) existing.capstonePassedAt = Date.now();
-  if (!passed) existing.capstonePassedAt = null;
-  existing.updatedAt = Date.now();
-  students[deviceId] = existing;
-  await saveStudents(students);
-  if (passed && !wasPassed) {
+  const out = await mutateStudents((students) => {
+    const existing = students[deviceId];
+    if (!existing) return null;
+    // Не сбрасываем уже сданный капстоун
+    const wasPassed = !!existing.capstonePassedAt;
+    if (passed && !existing.capstonePassedAt) existing.capstonePassedAt = Date.now();
+    if (!passed) existing.capstonePassedAt = null;
+    existing.updatedAt = Date.now();
+    students[deviceId] = existing;
+    return { existing, wasPassed };
+  });
+
+  if (!out) return res.status(404).json({ error: "student_not_found" });
+  if (passed && !out.wasPassed) {
     emitWebhookEvent({
       event: "capstone.passed",
       studentId: deviceId,
-      displayName: existing.displayName,
-      group: existing.group,
+      displayName: out.existing.displayName,
+      group: out.existing.group,
       ts: Date.now(),
     });
   }
-  res.json({ student: existing });
+  res.json({ student: out.existing });
 });
 
 // ── POST /student/:deviceId/achievements ───────────────────────────
@@ -504,28 +556,31 @@ smetaTrainerRouter.post("/student/:deviceId/achievements", writeLimiter, async (
   const clean = achievements.filter(
     (a): a is string => typeof a === "string" && a.length >= 2 && a.length <= 48,
   ).slice(0, 100);
-  const students = await loadStudents();
-  const existing = students[deviceId];
-  if (!existing) return res.status(404).json({ error: "student_not_found" });
-  // Объединяем со старым множеством — бейдж нельзя «отнять»
-  const prevAch = new Set(existing.achievements ?? []);
-  const merged = new Set([...prevAch, ...clean]);
-  const newOnes = [...merged].filter((id) => !prevAch.has(id));
-  existing.achievements = [...merged];
-  existing.updatedAt = Date.now();
-  students[deviceId] = existing;
-  await saveStudents(students);
-  for (const achievementId of newOnes) {
+  const out = await mutateStudents((students) => {
+    const existing = students[deviceId];
+    if (!existing) return null;
+    // Объединяем со старым множеством — бейдж нельзя «отнять»
+    const prevAch = new Set(existing.achievements ?? []);
+    const merged = new Set([...prevAch, ...clean]);
+    const newOnes = [...merged].filter((id) => !prevAch.has(id));
+    existing.achievements = [...merged];
+    existing.updatedAt = Date.now();
+    students[deviceId] = existing;
+    return { existing, newOnes };
+  });
+
+  if (!out) return res.status(404).json({ error: "student_not_found" });
+  for (const achievementId of out.newOnes) {
     emitWebhookEvent({
       event: "achievement.unlocked",
       studentId: deviceId,
-      displayName: existing.displayName,
-      group: existing.group,
+      displayName: out.existing.displayName,
+      group: out.existing.group,
       achievementId,
       ts: Date.now(),
     });
   }
-  res.json({ student: existing });
+  res.json({ student: out.existing });
 });
 
 // ── POST /student/:deviceId/attempt ────────────────────────────────
@@ -538,7 +593,6 @@ smetaTrainerRouter.post("/student/:deviceId/attempt", writeLimiter, async (req, 
   if (!["quiz", "exercise", "lsr-submit"].includes(kind)) {
     return res.status(400).json({ error: "bad_kind" });
   }
-  const attempts = await loadAttempts();
   const rec: AttemptRecord = {
     id: crypto.randomUUID(),
     deviceId,
@@ -549,10 +603,7 @@ smetaTrainerRouter.post("/student/:deviceId/attempt", writeLimiter, async (req, 
     feedback: typeof feedback === "string" ? feedback.slice(0, 4000) : null,
     ts: Date.now(),
   };
-  attempts.push(rec);
-  // обрезаем до последних 5000 — защита от роста без backup
-  if (attempts.length > 5000) attempts.splice(0, attempts.length - 5000);
-  await saveAttempts(attempts);
+  await appendAttempt(rec);
   res.json({ attempt: rec });
 });
 
@@ -757,7 +808,6 @@ smetaTrainerRouter.post("/material-overrides", writeLimiter, async (req, res) =>
   if (sscCode !== null && (typeof sscCode !== "string" || !/^\d{3}-\d{3}-\d{4}$/.test(sscCode))) {
     return res.status(400).json({ error: "bad_sscCode" });
   }
-  const all = await loadOverrides();
   const rec: OverrideRecord = {
     name, unit, sscCode,
     sscName: typeof sscName === "string" ? sscName.slice(0, 200) : undefined,
@@ -767,8 +817,10 @@ smetaTrainerRouter.post("/material-overrides", writeLimiter, async (req, res) =>
     setBy: userId,
     setAt: Date.now(),
   };
-  all[overrideKey(name, unit)] = rec;
-  await saveOverrides(all);
+  await updateJsonFile<Record<string, OverrideRecord>>(OVERRIDES_FILE, {}, (all) => {
+    all[overrideKey(name, unit)] = rec;
+    return all;
+  });
   res.json({ override: rec });
 });
 
@@ -780,11 +832,14 @@ smetaTrainerRouter.delete("/material-overrides", writeLimiter, async (req, res) 
   const name = String(req.query.name ?? "");
   const unit = String(req.query.unit ?? "");
   if (!name || !unit) return res.status(400).json({ error: "bad_query" });
-  const all = await loadOverrides();
   const key = overrideKey(name, unit);
-  if (!(key in all)) return res.status(404).json({ error: "not_found" });
-  delete all[key];
-  await saveOverrides(all);
+  let existed = false;
+  await updateJsonFile<Record<string, OverrideRecord>>(OVERRIDES_FILE, {}, (all) => {
+    existed = key in all;
+    if (existed) delete all[key];
+    return all;
+  });
+  if (!existed) return res.status(404).json({ error: "not_found" });
   res.json({ ok: true });
 });
 
@@ -826,7 +881,6 @@ smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
       typeof e === "string" && VALID_EVENTS.includes(e as WebhookEvent),
     );
   }
-  const all = await loadWebhooks();
   const id = crypto.randomUUID();
   const secret = crypto.randomBytes(32).toString("hex");
   const rec: WebhookConfig = {
@@ -840,8 +894,9 @@ smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
     lastSentAt: null,
     failureCount: 0,
   };
-  all[id] = rec;
-  await saveWebhooks(all);
+  await mutateWebhooks((all) => {
+    all[id] = rec;
+  });
   // Отдаём полный секрет ОДИН раз — клиент должен сохранить
   res.json({ webhook: rec });
 });
@@ -851,10 +906,12 @@ smetaTrainerRouter.delete("/admin/webhooks/:id", writeLimiter, async (req, res) 
   const userId = readUserIdFromBearer(req);
   if (!userId) return res.status(401).json({ error: "auth_required" });
   const id = String(req.params.id ?? "");
-  const all = await loadWebhooks();
-  if (!(id in all)) return res.status(404).json({ error: "not_found" });
-  delete all[id];
-  await saveWebhooks(all);
+  let existed = false;
+  await mutateWebhooks((all) => {
+    existed = id in all;
+    if (existed) delete all[id];
+  });
+  if (!existed) return res.status(404).json({ error: "not_found" });
   res.json({ ok: true });
 });
 

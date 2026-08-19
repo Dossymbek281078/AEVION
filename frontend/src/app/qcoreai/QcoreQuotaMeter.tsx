@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 /**
  * Token usage meter for QCoreAI. Reads GET /api/qcoreai/me/token-quota and
@@ -19,7 +20,7 @@ import { apiUrl } from "@/lib/apiBase";
  */
 function bearerHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};
-  const t = localStorage.getItem("aevion_token") ?? sessionStorage.getItem("qcoreai_token") ?? "";
+  const t = getAuthToken() ?? "";
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 

@@ -129,6 +129,7 @@ import { applyGameToCPI, ldCPIState, type GameMetrics } from "./cpi";
 import OpeningFlashCard from "./OpeningFlashCard";
 import MirrorModePanel from "./MirrorModePanel";
 import { buildPlayerProfile, mirrorDepth, type PlayerProfile, type SavedGameForMirror } from "./mirrorMode";
+import { getAuthToken } from "@/lib/auth";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -379,7 +380,7 @@ function setMuted(v:boolean){_muted=v;try{localStorage.setItem(MK,v?"1":"0")}cat
 // браузере (localStorage/fetch), вызываются только в рантайме. Сервер ключует
 // по JWT (не по client-userId), snapshot исключает userId и auth-токен.
 const CC_CLOUD_PREFIX=["cyberchess","aevion_chess"];
-function ccCloudToken():string{try{return localStorage.getItem("aevion_auth_token_v1")||localStorage.getItem("aevion_token")||localStorage.getItem("aevion_jwt")||""}catch{return""}}
+function ccCloudToken():string{try{return getAuthToken()||""}catch{return""}}
 function ccCloudSnapshot():Record<string,string>{const o:Record<string,string>={};try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||k==="cyberchess.userId")continue;if(CC_CLOUD_PREFIX.some(p=>k.startsWith(p)))o[k]=localStorage.getItem(k)||"";}}catch{}return o;}
 async function ccCloudPush():Promise<boolean>{const t=ccCloudToken();if(!t)return false;const s=ccCloudSnapshot();let ser="";try{ser=JSON.stringify(s)}catch{return false}if(ser.length>250000)return false;const ts=Date.now();try{const r=await fetch("/api-backend/api/cyberchess/state",{method:"PUT",headers:{"Content-Type":"application/json",Authorization:`Bearer ${t}`},body:JSON.stringify({state:s,clientTs:ts})});if(r.ok){try{localStorage.setItem("cc_cloud_seen_ts",String(ts))}catch{}return true}}catch{}return false;}
 async function ccCloudFetch():Promise<{state:Record<string,string>|null;clientTs:number}|null>{const t=ccCloudToken();if(!t)return null;try{const r=await fetch("/api-backend/api/cyberchess/state",{headers:{Authorization:`Bearer ${t}`}});if(!r.ok)return null;const d=await r.json() as {state?:Record<string,string>|null;clientTs?:number};return{state:d?.state&&typeof d.state==="object"?d.state:null,clientTs:Number(d?.clientTs)||0};}catch{return null}}
@@ -1497,7 +1498,7 @@ export default function CyberChessPage(){
     let cancelled=false;
     (async()=>{
       let t="";
-      try{t=localStorage.getItem("aevion_auth_token_v1")||localStorage.getItem("aevion_token")||localStorage.getItem("aevion_jwt")||""}catch{}
+      try{t=getAuthToken()||""}catch{}
       if(!t){if(!cancelled)sCcAuth({user:null,checked:true});return;}
       try{
         const r=await fetch("/api-backend/api/auth/me",{headers:{Authorization:`Bearer ${t}`}});
@@ -6619,7 +6620,7 @@ export default function CyberChessPage(){
           {savedGames.length<3&&(()=>{
             const tiles:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
               {emoji:"♟",title:"Сыграй первую партию",desc:"AI любого уровня. От 800 до 2400. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
-              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:"10 818 задач в банке."}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
+              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:"500 000 задач в банке."}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
               {emoji:"🎓",title:"Спроси Coach",desc:"AI-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
               {emoji:"📅",title:"Задача дня",desc:"Один пазл каждый день. Streak, leaderboard, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
             ];
@@ -9673,18 +9674,26 @@ export default function CyberChessPage(){
                 {pzAttempt==="correct"&&(()=>{
                   // Определяем тактический мотив из theme + sol для объяснения (lichess-style)
                   const theme=pzCurrent.theme||"";
-                  const motifMap:Record<string,{icon:string;name:string;desc:string}>={
-                    fork:{icon:"🐴",name:"Вилка",desc:"Одна фигура атакует две цели одновременно — соперник не успевает защитить обе."},
-                    pin:{icon:"📌",name:"Связка",desc:"Фигура не может двигаться — за ней стоит более ценная. Используй это давление."},
-                    skewer:{icon:"⚔",name:"Рентген",desc:"Атака на ценную фигуру, за которой прячется ещё одна. Вынуждает отступить и потерять материал."},
-                    discoveredAttack:{icon:"💥",name:"Открытый удар",desc:"Ход одной фигуры открывает атаку другой — соперник не готов к двойному удару."},
-                    deflection:{icon:"↗",name:"Отвлечение",desc:"Вынуждаем фигуру уйти с важного поля, теряя защиту ключевой цели."},
-                    decoy:{icon:"🎭",name:"Завлечение",desc:"Жертвой заманиваем фигуру на невыгодное поле для последующего удара."},
-                    backRankMate:{icon:"🏰",name:"Мат на последней горизонтали",desc:"Король заперт своими пешками. Ладья или ферзь ставят мат по первой/восьмой линии."},
-                    hangingPiece:{icon:"🎁",name:"Висячая фигура",desc:"Фигура соперника без защиты — просто забирай!"},
-                    trappedPiece:{icon:"🕸",name:"Западня",desc:"Фигура не может уйти без потерь — окружай и бери."},
+                  // ru — название темы, которое РЕАЛЬНО лежит в задаче. Раньше карта
+                  // ключевалась только английскими тегами Lichess, а импортёры пишут
+                  // в theme русское название: "связка".includes("pin") — ложь, и
+                  // объяснение приёма не показывалось НИКОГДА. Функция названа тут же
+                  // ключевым отличием от простого «верно/неверно» — и была мертва.
+                  // Английские ключи оставлены: в старом бандле часть тем сырые теги.
+                  const motifMap:Record<string,{icon:string;name:string;desc:string;ru:string}>={
+                    fork:{icon:"🐴",name:"Вилка",ru:"Вилка",desc:"Одна фигура атакует две цели одновременно — соперник не успевает защитить обе."},
+                    pin:{icon:"📌",name:"Связка",ru:"Связка",desc:"Фигура не может двигаться — за ней стоит более ценная. Используй это давление."},
+                    skewer:{icon:"⚔",name:"Рентген",ru:"Рентген",desc:"Атака на ценную фигуру, за которой прячется ещё одна. Вынуждает отступить и потерять материал."},
+                    discoveredAttack:{icon:"💥",name:"Открытый удар",ru:"Вскрытое нападение",desc:"Ход одной фигуры открывает атаку другой — соперник не готов к двойному удару."},
+                    deflection:{icon:"↗",name:"Отвлечение",ru:"Отвлечение",desc:"Вынуждаем фигуру уйти с важного поля, теряя защиту ключевой цели."},
+                    decoy:{icon:"🎭",name:"Завлечение",ru:"Завлечение",desc:"Жертвой заманиваем фигуру на невыгодное поле для последующего удара."},
+                    backRankMate:{icon:"🏰",name:"Мат на последней горизонтали",ru:"Мат на последней горизонтали",desc:"Король заперт своими пешками. Ладья или ферзь ставят мат по первой/восьмой линии."},
+                    hangingPiece:{icon:"🎁",name:"Висячая фигура",ru:"Висящая фигура",desc:"Фигура соперника без защиты — просто забирай!"},
+                    trappedPiece:{icon:"🕸",name:"Западня",ru:"Поймана фигура",desc:"Фигура не может уйти без потерь — окружай и бери."},
                   };
-                  const motif=Object.entries(motifMap).find(([k])=>theme.toLowerCase().includes(k.toLowerCase()))||null;
+                  const themeLc=theme.toLowerCase();
+                  const motif=Object.entries(motifMap).find(([k,v])=>
+                    themeLc.includes(k.toLowerCase())||themeLc.includes(v.ru.toLowerCase()))||null;
                   const isMate=pzCurrent.goal==="Mate";
                   return <div style={{marginBottom:10}}>
                     <div style={{fontSize:15,fontWeight:900,color:"#065f46",padding:"10px 14px",borderRadius:8,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",border:"1px solid #6ee7b7",display:"flex",alignItems:"center",gap:8,animation:"cc-turn-flash 0.6s ease-out"}}>
@@ -9815,6 +9824,28 @@ export default function CyberChessPage(){
                 "Миттельшпиль":{emoji:"⚡",color:"#7c2d12"},
                 "Промежуточный ход":{emoji:"⏱",color:"#a16207"},
                 "Твоя ошибка":{emoji:"🎯",color:"#be185d"},
+                // Ниже — темы, которые импортёры реально пишут в задачи. Без них
+                // 14 тем из 22 на проде рисовались одинаковой пешкой ♟ по запасному
+                // варианту: не сломано, но обезличено. Часть ключей выше — прежние
+                // названия («Двойной удар», «Открытое нападение», «Дебют»), которые
+                // ни один импортёр не производит; оставлены для старого бандла.
+                "Двойной шах":{emoji:"💥",color:"#be123c"},
+                "Вскрытое нападение":{emoji:"🗡",color:"#b91c1c"},
+                "Дебютная ловушка":{emoji:"📖",color:"#2563eb"},
+                "Продвинутая пешка":{emoji:"⬆",color:"#15803d"},
+                "Атака на королевском":{emoji:"🔥",color:"#c2410c"},
+                "Мат на последней горизонтали":{emoji:"🏰",color:"#7f1d1d"},
+                "Висящая фигура":{emoji:"🎁",color:"#0d9488"},
+                "Расчистка":{emoji:"🧹",color:"#4d7c0f"},
+                "Слоновый эндшпиль":{emoji:"🏁",color:"#047857"},
+                "Открытый король":{emoji:"👑",color:"#b45309"},
+                "Перекрытие":{emoji:"🚧",color:"#7c3aed"},
+                "Спасение":{emoji:"🛟",color:"#0284c7"},
+                "Мат в 4":{emoji:"♔",color:"#b45309"},
+                "Мат в 5+":{emoji:"♔",color:"#92400e"},
+                // Появятся у игроков после пересева банка (сейчас 0 задач).
+                "Рентген":{emoji:"⚔",color:"#9f1239"},
+                "Цугцванг":{emoji:"🪤",color:"#57534e"},
               };
               return <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
                 <div style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -9824,7 +9855,9 @@ export default function CyberChessPage(){
                 </div>
                 <div style={{padding:"8px",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:6}}>
                   {top.map(([th,cnt])=>{
-                    const meta=THEME_META[th]||{emoji:"♟",color:T.text};
+                    // Тема приходит из данных: THEME_META["constructor"] вернул бы
+                    // функцию, и meta.emoji стал бы undefined. Спрашиваем свои ключи.
+                    const meta=(Object.prototype.hasOwnProperty.call(THEME_META,th)?THEME_META[th]:null)||{emoji:"♟",color:T.text};
                     const active=pzFilterTheme===th;
                     return <button key={th} onClick={()=>{sPzFilterTheme(active?"all":th);sPzI(0);sPzCategory("all");sPzFilterGoal("all");sPzFilterMate(0);sPzFilterPhase("all")}}
                       title={`${th} · ${cnt} задач`}
@@ -11453,9 +11486,7 @@ ${question.trim()}`;
                     const amountAev=parseInt(t.price,10)||0;
                     // 1) JWT lookup — mirror keys used elsewhere in the app
                     const jwt=(typeof window!=="undefined")
-                      ? (window.localStorage.getItem("aevion_auth_token_v1")
-                        ?? window.localStorage.getItem("aevion_token")
-                        ?? window.localStorage.getItem("aevion_jwt")
+                      ? (getAuthToken()
                         ?? "")
                       : "";
                     if(!jwt){
@@ -11632,9 +11663,7 @@ ${question.trim()}`;
               sBillingPending(p=>p?{...p,busy:true}:p);
               showToast("⏳ Проверяю оплату…","info");
               const jwt=(typeof window!=="undefined")
-                ? (window.localStorage.getItem("aevion_auth_token_v1")
-                  ?? window.localStorage.getItem("aevion_token")
-                  ?? window.localStorage.getItem("aevion_jwt")
+                ? (getAuthToken()
                   ?? "")
                 : "";
               const paid=await pollPaymentRequest(bp.token,jwt,{intervalMs:3000,timeoutMs:60000});

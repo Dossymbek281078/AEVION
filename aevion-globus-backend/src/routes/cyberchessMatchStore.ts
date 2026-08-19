@@ -46,9 +46,25 @@ export function speedOf(timeControl: string): string {
   return "classical";
 }
 
+/**
+ * Когда можно пробовать подключиться снова.
+ *
+ * Раньше здесь стояла ЗАЩЁЛКА: dbInitTried = true перед попыткой, и больше
+ * никогда. Один обрыв сети в момент первого обращения — и модуль до перезапуска
+ * процесса работал только в памяти: партии, рейтинги и начисления Chessy никуда
+ * не писались, а снаружи это выглядело как обычная работа.
+ *
+ * Защёлка превращает временную неисправность в постоянную, и чинится она только
+ * случайным рестартом. Кулдаун оставляет системе шанс выздороветь сама.
+ */
+const DB_INIT_RETRY_MS = Number(process.env.CYBERCHESS_DB_INIT_RETRY_MS ?? 30_000);
+let dbInitNextTryAt = 0;
+
 export async function ensureDb(): Promise<void> {
-  if (dbInitTried) return;
+  if (dbReady) return;
+  if (Date.now() < dbInitNextTryAt) return; // ещё рано пробовать
   dbInitTried = true;
+  dbInitNextTryAt = Date.now() + DB_INIT_RETRY_MS;
   if (!process.env.DATABASE_URL) {
     console.log("[CyberMatchStore] No DATABASE_URL — offline mode (in-memory only)");
     return;
@@ -135,13 +151,23 @@ export async function ensureDb(): Promise<void> {
     `);
     pool = p;
     dbReady = true;
+    matchStoreHealth.connected = true;
+    matchStoreHealth.lastErrorKind = null;
     // Момент, с которого таблица ведомости заведомо существует в этом процессе
     // (CREATE TABLE IF NOT EXISTS выше). Нужен как граница доплаты — см.
     // repairBoundMs().
     storeReadyAt = Date.now();
     console.log("[CyberMatchStore] pg connected — match/rating store ready");
   } catch (e) {
-    console.warn("[CyberMatchStore] pg init failed:", e instanceof Error ? e.message : e);
+    // Отказ подключения виден снаружи, а не только в логе: без счётчика
+    // «работает на памяти» неотличимо от «работает».
+    matchStoreHealth.connected = false;
+    matchStoreHealth.connectErrors += 1;
+    matchStoreHealth.lastErrorKind = "connect";
+    console.warn(
+      `[CyberMatchStore] pg init failed (следующая попытка через ${DB_INIT_RETRY_MS / 1000} с):`,
+      e instanceof Error ? e.message : e,
+    );
   }
 }
 
@@ -155,7 +181,7 @@ export async function ensureDb(): Promise<void> {
  * из запроса, который не выполнился.
  */
 async function qOrNull(text: string, params: unknown[]): Promise<any[] | null> {
-  if (!dbReady && !dbInitTried) await ensureDb();
+  if (!dbReady) await ensureDb();  // решение о повторе принимает ensureDb по кулдауну
   if (!dbReady || !pool) return null;
   try {
     const r = await pool.query(text, params);
@@ -175,6 +201,10 @@ async function qOrNull(text: string, params: unknown[]): Promise<any[] | null> {
  * нельзя было отличить от «половина записей не доехала».
  */
 export const matchStoreHealth = {
+  /** Установлено ли подключение к базе прямо сейчас. */
+  connected: false,
+  /** Сколько раз не удалось подключиться. Отдельно от ошибок записи. */
+  connectErrors: 0,
   writes: 0,
   writeErrors: 0,
   /** Захват партии не выполнен, потому что база не ответила (НЕ «уже закрыта»). */
@@ -332,7 +362,7 @@ export async function finalizeMatch(
     termination?: string;
   },
 ): Promise<{ white: { before: number; after: number }; black: { before: number; after: number } } | null> {
-  if (!dbReady && !dbInitTried) await ensureDb();
+  if (!dbReady) await ensureDb();  // решение о повторе принимает ensureDb по кулдауну
   if (!dbReady) return null;
 
   // DB-layer idempotency: if this match row is already finalized, return the

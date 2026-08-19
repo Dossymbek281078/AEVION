@@ -136,7 +136,7 @@ export default function VenturesPage() {
                 <p className="vtx-mth">Юнит-экономика · путь до $10M</p>
                 <ul className="vtx-kv">
                   {[
-                    ["Цена (подписка / мес)", "$39", false],
+                    ["Цена (подписка / мес)", "$29", false],
                     ["Себестоимость (COGS)", "≈ $4", false],
                     ["Валовая маржа", "≈ 85%", true],
                     ["Целевой CAC", "< $25", false],

@@ -27,7 +27,7 @@ vi.mock("../src/lib/wranglerPagesDeploy", () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
+import { devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork } from "../src/routes/devhub";
 // eslint-disable-next-line import/first
 import { getProviders, callProvider } from "../src/services/qcoreai/providers";
 
@@ -51,6 +51,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Post-deploy verification scheduled by a test in this file used to fire
+  // during a LATER test and eat its mocked fetch — the suite then failed on a
+  // different test each run (issue #982). Drop what is still pending.
+  __clearDeferredDevHubWork();
   globalThis.fetch = originalFetch;
   vi.mocked(getProviders).mockReturnValue([]);
   vi.mocked(callProvider).mockReset();
@@ -4363,5 +4367,83 @@ describe("Deleting a project takes its Railway service with it", () => {
     // exactly the orphan this is meant to prevent.
     const still = await request(app).get(`/api/devhub/projects/${id}`);
     expect(still.status).toBe(200);
+  });
+});
+
+// ─── The timers behind the suite's drifting failures ─────────────────────────
+//
+// Deploy routes answer immediately and schedule the "does the page actually
+// serve" check on a timer — 4s for CF Pages, 5s for Vercel — after which
+// verifyDeploymentServes() fetches up to 5 times, 5s apart. Those fetches read
+// globalThis.fetch when they finally run, which by then belongs to a LATER
+// test, and they take mockResolvedValueOnce answers off its queue. That test
+// then reads somebody else's response and fails an assertion unrelated to what
+// it tests — a different one every run.
+//
+// Fixed by tracking them (see `deferred` in devhub.ts) and dropping them in
+// afterEach. These two tests hold that in place: the first shows the stray
+// traffic is real, the second shows the cleanup stops it. Without the cleanup
+// the second one fails.
+//
+// Isolated, this file finishes in ~2s and the process exits before any timer
+// fires — which is why isolation hid the problem for weeks.
+describe("deploy verification timers outlive the test that started them", () => {
+  test("a CF Pages deploy leaves a timer that fetches after the response", async () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    vi.useFakeTimers();
+    try {
+      const app = makeApp();
+      const created = await request(app).post("/api/devhub/projects").send({ name: "timer-probe" });
+      const id = created.body.project.id as string;
+      await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>x</h1>" });
+
+      fetchMock.mockResolvedValue(jsonResp(200, { success: true }));
+      mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://probe.pages.dev", output: "" });
+      const dep = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
+      expect(dep.status).toBe(200);
+
+      const afterResponse = fetchMock.mock.calls.length;
+      // The route has answered. Nothing is pending from the caller's point of
+      // view — but a timer is armed.
+      await vi.advanceTimersByTimeAsync(4_100);
+      const afterTimer = fetchMock.mock.calls.length;
+
+      // This is the stray traffic. In a real run it lands on whichever test is
+      // executing 4 seconds later.
+      expect(afterTimer).toBeGreaterThan(afterResponse);
+    } finally {
+      vi.useRealTimers();
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_API_TOKEN;
+    }
+  });
+
+  test("__clearDeferredDevHubWork disarms it, which is what afterEach does", async () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    vi.useFakeTimers();
+    try {
+      const app = makeApp();
+      const created = await request(app).post("/api/devhub/projects").send({ name: "timer-probe-2" });
+      const id = created.body.project.id as string;
+      await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>x</h1>" });
+
+      fetchMock.mockResolvedValue(jsonResp(200, { success: true }));
+      mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://probe2.pages.dev", output: "" });
+      await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
+
+      __clearDeferredDevHubWork();
+      const afterClear = fetchMock.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      // Untracked, this kept climbing — and every one of those calls was taken
+      // from a later test's queue.
+      expect(fetchMock.mock.calls.length).toBe(afterClear);
+    } finally {
+      vi.useRealTimers();
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_API_TOKEN;
+    }
   });
 });

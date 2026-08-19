@@ -36,6 +36,17 @@ const THEME_TEXT: Record<string, string> = {
   wedding: "#831843",
 };
 
+// Тема приходит из ?p= в адресе, то есть снаружи. Проверять её через
+// `themeId in THEME_GRADIENT` нельзя: `in` идёт по цепочке прототипов, и
+// "constructor" проходил проверку — в gradient попадала функция вместо строки,
+// превью подарочной ссылки отрисовывалось неправильно. У Set цепочки нет:
+// THEME_IDS.has("constructor") — честное false.
+const THEME_IDS = new Set(Object.keys(THEME_GRADIENT));
+
+export function resolveThemeId(raw: string | undefined): string {
+  return raw && THEME_IDS.has(raw) ? raw : "general";
+}
+
 function tryDecode(p: string | undefined): DecodedGift | null {
   if (!p) return null;
   try {
@@ -53,14 +64,23 @@ function tryDecode(p: string | undefined): DecodedGift | null {
   }
 }
 
-export default function GiftOgImage({
+export default async function GiftOgImage({
   searchParams,
 }: {
-  params: { id: string };
-  searchParams?: { p?: string };
+  // Next 16: params/searchParams — Promise. Синхронная форма не проходит
+  // проверку сгенерированных типов маршрутов (ошибка видна только в сборке,
+  // см. заметку в src/app/[id]/page.tsx).
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ p?: string }>;
 }) {
-  const decoded = tryDecode(searchParams?.p);
-  const themeId = decoded?.themeId && decoded.themeId in THEME_GRADIENT ? decoded.themeId : "general";
+  // Взято по половине от каждой стороны, и обе половины нужны:
+  //   • `await searchParams` — Next 16 отдаёт их промисом, без ожидания
+  //     параметр молча теряется и подпись картинки выходит пустой;
+  //   • resolveThemeId — безопасный разбор темы. Инлайн-проверка
+  //     `decoded.themeId in THEME_GRADIENT` ходит по цепочке прототипов, то
+  //     есть тема "constructor" прошла бы как настоящая.
+  const decoded = tryDecode((await searchParams)?.p);
+  const themeId = resolveThemeId(decoded?.themeId);
   const gradient = THEME_GRADIENT[themeId];
   const icon = THEME_ICON[themeId];
   const textColor = THEME_TEXT[themeId] ?? "#ffffff";

@@ -49,11 +49,19 @@ const SMOKES = [
   // Live pages: actually OPENS the public page of each live module (2xx +
   // real body). API success ≠ working page — the 2026-07-21 CF Pages lesson.
   { name: "pages-live", script: "pages-live-smoke.js", readOnly: true },
+  // Сверяет openapi с продом: обещанная, но отсутствующая ручка — тот же дефект,
+  // что и поломка, только тише. Нашёл три таких 12.08.2026.
+  { name: "openapi-live", script: "openapi-live-smoke.mjs", readOnly: true },
   // QSkyway: routing, regulator ceilings (FAA feed), signatures and the filing
   // document. Prod-safe — the slot-booking and QRight-registry write legs
   // self-skip under READ_ONLY=1, so the daily prod run covers the whole read
   // surface without leaving smoke rows in a live registry.
   { name: "qskyway", script: "qskyway-smoke.js", readOnly: true },
+  // CyberChess: приёмы, которым учит тренер, против содержимого банка задач.
+  // 12.08.2026 из пяти приёмов задачи были на ОДИН — остальные отдавали ноль,
+  // и это ничего не ломало: интерфейс фильтрует темы у себя, пустого экрана
+  // никто не видел. Только чтение.
+  { name: "cyberchess-coach-bank", script: "cyberchess-coach-vs-bank-smoke.js", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).

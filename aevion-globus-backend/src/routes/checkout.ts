@@ -106,14 +106,33 @@ checkoutRouter.post("/session", async (req, res) => {
 
     const reference = `tier_${tier.id}_${period}`;
 
-    // Free / fully discounted — no checkout needed, provision directly
+    // Free / fully discounted — no checkout needed, provision directly.
+    //
+    // There is no payment provider on this path, so provisioning IS the
+    // transaction: if it does not happen, nothing else will make it happen
+    // later. It used to run fire-and-forget with the error going to
+    // console.error, and the success URL was returned either way — including
+    // when no email was given at all, in which case nothing was provisioned
+    // and the customer still landed on the "success" page with no plan.
     if (totalCents <= 0) {
-      if (body.email) {
-        provisionSubscription({
+      if (!body.email) {
+        return res.status(400).json({
+          error: "email_required",
+          message: "A free or fully-discounted plan needs an email to be issued to.",
+        });
+      }
+      try {
+        await provisionSubscription({
           email: body.email, tierId: tier.id, period, seats,
           modules: body.modules ?? [], trialDays, amountUsd: 0,
           promoCode: body.promoCode, source: "gumroad_zero",
-        }).catch((e) => console.error("[provisioning] zero-price failed", e));
+        });
+      } catch (e) {
+        console.error("[provisioning] zero-price failed", e);
+        return res.status(502).json({
+          error: "provisioning_failed",
+          message: "The plan could not be issued. Nothing was charged — please try again.",
+        });
       }
       return res.json({
         url: `${FRONTEND_URL}/pricing/checkout/success?gumroad=true&tier=${tier.id}&period=${period}&total=0`,

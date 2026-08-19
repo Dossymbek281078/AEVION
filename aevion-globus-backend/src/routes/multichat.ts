@@ -21,10 +21,12 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { getPool } from "../lib/dbPool";
-import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
+import { readJsonFile, updateJsonFile } from "../lib/jsonFileStore";
 import { rateLimit } from "../lib/rateLimit";
 import { requireAuth } from "../lib/authJwt";
-import { listChatTurns, recordChatTurn } from "../lib/chatHistory";
+import { countChatTurns, listChatTurns, recordChatTurn, type ChatTurn } from "../lib/chatHistory";
+import { usageToTokens } from "../lib/usageTokens";
+import { costUsd } from "../services/qcoreai/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvNeutralizeFormula } from "../lib/csv";
 import { buildDissentMap } from "../services/multichat/dissent";
@@ -99,10 +101,14 @@ async function createConv(userId: string, title: string): Promise<Conversation> 
       [c.id, c.userId, c.title, c.createdAt, c.updatedAt],
     );
   } else {
-    const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
-    const items = Array.isArray(data.items) ? data.items : [];
-    items.push(c);
-    await writeJsonFile(STORE_REL, { items });
+    // updateJsonFile, а не пара read+write: список бесед общий на всех, и
+    // параллельные создание/переименование/шаринг затирали друг друга —
+    // беседа просто пропадала из библиотеки без единой ошибки.
+    await updateJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] }, (data) => {
+      const items = Array.isArray(data.items) ? data.items : [];
+      items.push(c);
+      return { items };
+    });
   }
   return c;
 }
@@ -161,19 +167,129 @@ async function touchConv(id: string): Promise<void> {
     await getPool().query(`UPDATE multichat_conversations SET updated_at = NOW() WHERE id = $1`, [id]);
     return;
   }
-  const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
-  const items = Array.isArray(data.items) ? data.items : [];
-  const c = items.find((x) => x.id === id);
-  if (c) {
-    c.updatedAt = new Date().toISOString();
-    await writeJsonFile(STORE_REL, { items });
-  }
+  await updateJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] }, (data) => {
+    const items = Array.isArray(data.items) ? data.items : [];
+    const c = items.find((x) => x.id === id);
+    if (c) c.updatedAt = new Date().toISOString();
+    return { items };
+  });
 }
 
 function toIso(v: unknown): string {
   if (v instanceof Date) return v.toISOString();
   if (typeof v === "string") return v;
   return new Date().toISOString();
+}
+
+// ─── Лента веера: беседа + подветка на каждого агента ──────────────────────
+//
+// Ответ агента живёт в собственной подветке `${conversationId}:${agentId}`:
+// так соседние агенты не перемешиваются в одну простыню и каждого можно
+// доспросить отдельно. Разделитель и разбор — в одном месте, потому что три
+// читателя (беседа, экспорт, публичная ссылка) разъедутся на первой же правке,
+// если каждый будет резать строку сам.
+
+const AGENT_THREAD_SEP = ":";
+
+function agentThreadId(conversationId: string, agentId: string): string {
+  return `${conversationId}${AGENT_THREAD_SEP}${agentId}`;
+}
+
+/** Маркер несостоявшегося ответа — им же держится позиционное соответствие
+ *  «вопрос ↔ ответ каждого агента» в публичном просмотре. */
+const NO_REPLY_PREFIX = "[no-reply]";
+
+async function recordAgentFailure(userId: string, threadId: string, reason: string): Promise<void> {
+  await recordChatTurn({
+    userId,
+    conversationId: threadId,
+    role: "system",
+    content: `${NO_REPLY_PREFIX} ${String(reason).slice(0, 200)}`,
+  });
+}
+
+export type LedgerTurn = ChatTurn & { agentId: string | null };
+
+/** Помечает каждую реплику её агентом (null — реплика самого пользователя). */
+// Сколько реплик берём в ленту и сколько — в выгрузку/счётчик.
+//
+// Оба числа стоят рядом намеренно: раньше выгрузка просила 5000, а хранилище
+// молча отдавало 500, и разойтись им было негде — потолок жил в другом файле.
+const FEED_LIMIT = 200;
+const FULL_READ_LIMIT = 5000;
+
+/**
+ * Лента + признак, что она неполная.
+ *
+ * Обрезанная выборка и полная выглядят одинаково, поэтому каждый читающий
+ * эндпоинт обязан отдать `totalTurns` и `truncated` — иначе «выгрузка для
+ * compliance» и счётчик расхода тихо занижают, оставаясь при 200 OK.
+ */
+async function readFeed(
+  userId: string,
+  conversationId: string,
+  limit: number,
+): Promise<{ turns: LedgerTurn[]; totalTurns: number; truncated: boolean }> {
+  const [turns, totalTurns] = await Promise.all([
+    listChatTurns({ userId, conversationId, includeAgentThreads: true, limit }),
+    countChatTurns({ userId, conversationId, includeAgentThreads: true }),
+  ]);
+  return {
+    turns: withAgentIds(conversationId, turns),
+    totalTurns,
+    truncated: totalTurns > turns.length,
+  };
+}
+
+function withAgentIds(rootId: string, turns: ChatTurn[]): LedgerTurn[] {
+  const prefix = `${rootId}${AGENT_THREAD_SEP}`;
+  return turns.map((t) => {
+    const cid = t.conversationId ?? "";
+    return { ...t, agentId: cid.startsWith(prefix) ? cid.slice(prefix.length) : null };
+  });
+}
+
+/**
+ * Расход по беседе — из фактически записанных реплик, а не из выдуманного поля.
+ *
+ * До этого счётчик читал `turn.usage`, которого у реплики нет и никогда не
+ * было: эндпоинт всегда отдавал 0 вызовов и $0.0000, а библиотека честно эти
+ * нули показывала. Считаем по tokensIn/tokensOut и прайс-листу QCoreAI.
+ *
+ * `unpricedCalls` — вызовы, для которых цена неизвестна (бесплатный флот,
+ * локальная модель, провайдер вне таблицы). Их нельзя молча сложить с нулём:
+ * «$0.00» и «не знаем» — разные утверждения.
+ */
+export function aggregateUsage(turns: Array<Partial<ChatTurn>>): {
+  calls: number;
+  tokens: { input: number; output: number; total: number };
+  costUsd: number;
+  unpricedCalls: number;
+} {
+  let calls = 0;
+  let input = 0;
+  let output = 0;
+  let total = 0;
+  let unpricedCalls = 0;
+
+  for (const t of turns) {
+    if (t.role !== "assistant") continue;
+    calls += 1;
+    const tin = Number(t.tokensIn ?? 0) || 0;
+    const tout = Number(t.tokensOut ?? 0) || 0;
+    input += tin;
+    output += tout;
+    const priced = t.provider && t.model ? costUsd(t.provider, t.model, tin, tout) : 0;
+    if (priced > 0) total += priced;
+    else unpricedCalls += 1;
+  }
+
+  return {
+    calls,
+    tokens: { input, output, total: input + output },
+    costUsd: Number(total.toFixed(6)),
+    unpricedCalls,
+  };
 }
 
 // ─── Phase 2 helpers (delete / rename / share / search / usage) ───────────
@@ -187,13 +303,14 @@ async function deleteConv(id: string, userId: string): Promise<boolean> {
     );
     return (r.rowCount ?? 0) > 0;
   }
-  const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
-  const items = Array.isArray(data.items) ? data.items : [];
-  const before = items.length;
-  const filtered = items.filter((c) => !(c.id === id && c.userId === userId));
-  if (filtered.length === before) return false;
-  await writeJsonFile(STORE_REL, { items: filtered });
-  return true;
+  let deleted = false;
+  await updateJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] }, (data) => {
+    const items = Array.isArray(data.items) ? data.items : [];
+    const filtered = items.filter((c) => !(c.id === id && c.userId === userId));
+    deleted = filtered.length !== items.length;
+    return { items: filtered };
+  });
+  return deleted;
 }
 
 async function renameConv(id: string, userId: string, title: string): Promise<Conversation | null> {
@@ -211,14 +328,18 @@ async function renameConv(id: string, userId: string, title: string): Promise<Co
     if (!row) return null;
     return { ...row, createdAt: toIso(row.createdAt), updatedAt: toIso(row.updatedAt) } as Conversation;
   }
-  const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
-  const items = Array.isArray(data.items) ? data.items : [];
-  const c = items.find((x) => x.id === id && x.userId === userId);
-  if (!c) return null;
-  c.title = safe;
-  c.updatedAt = new Date().toISOString();
-  await writeJsonFile(STORE_REL, { items });
-  return c;
+  let renamed: Conversation | null = null;
+  await updateJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] }, (data) => {
+    const items = Array.isArray(data.items) ? data.items : [];
+    const c = items.find((x) => x.id === id && x.userId === userId);
+    if (c) {
+      c.title = safe;
+      c.updatedAt = new Date().toISOString();
+      renamed = c;
+    }
+    return { items };
+  });
+  return renamed;
 }
 
 async function setShareToken(id: string, userId: string, token: string | null): Promise<Conversation | null> {
@@ -235,14 +356,18 @@ async function setShareToken(id: string, userId: string, token: string | null): 
     if (!row) return null;
     return { ...row, createdAt: toIso(row.createdAt), updatedAt: toIso(row.updatedAt) } as Conversation;
   }
-  const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
-  const items = Array.isArray(data.items) ? data.items : [];
-  const c = items.find((x) => x.id === id && x.userId === userId);
-  if (!c) return null;
-  c.shareToken = token;
-  c.updatedAt = new Date().toISOString();
-  await writeJsonFile(STORE_REL, { items });
-  return c;
+  let updated: Conversation | null = null;
+  await updateJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] }, (data) => {
+    const items = Array.isArray(data.items) ? data.items : [];
+    const c = items.find((x) => x.id === id && x.userId === userId);
+    if (c) {
+      c.shareToken = token;
+      c.updatedAt = new Date().toISOString();
+      updated = c;
+    }
+    return { items };
+  });
+  return updated;
 }
 
 async function findByShareToken(token: string): Promise<Conversation | null> {
@@ -261,6 +386,30 @@ async function findByShareToken(token: string): Promise<Conversation | null> {
   const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
   const items = Array.isArray(data.items) ? data.items : [];
   return items.find((c) => c.shareToken === token) ?? null;
+}
+
+/** Неотрицательное целое из query-параметра. `null` — значение задано и негодно. */
+function parseCount(raw: unknown, fallback: number): number | null {
+  if (raw === undefined || raw === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.floor(n);
+}
+
+/** Сколько бесед совпало с запросом — без пагинации. */
+async function countConvs(userId: string, q: string): Promise<number> {
+  if (isPg()) {
+    await ensureSchema();
+    const r = await getPool().query(
+      `SELECT COUNT(*)::int AS n FROM multichat_conversations WHERE user_id = $1 AND title ILIKE $2`,
+      [userId, `%${q}%`],
+    );
+    return Number(r.rows[0]?.n ?? 0) || 0;
+  }
+  const data = await readJsonFile<{ items: Conversation[] }>(STORE_REL, { items: [] });
+  const items = Array.isArray(data.items) ? data.items : [];
+  const needle = q.toLowerCase();
+  return items.filter((c) => c.userId === userId && c.title.toLowerCase().includes(needle)).length;
 }
 
 async function searchConvs(userId: string, q: string, limit: number, offset: number): Promise<Conversation[]> {
@@ -295,6 +444,24 @@ async function searchConvs(userId: string, q: string, limit: number, offset: num
 // ────────────────────────────────────────────────────────────────────────
 // Routes
 
+// GET /api/multichat/health — лёгкая проверка доступа к модулю.
+//
+// Её зовёт страница `multichat-engine/page.tsx` через `fetchOrPaywall`, чтобы
+// отличить «модуль не куплен» от всего остального: роутер смонтирован за
+// requireModule("multichat-engine"), поэтому без доступа сюда прилетит 402 с
+// payload'ом пейволла, и страница покажет предложение купить.
+//
+// Ручки не существовало, а `fetchOrPaywall` по устройству трактует всё, кроме
+// 402, как «не заблокировано» — то есть 404 молча означал «пускать всех».
+// Пока PAYWALL_MODULES пуст, это ничего не ломало; в день включения пейволла
+// человек без модуля увидел бы страницу вместо предложения купить. Найдено
+// прогоном scripts/build-contract-check.mjs 2026-08-10.
+//
+// Никаких данных не отдаёт намеренно: весь смысл в коде ответа.
+multichatRouter.get("/health", (_req, res) => {
+  res.json({ ok: true, module: "multichat-engine" });
+});
+
 // POST /api/multichat/conversations { title }
 multichatRouter.post("/conversations", async (req, res) => {
   const userId = req.auth!.sub;
@@ -327,8 +494,8 @@ multichatRouter.get("/conversations/:id", async (req, res) => {
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation not found" });
-    const turns = await listChatTurns({ userId, conversationId: id, limit: 200 });
-    res.json({ conversation: conv, turns });
+    const feed = await readFeed(userId, id, FEED_LIMIT);
+    res.json({ conversation: conv, ...feed });
   } catch (err: any) {
     captureMultichatError(err, { route: "get-conversation", entityId: id });
     res.status(500).json({ error: "fetch failed", });
@@ -338,10 +505,16 @@ multichatRouter.get("/conversations/:id", async (req, res) => {
 // POST /api/multichat/conversations/:id/dispatch
 //   { prompt, agents: [{ id, role, provider?, model?, temperature? }, ...] }
 //
-// Fans out one prompt across N agents in parallel. Each agent's reply is
-// independently persisted (own conversationId in chatHistory keyed by
-// `${conversationId}:${agentId}` so multichat UI can re-query per-agent
-// turns later). Returns an array aligned with the input agents.
+// Fans out one prompt across N agents in parallel. Returns an array aligned
+// with the input agents.
+//
+// Лента: вопрос пишется один раз на беседу, ответ каждого агента — в свою
+// подветку `${conversationId}:${agentId}`, запись делает ЭТОТ обработчик.
+// Не отдавать её /api/qcoreai/chat: он принимает conversationId в теле и
+// молча его игнорирует — на этом обещании три эндпоинта (экспорт, публичная
+// ссылка, расход) месяцами возвращали разговор без единого ответа.
+// Не ответивший агент тоже попадает в ленту (role: system) — иначе в
+// публичном просмотре ответы соседей молча сдвигаются на его место.
 multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req, res) => {
   const userId = req.auth!.sub;
   const conversationId = String(req.params.id);
@@ -355,6 +528,18 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
   const agents = Array.isArray(req.body?.agents) ? req.body.agents : [];
   if (agents.length === 0) return res.status(400).json({ error: "agents required" });
   if (agents.length > 8) return res.status(400).json({ error: "max 8 agents per dispatch" });
+
+  // Одинаковые id — отказ, а не тихая потеря ответа.
+  //
+  // Ответ каждого агента пишется в подветку `${conversationId}:${agentId}`.
+  // Два агента с одним id пишут в одну: вызовы оплачены, реплики сохранены, а
+  // всё, что раскладывает ленту ПО АГЕНТУ (публичная страница, карта
+  // разногласий), видит одного — второй ответ пропадает с экрана без следа.
+  const ids = (agents as Array<{ id?: unknown }>).map((a, i) => (typeof a.id === "string" ? a.id : `agent_${i}`));
+  const duplicate = ids.find((id, i) => ids.indexOf(id) !== i);
+  if (duplicate) {
+    return res.status(400).json({ error: `duplicate agent id: ${duplicate}` });
+  }
 
   // Persist the user prompt once at the conversation level.
   await recordChatTurn({
@@ -377,6 +562,17 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
     temperature?: unknown;
   };
 
+  // Тайм-аут на агента.
+  //
+  // Веер ждёт всех через Promise.all, то есть консилиум возвращается по САМОМУ
+  // МЕДЛЕННОМУ. Без тайм-аута провайдер, который принял соединение и замолчал,
+  // держал весь запрос столько, сколько позволит сеть, — а человек всё это
+  // время смотрел на «Агенты отвечают…», хотя двое из трёх уже ответили.
+  //
+  // 60 секунд: длинный ответ модели укладывается с запасом, но зависание
+  // становится отличимым от работы. Переопределяется на прогонах.
+  const agentTimeoutMs = Number(process.env.MULTICHAT_AGENT_TIMEOUT_MS) || 60_000;
+
   const calls = (agents as AgentSpec[]).map(async (a, idx) => {
     const agentId = typeof a.id === "string" ? a.id : `agent_${idx}`;
     const role = typeof a.role === "string" ? a.role : "Agent";
@@ -388,6 +584,8 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
       { role: "system", content: `You are ${role}. Respond concisely (under 200 words).` },
       { role: "user", content: prompt },
     ];
+
+    const threadId = agentThreadId(conversationId, agentId);
 
     try {
       const r = await fetch(`${internalBase}/api/qcoreai/chat`, {
@@ -401,28 +599,33 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
           provider,
           model,
           temperature,
-          conversationId: `${conversationId}:${agentId}`,
+          conversationId: threadId,
         }),
+        signal: AbortSignal.timeout(agentTimeoutMs),
       });
       const data = (await r.json().catch(() => null)) as {
         reply?: string;
+        mode?: string;
         provider?: string;
         model?: string;
         usage?: unknown;
         error?: string;
       } | null;
       if (!r.ok) {
+        const error = data?.error || `upstream ${r.status}`;
+        await recordAgentFailure(userId, threadId, error);
         return {
           agentId,
           role,
           ok: false,
-          error: data?.error || `upstream ${r.status}`,
+          error,
         };
       }
       if (!data?.reply?.trim()) {
         // /api/qcoreai/chat returned 200 with no (or blank) reply — a real
         // failure the caller shouldn't render as a successful, silently-empty
         // chat bubble.
+        await recordAgentFailure(userId, threadId, "empty reply from provider");
         return {
           agentId,
           role,
@@ -430,6 +633,23 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
           error: "empty reply from provider",
         };
       }
+      // Ответ агента кладём в ленту САМИ. Раньше комментарий выше обещал, что
+      // это делает /api/qcoreai/chat по переданному conversationId — тот его
+      // просто игнорирует, и в базе оставались одни вопросы: экспорт, публичная
+      // ссылка и счётчик токенов отдавали половину разговора как целый.
+      const { tokensIn, tokensOut } = usageToTokens(data.usage);
+      await recordChatTurn({
+        userId,
+        conversationId: threadId,
+        role: "assistant",
+        content: data.reply,
+        // Ключ прайс-листа — идентификатор провайдера (`mode`), а не его
+        // человекочитаемое имя из поля `provider`.
+        provider: data.mode ?? null,
+        model: data.model ?? model ?? null,
+        tokensIn,
+        tokensOut,
+      });
       return {
         agentId,
         role,
@@ -440,12 +660,21 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
         usage: data?.usage ?? null,
       };
     } catch (err: any) {
-      captureMultichatError(err, { route: "dispatch-agent", entityId: agentId });
+      // Молчание провайдера — не поломка нашего кода, и в Sentry ему не место:
+      // иначе шумная минута у апстрима хоронит настоящие ошибки веера. Но на
+      // экран причина уходит своя, а не общее «dispatch failed» — «не ответил
+      // за 60 с» и «упал» человек чинит по-разному.
+      const timedOut = err?.name === "TimeoutError" || err?.name === "AbortError";
+      const error = timedOut
+        ? `no reply within ${Math.round(agentTimeoutMs / 1000)}s`
+        : err?.message || "dispatch failed";
+      if (!timedOut) captureMultichatError(err, { route: "dispatch-agent", entityId: agentId });
+      await recordAgentFailure(userId, threadId, error);
       return {
         agentId,
         role,
         ok: false,
-        error: err?.message || "dispatch failed",
+        error,
       };
     }
   });
@@ -526,10 +755,10 @@ multichatRouter.get("/conversations/:id/export.json", async (req, res) => {
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation_not_found" });
-    const turns = await listChatTurns({ userId, conversationId: id, limit: 5000 });
+    const feed = await readFeed(userId, id, FULL_READ_LIMIT);
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Disposition", `attachment; filename="multichat-${id}.json"`);
-    res.json({ conversation: conv, turns, exportedAt: new Date().toISOString() });
+    res.json({ conversation: conv, ...feed, exportedAt: new Date().toISOString() });
   } catch (err: any) {
     captureMultichatError(err, { route: "export-json", entityId: id });
     res.status(500).json({ error: "export_failed", });
@@ -543,7 +772,7 @@ multichatRouter.get("/conversations/:id/export.csv", async (req, res) => {
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation_not_found" });
-    const turns = await listChatTurns({ userId, conversationId: id, limit: 5000 });
+    const { turns, totalTurns, truncated } = await readFeed(userId, id, FULL_READ_LIMIT);
     // Выгружается content — текст сообщений, который пишет пользователь. Гашение
     // формул берём из общего lib/csv: значение с ведущим = + - @ Excel исполняет
     // при открытии файла.
@@ -555,12 +784,29 @@ multichatRouter.get("/conversations/:id/export.csv", async (req, res) => {
       }
       return s;
     };
-    const lines = ["created_at,role,content"];
-    for (const t of turns as Array<Record<string, unknown>>) {
-      lines.push([esc(t.createdAt ?? t.created_at), esc(t.role), esc(t.content)].join(","));
+    // Колонка agent появилась вместе с записью ответов: без неё выгрузка веера
+    // из трёх агентов читается как один сплошной монолог непонятно чей.
+    const lines = ["created_at,agent,role,content"];
+    for (const t of turns) {
+      lines.push([esc(t.createdAt), esc(t.agentId ?? ""), esc(t.role), esc(t.content)].join(","));
+    }
+    // Неполная выгрузка говорит о себе строкой в самом файле, а не только
+    // заголовком ответа: человек открывает CSV в Excel и заголовков не видит,
+    // а недостающие реплики отличить не от чего.
+    if (truncated) {
+      lines.push(
+        [
+          esc(new Date().toISOString()),
+          "",
+          "system",
+          esc(`выгружены последние ${turns.length} реплик из ${totalTurns}`),
+        ].join(","),
+      );
     }
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="multichat-${id}.csv"`);
+    res.setHeader("X-Aevion-Total-Turns", String(totalTurns));
+    res.setHeader("X-Aevion-Truncated", truncated ? "true" : "false");
     res.send(lines.join("\n") + "\n");
   } catch (err: any) {
     captureMultichatError(err, { route: "export-csv", entityId: id });
@@ -568,34 +814,20 @@ multichatRouter.get("/conversations/:id/export.csv", async (req, res) => {
   }
 });
 
-// GET /api/multichat/conversations/:id/usage — aggregate token usage + cost
-// across all turns. Pulls usage from chatHistory rows (qcoreai persists usage
-// per call). Useful for per-conversation billing display.
+// GET /api/multichat/conversations/:id/usage — расход по беседе: вызовы,
+// токены, цена. Считается по репликам агентов из ленты (их пишет dispatch) и
+// прайс-листу QCoreAI. Для вызовов без цены отдельный счётчик unpricedCalls —
+// «бесплатно» и «цена неизвестна» не одно и то же.
 multichatRouter.get("/conversations/:id/usage", async (req, res) => {
   const userId = req.auth!.sub;
   const id = String(req.params.id);
   try {
     const conv = await findConv(id, userId);
     if (!conv) return res.status(404).json({ error: "conversation_not_found" });
-    const turns = await listChatTurns({ userId, conversationId: id, limit: 5000 });
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let totalUsd = 0;
-    let calls = 0;
-    for (const t of turns as Array<Record<string, unknown>>) {
-      const usage = t.usage as { inputTokens?: number; outputTokens?: number; costUsd?: number } | undefined;
-      if (!usage) continue;
-      calls += 1;
-      inputTokens += Number(usage.inputTokens ?? 0);
-      outputTokens += Number(usage.outputTokens ?? 0);
-      totalUsd += Number(usage.costUsd ?? 0);
-    }
-    res.json({
-      conversationId: id,
-      calls,
-      tokens: { input: inputTokens, output: outputTokens, total: inputTokens + outputTokens },
-      costUsd: Number(totalUsd.toFixed(6)),
-    });
+    const { turns, totalTurns, truncated } = await readFeed(userId, id, FULL_READ_LIMIT);
+    // truncated здесь — не косметика: расход при обрыве ЗАНИЖЕН, а число без
+    // признака неполноты выглядит как окончательное.
+    res.json({ conversationId: id, ...aggregateUsage(turns), totalTurns, truncated });
   } catch (err: any) {
     captureMultichatError(err, { route: "usage", entityId: id });
     res.status(500).json({ error: "usage_failed", });
@@ -640,12 +872,23 @@ multichatRouter.delete("/conversations/:id/share", async (req, res) => {
 multichatRouter.get("/search", async (req, res) => {
   const userId = req.auth!.sub;
   const q = (req.query.q as string | undefined)?.trim() ?? "";
-  const limit = Number(req.query.limit ?? 50);
-  const offset = Number(req.query.offset ?? 0);
+  // Нечисловой параметр — отказ с причиной. Раньше Number("abc") давал NaN,
+  // выборка молча возвращала пустой список, и это читалось как «ничего не
+  // найдено»: человек уходит искать в другое место вместо того, чтобы
+  // исправить запрос.
+  const limit = parseCount(req.query.limit, 50);
+  if (limit === null) return res.status(400).json({ error: "limit must be a non-negative number" });
+  const offset = parseCount(req.query.offset, 0);
+  if (offset === null) return res.status(400).json({ error: "offset must be a non-negative number" });
   if (!q) return res.json({ items: [], total: 0 });
   try {
-    const items = await searchConvs(userId, q, limit, offset);
-    res.json({ items, total: items.length, q });
+    // total — сколько СОВПАЛО, а не сколько уместилось на странице. Длина
+    // страницы в поле с именем total превращает «показано 2 из 3» в «найдено 2».
+    const [items, total] = await Promise.all([
+      searchConvs(userId, q, limit, offset),
+      countConvs(userId, q),
+    ]);
+    res.json({ items, total, q });
   } catch (err: any) {
     captureMultichatError(err, { route: "search" });
     res.status(500).json({ error: "search_failed", });
@@ -684,14 +927,21 @@ type ProviderStatus = {
 
 // Cache provider-status for 20s to avoid hammering the upstream qcoreai
 // /providers endpoint when the UI auto-refreshes every 30s across many tabs.
-let providerStatusCache: { at: number; data: ProviderStatus[] } | null = null;
+let providerStatusCache: { at: number; data: ProviderStatus[]; catalogLatencyMs: number } | null = null;
 const PROVIDER_STATUS_TTL_MS = 20_000;
 
 // GET /api/multichat/provider-status — live health per LLM provider.
 multichatRouter.get("/provider-status", async (req, res) => {
   const now = Date.now();
   if (providerStatusCache && now - providerStatusCache.at < PROVIDER_STATUS_TTL_MS) {
-    return res.json({ providers: providerStatusCache.data, cachedAt: new Date(providerStatusCache.at).toISOString(), fresh: false });
+    return res.json({
+      providers: providerStatusCache.data,
+      cachedAt: new Date(providerStatusCache.at).toISOString(),
+      fresh: false,
+      probed: false,
+      catalogLatencyMs: providerStatusCache.catalogLatencyMs,
+      note: "configured = задан ключ. Доступность самих поставщиков здесь не проверяется.",
+    });
   }
 
   const port = Number(process.env.PORT) || 4001;
@@ -707,24 +957,45 @@ multichatRouter.get("/provider-status", async (req, res) => {
     const data = (await r.json().catch(() => null)) as { providers?: Array<Record<string, unknown>> } | null;
     const list = Array.isArray(data?.providers) ? data!.providers! : [];
 
+    // Что здесь на самом деле известно, а что утверждалось.
+    //
+    // Источник — /api/qcoreai/providers, и он СИНХРОННЫЙ: читает переменные
+    // окружения и перечисляет провайдеров с заданным ключом. Ни одного
+    // обращения к Anthropic, OpenAI или Gemini там нет.
+    //
+    // Стояло `reachable: configured && r.ok`, где r.ok — «наш собственный
+    // внутренний маршрут ответил 200». Поле с именем «достижим» означало
+    // «ключ задан и наш бэкенд жив», а страница рисовала по нему зелёный
+    // огонёк и слово «online». При лежащем OpenAI ответ говорил бы то же
+    // самое. Туда же ехала latencyMs — время round-trip до нашего localhost,
+    // поданное как задержка провайдера (на странице ещё и с порогами ⚠/🐢).
+    //
+    // Теперь: reachable ровно повторяет configured (поле оставлено ради
+    // совместимости с packages/aevion-catalog-client и помечено там как
+    // устаревшее), latencyMs больше не выдумывается, а честная величина —
+    // catalogLatencyMs — названа своим именем. `probed: false` говорит прямо,
+    // что апстримы не опрашивались.
     const providers: ProviderStatus[] = list.map((p) => {
       const configured = Boolean(p.configured);
       return {
         id: String(p.id ?? ""),
         name: String(p.name ?? p.id ?? ""),
         configured,
-        // reachable = both configured AND the upstream /providers route returned OK
-        reachable: configured && r.ok,
-        // Per-provider latency isn't measured upstream; approximate with the
-        // single round-trip latency to the qcoreai aggregator. Honest about
-        // it on the client.
-        latencyMs: configured ? totalLatency : null,
+        reachable: configured,
+        latencyMs: null,
         defaultModel: typeof p.defaultModel === "string" ? p.defaultModel : null,
       };
     });
 
-    providerStatusCache = { at: now, data: providers };
-    res.json({ providers, cachedAt: new Date(now).toISOString(), fresh: true });
+    providerStatusCache = { at: now, data: providers, catalogLatencyMs: totalLatency };
+    res.json({
+      providers,
+      cachedAt: new Date(now).toISOString(),
+      fresh: true,
+      probed: false,
+      catalogLatencyMs: totalLatency,
+      note: "configured = задан ключ. Доступность самих поставщиков здесь не проверяется.",
+    });
   } catch (err: any) {
     captureMultichatError(err, { route: "provider-status" });
     res.status(502).json({
@@ -965,16 +1236,24 @@ multichatPublicRouter.get("/shared/:token", async (req, res) => {
   try {
     const conv = await findByShareToken(token);
     if (!conv) return res.status(404).json({ error: "not_found_or_revoked" });
-    const turns = await listChatTurns({ userId: conv.userId, conversationId: conv.id, limit: 200 });
-    // Strip per-turn usage to avoid leaking cost/billing info publicly.
-    const safeTurns = (turns as Array<Record<string, unknown>>).map((t) => {
-      const { usage, ...rest } = t;
-      void usage;
-      return rest;
+    const { turns, totalTurns, truncated } = await readFeed(conv.userId, conv.id, FEED_LIMIT);
+    // Публично отдаём разговор, но не счётчик: токены — это расход владельца.
+    // Текст несостоявшегося ответа тоже подменяем: причина отказа провайдера
+    // может нести внутренний адрес или код, а получателю ссылки важен сам факт.
+    const safeTurns = turns.map((t) => {
+      const { tokensIn, tokensOut, userId, ...rest } = t;
+      void tokensIn;
+      void tokensOut;
+      void userId;
+      return rest.role === "system" && rest.content.startsWith(NO_REPLY_PREFIX)
+        ? { ...rest, content: `${NO_REPLY_PREFIX} агент не ответил` }
+        : rest;
     });
     res.json({
       conversation: { id: conv.id, title: conv.title, createdAt: conv.createdAt },
       turns: safeTurns,
+      totalTurns,
+      truncated,
     });
   } catch (err: any) {
     captureMultichatError(err, { route: "shared-view" });

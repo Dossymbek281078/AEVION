@@ -47,12 +47,67 @@ EXPECT_ENFORCED=qcoreai node aevion-globus-backend/scripts/paywall-policy-smoke.
 
 ## Pre-flip checklist (one-time)
 
-- [ ] `npm run audit:projects-pricing` exit 0 — every module has a `MODULES_PRICING` row
-- [ ] `node scripts/paywall-policy-smoke.js` exit 0 — endpoint up, schema stable, **enforced: 0** in prod today
+> **Состояние на 11.08.2026 — проверено, не переписано с прошлого раза.** Три из пяти
+> пунктов зелёные прямо сейчас; четвёртый — ваше решение, пятый выполняется после флипа.
+> Технических препятствий к включению не осталось.
+>
+> | Пункт | Проверка | Результат |
+> |---|---|---|
+> | Аудит модулей | `npm run audit:projects-pricing --prefix aevion-globus-backend` | ✅ exit 0, у каждого модуля есть строка в `MODULES_PRICING` |
+> | Смок политики | `BASE=… node aevion-globus-backend/scripts/paywall-policy-smoke.js` | ✅ 5/5, `enforcedCount: 0`, схема стабильна, ни один `UNSAFE_TO_GATE` не включён |
+> | UX рекомендованного первого флипа | разбор кода без комментариев + флип `qfusionai` вживую | ✅ 3 из 4 дают страничную стену, `qfusionai` — глобальную модалку (осознанно) |
+> | Тарифы в 402 против `/pricing` | ответ смока `requiredTiers: [lite, medium, full, enterprise]` | ✅ `/pricing` рендерит все тарифы из бэкенд-реестра (страница отдаёт 200, проверено вживую) |
+> | Стратегия включения | — | ⏳ решение основателя: список, `*` или по одному модулю в день |
+>
+> **UX проверен вживую 11.08 — и работает не так, как читается по коду.** Поднял бэкенд с
+> `PAYWALL_MODULES=qfusionai`, затем с `healthai`. Оба раза политика показывала
+> `enforcedCount: 1`, а анонимный запрос к закрытой ручке возвращал **402** с полной
+> нагрузкой (`requiredTiers`, ссылка на `/pricing`, читаемое сообщение). Контур отказа
+> работает.
+>
+> **Но страница модуля при этом отдаёт 200 и обычный контент.** Причина: `<PaywallScreen>`
+> рисуется, только если 402 вернула ручка, которую опрашивает САМА страница, а
+> `isExemptPath()` намеренно держит открытыми `/health`, `/status`, `/providers`,
+> `/me/plan`, `/me/entitlements` даже на закрытом модуле. Разобрал пробу каждой из 15
+> страниц, где компонент упоминается:
+>
+> | Проба страницы | Сколько | Что увидит бесплатный пользователь |
+> |---|---|---|
+> | открытый `/health` (`/healthai`, `/qcoreai`, `/qskyway`, `/smeta-trainer`, `/multichat-engine`, `/longevity`, `/qrenew` + `/report`, `/qmelanin` + `/track`) | 10 | обычную страницу |
+> | закрытая ручка (`/qcoreai/playground` → `/api/qcoreai/chat`, `/qmaskcard` → `/masks`, `/qmedia` → `/videos`) | 3 | **страничную стену** |
+> | не определяется статически (`/veilnetx`) | 1 | проверять запуском |
+> | упоминание только в комментарии (`/qfusionai`) | 1 | обычную страницу + глобальную модалку |
+>
+> Практический вывод: **лендинги выглядят одинаково до и после флипа** — по ним нельзя
+> судить, сработал ли гейт. Смотреть на ответ API или на `/qcoreai/playground` (именно его
+> и называет шаг 4 ниже — он верен ровно для этой страницы). Отказ до пользователя всё
+> равно доходит: глобальный `<PaywallModal>` поднимается при первом платном действии.
+>
+> И отдельно про метод: греп по `PaywallScreen` даёт неверный ответ дважды — в `qfusionai`
+> он находит упоминание внутри комментария о том, что стена там не рисуется, а у остальных
+> десяти находит настоящий код недостижимой ветки. Проверять надо пробой, а не наличием
+> компонента. Это закреплено тестом `paywallReachable.guard.test.ts`.
+>
+> **Что уже покрыто автотестами, а что действительно требует глаз.** Контракт отказа
+> проверяется машиной, а не только руками: `tests/paywallProvisionFlow.test.ts` держит
+> «бесплатному отказано корректным 402», «после оплаты тот же пользователь проходит»,
+> «истёкшая подписка снова даёт 402» и «Lite открывает ТОЛЬКО выбранный модуль»;
+> `tests/planGate.test.ts` — вывод политики из `MODULES_PRICING`, включение по списку и по
+> `*`, и регрессию на инцидент 16.07 (`UNSAFE_TO_GATE` не включается даже явным списком).
+> То есть ручной шаг 4 добавляет ровно одно: как стена ВЫГЛЯДИТ. Логика отказа уже
+> под тестами.
+>
+> Смок гонялся против локально поднятого бэкенда, а не против прода: доступа к прод-адресу
+> из этой сессии нет. Перед реальным флипом прогоните его ещё раз с прод-BASE — форма
+> ответа и «dormant» подтверждены, а вот состояние именно прод-инстанса нет.
+
+
+- [ ] `npm run audit:projects-pricing --prefix aevion-globus-backend` exit 0 — every module has a `MODULES_PRICING` row
+- [ ] `node aevion-globus-backend/scripts/paywall-policy-smoke.js` exit 0 — endpoint up, schema stable, **enforced: 0** in prod today
 - [ ] (Optional since PR #439) Confirm modules you plan to enforce have a `<PaywallScreen>`-wired page for the *best* UX. Grep: `grep -l PaywallScreen frontend/src/app/<module>/`. Modules without one still get the global `<PaywallModal>` overlay on 402 — no module is left with a silent failure.
 - [ ] Confirm `/pricing` page lists the tiers the 402 response will name (`lite`/`medium`/`full`/`enterprise`). The CTA in `PaywallScreen` deep-links to `upgradeUrl` from the backend.
 - [ ] Decide enforcement strategy: comma list (`qcoreai,qfusionai`), wildcard (`*`), or stepwise rollout (one module per day for a week)
-- [ ] **After the flip: run `BASE=https://aevion.app/api-backend node scripts/all-smokes.js`.** The 2026-07 flip silently broke 8 module smokes for a day — they treated the gate's 402 as failure. Smokes are paywall-aware since PR #804/#825 (`scripts/lib/paywallAware.js` verifies the 402 contract; fully-gated modules self-skip functional checks), but any NEW module smoke must use the same helper, and only a post-flip suite run proves it.
+- [ ] **After the flip: run `BASE=https://aevion.app/api-backend node aevion-globus-backend/scripts/all-smokes.js`.** The 2026-07 flip silently broke 8 module smokes for a day — they treated the gate's 402 as failure. Smokes are paywall-aware since PR #804/#825 (`scripts/lib/paywallAware.js` verifies the 402 contract; fully-gated modules self-skip functional checks), but any NEW module smoke must use the same helper, and only a post-flip suite run proves it.
 
 ## The flip (per-module)
 
@@ -103,7 +158,7 @@ PAYWALL_DISABLED=1
 
 Set this env on Railway → redeploy. Confirms with:
 ```bash
-node scripts/paywall-policy-smoke.js
+node aevion-globus-backend/scripts/paywall-policy-smoke.js
 # expect: enforcedCount === 0 (even with PAYWALL_MODULES set)
 ```
 

@@ -15,6 +15,7 @@
  */
 
 import { Router } from "express";
+import { degraded } from "../lib/degradedResponse";
 import crypto from "node:crypto";
 import rateLimit from "express-rate-limit";
 import { REVENUE_APPS, getLiveRevenueApps, getRevenueApp } from "../data/revenueApps";
@@ -323,12 +324,23 @@ interface GumroadSale {
  * The Ping webhook (POST /gumroad/webhook) busts it the moment a sale lands.
  */
 const SALES_TTL_MS = 60_000;
-let salesCache: { at: number; data: GumroadSale[] } | null = null;
+let salesCache: { at: number; data: { sales: GumroadSale[]; complete: boolean; reason?: string } } | null = null;
 
 /** Drop the cached snapshot so the next read re-fetches from Gumroad. */
 function invalidateGumroadSales(): void {
   salesCache = null;
 }
+
+/**
+ * What a Gumroad walk produced, and whether it is the whole history.
+ *
+ * It used to be a bare array: a walk that died on page 3 returned the two
+ * pages it had, indistinguishable from a complete export, and computeLiveTotals
+ * added them into the headline number. Gumroad is the primary channel, so the
+ * result was revenue quietly reported lower than it is — with nothing in the
+ * response saying so. `complete: false` is that missing signal.
+ */
+type GumroadFetch = { sales: GumroadSale[]; complete: boolean; reason?: string } | null;
 
 /**
  * Fetch sales from Gumroad's GET /v2/sales, following next_page_url.
@@ -337,7 +349,7 @@ function invalidateGumroadSales(): void {
  * maxPages caps the walk so a huge history can't hang the request — if the cap
  * is hit we log it (no silent truncation).
  */
-async function gumroadSalesUncached(maxPages = 10): Promise<GumroadSale[] | null> {
+export async function gumroadSalesUncached(maxPages = 10): Promise<GumroadFetch> {
   const token = GUMROAD_TOKEN();
   if (!token) return null;
   const all: GumroadSale[] = [];
@@ -347,13 +359,24 @@ async function gumroadSalesUncached(maxPages = 10): Promise<GumroadSale[] | null
   try {
     while (url && pages < maxPages) {
       const r: Response = await fetch(url);
-      if (!r.ok) return all.length ? all : null;
+      if (!r.ok) {
+        // A page failed mid-walk. What we have is a prefix of the history,
+        // and returning it unmarked is how the totals got quietly smaller
+        // than reality.
+        return all.length
+          ? { sales: all, complete: false, reason: `gumroad page ${pages + 1} returned HTTP ${r.status}` }
+          : null;
+      }
       const d = (await r.json()) as {
         success?: boolean;
         sales?: GumroadSale[];
         next_page_url?: string;
       };
-      if (!d.success || !Array.isArray(d.sales)) break;
+      if (!d.success || !Array.isArray(d.sales)) {
+        return all.length
+          ? { sales: all, complete: false, reason: `gumroad page ${pages + 1} came back without sales` }
+          : null;
+      }
       all.push(...d.sales);
       pages++;
       if (d.next_page_url) {
@@ -369,11 +392,16 @@ async function gumroadSalesUncached(maxPages = 10): Promise<GumroadSale[] | null
       }
     }
     if (url && pages >= maxPages) {
+      // Was a console.warn only: the caller, and therefore the dashboard,
+      // had no way to know the number it was showing stopped early.
       console.warn(`[revenue/gumroad] maxPages=${maxPages} reached — totals may undercount older sales`);
+      return { sales: all, complete: false, reason: `stopped after ${maxPages} pages; older sales not counted` };
     }
-    return all;
-  } catch {
-    return all.length ? all : null;
+    return { sales: all, complete: true };
+  } catch (e) {
+    return all.length
+      ? { sales: all, complete: false, reason: `gumroad walk threw after ${pages} pages: ${(e as Error)?.message ?? "unknown"}` }
+      : null;
   }
 }
 
@@ -382,12 +410,14 @@ async function gumroadSalesUncached(maxPages = 10): Promise<GumroadSale[] | null
  * bypass the cache. A null result (no token / first page failed) is never
  * cached, so a transient failure won't stick.
  */
-async function gumroadSales(force = false): Promise<GumroadSale[] | null> {
+async function gumroadSales(force = false): Promise<GumroadFetch> {
   if (!force && salesCache && Date.now() - salesCache.at < SALES_TTL_MS) {
     return salesCache.data;
   }
   const fresh = await gumroadSalesUncached();
-  if (fresh) salesCache = { at: Date.now(), data: fresh };
+  // Only a complete walk is worth keeping for a minute. Caching a partial one
+  // would spread a single failed page across every reader for the whole TTL.
+  if (fresh && fresh.complete) salesCache = { at: Date.now(), data: fresh };
   return fresh;
 }
 
@@ -448,6 +478,9 @@ interface LiveTotals {
   byApp: Record<string, { count: number; grossUsd: number }>;
   byChannel: Record<string, { grossUsd: number; netUsd: number; count: number }>;
   channelsUsed: string[];
+  /** A channel returned only part of its history, so these totals undercount. */
+  incomplete?: boolean;
+  incompleteReason?: string;
 }
 
 /** Aggregate the live channels that are configured into one combined total.
@@ -462,8 +495,15 @@ async function computeLiveTotals(): Promise<LiveTotals> {
   };
 
   if (GUMROAD_TOKEN()) {
-    const sales = await gumroadSales();
-    if (sales) {
+    const fetched = await gumroadSales();
+    if (fetched) {
+      const sales = fetched.sales;
+      if (!fetched.complete) {
+        // The headline number is short by an unknown amount. Say so instead
+        // of letting it read as the full picture.
+        t.incomplete = true;
+        t.incompleteReason = fetched.reason ?? "gumroad export was partial";
+      }
       const paid = sales.filter((s) => !s.refunded && !s.disputed && !s.chargedback);
       const internal = paid.filter((s) => isInternalPurchase(s.email));
       const valid = paid.filter((s) => !isInternalPurchase(s.email));
@@ -715,6 +755,9 @@ revenueRouter.get("/summary", async (_req, res) => {
       netUsd: totals.netUsd,
       saleCount: totals.saleCount,
       channelsUsed: totals.channelsUsed,
+      // A partial export used to leave no trace in the response at all: the
+      // reader saw a smaller number and no reason to doubt it.
+      ...(totals.incomplete ? degraded(totals.incompleteReason ?? "partial channel export") : {}),
       // Свои проверочные покупки не входят в суммы выше, но и не прячутся.
       internalUsd: totals.internalUsd,
       internalCount: totals.internalCount,
@@ -806,8 +849,9 @@ revenueRouter.get("/gumroad/balance", async (_req, res) => {
   if (!GUMROAD_TOKEN()) {
     return res.json({ stub: true, message: "GUMROAD_ACCESS_TOKEN not set", setupGuide: "/api/revenue/env-guide" });
   }
-  const sales = await gumroadSales();
-  if (!sales) return res.status(502).json({ error: "gumroad_api_error" });
+  const fetched = await gumroadSales();
+  if (!fetched) return res.status(502).json({ error: "gumroad_api_error" });
+  const sales = fetched.sales;
 
   const valid = sales.filter((s) => !s.refunded && !s.disputed && !s.chargedback);
   const grossUsd = valid.reduce((sum, s) => sum + (s.price ? s.price / 100 : 0), 0);
@@ -837,8 +881,9 @@ revenueRouter.get("/gumroad/recent", async (_req, res) => {
   if (!GUMROAD_TOKEN()) {
     return res.json({ stub: true, sales: [], byApp: {}, message: "GUMROAD_ACCESS_TOKEN not set" });
   }
-  const sales = await gumroadSales();
-  if (!sales) return res.status(502).json({ error: "gumroad_api_error" });
+  const fetched = await gumroadSales();
+  if (!fetched) return res.status(502).json({ error: "gumroad_api_error" });
+  const sales = fetched.sales;
 
   const recent = sales.slice(0, 20).map((s) => ({
     id: s.id ?? "",
@@ -975,7 +1020,13 @@ revenueRouter.post("/snapshot", snapshotWriteLimit, async (req, res) => {
     // days (their own hard cap), so nothing older than that is ever read —
     // prune with a margin past it rather than let history accumulate forever.
     await pool.query(`DELETE FROM "RevenueSnapshot" WHERE "capturedAt" < NOW() - INTERVAL '400 days'`);
-    res.status(201).json({ snapshot: serializeSnapshot(r.rows[0] as SnapshotRow), channelsUsed: totals.channelsUsed });
+    res.status(201).json({
+      snapshot: serializeSnapshot(r.rows[0] as SnapshotRow),
+      channelsUsed: totals.channelsUsed,
+      // A snapshot frozen from partial data is worse than a live number: it
+      // becomes history. Mark it rather than let the trend inherit the gap.
+      ...(totals.incomplete ? degraded(totals.incompleteReason ?? "partial channel export") : {}),
+    });
   } catch (err: unknown) {
     capture(err, { route: "POST /snapshot" });
     console.error("[revenue] snapshot_failed", err instanceof Error ? err.message : err);
@@ -1037,7 +1088,8 @@ revenueRouter.post("/snapshots/backfill-internal", async (req, res) => {
     await ensureSnapshotTable();
     const pool = getPool();
 
-    const [sales, orders] = await Promise.all([gumroadSales(), lsOrders()]);
+    const [fetched, orders] = await Promise.all([gumroadSales(), lsOrders()]);
+    const sales = fetched?.sales ?? null;
     const internalDated: { at: number; usd: number }[] = [];
     const externalDated: { at: number; usd: number }[] = [];
     for (const sale of sales ?? []) {

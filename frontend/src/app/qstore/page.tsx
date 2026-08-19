@@ -8,6 +8,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { getAuthToken } from "@/lib/auth";
 
 interface Product {
   id: string;
@@ -275,7 +276,7 @@ export default function QStorePage() {
   }, [fetchFeatured]);
 
   const handlePurchase = async (productId: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) {
       setNotice("Sign in to purchase products.");
       return;
@@ -307,7 +308,7 @@ export default function QStorePage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) { setFormError("Sign in to list products"); return; }
     if (!form.title.trim()) { setFormError("Title is required"); return; }
     setCreating(true);

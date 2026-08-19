@@ -32,7 +32,16 @@ export default function LanguageSwitcher({ variant = "compact" }: Props) {
   }, [open]);
 
   return (
-    <div ref={ref} style={{ position: "relative", display: "inline-flex" }}>
+    // translate="no" на ВЕСЬ переключатель. Название языка — последнее, что
+    // можно переводить: человек ищет глазами «Русский» или «RU», а не их
+    // перевод. Живой перевод именно это и делал, замерено на проде 10.08.2026:
+    // «RU» превратилось в «Роял Юнион» (то есть машина развернула аббревиатуру
+    // как Royal Union), и кнопка раздулась с ~40 до 157 точек — на телефоне
+    // это почти половина доступной ширины.
+    //
+    // Тот же класс, что «API» -> «Интерфейс прикладного программирования»
+    // в шапке. Аббревиатуры и имена собственные переводу не подлежат.
+    <div ref={ref} translate="no" style={{ position: "relative", display: "inline-flex" }}>
       {/* Trigger кнопка */}
       <button
         onClick={() => setOpen(o => !o)}
@@ -58,7 +67,17 @@ export default function LanguageSwitcher({ variant = "compact" }: Props) {
         onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
         onMouseLeave={e => (e.currentTarget.style.background = open ? "rgba(255,255,255,0.12)" : "transparent")}
       >
-        <span style={{ fontSize: 16, lineHeight: 1 }}>{LANG_FLAG[lang]}</span>
+        {/* Флага в самой кнопке нет намеренно.
+         *
+         * Windows не рисует эмодзи-флаги: региональные индикаторы там
+         * показываются двумя буквами кода страны. Рядом с LANG_SHORT это давало
+         * «RU RU ▼» — увидено глазами на посадочной /cyberchess/launch 18.08,
+         * ни один сторож такого не ловит. На macOS флаг рисуется, и там пара
+         * выглядела нормально, поэтому дефект и жил.
+         *
+         * В выпадающем списке флаг остаётся: там он стоит рядом с «Русский», а
+         * не рядом с «RU», и на Windows читается как приставка кода, а не как
+         * дубль. */}
         <span>{LANG_SHORT[lang]}</span>
         <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 1 }}>{open ? "▲" : "▼"}</span>
       </button>

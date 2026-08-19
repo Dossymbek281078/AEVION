@@ -50,6 +50,10 @@ interface EventsSummary {
   byType: Record<string, number>;
   bySource: Record<string, number>;
   byTier: Record<string, number>;
+  /** Только checkout_start — «откуда идут платить», а не «где больше просмотров». */
+  checkoutBySource?: Record<string, number>;
+  /** Канал привлечения из метки ?c= (BuyLink кладёт его в meta.channel). */
+  checkoutByChannel?: Record<string, number>;
   byIndustry: Record<string, number>;
   /** Канал раздачи (tt / ig / yt …) — по нему видно, какая раздача привела людей. */
   byChannel?: Record<string, number>;
@@ -497,11 +501,29 @@ export default function PricingAdminPage() {
               <Breakdown title={t("pricing.admin.breakdown.byTier")} data={summary.byTier} />
               <Breakdown title={t("pricing.admin.breakdown.byIndustry")} data={summary.byIndustry} />
               <Breakdown title={t("pricing.admin.breakdown.bySource")} data={summary.bySource} />
-              {/* Канал и товар приезжают в meta. Без этих двух блоков метка ?c=tt
-                  собиралась бы и не показывалась никому — а она и есть
-                  единственный ответ на вопрос «сработала ли раздача». */}
-              <Breakdown title="По каналу раздачи" data={summary.byChannel ?? {}} />
-              <Breakdown title="Клики «купить» по товарам" data={summary.byProduct ?? {}} />
+              {/* bySource выше считает все события, поэтому в нём доминируют просмотры.
+                  Эти две панели показывают только начала оплаты — единственный срез,
+                  по которому видно, какие поверхности реально приводят к покупке. */}
+              <Breakdown
+                title={t("pricing.admin.breakdown.checkoutBySource")}
+                data={summary.checkoutBySource ?? {}}
+                accent="#0d9488"
+              />
+              <Breakdown
+                title={t("pricing.admin.breakdown.checkoutByChannel")}
+                data={summary.checkoutByChannel ?? {}}
+                accent="#7c3aed"
+              />
+              {/* Их две панели выше считают НАЧАЛА ОПЛАТЫ. Эта — клики по кнопке
+                  «купить» в разрезе товаров: при 26 товарах и трёх продажах за
+                  всё время это единственный способ понять, что вообще пробуют
+                  купить, а что не трогают. Срез другой, поэтому панель третья,
+                  а не вместо. */}
+              <Breakdown
+                title={t("pricing.admin.breakdown.byProduct")}
+                data={summary.byProduct ?? {}}
+                accent="#b45309"
+              />
             </section>
           )}
 
@@ -935,7 +957,7 @@ function Tile({ label, value, accent }: { label: string; value: string; accent?:
   );
 }
 
-function Breakdown({ title, data }: { title: string; data: Record<string, number> }) {
+function Breakdown({ title, data, accent }: { title: string; data: Record<string, number>; accent?: string }) {
   const entries = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const max = entries[0]?.[1] ?? 1;
   return (
@@ -962,7 +984,9 @@ function Breakdown({ title, data }: { title: string; data: Record<string, number
                 style={{
                   height: "100%",
                   width: `${(v / max) * 100}%`,
-                  background: "linear-gradient(90deg, #0d9488, #0ea5e9)",
+                  background: accent
+                    ? `linear-gradient(90deg, ${accent}, ${accent}99)`
+                    : "linear-gradient(90deg, #0d9488, #0ea5e9)",
                 }}
               />
             </div>

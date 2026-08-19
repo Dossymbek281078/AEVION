@@ -1,5 +1,6 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -51,7 +52,7 @@ export default function DocumentLog() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const token = localStorage.getItem("aevion_token") ?? "";
+    const token = getAuthToken() ?? "";
     if (!token) { setError(t("qcontract.log.error.auth_required")); setLoading(false); return; }
     fetch(apiUrl(`/api/qcontract/documents/${id}/log`), { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
@@ -171,7 +172,7 @@ export default function DocumentLog() {
           {data.views.length > 0 && (
             <button
               onClick={async () => {
-                const token = localStorage.getItem("aevion_token") ?? "";
+                const token = getAuthToken() ?? "";
                 const r = await fetch(apiUrl(`/api/qcontract/documents/${id}/log.csv`), { headers: { Authorization: `Bearer ${token}` } });
                 if (!r.ok) return;
                 const blob = await r.blob();
@@ -191,7 +192,7 @@ export default function DocumentLog() {
             <button
               onClick={async () => {
                 if (!confirm(t("qcontract.log.confirm_revoke"))) return;
-                const token = localStorage.getItem("aevion_token") ?? "";
+                const token = getAuthToken() ?? "";
                 await fetch(apiUrl(`/api/qcontract/documents/${id}`), { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
                 window.location.href = "/qcontract";
               }}

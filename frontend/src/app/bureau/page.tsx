@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -80,7 +81,20 @@ const WAITLIST_KEY = "aevion_notarized_waitlist_v1";
 
 type SortMode = "newest" | "oldest" | "verified";
 
+// useSearchParams заставляет Next вычислять страницу на запрос, и без границы
+// Suspense сборка падает на этапе пре-рендера — «Export encountered an error on
+// /bureau/page», то есть красной становится ВСЯ выкатка фронта, а не одна
+// страница. Образец границы взят из smeta-trainer/calc (5bc68b11e), где тот же
+// дефект чинили 21.05.
 export default function BureauPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "60vh", padding: 24, color: "#64748b", fontSize: 14 }}>Загрузка…</div>}>
+      <BureauPageInner />
+    </Suspense>
+  );
+}
+
+function BureauPageInner() {
   const { showToast } = useToast();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,6 +105,51 @@ export default function BureauPage() {
   const [kindFilter, setKindFilter] = useState<string>("all");
   const [sort, setSort] = useState<SortMode>("newest");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+
+  // Глубокая ссылка на объект: /bureau?objectId=… (маркер на 3D-глобусе) и
+  // ?qrightObjectId=… (страница объекта QRight, «посмотреть сертификат»).
+  //
+  // Оба параметра страница не читала вовсе — человек нажимал на конкретный
+  // объект и попадал в общий реестр, где его объект надо искать руками. Со
+  // стороны отправителя это невидимо: ссылка формируется верно, переход
+  // происходит, ошибки нет.
+  //
+  // Подставить id прямо в поиск нельзя: в сертификате его нет, поиск идёт по
+  // заголовку, автору и хешам — вышло бы «найдено 0», что читается как «моего
+  // объекта здесь нет». Поэтому спрашиваем у QRight хеш содержимого объекта и
+  // ищем по нему. Не разрешилось — говорим об этом, а не молчим.
+  const searchParams = useSearchParams();
+  const deepObjectId =
+    searchParams?.get("objectId") || searchParams?.get("qrightObjectId") || "";
+  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!deepObjectId) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(apiUrl(`/api/qright/objects/${encodeURIComponent(deepObjectId)}`));
+        if (!r.ok) {
+          if (alive) setDeepLinkError("Не удалось открыть объект по ссылке — записи с таким номером в реестре QRight нет.");
+          return;
+        }
+        const data = (await r.json()) as { contentHash?: string; object?: { contentHash?: string } };
+        const hash = data?.contentHash || data?.object?.contentHash || "";
+        if (!alive) return;
+        if (!hash) {
+          setDeepLinkError("Не удалось открыть объект по ссылке — у записи нет хеша содержимого.");
+          return;
+        }
+        setDeepLinkError(null);
+        setQuery(hash);
+      } catch {
+        if (alive) setDeepLinkError("Не удалось открыть объект по ссылке — реестр QRight сейчас недоступен.");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [deepObjectId]);
 
   // File drag-drop on /bureau: compute SHA-256 → populate search query.
   const [fileDragOver, setFileDragOver] = useState(false);
@@ -123,14 +182,34 @@ export default function BureauPage() {
   const [waitlistBusy, setWaitlistBusy] = useState(false);
   const submitWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!waitlistEmail.trim() || waitlistDone) return;
+    const email = waitlistEmail.trim();
+    if (!email || waitlistDone) return;
     setWaitlistBusy(true);
-    // Store locally — no backend endpoint yet; will wire up when Notarized goes live.
-    try { localStorage.setItem(WAITLIST_KEY, waitlistEmail.trim()); } catch {}
-    await new Promise((r) => setTimeout(r, 600));
-    setWaitlistDone(true);
-    setWaitlistBusy(false);
-    showToast("You're on the waitlist!", "success");
+    // This used to write the address to localStorage, wait 600ms and say
+    // "You're on the waitlist!" — the only copy lived in the visitor's own
+    // browser and no list existed. It posts to the backend now, and a failure
+    // says so instead of congratulating the person.
+    try {
+      const r = await fetch(apiUrl("/api/bureau/waitlist"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, source: "bureau-notarized" }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        showToast(j?.error || `Could not join the waitlist (${r.status})`, "error");
+        return;
+      }
+      // Local flag only remembers the form state for this browser; the record
+      // itself now lives on the server.
+      try { localStorage.setItem(WAITLIST_KEY, email); } catch {}
+      setWaitlistDone(true);
+      showToast("You're on the waitlist!", "success");
+    } catch {
+      showToast("Network error — the waitlist did not receive your address", "error");
+    } finally {
+      setWaitlistBusy(false);
+    }
   };
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [claimingEdgeId, setClaimingEdgeId] = useState<string | null>(null);
@@ -537,6 +616,25 @@ export default function BureauPage() {
               <input type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) hashAndSearch(f); }} />
             </label>
           </div>
+
+          {/* Ссылка не разрешилась — говорим об этом. Молчаливые «0
+              результатов» человек читает как «моего объекта здесь нет». */}
+          {deepLinkError && (
+            <div
+              style={{
+                marginBottom: 14,
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(185,28,28,0.25)",
+                background: "rgba(185,28,28,0.05)",
+                color: "#b91c1c",
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              {deepLinkError}
+            </div>
+          )}
 
           {!loading && certificates.length > 0 && (
             <div style={{ display: "grid", gap: 10, marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>

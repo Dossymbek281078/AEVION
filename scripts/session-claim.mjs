@@ -13,8 +13,18 @@
 //
 // Usage:
 //   node scripts/session-claim.mjs <module-id>   # check one module
+//   node scripts/session-claim.mjs --file <path> # who ALREADY changed this file
 //   node scripts/session-claim.mjs --map         # print module -> paths map
 //   node scripts/session-claim.mjs               # summarize every worktree's zone
+//
+// Why --file exists (added 2026-08-10 after a real duplicate). The module check
+// looks at branch NAMES and at UNCOMMITTED files. Both missed a collision that
+// cost two sessions the same two hours: another worktree had already COMMITTED
+// its change to frontend/src/data/pitchFacts.ts, so nothing was dirty, and its
+// branch was called fix/pitch-one-denominator — the word "pitchFacts" appears
+// nowhere in it. Asking about the module returned FREE, truthfully and
+// uselessly. Shared files (data/*.ts, guards in __tests__/) belong to no single
+// module, so ask about the FILE before touching them.
 //
 // Exit code: 0 = free (or informational), 1 = claimed by another worktree.
 
@@ -124,6 +134,51 @@ function dirtyInZone(wtPath, prefixes) {
   return files.filter((f) => prefixes.some((p) => p && f.startsWith(p)));
 }
 
+// Files another branch has ALREADY COMMITTED under the given zone prefixes.
+//
+// Without this the guard has a blind spot that costs exactly what it exists to
+// prevent. On 05.08.2026 two sessions fixed the same defect in
+// routes/pricing.ts: one claimed "pricing", the other claimed "qskyway" and
+// committed its pricing.ts change hours earlier. Nothing was dirty, and the
+// branch name said nothing about pricing — so the check answered FREE, and the
+// duplicate surfaced only as a merge conflict on identical lines.
+//
+// Committed work is a stronger claim than uncommitted work, not a weaker one:
+// it means someone already finished there.
+// Ветки, тронутые за последние две недели. Дублирование случается между
+// ЖИВЫМИ сессиями, а сравнение всех 48 worktree подряд стоило лишних секунд —
+// команду, которую зовут перед каждой правкой, при задержке просто перестают
+// звать. Замерено 05.08.2026: было 4.5 с без этой проверки, 11 с со сплошным
+// перебором, 7 с с отсечкой по свежести. Итоговая цена слепого пятна — 2.5 с.
+const RECENT_BRANCHES = (() => {
+  const out = sh(
+    `git for-each-ref --sort=-committerdate --format="%(refname:short) %(committerdate:unix)" refs/heads`,
+    ROOT,
+  );
+  const cutoff = Math.floor(Date.now() / 1000) - 14 * 24 * 3600;
+  const set = new Set();
+  for (const line of out.split("\n")) {
+    const [name, ts] = line.trim().split(/\s+/);
+    if (name && Number(ts) >= cutoff) set.add(name);
+  }
+  return set;
+})();
+
+function committedInZone(branch, prefixes) {
+  if (!branch || branch === "main" || branch === "master") return [];
+  if (!RECENT_BRANCHES.has(branch)) return [];
+  // Three dots: only what the branch added since it diverged, not what main
+  // moved on to — otherwise every stale branch looks like it touches everything.
+  // Пути отдаём git'у, а не фильтруем в JS: без этого проверка по 48 worktree
+  // занимала 11 секунд вместо секунды, а команду, которую зовут перед каждой
+  // правкой, при такой задержке просто перестают звать.
+  const paths = prefixes.filter(Boolean).map((p) => `"${p}"`).join(" ");
+  if (!paths) return [];
+  const out = sh(`git diff --name-only main...${branch} -- ${paths}`, ROOT);
+  if (!out) return [];
+  return out.split("\n").map((f) => f.trim()).filter(Boolean);
+}
+
 const arg = process.argv[2];
 
 if (arg === "--map") {
@@ -147,6 +202,41 @@ if (!arg) {
   console.log("\nRule: 1 module = 1 worktree = 1 branch. Claim before editing:");
   console.log("  node scripts/session-claim.mjs <module-id>");
   process.exit(0);
+}
+
+// ── --file mode: кто УЖЕ менял этот файл в своей ветке ────────────────────
+// Смотрим коммиты, а не грязь в рабочей папке: чужая работа чаще всего уже
+// закоммичена, и именно поэтому проверка по имени зоны её не видит.
+if (arg === "--file") {
+  const target = process.argv[3];
+  if (!target) {
+    console.log("Usage: node scripts/session-claim.mjs --file <path-from-repo-root>");
+    process.exit(0);
+  }
+  console.log(`File "${target}" — who already changed it on their branch:
+`);
+  const touched = [];
+  for (const wt of wts) {
+    if (resolve(wt.path) === self) continue;
+    if (!wt.branch) continue;
+    let n = 0;
+    try {
+      n = Number(sh(`git rev-list --count main..${wt.branch} -- "${target}"`, ROOT) || "0");
+    } catch {
+      n = 0;
+    }
+    if (n > 0) touched.push({ branch: wt.branch, path: wt.path, commits: n });
+  }
+  if (!touched.length) {
+    console.log("✅ FREE — no other worktree has committed changes to this file.");
+    process.exit(0);
+  }
+  console.log("⚠️  Уже правят — согласуй, иначе мерж затрёт чужое:");
+  for (const t of touched.sort((a, b) => b.commits - a.commits)) {
+    console.log(`   • ${t.branch}  (${t.commits} коммит(ов) по этому файлу)  ${t.path}`);
+  }
+  console.log(`\nПосмотреть чужую правку: git diff main...<ветка> -- ${target}`);
+  process.exit(1);
 }
 
 // Claim-check mode for a specific module.
@@ -184,30 +274,70 @@ if (!(id in ALIAS) && !zonesExist(prefixes)) {
 const token = (ALIAS[id]?.app || id).toLowerCase();
 
 const conflicts = [];
+const overlaps = [];
 for (const wt of wts) {
   if (resolve(wt.path) === self) continue;
   const branch = (wt.branch || "").toLowerCase();
   const byName = branch.includes(token) || branch.includes(id.toLowerCase());
   const byFiles = dirtyInZone(wt.path, prefixes);
-  if (byName || byFiles.length) {
-    conflicts.push({ wt, byName, byFiles });
+  const byCommits = committedInZone(wt.branch, prefixes);
+  // Закоммиченное НЕ блокирует. Иначе на живом репозитории почти любая зона
+  // выглядит занятой: pricing.ts, например, тронут четырьмя ветками сразу.
+  // Сторож, который звенит всегда, перестаёт значить что-либо — его глушат, и
+  // вместе с ним теряются настоящие срабатывания.
+  // Возраст последнего коммита чужой ветки. Без него «занято» звучит одинаково
+  // и для сессии, которая работает прямо сейчас, и для брошенной. 06.08.2026
+  // страж сказал CLAIMED про feat/qskyway-airspace-trust — я не стал трогать
+  // зону, а ветка не менялась ДЕВЯТЬ дней при чистом каталоге: готовые фиксы
+  // живых дефектов прода простаивали всё это время.
+  let ageDays = null;
+  if (wt.branch) {
+    const ts = sh(`git log -1 --format=%ct ${wt.branch}`, ROOT);
+    if (ts) ageDays = Math.floor((Date.now() / 1000 - Number(ts)) / 86400);
   }
+  if (byName || byFiles.length) conflicts.push({ wt, byName, byFiles, byCommits, ageDays });
+  else if (byCommits.length) overlaps.push({ wt, byCommits });
 }
 
 console.log(`Module "${id}"  zones: ${prefixes.join(", ") || "(core)"}\n`);
+// Перекрытие по УЖЕ ЗАКОММИЧЕННЫМ файлам печатается отдельно от блокировки:
+// это не «занято», а «здесь уже сделано — посмотри, прежде чем делать снова».
+function printOverlaps() {
+  if (!overlaps.length) return;
+  console.log(`\nℹ️  В этой зоне уже есть закоммиченные правки в других ветках`);
+  console.log(`   (не блокирует — но сначала посмотрите, не сделано ли уже):`);
+  for (const o of overlaps) {
+    console.log(`   • ${o.wt.branch}`);
+    for (const f of o.byCommits.slice(0, 4)) console.log(`       ${f}`);
+  }
+  console.log(`   Посмотреть: git log --oneline main..<ветка> -- <файл>`);
+}
+
 if (conflicts.length === 0) {
   console.log(`✅ FREE — no other worktree is claiming "${id}". Safe to work here.`);
   console.log(`   Reminder: use a branch named feat/${id}-... and commit --only your zone.`);
+  printOverlaps();
   process.exit(0);
 }
 
 console.log(`⚠️  CLAIMED by another worktree — do NOT edit "${id}" here:`);
 for (const c of conflicts) {
-  const why = [c.byName ? "branch name" : null, c.byFiles.length ? `${c.byFiles.length} dirty file(s)` : null]
+  const why = [
+    c.byName ? "branch name" : null,
+    // Неделя без коммитов — повод посмотреть, жива ли та сессия, а не молча
+    // уступать зону: работа могла быть доделана и брошена.
+    c.ageDays !== null && c.ageDays >= 7 ? `⚠ последний коммит ${c.ageDays} дн. назад` : null,
+    c.byFiles.length ? `${c.byFiles.length} dirty file(s)` : null,
+    c.byCommits.length ? `${c.byCommits.length} already committed` : null,
+  ]
     .filter(Boolean)
     .join(" + ");
   console.log(`   • ${c.wt.branch}  (${why})  ${c.wt.path}`);
   for (const f of c.byFiles.slice(0, 5)) console.log(`       ${f}`);
+  // Закоммиченное показываем отдельной пометкой: это не «кто-то сейчас правит»,
+  // а «здесь уже сделано» — реакция другая, вплоть до «не делай второй раз».
+  for (const f of c.byCommits.slice(0, 5)) console.log(`       ${f}  (уже закоммичено)`);
 }
+printOverlaps();
 console.log(`\nPick a different, free module or coordinate before touching this one.`);
 process.exit(1);

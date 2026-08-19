@@ -7,6 +7,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { catalogWithToken } from "@/lib/aevionCatalog";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { getAuthToken } from "@/lib/auth";
 
 interface Course {
   id: string;
@@ -315,7 +316,7 @@ interface CreateCourseForm {
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("aevion_auth_token");
+  return getAuthToken();
 }
 
 export default function QLearnPage() {
@@ -424,7 +425,7 @@ export default function QLearnPage() {
   };
 
   const handleEnroll = async (courseId: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) {
       setNotice("Sign in to enroll in courses.");
       return;
@@ -450,7 +451,7 @@ export default function QLearnPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) { setFormError("Sign in to create a course"); return; }
     if (!form.title.trim()) { setFormError("Title is required"); return; }
     setCreating(true);

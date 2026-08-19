@@ -151,7 +151,7 @@ const board = await fintech.ztide.leaderboard({ limit: 10, category: "global" })
       id: "webhooks",
       title: "Webhooks",
       code: pre(`// All fintech modules fire events to your webhook URL
-// Set endpoint in: https://aevion.app/qpaynet/settings/webhooks
+// Set endpoint in: https://aevion.app/qpaynet/merchant
 
 // Validate HMAC signature (Express example)
 import crypto from "node:crypto";

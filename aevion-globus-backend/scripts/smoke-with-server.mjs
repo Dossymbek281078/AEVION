@@ -25,6 +25,7 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
+import { readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -85,6 +86,51 @@ async function waitForHealth(timeoutMs = START_TIMEOUT_MS) {
     await new Promise((r) => setTimeout(r, 2000));
   }
   return null;
+}
+
+// Пересобрать, если dist отстал от исходников.
+//
+// Смоуки с пометкой offline бьют НЕ по серверу, а по скомпилированному коду:
+// require("../dist/routes/events.js"). 19.08.2026 выяснилось, что dist собран
+// 27 июля — то есть три недели эти проверки отвечали про код, которого никто
+// не запускает. Опасность двусторонняя: смоук краснеет на ПОЧИНЕННОМ коде
+// (так и было — два падения из четырёх) и зеленеет на сломанном, если поломку
+// внесли после последней сборки.
+//
+// Поэтому по умолчанию собираем, а не предупреждаем: предупреждение в длинном
+// логе никто не читает, а смоук по трёхнедельной сборке бесполезен целиком.
+// Отключить: SMOKE_BUILD=0.
+function newestMtime(dir) {
+  let newest = 0;
+  const walk = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.name === "node_modules") continue;
+      const p = join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else newest = Math.max(newest, statSync(p).mtimeMs);
+    }
+  };
+  try { walk(dir); } catch { return 0; }
+  return newest;
+}
+
+if (process.env.SMOKE_BUILD !== "0") {
+  const srcAt = newestMtime(join(ROOT, "src"));
+  const distAt = newestMtime(join(ROOT, "dist"));
+  if (srcAt > distAt) {
+    const gapMs = srcAt - distAt;
+    // «~0 дн.» ничего не сообщает: разрыв бывает и в минуты, и в недели.
+    const gap =
+      gapMs >= 86_400_000 ? `${Math.round(gapMs / 86_400_000)} дн.`
+      : gapMs >= 3_600_000 ? `${Math.round(gapMs / 3_600_000)} ч`
+      : `${Math.max(1, Math.round(gapMs / 60_000))} мин`;
+    console.log(`[smoke] dist отстал от src на ~${gap} — пересобираю`);
+    const r = spawnSync("npm run build", { shell: true, cwd: ROOT, stdio: "inherit" });
+    if (r.status !== 0) {
+      console.error("[smoke] сборка не удалась — offline-смоуки будут врать про старый код");
+      process.exit(2);
+    }
+  }
 }
 
 console.log(`[smoke] поднимаю бэкенд на ${BASE}`);

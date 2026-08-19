@@ -364,7 +364,7 @@ quantumShieldRouter.get("/webhooks/:id/deliveries", async (req, res) => {
     if ((owner.rows[0] as { ownerUserId: string }).ownerUserId !== auth.sub && auth.role !== "admin") {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
+    const limit = Math.max(1, Math.min(200, Math.max(Number(req.query.limit) || 50, 1)));
     const { rows } = await pool.query(
       `SELECT "id","event","succeeded","statusCode","errorMessage","durationMs","createdAt"
        FROM "QuantumShieldWebhookDelivery"
@@ -1835,7 +1835,7 @@ quantumShieldRouter.get("/:id/audit", async (req, res) => {
     if (!isAdmin && !isOwner) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
+    const limit = Math.max(1, Math.min(200, Math.max(Number(req.query.limit) || 50, 1)));
     const offset = Math.max(0, Number(req.query.offset) || 0);
     const { rows } = await pool.query(
       `SELECT "id","event","actorUserId","actorIp","details","createdAt"

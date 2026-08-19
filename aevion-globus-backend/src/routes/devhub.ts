@@ -3055,7 +3055,7 @@ async function dbSaveSnippet(s: DevHubSnippet): Promise<void> {
 devhubRouter.get("/snippets", async (req, res) => {
   const tag = req.query.tag ? String(req.query.tag).trim() : undefined;
   const userId = req.query.user ? String(req.query.user).trim() : undefined;
-  const limit = req.query.limit ? Math.min(parseInt(String(req.query.limit), 10) || 50, 200) : 50;
+  const limit = req.query.limit ? Math.min(Math.max(parseInt(String(req.query.limit), 10) || 50, 1), 200) : 50;
   try {
     const snippets = await dbListSnippets({ tag, userId, limit });
     res.json({ snippets, total: snippets.length });

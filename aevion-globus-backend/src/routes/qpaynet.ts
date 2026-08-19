@@ -1188,7 +1188,7 @@ qpaynetRouter.get("/transactions", async (req, res) => {
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
   const pool = getPool();
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
   const walletId = req.query.walletId as string | undefined;
   const type = req.query.type as string | undefined;
   const ownerId = auth.sub ?? auth.email ?? "anon";
@@ -3431,7 +3431,7 @@ qpaynetRouter.get("/notifications", async (req, res) => {
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
   const onlyUnread = req.query.unread === "1";
   const where = onlyUnread ? "owner_id=$1 AND read_at IS NULL" : "owner_id=$1";
   const r = await pool.query(
@@ -3658,7 +3658,7 @@ qpaynetRouter.get("/me/audit", authLimiter, async (req, res) => {
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
-  const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+  const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 500);
   const r = await pool.query(
     `SELECT id, action, details, ip, user_agent, created_at FROM qpaynet_audit_log
      WHERE owner_id=$1 ORDER BY created_at DESC LIMIT $2`,

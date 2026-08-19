@@ -111,7 +111,7 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
   const q = req.query.q ? String(req.query.q) : undefined;
   const category = req.query.category ? String(req.query.category) : undefined;
   const sort = req.query.sort ? String(req.query.sort) : "popular";
-  const limit = Math.min(Number(req.query.limit) || 20, 50);
+  const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
 
   const orderBySql: Record<string, string> = {
     popular: `"salesCount" DESC`,

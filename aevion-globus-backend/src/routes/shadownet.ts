@@ -416,7 +416,7 @@ shadownetRouter.post("/posts", async (req: Request, res: Response) => {
 // Gives the module a real list surface now that the generic mvpConcepts
 // scaffold no longer shadows this prefix (single-store consolidation).
 shadownetRouter.get("/posts", async (req: Request, res: Response) => {
-  const limit = Math.min(Number(req.query.limit ?? 50), 200);
+  const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 200);
   if (isShadowNetDbReady()) {
     try {
       const result = await pool.query(
@@ -464,7 +464,7 @@ shadownetRouter.get("/posts/:alias", async (req: Request, res: Response) => {
   if (!isValidAlias(alias)) {
     return fail(res, "invalid alias");
   }
-  const limit = Math.min(Number(req.query.limit ?? 50), 200);
+  const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 200);
 
   if (isShadowNetDbReady()) {
     try {

@@ -265,7 +265,7 @@ qlifeRouter.get("/biomarkers", readLimit, async (req: Request, res: Response) =>
     // ?userId. Health data must not be enumerable across users.
     const auth   = verifyBearerOptional(req);
     const userId = auth?.sub ?? "anonymous";
-    const limit  = Math.min(Number(req.query.limit) || 30, 200);
+    const limit  = Math.min(Math.max(Number(req.query.limit) || 30, 1), 200);
 
     if (type && !VALID_TYPES.includes(type as BiomarkerType)) {
       res.status(400).json({ ok: false, error: `Invalid type. Valid: ${VALID_TYPES.join(", ")}` });

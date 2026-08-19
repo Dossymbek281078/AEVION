@@ -1850,6 +1850,66 @@ router.get("/:id/next-round", (req: Request, res: Response): void => {
 // not pass through here. It exists for the tournament service to report
 // results, and that sender can sign — same secret and same verification chain
 // as /api/cyberchess/tournament-finalized.
+/**
+ * POST /:id/unregister { userId, ticketId } — выйти из турнира до его начала.
+ *
+ * Заведено 19.08.2026. До этого выйти было НЕЛЬЗЯ вообще: записался — значит
+ * навсегда, даже если передумал за неделю до старта. Регистрация без отмены —
+ * это про согласие человека, а не про удобство: он соглашался играть, а не
+ * числиться в списке, из которого нет выхода.
+ *
+ * Право подтверждается БИЛЕТОМ, а не одним userId. Аккаунтов у нас нет, и
+ * идентификатор игрока не секрет — зная его, посторонний вычёркивал бы людей из
+ * турниров. Билет выдаётся при регистрации и есть только у записавшегося.
+ *
+ * После старта выход закрыт: сетка уже построена, и вычеркнутый участник
+ * оставил бы дыру в парах.
+ */
+router.post("/:id/unregister", (req: Request, res: Response): void => {
+  const t = TOURNAMENTS.find((x) => x.id === String(req.params.id ?? ""));
+  if (!t) {
+    res.status(404).json({ ok: false, error: "not_found" });
+    return;
+  }
+  if (t.status !== "upcoming") {
+    res.status(409).json({
+      ok: false,
+      error: "already_started",
+      hint: "выйти можно только до начала турнира",
+    });
+    return;
+  }
+  const userId = String(req.body?.userId ?? "").trim();
+  const ticketId = String(req.body?.ticketId ?? "").trim();
+  if (!userId || !ticketId) {
+    res.status(400).json({ ok: false, error: "userId_and_ticketId_required" });
+    return;
+  }
+  if (!t.registeredUserIds.includes(userId)) {
+    res.status(404).json({ ok: false, error: "not_registered" });
+    return;
+  }
+  if (!t.tickets || t.tickets[userId] !== ticketId) {
+    res.status(403).json({ ok: false, error: "ticket_mismatch" });
+    return;
+  }
+
+  t.registeredUserIds = t.registeredUserIds.filter((u) => u !== userId);
+  t.players = Math.max(0, t.players - 1);
+  delete t.tickets[userId];
+  // Место в сетке освобождается тоже: иначе участник исчезает из списка, но
+  // продолжает занимать слот, и турнир выглядит полнее, чем есть.
+  for (const slot of t.roster) {
+    if (slot.userId === userId) {
+      slot.userId = undefined;
+      slot.name = "—";
+    }
+  }
+  tryWriteToDisk();
+
+  res.json({ ok: true, tournamentId: t.id, userId, players: t.players });
+});
+
 router.post("/:id/result", (req: Request, res: Response): void => {
   const verdict = verifyWebhookSig({
     signature: req.headers["x-aevion-signature"],

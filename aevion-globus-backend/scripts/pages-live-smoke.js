@@ -117,12 +117,72 @@ async function checkPage(p) {
   }
 }
 
+
+// ── Обещания модуля, а не только доступность страниц ─────────────────────────
+//
+// Этот файл — единственная проверка прода, которую что-то ЗАПУСКАЕТ: задача
+// AEVION-PagesGuard берёт его из зеркала каждые 30 минут. Шахматный смоук
+// подробнее, но его не зовёт никто, поэтому два обещания, молча пропадавшие
+// при чужих выкатках, живут здесь.
+//
+// 19.08.2026 чужая выкатка в 10:34 вернула прод к состоянию, где задача дня НЕ
+// РЕШАЕТСЯ (решение приходило обрывками JSON), а серию можно было объявить
+// числом без единого хода. Прод один на все окна, побеждает последняя выкатка —
+// откат повторится, и заметить его должен сторож, а не случайность.
+//
+// Проверяется ПРИГОДНОСТЬ, а не ответ 200: сервер может отвечать бодро и при
+// этом обещать то, чего не делает.
+const API = (process.env.API_BASE || "https://api.aevion.app").replace(/[/]+$/, "");
+const UCI = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
+
+async function checkChessPromises() {
+  try {
+    const r = await fetch(`${API}/api/cyberchess-daily/puzzle`, { signal: AbortSignal.timeout(15000) });
+    const j = await r.json();
+    const sol = Array.isArray(j?.puzzle?.sol) ? j.puzzle.sol : [];
+    if (sol.length > 0 && sol.every((m) => UCI.test(String(m)))) {
+      pass++; console.log(`  PASS задача дня решаема (${sol.length} ходов)`);
+    } else {
+      fail++; failures.push("задача дня нерешаема");
+      console.log(`  FAIL задача дня нерешаема — ${JSON.stringify(sol).slice(0, 60)}`);
+    }
+  } catch (e) {
+    fail++; failures.push("задача дня недоступна");
+    console.log(`  FAIL задача дня — ${e.message}`);
+  }
+
+  // Серию нельзя объявить: без сыгранных ходов запрос обязан быть отвергнут.
+  // Проба ничего не записывает именно потому, что её отвергают.
+  try {
+    const r = await fetch(`${API}/api/cyberchess-daily/solve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ streak: 999, day: new Date().toISOString().slice(0, 10), userId: "pages-guard-probe", name: "guard" }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 400 && j?.error === "moves_required") {
+      pass++; console.log("  PASS серию нельзя объявить без ходов");
+    } else {
+      fail++; failures.push("серию можно подделать");
+      console.log(`  FAIL серию можно подделать — ${r.status} ${JSON.stringify(j).slice(0, 60)}`);
+    }
+  } catch (e) {
+    fail++; failures.push("проверка подделки не выполнена");
+    console.log(`  FAIL проверка подделки — ${e.message}`);
+  }
+}
+
 (async () => {
   console.log(`pages-live-smoke against ${BASE} (${PAGES.length} pages)`);
   // Small batches: fast enough, and no thundering herd against prod.
   for (let i = 0; i < PAGES.length; i += 5) {
     await Promise.all(PAGES.slice(i, i + 5).map(checkPage));
   }
-  console.log(`\npages-live-smoke: ${pass}/${PAGES.length} PASS${fail ? ` — FAILING: ${failures.join(", ")}` : ""}`);
+  await checkChessPromises();
+  // Знаменатель — страницы плюс две проверки обещаний: иначе «46/46» при
+  // сломанном обещании читалось бы как полный порядок.
+  const total = PAGES.length + 2;
+  console.log(`\npages-live-smoke: ${pass}/${total} PASS${fail ? ` — FAILING: ${failures.join(", ")}` : ""}`);
   process.exit(fail ? 1 : 0);
 })();

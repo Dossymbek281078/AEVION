@@ -40,6 +40,8 @@ const capture = makeServiceCapture("cyberchessTournaments");
 // server down on a misconfigured deploy.
 const getResultSecret = () => requireProdSecret("CYBERCHESS_WEBHOOK_SECRET", "dev-chess-webhook");
 
+import { getRating, speedOf } from "./cyberchessMatchStore";
+
 const router = Router();
 
 // ── public types ───────────────────────────────────────────────────
@@ -1627,7 +1629,7 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
   });
 });
 
-router.post("/:id/register", (req: Request, res: Response): void => {
+router.post("/:id/register", async (req: Request, res: Response): Promise<void> => {
   const t = TOURNAMENTS.find((x) => x.id === req.params.id);
   if (!t) {
     res.status(404).json({ ok: false, error: "tournament_not_found", id: req.params.id });
@@ -1674,6 +1676,43 @@ router.post("/:id/register", (req: Request, res: Response): void => {
     });
     return;
   }
+  // ── Объявленное ограничение по рейтингу обеспечивается ───────────────────
+  //
+  // На карточке турнира написано «ELO 1800–2400», и человек читает это как
+  // ограничение. До 19.08.2026 оно не проверялось НИГДЕ: зарегистрироваться мог
+  // кто угодно с любым рейтингом. Обещание, которого продукт не держит, — это
+  // первый пункт ворот запуска, а не косметика.
+  //
+  // Проверяем только то, что ЗНАЕМ сами. Три исхода, как и везде:
+  //   партии есть, рейтинг вне рамок → отказ с понятным текстом
+  //   партий нет (0)                 → пускаем: рейтинга ещё не существует,
+  //                                    иначе к 30.08 турниры были бы пусты
+  //   базу спросить не удалось       → пускаем, но это ЗАПИСЫВАЕТСЯ в ответе,
+  //                                    чтобы «пустили» не выглядело «проверили»
+  let eloChecked: "по рейтингу" | "рейтинга нет" | "спросить не удалось" = "рейтинга нет";
+  try {
+    const known = await getRating(userId, speedOf(String(t.timeControl)));
+    if (known === null) {
+      eloChecked = "спросить не удалось";
+    } else if (Number(known.games) > 0) {
+      const r = Math.round(Number(known.rating));
+      if (Number.isFinite(r) && (r < t.eloMin || r > t.eloMax)) {
+        res.status(403).json({
+          ok: false,
+          error: "rating_out_of_range",
+          hint: `турнир для игроков ${t.eloMin}–${t.eloMax}, ваш рейтинг ${r}`,
+          rating: r,
+          eloMin: t.eloMin,
+          eloMax: t.eloMax,
+        });
+        return;
+      }
+      eloChecked = "по рейтингу";
+    }
+  } catch {
+    eloChecked = "спросить не удалось";
+  }
+
   t.registeredUserIds.push(userId);
   t.players += 1;
 
@@ -1717,6 +1756,9 @@ router.post("/:id/register", (req: Request, res: Response): void => {
     tournamentId: t.id,
     title: t.title,
     userId,
+    // Как именно прошло ограничение по рейтингу. «Пустили» и «проверили» —
+    // разные вещи, и различать их должен ответ, а не догадка читающего.
+    eloChecked,
     // Признак для клиента: идентификатор наш, его НАДО сохранить. Без этого
     // следующая регистрация того же человека заведёт нового игрока.
     userIdGenerated,

@@ -97,6 +97,7 @@ import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
 import { paymentsRouter } from "./routes/payments";
 import { qaiRouter } from "./routes/qai";
+import { channelsHealthRouter } from "./routes/channelsHealth";
 import { qstoreRouter } from "./routes/qstore";
 import { qlearnRouter } from "./routes/qlearn";
 import { qmelaninRouter } from "./routes/qmelanin";
@@ -276,6 +277,13 @@ app.get("/api/health/deep", async (_req, res) => {
     });
   }
 });
+
+// Состояние ОБЕЩАННЫХ каналов одним запросом: может ли человек
+// зарегистрироваться и заплатить. Отдельные ручки были у двух каналов из
+// шести, про остальные снаружи нельзя было сказать ничего — и 19.08.2026
+// это стоило нам неработающей регистрации, которую не видела ни одна
+// проверка (сайт 200, /health ok, Sentry молчит).
+app.use("/api/health", channelsHealthRouter);
 
 // Проверка соединения
 app.get("/api/globus/ping", (_req, res) => {

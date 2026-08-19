@@ -71,6 +71,11 @@ const SMOKES = [
   // /api/veilnetx-ledger/chain/head. Починено в самом смоуке, прод трогать
   // не пришлось: 13/13 после правки.
   { name: "fintech-all", script: "fintech-all-smoke.js", readOnly: true },
+
+  // Девятый. Тоже краснел на здоровой странице: искал английское
+  // doppelganger, а /qpersona перевели на русский. Починено ожиданием,
+  // которое переживает перевод (containsAny), 11/11.
+  { name: "ownerless-mvp", script: "ownerless-mvp-smoke.js", readOnly: true },
   // Hub catalog: read-only unified module discovery endpoint.
   { name: "hub-catalog", script: "hub-catalog-smoke.js", readOnly: true },
   // Waitlist unsubscribe: validates HMAC token rejection paths.

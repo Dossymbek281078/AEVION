@@ -205,6 +205,10 @@ async function ensureBureauTables(): Promise<void> {
       "certId" TEXT NOT NULL,
       "signedHash" TEXT NOT NULL,
       "signature" TEXT NOT NULL,
+      -- Чем именно подписано. Без этого поля демо-подпись НЕОТЛИЧИМА от
+      -- настоящей для того, кто читает сертификат, — а это и есть худшее, что
+      -- может быть у продукта, который продаёт доказуемость (19.08.2026).
+      "signatureAlgorithm" TEXT NOT NULL DEFAULT 'demo-hmac-sha256',
       "notaryRegistryRef" TEXT,
       "signedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       "revokedAt" TIMESTAMPTZ,
@@ -2497,6 +2501,58 @@ bureauRouter.delete("/org/:orgId/invites/:inviteId", async (req, res) => {
 async function ensureNotarizeColumns(): Promise<void> {
   await pool.query(`ALTER TABLE "BureauNotarySignature" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'pending';`);
   await pool.query(`ALTER TABLE "BureauNotarySignature" ADD COLUMN IF NOT EXISTS "requestedByUserId" TEXT;`);
+  await pool.query(
+    `ALTER TABLE "BureauNotarySignature" ADD COLUMN IF NOT EXISTS "signatureAlgorithm" TEXT NOT NULL DEFAULT 'demo-hmac-sha256';`,
+  );
+}
+
+/**
+ * Чем подписан сертификат — и почему об этом обязательно писать в самом
+ * сертификате.
+ *
+ * До 19.08.2026 подпись считалась так:
+ *
+ *     crypto.createHmac("sha256", notary.publicKeyEd25519 || "demo-key")
+ *
+ * Ключом служил ПУБЛИЧНЫЙ ключ нотариуса. Публичный — известный всем по
+ * определению, значит пересчитать значение мог кто угодно: certId, contentHash
+ * и открытый ключ суть открытые данные. Это не слабая криптография, а её
+ * отсутствие: свойства «подписать мог только держатель закрытого ключа» не было
+ * вовсе, и «нотариально заверенный» сертификат не доказывал третьей стороне
+ * ничего.
+ *
+ * Хуже самого дефекта было то, что такая подпись выглядела как настоящая.
+ * Поэтому здесь два изменения, и первое важнее второго:
+ *
+ *   1. Сертификат ВСЕГДА называет, чем он подписан. Читатель видит
+ *      `demo-hmac-sha256` и понимает, что доказательством это не является.
+ *   2. Если задан закрытый ключ, подпись становится настоящей — Ed25519.
+ *
+ * Ключ приходит из BUREAU_NOTARY_SIGNING_KEY (PKCS#8 PEM). Его заводит человек;
+ * пока переменной нет, режим честно остаётся демонстрационным.
+ */
+export type SignatureResult = { signature: string; algorithm: string };
+
+export function signNotarization(
+  payload: string,
+  notaryPublicKey: string | null,
+): SignatureResult {
+  const pem = process.env.BUREAU_NOTARY_SIGNING_KEY?.trim();
+  if (pem) {
+    // Ed25519 подписывает сообщение целиком, без предварительного хеша, —
+    // поэтому алгоритм у crypto.sign() null, и это не упущение.
+    const signature = crypto
+      .sign(null, Buffer.from(payload, "utf8"), pem)
+      .toString("base64");
+    return { signature, algorithm: "ed25519" };
+  }
+  // Демонстрационный режим. Оставлен, чтобы поток нотаризации работал до
+  // появления ключа, но назван своим именем в возвращаемом значении.
+  const signature = crypto
+    .createHmac("sha256", notaryPublicKey || "demo-key")
+    .update(payload)
+    .digest("hex");
+  return { signature, algorithm: "demo-hmac-sha256" };
 }
 
 /**
@@ -2619,19 +2675,20 @@ bureauRouter.post("/admin/cert/:certId/notarize/sign", async (req, res) => {
       `SELECT "publicKeyEd25519","fullName" FROM "BureauNotary" WHERE "id" = $1`,
       [sigRow.rows[0].notaryId],
     );
-    // Demo: HMAC-SHA256 with notary public key as secret (real impl would use Ed25519 private key held by notary).
-    const demoSig = crypto.createHmac("sha256", notary.rows[0].publicKeyEd25519 || "demo-key")
-      .update(`${certId}:${contentHash}`)
-      .digest("hex");
+    const signed = signNotarization(
+      `${certId}:${contentHash}`,
+      notary.rows[0].publicKeyEd25519 || null,
+    );
 
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
       await client.query(
         `UPDATE "BureauNotarySignature"
-            SET "signature" = $1, "status" = 'signed', "signedAt" = NOW(), "notaryRegistryRef" = $2
+            SET "signature" = $1, "status" = 'signed', "signedAt" = NOW(),
+                "notaryRegistryRef" = $2, "signatureAlgorithm" = $4
           WHERE "id" = $3`,
-        [demoSig, registryRef, notarySignatureId],
+        [signed.signature, registryRef, notarySignatureId, signed.algorithm],
       );
       await client.query(
         `UPDATE "IPCertificate"

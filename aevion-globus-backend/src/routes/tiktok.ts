@@ -41,7 +41,13 @@
 //   TIKTOK_CLIENT_SECRET  — matching secret
 //   TIKTOK_REDIRECT_URI   — must EXACTLY match a redirect URI registered in
 //                           the TikTok app, e.g.
-//                           https://aevion.vercel.app/api-backend/api/tiktok/auth/callback
+//                           https://aevion.app/api-backend/api/tiktok/auth/callback
+//                           ⚠️ 19.08.2026: в приложении TikTok зарегистрирован
+//                           СТАРЫЙ адрес на aevion.vercel.app, и переменная на
+//                           проде указывает туда же. Вход работает только потому,
+//                           что алиас Vercel ещё жив. Менять надо в паре:
+//                           сперва добавить новый URI в кабинете TikTok, затем
+//                           переключить переменную — TikTok сверяет строку дословно.
 //   TIKTOK_SCOPES         — optional, default "user.info.basic,video.publish"
 //   TIKTOK_SUCCESS_REDIRECT — optional frontend path to return to,
 //                           default "/tiktok-publisher"

@@ -6362,7 +6362,7 @@ devhubRouter.get("/studio/credits", async (req, res) => {
         pro:        { video: 50,  image: 200, tts: 30000,  music: 100, deploy: -1 },
         enterprise: { video: -1,  image: -1,  tts: -1,     music: -1,  deploy: -1 },
       },
-      upgradeUrl: "https://aevion.vercel.app/studio#upgrade",
+      upgradeUrl: "https://aevion.app/studio#upgrade",
     });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Credits fetch failed" });

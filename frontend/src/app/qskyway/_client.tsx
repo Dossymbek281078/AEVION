@@ -994,12 +994,10 @@ export default function QSkywayClient() {
                     }} />
                   {meta.suspect.length > 0 && (
                     <span
-                      title={
-                        t("qskyway.height.suspectTip")
-                      }
-                      style={{ color: "#fbbf24", textDecoration: "underline dotted", cursor: "help" }}
+                      style={{ color: "#fbbf24", textDecoration: "underline dotted" }}
                     >
                       {t("qskyway.height.suspect")}{" "}
+                      <InfoTip label={t("qskyway.height.suspect")} text={t("qskyway.height.suspectTip")} size={12} />{" "}
                       {meta.suspect
                         .map((o) => {
                           if (o.was !== undefined) {
@@ -1071,7 +1069,9 @@ export default function QSkywayClient() {
                       одной оговорки. Легенда говорит теми же словами, что список. */}
                   <span>{t("qskyway.legend.pads")} <span style={{ color: "#2dd4bf" }}>●</span> {t("qskyway.pad.candidate")} · <span style={{ color: "#fbbf24" }}>●</span> {t("qskyway.legend.needsInfraShort")} · <span style={{ color: "#fb7185" }}>●</span> {t("qskyway.pad.unsuitable")} · <span style={{ color: "#c8964f" }}>▨</span> {t("qskyway.legend.heightGuessed")}
                     {padBan && (
-                      <span style={{ color: "#fb7185" }} title={padBan.rule}> · 🚫 {t("qskyway.pad.cityProhibited")}</span>
+                      <span style={{ color: "#fb7185" }}> · 🚫 {t("qskyway.pad.cityProhibited")}{" "}
+                        <InfoTip label={t("qskyway.pad.cityProhibited")} text={padBan.rule} size={11} />
+                      </span>
                     )}
                   </span>
                 </div>
@@ -1242,8 +1242,9 @@ export default function QSkywayClient() {
                             в городе под сплошным запретом оставалось единственным,
                             что человек здесь читает о полёте. */}
                         {padBan && (
-                          <div style={{ color: "#fb7185", fontSize: 10, marginTop: 2 }} title={padBan.rule}>
+                          <div style={{ color: "#fb7185", fontSize: 10, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
                             🚫 {t("qskyway.pad.prohibited", { authority: padBan.authority })}
+                            <InfoTip label={t("qskyway.pad.cityProhibited")} text={padBan.rule} size={11} />
                           </div>
                         )}
                       </div>

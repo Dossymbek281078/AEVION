@@ -1,0 +1,216 @@
+import type { Metadata } from "next";
+import paper from "@/styles/aevionPaper.module.css";
+import { getApiBase } from "@/lib/apiBase";
+import { channelFrom } from "@/lib/products";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
+
+// Посадочная запуска DevHub — 13 сентября (дата из scripts/launch-readiness.mjs).
+//
+// ПОЧЕМУ СТРАНИЦА НАЧИНАЕТСЯ С «ОПИШИТЕ», А НЕ СО СПИСКА ВОЗМОЖНОСТЕЙ.
+// Основатель однажды открыл /devhub и не понял, что делать: вход выглядел
+// инвентарём — шаблоны, модели, панели. Модуль же устроен наоборот, от фразы
+// «сделай мне…». Поэтому первое, что человек читает здесь, — предложение
+// описать задачу словами, а перечень остаётся ниже как подтверждение.
+//
+// ПОЧЕМУ ЗДЕСЬ НЕТ НИ ОДНОГО ЧИСЛА ПРО СОЗДАННЫЕ ПРОЕКТЫ. Замер 18.08:
+// /api/devhub/projects отдаёт 17 записей, но уникальных названий семь, из них
+// одиннадцать раз один и тот же «таймер помодоро», а остальное — final retest,
+// pomodoro retest, react-preview-smoke, cf-pages-test, prod-smoke-test. Статусы:
+// 16 draft и 1 live. Это прогоны разработки, а не работа пользователей: число
+// было бы правдой формально и обманом по сути. То же правило, по которому
+// сделана посадочная патентного бюро.
+//
+// ЧТО ПРОВЕРЕНО ПЕРЕД ТЕМ, КАК ОБЕЩАТЬ (19.08, боевой прод api.aevion.app):
+//   • GET /api/devhub/templates        → 200, 5 начал: Next.js App, Express API,
+//     Landing Page, React SPA, Analytics Dashboard;
+//   • GET /api/devhub/agent/templates  → 200, 3 сценария, каждый собирает
+//     страницу вместе с озвучкой и звуком;
+//   • GET /api/devhub/media/3d/models  → 200, configured: true (trellis, hunyuan3d);
+//   • GET /api/devhub/media/video/models → 200, configured: true (veo-3, veo-3-fast,
+//     seedance);
+//   • POST /api/constitution/waitlist/subscribe с мусором → 400 — приём адресов
+//     есть и поля проверяет.
+//
+// ЦЕНЫ ЗДЕСЬ НЕТ, И ЭТО НЕ УПУЩЕНИЕ. В плане запуска у модуля стоит $149/мес, но
+// в прайсе (MODULES_PRICING) записи devhub нет вовсе, в магазине позиции нет, а
+// политика платного доступа модуля не знает — проверено на проде. Пока это так,
+// назвать цену значило бы отправить человека к кнопке, которой не существует.
+// Разбор — в Desktop\АЕВИОН\05-DevHub\2026-08-12\DEVHUB-НЕТ-В-РЕЕСТРЕ-запуск-13-09.md
+//
+// ЧЕГО ЗДЕСЬ НАМЕРЕННО НЕТ: обещания выкладки «в один клик». Публикация у модуля
+// есть, но её я не проверял живым прогоном, а история этого пути в репозитории
+// прямо предупреждает: успех деплоя раньше отмечался до того, как страница
+// начинала отвечать (см. конвенцию «deploy = uploaded + serves» в
+// aevion-globus-backend/CLAUDE.md). Не проверил — не обещаю.
+
+export const metadata: Metadata = {
+  title: "AEVION DevHub — запуск 13 сентября",
+  description:
+    "Опишите приложение словами — DevHub соберёт проект, страницы, картинки и озвучку. Пять готовых начал и сценарии сборки под ключ.",
+  openGraph: {
+    title: "AEVION DevHub — запуск 13 сентября",
+    description:
+      "«Сделай мне…» вместо конструктора: проект, медиа и озвучка собираются по описанию. Ранний доступ по адресу почты.",
+    type: "website",
+  },
+};
+
+/**
+ * Жив ли контур прямо сейчас. Обещать работу модуля, не проверив её, нельзя.
+ *
+ * Живым считаем всё, что ответило НЕ 404 — по той же причине, что на посадочной
+ * мультичата: осмысленный отказ (400 на неверные поля, 402 за платной стеной)
+ * доказывает, что роут смонтирован, а `r.ok` счёл бы его мёртвым.
+ */
+async function alive(path: string, init?: RequestInit): Promise<boolean> {
+  try {
+    const r = await fetch(`${getApiBase()}${path}`, { ...init, next: { revalidate: 1800 } });
+    return r.status !== 404;
+  } catch {
+    return false;
+  }
+}
+
+function daysUntilLaunch(): number {
+  const launch = Date.UTC(2026, 8, 13); // 13 сентября 2026
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((launch - today) / 86_400_000);
+}
+
+export default async function DevhubLaunchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
+  const [tplUp, agentsUp, mediaUp] = await Promise.all([
+    alive("/api/devhub/templates"),
+    alive("/api/devhub/agent/templates"),
+    alive("/api/devhub/media/video/models"),
+  ]);
+  const left = daysUntilLaunch();
+
+  // Метка канала — та же механика, что на посадочных бюро, шахмат и мультичата:
+  // без неё после запуска не ответить, какой источник привёл людей именно сюда.
+  const channel = channelFrom((await searchParams).c);
+  const source = channel ? `devhub-${channel}` : "devhub";
+
+  return (
+    <main className={paper.paper} style={{ minHeight: "100vh", padding: "32px 18px 56px" }}>
+      <div style={{ maxWidth: 620, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
+        <header>
+          <div className={paper.kicker}>AEVION · DevHub</div>
+          <h1
+            className={paper.serifTitle}
+            style={{ fontSize: "clamp(28px, 5vw, 36px)", lineHeight: 1.15, marginTop: 10 }}
+          >
+            Опишите приложение словами
+          </h1>
+          <p style={{ color: "var(--ink-soft)", fontSize: 15.5, lineHeight: 1.6, margin: "12px 0 0" }}>
+            «Сделай таймер помодоро с настройкой длительности» — и DevHub собирает
+            проект: код, страницы, а при необходимости картинки и озвучку к ним.
+            Начинать со списка возможностей не нужно, он ниже — просто чтобы вы
+            видели, из чего собирается.
+            {left > 0
+              ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`} — 13 сентября.`
+              : " Уже открыто."}
+          </p>
+        </header>
+
+        <WaitlistCapture
+          source={source}
+          tone="light"
+          title="Написать вам в день запуска"
+          description="Одно письмо на запуск и условия раннего доступа. Ничего больше."
+        />
+
+        <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className={paper.sectionHead}>
+            <h2 className={paper.serifTitle} style={{ fontSize: 21 }}>
+              Что происходит после описания
+            </h2>
+          </div>
+
+          <Step
+            n={1}
+            title="Проект собирается с готового начала"
+            note="Пять начал на выбор, и выбирать их вручную не обязательно: Next.js с серверными ручками, REST API на TypeScript, лендинг, одностраничное приложение на Vite, панель с графиками."
+            live={tplUp}
+          />
+          <Step
+            n={2}
+            title="Сценарий доводит до готовой страницы"
+            note="Три сценария собирают не только вёрстку: лендинг — с заголовком, призывом, озвучкой и звуковым эффектом; статью — с картинкой в шапке и аудиочтением; панель — с карточками, графиком и голосовым онбордингом."
+            live={agentsUp}
+          />
+          <Step
+            n={3}
+            title="Картинки, видео и голос — внутри, а не сбоку"
+            note="Генерация подключена по-настоящему: видео (veo-3, veo-3-fast, seedance) и объёмные модели (trellis, hunyuan3d). Это те же ключи, что у платформы, — отдельных подписок на медиа не нужно."
+            live={mediaUp}
+          />
+
+          <p style={{ color: "var(--ink-faint)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+            Отметка «работает» ставится не вручную: страница спрашивает у боевого
+            сервера при сборке.
+          </p>
+        </section>
+
+        <section className={paper.card}>
+          <h2 className={paper.serifTitle} style={{ fontSize: 18, marginBottom: 6 }}>
+            Чего мы не обещаем
+          </h2>
+          <p style={{ color: "var(--ink-soft)", fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>
+            Не обещаем выкладку «в один клик»: публикация в модуле есть, но живым
+            прогоном мы её здесь не подтверждали, а раньше на этом пути успех
+            отмечался до того, как страница начинала отвечать. Не называем и число
+            созданных приложений: сегодня в базе почти всё — прогоны разработки, и
+            цифра выглядела бы убедительнее, чем есть на самом деле.
+          </p>
+        </section>
+
+        <footer style={{ borderTop: "1px solid var(--rule)", paddingTop: 16 }}>
+          <p style={{ color: "var(--ink-faint)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+            Пока идёт подготовка, модуль уже открыт:{" "}
+            <a className={paper.link} href="/devhub">
+              посмотреть DevHub
+            </a>
+            . Отписка — одной ссылкой в каждом письме.
+          </p>
+        </footer>
+      </div>
+    </main>
+  );
+}
+
+function Step({ n, title, note, live }: { n: number; title: string; note: string; live: boolean }) {
+  return (
+    <div className={paper.card} style={{ display: "flex", gap: 12 }}>
+      <div
+        className={paper.serifTitle}
+        style={{ fontSize: 20, color: "var(--teal-deep)", lineHeight: 1.2 }}
+      >
+        {n}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+          <span className={paper.serifTitle} style={{ fontSize: 16.5 }}>
+            {title}
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--mono)",
+              fontSize: 11,
+              color: live ? "var(--teal-deep)" : "var(--ink-faint)",
+            }}
+          >
+            {live ? "работает" : "проверяется"}
+          </span>
+        </div>
+        <div style={{ color: "var(--ink-soft)", fontSize: 13.5, lineHeight: 1.55, marginTop: 4 }}>
+          {note}
+        </div>
+      </div>
+    </div>
+  );
+}

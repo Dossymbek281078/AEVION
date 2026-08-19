@@ -107,6 +107,28 @@ describe("отметка версии фронтенда", () => {
     expect(ignored("public/version.json"), "отметка заигнорена — до сборки не доедет").toBe(false);
   });
 
+  it("НЕ попал в репозиторий — иначе отметка начнёт врать при каждом мерже", () => {
+    // Файл обязан жить незакоммиченным: заигнорить его нельзя (не доедет до
+    // сборки — проверено 14.08 на бэкенде), а `git add -A` затащит его молча.
+    // Закоммиченная отметка начинает конфликтовать при слияниях и показывать
+    // чужую ветку как свою.
+    const tracked = (p: string): boolean => {
+      try {
+        execFileSync("git", ["ls-files", "--error-unmatch", p], { cwd: FRONT, stdio: "ignore" });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    // Контроль прибора: заведомо отслеживаемый файл обязан определиться как
+    // отслеживаемый, иначе «не в репозитории» означало бы «git не ответил».
+    expect(tracked("package.json"), "контроль: git не видит package.json").toBe(true);
+    expect(
+      tracked("public/version.json"),
+      "отметка закоммичена — уберите её из индекса: git rm --cached frontend/public/version.json",
+    ).toBe(false);
+  });
+
   it("не исключён и из .vercelignore", () => {
     const p = join(FRONT, "..", ".vercelignore");
     if (!existsSync(p)) return;

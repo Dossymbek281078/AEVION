@@ -259,6 +259,24 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   if (hasSeenWebhook("gumroad", dedupKey)) return res.json({ ok: true, deduped: true });
   markWebhookSeen("gumroad", dedupKey);
 
+  // Канал покупки. withChannel() добавляет его в ссылку Gumroad вместе с
+  // UTM-тройкой, а Gumroad возвращает параметры адреса плоскими ключами
+  // `url_params[...]` — тело приходит form-urlencoded и разбирается через
+  // Object.fromEntries(params.entries()).
+  //
+  // До 19.08.2026 вебхук их не читал: метка доезжала до кассы и терялась ровно
+  // так же, как у LemonSqueezy. Клик по «Купить» мы видели в своих событиях,
+  // а связать ОПЛАТУ с роликом было нечем.
+  //
+  // Запасным берём utm_source: withChannel кладёт туда то же значение, и если
+  // Gumroad когда-нибудь перестанет возвращать наш собственный ключ, метка
+  // всё равно доедет.
+  const purchaseChannel = (
+    raw["url_params[channel]"] ??
+    raw["url_params[utm_source]"] ??
+    ""
+  ).trim().slice(0, 40);
+
   const reference = resolveReference(raw);
 
   // Products from other services (book platform etc.) share this Gumroad account
@@ -415,6 +433,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         period,
         modules: [],
         source: "gumroad",
+        ...(purchaseChannel ? { channel: purchaseChannel } : {}),
       });
 
       console.log(`[gumroad/webhook] paid → provisioned ${tierId} for ${email} (ref=${reference} product=${productId})`);

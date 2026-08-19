@@ -296,16 +296,20 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // не читал, и метка терялась на последнем шаге: клик по «Купить» мы
       // видели в своих событиях, а связать оплату с роликом было нечем.
       //
-      // Пишем в source, а не в новое поле: оно уже есть у подписки и уже
-      // читается наружу (/api/pricing/provisioning). Дословных сравнений
-      // с "lemonsqueezy" в коде нет — проверено грепом по обеим половинам.
+      // Пишем в ОТДЕЛЬНОЕ поле `channel`, а не суффиксом к `source`.
+      // Сперва сделал суффиксом — у LemonSqueezy дословных сравнений нет, и
+      // казалось безопасным. Но у Gumroad такие сравнения есть: страница
+      // /revenue рисует бейдж провайдера через `s.source === "gumroad"`.
+      // Значит `source` — это «через какую кассу прошли деньги», а канал —
+      // другая ось, и складывать их в одно поле нельзя ни там, ни здесь.
       const channel = payload.meta?.custom_data?.channel?.trim().slice(0, 40);
       const result = await provisionSubscription({
         email,
         tierId,
         period: "monthly",
         modules,
-        source: channel ? `lemonsqueezy:${channel}` : "lemonsqueezy",
+        source: "lemonsqueezy",
+        ...(channel ? { channel } : {}),
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);
       return res.json({ ok: true, action: "activated", tierId, subscriptionId: result.subscription.id });

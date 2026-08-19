@@ -7,6 +7,9 @@ import { ensureQStoreTables, isQStoreDbReady } from "../lib/ensureQStoreTables";
 import { applyOgEtag } from "../lib/ogEtag";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 
+const WARN =
+  "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
+
 const captureQStoreError = makeServiceCapture("qstore");
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "https://aevion.app").replace(/\/$/, "");
@@ -135,8 +138,13 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
       );
       res.json({ products: rows.rows, total: rows.rowCount ?? rows.rows.length, sort });
       return;
-    } catch {
-      // fall through to in-memory
+    } catch (e) {
+      // Магазин: «товар не найден» при отказе базы — это несостоявшаяся
+      // покупка, о которой никто не узнает. Раньше голый catch уводил
+      // управление в память, пустую в проде.
+      console.error("[QStore] GET /products DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
     }
   }
 
@@ -176,8 +184,13 @@ qstoreRouter.get("/products/:id", async (req: Request, res: Response) => {
       if (row.rows.length === 0) { res.status(404).json({ error: "Product not found" }); return; }
       res.json({ product: row.rows[0] });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // Голый catch без возврата уводил управление ниже, в память — в
+      // проде она пуста, и запись объявлялась несуществующей. «Не
+      // найдено» на отказ базы законно и потому незаметно.
+      console.error("[QStore] GET /products/:id DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
     }
   }
   const product = memProducts.get(id);

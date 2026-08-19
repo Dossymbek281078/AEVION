@@ -226,7 +226,14 @@ mapRealityRouter.get("/signals", async (req: Request, res: Response) => {
       ]);
       return res.json({ signals: rows, total: cnt[0]?.total ?? rows.length });
     }
-  } catch (e) { capture(e); console.error("[MapReality] GET /signals DB error", e); }
+  } catch (e) {
+    capture(e);
+    console.error("[MapReality] GET /signals DB error", e);
+    // Ниже лежит запасная память, в проде пустая: список ушёл бы как
+    // { signals: [], total: 0 } — то есть «сигналов нет» вместо «не смогли
+    // спросить». Пустой список читается как факт о мире, а не как отказ.
+    return res.status(503).json({ error: "storage_unavailable", warning: WARN });
+  }
 
   let signals = memSignals.filter((s) => s.status === statusFilter);
   if (category && CATEGORIES.includes(category as Category)) {

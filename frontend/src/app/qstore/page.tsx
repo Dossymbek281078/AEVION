@@ -8,6 +8,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { getAuthToken } from "@/lib/auth";
 
 interface Product {
   id: string;
@@ -275,7 +276,7 @@ export default function QStorePage() {
   }, [fetchFeatured]);
 
   const handlePurchase = async (productId: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) {
       setNotice("Sign in to purchase products.");
       return;
@@ -297,7 +298,13 @@ export default function QStorePage() {
       } else if (d.error?.includes("checkout_not_enabled")) {
         setNotice("Payment gateway is being verified — available within 1-3 days. Write us at support@aevion.app to purchase manually.");
       } else {
-        setNotice(d.error || "Purchase failed");
+        // Сервер отдаёт человеческий `message` рядом с машинным `error` —
+        // читаем именно его. Без этого покупатель видел бы код вроде
+        // "no_payment_provider": 19.08.2026 в бэкенде появились честные
+        // отказы вместо тихой выдачи товара без оплаты, и без этой строки
+        // одна незаметная неисправность заменилась бы другой — кнопкой,
+        // которая ругается непонятным словом.
+        setNotice(d.message || d.error || "Purchase failed");
       }
     } catch {
       setNotice("Network error");
@@ -307,7 +314,7 @@ export default function QStorePage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) { setFormError("Sign in to list products"); return; }
     if (!form.title.trim()) { setFormError("Title is required"); return; }
     setCreating(true);

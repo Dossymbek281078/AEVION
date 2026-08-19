@@ -68,7 +68,7 @@ export async function ensureDb(): Promise<void> {
         "losses"      INTEGER NOT NULL DEFAULT 0,
         "draws"       INTEGER NOT NULL DEFAULT 0,
         "peak"        DOUBLE PRECISION NOT NULL DEFAULT 1500,
-        "updatedAt"   TIMESTAMP NOT NULL DEFAULT now(),
+        "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT now(),
         PRIMARY KEY ("userId","speed")
       );
       CREATE INDEX IF NOT EXISTS "cyberrating_leaderboard_idx"
@@ -92,8 +92,8 @@ export async function ensureDb(): Promise<void> {
         "whiteRatingAfter"  DOUBLE PRECISION,
         "blackRatingAfter"  DOUBLE PRECISION,
         "tournamentId"      TEXT,
-        "createdAt"         TIMESTAMP NOT NULL DEFAULT now(),
-        "endedAt"           TIMESTAMP
+        "createdAt"         TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "endedAt"           TIMESTAMPTZ
       );
       CREATE INDEX IF NOT EXISTS "cybermatch_white_idx" ON "CyberMatch" ("whiteUserId","createdAt" DESC);
       CREATE INDEX IF NOT EXISTS "cybermatch_black_idx" ON "CyberMatch" ("blackUserId","createdAt" DESC);
@@ -110,7 +110,7 @@ export async function ensureDb(): Promise<void> {
         "displayName" TEXT,
         "balance"     BIGINT NOT NULL DEFAULT 0,
         "earnedTotal" BIGINT NOT NULL DEFAULT 0,
-        "updatedAt"   TIMESTAMP NOT NULL DEFAULT now()
+        "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS "cyberwallet_leaderboard_idx" ON "CyberWallet" ("balance" DESC);
 
@@ -128,7 +128,7 @@ export async function ensureDb(): Promise<void> {
         "matchId" TEXT NOT NULL,
         "userId"  TEXT NOT NULL,
         "amount"  INTEGER NOT NULL,
-        "paidAt"  TIMESTAMP NOT NULL DEFAULT now(),
+        "paidAt"  TIMESTAMPTZ NOT NULL DEFAULT now(),
         PRIMARY KEY ("matchId","userId")
       );
       CREATE INDEX IF NOT EXISTS "cyberwalletaward_match_idx" ON "CyberWalletAward" ("matchId");

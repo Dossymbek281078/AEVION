@@ -90,8 +90,8 @@ async function ensureDb(): Promise<void> {
         "fideEstimate"   DOUBLE PRECISION,
         "stats"          JSONB NOT NULL,
         "ip"             TEXT,
-        "analysedAt"     TIMESTAMP NOT NULL,
-        "storedAt"       TIMESTAMP NOT NULL DEFAULT now()
+        "analysedAt"     TIMESTAMPTZ NOT NULL,
+        "storedAt"       TIMESTAMPTZ NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS "cyberanticheat_user_idx" ON "CyberAnticheatReport" ("userId","analysedAt" DESC);
       CREATE INDEX IF NOT EXISTS "cyberanticheat_flag_idx" ON "CyberAnticheatReport" ("verdict","suspicionScore" DESC);

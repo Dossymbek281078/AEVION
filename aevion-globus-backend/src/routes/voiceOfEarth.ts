@@ -261,7 +261,7 @@ voiceOfEarthRouter.post(
            RETURNING *`,
           [titleStored, artistAlias, language, lyrics, mood, audioUrl, contentHash],
         );
-        return res.status(201).json({ track: rows[0], contentHash });
+        return res.status(201).json({ track: rows[0], contentHash, storage: "db" });
       } catch (e) {
         console.error("[VoiceOfEarth] POST /tracks DB error", e);
       }
@@ -283,7 +283,7 @@ voiceOfEarthRouter.post(
     memTracks.push(track);
     // keep last 100 in memory
     if (memTracks.length > 100) memTracks.splice(0, memTracks.length - 100);
-    res.status(201).json({ track, contentHash });
+    res.status(201).json({ track, contentHash, storage: "memory" });
   },
 );
 

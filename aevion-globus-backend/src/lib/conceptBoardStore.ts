@@ -72,6 +72,18 @@ export interface ConceptMessage {
   extra: Record<string, unknown>;
   tags: string[];
   createdAt: string;
+  /**
+   * Где сообщение оказалось на самом деле.
+   *
+   * До 19.08.2026 запасной путь возвращал сообщение в ТОМ ЖЕ виде, что успешная
+   * запись в базу: человек получал 201 и свою идею, а она лежала в Map на 200
+   * записей и исчезала при следующем перезапуске. Выкаток в день бывает шесть.
+   * О подмене знал только console.warn, которого никто не читает.
+   *
+   * Признак подставленных данных должен ехать В САМИХ ДАННЫХ. Доской пользуются
+   * 18 модулей, и точка монтажа одна — значит и починка одна.
+   */
+  storage: "db" | "memory";
 }
 
 const MEM_MAX = 200;
@@ -89,7 +101,9 @@ export async function addMessage(
 ): Promise<ConceptMessage> {
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
-  const msg: ConceptMessage = { id, payload, extra, tags, createdAt };
+  // Признак ставится там, где исход ИЗВЕСТЕН, а не здесь: заготовка ещё
+  // нигде не сохранена, и «db» по умолчанию был бы враньём по умолчанию.
+  const msg = { id, payload, extra, tags, createdAt };
 
   const pool = getPool();
   try {
@@ -100,17 +114,18 @@ export async function addMessage(
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [id, moduleId, payload.idea, payload.rationale, payload.author, tags, JSON.stringify(extra), createdAt],
       );
-      return msg;
+      return { ...msg, storage: "db" };
     }
   } catch (e: any) {
     console.warn(`[ConceptBoard] insert failed for ${moduleId}, falling back to memory: ${e?.message}`);
   }
 
+  const fallback: ConceptMessage = { ...msg, storage: "memory" };
   const list = memStore.get(moduleId) ?? [];
-  list.unshift(msg);
+  list.unshift(fallback);
   if (list.length > MEM_MAX) list.length = MEM_MAX;
   memStore.set(moduleId, list);
-  return msg;
+  return fallback;
 }
 
 export async function getMessages(moduleId: string, limit: number): Promise<ConceptMessage[]> {
@@ -132,6 +147,7 @@ export async function getMessages(moduleId: string, limit: number): Promise<Conc
         extra: (r.extra && typeof r.extra === "object") ? r.extra : {},
         tags: Array.isArray(r.tags) ? r.tags : [],
         createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+        storage: "db" as const,
       }));
     }
   } catch (e: any) {
@@ -221,6 +237,8 @@ interface ProjectedMessage {
   payload: Record<string, unknown>;
   tags: string[];
   createdAt: string;
+  /** "memory" = запись не переживёт перезапуск. См. ConceptMessage.storage. */
+  storage: "db" | "memory";
 }
 
 function projectMessage(msg: ConceptMessage, fieldMap?: ConceptBoardFieldMap): ProjectedMessage {
@@ -229,6 +247,9 @@ function projectMessage(msg: ConceptMessage, fieldMap?: ConceptBoardFieldMap): P
     payload: buildResponsePayload(msg, fieldMap),
     tags: msg.tags,
     createdAt: msg.createdAt,
+    // Наружу тоже: клиент, показавший «сохранено», должен иметь возможность
+    // сказать правду, если сохранено оно только до перезапуска.
+    storage: msg.storage,
   };
 }
 

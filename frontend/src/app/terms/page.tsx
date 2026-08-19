@@ -21,12 +21,25 @@ export const metadata: Metadata = {
 };
 
 export default function TermsPage() {
-  const updated = "April 26, 2026";
+  const updated = "August 19, 2026";
   return (
     <main>
       <ProductPageShell maxWidth={760}>
         <h1 style={{ fontSize: 28, fontWeight: 900, marginBottom: 6, letterSpacing: "-0.02em" }}>Terms of Service</h1>
         <p style={{ color: "#64748b", marginBottom: 24, fontSize: 13 }}>Last updated: {updated}</p>
+
+        {/* Кто продавец. Добавлено 19.08.2026: до этого ни одна юридическая
+            страница не называла юрлицо вовсе — компания была зарегистрирована
+            20.07.2026, а страницы этого не знали. Платёжные системы при проверке
+            сверяют заявителя с тем, что написано на сайте; расхождение — самая
+            частая причина отказа. Реквизиты — из подписанной Form SS-4. */}
+        <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "14px 16px", marginBottom: 26, background: "#f8fafc", fontSize: 14, lineHeight: 1.6, color: "#334155" }}>
+          <b>Who you are contracting with.</b> The AEVION platform is operated by
+          {" "}<b>AEVION LLC</b>, a limited liability company registered in the State of
+          Wyoming, United States, with its registered office at 30 N Gould St, Ste R,
+          Sheridan, WY 82801, USA. Day-to-day operations are conducted from the Republic
+          of Kazakhstan.
+        </div>
 
         <div style={{ lineHeight: 1.75, color: "#334155", fontSize: 15 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>1. Acceptance of Terms</h2>
@@ -61,6 +74,18 @@ export default function TermsPage() {
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>6. AEVION Bank</h2>
           <p>AEVION Bank provides digital wallet services within the ecosystem. AEVION Credits (AEC) are internal units used for transactions between users. AEC is not a cryptocurrency or legal tender. Withdrawal to external accounts is subject to verification and applicable fees.</p>
 
+          {/* Перенесено 19.08.2026 из /legal/terms — страницы-сироты, на которую
+              никто не ссылался, но которая жила на проде отдельным комплектом
+              условий. Там эти два раздела были, здесь их не было вовсе: платный
+              продукт без описания списаний и отмены — прямой вопрос от платёжной
+              системы при проверке и повод для спора с покупателем. */}
+          <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>6a. Subscriptions, Billing &amp; Cancellation</h2>
+          <p>Paid subscriptions and one-off purchases are processed by our authorized payment processors, <b>Gumroad</b> and <b>Lemon Squeezy</b>, who act as Merchant of Record for those transactions. Recurring subscriptions renew automatically at the end of each billing period unless cancelled before the renewal date. Where a free trial is offered, no charge is made until the trial ends.</p>
+          <p>You may cancel a subscription at any time; cancellation stops future renewals and does not retroactively refund the current period. Refund terms are set out in our <a href="/pricing/refund-policy" style={{ color: "#0d9488", fontWeight: 700 }}>Refund Policy</a>.</p>
+
+          <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>6b. Suspension &amp; Termination</h2>
+          <p>We may suspend or terminate an account for violation of these Terms. You may close your account at any time from your account settings. Certificates and attestations already issued remain cryptographically verifiable after termination — closing an account does not invalidate evidence already committed.</p>
+
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>7. Prohibited Conduct</h2>
           <p>You may not: submit fraudulent content, manipulate voting systems, attempt to bypass security measures, use the platform for money laundering, or violate any applicable laws.</p>
 
@@ -75,7 +100,23 @@ export default function TermsPage() {
           <p>You are solely responsible for the content you publish and represent that you own or have the necessary rights to it. You agree to comply with TikTok&rsquo;s Community Guidelines, Terms of Service and Content Sharing Guidelines when using this feature. AEVION is an independent service, is not affiliated with, sponsored by or endorsed by TikTok, and TikTok is a trademark of its respective owner. AEVION is not liable for any action TikTok takes with respect to your account or your content.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>10. Contact</h2>
-          <p>For questions about these terms, contact us at yahiin1978@gmail.com or through the Help Center.</p>
+          {/* Почему личный адрес, а не legal@ на нашем домене. Причина сильнее,
+              чем кажется, и выяснилась 19.08.2026 двумя сессиями независимо:
+
+              · aevion.io — НЕ НАШ домен. Там работает другая компания с тем же
+                названием (их контакт jonathan@aevion.io). Часть адресов у них
+                живая, то есть письма наших людей уходили бы посторонним. Ставить
+                сюда legal@aevion.io нельзя ни при каких условиях.
+              · aevion.app — наш основной домен, но записи MX у него НЕТ: любой
+                адрес на нём отбивается. Проверено отправкой.
+              · aevion.tech — наш и почту принимает (Hostinger). Годится, но какой
+                адрес печатать на юридической странице — решение основателя, а не
+                массовой замены: ящик мало завести, его надо читать.
+
+              До этого решения стоит адрес, который проверен как рабочий. Красивый
+              адрес, не принимающий писем, хуже рабочего некрасивого. */}
+          <p>For questions about these Terms, contact AEVION LLC at yahiin1978@gmail.com or through the Help Center.</p>
+          <p style={{ color: "#64748b", fontSize: 13 }}>AEVION LLC · 30 N Gould St, Ste R, Sheridan, WY 82801, United States</p>
         </div>
       </ProductPageShell>
     </main>

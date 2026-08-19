@@ -21,12 +21,23 @@ export const metadata: Metadata = {
 };
 
 export default function PrivacyPage() {
-  const updated = "April 26, 2026";
+  const updated = "August 19, 2026";
   return (
     <main>
       <ProductPageShell maxWidth={760}>
         <h1 style={{ fontSize: 28, fontWeight: 900, marginBottom: 6, letterSpacing: "-0.02em" }}>Privacy Policy</h1>
         <p style={{ color: "#64748b", marginBottom: 24, fontSize: 13 }}>Last updated: {updated}</p>
+
+        {/* Кто оператор данных. Добавлено 19.08.2026 вместе с тем же блоком в
+            /terms: страница обещала права на доступ и удаление, но не называла
+            того, к кому эти требования предъявлять. Реквизиты — из подписанной
+            Form SS-4, компания зарегистрирована 20.07.2026. */}
+        <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "14px 16px", marginBottom: 26, background: "#f8fafc", fontSize: 14, lineHeight: 1.6, color: "#334155" }}>
+          <b>Data controller.</b> The controller of personal data processed through the
+          AEVION platform is <b>AEVION LLC</b>, a Wyoming limited liability company,
+          registered office 30 N Gould St, Ste R, Sheridan, WY 82801, United States.
+          Operations are conducted from the Republic of Kazakhstan.
+        </div>
 
         <div style={{ lineHeight: 1.75, color: "#334155", fontSize: 15 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>1. Information We Collect</h2>
@@ -70,7 +81,12 @@ export default function PrivacyPage() {
           <p><strong>Your content.</strong> Videos you choose to publish are transmitted to TikTok on your behalf; once on TikTok, your content and its visibility are governed by TikTok&rsquo;s own Terms and Privacy Policy. You are responsible for ensuring content you publish complies with TikTok&rsquo;s Community Guidelines.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>9. Contact</h2>
-          <p>Data Protection Officer: yahiin1978@gmail.com. AEVION, Astana, Kazakhstan.</p>
+          {/* Адрес проверен отправкой 19.08.2026. Не privacy@aevion.io: этот
+              домен принадлежит ДРУГОЙ компании с тем же названием — запросы на
+              удаление данных уходили бы посторонним. У aevion.app записи MX нет
+              вовсе. Разбор — в комментарии на /terms. */}
+          <p>Privacy contact: yahiin1978@gmail.com.</p>
+          <p style={{ color: "#64748b", fontSize: 13 }}>AEVION LLC · 30 N Gould St, Ste R, Sheridan, WY 82801, United States</p>
         </div>
       </ProductPageShell>
     </main>

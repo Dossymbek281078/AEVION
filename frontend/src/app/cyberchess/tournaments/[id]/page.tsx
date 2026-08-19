@@ -298,6 +298,37 @@ export default function TournamentDetailPage({
     }
   };
 
+  // ── выход из турнира ─────────────────────────────────────────────────────
+  //
+  // До 19.08.2026 выйти было нельзя: ручки не существовало, и записавшийся
+  // оставался в списке навсегда. Кнопка появляется только после регистрации и
+  // только до старта — после него сетка уже построена.
+  //
+  // Билет отправляется вместе с id: сервер по нему и подтверждает право. Без
+  // билета вычеркнуть человека мог бы любой, кто знает его идентификатор.
+  const handleUnregister = async () => {
+    if (reg.phase !== "registered" && reg.phase !== "waiting") return;
+    const { userId, ticketId } = reg;
+    setReg({ phase: "registering" });
+    try {
+      const r = await fetch(`/api-backend/api/cyberchess-tournaments/${tournamentId}/unregister`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, ticketId }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data?.ok) {
+        // Отказ показывается отказом, а не молчаливым возвратом в исходное:
+        // иначе человек решит, что вышел, и не придёт на турнир, где числится.
+        setReg({ phase: "error", message: String(data?.hint || data?.error || `HTTP ${r.status}`) });
+        return;
+      }
+      setReg({ phase: "idle" });
+    } catch (e) {
+      setReg({ phase: "error", message: (e as Error).message });
+    }
+  };
+
   // ── SSE subscription while waiting ───────────────────────────────
   useEffect(() => {
     if (reg.phase !== "waiting") {
@@ -519,6 +550,7 @@ export default function TournamentDetailPage({
             reg={reg}
             realPlayers={!!meta.realPlayers}
             onRegister={handleRegister}
+            onUnregister={handleUnregister}
             full={(meta.players ?? 0) >= (meta.maxPlayers ?? 0) && (meta.maxPlayers ?? 0) > 0}
           />
         )}
@@ -1696,11 +1728,13 @@ function RegPanel({
   reg,
   realPlayers,
   onRegister,
+  onUnregister,
   full,
 }: {
   reg: RegState;
   realPlayers: boolean;
   onRegister: () => void;
+  onUnregister: () => void;
   full: boolean;
 }) {
   const phase = reg.phase;
@@ -1755,6 +1789,22 @@ function RegPanel({
         <span style={{ fontSize: 12, color: T.dim }}>
           ticket: {(reg as { ticketId: string }).ticketId.slice(0, 14)}…
         </span>
+        {/* Выйти можно до старта. Без этой кнопки записавшийся оставался в
+            списке навсегда — согласие человека, а не удобство. */}
+        <button
+          onClick={onUnregister}
+          style={{
+            background: "transparent",
+            color: T.dim,
+            border: `1px solid ${T.border}`,
+            borderRadius: 8,
+            padding: "6px 14px",
+            fontSize: 12,
+            cursor: "pointer",
+          }}
+        >
+          Отменить участие
+        </button>
       </div>
     );
   } else if (phase === "waiting") {

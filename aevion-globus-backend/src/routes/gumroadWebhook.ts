@@ -147,7 +147,14 @@ function resolveReference(raw: Record<string, string>): string {
 
   // 4. Known AEVION permalinks — code-level default so entitlement never depends
   //    on an env var that was never set. See KNOWN_PERMALINK_REFERENCE above.
-  if (pingSlug && KNOWN_PERMALINK_REFERENCE[pingSlug]) {
+  // hasOwnProperty.call, а не просто KNOWN_PERMALINK_REFERENCE[pingSlug]: слаг
+  // приходит из ТЕЛА вебхука, а обычный объект наследует ключи прототипа.
+  // POST с `product_permalink=constructor` (адрес ping-ручки публично известен)
+  // возвращал отсюда функцию `Object` вместо строки-ссылки, и падало дальше —
+  // на `ref.toLowerCase()` в tierForReference, то есть 500 вместо честного
+  // разбора. Доступ никому не выдавался, но денежная ручка роняется одной
+  // строкой в теле запроса. Тот же класс, что и три другие находки 27.07.2026.
+  if (pingSlug && Object.prototype.hasOwnProperty.call(KNOWN_PERMALINK_REFERENCE, pingSlug)) {
     return KNOWN_PERMALINK_REFERENCE[pingSlug];
   }
 

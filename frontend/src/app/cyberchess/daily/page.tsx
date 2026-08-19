@@ -214,10 +214,19 @@ export default function DailyPuzzlePage() {
         if (!alive) return;
         const p = j?.puzzle;
         if (!p?.fen || !Array.isArray(p.sol) || p.sol.length === 0) return;
+        // Ходы обязаны быть ходами. Проверка стоит здесь, а не только на
+        // сервере, потому что ПОТРЕБИТЕЛЬ значения — движок на этой странице:
+        // он сравнивает ход игрока с этим списком, и мусор в списке делает
+        // задачу нерешаемой молча, без единой ошибки на экране.
+        //
+        // Так и случилось 19.08.2026: сервер отдавал `["c5c3"` вместо `c5c3`,
+        // а здешняя проверка `Array.isArray` пропускала — массив-то был.
+        const sol = p.sol.map((m: unknown) => String(m));
+        if (!sol.every((m: string) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m))) return;
         setPuzzle({
           id: String(p.id),
           fen: String(p.fen),
-          sol: p.sol.map((m: unknown) => String(m)),
+          sol,
           theme: String(p.theme ?? 'Тактика'),
           rating: Number(p.rating) || 1200,
         });

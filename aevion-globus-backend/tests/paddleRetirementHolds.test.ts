@@ -60,12 +60,31 @@ describe("уход Paddle держится: ни одного живого пу�
 });
 
 describe("чтение баланса без ключа не ходит в сеть", () => {
+  // Здесь мой первый вариант был ЛОЖНО ЗЕЛЁНЫМ, и мутация это показала.
+  //
+  // Я подменял fetch на бросающий и проверял, что результат — null. Но у
+  // paddleGet тело обёрнуто в try/catch: сняв защиту `if (!key) return null`,
+  // клиент шёл в сеть, получал моё исключение, ГЛОТАЛ его и возвращал тот же
+  // null. Утверждение «не ходит в сеть» держалось на догадке, а проверялось
+  // «не бросает» — и оставалось зелёным на сломанном коде.
+  //
+  // Поэтому считаем ВЫЗОВЫ, а не смотрим на возвращённое значение: подменённый
+  // fetch отдаёт вполне годный ответ, так что глотать нечего, и единственный
+  // признак нарушения — счётчик.
   const realFetch = globalThis.fetch;
   const realKey = process.env.PADDLE_API_KEY;
+  let calls: string[] = [];
 
   beforeEach(() => {
-    globalThis.fetch = (() => {
-      throw new Error("сетевой вызов при пустом ключе — этого быть не должно");
+    calls = [];
+    globalThis.fetch = ((url: unknown) => {
+      calls.push(String(url));
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
     }) as unknown as typeof fetch;
   });
 
@@ -75,19 +94,31 @@ describe("чтение баланса без ключа не ходит в се�
     else process.env.PADDLE_API_KEY = realKey;
   });
 
-  test("без ключа paddleGet отдаёт null и не трогает сеть", async () => {
+  test("прибор считает вызовы: с ключом обращение к сети ЕСТЬ", async () => {
+    // Отрицательный контроль. Без него нули ниже могли бы означать, что подмена
+    // fetch не сработала вовсе, а не что клиент воздержался.
+    process.env.PADDLE_API_KEY = "pdl_test_ключ";
+    await paddleGet("/transactions");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("/transactions");
+  });
+
+  test("без ключа paddleGet НЕ обращается в сеть и отдаёт null", async () => {
     delete process.env.PADDLE_API_KEY;
     expect(PADDLE_KEY()).toBe("");
     await expect(paddleGet("/transactions")).resolves.toBeNull();
+    expect(calls).toEqual([]);
   });
 
-  test("без ключа paddlePost тоже не трогает сеть", async () => {
+  test("без ключа paddlePost НЕ обращается в сеть и отдаёт null", async () => {
     delete process.env.PADDLE_API_KEY;
     await expect(paddlePost("/transactions", {})).resolves.toBeNull();
+    expect(calls).toEqual([]);
   });
 
-  test("createPaddleTransaction без ключа возвращает null, а не бросает", async () => {
-    // Если бы он бросал, вызывающий получил бы 500 вместо честного «нет канала».
+  test("createPaddleTransaction без ключа возвращает null, ничего не создав", async () => {
+    // Если бы он бросал, вызывающий получил бы 500 вместо честного «нет канала»;
+    // если бы ходил в сеть — создал бы товар и цену в чужом аккаунте.
     delete process.env.PADDLE_API_KEY;
     await expect(
       createPaddleTransaction({
@@ -97,10 +128,12 @@ describe("чтение баланса без ключа не ходит в се�
         successUrl: "https://aevion.app/ok",
       }),
     ).resolves.toBeNull();
+    expect(calls).toEqual([]);
   });
 
   test("проверка подписи вебхука не зависит от сети и отвергает мусор", () => {
     expect(verifyPaddleWebhook("{}", "мусор", "секрет")).toBe(false);
     expect(verifyPaddleWebhook("{}", "ts=1;h1=zz", "секрет")).toBe(false);
+    expect(calls).toEqual([]);
   });
 });

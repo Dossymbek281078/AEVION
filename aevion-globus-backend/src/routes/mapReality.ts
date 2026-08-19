@@ -6,6 +6,9 @@ import { ensureMapRealityTables, isMapRealityDbReady } from "../lib/ensureMapRea
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { pgIntId } from "../lib/queryNumber";
 
+const WARN =
+  "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
+
 const capture = makeServiceCapture("mapReality");
 
 const pool = getPool();
@@ -318,7 +321,15 @@ mapRealityRouter.get("/signals/:id", async (req: Request, res: Response) => {
       if (!rows[0]) return res.status(404).json({ error: "not_found" });
       return res.json({ signal: rows[0] });
     }
-  } catch (e) { capture(e); console.error("[MapReality] GET /signals/:id DB error", e); }
+  } catch (e) {
+    capture(e);
+    console.error("[MapReality] GET /signals/:id DB error", e);
+    // Сюда попадаем ТОЛЬКО когда база объявлена готовой и всё равно упала.
+    // Раньше управление уходило ниже, в память (в проде она пуста), и человек
+    // получал 404 на существующий сигнал. 404 — законный ответ, он не тревожит
+    // никого: отказ хранилища выглядел как «такой записи нет».
+    return res.status(503).json({ error: "storage_unavailable", warning: WARN });
+  }
 
   const signal = memSignals.find((s) => s.id === id);
   if (!signal) return res.status(404).json({ error: "not_found" });

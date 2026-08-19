@@ -13,6 +13,9 @@ import {
 import { VOICE_OF_EARTH_SEED, VoeSeedTrack } from "../data/voiceOfEarthSeed";
 import { pgIntId } from "../lib/queryNumber";
 
+const WARN =
+  "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
+
 const pool = getPool();
 (async () => {
   try {
@@ -194,6 +197,9 @@ voiceOfEarthRouter.get("/tracks/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "not_found" });
     } catch (e) {
       console.error("[VoiceOfEarth] GET /tracks/:id DB error", e);
+      // База объявлена готовой и упала — ниже лежит пустая в проде память,
+      // и оттуда ушёл бы 404 на существующий трек.
+      return res.status(503).json({ error: "storage_unavailable", warning: WARN });
     }
   }
   const track = memTracks.find((t) => t.id === id);

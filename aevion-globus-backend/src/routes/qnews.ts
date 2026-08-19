@@ -7,6 +7,9 @@ import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { ensureQNewsTables, isQNewsDbReady } from "../lib/ensureQNewsTables";
 
+const WARN =
+  "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
+
 const captureQNewsError = makeServiceCapture("qnews");
 
 const pool = getPool();
@@ -238,7 +241,12 @@ qnewsRouter.get("/articles/:id", async (req: Request, res: Response) => {
       if (rows[0]) return res.json({ article: rows[0] });
       return res.status(404).json({ error: "not_found" });
     }
-  } catch (e) { console.error("[QNews] GET /articles/:id DB error", e); }
+  } catch (e) {
+    console.error("[QNews] GET /articles/:id DB error", e);
+    // База объявлена готовой и упала — ниже пустая в проде память, и оттуда
+    // ушёл бы 404 на существующую статью.
+    return res.status(503).json({ error: "storage_unavailable", warning: WARN });
+  }
   const article = memNews.get(id);
   if (!article) return res.status(404).json({ error: "not_found" });
   return res.json({ article });

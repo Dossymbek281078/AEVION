@@ -48,6 +48,10 @@ const DISPROVEN_CLAIMS: Array<{ text: string; why: string }> = [
     text: "Unlimited usage",
     why: "в qcoreai есть месячная квота токенов бесплатного тарифа",
   },
+  {
+    text: "Club & tournament",
+    why: "управления клубами нет; Club это рейтинговый разряд и категория косметики",
+  },
 ];
 
 describe("витрина /apps не обещает несуществующего", () => {

@@ -221,7 +221,7 @@ const APP_DEFS: AppDef[] = [
     highlights: [
       "Grandmaster opening theory (CC0 corpus)",
       "Real-time AI coaching during games",
-      "Club & tournament management",
+      "Tournament management with ratings and prizes",
     ],
   },
 ];

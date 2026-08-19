@@ -36,7 +36,39 @@ const BASE = process.env.FRONTEND_URL?.replace(/\/+$/, "") || "https://aevion.ap
  * человеку «письмо не отправлено», а не молча ответить `{ok:true}`.
  */
 export function canSendEmail(): boolean {
-  return getTransport() !== null;
+  return getTransport() !== null || Boolean(process.env.RESEND_API_KEY?.trim());
+}
+
+/**
+ * Второй транспорт — Resend по HTTP.
+ *
+ * Он появился здесь не «на всякий случай». В `routes/build/` уже есть ПЯТЬ
+ * мест, отправляющих письма прямым вызовом `api.resend.com` (оповещения о
+ * вакансиях, отклики, подтверждение анкеты, выдача доступа). То есть сервер
+ * вполне может быть настроен ТОЛЬКО на Resend, без SMTP. Если бы этот модуль
+ * умел один SMTP, регистрация на таком сервере честно отвечала бы «отправка
+ * не настроена» — и это было бы неправдой: соседний код в ту же секунду
+ * успешно шлёт письма.
+ */
+async function sendViaResend(to: string, subject: string, html: string): Promise<boolean> {
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (!key) return false;
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: FROM, to, subject, html }),
+    });
+    if (!r.ok) {
+      // Тело не печатаем: в ответе провайдера бывает адрес получателя.
+      console.warn("[build/email] resend rejected:", r.status);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn("[build/email] resend failed:", (e as Error).message);
+    return false;
+  }
 }
 
 /**
@@ -51,12 +83,13 @@ export function canSendEmail(): boolean {
 async function send(to: string, subject: string, html: string): Promise<boolean> {
   try {
     const transport = getTransport();
-    if (!transport) return false; // SMTP не настроен
+    if (!transport) return sendViaResend(to, subject, html); // SMTP нет — пробуем Resend
     await transport.sendMail({ from: FROM, to, subject, html });
     return true;
   } catch (e) {
     console.warn("[build/email] send failed:", (e as Error).message);
-    return false;
+    // SMTP есть, но сорвался — пробуем второй транспорт, если он настроен.
+    return sendViaResend(to, subject, html);
   }
 }
 

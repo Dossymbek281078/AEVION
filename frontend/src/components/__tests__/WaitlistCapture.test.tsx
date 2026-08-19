@@ -140,8 +140,12 @@ describe("WaitlistCapture — отказ объяснён так, чтобы ч�
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("ECONNRESET"))));
     render(<WaitlistCapture source="devhub" />);
     await fillAndSubmit("kto@primer.ru");
-    // Главное — что человек видит хоть какое-то объяснение и может повторить.
-    expect(await screen.findByRole("button")).toBeTruthy();
+    // Проверять надо САМ ТЕКСТ, а не наличие кнопки: первая версия этого теста
+    // спрашивала только про кнопку и поле, и мутация «оставить сообщение пустым»
+    // её НЕ покраснела — то есть тест с названием «а не тишина» тишину разрешал.
+    const said = await screen.findByText(/связь|сервер/i);
+    expect(said.textContent?.trim().length).toBeGreaterThan(15);
+    // Адрес остаётся в поле: иначе человеку набирать заново то, что он уже вводил.
     await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue("kto@primer.ru"));
   });
 });

@@ -9,7 +9,12 @@ require("dotenv").config();
 const http = require("http");
 const jwt = require("jsonwebtoken");
 
-const BASE = process.argv[2] || "http://127.0.0.1:4001";
+// Адрес берём и из окружения: остальные смоуки и оркестратор передают BASE
+// именно так. Пока читался только аргумент, этот смоук ходил на зашитый
+// 4001 и падал с ECONNREFUSED, когда сервер поднят на другом порту, —
+// поэтому он и не мог жить в общем наборе. Аргумент оставлен: им уже
+// пользуются вручную, и ломать привычный вызов незачем.
+const BASE = process.argv[2] || process.env.BASE || "http://127.0.0.1:4001";
 const SECRET = process.env.AUTH_JWT_SECRET || "dev-auth-secret";
 
 let pass = 0,

@@ -40,7 +40,7 @@ function AevPill({ variant }: { variant: "light" | "dark" }) {
       color: dark ? "#67e8f9" : "#0e7490",
       fontWeight: 800, fontSize: 12, textDecoration: "none",
       fontFamily: "ui-monospace, SFMono-Regular, monospace",
-    }} title="AEV кошелёк">
+    }} title="AEV кошелёк / AEV wallet">
       <span style={{ fontSize: 11 }}>◆</span>
       <span>{balance.toFixed(2)} AEV</span>
     </Link>

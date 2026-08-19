@@ -110,6 +110,25 @@ const KEYS = [
   "qskyway.slots.storeDurable",
   "qskyway.slots.storeMemory",
   "qskyway.slots.testBadge",
+  "qskyway.dispute.tagVsLevels",
+  "qskyway.dispute.published",
+  "qskyway.dispute.ratio",
+  "qskyway.dispute.affects",
+  "qskyway.dispute.noEffect",
+  "qskyway.subst.byType",
+  "qskyway.wind.value",
+  "qskyway.subst.tipHead",
+  "qskyway.subst.tipExample",
+  "qskyway.subst.tipTail",
+  "qskyway.height.suspectTip",
+  "qskyway.tel.obstacleTip",
+  "qskyway.just.byBuildingsSuffix",
+  "qskyway.booking.netError",
+  "prov.measured",
+  "prov.derived",
+  "prov.guessed",
+  "qskyway.slots.storeDurableShort",
+  "qskyway.slots.storeMemoryShort",
   "qskyway.slots.receipt",
   "qskyway.slots.capacity",
   "qskyway.reg.subject.prohibition",
@@ -119,6 +138,21 @@ const KEYS = [
 ];
 
 const placeholders = (s: string): string[] => (s.match(/\{(\w+)\}/g) ?? []).sort();
+
+/**
+ * Совпадение английского значения с русским — почти всегда копипаста при
+ * добавлении ключа: ключ есть во всех локалях, подстановки совпадают, все
+ * прежние проверки зелёные, а англоязычный читатель видит кириллицу.
+ *
+ * Замер 19.08.2026 на 95 ключах: таких случаев НОЛЬ. Проверка заведена,
+ * чтобы так и осталось.
+ *
+ * Казахский сюда НЕ включён намеренно: там шесть значений законно совпадают
+ * с русскими («трафик», «демо», «телеметрия», «км», «м», «мин» — заимствования
+ * и сокращения, которые в казахском пишутся так же). Требовать различий
+ * значило бы заставлять переводить то, что перевода не требует.
+ */
+const SAME_EN_RU_ALLOWED: string[] = [];
 
 describe("ключи перевода qskyway", () => {
   for (const key of KEYS) {
@@ -136,4 +170,51 @@ describe("ключи перевода qskyway", () => {
       }
     });
   }
+
+  test("тексты для человека не выдают устройство системы", () => {
+    // Ворота запуска, пункт 4: «тексты ошибок — человеческие, без кодов и
+    // адресов серверов». 19.08.2026 карточка ошибки на этой странице
+    // советовала посетителю «проверь, что бэкенд поднят» и печатала путь
+    // /api/qskyway/city, а ошибка бронирования показывала сырое исключение.
+    // Это указания разработчику, показанные человеку.
+    //
+    // Проверяем ЗНАЧЕНИЯ всех ключей модуля во всех локалях.
+    const tbl = allTranslations() as Record<string, Record<string, string>>;
+    const FORBIDDEN: { re: RegExp; why: string }[] = [
+      { re: /\/api\//, why: "путь API" },
+      { re: /https?:\/\//, why: "адрес сервера" },
+      { re: /localhost|127\.0\.0\.1/, why: "локальный адрес" },
+      { re: /бэкенд|backend/i, why: "слово «бэкенд» — это про наше устройство, не про человека" },
+      { re: /\{(err|detail|stack)\}/, why: "сырое значение ошибки" },
+    ];
+    // Исключение с причиной, а не ослабление правила: подсказка про чек
+    // брони НАЗЫВАЕТ публичную ручку проверки намеренно. В этом и ценность
+    // модуля для регулятора — «проверьте сами вот здесь», а не «поверьте
+    // нам». Убирать оттуда адрес значило бы убрать саму проверяемость.
+    const ALLOWED_TO_NAME_ENDPOINT = new Set(["qskyway.slots.receipt"]);
+
+    const bad: string[] = [];
+    for (const lang of LOCALES) {
+      for (const k of KEYS) {
+        const v = tbl[lang]?.[k];
+        if (!v) continue;
+        const isPublicEndpointDoc = ALLOWED_TO_NAME_ENDPOINT.has(k);
+        for (const f of FORBIDDEN) {
+          if (isPublicEndpointDoc && f.why === "путь API") continue;
+          if (f.re.test(v)) bad.push(`${lang}/${k}: ${f.why} → ${v.slice(0, 50)}`);
+        }
+      }
+    }
+    expect(bad, "текст для человека выдаёт устройство системы").toEqual([]);
+  });
+
+  test("английский перевод не равен русскому (ловит копипасту)", () => {
+    const tbl = allTranslations() as Record<string, Record<string, string>>;
+    const same = KEYS.filter((k) => {
+      const ru = tbl.ru?.[k];
+      const en = tbl.en?.[k];
+      return ru != null && en != null && ru === en && !SAME_EN_RU_ALLOWED.includes(k);
+    });
+    expect(same, "английское значение совпало с русским — похоже, ключ скопировали").toEqual([]);
+  });
 });

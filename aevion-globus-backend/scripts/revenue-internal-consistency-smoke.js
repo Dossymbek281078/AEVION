@@ -133,7 +133,7 @@ function live(balance) {
 
   console.log(
     failures === 0
-      ? `\nPASS — выручка снаружи ${(summary.grossUsd ?? 0).toFixed(2)} USD, свои покупки ${internalGross.toFixed(2)} USD не в ней`
+      ? `\nPASS — FAIL=0, выручка снаружи ${(summary.grossUsd ?? 0).toFixed(2)} USD, свои покупки ${internalGross.toFixed(2)} USD не в ней`
       : `\nFAIL — ${failures} расхождений`,
   );
   process.exit(failures === 0 ? 0 : 1);

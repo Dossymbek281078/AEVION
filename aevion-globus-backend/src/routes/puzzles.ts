@@ -125,6 +125,8 @@ puzzlesRouter.post("/seed", async (req: Request, res: Response) => {
   try {
     const pool = getPool();
     let upserted = 0;
+    let inserted = 0;
+    let updated = 0;
     for (let i = 0; i < puzzles.length; i += 500) {
       const batch = puzzles.slice(i, i + 500).map((p: any) => ({
         id: String(p.id || `gen_${Date.now()}_${i}`),
@@ -135,13 +137,28 @@ puzzlesRouter.post("/seed", async (req: Request, res: Response) => {
         mateIn: p.mateIn ? parseInt(p.mateIn) : null,
       }));
       for (const p of batch) {
-        await pool.query(
-          `INSERT INTO "ChessPuzzle" ("id","fen","sol","name","rating","theme","phase","side","goal","mateIn") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT ("id") DO NOTHING`,
+        // Было ON CONFLICT DO NOTHING — и это делало повторный засев бесполезным:
+        // id задачи (li_<id> из дампа) у всех уже лежащих записей совпадает, поэтому
+        // исправленная раскладка тем молча отбрасывалась. Именно так 12.08.2026
+        // «Связка» и «Рентген» остались бы с нулём задач после пересева.
+        // Обновляем ПРОИЗВОДНЫЕ поля (классификацию), но не саму позицию: fen и sol
+        // для того же id не меняются, а перезапись их скрыла бы порчу дампа.
+        const r = await pool.query(
+          `INSERT INTO "ChessPuzzle" ("id","fen","sol","name","rating","theme","phase","side","goal","mateIn")
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           ON CONFLICT ("id") DO UPDATE SET
+             "name"=EXCLUDED."name", "rating"=EXCLUDED."rating", "theme"=EXCLUDED."theme",
+             "phase"=EXCLUDED."phase", "goal"=EXCLUDED."goal", "mateIn"=EXCLUDED."mateIn"
+           RETURNING (xmax = 0) AS inserted`,
           [p.id, p.fen, p.sol, p.name, p.rating, p.theme, p.phase, p.side, p.goal, p.mateIn]
         );
+        // Раньше счётчик рос на каждой ПОПЫТКЕ, независимо от результата: ответ
+        // рапортовал «upserted: 500000» при нуле реальных вставок. Считаем по факту,
+        // xmax=0 у свежевставленной строки и ненулевой у обновлённой.
+        if (r.rows?.[0]?.inserted) inserted++; else updated++;
         upserted++;
       }
     }
-    res.json({ ok: true, upserted });
+    res.json({ ok: true, upserted, inserted, updated });
   } catch (err) { capture(err); console.error("[Puzzles] seed:", err); res.status(500).json({ error: "seed_failed" }); }
 });

@@ -54,24 +54,48 @@ export const ADVANCE_KIND = "returnable advance";
 export const REVENUE_SPLIT = "51/49";
 
 // ── Revenue model (bottom-up, three flagships — see `unitEconomics`) ─────────
-/** The single defensible revenue figure. Company is pre-revenue ($0) today. */
-export const BOTTOM_UP_BEACHHEAD_ARR = "≈$0.8M";
-export const BOTTOM_UP_REGIONAL_ARR = "≈$9.4M";
+/**
+ * The single defensible revenue figure. Company is pre-revenue ($0) today.
+ *
+ * Recomputed 2026-08-18 off the repriced ladder: the "Ecosystem All-Access"
+ * flagship is the live Full tier, which moved $89 → $49/mo ($490/yr annual),
+ * so the same unchanged subscriber assumptions (1,000 beachhead / 10,000
+ * regional) now carry LESS ARR. Was ≈$1.2M / ≈$13.7M on the $89 price.
+ *
+ * The direction matters more than the number: the model follows the published
+ * price both ways. A revenue figure that only ever moves up is a figure nobody
+ * should believe.
+ */
+export const BOTTOM_UP_BEACHHEAD_ARR = "≈$0.85M";
+export const BOTTOM_UP_REGIONAL_ARR = "≈$9.65M";
 export const IS_PRE_REVENUE = true;
 
 // ── Universe Seat (one seat = the whole ecosystem) ───────────────────────────
 /**
- * PROPOSED premium "Universe Seat" price for a branded launch. This is a
- * repositioning of today's LIVE published All-Access price ($49/mo — still what
- * the pricing pages and Gumroad charge). $79 is a go-forward pricing DECISION,
- * not the live price; the live checkout is intentionally NOT changed here.
- * Justification anchor = sum-of-parts: a working creator's AI stack (Claude +
- * Midjourney + ElevenLabs + Higgsfield ≈ $100+/mo) vs one AEVION seat.
+ * The "Universe Seat" = the `pro` tier in the backend pricing registry
+ * (aevion-globus-backend/src/data/pricing.ts). Repriced 2026-08-13 from
+ * $249.99 → $149/mo, together with the whole ladder.
+ *
+ * The old justification is deliberately NOT kept: it said the flagship "must
+ * sit above a single premium AI subscription" and anchored on a $200–400/mo
+ * creator stack. At $149 that sentence is simply false, and a false argument in
+ * the pitch is worse than no argument — whoever reads it next would defend a
+ * position the price no longer supports.
+ *
+ * The honest anchor at $149: one seat replaces several logins rather than
+ * out-prices them. Comparison stays sum-of-parts, but the claim is "cheaper
+ * than assembling the same stack", not "more expensive, therefore better".
+ *
+ * ANNUAL = ×10 (pay for 10 months, get 12) — the `annualTotal()` formula in the
+ * backend registry. $149 × 10 = $1,490/yr, which is the seat ARPU the growth
+ * model in pitchModel.ts runs on.
  */
-export const UNIVERSE_SEAT_MONTHLY = "$149.99";
-export const UNIVERSE_SEAT_ANNUAL_TOTAL = "~$1,500/yr"; // effective ARPU used in the growth model
+export const UNIVERSE_SEAT_MONTHLY = "$149";
+export const UNIVERSE_SEAT_ANNUAL_TOTAL = "~$1,490/yr"; // effective ARPU used in the growth model
 export const UNIVERSE_SEAT_INTRO_NOTE = "Introductory price for the first 6–12 months — may rise as the ecosystem matures.";
-// Live plan is now 5-tier: Free / Lite $19 / Medium $29 / Full $49 / Universe(pro) $149.99.
-// The $149.99 "Universe" tier (id "pro") is defined in the backend pricing registry
-// (aevion-globus-backend/src/data/pricing.ts); its checkout goes live once its Gumroad product exists.
-export const LIVE_TOP_TIER_MONTHLY = "$49"; // highest tier with live checkout today (Full)
+// Live plan is 6-tier: Free / Lite $19 / Medium $29 / Full $49 / Universe(pro) $149 / Enterprise.
+// Universe has no Lemon Squeezy variant yet (see data/lemonSqueezyVariants.ts — a "pro" checkout
+// falls through to Gumroad/stub), so the highest tier with a real subscription checkout is Full.
+export const LIVE_TOP_TIER_MONTHLY = "$49"; // highest tier with live LS checkout today (Full)
+/** Entry paid tier — the "from $X/mo" figure on public pricing surfaces and OG cards. */
+export const ENTRY_PAID_TIER_MONTHLY = "$19";

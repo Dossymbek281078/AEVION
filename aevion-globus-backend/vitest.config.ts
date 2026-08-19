@@ -19,8 +19,21 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Один файл дедупликации на прогон — см. vitest.setup.ts.
+    setupFiles: ["./vitest.setup.ts"],
     include: ["tests/**/*.test.ts"],
     globals: false,
+    // 10s was not enough for the files that `await import()` a router inside
+    // the test body. On a loaded machine that first import pulls the router's
+    // whole dependency tree through Vite's transform, and the test dies with
+    // "Test timed out in 10000ms" — nothing to do with the code under test.
+    // Measured 2026-08-12 across two full runs: the same files took 16–30s in
+    // the full suite and 0.7–2.3s in isolation.
+    //
+    // This does NOT make the suite stable on its own. The other failure mode —
+    // assertion errors in devhub-integrations, where a mock queue is shared
+    // across files — survives a bigger timeout and is tracked separately.
+    // Raising this only stops the clock from being the reason.
     // 30 с, не 10. Замер 10.08.2026: `provisioning.sendEmail.test.ts` в
     // одиночку проходит за 530 мс, а в общем прогоне на этой машине занял
     // 31.5 с и упал по таймауту — вместе с `qtradeInternalCredit` (31.6 с) и

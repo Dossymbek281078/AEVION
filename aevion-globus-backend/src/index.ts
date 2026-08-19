@@ -34,6 +34,7 @@ import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
+import { provisioningRouter } from "./routes/provisioning";
 import { lemonSqueezyWebhookRouter } from "./routes/lemonSqueezyWebhook";
 import { appAccessRouter } from "./routes/appAccess";
 import { gumroadWebhookRouter } from "./routes/gumroadWebhook";
@@ -1212,6 +1213,11 @@ app.use("/api/healthai", healthaiRouter);
 // ==========================
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
+// Выдача доступа после оплаты. 19.08.2026 монтирование пропало при слиянии:
+// чужой index.ts взяли целиком, а этой строки в нём не было. Поймал сторож
+// tests/provisioning.routes.test.ts — до выкатки, а не после жалобы
+// покупателя, которому не открылось купленное.
+app.use("/api/pricing/provisioning", provisioningRouter);
 app.use("/api/quotas", apiQuotasRouter);
 // Platform entitlements + paywall policy (GET /api/me/entitlements, /api/paywall/policy)
 app.use("/api", entitlementsRouter);

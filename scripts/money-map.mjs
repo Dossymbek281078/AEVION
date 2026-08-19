@@ -122,6 +122,44 @@ async function cashDesks() {
   }
 }
 
+/**
+ * Заявления о масштабе против фактов с прода.
+ *
+ * На /pricing висят «12 000+ зарегистрированных идей» и «3 200+
+ * сертифицированных артефактов». Аудит 10.08.2026 записал прямо в
+ * data/trust.ts: источник этих чисел в коде не найден, компания
+ * pre-revenue, — и правильно не стал подставлять правдоподобное вместо
+ * выдуманного. Тогда сравнить было не с чем.
+ *
+ * 18.08.2026 сравнить есть с чем: прод отдаёт настоящие счётчики. Разрыв
+ * оказался не в процентах, а в сотнях раз. Поэтому сверка живёт здесь, в
+ * ежедневной карте: заявление, которое расходится с фактом, должно попадаться
+ * на глаза само, а не ждать следующего аудита.
+ *
+ * Решение, что делать с числами, — основателя (это позиционирование).
+ * Задача карты — не дать забыть, что решение открыто.
+ */
+async function scaleClaims() {
+  const [planet, qright, registry] = await Promise.all([
+    getJson(`${API}/api/planet/stats`).catch(() => null),
+    getJson(`${API}/api/qright/objects`).catch(() => null),
+    getJson(`${API}/api/aevion/registry-stats`).catch(() => null),
+  ]);
+  if (!planet && !qright && !registry) return null;
+
+  const objects = qright && typeof qright.total === "number" ? qright.total : null;
+  const certified = planet ? planet.certifiedArtifactVersions ?? null : null;
+  const modules = registry ? registry.total ?? null : null;
+
+  return [
+    { claim: "12 000+", what: "зарегистрированных идей", real: objects, src: "/api/qright/objects" },
+    { claim: "3 200+", what: "сертифицированных артефактов", real: certified, src: "/api/planet/stats" },
+    { claim: "40", what: "модулей платформы", real: modules === null ? null : modules - 1, src: "/api/aevion/registry-stats (минус globus)" },
+    { claim: "30+", what: "стран использования", real: null, src: "источника нет" },
+    { claim: "99.5%", what: "API uptime SLA", real: null, src: "в коде три разные лестницы" },
+  ];
+}
+
 /** Ссылка магазина → id модуля, как это делает бэкенд. Своей таблицы не заводим. */
 function storeNameToModule() {
   const src = readFileSync(resolve(REPO, "aevion-globus-backend/src/data/lemonSqueezyVariants.ts"), "utf8");
@@ -146,7 +184,7 @@ function row(cells) {
 }
 
 function main(data) {
-  const { pricing, shop, gum, nameToModule, measuredAt, desks } = data;
+  const { pricing, shop, gum, nameToModule, measuredAt, desks, claims } = data;
 
   const tierPrice = new Map(pricing.tiers.map((t) => [t.id, t.priceMonthly]));
 
@@ -281,6 +319,29 @@ function main(data) {
   const deskAll = desks ? Object.keys(desks.providers).length : 0;
   const deskOn = desks ? Object.values(desks.providers).filter((p) => p && p.configured).length : 0;
 
+  // ── Блок З: заявления против фактов
+  let claimRows;
+  if (!claims) {
+    claimRows = row([`<td colspan="4"><span class="dim">Прод не ответил — заявления не сверены. Это НЕ «всё сходится».</span></td>`]);
+  } else {
+    claimRows = claims.map((c) => {
+      let verdict;
+      if (c.real === null) verdict = '<span class="chip chip-off">сверить не с чем</span>';
+      else if (String(c.claim).replace(/[^\d]/g, "") === String(c.real)) verdict = '<span class="chip chip-ok">сходится</span>';
+      else {
+        const claimNum = Number(String(c.claim).replace(/[^\d]/g, ""));
+        const times = c.real > 0 ? Math.round(claimNum / c.real) : null;
+        verdict = `<span class="chip chip-bad">${times ? `больше в ${times} раз` : "расходится"}</span>`;
+      }
+      return row([
+        `<th scope="row">${esc(c.claim)}<span class="sub">${esc(c.what)}</span></th>`,
+        `<td class="num">${c.real === null ? '<span class="dim">—</span>' : esc(c.real)}</td>`,
+        `<td><code>${esc(c.src)}</code></td>`,
+        `<td>${verdict}</td>`,
+      ]);
+    }).join("\n");
+  }
+
   const totalProducts = shop.size + gum.length;
 
   const tpl = readFileSync(resolve(HERE, "money-map.tpl.html"), "utf8");
@@ -299,6 +360,7 @@ function main(data) {
     .replace("__GUM__", gumRows.join("\n"))
     .replace("__PROMOS__", promoRows.join("\n"))
     .replace("__DESKS__", deskRows)
+    .replace("__CLAIMS__", claimRows)
     .replace(/__NDESKS__/g, desks ? String(deskOn) : "?")
     .replace(/__NDESKS_ALL__/g, desks ? String(deskAll) : "?");
 
@@ -324,6 +386,7 @@ try {
     gum: gumroadFromSite(),
     nameToModule: storeNameToModule(),
     desks: await cashDesks(),
+    claims: await scaleClaims(),
     measuredAt: new Date().toISOString().slice(0, 10),
   });
 } catch (e) {

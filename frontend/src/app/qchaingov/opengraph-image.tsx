@@ -12,7 +12,7 @@ export default async function Image() {
       badge: "IDEA",
       title: "Governance that survives a vote.",
       accent: "survives a vote.",
-      subtitle: "Identity-bound votes · QSign chain · quadratic voting · delegate trees",
+      subtitle: "Identity-bound votes · QSign chain · ranked-choice and weighted modes",
       pills: ["🪪 Identity-bound", "📜 Open initiatives", "✍️ QSign-chain", "🎯 Quadratic"],
     },
     "sky",

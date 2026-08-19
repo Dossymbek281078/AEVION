@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 /* ═══════════════════════════════════════════════════════════════════════
    Types
@@ -290,7 +291,7 @@ const prettyModel = (m: string) => {
 
 function bearerHeader(): HeadersInit {
   try {
-    const t = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    const t = typeof window !== "undefined" ? getAuthToken() : null;
     return t ? { Authorization: `Bearer ${t}` } : {};
   } catch {
     return {};
@@ -581,7 +582,7 @@ export default function QCoreMultiAgentPage() {
   useEffect(() => {
     if (!paletteOpen || paletteQuery.length < 3) { setPaletteRunResults([]); return; }
     const t = setTimeout(async () => {
-      const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+      const token = typeof window !== "undefined" ? getAuthToken() : null;
       if (!token) return;
       try {
         const r = await fetch(apiUrl(`/api/qcoreai/search?q=${encodeURIComponent(paletteQuery)}&limit=5`), { headers: { Authorization: `Bearer ${token}` } });
@@ -752,7 +753,7 @@ export default function QCoreMultiAgentPage() {
     if (userWebhook !== null) return;
     if (typeof window === "undefined") return;
     const token = (() => {
-      try { return localStorage.getItem("aevion_auth_token_v1"); } catch { return null; }
+      try { return getAuthToken(); } catch { return null; }
     })();
     if (!token) {
       // Anonymous — there's no per-user config to load. Mark as undefined.
@@ -1676,7 +1677,7 @@ export default function QCoreMultiAgentPage() {
 
   // V31 — fetch smart suggestions for the active session.
   const loadSuggestions = useCallback(async (sessionId: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token || suggestBusy) return;
     setSuggestBusy(true);
     try {
@@ -1693,7 +1694,7 @@ export default function QCoreMultiAgentPage() {
 
   // V31 — load annotations for a run.
   const loadAnnotations = useCallback(async (runId: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) return;
     try {
       const r = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/annotations`), { headers: { Authorization: `Bearer ${token}` } });
@@ -1706,7 +1707,7 @@ export default function QCoreMultiAgentPage() {
 
   // V31 — save annotation.
   const saveAnnotation = useCallback(async (runId: string, note: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token || !note.trim()) return;
     setAnnotateSaving(true);
     try {
@@ -1726,7 +1727,7 @@ export default function QCoreMultiAgentPage() {
 
   // V31 — delete annotation.
   const deleteAnnotation = useCallback(async (annotationId: string, runId: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) return;
     try {
       await fetch(apiUrl(`/api/qcoreai/annotations/${annotationId}`), { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
@@ -2713,7 +2714,7 @@ export default function QCoreMultiAgentPage() {
                   <div>
                     {(() => {
                       const token = typeof window !== "undefined"
-                        ? (() => { try { return localStorage.getItem("aevion_auth_token_v1"); } catch { return null; } })()
+                        ? (() => { try { return getAuthToken(); } catch { return null; } })()
                         : null;
                       if (!token) {
                         return (
@@ -3053,7 +3054,7 @@ export default function QCoreMultiAgentPage() {
                       <button
                         onClick={async () => {
                           try {
-                            const tok = typeof window !== "undefined" ? (localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") || "") : "";
+                            const tok = typeof window !== "undefined" ? (getAuthToken() || "") : "";
                             await fetch(`/api/qcoreai/me/memories/extract`, { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify({ runId: lastDoneRun.id }) });
                           } catch { /* ignore */ }
                         }}
@@ -3999,7 +4000,7 @@ export default function QCoreMultiAgentPage() {
                     if (templateSuggestBusy) return;
                     setTemplateSuggestBusy(true);
                     try {
-                      const tok = typeof window !== "undefined" ? (localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") || "") : "";
+                      const tok = typeof window !== "undefined" ? (getAuthToken() || "") : "";
                       const r = await fetch(apiUrl("/api/qcoreai/templates/suggest"), { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) } });
                       const d = await r.json().catch(() => ({}));
                       if (Array.isArray(d?.suggestions)) setTemplateSuggestions(d.suggestions);
@@ -5121,7 +5122,7 @@ function RunCard({
           flushGuidanceBefore(consumedTurns);
           const makeNotebookSave = (t: AgentTurn) => !t.content ? undefined : async () => {
             const tok = typeof window !== "undefined"
-              ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
+              ? getAuthToken() : null;
             if (!tok) return;
             await fetch(apiUrl("/api/qcoreai/notebook"), {
               method: "POST",
@@ -5901,7 +5902,7 @@ function FinalCard({
   const [branchMsg, setBranchMsg] = useState<string | null>(null);
 
   const toggleBookmark = async () => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) return;
     if (bookmarked) {
       await fetch(apiUrl(`/api/qcoreai/runs/${runId}/bookmark`), { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
@@ -5921,7 +5922,7 @@ function FinalCard({
   const saveToNotebook = async () => {
     try {
       const token = typeof window !== "undefined"
-        ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token")
+        ? getAuthToken()
         : null;
       if (!token) return;
       await fetch(apiUrl("/api/qcoreai/notebook"), {
@@ -6014,7 +6015,7 @@ function FinalCard({
             onClick={async (e) => {
               // Quick create eval suite with this run's input as test case
               e.preventDefault();
-              const token = typeof window !== "undefined" ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
+              const token = typeof window !== "undefined" ? getAuthToken() : null;
               if (!token) { window.location.href = "/qcoreai/eval"; return; }
               try {
                 const res = await fetch(apiUrl("/api/qcoreai/eval/suites"), {
@@ -6130,7 +6131,7 @@ function FinalCard({
                 if (!branchInput.trim()) return;
                 setBranchBusy(true);
                 setBranchMsg(null);
-                const token = typeof window !== "undefined" ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
+                const token = typeof window !== "undefined" ? getAuthToken() : null;
                 try {
                   const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/branch`), {
                     method: "POST",

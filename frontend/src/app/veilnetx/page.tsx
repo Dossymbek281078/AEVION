@@ -6,11 +6,16 @@ import MvpConceptBoard from "@/components/MvpConceptBoard";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import { PaywallError, apiFetchOrPaywall, type PaywallPayload } from "@/lib/paywall";
+import { repoUrl } from "@/lib/repoUrl";
 
 type Status = { phase: string; eta: string; version: string; waitlistCount: number };
 
 const FEATURES = [
-  { t: "🧅 Tor-routed", d: "Каждый запрос проходит минимум 3 узла Tor — никто не знает источник + назначение одновременно." },
+  // Здесь стояло «🧅 Tor-routed · каждый запрос проходит минимум 3 узла Tor»
+  // — как работающая функция. Реестр модулей говорит, что Tor-прокси в плане
+  // на Q4 2026, а живёт сканер раскрытия. Обещание перенесено в план явно.
+  { t: "🔎 Exposure scan", d: "Показывает, что ваш запрос раскрывает серверу: IP, гео, User-Agent, Client-Hints — с оценкой риска." },
+  { t: "🧅 Tor-routing — Q4 2026", d: "Маршрутизация через узлы Tor в плане на конец 2026 года. Сейчас не работает — записаться можно в лист ожидания." },
   { t: "🔇 No logs", d: "Серверы не пишут access-логи. Соглашение публикуется в audit report ежеквартально." },
   { t: "🪪 No KYC", d: "Регистрация — anonymous wallet или одноразовый код. Без email, без телефона." },
   { t: "🛡 Anti-fingerprint", d: "Подмена User-Agent, canvas, WebGL, fonts. Все соединения выглядят как обычный Chrome." },
@@ -592,7 +597,7 @@ export default function VeilNetXLanding() {
             applicationCategory: "SecurityApplication",
             operatingSystem: "Linux, macOS, Windows, iOS, Android",
             description:
-              "Privacy proxy with Tor-routing, no logs, no KYC, anti-fingerprinting, and open-source clients.",
+              "Privacy exposure scanner: what your request reveals to a server and what your browser leaks. No logs, no KYC. Tor proxy on the Q4 2026 roadmap.",
             url: "https://aevion.app/veilnetx",
             offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
             featureList: FEATURES.map(f => f.t),
@@ -615,7 +620,7 @@ export default function VeilNetXLanding() {
 
       <section className="max-w-5xl mx-auto px-6 py-16 space-y-6">
         <div className="inline-block px-3 py-1 bg-cyan-900/40 border border-cyan-800 rounded-full text-xs text-cyan-300 font-semibold uppercase tracking-wider">
-          Privacy network · Tor-routed
+          Privacy network · exposure scanner
         </div>
         <h1 className="text-5xl md:text-6xl font-black tracking-tight">
           Privacy that{" "}
@@ -625,8 +630,8 @@ export default function VeilNetXLanding() {
         </h1>
         <p className="text-lg text-slate-400 max-w-2xl leading-relaxed">
           Не «обещаем» приватность — её невозможно у нас отнять. Серверы не пишут
-          логи. KYC нет. Tor-routing включён по умолчанию. Клиенты open-source с
-          воспроизводимыми билдами.
+          логи. KYC нет. Сканер показывает, что о вас уже видно серверу и что
+          утекает из браузера. Tor-routing — в плане на Q4 2026.
         </p>
         <StatusPill onPaywall={setPaywall} />
         <div id="waitlist" className="space-y-2 pt-2 scroll-mt-24">
@@ -649,7 +654,7 @@ export default function VeilNetXLanding() {
             Live status JSON →
           </Link>
           <Link
-            href="https://github.com/Dossymbek281078/AEVION"
+            href={repoUrl()}
             className="px-5 py-2.5 border border-slate-700 hover:bg-slate-900 rounded-lg text-sm font-semibold"
           >
             Watch on GitHub →

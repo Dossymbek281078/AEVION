@@ -1,5 +1,11 @@
 import { describe, test, expect } from "vitest";
-import { translations } from "@/lib/i18n-data";
+// Словари берём через единственную точку чтения: ветка соседней сессии
+// разбирает i18n-data.ts на файлы по языкам, и экспорта translations там
+// не будет. Когда перенос сойдётся, импорт переключат В ОДНОМ месте —
+// в localeSource, а не в каждой проверке по отдельности.
+import { allTranslations } from "@/app/__tests__/localeSource";
+
+const translations = allTranslations();
 
 /**
  * Экран после оплаты не должен называть платёжный сервис, которым человек не

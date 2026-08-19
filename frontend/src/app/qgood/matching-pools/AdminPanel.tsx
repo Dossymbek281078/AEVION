@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import type { MatchingPool } from "./page";
@@ -55,7 +56,7 @@ export default function AdminPanel({ pools }: { pools: MatchingPool[] }) {
   useEffect(() => {
     setHydrated(true);
     try {
-      const t = typeof window !== "undefined" ? localStorage.getItem("aevion_token") : null;
+      const t = typeof window !== "undefined" ? getAuthToken() : null;
       setToken(t);
     } catch {
       setToken(null);

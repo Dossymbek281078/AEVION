@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken } from "@/lib/auth";
 
 interface RequestMeta {
   id: string;
@@ -41,7 +42,7 @@ export default function PayRequestPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    setIsLoggedIn(!!localStorage.getItem("aevion_token"));
+    setIsLoggedIn(!!getAuthToken());
     fetch(`/api/qpaynet/requests/${token}`)
       .then((r) => r.json())
       .then((d) => {
@@ -56,7 +57,7 @@ export default function PayRequestPage() {
 
   useEffect(() => {
     if (stage !== "ready") return;
-    const auth = localStorage.getItem("aevion_token") ?? "";
+    const auth = getAuthToken() ?? "";
     if (!auth) return;
     fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${auth}` } })
       .then((r) => r.json())
@@ -69,7 +70,7 @@ export default function PayRequestPage() {
   }, [stage, meta?.currency]);
 
   async function handlePay() {
-    const auth = localStorage.getItem("aevion_token") ?? "";
+    const auth = getAuthToken() ?? "";
     if (!auth) { setError(t("qpaynet.pay.err.auth")); return; }
     if (!fromWalletId) { setError(t("qpaynet.pay.err.noWallet")); return; }
     setSubmitting(true); setError("");

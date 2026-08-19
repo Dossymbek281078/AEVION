@@ -56,15 +56,60 @@ function isPaywallPayload(x: unknown): x is PaywallPayload {
  * Use in RSC pages so the page can render <PaywallScreen> instead of the
  * gated content without an exception:
  *
- *   const r = await fetchOrPaywall<MyData>("/api/qcoreai/health");
+ *   const r = await fetchOrPaywall<MyData>("/api/qcoreai/chat");
  *   if ("paywall" in r) return <PaywallScreen payload={r.paywall} />;
  *   // ...render r.data
+ *
+ * ⚠️ ВАЖНО ПРО ВЫБОР РУЧКИ ДЛЯ ПРОБЫ. Ветка `"paywall" in r` срабатывает, только если
+ * ОПРОШЕННАЯ ручка вернула 402. Гейт (`planGate.isExemptPath`) намеренно оставляет
+ * открытыми `/health`, `/status`, `/providers`, `/me/plan`, `/me/entitlements` даже на
+ * закрытом модуле — значит, проба в `/health` НИКОГДА не вернёт `{paywall}`, и стоящий
+ * ниже `<PaywallScreen>` не отрисуется, сколько бы модулей ни было в `PAYWALL_MODULES`.
+ *
+ * Замерено 11.08.2026: с `PAYWALL_MODULES=healthai` API отдаёт 402, а страница
+ * `/healthai` — 200 и обычный контент, потому что пробует `/api/healthai/health`.
+ * Так сейчас у 10 из 14 страниц. Стену реально показывают три — `/qcoreai/playground`
+ * (`/api/qcoreai/chat`), `/qmaskcard` (`/masks`), `/qmedia` (`/videos`); у `/veilnetx`
+ * проба статически не определяется.
+ *
+ * Это не обязательно баг: лендинг модуля разумно оставить публичной витриной, а отказ
+ * показывает глобальный `<PaywallModal>` при первом платном действии. Но если страница
+ * ДОЛЖНА закрываться целиком — пробуй закрытую ручку, а не health. И не считай наличие
+ * `<PaywallScreen>` в коде доказательством того, что страница закрыта.
  */
 export async function fetchOrPaywall<T>(
   apiPath: string,
   init?: RequestInit,
 ): Promise<{ data: T } | { paywall: PaywallPayload }> {
-  const res = await fetch(apiUrl(apiPath), { cache: "no-store", ...init });
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(apiPath), { cache: "no-store", ...init });
+  } catch (err) {
+    // Бэкенд недоступен целиком (ECONNREFUSED, DNS, оборванный сокет) — здесь
+    // fetch не возвращает ответ, а БРОСАЕТ. Ниже разобран каждый статус, вплоть
+    // до 503, с явным правилом «всё, кроме 402, — не пейволл, рендерим
+    // страницу», но этот случай мимо него проходил: исключение улетало наверх и
+    // сервер отдавал 500.
+    //
+    // Замерено 2026-08-11 на собранном приложении без бэкенда: /qrenew и
+    // /longevity отдавали 500 за 60–80 мс, тогда как /apps, /shop, /go и
+    // /pricing спокойно рендерились. Обе упавшие страницы продают PDF — то
+    // есть при любой икоте бэкенда витрина гасла целиком, вместо того чтобы
+    // показать себя без динамического блока.
+    //
+    // Политика та же, что и для 5xx: не гейт, данных нет, страница живёт.
+    //
+    // Но молча деградировать нельзя: страница отрисуется пустой, и без строки в
+    // логе никто не поймёт, почему у блока пропали данные — он просто «иногда
+    // пустой». `captureException` из lib/sentry здесь бесполезен, он выходит
+    // сразу при `typeof window === "undefined"`, а этот хелпер серверный.
+    // Поэтому console.warn: он попадает в лог Next-сервера.
+    console.warn(
+      `[paywall] бэкенд недоступен для ${apiPath} — страница рендерится без этих данных`,
+      err,
+    );
+    return { data: null as unknown as T };
+  }
   if (res.status === 402) {
     const body = await res.json().catch(() => null);
     if (isPaywallPayload(body)) return { paywall: body };

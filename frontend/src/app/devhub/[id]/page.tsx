@@ -372,8 +372,10 @@ function FileContextMenu({
   );
 }
 
-export default function DevHubProjectPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
-  const { id } = params instanceof Promise ? use(params) : params;
+// Promise-only: Next 16 rejects the `T | Promise<T>` union in generated route
+// types (build-only error — see the note in src/app/[id]/page.tsx).
+export default function DevHubProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);

@@ -6,6 +6,7 @@ import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import TideCharts from "./TideCharts";
+import { getAuthToken } from "@/lib/auth";
 
 /**
  * Z-Tide — adaptive reputation / contribution layer.
@@ -57,16 +58,12 @@ const KIND_LABELS: Record<string, string> = {
 
 function bearer(): HeadersInit {
   if (typeof window === "undefined") return {};
-  const t = localStorage.getItem("aevion_token")
-    || localStorage.getItem("aevion_auth_token_v1")
-    || sessionStorage.getItem("aevion_token");
+  const t = getAuthToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 function hasToken(): boolean {
   if (typeof window === "undefined") return false;
-  return Boolean(localStorage.getItem("aevion_token")
-    || localStorage.getItem("aevion_auth_token_v1")
-    || sessionStorage.getItem("aevion_token"));
+  return Boolean(getAuthToken());
 }
 function shortId(id: string): string {
   return id.length <= 10 ? id : id.slice(0, 6) + "…" + id.slice(-4);

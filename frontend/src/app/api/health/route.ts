@@ -1,3 +1,4 @@
+import { BUILD_STAMP } from "@/lib/buildStamp";
 import { store } from "../payments/v1/_lib";
 import { kvBackend } from "../payments/v1/_persist";
 
@@ -45,8 +46,19 @@ export function GET() {
       // папкой через CLI. Нет их — говорим "unknown" ЯВНО: выдуманная метка
       // хуже отсутствующей, потому что ей верят.
       build: {
-        commit: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 12) || "unknown",
-        branch: process.env.VERCEL_GIT_COMMIT_REF || "unknown",
+        // Порядок источников: сначала то, что уехало ВНУТРИ сборки, потом
+        // переменные Vercel. При выкатке папкой git-метки нет вовсе (проверено
+        // 18.08.2026), а переменные проекта переживают чужую выкатку — им
+        // верить первыми нельзя.
+        commit:
+          (BUILD_STAMP.commit !== "unknown" ? BUILD_STAMP.commit : "") ||
+          (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 12) ||
+          "unknown",
+        branch:
+          (BUILD_STAMP.branch !== "unknown" ? BUILD_STAMP.branch : "") ||
+          process.env.VERCEL_GIT_COMMIT_REF ||
+          "unknown",
+        builtAt: BUILD_STAMP.builtAt,
         // Окружение Vercel: production или preview. Их деплои легко спутать.
         env: process.env.VERCEL_ENV || "local",
         // Идентификатор сборки — он есть всегда, даже когда git-метки нет.

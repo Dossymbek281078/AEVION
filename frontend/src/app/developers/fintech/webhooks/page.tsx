@@ -55,7 +55,7 @@ export default function FintechWebhooksPage() {
         <section style={sectionStyle}>
           <h2 style={h2Style}>1 · Register your endpoint</h2>
           <p style={pMutedStyle}>
-            Go to <Link href="/qpaynet/settings/webhooks" style={{ color: C.accent, textDecoration: "none" }}>QPayNet → Settings → Webhooks</Link> and add your HTTPS endpoint URL. You can subscribe to individual event types or all events.
+            Go to <Link href="/qpaynet/merchant" style={{ color: C.accent, textDecoration: "none" }}>QPayNet → Merchant API</Link> and add your HTTPS endpoint URL. You can subscribe to individual event types or all events.
           </p>
           <pre style={codeBlockStyle}>
 {pre(`POST https://api.aevion.app/api/qpaynet/me/webhook
@@ -343,7 +343,7 @@ function signFixture(body: object, secret: string) {
           <Link href="/developers/fintech/sdk" style={{ color: C.accent, textDecoration: "none" }}>SDK reference →</Link>
           <Link href="/developers/fintech/errors" style={{ color: C.accent, textDecoration: "none" }}>Error codes →</Link>
           <Link href="/developers/fintech/troubleshooting" style={{ color: C.accent, textDecoration: "none" }}>Troubleshooting →</Link>
-          <Link href="/qpaynet/settings/webhooks" style={{ color: C.accent, textDecoration: "none" }}>Manage webhooks →</Link>
+          <Link href="/qpaynet/merchant" style={{ color: C.accent, textDecoration: "none" }}>Manage webhooks →</Link>
         </div>
       </div>
     </main>

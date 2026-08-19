@@ -295,6 +295,17 @@ async function ensureBureauTables(): Promise<void> {
   await pool.query(
     `CREATE INDEX IF NOT EXISTS "BureauWebhookEvent_kind_receivedAt_idx" ON "BureauWebhookEvent" ("kind", "receivedAt" DESC);`,
   );
+  // Notarized-tier waitlist. The /bureau form used to keep the address in the
+  // visitor's own localStorage and answer "You're on the waitlist!" — nobody
+  // was on any list, and the only copy of the address lived in the browser of
+  // the person who typed it.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BureauWaitlist" (
+      "email"     TEXT PRIMARY KEY,
+      "source"    TEXT NOT NULL DEFAULT 'bureau-notarized',
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
   bureauTablesReady = true;
 }
 
@@ -1721,6 +1732,33 @@ bureauRouter.get("/cert/:certId/badge.svg", bureauEmbedRateLimit, async (req, re
     res.send(svgShell("AEVION BUREAU", label, color));
   } catch (err: any) {
     res.status(500).json({ error: "badge failed" });
+  }
+});
+
+// 🔹 POST /waitlist — Notarized tier sign-up. Public: the whole point is to
+// hear from people who do not have an account yet. Re-submitting the same
+// address is a no-op rather than an error, so a second click still reads as
+// success to the visitor without creating a second row.
+bureauRouter.post("/waitlist", bureauEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    // Deliberately loose: this is a mailing list, not an identity check. It
+    // rejects what cannot be an address at all and nothing else.
+    if (email.length < 5 || email.length > 254 || !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) {
+      return res.status(400).json({ error: "valid email required" });
+    }
+    const source = typeof req.body?.source === "string" ? req.body.source.slice(0, 60) : "bureau-notarized";
+    await pool.query(
+      `INSERT INTO "BureauWaitlist" ("email","source") VALUES ($1,$2)
+         ON CONFLICT ("email") DO NOTHING`,
+      [email, source],
+    );
+    const n = await pool.query(`SELECT COUNT(*)::int AS "n" FROM "BureauWaitlist"`);
+    res.status(201).json({ ok: true, total: n.rows[0]?.n ?? 0 });
+  } catch (err: unknown) {
+    captureBureauError(err, { route: "waitlist" });
+    res.status(500).json({ error: "waitlist failed" });
   }
 });
 

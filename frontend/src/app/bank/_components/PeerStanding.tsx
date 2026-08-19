@@ -112,7 +112,11 @@ export function PeerStanding({
               </InfoTooltip>
             </h2>
             <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
-              {t("peer.subtitle", { total: ranks[0].total.toLocaleString() })}
+              {/* Was: "of N wallets", where N was 8,500-14,500 drawn from a
+                  seed of the account id — a number that looked measured and
+                  never was. The panel keeps what is real: the user's own
+                  score per dimension. */}
+              {t("peer.subtitleNoCohort")}
             </div>
           </div>
         </div>
@@ -164,7 +168,6 @@ export function PeerStanding({
 function RankRow({ r }: { r: PeerRank }) {
   const { t } = useI18n();
   const pct = r.percentile * 100;
-  const medianPos = Math.min(95, Math.max(5, 50));
   return (
     <li
       style={{
@@ -207,10 +210,9 @@ function RankRow({ r }: { r: PeerRank }) {
             {t(r.labelKey)}
           </div>
           <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>
-            {t("peer.row.youMedian", {
-              you: r.userValueLabelKey ? t(r.userValueLabelKey, r.userValueLabelVars) : r.userValueLabel,
-              median: r.peerMedianLabelKey ? t(r.peerMedianLabelKey, r.peerMedianLabelVars) : r.peerMedianLabel,
-            })}
+            {/* The peer median next to it was a literal (42, 34, 1280), not
+                a measurement, so only the user's own value is shown. */}
+            {r.userValueLabelKey ? t(r.userValueLabelKey, r.userValueLabelVars) : r.userValueLabel}
           </div>
         </div>
         <div
@@ -247,19 +249,6 @@ function RankRow({ r }: { r: PeerRank }) {
             transition: "width 600ms ease",
           }}
         />
-        <span
-          aria-hidden="true"
-          style={{
-            position: "absolute" as const,
-            left: `${medianPos}%`,
-            top: -2,
-            width: 2,
-            height: 12,
-            background: "rgba(15,23,42,0.35)",
-            transform: "translateX(-50%)",
-          }}
-          title={t("peer.row.medianTitle")}
-        />
       </div>
 
       <div
@@ -271,7 +260,6 @@ function RankRow({ r }: { r: PeerRank }) {
           marginTop: 4,
         }}
       >
-        <span>{t("peer.row.rank", { rank: r.rank.toLocaleString(), total: r.total.toLocaleString() })}</span>
         <span style={{ fontWeight: 800, color: r.color }}>{pct.toFixed(0)}{t("peer.row.percentSuffix")}</span>
       </div>
     </li>

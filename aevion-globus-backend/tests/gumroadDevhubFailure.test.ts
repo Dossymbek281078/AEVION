@@ -56,6 +56,7 @@ beforeEach(() => {
   mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
 });
 
+
 describe("покупка DevHub через Gumroad", () => {
   test("успешная выдача отвечает 200 и говорит, что тариф поставлен", async () => {
     const r = await ping();

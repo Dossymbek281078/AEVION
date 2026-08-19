@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { track } from "@/lib/track";
 
 // Compact pricing chip + one-click buy for module pages. Mirrors the REAL GTM
 // tiers (Lite / Medium / Full) from /api/pricing — the same prices the checkout
@@ -106,6 +107,15 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
   async function buyNow() {
     setBuying(true);
     setBuyError(false);
+    // Same event the /pricing table fires, so the funnel dashboard counts a
+    // module-page purchase intent instead of silently missing it. sendBeacon
+    // inside track() survives the redirect to the processor.
+    track({
+      type: "checkout_start",
+      tier: "lite",
+      source: `module-chip/${moduleId}`,
+      meta: { period: "monthly", seats: 1, modules: 1, module: moduleId },
+    });
     try {
       const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
         method: "POST",

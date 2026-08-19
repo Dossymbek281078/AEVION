@@ -4,6 +4,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken } from "@/lib/auth";
 
 interface KycStatus {
   status: "none" | "pending" | "verified" | "rejected";
@@ -51,7 +52,7 @@ export default function KycPage() {
   const [address, setAddress] = useState("");
 
   useEffect(() => {
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = getAuthToken() ?? "";
     setToken(saved);
     if (!saved) { setLoading(false); return; }
     refresh(saved).finally(() => setLoading(false));

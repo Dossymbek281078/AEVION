@@ -132,19 +132,53 @@ export function buildWaitlistConfirmEmail(email: string, source?: string): Const
  * платформы, без обещаний по конкретному продукту, которых мы не давали на той
  * странице. Никаких скидок здесь не обещаем — цену и условия решает основатель.
  */
+/**
+ * Посадочные модулей: человек подписался НЕ «на платформу вообще», а ради
+ * конкретного продукта и конкретной даты, и письмо обязано это отражать.
+ *
+ * До 19.08 подписчику с /cyberchess/launch уходило «вы оставили адрес на
+ * главной странице aevion.app» — неправда — и ни слова про шахматы, ради
+ * которых он подписался. Форма научилась передавать `source` 14.08, письмо
+ * про это не знало.
+ *
+ * Дата названа как ПЛАН, а не обещание: письмо живёт в почте месяцами, а дата
+ * запуска — цель доски, и она может сдвинуться. Обещаем то, что зависит от
+ * нас: написать в день запуска.
+ */
+const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: string }> = [
+  { prefix: "cyberchess", name: "CyberChess", plan: "30 августа", page: "https://aevion.app/cyberchess/launch" },
+  { prefix: "bureau", name: "AEVION IP Bureau", plan: "6 сентября", page: "https://aevion.app/bureau/launch" },
+  { prefix: "qright", name: "AEVION IP Bureau", plan: "6 сентября", page: "https://aevion.app/bureau/launch" },
+  { prefix: "devhub", name: "DevHub Studio", plan: "13 сентября", page: "https://aevion.app/devhub/launch" },
+  { prefix: "multichat", name: "AEVION Multichat", plan: "20 сентября", page: "https://aevion.app/multichat-engine/launch" },
+];
+
+function moduleFromSource(source?: string) {
+  if (!source) return null;
+  const s = source.toLowerCase();
+  return LAUNCH_MODULES.find((m) => s === m.prefix || s.startsWith(`${m.prefix}-`)) ?? null;
+}
+
 export function buildPlatformWaitlistEmail(email: string, source?: string): ConstitutionEmailPayload {
-  const where = source === "go" ? "странице aevion.app/go" : "главной странице aevion.app";
+  const mod = moduleFromSource(source);
+  const where = mod
+    ? `странице запуска ${mod.name}`
+    : source === "go"
+      ? "странице aevion.app/go"
+      : "главной странице aevion.app";
   const html = `
     <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf8;border-radius:12px">
       <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION</div>
-      <p style="margin:0 0 16px">Адрес записан — вы в списке раннего доступа.</p>
+      <p style="margin:0 0 16px">Адрес записан${mod ? ` — вы в списке раннего доступа к ${mod.name}` : " — вы в списке раннего доступа"}.</p>
       <p style="color:#9aa3c0;margin:0 0 16px">
-        Платформа выпускает модули по одному. Как только выйдет следующий, вы получите
-        письмо в день запуска — с условиями раннего доступа, пока цена стартовая.
+        ${mod
+          ? `Открываем по плану ${mod.plan}. Напишем вам в день запуска — с условиями раннего доступа, пока цена стартовая. Если дата сдвинется, письмо всё равно придёт в день, когда откроем.`
+          : "Платформа выпускает модули по одному. Как только выйдет следующий, вы получите письмо в день запуска — с условиями раннего доступа, пока цена стартовая."}
       </p>
       <p style="color:#9aa3c0;margin:0 0 24px">
-        Пока можно посмотреть, что уже работает:
-        <a href="https://aevion.app/go" style="color:#22d3ee">aevion.app/go</a>
+        ${mod
+          ? `Страница запуска: <a href="${mod.page}" style="color:#22d3ee">${mod.page.replace("https://", "")}</a>`
+          : `Пока можно посмотреть, что уже работает: <a href="https://aevion.app/go" style="color:#22d3ee">aevion.app/go</a>`}
       </p>
       <hr style="border:none;border-top:1px solid rgba(212,175,55,0.2);margin-bottom:16px">
       <p style="color:#64748b;font-size:11px;margin:0">
@@ -155,9 +189,11 @@ export function buildPlatformWaitlistEmail(email: string, source?: string): Cons
   `;
   return {
     to: [{ email }],
-    subject: "Вы в списке раннего доступа AEVION",
+    subject: mod ? `Вы в списке раннего доступа: ${mod.name}` : "Вы в списке раннего доступа AEVION",
     htmlContent: html,
-    textContent: `Адрес записан — вы в списке раннего доступа AEVION. Напишем в день запуска следующего модуля. Что уже работает: aevion.app/go`,
+    textContent: mod
+      ? `Адрес записан — вы в списке раннего доступа к ${mod.name}. Открываем по плану ${mod.plan}, напишем в день запуска. Страница: ${mod.page}`
+      : `Адрес записан — вы в списке раннего доступа AEVION. Напишем в день запуска следующего модуля. Что уже работает: aevion.app/go`,
     tags: ["platform", "waitlist-confirm"],
   };
 }

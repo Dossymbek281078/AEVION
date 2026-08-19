@@ -46,6 +46,19 @@ export function getClientApiBase(): string {
 export function getBackendOrigin(): string {
   const pub = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (pub && /^https?:\/\//i.test(pub)) return stripTrailingSlash(pub);
+  // На проде — публичный адрес, а не служебный.
+  //
+  // Эта функция даёт origin для ССЫЛОК, по которым ходит человек, и она стоит
+  // в SiteHeader, то есть в шапке КАЖДОЙ страницы. `NEXT_PUBLIC_API_BASE_URL`
+  // в проде не задана, поэтому дальше подхватывался `API_INTERNAL_BASE_URL` —
+  // внутренний адрес Railway, — и он торчал наружу везде: ежедневный
+  // claims-audit нашёл его на /partner, странице для инвесторов, но там он был
+  // лишь заметнее, а не единственный.
+  //
+  // Адрес взят тот же, на который соседняя сессия перевела жёстко зашитую
+  // ссылку в /partner (0afe5b016), чтобы у платформы был один публичный адрес
+  // API, а не два разных в разных местах.
+  if (process.env.NODE_ENV === "production") return "https://aevion.app/api-backend";
   const internal = process.env.API_INTERNAL_BASE_URL?.trim();
   if (internal) return stripTrailingSlash(internal);
   return "http://127.0.0.1:4001";

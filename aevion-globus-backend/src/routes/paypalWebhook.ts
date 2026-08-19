@@ -16,12 +16,12 @@ import { paypalPaymentProvider, verifyPaypalWebhook } from "../lib/payment/paypa
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 
 const capture = makeServiceCapture("paypalWebhook");
 
 export const paypalWebhookRouter = Router();
 
-const SEEN = new Set<string>();
 
 function tierForReference(ref: string): TierId {
   const r = ref.toLowerCase();
@@ -95,8 +95,8 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   }
 
   const dedupKey = `${paymentId}:${result.status}`;
-  if (SEEN.has(dedupKey)) return res.json({ ok: true, deduped: true });
-  SEEN.add(dedupKey);
+  if (hasSeenWebhook("paypal", dedupKey)) return res.json({ ok: true, deduped: true });
+  markWebhookSeen("paypal", dedupKey);
 
   try {
     if (refunded || failed) {
@@ -132,7 +132,7 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
     return res.json({ ok: true, ignored: result.status });
   } catch (err) {
-    SEEN.delete(dedupKey);
+    releaseWebhookKey("paypal", dedupKey);
     capture(err);
     console.error("[paypal/webhook] handler error:", err instanceof Error ? err.message : err);
     return res.status(500).json({ ok: false, error: "handler_failed" });

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 type AuditEntry = {
   id: string;
@@ -48,7 +49,7 @@ export default function AuditLogPage() {
     setLoading(true);
     setError(null);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("qcore_token") : null;
+      const token = typeof window !== "undefined" ? getAuthToken() : null;
       const res = await fetch(apiUrl("/api/qcoreai/me/audit-log?limit=50"), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });

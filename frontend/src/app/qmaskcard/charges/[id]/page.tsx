@@ -10,6 +10,7 @@
  */
 
 import Link from "next/link";
+import { getAuthToken } from "@/lib/auth";
 import { useEffect, useMemo, useState, use as reactUse } from "react";
 import { getApiBase } from "@/lib/apiBase";
 
@@ -122,7 +123,7 @@ export default function QMaskCardChargeDetailPage({ params }: { params: Promise<
   // Hydrate: read token from localStorage
   useEffect(() => {
     try {
-      const t = window.localStorage.getItem("aevion_token");
+      const t = getAuthToken();
       if (!t) {
         setPhase("unauth");
         return;

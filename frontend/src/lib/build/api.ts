@@ -1922,7 +1922,7 @@ export async function completePasswordReset(email: string, token: string, newPas
 /** Request a verification email for the currently logged-in user. */
 export async function requestEmailVerification(): Promise<void> {
   const token = typeof window !== "undefined"
-    ? localStorage.getItem("build_auth_token") || sessionStorage.getItem("build_auth_token")
+    ? getAuthToken()
     : null;
   const res = await fetch(apiUrl("/api/auth/email/verify/request"), {
     method: "POST",
@@ -1938,7 +1938,7 @@ export async function requestEmailVerification(): Promise<void> {
 /** Complete email verification with the token from the verification link. */
 export async function completeEmailVerification(token: string): Promise<void> {
   const authToken = typeof window !== "undefined"
-    ? localStorage.getItem("build_auth_token") || sessionStorage.getItem("build_auth_token")
+    ? getAuthToken()
     : null;
   const res = await fetch(apiUrl("/api/auth/email/verify/complete"), {
     method: "POST",

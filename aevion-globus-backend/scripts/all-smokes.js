@@ -49,11 +49,19 @@ const SMOKES = [
   // Live pages: actually OPENS the public page of each live module (2xx +
   // real body). API success ≠ working page — the 2026-07-21 CF Pages lesson.
   { name: "pages-live", script: "pages-live-smoke.js", readOnly: true },
+  // Сверяет openapi с продом: обещанная, но отсутствующая ручка — тот же дефект,
+  // что и поломка, только тише. Нашёл три таких 12.08.2026.
+  { name: "openapi-live", script: "openapi-live-smoke.mjs", readOnly: true },
   // QSkyway: routing, regulator ceilings (FAA feed), signatures and the filing
   // document. Prod-safe — the slot-booking and QRight-registry write legs
   // self-skip under READ_ONLY=1, so the daily prod run covers the whole read
   // surface without leaving smoke rows in a live registry.
   { name: "qskyway", script: "qskyway-smoke.js", readOnly: true },
+  // CyberChess: приёмы, которым учит тренер, против содержимого банка задач.
+  // 12.08.2026 из пяти приёмов задачи были на ОДИН — остальные отдавали ноль,
+  // и это ничего не ломало: интерфейс фильтрует темы у себя, пустого экрана
+  // никто не видел. Только чтение.
+  { name: "cyberchess-coach-bank", script: "cyberchess-coach-vs-bank-smoke.js", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).
@@ -61,7 +69,16 @@ const SMOKES = [
   { name: "qsign-v2", script: "qsign-v2-smoke.js", readOnly: false },
   { name: "qshield", script: "qshield-smoke.js", readOnly: false },
   { name: "aev", script: "aev-smoke.js", readOnly: false },
-  { name: "build", script: "build-smoke.js", readOnly: false, env: { BUILD_PAYMENT_WEBHOOK_SECRET: process.env.BUILD_PAYMENT_WEBHOOK_SECRET || "4wSqkQHVbttaDO02zDJiPZcmyRVU3gO9fhSY6nicb9kIYxFI" } },
+  // Секрет берётся ТОЛЬКО из окружения. Здесь стояло зашитое значение как
+  // запасное — то есть живой ключ подписи платёжного вебхука лежал в коде с
+  // 19.05.2026 и разъехался по всем веткам и копиям репозитория. Этой подписью
+  // заказ помечается оплаченным (и начисляется кэшбэк), поэтому запасное
+  // значение было не удобством, а способом оплатить, не заплатив.
+  //
+  // Без переменной смоук теперь пропускается с явной причиной, а не идёт с
+  // зашитым ключом: молчаливая подстановка секрета скрывает и утечку, и
+  // поломку настройки разом.
+  { name: "build", script: "build-smoke.js", readOnly: false, requiresEnv: ["BUILD_PAYMENT_WEBHOOK_SECRET"] },
   // Offline: exercises the QCoreAI free fleet + council assembly against dist (no server/DB/keys).
   // `offline` because it require()s the COMPILED backend (dist/services/...), not the
   // target BASE. It is read-only, but running it in the prod sweep — a job that never
@@ -316,6 +333,11 @@ const prodSkipped = [];
 // job that only queries live Railway and never builds. They crashed on a missing
 // dist/ every day and turned the whole daily smoke red for a reason unrelated to prod.
 const offlineSkipped = [];
+// Смоуки, которым нужен секрет из окружения. Пропуск с НАЗВАННОЙ причиной, а не
+// падение и не тихая подстановка зашитого значения: до 19.08 у build-смоука
+// стоял запасной ключ прямо в коде, и настройка могла быть сломана месяцами —
+// смоук всё равно зеленел, потому что подписывал своим же зашитым секретом.
+const envSkipped = [];
 
 const eligible = SMOKES.filter((sm) => {
   if (ONLY.length > 0 && !ONLY.includes(sm.name)) return false;
@@ -329,10 +351,22 @@ const eligible = SMOKES.filter((sm) => {
     prodSkipped.push(sm.name);
     return false;
   }
+  const missing = (sm.requiresEnv || []).filter((k) => !String(process.env[k] || "").trim());
+  if (missing.length > 0) {
+    envSkipped.push(`${sm.name} (нет ${missing.join(", ")})`);
+    return false;
+  }
   return true;
 });
 
 if (eligible.length === 0) {
+  // Причина пропуска печатается ЗДЕСЬ, а не только ниже: если отсеян
+  // единственный выбранный смоук, до нижнего вывода дело не доходит, и
+  // «No smokes selected» читается как ошибка в ONLY/SKIP, хотя дело в
+  // ненастроенном секрете. Отказ обязан называть причину там, где он случился.
+  if (envSkipped.length > 0) {
+    console.error(`Пропущены из-за ненастроенного окружения: ${envSkipped.join(", ")}`);
+  }
   console.error("No smokes selected. Check ONLY / SKIP / READ_ONLY env vars.");
   process.exit(2);
 }
@@ -343,6 +377,9 @@ console.log(`  READ_ONLY  = ${READ_ONLY ? "yes" : "no"}`);
 console.log(`  scripts    = ${eligible.map((s) => s.name).join(", ")}`);
 if (prodSkipped.length > 0) {
   console.log(`  skipped    = ${prodSkipped.length} *-prod smoke(s) (BASE is not prod): ${prodSkipped.join(", ")}`);
+}
+if (envSkipped.length > 0) {
+  console.log(`  skipped    = ${envSkipped.length} smoke(s) без секрета в окружении: ${envSkipped.join(", ")}`);
 }
 if (offlineSkipped.length > 0) {
   console.log(`  skipped    = ${offlineSkipped.length} offline smoke(s) (they assert against the compiled backend, not ${BASE}): ${offlineSkipped.join(", ")}`);

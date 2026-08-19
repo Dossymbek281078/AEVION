@@ -673,9 +673,6 @@ export default function DrawingsHub() {
             <Link href="/smeta-trainer/drawings-practice/errors" className="text-[11px] px-3 py-1.5 bg-red-600 text-white rounded-full font-semibold hover:bg-red-700">
               🔍 Найди ошибку ({progress.errorsDone}/3)
             </Link>
-            <Link href="/smeta-trainer/drawings-practice/case-school47" className="text-[11px] px-3 py-1.5 bg-amber-600 text-white rounded-full font-semibold hover:bg-amber-700">
-              🎓 Капстоун-кейс
-            </Link>
           </div>
         </div>
       </div>

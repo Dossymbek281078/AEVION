@@ -7,6 +7,8 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
+import { track } from "@/lib/track";
+import { productById } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
@@ -72,6 +74,10 @@ function formatDate(iso: string) {
   const d = new Date(iso);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
+
+// Price and checkout URL come from the product catalogue, which is verified
+// against the live payment dashboards — the page must not carry its own copy.
+const STUDIO_PRO = productById("devhub");
 
 export default function DevHubPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -374,16 +380,20 @@ export default function DevHubPage() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
               <a
-                href="https://aevion.lemonsqueezy.com/checkout/buy/ab30b6f3-1d69-4db6-b7ab-86ef0d363a57"
+                href={STUDIO_PRO?.href ?? "#"}
                 target="_blank"
                 rel="noopener noreferrer"
+                // Studio Pro sells through its own Lemon Squeezy variant, so the
+                // charge never passes through /api/pricing/checkout — this event
+                // is the only way it shows up in the funnel dashboard.
+                onClick={() => track({ type: "checkout_start", tier: "studio-pro", source: "devhub", meta: { processor: "lemonsqueezy" } })}
                 style={{
                   padding: "9px 20px", background: "#fff", color: "#0d9488",
                   borderRadius: 8, fontWeight: 700, fontSize: 14, textDecoration: "none",
                   whiteSpace: "nowrap",
                 }}
               >
-                Upgrade — $149/mo
+                Upgrade — {`$${STUDIO_PRO?.priceUsd ?? 149}`}/mo
               </a>
               <a
                 href="/apps"

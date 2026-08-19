@@ -359,6 +359,26 @@ function isQRightAdmin(auth: { role?: string; email?: string } | null): boolean 
 }
 
 // 🔹 Получить все объекты (или ?mine=1 при Bearer — по ownerUserId, с fallback на старые строки по email)
+/**
+ * Публичный реестр не показывает следы собственных проверок.
+ *
+ * Замер 19.08.2026 по живому проду: из 25 объектов витрины **20** — записи
+ * прод-смоука (`ownerName: "smoke-test"`, заголовки вида «Smoke smoke-1784…»),
+ * с 18 мая по 22 июля. Прекратились они не потому, что их убрали, а потому что
+ * 27.07 отключили GitHub, откуда смоук и запускался; доступ вернули 18.08 —
+ * значит записи пойдут снова, и к запуску бюро 6 сентября витрина будет
+ * состоять из них ещё больше.
+ *
+ * Скрываем, а не удаляем: удаление из боевой базы необратимо и решается не
+ * здесь. Записи остаются доступны по прямому id и через `mine=1`, то есть сам
+ * смоук продолжает работать — он проверяет то, что создал, по id.
+ *
+ * Фильтр намеренно узкий, только по машинной метке `ownerName = 'smoke-test'`.
+ * Пробные объекты живых людей («Test Patent» и подобные) не трогаем: решать,
+ * что показывать в витрине из настоящих записей, — не дело кода выдачи.
+ */
+const SMOKE_OWNER = "smoke-test";
+
 qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
   try {
     await ensureQRightTable();
@@ -391,7 +411,8 @@ qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT * FROM "QRightObject" ORDER BY "createdAt" DESC'
+      'SELECT * FROM "QRightObject" WHERE "ownerName" IS DISTINCT FROM $1 ORDER BY "createdAt" DESC',
+      [SMOKE_OWNER],
     );
 
     res.json({
@@ -424,8 +445,10 @@ qrightRouter.get("/objects/search", objectsRateLimit, async (req, res) => {
     const limitRaw = parseInt(String(req.query.limit || "20"), 10);
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, limitRaw)) : 20;
 
-    const params: unknown[] = [`%${q}%`];
-    let where = `"title" ILIKE $1`;
+    const params: unknown[] = [`%${q}%`, SMOKE_OWNER];
+    // Тот же фильтр, что и у публичного списка: иначе смоук-записи не видны в
+    // витрине, но всплывают в поиске — то есть спрятаны наполовину.
+    let where = `"title" ILIKE $1 AND "ownerName" IS DISTINCT FROM $2`;
     if (kind) {
       params.push(kind);
       where += ` AND "kind" = $${params.length}`;
@@ -601,7 +624,9 @@ qrightRouter.get("/objects.csv", objectsRateLimit, async (req, res) => {
     const result = await pool.query(
       `SELECT id, title, kind, "contentHash", "ownerName", "ownerEmail", country, city, "createdAt"
        FROM "QRightObject"
-       ORDER BY "createdAt" DESC`
+       WHERE "ownerName" IS DISTINCT FROM $1
+       ORDER BY "createdAt" DESC`,
+      [SMOKE_OWNER],
     );
 
     // RFC 4180 CSV escaping: wrap field in quotes if it contains comma, quote, or newline;
@@ -1372,6 +1397,11 @@ qrightRouter.get("/transparency", embedRateLimit, async (_req, res) => {
   try {
     await ensureQRightTable();
 
+    // Числа прозрачности считаются по тем же записям, что показывает витрина:
+    // без записей прод-смоука. Замер 19.08.2026 — здесь стояло «зарегистрировано
+    // 25», из которых 20 были следами собственных проверок, то есть публичное
+    // число завышало реестр впятеро. Страница прозрачности, завышающая счёт,
+    // хуже отсутствия страницы: её показывают как доказательство.
     const [totals, byCode, byKind] = await Promise.all([
       pool.query(
         `SELECT
@@ -1379,21 +1409,26 @@ qrightRouter.get("/transparency", embedRateLimit, async (_req, res) => {
           COUNT("revokedAt") AS "revoked",
           MIN("createdAt") AS "first",
           MAX("createdAt") AS "last"
-         FROM "QRightObject"`
+         FROM "QRightObject"
+         WHERE "ownerName" IS DISTINCT FROM $1`,
+        [SMOKE_OWNER],
       ),
       pool.query(
         `SELECT COALESCE("revokeReasonCode", 'unspecified') AS code, COUNT(*) AS n
          FROM "QRightObject"
-         WHERE "revokedAt" IS NOT NULL
+         WHERE "revokedAt" IS NOT NULL AND "ownerName" IS DISTINCT FROM $1
          GROUP BY 1
-         ORDER BY 2 DESC`
+         ORDER BY 2 DESC`,
+        [SMOKE_OWNER],
       ),
       pool.query(
         `SELECT "kind", COUNT(*) AS n
          FROM "QRightObject"
+         WHERE "ownerName" IS DISTINCT FROM $1
          GROUP BY 1
          ORDER BY 2 DESC
-         LIMIT 12`
+         LIMIT 12`,
+        [SMOKE_OWNER],
       ),
     ]);
 

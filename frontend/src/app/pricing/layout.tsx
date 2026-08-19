@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Цены AEVION — единая платформа для IP, AI и финтеха",
   description:
-    "4 тарифа AEVION (Free / Pro / Business / Enterprise) и все модули под одной подпиской. Калькулятор сметы, бандлы, индустриальные кейсы, контакты с продажами.",
+    "6 тарифов AEVION (Free / Lite / Medium / Full / Universe / Enterprise) и все модули под одной подпиской. Калькулятор сметы, бандлы, индустриальные кейсы, контакты с продажами.",
   openGraph: {
     title: "Цены AEVION — все модули в одной подписке",
     description:

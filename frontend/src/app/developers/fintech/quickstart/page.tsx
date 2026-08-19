@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { repoPath } from "@/lib/repoUrl";
 
 // ── Fintech Quickstart — interactive curl examples
 // Zone: aevion-core/main owns frontend/src/app/developers/fintech/**
@@ -125,7 +126,7 @@ export default function FintechQuickstartPage() {
               { href: "/developers/fintech/troubleshooting", label: "Troubleshooting — 8 common issues with severity + fix steps" },
               { href: "/fintech/status", label: "Live health dashboard — module uptime" },
               { href: "/fintech", label: "Fintech ecosystem overview" },
-              { href: "https://github.com/Dossymbek281078/AEVION/issues", label: "GitHub Issues — report bugs or request endpoints" },
+              { href: repoPath("issues"), label: "GitHub Issues — report bugs or request endpoints" },
             ].map((l) => (
               <Link key={l.href} href={l.href} style={{ fontSize: 13, color: "#a78bfa", textDecoration: "none" }}>
                 → {l.label}

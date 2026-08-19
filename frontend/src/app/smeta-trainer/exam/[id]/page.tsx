@@ -44,12 +44,13 @@ import { LmsReturnBanner } from "../../components/LmsReturnBanner";
 export default function ExamTaskPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  // params — всегда промис (Next 15+). Объединение `Promise<…> | {…}` осталось
+  // со времён перехода и в Next 16 роняет СБОРКУ на проверке типов: сгенерённый
+  // PageProps требует `Promise<any>`. В dev это не видно — падает только
+  // полный build, уже после успешной компиляции.
+  params: Promise<{ id: string }>;
 }) {
-  const resolved =
-    typeof (params as Promise<{ id: string }>).then === "function"
-      ? use(params as Promise<{ id: string }>)
-      : (params as { id: string });
+  const resolved = use(params);
   const task = findExamTask(resolved.id);
   if (!task) {
     notFound();

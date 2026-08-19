@@ -1150,12 +1150,19 @@ describe("AevionCatalog.qcoreai (v0.7)", () => {
 
 describe("AevionCatalog.multichat (v0.7)", () => {
   it("providerStatus() → GET /api/multichat/provider-status", async () => {
+    // Ответ РЕАЛЬНОГО сервера, а не выдуманный. Прежняя версия этого теста
+    // проверяла поля `status: "online"` и `generatedAt`, которых ручка не
+    // отдавала никогда: тест был зелёным, а интегратор, написавший
+    // `if (p.status === "online")`, получал undefined.
     const body = {
       providers: [
-        { id: "openai", name: "OpenAI", status: "online", latencyMs: 120 },
-        { id: "anthropic", name: "Anthropic", status: "online", latencyMs: 200 },
+        { id: "openai", name: "OpenAI", configured: true, reachable: true, latencyMs: null, defaultModel: "gpt-4o-mini" },
+        { id: "anthropic", name: "Anthropic", configured: false, reachable: false, latencyMs: null, defaultModel: null },
       ],
-      generatedAt: "2026-05-14T00:00:00Z",
+      cachedAt: "2026-08-12T00:00:00.000Z",
+      fresh: true,
+      probed: false,
+      catalogLatencyMs: 3,
     };
     const { cat, fetchMock } = makeClient({ body });
     const r = await cat.multichat.providerStatus();
@@ -1163,7 +1170,11 @@ describe("AevionCatalog.multichat (v0.7)", () => {
       "https://api.aevion.app/api/multichat/provider-status",
     );
     expect(r.providers).toHaveLength(2);
-    expect(r.providers[0].status).toBe("online");
+    expect(r.providers[0].configured).toBe(true);
+    expect(r.providers[1].configured).toBe(false);
+    // Ручка обязана говорить, что апстримы не опрашивались: без этого поля
+    // «configured» читается как «работает».
+    expect(r.probed).toBe(false);
   });
 
   it("presets() → GET /api/multichat/presets", async () => {

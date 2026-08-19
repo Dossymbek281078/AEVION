@@ -118,7 +118,7 @@ export default function AccountPage() {
     source: string | null; createdAt: string; modules: string[];
   } | null>(null);
   // Модули, купленные ОТДЕЛЬНОЙ подпиской. Без них страница говорила
-  // «Free plan — no active subscription» человеку, который платит $39/мес за
+  // «Free plan — no active subscription» человеку, который платит $29/мес за
   // QVenture: тариф у него действительно free, а покупка живёт в другой
   // таблице, и кабинет её не читал.
   const [ownedApps, setOwnedApps] = useState<string[]>([]);

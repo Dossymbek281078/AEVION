@@ -9,6 +9,7 @@ import { smartComplete } from "../services/qcoreai/smartComplete";
 import { applyHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
+import { classifyGithubResponse, githubUnreachable } from "../lib/githubFailure";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
 import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
 
@@ -236,6 +237,35 @@ async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; mon
     usage[cap] = { used, limit: TIER_LIMITS[tier][cap] };
   }
   return { tier, month, usage: usage as Record<CapabilityKey, { used: number; limit: number }> };
+}
+
+// ── Deferred post-deploy work ────────────────────────────────────────────────
+// Deploy routes answer immediately and then verify, seconds later, that the
+// deployed URL actually serves (backend CLAUDE.md §10). Those timers outlive
+// the request — and in tests they outlive the test that started them, firing
+// during a later one and consuming its mocked fetch. That is what made the
+// backend suite fail on a different test each run (issue #982): a real
+// timing dependency, not a mystery.
+//
+// Prod behaviour is unchanged; the timers are merely tracked so a test can
+// drop the ones still pending.
+const deferredTimers = new Set<ReturnType<typeof setTimeout>>();
+
+function deferred(fn: () => void | Promise<void>, ms: number): void {
+  const t = setTimeout(() => {
+    deferredTimers.delete(t);
+    void fn();
+  }, ms);
+  // A pending timer keeps Node alive on its own. A post-deploy check should
+  // never be the reason a process refuses to exit.
+  t.unref?.();
+  deferredTimers.add(t);
+}
+
+/** Drop post-deploy verification still waiting to run. Tests only. */
+export function __clearDeferredDevHubWork() {
+  for (const t of deferredTimers) clearTimeout(t);
+  deferredTimers.clear();
 }
 
 // ── Exported reset helpers for tests ─────────────────────────────────────────
@@ -2039,7 +2069,7 @@ Built, but ${url} did not answer 2xx in time`;
 
         // Verify the page actually serves before calling it live — same
         // honesty rule as the CF Pages / Vercel paths.
-        setTimeout(async () => {
+        deferred(async () => {
           const d = memDeployments.get(deployment.id) ?? deployment;
           const serves = await verifyDeploymentServes(railwayDeployUrl);
           if (serves) {
@@ -2081,7 +2111,7 @@ Built, but ${url} did not answer 2xx in time`;
     })();
   } else {
     // Simulate build asynchronously — no Railway token
-    setTimeout(async () => {
+    deferred(async () => {
       deployment.status = "live";
       deployment.deployUrl = deployUrl;
       deployment.buildLog = `Build started at ${deployment.triggeredAt}\nInstalling dependencies...\nBuilding...\nDeployment complete!\nLive at: ${deployUrl}`;
@@ -2681,7 +2711,12 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
         "User-Agent": "AEVION-DevHub",
       },
     });
-    if (!ghResp.ok) return res.json({ exists: false });
+    // `exists: false` alone said "no such repository" for a revoked token too.
+    // The reason travels with it so the screen can tell the two apart.
+    if (!ghResp.ok) {
+      const { errorKind, error } = classifyGithubResponse(ghResp.status, ghResp.headers);
+      return res.json({ exists: false, errorKind, error });
+    }
     const ghData = await ghResp.json() as {
       stargazers_count?: number;
       open_issues_count?: number;
@@ -2693,8 +2728,9 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
       openIssues: ghData.open_issues_count ?? 0,
       lastPush: ghData.pushed_at ?? null,
     });
-  } catch {
-    return res.json({ exists: false });
+  } catch (e: any) {
+    const { errorKind, error } = githubUnreachable(e?.message);
+    return res.json({ exists: false, errorKind, error });
   }
 });
 
@@ -2729,61 +2765,30 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
         Accept: "application/vnd.github+json",
       },
     });
-    if (!resp.ok) return res.json({ branches: [], connected: true, error: "GitHub API error" });
+    // This line used to read `connected: true` for every failure: a revoked
+    // token, a repo the token cannot see and a GitHub outage all reached the
+    // screen as "connected, 0 branches". `connected` now means GitHub answered.
+    if (!resp.ok) return res.json({ branches: [], ...classifyGithubResponse(resp.status, resp.headers) });
     const data = await resp.json() as Array<{ name: string; commit: { sha: string } }>;
     return res.json({
       connected: true,
       repoUrl: project.repoUrl,
       branches: data.map((b) => ({ name: b.name, sha: b.commit.sha.slice(0, 7) })),
     });
-  } catch {
-    return res.json({ branches: [], connected: false });
+  } catch (e: any) {
+    // A thrown fetch says nothing about the token, so it must not read as one.
+    return res.json({ branches: [], ...githubUnreachable(e?.message) });
   }
 });
 
-// POST /api/devhub/projects/:id/github/sync — pull latest commit SHA for default branch
-devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
-  const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
-  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
-  if (!project.repoUrl || !githubToken) {
-    return res.json({ ok: false, message: "No GitHub repo linked or GITHUB_TOKEN missing (set in project envVars or server env)" });
-  }
-  try {
-    const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
-    if (!match) return res.json({ ok: false, message: "Invalid repoUrl format" });
-    const [, owner, repo] = match;
-    const resp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      headers: {
-        Authorization: `Bearer ${githubToken}`,
-        "User-Agent": "AEVION-DevHub",
-        Accept: "application/vnd.github+json",
-      },
-    });
-    if (!resp.ok) return res.json({ ok: false, message: "GitHub API error" });
-    const data = await resp.json() as { default_branch: string; pushed_at: string; stargazers_count: number };
-    project.updatedAt = new Date().toISOString();
-    try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
-    return res.json({
-      ok: true,
-      defaultBranch: data.default_branch,
-      lastPush: data.pushed_at,
-      stars: data.stargazers_count,
-      repoUrl: project.repoUrl,
-    });
-  } catch (e: any) {
-    return res.json({ ok: false, message: e?.message || "sync failed" });
-  }
-});
+// A second POST /projects/:id/github/sync used to be declared here, returning
+// the repo's default branch, star count and last-push date. Express matches the
+// FIRST handler registered for a path, so it never ran once — the pull-files
+// handler above always answered instead. Nothing consumed its shape (the UI
+// reads `updated`/`created`), and `/github/status` already serves stars and
+// last push, so it was removed rather than given a second path. The duplicate
+// is guarded by a test: devhub-github-connection-truth.test.ts.
+
 // ═════════════════════════════════════════════════════════════════════════════
 
 // GET /api/devhub/templates
@@ -5351,7 +5356,7 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 
     // Verify the page actually serves before calling it live — same honesty
     // rule as the CF Pages path (a deploy that never serves is a failure).
-    setTimeout(async () => {
+    deferred(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(liveUrl);
       if (serves) {
@@ -5536,7 +5541,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // then 500s forever while our records said "live" (found live 2026-07-21:
     // every CF Pages deploy ever made had this). Degraded-convention: a
     // deploy that doesn't serve is FAILED, not live.
-    setTimeout(async () => {
+    deferred(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(pagesUrl);
       if (serves) {

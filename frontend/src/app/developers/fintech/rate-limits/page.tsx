@@ -10,9 +10,14 @@ export const metadata: Metadata = {
 const C = { bg: "#050810", surface: "#0d1117", border: "#1e2a3a", text: "#e2e8f0", muted: "#64748b", code: "#0f1923", accent: "#6366f1", green: "#10b981", amber: "#f59e0b", red: "#ef4444" };
 
 const TIERS = [
+  // Цены и лимиты обязаны совпадать с API_TIERS в
+  // aevion-globus-backend/src/routes/apiQuotas.ts — он же отдаётся машинам на
+  // /api/quotas и на него ссылается /launch-status. Scale тут стоял $199 при
+  // $249 в реестре: разработчик, сравнивший таблицу с ответом эндпоинта,
+  // получал два разных числа. Закреплено тестом apiTierPrices.guard.
   { name: "Developer", price: "Free",    perMin: 100,  perMonth: "10K",   burst: 150,  concurrency: 5 },
   { name: "Build",     price: "$49/mo",  perMin: 500,  perMonth: "100K",  burst: 750,  concurrency: 20 },
-  { name: "Scale",     price: "$199/mo", perMin: 2000, perMonth: "1M",    burst: 3000, concurrency: 100 },
+  { name: "Scale",     price: "$249/mo", perMin: 2000, perMonth: "1M",    burst: 3000, concurrency: 100 },
   { name: "Enterprise",price: "Custom",  perMin: null, perMonth: "∞",     burst: null, concurrency: null },
 ];
 

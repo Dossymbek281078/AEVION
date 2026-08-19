@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { repoLabel, repoPath } from "@/lib/repoUrl";
 
 export const metadata: Metadata = {
   title: "AEVION Fintech API — Developer reference",
@@ -1152,10 +1153,10 @@ SMOKE_BASE=https://api.aevion.app npm run smoke:all`}</Pre>
             <br />
             <strong>Issues:</strong>{" "}
             <a
-              href="https://github.com/Dossymbek281078/AEVION/issues"
+              href={repoPath("issues")}
               style={{ color: ACCENT_PURPLE, textDecoration: "none" }}
             >
-              github.com/Dossymbek281078/AEVION/issues
+              {repoLabel()}/issues
             </a>
           </P>
         </footer>

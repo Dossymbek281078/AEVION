@@ -1,5 +1,6 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 import { useEffect, useState } from "react";
@@ -45,7 +46,7 @@ export default function QContractHome() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) { setLoading(false); return; }
     fetch(apiUrl("/api/qcontract/documents"), { headers: { Authorization: `Bearer ${t}` } })

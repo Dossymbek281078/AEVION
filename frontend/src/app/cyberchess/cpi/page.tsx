@@ -5,6 +5,7 @@
 // Зона: aevion-core/main owns frontend/src/app/cyberchess/**
 
 import Link from "next/link";
+import { repoPath } from "@/lib/repoUrl";
 
 const C = {
   bg: "#0f172a",
@@ -303,7 +304,7 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
         <div style={{ marginTop: 24, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
           <Link href="/cyberchess" style={{ color: C.purple, textDecoration: "none" }}>← CyberChess</Link>
           <span style={{ color: C.faint }}>·</span>
-          <a href="https://github.com/Dossymbek281078/AEVION/blob/main/CYBERCHESS_CPI_SPEC.md" style={{ color: C.purple, textDecoration: "none" }}>📄 Full spec on GitHub</a>
+          <a href={repoPath("blob/main/CYBERCHESS_CPI_SPEC.md")} style={{ color: C.purple, textDecoration: "none" }}>📄 Full spec on GitHub</a>
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>

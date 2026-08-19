@@ -177,10 +177,18 @@ const vBad = await m.verifyReceipt({ receipt: tamperedPrompt, hash: s1.hash, sig
 ok("подменённый чек проверку НЕ проходит", vBad.hashMatches === false);
 ok("но пересчитанный хеш всё равно отдаётся", /^[0-9a-f]{64}$/.test(vBad.computedHash));
 
-// Без переданного хеша сравнивать не с чем — выдать «сходится» было бы ложным
-// подтверждением, ровно тем, от чего чек и защищает.
+// Без переданного хеша сравнивать не с чем. Выдать «сходится» было бы ложным
+// подтверждением, ровно тем, от чего чек и защищает. Но и «не сходится» здесь
+// нельзя: ручка принимает голый чек как штатный формат, и на подлинный
+// документ страница отвечала «содержимое изменено». Поэтому третье
+// состояние — null, и оно обязано отличаться от false.
 const vNoHash = await m.verifyReceipt({ receipt: r, signature: null });
-ok("без переданного хеша совпадения нет", vNoHash.hashMatches === false);
+ok("без переданного хеша — не «сходится»", vNoHash.hashMatches !== true, String(vNoHash.hashMatches));
+ok("без переданного хеша — и не «подделан»", vNoHash.hashMatches === null, String(vNoHash.hashMatches));
+ok("пересчитанный хеш при этом отдаётся — есть что сверить самому",
+  vNoHash.computedHash === s1.hash, `${vNoHash.computedHash} vs ${s1.hash}`);
+ok("пояснение говорит, что сверять не с чем",
+  /не приложен/i.test(String(vNoHash.signatureNote)), String(vNoHash.signatureNote));
 
 const vAlgo = await m.verifyReceipt({ receipt: r, hash: s1.hash, signature: { algo: "rsa", kid: "k1", value: "00" } });
 ok("неизвестный алгоритм → unverifiable, а не valid", vAlgo.signature === "unverifiable", vAlgo.signature);

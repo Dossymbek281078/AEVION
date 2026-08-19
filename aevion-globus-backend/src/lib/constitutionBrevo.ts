@@ -313,14 +313,19 @@ export async function sendEmailVerify(email: string, verifyUrl: string): Promise
   return true;
 }
 
-export async function sendWaitlistConfirm(email: string, source?: string): Promise<void> {
+/** Возвращает, УДАЛОСЬ ли отправить. Вызывающий обязан заметить false:
+ *  молчаливый провал неотличим от задержки почты и не всплывает никогда. */
+export async function sendWaitlistConfirm(email: string, source?: string): Promise<boolean> {
   const payload = buildWaitlistConfirmEmail(email, source);
   const result = await sendBrevoEmail(payload);
   if (!result.ok) {
     console.error("[Brevo] waitlist-confirm failed:", result.error);
-  } else if (result.degraded) {
+    return false;
+  }
+  if (result.degraded) {
     console.warn(`[Brevo] waitlist-confirm degraded for ${email}: ${result.degradedReason}`);
   }
+  return true;
 }
 
 export async function sendWeeklyDigestEmail(

@@ -38,6 +38,15 @@ const app = express();
 app.use(express.json());
 app.use("/api/cyberchess-daily", dailyRouter);
 
+// Ходы и день берём у самого сервера: с 19.08.2026 /solve сверяет решение, а
+// зашитая дата не совпала бы с задачей, которую сервер выдаёт СЕГОДНЯ.
+// Утверждения ниже — про сохранность и статистику, дата в них роли не играет.
+const тестовыйДень = () => new Date().toISOString().slice(0, 10);
+const тестовыеХоды = async (): Promise<string[]> => {
+  const r = await request(app).get("/api/cyberchess-daily/puzzle");
+  return (r.body?.puzzle?.sol ?? []) as string[];
+};
+
 afterAll(() => {
   delete process.env.CYBERCHESS_DAILY_DIR;
   try {
@@ -76,7 +85,7 @@ describe("отсутствующая запись статистики — не 
   test("после решения запись появляется и статистика становится известной", async () => {
     await request(app)
       .post("/api/cyberchess-daily/solve")
-      .send({ streak: 2, day: "2026-08-12", timeMs: 5000, hintsUsed: 0, userId: "veteran", name: "Ветеран" });
+      .send({ day: тестовыйДень(), timeMs: 5000, hintsUsed: 0, userId: "veteran", name: "Ветеран", moves: await тестовыеХоды() });
 
     const res = await request(app).get("/api/cyberchess-daily/user/veteran/stats");
 

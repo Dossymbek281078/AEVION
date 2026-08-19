@@ -123,6 +123,7 @@ const KEYS = [
   "qskyway.height.suspectTip",
   "qskyway.tel.obstacleTip",
   "qskyway.just.byBuildingsSuffix",
+  "qskyway.booking.netError",
   "qskyway.slots.receipt",
   "qskyway.slots.capacity",
   "qskyway.reg.subject.prohibition",

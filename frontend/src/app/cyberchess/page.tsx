@@ -131,6 +131,15 @@ import MirrorModePanel from "./MirrorModePanel";
 import { buildPlayerProfile, mirrorDepth, type PlayerProfile, type SavedGameForMirror } from "./mirrorMode";
 import { getAuthToken } from "@/lib/auth";
 
+/** Русское склонение по числу: 1 задача, 2 задачи, 5 задач.
+ *  Без него счётчик пишет «502 584 задач» там, где нужно «задачи». */
+function ccPlural(n:number,one:string,few:string,many:string):string{
+  const a=Math.abs(n)%100, b=a%10;
+  if(a>10&&a<20)return many;
+  if(b>1&&b<5)return few;
+  if(b===1)return one;
+  return many;
+}
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
 type TC = {name:string;ini:number;inc:number;cat:"Bullet"|"Blitz"|"Rapid"|"Classical"};
@@ -1295,6 +1304,25 @@ export default function CyberChessPage(){
   const[bookmarks,sBookmarks]=useState<Bookmark[]>([]);
   useEffect(()=>{sBookmarks(loadBookmarks())},[]);
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
+  // Сколько задач в банке НА САМОМ ДЕЛЕ. PUZZLES — это загруженная в память
+  // пачка (на вкладке «Играть» их 400), и показывать её как размер базы значит
+  // занижать продукт в тысячу раз: лендинг обещает полмиллиона.
+  const[pzTotal,sPzTotal]=useState<number|null>(null);
+  useEffect(()=>{
+    let alive=true;
+    (async()=>{
+      try{
+        const r=await fetch("/api-backend/api/cyberchess-puzzles?limit=1");
+        if(!r.ok)return;
+        const d=await r.json();
+        const n=Number(d?.total);
+        // Отсутствие ответа оставляет null — тогда ниже покажем загруженное,
+        // а не выдуманное. Ноль от неудачного чтения не должен стать фактом.
+        if(alive&&Number.isFinite(n)&&n>0)sPzTotal(n);
+      }catch{ /* счётчик не критичен: молча остаёмся на загруженном */ }
+    })();
+    return()=>{alive=false};
+  },[]);
   // Puzzle system
   const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush"|"custom">("learn");
   const[pzCustomSec,sPzCustomSec]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_pz_custom_sec_v1")||"600");return isNaN(v)||v<30||v>3600?600:v}catch{return 600}});
@@ -5535,7 +5563,7 @@ export default function CyberChessPage(){
               </span>}
             </div>
             <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-              SF18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}
+              SF18 · {(pzTotal??PUZZLES.length).toLocaleString("ru-RU")} {ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")}{useSF&&sfOk?" · ⚡":""}
             </div>
           </div>
         </div>

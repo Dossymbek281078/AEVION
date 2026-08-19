@@ -12,9 +12,26 @@ export const puzzlesRouter = Router();
 let dbReady = false;
 let dbInitTried = false;
 
+/**
+ * Кулдаун вместо защёлки (19.08.2026).
+ *
+ * Раньше флаг «уже пробовали» ставился ПЕРЕД попыткой и больше не снимался: один
+ * обрыв сети при первом запросе — и облако задач до перезапуска процесса
+ * отвечало «offline: true», хотя база была жива. Для читателя это выглядит как
+ * «задач нет», а не как «мы не смогли спросить»; страница честно показывает
+ * встроенный набор и никто не узнаёт, что облако выключилось.
+ *
+ * Защёлка превращает временную неисправность в постоянную. Тот же класс
+ * починен в хранилище партий и в античите в этот же день.
+ */
+const PUZZLES_DB_INIT_RETRY_MS = Number(process.env.CYBERCHESS_DB_INIT_RETRY_MS ?? 30_000);
+let dbInitNextTryAt = 0;
+
 async function ensureDb() {
-  if (dbInitTried) return;
+  if (dbReady) return;
+  if (Date.now() < dbInitNextTryAt) return;
   dbInitTried = true;
+  dbInitNextTryAt = Date.now() + PUZZLES_DB_INIT_RETRY_MS;
   if (!process.env.DATABASE_URL) { console.log("[Puzzles] No DATABASE_URL — offline mode"); return; }
   try {
     const pool = getPool();

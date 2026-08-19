@@ -233,7 +233,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
           <footer className="mx-auto mt-8 max-w-3xl border-t border-white/5 pt-3 text-center text-[10px] text-slate-500">
             Powered by{" "}
             <a
-              href="https://aevion.tech/build"
+              href="https://aevion.app/build"
               target="_blank"
               rel="noopener noreferrer"
               className="text-emerald-300 hover:underline"
@@ -1865,7 +1865,7 @@ function EmbedSnippetBlock({ vacancyId }: { vacancyId: string }) {
   const [open, setOpen] = useState(false);
   const toast = useToast();
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.tech";
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.app";
   const snippet = `<div data-aevion-build data-key="qb_pk_..." data-vacancy-id="${vacancyId}"></div>
 <script src="${origin}/api/build/public/widget.js" defer></script>`;
 

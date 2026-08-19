@@ -8,7 +8,7 @@
  * BCH(15,5) для format info, стандартное размещение модулей по ISO 18004.
  *
  * Использование:
- *   const matrix = encodeQR("https://aevion.kz/...");  // boolean[][], true = чёрный
+ *   const matrix = encodeQR("https://aevion.app/...");  // boolean[][], true = чёрный
  *   const svg = renderQRSvg(matrix, 200);              // SVG-строка для <img src> или dangerouslySetInnerHTML
  */
 

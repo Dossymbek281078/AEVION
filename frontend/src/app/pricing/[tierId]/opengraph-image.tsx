@@ -137,7 +137,7 @@ export default async function Image({ params }: { params: Promise<{ tierId: stri
               )}
             </span>
           </div>
-          <div style={{ fontSize: 16, opacity: 0.7 }}>aevion.io/pricing/{tierId}</div>
+          <div style={{ fontSize: 16, opacity: 0.7 }}>aevion.app/pricing/{tierId}</div>
         </div>
       </div>
     ),

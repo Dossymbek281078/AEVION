@@ -41,23 +41,23 @@ const ORG_LD = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "AEVION QBuild",
-  url: "https://aevion.com/build",
-  logo: "https://aevion.com/build/icon.png",
+  url: "https://aevion.app/build",
+  logo: "https://aevion.app/build/icon.png",
   description:
     "AEVION QBuild — construction recruiting marketplace. Post projects, hire crews, get hired.",
-  sameAs: ["https://aevion.com"],
+  sameAs: ["https://aevion.app"],
 };
 
 const SITE_LD = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: "AEVION QBuild",
-  url: "https://aevion.com/build",
+  url: "https://aevion.app/build",
   potentialAction: {
     "@type": "SearchAction",
     target: {
       "@type": "EntryPoint",
-      urlTemplate: "https://aevion.com/build/vacancies?q={search_term_string}",
+      urlTemplate: "https://aevion.app/build/vacancies?q={search_term_string}",
     },
     "query-input": "required name=search_term_string",
   },

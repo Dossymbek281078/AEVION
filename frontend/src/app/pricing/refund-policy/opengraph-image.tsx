@@ -101,7 +101,7 @@ export default async function Image() {
             <Item label="90 ДНЕЙ" hint="retain после отмены" />
             <Item label="JSON / PDF" hint="экспорт данных" />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/refund-policy</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/refund-policy</div>
         </div>
       </div>
     ),

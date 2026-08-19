@@ -269,7 +269,7 @@ function CheatsheetPageInner() {
         <div className="mt-3 pt-2 border-t border-slate-300 flex justify-between items-end text-[9px] text-slate-500">
           <div>
             <strong>AEVION · Сметный тренажёр РК</strong>
-            <div className="text-slate-400">aevion.kz / smeta-trainer</div>
+            <div className="text-slate-400">aevion.app / smeta-trainer</div>
           </div>
           <div className="text-right text-slate-400 italic">
             Шпаргалка для учебных целей. Реальная экспертиза — ИСТ Эталон + ГЭ.

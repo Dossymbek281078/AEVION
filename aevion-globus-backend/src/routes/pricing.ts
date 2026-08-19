@@ -612,7 +612,18 @@ function persistApplication(file: string, app: ProgramApplication) {
   appendFileSync(file, JSON.stringify(app) + "\n", "utf8");
 }
 
-const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL?.trim() || "hello@aevion.io";
+// ⚠️ 19.08.2026: здесь стоял запасной адрес "hello@aevion.io" — и это ЧУЖОЙ
+// домен. aevion.io принадлежит другой компании с тем же названием (их
+// schema.org: «Aevion builds an AI-native personal operating system»,
+// контакт jonathan@aevion.io). Переменная NOTIFY_EMAIL на проде не задана,
+// значит внутренние уведомления о заявках — с именем, почтой, организацией,
+// страной и каналом заявителя — уходили им.
+//
+// Запасного адреса больше нет намеренно. Не задана переменная — уведомление
+// не отправляется, а пишется предупреждение: заявка при этом сохраняется, и
+// потерять её нельзя. Придумать «правдоподобный» адрес было бы тем же
+// дефектом с другим доменом.
+const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL?.trim() || "";
 
 const PROGRAM_LABELS: Record<ProgramApplication["kind"], { label: string; eta: string; subject: string }> = {
   affiliate: {
@@ -645,7 +656,7 @@ function applicantHtml(app: ProgramApplication): string {
       ID заявки: <strong style="color:#0f172a">${escapeHtml(app.id)}</strong>
     </div>
     <p style="font-size:13px;color:#94a3b8;margin:16px 0 0">
-      Вопросы — отвечайте на это письмо или пишите ${NOTIFY_EMAIL}.
+      Вопросы — отвечайте на это письмо${NOTIFY_EMAIL ? ` или пишите ${NOTIFY_EMAIL}` : ""}.
     </p>
   </div>
 </body></html>`;
@@ -659,7 +670,7 @@ function applicantText(app: ProgramApplication): string {
 
 ID заявки: ${app.id}
 
-Вопросы — отвечайте на это письмо или пишите ${NOTIFY_EMAIL}.
+Вопросы — отвечайте на это письмо${NOTIFY_EMAIL ? ` или пишите ${NOTIFY_EMAIL}` : ""}.
 
 — AEVION`;
 }
@@ -711,7 +722,15 @@ async function notifyApplication(app: ProgramApplication): Promise<void> {
     html: applicantHtml(app),
     text: applicantText(app),
   }).catch((e) => console.error(`[apply/${app.kind}] applicant email failed`, e));
-  // Внутреннее уведомление
+  // Внутреннее уведомление — только если адрес настроен (см. комментарий у
+  // NOTIFY_EMAIL: запасной вёл в чужую компанию).
+  if (!NOTIFY_EMAIL) {
+    console.warn(
+      `[apply/${app.kind}] NOTIFY_EMAIL не задан — внутреннее уведомление не отправлено. ` +
+      `Заявка сохранена, адресат уведомления не настроен.`,
+    );
+    return;
+  }
   sendEmail({
     to: NOTIFY_EMAIL,
     subject: `[${app.kind}] ${app.name} · ${app.organization ?? "—"}`,
@@ -1006,7 +1025,7 @@ function refCode(email: string, scope: "aff" | "prt"): string {
   );
 }
 
-const SITE_BASE = process.env.PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.io";
+const SITE_BASE = process.env.PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 function magicLinkHtml(
   appName: string,

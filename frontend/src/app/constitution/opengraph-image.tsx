@@ -257,7 +257,7 @@ export default async function Image() {
             display: "flex",
           }}
         >
-          aevion.io / constitution · North · Acemoglu · Ostrom · Taleb
+          aevion.app / constitution · North · Acemoglu · Ostrom · Taleb
         </div>
       </div>
     ),

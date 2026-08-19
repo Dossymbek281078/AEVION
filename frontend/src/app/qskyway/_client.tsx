@@ -981,7 +981,16 @@ export default function QSkywayClient() {
                       <span style={{ color: "#94a3b8" }}>{t("qskyway.verify.unknown")}</span>
                     )}
                   </span>
-                  <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: t("qskyway.unit.buildings") }} />
+                  <DataProvenanceChip compact dataQuality={meta.dq} labels={{
+                      // Подписи происхождения данных берём из переводов, а не из
+                      // умолчаний компонента: они русские, а компонент общий и
+                      // стоит в трёх модулях. Проверено на проде 19.08.2026 —
+                      // на английской странице читалось «0% измерено, 50.1% real».
+                      measured: t("prov.measured"),
+                      derived: t("prov.derived"),
+                      guessed: t("prov.guessed"),
+                      unit: t("qskyway.unit.buildings"),
+                    }} />
                   {meta.suspect.length > 0 && (
                     <span
                       title={

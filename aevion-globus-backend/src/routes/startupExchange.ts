@@ -312,10 +312,28 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
 
   const stage = stageRaw;
   const contentHash = computeContentHash({ title, description, stage });
-  // qright_object_id is reserved for a future direct integration; for MVP we
-  // stamp the contentHash here and flag qright_protected=true on response.
+
+  // ЧТО ЗДЕСЬ ПРОИСХОДИТ НА САМОМ ДЕЛЕ, и почему это важно назвать точно.
+  //
+  // Мы считаем SHA-256 от полей идеи и сохраняем его у себя. Всё. Регистрации в
+  // реестре QRight НЕ ПРОИСХОДИТ: qright_object_id всегда null, запроса к
+  // реестру нет ни одного.
+  //
+  // Поле qrightProtected при этом отдавалось как true всегда, а витрина рисует
+  // по нему значок «QRight» и пишет «Идея #N защищена». Основатель отдаёт идею,
+  // считая её зарегистрированной. Пояснительный текст страницы честен
+  // («QRight-совместимая схема», «позже можно перенести»), но человек читает
+  // короткое, а не абзац ниже.
+  //
+  // Поле оставлено, чтобы не сломать витрину чужой ветки, но рядом идут два
+  // честных: по ним интерфейс может сказать правду, не гадая. Замена значка и
+  // формулировки — на доске запуска, файлы витрины правят пять веток.
   const qrightObjectId: string | null = null;
-  const qrightProtected = true; // we always produce a deterministic contentHash
+  const qrightProtected = true; // историческое имя: означает «хеш посчитан», а не «зарегистрировано»
+  /** Есть ли запись в реестре QRight. Сегодня — никогда. */
+  const qrightRegistered = qrightObjectId !== null;
+  /** Что фактически сделано с идеей. */
+  const protection = "content-hash" as const;
 
   try {
     if (isStartupExchangeDbReady()) {
@@ -330,8 +348,11 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
       return ok(res, {
         id: row.id,
         qrightProtected,
+        qrightRegistered,
+        protection,
         contentHash: row.content_hash,
         idea: publicView(row),
+        storage: "db",
       }, 201);
     }
   } catch (e) {
@@ -348,11 +369,17 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
     content_hash: contentHash,
     visibility: "public",
   });
+  // Запасной путь: идея легла в Map с обрезкой до MEM_MAX_IDEAS и не переживёт
+  // перезапуск. До 19.08.2026 ответ был неотличим от настоящего сохранения —
+  // включая contentHash, по которому человек считает идею зафиксированной.
   return ok(res, {
     id: row.id,
     qrightProtected,
+    qrightRegistered,
+    protection,
     contentHash: row.content_hash,
     idea: publicView(row),
+    storage: "memory",
   }, 201);
 });
 

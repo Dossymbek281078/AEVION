@@ -92,7 +92,12 @@ deepSanRouter.get("/health", (_req: Request, res: Response) => {
 deepSanRouter.get("/tasks", async (req: Request, res: Response) => {
   const priority = req.query.priority as string | undefined;
   const done = req.query.done as string | undefined;
-  const limit = Math.min(Number(req.query.limit ?? 50), 200);
+  // ?? ловит только null/undefined, поэтому Number("zzz") давало NaN, а
+  // Math.min(NaN, 200) — тоже NaN: в SQL уходило LIMIT NaN и Postgres валил
+  // запрос пятисоткой. Отрицательное проходило как есть (LIMIT -5 — тоже
+  // ошибка СУБД). Идиом взят тот же, что в bureau.ts, чтобы не заводить
+  // второй способ делать одно и то же.
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "50"), 10) || 50, 1), 200);
 
   if (isDeepSanDbReady()) {
     try {

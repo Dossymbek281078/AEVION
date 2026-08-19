@@ -58,7 +58,10 @@ safetyBriefingRouter.post("/", async (req, res) => {
     const id = crypto.randomUUID();
     try {
       const r = await pool.query(
-        `INSERT INTO "BuildSafetyBriefing" ("id","shiftId","workerId","items")
+        // Колонки называются "userId" и "itemsJson" (см. lib/build/index.ts).
+        // С "workerId"/"items" вставка не могла пройти НИКОГДА — подпись
+        // инструктажа не сохранялась с первого дня.
+        `INSERT INTO "BuildSafetyBriefing" ("id","shiftId","userId","itemsJson")
          VALUES ($1,$2,$3,$4) RETURNING *`,
         [id, shiftId.value, auth.sub, JSON.stringify(items)],
       );
@@ -67,7 +70,7 @@ safetyBriefingRouter.post("/", async (req, res) => {
       // Unique violation on (shiftId, workerId) — already signed.
       if ((err as { code?: string }).code === "23505") {
         const existing = await pool.query(
-          `SELECT * FROM "BuildSafetyBriefing" WHERE "shiftId" = $1 AND "workerId" = $2 LIMIT 1`,
+          `SELECT * FROM "BuildSafetyBriefing" WHERE "shiftId" = $1 AND "userId" = $2 LIMIT 1`,
           [shiftId.value, auth.sub],
         );
         return ok(res, existing.rows[0]);

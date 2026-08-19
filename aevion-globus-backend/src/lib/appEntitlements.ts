@@ -19,6 +19,7 @@
  */
 
 import { getPool } from "./dbPool";
+import { ensureAppSubscriptionTable } from "./ensureAppSubscriptionTable";
 import { appSlugForModuleId } from "../data/lemonSqueezyVariants";
 
 /** Короткий кэш: покупка применится не позже этого срока после оплаты. */
@@ -45,6 +46,7 @@ async function activeAppsFor(email: string): Promise<Set<string> | null> {
 
   try {
     const pool = getPool();
+    await ensureAppSubscriptionTable(pool);
     const r = await pool.query(
       `SELECT "appSlug" FROM "AppSubscription" WHERE "email"=$1 AND "status"='active'`,
       [key],
@@ -95,6 +97,9 @@ export async function upsertAppSubscription(
 ): Promise<void> {
   const pool = getPool();
   try {
+    // Создание таблицы нужно и на ЗАПИСИ, а не только на чтении: покупка
+    // приходит вебхуком, и он вполне может быть первым, кто трогает таблицу.
+    await ensureAppSubscriptionTable(pool);
     await pool.query(
       `INSERT INTO "AppSubscription" ("id","email","appSlug","lsSubId","status","createdAt","updatedAt")
        VALUES (gen_random_uuid(),$1,$2,$3,$4,NOW(),NOW())

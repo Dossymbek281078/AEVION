@@ -224,7 +224,9 @@ qpersonaRouter.get("/stats", readLimit, async (_req: Request, res: Response) => 
 /** GET /api/qpersona/personas — list public personas */
 qpersonaRouter.get("/personas", readLimit, async (req: Request, res: Response) => {
   try {
-    const limit  = Math.min(Number(req.query.limit)  || 20, 100);
+    // || 20 ловит NaN, но НЕ отрицательное: limit=-5 доезжало до SQL и
+    // отвечало 500 (проверено на проде 19.08). Math.max(...,1) закрывает.
+    const limit  = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
     const offset = Math.max(Number(req.query.offset) || 0,  0);
     const personas = isQPersonaDbReady()
       ? await dbList(limit, offset)

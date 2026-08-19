@@ -1,10 +1,20 @@
 name: Post-merge prod check
 
 # The 2026-07-21 lesson applied to the planet itself: a merge is not "done"
-# when CI is green — it's done when the production page still opens. This
-# waits out the Vercel deploy window and then actually GETs the homepage,
-# so a broken main surfaces minutes after the merge, not in tomorrow's
-# daily smoke.
+# when CI is green — it's done when the production page still opens.
+#
+# ⚠️ ЧТО ЭТА ПРОВЕРКА ЗНАЧИТ, А ЧТО НЕТ (уточнено 19.08.2026).
+# Она писалась, когда пуш в main запускал выкатку Vercel — отсюда «подождать
+# окно деплоя». С 27.07 выкатка идёт ПАПКОЙ из локального каталога (§12 общих
+# правил), и пуш в main не выкатывает НИЧЕГО. Значит зелёная галочка здесь
+# говорит ровно одно: «сайт сейчас открывается» — и ничего о том, хорош ли
+# влитый код. Читать её как «мерж в проде в порядке» нельзя.
+#
+# Чтобы это не приходилось помнить, шаг ниже спрашивает у сайта отметку
+# версии (`/version.json`) и печатает, ЧТО на самом деле живёт на проде.
+# Расхождение с влитым коммитом — не ошибка, а норма при нынешнем способе
+# выкатки; оно выводится предупреждением, чтобы никто не принял зелёное за
+# «изменение уехало».
 
 on:
   push:
@@ -27,4 +37,26 @@ jobs:
             if [ "$size" -lt 5000 ]; then echo "::error::$url body suspiciously small (${size}B)"; exit 1; fi
             if ! grep -qi "aevion" /tmp/body; then echo "::error::$url body does not mention AEVION"; exit 1; fi
           done
-          echo "prod homepage serves after this merge"
+          echo "prod homepage serves (это всё, что проверено выше)"
+
+      - name: Что РЕАЛЬНО живёт на проде
+        run: |
+          # Отметку кладёт scripts/write-build-info.mjs в prebuild. Её может не
+          # быть: старая сборка на сайте или файл заигнорили. Тогда честно
+          # говорим «неизвестно» — молчание хуже, потому что читается как «всё
+          # совпало».
+          code=$(curl -s -o /tmp/ver -w "%{http_code}" --max-time 30 -L "https://aevion.app/version.json")
+          if [ "$code" != "200" ]; then
+            echo "::warning::отметки версии на проде нет (HTTP $code) — что там за код, сказать нельзя"
+            exit 0
+          fi
+          cat /tmp/ver
+          live=$(grep -o '"commit": *"[^"]*"' /tmp/ver | head -1 | cut -d'"' -f4)
+          if [ -z "$live" ]; then
+            echo "::warning::в отметке нет поля commit"
+            exit 0
+          fi
+          case "$GITHUB_SHA" in
+            "$live"*) echo "на проде ИМЕННО этот коммит: $live" ;;
+            *) echo "::warning::на проде $live, а влит ${GITHUB_SHA:0:12} — выкатка идёт из локального каталога, пуш в main ничего не выкатывает" ;;
+          esac

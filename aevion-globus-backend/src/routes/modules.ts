@@ -12,6 +12,27 @@ import {
   type ModuleRuntimeMeta,
 } from "../data/moduleRuntime";
 import type { GlobusProject } from "../types/globus";
+
+/**
+ * Знаем ли мы такой модуль.
+ *
+ * hasOwnProperty.call, а НЕ `MODULE_RUNTIME[id]`: идентификатор приходит из
+ * адреса, а обычный объект наследует ключи прототипа. Проверено на живом проде
+ * 19.08.2026 — `GET /api/modules/constructor/health` отвечал
+ * `{"ok":true,"message":"Registry entry healthy"}`, то есть объявлял ЗДОРОВЫМ
+ * модуль, которого не существует. То же для `__proto__`, `toString`, `valueOf`,
+ * `hasOwnProperty`. Контрольный `__no_such__` при этом честно давал 404.
+ *
+ * Цена именно здесь выше обычной: по этой ручке дашборд рисует зелёную точку у
+ * каждого модуля (см. комментарий у /:id/health). Зелёная точка на опечатку —
+ * это проверка, которая успокаивает вместо того, чтобы предупреждать.
+ *
+ * Не Object.hasOwn: цель компиляции у бэкенда ниже ES2022, tsc падает с TS2550.
+ */
+function isKnownModuleId(id: unknown): id is string {
+  return typeof id === "string" && Object.prototype.hasOwnProperty.call(MODULE_RUNTIME, id);
+}
+
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
@@ -199,7 +220,7 @@ modulesRouter.get("/status", async (_req, res) => {
 // dashboard to render a green dot per module without DB round-trips.
 modulesRouter.get("/:id/health", (req, res) => {
   const id = req.params.id;
-  const known = MODULE_RUNTIME[id];
+  const known = isKnownModuleId(id) ? MODULE_RUNTIME[id] : undefined;
   if (!known) {
     return res.status(404).json({ ok: false, error: "unknown module id", id });
   }
@@ -224,7 +245,7 @@ modulesRouter.get("/:id/health", (req, res) => {
 
 modulesRouter.get("/:id/meta", (req, res) => {
   const id = req.params.id;
-  if (!MODULE_RUNTIME[id]) {
+  if (!isKnownModuleId(id)) {
     return res.status(404).json({ error: "unknown module", id });
   }
   res.json({ id, ...getModuleRuntime(id) });
@@ -573,7 +594,7 @@ modulesRouter.get("/:id/detail", modulesEmbedRateLimit, async (req, res) => {
 modulesRouter.get("/:id/history", modulesEmbedRateLimit, async (req, res) => {
   try {
     const id = String(req.params.id);
-    if (!MODULE_RUNTIME[id]) {
+    if (!isKnownModuleId(id)) {
       res.setHeader("Cache-Control", "public, max-age=30");
       return res.status(404).json({ id, error: "unknown module id" });
     }
@@ -825,7 +846,7 @@ modulesRouter.patch("/admin/:id", async (req, res) => {
       return res.status(403).json({ error: "Admin role required" });
     }
     const id = String(req.params.id);
-    if (!MODULE_RUNTIME[id]) {
+    if (!isKnownModuleId(id)) {
       return res.status(404).json({ error: "unknown module id" });
     }
 
@@ -1775,7 +1796,7 @@ modulesRouter.patch("/admin/bulk", async (req, res) => {
         return res.status(400).json({ error: "each item must be an object" });
       }
       const id = typeof raw.id === "string" ? raw.id.trim() : "";
-      if (!id || !MODULE_RUNTIME[id]) {
+      if (!id || !isKnownModuleId(id)) {
         return res.status(400).json({ error: "unknown or missing module id", id });
       }
       const e: Edit = { id };

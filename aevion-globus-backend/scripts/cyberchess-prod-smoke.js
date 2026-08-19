@@ -18,10 +18,14 @@ let fail = 0;
 const ok = (l, e) => { pass++; console.log(`  ✓ ${l}${e ? "  " + e : ""}`); };
 const bad = (l, r) => { fail++; console.error(`  ✗ ${l}${r ? "  ↳ " + r : ""}`); };
 
-async function req(method, path) {
+// Тело поддерживается с 19.08.2026. До этого третий аргумент молча
+// выбрасывался: проба POST уходила пустой, сервер отвечал «нет обязательного
+// поля», и это читалось как «защита сработала». Прибор врал в пользу зелёного.
+async function req(method, path, body) {
   const r = await fetch(`${BASE}${path}`, {
     method,
     headers: { "Content-Type": "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: AbortSignal.timeout(12000),
   });
   let j;
@@ -199,6 +203,39 @@ async function run() {
   r = await req("GET", "/api/cyberchess-tournaments/list");
   if (/application\/json/i.test(r.ct || "")) ok("Content-Type application/json on /tournaments/list", r.ct);
   else bad("content-type", `ct=${r.ct}`);
+
+  // ── Задача дня пригодна к игре, а не просто отдана ───────────────────────
+  //
+  // Обе проверки заведены 19.08.2026 после того, как чужая выкатка в 10:34
+  // молча вернула прод к состоянию, где задача дня НЕ РЕШАЕТСЯ, а серию можно
+  // объявить числом. Обнаружил я это случайно, открыв ручку глазами. Прод один
+  // на все окна, побеждает последняя выкатка — значит откат чужой выкаткой
+  // будет ещё, и заметить его должен сторож, а не совпадение.
+  r = await req("GET", "/api/cyberchess-daily/puzzle");
+  {
+    const sol = Array.isArray(r.body?.puzzle?.sol) ? r.body.puzzle.sol : [];
+    const uci = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
+    const плохие = sol.filter((m) => !uci.test(String(m)));
+    if (sol.length > 0 && плохие.length === 0) {
+      ok("задача дня решаема", `${sol.length} ходов, подсказка ${r.body.puzzle.solHint}`);
+    } else {
+      bad("задача дня решаема", `ходы не похожи на ходы: ${JSON.stringify(sol).slice(0, 70)}`);
+    }
+  }
+
+  // Серию нельзя объявить: запрос без сыгранных ходов обязан быть отвергнут.
+  // Проверено на проде до починки — `{"streak":364}` ставил отправителя первым.
+  r = await req("POST", "/api/cyberchess-daily/solve", {
+    streak: 999,
+    day: new Date().toISOString().slice(0, 10),
+    userId: "smoke-forgery-probe",
+    name: "smoke",
+  });
+  if (r.status === 400 && r.body?.error === "moves_required") {
+    ok("серию нельзя объявить без ходов", "400 moves_required");
+  } else {
+    bad("серию нельзя объявить без ходов", `ответ ${r.status} ${JSON.stringify(r.body).slice(0, 70)} — подделка проходит`);
+  }
 
   // ── Живая СТРАНИЦА, а не только ручка ────────────────────────────────────
   //

@@ -114,9 +114,9 @@ function plural(n: number, one: string, few: string, many: string): string {
 }
 
 const VP_CLASS_LABEL: Record<string, string> = Object.assign(Object.create(null), {
-  "candidate-pad": "кандидат на площадку",
-  "needs-infrastructure": "нужна инфраструктура",
-  unsuitable: "непригодна",
+  "candidate-pad": "qskyway.pad.candidate",
+  "needs-infrastructure": "qskyway.pad.needsInfra",
+  unsuitable: "qskyway.pad.unsuitable",
 });
 const VP_CLASS_COLOR: Record<string, string> = Object.assign(Object.create(null), {
   "candidate-pad": "#2dd4bf",
@@ -862,8 +862,8 @@ export default function QSkywayClient() {
               <canvas ref={mapRef} style={{ display: "block", width: "100%", background: "#0a121d" }} />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
                 <button style={btnPri} onClick={newHero} disabled={!loaded}>{t("qskyway.btn.newFlight")}</button>
-                <button style={btn} onClick={() => { runningRef.current = !runningRef.current; setPlaying(runningRef.current); }}>{playing ? "⏸ Пауза" : "▶ Пуск"}</button>
-                <button style={btn} onClick={() => { for (let i = 0; i < 3; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); } }}>＋ Трафик</button>
+                <button style={btn} onClick={() => { runningRef.current = !runningRef.current; setPlaying(runningRef.current); }}>{playing ? t("qskyway.btn.pause") : t("qskyway.btn.play")}</button>
+                <button style={btn} onClick={() => { for (let i = 0; i < 3; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); } }}>{t("qskyway.btn.traffic")}</button>
                 <button style={btn} onClick={() => { showColorRef.current = !showColorRef.current; }}>{t("qskyway.btn.heightColors")}</button>
                 <button
                   style={strictCeiling ? { ...btn, borderColor: "#2dd4bf", color: "#2dd4bf" } : btn}
@@ -884,12 +884,12 @@ export default function QSkywayClient() {
               {meta && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 14, padding: "0 14px 12px", fontFamily: "monospace", fontSize: 11, color: "#9fb0c4" }}>
                   <span>
-                    🌬 ветер {meta.wind}
+                    {t("qskyway.wind.label", { wind: meta.wind })}
                     <span
-                      title={meta.windSource === "metar" ? "Наземный ветер — реальный METAR ближайшего аэропорта" : "METAR недоступен — используется иллюстративная демо-модель"}
+                      title={meta.windSource === "metar" ? t("qskyway.wind.metarTip") : t("qskyway.wind.demoTip")}
                       style={{ marginLeft: 6, color: meta.windSource === "metar" ? "#2dd4bf" : "#5f7086" }}
                     >
-                      · {meta.windSource === "metar" ? "METAR" : "демо"}
+                      · {meta.windSource === "metar" ? "METAR" : t("qskyway.wind.demo")}
                     </span>
                   </span>
                   {/* Two chips, deliberately side by side: the ceiling layer is a real
@@ -944,7 +944,7 @@ export default function QSkywayClient() {
                       <span style={{ color: "#94a3b8" }}>{t("qskyway.verify.unknown")}</span>
                     )}
                   </span>
-                  <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: "зданий" }} />
+                  <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: t("qskyway.unit.buildings") }} />
                   {meta.suspect.length > 0 && (
                     <span
                       title={
@@ -957,7 +957,7 @@ export default function QSkywayClient() {
                       }
                       style={{ color: "#fbbf24", textDecoration: "underline dotted", cursor: "help" }}
                     >
-                      ⚠ высота под вопросом:{" "}
+                      {t("qskyway.height.suspect")}{" "}
                       {meta.suspect
                         .map((o) => {
                           if (o.was !== undefined) {
@@ -1163,7 +1163,7 @@ export default function QSkywayClient() {
                       <div key={v.id} style={{ padding: "8px 14px", borderTop: "1px solid #1e2836", fontFamily: "monospace", fontSize: 11.5 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                           <span style={{ color: "#9fb0c4" }}>{v.id}</span>
-                          <span style={{ color: VP_CLASS_COLOR[v.cls] ?? "#5f7086" }}>{VP_CLASS_LABEL[v.cls] ?? "не оценена"} · {v.suitability}</span>
+                          <span style={{ color: VP_CLASS_COLOR[v.cls] ?? "#5f7086" }}>{t(VP_CLASS_LABEL[v.cls] ?? "qskyway.pad.unrated")} · {v.suitability}</span>
                         </div>
                         {v.openRadiusM != null && (
                           <div style={{ color: "#5f7086", fontSize: 10, marginTop: 2 }}>

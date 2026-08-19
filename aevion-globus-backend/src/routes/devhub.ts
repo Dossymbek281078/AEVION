@@ -573,7 +573,10 @@ async function applyCheckpointRevert(projectId: string, checkpoint: DevHubCheckp
 }
 
 // ── Built-in templates ────────────────────────────────────────────────────────
-const TEMPLATES = [
+// Экспортируется ради проверки запускаемости начал: тест смотрит, есть ли у каждого
+// точка входа своего стека и настроено ли то, чем оно собирается. Замер 19.08.2026
+// показал, что у react-spa не было index.html — «готовое начало» не начиналось.
+export const TEMPLATES = [
   {
     id: "next-app",
     name: "Next.js App",
@@ -611,7 +614,20 @@ const TEMPLATES = [
       {
         path: "package.json",
         language: "json",
-        content: JSON.stringify({ name: "my-express-api", version: "0.1.0", scripts: { dev: "ts-node-dev src/index.ts", build: "tsc", start: "node dist/index.js" }, dependencies: { express: "^4.18.0" }, devDependencies: { typescript: "^5.0.0", "@types/express": "^4.17.0" } }, null, 2),
+        content: JSON.stringify({ name: "my-express-api", version: "0.1.0", scripts: { dev: "ts-node-dev src/index.ts", build: "tsc", start: "node dist/index.js" }, dependencies: { express: "^4.18.0" }, devDependencies: { typescript: "^5.0.0", "@types/express": "^4.17.0", "ts-node-dev": "^2.0.0" } }, null, 2),
+      },
+      // tsconfig.json добавлен 19.08.2026 вместе с зависимостью ts-node-dev: у этого
+      // начала было ТРИ связанных дефекта, и каждый ломал свой шаг.
+      //
+      //   dev   зовёт ts-node-dev, а его не было в devDependencies — «команда не найдена»;
+      //   build зовёт tsc без tsconfig — компилировалось бы рядом с исходником;
+      //   start ждёт dist/index.js, которого такая сборка не создаёт вовсе.
+      //
+      // То есть «готовое начало» не проходило ни одного своего шага.
+      {
+        path: "tsconfig.json",
+        language: "json",
+        content: JSON.stringify({ compilerOptions: { target: "ES2020", module: "commonjs", outDir: "dist", rootDir: "src", strict: true, esModuleInterop: true, skipLibCheck: true }, include: ["src"] }, null, 2),
       },
     ],
   },
@@ -658,6 +674,31 @@ const TEMPLATES = [
         path: "package.json",
         language: "json",
         content: JSON.stringify({ name: "my-react-spa", version: "0.1.0", scripts: { dev: "vite", build: "tsc && vite build" }, dependencies: { react: "^18.0.0", "react-dom": "^18.0.0" }, devDependencies: { vite: "^5.0.0", "@vitejs/plugin-react": "^4.0.0", typescript: "^5.0.0" } }, null, 2),
+      },
+      // Три файла ниже добавлены 19.08.2026: без них «готовое начало» не начиналось.
+      //
+      // Было `src/App.tsx`, `src/main.tsx`, `package.json` — и всё. Для Vite точка
+      // входа это index.html, без него `npm run dev` не стартует вовсе. А выкатка
+      // отдаёт файлы проекта как статику: без index.html на корне нечего показать, то
+      // есть загрузка прошла бы, а страница не открылась. Сборка при этом зовёт `tsc`
+      // без tsconfig.json, а плагин React объявлен в зависимостях, но не подключён.
+      //
+      // Проверено: ни в одной из шести ветвей, правящих этот файл, index.html в
+      // начале react-spa нет — дефект не был починен нигде.
+      {
+        path: "index.html",
+        language: "html",
+        content: `<!DOCTYPE html>\n<html lang="ru">\n<head>\n  <meta charset="UTF-8"/>\n  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>\n  <title>React SPA</title>\n</head>\n<body>\n  <div id="root"></div>\n  <script type="module" src="/src/main.tsx"></script>\n</body>\n</html>\n`,
+      },
+      {
+        path: "vite.config.ts",
+        language: "typescript",
+        content: `import { defineConfig } from "vite";\nimport react from "@vitejs/plugin-react";\n\nexport default defineConfig({ plugins: [react()] });\n`,
+      },
+      {
+        path: "tsconfig.json",
+        language: "json",
+        content: JSON.stringify({ compilerOptions: { target: "ES2020", lib: ["ES2020", "DOM", "DOM.Iterable"], module: "ESNext", moduleResolution: "bundler", jsx: "react-jsx", strict: true, noEmit: true, skipLibCheck: true }, include: ["src"] }, null, 2),
       },
     ],
   },

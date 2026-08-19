@@ -20,73 +20,89 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Подменяет fetch фиксированным статусом и запоминает переданные аргументы. */
-function stubFetch(status: number) {
+/**
+ * Подменяет fetch статусом И ТЕЛОМ.
+ *
+ * Прежний помощник задавал только статус — и этого было достаточно, пока правило
+ * читало статус. Теперь решает тело (см. шапку probeLive), поэтому тест без тела
+ * проверял бы не то правило, которое работает.
+ */
+function stubFetch(status: number, body = "") {
   const calls: Array<[string, RequestInit | undefined]> = [];
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string, init?: RequestInit) => {
       calls.push([String(url), init]);
-      return Promise.resolve({ status, ok: status >= 200 && status < 300 } as Response);
+      return Promise.resolve({
+        status,
+        ok: status >= 200 && status < 300,
+        text: () => Promise.resolve(body),
+      } as unknown as Response);
     }),
   );
   return calls;
 }
 
-describe("probeLive — что считается живым", () => {
-  test("200 — живой", async () => {
-    stubFetch(200);
-    await expect(probeLive("/api/x")).resolves.toBe(true);
+const EXPRESS_404 = "<!DOCTYPE html><html><body><pre>Cannot GET /api/no-such/abc</pre></body></html>";
+const PAYWALL = '{"error":"upgrade_required","module":"multichat-engine","plan":"free"}';
+
+describe("probeLive — четыре случая, замеренные на проде 19.08.2026", () => {
+  // Каждый случай — реальный ответ api.aevion.app, а не придуманный.
+
+  test("404 с доменной ошибкой — ЖИВО (маршрут есть, ресурса нет)", async () => {
+    // GET /api/multichat/shared/launch-page-probe. Прежнее правило «не 404»
+    // объявляло это мёртвым, и посадочная мультичата отрицала работающий
+    // публичный просмотр беседы.
+    stubFetch(404, '{"error":"not_found_or_revoked"}');
+    await expect(probeLive("/api/multichat/shared/launch-page-probe")).resolves.toBe(true);
   });
 
-  test("400 живой: поля проверены, значит роут работает", async () => {
-    // Ровно случай проверки чека заведомо неверным пакетом.
-    stubFetch(400);
-    await expect(probeLive("/api/multichat/receipt/verify")).resolves.toBe(true);
+  test("402 платной стены — НЕ доказательство, значит не живо", async () => {
+    // GET /api/multichat/no-such-route-xyz: маршрута НЕТ, но стена модуля отвечает
+    // раньше маршрутизации. Прежнее правило объявляло такой путь живым.
+    stubFetch(402, PAYWALL);
+    await expect(probeLive("/api/multichat/no-such-route-xyz")).resolves.toBe(false);
   });
 
-  test("402 живой: платная стена — это работающая стена", async () => {
-    stubFetch(402);
-    await expect(probeLive("/api/multichat/conversations")).resolves.toBe(true);
+  test("HTML «Cannot GET» — мертво", async () => {
+    stubFetch(404, EXPRESS_404);
+    await expect(probeLive("/api/no-such-module-xyz/abc")).resolves.toBe(false);
   });
 
-  test("401 и 403 живые — отказ доступа не значит отсутствие", async () => {
-    stubFetch(401);
-    await expect(probeLive("/api/x")).resolves.toBe(true);
-    vi.unstubAllGlobals();
-    stubFetch(403);
-    await expect(probeLive("/api/x")).resolves.toBe(true);
+  test("400 с доменной ошибкой — живо", async () => {
+    // POST /api/multichat/receipt/verify с {} → not_a_receipt. Именно так и пробует
+    // посадочная: методом POST, который стену не задевает.
+    stubFetch(400, '{"error":"not_a_receipt","message":"Ожидается чек мультичата"}');
+    await expect(probeLive("/api/multichat/receipt/verify", { method: "POST" })).resolves.toBe(true);
   });
 
-  test("404 — единственный ответ, означающий «этого нет»", async () => {
-    stubFetch(404);
-    await expect(probeLive("/api/нет-такого")).resolves.toBe(false);
+  test("200 — живо", async () => {
+    stubFetch(200, '{"providers":[{"id":"anthropic"}]}');
+    await expect(probeLive("/api/qcoreai/providers")).resolves.toBe(true);
   });
 
-  test("500 живой: сервер отвечает, значит роут смонтирован", async () => {
-    // Спорный на вид случай, поэтому зафиксирован: 500 говорит о поломке
-    // обработчика, а не об отсутствии модуля. Страница обещает наличие контура,
-    // а не его безошибочность.
-    stubFetch(500);
-    await expect(probeLive("/api/x")).resolves.toBe(true);
-  });
-
-  test("сетевая ошибка — «не подтвердилось», а не «мертво»", async () => {
-    // Возвращаем false, и страница честно скажет «проверяется». Объявить контур
-    // сломанным из-за таймаута сборки было бы хуже.
-    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("ECONNRESET"))));
+  test("сетевая ошибка — не подтвердилось, а не «мертво»", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("ECONNREFUSED"))));
     await expect(probeLive("/api/x")).resolves.toBe(false);
   });
 
-  test("init прокидывается, а срок кэша задаётся всегда", async () => {
-    // Пробы идут при сборке: без revalidate страница брала бы результат
-    // бессрочно, и «работает» могло бы висеть месяцами после поломки.
-    const calls = stubFetch(400);
+  test("init и кэш доезжают до fetch", async () => {
+    const calls = stubFetch(200, "{}");
     await probeLive("/api/x", { method: "POST", body: "{}" });
-    const [, init] = calls[0];
-    expect((init as { method?: string })?.method).toBe("POST");
-    expect((init as { body?: string })?.body).toBe("{}");
-    expect((init as { next?: { revalidate?: number } })?.next?.revalidate).toBe(1800);
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]?.method).toBe("POST");
+    // Пробы кэшируются на полчаса: сборка не должна долбить прод при каждой странице.
+    expect((calls[0][1] as { next?: { revalidate?: number } }).next?.revalidate).toBe(1800);
+  });
+
+  test("отрицательный контроль: правило различает тела, а не только коды", async () => {
+    // Один и тот же код 404 даёт разные ответы — именно в этом суть починки.
+    stubFetch(404, '{"error":"not_found_or_revoked"}');
+    const alive = await probeLive("/a");
+    vi.unstubAllGlobals();
+    stubFetch(404, EXPRESS_404);
+    const dead = await probeLive("/a");
+    expect([alive, dead]).toEqual([true, false]);
   });
 });
 

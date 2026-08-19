@@ -21,7 +21,7 @@ import {
   isShadowNetDbReady,
 } from "../lib/ensureShadowNetTables";
 import { rateLimit } from "../lib/rateLimit";
-import { queryNumber } from "../lib/queryNumber";
+import { pgIntId, queryNumber } from "../lib/queryNumber";
 
 const captureShadowNetError = makeServiceCapture("shadownet");
 
@@ -492,8 +492,8 @@ shadownetRouter.get("/posts/:alias", async (req: Request, res: Response) => {
 });
 
 shadownetRouter.delete("/posts/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) {
+  const id = pgIntId(req.params.id);
+  if (id === null) {
     return fail(res, "invalid id");
   }
   const alias = (req.body || {}).alias;

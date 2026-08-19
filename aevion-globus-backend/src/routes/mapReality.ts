@@ -4,6 +4,7 @@ import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { ensureMapRealityTables, isMapRealityDbReady } from "../lib/ensureMapRealityTables";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { pgIntId } from "../lib/queryNumber";
 
 const capture = makeServiceCapture("mapReality");
 
@@ -308,8 +309,8 @@ mapRealityRouter.get("/signals/nearby", async (req: Request, res: Response) => {
 
 // ─── GET /api/mapreality/signals/:id ──────────────────────────────────────────
 mapRealityRouter.get("/signals/:id", async (req: Request, res: Response) => {
-  const id = Number(param(req, "id"));
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "invalid id" });
+  const id = pgIntId(param(req, "id"));
+  if (id === null) return res.status(400).json({ error: "invalid id" });
 
   try {
     if (isMapRealityDbReady()) {
@@ -326,8 +327,8 @@ mapRealityRouter.get("/signals/:id", async (req: Request, res: Response) => {
 
 // ─── POST /api/mapreality/signals/:id/support ─────────────────────────────────
 mapRealityRouter.post("/signals/:id/support", supportLimiter, async (req: Request, res: Response) => {
-  const id = Number(param(req, "id"));
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "invalid id" });
+  const id = pgIntId(param(req, "id"));
+  if (id === null) return res.status(400).json({ error: "invalid id" });
 
   const supporterAlias = clampString((req.body as { supporterAlias?: unknown })?.supporterAlias, MAX_ALIAS);
   if (!supporterAlias) return res.status(400).json({ error: "supporterAlias required" });
@@ -382,8 +383,8 @@ mapRealityRouter.post("/signals/:id/support", supportLimiter, async (req: Reques
 // ─── PATCH /api/mapreality/signals/:id/status ─────────────────────────────────
 // Body: { authorAlias, status }. For MVP, only the author can set status to 'resolved'.
 mapRealityRouter.patch("/signals/:id/status", async (req: Request, res: Response) => {
-  const id = Number(param(req, "id"));
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "invalid id" });
+  const id = pgIntId(param(req, "id"));
+  if (id === null) return res.status(400).json({ error: "invalid id" });
 
   const body = req.body as { authorAlias?: unknown; status?: unknown };
   const authorAlias = clampString(body.authorAlias, MAX_ALIAS);

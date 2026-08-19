@@ -11,6 +11,7 @@ import {
   isVoiceOfEarthDbReady,
 } from "../lib/ensureVoiceOfEarthTables";
 import { VOICE_OF_EARTH_SEED, VoeSeedTrack } from "../data/voiceOfEarthSeed";
+import { pgIntId } from "../lib/queryNumber";
 
 const pool = getPool();
 (async () => {
@@ -179,8 +180,8 @@ voiceOfEarthRouter.get("/tracks", async (req: Request, res: Response) => {
 
 // ─── GET /api/voice-of-earth/tracks/:id ──────────────────────────────────────
 voiceOfEarthRouter.get("/tracks/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) {
+  const id = pgIntId(req.params.id);
+  if (id === null) {
     return res.status(400).json({ error: "invalid id" });
   }
   if (isVoiceOfEarthDbReady()) {
@@ -292,8 +293,8 @@ voiceOfEarthRouter.post(
   "/tracks/:id/vote",
   voteLimiter,
   async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) {
+    const id = pgIntId(req.params.id);
+    if (id === null) {
       return res.status(400).json({ error: "invalid id" });
     }
     const body = (req.body || {}) as { voterAlias?: unknown };

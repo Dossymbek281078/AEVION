@@ -22,7 +22,7 @@ export function ProfileShareQR({
   const url =
     typeof window !== "undefined"
       ? `${window.location.origin}/build/u/${encodeURIComponent(userId)}`
-      : `https://aevion.tech/build/u/${encodeURIComponent(userId)}`;
+      : `https://aevion.app/build/u/${encodeURIComponent(userId)}`;
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=${encodeURIComponent(
     url,
   )}`;

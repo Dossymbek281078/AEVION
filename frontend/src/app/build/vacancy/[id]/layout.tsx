@@ -70,7 +70,7 @@ function buildJobPostingJsonLd(v: VacancyMeta) {
     hiringOrganization: {
       "@type": "Organization",
       name: v.projectTitle || "AEVION QBuild",
-      sameAs: "https://aevion.com/build",
+      sameAs: "https://aevion.app/build",
     },
     directApply: true,
   };
@@ -103,18 +103,18 @@ function buildJobPostingJsonLd(v: VacancyMeta) {
 
 function buildBreadcrumbJsonLd(v: VacancyMeta) {
   const items: Record<string, unknown>[] = [
-    { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.com/build" },
+    { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.app/build" },
     {
       "@type": "ListItem",
       position: 2,
       name: "Vacancies",
-      item: "https://aevion.com/build/vacancies",
+      item: "https://aevion.app/build/vacancies",
     },
     {
       "@type": "ListItem",
       position: 3,
       name: v.title,
-      item: `https://aevion.com/build/vacancy/${encodeURIComponent(v.id)}`,
+      item: `https://aevion.app/build/vacancy/${encodeURIComponent(v.id)}`,
     },
   ];
   return {

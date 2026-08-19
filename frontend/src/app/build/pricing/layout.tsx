@@ -4,14 +4,14 @@ export const metadata: Metadata = {
   title: "Pricing & Plans — AEVION QBuild",
   description:
     "AEVION QBuild pricing — Developer, Build, Scale, and Enterprise plans for construction hiring. Post projects, source crews, and message contractors directly. 20% off on yearly billing.",
-  alternates: { canonical: "https://aevion.com/build/pricing" },
+  alternates: { canonical: "https://aevion.app/build/pricing" },
   openGraph: {
     title: "Pricing & Plans — AEVION QBuild",
     description:
       "Developer, Build, Scale, and Enterprise plans for construction hiring on AEVION QBuild. 20% off yearly.",
     type: "website",
     siteName: "AEVION QBuild",
-    url: "https://aevion.com/build/pricing",
+    url: "https://aevion.app/build/pricing",
   },
   twitter: {
     card: "summary_large_image",
@@ -27,12 +27,12 @@ const BREADCRUMB_LD = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.com/build" },
+    { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.app/build" },
     {
       "@type": "ListItem",
       position: 2,
       name: "Pricing",
-      item: "https://aevion.com/build/pricing",
+      item: "https://aevion.app/build/pricing",
     },
   ],
 };

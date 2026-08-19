@@ -73,7 +73,7 @@ export default function GlossaryPrintPage() {
 
         {/* Подвал */}
         <div className="mt-4 pt-2 border-t border-slate-300 text-[9px] text-slate-500 text-center">
-          aevion.kz · /smeta-trainer/glossary · {new Date().toLocaleDateString("ru-RU")}
+          aevion.app · /smeta-trainer/glossary · {new Date().toLocaleDateString("ru-RU")}
         </div>
       </div>
 

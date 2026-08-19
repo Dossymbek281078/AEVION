@@ -12,6 +12,7 @@
  * не связанной ни с чем остальным на сайте (launch-readiness аудит 2026-07-20).
  */
 
+import { knownUserId } from "../tournaments/playerIdentity";
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -73,7 +74,7 @@ export default function CyberChessLeaderboardPage() {
 
   useEffect(() => {
     try {
-      setMyUserId(window.localStorage.getItem("cyberchess.userId") || "");
+      setMyUserId(knownUserId());
     } catch {
       /* ignore */
     }

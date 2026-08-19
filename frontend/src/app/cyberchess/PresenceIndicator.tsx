@@ -12,19 +12,19 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
+import { tournamentUserId } from "./tournaments/playerIdentity";
 
 const PING_URL = "/api-backend/api/cyberchess/matchmaking/presence/ping";
 const PING_INTERVAL_MS = 20_000;
 
+// Личность берётся из общего источника, а не заводится своя. Раньше здесь
+// создавался ключ `cc_user_id` — и счётчик «N играют сейчас» считал одного
+// человека отдельным игроком от того, кто он в задаче дня и в таблице лидеров.
+// Третий писатель того же ключа был и третьим источником расхождения.
 function stableUserId(): string {
   if (typeof window === "undefined") return "anon";
   try {
-    let id = localStorage.getItem("cc_user_id");
-    if (!id) {
-      id = "u_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
-      localStorage.setItem("cc_user_id", id);
-    }
-    return id;
+    return tournamentUserId();
   } catch {
     return "anon";
   }

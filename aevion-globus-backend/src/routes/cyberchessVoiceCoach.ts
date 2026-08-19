@@ -33,6 +33,8 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { createInMemoryRateLimiter } from '../lib/rateLimit/inMemoryWindow';
+import { clientIp } from '../lib/rateLimit';
 import { createHash } from 'crypto';
 import { makeServiceCapture } from '../lib/sentry/platform';
 
@@ -230,7 +232,40 @@ function upstreamErrorKind(err: unknown): string {
 // Body: BuildCommentInput + optional { model?, temperature?, llm?: boolean }
 // Tries LLM via QCoreAI first; on any failure → rule-based fallback.
 // Returns: { text: string, source: 'llm' | 'fallback' }
+
+/**
+ * Ограничители на ручки, которые ТРАТЯТ ДЕНЬГИ.
+ *
+ * Замер 19.08.2026: у этого файла не было ни одного ограничителя, ни квоты, ни
+ * проверки доступа — при том что `/comment` и `/ask` идут в платную модель, а
+ * `/tts` и `/broadcast` в платный синтез речи. Каждый вызов это счёт от
+ * провайдера, и утекает он тихо: ни падения, ни следа.
+ *
+ * Почему это не поймал общий сторож дорогих ручек: его шаблон требует ДВОЙНЫХ
+ * кавычек вокруг пути (`\.post\(\s*"`), а здесь пути в одинарных. Замер по
+ * репозиторию: 506 объявлений с двойными кавычками сторож видит, 7 с
+ * одинарными — нет, и пять из этих семи именно здесь. Слепое пятно легло ровно
+ * на незащищённое.
+ *
+ * Берётся тот же ограничитель, что в соседнем cyberchessDaily.ts, а не третий
+ * способ делать одно и то же.
+ *
+ * Пределы разные по цене вызова: текстовая модель дешевле синтеза речи.
+ */
+const coachLimiter = createInMemoryRateLimiter({ max: 20, windowMs: 60_000 });
+const ttsLimiter = createInMemoryRateLimiter({ max: 10, windowMs: 60_000 });
+
+/** Общий отказ: 429 с честным «когда можно снова», а не молчаливый провал. */
+function tooMany(res: Response, retryAfterMs: number): void {
+  const sec = Math.max(1, Math.ceil(retryAfterMs / 1000));
+  res.setHeader('Retry-After', String(sec));
+  res.status(429).json({ ok: false, error: 'rate_limited', retryAfterSec: sec });
+}
+
+
 router.post('/comment', async (req: Request, res: Response) => {
+  const gate = coachLimiter.check(clientIp(req));
+  if (!gate.allowed) return tooMany(res, gate.retryAfterMs);
   try {
     const body = (req.body ?? {}) as BuildCommentInput & {
       model?: string;
@@ -292,6 +327,8 @@ router.post('/comment', async (req: Request, res: Response) => {
 //         legalMoves?, bestMove?, model?, temperature? }
 // Returns: { text: string, sessionId: string }
 router.post('/ask', async (req: Request, res: Response) => {
+  const gate = coachLimiter.check(clientIp(req));
+  if (!gate.allowed) return tooMany(res, gate.retryAfterMs);
   try {
     const body = (req.body ?? {}) as {
       question?: string;
@@ -401,6 +438,8 @@ router.post('/sessions/:id/clear', (req: Request, res: Response) => {
 // Body: { text: string, voiceId?: string }
 // Returns: audio/mpeg stream (mp3)
 router.post('/tts', async (req: Request, res: Response) => {
+  const gate = ttsLimiter.check(clientIp(req));
+  if (!gate.allowed) return tooMany(res, gate.retryAfterMs);
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     return res.status(503).json({
@@ -545,6 +584,8 @@ async function generateTtsDataUrl(text: string, voiceId: string): Promise<string
 //
 // Returns: { ok, text, source, audioUrl?, viewers? }
 router.post('/broadcast', async (req: Request, res: Response) => {
+  const gate = ttsLimiter.check(clientIp(req));
+  if (!gate.allowed) return tooMany(res, gate.retryAfterMs);
   try {
     const body = (req.body ?? {}) as {
       gameId?: string;

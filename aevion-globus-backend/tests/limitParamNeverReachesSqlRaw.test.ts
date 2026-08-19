@@ -32,12 +32,37 @@ const read = (f: string) =>
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|[^:])\/\/.*$/gm, "$1");
 
+// ДОПОЛНЕНО 19.08 (вечер, второе окно). Первая версия сторожа искала ОДНУ
+// форму записи — `Math.min(Number(req.query.limit) ...)`. А `limit` часто
+// сперва разбирают из объекта:
+//
+//   const { category, limit } = req.query;
+//   const limitN = Math.min(Number(limit) || 20, 100);   // <- та же дыра
+//
+// Из-за этого свип пропустил три ручки, и нашлись они не им, а ЖУРНАЛОМ ОШИБОК
+// прода: «LIMIT must not be negative» x4 за неделю, и он же назвал адреса —
+// /api/qevents/events и /api/qjobs/jobs. Проверено пробой: ?limit=-5 -> 500.
+// Урок: свип по одной форме записи даёт ложное «чисто» по всей платформе.
+
 describe("limit из запроса зажат до похода в SQL", () => {
-  for (const f of ["deepsan.ts", "qpersona.ts"]) {
+  for (const f of [
+    "deepsan.ts", "qpersona.ts", "qevents.ts", "qjobs.ts", "qnews.ts",
+    // добавлены 19.08 (второе окно) по журналу ошибок прода за 90 дней:
+    // «LIMIT must not be negative» с местом GET /api/qlife/biomarkers.
+    // qlife БЫЛ в моём списке кандидатов — я отверг его, пробнув выдуманный
+    // адрес /api/qlife/entries, получив 404 и приняв это за «дефекта нет».
+    // 404 от выдуманного пути значит «не смог проверить», а не «чисто».
+    "qlife.ts", "qlearn.ts", "build/messaging.ts",
+  ]) {
     test(`${f}: нет Math.min(Number(req.query...)) без нижней границы`, () => {
       const code = read(f);
       const unsafe = [...code.matchAll(/Math\.min\(\s*Number\(\s*req\.query\.limit/g)];
       expect(unsafe.length).toBe(0);
+    });
+
+    test(`${f}: нет второй формы — Math.min(Number(limit) || N, M)`, () => {
+      // разобранный из объекта `limit` — та же дыра, другое написание
+      expect(read(f)).not.toMatch(/Math\.min\(\s*Number\(\s*limit\s*\)/);
     });
 
     test(`${f}: нижняя граница задана явно`, () => {
@@ -50,5 +75,17 @@ describe("limit из запроса зажат до похода в SQL", () => 
     // иначе пустая строка дала бы 0 совпадений и вечно зелёный тест
     expect(read("deepsan.ts").length).toBeGreaterThan(500);
     expect(read("qpersona.ts").length).toBeGreaterThan(500);
+  });
+});
+
+describe("qlife не рассказывает клиенту о своём хранилище", () => {
+  test("ни одна ручка не отдаёт e.message наружу", () => {
+    // Проверено на проде 19.08: `?limit=-5` возвращал дословное
+    // «LIMIT must not be negative» — ручка МЕДИЦИНСКИХ показателей описывала
+    // своё хранилище постороннему. В таких сообщениях бывают хост, порт и
+    // пользователь базы. Наружу — категория, подробность в журнал.
+    const src = read("qlife.ts");
+    expect(src).not.toMatch(/error:\s*e\?\.message/);
+    expect(src).not.toMatch(/error:\s*err\?\.message/);
   });
 });

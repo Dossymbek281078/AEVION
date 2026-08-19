@@ -103,7 +103,25 @@ constitutionWaitlistRouter.post(
           await pool.query(
             `INSERT INTO constitution_waitlist ("email","source","createdAt")
              VALUES ($1,$2,$3)
-             ON CONFLICT ("email") DO UPDATE SET "source" = EXCLUDED."source"`,
+             ON CONFLICT ("email") DO UPDATE SET "source" =
+               CASE
+                 -- Метка уже в списке — оставляем как есть.
+                 WHEN constitution_waitlist."source" = EXCLUDED."source" THEN constitution_waitlist."source"
+                 WHEN string_to_array(constitution_waitlist."source", ',') @> ARRAY[EXCLUDED."source"] THEN constitution_waitlist."source"
+                 -- Новая метка дописывается В КОНЕЦ: первый интерес остаётся
+                 -- первым, и развилка письма, читающая начало строки, не меняет
+                 -- поведения для тех, кто подписался на конституцию раньше.
+                 -- Обрезка не по 60 символам, а по последней целой метке:
+                 -- обрубленная посередине метка не совпала бы ни с чем при отборе.
+                 ELSE left(
+                        constitution_waitlist."source" || ',' || EXCLUDED."source",
+                        greatest(
+                          length(constitution_waitlist."source"),
+                          length(left(constitution_waitlist."source" || ',' || EXCLUDED."source", 250))
+                            - position(',' in reverse(left(constitution_waitlist."source" || ',' || EXCLUDED."source", 250)))
+                        )
+                      )
+               END`,
             [row.email, row.source, row.createdAt],
           );
           storage = "postgres";
@@ -128,7 +146,13 @@ constitutionWaitlistRouter.post(
       if (!memList.has(row.email)) memList.set(row.email, row);
 
       // Fire-and-forget confirmation email via Brevo
-      void sendWaitlistConfirm(row.email).catch(() => { /* ignore */ });
+      // source передаётся обязательно: без него развилка в письме считает
+      // подписчика конституционным (`!source` → true), и человек с главной или
+      // с посадочной модуля получает «Ты в листе ожидания Constitution Pro» с
+      // обещанием скидки, о которой не просил. Разрыв возник при сведении: файл
+      // письма пришёл из одной ветки, этот роут — из другой, и вызов остался
+      // старым. Проверять надо СВЯЗЬ, а не наличие починки в каждом файле.
+      void sendWaitlistConfirm(row.email, row.source).catch(() => { /* ignore */ });
 
       res.status(201).json({ ok: true, storage });
     } catch (err) {

@@ -1,0 +1,139 @@
+import { describe, test, expect, vi, afterEach } from "vitest";
+import express from "express";
+import request from "supertest";
+
+// Решение проверяется сервером, серия считается сервером. 19.08.2026.
+//
+// Прежде ручка /solve брала `streak` числом из тела запроса и записывала его.
+// Проверено на боевом проде: запрос `{"streak":364}` без единого хода поставил
+// меня первым в таблице со счётом 36700. Таблица лидеров, которую может
+// подделать любой посторонний, ХУЖЕ отсутствующей: она выглядит как достижения
+// живых людей и ровно этим обесценивает настоящие.
+//
+// Это тот же класс, что и выдуманные гроссмейстеры на той же странице, только
+// подделку здесь пишет не наш код, а кто угодно снаружи.
+
+const SOL = ["c5c3", "e6e4", "b5b4", "e4b4"];
+
+vi.hoisted(() => { process.env.DATABASE_URL = "postgres://test/test"; });
+
+// Тест не имеет права писать в данные репозитория. Без этого блока прогон
+// мутации (где сервер снова верил клиенту) записал «серию 364» в отслеживаемый
+// файл `data/cyberchess-daily-leaderboard.json` — и она уехала бы в коммит как
+// настоящая запись живого игрока. Соседний тест 12.08 стережёт ровно это, а мой
+// собственный новый файл в ту же яму и попал.
+vi.hoisted(() => {
+  const nodeOs = require("node:os") as typeof import("node:os");
+  const nodePath = require("node:path") as typeof import("node:path");
+  const nodeFs = require("node:fs") as typeof import("node:fs");
+  process.env.CYBERCHESS_DAILY_DIR = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), "cc-daily-"));
+});
+
+
+vi.mock("../src/lib/dbPool", () => ({
+  getPool: () => ({
+    query: async (text: string) => {
+      if (/count\(\*\)/i.test(text)) return { rows: [{ n: 500000 }], rowCount: 1 };
+      if (/FROM "ChessPuzzle"/i.test(text)) {
+        return {
+          rows: [{ id: "li_2AEIG", fen: "r4k1r/pp3p2/4qp2/1QR5/5Pp1/1N4P1/PPP5/R5K1 w - - 2 25", sol: JSON.stringify(SOL), name: "Тактика", rating: 1931, theme: "Миттельшпиль" }],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  }),
+  isDbConfigured: () => true,
+}));
+
+async function app() {
+  const router = (await import("../src/routes/cyberchessDaily")).default;
+  const a = express();
+  a.use(express.json());
+  a.use("/api/cyberchess-daily", router);
+  return a;
+}
+
+const DAY = "2026-08-19";
+vi.useFakeTimers({ shouldAdvanceTime: true });
+
+afterEach(() => { vi.useRealTimers(); });
+
+describe("серию нельзя объявить, её можно только заработать", () => {
+  test("без ходов — отказ, и он говорит, чего не хватает", async () => {
+    const r = await request(await app()).post("/api/cyberchess-daily/solve")
+      .send({ day: DAY, userId: "u1", streak: 364 });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe("moves_required");
+  });
+
+  test("неверные ходы — отказ, серия не растёт", async () => {
+    const r = await request(await app()).post("/api/cyberchess-daily/solve")
+      .send({ day: DAY, userId: "u2", moves: ["e2e4", "e7e5"] });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe("wrong_solution");
+  });
+
+  test("верные ходы засчитываются, а заявленная серия ИГНОРИРУЕТСЯ", async () => {
+    const r = await request(await app()).post("/api/cyberchess-daily/solve")
+      // Клиент заявляет 364. Сервер обязан ответить 1: это первый решённый день.
+      .send({ day: DAY, userId: "u3", moves: SOL, streak: 364 });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.streak).toBe(1);
+    expect(r.body.bestStreak).toBe(1);
+  });
+
+  test("серия растёт за подряд идущие дни и рвётся на пропуске", async () => {
+    // Дни переключаются ЧАСАМИ, а не полем запроса: с 19.08.2026 сервер берёт
+    // дату сам, и «дорешать» прошлый день нельзя. Тест обязан ходить тем же
+    // путём, что человек, иначе он проверял бы несуществующий способ.
+    const a = await app();
+    const send = async (день: string) => {
+      vi.setSystemTime(new Date(`${день}T12:00:00Z`));
+      return request(a).post("/api/cyberchess-daily/solve").send({ userId: "u4", moves: SOL });
+    };
+    expect((await send("2026-08-17")).body.streak).toBe(1);
+    expect((await send("2026-08-18")).body.streak).toBe(2);
+    expect((await send("2026-08-19")).body.streak).toBe(3);
+    // Пропуск 20-го: 21-е начинает заново, а не продолжает.
+    expect((await send("2026-08-21")).body.streak).toBe(1);
+  });
+
+  test("чужой день отвергается, а не записывается", async () => {
+    vi.setSystemTime(new Date("2026-08-19T12:00:00Z"));
+    const r = await request(await app()).post("/api/cyberchess-daily/solve")
+      .send({ day: "2026-08-10", userId: "u5", moves: SOL });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe("wrong_day");
+  });
+
+  test("подсказка не растит серию, но и не рвёт её", async () => {
+    // Правило написано на самом экране: «Streak не растёт, но и не сбрасывается».
+    // Перенеся подсчёт на сервер, я стал считать любой решённый день — и серия
+    // росла ВОПРЕКИ надписи. Экран обещал одно, сервер делал другое.
+    const a = await app();
+    const send = async (день: string, подсказок: number) => {
+      vi.setSystemTime(new Date(`${день}T12:00:00Z`));
+      return request(a).post("/api/cyberchess-daily/solve")
+        .send({ userId: "u6", moves: SOL, hintsUsed: подсказок });
+    };
+    expect((await send("2026-09-01", 0)).body.streak).toBe(1);
+    expect((await send("2026-09-02", 0)).body.streak).toBe(2);
+    // С подсказкой — прежнее число, а не три.
+    expect((await send("2026-09-03", 2)).body.streak).toBe(2);
+    // И цепочка не порвана: следующий день без подсказок продолжает её.
+    expect((await send("2026-09-04", 0)).body.streak).toBe(4);
+  });
+
+  test("новичок с подсказкой не получает серию из воздуха", async () => {
+    // streakEndingAt считает переданный день решённым по условию; для вчерашнего
+    // это верно только если вчера действительно решали.
+    const a = await app();
+    vi.setSystemTime(new Date("2026-09-10T12:00:00Z"));
+    const r = await request(a).post("/api/cyberchess-daily/solve")
+      .send({ userId: "новичок-с-подсказкой", moves: SOL, hintsUsed: 1 });
+    expect(r.status).toBe(200);
+    expect(r.body.streak).toBe(0);
+  });
+});

@@ -120,6 +120,13 @@ const TOP_LEVEL_ROUTES: Array<{
   // собственном тесте и в комментарии, то есть страницы собирали адреса, попасть
   // на которые было нельзя. Модули пока не запущены и цены у них нет, поэтому
   // приоритет умеренный, а частота — недельная.
+  // Посадочные запуска — все четыре. Без записи здесь страницу не найдёт ни
+  // человек, ни поисковик: sitemap собирается списком, а не обходом каталогов,
+  // поэтому новая страница попадает в карту только руками. Шахматы и бюро
+  // выпускаются раньше остальных (30.08 и 06.09), и их отсутствие стоило бы
+  // дороже всего — проверка sitemapCoversLaunchPages ловит ровно это.
+  { path: "/cyberchess/launch", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/bureau/launch", changeFrequency: "weekly", priority: 0.7 },
   { path: "/devhub/launch", changeFrequency: "weekly", priority: 0.6 },
   { path: "/multichat-engine/launch", changeFrequency: "weekly", priority: 0.6 },
   // Constitution module

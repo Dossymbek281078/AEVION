@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
-  const t = localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
+  const t = getAuthToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 

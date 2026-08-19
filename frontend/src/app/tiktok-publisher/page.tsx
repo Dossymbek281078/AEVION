@@ -47,6 +47,19 @@ export default function TikTokPublisherPage() {
   const [disableDuet, setDisableDuet] = useState(false);
   const [disableStitch, setDisableStitch] = useState(false);
 
+  // Раскрытие коммерческого контента. Два независимых признака, а не выбор из
+  // двух: ролик может продвигать и свой бренд, и партнёра одновременно.
+  const [brandOrganic, setBrandOrganic] = useState(false);
+  const [brandedContent, setBrandedContent] = useState(false);
+  const [isAigc, setIsAigc] = useState(false);
+
+  // Куда отправлять. Черновик — умолчание: он ничего не публикует без второго
+  // осознанного действия человека уже внутри TikTok. Выбор ОБЯЗАН быть явным на
+  // экране: сервер тоже считает черновик умолчанием, и если страница молчит,
+  // кнопка «Опубликовать» тихо кладёт в черновики, а показанные настройки
+  // приватности не отправляются вовсе.
+  const [target, setTarget] = useState<"draft" | "direct">("draft");
+
   const [posting, setPosting] = useState(false);
   const [postMsg, setPostMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
@@ -98,17 +111,88 @@ export default function TikTokPublisherPage() {
     setCfg((c) => (c ? { ...c, connected: false } : c));
   };
 
+  // Опрос состояния публикации. TikTok отвечает не сразу: ролик сначала
+  // скачивается, потом обрабатывается.
+  const trackStatus = (publishId?: string) => {
+    if (!publishId) return;
+    let left = 10; // ~50 секунд. Дальше молчим, а не опрашиваем вечно.
+    const tick = async () => {
+      left -= 1;
+      try {
+        const r = await fetch(`${API}/publish/status?publishId=${encodeURIComponent(publishId)}`, {
+          credentials: "include",
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "status_failed");
+
+        if (j.status === "PUBLISH_COMPLETE" || j.status === "SEND_TO_USER_INBOX") {
+          const where =
+            j.status === "SEND_TO_USER_INBOX"
+              ? "Готово: ролик в ваших черновиках TikTok — откройте приложение, чтобы дописать и опубликовать."
+              : "Готово: ролик опубликован.";
+          return setPostMsg({ kind: "ok", text: where });
+        }
+        if (j.status === "FAILED") {
+          // Причину показываем как есть: без неё «не получилось» не даёт
+          // человеку ни одного следующего шага.
+          return setPostMsg({
+            kind: "err",
+            text: `TikTok отклонил: ${j.failReason || "причина не названа"}`,
+          });
+        }
+        if (left <= 0) {
+          // Честно говорим, что перестали спрашивать, а не выдаём молчание за
+          // успех.
+          return setPostMsg({
+            kind: "ok",
+            text: `Отправлено, TikTok ещё обрабатывает (${j.status || "в работе"}). Проверьте приложение через минуту.`,
+          });
+        }
+        setPostMsg({ kind: "ok", text: `Отправлено. Состояние: ${j.status || "в работе"}…` });
+        window.setTimeout(tick, 5000);
+      } catch {
+        // Сбой опроса не означает, что публикация не удалась — так и пишем.
+        setPostMsg({
+          kind: "ok",
+          text: "Отправлено, но узнать состояние не удалось. Проверьте приложение TikTok.",
+        });
+      }
+    };
+    window.setTimeout(tick, 3000);
+  };
+
   const publish = async () => {
     setPostMsg(null);
     if (!videoUrl.trim()) return setPostMsg({ kind: "err", text: "Укажите публичный URL видео (mp4)." });
-    if (!privacy) return setPostMsg({ kind: "err", text: "Выберите уровень приватности." });
+    if (target === "direct" && !privacy)
+      return setPostMsg({ kind: "err", text: "Выберите уровень приватности." });
+    // Не понижаем приватность молча: автор выбрал «только я», и опубликовать
+    // вместо этого на всех — значит выложить то, на что он не соглашался.
+    // Поэтому называем оба несовместимых выбора и оставляем решение ему.
+    if (target === "direct" && brandedContent && privacy === "SELF_ONLY") {
+      return setPostMsg({
+        kind: "err",
+        text: "Рекламный контент нельзя публиковать с уровнем «Только я». Выберите открытую аудиторию или снимите отметку о рекламном контенте.",
+      });
+    }
     setPosting(true);
     try {
       const r = await fetch(`${API}/publish`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoUrl: videoUrl.trim(), title, privacyLevel: privacy, disableComment, disableDuet, disableStitch }),
+        body: JSON.stringify({
+          videoUrl: videoUrl.trim(),
+          title,
+          privacyLevel: privacy,
+          disableComment,
+          disableDuet,
+          disableStitch,
+          brandOrganic,
+          brandedContent,
+          isAigc,
+          target,
+        }),
       });
       const j = await r.json();
       if (!r.ok) {
@@ -116,7 +200,11 @@ export default function TikTokPublisherPage() {
         const detail = typeof d === "object" ? `${d.code || ""} ${d.message || ""}`.trim() : String(d || j.error || "");
         setPostMsg({ kind: "err", text: `Не удалось отправить: ${detail || "ошибка"}` });
       } else {
-        setPostMsg({ kind: "ok", text: `Отправлено в TikTok. publish_id: ${j.publishId}. Проверьте уведомления в приложении.` });
+        setPostMsg({ kind: "ok", text: "Отправлено в TikTok. Узнаём состояние…" });
+        // Каталог обещает отслеживание статуса, а страница до 19.08 печатала
+        // publish_id и советовала «посмотрите уведомления». Ручка при этом
+        // существовала и просто никем не звалась.
+        trackStatus(j.publishId);
       }
     } catch (e: any) {
       setPostMsg({ kind: "err", text: e?.message || "Сбой отправки" });
@@ -225,7 +313,12 @@ export default function TikTokPublisherPage() {
                 />
 
                 <label className="ttp-label">Кто увидит</label>
-                <select className="ttp-input" value={privacy} onChange={(e) => setPrivacy(e.target.value)}>
+                <select
+                  className="ttp-input"
+                  value={privacy}
+                  disabled={target === "draft"}
+                  onChange={(e) => setPrivacy(e.target.value)}
+                >
                   {(creator?.privacyOptions || []).map((o) => (
                     <option key={o} value={o}>
                       {PRIVACY_LABELS[o] || o}
@@ -238,7 +331,7 @@ export default function TikTokPublisherPage() {
                     <input
                       type="checkbox"
                       checked={disableComment}
-                      disabled={creator?.commentDisabled}
+                      disabled={target === "draft" || creator?.commentDisabled}
                       onChange={(e) => setDisableComment(e.target.checked)}
                     />
                     Выключить комментарии
@@ -247,7 +340,7 @@ export default function TikTokPublisherPage() {
                     <input
                       type="checkbox"
                       checked={disableDuet}
-                      disabled={creator?.duetDisabled}
+                      disabled={target === "draft" || creator?.duetDisabled}
                       onChange={(e) => setDisableDuet(e.target.checked)}
                     />
                     Выключить Duet
@@ -256,15 +349,96 @@ export default function TikTokPublisherPage() {
                     <input
                       type="checkbox"
                       checked={disableStitch}
-                      disabled={creator?.stitchDisabled}
+                      disabled={target === "draft" || creator?.stitchDisabled}
                       onChange={(e) => setDisableStitch(e.target.checked)}
                     />
                     Выключить Stitch
                   </label>
                 </div>
 
+                <div className="ttp-disclose">
+                  <p className="ttp-disclose-title">Куда отправить</p>
+                  <label className="ttp-toggle">
+                    <input
+                      type="radio"
+                      name="ttp-target"
+                      checked={target === "draft"}
+                      onChange={() => setTarget("draft")}
+                    />
+                    В черновики — доработать и опубликовать в самом TikTok
+                  </label>
+                  <label className="ttp-toggle">
+                    <input
+                      type="radio"
+                      name="ttp-target"
+                      checked={target === "direct"}
+                      onChange={() => setTarget("direct")}
+                    />
+                    Опубликовать сразу
+                  </label>
+                  {target === "draft" && (
+                    <p className="ttp-fine ttp-disclose-label">
+                      Подпись, приватность и раскрытие для черновика задаются в
+                      самом TikTok — отсюда они не отправляются, поэтому ниже
+                      неактивны.
+                    </p>
+                  )}
+                </div>
+
+                <div className="ttp-disclose" data-inactive={target === "draft" ? "1" : undefined}>
+                  <p className="ttp-disclose-title">Это коммерческий контент?</p>
+                  <label className="ttp-toggle">
+                    <input
+                      type="checkbox"
+                      checked={brandOrganic}
+                      disabled={target === "draft"}
+                      onChange={(e) => setBrandOrganic(e.target.checked)}
+                    />
+                    Продвигает мой собственный бренд или товар
+                  </label>
+                  <label className="ttp-toggle">
+                    <input
+                      type="checkbox"
+                      checked={brandedContent}
+                      disabled={target === "draft"}
+                      onChange={(e) => setBrandedContent(e.target.checked)}
+                    />
+                    Рекламирует другой бренд — платное партнёрство
+                  </label>
+                  <label className="ttp-toggle">
+                    <input
+                      type="checkbox"
+                      checked={isAigc}
+                      disabled={target === "draft"}
+                      onChange={(e) => setIsAigc(e.target.checked)}
+                    />
+                    Создан или изменён с помощью ИИ
+                  </label>
+
+                  {(brandOrganic || brandedContent) && (
+                    <p className="ttp-fine ttp-disclose-label">
+                      В TikTok ролик будет помечен:{" "}
+                      <strong>
+                        {brandedContent ? "Paid partnership" : "Promotional content"}
+                      </strong>
+                      .
+                    </p>
+                  )}
+
+                  {brandedContent && privacy === "SELF_ONLY" && (
+                    <p className="ttp-msg ttp-msg-err">
+                      Рекламный контент нельзя публиковать с уровнем «Только я».
+                      Выберите открытую аудиторию или снимите отметку.
+                    </p>
+                  )}
+                </div>
+
                 <button className="ttp-btn ttp-btn-tiktok ttp-post" onClick={publish} disabled={posting}>
-                  {posting ? "Отправка…" : "Опубликовать в TikTok"}
+                  {posting
+                    ? "Отправка…"
+                    : target === "draft"
+                      ? "Отправить в черновики TikTok"
+                      : "Опубликовать в TikTok"}
                 </button>
 
                 {postMsg && <div className={`ttp-msg ttp-msg-${postMsg.kind}`}>{postMsg.text}</div>}
@@ -332,4 +506,8 @@ const CSS = `
 .ttp-msg-ok{background:rgba(37,244,238,.12);color:var(--accent);border:1px solid rgba(37,244,238,.3)}
 .ttp-msg-err{background:rgba(254,44,85,.12);color:#ff8fa3;border:1px solid rgba(254,44,85,.3)}
 .ttp-disclosure a{color:var(--accent)}
+.ttp-disclose{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:14px 0;display:flex;flex-direction:column;gap:10px}
+.ttp-disclose-title{margin:0;font-weight:600;font-size:14px}
+.ttp-disclose-label{margin:0}
+.ttp-disclose[data-inactive="1"]{opacity:.5}
 `;

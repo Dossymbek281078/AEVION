@@ -4,6 +4,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken } from "@/lib/auth";
 
 interface Prefs {
   emailEnabled: boolean;
@@ -30,7 +31,7 @@ export default function NotificationPrefsPage() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("aevion_token") ?? "";
+    const saved = getAuthToken() ?? "";
     setToken(saved);
     if (!saved) { setLoading(false); return; }
     fetch(apiUrl("/api/qpaynet/notifications/preferences"), { headers: { Authorization: `Bearer ${saved}` } })

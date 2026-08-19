@@ -1,5 +1,6 @@
 "use client";
 
+import { LESSONS } from "../lib/lessons";
 import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "aevion-smeta-onboarding-v1";
@@ -12,7 +13,7 @@ const STEPS = [
   },
   {
     icon: "📚",
-    title: "5 уровней + 47 уроков теории",
+    title: `5 уровней + ${LESSONS.length} уроков теории`,
     text: "С нуля → Пользователь → ПТО → Проектировщик → Эксперт. На каждом уровне — вкладка «📚 Теория» с уроками, формулами и интерактивными квизами. Начните с уровня 1 если видите смету впервые.",
   },
   {

@@ -4,10 +4,27 @@ import { useState } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { productById } from "@/lib/products";
+import { track } from "@/lib/track";
+import { PageTracking } from "@/components/PageTracking";
 
 type Billing = "monthly" | "annual";
 
 /* ── Prices ─────────────────────────────────────────────────────────────────── */
+// ⚠️ Planet is the one paid AEVION offer whose price lives nowhere but this file.
+// Everything else resolves to a source of truth: tiers to data/pricing.ts (what
+// checkout.ts charges), one-off products and subscriptions to lib/products.ts
+// (verified against the live payment dashboards on 2026-07-26). These two numbers
+// have neither, and the checkout links below are raw Lemon Squeezy variant UUIDs
+// typed into this page — they bypass lib/products.ts AND the backend's
+// tier_planet_monthly / tier_planet_annual reference system
+// (data/lemonSqueezyVariants.ts), so nothing in the codebase can tell whether the
+// $250 shown here is what Lemon Squeezy actually bills.
+//
+// That is the same shape as the "All-Access $59/мес" banner, which advertised a
+// price for years while the button opened a different product. Not changed here:
+// correcting it needs the real variant prices from the Lemon Squeezy dashboard,
+// and inventing a number would be worse than naming the gap. Fix = add Planet to
+// lib/products.ts with its verified price + href, then read it from there.
 const PLANET_MONTHLY = 250;
 const PLANET_ANNUAL_PER_MO = 200; // 12-month commitment, billed monthly
 
@@ -46,7 +63,10 @@ const APP_DEFS: AppDef[] = [
       "Monaco IDE (VS Code engine)",
       "AI code generation",
       "Deploy: Railway · Vercel · Cloudflare Pages",
-      "Free *.aevion.build subdomain",
+      // 19.08.2026: домен наш, но зона ещё не делегирована на Cloudflare —
+      // /studio честно пишет «waiting on domain delegation». Пока это так,
+      // обещать поддомен без оговорки нельзя: человек выберет тариф ради него.
+      "Free *.aevion.build subdomain (coming soon)",
       "50 AI videos · 200 images/mo",
       "Team collaborators",
     ],
@@ -59,8 +79,28 @@ const APP_DEFS: AppDef[] = [
     tagline: "Multi-model AI assistant",
     href: "/qcoreai",
     cat: "Developer",
-    highlights: ["Claude · GPT · Gemini in one UI", "Unlimited usage", "Always free"],
+    highlights: ["Claude · GPT · Gemini in one UI", "Generous free monthly quota", "Always free"],
     badge: "Free forever",
+  },
+  {
+    id: "tiktok-publisher",
+    icon: "🎬",
+    name: "TikTok Publisher",
+    tagline: "Publish finished videos to your own TikTok",
+    href: "/tiktok-publisher",
+    cat: "Developer",
+    // Внесён в каталог 19.08.2026. До этого страница жила на проде, но нигде не
+    // значилась: формально открыта всем, фактически внутренний инструмент.
+    // Именно поэтому заявку на Content Posting API отклонили с формулировкой
+    // «personal or company internal use». Продукт для авторов должен быть
+    // ВИДИМ как продукт, иначе утверждение о нём — неправда.
+    highlights: [
+      "Connect your own TikTok via OAuth",
+      "Caption, privacy level and interaction settings before posting",
+      "Commercial-content disclosure built in",
+      "Save to drafts or post directly",
+      "Publish status tracking",
+    ],
   },
   /* ── Finance ────────────────────────────────────────────────────────── */
   {
@@ -81,7 +121,7 @@ const APP_DEFS: AppDef[] = [
     tagline: "Embedded payment infrastructure",
     href: "/qpaynet",
     cat: "Finance",
-    highlights: ["KZT · USD · multi-currency", "Virtual cards", "API + webhooks"],
+    highlights: ["KZT · USD · multi-currency", "Payouts to card, Kaspi and bank transfer", "API + webhooks"],
   },
   /* ── Business & Legal ───────────────────────────────────────────────── */
   {
@@ -117,6 +157,18 @@ const APP_DEFS: AppDef[] = [
     ],
   },
   {
+    // 19.08.2026: карточка обещала «Ed25519 signature» и «OpenTimestamps blockchain
+    // anchoring». Проверено по коду — ни того, ни другого нет. Подпись это
+    // HMAC-SHA256, ключом которого служит ПУБЛИЧНЫЙ ключ нотариуса (bureau.ts:2622,
+    // там же честная пометка «Demo»): пересчитать её может любой, потому что certId,
+    // contentHash и открытый ключ — открытые данные. Свойства подписи здесь нет.
+    // Якорения в бюро тоже нет: слово anchor встречается дважды, оба раза это
+    // text-anchor в SVG; библиотека OpenTimestamps живёт в соседнем модуле.
+    //
+    // Формулировки приведены к тому, что продукт делает на самом деле. Вернуть
+    // прежние можно ТОЛЬКО вместе с настоящей реализацией — иначе продукт,
+    // который продаёт доказуемость, врёт именно про неё.
+    // Разбор: 15-Аудиты-и-сводки\ВИТРИНА-обещания-против-кода-19-08.md
     id: "bureau",
     productId: "bureau",
     icon: "🔐",
@@ -125,8 +177,8 @@ const APP_DEFS: AppDef[] = [
     href: "/bureau",
     cat: "Business",
     highlights: [
-      "Ed25519 signature + SHA-256 hash",
-      "OpenTimestamps blockchain anchoring",
+      "SHA-256 content hash + signed audit trail",
+      "Notary review with registry reference",
       "Tamper-evident certificates",
     ],
   },
@@ -172,7 +224,7 @@ const APP_DEFS: AppDef[] = [
     highlights: [
       "Grandmaster opening theory (CC0 corpus)",
       "Real-time AI coaching during games",
-      "Club & tournament management",
+      "Tournament management with ratings and prizes",
     ],
   },
 ];
@@ -214,6 +266,7 @@ export default function AppsPage() {
         color: "#f1f5f9",
       }}
     >
+      <PageTracking page="apps" />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 16px 80px" }}>
         <Wave1Nav />
 
@@ -350,6 +403,15 @@ export default function AppsPage() {
                   : "https://aevion.lemonsqueezy.com/checkout/buy/23fa912b-b6dc-4b42-8dd8-7498b6298b1b"}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() =>
+                  track({
+                    type: "checkout_start",
+                    tier: "planet",
+                    source: "apps/planet",
+                    value: planetPrice,
+                    meta: { period: billing, processor: "lemonsqueezy" },
+                  })
+                }
                 style={{
                   display: "block",
                   marginTop: 16,
@@ -467,6 +529,12 @@ export default function AppsPage() {
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
+                        // Перевод удлиняет обе надписи ("Free" → "Бесплатно",
+                        // "Open free →" → "Открыть бесплатно →"), а строка была
+                        // свёрстана под короткие английские слова: без переноса
+                        // цена налезала на кнопку на всех бесплатных карточках.
+                        flexWrap: "wrap",
+                        gap: 10,
                         marginTop: "auto",
                         paddingTop: 14,
                         borderTop: "1px solid rgba(255,255,255,0.06)",
@@ -485,6 +553,14 @@ export default function AppsPage() {
                           href={app.checkoutUrl}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={() =>
+                            track({
+                              type: "checkout_start",
+                              source: `apps/${app.id}`,
+                              value: app.price,
+                              meta: { module: app.id },
+                            })
+                          }
                           style={{
                             padding: "8px 18px",
                             background: clr,
@@ -493,6 +569,7 @@ export default function AppsPage() {
                             fontWeight: 700,
                             fontSize: 13,
                             textDecoration: "none",
+                            whiteSpace: "nowrap",
                           }}
                         >
                           Subscribe →
@@ -508,6 +585,7 @@ export default function AppsPage() {
                             fontWeight: 700,
                             fontSize: 13,
                             textDecoration: "none",
+                            whiteSpace: "nowrap",
                           }}
                         >
                           {app.price === 0 ? "Open free →" : "Get access →"}

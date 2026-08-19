@@ -12,6 +12,7 @@
 
 import { Router } from "express";
 import { getPool } from "../lib/dbPool";
+import { ensureAppSubscriptionTable } from "../lib/ensureAppSubscriptionTable";
 
 export const appAccessRouter = Router();
 
@@ -21,6 +22,7 @@ appAccessRouter.get("/", async (req, res) => {
 
   try {
     const pool = getPool();
+    await ensureAppSubscriptionTable(pool);
     const result = await pool.query(
       `SELECT "appSlug" FROM "AppSubscription" WHERE "email"=$1 AND "status"='active'`,
       [email],
@@ -39,6 +41,7 @@ appAccessRouter.get("/check", async (req, res) => {
 
   try {
     const pool = getPool();
+    await ensureAppSubscriptionTable(pool);
     const result = await pool.query(
       `SELECT 1 FROM "AppSubscription" WHERE "email"=$1 AND "appSlug"=$2 AND "status"='active' LIMIT 1`,
       [email, app],

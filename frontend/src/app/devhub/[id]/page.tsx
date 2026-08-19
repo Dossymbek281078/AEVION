@@ -372,8 +372,10 @@ function FileContextMenu({
   );
 }
 
-export default function DevHubProjectPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
-  const { id } = params instanceof Promise ? use(params) : params;
+// Promise-only: Next 16 rejects the `T | Promise<T>` union in generated route
+// types (build-only error — see the note in src/app/[id]/page.tsx).
+export default function DevHubProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
@@ -4943,7 +4945,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Sender email (optional — falls back to BREVO_SENDER_EMAIL env)</label>
-                        <input value={tplBuilderSender} onChange={(e) => setTplBuilderSender(e.target.value)} placeholder="noreply@aevion.io"
+                        <input value={tplBuilderSender} onChange={(e) => setTplBuilderSender(e.target.value)} placeholder="noreply@aevion.app"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>

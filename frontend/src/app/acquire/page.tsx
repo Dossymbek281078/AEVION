@@ -123,7 +123,7 @@ const PILLARS: Pillar[] = [
     oneLine:
       "Доказательство, что инфраструктура держит массовых пользователей, а не только слайды.",
     modules: ["CyberChess (AEVION CPI)", "HealthAI v3", "Multichat", "KidsAI", "Smeta Trainer", "MapReality", "LifeBox", "StartupX"],
-    proof: "Stockfish 18 в браузере · 10 818 пазлов · HealthAI 19 commits · Multichat 12 фич",
+    proof: "Stockfish 18 в браузере · 500 000 пазлов (10 818 офлайн) · HealthAI 19 commits · Multichat 12 фич",
     tamAnchor: "Proof of execution (не TAM-якорь)",
     accent: "#fbbf24",
   },
@@ -132,7 +132,7 @@ const PILLARS: Pillar[] = [
     title: "Governance / Trust",
     oneLine:
       "Constitution v1 + Planet attestations + публичный health-board.",
-    modules: ["Constitution v1", "/planet", "/transparency", "/launch-status", "AEVION_COORDINATION"],
+    modules: ["Constitution v1", "/planet", "/status", "/launch-status", "AEVION_COORDINATION"],
     proof: "Constitution опубликован через QSign envelope (commit 1cacd5a1) · daily smoke полностью зелёный",
     tamAnchor: "Trust premium для всех четырёх слоёв",
     accent: "#f472b6",
@@ -274,13 +274,13 @@ export default function AcquirePage() {
             Запросить LOI → yahiin1978@gmail.com
           </a>
           <Link href="/launch-status" style={btnGhost}>Live status</Link>
-          <Link href="/transparency" style={btnGhost}>Transparency board</Link>
+          <Link href="/status" style={btnGhost}>Live health-board</Link>
           <Link href="/constitution" style={btnGhost}>Constitution v1</Link>
         </div>
 
         {/* Live counters */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 24, padding: 28, background: "rgba(255,255,255,0.03)", borderRadius: 20, border: "1px solid rgba(255,255,255,0.08)" }}>
-          <Counter label="Modules tracked" value={totalModules.toString()} sub="/api/aevion/registry" />
+          <Counter label="Modules tracked" value={totalModules.toString()} sub="/api/aevion/stats" />
           <Counter label="AEV cap supply" value="21 000 000" sub="зафиксирован навсегда" />
           <Counter label="Daily smoke" value="PASS" sub="все проверки зелёные" />
           <Counter
@@ -437,7 +437,7 @@ export default function AcquirePage() {
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
           {[
-            { t: "AEV в обращении", d: "Доверие к расчётной единице накапливается транзакциями, не маркетингом." },
+            { t: "AEV как расчётная единица", d: "Доверие к расчётной единице накапливается транзакциями, не маркетингом." },
             { t: "Constitution v1 + Planet", d: "Правовой режим, опубликованный через QSign envelope. Документ, не правила в Notion." },
             { t: "9 интеграций DevHub", d: "36+ месяцев комплаенс-работы для нового игрока. Уже пройдено." },
             { t: "30+ модулей с health-pings", d: "Каждый отдельно — 6-18 мес инжиниринга. В сумме — 200+ человеко-лет." },
@@ -689,7 +689,7 @@ export default function AcquirePage() {
           </div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
             <Link href="/launch-status" style={{ color: "#94a3b8", textDecoration: "none" }}>Live status</Link>
-            <Link href="/transparency" style={{ color: "#94a3b8", textDecoration: "none" }}>Transparency</Link>
+            <Link href="/status" style={{ color: "#94a3b8", textDecoration: "none" }}>Health board</Link>
             <Link href="/constitution" style={{ color: "#94a3b8", textDecoration: "none" }}>Constitution</Link>
             <Link href="/devhub" style={{ color: "#94a3b8", textDecoration: "none" }}>DevHub</Link>
             <Link href="/planet" style={{ color: "#94a3b8", textDecoration: "none" }}>Planet</Link>

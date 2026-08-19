@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 /**
  * QSkyway — drift detection for the committed FAA airspace snapshot.
  *
@@ -15,6 +15,7 @@
 import { AIRSPACE_NYC } from "../src/routes/qskyway.airspace.nyc";
 import { compareSnapshot, type LiveCell } from "../src/routes/qskyway.airspace.freshness";
 import { airspaceContentHash, signablePayload } from "../src/routes/qskyway.airspace";
+import { stableCellId } from "../src/lib/airspaceCellId";
 
 let step = 0, failed = 0;
 const assert = (cond: boolean, name: string, detail = ""): void => {
@@ -24,7 +25,14 @@ const assert = (cond: boolean, name: string, detail = ""): void => {
 };
 
 const snap = AIRSPACE_NYC;
-const asLive = (): LiveCell[] => snap.cells.map((c) => ({ id: c.id, ceilingFt: c.ceilingFt, effective: c.effective }));
+// Живая ячейка приходит с ключом, выведенным из ГЕОМЕТРИИ, а не из `OBJECTID`:
+// тот — номер строки в базе публикатора и меняется на каждой перепубликации. В
+// отгруженном слое в `c.id` всё ещё лежит старый `faa-<OBJECTID>` (пересобирать
+// его нельзя дёшево — id входит в подписываемое содержимое), и сверка это
+// переживает, выводя ключ из геометрии с обеих сторон. Копировать сюда `c.id`
+// значило бы проверять контракт, которого больше нет.
+const asLive = (): LiveCell[] =>
+  snap.cells.map((c) => ({ id: stableCellId(c), ceilingFt: c.ceilingFt, effective: c.effective }));
 
 console.log(`QSkyway airspace freshness smoke — snapshot ${snap.effective}, ${snap.cells.length} cells\n`);
 
@@ -48,7 +56,8 @@ assert(withdrawnDiff.upToDate === false && withdrawnDiff.cellsRemoved === 1 && w
   "a withdrawn cell is detected", `removed=${withdrawnDiff.cellsRemoved}`);
 
 // a newly published cell → addition
-const extended = [...asLive(), { id: "faa-999999999", ceilingFt: 200, effective: snap.effective }];
+const extended = [...asLive(), // Новая ячейка — новый участок неба, а не новый номер строки.
+  { id: stableCellId({ minLat: 41.5, minLon: -73.1, airportIcao: "KHPN" }), ceilingFt: 200, effective: snap.effective }];
 const extendedDiff = compareSnapshot(snap, extended);
 assert(extendedDiff.upToDate === false && extendedDiff.cellsAdded === 1 && extendedDiff.cellsRemoved === 0,
   "a newly published cell is detected", `added=${extendedDiff.cellsAdded}`);

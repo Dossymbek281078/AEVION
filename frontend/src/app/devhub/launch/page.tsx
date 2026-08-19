@@ -3,6 +3,7 @@ import paper from "@/styles/aevionPaper.module.css";
 import { probeJson } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { LandingView } from "@/components/LandingView";
 
 // Посадочная запуска DevHub.
 //
@@ -61,6 +62,12 @@ export const metadata: Metadata = {
     title: "AEVION DevHub — ранний доступ",
     description:
       "«Сделай мне…» вместо конструктора: проект, медиа и озвучка собираются по описанию. Ранний доступ по адресу почты.",
+    // Контент посадочных русский, а корневой layout объявляет lang="en":
+    // проверено запросом от имени поискового робота — в серверной разметке
+    // 2167 кириллических символов при lang="en" и без hreflang. Для
+    // поисковика и превью в мессенджерах это рассогласование, и оно решается
+    // здесь точечно: трогать общий layout нельзя, остальной сайт двуязычный.
+    locale: "ru_RU",
     type: "website",
   },
 };
@@ -107,6 +114,8 @@ export default async function DevhubLaunchPage({
             {" Дату открытия объявим отдельно — оставьте адрес, и письмо придёт в день запуска."}
           </p>
         </header>
+
+        <LandingView source={source} />
 
         <WaitlistCapture
           source={source}

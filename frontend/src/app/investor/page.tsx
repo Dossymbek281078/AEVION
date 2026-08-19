@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ModuleOfTheDayCard } from "@/components/ModuleOfTheDayCard";
 import { apiUrl } from "@/lib/apiBase";
+import { repoLabel, repoUrl } from "@/lib/repoUrl";
 
 // metadata must live in a server component — moved to layout or generateMetadata.
 // Kept as a plain object for <head> tags injected by the client shell.
@@ -100,7 +101,7 @@ export default function InvestorPage() {
           <a href="https://aevion.app" style={btnPrimary}>
             Try the product →
           </a>
-          <a href="https://github.com/Dossymbek281078/AEVION" target="_blank" rel="noopener" style={btnGhost}>
+          <a href={repoUrl()} target="_blank" rel="noopener" style={btnGhost}>
             Open repo (130+ PRs)
           </a>
           <Link href="/launch-status" style={btnGhost}>
@@ -295,10 +296,26 @@ export default function InvestorPage() {
               <div style={pricingBox}>
                 <div style={pricingTitle}>Pricing</div>
                 {[
-                  { tier: "Verified", price: "$9", desc: "SHA-256 + ML-DSA-65 + cert" },
-                  { tier: "Notarized", price: "$49", desc: "+ notary registry + Shamir backup" },
-                  { tier: "Gold", price: "$199", desc: "+ legal review + int'l databases" },
-                  { tier: "Platinum", price: "$999", desc: "+ multi-jurisdiction protection" },
+                  // Что покупатель получает СЕГОДНЯ. Раньше строка перечисляла
+                  // ML-DSA-65 как часть тарифа: на проде активны только hmac и
+                  // ed25519 (/api/qsign/v2/keys), поэтому за $9 подписи ML-DSA
+                  // не выдаётся. Оговорка «key-activated» читалась покупателем
+                  // как «входит в пакет» — язык разработчика на продающей строке.
+                  //
+                  // Цена привязана к коду тарификации: Verified — единственный
+                  // тариф с live charge: $19/cert (getVerifiedTierPriceCents()
+                  // в aevion-globus-backend/src/lib/payment, переопределяется
+                  // BUREAU_VERIFIED_PRICE_CENTS), ту же цифру показывает поток
+                  // апгрейда /bureau. Две ветки чинили эту строку порознь: одна
+                  // вернула честную криптографию, но поставила $9 — цену, которой
+                  // платформа не берёт; вторая верную цену, но с ML-DSA. Здесь
+                  // верно и то и другое. Notarized имеет поток заявки без цены в
+                  // коде, Gold и Platinum не существуют нигде — отсюда «planned»,
+                  // а не вид товара, который можно купить сегодня.
+                  { tier: "Verified", price: "$19", desc: "SHA-256 + Ed25519 signature + cert" },
+                  { tier: "Notarized (planned)", price: "$49", desc: "+ notary registry + Shamir backup" },
+                  { tier: "Gold (planned)", price: "$199", desc: "+ legal review + int'l databases" },
+                  { tier: "Platinum (planned)", price: "$999", desc: "+ multi-jurisdiction protection" },
                 ].map(p => (
                   <div key={p.tier} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                     <span style={{ fontSize: 12, color: "#f1f5f9", fontWeight: 600 }}>{p.tier}</span>
@@ -336,7 +353,7 @@ export default function InvestorPage() {
                   { tier: "Free", price: "$0", desc: "3 active vacancies" },
                   { tier: "Starter", price: "$49/mo", desc: "10 vacancies + AI scoring" },
                   { tier: "Pro", price: "$249/mo", desc: "unlimited + analytics" },
-                  { tier: "Hire fee", price: "1.5%", desc: "per successful placement" },
+                  { tier: "Hire fee", price: "12% → 4%", desc: "per successful placement; 12% recruiter tier down to 4% on Platinum" },
                 ].map(p => (
                   <div key={p.tier} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                     <span style={{ fontSize: 12, color: "#f1f5f9", fontWeight: 600 }}>{p.tier}</span>
@@ -474,12 +491,12 @@ export default function InvestorPage() {
         <div style={{ maxWidth: 560, margin: "0 auto" }}>
           <h2 style={{ fontSize: 32, fontWeight: 900, marginBottom: 12 }}>8-minute demo</h2>
           <p style={{ fontSize: 16, color: "#94a3b8", marginBottom: 28, lineHeight: 1.6 }}>
-            Register on aevion.app → create a QRight object → sign with ML-DSA-65 → get a Bureau certificate.
-            All verifiable, all on prod, no staging.
+            Register on aevion.app → create a QRight object → sign it → get a Bureau certificate.
+            All verifiable, all on prod, no staging. ML-DSA-65 signing is key-activated.
           </p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             <a href="https://aevion.app/auth" style={btnPrimary}>Start demo →</a>
-            <a href="https://github.com/Dossymbek281078/AEVION" target="_blank" rel="noopener" style={btnGhost}>Inspect the code</a>
+            <a href={repoUrl()} target="_blank" rel="noopener" style={btnGhost}>Inspect the code</a>
           </div>
           <p style={{ fontSize: 13, color: "#475569", marginTop: 20 }}>
             Partnership, not a buyout · $10M returnable advance + 51/49 revenue · contact:{" "}
@@ -493,13 +510,13 @@ export default function InvestorPage() {
       <footer style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
         <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px", display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 12, color: "#334155" }}>
-            AEVION · aevion.app · github.com/Dossymbek281078/AEVION
+            AEVION · aevion.app · {repoLabel()}
           </div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
             <Link href="/partner" style={{ color: "#94a3b8", textDecoration: "none" }}>Innovation Partnership</Link>
             <Link href="/acquire" style={{ color: "#94a3b8", textDecoration: "none" }}>Acquisition brief</Link>
             <Link href="/pilot" style={{ color: "#94a3b8", textDecoration: "none" }}>90-day pilot</Link>
-            <Link href="/transparency" style={{ color: "#94a3b8", textDecoration: "none" }}>Live health-board</Link>
+            <Link href="/status" style={{ color: "#94a3b8", textDecoration: "none" }}>Live health-board</Link>
           </div>
         </div>
       </footer>

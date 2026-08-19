@@ -30,7 +30,14 @@ const PAGES = [
   "/planet",
   "/awards",
   "/bank",
+  // Шахматы выходят публично 30.08.2026, и трафик на них будет платным. До
+  // 19.08 под наблюдением была только главная: страницы задачи дня, турниров и
+  // рейтинга могли отдавать пустой экран сколько угодно, и узнали бы мы об этом
+  // от посетителя. Это ровно тот урок, ради которого сторож и написан.
   "/cyberchess",
+  "/cyberchess/daily",
+  "/cyberchess/tournaments",
+  "/cyberchess/leaderboard",
   "/qventure",
   "/qskyway",
   "/build",
@@ -47,6 +54,40 @@ const PAGES = [
   "/qmelanin",  // кнопки покупки гайдов $9 / $19
   "/qrenew",    // линия здоровья, ведёт в те же товары
   "/longevity", // 12-недельный протокол, продукт oijxmq
+
+  // Добавлены 10.08.2026. Причина конкретная: за день в этих модулях нашлись
+  // дефекты (мёртвый ключ входа, вызовы мимо прокси), а смоук их даже не
+  // открывал — то есть отчёт «26/26 PASS» не покрывал ни одну сломанную
+  // страницу. Все семь проверены вручную, отдают 200.
+  //
+  // ⚠️ Помнить, чего этот смоук НЕ доказывает: критерий у него — 2xx, тело
+  // больше 5 КБ и слово «aevion». Всё это верно и у страницы, которая
+  // открылась, но внутри не работает: библиотека мультичата отдаёт 200 и
+  // «войдите» вошедшему человеку, админка QPayNet — 200 и пустые списки.
+  // Он доказывает, что страница ОТКРЫВАЕТСЯ, а не что она РАБОТАЕТ.
+  "/qpaynet",         // платежи: кошелёк, переводы, платёжные ссылки
+  "/multichat-engine",// консилиум агентов
+  "/qcontract",       // документы и подписание
+  "/qmaskcard",       // виртуальные карты
+  "/qchaingov",       // голосования
+  "/qevents",         // события
+  "/qsocial",         // лента
+
+  // Добавлены 14.08.2026, каждая по своему поводу — в этот день они либо
+  // оказались сломаны, либо чуть не пропали с прода вместе с /go.
+  "/partner",      // страница для инвесторов; звала мёртвый /api/aevion/registry → 404
+  "/investor",     // вторая инвесторская, тот же класс обещаний
+  "/compare",      // сравнение с аналогами; существует в одной ветке из трёх, легко теряется
+  "/constitution", // отдельный продукт со своей оплатой и листом ожидания
+  "/qcoreai",      // платный модуль, на его странице кнопка оплаты
+  "/veilnetx",     // обещал Tor, которого нет; формулировку правили дважды
+  "/cyberchess/launch",  // посадочная под ролики; её пропажа = потерянный трафик запуска
+  "/bureau/launch",      // то же для патентного бюро, запуск 06.09
+  // Добавлены 19.08.2026: обе посадочные уже отвечают 200 и уже собирают
+  // адреса, но сторож их не знал — то есть их падение прошло бы незамеченным
+  // ровно так же, как пропажа /go в июле.
+  "/devhub/launch",           // запуск 13.09, самый дорогой чек платформы
+  "/multichat-engine/launch", // запуск 20.09
 ];
 
 let pass = 0;
@@ -76,12 +117,72 @@ async function checkPage(p) {
   }
 }
 
+
+// ── Обещания модуля, а не только доступность страниц ─────────────────────────
+//
+// Этот файл — единственная проверка прода, которую что-то ЗАПУСКАЕТ: задача
+// AEVION-PagesGuard берёт его из зеркала каждые 30 минут. Шахматный смоук
+// подробнее, но его не зовёт никто, поэтому два обещания, молча пропадавшие
+// при чужих выкатках, живут здесь.
+//
+// 19.08.2026 чужая выкатка в 10:34 вернула прод к состоянию, где задача дня НЕ
+// РЕШАЕТСЯ (решение приходило обрывками JSON), а серию можно было объявить
+// числом без единого хода. Прод один на все окна, побеждает последняя выкатка —
+// откат повторится, и заметить его должен сторож, а не случайность.
+//
+// Проверяется ПРИГОДНОСТЬ, а не ответ 200: сервер может отвечать бодро и при
+// этом обещать то, чего не делает.
+const API = (process.env.API_BASE || "https://api.aevion.app").replace(/[/]+$/, "");
+const UCI = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
+
+async function checkChessPromises() {
+  try {
+    const r = await fetch(`${API}/api/cyberchess-daily/puzzle`, { signal: AbortSignal.timeout(15000) });
+    const j = await r.json();
+    const sol = Array.isArray(j?.puzzle?.sol) ? j.puzzle.sol : [];
+    if (sol.length > 0 && sol.every((m) => UCI.test(String(m)))) {
+      pass++; console.log(`  PASS задача дня решаема (${sol.length} ходов)`);
+    } else {
+      fail++; failures.push("задача дня нерешаема");
+      console.log(`  FAIL задача дня нерешаема — ${JSON.stringify(sol).slice(0, 60)}`);
+    }
+  } catch (e) {
+    fail++; failures.push("задача дня недоступна");
+    console.log(`  FAIL задача дня — ${e.message}`);
+  }
+
+  // Серию нельзя объявить: без сыгранных ходов запрос обязан быть отвергнут.
+  // Проба ничего не записывает именно потому, что её отвергают.
+  try {
+    const r = await fetch(`${API}/api/cyberchess-daily/solve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ streak: 999, day: new Date().toISOString().slice(0, 10), userId: "pages-guard-probe", name: "guard" }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 400 && j?.error === "moves_required") {
+      pass++; console.log("  PASS серию нельзя объявить без ходов");
+    } else {
+      fail++; failures.push("серию можно подделать");
+      console.log(`  FAIL серию можно подделать — ${r.status} ${JSON.stringify(j).slice(0, 60)}`);
+    }
+  } catch (e) {
+    fail++; failures.push("проверка подделки не выполнена");
+    console.log(`  FAIL проверка подделки — ${e.message}`);
+  }
+}
+
 (async () => {
   console.log(`pages-live-smoke against ${BASE} (${PAGES.length} pages)`);
   // Small batches: fast enough, and no thundering herd against prod.
   for (let i = 0; i < PAGES.length; i += 5) {
     await Promise.all(PAGES.slice(i, i + 5).map(checkPage));
   }
-  console.log(`\npages-live-smoke: ${pass}/${PAGES.length} PASS${fail ? ` — FAILING: ${failures.join(", ")}` : ""}`);
+  await checkChessPromises();
+  // Знаменатель — страницы плюс две проверки обещаний: иначе «46/46» при
+  // сломанном обещании читалось бы как полный порядок.
+  const total = PAGES.length + 2;
+  console.log(`\npages-live-smoke: ${pass}/${total} PASS${fail ? ` — FAILING: ${failures.join(", ")}` : ""}`);
   process.exit(fail ? 1 : 0);
 })();

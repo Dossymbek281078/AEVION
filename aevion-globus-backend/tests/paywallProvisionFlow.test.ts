@@ -38,19 +38,21 @@ function fakeRes() {
   };
 }
 
-function runGate(email: string) {
+// Гейт стал асинхронным 13.08.2026 — при отказе по тарифу он спрашивает базу
+// про отдельную подписку на модуль. Промис надо дождаться.
+async function runGate(email: string) {
   const req = bearerReq(email);
   const res = fakeRes();
   let passed = false;
-  requireModule("healthai")(req, res as any, () => { passed = true; });
+  await requireModule("healthai")(req, res as any, () => { passed = true; });
   return { passed, status: res.statusCode, body: res.body };
 }
 
 describe("paywall provision flow — pay → access → expire", () => {
   afterAll(() => rmSync(TMP, { recursive: true, force: true }));
 
-  test("free user is denied healthai with a well-formed 402", () => {
-    const g = runGate("free-user@test.aevion.dev");
+  test("free user is denied healthai with a well-formed 402", async () => {
+    const g = await runGate("free-user@test.aevion.dev");
     expect(g.passed).toBe(false);
     expect(g.status).toBe(402);
     expect(g.body.error).toBe("upgrade_required");
@@ -60,17 +62,17 @@ describe("paywall provision flow — pay → access → expire", () => {
 
   test("after provisioning a paid tier, the SAME user passes the gate", async () => {
     const email = "buyer@test.aevion.dev";
-    expect(runGate(email).status).toBe(402); // denied before purchase
+    expect((await runGate(email)).status).toBe(402); // denied before purchase
 
     await provisionSubscription({ email, tierId: "medium", period: "monthly", source: "gumroad" });
 
-    const g = runGate(email);
+    const g = await runGate(email);
     expect(g.passed).toBe(true);      // gate let the request through
     expect(g.status).toBe(0);          // no 402 written
     expect(isModuleEntitled(resolveUserPlan(bearerReq(email)), "healthai")).toBe(true);
   });
 
-  test("an expired subscription falls back to 402 (latest-wins downgrade)", () => {
+  test("an expired subscription falls back to 402 (latest-wins downgrade)", async () => {
     const email = "expired@test.aevion.dev";
     // Write a paid record that already lapsed yesterday.
     writeSubscription({
@@ -80,7 +82,7 @@ describe("paywall provision flow — pay → access → expire", () => {
       source: "gumroad",
     } as any);
 
-    const g = runGate(email);
+    const g = await runGate(email);
     expect(g.passed).toBe(false);
     expect(g.status).toBe(402);
   });
@@ -88,7 +90,7 @@ describe("paywall provision flow — pay → access → expire", () => {
   test("a lite subscription unlocks ONLY its chosen module", async () => {
     const email = "lite-buyer@test.aevion.dev";
     await provisionSubscription({ email, tierId: "lite", period: "monthly", modules: ["healthai"], source: "gumroad" });
-    expect(runGate(email).passed).toBe(true);
+    expect((await runGate(email)).passed).toBe(true);
     // A different medium-tier module (qnews) is NOT unlocked by a lite pick
     // of healthai — lite is one product of choice, not the whole medium tier.
     const req = bearerReq(email);

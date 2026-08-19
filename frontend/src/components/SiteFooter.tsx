@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { repoUrl } from "@/lib/repoUrl";
 
 export function SiteFooter() {
   const year = new Date().getFullYear();
@@ -76,7 +77,7 @@ export function SiteFooter() {
           </div>
           <div style={{ marginTop: 12, display: "flex", gap: 10 }}>
             <a
-              href="https://github.com/Dossymbek281078/AEVION"
+              href={repoUrl()}
               target="_blank"
               rel="noreferrer"
               style={{ color: "#64748b", textDecoration: "none", fontWeight: 700 }}

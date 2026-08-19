@@ -36,9 +36,25 @@ interface Puzzle {
 const POOL_PATH = process.env.CYBERCHESS_PUZZLES_PATH || "";
 const POOL_URL =
   process.env.CYBERCHESS_PUZZLES_URL ||
-  "https://aevion.vercel.app/puzzles.json";
+  "https://aevion.app/puzzles.json";
 
 let POOL: Puzzle[] = [];
+// ОТКУДА пул на самом деле. Раньше ответы отдавали адрес бандла
+// (POOL_PATH или POOL_URL) ВСЕГДА, даже когда данные пришли из Postgres. На проде
+// 11.08.2026 это выглядело так: poolSize 500000 (из БД) при source, указывающем
+// на bundled-файл с 10 818 задачами — ответ противоречил сам себе, и понять по
+// нему, что реально отдаётся игрокам, было нельзя.
+//
+// Описание источника ingest() получал и раньше, но тратил его только на
+// console.warn при ошибке. Теперь сохраняем.
+let POOL_SOURCE = "";
+// НАСТОЯЩИЙ размер банка, а не размер выборки. Разница важна для продающих
+// страниц: POOL.length упирается в cap (по умолчанию 500 000), и ответ
+// «poolSize: 500000» при cap = 500 000 — это не измерение, а обрезка. Взять
+// такое число на страницу значило бы напечатать настройку под видом факта.
+// 0 = не знаем (источник не умеет считать себя), и это НЕ то же самое, что 0 задач.
+let POOL_TOTAL = 0;
+let POOL_CAPPED = false;
 // theme (lowercased) -> index list, built once for cheap filtered lookups
 const THEME_INDEX = new Map<string, number[]>();
 let loadPromise: Promise<void> | null = null;
@@ -51,6 +67,11 @@ function ingest(arr: unknown, source: string): void {
   POOL = (arr as Puzzle[]).filter(
     (p) => p && typeof p.fen === "string" && Array.isArray(p.sol) && p.sol.length > 0,
   );
+  POOL_SOURCE = source;
+  // По умолчанию источник равен тому, что загрузили: для файла и URL весь банк
+  // и есть выборка. DB-ветка ниже перезапишет это настоящим COUNT(*).
+  POOL_TOTAL = POOL.length;
+  POOL_CAPPED = false;
   THEME_INDEX.clear();
   for (let i = 0; i < POOL.length; i++) {
     const key = String(POOL[i].theme || "").toLowerCase();
@@ -112,6 +133,22 @@ function ensureLoaded(): Promise<void> {
             } as Puzzle;
           });
           ingest(mapped, `db ChessPuzzle (${q.rows.length})`);
+          // Настоящий размер таблицы — отдельным запросом, ПОСЛЕ ingest():
+          // ingest ставит POOL_TOTAL = POOL.length, и здесь мы его уточняем.
+          // Свой try/catch: медленный или упавший COUNT(*) не должен ронять
+          // уже загруженный пул — тогда просто остаёмся без точного числа.
+          try {
+            const c = await pool.query(`SELECT COUNT(*)::bigint AS n FROM "ChessPuzzle"`);
+            // pg отдаёт bigint строкой — Number() обязателен, иначе сравнение
+            // с cap пойдёт лексикографически ("500000" > "1000000" как строки).
+            const n = Number(c.rows?.[0]?.n ?? 0);
+            if (Number.isFinite(n) && n > 0) {
+              POOL_TOTAL = n;
+              POOL_CAPPED = n > POOL.length;
+            }
+          } catch (e) {
+            console.warn("[cyberchess-puzzles] COUNT(*) failed:", e instanceof Error ? e.message : e);
+          }
           if (POOL.length > 0) return;
         }
       } catch (e) {
@@ -145,6 +182,16 @@ function toInt(v: unknown, dflt: number): number {
 router.get("/", async (req: Request, res: Response): Promise<void> => {
   try {
     await ensureLoaded();
+    // ensureLoaded() swallows a failed source fetch on purpose (warm-up must not
+    // crash the process), so an empty pool here means the load failed - not that
+    // there are no puzzles. Answering ok:true would show an empty trainer.
+    if (POOL.length === 0) {
+      res.status(503).json({
+        ok: false, reason: "puzzle_pool_empty",
+        total: 0, count: 0, offset: 0, poolSize: 0, puzzles: [],
+      });
+      return;
+    }
     const theme = String(req.query.theme || "").trim().toLowerCase();
     const phase = String(req.query.phase || "").trim().toLowerCase();
     const minRating = toInt(req.query.minRating, 0);
@@ -190,7 +237,12 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
     res.json({ ok: true, total, count: page.length, offset, poolSize: POOL.length, puzzles: page });
   } catch (e) {
     console.warn("[cyberchess-puzzles] query failed:", e instanceof Error ? e.message : e);
-    res.json({ ok: true, total: 0, count: 0, offset: 0, poolSize: POOL.length, puzzles: [] });
+    // ok:true with an empty list is indistinguishable from "your filter matched
+    // nothing", so a failure here renders as a legitimately empty trainer.
+    res.status(503).json({
+      ok: false, reason: "puzzle_query_failed",
+      total: 0, count: 0, offset: 0, poolSize: POOL.length, puzzles: [],
+    });
   }
 });
 
@@ -206,7 +258,17 @@ router.get("/themes", async (_req: Request, res: Response): Promise<void> => {
 // GET /meta — pool health/size (cheap smoke).
 router.get("/meta", async (_req: Request, res: Response): Promise<void> => {
   await ensureLoaded();
-  res.json({ ok: true, poolSize: POOL.length, themes: THEME_INDEX.size, source: POOL_PATH || POOL_URL });
+  // poolSize — сколько задач обслуживается сейчас (упирается в cap).
+  // bankTotal — сколько их в источнике на самом деле; для страниц брать ЭТО.
+  // capped — обслуживаем не весь банк, число занижено намеренно.
+  res.json({
+    ok: true,
+    poolSize: POOL.length,
+    bankTotal: POOL_TOTAL,
+    capped: POOL_CAPPED,
+    themes: THEME_INDEX.size,
+    source: POOL_SOURCE || POOL_PATH || POOL_URL,
+  });
 });
 
 /**

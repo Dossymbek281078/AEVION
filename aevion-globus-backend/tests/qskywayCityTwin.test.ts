@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  CELL, DEFAULT_HEIGHT_M, METRES_PER_LEVEL, PARAPET_M, heightOutliers,
+  CELL, DEFAULT_HEIGHT_M, METRES_PER_LEVEL, PARAPET_M, heightOutliers, MIN_STOREY_M, CONTRADICTION_MIN_LEVELS, overpassBodyProblem,
+  LEVELS_MEANINGLESS_FOR,
   projection, parseMetres, heightOf, toRing, ringsOf, inRing, rasterize, overpassProblem,
 } from "../scripts/lib/city-twin-geometry.mjs";
 import { CITY } from "../src/routes/qskyway.city";
@@ -41,9 +42,12 @@ describe("parseMetres — a bad tag must not become NaN", () => {
 });
 
 describe("heightOf — provenance decides the safety clearance, so it must be exact", () => {
-  it("an explicit height tag is measured (hs 0)", () => {
-    expect(heightOf({ height: "88" })).toEqual({ h: 88, hs: 0 });
-    expect(heightOf({ "building:height": "31.4" })).toEqual({ h: 31, hs: 0 });
+  it("тег height из OSM — DERIVED (hs 1), а не обмер", () => {
+    // hs=0 покупает нулевой запас: твин доверяет числу полностью. Такое доверие
+    // заслуживает обмер властей, а не тег волонтёра — тег ошибается на порядок в
+    // обе стороны (30 Rockefeller: height=10 при 70 этажах; Байтерек: 382 при 310.8).
+    expect(heightOf({ height: "88" })).toMatchObject({ h: 88, hs: 1 });
+    expect(heightOf({ "building:height": "31.4" })).toMatchObject({ h: 31, hs: 1 });
   });
 
   it("levels are derived with the parapet allowance (hs 1)", () => {
@@ -72,8 +76,10 @@ describe("heightOf — provenance decides the safety clearance, so it must be ex
     expect(heightOf({ height: "tall" })).toEqual({ h: DEFAULT_HEIGHT_M, hs: 2 });
   });
 
-  it("a measured height wins over levels", () => {
-    expect(heightOf({ height: "100", "building:levels": "2" })).toEqual({ h: 100, hs: 0 });
+  it("тег height задаёт ВЕЛИЧИНУ поверх этажности, но не класс доверия", () => {
+    // Значение берём из тега — он точнее прикидки по этажам. Класс всё равно
+    // derived: точнее не значит подтверждено.
+    expect(heightOf({ height: "100", "building:levels": "2" })).toMatchObject({ h: 100, hs: 1, stated: true });
   });
 });
 
@@ -298,5 +304,192 @@ describe("heightOutliers — one wrong tag is trusted completely", () => {
 
   it("says nothing about a city too small to have a distribution", () => {
     expect(heightOutliers(city(12, 900))).toEqual([]);
+  });
+});
+
+describe("the committed twins publish what the generator could not vouch for", () => {
+  it("Astana ships the height that towers over it, with the building it belongs to", () => {
+    // height=382 на 75-этажной башне: 5.1 м на этаж против опубликованных 311.
+    // ДО 2026-07-28 это входило в сетку как MEASURED — коридор расходился с ним
+    // без запаса вообще. Теперь тег OSM это derived (hs=1), и запас появляется;
+    // само число по-прежнему неверно, поэтому раскрытие остаётся здесь, а
+    // починка — выше по течению, в OSM.
+    const suspect = CITY.dataQuality.suspect ?? [];
+    expect(suspect).toHaveLength(1);
+    expect(suspect[0].h).toBe(382);
+    expect(suspect[0].times).toBeGreaterThan(3);
+    expect(CITY.buildings[suspect[0].i].h).toBe(suspect[0].h);
+    expect(CITY.buildings[suspect[0].i].hs).toBe(1);
+  });
+
+  it("пустой список никогда не отгружается — поля либо нет, либо в нём есть записи", () => {
+    // Всегда присутствующий пустой массив читается на чипе как «проверено, всё
+    // хорошо» ровно так же, как «не проверяли». Честная форма — отсутствие.
+    //
+    // Раньше здесь стоял Нью-Йорк как город «без находок». После пересборки
+    // 2026-07-28 находки появились и у него: три тега противоречат собственной
+    // этажности, включая 30 Rockefeller Plaza (height=10 при 70 этажах → 226 м).
+    // Привязка к конкретному городу оказалась привязкой к состоянию данных, а не
+    // к правилу. Проверяем само правило — по всем городам сразу.
+    for (const [name, city] of [["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO]] as const) {
+      const s = city.dataQuality.suspect;
+      expect(s === undefined || s.length > 0, `${name} отгрузил пустой список находок`).toBe(true);
+    }
+  });
+
+  it("Tokyo reports the height tags its own floor counts contradicted", () => {
+    // Two buildings carry a height tag impossible beside their floor count
+    // (14 m over 8 and over 10 storeys). The twin uses the floor-derived height
+    // and says so, instead of publishing the impossible number as measured.
+    const suspect = CITY_TOKYO.dataQuality.suspect ?? [];
+    expect(suspect.length).toBeGreaterThan(0);
+    for (const o of suspect) {
+      expect(o.why).toMatch(/contradicted/);
+      expect(o.h).toBeGreaterThan(o.was!);
+      // Deliberately NOT asserting the building's final provenance: a later
+      // stage may still identify it with a surveyed outline and re-measure it.
+      // The record says what the OSM tag claimed and what we used instead of
+      // it — not how the story ended.
+      expect(CITY_TOKYO.buildings[o.i]).toBeDefined();
+    }
+  });
+});
+
+describe("heightOf — a measured tag its own source contradicts is not a measurement", () => {
+  it("prefers the floor count when the height tag is impossible beside it", () => {
+    // way/572495079 in Nishi-Shinjuku: height=7 with building:levels=47, i.e.
+    // 0.15 m per storey. It shipped in the twin as MEASURED, which buys zero
+    // safety clearance, so corridors were planned through a 47-storey building
+    // at seven metres. PLATEAU did not cover that footprint, so nothing
+    // downstream caught it.
+    const got = heightOf({ height: "7", "building:levels": "47" });
+    expect(got.h).toBe(Math.round(47 * METRES_PER_LEVEL + PARAPET_M));
+    expect(got.hs).toBe(1);
+    expect(got.contradicted).toBe(7);
+  });
+
+  it("does not touch a height tag that merely sits low", () => {
+    // 3 m per storey is a normal building, not a contradiction. The rule must
+    // fire on the impossible, not on the merely short — otherwise it becomes a
+    // second, silent height model competing with the source.
+    // Признак «правило сработало» — это `contradicted` и подменённая высота, а
+    // НЕ hs: с 2026-07-28 тег OSM и так derived, поэтому обе ветки дают hs=1 и
+    // по нему их больше не различить. Тест, оставшийся на hs, был бы зелёным и
+    // при полностью отключённом правиле.
+    const got = heightOf({ height: "30", "building:levels": "10" });
+    expect(got).toMatchObject({ h: 30, hs: 1 });
+    expect(got.contradicted).toBeUndefined();
+  });
+
+  it("leaves single-storey structures alone, where the two tags do not really disagree", () => {
+    // A canopy tagged levels=1, height=1 is a modelling convention. Treating it
+    // as a hidden tower would inflate every awning in the city — eleven such
+    // rows exist in Nishi-Shinjuku against three genuine contradictions.
+    for (const levels of ["1", "2"]) {
+      const got = heightOf({ height: "1", "building:levels": levels });
+      expect(got.h).toBe(1);
+      expect(got.contradicted).toBeUndefined();
+    }
+    expect(CONTRADICTION_MIN_LEVELS).toBe(3);
+  });
+
+  it("keeps the boundary where a storey stops being possible", () => {
+    expect(MIN_STOREY_M).toBe(2);
+    // ровно 2 м на этаж допустимо, ниже — уже нет. Различаем по `contradicted`:
+    // hs после 2026-07-28 равен 1 в обеих ветках и границу не показывает.
+    expect(heightOf({ height: "20", "building:levels": "10" }).h).toBe(20);
+    expect(heightOf({ height: "20", "building:levels": "10" }).contradicted).toBeUndefined();
+    expect(heightOf({ height: "19", "building:levels": "10" })).toMatchObject({ contradicted: 19 });
+  });
+
+  it("leaves a CANOPY alone, where a floor count describes something else entirely", () => {
+    // way/572495079: building=roof, height=7, building:levels=47. The 7 m is
+    // correct — PLATEAU surveyed the same footprint at 7 m — and the floor count
+    // belongs to whatever the canopy is attached to. Without this exclusion the
+    // rule turns an awning into a 152 m obstacle, and in Tokyo only a second
+    // source stood in the way. Astana has no second source.
+    expect(heightOf({ building: "roof", height: "7", "building:levels": "47" }))
+      .toMatchObject({ h: 7 });
+    for (const kind of LEVELS_MEANINGLESS_FOR) {
+      expect(heightOf({ building: kind, height: "7", "building:levels": "47" }).contradicted).toBeUndefined();
+    }
+  });
+
+  it("still applies to an ordinary building, which is where the rule earns its keep", () => {
+    // 高倉第一ビル: building=yes, height=14 over 8 storeys. A real contradiction.
+    expect(heightOf({ building: "yes", height: "14", "building:levels": "8" }))
+      .toMatchObject({ hs: 1, contradicted: 14 });
+  });
+
+  it("still needs BOTH tags — one alone says nothing about the other", () => {
+    expect(heightOf({ height: "7" })).toMatchObject({ h: 7, hs: 1 });
+    expect(heightOf({ "building:levels": "47" })).toMatchObject({ hs: 1 });
+  });
+});
+
+describe("overpassBodyProblem — занятый сервер отвечает кодом 200", () => {
+  // Verbatim shape of what overpass-api.de returns when overloaded. `res.ok` is
+  // true, so only the BODY reveals it; res.json() would throw about token '<'
+  // and lose the explanation the server gave.
+  const BUSY = `<html><head><title>OSM3S Response</title></head><body>
+<p>The data included in this document is from www.openstreetmap.org.</p>
+<p><strong style="color:#FF0000">Error</strong>: runtime error: open64: 0 Success /osm3s_osm_base Dispatcher_Client::request_read_and_idx::timeout. The server is probably too busy to handle your request. </p>
+</body></html>`;
+
+  it("recognises the busy page and repeats what the server said", () => {
+    const problem = overpassBodyProblem(BUSY);
+    expect(problem).toMatch(/not data/);
+    expect(problem).toMatch(/too busy/);
+  });
+
+  it("lets a real JSON answer through untouched", () => {
+    expect(overpassBodyProblem('{"elements":[]}')).toBeNull();
+    expect(overpassBodyProblem('  {"elements":[1]}')).toBeNull();
+  });
+
+  it("still reports a page that explains nothing", () => {
+    expect(overpassBodyProblem("<html><body>gateway</body></html>")).toMatch(/non-JSON/);
+    expect(overpassBodyProblem(null as unknown as string)).toMatch(/non-JSON/);
+  });
+});
+
+// Высоты твина — единственный вход, от которого зависит КАЖДЫЙ маршрут: коридор
+// строится над зданиями, потолок регулятора сравнивается с этой высотой. Ошибка
+// в единицах при пересборке (футы вместо метров — ×3.28) не уронит ничего: она
+// молча поднимет все коридоры и превратит верные маршруты в «не влезающие в
+// потолок». Ровно так 11.08.2026 выглядело бы падение соответствия с 52% до 29%,
+// если бы оно было багом, а не следствием честных высот. Проверено вручную:
+// max=443 (Эмпайр-стейт с антенной — 443.2), 427 (One Vanderbilt), 366 (Bank of
+// America Tower), 320 (Крайслер — 318.9). Тест держит этот порядок величин.
+describe("высоты Нью-Йорка правдоподобны для Мидтауна", () => {
+  const heights = (CITY_NYC.buildings as { h?: number }[])
+    .map((b) => b.h ?? 0)
+    .filter((h) => h > 0)
+    .sort((a, b) => b - a);
+
+  it("самое высокое здание — в диапазоне Эмпайр-стейта, а не в футах", () => {
+    expect(heights.length).toBeGreaterThan(1000);
+    // 443.2 — Эмпайр-стейт с антенной, самая высокая точка твина. Полоса взята
+    // с запасом: ниже 380 означало бы потерю шпилей, выше 500 — что в Мидтаун
+    // попал небоскрёб, которого там нет, или пересчёт из футов.
+    expect(heights[0]).toBeGreaterThan(380);
+    expect(heights[0]).toBeLessThan(500);
+  });
+
+  it("сверхвысоких ровно столько, сколько их в Мидтауне", () => {
+    const over300 = heights.filter((h) => h > 300).length;
+    const over400 = heights.filter((h) => h > 400).length;
+    expect(over300).toBeGreaterThanOrEqual(8);
+    expect(over300).toBeLessThanOrEqual(25);
+    expect(over400).toBeGreaterThanOrEqual(1);
+    expect(over400).toBeLessThanOrEqual(8);
+    expect(heights.filter((h) => h > 500).length).toBe(0);
+  });
+
+  it("массовая застройка низкая — иначе сдвинулась вся шкала, а не верхушка", () => {
+    // Медиана ловит то, чего не ловит максимум: пересчёт единиц поднимает ВСЁ.
+    const median = heights[Math.floor(heights.length / 2)];
+    expect(median).toBeGreaterThan(8);
+    expect(median).toBeLessThan(60);
   });
 });

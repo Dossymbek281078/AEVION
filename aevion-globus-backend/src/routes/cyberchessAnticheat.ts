@@ -1,8 +1,11 @@
 import { Router, type Request, type Response } from "express";
+import { clientIp } from "../lib/rateLimit";
 import { randomUUID } from "node:crypto";
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pg = require("pg") as typeof import("pg");
+// Обычный импорт, а не require: под `require` подмена драйвера в тестах не
+// действует — хранилище выглядит недоступным, и тест проходит, не выполнив ни
+// одного запроса. Последний шахматный файл, где оставалась эта форма (12.08).
+import pg from "pg";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -69,9 +72,20 @@ let pool: any = null;
 let dbReady = false;
 let dbInitTried = false;
 
+/**
+ * Кулдаун вместо защёлки — по той же причине, что и в хранилище партий
+ * (19.08.2026). Раньше одна неудачная попытка при первом отчёте выключала базу
+ * до перезапуска процесса, и отчёты античита жили только в памяти: снаружи это
+ * выглядело как работающий модуль.
+ */
+const AC_DB_INIT_RETRY_MS = Number(process.env.CYBERCHESS_DB_INIT_RETRY_MS ?? 30_000);
+let dbInitNextTryAt = 0;
+
 async function ensureDb(): Promise<void> {
-  if (dbInitTried) return;
+  if (dbReady) return;
+  if (Date.now() < dbInitNextTryAt) return;
   dbInitTried = true;
+  dbInitNextTryAt = Date.now() + AC_DB_INIT_RETRY_MS;
   if (!process.env.DATABASE_URL) return;
   try {
     const p = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -87,8 +101,8 @@ async function ensureDb(): Promise<void> {
         "fideEstimate"   DOUBLE PRECISION,
         "stats"          JSONB NOT NULL,
         "ip"             TEXT,
-        "analysedAt"     TIMESTAMP NOT NULL,
-        "storedAt"       TIMESTAMP NOT NULL DEFAULT now()
+        "analysedAt"     TIMESTAMPTZ NOT NULL,
+        "storedAt"       TIMESTAMPTZ NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS "cyberanticheat_user_idx" ON "CyberAnticheatReport" ("userId","analysedAt" DESC);
       CREATE INDEX IF NOT EXISTS "cyberanticheat_flag_idx" ON "CyberAnticheatReport" ("verdict","suspicionScore" DESC);
@@ -102,7 +116,9 @@ async function ensureDb(): Promise<void> {
 }
 
 async function persistReport(report: StoredReport): Promise<void> {
-  if (!dbReady && !dbInitTried) await ensureDb();
+  // Зовём всегда: решение «пробовать ли сейчас» принимает сам ensureDb по
+  // кулдауну. Прежнее условие с dbInitTried делало повтор невозможным.
+  if (!dbReady) await ensureDb();
   if (!dbReady || !pool) return;
   try {
     await pool.query(
@@ -149,12 +165,12 @@ function isRateLimited(ip: string): boolean {
 const VERDICTS: Verdict[] = ["clean", "unusual", "suspicious", "flagged"];
 const CONFIDENCES: Confidence[] = ["insufficient", "low", "medium", "high"];
 
+// Reads req.ip through the shared helper. This used to take the LEFTMOST
+// X-Forwarded-For entry, which a proxy never writes — the caller does. Varying
+// that header per request handed every request its own bucket, so the limit
+// below could not fire while looking, from outside, exactly like one that works.
 function getIp(req: Request): string {
-  return (
-    (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
-    req.socket.remoteAddress ??
-    "unknown"
-  );
+  return clientIp(req);
 }
 
 function evictOldestIfFull(): void {
@@ -294,19 +310,51 @@ router.get("/stats/:userId", (req: Request, res: Response) => {
     .sort((a, b) => b.analysedAt - a.analysedAt)
     .slice(0, MAX_PER_USER);
 
-  const totalGames = reports.length;
-  const flaggedGames = reports.filter(r => r.verdict === "flagged").length;
-  const suspiciousGames = reports.filter(r => r.verdict === "suspicious").length;
+  // Вердикт складывается ТОЛЬКО из серверных сигналов.
+  //
+  // Клиентский отчёт присылает браузер, и в нём произвольный userId: кто угодно
+  // мог отправить «flagged» про любого игрока, и это попадало в его статистику
+  // наравне с измерениями сервера. Соседняя админская ручка /flagged прямо
+  // пишет, что серверные сигналы «unspoofable, a cheating client can't fake or
+  // suppress them» — то есть про клиентские там уже знали, а здесь считали
+  // вровень. Обвинение, которое может выписать любой прохожий, не должно
+  // выглядеть как вывод системы.
+  const serverReports = reports.filter(r => r.source === "server");
+  const clientReports = reports.filter(r => r.source !== "server");
+
+  const totalGames = serverReports.length;
+  const flaggedGames = serverReports.filter(r => r.verdict === "flagged").length;
+  const suspiciousGames = serverReports.filter(r => r.verdict === "suspicious").length;
   const avgSuspicionScore = totalGames
-    ? Math.round(reports.reduce((s, r) => s + r.suspicionScore, 0) / totalGames)
+    ? Math.round(serverReports.reduce((s, r) => s + r.suspicionScore, 0) / totalGames)
     : 0;
-  const latestVerdict = reports[0]?.verdict ?? "none";
+  const latestVerdict = serverReports[0]?.verdict ?? "none";
+
+  // Клиентские отчёты не выбрасываем — они полезны как сигнал, — но называем
+  // тем, что они есть: непроверенные заявления.
+  const unverified = {
+    total: clientReports.length,
+    flagged: clientReports.filter(r => r.verdict === "flagged").length,
+    suspicious: clientReports.filter(r => r.verdict === "suspicious").length,
+  };
+
+  // Наружу — без поля `ip`. Оно попадало в ПУБЛИЧНЫЙ ответ: по номеру игрока
+  // можно было прочитать адреса тех, чьи браузеры присылали отчёты. Хранить его
+  // для разбора злоупотреблений нормально, отдавать всем — нет.
+  const publicReports = reports.map(({ ip: _ip, ...rest }) => rest);
 
   res.json({
     ok: true,
     userId,
-    reports,
-    summary: { totalGames, flaggedGames, suspiciousGames, avgSuspicionScore, latestVerdict },
+    reports: publicReports,
+    summary: {
+      totalGames,
+      flaggedGames,
+      suspiciousGames,
+      avgSuspicionScore,
+      latestVerdict,
+      unverified,
+    },
   });
 });
 

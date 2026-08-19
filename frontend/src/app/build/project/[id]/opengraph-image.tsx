@@ -134,7 +134,7 @@ export default async function ProjectOgImage({
         >
           <span>construction project</span>
           <span style={{ fontWeight: 700, color: "#e2e8f0" }}>
-            aevion.tech/build
+            aevion.app/build
           </span>
         </div>
       </div>

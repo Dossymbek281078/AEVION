@@ -52,6 +52,36 @@ const THEME_MAP = {
   attraction:"Завлечение", equality:"Спасение",
 };
 
+// Фаза партии — НЕ тактическая тема. У записи для неё есть отдельное поле
+// (getPhase ниже), но эти же теги лежали в THEME_MAP и участвовали в выборе
+// темы наравне с тактикой. Выбор шёл через themes.find(), то есть побеждал
+// тег, который просто стоит раньше в списке Lichess. Последствие на проде
+// 12.08.2026: «Эндшпиль» 182 167 задач и «Миттельшпиль» 79 582 — 52% банка
+// заняты фазами, а «Связка» и «Рентген» отдавали НОЛЬ задач при 25 460 вилках.
+// Тихо: ничего не падало, просто целые приёмы стало не на чем тренировать.
+const PHASE_THEMES = new Set([
+  "endgame", "middlegame", "opening",
+  "rookEndgame", "queenEndgame", "pawnEndgame", "bishopEndgame", "knightEndgame",
+]);
+// Теги про длину и уровень решения — не тема вовсе.
+const NOISE_THEMES = new Set(["short", "long", "oneMove", "master", "veryLong"]);
+
+// Прототипные ключи: тема из CSV приходит извне, и `THEME_MAP[t]` для t вида
+// "constructor" или "toString" вернёт функцию — истинную при проверке.
+const mapped = (t) => (Object.prototype.hasOwnProperty.call(THEME_MAP, t) ? THEME_MAP[t] : undefined);
+
+/**
+ * Тема задачи: тактика важнее фазы. Фаза берётся, только если тактического
+ * тега нет вовсе — тогда «Эндшпиль» честнее, чем безликая «Тактика».
+ */
+function pickTheme(themes) {
+  const tactic = themes.find((t) => !PHASE_THEMES.has(t) && !NOISE_THEMES.has(t) && mapped(t));
+  if (tactic) return THEME_MAP[tactic];
+  const phase = themes.find((t) => PHASE_THEMES.has(t) && mapped(t));
+  if (phase) return THEME_MAP[phase];
+  return "Тактика";
+}
+
 function getPhase(themes) {
   if (themes.some(t => ["endgame","rookEndgame","queenEndgame","pawnEndgame","bishopEndgame","knightEndgame"].includes(t))) return "Endgame";
   if (themes.includes("opening")) return "Opening";
@@ -100,8 +130,7 @@ for await (const line of rl) {
   parsed++;
   const mateIn = getMateIn(themes);
   const isMate = themes.some(t => t.startsWith("mate")) || mateIn != null;
-  const themeKey = themes.find(t => THEME_MAP[t] && !["short","long","oneMove","master"].includes(t));
-  const theme = THEME_MAP[themeKey] || "Тактика";
+  const theme = pickTheme(themes);
   const phase = getPhase(themes);
   const side = fen.split(" ")[1] || "w";
 

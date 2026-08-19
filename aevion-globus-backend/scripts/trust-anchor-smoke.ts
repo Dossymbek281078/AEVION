@@ -1,5 +1,5 @@
 // Smoke: AEVION Trust Score OpenTimestamps (Bitcoin) anchoring.
-// Run: npx tsx scripts/trust-anchor-smoke.ts   (from aevion-globus-backend/)
+// Run: npm run smoke:trust-anchor   (from aevion-globus-backend/)
 //
 // The stamp step is a real network call to OT calendars. Bitcoin confirmation
 // takes ~1-6h, so a fresh anchor is ALWAYS "pending" here — that is expected and

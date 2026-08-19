@@ -22,3 +22,8 @@ data/partner-deals.jsonl
 
 /src/generated/prisma
 data/qreal-render-journal.jsonl
+
+# build-info.json СПЕЦИАЛЬНО не игнорируется: `railway up` уважает .gitignore,
+# и отметка сборки просто не уезжала в образ — /health честно отвечал "unknown".
+# Файл создаётся scripts/railway-deploy.sh перед загрузкой и удаляется им же
+# после; в коммит он не попадает, потому что скрипт убирает его за собой.

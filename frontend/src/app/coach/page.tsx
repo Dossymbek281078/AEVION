@@ -22,6 +22,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { catalogWithToken } from "@/lib/aevionCatalog";
+import { getAuthToken } from "@/lib/auth";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Session = {
@@ -47,14 +48,11 @@ type Goal = {
   completedAt?: string;
 };
 
-// ─── Auth helper ─────────────────────────────────────────────────────────────
-// AEVION-wide standard key (see frontend/src/lib/aevionCatalog.ts:getAuthToken).
-const AUTH_TOKEN_KEY = "aevion_auth_token";
-
-function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(AUTH_TOKEN_KEY);
-}
+// Ключ входа больше не объявляется здесь: до 12.08.2026 в этом файле стоял
+// литерал "aevion_auth_token" с комментарием «AEVION-wide standard key», а
+// стандартный ключ — "aevion_auth_token_v1". Под старым именем не пишет никто,
+// так что страница не видела сессию вошедшего. getAuthToken() импортирован из
+// @/lib/auth — единственного источника правды.
 
 // ─── Time helpers ────────────────────────────────────────────────────────────
 function formatElapsed(startedAt: string, endedAt?: string): string {

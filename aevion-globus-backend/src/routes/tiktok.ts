@@ -41,8 +41,37 @@
 //   TIKTOK_CLIENT_SECRET  — matching secret
 //   TIKTOK_REDIRECT_URI   — must EXACTLY match a redirect URI registered in
 //                           the TikTok app, e.g.
-//                           https://aevion.vercel.app/api-backend/api/tiktok/auth/callback
-//   TIKTOK_SCOPES         — optional, default "user.info.basic,video.publish"
+//                           https://aevion.app/api-backend/api/tiktok/auth/callback
+//                           ⚠️ 19.08.2026, найдено двумя сессиями независимо.
+//                           На проде адрес указывает на aevion.vercel.app, и вход
+//                           работает ТОЛЬКО потому, что алиас Vercel ещё жив, —
+//                           то есть починка не срочная лишь до тех пор, пока его
+//                           не убрали при чистке доменов.
+//                           Отдельно: домен в демо-ролике для ревью обязан
+//                           совпадать с сайтом в заявке, поэтому устаревший адрес
+//                           здесь заваливает ревью даже при верно заполненной форме.
+//
+//   🔴 МЕНЯТЬ ТОЛЬКО ВМЕСТЕ С TIKTOK_FRONTEND_ORIGIN. Обе на 19.08.2026 указывают
+//   на aevion.vercel.app, и поодиночке их переключать НЕЛЬЗЯ: callback ставит
+//   httpOnly-куку с токеном на том домене, где выполняется, и лишь потом делает
+//   302 на FRONTEND_ORIGIN. Переключишь только ORIGIN — кука останется на
+//   vercel.app, браузер приедет на aevion.app без неё, и публикатор скажет
+//   «не подключено», хотя авторизация прошла. Отказ будет выглядеть как ошибка
+//   TikTok, а не как наша настройка, и искать станут не там.
+//
+//   Правильный порядок: (1) добавить новый redirect URI в кабинете TikTok —
+//   СДЕЛАНО, зарегистрирован и в production, и в песочнице, домен aevion.app
+//   подтверждён (URL prefix — Verified); (2) переключить ОБЕ переменные разом;
+//   (3) проверить фактом: /api/tiktok/config показывает новый redirectUri, а вход
+//   возвращает на aevion.app и connected:true.
+//   TIKTOK_SCOPES         — optional, default
+//                           "user.info.basic,video.publish,video.upload".
+//                           video.upload was MISSING until 19.08.2026: the app
+//                           review claims drafts are the default path, but the
+//                           consent screen never asked for the scope that makes
+//                           drafts possible. Requesting fewer scopes than the
+//                           application lists is both a broken feature and a
+//                           claim the product does not keep.
 //   TIKTOK_SUCCESS_REDIRECT — optional frontend path to return to,
 //                           default "/tiktok-publisher"
 //
@@ -62,6 +91,16 @@ const TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/";
 const USERINFO_URL = "https://open.tiktokapis.com/v2/user/info/";
 const CREATOR_INFO_URL = "https://open.tiktokapis.com/v2/post/publish/creator_info/query/";
 const PUBLISH_INIT_URL = "https://open.tiktokapis.com/v2/post/publish/video/init/";
+// Черновики. Отдельная ручка, а не флаг: TikTok не принимает здесь post_info —
+// подпись, приватность и раскрытие автор задаёт уже внутри приложения, на своём
+// экране публикации. Это и есть смысл черновика.
+//
+// Добавлено 19.08.2026. До этого скоуп video.upload запрашивался, а кода,
+// который им пользуется, не было вовсе: и заявка на ревью, и карточка в
+// каталоге обещали черновики, которых продукт не умел. Просить разрешение,
+// которое не используешь, — вдобавок отдельный повод для отказа: TikTok прямо
+// требует убрать неиспользуемые скоупы перед ревью.
+const INBOX_INIT_URL = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/";
 const PUBLISH_STATUS_URL = "https://open.tiktokapis.com/v2/post/publish/status/fetch/";
 
 const STATE_COOKIE = "tt_oauth_state";
@@ -77,11 +116,81 @@ type TikTokConfig = {
   configured: boolean;
 };
 
+/**
+ * Куда и с чем уходит запрос на публикацию.
+ *
+ * Вынесено, потому что первая версия проверялась сканированием исходника — и
+ * тест НЕ покраснел, когда маршрутизацию сломали: строки с адресом и с формой
+ * тела остались в файле, хотя fetch их больше не использовал. Проверять надо
+ * поведение, а наличие текста поведением не является.
+ */
+export function buildPublishRequest(o: {
+  target: "draft" | "direct";
+  videoUrl: string;
+  title?: string;
+  privacyLevel?: string;
+  disableComment?: boolean;
+  disableDuet?: boolean;
+  disableStitch?: boolean;
+  brandOrganic?: boolean;
+  brandedContent?: boolean;
+  isAigc?: boolean;
+}): { url: string; body: Record<string, unknown> } {
+  const source_info = { source: "PULL_FROM_URL", video_url: o.videoUrl };
+  if (o.target === "draft") {
+    // Ручка черновиков не принимает post_info: подпись, приватность и раскрытие
+    // автор задаёт уже внутри TikTok. Прислать их сюда значит показать автору
+    // поля, которые ни на что не влияют.
+    return { url: INBOX_INIT_URL, body: { source_info } };
+  }
+  return {
+    url: PUBLISH_INIT_URL,
+    body: {
+      post_info: {
+        title: String(o.title || "").slice(0, 2200),
+        privacy_level: o.privacyLevel,
+        disable_comment: !!o.disableComment,
+        disable_duet: !!o.disableDuet,
+        disable_stitch: !!o.disableStitch,
+        // Уходят при КАЖДОЙ прямой публикации, а не только когда включены:
+        // отсутствие поля TikTok читает как «не коммерческое», и промолчать
+        // там, где автор сказал «да», — нераскрытая реклама.
+        brand_organic_toggle: !!o.brandOrganic,
+        brand_content_toggle: !!o.brandedContent,
+        is_aigc: !!o.isAigc,
+      },
+      source_info,
+    },
+  };
+}
+
+/**
+ * Which commercial-content disclosure combinations TikTok will accept.
+ *
+ * Exported because the rule is the part worth testing, and inside the route it
+ * sits behind ensureToken() — unreachable without a live session, which is how
+ * it went unwritten in the first place.
+ *
+ * Returns null when the combination is allowed, or the reason it is not.
+ */
+export function disclosureConflict(opts: {
+  privacyLevel: string;
+  brandedContent: boolean;
+}): string | null {
+  if (opts.brandedContent && opts.privacyLevel === "SELF_ONLY") {
+    return (
+      "Branded content cannot be posted with the SELF_ONLY privacy level. " +
+      "Choose a public audience, or turn off the branded content disclosure."
+    );
+  }
+  return null;
+}
+
 function getConfig(): TikTokConfig {
   const clientKey = process.env.TIKTOK_CLIENT_KEY?.trim() || "";
   const clientSecret = process.env.TIKTOK_CLIENT_SECRET?.trim() || "";
   const redirectUri = process.env.TIKTOK_REDIRECT_URI?.trim() || "";
-  const scopes = process.env.TIKTOK_SCOPES?.trim() || "user.info.basic,video.publish";
+  const scopes = process.env.TIKTOK_SCOPES?.trim() || "user.info.basic,video.publish,video.upload";
   const successRedirect = process.env.TIKTOK_SUCCESS_REDIRECT?.trim() || "/tiktok-publisher";
   return {
     clientKey,
@@ -367,30 +476,67 @@ tiktokRouter.post("/publish", async (req, res) => {
     disableComment = false,
     disableDuet = false,
     disableStitch = false,
+    // Commercial content disclosure. brandOrganic = "promoting my own brand";
+    // brandedContent = "promoting a third party in a paid partnership". They
+    // are independent: a creator may declare either, both, or neither.
+    brandOrganic = false,
+    brandedContent = false,
+    // Сгенерированное ИИ помечается отдельно от коммерческого: ролик может быть
+    // и тем и другим, и ни тем ни другим. Нам это поле нужно буквально — свои
+    // ролики мы генерируем.
+    isAigc = false,
+    // "draft" кладёт ролик в черновики автора, "direct" публикует сразу.
+    // Умолчание — черновик: он ничего не публикует без второго осознанного
+    // действия человека уже внутри TikTok, и это единственный путь, доступный
+    // приложению без одобренного video.publish.
+    target = "draft",
   } = (req.body || {}) as Record<string, any>;
   if (!videoUrl || typeof videoUrl !== "string") {
     return res.status(400).json({ error: "video_url_required" });
   }
-  if (!privacyLevel || typeof privacyLevel !== "string") {
+  if (target !== "draft" && target !== "direct") {
+    return res.status(400).json({ error: "invalid_target" });
+  }
+  // Приватность и раскрытие обязательны только для прямой публикации. У
+  // черновика их задаёт автор в самом TikTok, и требовать их здесь значило бы
+  // спрашивать то, что мы всё равно не отправим.
+  if (target === "direct" && (!privacyLevel || typeof privacyLevel !== "string")) {
     return res.status(400).json({ error: "privacy_level_required" });
   }
+  // Branded content may not be private. TikTok rejects the combination, and a
+  // tool that silently downgraded the privacy the creator picked would be
+  // publishing something they did not agree to — so refuse and say which two
+  // choices conflict, rather than choosing for them.
+  const conflict =
+    target === "direct"
+      ? disclosureConflict({ privacyLevel, brandedContent: !!brandedContent })
+      : null;
+  if (conflict) {
+    return res
+      .status(400)
+      .json({ error: "branded_content_cannot_be_private", message: conflict });
+  }
   try {
-    const r = await fetch(PUBLISH_INIT_URL, {
+    const { url: initUrl, body: initBody } = buildPublishRequest({
+      target,
+      videoUrl,
+      title,
+      privacyLevel,
+      disableComment,
+      disableDuet,
+      disableStitch,
+      brandOrganic,
+      brandedContent,
+      isAigc,
+    });
+
+    const r = await fetch(initUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${s.access_token}`,
         "Content-Type": "application/json; charset=UTF-8",
       },
-      body: JSON.stringify({
-        post_info: {
-          title: String(title).slice(0, 2200),
-          privacy_level: privacyLevel,
-          disable_comment: !!disableComment,
-          disable_duet: !!disableDuet,
-          disable_stitch: !!disableStitch,
-        },
-        source_info: { source: "PULL_FROM_URL", video_url: videoUrl },
-      }),
+      body: JSON.stringify(initBody),
     });
     const j: any = await r.json().catch(() => ({}));
     if (!r.ok || j.error?.code !== "ok") {

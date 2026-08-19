@@ -77,7 +77,7 @@ function shareAchievement(a: Achievement): void {
   ctx.fillStyle = "rgba(255,255,255,0.4)";
   ctx.font = "16px system-ui, sans-serif";
   ctx.textAlign = "right";
-  ctx.fillText("aevion.kz/smeta-trainer", 1120, 600);
+  ctx.fillText("aevion.app/smeta-trainer", 1120, 600);
 
   canvas.toBlob((blob) => {
     if (!blob) return;

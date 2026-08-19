@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiUrl } from "@/lib/apiBase";
 
 export interface AiScore {
   problem: number;
@@ -199,7 +200,12 @@ export function IdeaCard({ idea, onInterest }: Props) {
     setScoring(true);
     setScoreError(null);
     try {
-      const res = await fetch(`/api/startupx/ideas/${idea.id}/ai-score`, {
+      // Через apiUrl, как три соседних файла модуля. Голый `/api/...` уходит
+      // в сам Next: переписан только `/api-backend/*` (next.config.ts), в
+      // vercel.json rewrite'ов нет вовсе, а обработчика на этом пути не
+      // существует. То есть кнопка «оценить ИИ» получала 404 и молча
+      // показывала «Ошибка запроса».
+      const res = await fetch(apiUrl(`/api/startupx/ideas/${idea.id}/ai-score`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });

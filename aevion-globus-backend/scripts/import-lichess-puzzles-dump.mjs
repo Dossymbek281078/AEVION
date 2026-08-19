@@ -64,6 +64,28 @@ const THEME_RU = {
 const phaseOf = (themes) =>
   themes.includes("endgame") ? "Endgame" : themes.includes("opening") ? "Opening" : "Middlegame";
 
+// Та же болезнь, что была в seed-puzzles.mjs, и в более тяжёлом виде.
+// 1) Фазы партии (endgame/middlegame/opening) лежат в одной таблице с тактикой,
+//    а тема выбиралась через themes.find() — побеждал тег, стоящий раньше в
+//    списке Lichess. У задачи на связку в эндшпиле выигрывал «эндшпиль».
+//    Фазу при этом отдельно считает phaseOf() — в поле темы она не нужна.
+// 2) Если сопоставления не нашлось, в тему писался СЫРОЙ английский тег
+//    (themes[0]). Отсюда в публичном бандле пользовательские темы вида
+//    advantage, crushing, mate, long, master — их видит игрок.
+const PHASE_TAGS = new Set(["endgame", "middlegame", "opening"]);
+const NOISE_TAGS = new Set(["short", "long", "oneMove", "master", "veryLong"]);
+// Тег приходит из внешнего CSV: THEME_RU["constructor"] вернул бы функцию.
+const ru = (t) => (Object.prototype.hasOwnProperty.call(THEME_RU, t) ? THEME_RU[t] : undefined);
+
+/** Тактика важнее фазы; безымянную тему называем по-русски, а не тегом. */
+function pickTheme(themes) {
+  const tactic = themes.find((t) => !PHASE_TAGS.has(t) && !NOISE_TAGS.has(t) && ru(t));
+  if (tactic) return THEME_RU[tactic];
+  const phase = themes.find((t) => PHASE_TAGS.has(t) && ru(t));
+  if (phase) return THEME_RU[phase];
+  return "Тактика";
+}
+
 const existing = MERGE && fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, "utf-8")) : [];
 const seenFen = new Set(existing.map((p) => p.fen));
 const out = existing.slice();
@@ -93,14 +115,13 @@ for await (const line of rl) {
     if (seenFen.has(startFen)) { skipped++; continue; }
     const sol = uci.slice(1);
     const themes = themesStr.trim().split(/\s+/);
-    const primary = themes.find((t) => THEME_RU[t]) || themes[0] || "tactics";
     const isMate = themes.some((t) => t.startsWith("mateIn"));
     out.push({
       fen: startFen,
       sol,
       name: `Lichess ${rating}`,
       r: rating,
-      theme: THEME_RU[primary] || primary,
+      theme: pickTheme(themes),
       phase: phaseOf(themes),
       side: ch.turn(),
       goal: isMate ? "Mate" : "Best move",

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { repoPath, repoUrl } from "@/lib/repoUrl";
 
 type Health = {
   status: string;
@@ -213,7 +214,7 @@ export default function LaunchStatusPage() {
                     /api/quotas (machine-readable)
                   </a>
                   <a
-                    href="https://github.com/Dossymbek281078/AEVION/blob/main/docs/api/PUBLIC_API_QUOTAS.md"
+                    href={repoPath("blob/main/docs/api/PUBLIC_API_QUOTAS.md")}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-teal-400 hover:underline"
@@ -232,7 +233,7 @@ export default function LaunchStatusPage() {
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
             <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm">
               <a
-                href="https://github.com/Dossymbek281078/AEVION/actions/workflows/daily-smoke.yml"
+                href={repoPath("actions/workflows/daily-smoke.yml")}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-teal-400 hover:underline"
@@ -240,7 +241,7 @@ export default function LaunchStatusPage() {
                 Daily smoke (GitHub Actions) →
               </a>
               <a
-                href="https://github.com/Dossymbek281078/AEVION"
+                href={repoUrl()}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-teal-400 hover:underline"

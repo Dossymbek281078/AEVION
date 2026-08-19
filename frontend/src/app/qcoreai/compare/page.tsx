@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 /** Simple word-level diff — returns spans with add/remove/same highlighting */
 function wordDiff(textA: string, textB: string): React.ReactNode[] {
@@ -24,7 +25,7 @@ function wordDiff(textA: string, textB: string): React.ReactNode[] {
 
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
-  const t = localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
+  const t = getAuthToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 

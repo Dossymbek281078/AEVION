@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getApiBase } from "@/lib/apiBase";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { LandingView } from "@/components/LandingView";
 import {
   GUIDES,
   SUBSCRIPTIONS,
@@ -7,6 +10,8 @@ import {
   withChannel,
   type Product,
 } from "@/lib/products";
+import { BuyLink } from "@/components/BuyLink";
+import { PageTracking } from "@/components/PageTracking";
 
 // /go — страница-хаб под ссылку в профиле соцсетей.
 //
@@ -33,6 +38,31 @@ export const metadata: Metadata = {
     "Научные протоколы о долголетии и седине, книга о благодарности, живые инструменты AEVION. Всё в одном месте.",
 };
 
+
+/**
+ * Сколько модулей у платформы — из реестра, а не из головы.
+ *
+ * В первой версии страницы здесь стояло «29 живых модулей». Реестр на тот же
+ * день отвечал 36 live из 41 — то есть страница, на которую мы ведём платный
+ * трафик, занижала собственный масштаб на семь модулей. Ровно тот случай, ради
+ * которого числа на публичных страницах берутся из живого источника: захардкоженное
+ * число не устаревает заметно, оно просто тихо врёт.
+ *
+ * `null` при недоступном API — тогда заголовок обходится без числа: «модули
+ * AEVION» честнее, чем цифра, которую не удалось подтвердить.
+ */
+async function fetchLiveModules(): Promise<number | null> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/aevion/registry-stats`, { next: { revalidate: 3600 } });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { byStatus?: { live?: number; launched?: number } };
+    const live = (j.byStatus?.live ?? 0) + (j.byStatus?.launched ?? 0);
+    return live > 0 ? live : null;
+  } catch {
+    return null;
+  }
+}
+
 const CURRENCY = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -48,6 +78,8 @@ function LinkCard({
   note,
   price,
   external,
+  product,
+  channel,
 }: {
   href: string;
   kicker: string;
@@ -55,13 +87,15 @@ function LinkCard({
   note?: string;
   price?: string;
   external?: boolean;
+  /** Позиция каталога — только у внешних (платных) карточек. */
+  product?: Product;
+  channel?: string | null;
 }) {
-  return (
-    <a
-      href={href}
-      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      style={styles.card}
-    >
+  // Внешняя ссылка на этой странице всегда ведёт в оплату, поэтому идёт через
+  // BuyLink — иначе покупка с /go не попадёт в воронку. Внутренние переходы
+  // остаются обычным якорем: там покупки ещё нет.
+  const inner = (
+    <>
       <div style={styles.cardKicker}>{kicker}</div>
       <div style={styles.cardTitle}>{title}</div>
       {note ? <div style={styles.cardNote}>{note}</div> : null}
@@ -69,6 +103,27 @@ function LinkCard({
         {price ? <span style={styles.price}>{price}</span> : <span />}
         <span style={styles.arrow}>→</span>
       </div>
+    </>
+  );
+
+  if (external) {
+    return (
+      <BuyLink
+        href={href}
+        source="go"
+        productId={product?.id}
+        priceUsd={product?.priceUsd}
+        channel={channel}
+        style={styles.card}
+      >
+        {inner}
+      </BuyLink>
+    );
+  }
+
+  return (
+    <a href={href} style={styles.card}>
+      {inner}
     </a>
   );
 }
@@ -86,12 +141,18 @@ export default async function GoPage({
   // Метка канала из адреса: /go?c=ig в шапке Instagram, ?c=tt в TikTok и т.д.
   // Она доезжает до чекаута и возвращается в вебхуке рядом с продажей — иначе
   // «какой канал принёс деньги» остаётся без ответа.
+  const liveModules = await fetchLiveModules();
   const rawChannel = (await searchParams).c;
   const channel = channelFrom(rawChannel);
   // Внутренние переходы тоже несут метку: человек с /go часто уходит сначала в
   // /shop или /longevity и покупает уже оттуда. Без проброса канал терялся бы
   // ровно на том переходе, ради которого страница и сделана.
   const keep = (path: string) => (channel ? `${path}?c=${encodeURIComponent(String(Array.isArray(rawChannel) ? rawChannel[0] : rawChannel))}` : path);
+  // Метка источника несёт канал, как на посадочных модулей. До 19.08.2026 здесь
+  // стояло жёсткое "go": подписка с /go?c=ig помечалась просто «go», и канал
+  // терялся ровно на той странице, ради которой метки и заводились.
+  const goSource = channel ? `go-${channel}` : "go";
+
   const protocol = productById("oijxmq");
   const antiGreyRu = productById("tmuyxw");
   const bookFull = productById("ghvzq");
@@ -99,6 +160,8 @@ export default async function GoPage({
 
   return (
     <main style={styles.page}>
+      {/* Без этого нельзя ответить даже на «приходил ли кто-нибудь» — см. components/PageTracking */}
+      <PageTracking page="go" />
       <div style={styles.wrap}>
         <header style={styles.head}>
           <div style={styles.brand}>AEVION</div>
@@ -119,8 +182,10 @@ export default async function GoPage({
           />
           {protocol && (
             <LinkCard
-              href={withChannel(protocol.href, channel)}
+              href={withChannel(protocol.href, channel, "go")}
               external
+              product={protocol}
+              channel={channel}
               kicker={protocol.format}
               title="Тот же протокол в PDF"
               note="Чтобы заполнять на нулевой и двенадцатой неделе, не открывая сайт."
@@ -129,8 +194,10 @@ export default async function GoPage({
           )}
           {antiGreyRu && (
             <LinkCard
-              href={withChannel(antiGreyRu.href, channel)}
+              href={withChannel(antiGreyRu.href, channel, "go")}
               external
+              product={antiGreyRu}
+              channel={channel}
               kicker={antiGreyRu.format}
               title="Протокол «Анти-седина»"
               note="Почему волос седеет и что реально это замедляет. Медь, цинк, спермидин."
@@ -143,8 +210,10 @@ export default async function GoPage({
           <h2 style={styles.h2}>Книга</h2>
           {bookFull && (
             <LinkCard
-              href={withChannel(bookFull.href, channel)}
+              href={withChannel(bookFull.href, channel, "go")}
               external
+              product={bookFull}
+              channel={channel}
               kicker={bookFull.format}
               title="Благодарность ∞ Вечная Молодость"
               note="90 дней по четыре минуты. Книга, аудиокнига и материалы одним пакетом."
@@ -160,24 +229,51 @@ export default async function GoPage({
           </div>
         </section>
 
+        {/* Ближайший запуск — отдельной секцией перед общим обзором.
+            Замер 19.08.2026: на /go шахматы упоминались одной строкой внутри
+            описания «живых модулей», без своей карточки и без ссылки на
+            посадочную. Человек, пришедший по ролику о шахматах, их здесь не
+            находил — а /go единственная кликабельная ссылка в шапках соцсетей.
+            Дата и содержание совпадают с посадочной, чтобы обещание было одно. */}
+        <section style={styles.section}>
+          <h2 style={styles.h2}>Ближайший запуск</h2>
+          <LinkCard
+            href={keep("/cyberchess/launch")}
+            kicker="30 августа · шахматы"
+            title="CyberChess — открываем 30 августа"
+            note="Партия с движком, задача дня и тренер, который объясняет ход. Оставьте адрес — напишем в день запуска."
+          />
+        </section>
+
         <section style={styles.section}>
           <h2 style={styles.h2}>Вся платформа</h2>
           <LinkCard
             href={keep("/explore")}
             kicker="Бесплатно · обзор"
-            title="29 живых модулей AEVION"
+            title={liveModules ? `${liveModules} живых модулей AEVION` : "Живые модули AEVION"}
             note="Шахматы с ИИ-коучем, сметный тренажёр, венчурный аналитик, IP-бюро и другие."
           />
           {allAccess && (
             <LinkCard
-              href={withChannel(allAccess.href, channel)}
+              href={withChannel(allAccess.href, channel, "go")}
               external
+              product={allAccess}
+              channel={channel}
               kicker={allAccess.format}
               title="Доступ ко всему сразу"
               note="Вместо покупки модулей поштучно."
               price={priceOf(allAccess)}
             />
           )}
+        </section>
+
+        <section style={styles.section}>
+          <LandingView source={goSource} />
+          <WaitlistCapture
+            source={goSource}
+            title="Написать вам, когда выйдет следующее"
+            description="Модули выходят по одному. Оставьте адрес — придёт письмо в день запуска и условия раннего доступа, пока цена стартовая."
+          />
         </section>
 
         <p style={styles.foot}>

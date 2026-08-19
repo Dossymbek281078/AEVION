@@ -3,6 +3,7 @@ import Link from "next/link";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { getApiBase } from "@/lib/apiBase";
+import { repoPath } from "@/lib/repoUrl";
 
 /* ----------------------------- ISR ----------------------------- */
 
@@ -36,10 +37,8 @@ const CARD_BORDER = "rgba(15,23,42,0.08)";
 // recent enough not to look like a broken page.
 const FALLBACK_VERSION = "0.8.1";
 
-const COOKBOOK_URL =
-  "https://github.com/Dossymbek281078/AEVION/blob/main/docs/SDK_USAGE.md";
-const GITHUB_PACKAGE_URL =
-  "https://github.com/Dossymbek281078/AEVION/tree/main/packages/aevion-catalog-client";
+const COOKBOOK_URL = repoPath("blob/main/docs/SDK_USAGE.md");
+const GITHUB_PACKAGE_URL = repoPath("tree/main/packages/aevion-catalog-client");
 
 /* ----------------------------- types ----------------------------- */
 

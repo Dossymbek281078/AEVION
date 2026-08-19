@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
+import { emailSenderStatus } from "./routes/provisioning";
+import { lemonSqueezyVariantStatus } from "./data/lemonSqueezyVariants";
 dotenv.config();
 
 import express from "express";
@@ -32,6 +34,7 @@ import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
+import { provisioningRouter } from "./routes/provisioning";
 import { lemonSqueezyWebhookRouter } from "./routes/lemonSqueezyWebhook";
 import { appAccessRouter } from "./routes/appAccess";
 import { gumroadWebhookRouter } from "./routes/gumroadWebhook";
@@ -210,16 +213,29 @@ app.use(express.urlencoded({
  * несколько строк, и цена — доли миллисекунды на запуск против невозможности
  * узнать, какой код работает.
  */
-function readBuildInfo(): { commit: string; source: string; branch: string } {
-  const envCommit =
-    process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || process.env.SOURCE_VERSION;
-  if (envCommit) {
-    return {
-      commit: envCommit.slice(0, 12),
-      source: "env",
-      branch: process.env.RAILWAY_GIT_BRANCH || "unknown",
-    };
-  }
+/**
+ * builtAt отвечает на вопрос, который bootedAt не покрывает: контейнер Railway
+ * перезапускается сам по себе, и тогда «поднялся 10 минут назад» относится к
+ * образу недельной давности. Проверка выкатки (aevion-deploy-check.mjs) поле
+ * уже печатает — и до 14.08.2026 печатала «собрана ?», потому что отдавать его
+ * было некому.
+ */
+function readBuildInfo(): { commit: string; source: string; branch: string; builtAt: string | null } {
+  // ПОРЯДОК ВАЖЕН: сначала файл, переменные — только запасной путь.
+  //
+  // 14.08.2026 отметку ставили переменной сервиса, и она пережила чужую
+  // выкатку: образ сменился целиком, переменная осталась, а /health продолжил
+  // уверенно называть мой коммит. Проверка отвечала «сборка совпадает», пока на
+  // проде не было ни одной моей ручки.
+  //
+  // Причина в принадлежности: переменные принадлежат СЕРВИСУ, файл едет ВНУТРИ
+  // образа. Описывать артефакт может только то, что уезжает вместе с ним.
+  //
+  // Переменную из Railway тогда удалили, но код, читавший её ПЕРВОЙ, остался и
+  // 19.08 обнаружился прямо на проде. Он безвреден лишь пока переменной нет:
+  // вернут её (например, при переподключении источника сборки к GitHub) — и
+  // дефект вернётся в худшем виде, уверенным неправильным ответом вместо
+  // честного «не знаю».
   try {
     // Файл лежит РЯДОМ С КОДОМ, а не в dist: `railway up` уважает .gitignore, и
     // отметка из игнорируемого каталога в образ не уезжает. Это уже проверено
@@ -230,17 +246,38 @@ function readBuildInfo(): { commit: string; source: string; branch: string } {
     const fsMod = require("node:fs") as typeof import("node:fs");
     const pathMod = require("node:path") as typeof import("node:path");
     const raw = fsMod.readFileSync(pathMod.join(__dirname, "..", "build-info.json"), "utf-8");
-    const info = JSON.parse(raw) as { commit?: string; source?: string; branch?: string };
+    const info = JSON.parse(raw) as { commit?: string; source?: string; branch?: string; builtAt?: string };
     return {
       commit: String(info.commit || "unknown").slice(0, 12),
       source: String(info.source || "build-info"),
       branch: String(info.branch || "unknown"),
+      builtAt: info.builtAt ? String(info.builtAt) : null,
     };
   } catch {
-    // Файла нет — это dev-запуск через ts-node-dev (dist не собран). Отвечаем
-    // "unknown" явно, а не выдумываем: ложный коммит хуже отсутствующего.
-    return { commit: "unknown", source: "none", branch: "unknown" };
+    /* файла нет — идём к запасному пути ниже */
   }
+
+  // Запасной путь. Railway подставляет RAILWAY_GIT_COMMIT_SHA, только когда
+  // собирает из подключённого репозитория — тогда переменная приходит ВМЕСТЕ со
+  // сборкой и честна. Источник помечается явно: увидев source: "env", человек
+  // должен проверить, не переживает ли отметка выкатку.
+  const envCommit =
+    process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || process.env.SOURCE_VERSION;
+  if (envCommit) {
+    return {
+      commit: envCommit.slice(0, 12),
+      source: "env",
+      branch: process.env.RAILWAY_GIT_BRANCH || "unknown",
+      // Метку времени даёт только файл; из переменных её взять неоткуда, и
+      // выдумывать «сейчас» нельзя — это назвало бы старт контейнера сборкой.
+      builtAt: null,
+    };
+  }
+
+  // Ни файла, ни переменных — это dev-запуск через ts-node-dev (dist не
+  // собран). Отвечаем "unknown" явно, а не выдумываем: ложный коммит хуже
+  // отсутствующего.
+  return { commit: "unknown", source: "none", branch: "unknown", builtAt: null };
 }
 
 const BUILD_INFO = readBuildInfo();
@@ -258,6 +295,10 @@ function healthPayload() {
     // неисправности, и различать их надо не догадками.
     commitSource: BUILD_INFO.source,
     branch: BUILD_INFO.branch,
+    // Когда СОБРАН образ. Не то же, что bootedAt: Railway перезапускает
+    // контейнер сам, и «поднялся 10 минут назад» бывает у образа недельной
+    // давности. null — честнее выдуманного времени.
+    builtAt: BUILD_INFO.builtAt,
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
     // Аналитика пишется в файл. Если её самое старое событие всегда моложе
@@ -271,6 +312,15 @@ function healthPayload() {
     // без него прод отдаёт SHA-512, который наше же описание API называет
     // «NOT a cryptographic signature». Теперь проверяется одним запросом.
     qsign: safeDilithiumStatus(),
+    // Письмо после покупки. Без ключа отправка «успешна» и молча уходит в лог:
+    // покупатель не получает ни что он купил, ни как этим пользоваться, а
+    // снаружи это неотличимо от исправной работы. Признак и адрес отправителя,
+    // ключ не отдаём.
+    emailSender: safeEmailSenderStatus(),
+    // Какие товары магазина реально можно выдать. Товар в продаже с `false`
+    // здесь — это будущий отказ на живом покупателе. Только признаки, без
+    // самих идентификаторов вариантов.
+    lsVariants: safeLsVariantStatus(),
   };
 }
 
@@ -280,6 +330,24 @@ function safeDilithiumStatus() {
     return dilithiumStatus();
   } catch {
     return { mode: null, reason: null };
+  }
+}
+
+/** health не должен падать из-за диагностики. */
+function safeLsVariantStatus() {
+  try {
+    return lemonSqueezyVariantStatus();
+  } catch {
+    return null;
+  }
+}
+
+/** health не должен падать из-за диагностики. */
+function safeEmailSenderStatus() {
+  try {
+    return emailSenderStatus();
+  } catch {
+    return { configured: null, from: null, mode: null };
   }
 }
 
@@ -583,12 +651,7 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "Total provisioned subscriptions count" },
       },
       "/api/pricing/roadmap": {
-        // Число берётся из реестра, а не пишется в строке. Здесь стояло «27
-        // modules» — реестр к 16.08.2026 вырос до 41, и публичное описание API
-        // занижало платформу почти вдвое. Тот же класс, что и текст отказа,
-        // называвший неверный предел: как только число попадает в текст, оно
-        // перестаёт меняться вместе с тем, что описывает.
-        get: { summary: `Public roadmap for all ${projects.length} modules with phases and progress` },
+        get: { summary: "Public roadmap for all 27 modules with phases and progress" },
       },
       "/api/pricing/provisioning/history": {
         get: { summary: "Subscription history by email (?email=...) — masked PII, capped at 100" },
@@ -1150,6 +1213,11 @@ app.use("/api/healthai", healthaiRouter);
 // ==========================
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
+// Выдача доступа после оплаты. 19.08.2026 монтирование пропало при слиянии:
+// чужой index.ts взяли целиком, а этой строки в нём не было. Поймал сторож
+// tests/provisioning.routes.test.ts — до выкатки, а не после жалобы
+// покупателя, которому не открылось купленное.
+app.use("/api/pricing/provisioning", provisioningRouter);
 app.use("/api/quotas", apiQuotasRouter);
 // Platform entitlements + paywall policy (GET /api/me/entitlements, /api/paywall/policy)
 app.use("/api", entitlementsRouter);

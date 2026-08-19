@@ -11,6 +11,7 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 import AskAi from "@/components/AskAi";
 import { apiUrl } from "@/lib/apiBase";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { Sparkline } from "@/components/Sparkline";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -664,9 +665,23 @@ export default function QRightPage() {
               </div>
             </div>
             <p style={{ margin: 0, fontSize: 14, opacity: 0.75, lineHeight: 1.6, maxWidth: 600 }}>
-              Register your work and walk away with a self-contained proof bundle — verifiable against Bitcoin and Ed25519 even if AEVION disappears tomorrow.
+              Register your work and walk away with a self-contained proof bundle — Ed25519-signed immediately and Bitcoin-anchored once the timestamp confirms, verifiable even if AEVION disappears tomorrow.
             </p>
           </div>
+        </div>
+
+        {/* Приём адресов. До 19.08.2026 QRight был единственным модулем очереди
+            запуска, где человек не мог оставить адрес: посадочная у пары
+            QRight + Бюро одна (/bureau/launch), и попавший прямо сюда уходил ни
+            с чем. Метка источника «qright» — та же механика, что на посадочных:
+            без неё после 6 сентября не ответить, откуда пришли люди. */}
+        <div style={{ marginBottom: 24 }}>
+          <WaitlistCapture
+            source="qright"
+            tone="dark"
+            title="Написать вам в день запуска"
+            description="Реестр открыт уже сейчас. Одно письмо на запуск бюро 6 сентября и условия раннего доступа."
+          />
         </div>
 
         {/* ── Live transparency tile ── */}
@@ -718,7 +733,7 @@ export default function QRightPage() {
                 { n: "1", title: "Describe", desc: "Title and details", color: "#0d9488", tip: null },
                 { n: "2", title: "Fingerprint", desc: "Tamper-evident SHA-256", color: "#3b82f6", tip: { name: "SHA-256", text: "A cryptographic fingerprint of your work. Once registered, the smallest change in the source produces a different hash — proving the original was yours." } },
                 { n: "3", title: "Co-sign", desc: "AEVION + your browser key", color: "#8b5cf6", tip: { name: "Hybrid signing", text: "AEVION signs with HMAC-SHA256 (server-side) and your browser adds a second Ed25519 signature with a key only you hold. Even total platform compromise cannot forge a certificate in your name." } },
-                { n: "4", title: "Anchor", desc: "Distributed key + Bitcoin", color: "#f59e0b", tip: { name: "Quantum Shield + OTS", text: "The Ed25519 private key is split into 3 Shamir shards across independent locations (any 2 reconstruct, AEVION never holds 2). The content hash is also submitted to OpenTimestamps and confirmed in a Bitcoin block — a trust anchor we don't control." } },
+                { n: "4", title: "Anchor", desc: "Distributed key + Bitcoin", color: "#f59e0b", tip: { name: "Quantum Shield + OTS", text: "The Ed25519 private key is split into 3 Shamir shards across independent locations (any 2 reconstruct, AEVION never holds 2). The content hash is also submitted to the OpenTimestamps calendars right away; Bitcoin confirmation follows once the calendar's commitment lands in a block (typically a few hours), and the proof upgrades to a block height you can check yourself — a trust anchor we don't control." } },
               ].map((s) => (
                 <div key={s.n} style={{ textAlign: "center", padding: "14px 8px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
                   <div style={{ width: 32, height: 32, borderRadius: "50%", background: s.color, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, marginBottom: 6 }} aria-label={`Step ${s.n}`}>{s.n}</div>

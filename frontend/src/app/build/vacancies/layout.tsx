@@ -4,14 +4,14 @@ export const metadata: Metadata = {
   title: "Construction Vacancies & Jobs — AEVION QBuild",
   description:
     "Browse open construction vacancies on AEVION QBuild. Filter by city, salary, and skills. Apply directly to crews, contractors, and projects — no recruiters in between.",
-  alternates: { canonical: "https://aevion.com/build/vacancies" },
+  alternates: { canonical: "https://aevion.app/build/vacancies" },
   openGraph: {
     title: "Construction Vacancies & Jobs — AEVION QBuild",
     description:
       "Open construction vacancies — filter by city, salary, and skills. Apply directly on AEVION QBuild.",
     type: "website",
     siteName: "AEVION QBuild",
-    url: "https://aevion.com/build/vacancies",
+    url: "https://aevion.app/build/vacancies",
   },
   twitter: {
     card: "summary_large_image",
@@ -29,20 +29,20 @@ const COLLECTION_LD = {
   name: "Construction Vacancies",
   description:
     "Listing of open construction vacancies on AEVION QBuild — filter by city, salary, and skills.",
-  url: "https://aevion.com/build/vacancies",
-  isPartOf: { "@type": "WebSite", name: "AEVION QBuild", url: "https://aevion.com/build" },
+  url: "https://aevion.app/build/vacancies",
+  isPartOf: { "@type": "WebSite", name: "AEVION QBuild", url: "https://aevion.app/build" },
 };
 
 const BREADCRUMB_LD = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.com/build" },
+    { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.app/build" },
     {
       "@type": "ListItem",
       position: 2,
       name: "Vacancies",
-      item: "https://aevion.com/build/vacancies",
+      item: "https://aevion.app/build/vacancies",
     },
   ],
 };

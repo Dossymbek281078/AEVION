@@ -26,20 +26,19 @@ import { randomUUID } from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { CONSTITUTION_TIERS, constitutionTierLabel, type ConstitutionTier } from "../data/pricing";
 
 const capture = makeServiceCapture("constitutionCheckout");
 
-type Tier = "pro" | "team";
+// Цены и названия берутся из общего прайса напрямую. Здесь БЫЛИ две
+// собственные таблицы — из-за них цена Конституции жила в трёх местах сразу и
+// могла разойтись молча. Даже локальный алиас, читающий общий источник, не
+// оставляю: по форме он неотличим от своей таблицы, и следующий добавит в него
+// строку, не заметив разницы. Единственный источник — data/pricing.ts.
+type Tier = ConstitutionTier;
 
-const TIER_NAMES: Record<Tier, string> = {
-  pro:  "Constitution Pro · $9/mo",
-  team: "Constitution Team · $49/mo",
-};
-
-const TIER_PRICES_USD: Record<Tier, number> = {
-  pro:  9,
-  team: 49,
-};
+const priceOf = (tier: Tier): number => CONSTITUTION_TIERS[tier].priceUsd;
+const nameOf = (tier: Tier): string => constitutionTierLabel(tier);
 
 function lsVariantId(tier: Tier): string | null {
   const key = tier === "pro"
@@ -86,7 +85,7 @@ async function createLsCheckout(
           },
         },
         product_options: {
-          name: TIER_NAMES[tier],
+          name: nameOf(tier),
           receipt_link_url: `${base}/constitution/pricing`,
           redirect_url: `${base}/constitution?upgrade=success&tier=${tier}`,
         },
@@ -144,8 +143,8 @@ constitutionCheckoutRouter.post(
         return res.json({
           checkoutUrl: `${publicBase()}/constitution/pricing?stub=1&tier=${tier}`,
           tier,
-          tierName: TIER_NAMES[tier],
-          priceUsd: TIER_PRICES_USD[tier],
+          tierName: nameOf(tier),
+          priceUsd: priceOf(tier),
           provider: "stub",
           note: "No payment provider configured. Set LEMON_SQUEEZY_API_KEY or GUMROAD_CONSTITUTION_PRO_PERMALINK.",
         });
@@ -157,8 +156,8 @@ constitutionCheckoutRouter.post(
           checkoutUrl,
           checkoutId,
           tier,
-          tierName: TIER_NAMES[tier],
-          priceUsd: TIER_PRICES_USD[tier],
+          tierName: nameOf(tier),
+          priceUsd: priceOf(tier),
           provider: "lemonsqueezy",
         });
       }
@@ -166,16 +165,16 @@ constitutionCheckoutRouter.post(
       // Gumroad fallback
       const intent = await gumroadPaymentProvider.createIntent({
         reference: `constitution-${tier}`,
-        amountCents: TIER_PRICES_USD[tier] * 100,
+        amountCents: priceOf(tier) * 100,
         currency: "USD",
-        description: TIER_NAMES[tier],
+        description: nameOf(tier),
         email,
       });
       res.json({
         checkoutUrl: intent.checkoutUrl,
         tier,
-        tierName: TIER_NAMES[tier],
-        priceUsd: TIER_PRICES_USD[tier],
+        tierName: nameOf(tier),
+        priceUsd: priceOf(tier),
         provider: "gumroad",
       });
     } catch (err) {
@@ -211,9 +210,9 @@ constitutionCheckoutRouter.get(
       // Gumroad
       const intent = await gumroadPaymentProvider.createIntent({
         reference: `constitution-${tier}`,
-        amountCents: TIER_PRICES_USD[tier] * 100,
+        amountCents: priceOf(tier) * 100,
         currency: "USD",
-        description: TIER_NAMES[tier],
+        description: nameOf(tier),
       });
       res.redirect(303, intent.checkoutUrl);
     } catch {

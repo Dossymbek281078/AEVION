@@ -429,7 +429,7 @@ export function Level4View() {
 
         {activeLsr && activeCalc && (
           <div className="p-4 space-y-4">
-            <LsrFormHeader meta={activeLsr.meta ?? {}} calc={activeCalc} onChange={() => {}} />
+            <LsrFormHeader meta={activeLsr.meta ?? {}} calc={activeCalc} onChange={() => {}} readOnly />
             <LsrFormTable calc={activeCalc} notices={[]} onChangeVolume={() => {}} onRemove={() => {}} />
             <SsrView calc={activeCalc} />
           </div>

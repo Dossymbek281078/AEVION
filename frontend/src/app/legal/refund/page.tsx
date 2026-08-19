@@ -1,45 +1,25 @@
-export default function RefundPage() {
-  return (
-    <div className="max-w-3xl mx-auto px-6 py-16 text-gray-200">
-      <h1 className="text-3xl font-bold text-white mb-2">Refund Policy</h1>
-      <p className="text-gray-400 text-sm mb-10">Last updated: May 19, 2026</p>
+import { permanentRedirect } from "next/navigation";
 
-      <section className="space-y-6 text-sm leading-relaxed">
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">1. Free Trial</h2>
-          <p>All paid plans include a 14-day free trial. You will not be charged during the trial period. You may cancel at any time before the trial ends without any charge.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">2. Refund Eligibility</h2>
-          <p>We offer a full refund within <strong className="text-white">30 days</strong> of your first payment if you are not satisfied with the Service. To request a refund, contact us at <a href="mailto:billing@aevion.app" className="text-blue-400 hover:underline">billing@aevion.app</a> with your account email and reason.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">3. Subscription Cancellation</h2>
-          <p>You may cancel your subscription at any time through your account settings or by contacting support. Cancellation takes effect at the end of the current billing period — you retain access until then. No partial refunds are issued for unused time after the 30-day window.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">4. Annual Plans</h2>
-          <p>Annual subscriptions are eligible for a full refund within 30 days of purchase. After 30 days, annual plans are non-refundable but may be cancelled to prevent renewal.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">5. Non-Refundable Items</h2>
-          <p>One-time purchases (course access, marketplace items) are non-refundable once the digital content has been accessed or downloaded, except where required by applicable law.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">6. How Refunds Are Processed</h2>
-          <p>Refunds are processed through Gumroad (our payment processor) and typically appear on your statement within 5–10 business days, depending on your bank.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">7. Contact</h2>
-          <p>For refund requests or questions: <a href="mailto:billing@aevion.app" className="text-blue-400 hover:underline">billing@aevion.app</a></p>
-        </div>
-      </section>
-    </div>
-  );
+/**
+ * Было: отдельная страница refund, второй комплект юридических документов.
+ *
+ * Замер 19.08.2026: на /legal/terms, /legal/privacy и /legal/refund НЕ ССЫЛАЛСЯ
+ * никто — все ссылки сайта ведут на /terms, /privacy и /pricing/refund-policy.
+ * При этом страницы жили на проде, отдавали 200 и индексировались.
+ *
+ * Чем это плохо было на самом деле:
+ *   1. Два разных документа об одном. /terms называл подсудностью суды Астаны,
+ *      /legal/terms — суды Алматы. В споре непонятно, какой из них связывает.
+ *   2. Три напечатанных адреса — legal@, privacy@, billing@ на aevion.app —
+ *      не принимают писем: у домена нет записи MX. Проверено отправкой.
+ *   3. Разделы, которых не было в главном комплекте (подписки и списания,
+ *      прекращение), лежали только здесь. Они перенесены в /terms как 6a и 6b
+ *      ДО этого перенаправления — содержимое не потеряно.
+ *
+ * Почему перенаправление, а не удаление: адрес мог попасть во внешние ссылки и
+ * в поисковый индекс, а 404 на странице условий читается хуже, чем переезд.
+ * permanentRedirect отдаёт 308 — поисковик переносит вес на канонический адрес.
+ */
+export default function LegalRedirect() {
+  permanentRedirect("/pricing/refund-policy");
 }

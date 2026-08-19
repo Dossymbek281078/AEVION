@@ -275,10 +275,20 @@ kidsAiContentRouter.get("/lessons", async (req: Request, res: Response) => {
          LIMIT $${params.length}`,
         params,
       );
+      // Сколько подходит под фильтр — отдельным запросом, БЕЗ LIMIT.
+      //
+      // Здесь стояло `rows.rowCount ?? rows.rows.length`, и это тот же обман,
+      // что и в ветке в памяти, только незаметнее: rowCount — количество
+      // ВЕРНУВШИХСЯ строк, а запрос идёт с LIMIT. Поле называется total, а
+      // означает размер страницы.
+      const counted = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM kids_lessons ${where}`,
+        params.slice(0, params.length - 1), // те же условия, но без limit
+      );
       // Withhold content_md from list view (keep payloads small).
       res.json({
         lessons: rows.rows as KidsLesson[],
-        total: rows.rowCount ?? rows.rows.length,
+        total: Number(counted.rows[0]?.n ?? rows.rows.length) || rows.rows.length,
         source: "postgres",
       });
       return;
@@ -296,13 +306,18 @@ kidsAiContentRouter.get("/lessons", async (req: Request, res: Response) => {
   if (category) list = list.filter((l) => l.category === category);
   if (ageMin !== null) list = list.filter((l) => l.age_max >= ageMin);
   if (ageMax !== null) list = list.filter((l) => l.age_min <= ageMax);
+  // Считаем ДО среза: `total` отвечает на вопрос «сколько подходит», а не
+  // «сколько уместилось». Иначе при сорока уроках и limit=20 ответ говорит
+  // «всего 20», клиент рисует «показано 20 из 20» и не показывает кнопку
+  // «дальше» — половина каталога недостижима, и признака этого нет.
+  const matched = list.length;
   list = list.slice(0, limit);
   res.json({
     lessons: list.map(({ content_md: _drop, ...rest }) => {
       void _drop;
       return rest;
     }),
-    total: list.length,
+    total: matched,
     source: "memory",
   });
 });

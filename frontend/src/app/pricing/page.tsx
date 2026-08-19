@@ -272,6 +272,31 @@ export default function PricingPage() {
     }
   }
 
+  // Настроен ли PayBox НА САМОМ ДЕЛЕ. null = ещё не спросили.
+  //
+  // Подпись под ценой обещала «KZT -> локальные карты КЗ + Kaspi (PayBox)», и
+  // это было неправдой: 18.08.2026 проверено запросом — paybox configured=false,
+  // а запрос чекаута с currency=KZT молча возвращает долларовую ссылку
+  // LemonSqueezy. Покупатель из Казахстана читал про Kaspi и попадал на оплату
+  // в долларах. Обещание теперь следует за фактом, а не наоборот.
+  const [payboxLive, setPayboxLive] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(apiUrl("/api/pricing/checkout/healthz"));
+        if (!r.ok) return;
+        const j = await r.json();
+        if (!cancelled) setPayboxLive(Boolean(j?.providers?.paybox?.configured));
+      } catch {
+        // Не спросили - значит не знаем. Оставляем null: обещать нельзя,
+        // но и пугать «не работает» на основании сетевого сбоя тоже нельзя.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -485,7 +510,10 @@ export default function PricingPage() {
                 )}
               </div>
               <div style={{ fontSize: 12, color: "#64748b" }}>
-                {t("pricing.home.heroModule.paymentCard")} {currency === "KZT" ? t("pricing.home.heroModule.kztNote") : t("pricing.home.heroModule.usdNote")}
+                {t("pricing.home.heroModule.paymentCard")}{" "}
+                {currency === "KZT"
+                  ? (payboxLive ? t("pricing.home.heroModule.kztNote") : t("pricing.home.heroModule.kztFallbackNote"))
+                  : t("pricing.home.heroModule.usdNote")}
               </div>
             </div>
             <button
@@ -685,6 +713,17 @@ export default function PricingPage() {
               <span style={{ opacity: 0.7 }}>
                 {p.kind === "percent" ? `−${p.amount}%` : `${tp("promo.upTo")} −$${p.amount}`}
               </span>
+              {/* Потолок виден СРАЗУ, а не только во всплывающей подсказке.
+                  Замер 19.08.2026: TEAM100 обещает «до −$100», но общий потолок
+                  скидок — 50% заказа, и на одном месте тарифа Full ($49) он даёт
+                  $24.50, на двадцати — $53. До ста доходит примерно с сорока
+                  мест. Подсказка `title` на телефоне не показывается вовсе, а
+                  именно туда мы ведём трафик. Показываем только у кодов с
+                  фиксированной суммой: у процентных потолок ни на что не влияет
+                  (максимальный — 50%, и он же предел). */}
+              {p.kind !== "percent" && (
+                <span style={{ opacity: 0.55, fontWeight: 600 }}>{" "}{tp("promo.capNote")}</span>
+              )}
             </button>
           ))}
         </section>
@@ -1912,8 +1951,8 @@ export default function PricingPage() {
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
           {tp("faq.subtitle")}{" "}
-          <a href="mailto:hello@aevion.io" style={{ color: "#0d9488", fontWeight: 700 }}>
-            hello@aevion.io
+          <a href="mailto:hello@aevion.app" style={{ color: "#0d9488", fontWeight: 700 }}>
+            hello@aevion.app
           </a>
           .
         </p>

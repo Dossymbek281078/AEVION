@@ -25,7 +25,13 @@ const THRESHOLD = 4.5;
 const theme = readFileSync(path.join(MOD, "theme.ts"), "utf8");
 const T = Object.fromEntries([...theme.matchAll(/ {2}(\w+): "([^"]+)",/g)].map((m) => [m[1], m[2]]));
 
-const sources = ["MultichatEngineClient.tsx", "CouncilConsole.tsx", "verify/page.tsx"]
+const sources = [
+  "MultichatEngineClient.tsx",
+  "CouncilConsole.tsx",
+  "verify/page.tsx",
+  "library/page.tsx",
+  "shared/[token]/page.tsx", // публичный просмотр — самый внешний экран модуля
+]
   .map((f) => readFileSync(path.join(MOD, f), "utf8"));
 const code = sources.join("\n");
 
@@ -73,6 +79,17 @@ for (const s of SURFACES) {
   ok(`подложка ${s} задана и непрозрачна`, !!T[s] && parse(T[s])[3] === 1, T[s]);
 }
 
+// Текст на акцентной кнопке нельзя мерить к бумаге: белый на белом даст 1.00
+// и уронит проверку на цвете, который на экране лежит на бирюзе. Роль зашита
+// в имя (onAccent*), поэтому подложка для него — акцентные заливки, а не лист.
+// Ровно та же логика, что у чипов ниже: сравнивать надо с тем, на чём цвет
+// реально лежит.
+// Условие «светлый» обязательно: onAccent (#1a1a17) — тёмные чернила, они
+// лежат и на белых поверхностях тоже, мерить их к бирюзе неверно. А светлый
+// токен на бумаге не живёт по определению: он существует ради тёмной кнопки.
+const ACCENT_BACKDROPS = ["btnAccentBg", "accent"];
+const isOnAccent = (n) => /^onAccent/.test(n) && luminance(parse(T[n])) > 0.5;
+
 // 1. Обычный текст — к бумаге и к панели.
 const textTokens = Object.keys(T).filter(
   (n) => new RegExp(`color: T\\.${n}\\b`).test(code) && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(T[n])
@@ -80,24 +97,25 @@ const textTokens = Object.keys(T).filter(
 ok("текстовые токены найдены", textTokens.length >= 10, `найдено ${textTokens.length}`);
 
 for (const n of textTokens) {
-  const worst = Math.min(...SURFACES.map((s) => contrast(parse(T[n]), parse(T[s]))));
-  ok(`текст ${n} читается на подложке`, worst >= THRESHOLD, `${worst.toFixed(2)} < ${THRESHOLD} (${T[n]})`);
+  const backdrops = isOnAccent(n) ? ACCENT_BACKDROPS : SURFACES;
+  const worst = Math.min(...backdrops.map((s) => contrast(parse(T[n]), parse(T[s]))));
+  const where = isOnAccent(n) ? "на акцентной кнопке" : "на подложке";
+  ok(`текст ${n} читается ${where}`, worst >= THRESHOLD, `${worst.toFixed(2)} < ${THRESHOLD} (${T[n]})`);
 }
 
-// 2. Чипы ролей — текст к СМЕШАННОЙ подложке, а не к бумаге.
-const block = code.match(/ROLE_COLORS[^=]*= \{([\s\S]*?)\n\};/);
-ok("палитра чипов найдена", !!block);
-
-if (block) {
-  const chips = [...block[1].matchAll(/"?([\w/]+)"?:\s*\{ bg: T\.(\w+),\s*border: T\.(\w+),\s*fg: T\.(\w+)/g)];
-  ok("чипы разобраны", chips.length >= 5, `разобрано ${chips.length}`);
-
-  for (const [, name, bg, , fg] of chips) {
-    const worst = Math.min(...SURFACES.map((s) => contrast(parse(T[fg]), over(parse(T[bg]), parse(T[s])))));
-    ok(`чип ${name} читается на своей подложке`, worst >= THRESHOLD,
-      `${worst.toFixed(2)} < ${THRESHOLD} (текст ${T[fg]} на ${T[bg]})`);
-  }
-}
+// 2. Чипы ролей.
+//
+// Проверка снята 12.08.2026 вместе с палитрой ROLE_COLORS, которую она мерила.
+// Палитра принадлежала рабочему столу агентов (AgentPanel) — коду, который был
+// написан, но ни разу не отрисован, и удалён тем же заходом. Оставлять
+// проверку было нельзя (она бы просто падала), но и молча выкидывать её
+// неправильно: если чипы ролей когда-нибудь вернутся на экран, контраст их
+// текста на смешанной подложке — не то же самое, что контраст на бумаге, и
+// мерить его надо отдельно. Формула была: contrast(fg, over(bg, поверхность)).
+//
+// Функция over() ниже по этой причине пока не используется — она нужна ровно
+// для такой мерки и остаётся на месте.
+void over;
 
 // 3. Сырых цветов в компонентах быть не должно — иначе проверка их не видит,
 //    и цвет живёт вне всякого контроля.

@@ -20,6 +20,8 @@
  * US-only: no equivalent keyless feed was found for Astana (KZ) or Tokyo (JCAB).
  */
 
+import { stableCellId } from "./lib/airspace-cell-id.mjs";
+
 const FEED =
   "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query";
 
@@ -64,7 +66,14 @@ const cells = features
     const lons = ring.map((p) => p[0]);
     const lats = ring.map((p) => p[1]);
     return {
-      id: `faa-${a.OBJECTID}`,
+      // НЕ `faa-${a.OBJECTID}`: OBJECTID — номер строки в базе публикатора, он
+      // меняется при каждой перепубликации слоя и поднимал ложную тревогу
+      // «дрейф» при неизменных потолках. Ключ строится из самой ячейки.
+      id: stableCellId({
+        minLat: Math.min(...lats),
+        minLon: Math.min(...lons),
+        airportIcao: a.APT1_ICAO ?? null,
+      }),
       minLon: +Math.min(...lons).toFixed(7),
       maxLon: +Math.max(...lons).toFixed(7),
       minLat: +Math.min(...lats).toFixed(7),

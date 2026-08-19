@@ -44,7 +44,11 @@ function ensureDir() {
  * с первого взгляда вместо того, чтобы лезть в переменные окружения.
  */
 type EventsStoreStatus = {
+  /** Задана ли переменная EVENTS_FILE. НЕ отвечает на вопрос «переживут ли выкатку». */
   persistedByEnv: boolean;
+  /** Лежит ли файл на смонтированном томе. Вот это и есть ответ про сохранность.
+   *  null = том не объявлен окружением, судить не по чему. */
+  onVolume: boolean | null;
   exists: boolean;
   count: number;
   oldest: string | null;
@@ -73,8 +77,16 @@ function readEventsStoreStatus(): EventsStoreStatus {
   // Для ответа на вопрос «переживают ли события деплой» достаточно флага и
   // метки самого старого события.
   const persistedByEnv = EVENTS_FILE_FROM_ENV;
+  // ЧТО ИМЕННО СПРАШИВАЮТ. `persistedByEnv` отвечает «задана ли переменная», а
+  // читается как «переживут ли события выкатку» — 14.08.2026 я сам прочёл его
+  // именно так, написал основателю тревогу «первая же выкатка сотрёт замер» и
+  // просил настроить переменную. Выкатка в тот же день доказала обратное: 562
+  // события с 26 мая целы, потому что каталог лежит на смонтированном томе.
+  // Поэтому отдаём ФАКТ: попадает ли путь под точку монтирования тома.
+  const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim() || null;
+  const onVolume = mount ? EVENTS_FILE.replace(/\\/g, "/").startsWith(mount.replace(/\\/g, "/")) : null;
   if (!existsSync(EVENTS_FILE)) {
-    return { persistedByEnv, exists: false, count: 0, oldest: null };
+    return { persistedByEnv, onVolume, exists: false, count: 0, oldest: null };
   }
   try {
     const lines = readFileSync(EVENTS_FILE, "utf8").split("\n").filter(Boolean);
@@ -87,10 +99,10 @@ function readEventsStoreStatus(): EventsStoreStatus {
         // Битую строку пропускаем: одна порча не должна ронять health.
       }
     }
-    return { persistedByEnv, exists: true, count: lines.length, oldest };
+    return { persistedByEnv, onVolume, exists: true, count: lines.length, oldest };
   } catch (e) {
     captureEventsError(e, { route: "events/storeStatus" });
-    return { persistedByEnv, exists: true, count: -1, oldest: null };
+    return { persistedByEnv, onVolume, exists: true, count: -1, oldest: null };
   }
 }
 
@@ -113,6 +125,37 @@ interface AnalyticsEvent {
   meta?: Record<string, string | number | boolean | null>;
   ip?: string;
   ua?: string;
+}
+
+
+/**
+ * Разбивка НАЧАЛ ОПЛАТЫ по поверхности и по каналу привлечения.
+ *
+ * Вынесено отдельной чистой функцией, чтобы тест проверял тот самый код,
+ * который выполняется в проде, а не его копию, переписанную в тесте: копия
+ * расходится с оригиналом молча и создаёт ровно ту ложную уверенность,
+ * ради борьбы с которой тест и пишется.
+ *
+ * `bySource` в сводке считает ВСЕ события, поэтому в нём доминируют
+ * page_view и намерение купить тонет. Здесь — только `checkout_start`.
+ * Канал приезжает в `meta.channel` из метки `?c=` (lib/products withChannel
+ * + components/BuyLink). Ключи нейтральные: дашборд открывают и в EN/KK.
+ */
+export function summarizeCheckoutStarts(events: Array<Pick<AnalyticsEvent, "type" | "source" | "meta">>): {
+  bySource: Record<string, number>;
+  byChannel: Record<string, number>;
+} {
+  const bySource: Record<string, number> = {};
+  const byChannel: Record<string, number> = {};
+  for (const ev of events) {
+    if (ev.type !== "checkout_start") continue;
+    const src = ev.source?.trim() || "unknown";
+    bySource[src] = (bySource[src] ?? 0) + 1;
+    const ch = ev.meta?.channel;
+    const chKey = typeof ch === "string" && ch.trim() ? ch.trim() : "direct";
+    byChannel[chKey] = (byChannel[chKey] ?? 0) + 1;
+  }
+  return { bySource, byChannel };
 }
 
 const ALLOWED_TYPES = new Set([
@@ -238,7 +281,11 @@ eventsRouter.get("/summary", (req, res) => {
       byType: {},
       bySource: {},
       byTier: {},
+      checkoutBySource: {},
+      checkoutByChannel: {},
       byIndustry: {},
+      byChannel: {},
+      byProduct: {},
       sessionCount: 0,
       windowHours: 24,
     });
@@ -265,6 +312,15 @@ eventsRouter.get("/summary", (req, res) => {
   const bySource: Record<string, number> = {};
   const byTier: Record<string, number> = {};
   const byIndustry: Record<string, number> = {};
+  /** Разбивку по ним считает summarizeCheckoutStarts — см. её комментарий. */
+  const checkoutEvents: AnalyticsEvent[] = [];
+  // Канал (tt / ig / yt …) — единственный ответ на вопрос «какая раздача
+  // принесла людей». Он приезжает в meta, а сводка до 13.08.2026 считала
+  // только поля верхнего уровня: метка доезжала и НЕ показывалась никому.
+  const byChannel: Record<string, number> = {};
+  // Товар, по которому нажали «купить». Без него видно «клики были», но не
+  // видно, что именно хотели купить.
+  const byProduct: Record<string, number> = {};
   const sids = new Set<string>();
   let total = 0;
 
@@ -277,11 +333,19 @@ eventsRouter.get("/summary", (req, res) => {
       if (ev.source) bySource[ev.source] = (bySource[ev.source] ?? 0) + 1;
       if (ev.tier) byTier[ev.tier] = (byTier[ev.tier] ?? 0) + 1;
       if (ev.industry) byIndustry[ev.industry] = (byIndustry[ev.industry] ?? 0) + 1;
+      const meta = (ev as { meta?: Record<string, unknown> }).meta;
+      const channel = typeof meta?.channel === "string" ? meta.channel : null;
+      if (channel) byChannel[channel] = (byChannel[channel] ?? 0) + 1;
+      const product = typeof meta?.product === "string" ? meta.product : null;
+      if (product) byProduct[product] = (byProduct[product] ?? 0) + 1;
       if (ev.sid) sids.add(ev.sid);
+      if (ev.type === "checkout_start") checkoutEvents.push(ev);
     } catch {
       // skip malformed line
     }
   }
+
+  const checkoutSummary = summarizeCheckoutStarts(checkoutEvents);
 
   res.json({
     total,
@@ -289,6 +353,10 @@ eventsRouter.get("/summary", (req, res) => {
     bySource,
     byTier,
     byIndustry,
+    checkoutBySource: checkoutSummary.bySource,
+    checkoutByChannel: checkoutSummary.byChannel,
+    byChannel,
+    byProduct,
     sessionCount: sids.size,
     windowHours: sinceHours,
   });

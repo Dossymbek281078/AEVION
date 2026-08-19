@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { repoPath } from "@/lib/repoUrl";
 
 type Entry = {
   date: string;
@@ -130,7 +131,7 @@ export default function ChangelogPage() {
         </h1>
         <p style={{ fontSize: 15, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 36px" }}>
           Notable updates only. The git log is the unfiltered source of truth — see{" "}
-          <a href="https://github.com/Dossymbek281078/AEVION/commits/bank-payment-layer" style={{ color: "#5eead4" }}>
+          <a href={repoPath("commits/bank-payment-layer")} style={{ color: "#5eead4" }}>
             commits/bank-payment-layer
           </a>{" "}
           on GitHub.

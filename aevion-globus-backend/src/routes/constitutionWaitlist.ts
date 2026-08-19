@@ -164,6 +164,7 @@ constitutionWaitlistRouter.post(
           // (в пределах жизни процесса это лучше, чем потерять сразу), но
           // теперь об этом кричим.
           capture(dbErr, {
+            where: "waitlist.insert",
             route: "constitution/waitlist/subscribe",
             severity: "leads-at-risk",
             note: "запись в Postgres не удалась — заявка лежит только в памяти инстанса и будет потеряна при перезапуске",
@@ -184,14 +185,13 @@ constitutionWaitlistRouter.post(
       const prev = memList.get(row.email);
       memList.set(row.email, prev ? { ...prev, source: mergeSources(prev.source, row.source) } : row);
 
-      // Fire-and-forget confirmation email via Brevo
-      // source передаётся обязательно: без него развилка в письме считает
-      // подписчика конституционным (`!source` → true), и человек с главной или
-      // с посадочной модуля получает «Ты в листе ожидания Constitution Pro» с
-      // обещанием скидки, о которой не просил. Разрыв возник при сведении: файл
-      // письма пришёл из одной ветки, этот роут — из другой, и вызов остался
-      // старым. Проверять надо СВЯЗЬ, а не наличие починки в каждом файле.
-      void sendWaitlistConfirm(row.email, row.source).catch(() => { /* ignore */ });
+      // Письмо не задерживает ответ, но его провал обязан быть видимым: иначе
+      // человек подписан, письма нет, и снаружи это неотличимо от задержки.
+      void sendWaitlistConfirm(row.email, row.source)
+        .then((sent) => {
+          if (!sent) capture(new Error("waitlist confirm email not sent"), { where: "waitlist.confirmEmail" });
+        })
+        .catch((mailErr) => capture(mailErr, { where: "waitlist.confirmEmail" }));
 
       res.status(201).json({ ok: true, storage });
     } catch (err) {
@@ -239,6 +239,7 @@ constitutionWaitlistAdminRouter.get(
         } catch (dbErr) {
           dbQueryFailed = true;
           capture(dbErr, {
+            where: "waitlist.list",
             route: "constitution/waitlist/list",
             note: "список заявок не прочитан из Postgres — выгрузка идёт из памяти и полной не является",
           });
@@ -388,7 +389,11 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
           url: `https://aevion.app/constitution/leaderboard`,
           votes: Number(r.up_votes),
         }));
-      } catch { /* fall through */ }
+      } catch (dbErr) {
+        // чтение артефактов не удалось — дайджест был бы пропущен как «нечего слать».
+        capture(dbErr, { where: "digest.readTopArtifacts" });
+        console.error("[waitlist] digest.readTopArtifacts:", dbErr);
+      }
     }
     if (!topArtifacts.length) return { sent: 0, skipped: 1 };
 
@@ -406,6 +411,7 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
         // Отправка по неполному списку хуже неотправки: письмо нельзя послать
         // второй раз «уже правильно», а отчёт врёт.
         capture(dbErr, {
+          where: "digest.readSubscribers",
           route: "constitution/digest",
           severity: "digest-aborted",
           note: "список подписчиков не прочитан из Postgres — рассылка отменена, чтобы не уйти по неполному списку из памяти",

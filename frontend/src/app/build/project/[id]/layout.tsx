@@ -58,18 +58,18 @@ export default async function ProjectLayout({
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.com/build" },
+      { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.app/build" },
       {
         "@type": "ListItem",
         position: 2,
         name: "Projects",
-        item: "https://aevion.com/build",
+        item: "https://aevion.app/build",
       },
       {
         "@type": "ListItem",
         position: 3,
         name: p.title,
-        item: `https://aevion.com/build/project/${encodeURIComponent(id)}`,
+        item: `https://aevion.app/build/project/${encodeURIComponent(id)}`,
       },
     ],
   };

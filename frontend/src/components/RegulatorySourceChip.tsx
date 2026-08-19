@@ -56,9 +56,31 @@ export function RegulatorySourceChip({ source, labels, subject }: Props) {
     lines.push(t("reg.tip.official", { authority: source?.authority ?? "", title: source?.title ? ", " + source.title : "" }));
     if (source?.effective) lines.push(t("reg.tip.edition", { edition: source.effective }));
     if (source?.scopeNote) lines.push(t("reg.tip.scope", { scope: source.scopeNote }));
-    if (source?.upToDate === true) lines.push(t("reg.tip.fresh"));
+    // A reissue with identical values is NOT drift — nothing needs regenerating
+    // and routing stays correct — but it is also not "the snapshot matches what
+    // the regulator publishes": the edition has moved. Both sentences would be
+    // wrong here, so this case gets its own, narrower one.
+    const reissued =
+      source?.upToDate === true &&
+      Boolean(source?.publishedEffective) &&
+      Boolean(source?.effective) &&
+      source.publishedEffective !== source.effective;
+    if (reissued) lines.push(t("reg.tip.reissued", { edition: source!.publishedEffective as string }));
+    else if (source?.upToDate === true) lines.push(t("reg.tip.fresh"));
     if (source?.upToDate === false) lines.push(t("reg.tip.drift"));
-    if (source?.upToDate == null) lines.push(t("reg.tip.unchecked"));
+    // «Ещё не выполнялась» — обещание проверки. Для документа (eAIP цикла AIRAC,
+    // растровый слой ведомства) её не бывает вовсе, и обещать её нельзя.
+    if (source?.upToDate == null) {
+      if (source?.noLiveFeed) {
+        lines.push(
+          source.lastReviewed
+            ? t("reg.tip.nofeed.reviewed", { reviewed: source.lastReviewed })
+            : t("reg.tip.nofeed"),
+        );
+      } else {
+        lines.push(t("reg.tip.unchecked"));
+      }
+    }
     if (source?.attested) lines.push(t("reg.tip.attested"));
   } else if (tier === "illustrative") {
     lines.push(t("reg.tip.illustrative"));

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type BuildApplication } from "@/lib/build/api";
-import { useBuildAuth } from "@/lib/build/auth";
+import { useBuildAuth, getAuthToken } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 
 type ContractStatus = "pending" | "signed" | "expired";
@@ -87,7 +87,7 @@ function Body() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${typeof window !== "undefined" ? localStorage.getItem("build_token") ?? "" : ""}`,
+          Authorization: `Bearer ${typeof window !== "undefined" ? getAuthToken() ?? "" : ""}`,
         },
       });
       const json = await res.json();

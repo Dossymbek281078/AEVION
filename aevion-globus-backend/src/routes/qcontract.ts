@@ -641,7 +641,9 @@ qcontractRouter.get("/stats", async (_req, res) => {
       signedViews: Number(signed.rows[0]?.n ?? 0),
     });
   } catch {
-    res.json({ totalDocuments: 0, totalViews: 0, signedViews: 0 });
+    // Zeros are indistinguishable from a genuinely empty account, so the page
+    // would state "0 documents" as fact while storage is down.
+    res.status(503).json({ error: "stats_unavailable" });
   }
 });
 

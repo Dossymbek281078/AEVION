@@ -24,6 +24,7 @@ import {
   type SliderMeta,
   type Sliders,
 } from "@/lib/constitution";
+import { PageTracking } from "@/components/PageTracking";
 
 type TourStep = {
   // era/year/title/narrative text lives in i18n-data.ts under
@@ -753,6 +754,13 @@ export default function ConstitutionPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
       <div className="max-w-6xl mx-auto">
+      {/* Общий замер платформы. Свою подробную воронку модуль ведёт сам
+          (useFunnel → /api/constitution/funnel/track), но она отдельная: в
+          сводке платформы посещения Конституции не появлялись ВООБЩЕ, хотя
+          это страница с кнопкой покупки. Два канала намеренно — этот отвечает
+          на «сколько человек пришло на AEVION и сколько ушло платить»; между
+          собой их складывать нельзя, один визит попадёт в оба. */}
+      <PageTracking page="constitution" />
         <header className="mb-6">
           <Link href="/" className="text-[#d4af37] hover:underline text-sm">
             ← AEVION
@@ -2163,6 +2171,8 @@ function ProPaywallBanner({
   limit: number;
 }) {
   const { t } = useI18n();
+  // Own funnel, like the rest of this module (useFunnel → /api/constitution/funnel/track).
+  const { track } = useFunnel();
   return (
     <div className="mb-4 bg-gradient-to-r from-fuchsia-900/40 via-purple-900/30 to-cyan-900/40 border border-fuchsia-400/40 rounded-xl p-4">
       <div className="flex justify-between items-start flex-wrap gap-3">
@@ -2191,6 +2201,9 @@ function ProPaywallBanner({
             href="https://aevion.gumroad.com/l/pyiaz"
             target="_blank"
             rel="noopener noreferrer"
+            // Constitution keeps its own funnel (useFunnel → /api/constitution/funnel/track);
+            // its /pricing page already fires upgrade_click here, this banner did not.
+            onClick={() => track("upgrade_click", { tier: "pro", source: "constitution/inline-banner" })}
             className="px-4 py-2 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-white font-bold text-sm text-center hover:opacity-90"
           >
             Upgrade →

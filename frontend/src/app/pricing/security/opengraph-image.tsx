@@ -101,7 +101,7 @@ export default async function Image() {
             <Stat value="EU/RU/KZ" label="резидентность" />
             <Stat value="24/7" label="мониторинг" />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/security</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/security</div>
         </div>
       </div>
     ),

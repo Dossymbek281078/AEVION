@@ -101,7 +101,7 @@ export default async function Image() {
             <Pair from="Stripe" to="QPayNet" delta="−42% latency" />
             <Pair from="Patently" to="IP Bureau" delta="−74%" />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/migrations</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/migrations</div>
         </div>
       </div>
     ),

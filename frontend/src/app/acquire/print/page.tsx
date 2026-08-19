@@ -68,10 +68,10 @@ export default function AcquirePrintPage() {
         <h3>Что покупатель проверит сам</h3>
         <ul>
           <li><strong>aevion.app/launch-status</strong> — daily smoke полностью зелёный</li>
-          <li><strong>aevion.app/transparency</strong> — health-board всех модулей</li>
+          <li><strong>aevion.app/status</strong> — health-board всех модулей</li>
           <li><strong>aevion.app/constitution</strong> — учредительный документ (RU/EN/KK), QSign envelope</li>
           <li><strong>aevion.app/devhub</strong> — 9 интеграций в проде, единый AEV-биллинг</li>
-          <li><strong>/api/aevion/registry · /api/aevion/stats · /api/planet/stats</strong> — JSON метрики</li>
+          <li><strong>/api/aevion/catalog · /api/aevion/stats · /api/planet/stats</strong> — JSON метрики</li>
         </ul>
 
         <div className="footer">
@@ -124,7 +124,7 @@ export default function AcquirePrintPage() {
         <table>
           <thead><tr><th>Группа</th><th>Модули</th><th style={{ width: "28%" }}>Стейтус</th></tr></thead>
           <tbody>
-            <tr><td>Финансовый</td><td>AEV, QPayNet, AEVION Bank, Payments Rail, QTrade, QTradeOffline</td><td>5/6 в проде, AEV в обращении</td></tr>
+            <tr><td>Финансовый</td><td>AEV, QPayNet, AEVION Bank, Payments Rail, QTrade, QTradeOffline</td><td>5/6 в проде, AEV — расчётная единица</td></tr>
             <tr><td>Защита и право</td><td>QSign v2, QShield, QRight, QContract, QChainGov, QMaskCard, VeilNetX, Z-Tide</td><td>7/8 в проде, QSign GA</td></tr>
             <tr><td>Dev / DevHub</td><td>DevHub (9 integrations), QCoreAI (5+ providers, 230 routes), QBuild (60+ endpoints), Bureau v2</td><td>23 vitest · 364 vitest · 30/30 ATS tests</td></tr>
             <tr><td>Consumer</td><td>CyberChess, HealthAI, Multichat, KidsAI, Smeta Trainer, MapReality, LifeBox, StartupX, PsyApp, QFusionAI, VeilNetX consumer, Q-Good, ShadowNet, QLife, QPersona, DeepSan, Voe</td><td>7+ retention-products live</td></tr>
@@ -137,7 +137,7 @@ export default function AcquirePrintPage() {
 
         <h3>Что нельзя купить за деньги (compositional moat)</h3>
         <ul>
-          <li><strong>AEV в обращении</strong> — доверие к расчётной единице накапливается транзакциями, не маркетингом.</li>
+          <li><strong>AEV как расчётная единица</strong> — доверие к ней накапливается транзакциями, не маркетингом.</li>
           <li><strong>Constitution v1 + Planet attestations</strong> — правовой режим, опубликованный через QSign envelope.</li>
           <li><strong>9 интеграций DevHub</strong> — 36+ месяцев комплаенс-работы для нового игрока.</li>
           <li><strong>30+ модулей с health-pings</strong> — 200+ человеко-лет инжиниринга в сумме.</li>

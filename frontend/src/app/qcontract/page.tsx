@@ -1,5 +1,6 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 import { useEffect, useState } from "react";
@@ -45,7 +46,7 @@ export default function QContractHome() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) { setLoading(false); return; }
     fetch(apiUrl("/api/qcontract/documents"), { headers: { Authorization: `Bearer ${t}` } })
@@ -328,7 +329,12 @@ export default function QContractHome() {
 function QContractStats({ t }: { t: TFn }) {
   const [stats, setStats] = useState<{ totalDocuments: number; totalViews: number } | null>(null);
   useEffect(() => {
-    fetch(apiUrl("/api/qcontract/stats")).then((r) => r.json()).then(setStats).catch(() => {});
+    // fetch does not reject on a non-2xx status: without the r.ok check the error
+    // body becomes `stats`, which is truthy, and the block renders "undefined".
+    fetch(apiUrl("/api/qcontract/stats"))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("stats unavailable"))))
+      .then(setStats)
+      .catch(() => {});
   }, []);
   if (!stats) return null;
   return (

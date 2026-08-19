@@ -169,7 +169,28 @@ qrightRoyaltiesRouter.get("/royalties/summary", requireAuth, async (req, res) =>
 // requireProdSecret() so prod-misconfig fails per-request, not at boot.
 const getWebhookSecret = () => requireProdSecret("QRIGHT_WEBHOOK_SECRET", "dev-qright-webhook");
 
+// Fast path only. The authoritative replay check is the persisted
+// royaltyEvents list below: this Set lives in process memory, so on its own
+// it forgets every event the moment the service restarts — and a restart is
+// exactly when a webhook sender is most likely to be retrying.
 const seenWebhookIds = new Set<string>();
+
+/**
+ * Has this royalty already been recorded? A product is paid once per period,
+ * so an existing (email, productKey, period) row is a replay regardless of
+ * which delivery attempt carried it. Reads the persisted list, so it survives
+ * the restart that empties seenWebhookIds.
+ */
+function findExistingRoyalty(
+  email: string,
+  productKey: string,
+  period: string,
+): RoyaltyEvent | undefined {
+  const owner = email.trim().toLowerCase();
+  return royaltyEvents.find(
+    (x) => x.email === owner && x.productKey === productKey && x.period === period,
+  );
+}
 
 qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
   const verdict = verifyWebhookSig({
@@ -198,12 +219,12 @@ qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
     return res.status(400).json({ error: "amount must be positive number" });
   }
 
-  // Idempotency: if we've seen this eventId already, return the previously
-  // recorded entry so the partner can safely retry.
-  if (seenWebhookIds.has(eventId)) {
-    const existing = royaltyEvents.find(
-      (x) => x.email === email.toLowerCase() && x.productKey === productKey && x.period === period,
-    );
+  // Replay check reads the persisted royalties, not just this process's
+  // memory. Retries after a deploy used to miss the in-memory Set entirely
+  // and pay the same royalty a second time.
+  const existing = findExistingRoyalty(email, productKey, period);
+  if (existing || seenWebhookIds.has(eventId)) {
+    seenWebhookIds.add(eventId);
     return res.status(200).json({
       replayed: true,
       id: existing?.id ?? null,
@@ -214,15 +235,26 @@ qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
   // Credit the recipient's QTrade account so the royalty actually lands as
   // spendable balance, not just a ledger line. Auto-provisions an account if
   // the recipient doesn't have one yet — a rights body can pay out before
-  // the creator has ever opened /qtrade. Failure here is effectively
-  // unreachable (amount/email are already validated above) but is treated
-  // as non-fatal: the RoyaltyEvent is still recorded with transferId null so
-  // /earnings reflects the payout, and it can be reconciled manually.
+  // the creator has ever opened /qtrade.
   const credit = await internalCreditAccount({
     owner: email,
     amount: a,
     memo: `Royalty · ${productKey} · ${period}`,
   });
+
+  if (!credit.ok) {
+    // Money did not move. Recording the royalty anyway and answering 201 —
+    // with the failure tucked into a `creditError` field the sender had no
+    // reason to read — told it "delivered", so it never retried and the
+    // payout was silently lost while /earnings showed it as paid. Fail
+    // loudly instead and leave nothing behind: the event stays un-seen, so
+    // a retry runs the whole thing again.
+    return res.status(502).json({
+      error: "credit_failed",
+      reason: credit.error,
+      eventId,
+    });
+  }
 
   const ev: RoyaltyEvent = {
     id: `roy_${randomUUID()}`,
@@ -231,7 +263,7 @@ qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
     period,
     amount: a,
     paidAt: new Date().toISOString(),
-    transferId: credit.ok ? credit.operationId : null,
+    transferId: credit.operationId,
     source: "qright",
   };
   royaltyEvents.push(ev);
@@ -244,7 +276,6 @@ qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
     eventId,
     paidAt: ev.paidAt,
     transferId: ev.transferId,
-    accountId: credit.ok ? credit.accountId : null,
-    creditError: credit.ok ? undefined : credit.error,
+    accountId: credit.accountId,
   });
 });

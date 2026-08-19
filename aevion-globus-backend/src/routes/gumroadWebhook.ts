@@ -28,6 +28,8 @@ import { provisionSubscription, writeSubscription, type Subscription } from "./p
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
+import { upsertAppSubscription } from "../lib/appEntitlements";
 
 // DevHub Studio Pro: upgrade DevHubTier + DevHubEmailTier on purchase
 async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
@@ -46,6 +48,11 @@ async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promis
     }
   } catch (err) {
     console.error("[gumroad/devhub] upgradeByEmail error:", err instanceof Error ? err.message : err);
+    // Ошибку НЕ глотаем. Раньше сбой записи оставался здесь, а вызывающий печатал
+    // «devhub-studio-pro → tier=pro» и отвечал 200 с action "devhub_tier_set" —
+    // оба утверждения ложные. Gumroad считал доставку успешной и не повторял её:
+    // человек заплатил, доступа не получил, следов нет.
+    throw err;
   }
 }
 
@@ -53,7 +60,6 @@ const capture = makeServiceCapture("gumroadWebhook");
 
 export const gumroadWebhookRouter = Router();
 
-const SEEN = new Set<string>();
 
 // Tier products are sold via the same GUMROAD_PERMALINK_TIER_* permalinks the
 // checkout layer builds the buy-URL from. Gumroad pings that permalink back, so
@@ -103,6 +109,12 @@ const KNOWN_PERMALINK_REFERENCE: Record<string, string> = {
   xpxzam: "tier_full_monthly", // AEVION All-Access $59/mo
   // Constitution entry tier — same as the legacy default, made explicit.
   pyiaz: "constitution-pro", // Constitution Pro $9/mo
+  // Team задан ЯВНО с 13.08.2026. Раньше он проваливался в общую ветку, и это
+  // было осознанным решением — пока общая ветка вела в тариф. Теперь она ведёт
+  // в модуль, и молчаливое падение сюда делало бы Team за $49 равным Pro за $9.
+  // Что именно Team добавляет (места? модули?) — вопрос к продукту, но
+  // «неявно то же самое» ответом быть не может.
+  wjvquw: "constitution-team", // Constitution Team $49/mo
 };
 
 /** Last path segment of a Gumroad permalink or full product URL, lowercased.
@@ -151,8 +163,12 @@ function resolveReference(raw: Record<string, string>): string {
     return KNOWN_PERMALINK_REFERENCE[pingSlug];
   }
 
-  // 5. Legacy catch-all — keep Constitution Pro working without explicit mapping.
-  return "constitution-pro";
+  // 5. Неизвестный товар. Раньше здесь стоял catch-all "constitution-pro" — он
+  //    существовал, чтобы Pro работал без явной строки в карте. Pro теперь задан
+  //    явно, а молчаливая выдача чего-либо незнакомому товару — ровно тот
+  //    шаблон, что запрещён в вебхуке Lemon Squeezy: «мы не знаем, что человек
+  //    купил» обязано быть видно, а не превращаться в подарок.
+  return "unknown";
 }
 
 function tierForReference(ref: string): TierId {
@@ -166,6 +182,17 @@ function tierForReference(ref: string): TierId {
 
 function isConstitutionProduct(ref: string): boolean {
   return ref.includes("constitution");
+}
+
+/**
+ * Ссылка товара → slug модуля, если товар продаёт ровно один модуль.
+ * Пока это только Конституция; список явный, чтобы новый товар не попал сюда
+ * случайно по совпадению подстроки.
+ */
+function moduleSlugForReference(ref: string): string | null {
+  const r = ref.toLowerCase();
+  if (r === "constitution-pro" || r === "constitution-team") return "constitution";
+  return null;
 }
 
 // Liveness probe — Gumroad sends only POST, but a GET in the browser used to
@@ -229,8 +256,26 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
   // Dedup on sale_id + status
   const dedupKey = `${saleId}:${result.status}`;
-  if (SEEN.has(dedupKey)) return res.json({ ok: true, deduped: true });
-  SEEN.add(dedupKey);
+  if (hasSeenWebhook("gumroad", dedupKey)) return res.json({ ok: true, deduped: true });
+  markWebhookSeen("gumroad", dedupKey);
+
+  // Канал покупки. withChannel() добавляет его в ссылку Gumroad вместе с
+  // UTM-тройкой, а Gumroad возвращает параметры адреса плоскими ключами
+  // `url_params[...]` — тело приходит form-urlencoded и разбирается через
+  // Object.fromEntries(params.entries()).
+  //
+  // До 19.08.2026 вебхук их не читал: метка доезжала до кассы и терялась ровно
+  // так же, как у LemonSqueezy. Клик по «Купить» мы видели в своих событиях,
+  // а связать ОПЛАТУ с роликом было нечем.
+  //
+  // Запасным берём utm_source: withChannel кладёт туда то же значение, и если
+  // Gumroad когда-нибудь перестанет возвращать наш собственный ключ, метка
+  // всё равно доедет.
+  const purchaseChannel = (
+    raw["url_params[channel]"] ??
+    raw["url_params[utm_source]"] ??
+    ""
+  ).trim().slice(0, 40);
 
   const reference = resolveReference(raw);
 
@@ -257,7 +302,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     const verdict = await verifyGumroadSale(saleId);
     if (verdict === "not_found") {
       console.warn(`[gumroad/webhook] sale ${saleId} not found in Gumroad API — rejecting 401`);
-      SEEN.delete(dedupKey); // не занимать ключ отклонённым пингом
+      releaseWebhookKey("gumroad", dedupKey); // не занимать ключ отклонённым пингом
       return res.status(401).json({ ok: false, error: "sale_not_found" });
     }
     if (verdict === "unverifiable") {
@@ -271,7 +316,15 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   if (reference === "devhub-studio-pro") {
     const devhubTier = (refunded || failed) ? "free" : result.status === "paid" ? "pro" : null;
     if (devhubTier) {
-      await upgradeDevHubByEmail(email, devhubTier);
+      try {
+        await upgradeDevHubByEmail(email, devhubTier);
+      } catch (err) {
+        capture(err);
+        console.error(`[gumroad/webhook] devhub tier NOT set for ${email}:`, err instanceof Error ? err.message : err);
+        // 500, чтобы доставка повторилась и событие осталось видимым у Gumroad.
+        // Сообщить «успех» здесь — значит закрыть вопрос, не решив его.
+        return res.status(500).json({ ok: false, error: "devhub_tier_failed" });
+      }
       console.log(`[gumroad/webhook] devhub-studio-pro → tier=${devhubTier} for ${email}`);
       return res.json({ ok: true, action: "devhub_tier_set", tier: devhubTier, email });
     }
@@ -324,6 +377,34 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   }
 
   try {
+    // Неизвестный товар: деньги пришли, а что за них выдать — неизвестно.
+    // Молчать нельзя (получится подарок наугад), и выдавать наугад тоже.
+    // 500 — доставка повторится, событие останется видимым в панели Gumroad.
+    if (reference === "unknown") {
+      const err = new Error(`неизвестный товар Gumroad: permalink=${raw.product_permalink ?? raw.permalink ?? "?"} product=${productId} email=${email}`);
+      capture(err);
+      console.error(`[gumroad/webhook] ${err.message}`);
+      return res.status(500).json({ ok: false, error: "unmapped_product", permalink: String(raw.product_permalink ?? raw.permalink ?? "") });
+    }
+
+    // Товар, который продаёт ОДИН модуль, и должен давать этот модуль. Раньше
+    // Constitution Pro за $9 превращался в тариф lite ($19) со свободным
+    // выбором ЛЮБОГО модуля — включая те, что стоят $29–49. Человек платил за
+    // одну вещь и получал право на другую, более дорогую, а по логам это
+    // выглядело как обычная успешная выдача.
+    const moduleSlug = moduleSlugForReference(reference);
+    if (moduleSlug) {
+      const active = result.status === "paid";
+      await upsertAppSubscription(email, moduleSlug, active ? "active" : "cancelled", saleId);
+      console.log(`[gumroad/webhook] ${result.status} → app_sub ${active ? "active" : "cancelled"}: ${moduleSlug} for ${email}`);
+      return res.json({
+        ok: true,
+        action: active ? "app_activated" : "app_cancelled",
+        appSlug: moduleSlug,
+        email,
+      });
+    }
+
     if (refunded || failed) {
       // Downgrade to free
       const downgrade: Subscription = {
@@ -352,6 +433,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         period,
         modules: [],
         source: "gumroad",
+        ...(purchaseChannel ? { channel: purchaseChannel } : {}),
       });
 
       console.log(`[gumroad/webhook] paid → provisioned ${tierId} for ${email} (ref=${reference} product=${productId})`);
@@ -368,7 +450,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
     return res.json({ ok: true, ignored: result.status });
   } catch (err) {
-    SEEN.delete(dedupKey);
+    releaseWebhookKey("gumroad", dedupKey);
     capture(err);
     console.error("[gumroad/webhook] handler error:", err instanceof Error ? err.message : err);
     return res.status(500).json({ ok: false, error: "handler_failed" });

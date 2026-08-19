@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BuyLink } from "@/components/BuyLink";
 import {
   SUBSCRIPTIONS,
   GUIDES,
@@ -8,6 +9,7 @@ import {
   withChannel,
   type Product,
 } from "@/lib/products";
+import { PageTracking } from "@/components/PageTracking";
 
 // AEVION Shop — единая витрина всех покупаемых товаров.
 //
@@ -38,7 +40,14 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
   // до нажатия кнопки, а не в письме от LemonSqueezy.
   const isSub = p.billing === "monthly";
   return (
-    <a href={withChannel(p.href, channel)} target="_blank" rel="noopener noreferrer" style={styles.card}>
+    <BuyLink
+      href={withChannel(p.href, channel, "shop")}
+      source="shop"
+      productId={p.id}
+      priceUsd={p.priceUsd}
+      channel={channel}
+      style={styles.card}
+    >
       <div style={styles.cardTop}>
         {p.badge ? <span style={styles.badge}>{p.badge}</span> : null}
         <span style={styles.format}>{p.format}</span>
@@ -70,7 +79,7 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
         </span>
         <span style={styles.buy}>{isSub ? "Подписаться" : "Купить"}&nbsp;→</span>
       </div>
-    </a>
+    </BuyLink>
   );
 }
 
@@ -111,6 +120,7 @@ export default async function ShopPage({
   const channel = channelFrom((await searchParams).c);
   return (
     <main style={styles.page}>
+      <PageTracking page="shop" />
       <div style={styles.wrap}>
         <div style={styles.eyebrow}>AEVION · Магазин</div>
         <h1 style={styles.h1}>Всё, что можно купить в AEVION</h1>

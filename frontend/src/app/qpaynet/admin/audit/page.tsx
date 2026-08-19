@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { reportError } from "@/lib/reporter";
+import { getAuthToken } from "@/lib/auth";
 
 interface AuditEvent {
   id: string;
@@ -61,7 +62,7 @@ export default function AdminAuditPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
+    const t = getAuthToken() ?? "";
     setToken(t);
     if (!t) {
       setLoading(false);

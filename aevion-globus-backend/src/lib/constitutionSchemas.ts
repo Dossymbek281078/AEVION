@@ -16,23 +16,63 @@ import type { Request, Response, NextFunction } from "express";
 
 /* ───── Human-readable RU messages ─────────────────────────────── */
 
+/**
+ * Сообщение Zod → человеческий русский текст.
+ *
+ * ⚠️ 19.08.2026: прежняя версия была написана под формулировки Zod v3, при том
+ * что в зависимостях стоит v4 (комментарий утверждал обратное). Разошлись они
+ * молча — тип возврата остался строкой, ничего не падало, — и наружу поехал
+ * сырой английский в поле, которое НАЗЫВАЕТСЯ message_ru:
+ *
+ *   POST /api/constitution/waitlist/subscribe  {}
+ *   → {"field":"email","message_ru":"Invalid input: expected string, received undefined"}
+ *
+ * Проверено на живом проде. Ловушек было две: v4 сменил формулировку
+ * («Required» → «Invalid input: expected …»), а проверка искала слово
+ * «Expected» с большой буквы, тогда как в v4 оно строчное. Поэтому теперь
+ * сравнение регистронезависимое, и разбор идёт по КОДУ ошибки, а не по её
+ * тексту: код — часть контракта библиотеки, текст меняется от версии к версии.
+ *
+ * Это форма подписки на /go — единственной ссылке из соцсетей. Английская
+ * ошибка в русской форме отпугивает ровно того человека, ради которого
+ * снимается ролик.
+ */
 function zodErrorToRu(iss: z.ZodIssue): string {
-  const msg = iss.message ?? "";
-  // Map common Zod v4 messages to Russian
-  if (msg.includes("Invalid email")) return "неверный формат email";
-  if (msg.includes("String must contain at least"))
-    return msg.replace("String must contain at least", "минимум").replace("character(s)", "символов");
-  if (msg.includes("String must contain at most"))
-    return msg.replace("String must contain at most", "максимум").replace("character(s)", "символов");
-  if (msg.includes("Number must be greater than or equal to"))
-    return msg.replace("Number must be greater than or equal to", "минимум");
-  if (msg.includes("Number must be less than or equal to"))
-    return msg.replace("Number must be less than or equal to", "максимум");
-  if (msg.includes("Required")) return "обязательное поле";
-  if (msg.includes("Expected") && msg.includes("received")) {
+  const code = iss.code;
+  const msg = (iss.message ?? "").toLowerCase();
+
+  // Разбор по коду — устойчив к смене формулировок в новых версиях Zod.
+  if (code === "invalid_type") {
+    const received = (iss as { received?: unknown }).received;
+    if (received === "undefined" || received === undefined) return "обязательное поле";
     return "неверный тип данных";
   }
-  return msg || "неверное значение";
+  if (code === "too_small") {
+    const min = (iss as { minimum?: number | bigint }).minimum;
+    return min === undefined ? "значение слишком маленькое" : `минимум ${String(min)}`;
+  }
+  if (code === "too_big") {
+    const max = (iss as { maximum?: number | bigint }).maximum;
+    return max === undefined ? "значение слишком большое" : `максимум ${String(max)}`;
+  }
+  if (code === "invalid_format") {
+    const fmt = (iss as { format?: string }).format;
+    if (fmt === "email") return "неверный формат email";
+    if (fmt === "url") return "неверная ссылка";
+    return "неверный формат";
+  }
+  if (code === "invalid_value") return "недопустимое значение";
+  if (code === "unrecognized_keys") return "лишнее поле";
+
+  // Запасной разбор по тексту — на случай кодов, которых мы ещё не знаем.
+  // Регистронезависимо: в v4 слова пишутся со строчной.
+  if (msg.includes("invalid email")) return "неверный формат email";
+  if (msg.includes("required")) return "обязательное поле";
+  if (msg.includes("expected") && msg.includes("received")) return "неверный тип данных";
+
+  // Последний рубеж: наружу не должен уйти английский текст библиотеки.
+  // Лучше общее русское сообщение, чем developer-facing строка в форме.
+  return "неверное значение";
 }
 
 export function validate<T extends z.ZodTypeAny>(schema: T) {

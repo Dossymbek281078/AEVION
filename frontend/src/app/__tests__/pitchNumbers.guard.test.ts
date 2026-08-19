@@ -190,3 +190,232 @@ describe("pitchFacts — canonical counts stay in sync with the registry", () =>
     expect(Object.keys(byStatus).length).toBeGreaterThan(0);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Price drift — the expensive half of the same problem                        */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The 2026-07-22 repricing (lite 19→24, medium 29→39, full 49→89, Universe
+ * 149.99→249.99) landed in the backend tier registry and nowhere else. For
+ * three weeks the marketing copy, the tier OG cards and the whole investor
+ * model still quoted the old ladder — a visitor read "$19/mo" and the checkout
+ * charged $24. Nothing crashed, no test went red: exactly the silent kind of
+ * wrong that only a human re-reading the page ever catches.
+ *
+ * So: parse the prices straight out of the backend registry and assert the
+ * derived surfaces match. Any future price change fails here until every
+ * surface is updated — the drift becomes a red build, not a support ticket.
+ *
+ * SCOPE, and its counterpart. The checks below pin NAMED surfaces to the
+ * registry — they answer "is this specific figure still right?". They cannot
+ * answer "did a retired price reappear somewhere nobody is watching?": the $59
+ * All-Access banner and the $149 devhub link were both found by hand on
+ * 2026-08-10, not by this guard. That question belongs to
+ * retiredPrices.guard.test.ts, which sweeps the whole frontend for the four
+ * retired tier prices and names every legitimate exception — the same bet
+ * scaleClaims.guard.test.ts makes for module counts. Keep the two apart:
+ * positive pinning here, whole-sweep there, and no third mechanism.
+ */
+
+const BACKEND_PRICING = path.resolve(
+  FRONTEND_ROOT,
+  "../aevion-globus-backend/src/data/pricing.ts",
+);
+
+/** tierId → priceMonthly as written in TIERS (null for enterprise). */
+function registryTierPrices(): Record<string, number | null> {
+  const src = readFileSync(BACKEND_PRICING, "utf8");
+  // Slice to the TIERS array — MODULES_PRICING below it also has `id:` keys.
+  const start = src.indexOf("export const TIERS");
+  const end = src.indexOf("export const MODULES_PRICING");
+  expect(
+    start >= 0 && end > start,
+    `Could not locate the TIERS array in ${BACKEND_PRICING}. If the registry was ` +
+      "restructured, update this guard — do not delete it.",
+  ).toBe(true);
+
+  const tiers: Record<string, number | null> = {};
+  const re = /id:\s*"([a-z]+)",[\s\S]*?priceMonthly:\s*([\d.]+|null)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src.slice(start, end))) !== null) {
+    tiers[m[1]] = m[2] === "null" ? null : Number(m[2]);
+  }
+  return tiers;
+}
+
+/** Prices a public price card is allowed to show, ascending. */
+function registryCardPrices(): number[] {
+  const tiers = registryTierPrices();
+  return Object.values(tiers)
+    .filter((p): p is number => p !== null)
+    .sort((a, b) => a - b);
+}
+
+/**
+ * These pull in pitchModel/pitchFacts through a dynamic import. Under a full
+ * parallel run on a loaded machine that import alone can exceed vitest's 5s
+ * default, which is sized for pure unit tests — the guard then goes red because
+ * the disk was busy, not because a price drifted. A guard that is red for no
+ * reason is one people learn to skim past.
+ */
+const IMPORT_TIMEOUT_MS = 30_000;
+
+describe("prices — derived surfaces stay in sync with the backend tier registry", () => {
+  it("the registry parses and still holds the six known tiers", () => {
+    const tiers = registryTierPrices();
+    expect(Object.keys(tiers).sort()).toEqual(
+      ["enterprise", "free", "full", "lite", "medium", "pro"],
+    );
+    expect(tiers.enterprise).toBeNull();
+  }, IMPORT_TIMEOUT_MS);
+
+  it("pitchFacts quotes the live ladder (entry / top-live-checkout / Universe)", async () => {
+    const tiers = registryTierPrices();
+    const facts = await import("@/data/pitchFacts");
+
+    expect(
+      facts.ENTRY_PAID_TIER_MONTHLY,
+      "ENTRY_PAID_TIER_MONTHLY must equal the Lite price in data/pricing.ts",
+    ).toBe(`$${tiers.lite}`);
+
+    // Universe (`pro`) has no Lemon Squeezy variant, so Full is the highest
+    // tier a visitor can actually subscribe to — see data/lemonSqueezyVariants.ts.
+    expect(
+      facts.LIVE_TOP_TIER_MONTHLY,
+      "LIVE_TOP_TIER_MONTHLY must equal the Full price in data/pricing.ts",
+    ).toBe(`$${tiers.full}`);
+
+    expect(
+      facts.UNIVERSE_SEAT_MONTHLY,
+      "UNIVERSE_SEAT_MONTHLY must equal the `pro` (Universe) price in data/pricing.ts",
+    ).toBe(`$${tiers.pro}`);
+  }, IMPORT_TIMEOUT_MS);
+
+  it("the Universe annual figure follows the registry's ×10 annual formula", async () => {
+    const tiers = registryTierPrices();
+    const { UNIVERSE_SEAT_ANNUAL_TOTAL } = await import("@/data/pitchFacts");
+    const expected = `~$${Math.round((tiers.pro as number) * 10).toLocaleString("en-US")}/yr`;
+    expect(
+      UNIVERSE_SEAT_ANNUAL_TOTAL,
+      "Annual = pay for 10 months, get 12 (annualTotal() in data/pricing.ts). " +
+        "This figure is the seat ARPU the growth model runs on — if it drifts, every " +
+        "ARR row in pitchModel.ts is wrong.",
+    ).toBe(expected);
+  }, IMPORT_TIMEOUT_MS);
+
+  it("the growth model prices the Universe seat at the registry price", async () => {
+    const tiers = registryTierPrices();
+    const { launchGrowth } = await import("@/data/pitchModel");
+
+    expect(launchGrowth.seat.headline).toBe(`$${tiers.pro} / mo`);
+    expect(
+      launchGrowth.seat.honesty,
+      "The on-ramp ladder quoted next to the seat price must be the live one.",
+    ).toContain(`($0/$${tiers.lite}/$${tiers.medium}/$${tiers.full})`);
+  }, IMPORT_TIMEOUT_MS);
+
+  it("the bottom-up model prices All-Access at the live Full tier", async () => {
+    const tiers = registryTierPrices();
+    const { unitEconomics } = await import("@/data/pitchModel");
+    const allAccess = unitEconomics.flagships.find((f) => f.module === "Ecosystem All-Access");
+    expect(allAccess, "The 'Ecosystem All-Access' flagship disappeared from unitEconomics").toBeTruthy();
+    expect(
+      allAccess!.price.startsWith(`$${tiers.full}/mo`),
+      `All-Access is the Full tier — its modelled price must open with $${tiers.full}/mo, got: ${allAccess!.price}`,
+    ).toBe(true);
+  }, IMPORT_TIMEOUT_MS);
+
+  // OG cards are the classic laggard: nobody re-opens an image when a price
+  // changes. Compare the full set of prices on the card to the registry rather
+  // than banning old literals — that way an added tier fails too, and prose in
+  // comments can still mention a retired price.
+  const PRICE_CARDS: Array<{ rel: string; re: RegExp }> = [
+    { rel: "src/app/pricing/[tierId]/opengraph-image.tsx", re: /price:\s*"\$([\d.]+)"/g },
+    { rel: "src/app/pricing/compare/opengraph-image.tsx", re: /price="\$([\d.]+)"/g },
+  ];
+
+  for (const { rel, re } of PRICE_CARDS) {
+    it(`${rel} shows exactly the registry ladder`, () => {
+      const src = readFileSync(path.join(FRONTEND_ROOT, rel), "utf8");
+      const shown = [...src.matchAll(re)].map((m) => Number(m[1])).sort((a, b) => a - b);
+      expect(
+        shown,
+        `${rel} is a share card — its prices must be the live ladder from ` +
+          "aevion-globus-backend/src/data/pricing.ts (Enterprise shows a word, not a number).",
+      ).toEqual(registryCardPrices());
+    }, IMPORT_TIMEOUT_MS);
+  }
+});
+
+/**
+ * The same drift, one level down: per-product prices quoted on marketing and
+ * investor surfaces while the charging code lives elsewhere in the backend.
+ * Each case below was a real wrong number found on 2026-08-10, so each is
+ * pinned to the file that actually decides what a customer pays.
+ */
+
+const BACKEND_SRC = path.resolve(FRONTEND_ROOT, "../aevion-globus-backend/src");
+
+/** Read a backend file, failing with a useful message if the layout moved. */
+function readBackend(rel: string): string {
+  const abs = path.join(BACKEND_SRC, rel);
+  try {
+    return readFileSync(abs, "utf8");
+  } catch {
+    throw new Error(
+      `Could not read ${abs}. If the backend was restructured, repoint this guard — ` +
+        "do not delete it; it exists because these numbers drifted silently once.",
+    );
+  }
+}
+
+describe("product prices — marketing copy stays pinned to the charging code", () => {
+  it("the All-Access upgrade banner carries no hardcoded price", () => {
+    const src = readFileSync(path.join(FRONTEND_ROOT, "src/components/UpgradeButton.tsx"), "utf8");
+    // This banner renders on 9 module pages next to a live checkout. It sat at
+    // "$59/мес" — a number no tier ever charged. The price must be imported.
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    expect(
+      /\$\s?\d/.test(code),
+      "UpgradeButton.tsx must not type a price literal — read it from @/lib/products.",
+    ).toBe(false);
+    // It sells the Gumroad product `xpxzam`, not a tier, so the figure must come
+    // from the product catalogue (verified against the live Gumroad dashboard on
+    // 2026-07-26) — not from the tier registry.
+    expect(src).toContain('productById("xpxzam")');
+  }, IMPORT_TIMEOUT_MS);
+
+  it("/investor quotes the live Bureau Verified price", () => {
+    const payment = readBackend("lib/payment/index.ts");
+    // getVerifiedTierPriceCents(): the env override is a deployment concern;
+    // the default in code is what the published page should quote.
+    const m = payment.match(/BUREAU_VERIFIED_PRICE_CENTS[\s\S]{0,200}?return\s+(\d+);/);
+    expect(m, "Could not read the Verified-tier default price from lib/payment/index.ts").toBeTruthy();
+    const usd = Number(m![1]) / 100;
+
+    const investor = readFileSync(path.join(FRONTEND_ROOT, "src/app/investor/page.tsx"), "utf8");
+    expect(
+      investor,
+      `Bureau Verified is charged at $${usd}/cert — /investor must not quote a different figure.`,
+    ).toContain(`{ tier: "Verified", price: "$${usd}"`);
+  }, IMPORT_TIMEOUT_MS);
+
+  it("/investor quotes the real QBuild hire-fee range", () => {
+    const build = readBackend("lib/build/index.ts");
+    // hireFeeBps/10000 of the accepted salary, tier-adjusted at hire time.
+    const bps = [...build.matchAll(/hireFeeBps:\s*(\d+),/g)]
+      .map((x) => Number(x[1]))
+      .filter((n) => n > 0);
+    expect(bps.length, "No hireFeeBps values found in lib/build/index.ts").toBeGreaterThan(1);
+    const base = Math.max(...bps) / 100;
+    const best = Math.min(...bps) / 100;
+
+    const investor = readFileSync(path.join(FRONTEND_ROOT, "src/app/investor/page.tsx"), "utf8");
+    expect(
+      investor,
+      `The hire fee runs ${base}% (default recruiter tier) down to ${best}% (Platinum). ` +
+        "It once read \"1.5%\" here — 8× below what the platform actually takes.",
+    ).toContain(`price: "${base}% → ${best}%"`);
+  }, IMPORT_TIMEOUT_MS);
+});

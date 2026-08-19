@@ -1,0 +1,472 @@
+[
+ {
+  "base": "/api/admin/constitution",
+  "url": "/api/admin/constitution/metrics",
+  "expect": 403
+ },
+ {
+  "base": "/api/admin/constitution/funnel",
+  "url": "/api/admin/constitution/funnel",
+  "expect": 403
+ },
+ {
+  "base": "/api/admin/constitution/waitlist",
+  "url": "/api/admin/constitution/waitlist/list",
+  "expect": 403
+ },
+ {
+  "base": "/api/aev",
+  "url": "/api/aev/stats",
+  "expect": 200
+ },
+ {
+  "base": "/api/aevion",
+  "url": "/api/aevion/openapi.json",
+  "expect": 200
+ },
+ {
+  "base": "/api/agent-runtime",
+  "url": "/api/agent-runtime/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/apps/access",
+  "url": "/api/apps/access",
+  "expect": 400
+ },
+ {
+  "base": "/api/auth",
+  "url": "/api/auth/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/auth/oauth",
+  "url": "/api/auth/oauth/providers",
+  "expect": 200
+ },
+ {
+  "base": "/api/awards",
+  "url": "/api/awards/seasons",
+  "expect": 200
+ },
+ {
+  "base": "/api/build/jobs",
+  "url": "/api/build/jobs/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/build/social",
+  "url": "/api/build/social/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/bureau",
+  "url": "/api/bureau/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/coach",
+  "url": "/api/coach/sessions",
+  "expect": 401
+ },
+ {
+  "base": "/api/constitution",
+  "url": "/api/constitution/me/plan",
+  "expect": 200
+ },
+ {
+  "base": "/api/constitution/public",
+  "url": "/api/constitution/public/regimes",
+  "expect": 200
+ },
+ {
+  "base": "/api/constitution/status",
+  "url": "/api/constitution/status",
+  "expect": 200
+ },
+ {
+  "base": "/api/cyberchess",
+  "url": "/api/cyberchess/results",
+  "expect": 401
+ },
+ {
+  "base": "/api/cyberchess-anticheat",
+  "url": "/api/cyberchess-anticheat/flagged",
+  "expect": 403
+ },
+ {
+  "base": "/api/cyberchess-daily",
+  "url": "/api/cyberchess-daily/puzzle",
+  "expect": 200
+ },
+ {
+  "base": "/api/cyberchess-opening",
+  "url": "/api/cyberchess-opening",
+  "expect": 200
+ },
+ {
+  "base": "/api/cyberchess-puzzles",
+  "url": "/api/cyberchess-puzzles",
+  "expect": 200
+ },
+ {
+  "base": "/api/cyberchess-spectator",
+  "url": "/api/cyberchess-spectator/list",
+  "expect": 200
+ },
+ {
+  "base": "/api/cyberchess-tournaments",
+  "url": "/api/cyberchess-tournaments/_persistence",
+  "expect": 200
+ },
+ {
+  "base": "/api/cyberchess-voice-coach",
+  "url": "/api/cyberchess-voice-coach/voices",
+  "expect": 200
+ },
+ {
+  "base": "/api/cyberchess/matchmaking",
+  "url": "/api/cyberchess/matchmaking/queue/status",
+  "expect": 400
+ },
+ {
+  "base": "/api/data-quality",
+  "url": "/api/data-quality",
+  "expect": 200
+ },
+ {
+  "base": "/api/deepsan",
+  "url": "/api/deepsan/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/devhub",
+  "url": "/api/devhub/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/ecosystem",
+  "url": "/api/ecosystem/earnings",
+  "expect": 401
+ },
+ {
+  "base": "/api/gumroad",
+  "url": "/api/gumroad/webhook",
+  "expect": 200
+ },
+ {
+  "base": "/api/healthai",
+  "url": "/api/healthai/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/i18n",
+  "url": "/api/i18n/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/keys",
+  "url": "/api/keys",
+  "expect": 401
+ },
+ {
+  "base": "/api/kids-ai",
+  "url": "/api/kids-ai/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/lifebox",
+  "url": "/api/lifebox/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/longevity",
+  "url": "/api/longevity/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/mapreality",
+  "url": "/api/mapreality/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/metrics",
+  "url": "/api/metrics",
+  "expect": 200
+ },
+ {
+  "base": "/api/modules",
+  "url": "/api/modules/trending",
+  "expect": 200
+ },
+ {
+  "base": "/api/multichat",
+  "url": "/api/multichat/health",
+  "expect": 401
+ },
+ {
+  "base": "/api/paybox",
+  "url": "/api/paybox/webhook",
+  "expect": 200
+ },
+ {
+  "base": "/api/payments",
+  "url": "/api/payments/gumroad/config",
+  "expect": 200
+ },
+ {
+  "base": "/api/paypal",
+  "url": "/api/paypal/webhook",
+  "expect": 200
+ },
+ {
+  "base": "/api/pipeline",
+  "url": "/api/pipeline/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/planet",
+  "url": "/api/planet/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/planet/constitution-artifacts",
+  "url": "/api/planet/constitution-artifacts/stats",
+  "expect": 200
+ },
+ {
+  "base": "/api/pricing",
+  "url": "/api/pricing/tiers",
+  "expect": 200
+ },
+ {
+  "base": "/api/pricing/checkout",
+  "url": "/api/pricing/checkout/subscriptions/count",
+  "expect": 200
+ },
+ {
+  "base": "/api/pricing/events",
+  "url": "/api/pricing/events/summary",
+  "expect": 401
+ },
+ {
+  "base": "/api/pricing/provisioning",
+  "url": "/api/pricing/provisioning/healthz",
+  "expect": 200
+ },
+ {
+  "base": "/api/psyapp-deps",
+  "url": "/api/psyapp-deps/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/puzzles",
+  "url": "/api/puzzles/themes",
+  "expect": 200
+ },
+ {
+  "base": "/api/qai",
+  "url": "/api/qai/sessions",
+  "expect": 402
+ },
+ {
+  "base": "/api/qchaingov",
+  "url": "/api/qchaingov/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qcontract",
+  "url": "/api/qcontract/templates",
+  "expect": 200
+ },
+ {
+  "base": "/api/qcoreai",
+  "url": "/api/qcoreai/me/webhook",
+  "expect": 401
+ },
+ {
+  "base": "/api/qevents",
+  "url": "/api/qevents/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qfusionai",
+  "url": "/api/qfusionai/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qgood",
+  "url": "/api/qgood/campaigns",
+  "expect": 200
+ },
+ {
+  "base": "/api/qjobs",
+  "url": "/api/qjobs/types",
+  "expect": 200
+ },
+ {
+  "base": "/api/qlearn",
+  "url": "/api/qlearn/categories",
+  "expect": 402
+ },
+ {
+  "base": "/api/qlife",
+  "url": "/api/qlife/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qmaskcard",
+  "url": "/api/qmaskcard/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qmedia",
+  "url": "/api/qmedia/me/tracks",
+  "expect": 401
+ },
+ {
+  "base": "/api/qmelanin",
+  "url": "/api/qmelanin/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qnews",
+  "url": "/api/qnews/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qpaynet",
+  "url": "/api/qpaynet/wallets",
+  "expect": 401
+ },
+ {
+  "base": "/api/qpersona",
+  "url": "/api/qpersona/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qreal",
+  "url": "/api/qreal/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qrenew",
+  "url": "/api/qrenew/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qright",
+  "url": "/api/qright/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qsign",
+  "url": "/api/qsign/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qsign/v2",
+  "url": "/api/qsign/v2/recent",
+  "expect": 200
+ },
+ {
+  "base": "/api/qskyway",
+  "url": "/api/qskyway/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qsocial",
+  "url": "/api/qsocial/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qstore",
+  "url": "/api/qstore/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/qtrade",
+  "url": "/api/qtrade/accounts",
+  "expect": 401
+ },
+ {
+  "base": "/api/qtradeoffline",
+  "url": "/api/qtradeoffline/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/quantum-shield",
+  "url": "/api/quantum-shield/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/quotas",
+  "url": "/api/quotas",
+  "expect": 200
+ },
+ {
+  "base": "/api/qventure",
+  "url": "/api/qventure/sectors",
+  "expect": 200
+ },
+ {
+  "base": "/api/revenue",
+  "url": "/api/revenue/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/search",
+  "url": "/api/search",
+  "expect": 400
+ },
+ {
+  "base": "/api/shadownet",
+  "url": "/api/shadownet/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/smeta-trainer",
+  "url": "/api/smeta-trainer/leaderboard",
+  "expect": 200
+ },
+ {
+  "base": "/api/startupx",
+  "url": "/api/startupx/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/status",
+  "url": "/api/status/subscribers/count",
+  "expect": 200
+ },
+ {
+  "base": "/api/tiktok",
+  "url": "/api/tiktok/config",
+  "expect": 200
+ },
+ {
+  "base": "/api/veilnetx",
+  "url": "/api/veilnetx/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/veilnetx-ledger",
+  "url": "/api/veilnetx-ledger/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/ventures",
+  "url": "/api/ventures/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/voice-of-earth",
+  "url": "/api/voice-of-earth/tracks",
+  "expect": 200
+ },
+ {
+  "base": "/api/ztide",
+  "url": "/api/ztide/health",
+  "expect": 200
+ }
+]

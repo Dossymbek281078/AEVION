@@ -52,6 +52,32 @@ if (!TOKEN) {
 
 type Row = { email: string; source: string };
 
+/**
+ * Достаёт список подписчиков из ответа выгрузки.
+ *
+ * Поле называется `items` — и это ровно то место, где я уже ошибся: скрипт читал
+ * `rows`, ручка отдавала `items`, и сухой прогон печатал «получателей нет» при
+ * живых подписчиках, да ещё убедительно объяснял это двумя причинами. Молчаливый
+ * ноль хуже ошибки.
+ *
+ * Поэтому: перечисляем известные имена, а при неизвестном формате возвращаем null
+ * — вызывающий обязан сказать «формат не распознан», а не «никого нет».
+ * Пустой массив от отсутствия поля отличается намеренно.
+ */
+export function extractRows(body: Record<string, unknown>): Row[] | null {
+  for (const key of ["items", "rows", "subscribers"]) {
+    const v = body[key];
+    if (Array.isArray(v)) {
+      return v
+        .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+        .map((x) => ({ email: String(x.email ?? ""), source: String(x.source ?? "") }))
+        .filter((r) => r.email);
+    }
+  }
+  return null;
+}
+
+
 async function readSubscribers(): Promise<{ rows: Row[]; source: string; truncated: boolean }> {
   const url = `${BASE}/api/constitution/waitlist/list`;
   let res: Response;
@@ -67,18 +93,23 @@ async function readSubscribers(): Promise<{ rows: Row[]; source: string; truncat
       2,
     );
   }
-  const body = (await res.json()) as {
-    rows?: Row[];
-    subscribers?: Row[];
-    source?: string;
-    truncated?: boolean;
-    dbQueryFailed?: boolean;
-  };
-  const rows = body.rows ?? body.subscribers ?? [];
+  const body = (await res.json()) as Record<string, unknown>;
+  const parsed = extractRows(body);
+  if (!parsed) {
+    fail(
+      [
+        "Ответ получен, но список подписчиков в нём не найден.",
+        `Известные поля: ${Object.keys(body).join(", ") || "(пусто)"}`,
+        "Это НЕ «никто не подписан» — формат ответа изменился, и печатать ноль",
+        "получателей здесь было бы ложью.",
+      ].join("\n"),
+      2,
+    );
+  }
   // Выгрузка сама говорит, откуда список и не обрезан ли он — используем это,
   // иначе план мог бы строиться по неполным данным и выглядеть полным.
   return {
-    rows,
+    rows: parsed,
     source: String(body.source ?? "unknown"),
     truncated: Boolean(body.truncated),
   };
@@ -109,8 +140,9 @@ async function main(): Promise<void> {
     console.log("");
     console.log(`Получателей нет. Возможных причин две, и они разные:`);
     console.log(`  • на посадочной ${m.name} действительно никто не оставил адрес;`);
-    console.log(`  • метка источника перезаписана более поздней подпиской — известный`);
-    console.log(`    дефект, разбор в ОДИН-АДРЕС-ОДИН-ИНТЕРЕС-19-08.md.`);
+    console.log(`  • подписки есть, но старше 19.08.2026 — до этой даты метка источника`);
+    console.log(`    ПЕРЕЗАПИСЫВАЛАСЬ последней подпиской, и у таких записей интерес к`);
+    console.log(`    ${m.name} мог быть затёрт. Новые подписки метки накапливают.`);
     console.log(`Просмотрено записей: ${plan.scanned} — если это ноль, список не прочитан.`);
     process.exit(1);
   }

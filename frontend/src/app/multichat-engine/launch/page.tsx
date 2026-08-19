@@ -3,6 +3,7 @@ import paper from "@/styles/aevionPaper.module.css";
 import { probeLive, daysUntil } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { LandingView } from "@/components/LandingView";
 
 // Посадочная запуска Multichat — 20 сентября (дата из scripts/launch-readiness.mjs).
 //
@@ -100,6 +101,8 @@ export default async function MultichatLaunchPage({
               : " Уже открыто."}
           </p>
         </header>
+
+        <LandingView source={source} />
 
         <WaitlistCapture
           source={source}

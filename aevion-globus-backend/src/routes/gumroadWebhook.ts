@@ -23,7 +23,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { gumroadPaymentProvider, verifyGumroadSale } from "../lib/payment/gumroadProvider";
+import { gumroadPaymentProvider, verifyGumroadSaleDetailed } from "../lib/payment/gumroadProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
@@ -254,7 +254,39 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   // Аварийный выключатель: GUMROAD_VERIFY_SALES=0.
   const signatureEnforced = Boolean(process.env.GUMROAD_WEBHOOK_SECRET);
   if (!signatureEnforced && process.env.GUMROAD_VERIFY_SALES !== "0") {
-    const verdict = await verifyGumroadSale(saleId);
+    const { verdict, sale } = await verifyGumroadSaleDetailed(saleId);
+
+    // ЗАЯВЛЕННОЕ СВЕРЯЕТСЯ С ПОДТВЕРЖДЁННЫМ (19.08.2026).
+    //
+    // Проверка выше отвечает только на вопрос «такая продажа есть?». Товар и
+    // адрес до сих пор брались из ТЕЛА ЗАПРОСА, а его пишет отправитель. То
+    // есть обладатель настоящего дешёвого чека мог прислать его номер,
+    // подставив `product_id` дорогого тарифа, — существование продажи
+    // подтверждалось, и выдавался дорогой. Тем же способом права выписывались
+    // на чужой адрес.
+    //
+    // Сверяем только то, что Gumroad действительно вернул: если поля в ответе
+    // нет, молча пропускаем — придумывать за провайдера нельзя, а ложный
+    // отказ здесь означал бы, что оплативший человек не получил товар.
+    if (verdict === "confirmed" && sale) {
+      const saleEmail = String(sale.purchase_email ?? sale.email ?? "").trim().toLowerCase();
+      if (saleEmail && saleEmail !== email) {
+        console.warn(`[gumroad/webhook] адрес в пинге не совпал с продажей ${saleId} — отказ`);
+        capture(new Error("gumroad_ping_email_mismatch"), { route: "gumroad/webhook" });
+        SEEN.delete(dedupKey);
+        return res.status(401).json({ ok: false, error: "claim_mismatch" });
+      }
+      const saleProduct = String(sale.product_id ?? "").trim();
+      const saleShort = String(sale.short_product_id ?? "").trim();
+      const claimed = String(productId ?? "").trim();
+      if (claimed && (saleProduct || saleShort) && claimed !== saleProduct && claimed !== saleShort) {
+        console.warn(`[gumroad/webhook] товар в пинге не совпал с продажей ${saleId} — отказ`);
+        capture(new Error("gumroad_ping_product_mismatch"), { route: "gumroad/webhook" });
+        SEEN.delete(dedupKey);
+        return res.status(401).json({ ok: false, error: "claim_mismatch" });
+      }
+    }
+
     if (verdict === "not_found") {
       console.warn(`[gumroad/webhook] sale ${saleId} not found in Gumroad API — rejecting 401`);
       SEEN.delete(dedupKey); // не занимать ключ отклонённым пингом

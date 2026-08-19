@@ -6,13 +6,22 @@ type Props = {
   label: string;
   text: string;
   size?: number;
+  /**
+   * Подпись для экранного диктора. Необязательна СОЗНАТЕЛЬНО: компонент уже
+   * стоит на нескольких страницах, и обязательный параметр сломал бы их все.
+   * Без неё остаётся английская фраза — приемлемо на одноязычных страницах и
+   * НЕ приемлемо на переведённых, где незрячий человек слышит английское
+   * "What is …?" посреди русского интерфейса. Переводимые страницы передают
+   * t("common.infotip.whatIs", { term: label }).
+   */
+  ariaLabel?: string;
 };
 
 /**
  * Small accessible "?" hint shown next to technical terms.
  * Hover, focus, or tap to reveal; Esc closes; outside click closes.
  */
-export function InfoTip({ label, text, size = 14 }: Props) {
+export function InfoTip({ label, text, size = 14, ariaLabel }: Props) {
   const [open, setOpen] = useState(false);
   const tipId = useId();
   const wrapRef = useRef<HTMLSpanElement>(null);
@@ -50,7 +59,7 @@ export function InfoTip({ label, text, size = 14 }: Props) {
           e.preventDefault();
           setOpen((v) => !v);
         }}
-        aria-label={`What is ${label}?`}
+        aria-label={ariaLabel ?? `What is ${label}?`}
         aria-describedby={open ? tipId : undefined}
         aria-expanded={open}
         style={{

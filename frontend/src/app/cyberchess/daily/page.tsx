@@ -401,6 +401,17 @@ export default function DailyPuzzlePage() {
         if (typeof j.streak === 'number') {
           setStreak(j.streak);
           try { localStorage.setItem('cc_daily_streak', String(j.streak)); } catch {}
+          // Сообщение тоже пересобирается по серверному числу. Иначе экран
+          // противоречит сам себе: в тексте одно, на значке другое. Расходятся
+          // они в понятном случае — местная серия осталась с давних времён, а
+          // вчерашний день не решён, и сервер честно отвечает 0.
+          if (j.streak !== newStreak) {
+            setMessage(
+              usedHints
+                ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Streak не растёт: ${j.streak}.`
+                : `Поздравляем! Решено за ${formatTime(totalMs)}. Streak: ${j.streak}.`
+            );
+          }
         }
         if (typeof j.bestStreak === 'number') {
           setBestStreak(j.bestStreak);

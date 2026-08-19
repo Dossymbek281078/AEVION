@@ -376,13 +376,21 @@ app.get("/api/health/deep", async (_req, res) => {
     await ensureEcosystemLoaded();
     const q = getQtradeMetrics();
     const e = getEcosystemMetrics();
+    // Проверка ПРОДУКТА, а не только процесса. До 20.08.2026 эта ручка
+    // отвечала "ok", измеряя время работы, память и флаги — ни одного поля
+    // про то, работает ли хоть что-нибудь. За ту же неделю три ручки отдавали
+    // 500 на каждый запрос, и проверка не могла покраснеть в принципе.
+    // Запросы с LIMIT 0 стоят ноль строк, но падают, если колонки нет.
+    const { checkQueriedSchemas } = await import("./lib/schemaHealth");
+    const schema = await checkQueriedSchemas();
     const mem = process.memoryUsage();
     res.json({
-      status: "ok",
+      status: schema.ok ? "ok" : "degraded",
       service: "AEVION Globus Backend",
       timestamp: new Date().toISOString(),
       uptimeSec: Math.floor((Date.now() - STARTED_AT) / 1000),
       sentry: isSentryEnabled(),
+      schema,
       ledger: {
         accounts: q.accounts,
         transfers: q.transfers,

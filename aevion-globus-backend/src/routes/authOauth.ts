@@ -62,6 +62,30 @@ type Provider = {
   configured: boolean;
 };
 
+/**
+ * Знаем ли мы такого провайдера.
+ *
+ * hasOwnProperty.call, а не `getProviders()[id]`: имя провайдера приходит из
+ * адреса, а обычный объект наследует ключи прототипа. Проверено на живом проде
+ * 19.08.2026 —
+ *
+ *   GET /api/auth/oauth/zzz-nonexistent-xyz/start -> 404 unknown provider
+ *   GET /api/auth/oauth/constructor/start         -> 503 provider not configured
+ *
+ * то есть служебное слово проходило проверку «знаем ли мы провайдера» и
+ * добиралось до ветки «не настроен». Доступа это не давало, но ответ отличался
+ * от честного 404 — а разный ответ на несуществующее и есть та щель, по которой
+ * снаружи определяют, что именно у нас внутри.
+ *
+ * Не Object.hasOwn: цель компиляции ниже ES2022, tsc падает с TS2550.
+ */
+function knownProvider(
+  all: Record<string, Provider>,
+  id: string,
+): Provider | undefined {
+  return Object.prototype.hasOwnProperty.call(all, id) ? all[id] : undefined;
+}
+
 function getProviders(): Record<"google" | "github", Provider> {
   const googleId = process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() || "";
   const googleSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() || "";
@@ -198,7 +222,7 @@ authOauthRouter.get("/providers", (_req, res) => {
 // GET /api/auth/oauth/:provider/start
 authOauthRouter.get("/:provider/start", (req, res) => {
   const id = req.params.provider as "google" | "github";
-  const provider = getProviders()[id];
+  const provider = knownProvider(getProviders(), id);
   if (!provider) {
     return res.status(404).json({ error: "unknown provider" });
   }
@@ -230,7 +254,7 @@ authOauthRouter.get("/:provider/start", (req, res) => {
 // GET /api/auth/oauth/:provider/callback?code=…&state=…
 authOauthRouter.get("/:provider/callback", async (req, res) => {
   const id = req.params.provider as "google" | "github";
-  const provider = getProviders()[id];
+  const provider = knownProvider(getProviders(), id);
   if (!provider) return res.status(404).json({ error: "unknown provider" });
   if (!provider.configured) return res.status(503).json({ error: "provider not configured" });
 

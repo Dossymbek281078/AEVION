@@ -412,7 +412,25 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
       return { agentId: a.agentId, mean: m };
     });
     const worst = avg.reduce((w, x) => (x.mean < w.mean ? x : w), avg[0]);
-    outlier = { agentId: worst.agentId, distance: Number((1 - worst.mean).toFixed(3)) };
+    const best = avg.reduce((b, x) => (x.mean > b.mean ? x : b), avg[0]);
+
+    // Выброс существует, только если ОДИН агент действительно стоит в стороне.
+    //
+    // Прежде он назначался всегда, стоило набраться трём ответам. На трёх
+    // ОДИНАКОВЫХ ответах карта выдавала `outlier: a, distance: 0` и советовала
+    // человеку: «прочитать первым ответ агента a: он дальше всех от остальных» —
+    // прямая ложь при полном согласии. На трёх взаимно разных выбирался первый по
+    // порядку, то есть произвольный.
+    //
+    // Два условия. Первое: разброс средних схожестей должен быть заметен — иначе
+    // все стоят одинаково и «дальше всех» не про кого. Второе: минимум должен быть
+    // ОДИН; при ничьей называть кого-то — то же произвольное решение.
+    const SPREAD_MIN = 0.05;
+    const nearWorst = avg.filter((x) => x.mean <= worst.mean + SPREAD_MIN / 2).length;
+    const distinguishable = best.mean - worst.mean >= SPREAD_MIN && nearWorst === 1;
+    outlier = distinguishable
+      ? { agentId: worst.agentId, distance: Number((1 - worst.mean).toFixed(3)) }
+      : null;
   }
 
   const conflicts = numericConflicts(list);

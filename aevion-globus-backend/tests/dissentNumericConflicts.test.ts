@@ -158,3 +158,53 @@ describe("текст, который читает человек", () => {
     expect(money?.text).toContain("analyst и writer: 12000 против critic: 30000");
   });
 });
+
+describe("выброс называется только тогда, когда он есть", () => {
+  // Прежде выброс назначался всегда, стоило набраться трём ответам. Замер зондом
+  // 19.08.2026: на трёх ОДИНАКОВЫХ ответах карта отдавала `outlier: a, distance: 0`,
+  // и список проверок советовал «прочитать первым ответ агента a: он дальше всех от
+  // остальных» — прямая ложь при полном согласии. На трёх взаимно разных выбирался
+  // первый по порядку, то есть произвольный. У чужих ветвей эта функция побайтно
+  // такая же, значит дефект был и на проде.
+
+  const A = (id: string, reply: string) => ({ agentId: id, ok: true, reply });
+
+  async function map(answers: ReturnType<typeof A>[]) {
+    const { buildDissentMap } = await import("../src/services/multichat/dissent");
+    return buildDissentMap(answers as never);
+  }
+
+  test("три одинаковых ответа — выброса нет", async () => {
+    const m = await map([
+      A("a", "Использовать Postgres для заказов."),
+      A("b", "Использовать Postgres для заказов."),
+      A("c", "Использовать Postgres для заказов."),
+    ]);
+    expect(m.agreement).toBe(1);
+    expect(m.outlier).toBeNull();
+    // И в списке проверок не должно быть совета читать кого-то первым.
+    expect(m.checks.some((c) => c.kind === "outlier")).toBe(false);
+  });
+
+  test("все трое разошлись поровну — выброса нет, произвольный не назначается", async () => {
+    const m = await map([
+      A("a", "Только Postgres здесь."),
+      A("b", "Однозначно MongoDB везде."),
+      A("c", "Берите Redis обязательно."),
+    ]);
+    expect(m.outlier).toBeNull();
+  });
+
+  test("двое согласны, третий в стороне — выброс найден", async () => {
+    // Отрицательный контроль: без него «выброса нет» выше могло бы означать, что
+    // функция сломана и не находит его никогда.
+    const m = await map([
+      A("a", "Использовать Postgres для хранения заказов."),
+      A("b", "Использовать Postgres для хранения заказов."),
+      A("c", "Никакой базы не нужно, храните в файлах на диске."),
+    ]);
+    expect(m.outlier?.agentId).toBe("c");
+    expect(m.outlier!.distance).toBeGreaterThan(0);
+    expect(m.checks.some((c) => c.kind === "outlier")).toBe(true);
+  });
+});

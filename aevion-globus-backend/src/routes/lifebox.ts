@@ -368,11 +368,29 @@ lifeboxRouter.post("/capsules", writeLimit, async (req: Request, res: Response) 
       unlock_at: unlockDate.toISOString(),
     };
 
-    const capsule = isLifeBoxDbReady() ? await dbInsert(fields) : memInsert(fields);
+    const persisted = isLifeBoxDbReady();
+    const capsule = persisted ? await dbInsert(fields) : memInsert(fields);
 
     // For the create response we deliberately mask content (capsule is locked).
+    //
+    // Признак хранилища — обязателен. До 19.08.2026 ответ был ОДИНАКОВ независимо
+    // от того, легла капсула в Postgres или в массив в памяти процесса: человек
+    // видел ok:true и запертую капсулу, а она исчезала при следующем перезапуске.
+    // Выкаток в день бывает шесть.
+    //
+    // Для этого модуля цена ошибки выше, чем где-либо ещё на платформе: он
+    // называется «сейф для себя будущего», продаётся за деньги и обещает
+    // сохранить послание на годы. Молча потерять его — не сбой, а обман
+    // обещания, ради которого модуль и куплен.
     res.status(201).json({
       ok:      true,
+      storage: persisted ? "db" : "memory",
+      // Машиночитаемого признака мало: интерфейс может его не читать, а человек
+      // должен узнать правду про СВОЮ капсулу, а не про наше хранилище.
+      ...(persisted ? {} : {
+        warning: "Хранилище временно недоступно. Капсула принята, но НЕ переживёт " +
+          "перезапуск сервиса — сохраните текст у себя и создайте её заново позже.",
+      }),
       capsule: publicView(capsule),
     });
   } catch (e: any) {

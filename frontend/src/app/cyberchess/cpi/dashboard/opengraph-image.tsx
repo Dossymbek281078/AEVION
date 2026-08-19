@@ -35,7 +35,7 @@ export default function Image() {
         Your CPI Dashboard
       </div>
       <div style={{ fontSize: 22, color: "#64748b", textAlign: "center", marginBottom: 52, maxWidth: 980 }}>
-        История · breakdown · weak factor → drill recommendation
+        История · разбор по факторам · слабая сторона → что тренировать
       </div>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>

@@ -395,7 +395,7 @@ export default function TrainingHubPage() {
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>
-          Hub обновляется ежедневно · CPI-данные подгружаются из localStorage
+          Обновляется каждый день · данные CPI хранятся в вашем браузере
         </div>
       </article>
     </main>

@@ -612,7 +612,7 @@ export default function EconomyHubPage() {
 
         {/* Footer note */}
         <div style={{ marginTop: 32, padding: "12px 16px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, color: C.faint, lineHeight: 1.6 }}>
-          F7 · Mock-режим: все операции сохраняются в localStorage браузера. Backend-интеграция (реальные аукционы, верификация PGN, push-уведомления стримов) — следующая фаза.
+          Это витрина замысла: все действия сохраняются только в вашем браузере и никому не видны. Настоящие торги, проверка партий и оповещения о трансляциях — следующий шаг.
         </div>
 
         <div style={{ marginTop: 24, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>

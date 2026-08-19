@@ -216,7 +216,17 @@ export default function QSkywayClient() {
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", heightConfidencePct: null as number | null, avgConfClearM: null as number | null, etaStill: null as number | null, obstacleSegments: null as number | null, measuredObstacleSegments: null as number | null });
-  const [booking, setBooking] = useState<string>("");
+  /**
+   * Исход бронирования хранится РАЗОБРАННЫМ, а не готовой строкой.
+   *
+   * Раньше здесь лежал текст, и цвет выбирался по первому символу
+   * (`startsWith("✓")`). Два следствия: русская фраза «ошибка сети» оседала в
+   * состоянии и не менялась при переключении языка, а смысл исхода держался
+   * на значке внутри строки — то есть на её оформлении.
+   */
+  const [booking, setBooking] = useState<
+    { kind: "ok" | "err"; text: string } | { kind: "net"; detail: string } | null
+  >(null);
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [coverage, setCoverage] = useState<{ withFeed: number; withRegulatoryLayer?: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
@@ -712,9 +722,13 @@ export default function QSkywayClient() {
         body: JSON.stringify({ routeId, t0, t1, holder: "AEVION demo" }),
       });
       const j = await res.json();
-      setBooking(j.ok ? `✓ ${j.slot.id} · ${j.slot.receipt}` : `✗ ${j.error}`);
+      setBooking(
+        j.ok
+          ? { kind: "ok", text: `✓ ${j.slot.id} · ${j.slot.receipt}` }
+          : { kind: "err", text: `✗ ${j.error}` },
+      );
       if (j.ok) fetchSlots();
-    } catch (e) { setBooking("ошибка сети: " + String(e)); }
+    } catch (e) { setBooking({ kind: "net", detail: String(e) }); }
   }, [cityId, fetchSlots]);
 
   // ── filing document ────────────────────────────────────────────────────────
@@ -958,12 +972,7 @@ export default function QSkywayClient() {
                   {meta.suspect.length > 0 && (
                     <span
                       title={
-                        "Высоту из источника мы не считаем достоверной. Либо она в разы выше всей остальной " +
-                        "застройки, либо тег высоты спорит с числом этажей в том же источнике. " +
-                        "Молча мы ничего не переписываем: где источник противоречит сам себе, берём его же счёт " +
-                        "этажей вместо спорной высоты, а где высота просто выделяется — оставляем как " +
-                        "опубликовано и показываем расхождение. Страховочный запас коридор получает в обоих " +
-                        "случаях: высота из OpenStreetMap — заявление участника проекта, а не обмер службы."
+                        t("qskyway.height.suspectTip")
                       }
                       style={{ color: "#fbbf24", textDecoration: "underline dotted", cursor: "help" }}
                     >
@@ -1083,7 +1092,7 @@ export default function QSkywayClient() {
                             где он недостижим. */}
                         {measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) != null && (
                           <span
-                            title={`Из ${stats.obstacleSegments} участков со зданием под крылом на обмеренной городом высоте стоят ${stats.measuredObstacleSegments ?? 0}. Остальные — вывод из тега или счёта этажей OSM, либо слепой дефолт; за неуверенность коридор платит запасом по высоте.`}
+                            title={t("qskyway.tel.obstacleTip", { total: stats.obstacleSegments ?? 0, measured: stats.measuredObstacleSegments ?? 0 })}
                             style={{ fontSize: 11, fontWeight: 400, color: (stats.measuredObstacleSegments ?? 0) === 0 ? "#fbbf24" : "#5f7086", marginLeft: 5, cursor: "help" }}
                           >
                             {t("qskyway.tel.byBuildings", { pct: measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) ?? 0 })}
@@ -1119,7 +1128,13 @@ export default function QSkywayClient() {
                 <HeightDisputePanel dispute={heightDispute} />
                 <div style={{ padding: "12px 14px", borderTop: "1px solid #1e2836" }}>
                   <button style={btnPri} onClick={bookSlot} disabled={!loaded}>{t("qskyway.btn.bookSlot")}</button>
-                  {booking && <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.startsWith("✓") ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>{booking}</div>}
+                  {booking && (
+                    <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.kind === "ok" ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>
+                      {booking.kind === "net"
+                        ? t("qskyway.booking.netError", { detail: booking.detail })
+                        : booking.text}
+                    </div>
+                  )}
 
                   {/* The filing document. Until now it existed only as an endpoint,
                       which is the same as not existing for the person who has to
@@ -1150,7 +1165,7 @@ export default function QSkywayClient() {
                         {justification.doc.obstacleSegments != null && justification.doc.obstacleSegments > 0 && (
                           <div style={{ marginTop: 3, color: justification.doc.measuredObstacleSegments === 0 ? "#fbbf24" : "#5f7086" }}>
                             {t("qskyway.just.heights", { pct: justification.doc.heightConfidencePct })}{" "}
-                            {measuredObstaclePct(justification.doc.obstacleSegments, justification.doc.measuredObstacleSegments)}% по зданиям
+                            {measuredObstaclePct(justification.doc.obstacleSegments, justification.doc.measuredObstacleSegments)}{t("qskyway.just.byBuildingsSuffix")}
                             {justification.doc.measuredObstacleSegments === 0 && t("qskyway.just.noCityMeasure")}
                           </div>
                         )}

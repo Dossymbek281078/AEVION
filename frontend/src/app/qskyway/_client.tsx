@@ -222,7 +222,7 @@ export default function QSkywayClient() {
   const [coverage, setCoverage] = useState<{ withFeed: number; withRegulatoryLayer?: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
   const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
   const [cityId, setCityId] = useState<string>("astana");
-  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; substituted: { i: number; type: string; from: number; n: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
+  const [meta, setMeta] = useState<{ wind: { groundMs: number; topMs: number; fromDeg: number } | null; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; substituted: { i: number; type: string; from: number; n: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
   // Strict mode asks the backend to treat the published ceiling as a hard
   // constraint instead of an advisory verdict. Off by default: the honest
   // default is "fly the corridor and tell me what it would require".
@@ -438,7 +438,13 @@ export default function QSkywayClient() {
       altMaxRef.current = FLOOR + Math.ceil((mh + CLEAR - FLOOR) / BAND) * BAND + BAND;
       setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null });
       setMeta({
-        wind: city.wind ? `${city.wind.groundMs}→${city.wind.topMs} м/с (от ${city.wind.fromDeg}°)` : "—",
+        // Храним ЧИСЛА, а не готовую строку. Раньше здесь собирался текст с
+        // русскими единицами и он оседал в состоянии: переключение языка его
+        // уже не обновляло, потому что строка сложена один раз при загрузке
+        // города. Формат теперь берётся в отрисовке и знает текущий язык.
+        wind: city.wind
+          ? { groundMs: city.wind.groundMs, topMs: city.wind.topMs, fromDeg: city.wind.fromDeg }
+          : null,
         windSource: city.wind?.source ?? "illustrative",
         signed: city._signature ? city._signature.contentHash.slice(0, 12) : "—",
         nofly: city.nofly?.length ?? 0,
@@ -884,7 +890,11 @@ export default function QSkywayClient() {
               {meta && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 14, padding: "0 14px 12px", fontFamily: "monospace", fontSize: 11, color: "#9fb0c4" }}>
                   <span>
-                    {t("qskyway.wind.label", { wind: meta.wind })}
+                    {t("qskyway.wind.label", {
+                      wind: meta.wind
+                        ? t("qskyway.wind.value", { ground: meta.wind.groundMs, top: meta.wind.topMs, deg: meta.wind.fromDeg })
+                        : "—",
+                    })}
                     <span
                       title={meta.windSource === "metar" ? t("qskyway.wind.metarTip") : t("qskyway.wind.demoTip")}
                       style={{ marginLeft: 6, color: meta.windSource === "metar" ? "#2dd4bf" : "#5f7086" }}
@@ -996,10 +1006,12 @@ export default function QSkywayClient() {
                   {meta.substituted.length > 0 && (
                     <span
                       title={
-                        "Высота взята из статистики домов того же типа в этом городе, а не измерена и не выведена из этажности самого дома. "
-                        + "Занижать нельзя: коридор пройдёт ниже крыши, поэтому берётся 75-й процентиль, а не медиана. Примеры: "
-                        + meta.substituted.slice(0, 3).map((o) => `дом ${o.i} (${o.type}) вместо ${o.from} м, по ${o.n} известным высотам`).join("; ")
-                        + ". На карте такие дома обведены пунктиром: тёплый оттенок значит «угадано» и достаётся им наравне со слепым дефолтом 12 м, хотя утверждения разные."
+                        t("qskyway.subst.tipHead")
+                        + meta.substituted
+                            .slice(0, 3)
+                            .map((o) => t("qskyway.subst.tipExample", { i: o.i, type: o.type, from: o.from, n: o.n }))
+                            .join("; ")
+                        + t("qskyway.subst.tipTail")
                       }
                       style={{ color: "#c8964f", textDecoration: "underline dotted", cursor: "help" }}
                     >

@@ -1,65 +1,25 @@
-export default function TermsPage() {
-  return (
-    <div className="max-w-3xl mx-auto px-6 py-16 text-gray-200">
-      <h1 className="text-3xl font-bold text-white mb-2">Terms of Service</h1>
-      <p className="text-gray-400 text-sm mb-10">Last updated: May 19, 2026</p>
+import { permanentRedirect } from "next/navigation";
 
-      <section className="space-y-6 text-sm leading-relaxed">
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">1. Acceptance of Terms</h2>
-          <p>By accessing or using AEVION ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">2. Description of Service</h2>
-          <p>AEVION is a SaaS platform providing AI-powered digital tools including productivity software, legal document management, educational courses, chess gaming, health AI assistant, and digital marketplace services. All products are delivered digitally via web application.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">3. Account Registration</h2>
-          <p>You must provide accurate and complete information when creating an account. You are responsible for maintaining the confidentiality of your account credentials and for all activities under your account.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">4. Subscriptions and Billing</h2>
-          <p>Payments and paid subscriptions are processed through Gumroad, our authorized payment processor and Merchant of Record. Recurring subscriptions automatically renew unless cancelled before the renewal date. Where a free trial is offered, no charge is made until the trial ends.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">5. Acceptable Use</h2>
-          <p>You agree not to misuse the Service, including but not limited to: attempting to gain unauthorized access, distributing malware, violating applicable laws, or infringing third-party intellectual property rights.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">6. Intellectual Property</h2>
-          <p>All content, features, and functionality of AEVION are owned by AEVION and protected by international copyright, trademark, and other intellectual property laws.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">7. Termination</h2>
-          <p>We reserve the right to suspend or terminate your account for violation of these Terms. You may cancel your subscription at any time through your account settings.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">8. Disclaimer of Warranties</h2>
-          <p>The Service is provided "as is" without warranties of any kind. We do not guarantee uninterrupted or error-free operation.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">9. Limitation of Liability</h2>
-          <p>To the maximum extent permitted by law, AEVION shall not be liable for any indirect, incidental, or consequential damages arising from your use of the Service.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">10. Governing Law</h2>
-          <p>These Terms are governed by the laws of the Republic of Kazakhstan. Disputes shall be resolved in the courts of Almaty, Kazakhstan.</p>
-        </div>
-
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">11. Contact</h2>
-          <p>For questions regarding these Terms, contact us at: <a href="mailto:legal@aevion.app" className="text-blue-400 hover:underline">legal@aevion.app</a></p>
-        </div>
-      </section>
-    </div>
-  );
+/**
+ * Было: отдельная страница terms, второй комплект юридических документов.
+ *
+ * Замер 19.08.2026: на /legal/terms, /legal/privacy и /legal/refund НЕ ССЫЛАЛСЯ
+ * никто — все ссылки сайта ведут на /terms, /privacy и /pricing/refund-policy.
+ * При этом страницы жили на проде, отдавали 200 и индексировались.
+ *
+ * Чем это плохо было на самом деле:
+ *   1. Два разных документа об одном. /terms называл подсудностью суды Астаны,
+ *      /legal/terms — суды Алматы. В споре непонятно, какой из них связывает.
+ *   2. Три напечатанных адреса — legal@, privacy@, billing@ на aevion.app —
+ *      не принимают писем: у домена нет записи MX. Проверено отправкой.
+ *   3. Разделы, которых не было в главном комплекте (подписки и списания,
+ *      прекращение), лежали только здесь. Они перенесены в /terms как 6a и 6b
+ *      ДО этого перенаправления — содержимое не потеряно.
+ *
+ * Почему перенаправление, а не удаление: адрес мог попасть во внешние ссылки и
+ * в поисковый индекс, а 404 на странице условий читается хуже, чем переезд.
+ * permanentRedirect отдаёт 308 — поисковик переносит вес на канонический адрес.
+ */
+export default function LegalRedirect() {
+  permanentRedirect("/terms");
 }

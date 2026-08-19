@@ -183,6 +183,25 @@ export const CURRENCY_RATES: Record<CurrencyCode, { rate: number; symbol: string
   RUB: { rate: 92, symbol: "₽", label: "Russian Ruble" },
 };
 
+/**
+ * Курс валюты, который нельзя увести в NaN.
+ *
+ * `CURRENCY_RATES[currency]` находит и унаследованное: для "constructor" это
+ * функция Object, и `.rate` у неё undefined — смета уходила клиенту БЕЗ ЦИФР
+ * (HTTP 200, пустые total и subtotal). Живой прод отвечал так 28.07.2026.
+ *
+ * Проверка в маршруте /api/pricing/quote уже стоит, и другого вызывающего у
+ * buildQuote сегодня нет. Но она стоит ДАЛЕКО от расчёта, а buildQuote
+ * экспортирован: следующий вызывающий получит NaN молча. Курс берётся здесь,
+ * значит и защита должна жить здесь.
+ */
+export function currencyRate(currency: string): number {
+  return Object.prototype.hasOwnProperty.call(CURRENCY_RATES, currency)
+    ? CURRENCY_RATES[currency as CurrencyCode].rate
+    : CURRENCY_RATES.USD.rate;
+}
+
+
 /** Годовая сумма = -2 месяца (платишь за 10, получаешь 12). */
 const annualTotal = (m: number) => m * 10;
 /**
@@ -1016,7 +1035,7 @@ export function buildQuote(input: {
           ? Math.round((base * promo.amount) / 100)
           : Math.min(base, promo.amount * (period === "annual" ? 12 : 1));
       promoUsd = Math.min(rawPromoUsd, base * MAX_PROMO_DISCOUNT_RATIO);
-      const rate = CURRENCY_RATES[currency].rate;
+      const rate = currencyRate(currency);
       promoApplied = {
         code: promo.code,
         kind: promo.kind,
@@ -1042,7 +1061,7 @@ export function buildQuote(input: {
   if (capped.cappedBy > 0) {
     notes.push(`Скидки срезаны потолком: −$${capped.cappedBy} сверх допустимого`);
   }
-  const rate = CURRENCY_RATES[currency].rate;
+  const rate = currencyRate(currency);
 
   return {
     tierId: tier.id,

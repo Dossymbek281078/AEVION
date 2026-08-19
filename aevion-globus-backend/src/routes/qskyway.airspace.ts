@@ -210,6 +210,7 @@ export function airspaceSummary(cityId: string, city: CityData) {
       // rule, and the caller sees it in the sibling `permission` block. The old
       // wording claimed no source was found and was false for both.
       note: "Сетку потолков высоты регулятор этого города не публикует, поэтому высотного ограничения здесь нет. Это НЕ значит, что города нет правил — см. блок permission рядом.",
+      noteEn: "This city's regulator publishes no altitude-ceiling grid, so there is no altitude constraint here. That does NOT mean the city has no rules — see the permission block next to this one.",
     };
   }
   const field = ceilingField(cityId, city);
@@ -227,5 +228,6 @@ export function airspaceSummary(cityId: string, city: CityData) {
     maxCeilingM: field?.maxCeilingM ?? null,
     zeroCeilingCells: field?.zeroCeilingCells ?? 0,
     note: "Реальные потолки регулятора (FAA UASFM, LAANC для малых БВС Part 107) — НЕ сертификация аэротакси. Используется как опубликованное ограничение высоты над твином; по умолчанию рекомендательно, строгий режим — POST /route {respectCeiling:true}.",
+    noteEn: "Real regulator ceilings (FAA UASFM, LAANC for Part 107 small UAS) — NOT an air-taxi certification. Used as the published altitude limit over the twin; advisory by default, strict mode is POST /route {respectCeiling:true}.",
   };
 }

@@ -14,6 +14,13 @@
  * Usage:
  *   node scripts/fetch-city-twin.mjs astana --compare   (diff vs committed, writes nothing)
  *   node scripts/fetch-city-twin.mjs astana --write     (replace the committed twin)
+ *   node scripts/fetch-city-twin.mjs tokyo --compare --plateau-cache .aevion-data/plateau-cache
+ *
+ * Про Токио отдельной строкой, потому что на этом спотыкаются: без
+ * `--plateau-cache` каждый прогон тянет ~420 МБ CityGML заново, и на занятой
+ * машине это упирается в память (12.08.2026 проверка Токио так и осталась
+ * несделанной — `aevion-commit-check.ps1` дважды сказал «подожди»). С кэшем
+ * первый прогон платит один раз, остальные бесплатны.
  *
  * NOTE: `> src/routes/qskyway.city.ts` looks equivalent to --write and is NOT.
  * The shell truncates the target before node starts, and this script READS the
@@ -37,6 +44,18 @@
 
 import fs from "node:fs";
 
+// Сколько известных высот того же типа нужно, чтобы квантиль считался ответом
+// города, а не совпадением двух домов.
+const TYPE_MEDIAN_MIN_SAMPLES = 3;
+// Берём 75-й процентиль распределения этого типа, не медиану: см. замер в блоке
+// подстановки перед rasterize.
+const TYPE_QUANTILE = 0.75;
+// Подстановка больше этого — называется поимённо в выводе: она заметно двигает
+// коридоры, и узнавать о ней из карты человек не должен.
+const BIG_SUBSTITUTION_M = 30;
+// Типы, которые о высоте не сообщают ничего.
+const UNINFORMATIVE_TYPES = new Set(["yes", "building", "construction", "roof"]);
+
 const OVERPASS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
@@ -44,9 +63,11 @@ const OVERPASS = [
 
 import {
   METRES_PER_LEVEL, PARAPET_M, DEFAULT_HEIGHT_M, CELL, M_PER_LAT, M_PER_LON_EQ,
-  projection, parseMetres, heightOf, ringsOf, inRing, rasterize, overpassProblem, heightOutliers,
+  projection, parseMetres, heightOf, ringsOf, inRing, rasterize, overpassProblem, overpassBodyProblem, heightOutliers,
 } from "./lib/city-twin-geometry.mjs";
-import { parsePlateauGml, reconcileWithPlateau } from "./lib/plateau-heights.mjs";
+import { parsePlateauGml } from "./lib/plateau-heights.mjs";
+import { parseNycBuildings, nycBuildingsQuery } from "./lib/nyc-open-data.mjs";
+import { reconcileMeasuredOutlines } from "./lib/measured-outlines.mjs";
 
 // The height model, the projection and the rasterizer live in
 // scripts/lib/city-twin-geometry.mjs so they can be unit-tested; this file is
@@ -83,6 +104,23 @@ const CITIES = {
       "  dataQuality: {",
       "    total: number; measured: number; derived: number; guessed: number;",
       "    measuredPct: number; realPct: number; source: string; note: string;",
+      "    /** Heights that tower over the rest of the city — a wrong tag is trusted",
+      "     *  as completely as a right one, so it is published, not hidden.",
+      "     *  Absent when there is nothing to report. */",
+      "    suspect?: { i: number; h: number; why: string;",
+      "                 /** элемент OSM: индекс здания переживает не всякую пересборку, id — переживает */",
+      "                 osm?: string | null;",
+      "                 /** set when the height stands out from the city */ times?: number;",
+      "                 /** set when the source's own floor count contradicted its height tag */",
+      "                 was?: number; levels?: number }[];",
+      "    /** Высоты, ВЗЯТЫЕ ИЗ СТАТИСТИКИ по типу застройки (75-й процентиль домов",
+      "     *  того же типа в этом городе), а не измеренные у этого дома и не выведенные",
+      "     *  из его этажности. Класс высоты у них остаётся `guessed`, но одного класса",
+      "     *  мало: «12 м» слепого дефолта и «171 м» городской статистики — разные",
+      "     *  утверждения, а по `hs` их не различить.",
+      "     *  `from` — что стояло бы без подстановки, `n` — по скольким известным",
+      "     *  высотам взят процентиль. Отсутствует у твинов, собранных до 12.08.2026. */",
+      "    substituted?: { i: number; type: string; from: number; n: number }[];",
       "  };",
       "}",
     ].join("\n"),
@@ -93,6 +131,16 @@ const CITIES = {
     exportName: "CITY_NYC",
     committed: "qskyway.city.nyc.ts",
     vertiports: null, // read from the committed twin (see loadCommitted)
+    // New York surveys its own buildings and publishes the result as an API.
+    // Before this was wired in, 205 Midtown buildings sat in the obstacle grid
+    // at the blind 12 m default while the city had a measured height for them.
+    measured: {
+      kind: "socrata",
+      label: "NYC Open Data height_roof (photogrammetric survey, dataset 5zhs-2jue)",
+      // height_roof is in FEET and stops at the roof — see nyc-open-data.mjs.
+      marginM: 300,
+      nearRadiusM: 20,
+    },
     header: [
       "// QSkyway city digital-twin — NYC Midtown (Manhattan), real OpenStreetMap buildings",
       "// (Overpass, ODbL), 20m height field. v2: height provenance + dataQuality.",
@@ -113,6 +161,7 @@ const CITIES = {
     // this city could not be regenerated at all and its footprints were frozen
     // at 2026-07-13 — see plateau-heights.mjs for what that cost.
     measured: {
+      kind: "citygml",
       label: "PLATEAU LOD2 measuredHeight (MLIT Project PLATEAU, Shinjuku-ku 2025, CityGML spec 5.0)",
       // Per-3rd-mesh CityGML for Shinjuku-ku. These are the four meshes covering
       // the Nishi-Shinjuku bbox. The asset id in the path is issued by the
@@ -155,6 +204,13 @@ if (!city) {
 // the script re-downloads whatever is missing.
 const cacheFlag = process.argv.indexOf("--plateau-cache");
 const plateauCache = cacheFlag > 0 ? process.argv[cacheFlag + 1] : null;
+// Каталог кэша надо СОЗДАТЬ, иначе флаг работает только на уже наполненном.
+// 12.08.2026 прогон по Токио скачал все четыре архива CityGML (~420 МБ) и
+// упал на первой же записи с ENOENT: `writeFileSync` не создаёт каталог.
+// Цена ошибки не в исключении, а в том, что ушедший трафик пропал впустую,
+// а следующий запуск начал бы с нуля — то есть флаг «ускорить повторные
+// прогоны» гарантированно не ускорял ни один из них.
+if (plateauCache) fs.mkdirSync(plateauCache, { recursive: true });
 
 // ── projection ────────────────────────────────────────────────────────────────
 const { minLat, maxLat, minLon, maxLon } = city.bbox;
@@ -187,7 +243,13 @@ async function overpass() {
         // 429/504 are Overpass telling us to wait, not that the data is absent.
         if (res.status === 429 || res.status === 504) throw new Error(`Overpass HTTP ${res.status} (busy)`);
         if (!res.ok) throw new Error(`Overpass HTTP ${res.status}`);
-        const json = await res.json();
+        // A busy instance says so with HTTP 200 and an HTML page; parsing that
+        // as JSON throws something about token '<' and loses the server's own
+        // explanation.
+        const body = await res.text();
+        const bodyProblem = overpassBodyProblem(body);
+        if (bodyProblem) throw new Error(bodyProblem);
+        const json = JSON.parse(body);
         // A truncated answer arrives as HTTP 200 with fewer buildings and a
         // remark — never as an error. Treat it as a failure, not as data.
         const problem = overpassProblem(json);
@@ -220,10 +282,20 @@ const buildings = [];
 // Parallel array, diagnostics only — never emitted, so the twin keeps exactly
 // the shape src/routes/qskyway.ts already consumes.
 const meta = [];
+// Тип здания из OSM. Тоже параллельным массивом и тоже не отгружается: он нужен
+// ровно для одного — подставить слепой высоте медиану её собственного типа
+// (см. блок перед rasterize). В самом твине типу делать нечего, там его никто
+// не читает, а лишнее поле в 500-килобайтном файле надо было бы поддерживать.
+const buildingTypes = [];
+const contradicted = [];
 for (const el of elements) {
-  const { h, hs } = heightOf(el.tags);
+  const { h, hs, stated, contradicted: was } = heightOf(el.tags);
   for (const r of ringsOf(el, proj)) {
-    buildings.push({ h, hs, r });
+    if (was !== undefined) {
+      contradicted.push({ i: buildings.length, h, was, levels: Number(el.tags["building:levels"]) });
+    }
+    buildings.push({ h, hs, r, stated });
+    buildingTypes.push(String(el.tags?.building || "yes"));
     meta.push({ id: `${el.type}/${el.id}`, name: el.tags?.name ?? el.tags?.["name:en"] ?? null });
   }
 }
@@ -231,52 +303,82 @@ if (!buildings.length) throw new Error("Overpass returned no usable building foo
 
 // ── measured heights from a second source (PLATEAU) ───────────────────────────
 let sourceLabel = "OpenStreetMap (Overpass, ODbL)";
+// Легенда едет в отгружаемом твине и показывается человеку — до 28.07.2026 она
+// гласила «hs 0=измерено(height tag)», то есть описывала правило, которое к тому
+// моменту уже отменили. Легенда, описывающая не тот код, хуже её отсутствия:
+// она выглядит как проверенное утверждение о происхождении данных.
 let provenanceNote =
-  "hs 0=измерено(height tag) 1=выведено(levels×3.2+1.6м парапет) 2=угадано(дефолт 12м). " +
-  "Апгрейд LiDAR/LOD2/3D Tiles повышает measuredPct и снижает страховочный просвет.";
+  "hs 0=обмерено властями (в этом городе такого источника нет) " +
+  "1=выведено(тег height из OSM либо levels×3.2+1.6м парапет) 2=угадано(дефолт 12м). " +
+  "Тег OSM ставит участник проекта, а не служба обмера, поэтому он выведенный: " +
+  "ему добавляется страховочный просвет. Появление LiDAR/LOD2/3D Tiles поднимет " +
+  "measuredPct и просвет снизит.";
 
 if (city.measured) {
-  const { assets, marginM, nearRadiusM, label } = city.measured;
+  const { kind, assets, marginM, nearRadiusM, label } = city.measured;
   const mPerLon = M_PER_LON_EQ * Math.cos((((minLat + maxLat) / 2) * Math.PI) / 180);
   const wide = {
     minLat: minLat - marginM / M_PER_LAT, maxLat: maxLat + marginM / M_PER_LAT,
     minLon: minLon - marginM / mPerLon, maxLon: maxLon + marginM / mPerLon,
   };
 
+  // Every source hands back the same shape: { h in METRES, ring as [lon, lat] }.
+  // Normalising here and not at the reconciler is deliberate — a source's axis
+  // order and unit are facts about that source, and the further they travel
+  // un-normalised the more places can read them the wrong way round.
   const outlines = [];
-  for (const url of assets) {
-    const name = url.slice(url.lastIndexOf("/") + 1);
-    const cached = plateauCache ? `${plateauCache}/${name}` : null;
-    let gml;
-    if (cached && fs.existsSync(cached)) {
-      gml = fs.readFileSync(cached, "utf8");
-      process.stderr.write(`  PLATEAU ${name}: cached\n`);
-    } else {
-      process.stderr.write(`  PLATEAU ${name}: downloading…\n`);
-      const res = await fetch(url, {
-        headers: { "User-Agent": "AEVION-QSkyway/1.0 (city twin builder)" },
-        signal: AbortSignal.timeout(600_000),
-      });
-      if (!res.ok) throw new Error(`PLATEAU ${name}: HTTP ${res.status}`);
-      gml = await res.text();
-      if (cached) fs.writeFileSync(cached, gml);
+  if (kind === "citygml") {
+    for (const url of assets) {
+      const name = url.slice(url.lastIndexOf("/") + 1);
+      const cached = plateauCache ? `${plateauCache}/${name}` : null;
+      let gml;
+      if (cached && fs.existsSync(cached)) {
+        gml = fs.readFileSync(cached, "utf8");
+        process.stderr.write(`  PLATEAU ${name}: cached\n`);
+      } else {
+        process.stderr.write(`  PLATEAU ${name}: downloading…\n`);
+        const res = await fetch(url, {
+          headers: { "User-Agent": "AEVION-QSkyway/1.0 (city twin builder)" },
+          signal: AbortSignal.timeout(600_000),
+        });
+        if (!res.ok) throw new Error(`PLATEAU ${name}: HTTP ${res.status}`);
+        gml = await res.text();
+        if (cached) fs.writeFileSync(cached, gml);
+      }
+      const got = parsePlateauGml(gml, wide);
+      process.stderr.write(`  PLATEAU ${name}: ${got.length} roof outlines\n`);
+      // CityGML is EPSG:6697, latitude first.
+      for (const g of got) outlines.push({ h: g.h, ring: g.ring.map(([lat, lon]) => [lon, lat]) });
     }
-    const got = parsePlateauGml(gml, wide);
-    process.stderr.write(`  PLATEAU ${name}: ${got.length} roof outlines\n`);
+  } else if (kind === "socrata") {
+    const url = nycBuildingsQuery(wide);
+    process.stderr.write(`  NYC Open Data: querying…\n`);
+    const res = await fetch(url, {
+      headers: { "User-Agent": "AEVION-QSkyway/1.0 (city twin builder)" },
+      signal: AbortSignal.timeout(600_000),
+    });
+    if (!res.ok) throw new Error(`NYC Open Data: HTTP ${res.status}`);
+    const rows = await res.json();
+    const got = parseNycBuildings(rows);
+    process.stderr.write(`  NYC Open Data: ${rows.length} rows, ${got.length} outlines with a height\n`);
+    // Socrata geometry is GeoJSON, longitude first — already the shape we want.
     outlines.push(...got);
+  } else {
+    throw new Error(`${cityId}: unknown measured-height source kind "${kind}"`);
   }
+
   // An empty answer is the failure mode that must never reach --write: the twin
   // would keep its shape, lose every measured height, and read as a successful
   // regeneration. Louder than a downgraded file.
   if (!outlines.length) {
     throw new Error(
-      `${cityId}: PLATEAU returned no roof outlines inside the bbox. Refusing to emit a twin ` +
-      `that would silently downgrade measured heights to OSM guesses.`,
+      `${cityId}: the measured-height source returned no outlines inside the bbox. Refusing to ` +
+      `emit a twin that would silently downgrade measured heights to OSM guesses.`,
     );
   }
 
-  const projected = outlines.map((p) => ({ h: p.h, ring: p.ring.map(([lat, lon]) => proj(lon, lat)) }));
-  const { heights: measuredAt, unmatched } = reconcileWithPlateau(
+  const projected = outlines.map((p) => ({ h: p.h, ring: p.ring.map(([lon, lat]) => proj(lon, lat)) }));
+  const { heights: measuredAt, unmatched } = reconcileMeasuredOutlines(
     buildings.map((b) => b.r), projected, { nearRadiusM },
   );
 
@@ -295,7 +397,18 @@ if (city.measured) {
     const p = measuredAt[i];
     if (p.how === "contained") {
       contained++;
-      if (b.hs === 0) {
+      // Условие — «у OSM есть СВОЁ число», а не «оно считается обмером».
+      //
+      // Причина брать большее физическая: съёмка меряет крышу, тег часто
+      // включает мачту. К классу доверия это отношения не имеет, и когда правило
+      // было привязано к hs===0, оно молча выключилось, стоило понизить класс
+      // тега OSM (28.07.2026). Цена выключения проверяется тестом: максимум
+      // твина Нью-Йорка падал с 443 до 427 — то есть коридор шёл сквозь антенну
+      // Эмпайр-Стейт, потому что съёмка города меряет крыши без мачт.
+      //
+      // Прикидке по этажам и подставленному значению по умолчанию спорить с
+      // обмером нечем — там побеждает съёмка.
+      if (b.stated) {
         if (p.h > b.h) plateauTaller++; else if (b.h > p.h) osmTaller++;
         b.h = Math.round(Math.max(p.h, b.h));
       } else {
@@ -324,22 +437,132 @@ if (city.measured) {
       h: Math.round(projected[i].h), hs: 0,
       r: ring.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]),
     });
-    meta.push({ id: `plateau/${i}`, name: null });
+    meta.push({ id: `${kind}/${i}`, name: null });
     added++;
   }
 
   process.stderr.write(
-    `  PLATEAU: ${contained} footprints identified by containment (${plateauTaller} raised, ` +
+    `  ${kind}: ${contained} footprints identified by containment (${plateauTaller} raised, ` +
     `${osmTaller} kept OSM's taller measurement), ${near} by proximity, ${added} outlines added ` +
     `that OSM has no footprint for\n`,
   );
 
   sourceLabel = `OSM footprints (ODbL) + ${label}`;
   provenanceNote =
-    "hs 0=измерено(PLATEAU measuredHeight и/или OSM height tag — при расхождении берётся большая, " +
-    "это высота, которую надо облететь) 1=выведено(здесь: контур PLATEAU опознан по близости, " +
-    "а не по вложенности, либо levels×3.2+1.6м парапет) 2=угадано(дефолт 12м). " +
+    `hs 0=обмерено(${label}; где источник обмера опознал контур уверенно и OSM НАЗВАЛ ` +
+    "свою высоту — берётся большая: обмер меряет крышу, а тег часто включает мачту, " +
+    "и облетать надо мачту) 1=выведено(контур обмера опознан по близости, а не по " +
+    "вложенности; либо тег height из OSM без подтверждения обмером; либо " +
+    "levels×3.2+1.6м парапет) 2=угадано(дефолт 12м). " +
     "Просвет SRC_CLEARANCE растёт по мере падения уверенности.";
+}
+
+/**
+ * Слепой дефолт 12 м заменяется медианой по ТИПУ здания из домов ТОГО ЖЕ города.
+ *
+ * Зачем. 12 метров — не «нет данных», а число, одинаковое для сарая и для жилой
+ * башни. Замер 12.08.2026 по Астане: 22 дома с тегом `building=apartments`
+ * летались как 12-метровые, при том что медиана таких домов в самом городе
+ * 33.6 м, а 30 из 80 известных зданий этого типа выше 43 м — коридора, который
+ * над слепым домом и строится (12 + 15 просвет + 16 страховки за `guessed`).
+ * То есть у каждого третьего такого дома коридор прошёл бы ниже крыши.
+ *
+ * Почему это не «выдумать другое число». Медиана считается ТОЛЬКО по зданиям
+ * того же типа в этом же городе, у которых высота известна, и только при трёх и
+ * более свидетельствах. Город отвечает про себя сам; чужие нормативы и
+ * справочники сюда не попадают.
+ *
+ * Что НЕ меняется: класс остаётся hs=2 (`guessed`) и получает те же 16 м
+ * страховочного просвета. Медиана по типу — догадка получше, но догадка.
+ *
+ * Идёт ПОСЛЕ сверки с обмером (PLATEAU/NYC): там часть зданий переходит в hs=0,
+ * и подставлять надо в окончательный набор угаданных, а не в промежуточный.
+ */
+const knownByType = new Map();
+buildings.forEach((b, i) => {
+  if (b.hs === 2) return;
+  const t = buildingTypes[i] ?? "yes";
+  if (!knownByType.has(t)) knownByType.set(t, []);
+  knownByType.get(t).push(b.h);
+});
+/** Квантиль по возрастанию, линейная интерполяция между соседями. */
+const quantile = (xs, p) => {
+  const s = [...xs].sort((x, y) => x - y);
+  const i = (s.length - 1) * p;
+  const lo = Math.floor(i), hi = Math.ceil(i);
+  return lo === hi ? s[lo] : s[lo] + (s[hi] - s[lo]) * (i - lo);
+};
+// `--no-type-median` оставляет слепой дефолт как был. Нужен не «на всякий
+// случай»: без него нельзя отделить эффект этой подстановки от дрейфа самого
+// OSM, а `--compare` показывает их одной цифрой «ячеек различается».
+const noTypeMedian = process.argv.includes("--no-type-median");
+let typedGuesses = 0, typedRaised = 0, typedLowered = 0, typedMaxDelta = 0;
+const bigSubstitutions = [];
+// Признак подстановки едет В САМОМ ТВИНЕ, а не только в этом выводе.
+//
+// До 12.08.2026 новая высота записывалась прямо в `b.h`, класс оставался
+// `guessed`, и в данных было не отличить «12 м — слепой дефолт» от «59 м —
+// 75-й процентиль чужих домов того же типа». Человек, глядя на карточку
+// здания, естественно читает второе как догадку об ЭТОМ доме (по этажности).
+// Список печатался в stderr при пересборке — то есть знал о нём только тот,
+// кто её запускал, а не тот, кто смотрит на город.
+const substituted = [];
+for (let i = 0; !noTypeMedian && i < buildings.length; i++) {
+  const b = buildings[i];
+  if (b.hs !== 2) continue;
+  const type = buildingTypes[i] ?? "yes";
+  // `building=yes` — это «здание», и всё. Бакет нетипизированных домов ничего
+  // не говорит о высоте: в Астане его медиана 11 м при 75-м процентиле 27 —
+  // распределение смешанное, и подстановка сюда подняла бы 172 дома на пятнадцать
+  // метров без основания. Предпосылка правила — «тип что-то сообщает»; здесь он
+  // не сообщает ничего, значит остаётся слепой дефолт.
+  if (UNINFORMATIVE_TYPES.has(type)) continue;
+  const xs = knownByType.get(type);
+  if (!xs || xs.length < TYPE_MEDIAN_MIN_SAMPLES) continue;
+  // 75-й процентиль, а не медиана. Замер по Астане: при медиане (34 м у
+  // `apartments`) ВЫШЕ получившегося коридора остаются 16 из 80 известных домов
+  // этого типа — то есть половина исходной опасности сохраняется. При p75 (59 м)
+  // не остаётся ни одного. Занижение здесь дороже завышения: завышение стоит
+  // крюка, занижение — пролёта ниже крыши.
+  //
+  // И никогда НЕ опускаем ниже прежнего слепого дефолта: у угаданного здания
+  // уменьшать запас не за что.
+  const h = Math.max(DEFAULT_HEIGHT_M, Math.round(quantile(xs, TYPE_QUANTILE)));
+  if (h === b.h) continue;
+  if (h > b.h) typedRaised++; else typedLowered++;
+  typedMaxDelta = Math.max(typedMaxDelta, Math.abs(h - b.h));
+  if (h - b.h > BIG_SUBSTITUTION_M) bigSubstitutions.push({ i, type, from: b.h, to: h, samples: xs.length });
+  // `from` — то, что стояло бы без подстановки (слепой дефолт), `n` — по
+  // скольким известным высотам этого типа взят процентиль. Без `n` цифра
+  // выглядит замером; с ней видно, на чём она держится.
+  substituted.push({ i, type, from: b.h, n: xs.length });
+  b.h = h;
+  typedGuesses++;
+}
+if (typedGuesses) {
+  process.stderr.write(
+    `  высота по 75-му процентилю своего типа: ${typedGuesses} зданий `
+    + `(поднято ${typedRaised}, опущено ${typedLowered}, макс. сдвиг ${typedMaxDelta} м); `
+    + `класс остался guessed\n`,
+  );
+  // Крупная подстановка называется поимённо, а не прячется за «макс. сдвиг».
+  // Повод конкретный: прогон по Нью-Йорку 12.08.2026 поднял ОДНО здание сразу
+  // на 159 м — в Мидтауне 75-й процентиль коммерческой застройки такой и есть.
+  // Формально это ответ города о себе, но 170-метровая догадка на месте
+  // неизвестного дома заметно двигает коридоры вокруг, и человек, который
+  // пересобирает твин, должен увидеть её списком, а не узнать из карты.
+  for (const s of bigSubstitutions.slice(0, 5)) {
+    process.stderr.write(
+      `    ⚠ здание ${s.i} (${s.type}): ${s.from} → ${s.to} м по ${s.samples} известным высотам этого типа\n`,
+    );
+  }
+  if (bigSubstitutions.length > 5) {
+    process.stderr.write(`    … и ещё ${bigSubstitutions.length - 5} подстановок больше ${BIG_SUBSTITUTION_M} м\n`);
+  }
+  provenanceNote = provenanceNote.replace(
+    "2=угадано(дефолт 12м)",
+    `2=угадано(75-й процентиль высот этого же типа зданий в этом же городе, при ${TYPE_MEDIAN_MIN_SAMPLES}+ известных высотах и только для типов, которые о высоте что-то говорят; иначе дефолт ${DEFAULT_HEIGHT_M}м)`,
+  );
 }
 
 const { heights, src } = rasterize(buildings, COLS, ROWS);
@@ -438,12 +661,34 @@ if (compareOnly) {
   process.exit(0);
 }
 
+// `osm` рядом с индексом — не украшение. Индекс здания живёт до следующей
+// пересборки: 12.08.2026 в bbox Астаны добавилось пять домов, и Абу-Даби Плаза
+// переехала со 195 на 194, а разбор высоты в src/data/qskywayHeightReview.ts
+// был привязан к номеру. Поймал тест, но привязка к элементу источника
+// переживает пересборку сама, поэтому она теперь есть у каждой спорной высоты.
+// Отгружается ТОЛЬКО для спорных: у 475 зданий id стоил бы лишних килобайт в
+// файле, который целиком грузится в браузер.
+const osmIdOf = (i) => meta[i]?.id ?? null;
+const suspect = [
+  ...heightOutliers(buildings).map((o) => ({ i: o.index, osm: osmIdOf(o.index), h: o.h, times: o.times, why: "towers over the city" })),
+  ...contradicted.map((c) => ({ i: c.i, osm: osmIdOf(c.i), h: c.h, was: c.was, levels: c.levels, why: "height tag contradicted its own floor count" })),
+];
+if (suspect.length) {
+  process.stderr.write(
+    `  ⚠ ${suspect.length} height(s) the source could not vouch for: ` +
+    `${suspect.map((o) => (o.times ? `${o.h} m (${o.times}x p99)` : `${o.was} m over ${o.levels} floors → ${o.h} m`)).join(", ")}
+`,
+  );
+}
+
 const data = {
   city: city.name,
   bbox: city.bbox,
   meters: { w: W, h: H },
   grid: { cols: COLS, rows: ROWS, cell: CELL, heights, src },
-  buildings,
+  // `stated` — служебный признак этапа сверки, а не часть твина: в объявленном
+  // CityData его нет, и в отгружаемом файле ему делать нечего.
+  buildings: buildings.map(({ h, hs, r }) => ({ h, hs, r })),
   vertiports: city.vertiports ?? committed.vertiports,
   dataQuality: {
     total, measured, derived, guessed,
@@ -451,6 +696,16 @@ const data = {
     realPct: round1((100 * (measured + derived)) / total),
     source: sourceLabel,
     note: provenanceNote,
+    // Published rather than merely printed: the twin trusts a height tag
+    // absolutely (hs=0 gets zero safety clearance), so a tag that cannot be
+    // right has to reach whoever is looking at the city, not just whoever
+    // regenerates it. Omitted entirely when clean, so a quiet city stays quiet.
+    ...(suspect.length ? { suspect } : {}),
+    // Тем же правилом, что `suspect`: публикуется, а не только печатается.
+    // Высота этих зданий взята из статистики по их типу, а не измерена и не
+    // выведена из этажности именно этого дома — и сказать об этом должен твин,
+    // а не консоль того, кто его пересобирал.
+    ...(substituted.length ? { substituted } : {}),
   },
 };
 

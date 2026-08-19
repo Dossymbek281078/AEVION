@@ -38,6 +38,30 @@ export interface RegulatorySource {
   scopeNote?: string;
   /** snapshot still matches what the authority publishes (null = not checked) */
   upToDate?: boolean | null;
+  /**
+   * Edition the authority publishes RIGHT NOW, when a live check answered.
+   *
+   * Not the same question as `upToDate`. The FAA reissues UAS Facility Maps on
+   * a cycle; a reissue that leaves every ceiling untouched is not drift — the
+   * numbers we route against are still correct — but the edition has moved.
+   * Checked live on 2026-08-10: our snapshot is the 7/9/2026 edition, the feed
+   * publishes 8/6/2026, zero cells changed. Saying "the snapshot matches what
+   * the regulator publishes" there is literally false, and this is a chip whose
+   * entire job is to be defensible. So the two facts are carried separately and
+   * the chip states the narrower, true one.
+   */
+  publishedEffective?: string | null;
+  /**
+   * У источника нет фида, который можно опрашивать: это опубликованный
+   * ДОКУМЕНТ (eAIP цикла AIRAC, растровый слой ведомства), а не набор данных с
+   * эндпоинтом. Отличать обязательно: при `upToDate == null` чип говорит
+   * «сверка ещё не выполнялась», а это обещание проверки, которой для документа
+   * не бывает. Здесь честное утверждение другое — сверяем при пересборке слоя,
+   * и вот когда сверяли в последний раз (`lastReviewed`).
+   */
+  noLiveFeed?: boolean;
+  /** когда слой в последний раз сверяли с документом вручную */
+  lastReviewed?: string;
   /** cryptographically attested (e.g. Ed25519 over the ingested rule set) */
   attested?: boolean;
 }

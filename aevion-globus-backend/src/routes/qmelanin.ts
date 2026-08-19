@@ -251,7 +251,14 @@ qmelaninRouter.post("/plan", (req: Request, res: Response) => {
   let deficientKeys: BiomarkerKey[] = [];
 
   if (Array.isArray(b.deficientKeys)) {
-    deficientKeys = b.deficientKeys.filter((k: string): k is BiomarkerKey => k in BIOMARKER_BY_KEY);
+    deficientKeys = b.deficientKeys.filter(
+      // hasOwnProperty.call, а не `in`: `in` идёт по цепочке прототипов, поэтому
+      // "constructor" проходил фильтр, а BIOMARKER_BY_KEY["constructor"] — функция.
+      // Падения не было: .label и .drives у функции просто undefined — и человек
+      // получал рекомендацию С ПУСТЫМ НАЗВАНИЕМ нутриента. Тихий неверный ответ в
+      // модуле про здоровье хуже отказа: отказ видно, пустую строку принимают.
+      (k: string): k is BiomarkerKey => Object.prototype.hasOwnProperty.call(BIOMARKER_BY_KEY, k),
+    );
   } else if (b.values) {
     deficientKeys = BIOMARKERS.filter((spec) => {
       const v = num(b.values[spec.key]);
@@ -356,7 +363,14 @@ qmelaninRouter.post("/ai-plan", async (req: Request, res: Response) => {
   const b = req.body || {};
   let deficientKeys: BiomarkerKey[] = [];
   if (Array.isArray(b.deficientKeys)) {
-    deficientKeys = b.deficientKeys.filter((k: string): k is BiomarkerKey => k in BIOMARKER_BY_KEY);
+    deficientKeys = b.deficientKeys.filter(
+      // hasOwnProperty.call, а не `in`: `in` идёт по цепочке прототипов, поэтому
+      // "constructor" проходил фильтр, а BIOMARKER_BY_KEY["constructor"] — функция.
+      // Падения не было: .label и .drives у функции просто undefined — и человек
+      // получал рекомендацию С ПУСТЫМ НАЗВАНИЕМ нутриента. Тихий неверный ответ в
+      // модуле про здоровье хуже отказа: отказ видно, пустую строку принимают.
+      (k: string): k is BiomarkerKey => Object.prototype.hasOwnProperty.call(BIOMARKER_BY_KEY, k),
+    );
   } else if (b.values) {
     deficientKeys = BIOMARKERS.filter((spec) => {
       const v = num(b.values[spec.key]);

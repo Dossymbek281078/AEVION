@@ -76,7 +76,7 @@ const APP_DEFS: AppDef[] = [
     tagline: "Multi-model AI assistant",
     href: "/qcoreai",
     cat: "Developer",
-    highlights: ["Claude · GPT · Gemini in one UI", "Unlimited usage", "Always free"],
+    highlights: ["Claude · GPT · Gemini in one UI", "Generous free monthly quota", "Always free"],
     badge: "Free forever",
   },
   {
@@ -118,7 +118,7 @@ const APP_DEFS: AppDef[] = [
     tagline: "Embedded payment infrastructure",
     href: "/qpaynet",
     cat: "Finance",
-    highlights: ["KZT · USD · multi-currency", "Virtual cards", "API + webhooks"],
+    highlights: ["KZT · USD · multi-currency", "Payouts to card, Kaspi and bank transfer", "API + webhooks"],
   },
   /* ── Business & Legal ───────────────────────────────────────────────── */
   {
@@ -154,6 +154,18 @@ const APP_DEFS: AppDef[] = [
     ],
   },
   {
+    // 19.08.2026: карточка обещала «Ed25519 signature» и «OpenTimestamps blockchain
+    // anchoring». Проверено по коду — ни того, ни другого нет. Подпись это
+    // HMAC-SHA256, ключом которого служит ПУБЛИЧНЫЙ ключ нотариуса (bureau.ts:2622,
+    // там же честная пометка «Demo»): пересчитать её может любой, потому что certId,
+    // contentHash и открытый ключ — открытые данные. Свойства подписи здесь нет.
+    // Якорения в бюро тоже нет: слово anchor встречается дважды, оба раза это
+    // text-anchor в SVG; библиотека OpenTimestamps живёт в соседнем модуле.
+    //
+    // Формулировки приведены к тому, что продукт делает на самом деле. Вернуть
+    // прежние можно ТОЛЬКО вместе с настоящей реализацией — иначе продукт,
+    // который продаёт доказуемость, врёт именно про неё.
+    // Разбор: 15-Аудиты-и-сводки\ВИТРИНА-обещания-против-кода-19-08.md
     id: "bureau",
     productId: "bureau",
     icon: "🔐",
@@ -162,8 +174,8 @@ const APP_DEFS: AppDef[] = [
     href: "/bureau",
     cat: "Business",
     highlights: [
-      "Ed25519 signature + SHA-256 hash",
-      "OpenTimestamps blockchain anchoring",
+      "SHA-256 content hash + signed audit trail",
+      "Notary review with registry reference",
       "Tamper-evident certificates",
     ],
   },

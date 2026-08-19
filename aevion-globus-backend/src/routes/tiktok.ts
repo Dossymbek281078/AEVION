@@ -41,8 +41,20 @@
 //   TIKTOK_CLIENT_SECRET  — matching secret
 //   TIKTOK_REDIRECT_URI   — must EXACTLY match a redirect URI registered in
 //                           the TikTok app, e.g.
-//                           https://aevion.vercel.app/api-backend/api/tiktok/auth/callback
-//   TIKTOK_SCOPES         — optional, default "user.info.basic,video.publish"
+//                           https://aevion.app/api-backend/api/tiktok/auth/callback
+//                           NB 19.08.2026: prod still pointed at the old
+//                           aevion.vercel.app host. TikTok requires the domain
+//                           shown in the review demo video to match the site
+//                           URL in the application, so a stale host here fails
+//                           the review even when every form field is right.
+//   TIKTOK_SCOPES         — optional, default
+//                           "user.info.basic,video.publish,video.upload".
+//                           video.upload was MISSING until 19.08.2026: the app
+//                           review claims drafts are the default path, but the
+//                           consent screen never asked for the scope that makes
+//                           drafts possible. Requesting fewer scopes than the
+//                           application lists is both a broken feature and a
+//                           claim the product does not keep.
 //   TIKTOK_SUCCESS_REDIRECT — optional frontend path to return to,
 //                           default "/tiktok-publisher"
 //
@@ -81,7 +93,7 @@ function getConfig(): TikTokConfig {
   const clientKey = process.env.TIKTOK_CLIENT_KEY?.trim() || "";
   const clientSecret = process.env.TIKTOK_CLIENT_SECRET?.trim() || "";
   const redirectUri = process.env.TIKTOK_REDIRECT_URI?.trim() || "";
-  const scopes = process.env.TIKTOK_SCOPES?.trim() || "user.info.basic,video.publish";
+  const scopes = process.env.TIKTOK_SCOPES?.trim() || "user.info.basic,video.publish,video.upload";
   const successRedirect = process.env.TIKTOK_SUCCESS_REDIRECT?.trim() || "/tiktok-publisher";
   return {
     clientKey,

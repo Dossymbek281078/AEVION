@@ -67,7 +67,10 @@ function stubProdDown() {
   vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("ECONNREFUSED"))));
 }
 
-async function renderLaunch(mod: "multichat-engine" | "devhub"): Promise<string> {
+async function renderLaunch(
+  mod: "multichat-engine" | "devhub",
+  searchParams: { c?: string | string[] } = {},
+): Promise<string> {
   const imported =
     mod === "multichat-engine"
       ? await import("../multichat-engine/launch/page")
@@ -75,7 +78,7 @@ async function renderLaunch(mod: "multichat-engine" | "devhub"): Promise<string>
   const Page = imported.default as (p: {
     searchParams: Promise<{ c?: string | string[] }>;
   }) => Promise<React.ReactElement>;
-  return renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
+  return renderToStaticMarkup(await Page({ searchParams: Promise.resolve(searchParams) }));
 }
 
 describe.each(["multichat-engine", "devhub"] as const)("посадочная /%s/launch", (mod) => {
@@ -179,6 +182,59 @@ describe("сторож обещаний в МЕТАДАННЫХ — их не в
     for (const f of fields) {
       expect(f, `запрещённое в метаданных: ${f}`).not.toMatch(forbidden);
       expect(f, `цена в метаданных: ${f}`).not.toMatch(/\$\s?\d/);
+    }
+  });
+});
+
+describe("метка канала ?c= — по ней после запуска считают источники", () => {
+  // Метка попадает в source формы приёма адресов, а сервер пишет её в колонку
+  // рядом с адресом. Если она не доедет, после запуска нельзя будет сказать,
+  // какая соцсеть привела людей, — а ради этого посадочные и делались.
+  //
+  // Значение видно в разметке: WaitlistCapture подставляет source в id поля
+  // ввода, поэтому проверяем по нему, а не по внутренностям компонента.
+  test.each([
+    ["ig", "instagram"],
+    ["tt", "tiktok"],
+    ["tg", "telegram"],
+    ["qr", "qr-code"],
+  ] as const)("?c=%s → источник с суффиксом %s", async (code, channel) => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ status: 400, ok: false } as Response)));
+    const html = await renderLaunch("multichat-engine", { c: code });
+    expect(html).toContain(`multichat-${channel}`);
+  });
+
+  test("неизвестная метка не портит источник, а просто не добавляется", async () => {
+    // Иначе мусор из чужой ссылки («?c=..%20drop») попал бы в колонку источника
+    // и в выгрузку. channelFrom возвращает null на всё, чего нет в списке.
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ status: 400, ok: false } as Response)));
+    const html = await renderLaunch("devhub", { c: "неизвестный-канал" });
+    expect(html).toContain("waitlist-email-devhub");
+    expect(html).not.toMatch(/devhub-неизвестный/);
+  });
+
+  test("метка нечувствительна к регистру и пробелам", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ status: 400, ok: false } as Response)));
+    const html = await renderLaunch("devhub", { c: "  IG " });
+    expect(html).toContain("devhub-instagram");
+  });
+
+  test("массив в ?c= берётся первым элементом, а не склеивается", async () => {
+    // Next отдаёт массив, когда параметр указан дважды: ?c=ig&c=tt.
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ status: 400, ok: false } as Response)));
+    const html = await renderLaunch("devhub", { c: ["ig", "tt"] });
+    expect(html).toContain("devhub-instagram");
+    expect(html).not.toContain("devhub-tiktok");
+  });
+
+  test("любой источник укладывается в 60 символов, которые принимает сервер", async () => {
+    // Ручка приёма обрезает source до 60 символов (slice(0, 60)). Самая длинная
+    // из наших комбинаций должна быть заметно короче, иначе метка приедет
+    // обрубленной и группировка в выгрузке сломается.
+    const { CHANNELS } = await import("@/lib/products");
+    const longest = Object.values(CHANNELS).reduce((a, b) => (b.length > a.length ? b : a));
+    for (const mod of ["multichat", "devhub"]) {
+      expect(`${mod}-${longest}`.length).toBeLessThan(40);
     }
   });
 });

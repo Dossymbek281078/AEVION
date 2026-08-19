@@ -11,6 +11,7 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 import AskAi from "@/components/AskAi";
 import { apiUrl } from "@/lib/apiBase";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { Sparkline } from "@/components/Sparkline";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -667,6 +668,20 @@ export default function QRightPage() {
               Register your work and walk away with a self-contained proof bundle — Ed25519-signed immediately and Bitcoin-anchored once the timestamp confirms, verifiable even if AEVION disappears tomorrow.
             </p>
           </div>
+        </div>
+
+        {/* Приём адресов. До 19.08.2026 QRight был единственным модулем очереди
+            запуска, где человек не мог оставить адрес: посадочная у пары
+            QRight + Бюро одна (/bureau/launch), и попавший прямо сюда уходил ни
+            с чем. Метка источника «qright» — та же механика, что на посадочных:
+            без неё после 6 сентября не ответить, откуда пришли люди. */}
+        <div style={{ marginBottom: 24 }}>
+          <WaitlistCapture
+            source="qright"
+            tone="dark"
+            title="Написать вам в день запуска"
+            description="Реестр открыт уже сейчас. Одно письмо на запуск бюро 6 сентября и условия раннего доступа."
+          />
         </div>
 
         {/* ── Live transparency tile ── */}

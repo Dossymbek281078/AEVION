@@ -36,19 +36,25 @@ const POOL: Puzzle[] = [
   { fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1', sol: ['c4f7', 'e8f7', 'f3e5'], theme: 'Fried liver', rating: 1400 },
 ];
 
-const COUNTRIES = ['🇷🇺', '🇺🇸', '🇩🇪', '🇫🇷', '🇪🇸', '🇮🇹', '🇰🇿', '🇺🇦', '🇵🇱', '🇧🇷', '🇨🇳', '🇯🇵', '🇮🇳', '🇬🇧', '🇰🇷', '🇳🇱', '🇸🇪', '🇳🇴', '🇫🇮', '🇦🇷'];
-const NAMES = ['Magnus', 'Hikaru', 'Fabiano', 'Ding', 'Anish', 'Ian', 'Levon', 'Wesley', 'Maxime', 'Alireza', 'Praggnanandhaa', 'Gukesh', 'Erigaisi', 'Nakamura', 'Carlsen', 'Caruana', 'Liren', 'Giri', 'Vachier', 'Firouzja', 'Karjakin', 'Aronian', 'So', 'MVL', 'Pragg', 'Dommaraju', 'Niemann', 'Abdusattorov', 'Esipenko', 'Sarana'];
 
-function mockLeaderboard(): LeaderEntry[] {
-  const out: LeaderEntry[] = [];
-  for (let i = 0; i < 100; i++) {
-    const name = `${NAMES[i % NAMES.length]}${i < NAMES.length ? '' : '_' + Math.floor(i / NAMES.length)}`;
-    const country = COUNTRIES[i % COUNTRIES.length];
-    const streak = Math.max(1, 365 - i * 3 - Math.floor(Math.random() * 5));
-    out.push({ name, country, streak });
-  }
-  return out.sort((a, b) => b.streak - a.streak);
-}
+// Списки NAMES и COUNTRIES удалены вместе с выдумкой: там лежали имена
+// НАСТОЯЩИХ гроссмейстеров (Magnus, Hikaru, Ding), которыми подписывались
+// несуществующие игроки. Показывать живых людей как своих пользователей
+// нельзя, и держать такой список «на всякий случай» — значит однажды его
+// снова использовать.
+/**
+ * Таблица лидеров приходит С СЕРВЕРА. Выдумывать её нельзя.
+ *
+ * Здесь стояла mockLeaderboard(): сто игроков с именами из списка и сериями до
+ * 365 дней, показанные ровно как настоящие — медали, флаги, огонь. Живых
+ * игроков при этом ноль. Такую таблицу человек читает как факт: «я 101-й из
+ * ста», хотя соревноваться не с кем.
+ *
+ * Ту же выдумку из ста seed-игроков убрали из бэкенда 10.08; фронт продолжал
+ * сочинять свою независимо. Теперь источник один — ручка
+ * /api/cyberchess-daily/leaderboard, и три состояния различаются словами:
+ * загрузка, пусто, отказ. Пустая таблица это НЕ отказ, и наоборот.
+ */
 
 // Unicode pieces by FEN char
 const PIECE: Record<string, string> = {
@@ -137,7 +143,8 @@ export default function DailyPuzzlePage() {
    */
   const [puzzle, setPuzzle] = useState<Puzzle>(() => POOL[dayIndex() % POOL.length]);
   const [fromBank, setFromBank] = useState(false);
-  const leaderboard = useMemo(() => mockLeaderboard(), []);
+  const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
+  const [lbState, setLbState] = useState<'loading' | 'ok' | 'failed'>('loading');
 
   // chess engine (mutable via ref to keep instance stable across renders)
   const chessRef = useRef<Chess>(new Chess(puzzle.fen));
@@ -167,6 +174,34 @@ export default function DailyPuzzlePage() {
 
   // Bot reply pending (visual)
   const [botPending, setBotPending] = useState(false);
+
+  // Таблица лидеров — с сервера, и её три состояния различаются. Пустой список
+  // на упавшем запросе выглядел бы так же, как честное «никто ещё не решал», —
+  // а это разные вещи для человека, который решает, стоит ли играть.
+  useEffect(() => {
+    let alive = true;
+    fetch('/api-backend/api/cyberchess-daily/leaderboard?limit=100')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j) => {
+        if (!alive) return;
+        const rows = Array.isArray(j?.leaderboard) ? j.leaderboard : [];
+        setLeaderboard(
+          rows.map((e: Record<string, unknown>) => ({
+            name: String(e.name ?? e.userId ?? 'игрок'),
+            streak: Number(e.streak) || 0,
+            country: String(e.country ?? '🌍'),
+            score: typeof e.score === 'number' ? e.score : undefined,
+          })),
+        );
+        setLbState('ok');
+      })
+      .catch(() => {
+        if (alive) setLbState('failed');
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Забираем настоящую задачу дня. Ошибку глотаем намеренно: страница уже
   // показывает встроенную, и падать из-за сети ей незачем — но подпись внизу
@@ -856,6 +891,23 @@ export default function DailyPuzzlePage() {
             <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 12px 0', color: '#b56bff' }}>
               🏆 Top-100 Streaks
             </h2>
+            {/* Три состояния различаются СЛОВАМИ. Пустой список и отказ
+                выглядели бы одинаково — пустой таблицей, — а для человека это
+                разные вещи: в первом случае он первый, во втором мы не знаем. */}
+            {lbState === 'loading' && (
+              <div style={{ fontSize: 13, color: '#9aa0b4' }}>Загружаем таблицу…</div>
+            )}
+            {lbState === 'failed' && (
+              <div data-testid="daily-lb-failed" style={{ fontSize: 13, color: '#ffd84d' }}>
+                Таблицу не удалось загрузить. Это не значит, что она пуста — мы просто не смогли
+                спросить сервер.
+              </div>
+            )}
+            {lbState === 'ok' && leaderboard.length === 0 && (
+              <div data-testid="daily-lb-empty" style={{ fontSize: 13, color: '#9aa0b4' }}>
+                Сегодня задачу ещё никто не решил. Решите — и будете первым.
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {leaderboard.map((entry, i) => (
                 <div

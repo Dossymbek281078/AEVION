@@ -489,7 +489,15 @@ export default function DailyPuzzlePage() {
         setSolIndex((s) => s + 1);
         const afterBotIdx = nextIdx + 1;
         if (afterBotIdx >= puzzle.sol.length) {
-          // shouldn't happen, but guard
+          // Это ОСНОВНОЙ путь завершения, а не запасной. Прежний комментарий
+          // говорил «shouldn't happen, but guard» — и приглашал удалить живой
+          // код при первой уборке.
+          //
+          // Замер по настоящему банку 19.08.2026: у всех семи проверенных задач
+          // решение ЧЁТНОЙ длины (четыре и шесть ходов). Игрок ходит по чётным
+          // индексам, бот по нечётным — значит последний ход делает бот, и
+          // задача закрывается ровно здесь. Нечётная длина (игрок ходит
+          // последним) закрывается выше, по nextIdx >= sol.length.
           const totalMs = startedAtRef.current != null ? Date.now() - startedAtRef.current : timeMs;
           finalizeSolved(totalMs, hintsUsed);
         } else {

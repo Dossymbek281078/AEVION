@@ -1629,6 +1629,34 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
   });
 });
 
+
+/**
+ * Скорость турнира для поиска рейтинга.
+ *
+ * Найдено вычиткой 19.08.2026, через час после того, как проверка рамок ELO
+ * была написана и покрыта зелёными тестами. Турниры хранят `timeControl` уже
+ * как НАЗВАНИЕ скорости («blitz», «classic», «rapid»), а `speedOf` из хранилища
+ * партий ждёт вид «300+5» и на всё прочее молча возвращает «blitz».
+ *
+ * То есть рамки сверялись по блицу для ВСЕХ турниров: игрок с рейтингом в
+ * рапиде имел в блице ноль партий, считался новичком и проходил куда угодно.
+ * Ни одной ошибки при этом не возникало — проверка просто ничего не проверяла
+ * у девяти турниров из двенадцати.
+ *
+ * Отдельно: у турниров «classic», а у скоростей «classical» — несовпадение,
+ * которое тем же путём давало бы блиц.
+ *
+ * Неизвестное значение возвращает null, а не «blitz»: подстановка чужой
+ * скорости выглядела бы как выполненная проверка. Не знаем — говорим об этом.
+ */
+function tournamentSpeed(timeControl: unknown): string | null {
+  const raw = String(timeControl ?? "").trim().toLowerCase();
+  if (/^\d+\+\d+$/.test(raw)) return speedOf(raw);
+  if (raw === "classic" || raw === "classical") return "classical";
+  if (raw === "bullet" || raw === "blitz" || raw === "rapid") return raw;
+  return null;
+}
+
 router.post("/:id/register", async (req: Request, res: Response): Promise<void> => {
   const t = TOURNAMENTS.find((x) => x.id === req.params.id);
   if (!t) {
@@ -1691,7 +1719,10 @@ router.post("/:id/register", async (req: Request, res: Response): Promise<void> 
   //                                    чтобы «пустили» не выглядело «проверили»
   let eloChecked: "по рейтингу" | "рейтинга нет" | "спросить не удалось" = "рейтинга нет";
   try {
-    const known = await getRating(userId, speedOf(String(t.timeControl)));
+    const speed = tournamentSpeed(t.timeControl);
+    // Скорость не опознана — рейтинг искать негде. Пускаем, но это ЗАПИСАНО:
+    // «пустили, не спросив» и «спросили и пустили» — разные вещи.
+    const known = speed === null ? null : await getRating(userId, speed);
     if (known === null) {
       eloChecked = "спросить не удалось";
     } else if (Number(known.games) > 0) {

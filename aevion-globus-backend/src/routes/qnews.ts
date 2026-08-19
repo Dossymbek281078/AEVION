@@ -284,12 +284,12 @@ qnewsRouter.post("/articles", submitLimiter, async (req: Request, res: Response)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
         [article.id, article.title, article.summary, article.url, article.source, article.category, article.tags, auth.sub],
       );
-      return res.status(201).json({ article });
+      return res.status(201).json({ article, storage: "db" });
     }
   } catch (e) { console.error("[QNews] POST /articles DB error", e); }
 
   memNews.set(article.id, article);
-  return res.status(201).json({ article });
+  return res.status(201).json({ article, storage: "memory" });
 });
 
 // ─── POST /api/qnews/articles/:id/bookmark — toggle bookmark ─────────────────
@@ -312,7 +312,7 @@ qnewsRouter.post("/articles/:id/bookmark", async (req: Request, res: Response) =
           `INSERT INTO "QNewsBookmark"("id","userId","articleId") VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
           [crypto.randomUUID(), auth.sub, id],
         );
-        return res.json({ bookmarked: true });
+        return res.json({ bookmarked: true, storage: "db" });
       }
     }
   } catch (e) { console.error("[QNews] bookmark DB error", e); }
@@ -321,7 +321,7 @@ qnewsRouter.post("/articles/:id/bookmark", async (req: Request, res: Response) =
   const key = `${auth.sub}:${id}`;
   const bookmarked = !memBookmarks.get(key);
   if (bookmarked) memBookmarks.set(key, true); else memBookmarks.delete(key);
-  return res.json({ bookmarked });
+  return res.json({ bookmarked, storage: "memory" });
 });
 
 // ─── GET /api/qnews/me/bookmarks — my bookmarked articles ────────────────────

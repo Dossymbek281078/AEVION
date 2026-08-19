@@ -163,7 +163,7 @@ mapRealityRouter.post("/signals", submitLimiter, async (req: Request, res: Respo
         [title, description, category, country, city, lat, lng, authorAlias],
       );
       const row = rows[0] as { id: number; support_count: number };
-      return res.status(201).json({ id: row.id, supportCount: row.support_count });
+      return res.status(201).json({ id: row.id, supportCount: row.support_count, storage: "db" });
     }
   } catch (e) { capture(e); console.error("[MapReality] POST /signals DB error", e); }
 
@@ -183,7 +183,7 @@ mapRealityRouter.post("/signals", submitLimiter, async (req: Request, res: Respo
   };
   memSignals.push(signal);
   trimMemStore();
-  return res.status(201).json({ id: signal.id, supportCount: 0 });
+  return res.status(201).json({ id: signal.id, supportCount: 0, storage: "memory" });
 });
 
 // ─── GET /api/mapreality/signals ──────────────────────────────────────────────
@@ -364,7 +364,7 @@ mapRealityRouter.post("/signals/:id/support", supportLimiter, async (req: Reques
          RETURNING support_count`,
         [id],
       );
-      return res.json({ supportCount: updated[0]?.support_count ?? 0 });
+      return res.json({ supportCount: updated[0]?.support_count ?? 0, storage: "db" });
     }
   } catch (e) { capture(e); console.error("[MapReality] POST /signals/:id/support DB error", e); }
 
@@ -376,7 +376,7 @@ mapRealityRouter.post("/signals/:id/support", supportLimiter, async (req: Reques
 
   memSupports.push({ signal_id: id, supporter_alias: supporterAlias, created_at: nowIso() });
   signal.support_count += 1;
-  return res.json({ supportCount: signal.support_count });
+  return res.json({ supportCount: signal.support_count, storage: "memory" });
 });
 
 // ─── PATCH /api/mapreality/signals/:id/status ─────────────────────────────────

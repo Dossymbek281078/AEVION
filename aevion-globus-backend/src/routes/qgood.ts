@@ -661,7 +661,7 @@ qgoodRouter.post("/mood", moodLimit, async (req, res) => {
         `INSERT INTO qgood_moods (user_id, score, emotion, context) VALUES ($1,$2,$3,$4) RETURNING *`,
         [userId, score, emotion, context],
       );
-      return res.status(201).json({ ok: true, entry: r.rows[0] });
+      return res.status(201).json({ ok: true, entry: r.rows[0], storage: "db" });
     } catch (err: unknown) {
       console.error("[qgood] mood_insert_failed", err instanceof Error ? err.message : err);
     }
@@ -677,7 +677,7 @@ qgoodRouter.post("/mood", moodLimit, async (req, res) => {
     logged_at: new Date().toISOString(),
   };
   memMoods.push(entry);
-  res.status(201).json({ ok: true, entry });
+  res.status(201).json({ ok: true, entry, storage: "memory" });
 });
 
 // ── GET /api/qgood/mood ──────────────────────────────────────────────────────
@@ -854,7 +854,7 @@ qgoodRouter.post("/exercises/:id/complete", moodLimit, async (req, res) => {
       );
       const streak = Number((streakRow.rows[0] as { streak_days?: string } | undefined)?.streak_days ?? 0);
 
-      return res.status(201).json({ ok: true, exercise_id: exerciseId, streak, total_done });
+      return res.status(201).json({ ok: true, exercise_id: exerciseId, streak, total_done, storage: "db" });
     } catch (err: unknown) {
       console.error("[qgood] exercise_complete_failed", err instanceof Error ? err.message : err);
     }
@@ -874,7 +874,7 @@ qgoodRouter.post("/exercises/:id/complete", moodLimit, async (req, res) => {
       .filter((c) => c.user_id === userId)
       .map((c) => c.completed_at.slice(0, 10)),
   ).size;
-  res.status(201).json({ ok: true, exercise_id: exerciseId, streak: uniqueDays, total_done });
+  res.status(201).json({ ok: true, exercise_id: exerciseId, streak: uniqueDays, total_done, storage: "memory" });
 });
 
 // ── MVP concept board surface ───────────────────────────────────────────────

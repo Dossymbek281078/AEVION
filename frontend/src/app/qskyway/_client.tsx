@@ -17,6 +17,7 @@ import { isSmokeSlot, countSmokeSlots } from "./slotSource";
 import { HeightDisputePanel, type HeightDispute } from "./HeightDisputePanel";
 import { padProhibition } from "./padPermission";
 import { verifyVerdict } from "./verifyVerdict";
+import { InfoTip } from "@/components/InfoTip";
 import { measuredObstaclePct } from "./heightQuality";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
@@ -1226,8 +1227,14 @@ export default function QSkywayClient() {
                           </div>
                         )}
                         {v.needsAtc && (
-                          <div style={{ color: "#fda4af", fontSize: 10, marginTop: 2 }} title={t("qskyway.tip.noAutoClearance")}>
+                          <div style={{ color: "#fda4af", fontSize: 10, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
                             {t("qskyway.pad.needsAtc")}
+                            {/* Не title, а InfoTip: подсказка при наведении на телефоне
+                                не существует, а здесь заперто РЕГУЛЯТОРНОЕ условие —
+                                автоматического допуска нет, вылет только по координации
+                                с УВД. InfoTip открывается нажатием и имеет подпись для
+                                экранного диктора. Компонент платформенный, не свой. */}
+                            <InfoTip label={t("qskyway.pad.needsAtc")} text={t("qskyway.tip.noAutoClearance")} size={12} />
                           </div>
                         )}
                         {/* Оценка отвечает «сядет ли сюда аппарат», а не «можно ли

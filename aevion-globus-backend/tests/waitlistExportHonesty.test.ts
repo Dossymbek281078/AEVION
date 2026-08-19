@@ -26,6 +26,16 @@ const SECRET = "test-secret-for-waitlist-export-honesty-000";
 
 beforeAll(() => {
   process.env.AUTH_JWT_SECRET = SECRET;
+  // Базы в тестах нет, и ручка это выясняет ПОПЫТКОЙ подключения. Пул по
+  // умолчанию ждёт её 5 секунд (PG_POOL_CONN_MS), а при полном прогоне —
+  // 122 файла параллельно — этого хватало, чтобы тест падал по таймауту в 10 с,
+  // будучи зелёным в одиночку. Падало при этом не там, где причина.
+  //
+  // Сокращаем ожидание, а не поднимаем лимит теста: причина в ожидании
+  // соединения, которого здесь и не должно быть. Vitest изолирует модули по
+  // файлу, поэтому пул в этом файле создаётся уже с этим значением.
+  process.env.PG_POOL_CONN_MS = "150";
+  process.env.PG_STATEMENT_TIMEOUT_MS = "500";
 });
 
 function adminToken(): string {
@@ -44,13 +54,18 @@ async function mount() {
 }
 
 describe("выгрузка заявок — признаки честности", () => {
-  test("без админского токена не отдаётся вовсе", async () => {
-    // Список адресов — персональные данные: закрыт он не «на всякий случай».
-    const app = await mount();
-    const r = await request(app).get("/api/constitution/waitlist/list");
-    expect(r.status).toBe(403);
-    expect(r.body.error).toBe("admin_required");
-  });
+  test(
+    "без админского токена не отдаётся вовсе",
+    async () => {
+      // Список адресов — персональные данные: закрыт он не «на всякий случай».
+      const app = await mount();
+      const r = await request(app).get("/api/constitution/waitlist/list");
+      expect(r.status).toBe(403);
+      expect(r.body.error).toBe("admin_required");
+    },
+    // Страховка: этот случай первый, он и платит за создание пула.
+    20_000,
+  );
 
   test("JSON называет источник данных, а не только строки", async () => {
     const app = await mount();

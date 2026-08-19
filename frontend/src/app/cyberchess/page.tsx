@@ -2068,6 +2068,13 @@ export default function CyberChessPage(){
       const params=new URLSearchParams(window.location.search);
       const mid=params.get("matchId");
       if(mid&&/^[a-zA-Z0-9-]{6,64}$/.test(mid))sMatchmakingId(mid);
+      // Цвет из ссылки разворачивает доску. Сервер кладёт его в ссылку
+      // (`&color=black`), а страница до 19.08.2026 его ВЫБРАСЫВАЛА: игрок за
+      // чёрных приходил из турнира и видел доску белыми к себе, переворачивая
+      // вручную. Параметр передавали — и не использовали.
+      const col=params.get("color");
+      if(col==="black")sFlip(true);
+      else if(col==="white")sFlip(false);
     }catch{}
   },[]);
   useEffect(()=>{

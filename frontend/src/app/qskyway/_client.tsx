@@ -1006,6 +1006,12 @@ export default function QSkywayClient() {
                       derived: t("prov.derived"),
                       guessed: t("prov.guessed"),
                       unit: t("qskyway.unit.buildings"),
+                      // Заголовок значка и подпись для диктора — тоже из переводов.
+                      // Без них InfoTip подставлял английское «What is …?» вокруг
+                      // русского слова: видно это только в настоящем браузере,
+                      // потому что подсказка появляется после загрузки данных.
+                      title: t("prov.title"),
+                      whatIs: t("common.infotip.whatIs", { term: t("prov.title") }),
                     }} />
                   {meta.suspect.length > 0 && (
                     <span

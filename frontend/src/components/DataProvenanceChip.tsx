@@ -48,7 +48,7 @@ export function DataProvenanceChip({ dataQuality, labels, compact }: Props) {
     return (
       <span style={{ fontFamily: "monospace", fontSize: 11, color: "#9fb0c4", display: "inline-flex", alignItems: "center" }}>
         📊 <span style={{ color: headTone, marginLeft: 4 }}>{measuredPct}% {L.measured}</span>, {realPct}% реальных
-        <InfoTip label="Провенанс данных" text={tip} size={13} />
+        <InfoTip label={L.title ?? "Провенанс данных"} ariaLabel={L.whatIs} text={tip} size={13} />
       </span>
     );
   }
@@ -81,7 +81,7 @@ export function DataProvenanceChip({ dataQuality, labels, compact }: Props) {
           {Math.round((1000 * guessed) / total) / 10}% {L.guessed}
         </span>
       )}
-      <InfoTip label="Провенанс данных" text={tip} size={13} />
+      <InfoTip label={L.title ?? "Провенанс данных"} ariaLabel={L.whatIs} text={tip} size={13} />
     </span>
   );
 }

@@ -40,12 +40,23 @@ export interface ProvenanceLabels {
   guessed: string;
   /** unit of the counted thing, e.g. "зданий", "позиций" (optional) */
   unit?: string;
+  /**
+   * Заголовок значка и подпись для экранного диктора.
+   *
+   * Добавлено 20.08.2026 по факту: на переведённой странице диктор произносил
+   * «What is Провенанс данных?» — английская обёртка вокруг русского слова.
+   * Видно это только в настоящем браузере: подсказка появляется после
+   * загрузки данных, и ни в серверном HTML, ни в тестах её не было.
+   */
+  title?: string;
+  whatIs?: string;
 }
 
 export const DEFAULT_PROVENANCE_LABELS: ProvenanceLabels = {
   measured: "измерено",
   derived: "выведено",
   guessed: "угадано",
+  title: "Провенанс данных",
 };
 
 /** Semantic colours shared with the rest of the platform (teal/amber/rose). */

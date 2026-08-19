@@ -817,6 +817,153 @@ modulesRouter.get("/admin/whoami", (req, res) => {
 
 // 🔹 PATCH /admin/:id — set/clear override fields. Pass null to clear.
 //    Body: { status?: string|null, tier?: string|null, hint?: string|null }
+// ВАЖЕН ПОРЯДОК: ДО `/admin/:id`, иначе `:id` принимает слово "bulk" за
+// идентификатор модуля и массовая правка молча уходит в обработчик одного.
+// Найдено свипом по классу 19.08.2026 вместе с двумя такими же.
+modulesRouter.patch("/admin/bulk", async (req, res) => {
+  try {
+    await ensureModulesTables();
+    const auth = verifyBearerOptional(req);
+    if (!isModulesAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+    const itemsRaw = req.body?.items;
+    if (!Array.isArray(itemsRaw) || itemsRaw.length === 0) {
+      return res.status(400).json({ error: "items must be a non-empty array" });
+    }
+    if (itemsRaw.length > 100) {
+      return res.status(400).json({ error: "max 100 items per call" });
+    }
+
+    type Edit = {
+      id: string;
+      status?: string | null;
+      tier?: string | null;
+      hint?: string | null;
+    };
+    const edits: Edit[] = [];
+    for (const raw of itemsRaw) {
+      if (!raw || typeof raw !== "object") {
+        return res.status(400).json({ error: "each item must be an object" });
+      }
+      const id = typeof raw.id === "string" ? raw.id.trim() : "";
+      if (!id || !MODULE_RUNTIME[id]) {
+        return res.status(400).json({ error: "unknown or missing module id", id });
+      }
+      const e: Edit = { id };
+      if ("status" in raw) {
+        const v = raw.status;
+        if (v !== null && v !== undefined && !VALID_STATUS.has(String(v))) {
+          return res.status(400).json({ error: "invalid status", id, value: v });
+        }
+        e.status = v === undefined ? undefined : v;
+      }
+      if ("tier" in raw) {
+        const v = raw.tier;
+        if (v !== null && v !== undefined && !VALID_TIER.has(String(v))) {
+          return res.status(400).json({ error: "invalid tier", id, value: v });
+        }
+        e.tier = v === undefined ? undefined : v;
+      }
+      if ("hint" in raw) {
+        const v = raw.hint;
+        if (v !== null && v !== undefined && (typeof v !== "string" || v.length > 500)) {
+          return res.status(400).json({ error: "hint must be string ≤ 500 chars", id });
+        }
+        e.hint = v === undefined ? undefined : v;
+      }
+      edits.push(e);
+    }
+
+    const overridesBefore = await loadOverrides();
+    const results: Array<{
+      moduleId: string;
+      before: any;
+      after: any;
+      cleared: boolean;
+    }> = [];
+    const actor = auth?.email || auth?.sub || null;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const e of edits) {
+        const beforeOv = overridesBefore.get(e.id);
+        const baseEnriched = enrichProject(projects.find((p) => p.id === e.id)!);
+        const before = {
+          status: beforeOv?.status ?? baseEnriched.status,
+          tier: beforeOv?.tier ?? baseEnriched.runtime.tier,
+          hint: beforeOv?.hint ?? baseEnriched.runtime.hint,
+          hadOverride: !!beforeOv,
+        };
+        const next = {
+          status: e.status === undefined ? beforeOv?.status ?? null : e.status,
+          tier: e.tier === undefined ? beforeOv?.tier ?? null : e.tier,
+          hint: e.hint === undefined ? beforeOv?.hint ?? null : e.hint,
+        };
+        if (next.status === null && next.tier === null && next.hint === null) {
+          await client.query(`DELETE FROM "ModuleStateOverride" WHERE "moduleId" = $1`, [e.id]);
+        } else {
+          await client.query(
+            `INSERT INTO "ModuleStateOverride" ("moduleId","status","tier","hint","updatedAt","updatedBy")
+             VALUES ($1,$2,$3,$4,NOW(),$5)
+             ON CONFLICT ("moduleId") DO UPDATE
+               SET "status" = EXCLUDED."status",
+                   "tier" = EXCLUDED."tier",
+                   "hint" = EXCLUDED."hint",
+                   "updatedAt" = NOW(),
+                   "updatedBy" = EXCLUDED."updatedBy"`,
+            [e.id, next.status, next.tier, next.hint, actor]
+          );
+        }
+        const after = {
+          status: next.status ?? baseEnriched.status,
+          tier: next.tier ?? baseEnriched.runtime.tier,
+          hint: next.hint ?? baseEnriched.runtime.hint,
+          hadOverride: next.status !== null || next.tier !== null || next.hint !== null,
+        };
+        await client.query(
+          `INSERT INTO "ModuleStateChange" ("id","moduleId","actor","oldState","newState")
+           VALUES ($1,$2,$3,$4,$5)`,
+          [crypto.randomUUID(), e.id, actor, JSON.stringify(before), JSON.stringify(after)]
+        );
+        results.push({
+          moduleId: e.id,
+          before,
+          after,
+          cleared: !after.hadOverride,
+        });
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // Fire webhooks AFTER the transaction commits — one per module so
+    // subscribers can correlate by moduleId, matching the single-edit
+    // contract.
+    for (const r of results) {
+      const ev: ModuleWebhookEvent = r.cleared
+        ? "module.override.cleared"
+        : "module.override.set";
+      fireModuleWebhook(pool, ev, {
+        moduleId: r.moduleId,
+        before: r.before,
+        after: r.after,
+        at: new Date().toISOString(),
+      });
+    }
+
+    res.json({ updated: results.length, items: results });
+  } catch (err: any) {
+    captureModulesError(err, { route: "admin-bulk" });
+    res.status(500).json({ error: "bulk patch failed" });
+  }
+});
+
 modulesRouter.patch("/admin/:id", async (req, res) => {
   try {
     await ensureModulesTables();
@@ -1748,146 +1895,3 @@ ${items}
 //    All writes happen in a single transaction; one combined audit row per
 //    module affected; one webhook fire per module. Aborts on first
 //    validation error (no partial writes).
-modulesRouter.patch("/admin/bulk", async (req, res) => {
-  try {
-    await ensureModulesTables();
-    const auth = verifyBearerOptional(req);
-    if (!isModulesAdmin(auth)) {
-      return res.status(403).json({ error: "Admin role required" });
-    }
-    const itemsRaw = req.body?.items;
-    if (!Array.isArray(itemsRaw) || itemsRaw.length === 0) {
-      return res.status(400).json({ error: "items must be a non-empty array" });
-    }
-    if (itemsRaw.length > 100) {
-      return res.status(400).json({ error: "max 100 items per call" });
-    }
-
-    type Edit = {
-      id: string;
-      status?: string | null;
-      tier?: string | null;
-      hint?: string | null;
-    };
-    const edits: Edit[] = [];
-    for (const raw of itemsRaw) {
-      if (!raw || typeof raw !== "object") {
-        return res.status(400).json({ error: "each item must be an object" });
-      }
-      const id = typeof raw.id === "string" ? raw.id.trim() : "";
-      if (!id || !MODULE_RUNTIME[id]) {
-        return res.status(400).json({ error: "unknown or missing module id", id });
-      }
-      const e: Edit = { id };
-      if ("status" in raw) {
-        const v = raw.status;
-        if (v !== null && v !== undefined && !VALID_STATUS.has(String(v))) {
-          return res.status(400).json({ error: "invalid status", id, value: v });
-        }
-        e.status = v === undefined ? undefined : v;
-      }
-      if ("tier" in raw) {
-        const v = raw.tier;
-        if (v !== null && v !== undefined && !VALID_TIER.has(String(v))) {
-          return res.status(400).json({ error: "invalid tier", id, value: v });
-        }
-        e.tier = v === undefined ? undefined : v;
-      }
-      if ("hint" in raw) {
-        const v = raw.hint;
-        if (v !== null && v !== undefined && (typeof v !== "string" || v.length > 500)) {
-          return res.status(400).json({ error: "hint must be string ≤ 500 chars", id });
-        }
-        e.hint = v === undefined ? undefined : v;
-      }
-      edits.push(e);
-    }
-
-    const overridesBefore = await loadOverrides();
-    const results: Array<{
-      moduleId: string;
-      before: any;
-      after: any;
-      cleared: boolean;
-    }> = [];
-    const actor = auth?.email || auth?.sub || null;
-
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      for (const e of edits) {
-        const beforeOv = overridesBefore.get(e.id);
-        const baseEnriched = enrichProject(projects.find((p) => p.id === e.id)!);
-        const before = {
-          status: beforeOv?.status ?? baseEnriched.status,
-          tier: beforeOv?.tier ?? baseEnriched.runtime.tier,
-          hint: beforeOv?.hint ?? baseEnriched.runtime.hint,
-          hadOverride: !!beforeOv,
-        };
-        const next = {
-          status: e.status === undefined ? beforeOv?.status ?? null : e.status,
-          tier: e.tier === undefined ? beforeOv?.tier ?? null : e.tier,
-          hint: e.hint === undefined ? beforeOv?.hint ?? null : e.hint,
-        };
-        if (next.status === null && next.tier === null && next.hint === null) {
-          await client.query(`DELETE FROM "ModuleStateOverride" WHERE "moduleId" = $1`, [e.id]);
-        } else {
-          await client.query(
-            `INSERT INTO "ModuleStateOverride" ("moduleId","status","tier","hint","updatedAt","updatedBy")
-             VALUES ($1,$2,$3,$4,NOW(),$5)
-             ON CONFLICT ("moduleId") DO UPDATE
-               SET "status" = EXCLUDED."status",
-                   "tier" = EXCLUDED."tier",
-                   "hint" = EXCLUDED."hint",
-                   "updatedAt" = NOW(),
-                   "updatedBy" = EXCLUDED."updatedBy"`,
-            [e.id, next.status, next.tier, next.hint, actor]
-          );
-        }
-        const after = {
-          status: next.status ?? baseEnriched.status,
-          tier: next.tier ?? baseEnriched.runtime.tier,
-          hint: next.hint ?? baseEnriched.runtime.hint,
-          hadOverride: next.status !== null || next.tier !== null || next.hint !== null,
-        };
-        await client.query(
-          `INSERT INTO "ModuleStateChange" ("id","moduleId","actor","oldState","newState")
-           VALUES ($1,$2,$3,$4,$5)`,
-          [crypto.randomUUID(), e.id, actor, JSON.stringify(before), JSON.stringify(after)]
-        );
-        results.push({
-          moduleId: e.id,
-          before,
-          after,
-          cleared: !after.hadOverride,
-        });
-      }
-      await client.query("COMMIT");
-    } catch (err) {
-      await client.query("ROLLBACK").catch(() => {});
-      throw err;
-    } finally {
-      client.release();
-    }
-
-    // Fire webhooks AFTER the transaction commits — one per module so
-    // subscribers can correlate by moduleId, matching the single-edit
-    // contract.
-    for (const r of results) {
-      const ev: ModuleWebhookEvent = r.cleared
-        ? "module.override.cleared"
-        : "module.override.set";
-      fireModuleWebhook(pool, ev, {
-        moduleId: r.moduleId,
-        before: r.before,
-        after: r.after,
-        at: new Date().toISOString(),
-      });
-    }
-
-    res.json({ updated: results.length, items: results });
-  } catch (err: any) {
-    captureModulesError(err, { route: "admin-bulk" });
-    res.status(500).json({ error: "bulk patch failed" });
-  }
-});

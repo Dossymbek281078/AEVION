@@ -1247,6 +1247,22 @@ qcoreaiRouter.get("/sessions", async (req, res) => {
   }
 });
 
+// ВАЖЕН ПОРЯДОК: ДО `/sessions/:id`, иначе `:id` принимает слово "archived"
+// за идентификатор. Проверено на проде 19.08.2026: адрес отвечал
+// 404 {"error":"session not found"} — то есть из ЧУЖОГО обработчика, а список
+// архивных сессий был недостижим.
+qcoreaiRouter.get("/sessions/archived", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const rows = await listSessions(auth?.sub ?? null, 100, true);
+    const archived = rows.filter((s) => s.archivedAt);
+    res.json({ items: archived, total: archived.length });
+  } catch (err: any) {
+    captureQCoreAIError(err, { route: "sessions-archived" });
+    res.status(500).json({ error: "list archived failed" });
+  }
+});
+
 qcoreaiRouter.get("/sessions/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
@@ -1317,17 +1333,6 @@ qcoreaiRouter.patch("/sessions/:id/archive", async (req, res) => {
 });
 
 /** GET /sessions/archived — list archived sessions. */
-qcoreaiRouter.get("/sessions/archived", async (req, res) => {
-  try {
-    const auth = verifyBearerOptional(req);
-    const rows = await listSessions(auth?.sub ?? null, 100, true);
-    const archived = rows.filter((s) => s.archivedAt);
-    res.json({ items: archived, total: archived.length });
-  } catch (err: any) {
-    captureQCoreAIError(err, { route: "sessions-archived" });
-    res.status(500).json({ error: "list archived failed" });
-  }
-});
 
 /** POST /sessions/:id/merge — move all runs from sourceSessionId into this session, then delete source. */
 qcoreaiRouter.post("/sessions/:id/merge", async (req, res) => {
@@ -3145,6 +3150,27 @@ qcoreaiRouter.get("/prompts/public", async (req, res) => {
   }
 });
 
+// ВАЖЕН ПОРЯДОК: этот маршрут обязан стоять ДО `/prompts/:id`. Express
+// разбирает по порядку регистрации, и `:id` принимает слово "audit" за
+// идентификатор. До 19.08.2026 обработчик стоял на 835 строк ниже и был
+// НЕДОСТИЖИМ: прод отвечал 404 {"error":"prompt not found"} из ЧУЖОГО
+// обработчика, а страница журнала промтов молча оставалась пустой —
+// клиент глотает ошибку через `catch { /* noop */ }`.
+// Соседний `/prompts/public` стоит выше правильно: правило знали, пропустили
+// один случай.
+qcoreaiRouter.get("/prompts/audit", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = parseInt(String(req.query.limit || "100"), 10) || 100;
+    const items = await listPromptAudit(auth.sub, limit);
+    res.json({ items });
+  } catch (err: any) {
+    captureQCoreAIError(err, { route: "prompts-audit" });
+    res.status(500).json({ error: "list audit failed" });
+  }
+});
+
 qcoreaiRouter.get("/prompts/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
@@ -3980,18 +4006,6 @@ qcoreaiRouter.get("/runs/:id/comments", async (req, res) => {
    GET /api/qcoreai/prompts/audit
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.get("/prompts/audit", async (req, res) => {
-  try {
-    const auth = verifyBearerOptional(req);
-    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const limit = parseInt(String(req.query.limit || "100"), 10) || 100;
-    const items = await listPromptAudit(auth.sub, limit);
-    res.json({ items });
-  } catch (err: any) {
-    captureQCoreAIError(err, { route: "prompts-audit" });
-    res.status(500).json({ error: "list audit failed" });
-  }
-});
 
 /* ═══════════════════════════════════════════════════════════════════════
    Workspaces — shared session collections

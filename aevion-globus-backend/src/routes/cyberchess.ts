@@ -338,7 +338,7 @@ async function ensureCpiDb(): Promise<void> {
         -- измеренная сервером. Появится серверный расчёт — у его строк будет
         -- своё значение, и отличить одно от другого можно будет запросом.
         "source"            TEXT NOT NULL DEFAULT 'self_reported',
-        "updatedAt"         TIMESTAMP NOT NULL DEFAULT now()
+        "updatedAt"         TIMESTAMPTZ NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS "cpi_overall_idx"     ON "CyberchessCpiState" ("overall" DESC);
       CREATE INDEX IF NOT EXISTS "cpi_tactics_idx"     ON "CyberchessCpiState" ("tactics" DESC);
@@ -554,7 +554,7 @@ async function ensureStateDb(): Promise<any> {
         "userId"    TEXT PRIMARY KEY,
         "state"     JSONB NOT NULL DEFAULT '{}'::jsonb,
         "clientTs"  BIGINT NOT NULL DEFAULT 0,
-        "updatedAt" TIMESTAMP NOT NULL DEFAULT now()
+        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
       );
     `);
     statePool = pool;

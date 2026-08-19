@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Chess, Square } from 'chess.js';
 
 type Puzzle = {
+  /** Есть только у задач из банка; у встроенных его нет. */
+  id?: string;
   fen: string;
   sol: string[];
   theme: string;
@@ -93,7 +95,22 @@ function formatTime(ms: number): string {
 }
 
 export default function DailyPuzzlePage() {
-  const puzzle = useMemo(() => POOL[dayIndex() % POOL.length], []);
+  /**
+   * Задача дня приходит С СЕРВЕРА, а встроенный набор — только запасной путь.
+   *
+   * Замер 19.08.2026: в банке ChessPuzzle 502 584 записи с живыми темами и
+   * рейтингами, а страница брала позицию из тридцати, зашитых в браузерный
+   * пакет. Тридцать — это цикл повтора в месяц; к публичному запуску 30.08
+   * человек его заметит. Ручка бэкенда при этом уже отдавала настоящую задачу —
+   * страница её просто не звала.
+   *
+   * Порядок именно такой: встроенная показывается СРАЗУ (страница не ждёт сеть
+   * и работает даже при мёртвом бэкенде), а как только придёт настоящая —
+   * заменяет её. Обратный порядок дал бы пустую доску на секунду и белый экран
+   * при недоступной сети.
+   */
+  const [puzzle, setPuzzle] = useState<Puzzle>(() => POOL[dayIndex() % POOL.length]);
+  const [fromBank, setFromBank] = useState(false);
   const leaderboard = useMemo(() => mockLeaderboard(), []);
 
   // chess engine (mutable via ref to keep instance stable across renders)
@@ -124,6 +141,54 @@ export default function DailyPuzzlePage() {
 
   // Bot reply pending (visual)
   const [botPending, setBotPending] = useState(false);
+
+  // Забираем настоящую задачу дня. Ошибку глотаем намеренно: страница уже
+  // показывает встроенную, и падать из-за сети ей незачем — но подпись внизу
+  // честно скажет, что задача резервная.
+  useEffect(() => {
+    let alive = true;
+    fetch('/api-backend/api/cyberchess-daily/puzzle')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive) return;
+        const p = j?.puzzle;
+        if (!p?.fen || !Array.isArray(p.sol) || p.sol.length === 0) return;
+        setPuzzle({
+          id: String(p.id),
+          fen: String(p.fen),
+          sol: p.sol.map((m: unknown) => String(m)),
+          theme: String(p.theme ?? 'Тактика'),
+          rating: Number(p.rating) || 1200,
+        });
+        // Признак берётся из ответа сервера, а не угадывается: сервер сам знает,
+        // ответил ли банк, и говорит это полем source.
+        setFromBank(typeof j?.source === 'string' && j.source.includes('банк'));
+      })
+      .catch(() => {
+        /* остаёмся на встроенной задаче */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Смена задачи обязана сбросить ВСЁ состояние решения. Иначе останутся ходы
+  // и подсказки от прошлой позиции — тот же класс, что «ответы под чужими
+  // вопросами».
+  useEffect(() => {
+    chessRef.current = new Chess(puzzle.fen);
+    setBoard(buildBoardFromChess(chessRef.current));
+    setSelected(null);
+    setLegalDests([]);
+    setLastMove(null);
+    setSolIndex(0);
+    setHintLevel(0);
+    setHintsUsed(0);
+    setSolved(false);
+    setMessage('');
+    setPromoMove(null);
+    setBotPending(false);
+  }, [puzzle]);
 
   // load streak from localStorage on mount
   useEffect(() => {
@@ -495,6 +560,20 @@ export default function DailyPuzzlePage() {
                   <div style={{ fontSize: 12, color: '#9aa0b4' }}>Рейтинг</div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: '#b56bff' }}>{puzzle.rating}</div>
                 </div>
+              </div>
+
+              {/* Откуда задача. Без этой строки резервная позиция неотличима от
+                  настоящей: та же доска, та же тема, тот же рейтинг — и человек
+                  решает, что играет сегодняшнюю задачу всей платформы, когда на
+                  самом деле банк не ответил и ему досталась одна из тридцати
+                  встроенных. Признак берётся с сервера, а не угадывается. */}
+              <div
+                data-testid="daily-puzzle-source"
+                style={{ fontSize: 12, color: fromBank ? '#9aa0b4' : '#ffd84d', marginBottom: 10 }}
+              >
+                {fromBank
+                  ? 'Задача дня из общего банка — одна и та же у всех игроков сегодня'
+                  : 'Резервная задача: банк задач не ответил, у других игроков сегодня может быть другая'}
               </div>
 
               <div style={{ position: 'relative' }}>

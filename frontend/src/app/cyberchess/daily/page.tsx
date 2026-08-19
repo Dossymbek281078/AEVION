@@ -2,6 +2,7 @@
 // CyberChess Daily Puzzle — real chess.js + 365 pool + leaderboard + streak
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { themeRu } from './themes';
 import { tournamentUserId, tournamentDisplayName } from '../tournaments/playerIdentity';
 import { Chess, Square } from 'chess.js';
 
@@ -640,10 +641,10 @@ export default function DailyPuzzlePage() {
             WebkitTextFillColor: 'transparent',
           }}
         >
-          🧩 Daily Puzzle
+          🧩 Задача дня
         </h1>
         <p style={{ color: '#9aa0b4', margin: '0 0 24px 0', fontSize: 14 }}>
-          Один пазл в день. Решай каждый день — держи streak. Многоходовые пазлы: бот отвечает за противника.
+          Один пазл в день. Решай каждый день — держи серию. Многоходовые пазлы: бот отвечает за противника.
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 24, alignItems: 'start' }}>
@@ -661,7 +662,7 @@ export default function DailyPuzzlePage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 12, color: '#9aa0b4' }}>Тема</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#00ff9d' }}>{puzzle.theme}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#00ff9d' }}>{themeRu(puzzle.theme)}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 12, color: '#9aa0b4' }}>Время</div>
@@ -901,7 +902,7 @@ export default function DailyPuzzlePage() {
                   padding: 16,
                 }}
               >
-                <div style={{ fontSize: 12, color: '#9aa0b4' }}>Текущий streak</div>
+                <div style={{ fontSize: 12, color: '#9aa0b4' }}>Текущая серия</div>
                 <div style={{ fontSize: 32, fontWeight: 800, color: '#00ff9d' }}>🔥 {streak}</div>
               </div>
               <div
@@ -912,7 +913,7 @@ export default function DailyPuzzlePage() {
                   padding: 16,
                 }}
               >
-                <div style={{ fontSize: 12, color: '#9aa0b4' }}>Лучший streak</div>
+                <div style={{ fontSize: 12, color: '#9aa0b4' }}>Лучшая серия</div>
                 <div style={{ fontSize: 32, fontWeight: 800, color: '#b56bff' }}>🏆 {bestStreak}</div>
               </div>
               <div

@@ -355,7 +355,7 @@ qcontractRouter.get("/documents", async (req, res) => {
   const ownerId = auth.sub ?? auth.email ?? "unknown";
   const q = (req.query.q as string | undefined)?.trim();
   const status = req.query.status as string | undefined; // "active" | "expired" | "revoked"
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
 
   const params: unknown[] = [ownerId];
   let where = "owner_id = $1";

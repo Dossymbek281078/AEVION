@@ -19,6 +19,7 @@
 
 import { Router, type Express, type Request, type Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
+import { queryNumber } from "../lib/queryNumber";
 import {
   createItem, listItems, getItem, statsFor,
   searchByPayloadField, searchByDistance,
@@ -90,8 +91,8 @@ function buildRouter(cfg: ConceptConfig): Router {
   // GET /<noun>?limit&offset&tag
   r.get(`/${cfg.noun}`, readLimit, async (req: Request, res: Response) => {
     try {
-      const limit = Number(req.query.limit ?? 20);
-      const offset = Number(req.query.offset ?? 0);
+      const limit = queryNumber(req.query.limit, 20);
+      const offset = queryNumber(req.query.offset, 0);
       const tag = typeof req.query.tag === "string" ? req.query.tag : null;
       const { items, total } = await listItems(cfg.id, { limit, offset, tag });
       res.json({ items, total, moduleId: cfg.id, noun: cfg.noun });
@@ -161,8 +162,8 @@ function attachModuleExtensions(app: Express): void {
     try {
       const lat = Number(req.query.lat);
       const lng = Number(req.query.lng);
-      const radiusKm = Number(req.query.radiusKm ?? req.query.radius ?? 25);
-      const limit = Number(req.query.limit ?? 20);
+      const radiusKm = queryNumber(req.query.radiusKm ?? req.query.radius, 25);
+      const limit = queryNumber(req.query.limit, 20);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         return res.status(400).json({ error: "missing_coords", hint: "pass ?lat=...&lng=...&radiusKm=..." });
       }
@@ -180,7 +181,7 @@ function attachModuleExtensions(app: Express): void {
     try {
       const stage = String(req.params.stage || "").slice(0, 40);
       if (!stage) return res.status(400).json({ error: "missing_stage" });
-      const limit = Number(req.query.limit ?? 20);
+      const limit = queryNumber(req.query.limit, 20);
       const items = await searchByPayloadField("startup-exchange", "stage", stage, limit);
       res.json({ items, total: items.length, moduleId: "startup-exchange", noun: "listings", query: { stage } });
     } catch (err) {
@@ -192,7 +193,7 @@ function attachModuleExtensions(app: Express): void {
     try {
       const location = String(req.query.location || "").slice(0, 80);
       if (!location) return res.status(400).json({ error: "missing_location", hint: "pass ?location=..." });
-      const limit = Number(req.query.limit ?? 20);
+      const limit = queryNumber(req.query.limit, 20);
       const items = await searchByPayloadField("voice-of-earth", "location", location, limit);
       res.json({ items, total: items.length, moduleId: "voice-of-earth", noun: "feeds", query: { location } });
     } catch (err) {

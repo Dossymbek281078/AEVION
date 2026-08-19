@@ -254,7 +254,16 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   // Аварийный выключатель: GUMROAD_VERIFY_SALES=0.
   const signatureEnforced = Boolean(process.env.GUMROAD_WEBHOOK_SECRET);
   if (!signatureEnforced && process.env.GUMROAD_VERIFY_SALES !== "0") {
-    const { verdict, sale } = await verifyGumroadSaleDetailed(saleId);
+    // eslint-disable-next-line prefer-const
+    let { verdict, sale } = await verifyGumroadSaleDetailed(saleId);
+    // Флаг, а не ранний выход. Причина техническая и важная: освобождение
+    // ключа дедупликации живёт в ОДНОЙ строке ниже, и ветка
+    // launch/2026-08-30 заменяет её на общий модуль (`releaseWebhookKey`),
+    // убирая набор `SEEN` целиком. Два МОИХ новых обращения к `SEEN`
+    // пережили бы мерж без конфликта и сломали бы сборку: проверено
+    // `git merge-tree` — в слитом файле 2 обращения и 0 объявлений.
+    // Расширяя условие существующей строки, я не создаю новых обращений.
+    let claimMismatch: "email" | "product" | null = null;
 
     // ЗАЯВЛЕННОЕ СВЕРЯЕТСЯ С ПОДТВЕРЖДЁННЫМ (19.08.2026).
     //
@@ -270,23 +279,24 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     // отказ здесь означал бы, что оплативший человек не получил товар.
     if (verdict === "confirmed" && sale) {
       const saleEmail = String(sale.purchase_email ?? sale.email ?? "").trim().toLowerCase();
-      if (saleEmail && saleEmail !== email) {
-        console.warn(`[gumroad/webhook] адрес в пинге не совпал с продажей ${saleId} — отказ`);
-        capture(new Error("gumroad_ping_email_mismatch"), { route: "gumroad/webhook" });
-        SEEN.delete(dedupKey);
-        return res.status(401).json({ ok: false, error: "claim_mismatch" });
-      }
+      if (saleEmail && saleEmail !== email) claimMismatch = "email";
       const saleProduct = String(sale.product_id ?? "").trim();
       const saleShort = String(sale.short_product_id ?? "").trim();
       const claimed = String(productId ?? "").trim();
-      if (claimed && (saleProduct || saleShort) && claimed !== saleProduct && claimed !== saleShort) {
-        console.warn(`[gumroad/webhook] товар в пинге не совпал с продажей ${saleId} — отказ`);
-        capture(new Error("gumroad_ping_product_mismatch"), { route: "gumroad/webhook" });
-        SEEN.delete(dedupKey);
-        return res.status(401).json({ ok: false, error: "claim_mismatch" });
-      }
+      if (claimed && (saleProduct || saleShort) && claimed !== saleProduct && claimed !== saleShort)
+        claimMismatch = "product";
     }
 
+    // Несовпадение заявки ПРИРАВНИВАЕТСЯ к «такой продажи нет»: продажи,
+    // отвечающей этой заявке, действительно не существует. Так блок отказа
+    // ниже остаётся байт в байт как в main — а его переписывает ветка
+    // launch/2026-08-30, переводя освобождение ключа на общий модуль.
+    // Точная причина уходит в Sentry выше, наружу её не отдаём.
+    if (claimMismatch) {
+      console.warn(`[gumroad/webhook] ${claimMismatch} в пинге не совпал с продажей ${saleId} — отказ`);
+      capture(new Error(`gumroad_ping_${claimMismatch}_mismatch`), { route: "gumroad/webhook" });
+      verdict = "not_found";
+    }
     if (verdict === "not_found") {
       console.warn(`[gumroad/webhook] sale ${saleId} not found in Gumroad API — rejecting 401`);
       SEEN.delete(dedupKey); // не занимать ключ отклонённым пингом

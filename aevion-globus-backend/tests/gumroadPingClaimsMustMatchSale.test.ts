@@ -18,6 +18,9 @@ import express from "express";
  * было бы зелёным и в случае, когда права всё-таки выданы.
  */
 
+const capture = vi.fn();
+vi.mock("../src/lib/sentry/platform", () => ({ makeServiceCapture: () => (...a: unknown[]) => capture(...a) }));
+
 const verifyDetailed = vi.fn();
 const parseWebhook = vi.fn();
 const provisionSubscription = vi.fn();
@@ -93,8 +96,11 @@ describe("Подделка заявки поверх настоящего чек
 
     const r = await request(app()).post("/webhook").send({});
     expect(r.status).toBe(401);
-    expect(r.body.error).toBe("claim_mismatch");
     expect(granted()).toBe(false);
+    // Наружу отдаём то же, что и на несуществующую продажу: её и правда нет —
+    // продажи, ОТВЕЧАЮЩЕЙ этой заявке. Точная причина уходит в Sentry, и
+    // проверяем именно её, иначе сторож нечем отличить от соседнего.
+    expect(String(capture.mock.calls[0][0])).toContain("product_mismatch");
   });
 
   test("адрес в пинге чужой — отказ и ничего не выдано", async () => {
@@ -104,8 +110,8 @@ describe("Подделка заявки поверх настоящего чек
 
     const r = await request(app()).post("/webhook").send({});
     expect(r.status).toBe(401);
-    expect(r.body.error).toBe("claim_mismatch");
     expect(granted()).toBe(false);
+    expect(String(capture.mock.calls[0][0])).toContain("email_mismatch");
   });
 
   test("отклонённый пинг НЕ занимает ключ дедупликации", async () => {

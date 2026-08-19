@@ -107,7 +107,12 @@ function isAdmin(req: Request): boolean {
 export const constitutionWaitlistRouter = Router();
 export const constitutionWaitlistAdminRouter = Router();
 
-const writeLimit = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "constitution-waitlist" });
+// Предел на публичную подписку: КАЖДЫЙ запрос шлёт письмо, а у Brevo потолок
+// 300 писем в сутки. При «10 в минуту» один адрес выбирал суточную квоту за
+// полчаса, после чего подтверждения не приходили НИКОМУ — и выглядело это как
+// «письма задерживаются». Три в минуту человеку хватает с запасом (он подписывается
+// один раз), а квоту так с одного адреса не выбрать.
+const writeLimit = rateLimit({ windowMs: 60_000, max: 3, keyPrefix: "constitution-waitlist" });
 const readLimit  = rateLimit({ windowMs: 60_000, max: 30, keyPrefix: "constitution-waitlist-read" });
 
 constitutionWaitlistRouter.post(

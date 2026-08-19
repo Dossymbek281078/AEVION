@@ -49,9 +49,25 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+let ipSeq = 0;
+/**
+ * Свой адрес каждому запросу.
+ *
+ * Предел на публичной подписке — 3 в минуту на адрес (каждый запрос шлёт письмо, а
+ * у Brevo потолок 300 в сутки). Файл делает четыре подписки, и с одного адреса
+ * четвёртая упиралась в предел: письма не было, а падало это на проверке «наружу
+ * ушло ровно одно письмо». Настоящие подписчики приходят с разных адресов — тесты
+ * тоже.
+ */
 async function mount() {
   const { constitutionWaitlistRouter } = await import("../src/routes/constitutionWaitlist");
   const app = express();
+  app.set("trust proxy", true);
+  app.use((req, _res, next) => {
+    ipSeq += 1;
+    req.headers["x-forwarded-for"] = `10.2.${Math.floor(ipSeq / 250) % 250}.${(ipSeq % 250) + 1}`;
+    next();
+  });
   app.use(express.json());
   app.use("/api/constitution/waitlist", constitutionWaitlistRouter);
   return app;

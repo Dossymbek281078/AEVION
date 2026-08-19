@@ -48,6 +48,18 @@
 //                           что алиас Vercel ещё жив. Менять надо в паре:
 //                           сперва добавить новый URI в кабинете TikTok, затем
 //                           переключить переменную — TikTok сверяет строку дословно.
+//
+//   ⚠️ И ВМЕСТЕ С НЕЙ TIKTOK_FRONTEND_ORIGIN. Обе переменные на 19.08.2026
+//   указывают на aevion.vercel.app, и менять их поодиночке НЕЛЬЗЯ: callback
+//   ставит httpOnly-куку с токеном на том домене, где выполняется, и лишь
+//   потом делает 302 на FRONTEND_ORIGIN. Переключишь только ORIGIN — кука
+//   останется на vercel.app, браузер приедет на aevion.app без неё, и
+//   публикатор скажет «не подключено», хотя авторизация прошла. Отказ будет
+//   выглядеть как ошибка TikTok, а не как наша настройка.
+//
+//   Правильный порядок: (1) добавить новый redirect URI в кабинете TikTok,
+//   (2) переключить ОБЕ переменные разом, (3) проверить фактом: /api/tiktok/config
+//   показывает новый redirectUri, а вход возвращает на aevion.app и connected:true.
 //   TIKTOK_SCOPES         — optional, default "user.info.basic,video.publish"
 //   TIKTOK_SUCCESS_REDIRECT — optional frontend path to return to,
 //                           default "/tiktok-publisher"

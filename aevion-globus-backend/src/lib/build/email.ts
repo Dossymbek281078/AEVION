@@ -30,14 +30,33 @@ function getTransport() {
 const FROM = process.env.SMTP_FROM || "AEVION QBuild <noreply@aevion.app>";
 const BASE = process.env.FRONTEND_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
-/** Fire-and-forget send — never throws. */
-async function send(to: string, subject: string, html: string): Promise<void> {
+/**
+ * Настроен ли транспорт. Отдельная функция, потому что вызывающему бывает
+ * нужно ЗНАТЬ ответ до отправки: ручка подтверждения адреса обязана сказать
+ * человеку «письмо не отправлено», а не молча ответить `{ok:true}`.
+ */
+export function canSendEmail(): boolean {
+  return getTransport() !== null;
+}
+
+/**
+ * Отправка. Возвращает, УШЛО ли письмо.
+ *
+ * Раньше возвращала `void` и в обоих неудачных случаях — нет транспорта и
+ * ошибка SMTP — молчала. Вызывающий не мог отличить «отправлено» от «не
+ * отправлено» никак, и именно поэтому регистрация отвечала `{ok:true}`,
+ * не отправив ни одного письма. Значение возвращается всегда; кто хочет
+ * прежнее поведение «выстрелил и забыл», по-прежнему пишет `void send(...)`.
+ */
+async function send(to: string, subject: string, html: string): Promise<boolean> {
   try {
     const transport = getTransport();
-    if (!transport) return; // SMTP not configured — skip silently
+    if (!transport) return false; // SMTP не настроен
     await transport.sendMail({ from: FROM, to, subject, html });
+    return true;
   } catch (e) {
     console.warn("[build/email] send failed:", (e as Error).message);
+    return false;
   }
 }
 
@@ -193,13 +212,13 @@ export function sendTrialTaskApproved(opts: {
 
 // ── Auth emails ──────────────────────────────────────────────────────
 
-export function sendVerificationEmail(opts: {
+export async function sendVerificationEmail(opts: {
   to: string;
   name: string;
   token: string;
-}): void {
+}): Promise<boolean> {
   const link = `${BASE}/build/verify-email?token=${encodeURIComponent(opts.token)}`;
-  void send(
+  return send(
     opts.to,
     "Подтвердите email — AEVION QBuild",
     layout(`
@@ -215,13 +234,13 @@ export function sendVerificationEmail(opts: {
   );
 }
 
-export function sendPasswordResetEmail(opts: {
+export async function sendPasswordResetEmail(opts: {
   to: string;
   name: string;
   token: string;
-}): void {
+}): Promise<boolean> {
   const link = `${BASE}/build/reset-password?token=${encodeURIComponent(opts.token)}&email=${encodeURIComponent(opts.to)}`;
-  void send(
+  return send(
     opts.to,
     "Сброс пароля — AEVION QBuild",
     layout(`

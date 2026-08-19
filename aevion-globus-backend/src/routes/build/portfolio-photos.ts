@@ -39,8 +39,12 @@ portfolioPhotosRouter.get("/:userId", async (req, res) => {
   try {
     const userId = String(req.params.userId);
     const result = await pool.query(
+      // Колонки "sortOrder" в "BuildPortfolioPhoto" нет (см. lib/build/index.ts):
+      // ручка падала 500 на КАЖДОМ обращении, то есть фотографии портфолио не
+      // показывались никогда. Ручную сортировку добавлять не стал — это отдельное
+      // решение о схеме; порядок по дате был вторым ключом и остаётся рабочим.
       `SELECT * FROM "BuildPortfolioPhoto" WHERE "userId" = $1
-       ORDER BY "sortOrder" ASC, "createdAt" DESC`,
+       ORDER BY "createdAt" DESC`,
       [userId],
     );
     return ok(res, { items: result.rows, total: result.rowCount });

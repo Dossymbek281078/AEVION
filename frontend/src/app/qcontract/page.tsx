@@ -329,7 +329,12 @@ export default function QContractHome() {
 function QContractStats({ t }: { t: TFn }) {
   const [stats, setStats] = useState<{ totalDocuments: number; totalViews: number } | null>(null);
   useEffect(() => {
-    fetch(apiUrl("/api/qcontract/stats")).then((r) => r.json()).then(setStats).catch(() => {});
+    // fetch does not reject on a non-2xx status: without the r.ok check the error
+    // body becomes `stats`, which is truthy, and the block renders "undefined".
+    fetch(apiUrl("/api/qcontract/stats"))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("stats unavailable"))))
+      .then(setStats)
+      .catch(() => {});
   }, []);
   if (!stats) return null;
   return (

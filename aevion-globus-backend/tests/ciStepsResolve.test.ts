@@ -83,6 +83,11 @@ describe("шаги CI ссылаются на то, что существует"
       const scripts: Record<string, string> = JSON.parse(fs.readFileSync(p, "utf8")).scripts || {};
       for (const [name, cmd] of Object.entries(scripts)) {
         for (const m of cmd.matchAll(/(?:node|ts-node(?:\s+-T)?|tsx)\s+([\w./-]+\.(?:m?js|cjs|ts))/g)) {
+          // Артефакты сборки пропускаем: "start" зовёт dist/index.js, которого в
+          // чистой копии нет и быть не должно — он появляется после npm run build.
+          // Без этого тест краснел не на дефекте, а на том, что рядом не собирали,
+          // и краснота приучала считать его шумом (19.08.2026).
+          if (/^(dist|build|out|\.next)\//.test(m[1])) continue;
           if (!fs.existsSync(path.join(ROOT, dir, m[1]))) {
             missing.push(`${dir}/package.json → "${name}" зовёт ${m[1]}`);
           }

@@ -80,6 +80,19 @@ describe("постраничный вывод зажат с обеих стор�
       "limit снова зажат только сверху — ?limit=-1 уйдёт в Postgres и вернёт 500 вместо 400",
     ).toEqual([]);
     // И прямая проверка, что нижняя граница именно там, где нужна.
-    expect(src).toMatch(/Math\.min\(Math\.max\(Number\(req\.query\.limit\)/);
+    //
+    // Утверждение намеренно НЕ привязано к тексту выражения. Первая версия
+    // требовала дословно мой идиом Math.min(Math.max(Number(...)...), и когда
+    // соседняя сессия закрыла ту же дыру ЛУЧШЕ — через parseInt(String(...)),
+    // который переживает и ?limit=zzz, — тест покраснел на правильном коде.
+    // Тест обязан охранять свойство, а не мою формулировку.
+    const line = src.split(String.fromCharCode(10)).find((l) => /const limit *=/.test(l)) ?? "";
+    expect(line, "строка с limit не найдена").not.toBe("");
+    expect(line, "нет нижней границы: ?limit=-1 уйдёт в SQL").toMatch(/Math\.max\(/);
+    expect(line, "нет верхней границы: ?limit=99999 выгребет таблицу").toMatch(/Math\.min\(/);
+    expect(
+      /parseInt\(String\(|Number\.isFinite|queryNumber\(/.test(line),
+      "нет защиты от нечисла: ?limit=zzz даст NaN и 500",
+    ).toBe(true);
   });
 });

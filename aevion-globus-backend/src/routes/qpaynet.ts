@@ -49,6 +49,7 @@ import { emitVeilNetXEntry, emitEcosystemEvent } from "../lib/ecosystemEvents";
 import { validateOr400 } from "../lib/qpaynetValidate";
 import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } from "../lib/qpaynetCrypto";
 import { csvNeutralizeFormula } from "../lib/csv";
+import { queryNumber } from "../lib/queryNumber";
 
 export const qpaynetRouter = Router();
 
@@ -2884,7 +2885,7 @@ qpaynetRouter.get("/admin/refunds", async (req, res) => {
   if (!auth) return res.status(401).json({ error: "auth_required" });
   if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
 
-  const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
+  const limit = Math.max(1, Math.min(200, queryNumber(req.query.limit, 50)));
   const before = (req.query.before as string | undefined)?.trim();
   const params: unknown[] = [limit];
   let where = "type = 'refund'";
@@ -2928,7 +2929,7 @@ qpaynetRouter.get("/admin/refunds.csv", async (req, res) => {
   if (!auth) return res.status(401).json({ error: "auth_required" });
   if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
 
-  const limit = Math.max(1, Math.min(5000, Number(req.query.limit ?? 1000)));
+  const limit = Math.max(1, Math.min(5000, queryNumber(req.query.limit, 1000)));
   const before = (req.query.before as string | undefined)?.trim();
   const params: unknown[] = [limit];
   let where = "type = 'refund'";
@@ -3092,7 +3093,7 @@ qpaynetRouter.get("/admin/wallets", async (req, res) => {
 
   const q = (req.query.q as string | undefined)?.trim();
   const status = (req.query.status as string | undefined)?.trim();
-  const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
+  const limit = Math.max(1, Math.min(200, queryNumber(req.query.limit, 50)));
   const where: string[] = [];
   const params: unknown[] = [];
   if (q) {
@@ -3139,7 +3140,7 @@ qpaynetRouter.get("/admin/audit", async (req, res) => {
   const action = (req.query.action as string | undefined)?.trim();
   const owner = (req.query.owner as string | undefined)?.trim();
   const before = (req.query.before as string | undefined)?.trim();
-  const limit = Math.max(1, Math.min(500, Number(req.query.limit ?? 100)));
+  const limit = Math.max(1, Math.min(500, queryNumber(req.query.limit, 100)));
 
   const where: string[] = [];
   const params: unknown[] = [];
@@ -3189,7 +3190,7 @@ qpaynetRouter.get("/admin/analytics", async (req, res) => {
   if (!auth) return res.status(401).json({ error: "auth_required" });
   if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
 
-  const days = Math.max(7, Math.min(90, Number(req.query.days ?? 30)));
+  const days = Math.max(7, Math.min(90, queryNumber(req.query.days, 30)));
   const pool = getPool();
 
   const [refundDaily, deliveryDaily, walletStats] = await Promise.all([
@@ -3308,7 +3309,7 @@ qpaynetRouter.get("/admin/webhook-deliveries", async (req, res) => {
   if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
 
   const status = (req.query.status as string | undefined)?.trim();
-  const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
+  const limit = Math.max(1, Math.min(200, queryNumber(req.query.limit, 50)));
 
   let where = "1=1";
   if (status === "stuck") where = `delivered_at IS NULL AND attempts >= ${MAX_NOTIFY_ATTEMPTS}`;

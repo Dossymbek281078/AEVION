@@ -161,7 +161,12 @@ function param(req: Request, key: string): string {
 
 // ─── GET /api/qnews/health ───────────────────────────────────────────────────
 qnewsRouter.get("/health", (_req: Request, res: Response) => {
-  res.json({ ok: true, service: "qnews" });
+  // Состояние базы в ручке здоровья. Добавлено 19.08.2026: сторож
+  // запасного хранилища опрашивает модули и до этого видел 9 из 12 —
+  // остальные просто не публиковали поле, и их молчание читалось как
+  // благополучие. Поле дешёвое, а без него нельзя ответить на вопрос
+  // «пишет ли прод в память вместо базы».
+  res.json({ ok: true, service: "qnews", db: isQNewsDbReady() ? "postgres" : "memory" });
 });
 
 // ─── GET /api/qnews/categories ───────────────────────────────────────────────

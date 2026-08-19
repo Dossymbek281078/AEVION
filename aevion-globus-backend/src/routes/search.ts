@@ -130,11 +130,17 @@ async function searchQEvents(pool: any, q: string, limit: number): Promise<Searc
 async function searchQJobs(pool: any, q: string, limit: number): Promise<SearchResult[]> {
   try {
     const r = await pool.query(
-      `SELECT id, title, description, "jobType", location, salary, "companyName"
-       FROM qjobs
-       WHERE status = 'open' AND (
+      // Таблица называется "QJobsPosting", а не `qjobs`; колонки — "type",
+      // "company" и "isActive", а не "jobType"/"companyName"/status='open'.
+      // Ни одно из шести имён не существовало: глобальный поиск НИКОГДА не
+      // находил вакансий, и молчал об этом (запрос в мягком catch).
+      // Найдено 19.08.2026 сверкой запрашиваемых таблиц против CREATE TABLE.
+      `SELECT id, title, description, "type" AS "jobType", location, salary,
+              "company" AS "companyName"
+       FROM "QJobsPosting"
+       WHERE "isActive" = TRUE AND (
          LOWER(title) LIKE $1 OR LOWER(description) LIKE $1
-         OR LOWER("companyName") LIKE $1 OR LOWER(location) LIKE $1
+         OR LOWER("company") LIKE $1 OR LOWER(location) LIKE $1
        ) ORDER BY "createdAt" DESC LIMIT $2`,
       [`%${q.toLowerCase()}%`, limit],
     );

@@ -155,18 +155,21 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
         style={{ display: "inline-flex", alignItems: "center", gap: 8, color: palette.text, textDecoration: "none" }}
         title="Сравнить тарифы — Lite, Medium, Full"
       >
-        <span><strong style={{ fontWeight: 800 }}>{litePrice}</strong>/мес · <span translate="no">Lite</span></span>
+        <span><strong style={{ fontWeight: 800 }}>{litePrice}</strong>/мес · <span translate="no" className="notranslate">{lite.name || "Lite"}</span></span>
         {medium && medium.priceMonthly != null && (
           <>
             <span style={{ color: palette.muted }}>·</span>
-            <span><span translate="no">Medium</span> {fmt(medium.priceMonthly, currency, data.currencies)}</span>
+            <span><span translate="no" className="notranslate">{medium.name || "Medium"}</span> {fmt(medium.priceMonthly, currency, data.currencies)}</span>
           </>
         )}
         {full && full.priceMonthly != null && (
           <>
             <span style={{ color: palette.muted }}>·</span>
+            {/* Имя тарифа — из /api/pricing, тем же словом, что на кассе и в
+                письме. Подпись «Полный доступ» была четвёртым названием той же
+                строки: человек искал «Full», а на витрине его не было. */}
             <span style={{ color: palette.accent, fontWeight: 700 }}>
-              Полный доступ {fmt(full.priceMonthly, currency, data.currencies)}
+              <span translate="no" className="notranslate">{full.name || "Full"}</span> {fmt(full.priceMonthly, currency, data.currencies)}
             </span>
           </>
         )}

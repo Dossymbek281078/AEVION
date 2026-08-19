@@ -816,7 +816,19 @@ router.post('/solve', async (req: Request, res: Response) => {
   const tMs = typeof timeMs === 'number' && timeMs >= 0 ? Math.min(timeMs, MAX_TIME_MS) : 0;
   const hUsed = typeof hintsUsed === 'number' && hintsUsed >= 0 ? Math.min(Math.floor(hintsUsed), MAX_HINTS) : 0;
   const uid = typeof userId === 'string' && userId.length > 0 ? userId : 'anonymous';
-  const uname = typeof name === 'string' && name.length > 0 ? name.slice(0, MAX_NAME_LEN) : `Player_${uid.slice(0, 6)}`;
+  // Имя в ПУБЛИЧНОЙ таблице: пускаем только то, что человек сможет прочитать.
+  //
+  // Замер 19.08.2026: в рейтинге на проде лежали четыре записи, у которых имя
+  // состояло из символов-замен (U+FFFD, в байтах ef bf bd) — их оставили
+  // проверки, отправленные утилитой, которая портит кириллицу при отправке.
+  // Снаружи это выглядело как «в лидерах ████████3 со счётом 100 200».
+  // Пустая строка после чистки — не ошибка запроса: решение засчитывается,
+  // просто имя подставляется наше.
+  // Имя с символом-заменой не чинится вычиткой: от «Тестер3» остаётся «3».
+  // Пришло испорченным — не доверяем целиком и подставляем своё.
+  const nameOk = typeof name === 'string' && name.indexOf('\uFFFD') < 0;
+  const rawName = nameOk ? (name as string).trim() : '';
+  const uname = rawName.length > 0 ? rawName.slice(0, MAX_NAME_LEN) : `Player_${uid.slice(0, 6)}`;
   const uctry = typeof country === 'string' && country.length > 0 ? country.slice(0, MAX_COUNTRY_LEN) : '🌍';
 
   // Серия — производное от нашей истории, а не поле запроса. Считается ДО
@@ -907,9 +919,13 @@ router.get('/leaderboard', (req: Request, res: Response) => {
   }
   const rawLimit = parseInt(String(req.query.limit || '100'), 10);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, LB_MAX) : 100;
+  // Записи с нечитаемым именем не показываем. Приём таких имён закрыт выше, но
+  // четыре штуки успели попасть в боевую таблицу 19.08 — витрина показывала
+  // «████████3 — 100 200 очков». Данные не трогаем: скрыть обратимо, удалить нет.
+  const readable = LEADERBOARD.filter((e) => !String(e.name || '').includes('�'));
   return res.json({
-    leaderboard: LEADERBOARD.slice(0, limit),
-    total: LEADERBOARD.length,
+    leaderboard: readable.slice(0, limit),
+    total: readable.length,
   });
 });
 

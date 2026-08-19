@@ -15,10 +15,22 @@ interface Props {
   onHide: () => void;
 }
 
+const BANNER_W = 240;
+
 export default function AevionProjectsBanner({ onHide }: Props) {
+  // Панель фиксированная и лежит ПОВЕРХ страницы: без компенсации она срезает
+  // правый край контента — на лаунчпаде под неё уходил край кнопки «Играть».
+  // Отступ снимается при размонтировании, поэтому «скрыть панель» возвращает
+  // страницу к прежней ширине.
+  React.useEffect(() => {
+    const prev = document.body.style.paddingRight;
+    document.body.style.paddingRight = `${BANNER_W}px`;
+    return () => { document.body.style.paddingRight = prev; };
+  }, []);
+
   return (
     <div style={{
-      position: "fixed", right: 0, top: 28, bottom: 0, width: 240,
+      position: "fixed", right: 0, top: 28, bottom: 0, width: BANNER_W,
       background: "#1e1c19", borderLeft: "1px solid #3d3b39",
       display: "flex", flexDirection: "column", zIndex: 150,
       overflow: "hidden",
@@ -64,7 +76,9 @@ export default function AevionProjectsBanner({ onHide }: Props) {
           >
             <span style={{ fontSize: 18, flexShrink: 0 }}>{p.emoji}</span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "inherit", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {/* translate="no": это имена продуктов. Без него авто-перевод
+                  делал из «Ксайн / QSign» — «Xsign / QSign», а из «Крайт» — «Krait». */}
+              <div translate="no" className="notranslate" style={{ fontSize: 11, fontWeight: 700, color: "inherit", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {p.name}
               </div>
               <div style={{ fontSize: 9, fontWeight: 600, color: "#5d5b59", marginTop: 1 }}>

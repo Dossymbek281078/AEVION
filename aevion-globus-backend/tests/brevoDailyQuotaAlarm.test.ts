@@ -28,7 +28,8 @@ describe("счётчик писем и тревога", () => {
   test("счётчик ПОДКЛЮЧЁН к настоящей отправке, а не просто написан", async () => {
     // Главная проверка файла. Написанный и никем не вызванный счётчик — это класс
     // «код обещает то, чего не делает», и он у нас уже случался.
-    const { sendWaitlistConfirm, __emailCounter, __resetEmailCounter } = await import("../src/lib/constitutionBrevo");
+    const { sendWaitlistConfirm } = await import("../src/lib/constitutionBrevo");
+    const { __emailCounter, __resetEmailCounter } = await import("../src/lib/brevoQuota");
     __resetEmailCounter();
     expect(__emailCounter().count).toBe(0);
     await sendWaitlistConfirm("kto@primer.test", "devhub");
@@ -36,7 +37,8 @@ describe("счётчик писем и тревога", () => {
   });
 
   test("тревога поднимается на 2/3 квоты и ровно ОДИН раз", async () => {
-    const { sendWaitlistConfirm, __resetEmailCounter } = await import("../src/lib/constitutionBrevo");
+    const { sendWaitlistConfirm } = await import("../src/lib/constitutionBrevo");
+    const { __resetEmailCounter } = await import("../src/lib/brevoQuota");
     __resetEmailCounter();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     for (let i = 0; i < 21; i++) await sendWaitlistConfirm(`k${i}@primer.test`, "devhub");
@@ -48,7 +50,8 @@ describe("счётчик писем и тревога", () => {
   });
 
   test("до порога тревоги нет — иначе канал зашумлён с первого дня", async () => {
-    const { sendWaitlistConfirm, __resetEmailCounter } = await import("../src/lib/constitutionBrevo");
+    const { sendWaitlistConfirm } = await import("../src/lib/constitutionBrevo");
+    const { __resetEmailCounter } = await import("../src/lib/brevoQuota");
     __resetEmailCounter();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     for (let i = 0; i < 5; i++) await sendWaitlistConfirm(`m${i}@primer.test`, "devhub");
@@ -59,7 +62,7 @@ describe("счётчик писем и тревога", () => {
   test("подписка через роут тоже двигает счётчик", async () => {
     // Сквозная проверка: путь, которым идёт человек, а не прямой вызов функции.
     const { constitutionWaitlistRouter } = await import("../src/routes/constitutionWaitlist");
-    const { __emailCounter, __resetEmailCounter } = await import("../src/lib/constitutionBrevo");
+    const { __emailCounter, __resetEmailCounter } = await import("../src/lib/brevoQuota");
     __resetEmailCounter();
     const app = express();
     app.use(express.json());
@@ -72,5 +75,72 @@ describe("счётчик писем и тревога", () => {
       await new Promise((r) => setTimeout(r, 25));
     }
     expect(__emailCounter().count, "подписка прошла, письма не посчитано").toBe(1);
+  });
+});
+
+describe("охват счётчика: письма DevHub идут в ту же квоту", () => {
+  // Найдено сразу после первой версии счётчика: DevHub шлёт письма ПРЯМО в API
+  // Brevo, минуя lib/constitutionBrevo. Значит счётчик видел только один из двух
+  // путей и занижал расход — тревога пришла бы поздно. Это класс «сторож занижал
+  // свой охват»: он не врал о себе, он просто не знал, что смотрит в половину.
+  //
+  // Проверяем ПОВЕДЕНИЕМ, а не наличием строки: греп по noteEmailSent сказал бы
+  // «вызов есть» и на пути, который никогда не выполняется.
+  test("POST /media/email увеличивает общий счётчик", async () => {
+    process.env.BREVO_API_KEY = "test-key";
+    const { devhubRouter } = await import("../src/routes/devhub");
+    const { __emailCounter, __resetEmailCounter } = await import("../src/lib/brevoQuota");
+    __resetEmailCounter();
+    const app = express();
+    app.set("trust proxy", true);
+    app.use(express.json());
+    app.use("/api/devhub", devhubRouter);
+    const r = await request(app)
+      .post("/api/devhub/media/email")
+      .set("X-Forwarded-For", "10.9.9.9")
+      .send({ to: "kto@primer.test", subject: "тема", htmlBody: "<p>тело</p>" });
+    // Транспорт подменён в beforeEach — наружу ничего не ушло.
+    expect([200, 201], `ручка ответила ${r.status}: ${JSON.stringify(r.body).slice(0, 120)}`).toContain(r.status);
+    expect(__emailCounter().count, "письмо DevHub не попало в общую квоту").toBe(1);
+  });
+
+  test("SMS в квоту писем НЕ идёт — у него своя", async () => {
+    // Обратная граница. Смешать две квоты означало бы врать обоими числами:
+    // тревога о письмах приходила бы от чужого расхода, а SMS остался бы без учёта.
+    process.env.BREVO_API_KEY = "test-key";
+    const { devhubRouter } = await import("../src/routes/devhub");
+    const { __emailCounter, __resetEmailCounter } = await import("../src/lib/brevoQuota");
+    __resetEmailCounter();
+    const app = express();
+    app.set("trust proxy", true);
+    app.use(express.json());
+    app.use("/api/devhub", devhubRouter);
+    await request(app)
+      .post("/api/devhub/media/sms")
+      .set("X-Forwarded-For", "10.9.9.10")
+      .send({ recipient: "+79001234567", content: "текст" });
+    expect(__emailCounter().count).toBe(0);
+  });
+});
+
+describe("охват: второй письменный путь DevHub тоже в квоте", () => {
+  // Мутация показала, что первая версия проверок охвата покрывала ОДИН из двух
+  // письменных путей: снятие вызова у /media/email краснело, у отправки шаблона —
+  // нет. То есть про второй путь я знал бы только из кода, а это не проверка.
+  test("POST /media/email-template-send увеличивает общий счётчик", async () => {
+    process.env.BREVO_API_KEY = "test-key";
+    const { devhubRouter } = await import("../src/routes/devhub");
+    const { __emailCounter, __resetEmailCounter } = await import("../src/lib/brevoQuota");
+    __resetEmailCounter();
+    const app = express();
+    app.set("trust proxy", true);
+    app.use(express.json());
+    app.use("/api/devhub", devhubRouter);
+    const r = await request(app)
+      .post("/api/devhub/media/email-template-send")
+      .set("X-Forwarded-For", "10.9.9.11")
+      .send({ templateId: 7, to: "kto@primer.test", params: { name: "Кто" } });
+    expect([200, 201], `ручка ответила ${r.status}: ${JSON.stringify(r.body).slice(0, 120)}`).toContain(r.status);
+    expect(__emailCounter().count, "письмо по шаблону не попало в общую квоту").toBe(1);
   });
 });

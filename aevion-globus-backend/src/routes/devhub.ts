@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { noteEmailSent } from "../lib/brevoQuota";
 // Ограничитель дорогих ручек. Тот же помощник, что стоит на 27 соседних ручках в
 // коммите d9cc19ce0 (28.07) — он ждёт мержа 22 дня, поэтому здесь пока только две
 // ручки, которые тогда пропустили: /ask и /media/upload-image.
@@ -3422,6 +3423,12 @@ devhubRouter.post("/media/email", async (req, res) => {
     }
     const data = await r.json().catch(() => ({}));
     const messageId = (data as any)?.messageId ?? null;
+    // Считаем в ОБЩУЮ суточную квоту: у Brevo потолок 300 писем в сутки, и он один
+    // на всю платформу. Этот путь шлёт письма минуя lib/constitutionBrevo, поэтому
+    // без этой строки счётчик занижал бы расход и тревога пришла бы поздно — класс
+    // «сторож занижал свой охват». SMS и WhatsApp сюда НЕ входят: у них отдельная
+    // квота, и смешивать их значило бы врать обоими числами.
+    noteEmailSent();
     res.json({
       ok: true, messageId,
       ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),
@@ -4984,6 +4991,7 @@ devhubRouter.post("/media/email-template-send", async (req, res) => {
       return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json().catch(() => ({}));
+    noteEmailSent(); // тот же общий потолок 300 писем в сутки, см. выше
     res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Template send failed" });

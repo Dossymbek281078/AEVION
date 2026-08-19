@@ -75,3 +75,12 @@ page_v*_backup.*
 
 # Прогоны бенчмарка QReal: ссылки на рендеры, судейские листы, ключ плеч.
 benchmark-out/
+# Локальное хранилище jsonFileStore. Создаётся в process.cwd(), когда
+# AEVION_DATA_DIR не задан (aevion-globus-backend/src/lib/jsonFileStore.ts:11),
+# то есть при обычном npm test и при dev-запуске — прямо в корне worktree.
+# Не игнорировалось до 29.07: папки уже лежали в трёх worktree и были видны в
+# git status как untracked, а любой `git add -A` затащил бы их в коммит.
+.aevion-data/
+**/.aevion-data/
+# Тот же случай: каталог data/ появляется от прогонов тестов в корне worktree.
+/data/

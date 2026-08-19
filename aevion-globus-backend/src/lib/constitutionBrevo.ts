@@ -255,6 +255,64 @@ export function buildWeeklyDigestEmail(
 
 /* ─── Exported send functions ─────────────────────────────────────── */
 
+/**
+ * Письмо с подтверждением адреса.
+ *
+ * До 19.08.2026 его не было вовсе: `POST /api/auth/email/verify/request`
+ * создавал токен, писал его в базу и возвращал `{ok:true}`, а интерфейс
+ * показывал «Verification email sent» — то есть сообщал об успехе действия,
+ * которого не произошло. В разработке токен отдавался прямо в ответе
+ * (`devToken`), и на этом фоне отсутствие отправки в проде не бросалось в
+ * глаза.
+ *
+ * Отправляем тем же путём, каким уходят письма подписчикам, — он проверен и
+ * работает. Ссылка ведёт на страницу подтверждения с токеном в адресе.
+ */
+export function buildEmailVerifyEmail(email: string, verifyUrl: string): ConstitutionEmailPayload {
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf8;border-radius:12px">
+      <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION</div>
+      <p style="margin:0 0 16px">Подтвердите адрес — это займёт одно нажатие.</p>
+      <p style="color:#9aa3c0;margin:0 0 20px">
+        Мы отправили это письмо, потому что на аккаунте ${email} запросили подтверждение адреса.
+        Если это были не вы, просто не открывайте ссылку — без неё ничего не изменится.
+      </p>
+      <p style="margin:0 0 24px">
+        <a href="${verifyUrl}" style="display:inline-block;background:#22d3ee;color:#0b1736;font-weight:700;padding:12px 20px;border-radius:8px;text-decoration:none">
+          Подтвердить адрес
+        </a>
+      </p>
+      <p style="color:#64748b;font-size:11px;margin:0">
+        Ссылка действует ограниченное время. Если кнопка не открывается, скопируйте адрес:<br>
+        <span style="color:#9aa3c0">${verifyUrl}</span>
+      </p>
+    </div>
+  `;
+  return {
+    to: [{ email }],
+    subject: "Подтвердите адрес — AEVION",
+    htmlContent: html,
+    textContent: `Подтвердите адрес: ${verifyUrl}
+
+Если это были не вы — просто не открывайте ссылку.`,
+    tags: ["auth", "email-verify"],
+  };
+}
+
+/** Отправляет письмо подтверждения. Возвращает, УДАЛОСЬ ли — вызывающий обязан
+ *  сообщить человеку правду, а не «отправлено» в любом случае. */
+export async function sendEmailVerify(email: string, verifyUrl: string): Promise<boolean> {
+  const result = await sendBrevoEmail(buildEmailVerifyEmail(email, verifyUrl));
+  if (!result.ok) {
+    console.error("[Brevo] email-verify failed:", result.error);
+    return false;
+  }
+  if (result.degraded) {
+    console.warn(`[Brevo] email-verify degraded for ${email}: ${result.degradedReason}`);
+  }
+  return true;
+}
+
 export async function sendWaitlistConfirm(email: string, source?: string): Promise<void> {
   const payload = buildWaitlistConfirmEmail(email, source);
   const result = await sendBrevoEmail(payload);

@@ -276,8 +276,13 @@ export default function AccountPage() {
           if (d.devToken) {
             setVerifyDevToken(d.devToken);
             showToast("Dev token shown — paste below to verify", "success");
-          } else {
+          } else if (d.emailSent) {
             showToast("Verification email sent", "success");
+          } else {
+            // Сервер создал токен, но письмо не ушло. До 19.08.2026 здесь в
+            // любом случае показывали «sent», и человек ждал письма, которого
+            // не было. Говорим правду: действие не состоялось наполовину.
+            showToast("Токен создан, но письмо отправить не удалось — напишите нам", "error");
           }
         }
       } else {

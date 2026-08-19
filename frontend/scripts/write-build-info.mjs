@@ -24,7 +24,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -69,5 +69,37 @@ const info = {
 };
 
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, JSON.stringify(info, null, 2) + "\n", "utf8");
-console.log(`version.json: ${info.commit} (${info.branch}) источник=${info.source}`);
+
+/**
+ * НЕ ПОНИЖАТЬ уже привезённую отметку.
+ *
+ * Воспроизведено 19.08.2026: сборка Vercel идёт НА ИХ МАШИНЕ, git там
+ * недоступен, а при заливке из локального каталога переменных VERCEL_GIT_*
+ * тоже нет. Значит этот скрипт запускается там ВТОРОЙ раз, не находит
+ * ничего — и перезаписывает привезённую честную отметку на "unknown". То
+ * есть механизм, сделанный ради ответа «какой код на сайте», сам же этот
+ * ответ и стирал — молча и только в проде.
+ *
+ * Правило: пустой ответ не имеет права затирать непустой.
+ */
+let keep = null;
+if (info.commit === "unknown") {
+  try {
+    const prev = JSON.parse(readFileSync(OUT, "utf8"));
+    if (prev && typeof prev.commit === "string" && prev.commit && prev.commit !== "unknown") {
+      keep = prev;
+    }
+  } catch {
+    /* нет файла или он битый — писать своё, это честнее */
+  }
+}
+
+if (keep) {
+  console.log(
+    `version.json: оставлена привезённая отметка ${keep.commit} (${keep.branch}) — ` +
+      `здесь определить коммит нечем, а затирать known на unknown нельзя`,
+  );
+} else {
+  writeFileSync(OUT, JSON.stringify(info, null, 2) + "\n", "utf8");
+  console.log(`version.json: ${info.commit} (${info.branch}) источник=${info.source}`);
+}

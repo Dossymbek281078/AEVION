@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -50,6 +51,45 @@ describe("отметка версии фронтенда", () => {
     expect(new Date(stamp.builtAt).toString(), "builtAt не разбирается как дата").not.toBe(
       "Invalid Date",
     );
+  });
+
+  it("не понижает привезённую отметку до unknown", () => {
+    // Случай Vercel: сборка идёт на ЧУЖОЙ машине, git там недоступен и
+    // переменных VERCEL_GIT_* при заливке из каталога тоже нет. Скрипт
+    // запускается там второй раз — и раньше затирал честную отметку,
+    // привезённую с собой. Воспроизводится запуском вне git-репозитория.
+    const tmp = mkdtempSync(join(tmpdir(), "stamp-"));
+    mkdirSync(join(tmp, "scripts"), { recursive: true });
+    mkdirSync(join(tmp, "public"), { recursive: true });
+    copyFileSync(SCRIPT, join(tmp, "scripts", "write-build-info.mjs"));
+
+    const brought = { commit: "abc123456789", branch: "deploy/x", builtAt: "2026-08-19T00:00:00.000Z", source: "git" };
+    const out = join(tmp, "public", "version.json");
+    writeFileSync(out, JSON.stringify(brought, null, 2), "utf8");
+
+    execFileSync(process.execPath, [join(tmp, "scripts", "write-build-info.mjs")], {
+      cwd: tmp,
+      stdio: "ignore",
+    });
+
+    expect(JSON.parse(readFileSync(out, "utf8")).commit, "привезённую отметку затёрли").toBe(
+      brought.commit,
+    );
+  });
+
+  it("без отметки и без git пишет честное unknown, а не пустоту", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "stamp-"));
+    mkdirSync(join(tmp, "scripts"), { recursive: true });
+    copyFileSync(SCRIPT, join(tmp, "scripts", "write-build-info.mjs"));
+    execFileSync(process.execPath, [join(tmp, "scripts", "write-build-info.mjs")], {
+      cwd: tmp,
+      stdio: "ignore",
+    });
+    const j = JSON.parse(readFileSync(join(tmp, "public", "version.json"), "utf8"));
+    // «Не смогли определить» обязано быть видно, иначе оно неотличимо от
+    // «совпало»: source называет причину.
+    expect(j.commit).toBe("unknown");
+    expect(j.source).toBe("none");
   });
 
   it("файл НЕ заигнорен — иначе он не доедет до сборки", () => {

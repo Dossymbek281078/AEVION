@@ -37,7 +37,7 @@ vi.mock("../src/routes/cyberchessMatchStore", () => ({
   // Счётчики записи, добавленные 18.08.2026. Заглушка обязана покрывать
   // ВСЕ импорты роутера — ради этого сам тест и написан: без этой строки
   // /debug/stats падает на undefined, и падает именно здесь, а не в проде.
-  matchStoreHealth: { writes: 0, writeErrors: 0, claimUnknown: 0, lastErrorKind: null },
+  matchStoreHealth: { connected: false, connectErrors: 0, writes: 0, writeErrors: 0, claimUnknown: 0, lastErrorKind: null },
   countWalletsWithoutRatedGames: vi.fn().mockResolvedValue(0),
 }));
 

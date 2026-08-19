@@ -166,6 +166,43 @@ describe("ключи перевода qskyway", () => {
     });
   }
 
+  test("тексты для человека не выдают устройство системы", () => {
+    // Ворота запуска, пункт 4: «тексты ошибок — человеческие, без кодов и
+    // адресов серверов». 19.08.2026 карточка ошибки на этой странице
+    // советовала посетителю «проверь, что бэкенд поднят» и печатала путь
+    // /api/qskyway/city, а ошибка бронирования показывала сырое исключение.
+    // Это указания разработчику, показанные человеку.
+    //
+    // Проверяем ЗНАЧЕНИЯ всех ключей модуля во всех локалях.
+    const tbl = allTranslations() as Record<string, Record<string, string>>;
+    const FORBIDDEN: { re: RegExp; why: string }[] = [
+      { re: /\/api\//, why: "путь API" },
+      { re: /https?:\/\//, why: "адрес сервера" },
+      { re: /localhost|127\.0\.0\.1/, why: "локальный адрес" },
+      { re: /бэкенд|backend/i, why: "слово «бэкенд» — это про наше устройство, не про человека" },
+      { re: /\{(err|detail|stack)\}/, why: "сырое значение ошибки" },
+    ];
+    // Исключение с причиной, а не ослабление правила: подсказка про чек
+    // брони НАЗЫВАЕТ публичную ручку проверки намеренно. В этом и ценность
+    // модуля для регулятора — «проверьте сами вот здесь», а не «поверьте
+    // нам». Убирать оттуда адрес значило бы убрать саму проверяемость.
+    const ALLOWED_TO_NAME_ENDPOINT = new Set(["qskyway.slots.receipt"]);
+
+    const bad: string[] = [];
+    for (const lang of LOCALES) {
+      for (const k of KEYS) {
+        const v = tbl[lang]?.[k];
+        if (!v) continue;
+        const isPublicEndpointDoc = ALLOWED_TO_NAME_ENDPOINT.has(k);
+        for (const f of FORBIDDEN) {
+          if (isPublicEndpointDoc && f.why === "путь API") continue;
+          if (f.re.test(v)) bad.push(`${lang}/${k}: ${f.why} → ${v.slice(0, 50)}`);
+        }
+      }
+    }
+    expect(bad, "текст для человека выдаёт устройство системы").toEqual([]);
+  });
+
   test("английский перевод не равен русскому (ловит копипасту)", () => {
     const tbl = allTranslations() as Record<string, Record<string, string>>;
     const same = KEYS.filter((k) => {

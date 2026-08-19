@@ -480,7 +480,15 @@ export default function QSkywayClient() {
       setLoaded(true);
       newHero();
       for (let i = 0; i < 5; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); }
-    } catch (e) { setErr(String(e)); }
+    } catch (e) {
+      // Человеку — человеческий текст (ключ qskyway.err.cityLoad), технику —
+      // в консоль. Ворота запуска, пункт 4: «тексты ошибок человеческие, без
+      // кодов и адресов серверов». До 19.08.2026 карточка советовала
+      // «проверь, что бэкенд поднят» и печатала путь /api/qskyway/city —
+      // это указание разработчику, показанное посетителю.
+      console.warn("[qskyway] не удалось загрузить город:", e);
+      setErr("failed");
+    }
   }, [newHero, makeTaxi]);
 
   // ── rendering / bootstrap ──────────────────────────────────────────────────────
@@ -728,7 +736,12 @@ export default function QSkywayClient() {
           : { kind: "err", text: `✗ ${j.error}` },
       );
       if (j.ok) fetchSlots();
-    } catch (e) { setBooking({ kind: "net", detail: String(e) }); }
+    } catch (e) {
+      // Сырое исключение («TypeError: Failed to fetch») человеку ничего не
+      // говорит и выдаёт устройство системы. В консоль — да, на экран — нет.
+      console.warn("[qskyway] бронирование не дошло до сервиса:", e);
+      setBooking({ kind: "net", detail: String(e) });
+    }
   }, [cityId, fetchSlots]);
 
   // ── filing document ────────────────────────────────────────────────────────
@@ -850,7 +863,7 @@ export default function QSkywayClient() {
           </div>
         )}
 
-        {err && <div style={{ ...card, padding: 16, color: "#fb7185" }}>{t("qskyway.err.cityLoad", { err: String(err) })}</div>}
+        {err && <div style={{ ...card, padding: 16, color: "#fb7185" }}>{t("qskyway.err.cityLoad")}</div>}
 
         {!err && (
           <div className="qsky-grid" style={{ display: "grid", gap: 14 }}>
@@ -1131,7 +1144,7 @@ export default function QSkywayClient() {
                   {booking && (
                     <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 11, color: booking.kind === "ok" ? "#2dd4bf" : "#fb7185", wordBreak: "break-all" }}>
                       {booking.kind === "net"
-                        ? t("qskyway.booking.netError", { detail: booking.detail })
+                        ? t("qskyway.booking.netError")
                         : booking.text}
                     </div>
                   )}

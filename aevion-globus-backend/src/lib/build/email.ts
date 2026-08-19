@@ -34,7 +34,22 @@ const BASE = process.env.FRONTEND_URL?.replace(/\/+$/, "") || "https://aevion.ap
 async function send(to: string, subject: string, html: string): Promise<void> {
   try {
     const transport = getTransport();
-    if (!transport) return; // SMTP not configured — skip silently
+    if (!transport) {
+      // РАНЬШЕ ЗДЕСЬ БЫЛО МОЛЧАЛИВОЕ `return`, и это худший вид отказа:
+      // ненастроенный SMTP выглядел как успешная отправка. Замер 19.08.2026 —
+      // из девяти писем этого модуля пять не вызываются вовсе, а те, что
+      // вызываются, при пустых настройках уходили в никуда без единого следа.
+      // Ни в журнале, ни в Sentry, ни в ответе ручки — ничего.
+      //
+      // Отправку по-прежнему НЕ роняем: письмо не должно валить операцию, ради
+      // которой его шлют. Но след обязателен, иначе «письма не приходят»
+      // невозможно отличить от «письма не отправлялись».
+      console.warn(
+        `[build/email] SMTP не настроен — письмо «${subject}» для ${to} НЕ отправлено. ` +
+          "Задайте SMTP_HOST, SMTP_USER и SMTP_PASS.",
+      );
+      return;
+    }
     await transport.sendMail({ from: FROM, to, subject, html });
   } catch (e) {
     console.warn("[build/email] send failed:", (e as Error).message);

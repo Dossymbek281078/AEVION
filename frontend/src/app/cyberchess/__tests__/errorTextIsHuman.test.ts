@@ -28,3 +28,23 @@ describe("страница повторов говорит с человеком
     expect(s).toMatch(/console\.warn\(/);
   });
 });
+
+describe("во всём модуле текст исключения не показывается человеку", () => {
+  test("ни одна страница не подставляет e.message в сообщение", () => {
+    // Свип по классу, а не по одному файлу: сегодня нашлось три места, и все
+    // три показывали «HTTP 500» или «API returned ok=false».
+    const корень = path.join(__dirname, "..");
+    const файлы: string[] = [];
+    const обойти = (d: string) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) { if (e.name !== "__tests__") обойти(p); }
+        else if (/\.tsx?$/.test(e.name)) файлы.push(p);
+      }
+    };
+    обойти(корень);
+    const плохие = файлы.filter((f) =>
+      /set(Error|Message)\(\s*(e|err)[^)]*\.message/.test(stripComments(fs.readFileSync(f, "utf-8"))));
+    expect(плохие.map((f) => path.relative(корень, f))).toEqual([]);
+  });
+});

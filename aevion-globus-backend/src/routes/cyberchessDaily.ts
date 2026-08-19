@@ -554,6 +554,40 @@ let bankPuzzleCache: { day: string; puzzle: Puzzle | null } | null = null;
 let bankTotalCache: { at: number; total: number } | null = null;
 const BANK_TOTAL_TTL_MS = 6 * 60 * 60 * 1000;
 
+
+/** Ход в записи UCI: e2e4, g7g8q. Ничего другого движок не примет. */
+function isUciMove(m: string): boolean {
+  return /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m);
+}
+
+/**
+ * Решение из банка. Колонка `sol` — ТЕКСТ, внутри которого JSON-массив
+ * (`["c5c3","e6e4"]`), а не массив Postgres.
+ *
+ * Прежняя версия проверяла `Array.isArray` и, не найдя массива, резала строку
+ * по запятым. Получались «ходы» вида `["c5c3"` и `"e6e4"` — со скобками и
+ * кавычками. Задача дня становилась НЕРЕШАЕМОЙ: ни один ход игрока с таким
+ * мусором не совпадёт, а подсказка показывала `["c5c3"`.
+ *
+ * Дефект прожил день незамеченным, потому что мои проверки спрашивали «пришла
+ * ли задача из банка» и «разные ли задачи по дням» — и обе честно отвечали да.
+ * Ни одна не спросила, можно ли эту задачу решить.
+ */
+function parseSolution(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+  const s = String(raw ?? "").trim();
+  if (!s) return [];
+  if (s.startsWith("[")) {
+    try {
+      const j: unknown = JSON.parse(s);
+      if (Array.isArray(j)) return j.map(String).filter(Boolean);
+    } catch {
+      // не JSON — ниже разбор по разделителям
+    }
+  }
+  return s.split(/[\s,]+/).filter(Boolean);
+}
+
 async function dailyFromBank(day: string): Promise<Puzzle | null> {
   if (bankPuzzleCache && bankPuzzleCache.day === day) return bankPuzzleCache.puzzle;
   try {
@@ -576,7 +610,13 @@ async function dailyFromBank(day: string): Promise<Puzzle | null> {
     );
     const row = r.rows?.[0];
     if (!row) return null;
-    const sol = Array.isArray(row.sol) ? row.sol : String(row.sol || "").split(/[\s,]+/).filter(Boolean);
+    const sol = parseSolution(row.sol);
+    // Нерешаемая задача ХУЖЕ резервной: человек не поймёт, что сломано, и решит,
+    // что не умеет играть. Поэтому банк отвергается, а не показывается кое-как.
+    if (!sol.every(isUciMove)) {
+      console.error(`[cyberchess-daily] у задачи ${row.id} ходы не похожи на ходы: ${JSON.stringify(sol).slice(0, 80)}`);
+      return null;
+    }
     if (sol.length === 0) return null;
     const puzzle: Puzzle = {
       id: String(row.id),

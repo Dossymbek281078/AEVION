@@ -56,6 +56,32 @@ const PIECE: Record<string, string> = {
   k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟',
 };
 
+/**
+ * Названия фигур словами — для экранного диктора и клавиатуры.
+ *
+ * Найдено окном запуска 18.08.2026 живым прохождением: дерево доступности
+ * видело один образ «Шахматная доска» без клеток и фигур, то есть партия была
+ * недоступна и с клавиатуры, и с диктором. Символы ♔♕♖ диктор читает как
+ * «белый шахматный король» на английском или молчит вовсе — подпись словами
+ * нужна отдельно от глифа.
+ */
+const PIECE_NAME: Record<string, string> = {
+  K: 'белый король', Q: 'белый ферзь', R: 'белая ладья',
+  B: 'белый слон', N: 'белый конь', P: 'белая пешка',
+  k: 'чёрный король', q: 'чёрный ферзь', r: 'чёрная ладья',
+  b: 'чёрный слон', n: 'чёрный конь', p: 'чёрная пешка',
+};
+
+/** Подпись клетки: координата, что на ней стоит и что с ней можно сделать. */
+function squareLabel(sq: string, piece: string, opts: { selected: boolean; legal: boolean }): string {
+  const what = piece ? (PIECE_NAME[piece] ?? 'фигура') : 'пусто';
+  const extra = [
+    opts.selected ? 'выбрана' : '',
+    opts.legal ? 'возможный ход' : '',
+  ].filter(Boolean).join(', ');
+  return extra ? `${sq}, ${what}, ${extra}` : `${sq}, ${what}`;
+}
+
 function coordToUci(r: number, c: number): string {
   const file = 'abcdefgh'[c];
   const rank = String(8 - r);
@@ -578,6 +604,11 @@ export default function DailyPuzzlePage() {
 
               <div style={{ position: 'relative' }}>
                 <div
+                  // Имя у самой доски: без него диктор объявляет 64 кнопки
+                  // подряд, не сказав, что это. Роль grid не ставим намеренно —
+                  // она потребовала бы строк и ячеек по спецификации, а
+                  // полсделанной семантики хуже honest-простой.
+                  aria-label="Шахматная доска задачи дня"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(8, 1fr)',
@@ -603,11 +634,23 @@ export default function DailyPuzzlePage() {
                         ? '#1a1a28'
                         : '#2a2a3e';
                       const isWhite = piece && piece === piece.toUpperCase();
+                      const sq = coordToUci(r, c);
                       return (
-                        <div
+                        // Кнопка, а не div: фокус с клавиатуры, Enter и пробел
+                        // работают сами, роль читается диктором. Раньше клетки
+                        // были неинтерактивными для всех, кто не пользуется
+                        // мышью.
+                        <button
+                          type="button"
                           key={`${r}-${c}`}
                           onClick={() => onCellClick(r, c)}
+                          aria-label={squareLabel(sq, piece, { selected: !!sel, legal: !!legal })}
+                          aria-pressed={!!sel}
+                          disabled={solved || botPending}
                           style={{
+                            border: 'none',
+                            font: 'inherit',
+                            padding: 0,
                             background: bg,
                             position: 'relative',
                             display: 'flex',
@@ -635,7 +678,7 @@ export default function DailyPuzzlePage() {
                               }}
                             />
                           )}
-                        </div>
+                        </button>
                       );
                     })
                   )}

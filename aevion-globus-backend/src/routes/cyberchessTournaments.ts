@@ -1641,9 +1641,24 @@ router.post("/:id/register", (req: Request, res: Response): void => {
     res.status(409).json({ ok: false, error: "tournament_full" });
     return;
   }
-  const userId: string =
-    (typeof req.body?.userId === "string" && req.body.userId) ||
-    `anon_${randomUUID().slice(0, 8)}`;
+  // Идентификатор не пришёл — выдаём свой, но ГОВОРИМ об этом.
+  //
+  // Замер 19.08.2026: страница списка турниров читала ключ, который пишется
+  // только при входе, и у посетителя без аккаунта отправляла пустое поле. Тогда
+  // каждый повторный клик получал НОВЫЙ anon_… — то есть защита ниже
+  // («уже зарегистрирован») обходилась по построению: один человек мог набить
+  // турнир призраками, и билет было не восстановить.
+  //
+  // Клиент починен, но контракт обязан быть явным: без признака вызывающий не
+  // знает, что идентификатор надо сохранить, и повторит ту же ошибку.
+  const providedUserId = typeof req.body?.userId === "string" && req.body.userId.trim();
+  const userIdGenerated = !providedUserId;
+  const userId: string = providedUserId || `anon_${randomUUID().slice(0, 8)}`;
+  if (userIdGenerated) {
+    console.warn(
+      `[cyberchess-tournaments] регистрация без идентификатора в ${t.id} — выдан ${userId}. Клиент обязан сохранить его, иначе повторная регистрация создаст нового игрока.`,
+    );
+  }
   const displayName: string =
     (typeof req.body?.displayName === "string" && req.body.displayName.trim()) ||
     `Player_${userId.slice(-4)}`;
@@ -1702,6 +1717,9 @@ router.post("/:id/register", (req: Request, res: Response): void => {
     tournamentId: t.id,
     title: t.title,
     userId,
+    // Признак для клиента: идентификатор наш, его НАДО сохранить. Без этого
+    // следующая регистрация того же человека заведёт нового игрока.
+    userIdGenerated,
     realPlayers: !!t.realPlayers,
     queueStreamUrl: t.realPlayers
       ? `/api/cyberchess/matchmaking/queue/stream?userId=${encodeURIComponent(userId)}`

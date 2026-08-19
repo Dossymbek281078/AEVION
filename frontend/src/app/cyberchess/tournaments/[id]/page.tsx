@@ -16,6 +16,7 @@
 //      auto-trigger queue-match on round completion for realPlayers tournaments
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
+import { tournamentUserId, tournamentDisplayName } from "../playerIdentity";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -88,6 +89,8 @@ interface TournamentMeta {
   players?: number;
   maxPlayers?: number;
   realPlayers?: boolean;
+  /** "seed" — фикстура из кода, "user" — турнир завёл кто угодно через открытую ручку. */
+  origin?: "seed" | "user";
   liveMatchId?: string | null;
 }
 
@@ -108,37 +111,13 @@ type RegState =
 type SortKey = "score" | "buchholz" | "rating" | "games";
 type SortDir = "asc" | "desc";
 
-function genLocalUserId(tournamentId: string): string {
-  if (typeof window === "undefined") return `anon_${Math.random().toString(36).slice(2, 10)}`;
-  const key = `cc_user_id`;
-  let id = window.localStorage.getItem(key);
-  if (!id) {
-    id =
-      `u_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    try {
-      window.localStorage.setItem(key, id);
-    } catch {
-      // ignore
-    }
-  }
-  void tournamentId;
-  return id;
-}
-
-function getDisplayName(): string {
-  if (typeof window === "undefined") return "";
-  return window.localStorage.getItem("cc_display_name") || "";
-}
-
 export default function TournamentDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }) {
   const resolved =
-    typeof (params as Promise<{ id: string }>).then === "function"
-      ? use(params as Promise<{ id: string }>)
-      : (params as { id: string });
+    use(params);
 
   const tournamentId = resolved.id;
   const router = useRouter();
@@ -183,6 +162,7 @@ export default function TournamentDetailPage({
           players: tData.tournament.players,
           maxPlayers: tData.tournament.maxPlayers,
           realPlayers: !!tData.tournament.realPlayers,
+          origin: tData.tournament.origin,
           liveMatchId: tData.tournament.liveMatchId ?? null,
         });
       }
@@ -286,8 +266,8 @@ export default function TournamentDetailPage({
     if (!meta) return;
     if (reg.phase === "registering" || reg.phase === "waiting") return;
     setReg({ phase: "registering" });
-    const userId = genLocalUserId(tournamentId);
-    const displayName = getDisplayName();
+    const userId = tournamentUserId();
+    const displayName = tournamentDisplayName();
     try {
       const r = await fetch(`/api-backend/api/cyberchess-tournaments/${tournamentId}/register`, {
         method: "POST",
@@ -478,6 +458,30 @@ export default function TournamentDetailPage({
         >
           tournament_id: {tournamentId}
         </div>
+        {/* Образец обязан сказать о себе ДО того, как человек начнёт читать
+            сетку. В списке турниров подпись уже стоит (12.08), а здесь её не
+            было: открыв «Winter Arena #12», человек видел участников и
+            завершённые результаты, которых никогда не существовало. На проде
+            таких турниров одиннадцать из тринадцати. Признак берётся с
+            сервера, а не угадывается по имени идентификатора. */}
+        {meta?.origin === "seed" && (
+          <div
+            data-testid="tournament-sample-notice"
+            style={{
+              marginTop: 12,
+              padding: "10px 14px",
+              border: `1px solid ${T.dim}`,
+              borderRadius: 8,
+              fontSize: 13,
+              color: T.dim,
+              lineHeight: 1.5,
+            }}
+          >
+            <b>Это образец.</b> Участники, счёт и результаты в нём выдуманы —
+            турнир показывает, как всё выглядит, и в нём нельзя сыграть.
+          </div>
+        )}
+
         <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
           {meta && (
             <>

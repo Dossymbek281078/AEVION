@@ -73,4 +73,31 @@ describe("выход из турнира", () => {
     expect(r.status).toBe(404);
     expect(r.body.error).toBe("not_registered");
   });
+
+  test("сетка возвращается в прежний вид, а не остаётся с прочерком", async () => {
+    // У турнира с реальными игроками места сетки заняты демо-именами, и
+    // регистрация их затирает. Выход обязан вернуть прежнее имя: иначе
+    // демо-участник исчезает навсегда, а сетка выглядит поломанной.
+    const a = await app();
+    const list = (await request(a).get("/api/cyberchess-tournaments/list")).body.tournaments as Array<Record<string, any>>;
+    const real = list.find((t) => t.status === "upcoming" && t.realPlayers && t.players < t.maxPlayers);
+    if (!real) return; // нет подходящей заготовки — проверять нечем
+
+    const до = (await request(a).get(`/api/cyberchess-tournaments/${real.id}`)).body;
+    const именаДо = ((до.tournament ?? до).roster ?? []).map((p: any) => p.name);
+
+    const reg = await request(a).post(`/api/cyberchess-tournaments/${real.id}/register`)
+      .send({ userId: "временный", displayName: "Временный" });
+    expect(reg.status).toBe(200);
+
+    const out = await request(a).post(`/api/cyberchess-tournaments/${real.id}/unregister`)
+      .send({ userId: "временный", ticketId: reg.body.ticketId });
+    expect(out.status).toBe(200);
+
+    const после = (await request(a).get(`/api/cyberchess-tournaments/${real.id}`)).body;
+    const именаПосле = ((после.tournament ?? после).roster ?? []).map((p: any) => p.name);
+    expect(именаПосле).toEqual(именаДо);
+    expect(именаПосле).not.toContain("Временный");
+    expect(именаПосле).not.toContain("—");
+  });
 });

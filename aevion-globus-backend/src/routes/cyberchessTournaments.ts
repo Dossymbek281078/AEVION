@@ -63,6 +63,9 @@ export interface Player {
   blackCount: number;
   opponentIds: string[];
   userId?: string; // when a real registered user is mapped onto this roster slot
+  /** Имя места до того, как его занял живой игрок. Нужно, чтобы выход из
+   *  турнира вернул сетке прежнего участника, а не прочерк. */
+  seedName?: string;
 }
 
 export interface BracketMatch {
@@ -1752,6 +1755,9 @@ router.post("/:id/register", async (req: Request, res: Response): Promise<void> 
   if (t.realPlayers) {
     const freeSlot = t.roster.find((p) => !p.userId);
     if (freeSlot) {
+      // Прежнее имя места запоминается, иначе выход из турнира его теряет:
+      // в сетке лежат демо-имена, и регистрация их затирает.
+      if (freeSlot.seedName === undefined) freeSlot.seedName = freeSlot.name;
       freeSlot.userId = userId;
       freeSlot.name = displayName;
     } else {
@@ -1930,12 +1936,25 @@ router.post("/:id/unregister", (req: Request, res: Response): void => {
   delete t.tickets[userId];
   // Место в сетке освобождается тоже: иначе участник исчезает из списка, но
   // продолжает занимать слот, и турнир выглядит полнее, чем есть.
+  // Два случая, и они разные. Дописанный игрок (`pl_dyn_…`) появился ТОЛЬКО
+  // из-за регистрации — его надо убрать целиком, иначе сетка копит пустые
+  // строки. Готовое место сетки существовало и до него: ему возвращается
+  // прежнее имя, а не прочерк, иначе демо-участник исчезает навсегда.
+  const оставшиеся: typeof t.roster = [];
   for (const slot of t.roster) {
-    if (slot.userId === userId) {
-      slot.userId = undefined;
-      slot.name = "—";
+    if (slot.userId !== userId) {
+      оставшиеся.push(slot);
+      continue;
     }
+    if (String(slot.id).startsWith("pl_dyn_")) continue; // дописанный — убираем
+    slot.userId = undefined;
+    if (slot.seedName !== undefined) {
+      slot.name = slot.seedName;
+      delete slot.seedName;
+    }
+    оставшиеся.push(slot);
   }
+  t.roster = оставшиеся;
   tryWriteToDisk();
 
   res.json({ ok: true, tournamentId: t.id, userId, players: t.players });

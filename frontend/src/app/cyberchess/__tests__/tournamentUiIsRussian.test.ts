@@ -125,3 +125,32 @@ describe("кнопка к таблице лидеров названа один�
     expect(s).toContain("Таблица лидеров");
   });
 });
+
+describe("в центре обучения нет жаргона разработчика", () => {
+  // 20.08: на экран уехали внутренние термины — «Основан на CPI weak factor,
+  // due Coach reminders, и daily-variant ротации», «Открой Coach Knowledge»,
+  // «за визит в training hub». Это записки для себя, а не текст для человека.
+  const zhargon = [/CPI weak factor/, /Coach reminders/, /daily-variant/, /Coach Knowledge/, /training hub/];
+
+  test("шаблоны узнают свои образцы", () => {
+    const obraztsy = ["Основан на CPI weak factor", "due Coach reminders,", "и daily-variant ротации",
+                      "Открой Coach Knowledge чтобы", "за визит в training hub."];
+    zhargon.forEach((re, i) => {
+      expect(re.test(obraztsy[i]), `шаблон ${i + 1} не узнаёт свой образец`).toBe(true);
+    });
+  });
+
+  test("видимый текст страницы чист", () => {
+    const s = fs.readFileSync(path.join(ROOT, "training", "page.tsx"), "utf-8");
+    // Комментарии и структурированные данные не трогаем: первое — записки в коде,
+    // второе — то, что читает поисковик, и меняется отдельным решением.
+    const vidimyj = s
+      .split("\n")
+      .filter((l) => !/^\s*(\/\/|\*)/.test(l))
+      .filter((l) => !l.includes("description:") && !l.includes("@id"))
+      .join("\n");
+    zhargon.forEach((re) => {
+      expect(re.test(vidimyj), `жаргон вернулся на экран: ${re}`).toBe(false);
+    });
+  });
+});

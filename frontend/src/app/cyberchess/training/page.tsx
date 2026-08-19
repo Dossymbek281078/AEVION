@@ -168,8 +168,8 @@ export default function TrainingHubPage() {
             Тренировки
           </h1>
           <p style={{ fontSize: 14, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 640 }}>
-            Твой персональный ежедневный план. Основан на CPI weak factor, due Coach reminders,
-            и daily-variant ротации.
+            Твой личный план на день: слабая сторона по CPI, темы, которые пора повторить
+            с коучем, и вариант дня.
           </p>
         </div>
 
@@ -289,7 +289,7 @@ export default function TrainingHubPage() {
             ) : (
               <>
                 <div style={{ fontSize: 13, color: C.dim, marginBottom: 10, lineHeight: 1.5 }}>
-                  Нет тем для повторения сегодня. Открой Coach Knowledge чтобы изучить новые.
+                  Нет тем для повторения сегодня. Открой «Знания коуча», чтобы изучить новые.
                 </div>
                 <Link href="/cyberchess?tab=coach&modal=knowledge" style={{
                   display: "inline-block",
@@ -317,7 +317,7 @@ export default function TrainingHubPage() {
               {dailyClaimed ? "Сегодня забрано ✓" : "Заберать ежедневный бонус"}
             </div>
             <div style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.5 }}>
-              <strong style={{ color: C.gold }}>+25 AEV</strong> за визит в training hub. Используй в Economy для аукциона или аренды тренера.
+              <strong style={{ color: C.gold }}>+25 AEV</strong> за визит в центр обучения. Используй в «Экономике» для аукциона или аренды тренера.
             </div>
             <button
               onClick={claimDaily}

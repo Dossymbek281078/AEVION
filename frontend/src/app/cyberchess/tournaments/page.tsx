@@ -68,6 +68,14 @@ interface StandingRow {
   gamesPlayed: number;
 }
 
+// Запасной список помечен origin: "seed" — тем же признаком, по которому
+// карточка рисует подпись «образец». Прежде признака не было: при недоступном
+// сервере человек видел «Spring Blitz Open, 87/128 игроков» как настоящий
+// турнир. Сообщение об отказе внизу страницы есть, но карточки читают раньше
+// него и по отдельности.
+//
+// Механизм переиспользован, а не заведён второй: подпись уже умеет включаться
+// по origin.
 const MOCK_FALLBACK: Tournament[] = [
   {
     id: "spring-blitz-01",
@@ -80,6 +88,7 @@ const MOCK_FALLBACK: Tournament[] = [
     maxPlayers: 128,
     prizeChessy: 50_000,
     status: "upcoming",
+    origin: "seed",
     startsAt: "2026-05-18 19:00",
   },
   {
@@ -93,6 +102,7 @@ const MOCK_FALLBACK: Tournament[] = [
     maxPlayers: 16,
     prizeChessy: 40_000,
     status: "live",
+    origin: "seed",
     startsAt: "2026-05-16 18:00",
     swissRounds: 5,
     currentRound: 1,
@@ -109,6 +119,7 @@ const MOCK_FALLBACK: Tournament[] = [
     maxPlayers: 8,
     prizeChessy: 120_000,
     status: "live",
+    origin: "seed",
     startsAt: "2026-05-14 12:00",
   },
 ];

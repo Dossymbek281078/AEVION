@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { readFileSync } from "node:fs";
 import { stripComments } from "./_stripComments";
 
@@ -118,5 +120,20 @@ describe("подпись образца не обманывается внутр
     const realAt = s.indexOf("t.realPlayers ?");
     expect(originAt).toBeGreaterThan(-1);
     expect(originAt).toBeLessThan(realAt);
+  });
+});
+
+describe("запасной список тоже подписан", () => {
+  test("у каждого запасного турнира есть признак образца", () => {
+    // При недоступном сервере человек видел «Spring Blitz Open, 87/128 игроков»
+    // как настоящий турнир. Сообщение об отказе внизу страницы есть, но
+    // карточки читают раньше него и по отдельности.
+    const src = fs.readFileSync(
+      path.join(__dirname, "..", "tournaments", "page.tsx"), "utf-8");
+    const блок = src.slice(src.indexOf("const MOCK_FALLBACK"), src.indexOf("\n];", src.indexOf("const MOCK_FALLBACK")));
+    const турниров = (блок.match(/\n    id: "/g) || []).length;
+    const помеченных = (блок.match(/origin: "seed"/g) || []).length;
+    expect(турниров).toBeGreaterThan(0);
+    expect(помеченных).toBe(турниров);
   });
 });

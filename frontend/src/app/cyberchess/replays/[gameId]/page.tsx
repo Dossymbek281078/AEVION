@@ -188,7 +188,12 @@ export default function ReplayViewerPage() {
         } catch {}
       })
       .catch((e: unknown) => {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        // Человеку — человеческое, технику — в консоль. Сюда попадали
+        // «HTTP 500» и «API returned ok=false»: язык разработчика, из которого
+        // человек не понимает ни что случилось, ни что делать.
+        if (!alive) return;
+        console.warn("[replay] не удалось загрузить партию:", e);
+        setError("Не удалось загрузить партию. Попробуйте обновить страницу.");
       });
     return () => {
       alive = false;

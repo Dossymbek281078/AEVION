@@ -63,6 +63,9 @@ export interface Player {
   blackCount: number;
   opponentIds: string[];
   userId?: string; // when a real registered user is mapped onto this roster slot
+  /** Имя места до того, как его занял живой игрок. Нужно, чтобы выход из
+   *  турнира вернул сетке прежнего участника, а не прочерк. */
+  seedName?: string;
 }
 
 export interface BracketMatch {
@@ -570,6 +573,26 @@ function mkPlayer(name: string, rating: number, idx: number): Player {
   };
 }
 
+
+/**
+ * Дата заготовки — ОТНОСИТЕЛЬНО сегодняшнего дня, а не зашитая.
+ *
+ * Замер 19.08.2026 на проде: семь турниров из двенадцати числились
+ * «предстоящими», а время старта у них прошло 88–94 дня назад. Даты были
+ * записаны в мае и с тех пор протухли. Человек, открывший страницу, видит
+ * «Скоро» и дату из мая — и справедливо решает, что здесь всё заброшено.
+ *
+ * Зашитая дата в образце протухает ВСЕГДА, вопрос только когда. Поэтому она
+ * считается от текущего момента, а смысл статуса сохраняется: предстоящий
+ * турнир в будущем, идущий начался недавно, завершённый — в прошлом.
+ *
+ * @param часов смещение от сейчас: отрицательное — в прошлое.
+ */
+function seedDate(часов: number): string {
+  return new Date(Date.now() + часов * 3600_000).toISOString();
+}
+
+
 function buildSeedFixtures(): Tournament[] {
   // --- single elimination #1 (legacy) ---
   const elim1: Tournament = {
@@ -583,7 +606,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 128,
     prizeChessy: 50_000,
     status: "upcoming",
-    startsAt: "2026-05-18T19:00:00Z",
+    startsAt: seedDate(3 * 24 + 5),
     description: "Открытый блиц-турнир с накопительным призовым фондом в Chessy.",
     registeredUserIds: [],
     roster: [],
@@ -603,7 +626,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 64,
     prizeChessy: 25_000,
     status: "live",
-    startsAt: "2026-05-15T18:30:00Z",
+    startsAt: seedDate(-2),
     description: "Еженедельный рапид-турнир. Идёт прямо сейчас.",
     registeredUserIds: [],
     roster: [],
@@ -634,7 +657,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 16,
     prizeChessy: 40_000,
     status: "live",
-    startsAt: "2026-05-16T18:00:00Z",
+    startsAt: seedDate(-1),
     description: "Швейцарка на 5 туров с buchholz-тайбрейком.",
     swissRounds: 5,
     currentRound: 1,
@@ -680,7 +703,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 32,
     prizeChessy: 18_000,
     status: "upcoming",
-    startsAt: "2026-05-22T20:00:00Z",
+    startsAt: seedDate(6 * 24 + 6),
     description: "7 туров швейцарки, блиц 3+2.",
     swissRounds: 7,
     currentRound: 0,
@@ -713,7 +736,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 8,
     prizeChessy: 120_000,
     status: "live",
-    startsAt: "2026-05-14T12:00:00Z",
+    startsAt: seedDate(-3),
     description: "Полный круг 8 игроков, классический контроль.",
     currentRound: 1,
     registeredUserIds: [],
@@ -743,7 +766,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 6,
     prizeChessy: 22_000,
     status: "upcoming",
-    startsAt: "2026-05-19T16:00:00Z",
+    startsAt: seedDate(4 * 24 + 2),
     description: "6 игроков, круговая система, рапид 10+5.",
     currentRound: 0,
     registeredUserIds: [],
@@ -765,7 +788,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 32,
     prizeChessy: 120_000,
     status: "live",
-    startsAt: "2026-05-14T12:00:00Z",
+    startsAt: seedDate(-3),
     registeredUserIds: [],
     roster: [],
     rounds: buildLegacyElimRounds(),
@@ -783,7 +806,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 256,
     prizeChessy: 15_000,
     status: "upcoming",
-    startsAt: "2026-05-16T21:00:00Z",
+    startsAt: seedDate(1 * 24 + 6),
     registeredUserIds: [],
     roster: [],
     rounds: [],
@@ -801,7 +824,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 64,
     prizeChessy: 35_000,
     status: "upcoming",
-    startsAt: "2026-05-20T17:00:00Z",
+    startsAt: seedDate(5 * 24 + 3),
     registeredUserIds: [],
     roster: [],
     rounds: [],
@@ -819,7 +842,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 16,
     prizeChessy: 80_000,
     status: "finished",
-    startsAt: "2026-04-30T15:00:00Z",
+    startsAt: seedDate(-7 * 24),
     registeredUserIds: [],
     roster: [],
     rounds: buildLegacyElimRounds(),
@@ -837,7 +860,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 64,
     prizeChessy: 5_000,
     status: "upcoming",
-    startsAt: "2026-05-17T14:00:00Z",
+    startsAt: seedDate(2 * 24 + 4),
     registeredUserIds: [],
     roster: [],
     rounds: [],
@@ -863,7 +886,7 @@ function buildSeedFixtures(): Tournament[] {
     maxPlayers: 8,
     prizeChessy: 1_000,
     status: "upcoming",
-    startsAt: "2026-05-19T18:00:00Z",
+    startsAt: seedDate(4 * 24 + 6),
     description: "Демо-турнир с реальными игроками. Регистрация открыта.",
     swissRounds: 3,
     currentRound: 0,
@@ -873,6 +896,12 @@ function buildSeedFixtures(): Tournament[] {
     realPlayers: true,
   };
 
+  // Признак образца проставляется ЗДЕСЬ, а не в каждой записи по отдельности.
+  //
+  // Он был у одиннадцати заготовок из двенадцати — кто-то добавил новую и не
+  // повторил поле. Тихо: пропущенная не сдвигалась по времени и не считалась
+  // образцом ни в одной проверке. Тринадцатую добавят так же, поэтому место
+  // одно и забыть его нельзя.
   return [
     elim1,
     elim2,
@@ -886,7 +915,7 @@ function buildSeedFixtures(): Tournament[] {
     elimLegacy6,
     elimLegacy7,
     realDemo,
-  ];
+  ].map((t) => (t.origin ? t : { ...t, origin: "seed" as const }));
 }
 
 function rr1RosterToIds(roster: Player[]): string[] {
@@ -1350,6 +1379,130 @@ function resolveRating(t: Tournament, playerId: string | null | undefined): numb
  * Errors are isolated per-pairing — one failure must not abort the
  * whole round.
  */
+
+/**
+ * Обновляет даты ОБРАЗЦОВ из кода после подъёма состояния из базы.
+ *
+ * Зачем отдельный шаг. Даты заготовок стали относительными, но на проде они
+ * лежат В БАЗЕ, записанные в мае: правка кода их не касается. Замер 19.08.2026:
+ * семь турниров из двенадцати числились «предстоящими» с временем старта
+ * 88–94 дня назад, и человек видел заброшенный раздел.
+ *
+ * Что трогаем и чего НЕ трогаем — граница важна:
+ *   • только `origin === "seed"` — образцы принадлежат коду, а не людям;
+ *   • только `startsAt` — регистрации, сетка, счёт и статус остаются как есть;
+ *   • турниры, заведённые людьми (`origin === "user"`), не трогаются ВООБЩЕ.
+ *
+ * Без этой границы обновление превратилось бы в перезапись чужих данных.
+ */
+function refreshSeedDates(): void {
+  const свежие = new Map(buildSeedFixtures().map((t) => [t.id, t.startsAt]));
+  let обновлено = 0;
+  for (const t of TOURNAMENTS) {
+    if (t.origin !== "seed") continue;
+    const дата = свежие.get(t.id);
+    if (!дата || дата === t.startsAt) continue;
+    t.startsAt = дата;
+    обновлено += 1;
+  }
+  if (обновлено > 0) {
+    savedAtMs = Date.now();
+    tryWriteToDisk();
+    void saveToDb(TOURNAMENTS, savedAtMs);
+    console.log(`[cyberchess-tournaments] обновлены даты образцов: ${обновлено}`);
+  }
+}
+
+
+/** Как часто смотреть, не пора ли начать турнир. Минута — с запасом: точность
+ *  «плюс-минус минута» человеку незаметна, а нагрузки не создаёт. */
+const TOURNAMENT_TICK_MS = 60_000;
+
+/**
+ * Начать турниры, у которых наступило время, и не дать образцам протухнуть.
+ *
+ * Замер 19.08.2026 на проде: семь турниров из двенадцати числились
+ * «предстоящими», а время старта прошло 88–94 дня назад. Механизма перехода
+ * «предстоит → идёт» не существовало ВООБЩЕ: поле `startsAt` записывалось при
+ * создании и ни разу ни с чем не сравнивалось. Объяви турнир к запуску — он бы
+ * не начался, а зарегистрировавшиеся ждали.
+ *
+ * Две разные задачи в одном тике, и граница между ними важна:
+ *
+ * 1. НАСТОЯЩИЙ турнир (есть хотя бы двое записавшихся) — переводится в «идёт»
+ *    и получает первый круг. Это и есть обещание, данное временем на карточке.
+ *
+ * 2. ОБРАЗЕЦ без записавшихся — даты сдвигаются вперёд, статус НЕ меняется.
+ *    Начать его значило бы показать игру демо-участников как настоящую, а это
+ *    ровно та выдумка, которую мы весь день из модуля вычищали.
+ *
+ * Почему сдвиг нужен и здесь, а не только при загрузке: сервер живёт неделями,
+ * и дата «+1 день», выданная при старте, через двое суток снова окажется в
+ * прошлом. Обновление при подъёме чинит прошлое, тик — будущее.
+ */
+export function tournamentTick(): void {
+  const now = Date.now();
+  let начато = 0;
+  let сдвинуто = 0;
+
+  for (const t of TOURNAMENTS) {
+    if (t.status !== "upcoming") continue;
+    const старт = Date.parse(t.startsAt);
+    if (!Number.isFinite(старт) || старт > now) continue;
+
+    const записавшихся = t.registeredUserIds.length;
+    if (записавшихся >= 2) {
+      t.status = "live";
+      начато += 1;
+      try {
+        const первый = t.rounds?.[0]?.matches ?? [];
+        if (первый.length) publishRoundToMatchmaking(t, первый);
+      } catch (e) {
+        // Публикация круга не должна мешать самому старту: турнир уже идёт,
+        // а пары можно опубликовать следующим тиком или вручную.
+        console.error(`[cyberchess-tournaments] круг не опубликован для ${t.id}:`, e);
+      }
+      continue;
+    }
+
+    if (t.origin === "seed") {
+      // Образец: сдвигаем на неделю вперёд, чтобы раздел не выглядел заброшенным.
+      t.startsAt = new Date(now + 7 * 24 * 3600_000).toISOString();
+      сдвинуто += 1;
+    }
+    // Настоящий турнир без пары участников не начинаем и не сдвигаем: его дату
+    // назначил человек, и молча её менять нельзя. Он останется «предстоящим»,
+    // и это честно — начинать турнир с одним игроком нечего.
+  }
+
+  if (начато || сдвинуто) {
+    savedAtMs = Date.now();
+    tryWriteToDisk();
+    void saveToDb(TOURNAMENTS, savedAtMs);
+    console.log(`[cyberchess-tournaments] тик: начато ${начато}, сдвинуто образцов ${сдвинуто}`);
+  }
+}
+
+/** Обёртка: исключение внутри setInterval минует Express и роняет весь бэкенд. */
+function safeTournamentTick(): void {
+  try {
+    tournamentTick();
+  } catch (e) {
+    console.error("[cyberchess-tournaments] тик стартов сорвался", e);
+  }
+}
+
+// Фоновый цикл — с защитой от двойного запуска при горячей перезагрузке.
+const TG = global as unknown as { __cc_tournament_timer?: NodeJS.Timeout };
+if (!TG.__cc_tournament_timer) {
+  TG.__cc_tournament_timer = setInterval(safeTournamentTick, TOURNAMENT_TICK_MS);
+  // Не держим процесс живым ради одного этого таймера.
+  if (typeof TG.__cc_tournament_timer.unref === "function") {
+    TG.__cc_tournament_timer.unref();
+  }
+}
+
+
 function publishRoundToMatchmaking(t: Tournament, matches: BracketMatch[]): void {
   if (!t.realPlayers) return;
   const mmTc = mapTimeControl(t.timeControl);
@@ -1442,6 +1595,7 @@ const storeReady: Promise<void> = (async () => {
     if (typeof t.realPlayers === "undefined") t.realPlayers = false;
     if (typeof t.origin === "undefined") t.origin = t.id.startsWith("usr-") ? "user" : "seed";
   }
+  refreshSeedDates();
   console.log(`[cyberchess-tournaments] состояние взято из базы (${TOURNAMENTS.length} турниров) — она свежее файла`);
 })().catch((e) => {
   console.error("[cyberchess-tournaments] догрузка из базы не удалась, остаёмся на файле:", (e as Error).message);
@@ -1629,6 +1783,34 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
   });
 });
 
+
+/**
+ * Скорость турнира для поиска рейтинга.
+ *
+ * Найдено вычиткой 19.08.2026, через час после того, как проверка рамок ELO
+ * была написана и покрыта зелёными тестами. Турниры хранят `timeControl` уже
+ * как НАЗВАНИЕ скорости («blitz», «classic», «rapid»), а `speedOf` из хранилища
+ * партий ждёт вид «300+5» и на всё прочее молча возвращает «blitz».
+ *
+ * То есть рамки сверялись по блицу для ВСЕХ турниров: игрок с рейтингом в
+ * рапиде имел в блице ноль партий, считался новичком и проходил куда угодно.
+ * Ни одной ошибки при этом не возникало — проверка просто ничего не проверяла
+ * у девяти турниров из двенадцати.
+ *
+ * Отдельно: у турниров «classic», а у скоростей «classical» — несовпадение,
+ * которое тем же путём давало бы блиц.
+ *
+ * Неизвестное значение возвращает null, а не «blitz»: подстановка чужой
+ * скорости выглядела бы как выполненная проверка. Не знаем — говорим об этом.
+ */
+function tournamentSpeed(timeControl: unknown): string | null {
+  const raw = String(timeControl ?? "").trim().toLowerCase();
+  if (/^\d+\+\d+$/.test(raw)) return speedOf(raw);
+  if (raw === "classic" || raw === "classical") return "classical";
+  if (raw === "bullet" || raw === "blitz" || raw === "rapid") return raw;
+  return null;
+}
+
 router.post("/:id/register", async (req: Request, res: Response): Promise<void> => {
   const t = TOURNAMENTS.find((x) => x.id === req.params.id);
   if (!t) {
@@ -1691,7 +1873,10 @@ router.post("/:id/register", async (req: Request, res: Response): Promise<void> 
   //                                    чтобы «пустили» не выглядело «проверили»
   let eloChecked: "по рейтингу" | "рейтинга нет" | "спросить не удалось" = "рейтинга нет";
   try {
-    const known = await getRating(userId, speedOf(String(t.timeControl)));
+    const speed = tournamentSpeed(t.timeControl);
+    // Скорость не опознана — рейтинг искать негде. Пускаем, но это ЗАПИСАНО:
+    // «пустили, не спросив» и «спросили и пустили» — разные вещи.
+    const known = speed === null ? null : await getRating(userId, speed);
     if (known === null) {
       eloChecked = "спросить не удалось";
     } else if (Number(known.games) > 0) {
@@ -1721,6 +1906,9 @@ router.post("/:id/register", async (req: Request, res: Response): Promise<void> 
   if (t.realPlayers) {
     const freeSlot = t.roster.find((p) => !p.userId);
     if (freeSlot) {
+      // Прежнее имя места запоминается, иначе выход из турнира его теряет:
+      // в сетке лежат демо-имена, и регистрация их затирает.
+      if (freeSlot.seedName === undefined) freeSlot.seedName = freeSlot.name;
       freeSlot.userId = userId;
       freeSlot.name = displayName;
     } else {
@@ -1850,6 +2038,79 @@ router.get("/:id/next-round", (req: Request, res: Response): void => {
 // not pass through here. It exists for the tournament service to report
 // results, and that sender can sign — same secret and same verification chain
 // as /api/cyberchess/tournament-finalized.
+/**
+ * POST /:id/unregister { userId, ticketId } — выйти из турнира до его начала.
+ *
+ * Заведено 19.08.2026. До этого выйти было НЕЛЬЗЯ вообще: записался — значит
+ * навсегда, даже если передумал за неделю до старта. Регистрация без отмены —
+ * это про согласие человека, а не про удобство: он соглашался играть, а не
+ * числиться в списке, из которого нет выхода.
+ *
+ * Право подтверждается БИЛЕТОМ, а не одним userId. Аккаунтов у нас нет, и
+ * идентификатор игрока не секрет — зная его, посторонний вычёркивал бы людей из
+ * турниров. Билет выдаётся при регистрации и есть только у записавшегося.
+ *
+ * После старта выход закрыт: сетка уже построена, и вычеркнутый участник
+ * оставил бы дыру в парах.
+ */
+router.post("/:id/unregister", (req: Request, res: Response): void => {
+  const t = TOURNAMENTS.find((x) => x.id === String(req.params.id ?? ""));
+  if (!t) {
+    res.status(404).json({ ok: false, error: "not_found" });
+    return;
+  }
+  if (t.status !== "upcoming") {
+    res.status(409).json({
+      ok: false,
+      error: "already_started",
+      hint: "выйти можно только до начала турнира",
+    });
+    return;
+  }
+  const userId = String(req.body?.userId ?? "").trim();
+  const ticketId = String(req.body?.ticketId ?? "").trim();
+  if (!userId || !ticketId) {
+    res.status(400).json({ ok: false, error: "userId_and_ticketId_required" });
+    return;
+  }
+  if (!t.registeredUserIds.includes(userId)) {
+    res.status(404).json({ ok: false, error: "not_registered" });
+    return;
+  }
+  if (!t.tickets || t.tickets[userId] !== ticketId) {
+    res.status(403).json({ ok: false, error: "ticket_mismatch" });
+    return;
+  }
+
+  t.registeredUserIds = t.registeredUserIds.filter((u) => u !== userId);
+  t.players = Math.max(0, t.players - 1);
+  delete t.tickets[userId];
+  // Место в сетке освобождается тоже: иначе участник исчезает из списка, но
+  // продолжает занимать слот, и турнир выглядит полнее, чем есть.
+  // Два случая, и они разные. Дописанный игрок (`pl_dyn_…`) появился ТОЛЬКО
+  // из-за регистрации — его надо убрать целиком, иначе сетка копит пустые
+  // строки. Готовое место сетки существовало и до него: ему возвращается
+  // прежнее имя, а не прочерк, иначе демо-участник исчезает навсегда.
+  const оставшиеся: typeof t.roster = [];
+  for (const slot of t.roster) {
+    if (slot.userId !== userId) {
+      оставшиеся.push(slot);
+      continue;
+    }
+    if (String(slot.id).startsWith("pl_dyn_")) continue; // дописанный — убираем
+    slot.userId = undefined;
+    if (slot.seedName !== undefined) {
+      slot.name = slot.seedName;
+      delete slot.seedName;
+    }
+    оставшиеся.push(slot);
+  }
+  t.roster = оставшиеся;
+  tryWriteToDisk();
+
+  res.json({ ok: true, tournamentId: t.id, userId, players: t.players });
+});
+
 router.post("/:id/result", (req: Request, res: Response): void => {
   const verdict = verifyWebhookSig({
     signature: req.headers["x-aevion-signature"],

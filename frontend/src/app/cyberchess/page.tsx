@@ -1312,10 +1312,14 @@ export default function CyberChessPage(){
     let alive=true;
     (async()=>{
       try{
-        const r=await fetch("/api-backend/api/cyberchess-puzzles?limit=1");
+        // /meta, а не ?limit=1: там `total` — это «сколько подошло под фильтр
+        // в ЗАГРУЖЕННОЙ пачке» и упирается в потолок загрузки (500 000).
+        // Размер банка живёт в bankTotal — в самом роутере так и написано:
+        // «для страниц брать ЭТО». Разница видна: 502 584 против 500 000.
+        const r=await fetch("/api-backend/api/cyberchess-puzzles/meta");
         if(!r.ok)return;
         const d=await r.json();
-        const n=Number(d?.total);
+        const n=Number(d?.bankTotal);
         // Отсутствие ответа оставляет null — тогда ниже покажем загруженное,
         // а не выдуманное. Ноль от неудачного чтения не должен стать фактом.
         if(alive&&Number.isFinite(n)&&n>0)sPzTotal(n);
@@ -2064,6 +2068,13 @@ export default function CyberChessPage(){
       const params=new URLSearchParams(window.location.search);
       const mid=params.get("matchId");
       if(mid&&/^[a-zA-Z0-9-]{6,64}$/.test(mid))sMatchmakingId(mid);
+      // Цвет из ссылки разворачивает доску. Сервер кладёт его в ссылку
+      // (`&color=black`), а страница до 19.08.2026 его ВЫБРАСЫВАЛА: игрок за
+      // чёрных приходил из турнира и видел доску белыми к себе, переворачивая
+      // вручную. Параметр передавали — и не использовали.
+      const col=params.get("color");
+      if(col==="black")sFlip(true);
+      else if(col==="white")sFlip(false);
     }catch{}
   },[]);
   useEffect(()=>{
@@ -6648,9 +6659,9 @@ export default function CyberChessPage(){
           {savedGames.length<3&&(()=>{
             const tiles:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
               {emoji:"♟",title:"Сыграй первую партию",desc:"AI любого уровня. От 800 до 2400. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
-              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:"500 000 задач в банке."}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
+              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:pzTotal?`${pzTotal.toLocaleString("ru-RU")} ${ccPlural(pzTotal,"задача","задачи","задач")} в банке.`:"Полмиллиона задач в банке."}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
               {emoji:"🎓",title:"Спроси Coach",desc:"AI-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
-              {emoji:"📅",title:"Задача дня",desc:"Один пазл каждый день. Streak, leaderboard, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
+              {emoji:"📅",title:"Задача дня",desc:"Один пазл каждый день. Серия, таблица лидеров, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
             ];
             return <Card padding={SPACE[3]} elevation="sm">
               <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:SPACE[3]}}>
@@ -10200,7 +10211,7 @@ export default function CyberChessPage(){
 
                 {/* Daily puzzle */}
                 <button onClick={()=>{
-                  if(!dailyState||!PUZZLES[dailyState.idx]){showToast("Daily puzzle не готов","error");return}
+                  if(!dailyState||!PUZZLES[dailyState.idx]){showToast("Задача дня не готова","error");return}
                   const pz=PUZZLES[dailyState.idx];
                   const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
                   showToast(`☀ Пазл дня · ${pz.r}`,"info");
@@ -10861,7 +10872,7 @@ ${question.trim()}`;
                       showToast("Выбери источник ниже","info");
                     })}
                     {modeBtn("🧩","Из пазлов","активный пазл",()=>{
-                      if(!pzCurrent){showToast("Сначала выбери пазл во вкладке Puzzles","info");sTab("puzzles");return}
+                      if(!pzCurrent){showToast("Сначала выбери пазл во вкладке «Пазлы»","info");sTab("puzzles");return}
                       const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sCoachAIEnabled(false);sEditorMode(false);
                       showToast(`Пазл: ${pzCurrent.name}`,"success");
                     })}
@@ -11460,7 +11471,7 @@ ${question.trim()}`;
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:SPACE[2]}}>
             {[
               {id:"free",name:"Free",price:"0",sub:"навсегда",
-                features:["Игра против AI до 2000 ELO","Все 12 вариантов шахмат","3418 пазлов с фильтрами","Coach knowledge база","P2P партии с другом","Library + PGN-экспорт"],
+                features:["Игра против AI до 2000 ELO","Все 12 вариантов шахмат",`${pzTotal?pzTotal.toLocaleString("ru-RU"):"500 000+"} ${ccPlural(pzTotal??0,"задача","задачи","задач")} с фильтрами`,"Coach knowledge база","P2P партии с другом","Library + PGN-экспорт"],
                 cta:"Текущий тариф",disabled:true},
               {id:"pro",name:"Pro",price:"500",sub:"AEV / месяц",accent:true,
                 features:["Всё из Free","Master AI до 2800 ELO","Безлимитные подсказки","Глубокий разбор каждой партии","Дебютная теория из мастер-партий","Multi-PV анализ до 5 линий","🎬 Auto-Reels без водяного знака"],
@@ -12763,7 +12774,7 @@ ${question.trim()}`;
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:15,fontWeight:900,display:"flex",alignItems:"center",gap:6}}>
                     {v.name}
-                    {isDaily&&<span title="Daily Challenge — +50 Chessy за победу" style={{fontSize:10,fontWeight:900,color:"#fff",background:"linear-gradient(90deg,#7c3aed,#a78bfa)",padding:"1px 6px",borderRadius:RADIUS.full}}>⭐ DAILY +50</span>}
+                    {isDaily&&<span title="Задача дня — +50 Chessy за победу" style={{fontSize:10,fontWeight:900,color:"#fff",background:"linear-gradient(90deg,#7c3aed,#a78bfa)",padding:"1px 6px",borderRadius:RADIUS.full}}>⭐ DAILY +50</span>}
                   </div>
                   <div style={{fontSize:11,color:CC.textDim}}>{v.shortDesc}</div>
                 </div>
@@ -12955,7 +12966,7 @@ ${question.trim()}`;
             <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[3]}}>
               <Btn variant="ghost" size="sm" disabled={brilliancyState.hintShown} onClick={()=>{sBrilliancyState(showHint(brilliancyHunt,brilliancyState))}}>💡 Подсказка (-40% reward)</Btn>
               <Btn variant="ghost" size="sm" onClick={()=>{
-                if(confirm("Сдаёшься? Streak обнулится."))sBrilliancyState(giveUp(brilliancyHunt,brilliancyState))
+                if(confirm("Сдаёшься? Серия обнулится."))sBrilliancyState(giveUp(brilliancyHunt,brilliancyState))
               }}>🏳 Сдаюсь</Btn>
             </div>
           </>}

@@ -40,6 +40,14 @@ export default function LifeBoxPage() {
   const [readerContent, setReaderContent] = useState<string | null>(null);
   const [readerLoading, setReaderLoading] = useState(false);
   const [readerError, setReaderError] = useState<string | null>(null);
+  // Предупреждение о временном хранилище.
+  //
+  // 19.08.2026 бэкенд научился говорить правду: при недоступной базе капсула
+  // уходит в память процесса и не переживёт перезапуск, и ответ теперь несёт
+  // storage: "memory" и текст warning. Но страница ответ НЕ ЧИТАЛА вовсе —
+  // просто перезагружала список. Метка доехала, а человек её не видел, то есть
+  // починка была ровно наполовину.
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
   // Load alias from localStorage on mount
   useEffect(() => {
@@ -115,6 +123,9 @@ export default function LifeBoxPage() {
       });
       const j = await r.json();
       if (!r.ok || !j?.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+      // Модуль называется «сейф для себя будущего». Если сейф сегодня не
+      // сейф — человек должен узнать об этом сейчас, а не через год.
+      setStorageWarning(j?.storage === "memory" ? (j?.warning || "Хранилище временно недоступно — капсула не переживёт перезапуск сервиса.") : null);
       await loadCapsules(alias);
     } finally {
       setBusy(false);
@@ -273,6 +284,21 @@ export default function LifeBoxPage() {
           <StatsBar stats={stats} loading={loadingList && !stats} />
 
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 28, marginBottom: 32 }}>
+            {storageWarning && (
+              /* Метка доехала — покажем её человеку. Бэкенд с 19.08.2026 честно
+                 говорит storage: "memory", но до этой вставки страница ответ не
+                 читала вовсе, и правда останавливалась на границе API. */
+              <div
+                role="alert"
+                style={{
+                  border: "1px solid #fbbf24", background: "#fffbeb", color: "#78350f",
+                  borderRadius: 10, padding: "12px 14px", marginBottom: 16,
+                  fontSize: 14, lineHeight: 1.55,
+                }}
+              >
+                <b>Капсула сохранена не насовсем.</b> {storageWarning}
+              </div>
+            )}
             <CapsuleForm alias={alias} categories={categories} onCreate={handleCreate} busy={busy} />
           </div>
 

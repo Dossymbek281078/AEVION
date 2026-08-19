@@ -2,9 +2,12 @@
 // CyberChess Daily Puzzle — real chess.js + 365 pool + leaderboard + streak
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { tournamentUserId, tournamentDisplayName } from '../tournaments/playerIdentity';
 import { Chess, Square } from 'chess.js';
 
 type Puzzle = {
+  /** Есть только у задач из банка; у встроенных его нет. */
+  id?: string;
   fen: string;
   sol: string[];
   theme: string;
@@ -34,25 +37,57 @@ const POOL: Puzzle[] = [
   { fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1', sol: ['c4f7', 'e8f7', 'f3e5'], theme: 'Fried liver', rating: 1400 },
 ];
 
-const COUNTRIES = ['🇷🇺', '🇺🇸', '🇩🇪', '🇫🇷', '🇪🇸', '🇮🇹', '🇰🇿', '🇺🇦', '🇵🇱', '🇧🇷', '🇨🇳', '🇯🇵', '🇮🇳', '🇬🇧', '🇰🇷', '🇳🇱', '🇸🇪', '🇳🇴', '🇫🇮', '🇦🇷'];
-const NAMES = ['Magnus', 'Hikaru', 'Fabiano', 'Ding', 'Anish', 'Ian', 'Levon', 'Wesley', 'Maxime', 'Alireza', 'Praggnanandhaa', 'Gukesh', 'Erigaisi', 'Nakamura', 'Carlsen', 'Caruana', 'Liren', 'Giri', 'Vachier', 'Firouzja', 'Karjakin', 'Aronian', 'So', 'MVL', 'Pragg', 'Dommaraju', 'Niemann', 'Abdusattorov', 'Esipenko', 'Sarana'];
 
-function mockLeaderboard(): LeaderEntry[] {
-  const out: LeaderEntry[] = [];
-  for (let i = 0; i < 100; i++) {
-    const name = `${NAMES[i % NAMES.length]}${i < NAMES.length ? '' : '_' + Math.floor(i / NAMES.length)}`;
-    const country = COUNTRIES[i % COUNTRIES.length];
-    const streak = Math.max(1, 365 - i * 3 - Math.floor(Math.random() * 5));
-    out.push({ name, country, streak });
-  }
-  return out.sort((a, b) => b.streak - a.streak);
-}
+// Списки NAMES и COUNTRIES удалены вместе с выдумкой: там лежали имена
+// НАСТОЯЩИХ гроссмейстеров (Magnus, Hikaru, Ding), которыми подписывались
+// несуществующие игроки. Показывать живых людей как своих пользователей
+// нельзя, и держать такой список «на всякий случай» — значит однажды его
+// снова использовать.
+/**
+ * Таблица лидеров приходит С СЕРВЕРА. Выдумывать её нельзя.
+ *
+ * Здесь стояла mockLeaderboard(): сто игроков с именами из списка и сериями до
+ * 365 дней, показанные ровно как настоящие — медали, флаги, огонь. Живых
+ * игроков при этом ноль. Такую таблицу человек читает как факт: «я 101-й из
+ * ста», хотя соревноваться не с кем.
+ *
+ * Ту же выдумку из ста seed-игроков убрали из бэкенда 10.08; фронт продолжал
+ * сочинять свою независимо. Теперь источник один — ручка
+ * /api/cyberchess-daily/leaderboard, и три состояния различаются словами:
+ * загрузка, пусто, отказ. Пустая таблица это НЕ отказ, и наоборот.
+ */
 
 // Unicode pieces by FEN char
 const PIECE: Record<string, string> = {
   K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙',
   k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟',
 };
+
+/**
+ * Названия фигур словами — для экранного диктора и клавиатуры.
+ *
+ * Найдено окном запуска 18.08.2026 живым прохождением: дерево доступности
+ * видело один образ «Шахматная доска» без клеток и фигур, то есть партия была
+ * недоступна и с клавиатуры, и с диктором. Символы ♔♕♖ диктор читает как
+ * «белый шахматный король» на английском или молчит вовсе — подпись словами
+ * нужна отдельно от глифа.
+ */
+const PIECE_NAME: Record<string, string> = {
+  K: 'белый король', Q: 'белый ферзь', R: 'белая ладья',
+  B: 'белый слон', N: 'белый конь', P: 'белая пешка',
+  k: 'чёрный король', q: 'чёрный ферзь', r: 'чёрная ладья',
+  b: 'чёрный слон', n: 'чёрный конь', p: 'чёрная пешка',
+};
+
+/** Подпись клетки: координата, что на ней стоит и что с ней можно сделать. */
+function squareLabel(sq: string, piece: string, opts: { selected: boolean; legal: boolean }): string {
+  const what = piece ? (PIECE_NAME[piece] ?? 'фигура') : 'пусто';
+  const extra = [
+    opts.selected ? 'выбрана' : '',
+    opts.legal ? 'возможный ход' : '',
+  ].filter(Boolean).join(', ');
+  return extra ? `${sq}, ${what}, ${extra}` : `${sq}, ${what}`;
+}
 
 function coordToUci(r: number, c: number): string {
   const file = 'abcdefgh'[c];
@@ -93,8 +128,24 @@ function formatTime(ms: number): string {
 }
 
 export default function DailyPuzzlePage() {
-  const puzzle = useMemo(() => POOL[dayIndex() % POOL.length], []);
-  const leaderboard = useMemo(() => mockLeaderboard(), []);
+  /**
+   * Задача дня приходит С СЕРВЕРА, а встроенный набор — только запасной путь.
+   *
+   * Замер 19.08.2026: в банке ChessPuzzle 502 584 записи с живыми темами и
+   * рейтингами, а страница брала позицию из тридцати, зашитых в браузерный
+   * пакет. Тридцать — это цикл повтора в месяц; к публичному запуску 30.08
+   * человек его заметит. Ручка бэкенда при этом уже отдавала настоящую задачу —
+   * страница её просто не звала.
+   *
+   * Порядок именно такой: встроенная показывается СРАЗУ (страница не ждёт сеть
+   * и работает даже при мёртвом бэкенде), а как только придёт настоящая —
+   * заменяет её. Обратный порядок дал бы пустую доску на секунду и белый экран
+   * при недоступной сети.
+   */
+  const [puzzle, setPuzzle] = useState<Puzzle>(() => POOL[dayIndex() % POOL.length]);
+  const [fromBank, setFromBank] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
+  const [lbState, setLbState] = useState<'loading' | 'ok' | 'failed'>('loading');
 
   // chess engine (mutable via ref to keep instance stable across renders)
   const chessRef = useRef<Chess>(new Chess(puzzle.fen));
@@ -124,6 +175,91 @@ export default function DailyPuzzlePage() {
 
   // Bot reply pending (visual)
   const [botPending, setBotPending] = useState(false);
+
+  // Таблица лидеров — с сервера, и её три состояния различаются. Пустой список
+  // на упавшем запросе выглядел бы так же, как честное «никто ещё не решал», —
+  // а это разные вещи для человека, который решает, стоит ли играть.
+  useEffect(() => {
+    let alive = true;
+    fetch('/api-backend/api/cyberchess-daily/leaderboard?limit=100')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j) => {
+        if (!alive) return;
+        const rows = Array.isArray(j?.leaderboard) ? j.leaderboard : [];
+        setLeaderboard(
+          rows.map((e: Record<string, unknown>) => ({
+            name: String(e.name ?? e.userId ?? 'игрок'),
+            streak: Number(e.streak) || 0,
+            country: String(e.country ?? '🌍'),
+            score: typeof e.score === 'number' ? e.score : undefined,
+          })),
+        );
+        setLbState('ok');
+      })
+      .catch(() => {
+        if (alive) setLbState('failed');
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Забираем настоящую задачу дня. Ошибку глотаем намеренно: страница уже
+  // показывает встроенную, и падать из-за сети ей незачем — но подпись внизу
+  // честно скажет, что задача резервная.
+  useEffect(() => {
+    let alive = true;
+    fetch('/api-backend/api/cyberchess-daily/puzzle')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive) return;
+        const p = j?.puzzle;
+        if (!p?.fen || !Array.isArray(p.sol) || p.sol.length === 0) return;
+        // Ходы обязаны быть ходами. Проверка стоит здесь, а не только на
+        // сервере, потому что ПОТРЕБИТЕЛЬ значения — движок на этой странице:
+        // он сравнивает ход игрока с этим списком, и мусор в списке делает
+        // задачу нерешаемой молча, без единой ошибки на экране.
+        //
+        // Так и случилось 19.08.2026: сервер отдавал `["c5c3"` вместо `c5c3`,
+        // а здешняя проверка `Array.isArray` пропускала — массив-то был.
+        const sol = p.sol.map((m: unknown) => String(m));
+        if (!sol.every((m: string) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m))) return;
+        setPuzzle({
+          id: String(p.id),
+          fen: String(p.fen),
+          sol,
+          theme: String(p.theme ?? 'Тактика'),
+          rating: Number(p.rating) || 1200,
+        });
+        // Признак берётся из ответа сервера, а не угадывается: сервер сам знает,
+        // ответил ли банк, и говорит это полем source.
+        setFromBank(typeof j?.source === 'string' && j.source.includes('банк'));
+      })
+      .catch(() => {
+        /* остаёмся на встроенной задаче */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Смена задачи обязана сбросить ВСЁ состояние решения. Иначе останутся ходы
+  // и подсказки от прошлой позиции — тот же класс, что «ответы под чужими
+  // вопросами».
+  useEffect(() => {
+    chessRef.current = new Chess(puzzle.fen);
+    setBoard(buildBoardFromChess(chessRef.current));
+    setSelected(null);
+    setLegalDests([]);
+    setLastMove(null);
+    setSolIndex(0);
+    setHintLevel(0);
+    setHintsUsed(0);
+    setSolved(false);
+    setMessage('');
+    setPromoMove(null);
+    setBotPending(false);
+  }, [puzzle]);
 
   // load streak from localStorage on mount
   useEffect(() => {
@@ -236,18 +372,52 @@ export default function DailyPuzzlePage() {
         : `Поздравляем! Решено за ${formatTime(totalMs)}. Streak +1 = ${newStreak}. Best: ${newBest}`
     );
 
-    // Send to backend (best-effort, ignore failures — UI doesn't block)
+    // Отправка на сервер. Изменилось два раза за 19.08.2026, и оба важны.
+    //
+    // 1. Шлём ХОДЫ, а не длину серии. Прежде сервер брал `streak` числом на
+    //    веру — проверено на проде: запрос со «серией 364» без единого хода
+    //    ставил отправителя первым в таблице. Теперь сервер сверяет решение и
+    //    считает серию сам.
+    // 2. Шлём userId. Без него сервер считал игрока анонимом и В ТАБЛИЦУ НЕ
+    //    ЗАНОСИЛ вовсе: человек решал задачу и не появлялся в списке никогда.
+    //    Личность — из общего источника модуля, а не своя четвёртая.
     try {
-      await fetch('/api-backend/api/cyberchess-daily/solve', {
+      const r = await fetch('/api-backend/api/cyberchess-daily/solve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          streak: newStreak,
           day: today,
+          moves: puzzle.sol,
           timeMs: totalMs,
           hintsUsed: hUsed,
+          userId: tournamentUserId(),
+          name: tournamentDisplayName() || undefined,
         }),
       });
+      // Серию показываем ТУ, что признал сервер: иначе на экране одно число, а
+      // в таблице лидеров другое — два писателя одного значения.
+      if (r.ok) {
+        const j = (await r.json()) as { streak?: number; bestStreak?: number };
+        if (typeof j.streak === 'number') {
+          setStreak(j.streak);
+          try { localStorage.setItem('cc_daily_streak', String(j.streak)); } catch {}
+          // Сообщение тоже пересобирается по серверному числу. Иначе экран
+          // противоречит сам себе: в тексте одно, на значке другое. Расходятся
+          // они в понятном случае — местная серия осталась с давних времён, а
+          // вчерашний день не решён, и сервер честно отвечает 0.
+          if (j.streak !== newStreak) {
+            setMessage(
+              usedHints
+                ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Streak не растёт: ${j.streak}.`
+                : `Поздравляем! Решено за ${formatTime(totalMs)}. Streak: ${j.streak}.`
+            );
+          }
+        }
+        if (typeof j.bestStreak === 'number') {
+          setBestStreak(j.bestStreak);
+          try { localStorage.setItem('cc_daily_best_streak', String(j.bestStreak)); } catch {}
+        }
+      }
     } catch {
       // ignore network errors — local state already saved
     }
@@ -319,7 +489,15 @@ export default function DailyPuzzlePage() {
         setSolIndex((s) => s + 1);
         const afterBotIdx = nextIdx + 1;
         if (afterBotIdx >= puzzle.sol.length) {
-          // shouldn't happen, but guard
+          // Это ОСНОВНОЙ путь завершения, а не запасной. Прежний комментарий
+          // говорил «shouldn't happen, but guard» — и приглашал удалить живой
+          // код при первой уборке.
+          //
+          // Замер по настоящему банку 19.08.2026: у всех семи проверенных задач
+          // решение ЧЁТНОЙ длины (четыре и шесть ходов). Игрок ходит по чётным
+          // индексам, бот по нечётным — значит последний ход делает бот, и
+          // задача закрывается ровно здесь. Нечётная длина (игрок ходит
+          // последним) закрывается выше, по nextIdx >= sol.length.
           const totalMs = startedAtRef.current != null ? Date.now() - startedAtRef.current : timeMs;
           finalizeSolved(totalMs, hintsUsed);
         } else {
@@ -497,8 +675,27 @@ export default function DailyPuzzlePage() {
                 </div>
               </div>
 
+              {/* Откуда задача. Без этой строки резервная позиция неотличима от
+                  настоящей: та же доска, та же тема, тот же рейтинг — и человек
+                  решает, что играет сегодняшнюю задачу всей платформы, когда на
+                  самом деле банк не ответил и ему досталась одна из тридцати
+                  встроенных. Признак берётся с сервера, а не угадывается. */}
+              <div
+                data-testid="daily-puzzle-source"
+                style={{ fontSize: 12, color: fromBank ? '#9aa0b4' : '#ffd84d', marginBottom: 10 }}
+              >
+                {fromBank
+                  ? 'Задача дня из общего банка — одна и та же у всех игроков сегодня'
+                  : 'Резервная задача: банк задач не ответил, у других игроков сегодня может быть другая'}
+              </div>
+
               <div style={{ position: 'relative' }}>
                 <div
+                  // Имя у самой доски: без него диктор объявляет 64 кнопки
+                  // подряд, не сказав, что это. Роль grid не ставим намеренно —
+                  // она потребовала бы строк и ячеек по спецификации, а
+                  // полсделанной семантики хуже honest-простой.
+                  aria-label="Шахматная доска задачи дня"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(8, 1fr)',
@@ -524,11 +721,23 @@ export default function DailyPuzzlePage() {
                         ? '#1a1a28'
                         : '#2a2a3e';
                       const isWhite = piece && piece === piece.toUpperCase();
+                      const sq = coordToUci(r, c);
                       return (
-                        <div
+                        // Кнопка, а не div: фокус с клавиатуры, Enter и пробел
+                        // работают сами, роль читается диктором. Раньше клетки
+                        // были неинтерактивными для всех, кто не пользуется
+                        // мышью.
+                        <button
+                          type="button"
                           key={`${r}-${c}`}
                           onClick={() => onCellClick(r, c)}
+                          aria-label={squareLabel(sq, piece, { selected: !!sel, legal: !!legal })}
+                          aria-pressed={!!sel}
+                          disabled={solved || botPending}
                           style={{
+                            border: 'none',
+                            font: 'inherit',
+                            padding: 0,
                             background: bg,
                             position: 'relative',
                             display: 'flex',
@@ -556,7 +765,7 @@ export default function DailyPuzzlePage() {
                               }}
                             />
                           )}
-                        </div>
+                        </button>
                       );
                     })
                   )}
@@ -731,9 +940,35 @@ export default function DailyPuzzlePage() {
               overflowY: 'auto',
             }}
           >
+            {/* Название по факту, а не по замыслу. Сервер хранит МАКСИМАЛЬНУЮ
+                серию игрока за всё время (`Math.max` при обновлении), а не
+                текущую. «Top-100 Streaks» читается как «сейчас», и человек с
+                серией 3 не понимал бы, почему рядом стоит 40 у того, кто уже
+                месяц не заходил. Название исправлено, потому что менять правило
+                хуже: таблица, ежедневно вычёркивающая людей, отталкивает. */}
             <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 12px 0', color: '#b56bff' }}>
-              🏆 Top-100 Streaks
+              🏆 Лучшие серии — топ-100
             </h2>
+            <div style={{ fontSize: 11, color: '#9aa0b4', margin: '0 0 10px 0' }}>
+              Личный рекорд каждого игрока, а не серия на сегодня.
+            </div>
+            {/* Три состояния различаются СЛОВАМИ. Пустой список и отказ
+                выглядели бы одинаково — пустой таблицей, — а для человека это
+                разные вещи: в первом случае он первый, во втором мы не знаем. */}
+            {lbState === 'loading' && (
+              <div style={{ fontSize: 13, color: '#9aa0b4' }}>Загружаем таблицу…</div>
+            )}
+            {lbState === 'failed' && (
+              <div data-testid="daily-lb-failed" style={{ fontSize: 13, color: '#ffd84d' }}>
+                Таблицу не удалось загрузить. Это не значит, что она пуста — мы просто не смогли
+                спросить сервер.
+              </div>
+            )}
+            {lbState === 'ok' && leaderboard.length === 0 && (
+              <div data-testid="daily-lb-empty" style={{ fontSize: 13, color: '#9aa0b4' }}>
+                Сегодня задачу ещё никто не решил. Решите — и будете первым.
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {leaderboard.map((entry, i) => (
                 <div

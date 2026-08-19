@@ -115,6 +115,13 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qventure/a/demo-neurodx", changeFrequency: "monthly", priority: 0.6 },
   // Launch status
   { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
+  // Посадочные запуска. Замер 19.08.2026: на обе НЕ ВЕЛА ни одна ссылка — ни из
+  // карты сайта, ни с какой-либо страницы. Единственные упоминания в коде были в
+  // собственном тесте и в комментарии, то есть страницы собирали адреса, попасть
+  // на которые было нельзя. Модули пока не запущены и цены у них нет, поэтому
+  // приоритет умеренный, а частота — недельная.
+  { path: "/devhub/launch", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/multichat-engine/launch", changeFrequency: "weekly", priority: 0.6 },
   // Constitution module
   { path: "/constitution",             changeFrequency: "daily",   priority: 0.9 },
   { path: "/constitution/leaderboard", changeFrequency: "hourly",  priority: 0.8 },

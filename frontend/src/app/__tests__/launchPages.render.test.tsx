@@ -71,6 +71,17 @@ function stubProdAlive() {
     models: [{ id: "video-1" }],
     configured: true,
     error: "not_a_receipt",
+    // Четыре настроенных из семи — как на проде 19.08 (там 4 из 17). Числа на
+    // странице обязаны считаться отсюда, а не быть зашитыми.
+    providers: [
+      { id: "anthropic", name: "Claude (Anthropic)", configured: true, free: false },
+      { id: "openai", name: "GPT (OpenAI)", configured: true, free: false },
+      { id: "gemini", name: "Gemini (Google)", configured: true, free: true },
+      { id: "openrouter", name: "OpenRouter", configured: true, free: true },
+      { id: "deepseek", name: "DeepSeek", configured: false, free: false },
+      { id: "grok", name: "Grok (xAI)", configured: false, free: false },
+      { id: "groq", name: "Groq", configured: false, free: true },
+    ],
   });
   vi.stubGlobal(
     "fetch",
@@ -141,7 +152,14 @@ describe("сторож обещаний: то, что выверено заме�
     // В реестре 17 записей, настроено 4 — «17 моделей» было бы правдой по списку
     // и обманом по делу.
     expect(html).not.toMatch(/17\s*(моделей|models)/i);
-    expect(html).toMatch(/четыре независимых поставщика/i);
+    // Прежде здесь стояло `toMatch(/четыре независимых поставщика/)` — то есть тест
+    // охранял ЗАШИТОЕ слово, а не свойство. Число теперь считается из ответа, и
+    // проверять надо именно это: показано столько, сколько настроено (в подмене 4
+    // из 7), и общее число не называется.
+    expect(html).toMatch(/4 независимых поставщика/i);
+    expect(html).not.toMatch(/7 независимых поставщик/i);
+    // Ненастроенные поставщики не должны попасть в перечисление.
+    expect(html).not.toMatch(/DeepSeek|Grok|Groq/i);
     // Отдельной подписки в магазине нет: цену называть нельзя.
     expect(html).not.toMatch(/\$\s?\d/);
   });

@@ -205,7 +205,7 @@ qlearnRouter.get("/courses", async (req: Request, res: Response) => {
   const category = req.query.category ? String(req.query.category) : undefined;
   const level = req.query.level ? String(req.query.level) : undefined;
   const q = req.query.q ? String(req.query.q) : undefined;
-  const limit = Math.min(Number(req.query.limit) || 20, 50);
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 50);
 
   if (isQLearnDbReady()) {
     try {

@@ -163,7 +163,7 @@ export function buildPlatformWaitlistEmail(email: string, source?: string): Cons
   const mod = moduleFromSource(source);
   const where = mod
     ? `странице запуска ${mod.name}`
-    : source === "go"
+    : source === "go" || source?.startsWith("go-")
       ? "странице aevion.app/go"
       : "главной странице aevion.app";
   const html = `

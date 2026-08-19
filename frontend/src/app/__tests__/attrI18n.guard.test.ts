@@ -69,8 +69,8 @@ const KNOWN: Hit[] = [
   // ModulePricingChip на 22. Внесены в список, а не починены залпом: правка
   // навигации такого охвата требует, чтобы владелец зоны посмотрел результат.
   { file: "components/ModulePricingChip.tsx", attr: "title", text: "Сравнить тарифы — Lite, Medium, Full" },
-  { file: "components/ToastProvider.tsx", attr: "aria-label", text: "Закрыть" },
-  { file: "components/Wave1Nav.tsx", attr: "title", text: "AEV кошелёк" },
+  { file: "components/ToastProvider.tsx", attr: "aria-label", text: "Закрыть / Close" },
+  { file: "components/Wave1Nav.tsx", attr: "title", text: "AEV кошелёк / AEV wallet" },
   { file: "components/build/AiCoachChat.tsx", attr: "placeholder", text: "Напиши вопрос. Enter — отправить, Shift+" },
   { file: "components/build/AiResumeBuilder.tsx", attr: "placeholder", text: "Твой ответ… Enter — отправить." },
   { file: "components/build/HelpTip.tsx", attr: "aria-label", text: "Подсказка" },

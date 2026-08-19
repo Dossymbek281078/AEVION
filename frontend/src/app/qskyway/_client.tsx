@@ -971,8 +971,9 @@ export default function QSkywayClient() {
                         временный ключ никто раньше не видел, и связи со вчерашним
                         двойником подпись не даёт. На проде ключ именно такой. */}
                     {verify === "valid" && verifyKey?.ephemeral && (
-                      <span style={{ color: "#fbbf24" }} title={verifyKey.note}>
-                        {t("qskyway.verify.ephemeralKey")}
+                      <span style={{ color: "#fbbf24" }}>
+                        {t("qskyway.verify.ephemeralKey")}{" "}
+                        <InfoTip label={t("qskyway.verify.ephemeralKey")} text={verifyKey.note} size={11} />
                       </span>
                     )}
                     {verify === "invalid" && t("qskyway.verify.failed")}
@@ -1115,10 +1116,10 @@ export default function QSkywayClient() {
                             где он недостижим. */}
                         {measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) != null && (
                           <span
-                            title={t("qskyway.tel.obstacleTip", { total: stats.obstacleSegments ?? 0, measured: stats.measuredObstacleSegments ?? 0 })}
                             style={{ fontSize: 11, fontWeight: 400, color: (stats.measuredObstacleSegments ?? 0) === 0 ? "#fbbf24" : "#5f7086", marginLeft: 5, cursor: "help" }}
                           >
-                            {t("qskyway.tel.byBuildings", { pct: measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) ?? 0 })}
+                            {t("qskyway.tel.byBuildings", { pct: measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) ?? 0 })}{" "}
+                            <InfoTip label={t("qskyway.tel.heightConfidence")} text={t("qskyway.tel.obstacleTip", { total: stats.obstacleSegments ?? 0, measured: stats.measuredObstacleSegments ?? 0 })} size={11} />
                           </span>
                         )}
                       </>
@@ -1273,7 +1274,12 @@ export default function QSkywayClient() {
                   </span>
                   {slots.store && (
                     <span style={{ color: slots.store === "postgres" ? "#2dd4bf" : "#fbbf24", textTransform: "none", letterSpacing: 0 }} title={slots.store === "postgres" ? t("qskyway.slots.storeDurable") : t("qskyway.slots.storeMemory")}>
-                      {slots.store === "postgres" ? "● persist" : "● ephemeral"}
+                      {slots.store === "postgres" ? t("qskyway.slots.storeDurableShort") : t("qskyway.slots.storeMemoryShort")}{" "}
+                      <InfoTip
+                        label={t("qskyway.panel.slotMarket")}
+                        text={slots.store === "postgres" ? t("qskyway.slots.storeDurable") : t("qskyway.slots.storeMemory")}
+                        size={11}
+                      />
                     </span>
                   )}
                 </div>

@@ -127,6 +127,8 @@ const KEYS = [
   "prov.measured",
   "prov.derived",
   "prov.guessed",
+  "qskyway.slots.storeDurableShort",
+  "qskyway.slots.storeMemoryShort",
   "qskyway.slots.receipt",
   "qskyway.slots.capacity",
   "qskyway.reg.subject.prohibition",

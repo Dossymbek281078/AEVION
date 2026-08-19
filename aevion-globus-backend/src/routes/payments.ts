@@ -169,13 +169,62 @@ paymentsRouter.post("/paybox/init", async (req, res) => {
   } catch (err) { capturePaymentsError(err, { route: "paybox-init" }); res.status(500).json({ error: "paybox init failed" }); }
 });
 
-paymentsRouter.post("/paybox/callback", (_req, res) => {
+// ─── POST /api/payments/paybox/callback ──────────────────────────────────────
+//
+// ⚠ Это НЕ боевой приёмник уведомлений PayBox. Боевой — /api/paybox/webhook:
+// он проверяет подпись pg_sig, отбивает повторы и записывает оплату. Именно
+// его адрес подставляет payboxProvider.ts в pg_result_url, так что платежи,
+// начатые текущим кодом, приходят туда.
+//
+// Раньше этот обработчик отвечал <pg_status>ok</pg_status> и НЕ ДЕЛАЛ НИЧЕГО.
+// Для PayBox «ok» означает «уведомление принято, повторять не нужно» — то есть
+// подтверждение оплаты, попавшее сюда по устаревшей настройке в кабинете,
+// подтверждалось и выбрасывалось. Молча: ни лога, ни тревоги, ни следа.
+//
+// Убрать маршрут нельзя — тогда уведомление потеряется так же, только с 404.
+// Поэтому: тело сохраняется в Sentry как сообщение (не ошибка — это не сбой
+// кода, а неверный адрес в кабинете), и ответ прежний, чтобы PayBox не начал
+// повторять в пустоту. Ничего не теряется, и это видно.
+paymentsRouter.post("/paybox/callback", (req, res) => {
+  capturePaymentsError(
+    new Error("paybox_callback_on_legacy_path"),
+    {
+      route: "paybox-callback-legacy",
+      canonical: "/api/paybox/webhook",
+      // Тело целиком: без него уведомление всё равно потеряно, а разобрать
+      // потом будет нечего. Карт и секретов PayBox сюда не шлёт — только
+      // идентификаторы заказа, сумму и подпись.
+      body: JSON.stringify(req.body ?? {}).slice(0, 4000),
+    },
+  );
+  console.error(
+    "[payments] уведомление PayBox пришло на устаревший путь /api/payments/paybox/callback;" +
+      " боевой приёмник — /api/paybox/webhook. Тело сохранено в Sentry.",
+  );
   res.setHeader("Content-Type", "text/xml");
   res.send(`<?xml version="1.0" encoding="utf-8"?><response><pg_status>ok</pg_status></response>`);
 });
 
+// ─── GET /api/payments/paybox/status/:orderId ────────────────────────────────
+//
+// Раньше отвечало { status: "pending", amount: null } на ЛЮБОЙ идентификатор —
+// включая заказ, которого не существует, и заказ, который давно оплачен.
+// Никакого обращения ни к PayBox, ни к нашей базе здесь нет и не было.
+//
+// «pending» — не безобидная заглушка, а утверждение о деньгах: спрашивающий
+// читает его как «платёж идёт, ждите». Проверено на проде 20.08.2026: два
+// заведомо разных заказа получили один и тот же ответ.
+//
+// Честного ответа у этого маршрута быть не может, поэтому он его и не даёт.
+// Статус оплаты живёт там, куда приходит боевой вебхук.
 paymentsRouter.get("/paybox/status/:orderId", (req, res) => {
-  res.json({ orderId: req.params.orderId, status: "pending", amount: null });
+  res.status(501).json({
+    error: "not_implemented",
+    orderId: req.params.orderId,
+    message:
+      "Этот маршрут не знает статуса оплаты и раньше отвечал «pending» на любой заказ. " +
+      "Состояние платежа определяется по уведомлению на /api/paybox/webhook.",
+  });
 });
 
 /* ═══ Kaspi ═══ */

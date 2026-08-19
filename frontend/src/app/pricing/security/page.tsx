@@ -128,6 +128,21 @@ const DOC_CARDS = [
   },
 ];
 
+/*
+ * Адрес для сообщений об уязвимостях.
+ *
+ * Здесь стоял security@aevion.app. Проверено 19.08.2026: у домена aevion.app
+ * записи MX НЕТ вовсе — письмо на любой адрес там отбивается. Исследователь,
+ * нашедший дыру и не сумевший сообщить, расскажет о ней иначе; для страницы
+ * про безопасность это худший из исходов.
+ *
+ * Взят адрес, который основатель УЖЕ выбрал каналом раскрытия в
+ * /.well-known/security.txt — машиночитаемом файле, по которому исследователи
+ * и ходят. Два разных контакта на один канал хуже некрасивого адреса: половина
+ * сообщений уходила в никуда, и мы об этом не узнавали.
+ *
+ * Менять — только вместе с security.txt, иначе расхождение вернётся.
+ */
 export default async function SecurityPage() {
   const { t } = await getServerT();
   return (
@@ -443,7 +458,7 @@ export default async function SecurityPage() {
             {t("pricing.security.bugBounty.reportCta")}
           </Link>
           <a
-            href="mailto:security@aevion.app"
+            href="mailto:yahiin1978@gmail.com"
             style={{
               display: "inline-block",
               padding: "12px 24px",
@@ -456,7 +471,7 @@ export default async function SecurityPage() {
               fontSize: 14,
             }}
           >
-            security@aevion.app
+            yahiin1978@gmail.com
           </a>
         </div>
       </section>
@@ -551,8 +566,8 @@ export default async function SecurityPage() {
         </Link>
         <div style={{ fontSize: 12, color: "#94a3b8" }}>
           {t("pricing.security.questions")}{" "}
-          <a href="mailto:security@aevion.app" style={{ color: "#0d9488", fontWeight: 700 }}>
-            security@aevion.app
+          <a href="mailto:yahiin1978@gmail.com" style={{ color: "#0d9488", fontWeight: 700 }}>
+            yahiin1978@gmail.com
           </a>
         </div>
       </div>

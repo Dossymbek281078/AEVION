@@ -258,6 +258,11 @@ function awaitingFounder() {
   const files = [
     "aevion-globus-backend/tests/priceLadderCoherence.test.ts",
     "aevion-globus-backend/tests/sameEntitlementSamePrice.test.ts",
+    // Добавлен 19.08.2026: модули, у которых нет НИ ОДНОГО способа оплаты.
+    // Замер того дня — 11 из 41, и нашлись они только тем, что я пересчитал
+    // руками. Теперь список ведёт сторож и он же требует убрать строку,
+    // как только цена появится.
+    "aevion-globus-backend/tests/everyLiveModuleCanBeBought.test.ts",
   ];
   const out = [];
   for (const rel of files) {

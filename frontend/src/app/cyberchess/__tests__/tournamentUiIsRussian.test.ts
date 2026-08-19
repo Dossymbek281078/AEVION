@@ -82,3 +82,35 @@ describe("заголовки разделов модуля — русские", 
     for (const t of ne_dolzhno) expect(s, `английский заголовок вернулся: ${t}`).not.toContain(t);
   });
 });
+
+describe("контроли времени названы одинаково во всём модуле", () => {
+  // 20.08.2026, ходьба по проду: одни и те же скорости назывались по-разному на
+  // трёх страницах — Bullet/Blitz/Rapid/Classic в поиске соперника, ПУЛЯ/БЛИЦ/
+  // РАПИД/КЛАССИКА в таблице лидеров, Буллет/Блиц/Рапид на главной. Человек не
+  // обязан догадываться, что это одно и то же.
+  //
+  // Главную страницу тут НЕ проверяем: её ведут четыре чужие ветки, и правка
+  // отдана владельцу списком. Придёт — сюда добавится строка.
+  const angliyskie = [/Bullet /, /Blitz /, /Rapid /, /Classic /];
+
+  test("шаблоны узнают свои образцы", () => {
+    const obraztsy = ['sub: "Bullet · 1"', 'sub: "Blitz · 3"', 'sub: "Rapid · 10"', 'sub: "Classic · 30"'];
+    angliyskie.forEach((re, i) => {
+      expect(re.test(obraztsy[i]), `шаблон ${i + 1} не узнаёт свой образец`).toBe(true);
+    });
+  });
+
+  test("в поиске соперника скорости по-русски", () => {
+    const s = fs.readFileSync(path.join(ROOT, "matchmaking", "page.tsx"), "utf-8");
+    expect(s).toContain("Пуля · 1 мин");
+    expect(s).toContain("Блиц · 3 мин");
+    expect(s).toContain("Рапид · 10 мин");
+    expect(s).toContain("Классика · 30 мин");
+    // Значения для сервера ("60+0") НЕ трогаем — это устройство, а не текст.
+    expect(s).toContain('value: "60+0"');
+    const kod = s.split("\n").filter((l) => !/^\s*(\/\/|\*)/.test(l)).join("\n");
+    angliyskie.forEach((re) => {
+      expect(re.test(kod), `английское название скорости вернулось: ${re}`).toBe(false);
+    });
+  });
+});

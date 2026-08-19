@@ -182,6 +182,16 @@ function toInt(v: unknown, dflt: number): number {
 router.get("/", async (req: Request, res: Response): Promise<void> => {
   try {
     await ensureLoaded();
+    // ensureLoaded() swallows a failed source fetch on purpose (warm-up must not
+    // crash the process), so an empty pool here means the load failed - not that
+    // there are no puzzles. Answering ok:true would show an empty trainer.
+    if (POOL.length === 0) {
+      res.status(503).json({
+        ok: false, reason: "puzzle_pool_empty",
+        total: 0, count: 0, offset: 0, poolSize: 0, puzzles: [],
+      });
+      return;
+    }
     const theme = String(req.query.theme || "").trim().toLowerCase();
     const phase = String(req.query.phase || "").trim().toLowerCase();
     const minRating = toInt(req.query.minRating, 0);
@@ -227,7 +237,12 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
     res.json({ ok: true, total, count: page.length, offset, poolSize: POOL.length, puzzles: page });
   } catch (e) {
     console.warn("[cyberchess-puzzles] query failed:", e instanceof Error ? e.message : e);
-    res.json({ ok: true, total: 0, count: 0, offset: 0, poolSize: POOL.length, puzzles: [] });
+    // ok:true with an empty list is indistinguishable from "your filter matched
+    // nothing", so a failure here renders as a legitimately empty trainer.
+    res.status(503).json({
+      ok: false, reason: "puzzle_query_failed",
+      total: 0, count: 0, offset: 0, poolSize: POOL.length, puzzles: [],
+    });
   }
 });
 

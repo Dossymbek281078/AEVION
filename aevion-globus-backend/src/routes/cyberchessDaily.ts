@@ -554,6 +554,40 @@ let bankPuzzleCache: { day: string; puzzle: Puzzle | null } | null = null;
 let bankTotalCache: { at: number; total: number } | null = null;
 const BANK_TOTAL_TTL_MS = 6 * 60 * 60 * 1000;
 
+
+/** Ход в записи UCI: e2e4, g7g8q. Ничего другого движок не примет. */
+function isUciMove(m: string): boolean {
+  return /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m);
+}
+
+/**
+ * Решение из банка. Колонка `sol` — ТЕКСТ, внутри которого JSON-массив
+ * (`["c5c3","e6e4"]`), а не массив Postgres.
+ *
+ * Прежняя версия проверяла `Array.isArray` и, не найдя массива, резала строку
+ * по запятым. Получались «ходы» вида `["c5c3"` и `"e6e4"` — со скобками и
+ * кавычками. Задача дня становилась НЕРЕШАЕМОЙ: ни один ход игрока с таким
+ * мусором не совпадёт, а подсказка показывала `["c5c3"`.
+ *
+ * Дефект прожил день незамеченным, потому что мои проверки спрашивали «пришла
+ * ли задача из банка» и «разные ли задачи по дням» — и обе честно отвечали да.
+ * Ни одна не спросила, можно ли эту задачу решить.
+ */
+function parseSolution(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+  const s = String(raw ?? "").trim();
+  if (!s) return [];
+  if (s.startsWith("[")) {
+    try {
+      const j: unknown = JSON.parse(s);
+      if (Array.isArray(j)) return j.map(String).filter(Boolean);
+    } catch {
+      // не JSON — ниже разбор по разделителям
+    }
+  }
+  return s.split(/[\s,]+/).filter(Boolean);
+}
+
 async function dailyFromBank(day: string): Promise<Puzzle | null> {
   if (bankPuzzleCache && bankPuzzleCache.day === day) return bankPuzzleCache.puzzle;
   try {
@@ -576,7 +610,13 @@ async function dailyFromBank(day: string): Promise<Puzzle | null> {
     );
     const row = r.rows?.[0];
     if (!row) return null;
-    const sol = Array.isArray(row.sol) ? row.sol : String(row.sol || "").split(/[\s,]+/).filter(Boolean);
+    const sol = parseSolution(row.sol);
+    // Нерешаемая задача ХУЖЕ резервной: человек не поймёт, что сломано, и решит,
+    // что не умеет играть. Поэтому банк отвергается, а не показывается кое-как.
+    if (!sol.every(isUciMove)) {
+      console.error(`[cyberchess-daily] у задачи ${row.id} ходы не похожи на ходы: ${JSON.stringify(sol).slice(0, 80)}`);
+      return null;
+    }
     if (sol.length === 0) return null;
     const puzzle: Puzzle = {
       id: String(row.id),
@@ -671,7 +711,41 @@ const MAX_COUNTRY_LEN = 8;
 // have room to spare.
 const solveLimiter = createInMemoryRateLimiter({ max: 30, windowMs: 60_000 });
 
-router.post('/solve', (req: Request, res: Response) => {
+
+/**
+ * Решение задачи ТОГО ЖЕ дня, которое сервер выдал бы по GET /puzzle.
+ * Отдельная функция, чтобы проверка решения и выдача задачи не разъехались:
+ * два способа считать одно и то же — источник расхождений.
+ */
+async function solutionForDay(day: string): Promise<string[] | null> {
+  const fromBank = await dailyFromBank(day);
+  if (fromBank) return fromBank.sol.map((m) => m.toLowerCase());
+  const p = pickDailyPuzzle(POOL, dayIndex(day));
+  return p ? p.sol.map((m) => m.toLowerCase()) : null;
+}
+
+/**
+ * Длина серии, заканчивающейся днём `day`, по списку уже решённых дней.
+ * Считает подряд идущие календарные дни назад: вчера, позавчера и так далее.
+ *
+ * Раньше это число присылал клиент, и любой мог объявить себя первым в таблице
+ * (проверено на проде: `{"streak":364}` без единого хода → счёт 36700).
+ */
+function streakEndingAt(day: string, solvedDays: string[]): number {
+  const set = new Set(solvedDays);
+  let n = 1; // сегодняшний день засчитан вызовом
+  const d = new Date(`${day}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return 1;
+  for (;;) {
+    d.setUTCDate(d.getUTCDate() - 1);
+    if (!set.has(d.toISOString().slice(0, 10))) break;
+    n += 1;
+    if (n >= MAX_STREAK) break;
+  }
+  return n;
+}
+
+router.post('/solve', async (req: Request, res: Response) => {
   const gate = solveLimiter.check(clientIp(req));
   if (!gate.allowed) {
     res.setHeader('Retry-After', String(Math.max(1, Math.ceil(gate.retryAfterMs / 1000))));
@@ -682,17 +756,35 @@ router.post('/solve', (req: Request, res: Response) => {
     });
   }
 
-  const { streak, day, timeMs, hintsUsed, userId, name, country } = req.body || {};
-  if (typeof streak !== 'number' || typeof day !== 'string') {
-    return res.status(400).json({ ok: false, error: 'streak (number) and day (string) required' });
+  const { day, timeMs, hintsUsed, userId, name, country, moves } = req.body || {};
+  if (typeof day !== 'string' || !day) {
+    return res.status(400).json({ ok: false, error: 'day (string) required' });
   }
-  // Whole, non-negative, and within a range a real player could reach.
-  if (!Number.isInteger(streak) || streak < 0 || streak > MAX_STREAK) {
+
+  // ── Решение ПРОВЕРЯЕТСЯ, а не принимается на слово ───────────────────────
+  //
+  // Прежде ручка брала `streak` числом из тела и записывала его. Проверено на
+  // проде 19.08.2026: запрос `{"streak":364}` без единого хода поставил меня
+  // первым в таблице со счётом 36700. Таблица лидеров, которую может подделать
+  // любой посторонний, хуже отсутствующей: она выглядит как достижения людей.
+  //
+  // Теперь клиент присылает ХОДЫ, а сервер сверяет их с решением того дня,
+  // которое знает сам. Серия считается по нашей истории, а не по числу извне.
+  if (!Array.isArray(moves) || moves.length === 0) {
     return res.status(400).json({
       ok: false,
-      error: 'invalid_streak',
-      hint: `streak must be a whole number between 0 and ${MAX_STREAK}`,
+      error: 'moves_required',
+      hint: 'пришлите ходы решения (UCI), серию сервер посчитает сам',
     });
+  }
+  const expected = await solutionForDay(day);
+  if (!expected) {
+    return res.status(503).json({ ok: false, error: 'puzzle_unavailable' });
+  }
+  const given = moves.map((m: unknown) => String(m).trim().toLowerCase());
+  const solved = given.length === expected.length && given.every((m, i) => m === expected[i]);
+  if (!solved) {
+    return res.status(400).json({ ok: false, error: 'wrong_solution' });
   }
   const tMs = typeof timeMs === 'number' && timeMs >= 0 ? Math.min(timeMs, MAX_TIME_MS) : 0;
   const hUsed = typeof hintsUsed === 'number' && hintsUsed >= 0 ? Math.min(Math.floor(hintsUsed), MAX_HINTS) : 0;
@@ -700,6 +792,10 @@ router.post('/solve', (req: Request, res: Response) => {
   const uname = typeof name === 'string' && name.length > 0 ? name.slice(0, MAX_NAME_LEN) : `Player_${uid.slice(0, 6)}`;
   const uctry = typeof country === 'string' && country.length > 0 ? country.slice(0, MAX_COUNTRY_LEN) : '🌍';
 
+  // Серия — производное от нашей истории, а не поле запроса. Считается ДО
+  // записи сегодняшнего дня: сегодня всегда +1 к тому, что было вчера.
+  const priorHistory = userStats.get(uid)?.history ?? [];
+  const streak = streakEndingAt(day, priorHistory.map((h) => h.day));
   const score = computeScore(streak, tMs, hUsed);
   const key = `${uid}:${day}`;
   const record: SolveRecord = { day, streak, userId: uid, timeMs: tMs, hintsUsed: hUsed, score };

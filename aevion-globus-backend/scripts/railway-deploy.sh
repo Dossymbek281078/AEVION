@@ -60,6 +60,7 @@ echo "повод:  $MSG"
 PROD_URL="${PROD_HEALTH_URL:-https://api.aevion.app/health}"
 PROD_JSON="$(curl -s --max-time 20 "$PROD_URL" 2>/dev/null || true)"
 PROD_BRANCH="$(printf '%s' "$PROD_JSON" | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).branch||''}catch(e){''}" 2>/dev/null || true)"
+PROD_COMMIT="$(printf '%s' "$PROD_JSON" | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).commit||''}catch(e){''}" 2>/dev/null || true)"
 
 if [ -z "$PROD_JSON" ]; then
   PROD_STATE="не ответил"
@@ -67,12 +68,23 @@ elif [ -z "$PROD_BRANCH" ] || [ "$PROD_BRANCH" = "null" ]; then
   PROD_STATE="ветку не называет"
 elif [ "$PROD_BRANCH" = "$BRANCH" ]; then
   PROD_STATE="своя"
+elif [ -n "$PROD_COMMIT" ] && git merge-base --is-ancestor "$PROD_COMMIT" HEAD 2>/dev/null; then
+  # Имя чужое, но коммит прода лежит в истории нашей ветки — значит их работа
+  # уже внутри и сносить нечего. Признак — РОДСТВО, а не имя.
+  #
+  # 19.08.2026: правильно собранная объединённая ветка получила здесь отказ,
+  # тогда как aevion-deploy-check.mjs на том же состоянии отвечал «выкатывать
+  # можно». Два прибора об одном — источник расхождений, а ложный отказ хуже
+  # отсутствия проверки: к обходу через ALLOW_OVERWRITE привыкают, и защита
+  # перестаёт работать в том случае, ради которого написана.
+  PROD_STATE="чужая по имени ($PROD_BRANCH), но целиком внутри вашей"
 else
   PROD_STATE="чужая: $PROD_BRANCH"
 fi
 echo "на проде: $PROD_STATE"
 
-if [ "$PROD_STATE" != "своя" ] && [ -z "${ALLOW_OVERWRITE:-}" ]; then
+case "$PROD_STATE" in "своя"|"чужая по имени"*) SAFE=1 ;; *) SAFE=0 ;; esac
+if [ "$SAFE" = "0" ] && [ -z "${ALLOW_OVERWRITE:-}" ]; then
   {
     echo ""
     echo "ОСТАНОВКА: выкатка заменит образ целиком, а на проде не ваша ветка."

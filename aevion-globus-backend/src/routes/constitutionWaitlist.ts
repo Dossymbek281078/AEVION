@@ -103,12 +103,21 @@ constitutionWaitlistRouter.post(
             [row.email, row.source, row.createdAt],
           );
           storage = "postgres";
-        } catch { /* fall through */ }
+        } catch (dbErr) {
+          // база не приняла подписку — дальше она ляжет только в память процесса, а та живёт до ближайшей выкатки.
+          capture(dbErr, { where: "waitlist.insert" });
+          console.error("[waitlist] waitlist.insert:", dbErr);
+        }
       }
       if (!memList.has(row.email)) memList.set(row.email, row);
 
-      // Fire-and-forget confirmation email via Brevo
-      void sendWaitlistConfirm(row.email, row.source).catch(() => { /* ignore */ });
+      // Письмо не задерживает ответ, но его провал обязан быть видимым: иначе
+      // человек подписан, письма нет, и снаружи это неотличимо от задержки.
+      void sendWaitlistConfirm(row.email, row.source)
+        .then((sent) => {
+          if (!sent) capture(new Error("waitlist confirm email not sent"), { where: "waitlist.confirmEmail" });
+        })
+        .catch((mailErr) => capture(mailErr, { where: "waitlist.confirmEmail" }));
 
       res.status(201).json({ ok: true, storage });
     } catch (err) {
@@ -145,7 +154,11 @@ constitutionWaitlistAdminRouter.get(
               ? x.createdAt.toISOString()
               : String(x.createdAt),
           }));
-        } catch { /* fall through */ }
+        } catch (dbErr) {
+          // чтение списка не удалось — ниже подставится память процесса, и список покажется коротким, а не сломанным.
+          capture(dbErr, { where: "waitlist.list" });
+          console.error("[waitlist] waitlist.list:", dbErr);
+        }
       }
       if (rows.length === 0) rows = Array.from(memList.values());
       const fmt = String(req.query.format ?? "json");
@@ -216,7 +229,11 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
           url: `https://aevion.app/constitution/leaderboard`,
           votes: Number(r.up_votes),
         }));
-      } catch { /* fall through */ }
+      } catch (dbErr) {
+        // чтение артефактов не удалось — дайджест был бы пропущен как «нечего слать».
+        capture(dbErr, { where: "digest.readTopArtifacts" });
+        console.error("[waitlist] digest.readTopArtifacts:", dbErr);
+      }
     }
     if (!topArtifacts.length) return { sent: 0, skipped: 1 };
 
@@ -227,7 +244,11 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
         const pool = getPool();
         const r = await pool.query(`SELECT "email" FROM constitution_waitlist ORDER BY "createdAt" ASC LIMIT 5000`);
         subscribers = r.rows.map((x: Record<string, unknown>) => ({ email: String(x.email) }));
-      } catch { /* fall through */ }
+      } catch (dbErr) {
+        // чтение подписчиков не удалось — рассылка ушла бы по пустому списку из памяти и отчиталась «отправлено 0».
+        capture(dbErr, { where: "digest.readSubscribers" });
+        console.error("[waitlist] digest.readSubscribers:", dbErr);
+      }
     }
     if (!subscribers.length) return { sent: 0, skipped: 0 };
 

@@ -32,6 +32,7 @@ import {
   appendMove,
   finalizeMatch,
   getRating,
+  speedOf,
   getLeaderboard,
   getHistory,
   getWallet,
@@ -727,7 +728,7 @@ export function createPreMatchedMatch(
 // ── routes ─────────────────────────────────────────────────────────
 
 // POST /queue/join { userId, displayName, rating, timeControl }
-router.post("/queue/join", (req: Request, res: Response): void => {
+router.post("/queue/join", async (req: Request, res: Response): Promise<void> => {
   const ip = clientIp(req);
   if (!rateLimitOk(ip)) {
     res.status(429).json({ ok: false, error: "rate_limited", retryAfter: 60 });
@@ -737,14 +738,14 @@ router.post("/queue/join", (req: Request, res: Response): void => {
   const userId = String(req.body?.userId || "").trim();
   const displayName =
     String(req.body?.displayName || "").trim() || `Player_${userId.slice(-4) || "anon"}`;
-  const rating = safeRating(req.body?.rating);
+  const claimedRating = safeRating(req.body?.rating);
   const timeControl = req.body?.timeControl;
 
   if (!userId) {
     res.status(400).json({ ok: false, error: "userId_required" });
     return;
   }
-  if (rating === null) {
+  if (claimedRating === null) {
     res.status(400).json({
       ok: false,
       error: "invalid_rating",
@@ -759,6 +760,29 @@ router.post("/queue/join", (req: Request, res: Response): void => {
       allowed: ALLOWED_TIME_CONTROLS,
     });
     return;
+  }
+
+  // ── Рейтинг для подбора берём СВОЙ, а не заявленный ──────────────────────
+  //
+  // Клиент присылает своё число, и до 19.08.2026 оно и шло в подбор. Пока
+  // таблица рейтингов пуста это безобидно, но с первой же сыгранной партией
+  // превращается в способ выбирать себе слабых соперников: назвался 800 —
+  // получил новичка, назвался 2800 — попал в верх таблицы.
+  //
+  // Три исхода различаются намеренно, как и везде у нас:
+  //   база не ответила      → берём заявленное (запирать очередь из-за базы нельзя)
+  //   партий сыграно 0      → заявленное законно, это стартовая самооценка
+  //   партии есть           → сервер знает лучше, заявленное игнорируется
+  let rating = claimedRating;
+  let ratingSource: "сервер" | "заявлен" = "заявлен";
+  try {
+    const known = await getRating(userId, speedOf(timeControl));
+    if (known && Number(known.games) > 0 && Number.isFinite(Number(known.rating))) {
+      rating = Math.round(Number(known.rating));
+      ratingSource = "сервер";
+    }
+  } catch {
+    // не смогли спросить — остаётся заявленное, и это записано выше как решение
   }
 
   // idempotency: same user re-joining with different params updates their entry
@@ -802,6 +826,12 @@ router.post("/queue/join", (req: Request, res: Response): void => {
     ok: true,
     matched: false,
     queueId: entry.queueId,
+    // Рейтинг и ЕГО ПРОИСХОЖДЕНИЕ отдаются наружу намеренно. Без этого свойство
+    // «подбор идёт по нашему рейтингу, а не по заявленному» непроверяемо ни
+    // тестом, ни сторожем — а непроверяемая защита живёт до первой правки.
+    // Признак подставленного значения принадлежит самим данным, а не догадке.
+    rating: entry.ratingInternal,
+    ratingSource,
     position: queuePositionFor(entry),
     waiting: [...QUEUE.values()].filter(
       (e) => e.status === "waiting" && e.timeControl === entry.timeControl,

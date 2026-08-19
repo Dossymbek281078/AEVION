@@ -28,9 +28,37 @@ import { getApiBase } from "@/lib/apiBase";
  * «проверяется», и это лучше, чем объявить контур сломанным из-за таймаута
  * сборки.
  */
-export async function probeLive(path: string, init?: RequestInit): Promise<boolean> {
+export interface ProbeOptions {
+  /**
+   * Считать 404 признаком ЖИЗНИ, а не смерти.
+   *
+   * Нужно для ручек, которые ищут объект по идентификатору: у них 404 —
+   * законный и правильный ответ на «такого нет». Замер 19.08.2026:
+   * `GET /api/multichat/shared/launch-page-probe` отвечает
+   * `{"error":"not_found_or_revoked"}` с кодом 404, потому что токена с таким
+   * именем не существует — и не должно существовать, проба его не создаёт.
+   *
+   * По умолчанию проба считала это смертью, и метка «Совет можно открыть
+   * ссылкой» на посадочной Multichat не могла стать «работает» НИКОГДА,
+   * сколько бы контур ни работал.
+   *
+   * Отличить «нет объекта» от «нет роутера» по коду здесь нельзя, и вот
+   * почему: несуществующий путь внутри multichat отвечает не 404, а **402**
+   * `upgrade_required` — платная стена срабатывает раньше маршрутизации.
+   * Значит для таких проб единственный честный критерий — «сервер вообще
+   * ответил», и он ниже.
+   */
+  aliveOn404?: boolean;
+}
+
+export async function probeLive(
+  path: string,
+  init?: RequestInit,
+  opts?: ProbeOptions,
+): Promise<boolean> {
   try {
     const r = await fetch(`${getApiBase()}${path}`, { ...init, next: { revalidate: 1800 } });
+    if (opts?.aliveOn404) return true; // сервер ответил — контур на месте
     return r.status !== 404;
   } catch {
     return false;

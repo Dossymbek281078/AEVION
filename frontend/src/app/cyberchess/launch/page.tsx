@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { LandingView } from "@/components/LandingView";
 
 // Посадочная страница запуска CyberChess — 30 августа 2026.
 //
@@ -28,6 +29,12 @@ export const metadata: Metadata = {
     title: "CyberChess — запуск 30 августа",
     description:
       "ИИ-коуч, полмиллиона задач, турниры, античит. Ранний доступ по адресу почты.",
+    // Контент посадочных русский, а корневой layout объявляет lang="en":
+    // проверено запросом от имени поискового робота — в серверной разметке
+    // 2167 кириллических символов при lang="en" и без hreflang. Для
+    // поисковика и превью в мессенджерах это рассогласование, и оно решается
+    // здесь точечно: трогать общий layout нельзя, остальной сайт двуязычный.
+    locale: "ru_RU",
     type: "website",
   },
 };
@@ -114,6 +121,9 @@ export default async function CyberChessLaunchPage({
               : "Уже открыто. Оставьте адрес, если хотите получать разборы и новости о турнирах."}
           </p>
         </header>
+
+        <LandingView source={source} />
+
 
         <WaitlistCapture
           source={source}

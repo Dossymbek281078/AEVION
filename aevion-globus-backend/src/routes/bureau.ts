@@ -2635,7 +2635,21 @@ bureauRouter.get("/cert/:certId/notarize/status", async (req, res) => {
       [certId],
     );
     if (r.rows.length === 0) return res.status(404).json({ error: "no notarization request found" });
-    res.json(r.rows[0]);
+
+    // Читатель сертификата обязан понимать, ЧТО он держит в руках. Хранить
+    // алгоритм в базе и не отдавать наружу — то же самое, что не хранить:
+    // снаружи демо-подпись всё равно неотличима от настоящей.
+    const row = r.rows[0];
+    const isDemo = row.signatureAlgorithm !== "ed25519";
+    res.json({
+      ...row,
+      // Отдельным полем, а не только названием алгоритма: тот, кто разбирает
+      // ответ программой, не должен знать наш перечень названий режимов.
+      cryptographicallyVerifiable: !isDemo,
+      signatureNote: isDemo
+        ? "Demonstration signature. It is reproducible from public data and is NOT proof of authorship."
+        : "Ed25519 signature. Verify it against the notary public key.",
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -2643,7 +2657,10 @@ bureauRouter.get("/cert/:certId/notarize/status", async (req, res) => {
 
 /**
  * POST /api/bureau/admin/cert/:certId/notarize/sign
- * Admin-only: approve and sign a pending notarization request (demo uses Ed25519-like HMAC stub).
+ * Admin-only: approve and sign a pending notarization request.
+ * Подпись настоящая (Ed25519), если задан BUREAU_NOTARY_SIGNING_KEY, иначе
+ * демонстрационная. Режим в обоих случаях пишется в signatureAlgorithm и
+ * отдаётся наружу в /notarize/status. См. signNotarization().
  */
 bureauRouter.post("/admin/cert/:certId/notarize/sign", async (req, res) => {
   const a = isBureauAdmin(req);

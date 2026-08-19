@@ -73,7 +73,19 @@ export interface Subscription {
   amountUsd?: number;
   promoCode?: string;
   stripeSessionId?: string;
+  /** Кто провёл платёж: "gumroad" | "lemonsqueezy" | "stripe" и т.п. */
   source?: string;
+  /**
+   * Маркетинговый канал покупки — метка из ссылки (`/go?c=ig`).
+   *
+   * Отдельным полем, а не суффиксом к `source`: это разные оси. `source`
+   * отвечает «через какую кассу прошли деньги» и по нему уже сравнивают
+   * дословно (страница /revenue рисует бейдж провайдера через
+   * `s.source === "gumroad"`). Подмешать туда канал значило бы сломать
+   * чужой экран ради своей метки — тот же дефект, что «две оси в одной
+   * таблице». Добавлено 19.08.2026.
+   */
+  channel?: string;
 }
 
 function ensureDir(file: string) {
@@ -350,6 +362,7 @@ export async function provisionSubscription(input: {
   stripeSessionId?: string;
   paddleTransactionId?: string;
   source?: string;
+  channel?: string;
 }): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean }> {
   const trialDays = input.trialDays ?? 0;
   const period: BillingPeriod = input.period ?? "monthly";
@@ -369,6 +382,7 @@ export async function provisionSubscription(input: {
     promoCode: input.promoCode,
     stripeSessionId: input.stripeSessionId,
     source: input.source,
+    channel: input.channel,
   };
 
   writeSubscription(subscription);

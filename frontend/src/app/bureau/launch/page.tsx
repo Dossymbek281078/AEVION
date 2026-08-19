@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { LandingView } from "@/components/LandingView";
 
 // Посадочная запуска «патентного бюро» (QRight + QSign + IP Bureau) — 6 сентября.
 //
@@ -31,6 +32,12 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AEVION IP Bureau — запуск 6 сентября",
     description: "Реестр, подпись, сертификат с проверкой по ссылке. Ранний доступ по адресу почты.",
+    // Контент посадочных русский, а корневой layout объявляет lang="en":
+    // проверено запросом от имени поискового робота — в серверной разметке
+    // 2167 кириллических символов при lang="en" и без hreflang. Для
+    // поисковика и превью в мессенджерах это рассогласование, и оно решается
+    // здесь точечно: трогать общий layout нельзя, остальной сайт двуязычный.
+    locale: "ru_RU",
     type: "website",
   },
 };
@@ -91,6 +98,9 @@ export default async function BureauLaunchPage({
             {left > 0 ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`} — 6 сентября.` : " Уже открыто."}
           </p>
         </header>
+
+        <LandingView source={source} />
+
 
         <WaitlistCapture
           source={source}

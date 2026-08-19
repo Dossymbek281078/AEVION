@@ -66,4 +66,18 @@ describe("личность игрока едина для всего модул�
     const first = await userId();
     expect(await userId()).toBe(first);
   });
+
+  test("просмотр не заводит игрока: knownUserId ничего не пишет", async () => {
+    const mod = await import("../tournaments/playerIdentity");
+    expect(mod.knownUserId()).toBe("");
+    // Пусто в хранилище после вопроса «кто я» — иначе зашедший посмотреть
+    // таблицу лидеров попадал бы в счёт наравне с играющими.
+    expect(Object.keys(store.dump())).toHaveLength(0);
+  });
+
+  test("knownUserId видит уже существующего игрока", async () => {
+    store.setItem(PLATFORM, "acc_42");
+    const mod = await import("../tournaments/playerIdentity");
+    expect(mod.knownUserId()).toBe("acc_42");
+  });
 });

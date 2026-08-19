@@ -67,3 +67,20 @@ export function tournamentDisplayName(): string {
     return "";
   }
 }
+
+/**
+ * Личность, если она УЖЕ есть. Пустая строка — «не знаю».
+ *
+ * Отдельная функция нужна потому, что просмотр таблицы лидеров или истории не
+ * должен ЗАВОДИТЬ игрока: зашедший посмотреть получал бы id и попадал в счёт
+ * наравне с играющими. Эти страницы спрашивают «кто я, если известно», и ответ
+ * «не знаю» для них законный.
+ */
+export function knownUserId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(USER_ID_KEY) || window.localStorage.getItem(LEGACY_USER_ID_KEY) || "";
+  } catch {
+    return "";
+  }
+}

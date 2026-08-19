@@ -319,7 +319,20 @@ export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
   const out: Check[] = [];
 
   for (const c of map.numericConflicts) {
-    const spread = c.values.map((v) => `${v.agentId}: ${v.raw}`).join(" против ");
+    // Значения СНАЧАЛА группируются, и только разные группы противопоставляются.
+    // Прежде текст склеивал все значения через «против», и согласные агенты
+    // выглядели спорящими: «analyst: 12000 против writer: 12000 против critic:
+    // 30000». Человек читает это первым и видит бессмыслицу — 12000 против 12000.
+    // Правильно показать, где раскол: «analyst и writer: 12000 против critic: 30000».
+    const groups = new Map<string, string[]>();
+    for (const v of c.values) {
+      const key = v.raw;
+      const list = groups.get(key);
+      if (list) list.push(v.agentId); else groups.set(key, [v.agentId]);
+    }
+    const names = (ids: string[]) =>
+      ids.length <= 1 ? ids.join("") : `${ids.slice(0, -1).join(", ")} и ${ids[ids.length - 1]}`;
+    const spread = [...groups.entries()].map(([raw, ids]) => `${names(ids)}: ${raw}`).join(" против ");
     out.push({
       kind: "number",
       text: `Сверить число с источником — ${spread}. Контекст: «${c.context}»`,

@@ -135,3 +135,26 @@ describe("согласие не выдаётся за спор", () => {
     expect(numericConflicts(diff)).toHaveLength(1);
   });
 });
+
+describe("текст, который читает человек", () => {
+  test("согласные агенты сгруппированы, а не противопоставлены", async () => {
+    // Прежний текст склеивал ВСЕ значения через «против», и выходило
+    // «analyst: 12000 против writer: 12000 против critic: 30000» — то есть 12000
+    // против 12000. Человек читает список «что проверить» первым, и бессмыслица в
+    // нём обесценивает всю карту.
+    const { buildDissentMap } = await import("../src/services/multichat/dissent");
+    const m = buildDissentMap(PROD_SAMPLE);
+    const numbers = m.checks.filter((c) => c.kind === "number");
+    expect(numbers.length).toBeGreaterThan(0);
+
+    for (const c of numbers) {
+      // Ни одно значение не должно стоять «против» самого себя.
+      const sides = c.text.split(" против ");
+      const values = sides.map((sd) => (/:\s*([\d\s.,]+)/.exec(sd) || [])[1]?.trim());
+      expect(new Set(values).size, `одно и то же значение по обе стороны: ${c.text}`).toBe(values.length);
+    }
+
+    const money = numbers.find((c) => c.text.includes("30000"));
+    expect(money?.text).toContain("analyst и writer: 12000 против critic: 30000");
+  });
+});

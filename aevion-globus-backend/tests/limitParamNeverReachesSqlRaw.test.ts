@@ -32,12 +32,29 @@ const read = (f: string) =>
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|[^:])\/\/.*$/gm, "$1");
 
+// ДОПОЛНЕНО 19.08 (вечер, второе окно). Первая версия сторожа искала ОДНУ
+// форму записи — `Math.min(Number(req.query.limit) ...)`. А `limit` часто
+// сперва разбирают из объекта:
+//
+//   const { category, limit } = req.query;
+//   const limitN = Math.min(Number(limit) || 20, 100);   // <- та же дыра
+//
+// Из-за этого свип пропустил три ручки, и нашлись они не им, а ЖУРНАЛОМ ОШИБОК
+// прода: «LIMIT must not be negative» x4 за неделю, и он же назвал адреса —
+// /api/qevents/events и /api/qjobs/jobs. Проверено пробой: ?limit=-5 -> 500.
+// Урок: свип по одной форме записи даёт ложное «чисто» по всей платформе.
+
 describe("limit из запроса зажат до похода в SQL", () => {
-  for (const f of ["deepsan.ts", "qpersona.ts"]) {
+  for (const f of ["deepsan.ts", "qpersona.ts", "qevents.ts", "qjobs.ts", "qnews.ts"]) {
     test(`${f}: нет Math.min(Number(req.query...)) без нижней границы`, () => {
       const code = read(f);
       const unsafe = [...code.matchAll(/Math\.min\(\s*Number\(\s*req\.query\.limit/g)];
       expect(unsafe.length).toBe(0);
+    });
+
+    test(`${f}: нет второй формы — Math.min(Number(limit) || N, M)`, () => {
+      // разобранный из объекта `limit` — та же дыра, другое написание
+      expect(read(f)).not.toMatch(/Math\.min\(\s*Number\(\s*limit\s*\)/);
     });
 
     test(`${f}: нижняя граница задана явно`, () => {

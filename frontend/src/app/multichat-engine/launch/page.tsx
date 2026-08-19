@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import paper from "@/styles/aevionPaper.module.css";
-import { getApiBase } from "@/lib/apiBase";
+import { probeLive, daysUntil } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 
@@ -51,51 +51,22 @@ export const metadata: Metadata = {
   },
 };
 
-/**
- * Жив ли контур прямо сейчас. Обещать работу модуля, не проверив её, нельзя.
- *
- * Считаем живым всё, что ответило НЕ 404 — в отличие от `r.ok` в соседних
- * посадочных. Причина: у этого модуля осмысленные ответы как раз не 2xx.
- * Проверка чека на заведомо неверном пакете отвечает 400 («поля не прошли» —
- * значит роут работает), а список бесед без входа отвечает 402 (платная стена
- * на месте). По `r.ok` оба выглядели бы мёртвыми.
- *
- * Приём взят из scripts/contact-channels-smoke.mjs: там ручку приёма обращений
- * тоже проверяют неверным пакетом и ждут 400, чтобы проверка не оставляла на
- * проде ни одного настоящего обращения.
- */
-async function alive(path: string, init?: RequestInit): Promise<boolean> {
-  try {
-    const r = await fetch(`${getApiBase()}${path}`, { ...init, next: { revalidate: 1800 } });
-    return r.status !== 404;
-  } catch {
-    return false;
-  }
-}
-
-function daysUntilLaunch(): number {
-  const launch = Date.UTC(2026, 8, 20); // 20 сентября 2026
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return Math.round((launch - today) / 86_400_000);
-}
-
 export default async function MultichatLaunchPage({
   searchParams,
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
   const [modelsUp, receiptUp, sharedUp] = await Promise.all([
-    alive("/api/qcoreai/providers"),
-    alive("/api/multichat/receipt/verify", {
+    probeLive("/api/qcoreai/providers"),
+    probeLive("/api/multichat/receipt/verify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // Заведомо неверный пакет: ждём 400. Настоящих чеков на проде не создаём.
       body: "{}",
     }),
-    alive("/api/multichat/shared/launch-page-probe"),
+    probeLive("/api/multichat/shared/launch-page-probe"),
   ]);
-  const left = daysUntilLaunch();
+  const left = daysUntil(2026, 8, 20);
 
   // Метка канала — та же механика, что на посадочных бюро и шахмат: без неё
   // после запуска не ответить, какой источник привёл людей именно сюда.

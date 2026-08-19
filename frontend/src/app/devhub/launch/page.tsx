@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import paper from "@/styles/aevionPaper.module.css";
-import { getApiBase } from "@/lib/apiBase";
+import { probeLive, daysUntil } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 
@@ -55,40 +55,17 @@ export const metadata: Metadata = {
   },
 };
 
-/**
- * Жив ли контур прямо сейчас. Обещать работу модуля, не проверив её, нельзя.
- *
- * Живым считаем всё, что ответило НЕ 404 — по той же причине, что на посадочной
- * мультичата: осмысленный отказ (400 на неверные поля, 402 за платной стеной)
- * доказывает, что роут смонтирован, а `r.ok` счёл бы его мёртвым.
- */
-async function alive(path: string, init?: RequestInit): Promise<boolean> {
-  try {
-    const r = await fetch(`${getApiBase()}${path}`, { ...init, next: { revalidate: 1800 } });
-    return r.status !== 404;
-  } catch {
-    return false;
-  }
-}
-
-function daysUntilLaunch(): number {
-  const launch = Date.UTC(2026, 8, 13); // 13 сентября 2026
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return Math.round((launch - today) / 86_400_000);
-}
-
 export default async function DevhubLaunchPage({
   searchParams,
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
   const [tplUp, agentsUp, mediaUp] = await Promise.all([
-    alive("/api/devhub/templates"),
-    alive("/api/devhub/agent/templates"),
-    alive("/api/devhub/media/video/models"),
+    probeLive("/api/devhub/templates"),
+    probeLive("/api/devhub/agent/templates"),
+    probeLive("/api/devhub/media/video/models"),
   ]);
-  const left = daysUntilLaunch();
+  const left = daysUntil(2026, 8, 13);
 
   // Метка канала — та же механика, что на посадочных бюро, шахмат и мультичата:
   // без неё после запуска не ответить, какой источник привёл людей именно сюда.

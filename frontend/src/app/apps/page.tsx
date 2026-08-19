@@ -63,6 +63,26 @@ const APP_DEFS: AppDef[] = [
     highlights: ["Claude · GPT · Gemini in one UI", "Unlimited usage", "Always free"],
     badge: "Free forever",
   },
+  {
+    id: "tiktok-publisher",
+    icon: "🎬",
+    name: "TikTok Publisher",
+    tagline: "Publish finished videos to your own TikTok",
+    href: "/tiktok-publisher",
+    cat: "Developer",
+    // Внесён в каталог 19.08.2026. До этого страница жила на проде, но нигде не
+    // значилась: формально открыта всем, фактически внутренний инструмент.
+    // Именно поэтому заявку на Content Posting API отклонили с формулировкой
+    // «personal or company internal use». Продукт для авторов должен быть
+    // ВИДИМ как продукт, иначе утверждение о нём — неправда.
+    highlights: [
+      "Connect your own TikTok via OAuth",
+      "Caption, privacy level and interaction settings before posting",
+      "Commercial-content disclosure built in",
+      "Save to drafts or post directly",
+      "Publish status tracking",
+    ],
+  },
   /* ── Finance ────────────────────────────────────────────────────────── */
   {
     id: "qventure",

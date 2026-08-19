@@ -62,7 +62,7 @@ describe("приз, объявленный посторонним, не выда
     /* Отличать по префиксу `usr-` нельзя: это совпадение строки, а не признак.
        Бэкенд отдаёт origin в списке (12.08.2026). */
     expect(src).toMatch(/origin === "user"/);
-    expect(src).not.toMatch(/startsWith\("usr-"\)/);
+    expect(src).not.toMatch(/startsWith\(\s*['"`]usr-['"`]\s*\)/);
   });
 
   it("у фикстур подпись про приз не появляется", () => {
@@ -94,7 +94,7 @@ describe("страница отдельного турнира тоже подп
 
   it("оговорка привязана к признаку с сервера, а не к имени идентификатора", () => {
     expect(detail).toMatch(/origin === "seed"/);
-    expect(detail).not.toMatch(/startsWith\("usr-"\)/);
+    expect(detail).not.toMatch(/startsWith\(\s*['"`]usr-['"`]\s*\)/);
   });
 
   it("признак действительно берётся из ответа сервера", () => {

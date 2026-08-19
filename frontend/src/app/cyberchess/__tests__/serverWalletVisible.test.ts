@@ -55,6 +55,6 @@ describe("серверный счёт Chessy", () => {
     const s = src();
     const i = s.indexOf("chessy-server-balance");
     expect(s.slice(i, i + 400)).toMatch(/srvWallet\.balance/);
-    expect(s.slice(i, i + 400)).not.toMatch(/chessy\.balance\s*\+/);
+    expect(s.slice(i, i + 400)).not.toMatch(/chessy\.balance\s*\+|\+\s*chessy\.balance/);
   });
 });

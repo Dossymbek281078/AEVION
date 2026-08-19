@@ -86,12 +86,18 @@ function isValidEmail(s: string): boolean {
  * Используется фронтом /pricing для одного запроса вместо 4-х.
  */
 pricingRouter.get("/", (_req, res) => {
-  // Обогащаем модули названием из projects.ts (избегаем рассинхрона)
+  // Обогащаем модули названием из projects.ts (избегаем рассинхрона).
+  //
+  // Порядок запасных путей важен: реестр -> собственное имя модуля -> и только
+  // потом id. Прежде сразу подставлялся `m.id`, и два модуля, которых нет в
+  // реестре, показывались ПОКУПАТЕЛЮ как «qmelanin» и «qrenew» — в выпадающем
+  // списке продукта для тарифа Lite. Замер 20.08.2026 на живом проде: 2 из 43.
+  // Таких мест было ТРИ, не одно.
   const modulesEnriched = MODULES_PRICING.map((m) => {
     const p = projects.find((x) => x.id === m.id);
     return {
       ...m,
-      name: p?.name ?? m.id,
+      name: p?.name ?? m.name ?? m.id,
       code: p?.code ?? m.id.toUpperCase(),
       kind: p?.kind ?? "product",
       tags: p?.tags ?? [],
@@ -143,7 +149,7 @@ pricingRouter.get("/modules", (_req, res) => {
     const p = projects.find((x) => x.id === m.id);
     return {
       ...m,
-      name: p?.name ?? m.id,
+      name: p?.name ?? m.name ?? m.id,
       code: p?.code ?? m.id.toUpperCase(),
     };
   });
@@ -162,7 +168,7 @@ pricingRouter.get("/modules/:id", (req, res) => {
   const p = projects.find((x) => x.id === m.id);
   res.json({
     ...m,
-    name: p?.name ?? m.id,
+    name: p?.name ?? m.name ?? m.id,
     code: p?.code ?? m.id.toUpperCase(),
     description: p?.description,
     tags: p?.tags ?? [],

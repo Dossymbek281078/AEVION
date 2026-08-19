@@ -43,7 +43,7 @@ describe("предложение установки уважает занято�
     // Если бы список покрывал весь модуль, установка стала бы недоступна вовсе.
     const s = src();
     for (const free of ["/cyberchess/history", "/cyberchess/leaderboard", "/cyberchess/economy"]) {
-      expect(s).not.toContain(`'${free}'`);
+      expect(s, `страница ${free} попала в список «не предлагать установку»`).not.toContain(free);
     }
   });
 });

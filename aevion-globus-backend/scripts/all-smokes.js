@@ -64,6 +64,13 @@ const SMOKES = [
   { name: "qsocial", script: "qsocial-smoke.js", readOnly: true },
   { name: "qtradeoffline", script: "qtradeoffline-smoke.js", readOnly: true },
   { name: "qventure", script: "qventure-smoke.js", readOnly: true },
+
+  // Восьмой. Краснел на ЗДОРОВОМ проде из-за двух устаревших ожиданий:
+  // проверка здоровья искала поле status, а ручка отдаёт ok; реестр цепочки
+  // искали по /api/veilnetx/chain/head, а он живёт в отдельном роутере по
+  // /api/veilnetx-ledger/chain/head. Починено в самом смоуке, прод трогать
+  // не пришлось: 13/13 после правки.
+  { name: "fintech-all", script: "fintech-all-smoke.js", readOnly: true },
   // Hub catalog: read-only unified module discovery endpoint.
   { name: "hub-catalog", script: "hub-catalog-smoke.js", readOnly: true },
   // Waitlist unsubscribe: validates HMAC token rejection paths.

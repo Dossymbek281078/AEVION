@@ -1025,7 +1025,7 @@ export default function QSkywayClient() {
                       списке справа («кандидат на площадку»): один и тот же класс,
                       два разных слова, и самое сильное стояло там, где нет ни
                       одной оговорки. Легенда говорит теми же словами, что список. */}
-                  <span>площадки: <span style={{ color: "#2dd4bf" }}>●</span> кандидат · <span style={{ color: "#fbbf24" }}>●</span> нужна инфра · <span style={{ color: "#fb7185" }}>●</span> непригодна · <span style={{ color: "#c8964f" }}>▨</span> высота угадана
+                  <span>{t("qskyway.legend.pads")} <span style={{ color: "#2dd4bf" }}>●</span> {t("qskyway.pad.candidate")} · <span style={{ color: "#fbbf24" }}>●</span> {t("qskyway.legend.needsInfraShort")} · <span style={{ color: "#fb7185" }}>●</span> {t("qskyway.pad.unsuitable")} · <span style={{ color: "#c8964f" }}>▨</span> {t("qskyway.legend.heightGuessed")}
                     {padBan && (
                       <span style={{ color: "#fb7185" }} title={padBan.rule}> · 🚫 {t("qskyway.pad.cityProhibited")}</span>
                     )}
@@ -1137,9 +1137,9 @@ export default function QSkywayClient() {
                             обе цифры сразу — иначе на экране остаётся удобная. */}
                         {justification.doc.obstacleSegments != null && justification.doc.obstacleSegments > 0 && (
                           <div style={{ marginTop: 3, color: justification.doc.measuredObstacleSegments === 0 ? "#fbbf24" : "#5f7086" }}>
-                            высоты: {justification.doc.heightConfidencePct}% по коридору ·{" "}
+                            {t("qskyway.just.heights", { pct: justification.doc.heightConfidencePct })}{" "}
                             {measuredObstaclePct(justification.doc.obstacleSegments, justification.doc.measuredObstacleSegments)}% по зданиям
-                            {justification.doc.measuredObstacleSegments === 0 && " — городского обмера нет ни у одного"}
+                            {justification.doc.measuredObstacleSegments === 0 && t("qskyway.just.noCityMeasure")}
                           </div>
                         )}
                         <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
@@ -1172,8 +1172,8 @@ export default function QSkywayClient() {
                         </div>
                         {v.openRadiusM != null && (
                           <div style={{ color: "#5f7086", fontSize: 10, marginTop: 2 }}>
-                            откр. радиус {v.openRadiusM}м · просвет {v.clearanceM}м · до запретной зоны {v.distNoFlyM! >= 9999 ? "—" : v.distNoFlyM + "м"}
-                            {v.ceilingM != null && <> · потолок {v.ceilingM}м</>}
+                            {t("qskyway.pad.rowDetails", { r: v.openRadiusM ?? "—", c: v.clearanceM ?? "—", d: v.distNoFlyM! >= 9999 ? "—" : v.distNoFlyM + "м" })}
+                            {v.ceilingM != null && <>{t("qskyway.pad.ceiling", { m: v.ceilingM })}</>}
                           </div>
                         )}
                         {v.needsAtc && (
@@ -1215,7 +1215,7 @@ export default function QSkywayClient() {
                     )}
                   </span>
                   {slots.store && (
-                    <span style={{ color: slots.store === "postgres" ? "#2dd4bf" : "#fbbf24", textTransform: "none", letterSpacing: 0 }} title={slots.store === "postgres" ? "Слоты сохраняются в Postgres — переживут рестарт" : "Слоты только в памяти процесса — теряются при рестарте бэкенда"}>
+                    <span style={{ color: slots.store === "postgres" ? "#2dd4bf" : "#fbbf24", textTransform: "none", letterSpacing: 0 }} title={slots.store === "postgres" ? t("qskyway.slots.storeDurable") : t("qskyway.slots.storeMemory")}>
                       {slots.store === "postgres" ? "● persist" : "● ephemeral"}
                     </span>
                   )}
@@ -1234,7 +1234,7 @@ export default function QSkywayClient() {
                                 style={{ color: "#fbbf24", marginLeft: 6 }}
                                 title={t("qskyway.tip.smokeBooking")}
                               >
-                                тест
+                                {t("qskyway.slots.testBadge")}
                               </span>
                             )}
                           </span>

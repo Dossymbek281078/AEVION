@@ -71,6 +71,12 @@ const KNOWN: Hit[] = [
   { file: "components/ModulePricingChip.tsx", attr: "title", text: "Сравнить тарифы — Lite, Medium, Full" },
   { file: "components/ToastProvider.tsx", attr: "aria-label", text: "Закрыть / Close" },
   { file: "components/Wave1Nav.tsx", attr: "title", text: "AEV кошелёк / AEV wallet" },
+  // ГРАНИЦА приёма «двуязычная подпись». Она уместна там, где текст НЕ виден
+  // на экране или короток: aria-label читает только диктор, title всплывает
+  // по наведению. Оставшиеся три — placeholder, то есть видимый текст ВНУТРИ
+  // поля ввода. «Напиши вопрос / Ask a question» там читается как поломка
+  // вёрстки, а не как забота о читателе. Им нужен настоящий перевод через
+  // словарь, а это правка в зоне build — за владельцем.
   { file: "components/build/AiCoachChat.tsx", attr: "placeholder", text: "Напиши вопрос. Enter — отправить, Shift+" },
   { file: "components/build/AiResumeBuilder.tsx", attr: "placeholder", text: "Твой ответ… Enter — отправить." },
   { file: "components/build/HelpTip.tsx", attr: "aria-label", text: "Подсказка / Hint" },

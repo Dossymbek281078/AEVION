@@ -105,13 +105,23 @@ async function main() {
   const board = await json("/api/cyberchess-daily/leaderboard");
   const puzzles = await json("/api/cyberchess-puzzles/meta");
 
-  const dailyHonest = daily ? daily.poolSize !== 365 : null;
+  // Проверка была на ЧЕСТНОСТЬ (не 365 позиций-пустышек) и молчала о главном:
+  // 19.08 выяснилось, что задача дня отдаётся из ЗАПАСНОГО пула на 30 позиций,
+  // потому что ручка, на которую ссылается сам ответ
+  // (/api/cyberchess-puzzles/daily), не существует — 404, и её нет ни в одной
+  // ветке. В банке при этом 502 584 задачи. Пул из 30 значит повтор раз в
+  // месяц, а «возврат на второй день» — это ворота 5 запуска.
+  //
+  // Подстановка честно помечена в поле `source`, поэтому её видно без догадок.
+  // Раз механизм подставной — считаем ворота НЕ пройденными.
+  const dailyFallback = daily ? /fallback/i.test(String(daily.source || "")) : null;
+  const dailyHonest = daily ? daily.poolSize !== 365 && dailyFallback === false : null;
   const seeded = board?.leaderboard?.some((e) => String(e.userId || "").startsWith("seed_"));
   const boardHonest = board ? !seeded : null;
   const bank = puzzles?.bankTotal ?? puzzles?.poolSize ?? null;
 
   if (process.argv.includes("--json")) {
-    console.log(JSON.stringify({ daysLeft: daysLeft(), rows, chess: { dailyHonest, boardHonest, bank } }, null, 2));
+    console.log(JSON.stringify({ daysLeft: daysLeft(), rows, chess: { dailyHonest, dailyFallback, boardHonest, bank } }, null, 2));
   } else {
     console.log(`Готовность к запуску · до 30 августа ${daysLeft()} дн. · ${SITE}\n`);
     console.log("МОДУЛЬ        ДАТА    страница  посадочная  приём адресов  цена");
@@ -121,7 +131,10 @@ async function main() {
       );
     }
     console.log("\nБлокеры CyberChess (приёмка Б-1 и Б-2 из доски):");
-    console.log(`  задача дня не из позиций-пустышек : ${mark(dailyHonest)}${daily ? `  (poolSize ${daily.poolSize})` : ""}`);
+    console.log(
+      `  задача дня из настоящего банка      : ${mark(dailyHonest)}` +
+        (daily ? `  (пул ${daily.poolSize}${dailyFallback ? ", ЗАПАСНОЙ — настоящая ручка отдаёт 404" : ""})` : ""),
+    );
     console.log(`  рейтинг без выдуманных игроков    : ${mark(boardHonest)}${board ? `  (записей ${board.leaderboard?.length ?? 0})` : ""}`);
     console.log(`  банк задач в базе                 : ${bank ? bank.toLocaleString("ru-RU") : "нет ответа"}`);
     console.log("\nЗа человеком, машиной не проверяется:");

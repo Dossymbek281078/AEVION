@@ -4,6 +4,10 @@ import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { ensureMapRealityTables, isMapRealityDbReady } from "../lib/ensureMapRealityTables";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { pgIntId } from "../lib/queryNumber";
+
+const WARN =
+  "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
 
 const capture = makeServiceCapture("mapReality");
 
@@ -308,8 +312,8 @@ mapRealityRouter.get("/signals/nearby", async (req: Request, res: Response) => {
 
 // ─── GET /api/mapreality/signals/:id ──────────────────────────────────────────
 mapRealityRouter.get("/signals/:id", async (req: Request, res: Response) => {
-  const id = Number(param(req, "id"));
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "invalid id" });
+  const id = pgIntId(param(req, "id"));
+  if (id === null) return res.status(400).json({ error: "invalid id" });
 
   try {
     if (isMapRealityDbReady()) {
@@ -317,7 +321,15 @@ mapRealityRouter.get("/signals/:id", async (req: Request, res: Response) => {
       if (!rows[0]) return res.status(404).json({ error: "not_found" });
       return res.json({ signal: rows[0] });
     }
-  } catch (e) { capture(e); console.error("[MapReality] GET /signals/:id DB error", e); }
+  } catch (e) {
+    capture(e);
+    console.error("[MapReality] GET /signals/:id DB error", e);
+    // Сюда попадаем ТОЛЬКО когда база объявлена готовой и всё равно упала.
+    // Раньше управление уходило ниже, в память (в проде она пуста), и человек
+    // получал 404 на существующий сигнал. 404 — законный ответ, он не тревожит
+    // никого: отказ хранилища выглядел как «такой записи нет».
+    return res.status(503).json({ error: "storage_unavailable", warning: WARN });
+  }
 
   const signal = memSignals.find((s) => s.id === id);
   if (!signal) return res.status(404).json({ error: "not_found" });
@@ -326,8 +338,8 @@ mapRealityRouter.get("/signals/:id", async (req: Request, res: Response) => {
 
 // ─── POST /api/mapreality/signals/:id/support ─────────────────────────────────
 mapRealityRouter.post("/signals/:id/support", supportLimiter, async (req: Request, res: Response) => {
-  const id = Number(param(req, "id"));
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "invalid id" });
+  const id = pgIntId(param(req, "id"));
+  if (id === null) return res.status(400).json({ error: "invalid id" });
 
   const supporterAlias = clampString((req.body as { supporterAlias?: unknown })?.supporterAlias, MAX_ALIAS);
   if (!supporterAlias) return res.status(400).json({ error: "supporterAlias required" });
@@ -382,8 +394,8 @@ mapRealityRouter.post("/signals/:id/support", supportLimiter, async (req: Reques
 // ─── PATCH /api/mapreality/signals/:id/status ─────────────────────────────────
 // Body: { authorAlias, status }. For MVP, only the author can set status to 'resolved'.
 mapRealityRouter.patch("/signals/:id/status", async (req: Request, res: Response) => {
-  const id = Number(param(req, "id"));
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "invalid id" });
+  const id = pgIntId(param(req, "id"));
+  if (id === null) return res.status(400).json({ error: "invalid id" });
 
   const body = req.body as { authorAlias?: unknown; status?: unknown };
   const authorAlias = clampString(body.authorAlias, MAX_ALIAS);

@@ -32,3 +32,34 @@ export function queryNumber(raw: unknown, fallback: number): number {
   const n = Number(one);
   return Number.isFinite(n) ? n : fallback;
 }
+
+/**
+ * Целочисленный идентификатор из пути или запроса, пригодный для колонки
+ * `SERIAL` / `integer` в Postgres. Возвращает null, если непригоден.
+ *
+ * Почему мало `Number.isFinite(id) && id > 0`. Так было в трёх ручках
+ * MapReality, и `/signals/99999999999999999999` проходило проверку: 1e20 —
+ * конечное положительное число. Дальше Postgres отвечал
+ *
+ *     value "100000000000000000000" is out of range for type integer
+ *
+ * `SERIAL` — это 32-битное целое, потолок 2 147 483 647.
+ *
+ * Дефект прятался вдвойне (Sentry, 19.08.2026, GET /api/mapreality/signals/…):
+ * ошибка попадала в `catch`, обработчик уходил в запасное хранилище в памяти,
+ * там ничего не находил — и человек получал правдоподобный 404, а Sentry
+ * ошибку на каждый заход робота. Снаружи всё выглядело исправным, а тревога
+ * копилась на клиентской ошибке, которой место в 400 (правило 15г).
+ *
+ * Хуже того, тот же `catch` означает: при НАСТОЯЩЕМ отказе базы ручка ответит
+ * «не найдено» про запись, которая есть. Здесь это не чинится — чинится тем,
+ * что до `catch` дело не доходит.
+ */
+export const PG_INT_MAX = 2147483647;
+
+export function pgIntId(raw: unknown): number | null {
+  const n = queryNumber(raw, Number.NaN);
+  if (!Number.isInteger(n)) return null; // «1.5» и «1e20» одинаково непригодны
+  if (n < 1 || n > PG_INT_MAX) return null;
+  return n;
+}

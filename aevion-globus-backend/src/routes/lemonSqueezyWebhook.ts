@@ -104,7 +104,7 @@ export const lemonSqueezyWebhookRouter = Router();
 interface LsSubscriptionPayload {
   meta?: {
     event_name?: string;
-    custom_data?: { reference?: string; email?: string; module?: string };
+    custom_data?: { reference?: string; email?: string; module?: string; channel?: string };
   };
   data?: {
     id?: string;
@@ -291,12 +291,25 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // Lite = 1 продукт на выбор: берём его из custom_data (передан на чекауте).
       const customModule = payload.meta?.custom_data?.module;
       const modules = tierId === "lite" && customModule ? [customModule] : modulesForReference(ref);
+      // Канал приходит из ссылки: withChannel() кладёт его в
+      // checkout[custom][channel] для LemonSqueezy. До 19.08.2026 вебхук его
+      // не читал, и метка терялась на последнем шаге: клик по «Купить» мы
+      // видели в своих событиях, а связать оплату с роликом было нечем.
+      //
+      // Пишем в ОТДЕЛЬНОЕ поле `channel`, а не суффиксом к `source`.
+      // Сперва сделал суффиксом — у LemonSqueezy дословных сравнений нет, и
+      // казалось безопасным. Но у Gumroad такие сравнения есть: страница
+      // /revenue рисует бейдж провайдера через `s.source === "gumroad"`.
+      // Значит `source` — это «через какую кассу прошли деньги», а канал —
+      // другая ось, и складывать их в одно поле нельзя ни там, ни здесь.
+      const channel = payload.meta?.custom_data?.channel?.trim().slice(0, 40);
       const result = await provisionSubscription({
         email,
         tierId,
         period: "monthly",
         modules,
         source: "lemonsqueezy",
+        ...(channel ? { channel } : {}),
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);
       return res.json({ ok: true, action: "activated", tierId, subscriptionId: result.subscription.id });

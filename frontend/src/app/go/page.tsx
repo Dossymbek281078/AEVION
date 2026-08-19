@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { LandingView } from "@/components/LandingView";
 import {
   GUIDES,
   SUBSCRIPTIONS,
@@ -147,6 +148,11 @@ export default async function GoPage({
   // /shop или /longevity и покупает уже оттуда. Без проброса канал терялся бы
   // ровно на том переходе, ради которого страница и сделана.
   const keep = (path: string) => (channel ? `${path}?c=${encodeURIComponent(String(Array.isArray(rawChannel) ? rawChannel[0] : rawChannel))}` : path);
+  // Метка источника несёт канал, как на посадочных модулей. До 19.08.2026 здесь
+  // стояло жёсткое "go": подписка с /go?c=ig помечалась просто «go», и канал
+  // терялся ровно на той странице, ради которой метки и заводились.
+  const goSource = channel ? `go-${channel}` : "go";
+
   const protocol = productById("oijxmq");
   const antiGreyRu = productById("tmuyxw");
   const bookFull = productById("ghvzq");
@@ -246,8 +252,9 @@ export default async function GoPage({
         </section>
 
         <section style={styles.section}>
+          <LandingView source={goSource} />
           <WaitlistCapture
-            source="go"
+            source={goSource}
             title="Написать вам, когда выйдет следующее"
             description="Модули выходят по одному. Оставьте адрес — придёт письмо в день запуска и условия раннего доступа, пока цена стартовая."
           />

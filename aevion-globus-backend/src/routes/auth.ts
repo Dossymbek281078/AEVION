@@ -6,6 +6,7 @@ import { getJwtSecret } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import { sendEmailVerify } from "../lib/constitutionBrevo";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
 const captureAuthError = makeServiceCapture("auth");
@@ -756,9 +757,22 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
     recordAuthAudit(user.id, "email.verify.request", req, { tokenId: id });
 
     const dev = process.env.NODE_ENV !== "production";
+
+    // Письмо со ссылкой. До 19.08.2026 его не отправляли вовсе: токен писался
+    // в базу, ручка отвечала {ok:true}, а интерфейс показывал «Verification
+    // email sent». Страница /build/verify-email при этом давно умеет принять
+    // ?token= из ссылки и подтвердить сама — половина механизма была готова.
+    //
+    // Возвращаем emailSent по ФАКТУ отправки, а не «ok» в любом случае: иначе
+    // человек снова будет ждать письма, которого нет.
+    const siteBase = (process.env.PUBLIC_SITE_URL || "https://aevion.app").replace(/\/+$/, "");
+    const verifyUrl = `${siteBase}/build/verify-email?token=${encodeURIComponent(minted.plaintext)}`;
+    const emailSent = await sendEmailVerify(user.email, verifyUrl);
+
     res.json({
       ok: true,
       email: user.email,
+      emailSent,
       ...(dev ? { devToken: minted.plaintext } : {}),
     });
   } catch (err: any) {

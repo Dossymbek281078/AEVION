@@ -3,6 +3,7 @@ import paper from "@/styles/aevionPaper.module.css";
 import { probeLive, daysUntil } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { LandingView } from "@/components/LandingView";
 
 // Посадочная запуска Multichat — 20 сентября (дата из scripts/launch-readiness.mjs).
 //
@@ -64,7 +65,12 @@ export default async function MultichatLaunchPage({
       // Заведомо неверный пакет: ждём 400. Настоящих чеков на проде не создаём.
       body: "{}",
     }),
-    probeLive("/api/multichat/shared/launch-page-probe"),
+    // Ручка ищет беседу по токену, поэтому 404 на несуществующий токен — её
+    // ПРАВИЛЬНЫЙ ответ, а не признак поломки. Без этой оговорки метка не
+    // могла стать «работает» никогда: проба сама создаёт условие, при котором
+    // всегда получает 404, и мы бы вечно писали «проверяется» о работающем
+    // контуре. Токен намеренно несуществующий — проба ничего не создаёт.
+    probeLive("/api/multichat/shared/launch-page-probe", undefined, { aliveOn404: true }),
   ]);
   const left = daysUntil(2026, 8, 20);
 
@@ -100,6 +106,8 @@ export default async function MultichatLaunchPage({
               : " Уже открыто."}
           </p>
         </header>
+
+        <LandingView source={source} />
 
         <WaitlistCapture
           source={source}

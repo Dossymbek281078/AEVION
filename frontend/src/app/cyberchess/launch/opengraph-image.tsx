@@ -1,0 +1,76 @@
+import { ImageResponse } from "next/og";
+
+export const runtime = "edge";
+export const alt = "CyberChess — открываем 30 августа: 502 584 задачи, Stockfish 18, ИИ-коуч";
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
+
+// Карточка репоста. До 19.08.2026 у посадочных запуска не было og:image вовсе —
+// ссылка в Telegram или LinkedIn показывалась голым текстом, хотя именно на эти
+// страницы ведёт трафик роликов.
+//
+// Числа здесь только те, что проверены замером на живом проде: 502 584 задачи
+// (GET /api/cyberchess-puzzles/meta) и Stockfish 18 (виден в интерфейсе партии).
+// Ничего про турниры и рейтинги — их я не проверял, а карточка живёт в ленте
+// дольше, чем любая правка.
+const PAPER = "#f7f6f2";
+const INK = "#16161a";
+const MUTED = "#5d5f66";
+const GOLD = "#a9781a";
+
+export default function CyberChessLaunchOg() {
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          height: "100%",
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          padding: 72,
+          background: PAPER,
+          color: INK,
+          fontFamily: "sans-serif",
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ fontSize: 22, letterSpacing: 4, color: GOLD, textTransform: "uppercase", display: "flex" }}>
+            AEVION · CyberChess
+          </div>
+          <div style={{ fontSize: 78, fontWeight: 800, lineHeight: 1.05, letterSpacing: -2, display: "flex" }}>
+            Открываем 30 августа
+          </div>
+          <div style={{ fontSize: 30, color: MUTED, lineHeight: 1.35, maxWidth: 900, display: "flex" }}>
+            Партия с движком, задача дня и тренер, который объясняет ход, а не просто оценивает.
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 18 }}>
+          {[
+            { n: "502 584", t: "задачи в банке" },
+            { n: "Stockfish 18", t: "движок" },
+            { n: "$19", t: "в месяц" },
+          ].map((c) => (
+            <div
+              key={c.n}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                padding: "18px 26px",
+                borderRadius: 14,
+                background: "#fffdf8",
+                border: "1px solid rgba(22,22,26,0.12)",
+              }}
+            >
+              <div style={{ fontSize: 34, fontWeight: 800, display: "flex" }}>{c.n}</div>
+              <div style={{ fontSize: 19, color: MUTED, display: "flex" }}>{c.t}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ),
+    { ...size },
+  );
+}

@@ -26,7 +26,7 @@
  },
  {
   "base": "/api/agent-runtime",
-  "url": "/api/agent-runtime/mcp-selftest",
+  "url": "/api/agent-runtime/health",
   "expect": 200
  },
  {
@@ -111,12 +111,12 @@
  },
  {
   "base": "/api/cyberchess-spectator",
-  "url": "/api/cyberchess-spectator/replays",
+  "url": "/api/cyberchess-spectator/list",
   "expect": 200
  },
  {
   "base": "/api/cyberchess-tournaments",
-  "url": "/api/cyberchess-tournaments/list",
+  "url": "/api/cyberchess-tournaments/_persistence",
   "expect": 200
  },
  {
@@ -191,18 +191,18 @@
  },
  {
   "base": "/api/metrics",
-  "url": "/api/metrics/json",
+  "url": "/api/metrics",
   "expect": 200
  },
  {
   "base": "/api/modules",
-  "url": "/api/modules/registry",
+  "url": "/api/modules/trending",
   "expect": 200
  },
  {
   "base": "/api/multichat",
-  "url": "/api/multichat/conversations",
-  "expect": 402
+  "url": "/api/multichat/health",
+  "expect": 401
  },
  {
   "base": "/api/paybox",
@@ -221,7 +221,7 @@
  },
  {
   "base": "/api/pipeline",
-  "url": "/api/pipeline/certificates",
+  "url": "/api/pipeline/health",
   "expect": 200
  },
  {
@@ -236,7 +236,7 @@
  },
  {
   "base": "/api/pricing",
-  "url": "/api/pricing",
+  "url": "/api/pricing/tiers",
   "expect": 200
  },
  {
@@ -248,6 +248,11 @@
   "base": "/api/pricing/events",
   "url": "/api/pricing/events/summary",
   "expect": 401
+ },
+ {
+  "base": "/api/pricing/provisioning",
+  "url": "/api/pricing/provisioning/healthz",
+  "expect": 200
  },
  {
   "base": "/api/psyapp-deps",
@@ -291,7 +296,7 @@
  },
  {
   "base": "/api/qgood",
-  "url": "/api/qgood/matching-pools",
+  "url": "/api/qgood/campaigns",
   "expect": 200
  },
  {
@@ -316,8 +321,8 @@
  },
  {
   "base": "/api/qmedia",
-  "url": "/api/qmedia/tracks",
-  "expect": 200
+  "url": "/api/qmedia/me/tracks",
+  "expect": 401
  },
  {
   "base": "/api/qmelanin",
@@ -336,7 +341,7 @@
  },
  {
   "base": "/api/qpersona",
-  "url": "/api/qpersona/stats",
+  "url": "/api/qpersona/health",
   "expect": 200
  },
  {
@@ -361,12 +366,12 @@
  },
  {
   "base": "/api/qsign/v2",
-  "url": "/api/qsign/v2/metrics",
+  "url": "/api/qsign/v2/recent",
   "expect": 200
  },
  {
   "base": "/api/qskyway",
-  "url": "/api/qskyway/cities",
+  "url": "/api/qskyway/health",
   "expect": 200
  },
  {
@@ -391,8 +396,8 @@
  },
  {
   "base": "/api/quantum-shield",
-  "url": "/api/quantum-shield/webhooks",
-  "expect": 401
+  "url": "/api/quantum-shield/health",
+  "expect": 200
  },
  {
   "base": "/api/quotas",
@@ -401,7 +406,7 @@
  },
  {
   "base": "/api/qventure",
-  "url": "/api/qventure/health",
+  "url": "/api/qventure/sectors",
   "expect": 200
  },
  {
@@ -416,7 +421,7 @@
  },
  {
   "base": "/api/shadownet",
-  "url": "/api/shadownet/threat-models",
+  "url": "/api/shadownet/health",
   "expect": 200
  },
  {
@@ -426,7 +431,7 @@
  },
  {
   "base": "/api/startupx",
-  "url": "/api/startupx/ideas",
+  "url": "/api/startupx/health",
   "expect": 200
  },
  {
@@ -456,7 +461,7 @@
  },
  {
   "base": "/api/voice-of-earth",
-  "url": "/api/voice-of-earth/health",
+  "url": "/api/voice-of-earth/tracks",
   "expect": 200
  },
  {

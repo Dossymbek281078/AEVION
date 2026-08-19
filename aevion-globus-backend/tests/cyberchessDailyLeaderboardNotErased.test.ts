@@ -34,6 +34,15 @@ const app = express();
 app.use(express.json());
 app.use("/api/cyberchess-daily", dailyRouter);
 
+// Ходы и день берём у самого сервера: с 19.08.2026 /solve сверяет решение, а
+// зашитая дата не совпала бы с задачей, которую сервер выдаёт СЕГОДНЯ.
+// Утверждения ниже — про сохранность и статистику, дата в них роли не играет.
+const тестовыйДень = () => new Date().toISOString().slice(0, 10);
+const тестовыеХоды = async (): Promise<string[]> => {
+  const r = await request(app).get("/api/cyberchess-daily/puzzle");
+  return (r.body?.puzzle?.sol ?? []) as string[];
+};
+
 const lbFile = path.join(scratch, "cyberchess-daily-leaderboard.json");
 const fileRaw = () => realFs.readFileSync(lbFile, "utf-8");
 
@@ -66,7 +75,7 @@ describe("нечитаемый файл таблицы не превращает
 
     const res = await request(app)
       .post("/api/cyberchess-daily/solve")
-      .send({ streak: 3, day: "2026-08-12", timeMs: 12_000, hintsUsed: 0, userId: "u1", name: "Игрок" });
+      .send({ day: тестовыйДень(), timeMs: 12_000, hintsUsed: 0, userId: "u1", name: "Игрок", moves: await тестовыеХоды() });
 
     expect(res.status).toBe(200); // игроку отказывать не за что
     expect(fileRaw()).toBe(before); // а диск трогать нечем
@@ -78,7 +87,7 @@ describe("нечитаемый файл таблицы не превращает
 
     const res = await request(app)
       .post("/api/cyberchess-daily/solve")
-      .send({ streak: 5, day: "2026-08-12", timeMs: 9_000, hintsUsed: 0, userId: "u2", name: "Второй" });
+      .send({ day: тестовыйДень(), timeMs: 9_000, hintsUsed: 0, userId: "u2", name: "Второй", moves: await тестовыеХоды() });
 
     expect(res.status).toBe(200);
     expect(dailyLeaderboardReadable()).toBe(true);

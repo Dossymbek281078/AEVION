@@ -12,7 +12,10 @@ import request from "supertest";
 
 const { db } = vi.hoisted(() => {
   process.env.DATABASE_URL = "postgres://test/test";
-  return { db: { total: 500000, fail: false, offsets: [] as number[] } };
+  // `sol` в базе — ТЕКСТ с JSON-массивом внутри, а не массив и не голая строка.
+  // Прежний мок отдавал "a1b1", формы, которой в базе не существует, и потому
+  // тест был зелёным на коде, который резал настоящее значение по запятым.
+  return { db: { total: 500000, fail: false, offsets: [] as number[], solRaw: '["a1b1","b1c1"]' } };
 });
 
 vi.mock("../src/lib/dbPool", () => ({
@@ -24,7 +27,7 @@ vi.mock("../src/lib/dbPool", () => ({
         const off = Number(params[0]);
         db.offsets.push(off);
         return {
-          rows: [{ id: `bank_${off}`, fen: "8/8/8/8/8/8/8/K6k w - - 0 1", sol: "a1b1", name: "Тактика", rating: 1500, theme: "Пешечный эндшпиль" }],
+          rows: [{ id: `bank_${off}`, fen: "8/8/8/8/8/8/8/K6k w - - 0 1", sol: db.solRaw, name: "Тактика", rating: 1500, theme: "Пешечный эндшпиль" }],
           rowCount: 1,
         };
       }

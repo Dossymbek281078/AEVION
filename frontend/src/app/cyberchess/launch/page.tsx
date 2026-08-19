@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { LandingView } from "@/components/LandingView";
 
 // Посадочная страница запуска CyberChess — 30 августа 2026.
 //
@@ -114,6 +115,9 @@ export default async function CyberChessLaunchPage({
               : "Уже открыто. Оставьте адрес, если хотите получать разборы и новости о турнирах."}
           </p>
         </header>
+
+        <LandingView source={source} />
+
 
         <WaitlistCapture
           source={source}

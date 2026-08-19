@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { LandingView } from "@/components/LandingView";
 
 // Посадочная запуска «патентного бюро» (QRight + QSign + IP Bureau) — 6 сентября.
 //
@@ -91,6 +92,9 @@ export default async function BureauLaunchPage({
             {left > 0 ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`} — 6 сентября.` : " Уже открыто."}
           </p>
         </header>
+
+        <LandingView source={source} />
+
 
         <WaitlistCapture
           source={source}

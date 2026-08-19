@@ -80,27 +80,53 @@ afterEach(() => {
 
 describe("chatLimiter — единица счёта", () => {
   test("два аккаунта с одного адреса не делят бюджет", async () => {
+    // Изоляция видна по ОСТАТКУ, а не по исчерпанию: если бы бюджет был общим,
+    // второй аккаунт получил бы 28 вместо 29.
+    //
+    // Первая версия выбирала весь бюджет — 31 запрос через supertest. В
+    // одиночку это 2.5 секунды при лимите в 10, а в полном прогоне (120 файлов
+    // параллельно) тест падал по таймауту через раз, и падал не там, где
+    // причина. Наращивать лимит было бы лечением симптома: свойство
+    // проверяется двумя запросами, остальные двадцать девять ничего не
+    // добавляли.
     freezeClock();
     const app = await mount();
     const a = tokenFor("acct-a");
     const b = tokenFor("acct-b");
 
-    // acct-a выбирает свой бюджет целиком. Адрес у обоих один и тот же —
-    // supertest всегда приходит с loopback, ровно как внутренний fetch
-    // MultiChat.
-    for (let i = 0; i < 30; i++) {
-      const r = await request(app).post("/chat").set("Authorization", `Bearer ${a}`);
-      expect(r.status).toBe(200);
-    }
-    // Свой предел за собой остаётся — иначе починка превратилась бы в дыру.
-    const over = await request(app).post("/chat").set("Authorization", `Bearer ${a}`);
-    expect(over.status).toBe(429);
-
-    // acct-b не сделал ни одного вызова. До починки здесь было 429.
-    const first = await request(app).post("/chat").set("Authorization", `Bearer ${b}`);
+    // Адрес у обоих один и тот же — supertest всегда приходит с loopback,
+    // ровно как внутренний fetch MultiChat.
+    const first = await request(app).post("/chat").set("Authorization", `Bearer ${a}`);
     expect(first.status).toBe(200);
     expect(first.headers["x-ratelimit-remaining"]).toBe("29");
+
+    // acct-b не сделал ни одного вызова. Общий счётчик показал бы 28.
+    const other = await request(app).post("/chat").set("Authorization", `Bearer ${b}`);
+    expect(other.status).toBe(200);
+    expect(other.headers["x-ratelimit-remaining"]).toBe("29");
+
+    // И тот же аккаунт продолжает тратить именно свой остаток.
+    const again = await request(app).post("/chat").set("Authorization", `Bearer ${a}`);
+    expect(again.headers["x-ratelimit-remaining"]).toBe("28");
   });
+
+  test(
+    "свой предел за аккаунтом остаётся — починка не стала дырой",
+    async () => {
+      // Единственный случай, которому действительно нужно выбрать бюджет
+      // целиком. Явный лимит времени — как в чужой починке фронтовых сторожей
+      // (568415eb3): на загруженной машине тридцать один запрос в десять секунд
+      // не укладывается, и это про очередь, а не про логику.
+      freezeClock();
+      const app = await mount();
+      const a = tokenFor("acct-over");
+      for (let i = 0; i < 30; i++) {
+        expect((await request(app).post("/chat").set("Authorization", `Bearer ${a}`)).status).toBe(200);
+      }
+      expect((await request(app).post("/chat").set("Authorization", `Bearer ${a}`)).status).toBe(429);
+    },
+    30_000,
+  );
 
   test("аноним по-прежнему ограничен, и считается по адресу", async () => {
     freezeClock();

@@ -627,7 +627,12 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "Total provisioned subscriptions count" },
       },
       "/api/pricing/roadmap": {
-        get: { summary: "Public roadmap for all 27 modules with phases and progress" },
+        // Число берётся из реестра, а не пишется в строке. Здесь стояло «27
+        // modules» — реестр к 16.08.2026 вырос до 41, и публичное описание API
+        // занижало платформу почти вдвое. Тот же класс, что и текст отказа,
+        // называвший неверный предел: как только число попадает в текст, оно
+        // перестаёт меняться вместе с тем, что описывает.
+        get: { summary: `Public roadmap for all ${projects.length} modules with phases and progress` },
       },
       "/api/pricing/provisioning/history": {
         get: { summary: "Subscription history by email (?email=...) — masked PII, capped at 100" },

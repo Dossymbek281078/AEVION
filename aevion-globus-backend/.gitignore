@@ -4,6 +4,11 @@ node_modules
 
 # Локальные JSON-стора MVP (QTrade и др.)
 .aevion-data/
+# Снимки того же хранилища: создаются `npm run backup` в .aevion-backups/<UTC>/.
+# Содержат КОПИИ кошельков и реестра AEV, поэтому в репозиторий им нельзя тем же
+# правилом, что и источнику. Команда backup вернулась 14.08.2026 — до этого
+# каталог просто не появлялся, и правило было не нужно.
+.aevion-backups/
 
 # Pricing leads + analytics events + newsletter + subscriptions (PII / IP)
 data/leads.jsonl

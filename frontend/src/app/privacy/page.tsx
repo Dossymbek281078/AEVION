@@ -81,8 +81,10 @@ export default function PrivacyPage() {
           <p><strong>Your content.</strong> Videos you choose to publish are transmitted to TikTok on your behalf; once on TikTok, your content and its visibility are governed by TikTok&rsquo;s own Terms and Privacy Policy. You are responsible for ensuring content you publish complies with TikTok&rsquo;s Community Guidelines.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>9. Contact</h2>
-          {/* Адрес рабочий и проверен отправкой 19.08.2026. privacy@aevion.io
-              НЕ существует — отбойник «address couldn’t be found». */}
+          {/* Адрес проверен отправкой 19.08.2026. Не privacy@aevion.io: этот
+              домен принадлежит ДРУГОЙ компании с тем же названием — запросы на
+              удаление данных уходили бы посторонним. У aevion.app записи MX нет
+              вовсе. Разбор — в комментарии на /terms. */}
           <p>Privacy contact: yahiin1978@gmail.com.</p>
           <p style={{ color: "#64748b", fontSize: 13 }}>AEVION LLC · 30 N Gould St, Ste R, Sheridan, WY 82801, United States</p>
         </div>

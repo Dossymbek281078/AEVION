@@ -100,12 +100,21 @@ export default function TermsPage() {
           <p>You are solely responsible for the content you publish and represent that you own or have the necessary rights to it. You agree to comply with TikTok&rsquo;s Community Guidelines, Terms of Service and Content Sharing Guidelines when using this feature. AEVION is an independent service, is not affiliated with, sponsored by or endorsed by TikTok, and TikTok is a trademark of its respective owner. AEVION is not liable for any action TikTok takes with respect to your account or your content.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>10. Contact</h2>
-          {/* Адрес намеренно этот, а не legal@aevion.io. Проверено 19.08.2026
-              отправкой: legal@ и privacy@ на aevion.io НЕ СУЩЕСТВУЮТ (отбойник
-              «address couldn’t be found»), а у домена aevion.app нет записи MX
-              вовсе — там отбивается любой адрес. Печатать красивый адрес, который
-              не принимает писем, хуже, чем печатать рабочий. Заведут ящик —
-              поменять здесь и в /privacy. */}
+          {/* Почему личный адрес, а не legal@ на нашем домене. Причина сильнее,
+              чем кажется, и выяснилась 19.08.2026 двумя сессиями независимо:
+
+              · aevion.io — НЕ НАШ домен. Там работает другая компания с тем же
+                названием (их контакт jonathan@aevion.io). Часть адресов у них
+                живая, то есть письма наших людей уходили бы посторонним. Ставить
+                сюда legal@aevion.io нельзя ни при каких условиях.
+              · aevion.app — наш основной домен, но записи MX у него НЕТ: любой
+                адрес на нём отбивается. Проверено отправкой.
+              · aevion.tech — наш и почту принимает (Hostinger). Годится, но какой
+                адрес печатать на юридической странице — решение основателя, а не
+                массовой замены: ящик мало завести, его надо читать.
+
+              До этого решения стоит адрес, который проверен как рабочий. Красивый
+              адрес, не принимающий писем, хуже рабочего некрасивого. */}
           <p>For questions about these Terms, contact AEVION LLC at yahiin1978@gmail.com or through the Help Center.</p>
           <p style={{ color: "#64748b", fontSize: 13 }}>AEVION LLC · 30 N Gould St, Ste R, Sheridan, WY 82801, United States</p>
         </div>

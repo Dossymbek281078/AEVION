@@ -85,7 +85,9 @@ export function normalizeAddressForKey(ip: string): string {
 const GLOBAL_BUCKETS = new Map<string, Bucket>();
 let lastSweep = 0;
 
+
 /**
+ * In-process fixed-window rate limiter. No external deps.
  * Serial for the default keyPrefix. Only has to be unique inside the process —
  * the buckets it names live in this module's Map and nothing outside reads the
  * key. Module-load order therefore does not matter.
@@ -115,6 +117,32 @@ function warnKeyFnFallback(prefix: string, why: string): void {
  * Good enough for public read-only endpoints; replace with Redis-backed
  * limiter if the app ever runs on multiple instances.
  */
+/**
+ * Адрес клиента как КЛЮЧ ограничителя.
+ *
+ * Возвращён 19.08.2026 при объединении веток: пять шахматных модулей зовут эту
+ * функцию, а в версии из ветки прода её не было — проверка типов поймала это
+ * до выкатки. Восстановлена поверх ИХ файла, а не заменой файла целиком: там
+ * живёт нормализация адреса, закрывающая обход ограничителя по IPv6.
+ *
+ * Почему НЕ читаем X-Forwarded-For напрямую (объяснение из удалённой копии,
+ * оно отвечает на другой вопрос и потерять его нельзя): прокси дописывает
+ * себя справа, поэтому ЛЕВЫЙ элемент — тот, что берёт `split(",")[0]`, —
+ * пишет сам клиент, и его никто не проверяет. Ограничитель по такому ключу
+ * даёт каждому запросу свою корзину, как только клиент меняет заголовок:
+ * снаружи он выглядит работающим и не срабатывает никогда. `req.ip` читает
+ * тот же заголовок, но только по узлам, которые приложение объявило
+ * доверенными (`app.set("trust proxy", 1)`).
+ *
+ * Нормализуем тем же helper-ом, что и сам ограничитель. Иначе один и тот же
+ * человек получал бы РАЗНЫЕ корзины в шахматах и в остальной платформе — а
+ * это и есть обход: две записи одного адреса считаются двумя посетителями.
+ */
+export function clientIp(req: { ip?: string; socket?: { remoteAddress?: string } }): string {
+  const raw = req.ip || req.socket?.remoteAddress || "unknown";
+  return raw === "unknown" ? raw : normalizeAddressForKey(raw);
+}
+
 export function rateLimit(opts: RateLimitOptions) {
   const windowMs = opts.windowMs ?? 60_000;
   const max = opts.max ?? opts.capacity ?? 60;
@@ -140,21 +168,12 @@ export function rateLimit(opts: RateLimitOptions) {
       }
     }
 
-    // 🔴 ВНИМАНИЕ МЕРЖАЩЕМУ: эти пять строк УЖЕ ИСПРАВЛЕНЫ в ветке
-    // feat/cyberchess-human-weak-bots (коммит d5072991a) — там они заменены на
-    // `clientIp(req)`, потому что ЛЕВЫЙ элемент X-Forwarded-For пишет сам клиент,
-    // и лимит по нему подделывается сменой заголовка на каждый запрос.
-    //
-    // Здесь они остались НАМЕРЕННО: я не стал дублировать чужую починку (иначе в
-    // одном файле было бы два её варианта). При конфликте берите ИХ сторону этих
-    // строк и МОЮ — построения ключа ниже. Объединение, а не выбор: возьмёте
-    // только моё — вернётся подделываемый заголовок; только их — вернётся общий
-    // счётчик на шесть лимитеров.
-    const ip =
-      (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
-      req.ip ||
-      req.socket?.remoteAddress ||
-      "unknown";
+    // Адрес берётся у соседней починки: clientIp читает заголовок прокси
+    // только по доверенным узлам, поэтому подделать его нельзя.
+    // Как сводить это место, прошлая сессия написала прямо здесь: их получение
+    // адреса + моё построение ключа. Взять только одно — вернуть либо
+    // подделываемый заголовок, либо общий счётчик на шесть лимитеров.
+    const ip = clientIp(req);
     // A keyFn from the call site names the unit to count (an account, a tenant);
     // the address is the fallback, including when the fn yields nothing usable.
     let counted = ip;

@@ -89,3 +89,66 @@ describe("qlife не рассказывает клиенту о своём хр�
     expect(src).not.toMatch(/error:\s*err\?\.message/);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ДОПОЛНЕНО 20.08.2026 — сплошной свип вместо списка.
+//
+// Список выше рос РЕАКТИВНО: каждая новая ошибка прода добавляла в него файл.
+// Значит защищено ровно то, что уже успело сломаться, а новый файл под охрану
+// не попадает вовсе. Замер в день написания: список покрывал 8 файлов, а форма
+// без нижней границы жила ещё в четырёх — и одна из них, `build/stats.ts`,
+// давала живую 500 на проде (`?limit=-1` -> 500 hires_failed, `?limit=5` -> 200)
+// и была самой частой ошибкой недели.
+//
+// Умолчание развёрнуто: проверяется КАЖДЫЙ файл маршрутов, а исключения
+// перечислены поимённо и с причиной. Отдельная проверка следит, чтобы список
+// исключений не протухал — иначе он сам станет новым слепым пятном.
+import { readdirSync, statSync } from "node:fs";
+
+const ROUTES = path.join(__dirname, "..", "src", "routes");
+
+function allRouteFiles(dir = ROUTES, prefix = ""): string[] {
+  const out: string[] = [];
+  for (const name of readdirSync(dir)) {
+    const full = path.join(dir, name);
+    if (statSync(full).isDirectory()) out.push(...allRouteFiles(full, prefix + name + "/"));
+    else if (name.endsWith(".ts") && !name.endsWith(".d.ts")) out.push(prefix + name);
+  }
+  return out;
+}
+
+// Форма без нижней границы, в обоих написаниях: и `req.query.limit`, и
+// разобранный в переменную `limit`.
+const UNSAFE = /Math\.min\(\s*Number\(\s*(?:req\.query\.limit|limit)\b/;
+
+// Известные нарушения, которые чинит ДРУГАЯ незамёрженная ветка. Дублировать
+// их правку нельзя — при мерже обеих получим конфликт на ровном месте.
+// Строка живёт до мержа названной ветки и удаляется вместе с ним.
+const PENDING: Record<string, string> = {
+  "qstore.ts": "чинится в fix/int-id-overflow-500 (там 3 нижних границы, 0 нарушений)",
+  "shadownet.ts": "чинится в fix/int-id-overflow-500 (там 2 нижних границы)",
+};
+
+describe("limit: сплошной свип по всем маршрутам", () => {
+  const files = allRouteFiles();
+
+  test("обход маршрутов реально что-то нашёл (контроль прибора)", () => {
+    // Порог «больше N» тут бесполезен: он переживает мутацию, потому что
+    // файлов и так много. Проверять надо СВОЙСТВА обхода, которые могут
+    // сломаться: непустой список, файл из корня и файл из ПОДПАПКИ —
+    // именно рекурсия дала бы тихий зелёный свип, потеряв build/*.
+    expect(files.length).toBeGreaterThan(50);
+    expect(files).toContain("qevents.ts");
+    expect(files).toContain("build/stats.ts");
+  });
+
+  for (const f of files) {
+    const why = PENDING[f];
+    test(`${f}: limit зажат снизу${why ? " (ожидаемо ждёт: " + why + ")" : ""}`, () => {
+      const code = read(f);
+      const hit = UNSAFE.test(code);
+      if (why) expect(hit).toBe(true);   // исключение обязано быть НАСТОЯЩИМ
+      else expect(hit).toBe(false);
+    });
+  }
+});

@@ -310,7 +310,17 @@ qmelaninRouter.post("/plan", (req: Request, res: Response) => {
   // остаётся пустым, а сводка гласит «Явных дефицитов по порогам нет».
   // Проверено на проде 20.08.2026 телом {}. Отсутствие данных выдавалось за
   // результат проверки.
-  const hasInput = Array.isArray(b.deficientKeys) || Boolean(b.values);
+  //
+  // Считаем ЗНАЧЕНИЯ, а не наличие поля. Boolean({}) истинно, а витрина
+  // шлёт `values` ВСЕГДА — при пустой форме это пустой объект. Первая
+  // версия признака (`Boolean(b.values)`) поэтому срабатывала только на
+  // теле из моего же зонда и молчала ровно там, где человек ничего не
+  // ввёл. Проверено прогоном обоих тел рядом.
+  const hasInput =
+    (Array.isArray(b.deficientKeys) && b.deficientKeys.length > 0) ||
+    (b.values !== null &&
+      typeof b.values === "object" &&
+      Object.values(b.values as Record<string, unknown>).some((v) => num(v) !== null));
 
   const targeted = deficientKeys.map((k) => ({
     nutrient: BIOMARKER_BY_KEY[k].label,

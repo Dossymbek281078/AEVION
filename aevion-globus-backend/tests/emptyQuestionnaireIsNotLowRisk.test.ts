@@ -109,3 +109,35 @@ describe("соседние ручки того же класса", () => {
     expect(res.body.warning).toBeUndefined();
   });
 });
+
+describe("тело, которое реально шлёт витрина", () => {
+  // Зонд слал {}. Витрина шлёт `values` ВСЕГДА — при пустой форме это пустой
+  // объект, и первая версия признака (Boolean(b.values)) его пропускала:
+  // проверка молчала ровно в том случае, ради которого написана.
+  test("qmelanin /plan: values: {} — это тоже «данных нет»", async () => {
+    const res = await request(app()).post("/api/qmelanin/plan").send({ values: {} });
+    expect(res.body.personalised, "пустая форма выдаётся за персональный план").toBe(false);
+    expect(String(res.body.summary ?? "")).not.toMatch(/дефицитов по порогам нет/);
+  });
+
+  test("qmelanin /plan: пустой список дефицитов — тоже не результат проверки", async () => {
+    const res = await request(app()).post("/api/qmelanin/plan").send({ deficientKeys: [] });
+    expect(res.body.personalised).toBe(false);
+  });
+
+  test("контроль: одно настоящее значение включает персонализацию", async () => {
+    const res = await request(app())
+      .post("/api/qmelanin/plan")
+      .send({ values: { ferritin: 12 } });
+    expect(res.body.personalised).toBe(true);
+    expect(res.body.warning).toBeUndefined();
+  });
+
+  test("longevity: values: {} даёт measuredCount 0 и предупреждение", async () => {
+    const res = await request(app())
+      .post("/api/longevity/assess")
+      .send({ values: {}, flags: {} });
+    expect(res.body.measuredCount).toBe(0);
+    expect(String(res.body.warning ?? "")).toMatch(/не передано/);
+  });
+});

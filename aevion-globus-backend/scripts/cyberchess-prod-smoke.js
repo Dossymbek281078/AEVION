@@ -200,6 +200,36 @@ async function run() {
   if (/application\/json/i.test(r.ct || "")) ok("Content-Type application/json on /tournaments/list", r.ct);
   else bad("content-type", `ct=${r.ct}`);
 
+  // ── Живая СТРАНИЦА, а не только ручка ────────────────────────────────────
+  //
+  // Заведено 19.08.2026 после находки, которую не поймал ни один сторож: на
+  // /cyberchess/daily висела таблица «Топ-100 серий» с выдуманными сериями под
+  // именами настоящих гроссмейстеров, и числа менялись при каждой отрисовке.
+  // Все проверки до этой смотрели на бэкенд либо на код ответа страницы, а
+  // выдумка живёт в её ТЕЛЕ: код 200 про содержимое не говорит ничего.
+  //
+  // Имена настоящих людей рядом с придуманными о них цифрами — не вопрос вкуса,
+  // поэтому проверка жёсткая, а не предупреждение.
+  const FRONT = (process.env.FRONT || "https://aevion.app").replace(/\/+$/, "");
+  const FORBIDDEN = ["Magnus", "Hikaru", "Fabiano", "Praggnanandhaa", "Nakamura"];
+  try {
+    const page = await fetch(FRONT + "/cyberchess/daily", { redirect: "follow" });
+    const html = await page.text();
+
+    // Контроль прибора: страница обязана содержать то, что там точно есть. Без
+    // него пустой ответ или редирект дали бы «запрещённых имён нет», то есть
+    // зелёный на нечитанной странице.
+    if (/головоломка|puzzle/i.test(html)) {
+      const found = FORBIDDEN.filter((n) => html.includes(n));
+      if (!found.length) ok("на странице задачи дня нет выдуманной таблицы под чужими именами");
+      else bad("выдуманная таблица под именами настоящих людей", "найдены: " + found.join(", "));
+    } else {
+      bad("страница задачи дня прочитана", "тело не похоже на страницу пазла (" + html.length + " байт) — проверка НЕ выполнена");
+    }
+  } catch (e) {
+    bad("страница задачи дня доступна", String(e && e.message ? e.message : e));
+  }
+
   console.log(`\n${pass + fail} assertions — ${pass} PASS  ${fail} FAIL\n`);
   process.exit(fail > 0 ? 1 : 0);
 }

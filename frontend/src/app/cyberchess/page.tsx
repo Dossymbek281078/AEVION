@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { knownUserId } from "./tournaments/playerIdentity";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -2075,6 +2076,42 @@ export default function CyberChessPage(){
       const col=params.get("color");
       if(col==="black")sFlip(true);
       else if(col==="white")sFlip(false);
+    }catch{}
+  },[]);
+  // ── Серверный кошелёк Chessy ────────────────────────────────────────────
+  //
+  // Chessy за рейтинговые партии начисляет СЕРВЕР в таблицу CyberWallet, а
+  // баланс на этом экране всё время брался из localStorage. Две суммы никогда
+  // не встречались: заработанное в рейтинге было видно всем в таблице лидеров
+  // Chessy — и не видно самому игроку. Потратить его тоже нельзя, магазин
+  // работает с местным балансом.
+  //
+  // Здесь показываем ровно то, что знает сервер, и не смешиваем с местным:
+  // объединение двух валют — продуктовое решение, а не правка экрана.
+  const[srvWallet,sSrvWallet]=useState<{balance:number;earnedTotal:number}|"failed"|null>(null);
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    // knownUserId, а не своё чтение ключа: во-первых, мой же сторож считает
+    // прямые обращения и краснеет на пятом; во-вторых, по смыслу верно именно
+    // «кто я, если известно» — заводить личность ради запроса баланса нельзя.
+    const uid=knownUserId();
+    if(!uid)return; // личности ещё нет — спрашивать не о чем
+    let alive=true;
+    fetch(`/api-backend/api/cyberchess/matchmaking/wallet?userId=${encodeURIComponent(uid)}`)
+      .then(r=>r.ok?r.json():null)
+      .then(j=>{
+        if(!alive)return;
+        // Отказ и ноль — РАЗНЫЕ вещи: сервер отвечает 503, когда не смог
+        // спросить базу, и превращать это в «вы ничего не заработали» нельзя.
+        if(!j||j.ok!==true){sSrvWallet("failed");return}
+        sSrvWallet({balance:Number(j.balance)||0,earnedTotal:Number(j.earnedTotal)||0});
+      })
+      .catch(()=>{if(alive)sSrvWallet("failed")});
+    return()=>{alive=false};
+  },[]);
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    try{
     }catch{}
   },[]);
   useEffect(()=>{
@@ -5771,6 +5808,29 @@ export default function CyberChessPage(){
           >
             <Icon.Coin width={18} height={18}/>
             <span>{chessy.balance}</span>
+            {/* Заработанное на сервере — отдельным значком, а не в общей сумме.
+                Смешивать две валюты нельзя: местная копится за пазлы в этом
+                браузере, серверная — за рейтинговые партии, и объединение их
+                продуктовое решение. Но прятать от владельца то, что видно
+                другим в таблице лидеров, нельзя тем более. */}
+            {typeof srvWallet==="object"&&srvWallet!==null&&srvWallet.balance>0&&(
+              <span
+                data-testid="chessy-server-balance"
+                title={`На сервере за рейтинговые партии: ${srvWallet.balance} Chessy (всего заработано ${srvWallet.earnedTotal}). Это отдельный счёт от местного.`}
+                style={{fontSize:11,fontWeight:800,marginLeft:4,padding:"1px 5px",borderRadius:6,background:"rgba(120,53,15,0.12)"}}
+              >
+                +{srvWallet.balance}
+              </span>
+            )}
+            {srvWallet==="failed"&&(
+              <span
+                data-testid="chessy-server-unknown"
+                title="Не удалось запросить серверный счёт Chessy. Это НЕ значит, что он пуст."
+                style={{fontSize:11,fontWeight:800,marginLeft:4,opacity:0.55}}
+              >
+                ?
+              </span>
+            )}
             {chessy.owned.puzzle_boost&&<span title="Пазл-буст активен!" style={{fontSize:9,marginLeft:2,color:"#ea580c",fontWeight:900}}>⚡</span>}
             {chessy.owned.streak_shield&&<span title="Щит стрика активен!" style={{fontSize:9,marginLeft:1,color:"#3b82f6",fontWeight:900}}>🛡</span>}
           </button>

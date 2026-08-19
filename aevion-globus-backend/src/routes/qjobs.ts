@@ -396,12 +396,21 @@ qjobsRouter.post("/ai/match", async (req: Request, res: Response) => {
     try {
       const { getPool: gp } = await import("../lib/dbPool");
       const bp = gp();
+      // Таблица называется "BuildSkillBadge" (её создаёт routes/build/skill-badges.ts),
+      // а колонок "testTitle" и "status" не существует ни в одной таблице платформы.
+      // Прежний запрос не мог выполниться НИКОГДА, и `catch {}` это прятал: человек
+      // с заработанными значками получал ответ «привяжите профиль QBuild».
+      // Найдено 19.08.2026 сверкой «что запрашиваем» против «что создаём».
       const { rows: badges } = await bp.query(
-        `SELECT "testTitle" FROM "SkillBadge" WHERE "userId"=$1 AND "status"='active' LIMIT 10`,
+        `SELECT "testId" FROM "BuildSkillBadge" WHERE "userId"=$1 AND "passed"=TRUE LIMIT 10`,
         [auth.sub],
       );
-      if (badges.length > 0) skills = badges.map((b: { testTitle: string }) => b.testTitle);
-    } catch { /* ignore — QBuild table may not exist */ }
+      if (badges.length > 0) skills = badges.map((b: { testId: string }) => b.testId);
+    } catch (e) {
+      // Отсутствие значков — обычное дело, поэтому путь остаётся мягким. Но
+      // молчать нельзя: именно молчание и продержало неверный запрос до сих пор.
+      console.warn("[qjobs] skill badges lookup failed:", e instanceof Error ? e.message : e);
+    }
   }
 
   if (skills.length === 0) {

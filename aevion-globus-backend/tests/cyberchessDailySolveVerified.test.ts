@@ -17,6 +17,19 @@ const SOL = ["c5c3", "e6e4", "b5b4", "e4b4"];
 
 vi.hoisted(() => { process.env.DATABASE_URL = "postgres://test/test"; });
 
+// Тест не имеет права писать в данные репозитория. Без этого блока прогон
+// мутации (где сервер снова верил клиенту) записал «серию 364» в отслеживаемый
+// файл `data/cyberchess-daily-leaderboard.json` — и она уехала бы в коммит как
+// настоящая запись живого игрока. Соседний тест 12.08 стережёт ровно это, а мой
+// собственный новый файл в ту же яму и попал.
+vi.hoisted(() => {
+  const nodeOs = require("node:os") as typeof import("node:os");
+  const nodePath = require("node:path") as typeof import("node:path");
+  const nodeFs = require("node:fs") as typeof import("node:fs");
+  process.env.CYBERCHESS_DAILY_DIR = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), "cc-daily-"));
+});
+
+
 vi.mock("../src/lib/dbPool", () => ({
   getPool: () => ({
     query: async (text: string) => {

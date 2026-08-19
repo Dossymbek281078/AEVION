@@ -28,9 +28,15 @@ const UA = "aevion-launch-readiness";
 const MODULES = [
   { id: "cyberchess", name: "CyberChess", date: "30.08", page: "/cyberchess", landing: "/cyberchess/launch", price: 19 },
   { id: "qright", name: "QRight", date: "06.09", page: "/qright", landing: null, price: null },
-  { id: "bureau", name: "IP Bureau", date: "06.09", page: "/bureau", landing: null, price: 29 },
-  { id: "devhub", name: "DevHub", date: "13.09", page: "/devhub", landing: null, price: 149 },
-  { id: "multichat-engine", name: "Multichat", date: "20.09", page: "/multichat-engine", landing: null, price: null },
+  { id: "bureau", name: "IP Bureau", date: "06.09", page: "/bureau", landing: "/bureau/launch", price: 29 },
+  // Посадочные DevHub и Multichat здесь стояли как `null` — и это было НЕВЕРНО:
+  // обе написаны соседними окнами и уже отвечают 200 на проде (проверено
+  // 19.08 вместе с отрицательным контролем: /qwerty/launch → 404). Сводка,
+  // которая занижает готовность, толкает делать заново то, что готово, —
+  // ровно этим я чуть не занялся. У QRight посадочной действительно нет:
+  // пару закрывает /bureau/launch, поэтому здесь оставлен null.
+  { id: "devhub", name: "DevHub", date: "13.09", page: "/devhub", landing: "/devhub/launch", price: 149 },
+  { id: "multichat-engine", name: "Multichat", date: "20.09", page: "/multichat-engine", landing: "/multichat-engine/launch", price: null },
 ];
 
 let networkFailed = false;

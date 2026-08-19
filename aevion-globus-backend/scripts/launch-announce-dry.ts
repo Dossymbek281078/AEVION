@@ -23,19 +23,28 @@ const BASE = (process.env.BASE || "https://api.aevion.app").replace(/\/+$/, "");
 const TOKEN = process.env.AEVION_ADMIN_TOKEN?.trim();
 const slug = (process.argv[2] || "").trim();
 
+/**
+ * Запущен ли файл КАК КОМАНДА, а не подключён из теста.
+ *
+ * Без этого признака `extractRows` экспортировался «ради теста», но воспользоваться
+ * им было нельзя: при импорте срабатывали проверки ниже и звали process.exit, убивая
+ * прогон. Экспорт был декоративным — тот самый класс «код обещает то, чего не делает».
+ */
+const INVOKED_DIRECTLY = /launch-announce-dry(\.[cm]?[jt]s)?$/.test(process.argv[1] || "");
+
 function fail(msg: string, code: 1 | 2): never {
   console.error(msg);
   process.exit(code);
 }
 
-if (!slug) {
+if (INVOKED_DIRECTLY && !slug) {
   fail(
     `Нужен модуль: npx tsx scripts/launch-announce-dry.ts <модуль>\n` +
       `Известные: ${Object.keys(LAUNCH_MODULES).join(", ")}`,
     1,
   );
 }
-if (!LAUNCH_MODULES[slug]) {
+if (INVOKED_DIRECTLY && !LAUNCH_MODULES[slug]) {
   fail(
     `Неизвестный модуль «${slug}». Известные: ${Object.keys(LAUNCH_MODULES).join(", ")}\n` +
       `Состав и даты — в src/lib/launchAnnounce.ts. Дата там может быть null: у
@@ -44,7 +53,7 @@ if (!LAUNCH_MODULES[slug]) {
     1,
   );
 }
-if (!TOKEN) {
+if (INVOKED_DIRECTLY && !TOKEN) {
   fail(
     `Нет AEVION_ADMIN_TOKEN. Выгрузка подписчиков закрыта админским доступом —\n` +
       `это персональные данные, и открывать их скрипту без токена нельзя.`,
@@ -163,4 +172,4 @@ async function main(): Promise<void> {
   console.log("Ни одно письмо не отправлено. Отправка — отдельным решением владельца.");
 }
 
-void main();
+if (INVOKED_DIRECTLY) void main();

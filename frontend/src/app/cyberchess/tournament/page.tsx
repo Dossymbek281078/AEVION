@@ -282,13 +282,13 @@ export default function TournamentHubPage() {
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
           <Link href="/cyberchess" style={{ color: C.dim, textDecoration: "none" }}>CyberChess</Link>
-          {" / "}<span style={{ color: C.text }}>Tournament Hub</span>
+          {" / "}<span style={{ color: C.text }}>Турнирный хаб</span>
         </div>
 
         {/* Hero */}
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.025em", margin: "0 0 10px", lineHeight: 1.15 }}>
-            Tournament <span style={{ color: C.purple }}>Hub</span>
+            Турнирный <span style={{ color: C.purple }}>хаб</span>
           </h1>
           <p style={{ fontSize: 14, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 700 }}>
             Твои трофеи и место в лидерборде — <strong style={{ color: C.green }}>реальные</strong>. Cross-tournament

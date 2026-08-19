@@ -308,7 +308,7 @@ export default function CPIDashboardPage() {
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
           <Link href="/cyberchess" style={{ color: C.dim, textDecoration: "none" }}>CyberChess</Link>
           {" / "}<Link href="/cyberchess/cpi" style={{ color: C.dim, textDecoration: "none" }}>CPI</Link>
-          {" / "}<span style={{ color: C.text }}>Dashboard</span>
+          {" / "}<span style={{ color: C.text }}>Мой CPI</span>
         </div>
 
         <div style={{ marginBottom: 24 }}>

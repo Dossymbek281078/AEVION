@@ -65,3 +65,20 @@ describe("турнирные страницы говорят по-русски",
     });
   });
 });
+
+describe("заголовки разделов модуля — русские", () => {
+  // Ходьба по страницам 20.08: «хлебные крошки» и заголовки оставались
+  // английскими — Training Hub, Tournament Hub, Leaderboard, Dashboard —
+  // на страницах, где весь остальной текст русский.
+  const stranitsy: Array<[string, string[], string[]]> = [
+    ["training/page.tsx", ["Тренировки"], [">Training Hub<"]],
+    ["tournament/page.tsx", ["Турнирный"], [">Tournament Hub<"]],
+    ["cpi/leaderboard/page.tsx", ["Таблица лидеров"], [">Leaderboard<"]],
+    ["cpi/dashboard/page.tsx", ["Мой CPI"], [">Dashboard<"]],
+  ];
+  test.each(stranitsy)("%s", (fajl, dolzhno, ne_dolzhno) => {
+    const s = fs.readFileSync(path.join(ROOT, ...fajl.split("/")), "utf-8");
+    for (const t of dolzhno) expect(s, `нет русского заголовка «${t}»`).toContain(t);
+    for (const t of ne_dolzhno) expect(s, `английский заголовок вернулся: ${t}`).not.toContain(t);
+  });
+});

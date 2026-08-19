@@ -159,13 +159,13 @@ export default function TrainingHubPage() {
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
           <Link href="/cyberchess" style={{ color: C.dim, textDecoration: "none" }}>CyberChess</Link>
-          {" / "}<span style={{ color: C.text }}>Training Hub</span>
+          {" / "}<span style={{ color: C.text }}>Тренировки</span>
         </div>
 
         {/* Hero */}
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.025em", margin: "0 0 8px", lineHeight: 1.15 }}>
-            Training Hub
+            Тренировки
           </h1>
           <p style={{ fontSize: 14, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 640 }}>
             Твой персональный ежедневный план. Основан на CPI weak factor, due Coach reminders,

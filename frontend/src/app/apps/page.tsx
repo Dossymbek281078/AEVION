@@ -79,8 +79,28 @@ const APP_DEFS: AppDef[] = [
     tagline: "Multi-model AI assistant",
     href: "/qcoreai",
     cat: "Developer",
-    highlights: ["Claude · GPT · Gemini in one UI", "Unlimited usage", "Always free"],
+    highlights: ["Claude · GPT · Gemini in one UI", "Generous free monthly quota", "Always free"],
     badge: "Free forever",
+  },
+  {
+    id: "tiktok-publisher",
+    icon: "🎬",
+    name: "TikTok Publisher",
+    tagline: "Publish finished videos to your own TikTok",
+    href: "/tiktok-publisher",
+    cat: "Developer",
+    // Внесён в каталог 19.08.2026. До этого страница жила на проде, но нигде не
+    // значилась: формально открыта всем, фактически внутренний инструмент.
+    // Именно поэтому заявку на Content Posting API отклонили с формулировкой
+    // «personal or company internal use». Продукт для авторов должен быть
+    // ВИДИМ как продукт, иначе утверждение о нём — неправда.
+    highlights: [
+      "Connect your own TikTok via OAuth",
+      "Caption, privacy level and interaction settings before posting",
+      "Commercial-content disclosure built in",
+      "Save to drafts or post directly",
+      "Publish status tracking",
+    ],
   },
   /* ── Finance ────────────────────────────────────────────────────────── */
   {
@@ -101,7 +121,7 @@ const APP_DEFS: AppDef[] = [
     tagline: "Embedded payment infrastructure",
     href: "/qpaynet",
     cat: "Finance",
-    highlights: ["KZT · USD · multi-currency", "Virtual cards", "API + webhooks"],
+    highlights: ["KZT · USD · multi-currency", "Payouts to card, Kaspi and bank transfer", "API + webhooks"],
   },
   /* ── Business & Legal ───────────────────────────────────────────────── */
   {
@@ -137,6 +157,18 @@ const APP_DEFS: AppDef[] = [
     ],
   },
   {
+    // 19.08.2026: карточка обещала «Ed25519 signature» и «OpenTimestamps blockchain
+    // anchoring». Проверено по коду — ни того, ни другого нет. Подпись это
+    // HMAC-SHA256, ключом которого служит ПУБЛИЧНЫЙ ключ нотариуса (bureau.ts:2622,
+    // там же честная пометка «Demo»): пересчитать её может любой, потому что certId,
+    // contentHash и открытый ключ — открытые данные. Свойства подписи здесь нет.
+    // Якорения в бюро тоже нет: слово anchor встречается дважды, оба раза это
+    // text-anchor в SVG; библиотека OpenTimestamps живёт в соседнем модуле.
+    //
+    // Формулировки приведены к тому, что продукт делает на самом деле. Вернуть
+    // прежние можно ТОЛЬКО вместе с настоящей реализацией — иначе продукт,
+    // который продаёт доказуемость, врёт именно про неё.
+    // Разбор: 15-Аудиты-и-сводки\ВИТРИНА-обещания-против-кода-19-08.md
     id: "bureau",
     productId: "bureau",
     icon: "🔐",
@@ -145,8 +177,8 @@ const APP_DEFS: AppDef[] = [
     href: "/bureau",
     cat: "Business",
     highlights: [
-      "Ed25519 signature + SHA-256 hash",
-      "OpenTimestamps blockchain anchoring",
+      "SHA-256 content hash + signed audit trail",
+      "Notary review with registry reference",
       "Tamper-evident certificates",
     ],
   },
@@ -192,7 +224,7 @@ const APP_DEFS: AppDef[] = [
     highlights: [
       "Grandmaster opening theory (CC0 corpus)",
       "Real-time AI coaching during games",
-      "Club & tournament management",
+      "Tournament management with ratings and prizes",
     ],
   },
 ];
@@ -497,6 +529,12 @@ export default function AppsPage() {
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
+                        // Перевод удлиняет обе надписи ("Free" → "Бесплатно",
+                        // "Open free →" → "Открыть бесплатно →"), а строка была
+                        // свёрстана под короткие английские слова: без переноса
+                        // цена налезала на кнопку на всех бесплатных карточках.
+                        flexWrap: "wrap",
+                        gap: 10,
                         marginTop: "auto",
                         paddingTop: 14,
                         borderTop: "1px solid rgba(255,255,255,0.06)",
@@ -531,6 +569,7 @@ export default function AppsPage() {
                             fontWeight: 700,
                             fontSize: 13,
                             textDecoration: "none",
+                            whiteSpace: "nowrap",
                           }}
                         >
                           Subscribe →
@@ -546,6 +585,7 @@ export default function AppsPage() {
                             fontWeight: 700,
                             fontSize: 13,
                             textDecoration: "none",
+                            whiteSpace: "nowrap",
                           }}
                         >
                           {app.price === 0 ? "Open free →" : "Get access →"}

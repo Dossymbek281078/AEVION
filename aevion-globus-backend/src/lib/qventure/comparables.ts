@@ -52,8 +52,18 @@ const LIVE_TTL_MS = 24 * 60 * 60 * 1000;
 // иначе живой режим был бы заперт суточным образцовым ответом.
 const ILLUSTRATIVE_TTL_MS = 60 * 60 * 1000;
 
+// Пустой ответ держим всего пять минут. Он бывает двух происхождений:
+// модель ничего не вернула по бессмысленному сектору (платный вызов УЖЕ
+// сделан, и повтор стоил бы ещё одного) либо провайдер отказал. Первое
+// кэшировать надо, второе — нельзя надолго, иначе восстановление
+// провайдера останется незамеченным. Пять минут закрывают перебор
+// случайных секторов, не пряча починку.
+const UNAVAILABLE_TTL_MS = 5 * 60 * 1000;
+
 function ttlFor(mode: ComparablesResult["mode"]): number {
-  return mode === "live" ? LIVE_TTL_MS : ILLUSTRATIVE_TTL_MS;
+  if (mode === "live") return LIVE_TTL_MS;
+  if (mode === "illustrative") return ILLUSTRATIVE_TTL_MS;
+  return UNAVAILABLE_TTL_MS;
 }
 const liveCache = new Map<string, { at: number; result: ComparablesResult }>();
 
@@ -173,10 +183,12 @@ export async function fetchComparables(sectorLabel: string, stage: string): Prom
     }
   }
 
-  return {
+  const unavailable: ComparablesResult = {
     mode: "unavailable",
     comps: [],
     disclaimer: "Live comparable rounds need a market-data source. Set SERPER_API_KEY (or a configured AI provider) to enable this.",
     query,
   };
+  liveCache.set(key, { at: Date.now(), result: unavailable });
+  return unavailable;
 }

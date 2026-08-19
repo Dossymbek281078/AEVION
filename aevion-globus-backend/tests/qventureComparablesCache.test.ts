@@ -18,7 +18,11 @@ const calls: string[] = [];
 
 vi.mock("../src/services/qcoreai/providers", () => ({
   callProvider: vi.fn(async (_p: string, messages: any[]) => {
-    calls.push(String(messages?.[1]?.content ?? "").slice(0, 40));
+    const ask = String(messages?.[1]?.content ?? "");
+    calls.push(ask.slice(0, 40));
+    // Сектор со словом "empty" — тот случай, когда модель ничего не нашла:
+    // платный вызов сделан, полезного ответа нет.
+    if (ask.includes("empty")) return { reply: "[]" };
     return {
       reply: JSON.stringify([
         { company: "Acme", amountText: "$10M", amountUsd: 10_000_000, round: "Seed", date: "2025" },
@@ -64,6 +68,24 @@ describe("qventure comparables — образцовый режим кэширу�
   test("другая стадия того же сектора — тоже отдельно", async () => {
     await fetchComparables("stage-probe", "seed");
     await fetchComparables("stage-probe", "series-a");
+    expect(calls.length).toBe(2);
+  });
+
+  test("пустой ответ модели тоже не повторяет платный вызов", async () => {
+    // Это путь ЗЛОУПОТРЕБЛЕНИЯ: бессмысленный сектор, модель ничего не
+    // вернула — но деньги за вызов уже потрачены. Без кэша перебор случайных
+    // секторов стоил бы по вызову на каждый.
+    const a = await fetchComparables("empty-sector", "seed");
+    const b = await fetchComparables("empty-sector", "seed");
+
+    expect(a.mode).toBe("unavailable");
+    expect(calls.length).toBe(1);
+    expect((b as any).cached).toBe(true);
+  });
+
+  test("пустой ответ не заслоняет другой сектор", async () => {
+    await fetchComparables("empty-one", "seed");
+    await fetchComparables("empty-two", "seed");
     expect(calls.length).toBe(2);
   });
 });

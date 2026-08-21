@@ -298,7 +298,13 @@ export default function QStorePage() {
       } else if (d.error?.includes("checkout_not_enabled")) {
         setNotice("Payment gateway is being verified — available within 1-3 days. Write us at support@aevion.app to purchase manually.");
       } else {
-        setNotice(d.error || "Purchase failed");
+        // Сервер отдаёт человеческий `message` рядом с машинным `error` —
+        // читаем именно его. Без этого покупатель видел бы код вроде
+        // "no_payment_provider": 19.08.2026 в бэкенде появились честные
+        // отказы вместо тихой выдачи товара без оплаты, и без этой строки
+        // одна незаметная неисправность заменилась бы другой — кнопкой,
+        // которая ругается непонятным словом.
+        setNotice(d.message || d.error || "Purchase failed");
       }
     } catch {
       setNotice("Network error");

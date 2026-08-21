@@ -71,6 +71,11 @@ vi.mock("../src/lib/ensureShadowNetTables", () => ({
   isShadowNetDbReady: () => true,
   getShadowNetDbError: () => null,
 }));
+vi.mock("../src/lib/ensureDevHubTables", () => ({
+  ensureDevHubTables: async () => {},
+  isDevHubDbReady: () => true,
+  getDevHubDbError: () => null,
+}));
 
 import { mapRealityRouter } from "../src/routes/mapReality";
 import { voiceOfEarthRouter } from "../src/routes/voiceOfEarth";
@@ -78,6 +83,7 @@ import { qnewsRouter } from "../src/routes/qnews";
 import { qlearnRouter } from "../src/routes/qlearn";
 import { qstoreRouter } from "../src/routes/qstore";
 import { shadownetRouter } from "../src/routes/shadownet";
+import { devhubRouter } from "../src/routes/devhub";
 
 const CASES: Array<[string, express.Router, string]> = [
   ["MapReality", mapRealityRouter, "/signals/12345"],
@@ -99,6 +105,9 @@ const CASES: Array<[string, express.Router, string]> = [
   // { signals: [], total: 0 } — «сигналов нет» вместо «не смогли спросить».
   // Ноль в поле total читается как измерение, а не как отказ.
   ["MapReality список", mapRealityRouter, "/signals"],
+  // «У вас нет проектов» — худший ответ из возможных: человек решит, что зашёл
+  // не под тем аккаунтом, и уйдёт разбираться не туда.
+  ["DevHub проекты", devhubRouter, "/projects"],
 ];
 
 function mount(router: express.Router) {

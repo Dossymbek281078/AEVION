@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, afterEach } from "vitest";
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -55,7 +55,24 @@ async function app() {
 }
 
 const DAY = "2026-08-19";
-vi.useFakeTimers({ shouldAdvanceTime: true });
+
+// Часы подменяются ПЕРЕД КАЖДОЙ проверкой, а не один раз на файл.
+//
+// Было: useFakeTimers() на уровне модуля и useRealTimers() в afterEach. То есть
+// после первой же проверки часы становились настоящими, и три теста, которые
+// шлют day: "2026-08-19", сравнивались с СЕГОДНЯШНЕЙ датой. Сервер отвечал
+// wrong_day, а тесты ждали moves_required / wrong_solution / 200.
+//
+// Зелёными они были ровно два дня — пока календарь совпадал с зашитым DAY.
+// Поймано 21.08.2026 на полном прогоне: три падения, идентичные с моей правкой
+// и без неё. Это ставка на календарь, родня ставке на скорость машины.
+//
+// Проверки, которым нужен другой день, зовут setSystemTime сами и перекрывают
+// это значение.
+beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date(`${DAY}T12:00:00Z`));
+});
 
 afterEach(() => { vi.useRealTimers(); });
 

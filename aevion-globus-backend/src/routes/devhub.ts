@@ -1095,8 +1095,26 @@ devhubRouter.get("/projects", async (req, res) => {
     res.json({ projects: projects.map((p, i) => ({ ...p, needsRedeploy: flags[i] })), total: projects.length });
   } catch (e: any) {
     captureException(e, { route: "devhub/projects:list", userId });
+    // Раньше отсюда уходил список из запасной памяти — в проде пустой, — и
+    // человек читал «у вас нет проектов». Ответ 200 с пустым списком не тревожит
+    // никого: ни Sentry (ошибка проглочена выше), ни дежурного, ни самого
+    // пользователя, который решит, что зашёл не под тем аккаунтом.
+    //
+    // Признак хранилища тут не спасает: страница показала бы «сохранено в
+    // памяти» рядом с пустотой, а пустота и есть неверный ответ.
     const projects = [...memProjects.values()].filter((p) => p.userId === userId);
-    res.json({ projects, total: projects.length });
+    if (projects.length === 0) {
+      res.status(503).json({
+        error: "storage_unavailable",
+        warning:
+          "Хранилище временно недоступно. Это НЕ значит, что проектов нет — " +
+          "список не удалось получить. Повторите запрос позже.",
+      });
+      return;
+    }
+    // В памяти что-то есть (dev-режим или свежие правки этого процесса) —
+    // отдаём, но честно называем источник.
+    res.json({ projects, total: projects.length, storage: "memory" });
   }
 });
 

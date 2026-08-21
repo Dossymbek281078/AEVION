@@ -391,6 +391,7 @@ app.get("/api/health/deep", async (_req, res) => {
       uptimeSec: Math.floor((Date.now() - STARTED_AT) / 1000),
       sentry: isSentryEnabled(),
       schema,
+      tokenRevocation: (await import("./lib/tokenVersion")).tokenVersionStatus(),
       ledger: {
         accounts: q.accounts,
         transfers: q.transfers,
@@ -1401,6 +1402,19 @@ const httpServer = app.listen(PORT, () => {
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
   // QSign v2 — DB-backed webhook delivery queue. Survives restarts.
   startWebhookWorker();
+
+  // Карта версий токенов. Пока она не загружена, проверка отзыва НЕ
+  // применяется (см. lib/tokenVersion.ts): это осознанный выбор направления
+  // отказа — падать закрыто значило бы не пустить вообще никого при недоступной
+  // базе. Но слепота не бывает молчаливой: модуль кричит в журнал, а состояние
+  // видно снаружи в /api/health/deep.
+  //
+  // Перезагрузка раз в 5 минут нужна для второго экземпляра сервиса: он
+  // увеличивает счётчик в базе, а наша карта об этом узнает только так.
+  void import("./lib/tokenVersion").then(async ({ loadTokenVersions }) => {
+    await loadTokenVersions();
+    setInterval(() => void loadTokenVersions(), 5 * 60 * 1000).unref();
+  });
 });
 
 // Last-resort process-level backstops. Express 5 auto-forwards async request-

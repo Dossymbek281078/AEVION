@@ -140,6 +140,13 @@ function signToken(payload: {
   email: string;
   role: string;
   sid?: string;
+  /**
+   * Версия токена на момент выпуска. Без неё механизм «выйти со всех
+   * устройств» не работает вовсе: проверке нечего сравнивать. Поле
+   * описано в типе JwtPayload с самого начала и до 21.08.2026 не
+   * заполнялось ни разу.
+   */
+  tv?: number;
 }): string {
   const secret = getJwtSecret();
   const expiresIn = process.env.AUTH_JWT_EXPIRES_IN || "7d";
@@ -336,7 +343,8 @@ authRouter.post("/login", loginIpRateLimit, async (req, res) => {
     }
 
     const r = await pool.query(
-      `SELECT "id","email","name","role","passwordHash","deletedAt"
+      `SELECT "id","email","name","role","passwordHash","deletedAt",
+              COALESCE("tokenVersion", 0) AS "tokenVersion"
        FROM "AEVIONUser" WHERE "email"=$1`,
       [email]
     );
@@ -354,7 +362,16 @@ authRouter.post("/login", loginIpRateLimit, async (req, res) => {
     }
 
     const sid = await createSession(user.id, req);
-    const token = signToken({ sub: user.id, email: user.email, role: user.role, sid });
+    const token = signToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      sid,
+      // Из СТРОКИ пользователя, а не из карты в памяти: карта может быть ещё
+      // не загружена, и тогда мы выдали бы 0 при настоящей версии 3 — токен
+      // отвергся бы сразу после выдачи.
+      tv: Number(user.tokenVersion) || 0,
+    });
     recordAuthAudit(user.id, "login", req, { sid });
 
     res.json({
@@ -562,6 +579,54 @@ authRouter.post("/logout-all", async (req, res) => {
   } catch (err: any) {
     captureAuthError(err, { route: "logout-all" });
     res.status(500).json({ error: "logout-all failed" });
+  }
+});
+
+// 🔹 POST /sign-out-everywhere — увеличить tokenVersion.
+//
+// Ручка была ОПУБЛИКОВАНА в нашей спецификации API («Bump tokenVersion —
+// invalidate every JWT for caller») и при этом отсутствовала: проба на проде
+// 20.08.2026 давала 404. Кнопка в кабинете её звала и всегда показывала
+// ошибку.
+//
+// Отличие от /logout-all принципиальное, а не косметическое:
+//   * /logout-all помечает строки сессий, и их смотрят 2 проверки входа из 97,
+//     то есть почти везде отозванный токен продолжал работать;
+//   * здесь растёт счётчик, который проверяется в САМОМ разборе токена —
+//     значит перестают подходить все выпущенные токены, включая текущий.
+//     Именно это обещает надпись на кнопке: «войти придётся заново и здесь».
+//
+// Сессии тоже помечаем — не вместо, а вдобавок: список устройств в кабинете
+// читает их, и человек должен увидеть пустой список, а не прежний.
+authRouter.post("/sign-out-everywhere", async (req, res) => {
+  try {
+    const payload: any = requireAuth(req, res);
+    if (!payload) return;
+    await ensureAuthTier2Tables();
+
+    const { bumpTokenVersion } = await import("../lib/tokenVersion");
+    const tokenVersion = await bumpTokenVersion(String(payload.sub));
+
+    // Отказ здесь НЕ отменяет главного: счётчик уже вырос, токены уже мертвы.
+    // Но и молчать нельзя — иначе список устройств разойдётся с правдой,
+    // и никто об этом не узнает (§16).
+    let revokedCount = 0;
+    try {
+      const r = await pool.query(
+        `UPDATE "AuthSession" SET "revokedAt" = NOW()
+          WHERE "userId" = $1 AND "revokedAt" IS NULL`,
+        [payload.sub],
+      );
+      revokedCount = r.rowCount ?? 0;
+    } catch (err) {
+      console.error("[auth] sign-out-everywhere: сессии не помечены отозванными:", err);
+    }
+
+    recordAuthAudit(payload.sub, "sign-out-everywhere", req, { tokenVersion, revokedCount });
+    res.json({ ok: true, tokenVersion, revokedCount });
+  } catch (err: any) {
+    captureAuthError(err, { route: "sign-out-everywhere" });
+    res.status(500).json({ error: "sign-out-everywhere failed" });
   }
 });
 

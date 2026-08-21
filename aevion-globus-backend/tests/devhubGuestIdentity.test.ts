@@ -121,3 +121,62 @@ describe("проекты гостей разделены", () => {
     expect(r.body.projects.map((p: { name: string }) => p.name)).toContain("старый клиент");
   });
 });
+
+describe("публичная полка сниппетов", () => {
+  async function share(app: express.Express, headers: Record<string, string>, title: string) {
+    const r = await request(app).post("/api/devhub/snippets").set(headers)
+      .send({ title, content: "console.log(1);", language: "javascript", tags: ["proba"] });
+    expect(r.status, `не удалось опубликовать «${title}»: ${r.text}`).toBe(201);
+    return r.body.snippet.id as string;
+  }
+
+  test("личность автора не уезжает на публичную полку", async () => {
+    const app = makeApp();
+    await share(app, { [DEVHUB_GUEST_HEADER]: GUEST_A }, "сниппет гостя А");
+
+    const list = await request(app).get("/api/devhub/snippets").set({ [DEVHUB_GUEST_HEADER]: GUEST_B });
+    // Контроль: сниппет в списке ЕСТЬ — иначе проверка на утечку прошла бы
+    // просто потому, что список пустой.
+    expect(list.body.snippets.map((s: { title: string }) => s.title)).toContain("сниппет гостя А");
+    expect(list.text, "идентификатор гостя опубликован — по нему можно назваться им")
+      .not.toContain(GUEST_A);
+    expect(list.body.snippets[0]).not.toHaveProperty("userId");
+  });
+
+  test("свой сниппет помечен mine, чужой — нет", async () => {
+    const app = makeApp();
+    await share(app, { [DEVHUB_GUEST_HEADER]: GUEST_A }, "мой");
+    const asA = await request(app).get("/api/devhub/snippets").set({ [DEVHUB_GUEST_HEADER]: GUEST_A });
+    const asB = await request(app).get("/api/devhub/snippets").set({ [DEVHUB_GUEST_HEADER]: GUEST_B });
+    expect(asA.body.snippets[0].mine).toBe(true);
+    expect(asB.body.snippets[0].mine).toBe(false);
+  });
+
+  test("автор может снять свой сниппет с полки", async () => {
+    const app = makeApp();
+    const id = await share(app, { [DEVHUB_GUEST_HEADER]: GUEST_A }, "снимаемый");
+    const del = await request(app).delete(`/api/devhub/snippets/${id}`).set({ [DEVHUB_GUEST_HEADER]: GUEST_A });
+    expect(del.status, "опубликованное нельзя было убрать никак — ручки удаления не существовало").toBe(200);
+
+    const list = await request(app).get("/api/devhub/snippets").set({ [DEVHUB_GUEST_HEADER]: GUEST_A });
+    expect(list.body.snippets.map((s: { id: string }) => s.id)).not.toContain(id);
+  });
+
+  test("посторонний снять чужой сниппет не может", async () => {
+    const app = makeApp();
+    const id = await share(app, { [DEVHUB_GUEST_HEADER]: GUEST_A }, "чужой");
+    const del = await request(app).delete(`/api/devhub/snippets/${id}`).set({ [DEVHUB_GUEST_HEADER]: GUEST_B });
+    expect(del.status).toBe(404);
+    const list = await request(app).get("/api/devhub/snippets").set({ [DEVHUB_GUEST_HEADER]: GUEST_A });
+    expect(list.body.snippets.map((s: { id: string }) => s.id), "посторонний удалил чужое").toContain(id);
+  });
+
+  test("одиночный сниппет тоже отдаётся без личности", async () => {
+    const app = makeApp();
+    const id = await share(app, { [DEVHUB_GUEST_HEADER]: GUEST_A }, "одиночный");
+    const one = await request(app).get(`/api/devhub/snippets/${id}`).set({ [DEVHUB_GUEST_HEADER]: GUEST_B });
+    expect(one.status).toBe(200);
+    expect(one.body.snippet.title).toBe("одиночный");
+    expect(one.text).not.toContain(GUEST_A);
+  });
+});

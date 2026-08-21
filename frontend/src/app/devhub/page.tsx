@@ -29,7 +29,9 @@ interface Project {
 
 interface Snippet {
   id: string;
-  userId: string;
+  /** Мой ли это сниппет. Личность автора наружу не отдаётся: по ней можно
+   *  было бы назваться им (см. publicSnippet в routes/devhub.ts). */
+  mine?: boolean;
   title: string;
   content: string;
   language: string;
@@ -247,6 +249,21 @@ export default function DevHubPage() {
       setTimeout(() => setCopiedId((c) => (c === s.id ? null : c)), 1600);
     } catch {
       setSnippetError("Clipboard unavailable");
+    }
+  };
+
+  const removeSnippet = async (s: Snippet) => {
+    const prev = snippets;
+    setSnippets((arr) => arr.filter((x) => x.id !== s.id));
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/snippets/${s.id}`), { method: "DELETE" });
+      if (!r.ok) throw new Error(String(r.status));
+    } catch {
+      // Возврат обязателен: если снять не удалось, сниппет ОСТАЛСЯ на публичной
+      // полке. Показать пустое место значило бы соврать — человек решит, что
+      // убрал опубликованное, а оно на месте.
+      setSnippets(prev);
+      setSnippetError("Не удалось снять сниппет с полки — он всё ещё опубликован");
     }
   };
 
@@ -709,6 +726,15 @@ export default function DevHubPage() {
                         <span aria-hidden>★</span>
                         <span>{s.stars}</span>
                       </button>
+                      {s.mine && (
+                        <button
+                          onClick={() => removeSnippet(s)}
+                          className="text-xs font-semibold px-2.5 py-1 rounded-md border border-slate-700 bg-slate-800 hover:bg-rose-900/60 hover:border-rose-800 text-slate-300 hover:text-rose-200 transition-colors ml-auto mr-2"
+                          aria-label="снять сниппет с публичной полки"
+                        >
+                          Снять
+                        </button>
+                      )}
                       <button
                         onClick={() => copySnippet(s)}
                         className={

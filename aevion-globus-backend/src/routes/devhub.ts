@@ -3180,14 +3180,37 @@ async function dbSaveSnippet(s: DevHubSnippet): Promise<void> {
   );
 }
 
+async function dbDeleteSnippet(id: string): Promise<void> {
+  if (!isDevHubDbReady()) { memSnippets.delete(id); return; }
+  await pool.query(`DELETE FROM "DevHubSnippet" WHERE "id" = $1`, [id]);
+}
+
+/**
+ * Публичный вид сниппета: БЕЗ личности автора.
+ *
+ * Полка сниппетов видна всем, и раньше вместе с кодом наружу уезжало поле
+ * userId. Пока все разлогиненные были одним "anonymous", это ничего не
+ * значило. С личным идентификатором гостя (lib/devhubGuest.ts) это стало бы
+ * дырой: опубликовав сниппет, посетитель публиковал бы и свой идентификатор,
+ * а по нему любой мог назваться им — и удалить его проекты.
+ *
+ * Вместо личности отдаём `mine`: клиенту нужно ровно одно — показывать ли
+ * кнопку удаления.
+ */
+function publicSnippet(s: DevHubSnippet, viewerId: string) {
+  const { userId, ...rest } = s;
+  return { ...rest, mine: userId === viewerId };
+}
+
 // GET /api/devhub/snippets — public list, optional ?tag=X&user=Y&limit=N
 devhubRouter.get("/snippets", async (req, res) => {
+  const viewerId = requesterId(req, verifyBearerOptional(req)?.sub);
   const tag = req.query.tag ? String(req.query.tag).trim() : undefined;
   const userId = req.query.user ? String(req.query.user).trim() : undefined;
   const limit = req.query.limit ? Math.min(parseInt(String(req.query.limit), 10) || 50, 200) : 50;
   try {
     const snippets = await dbListSnippets({ tag, userId, limit });
-    res.json({ snippets, total: snippets.length });
+    res.json({ snippets: snippets.map((s) => publicSnippet(s, viewerId)), total: snippets.length });
   } catch {
     let arr = [...memSnippets.values()];
     if (userId) arr = arr.filter((s) => s.userId === userId);
@@ -3196,7 +3219,7 @@ devhubRouter.get("/snippets", async (req, res) => {
       arr = arr.filter((s) => s.tags.some((tg) => tg.toLowerCase() === t));
     }
     const snippets = arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
-    res.json({ snippets, total: snippets.length });
+    res.json({ snippets: snippets.map((s) => publicSnippet(s, viewerId)), total: snippets.length });
   }
 });
 
@@ -3227,20 +3250,48 @@ devhubRouter.post("/snippets", async (req, res) => {
     captureException(e, { route: "devhub/snippets:create", snippetId: snippet.id });
     memSnippets.set(snippet.id, snippet);
   }
-  res.status(201).json({ snippet });
+  res.status(201).json({ snippet: publicSnippet(snippet, userId) });
 });
 
 // GET /api/devhub/snippets/:id — fetch single snippet
 devhubRouter.get("/snippets/:id", async (req, res) => {
+  const viewerId = requesterId(req, verifyBearerOptional(req)?.sub);
   try {
     const snippet = await dbGetSnippet(req.params.id);
     if (!snippet) return res.status(404).json({ error: "snippet not found" });
-    res.json({ snippet });
+    res.json({ snippet: publicSnippet(snippet, viewerId) });
   } catch {
     const snippet = memSnippets.get(req.params.id);
     if (!snippet) return res.status(404).json({ error: "snippet not found" });
-    res.json({ snippet });
+    res.json({ snippet: publicSnippet(snippet, viewerId) });
   }
+});
+
+// DELETE /api/devhub/snippets/:id — снять СВОЙ сниппет с публичной полки
+devhubRouter.delete("/snippets/:id", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = requesterId(req, auth?.sub);
+  let snippet: DevHubSnippet | null;
+  try {
+    snippet = await dbGetSnippet(req.params.id);
+  } catch {
+    snippet = memSnippets.get(req.params.id) ?? null;
+  }
+  // 404, а не 403: иначе ответ подтверждал бы существование чужого сниппета
+  // тому, кто им не владеет.
+  if (!snippet || snippet.userId !== userId) {
+    return res.status(404).json({ error: "snippet not found" });
+  }
+  try {
+    await dbDeleteSnippet(snippet.id);
+  } catch (e) {
+    // Молчаливый успех здесь хуже отказа: человек увидел бы, что сниппет снят,
+    // а он остался бы на публичной полке.
+    captureException(e, { route: "devhub/snippets:delete", snippetId: snippet.id });
+    return res.status(500).json({ error: "delete failed" });
+  }
+  memSnippets.delete(snippet.id);
+  res.json({ ok: true, id: snippet.id });
 });
 
 // POST /api/devhub/snippets/:id/star — increment star count

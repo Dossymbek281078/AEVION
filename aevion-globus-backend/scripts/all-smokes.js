@@ -31,6 +31,13 @@ const SKIP = (process.env.SKIP || "").split(",").map((s) => s.trim()).filter(Boo
 const READ_ONLY = process.env.READ_ONLY === "1";
 
 const SMOKES = [
+  // Регрессии, найденные 19.08.2026: платный товар без оплаты, отрицательный
+  // limit роняет Postgres, приём оплаты без подписи, ручка состояния каналов.
+  // Ни один прежний смоук ни один из этих классов не проверял (поиск по всем
+  // скриптам дал ноль). Случаи, чьи починки ещё не выкачены, помечены внутри
+  // как PENDING и НЕ красят смоук — иначе он был бы красным с рождения и его
+  // перестали бы читать.
+  { name: "regression-19-08", script: "regression-19-08-smoke.js", readOnly: true },
   // Read-only public endpoints — safe to run anywhere, including prod.
   // Tier 3 amplifier surfaces (OG cards, sitemaps, RSS, badges).
   { name: "tier3", script: "tier3-smoke.js", readOnly: true },

@@ -812,9 +812,16 @@ function BranchCard(props: {
             </span>
             <span style={{ color: COLORS.textDim }}>
               Успех:{" "}
-              <strong style={{ color: rate >= 70 ? COLORS.green : rate >= 40 ? COLORS.yellow : COLORS.red }}>
-                {rate}%
-              </strong>
+              {branch.attempts === 0 ? (
+                /* Ноль попыток — это «неизвестно», а не «плохо». Раньше здесь
+                   стояло красное «0%»: человеку сообщали о провале в том, чего
+                   он ещё не пробовал. */
+                <strong style={{ color: COLORS.textDim }}>— ещё не тренировали</strong>
+              ) : (
+                <strong style={{ color: rate >= 70 ? COLORS.green : rate >= 40 ? COLORS.yellow : COLORS.red }}>
+                  {rate}%
+                </strong>
+              )}
             </span>
           </div>
           {isEditing && (
@@ -1107,7 +1114,7 @@ function StatsTab({ branches }: { branches: RepertoireBranch[] }) {
       >
         <StatCard label="Всего веток" value={branches.length} />
         <StatCard label="Попыток" value={totals.attempts} />
-        <StatCard label="Общий успех" value={`${totals.rate}%`} accent />
+        <StatCard label="Общий успех" value={totals.attempts === 0 ? "—" : `${totals.rate}%`} accent />
       </div>
 
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: COLORS.accentBright }}>

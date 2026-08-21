@@ -93,15 +93,24 @@ constitutionWaitlistRouter.post(
 
       await ensureWaitlistTable();
       let storage: "postgres" | "memory" = "memory";
+      // Новая ли это подписка. Нужно, чтобы не слать письмо второй раз тому,
+      // кто нажал кнопку дважды: замер 21.08.2026 на проде — две подписки
+      // подряд дали ДВА одинаковых письма за две секунды. Это раздражает
+      // человека и жжёт суточный потолок Brevo (300 писем).
+      let isNew = true;
       if (dbAvailable) {
         try {
           const pool = getPool();
-          await pool.query(
+          // xmax = 0 у строки, которая была ВСТАВЛЕНА; у обновлённой конфликтом
+          // там номер транзакции. Штатный способ различить их в одном запросе.
+          const ins = await pool.query(
             `INSERT INTO constitution_waitlist ("email","source","createdAt")
              VALUES ($1,$2,$3)
-             ON CONFLICT ("email") DO UPDATE SET "source" = EXCLUDED."source"`,
+             ON CONFLICT ("email") DO UPDATE SET "source" = EXCLUDED."source"
+             RETURNING (xmax = 0) AS inserted`,
             [row.email, row.source, row.createdAt],
           );
+          isNew = ins.rows?.[0]?.inserted !== false;
           storage = "postgres";
         } catch (dbErr) {
           // база не приняла подписку — дальше она ляжет только в память процесса, а та живёт до ближайшей выкатки.
@@ -113,7 +122,13 @@ constitutionWaitlistRouter.post(
 
       // Письмо не задерживает ответ, но его провал обязан быть видимым: иначе
       // человек подписан, письма нет, и снаружи это неотличимо от задержки.
-      void sendWaitlistConfirm(row.email, row.source)
+      //
+      // Повторная подписка письма НЕ шлёт. Ответ при этом остаётся 201: с точки
+      // зрения человека он подписан, и рассказывать ему про устройство базы
+      // незачем. Если различить не удалось (база недоступна, isNew остаётся
+      // true) — письмо шлём: лучше лишнее письмо, чем молчание в ответ на
+      // первую подписку.
+      if (isNew) void sendWaitlistConfirm(row.email, row.source)
         .then((sent) => {
           if (!sent) capture(new Error("waitlist confirm email not sent"), { where: "waitlist.confirmEmail" });
         })

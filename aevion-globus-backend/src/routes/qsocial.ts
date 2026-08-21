@@ -630,7 +630,17 @@ qsocialRouter.patch("/me/notifications/:id/read", async (req: Request, res: Resp
       if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found" });
       return res.json({ ok: true });
     }
-  } catch (e) { console.error("[QSocial] mark-read DB error", e); }
+  } catch (e) {
+    console.error("[QSocial] mark-read DB error", e);
+    // База объявлена готовой и упала. Ниже — запасная память, в проде пустая,
+    // и оттуда ушло бы «not_found» про уведомление, которое есть.
+    return res.status(503).json({
+      error: "storage_unavailable",
+      warning:
+        "Хранилище временно недоступно. Это НЕ значит, что записи нет — " +
+        "повторите запрос позже.",
+    });
+  }
 
   const all = memNotifications.get(auth.sub) ?? [];
   const notif = all.find((n) => n.id === notifId);
@@ -913,7 +923,15 @@ qsocialRouter.post("/stories/:id/view", async (req: Request, res: Response) => {
       if (!rows[0]) return res.status(404).json({ error: "not_found" });
       return res.json({ viewCount: rows[0].viewCount, storage: "db" });
     }
-  } catch (e) { console.error("[QSocial] story view DB error", e); }
+  } catch (e) {
+    console.error("[QSocial] story view DB error", e);
+    return res.status(503).json({
+      error: "storage_unavailable",
+      warning:
+        "Хранилище временно недоступно. Это НЕ значит, что истории нет — " +
+        "повторите запрос позже.",
+    });
+  }
 
   const story = memStories.get(id);
   if (!story) return res.status(404).json({ error: "not_found" });

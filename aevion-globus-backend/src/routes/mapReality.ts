@@ -385,7 +385,14 @@ mapRealityRouter.post("/signals/:id/support", supportLimiter, async (req: Reques
       );
       return res.json({ supportCount: updated[0]?.support_count ?? 0, storage: "db" });
     }
-  } catch (e) { capture(e); console.error("[MapReality] POST /signals/:id/support DB error", e); }
+  } catch (e) {
+    capture(e);
+    console.error("[MapReality] POST /signals/:id/support DB error", e);
+    // Ниже сигнал ищется в памяти (в проде пустой), и его отсутствие уходило
+    // как «not_found» про существующий сигнал. Отметка storage: "memory" в
+    // соседней ветке правду про ХРАНИЛИЩЕ говорила, но не про сам факт отказа.
+    return res.status(503).json({ error: "storage_unavailable", warning: WARN });
+  }
 
   const signal = memSignals.find((s) => s.id === id);
   if (!signal) return res.status(404).json({ error: "not_found" });
@@ -429,7 +436,11 @@ mapRealityRouter.patch("/signals/:id/status", async (req: Request, res: Response
       );
       return res.json({ signal: updated[0] });
     }
-  } catch (e) { capture(e); console.error("[MapReality] PATCH /signals/:id/status DB error", e); }
+  } catch (e) {
+    capture(e);
+    console.error("[MapReality] PATCH /signals/:id/status DB error", e);
+    return res.status(503).json({ error: "storage_unavailable", warning: WARN });
+  }
 
   const signal = memSignals.find((s) => s.id === id);
   if (!signal) return res.status(404).json({ error: "not_found" });

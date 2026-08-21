@@ -3034,20 +3034,27 @@ devhubRouter.get("/snippets/:id", async (req, res) => {
     if (!snippet) return res.status(404).json({ error: "snippet not found" });
     res.json({ snippet });
   } catch {
+    // База упала. Память в проде пуста, и «snippet not found» стало бы ложью
+    // о существующем фрагменте.
     const snippet = memSnippets.get(req.params.id);
-    if (!snippet) return res.status(404).json({ error: "snippet not found" });
-    res.json({ snippet });
+    if (!snippet) return replyStorageUnavailable(res);
+    res.json({ snippet, storage: "memory" });
   }
 });
 
 // POST /api/devhub/snippets/:id/star — increment star count
 devhubRouter.post("/snippets/:id/star", async (req, res) => {
   let snippet: DevHubSnippet | null;
+  let readFailed = false;
   try {
     snippet = await dbGetSnippet(req.params.id);
   } catch {
     snippet = memSnippets.get(req.params.id) ?? null;
+    readFailed = true;
   }
+  // «snippet not found» на упавшей базе — ложь о существующем фрагменте, и
+  // звезда при этом молча не ставится.
+  if (!snippet && readFailed) return replyStorageUnavailable(res);
   if (!snippet) return res.status(404).json({ error: "snippet not found" });
   snippet.stars += 1;
   snippet.updatedAt = now();

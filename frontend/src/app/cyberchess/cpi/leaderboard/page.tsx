@@ -384,7 +384,7 @@ export default function CPILeaderboardPage() {
 
         {/* Related */}
         <div style={{ marginTop: 32, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
-          <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>← CPI Spec</Link>
+          <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>← Описание CPI</Link>
           <span style={{ color: C.faint }}>·</span>
           <Link href="/cyberchess/cpi/dashboard" style={{ color: C.purple, textDecoration: "none" }}>📊 Мой дашборд</Link>
           <span style={{ color: C.faint }}>·</span>

@@ -29,12 +29,23 @@ import request from "supertest";
  * равно упала.
  */
 
+// База БЫЛА жива при старте и умерла потом — именно так выглядит настоящая
+// авария, и только так достижим путь у модулей, которые включают признак
+// готовности успешным CREATE TABLE (например qai).
+//
+// Первая версия подменяла пул на всегда падающий, и такие модули просто не
+// доходили до запроса: тест был зелёным, не проверив ничего.
 vi.mock("../src/lib/dbPool", () => ({
   getPool: () => ({
-    query: async () => {
+    query: async (sql?: string) => {
+      const head = String(sql ?? "").trimStart().toUpperCase();
+      if (head.startsWith("CREATE") || head.startsWith("ALTER")) {
+        return { rows: [], rowCount: 0 };
+      }
       throw new Error("storage unreachable");
     },
   }),
+  isDbConfigured: () => true,
 }));
 
 // Признак готовности базы обязателен, и это не украшение теста.
@@ -76,6 +87,11 @@ vi.mock("../src/lib/ensureDevHubTables", () => ({
   isDevHubDbReady: () => true,
   getDevHubDbError: () => null,
 }));
+vi.mock("../src/lib/ensureQVentureTables", () => ({
+  ensureQVentureTables: async () => {},
+  isQVentureDbReady: () => true,
+  getQVentureDbError: () => null,
+}));
 
 import { mapRealityRouter } from "../src/routes/mapReality";
 import { voiceOfEarthRouter } from "../src/routes/voiceOfEarth";
@@ -84,6 +100,8 @@ import { qlearnRouter } from "../src/routes/qlearn";
 import { qstoreRouter } from "../src/routes/qstore";
 import { shadownetRouter } from "../src/routes/shadownet";
 import { devhubRouter } from "../src/routes/devhub";
+import { qventureRouter } from "../src/routes/qventure";
+import { qaiRouter } from "../src/routes/qai";
 
 const CASES: Array<[string, express.Router, string]> = [
   ["MapReality", mapRealityRouter, "/signals/12345"],
@@ -108,6 +126,13 @@ const CASES: Array<[string, express.Router, string]> = [
   // «У вас нет проектов» — худший ответ из возможных: человек решит, что зашёл
   // не под тем аккаунтом, и уйдёт разбираться не туда.
   ["DevHub проекты", devhubRouter, "/projects"],
+  // Найдены ПОЛОЖИТЕЛЬНЫМ контролем: с работающей базой обе ручки отвечают
+  // иначе (qventure — 200 с данными, qai — 403 о чужой сессии), значит база на
+  // пути и её отказ подменялся отсутствием записи. Шесть соседних ручек тем же
+  // контролем оправданы: они отвечают 404 одинаково в обоих случаях, потому что
+  // в базу не ходят вовсе.
+  ["QVenture анализ", qventureRouter, "/analyses/probe1"],
+  ["QAI сессия", qaiRouter, "/sessions/probe1"],
 ];
 
 function mount(router: express.Router) {

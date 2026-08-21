@@ -24,6 +24,9 @@ const CASES: Array<[string, string, string]> = [
   ["QCoreAI цепочки", "qcoreai/chains/page.tsx", "deleteChain"],
   ["QCoreAI конвейеры", "qcoreai/pipeline/page.tsx", "del"],
   ["QSocial запись", "qsocial/page.tsx", "handleDelete"],
+  ["QCoreAI A/B-тесты", "qcoreai/ab-tests/page.tsx", "deleteTest"],
+  ["QCoreAI заметки", "qcoreai/notebook/page.tsx", "del"],
+  ["QCoreAI расписания", "qcoreai/schedule/page.tsx", "remove"],
 ];
 
 describe("удаление проверяет ответ до правки экрана", () => {

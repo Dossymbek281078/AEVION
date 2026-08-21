@@ -172,7 +172,9 @@ export default function NotebookPage() {
   const del = async (id: string) => {
     if (!confirm("Delete this snippet?")) return;
     try {
-      await fetch(apiUrl(`/api/qcoreai/notebook/${id}`), { method: "DELETE", headers: bearerHeader() });
+      // Ответ спрашивается ДО правки списка: провал удаления выглядел как удаление.
+      const r = await fetch(apiUrl(`/api/qcoreai/notebook/${id}`), { method: "DELETE", headers: bearerHeader() });
+      if (!r.ok) { alert("Не удалось удалить заметку — она осталась на месте."); return; }
       setSnippets((p) => p.filter((s) => s.id !== id));
       setTags((prev) => {
         // Re-fetch tags to get updated counts

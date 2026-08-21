@@ -94,7 +94,9 @@ export default function AbTestsPage() {
   };
 
   const deleteTest = async (id: string) => {
-    await fetch(apiUrl(`/api/qcoreai/ab-tests/${id}`), { method: "DELETE", headers: bearerHeader() });
+    // Ответ спрашивается ДО правки списка: провал удаления выглядел как удаление.
+    const r = await fetch(apiUrl(`/api/qcoreai/ab-tests/${id}`), { method: "DELETE", headers: bearerHeader() });
+    if (!r.ok) { alert("Не удалось удалить тест — он остался на месте."); return; }
     setTests((p) => p.filter((t) => t.id !== id));
     setResults((p) => { const n = { ...p }; delete n[id]; return n; });
   };

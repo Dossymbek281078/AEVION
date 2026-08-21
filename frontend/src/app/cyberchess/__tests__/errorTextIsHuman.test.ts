@@ -98,3 +98,25 @@ describe("во всём модуле текст исключения не пок
     expect(плохие.map((f) => path.relative(корень, f))).toEqual([]);
   });
 });
+
+describe("код ошибки не доходит до человека", () => {
+  // 21.08. В матчмейкинге при отказе показывали «Не удалось встать в очередь:
+  // unknown» — внутренний код в тексте для человека. Он ничего не объясняет и
+  // выглядит поломкой. Код теперь уходит в консоль.
+  const SRC_MM = path.join(__dirname, "..", "matchmaking", "page.tsx");
+
+  test("шаблон узнаёт свой образец", () => {
+    const obrazec = 'message: `Не удалось встать в очередь: ${data?.error || "unknown"}`';
+    expect(/message:[^;]*\$\{[^}]*error/.test(obrazec)).toBe(true);
+  });
+
+  test("в сообщении очереди нет кода ошибки", () => {
+    const src = fs.readFileSync(SRC_MM, "utf-8")
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("//"))
+      .join("\n");
+    expect(src, "код ошибки вернулся в текст для человека")
+      .not.toMatch(/message:[^;]*\$\{[^}]*error/);
+    expect(src, "код перестал уходить в консоль").toContain("[matchmaking] очередь отказала:");
+  });
+});

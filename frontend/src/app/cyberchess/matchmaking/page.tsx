@@ -315,12 +315,16 @@ export default function CyberChessMatchmakingPage() {
       });
       const data = await r.json();
       if (!data?.ok) {
+        // Код ошибки человеку не показываем: «Не удалось встать в очередь:
+        // unknown» не говорит ему ничего и выглядит поломкой. Код уходит в
+        // консоль, где он и нужен.
+        console.warn("[matchmaking] очередь отказала:", data?.error);
         setState({
           phase: "error",
           message:
             data?.error === "rate_limited"
               ? "Слишком много попыток. Подожди минуту."
-              : `Не удалось встать в очередь: ${data?.error || "unknown"}`,
+              : "Не удалось встать в очередь. Попробуй ещё раз через минуту.",
         });
         return;
       }

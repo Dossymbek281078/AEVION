@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION CyberChess — CPI Leaderboard";
+export const alt = "AEVION CyberChess — таблица лидеров CPI";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -32,10 +32,10 @@ export default function Image() {
       </div>
 
       <div style={{ fontSize: 52, fontWeight: 900, color: "#f1f5f9", textAlign: "center", lineHeight: 1.15, marginBottom: 16 }}>
-        CPI Leaderboard
+        Таблица лидеров CPI
       </div>
       <div style={{ fontSize: 22, color: "#64748b", textAlign: "center", marginBottom: 52, maxWidth: 980 }}>
-        Ranking by ANY of 9 quality factors
+        Рейтинг по любому из 9 факторов качества
       </div>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>

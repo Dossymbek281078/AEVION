@@ -21,11 +21,11 @@ import { tournamentUserId } from "../tournaments/playerIdentity";
 type TimeControl = "60+0" | "180+0" | "300+5" | "600+10" | "1800+0";
 
 const TIME_CONTROLS: { value: TimeControl; label: string; sub: string }[] = [
-  { value: "60+0", label: "1+0", sub: "Bullet · 1 мин" },
-  { value: "180+0", label: "3+0", sub: "Blitz · 3 мин" },
-  { value: "300+5", label: "5+5", sub: "Blitz · 5 мин + 5 сек" },
-  { value: "600+10", label: "10+10", sub: "Rapid · 10 мин + 10 сек" },
-  { value: "1800+0", label: "30+0", sub: "Classic · 30 мин" },
+  { value: "60+0", label: "1+0", sub: "Пуля · 1 мин" },
+  { value: "180+0", label: "3+0", sub: "Блиц · 3 мин" },
+  { value: "300+5", label: "5+5", sub: "Блиц · 5 мин + 5 сек" },
+  { value: "600+10", label: "10+10", sub: "Рапид · 10 мин + 10 сек" },
+  { value: "1800+0", label: "30+0", sub: "Классика · 30 мин" },
 ];
 
 type QueueState =
@@ -315,12 +315,16 @@ export default function CyberChessMatchmakingPage() {
       });
       const data = await r.json();
       if (!data?.ok) {
+        // Код ошибки человеку не показываем: «Не удалось встать в очередь:
+        // unknown» не говорит ему ничего и выглядит поломкой. Код уходит в
+        // консоль, где он и нужен.
+        console.warn("[matchmaking] очередь отказала:", data?.error);
         setState({
           phase: "error",
           message:
             data?.error === "rate_limited"
               ? "Слишком много попыток. Подожди минуту."
-              : `Не удалось встать в очередь: ${data?.error || "unknown"}`,
+              : "Не удалось встать в очередь. Попробуй ещё раз через минуту.",
         });
         return;
       }
@@ -378,7 +382,7 @@ export default function CyberChessMatchmakingPage() {
             Подберём живого игрока с похожим рейтингом ({rating - 150}–{rating + 150}) и тем же контролем времени.
           </p>
           <nav style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingTop: 4 }}>
-            <a href="/cyberchess/leaderboard" className="planet-btn">Лидерборд</a>
+            <a href="/cyberchess/leaderboard" className="planet-btn">Таблица лидеров</a>
             <a href="/cyberchess/history" className="planet-btn">История матчей</a>
           </nav>
         </header>

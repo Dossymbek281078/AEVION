@@ -133,13 +133,30 @@ async function ensureTables(): Promise<void> {
   tablesReady = true;
 }
 
-qgoodRouter.get("/health", (_req, res) => {
+qgoodRouter.get("/health", async (_req, res) => {
   // Состояние базы в ручке здоровья. Добавлено 19.08.2026: сторож
   // запасного хранилища опрашивает модули и до этого видел 9 из 12 —
   // остальные просто не публиковали поле, и их молчание читалось как
   // благополучие. Поле дешёвое, а без него нельзя ответить на вопрос
   // «пишет ли прод в память вместо базы».
-  res.json({ status: "ok", service: "qgood", db: isQGoodDbReady() ? "postgres" : "memory", timestamp: new Date().toISOString() });
+  // ПОПРАВКА 21.08.2026. Раньше здесь стоял isQGoodDbReady() — флаг из
+  // lib/ensureQGoodTables. Его ставит ровно одно место модуля (психологическая
+  // часть, initPsychTables), а десять основных ручек — кампании и пожертвования —
+  // работают через локальную ensureTables() и этот флаг не трогают. В итоге
+  // health отвечал "memory" при полностью исправной базе: сторож запасного
+  // хранилища поднял тревогу через минуту после выкатки, и она была ложной.
+  //
+  // Спрашиваем базу напрямую, как это делает qchaingov: один SELECT 1, ответ
+  // о том, что читатель и имеет в виду. Ошибка не роняет ручку — она и есть
+  // ответ «memory».
+  let db: "postgres" | "memory" = "memory";
+  try {
+    await getPool().query("SELECT 1");
+    db = "postgres";
+  } catch {
+    // db остаётся "memory" — это и есть честный ответ: база не отвечает
+  }
+  res.json({ status: "ok", service: "qgood", db, timestamp: new Date().toISOString() });
 });
 
 qgoodRouter.get("/campaigns", readLimit, async (req, res) => {

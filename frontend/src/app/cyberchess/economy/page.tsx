@@ -305,17 +305,17 @@ export default function EconomyHubPage() {
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
           <Link href="/cyberchess" style={{ color: C.dim, textDecoration: "none" }}>← CyberChess</Link>
-          {" / "}<span style={{ color: C.text }}>Economy</span>
+          {" / "}<span style={{ color: C.text }}>Экономика</span>
         </div>
 
         {/* Hero */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginBottom: 32 }}>
           <div style={{ flex: "1 1 460px", minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: C.gold, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>
-              F7 · CHESSY ECONOMY HUB
+              ЭКОНОМИКА CHESSY
             </div>
             <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.025em", margin: "0 0 12px", lineHeight: 1.15 }}>
-              Chessy <span style={{ color: C.gold }}>Economy</span>
+              Экономика <span style={{ color: C.gold }}>Chessy</span>
             </h1>
             <p style={{ fontSize: 15, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 620 }}>
               Аукцион уроков, аренда виртуальных тренеров и подписка на стримеров. Платформа активных взаимодействий за Chessy (AEV).
@@ -441,7 +441,7 @@ export default function EconomyHubPage() {
                       background: C.gold, color: "#000",
                       fontSize: 10, fontWeight: 900, letterSpacing: 0.5,
                       padding: "2px 8px", borderRadius: 4, textTransform: "uppercase",
-                    }}>★ Featured</div>
+                    }}>★ Избранное</div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
                     <div style={{ flex: "1 1 320px", minWidth: 0 }}>
@@ -612,19 +612,19 @@ export default function EconomyHubPage() {
 
         {/* Footer note */}
         <div style={{ marginTop: 32, padding: "12px 16px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, color: C.faint, lineHeight: 1.6 }}>
-          F7 · Mock-режим: все операции сохраняются в localStorage браузера. Backend-интеграция (реальные аукционы, верификация PGN, push-уведомления стримов) — следующая фаза.
+          Это витрина замысла: все действия сохраняются только в вашем браузере и никому не видны. Настоящие торги, проверка партий и оповещения о трансляциях — следующий шаг.
         </div>
 
         <div style={{ marginTop: 24, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
           <Link href="/cyberchess" style={{ color: C.purple, textDecoration: "none" }}>← CyberChess</Link>
           <span style={{ color: C.faint }}>·</span>
-          <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>📊 CPI rating</Link>
+          <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>📊 Рейтинг CPI</Link>
           <span style={{ color: C.faint }}>·</span>
           <Link href="/bank" style={{ color: C.purple, textDecoration: "none" }}>🏦 AEVION Bank — тиры Pro/Ultimate</Link>
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>
-          F7 · 2026-05-12 · Chessy Economy v0.1
+          Экономика Chessy · версия 0.1
         </div>
       </article>
 

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Tournament Hub — турниры, brackets, лидерборд",
+  title: "Турнирный хаб — турниры, сетки, таблица лидеров",
   description:
     "Турнирная сетка с визуализацией bracket, cross-tournament лидерборд, бейджи за достижения. Стандартные шахматы и 12 вариантов.",
   openGraph: {
-    title: "CyberChess Tournament Hub — bracket, leaderboard, badges",
+    title: "Турнирный хаб CyberChess — сетки, таблица лидеров, трофеи",
     description:
       "Турниры с bracket-визуализацией, сквозной лидерборд, бейджи. Стандарт + 12 вариантов под одной крышей.",
     type: "website",
@@ -13,8 +13,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "CyberChess Tournament Hub",
-    description: "Bracket viz · cross-tournament leaderboard · badges. 12 вариантов + стандарт.",
+    title: "Турнирный хаб · CyberChess",
+    description: "Сетка турнира · сквозная таблица лидеров · трофеи. 12 вариантов, призовой фонд в Chessy.",
   },
 };
 

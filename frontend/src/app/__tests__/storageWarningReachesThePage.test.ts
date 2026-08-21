@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { stripComments } from "./helpers/sourceCode";
 import { join } from "node:path";
 
 /**
@@ -34,7 +35,7 @@ describe("страница показывает признак хранилищ�
   test("контроль: файлы читаются и это действительно страницы", () => {
     for (const [, files] of PAGES) {
       for (const f of files) {
-        const src = readFileSync(join(ROOT, f), "utf8");
+        const src = stripComments(readFileSync(join(ROOT, f), "utf8"));
         expect(src.length, `${f} пуст`).toBeGreaterThan(500);
         expect(src, `${f} не похож на компонент`).toMatch(/export default function|useState/);
       }
@@ -42,7 +43,7 @@ describe("страница показывает признак хранилищ�
   });
 
   test.each(PAGES)("%s читает storage из ответа", (_name, files) => {
-    const all = files.map((f) => readFileSync(join(ROOT, f), "utf8")).join("\n");
+    const all = files.map((f) => stripComments(readFileSync(join(ROOT, f), "utf8"))).join("\n");
     // Требуем, чтобы признак был взят ИМЕННО ИЗ ОТВЕТА, а не просто упоминался.
     //
     // Первая версия проверки искала слово "storage" где угодно в файле — и
@@ -65,7 +66,7 @@ describe("страница показывает признак хранилищ�
   });
 
   test.each(PAGES)("%s рисует предупреждение, а не молчит", (_name, files) => {
-    const all = files.map((f) => readFileSync(join(ROOT, f), "utf8")).join("\n");
+    const all = files.map((f) => stripComments(readFileSync(join(ROOT, f), "utf8"))).join("\n");
     // role="alert" — не украшение: без него экранный диктор промолчит.
     expect(all, "нет видимой плашки с role=alert").toMatch(/role="alert"/);
     expect(all, "нет текста про недоступное хранилище").toMatch(/недоступно/);
@@ -74,7 +75,7 @@ describe("страница показывает признак хранилищ�
 
 describe("health-страница отличает «чисто» от «нечего было проверять»", () => {
   test.each(HEALTH_PAGES)("%s читает признак и показывает его", (_name, file) => {
-    const src = readFileSync(join(ROOT, file), "utf8");
+    const src = stripComments(readFileSync(join(ROOT, file), "utf8"));
     // Контроль: файл действительно та страница, а не заглушка.
     expect(src.length).toBeGreaterThan(2000);
     expect(src).toMatch(/useState/);

@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -36,7 +36,13 @@ function contactFromSecurityTxt(): string {
 function proseLines(src: string): string[] {
   return src.split("\n").filter((l) => {
     const t = l.trim();
-    return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
+    // `{/*` добавлен 21.08.2026: JSX-комментарии этот отсев пропускал,
+    // и адрес из пояснения «почему НЕ этот домен» считался обещанием.
+    // Ложная тревога в стороже опаснее пропуска: на неё перестают смотреть.
+    return (
+      !t.startsWith("//") && !t.startsWith("*") &&
+      !t.startsWith("/*") && !t.startsWith("{/*")
+    );
   });
 }
 
@@ -77,5 +83,95 @@ describe("канал раскрытия уязвимостей не расход
     const page = read("src/app/pricing/security/page.tsx");
     expect(page, "разбор из комментария пропал — верните объяснение").toContain("записи MX");
     expect(proseLines(page).join("\n")).not.toContain("записи MX");
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// ДОБАВЛЕНО 21.08.2026: отдельная, БОЛЕЕ ШИРОКАЯ проверка.
+//
+// Поправка к первой редакции этого блока. Я написал, что сторож выше «знал
+// правило и стерёг 12% случаев» — это НЕСПРАВЕДЛИВО. Он проверяет строки с
+// `security@`, то есть адрес раскрытия уязвимостей, и для СВОЕГО предмета
+// очерчен точно. Я сравнил его с чужой задачей.
+//
+// Задача здесь другая и шире: НИКАКОЙ публичный адрес не должен стоять на
+// домене без почты. Замер 21.08.2026: у `aevion.app` записей MX нет (контроль:
+// у gmail.com их 5), а на сайте такие адреса встречаются в восьми файлах —
+// среди них /terms, /qstore и панель партнёра.
+//
+// Почему список ожидающих, а не немедленный отказ: починка — это либо завести
+// почту домену (панель DNS, рука основателя), либо заменить адреса на читаемый
+// ящик (решение о позиционировании, тоже его). Пока решения нет, сторож держит
+// ГРАНИЦУ: новых мест не прибавится, а список тает по мере починки.
+
+function allSourceFiles(dir: string, acc: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    if (name === "node_modules" || name === "__tests__" || name === ".next") continue;
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) allSourceFiles(full, acc);
+    else if (/\.tsx?$/.test(name)) acc.push(full);
+  }
+  return acc;
+}
+
+// Файлы, где адреса на домене без почты ещё остались. Список тает; новые
+// записи сюда добавлять НЕЛЬЗЯ — в этом весь смысл.
+const PENDING_FILES = new Set([
+  "app/api/payments/v1/_email.ts",
+  "app/build/onboarding/page.tsx",
+  "app/constitution/pricing/page.tsx",
+  "app/constitution/showcase/page.tsx",
+  "app/developers/fintech/troubleshooting/page.tsx",
+  "app/devhub/[id]/page.tsx",
+  "app/pricing/affiliate-dashboard/page.tsx",
+  "app/pricing/glossary/page.tsx",
+  "app/pricing/page.tsx",
+  "app/pricing/refund-policy/page.tsx",
+  "app/qcoreai/budget/page.tsx",
+  "app/qstore/page.tsx",
+  "app/terms/page.tsx",
+  "lib/build/calendar.ts",
+  "lib/i18n-data.ts",
+  "lib/pricingI18n.ts",
+]);
+
+describe("адреса на домене без почты не расползаются", () => {
+  const SRC = join(ROOT, "src");
+  const files = allSourceFiles(SRC);
+
+  test("контроль прибора: файлы найдены и правило непустое", () => {
+    expect(files.length).toBeGreaterThan(100);
+    expect(DOMAINS_WITHOUT_MAIL.length).toBeGreaterThan(0);
+  });
+
+  test("новых файлов с такими адресами не появилось", () => {
+    const offenders: string[] = [];
+    for (const full of files) {
+      const rel = full.slice(SRC.length + 1).split("\\").join("/");
+      const lines = proseLines(readFileSync(full, "utf8"));
+      const hit = lines.some((l) =>
+        [...DOMAINS_WITHOUT_MAIL, ...FOREIGN_DOMAINS].some((d) => l.includes(d)),
+      );
+      if (hit && !PENDING_FILES.has(rel)) offenders.push(rel);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test("список ожидающих не протух: каждый файл всё ещё нарушает", () => {
+    const stale: string[] = [];
+    for (const rel of PENDING_FILES) {
+      let lines: string[] = [];
+      try {
+        lines = proseLines(readFileSync(join(SRC, rel), "utf8"));
+      } catch {
+        stale.push(rel + " (файла нет)");
+        continue;
+      }
+      const hit = lines.some((l) =>
+        [...DOMAINS_WITHOUT_MAIL, ...FOREIGN_DOMAINS].some((d) => l.includes(d)),
+      );
+      if (!hit) stale.push(rel + " (уже починен — уберите из списка)");
+    }
+    expect(stale).toEqual([]);
   });
 });

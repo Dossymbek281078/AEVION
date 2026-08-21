@@ -1108,6 +1108,18 @@ async function computeNeedsRedeploy(project: DevHubProject): Promise<boolean> {
  * Память ниже осмысленна, когда база не настроена вовсе: тогда она И ЕСТЬ
  * хранилище, и «не найдено» честно.
  */
+/**
+ * Признак того, что запись легла ТОЛЬКО в память процесса.
+ *
+ * Форма та же, что уже принята в модуле (поле `storage` в теле), а не
+ * заголовок: второй способ говорить то же самое разошёлся бы с первым при
+ * следующей правке. Я успел написать заголовок и откатил.
+ */
+const MEMORY_NOTE = {
+  storage: "memory" as const,
+  warning: "Хранилище недоступно: изменение сохранено только до перезапуска сервиса.",
+};
+
 /** Ответ на отказ хранилища — один текст на весь модуль. */
 function replyStorageUnavailable(res: {
   status: (code: number) => { json: (body: unknown) => unknown };
@@ -2304,13 +2316,15 @@ devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res
   const { collabUserId } = req.params;
   project.collaborators = project.collaborators.filter((c) => c.userId !== collabUserId);
   project.updatedAt = now();
+  let storageFallback = false;
   try {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/collaborators:delete", projectId: project.id });
     memProjects.set(project.id, project);
+    storageFallback = true;
   }
-  res.json({ ok: true, collaborators: project.collaborators });
+  res.json({ ok: true, collaborators: project.collaborators, ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -2844,13 +2858,15 @@ devhubRouter.put("/projects/:id/env", async (req, res) => {
   if (!key || typeof key !== "string") return res.status(400).json({ error: "key is required" });
   project.envVars[String(key)] = String(value ?? "");
   project.updatedAt = now();
+  let storageFallback = false;
   try {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/env:put", projectId: project.id });
     memProjects.set(project.id, project);
+    storageFallback = true;
   }
-  res.json({ ok: true, key });
+  res.json({ ok: true, key, ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // DELETE /api/devhub/projects/:id/env/:key
@@ -2862,13 +2878,15 @@ devhubRouter.delete("/projects/:id/env/:key", async (req, res) => {
   const key = req.params.key;
   delete project.envVars[key];
   project.updatedAt = now();
+  let storageFallback = false;
   try {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/env:delete", projectId: project.id });
     memProjects.set(project.id, project);
+    storageFallback = true;
   }
-  res.json({ ok: true, key });
+  res.json({ ok: true, key, ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -3032,13 +3050,15 @@ devhubRouter.post("/snippets", async (req, res) => {
     createdAt: now(),
     updatedAt: now(),
   };
+  let storageFallback = false;
   try {
     await dbSaveSnippet(snippet);
   } catch (e) {
     captureException(e, { route: "devhub/snippets:create", snippetId: snippet.id });
     memSnippets.set(snippet.id, snippet);
+    storageFallback = true;
   }
-  res.status(201).json({ snippet });
+  res.status(201).json({ snippet, ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // GET /api/devhub/snippets/:id — fetch single snippet

@@ -282,7 +282,7 @@ export default function DailyPuzzlePage() {
       setBestStreak(rawBest);
       if (lastSolved === today) {
         setSolved(true);
-        setMessage(`Уже решено сегодня. Streak: ${curStreak}`);
+        setMessage(`Уже решено сегодня. Серия: ${curStreak}`);
       }
     } catch {
       // ignore
@@ -369,8 +369,8 @@ export default function DailyPuzzlePage() {
     stopTimer();
     setMessage(
       usedHints
-        ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Streak не растёт, но и не сбрасывается: ${newStreak}.`
-        : `Поздравляем! Решено за ${formatTime(totalMs)}. Streak +1 = ${newStreak}. Best: ${newBest}`
+        ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Серия не растёт, но и не сбрасывается: ${newStreak}.`
+        : `Поздравляем! Решено за ${formatTime(totalMs)}. Серия +1 = ${newStreak}. Рекорд: ${newBest}`
     );
 
     // Отправка на сервер. Изменилось два раза за 19.08.2026, и оба важны.
@@ -409,8 +409,8 @@ export default function DailyPuzzlePage() {
           if (j.streak !== newStreak) {
             setMessage(
               usedHints
-                ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Streak не растёт: ${j.streak}.`
-                : `Поздравляем! Решено за ${formatTime(totalMs)}. Streak: ${j.streak}.`
+                ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Серия не растёт: ${j.streak}.`
+                : `Поздравляем! Решено за ${formatTime(totalMs)}. Серия: ${j.streak}.`
             );
           }
         }
@@ -418,6 +418,23 @@ export default function DailyPuzzlePage() {
           setBestStreak(j.bestStreak);
           try { localStorage.setItem('cc_daily_best_streak', String(j.bestStreak)); } catch {}
         }
+      } else {
+        // ОТКАЗ СЕРВЕРА. Раньше здесь не было ничего: местная серия уже выросла,
+        // человек видел «Серия +1», а сервер её не признал — и назавтра число
+        // молча менялось. Это те же «два писателя одного значения», от которых
+        // защищается ветка выше, только в тихой половине.
+        //
+        // Технический код (moves_required, wrong_day) не показываем: сервер шлёт
+        // рядом человеческую подсказку, её и читаем, а код уходит в консоль.
+        let podskazka = 'Сервер не засчитал решение. Попробуйте ещё раз.';
+        try {
+          const j = (await r.json()) as { error?: string; hint?: string };
+          if (typeof j.hint === 'string' && j.hint) podskazka = j.hint;
+          console.warn('[daily] сервер отказал:', j.error ?? r.status);
+        } catch {
+          console.warn('[daily] сервер отказал:', r.status);
+        }
+        setMessage(podskazka);
       }
     } catch {
       // ignore network errors — local state already saved

@@ -6,6 +6,7 @@ import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Mo
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import AevionProjectsBanner from "./AevionProjectsBanner";
+import { PageTracking } from "@/components/PageTracking";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
 import AiCoach from "./AiCoach";
@@ -1260,6 +1261,10 @@ export default function CyberChessPage(){
   type Opening = {eco:string;name:string;moves:string;desc:string};
   type OpeningIndexed = Opening & {fenKey:string;plyLen:number};
   const[openingsDb,sOpeningsDb]=useState<OpeningIndexed[]>([]);
+  // Пустой список после ОШИБКИ и пустой список ДО загрузки выглядят одинаково,
+  // а человеку это разные вещи: во втором случае надо ждать, в первом — ждать
+  // бесполезно. Без этого флага экран вечно писал «База дебютов загружается…».
+  const[openingsFailed,sOpeningsFailed]=useState(false);
   const openingMapRef=useRef<Map<string,OpeningIndexed>>(new Map());
   // Book-continuation map: fenKey позиции -> UCI следующего хода по книжной линии.
   // Заполняется при загрузке openings.json. Используется для стрелки-подсказки дебюта.
@@ -2797,7 +2802,7 @@ export default function CyberChessPage(){
           const existing=map.get(fenKey);if(!existing||existing.plyLen<entry.plyLen)map.set(fenKey,entry);
         }catch{}}
         openingMapRef.current=map;sOpeningsDb(indexed);
-      }).catch(()=>sOpeningsDb([]));
+      }).catch(()=>{sOpeningsDb([]);sOpeningsFailed(true)});
     };
     if(typeof window!=="undefined"&&"requestIdleCallback" in window){
       (window as any).requestIdleCallback(loadOpenings,{timeout:6000});
@@ -5584,6 +5589,11 @@ export default function CyberChessPage(){
   return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":tabBg,transition:`background ${MOTION.base} ${MOTION.ease}`,height:"100dvh",overflow:"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
     {hasBg&&<div style={{position:"fixed",inset:0,background:themeMode==="dark"?"rgba(15,13,10,0.72)":"rgba(255,255,255,0.55)",zIndex:0,pointerEvents:"none"}}/>}
     <ProductPageShell fullWidth>
+      {/* Просмотры главной страницы продукта не считались ВООБЩЕ: на вопрос
+          «сколько людей открыли шахматы и какой канал их привёл» ответа не
+          было. PageTracking уже умеет и то и другое (читает ?c= из ссылки и
+          шлёт через sendBeacon), поэтому берём его, а не пишем свой счётчик. */}
+      <PageTracking page="cyberchess" />
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
       <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
       {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6,alignItems:"center"}}>
@@ -10121,7 +10131,17 @@ export default function CyberChessPage(){
               </div>
               {puzzleListOpen&&<>
               <div style={{maxHeight:520,overflowY:"auto"}}>
-                {fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13,fontStyle:"italic"}}>Нет задач по фильтру</div>:
+                {/* Два РАЗНЫХ состояния, а не одно. Пустой фильтр при живом
+                    банке — это результат («сузьте условия»), а пустой БАНК —
+                    это сбой загрузки, и говорить о фильтре в этом случае
+                    значит выдавать отказ за законную пустоту: человек начнёт
+                    менять фильтры, которые ни при чём. Три места загрузки
+                    задач глотают ошибку молча, так что снаружи различить
+                    можно только здесь. */}
+                {PUZZLES.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13}}>
+                    <div style={{fontWeight:700,marginBottom:6}}>Задачи не загрузились</div>
+                    <div style={{fontSize:12,opacity:0.85}}>Это не фильтр — банк не ответил. Обновите страницу; если повторится, напишите нам.</div>
+                  </div>:fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13,fontStyle:"italic"}}>Нет задач по фильтру</div>:
                 fPz.slice(0,100).map((pz,i)=>{
                   // Build readable name: "Мат в 2 · f5+ Kxf5 · Эндшпиль"
                   const goalLabel=pz.goal==="Mate"?`Мат в ${pz.mateIn||1}`:"Лучший ход";
@@ -12340,7 +12360,11 @@ ${question.trim()}`;
             if(!q)return true;
             return op.name.toLowerCase().includes(q)||op.eco.toLowerCase().includes(q);
           }).slice(0,80);
-          if(openingsDb.length===0)return <div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>База дебютов загружается…</div>;
+          if(openingsDb.length===0)return <div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>
+            {openingsFailed
+              ? <><div style={{fontWeight:700,marginBottom:6}}>База дебютов не загрузилась</div><div style={{fontSize:12,opacity:0.85}}>Обновите страницу — ждать здесь бесполезно.</div></>
+              : "База дебютов загружается…"}
+          </div>;
           if(list.length===0)return <div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>Ничего не найдено</div>;
           return list.map((op,i)=>{
             const sans=(typeof op.moves==="string"?op.moves.split(/\s+/):[]).filter(Boolean);

@@ -154,3 +154,51 @@ describe("в центре обучения нет жаргона разрабо�
     });
   });
 });
+
+describe("подписи со значком тоже по-русски", () => {
+  // 21.08. Дыра в МОЁМ прежнем свипе: он требовал, чтобы видимый текст начинался
+  // с латинской буквы, а у кнопок впереди значок — «▶ Drill», «✎ Edit»,
+  // «⏱ Clock Pressure Drill». Поэтому вчерашний вывод «модуль чист по языку» был
+  // шире, чем проверка. Нашлось глазами на /cyberchess/repertoire.
+  //
+  // Первая версия ЭТОГО сторожа тоже была декоративной: искала ">Drill" и
+  // "\"Drill\"", а в файле стоит "▶ Drill" — мутация не покраснела. Поэтому
+  // теперь извлекаем видимый текст между тегами и ищем слово в нём.
+  function vidimyj(src: string): string[] {
+    const bezKom = src
+      .split("\n")
+      .filter((l) => {
+        const t = l.trim();
+        return !(t.startsWith("\/\/") || t.startsWith("\*"));
+      })
+      .join("\n");
+    const out: string[] = [];
+    for (const m of bezKom.matchAll(/>([^<>{}]{2,120})</g)) {
+      const v = m[1].replace(/\s+/g, " ").trim();
+      // Отсекаем код: обобщённые типы дают ложные «>текст<»
+      // (useState<string | null>), и на них сторож краснел зря.
+      if (v && !/[;=(){}|]/.test(v)) out.push(v);
+    }
+    return out;
+  }
+
+  test("извлекатель видит подпись со значком", () => {
+    // Контроль: без него сторож молча зеленеет, как и случилось час назад.
+    const najdeno = vidimyj("<button>\n            ▶ Drill\n          </button>");
+    expect(najdeno.some((t) => t.includes("Drill")), "видимый текст со значком не извлечён").toBe(true);
+  });
+
+  const mesta: Array<[string, string[]]> = [
+    ["OpeningRepertoire.tsx", ["Drill", "Edit"]],
+    ["ClockPressureDrill.tsx", ["Clock Pressure Drill"]],
+    ["MirrorModePanel.tsx", ["Mirror Mode"]],
+    ["MultiPanel.tsx", ["Multi-panel"]],
+  ];
+  test.each(mesta)("%s", (fajl, zapreshcheno) => {
+    const teksty = vidimyj(fs.readFileSync(path.join(ROOT, fajl), "utf-8"));
+    for (const t of zapreshcheno) {
+      const plohie = teksty.filter((v) => v.includes(t));
+      expect(plohie, `английская подпись «${t}» на экране в ${fajl}`).toEqual([]);
+    }
+  });
+});

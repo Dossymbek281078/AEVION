@@ -503,7 +503,7 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
     { key: "branches", label: "Мои ветки" },
     { key: "drill", label: "Тренировка" },
     { key: "stats", label: "Статистика" },
-    { key: "gmgames", label: "GM партии" },
+    { key: "gmgames", label: "Партии гроссмейстеров" },
     { key: "settings", label: "Настройки" },
   ];
   return (
@@ -845,10 +845,10 @@ function BranchCard(props: {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginLeft: 16 }}>
           <button onClick={onDrill} style={primaryBtn}>
-            ▶ Drill
+            ▶ Тренировать
           </button>
           <button onClick={onEditToggle} style={ghostBtn}>
-            {isEditing ? "✓ OK" : "✎ Edit"}
+            {isEditing ? "✓ Готово" : "✎ Изменить"}
           </button>
           <div style={{ display: "flex", gap: 4 }}>
             <button

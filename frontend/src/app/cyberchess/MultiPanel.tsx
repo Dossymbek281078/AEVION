@@ -126,7 +126,7 @@ export default function MultiPanel({ open, onClose }: Props) {
         background: "rgba(15,23,42,0.95)", borderBottom: "1px solid rgba(255,255,255,0.1)",
         flexWrap: "wrap"
       }}>
-        <span style={{ fontSize: 16, fontWeight: 900, color: "#fff", letterSpacing: 0.4 }}>📺 Multi-panel</span>
+        <span style={{ fontSize: 16, fontWeight: 900, color: "#fff", letterSpacing: 0.4 }}>📺 Несколько экранов</span>
         <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>{panes.length}/4</span>
         <div style={{ flex: 1 }} />
         <input

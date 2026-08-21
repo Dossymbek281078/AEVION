@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./helpers/sourceCode";
 
 /**
  * DevHub называет хранилище там, где человек теряет свою работу.
@@ -24,7 +25,7 @@ import { join } from "node:path";
  * там, где выигрыш меньше. Список — на доске запуска.
  */
 
-const SRC = readFileSync(join(__dirname, "..", "src", "routes", "devhub.ts"), "utf8");
+const SRC = stripComments(readFileSync(join(__dirname, "..", "src", "routes", "devhub.ts"), "utf8"));
 
 describe("DevHub не выдаёт память за сохранение", () => {
   test("контроль: файл прочитан и содержит обе ветки", () => {

@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./helpers/sourceCode";
 
 /**
  * QEvents называет, где оказались событие, запись на него и место в очереди.
@@ -19,7 +20,7 @@ import { join } from "node:path";
  * признак: пока хранилища нет, человек об этом узнаёт.
  */
 
-const SRC = readFileSync(join(__dirname, "..", "src", "routes", "qevents.ts"), "utf8");
+const SRC = stripComments(readFileSync(join(__dirname, "..", "src", "routes", "qevents.ts"), "utf8"));
 
 describe("QEvents не выдаёт временное хранилище за постоянное", () => {
   test("контроль: обе ветки записи на месте", () => {

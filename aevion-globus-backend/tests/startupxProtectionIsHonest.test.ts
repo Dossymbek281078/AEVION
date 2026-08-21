@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./helpers/sourceCode";
 
 /**
  * StartupX не должен утверждать регистрацию, которой не делает.
@@ -24,7 +25,7 @@ import { join } from "node:path";
  * Замена значка и формулировки вынесена на доску запуска.
  */
 
-const SRC = readFileSync(join(__dirname, "..", "src", "routes", "startupExchange.ts"), "utf8");
+const SRC = stripComments(readFileSync(join(__dirname, "..", "src", "routes", "startupExchange.ts"), "utf8"));
 
 describe("StartupX говорит правду о защите", () => {
   test("контроль: файл прочитан и содержит ключевые места", () => {

@@ -4,6 +4,13 @@ import { getApiBase } from "@/lib/apiBase";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
+// ⚠️ Руками сюда добавлять адрес МОЖНО только если страница уже есть:
+// обход каталогов ниже подхватывает новые страницы сам, а запись в этом
+// списке живёт вечно и не проверяется ничем. Замер 21.08.2026: карта
+// отдавала поисковику 4 мёртвых адреса из 782, и три из них пришли
+// отсюда — /bureau/transparency и /qcontract/documents (страниц нет ни
+// в одной из веток) и /qcoreai/docs (страница есть, но её вырезал
+// незаякоренный шаблон docs/ в .vercelignore — починено там же).
 const TOP_LEVEL_ROUTES: Array<{
   path: string;
   changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
@@ -14,7 +21,6 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qright", changeFrequency: "daily", priority: 0.9 },
   { path: "/qright/transparency", changeFrequency: "weekly", priority: 0.6 },
   { path: "/bureau", changeFrequency: "daily", priority: 0.9 },
-  { path: "/bureau/transparency", changeFrequency: "weekly", priority: 0.6 },
   { path: "/qsign", changeFrequency: "weekly", priority: 0.7 },
   { path: "/quantum-shield", changeFrequency: "weekly", priority: 0.7 },
   { path: "/planet", changeFrequency: "daily", priority: 0.8 },
@@ -66,7 +72,6 @@ const TOP_LEVEL_ROUTES: Array<{
   // QContract
   { path: "/qcontract", changeFrequency: "weekly", priority: 0.75 },
   { path: "/qcontract/create", changeFrequency: "weekly", priority: 0.6 },
-  { path: "/qcontract/documents", changeFrequency: "daily", priority: 0.5 },
   // DevHub — AI developer platform
   { path: "/devhub", changeFrequency: "weekly", priority: 0.8 },
   // Smeta Trainer
@@ -254,7 +259,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .map((s) => s.skill?.trim())
     .filter((s): s is string => !!s)
     .slice(0, 50)
-    .map((s) => s.toLowerCase().replace(/\s+/g, "-"));
+    // Кодировать ОБЯЗАТЕЛЬНО: без этого навык «MIG/MAG welding» давал слаг
+    // "mig/mag-welding", косая черта становилась разделителем пути, и карта
+    // отдавала поисковику адрес /build/skill/mig/mag-welding — 404 (замер
+    // 21.08.2026: он был одним из четырёх мёртвых адресов в карте из 782).
+    // Точное зеркало того, что делает сама страница: slugToSkill() в
+    // build/skill/[slug]/page.tsx зовёт decodeURIComponent, а потом меняет
+    // дефисы на пробелы. Проверено на проде: /build/skill/mig%2Fmag-welding
+    // отдаёт заголовок «Mig/mag welding jobs».
+    .map((s) => encodeURIComponent(s.toLowerCase().replace(/\s+/g, "-")));
 
   // Merge strategy:
   // 1. Every route in TOP_LEVEL_ROUTES keeps its hand-tuned changeFreq + priority

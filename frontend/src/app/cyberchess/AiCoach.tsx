@@ -688,7 +688,7 @@ ${quality === "blunder" || quality === "mistake"
             {ttsOn ? "🔊 Voice" : "🔈 Voice"}
           </button>
           {ttsOn && voices.length > 0 && (
-            <select value={voiceName} onChange={e => sVoiceName(e.target.value)} title="Голос"
+            <select aria-label="Голос коуча" value={voiceName} onChange={e => sVoiceName(e.target.value)} title="Голос"
               style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 6px", fontSize: 10, fontWeight: 700, cursor: "pointer", maxWidth: 110 }}>
               {voices.filter(v => v.lang.toLowerCase().startsWith("ru") || v.lang.toLowerCase().startsWith("en")).slice(0, 12).map(v => (
                 <option key={v.name} value={v.name} style={{ color: "#111" }}>{v.name.slice(0, 18)}</option>
@@ -816,7 +816,7 @@ ${quality === "blunder" || quality === "mistake"
 
       {!liveMode && (
         <div style={{ padding: "8px 12px", borderTop: "1px solid #e5e7eb", display: "flex", gap: 6 }}>
-          <input
+          <input aria-label="Вопрос коучу"
             value={input}
             onChange={(e) => sInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !loading) send(); }}

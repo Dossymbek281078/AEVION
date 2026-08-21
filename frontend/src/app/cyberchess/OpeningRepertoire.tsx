@@ -776,7 +776,7 @@ function BranchCard(props: {
               {branch.eco}
             </span>
             {isEditing ? (
-              <input
+              <input aria-label="Название ветки"
                 value={branch.name}
                 onChange={(e) => onUpdate({ name: e.target.value })}
                 style={{ ...inputStyle, fontSize: 15, fontWeight: 600, padding: "4px 8px" }}

@@ -6,6 +6,7 @@ import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Mo
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import AevionProjectsBanner from "./AevionProjectsBanner";
+import { PageTracking } from "@/components/PageTracking";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
 import AiCoach from "./AiCoach";
@@ -5584,6 +5585,11 @@ export default function CyberChessPage(){
   return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":tabBg,transition:`background ${MOTION.base} ${MOTION.ease}`,height:"100dvh",overflow:"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
     {hasBg&&<div style={{position:"fixed",inset:0,background:themeMode==="dark"?"rgba(15,13,10,0.72)":"rgba(255,255,255,0.55)",zIndex:0,pointerEvents:"none"}}/>}
     <ProductPageShell fullWidth>
+      {/* Просмотры главной страницы продукта не считались ВООБЩЕ: на вопрос
+          «сколько людей открыли шахматы и какой канал их привёл» ответа не
+          было. PageTracking уже умеет и то и другое (читает ?c= из ссылки и
+          шлёт через sendBeacon), поэтому берём его, а не пишем свой счётчик. */}
+      <PageTracking page="cyberchess" />
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
       <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
       {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6,alignItems:"center"}}>

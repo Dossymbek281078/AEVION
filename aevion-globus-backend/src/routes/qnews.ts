@@ -327,7 +327,18 @@ qnewsRouter.post("/articles/:id/bookmark", async (req: Request, res: Response) =
         return res.json({ bookmarked: true, storage: "db" });
       }
     }
-  } catch (e) { console.error("[QNews] bookmark DB error", e); }
+  } catch (e) {
+    console.error("[QNews] bookmark DB error", e);
+    // Ниже закладка ставится в память, но сперва проверяется memNews — в проде
+    // она пуста, и человек получал «not_found» про существующую статью, а
+    // закладка молча не ставилась. Проверено контролем 21.08.2026: с живой
+    // базой ручка отвечает 200, с упавшей — 404.
+    return res.status(503).json({
+      error: "storage_unavailable",
+      warning:
+        "Хранилище временно недоступно. Закладка не сохранена — повторите позже.",
+    });
+  }
 
   if (!memNews.has(id)) return res.status(404).json({ error: "not_found" });
   const key = `${auth.sub}:${id}`;

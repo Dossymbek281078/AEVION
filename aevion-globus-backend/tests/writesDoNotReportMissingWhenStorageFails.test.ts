@@ -41,9 +41,22 @@ vi.mock("../src/lib/ensureDevHubTables", () => ({
   isDevHubDbReady: () => true,
   getDevHubDbError: () => null,
 }));
+vi.mock("../src/lib/ensureQStoreTables", () => ({
+  ensureQStoreTables: async () => {},
+  isQStoreDbReady: () => true,
+  getQStoreDbError: () => null,
+}));
+vi.mock("../src/lib/ensureQNewsTables", () => ({
+  ensureQNewsTables: async () => {},
+  isQNewsDbReady: () => true,
+  getQNewsDbError: () => null,
+}));
 
 import { mapRealityRouter } from "../src/routes/mapReality";
 import { devhubRouter } from "../src/routes/devhub";
+import { qstoreRouter } from "../src/routes/qstore";
+import { qnewsRouter } from "../src/routes/qnews";
+import jwt from "jsonwebtoken";
 
 function app(router: express.Router, base: string) {
   const a = express();
@@ -52,7 +65,38 @@ function app(router: express.Router, base: string) {
   return a;
 }
 
+// Настоящий токен: 54 ручки записи из 76 закрыты авторизацией, и без него
+// зонд их просто не видит. Секрет в dev-режиме тот же, что у приложения.
+const TOKEN = jwt.sign({ sub: "probe-user" }, "dev-auth-secret", {
+  algorithm: "HS256",
+  expiresIn: "1h",
+});
+
 describe("запись при упавшем хранилище не отвечает «не найдено»", () => {
+  test("QStore: продавец удаляет СВОЙ товар", async () => {
+    const res = await request(app(qstoreRouter, "/x"))
+      .delete("/x/me/products/12345")
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .send({});
+    expect(res.status, "продавцу отвечали «товара нет» про его же товар").not.toBe(404);
+    expect(res.status).toBe(503);
+  });
+
+  test("QNews: закладка на статью", async () => {
+    const res = await request(app(qnewsRouter, "/x"))
+      .post("/x/articles/12345/bookmark")
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .send({});
+    expect(res.status, "закладка молча не ставилась, а ответ звучал как «нет статьи»").not.toBe(404);
+    expect(res.status).toBe(503);
+  });
+
+  test("контроль: без токена по-прежнему 401, а не 503", async () => {
+    // Иначе тест был бы зелёным и на ручке, которая отвечает 503 до проверки прав.
+    const res = await request(app(qstoreRouter, "/x")).delete("/x/me/products/12345").send({});
+    expect(res.status).toBe(401);
+  });
+
   test("MapReality: поддержать сигнал", async () => {
     const res = await request(app(mapRealityRouter, "/x"))
       .post("/x/signals/12345/support")

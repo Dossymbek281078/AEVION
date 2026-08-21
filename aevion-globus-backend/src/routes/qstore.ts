@@ -282,8 +282,19 @@ qstoreRouter.patch("/me/products/:id", async (req: Request, res: Response) => {
       );
       res.json({ product: updated.rows[0] });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // Раньше управление уходило ниже, в память (в проде пустую), и продавцу
+      // отвечали «Product not found» про ЕГО ЖЕ товар. Проверено контролем
+      // 21.08.2026: с живой базой та же ручка доходит до проверки владельца и
+      // отвечает 403, с упавшей — 404. Значит база на пути.
+      console.error("[QStore] /me/products/:id DB error", e);
+      res.status(503).json({
+        error: "storage_unavailable",
+        warning:
+          "Хранилище временно недоступно. Это НЕ значит, что товара нет — " +
+          "изменение не применено. Повторите позже.",
+      });
+      return;
     }
   }
   const product = memProducts.get(id);
@@ -308,8 +319,19 @@ qstoreRouter.delete("/me/products/:id", async (req: Request, res: Response) => {
       await pool.query(`DELETE FROM "QStoreProduct" WHERE "id" = $1`, [id]);
       res.json({ ok: true });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // Раньше управление уходило ниже, в память (в проде пустую), и продавцу
+      // отвечали «Product not found» про ЕГО ЖЕ товар. Проверено контролем
+      // 21.08.2026: с живой базой та же ручка доходит до проверки владельца и
+      // отвечает 403, с упавшей — 404. Значит база на пути.
+      console.error("[QStore] /me/products/:id DB error", e);
+      res.status(503).json({
+        error: "storage_unavailable",
+        warning:
+          "Хранилище временно недоступно. Это НЕ значит, что товара нет — " +
+          "изменение не применено. Повторите позже.",
+      });
+      return;
     }
   }
   const product = memProducts.get(id);

@@ -236,7 +236,7 @@ echo "проверяю типы с подставленной отметкой�
 # проверка в начале сказала "предок", а выкатка сняла с прода восемь чужих
 # коммитов, появившихся, пока она собиралась.
 BEFORE=$(curl -s --max-time 20 https://aevion.app/api/health 2>/dev/null \
-  | sed -n 's/.*"commit":"\\([^"]*\\)".*/\\1/p' | head -1)
+  | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' | head -1)
 
 npx vercel deploy --prod --yes
 

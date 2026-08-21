@@ -46,6 +46,11 @@ vi.mock("../src/lib/ensureQStoreTables", () => ({
   isQStoreDbReady: () => true,
   getQStoreDbError: () => null,
 }));
+vi.mock("../src/lib/ensureQLearnTables", () => ({
+  ensureQLearnTables: async () => {},
+  isQLearnDbReady: () => true,
+  getQLearnDbError: () => null,
+}));
 vi.mock("../src/lib/ensureQNewsTables", () => ({
   ensureQNewsTables: async () => {},
   isQNewsDbReady: () => true,
@@ -56,6 +61,7 @@ import { mapRealityRouter } from "../src/routes/mapReality";
 import { devhubRouter } from "../src/routes/devhub";
 import { qstoreRouter } from "../src/routes/qstore";
 import { qnewsRouter } from "../src/routes/qnews";
+import { qlearnRouter } from "../src/routes/qlearn";
 import jwt from "jsonwebtoken";
 
 function app(router: express.Router, base: string) {
@@ -89,6 +95,16 @@ describe("запись при упавшем хранилище не отвеч�
       .send({});
     expect(res.status, "закладка молча не ставилась, а ответ звучал как «нет статьи»").not.toBe(404);
     expect(res.status).toBe(503);
+  });
+
+  test("QLearn: запись на курс", async () => {
+    const res = await request(app(qlearnRouter, "/x"))
+      .post("/x/courses/12345/enroll")
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .send({});
+    expect(res.status, "студент видел «курса нет», а запись молча не прошла").not.toBe(404);
+    expect(res.status).toBe(503);
+    expect(String(res.body?.warning ?? "")).toMatch(/НЕ сохранена/);
   });
 
   test("контроль: без токена по-прежнему 401, а не 503", async () => {

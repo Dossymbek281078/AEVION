@@ -523,8 +523,19 @@ qlearnRouter.post("/courses/:id/enroll", async (req: Request, res: Response) => 
       }
       res.status(201).json({ enrollmentId });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // Отсюда управление уходило вниз, в память (в проде пустую), и студент
+      // получал «Course not found» про существующий курс — а запись при этом
+      // молча не происходила. Проверено контролем 21.08.2026: с живой базой
+      // ручка отвечает 201, с упавшей — 404.
+      console.error("[QLearn] enroll DB error", e);
+      res.status(503).json({
+        error: "storage_unavailable",
+        warning:
+          "Хранилище временно недоступно. Запись на курс НЕ сохранена — " +
+          "повторите попытку позже.",
+      });
+      return;
     }
   }
   const course = memCourses.get(courseId);

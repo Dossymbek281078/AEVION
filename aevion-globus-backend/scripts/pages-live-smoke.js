@@ -160,6 +160,22 @@ const PAGES = [
   "/verify-offline",
   "/voice-of-earth",
   "/z-tide",
+  // Из ветки шахмат (сведено 21.08.2026): подстраницы модуля, которых
+  // не было в общем списке. Списки собирали два окна независимо,
+  // поэтому здесь ОБЪЕДИНЕНИЕ, а не выбор одной стороны.
+  "/multichat-engine/verify",
+  "/cyberchess/cpi",
+  "/cyberchess/cpi/dashboard",
+  "/cyberchess/cpi/leaderboard",
+  "/cyberchess/economy",
+  "/cyberchess/history",
+  "/cyberchess/matchmaking",
+  "/cyberchess/repertoire",
+  "/cyberchess/replays",
+  "/cyberchess/spectator",
+  "/cyberchess/studio",
+  "/cyberchess/tournament",
+  "/cyberchess/training",
 ];
 
 let pass = 0;

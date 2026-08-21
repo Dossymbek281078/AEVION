@@ -257,7 +257,7 @@ export default function TournamentsHubPage() {
           </button>
         </div>
         <p style={{ color: T.dim, marginTop: 8, fontSize: 14 }}>
-          Single elimination, Swiss или round-robin — создай свой турнир или регистрируйся в чужой.
+          На вылет, швейцарская система или круговой — создай свой турнир или регистрируйся в чужой.
         </p>
         {loading && (
           <div style={{ color: T.faint, marginTop: 8, fontSize: 12 }}>Загружаем список...</div>
@@ -305,7 +305,7 @@ export default function TournamentsHubPage() {
                   : v === "single_elimination"
                   ? "Elim"
                   : v === "swiss"
-                  ? "Swiss"
+                  ? "Швейцарская"
                   : "RR"
               }
             />
@@ -489,9 +489,9 @@ function formatLabel(f: Format, t: Tournament): string {
   if (f === "single_elimination") return "Single Elim";
   if (f === "swiss") {
     const rounds = t.swissRounds ?? 5;
-    return `Swiss · ${rounds} туров`;
+    return `Швейцарская · ${rounds} туров`;
   }
-  return "Round-robin";
+  return "Круговой";
 }
 
 function formatColor(f: Format): string {
@@ -635,7 +635,7 @@ function TournamentCard({ t }: { t: Tournament }) {
               marginBottom: 6,
             }}
           >
-            Топ-5 · {t.format === "swiss" ? "Buchholz tiebreak" : "Round-robin"}
+            Топ-5 · {t.format === "swiss" ? "коэффициент Бухгольца" : "круговой"}
           </div>
           {standingsLoading && <div style={{ color: T.dim }}>Загрузка...</div>}
           {!standingsLoading && (!standings || standings.length === 0) && (
@@ -707,12 +707,12 @@ function TournamentCard({ t }: { t: Tournament }) {
             Подробнее
           </Link>
           {t.status === "live" ? (
-            <button
-              onClick={() => alert(`[mock] Spectate ${t.title}`)}
-              style={btnPrimary(T.blue)}
+            <Link
+              href="/cyberchess/spectator"
+              style={{ ...btnPrimary(T.blue), textDecoration: "none", display: "inline-block" }}
             >
-              Spectate
-            </button>
+              Смотреть
+            </Link>
           ) : t.status === "upcoming" ? (
             <button
               disabled={full}
@@ -736,9 +736,16 @@ function TournamentCard({ t }: { t: Tournament }) {
                   );
                   const data = await r.json();
                   if (data?.ok) {
-                    alert(`Registered. Ticket ${data.ticketId}`);
+                    alert(`Вы записаны на «${t.title}». Номер участника: ${data.ticketId}`);
                   } else {
-                    alert(`Error: ${data?.error || "unknown"}`);
+                    // Человеку — человеческое; код ошибки уходит в консоль.
+                    // Раньше здесь было «Error: <код>»: слово чужого языка и
+                    // строка, которая ничего не говорит тому, кто её прочтёт.
+                    console.warn("[tournaments] регистрация отклонена:", data?.error);
+                    alert(
+                      `Не удалось записаться на «${t.title}». ` +
+                        `Попробуйте ещё раз — если не выйдет, напишите нам.`,
+                    );
                   }
                 } catch {
                   /* Здесь стояло «Registered (offline mock)» — то есть при
@@ -947,9 +954,9 @@ function CreateTournamentModal({
           <div>
             <label style={labelStyle}>Формат</label>
             <select style={inputStyle} value={format} onChange={(e) => setFormat(e.target.value as Format)}>
-              <option value="single_elimination">Single elimination</option>
+              <option value="single_elimination">На вылет</option>
               <option value="swiss">Швейцарка</option>
-              <option value="round_robin">Round-robin</option>
+              <option value="round_robin">Круговой</option>
             </select>
           </div>
           <div>

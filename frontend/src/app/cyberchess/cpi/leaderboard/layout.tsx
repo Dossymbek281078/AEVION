@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "CPI Leaderboard — лидерборд по любому фактору",
+  title: "Таблица лидеров CPI — по любому фактору",
   description:
     "Топ игроков отдельно по точности, тактике, эндшпилю, контролю времени и ещё 7 параметрам. Не один-числовой Elo — а 11 разных пьедесталов.",
   openGraph: {
-    title: "CPI Leaderboard — 11 разных пьедесталов · CyberChess",
+    title: "Таблица лидеров CPI — 11 разных пьедесталов · CyberChess",
     description:
       "Лидерборд по каждому фактору CPI отдельно. Будь №1 по эндшпилю, даже если общий рейтинг средний.",
     type: "website",
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "CyberChess CPI Leaderboard",
+    title: "Таблица лидеров CPI · CyberChess",
     description: "Лидерборд по любому из 11 факторов рейтинга. Не одна цифра — а 11 пьедесталов.",
   },
 };

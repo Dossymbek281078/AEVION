@@ -1311,6 +1311,20 @@ export default function QSkywayClient() {
                   <div style={{ padding: "12px 14px", fontSize: 12, color: "#5f7086" }}>{t("qskyway.slots.empty")}</div>
                 ) : (
                   <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                    {/*
+                      Когда НАСТОЯЩИХ бронирований нет, а список не пуст, самое
+                      заметное в панели — чужие тестовые записи. Заголовок при
+                      этом честно показывает «· 0», но мелко, и рядом со списком
+                      из двух десятков строк читается как активность рынка.
+                      21.08.2026 на проде было ровно так: 0 живых, 39 тестовых.
+                      Не прячем список (принцип этой панели — называть, а не
+                      скрывать), а говорим прямо, что ниже.
+                    */}
+                    {(slots.liveCount ?? 0) === 0 && smokeSlotCount > 0 && (
+                      <div style={{ padding: "8px 14px", fontSize: 11.5, color: "#fbbf24", borderTop: "1px solid #1e2836" }}>
+                        {t("qskyway.slots.onlyTest")}
+                      </div>
+                    )}
                     {[...slots.list].reverse().slice(0, 20).map((s) => (
                       <div key={s.id} style={{ padding: "8px 14px", borderTop: "1px solid #1e2836", fontFamily: "monospace", fontSize: 11 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", color: "#9fb0c4" }}>

@@ -50,6 +50,7 @@ import { validateOr400 } from "../lib/qpaynetValidate";
 import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } from "../lib/qpaynetCrypto";
 import { csvNeutralizeFormula } from "../lib/csv";
 import { queryNumber } from "../lib/queryNumber";
+import { safeErrorText } from "../lib/safeError";
 
 export const qpaynetRouter = Router();
 
@@ -1855,7 +1856,7 @@ async function fireRequestWebhook(
     clearTimeout(t);
     return { ok: r.ok, status: r.status, error: r.ok ? undefined : `HTTP ${r.status}` };
   } catch (err) {
-    return { ok: false, status: 0, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, status: 0, error: safeErrorText(err, "internal error", "qpaynet") };
   }
 }
 
@@ -2360,7 +2361,7 @@ qpaynetRouter.post("/deposit/webhook", async (req, res) => {
     // Sentry: signature failure = either misconfiguration OR active spoof attempt.
     // Either way we want to know about it.
     captureException(err, { source: "qpaynet/stripe-webhook", phase: "verifySignature" });
-    return res.status(400).json({ error: "signature_verification_failed", detail: err instanceof Error ? err.message : String(err) });
+    return res.status(400).json({ error: "signature_verification_failed", detail: safeErrorText(err, "internal error", "qpaynet") });
   }
 
   // Event-level dedup. INSERT first; if a row already exists, this is a
@@ -2689,7 +2690,7 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
     }
   } catch (err) {
     captureException(err, { source: "qpaynet/reconcile", phase: "query" });
-    res.status(500).json({ error: "reconcile_failed", detail: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "reconcile_failed", detail: safeErrorText(err, "internal error", "qpaynet") });
   }
 });
 
@@ -3986,7 +3987,7 @@ qpaynetRouter.get("/health", async (_req, res) => {
       stuckWebhookDeliveries: stuckDeliveries,
     });
   } catch (err) {
-    res.status(503).json({ status: "error", service: "qpaynet", error: err instanceof Error ? err.message : String(err) });
+    res.status(503).json({ status: "error", service: "qpaynet", error: safeErrorText(err, "internal error", "qpaynet") });
   }
 });
 

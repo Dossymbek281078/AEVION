@@ -51,6 +51,7 @@ import { MEDIUM_BUNDLE } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
+import { safeErrorText } from "../lib/safeError";
 
 async function upsertAppSubscription(
   email: string,
@@ -335,11 +336,12 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     // Known subscription_* event we don't act on (e.g. subscription_payment_success).
     return res.json({ ok: true, ignored: event });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "ls webhook failed";
+    const msg = err instanceof Error ? err.message : "ls webhook failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "ls webhook failed", "lemonSqueezyWebhook");
     capture(err);
     console.error("[ls/webhook] handler error:", msg);
     // 500 so LS retries — provisioning is idempotent enough (latest-wins).
     releaseWebhookKey("lemonsqueezy", dedupKey);
-    return res.status(500).json({ ok: false, error: msg });
+    return res.status(500).json({ ok: false, error: msgPublic });
   }
 });

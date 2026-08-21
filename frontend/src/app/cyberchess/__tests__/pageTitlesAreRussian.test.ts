@@ -227,3 +227,48 @@ describe("подпись связана с полем на пути новичк
     expect(s).toContain('id="mm-rating"');
   });
 });
+
+describe("у каждого поля ввода есть имя для диктора", () => {
+  // 21.08. Было 58 полей, у которых диктор говорил «поле ввода» и ничего
+  // больше: ни label рядом, ни aria-label. Стало 0 — 13 связаны с подписями,
+  // 45 получили имя по месту.
+  //
+  // Окно 14 строк, а не 6: имя может стоять далеко от открывающего тега.
+  // С окном в 6 строк детектор не увидел уже существующий aria-label в
+  // VoiceCoach и поставил ВТОРОЙ — дубль поймал TSC.
+  function bezImeni(src: string): number {
+    const lines = src.split("\n");
+    let n = 0;
+    lines.forEach((l, i) => {
+      if (!/<(input|textarea|select)\b/.test(l)) return;
+      const blok = lines.slice(i, i + 14).join("\n");
+      if (/type\s*=\s*["'](hidden|checkbox|radio|range|color|file)/.test(blok)) return;
+      if (/aria-label|aria-labelledby|\bid\s*=/.test(blok)) return;
+      if (/<label[^>]*>/.test(lines.slice(Math.max(0, i - 4), i).join("\n"))) return;
+      n++;
+    });
+    return n;
+  }
+
+  test("детектор видит поле без имени и не видит поле с именем", () => {
+    expect(bezImeni("<input value={x} />")).toBe(1);
+    expect(bezImeni('<input aria-label="Ник" value={x} />')).toBe(0);
+  });
+
+  test("во всём модуле полей без имени нет", () => {
+    const plohie: string[] = [];
+    const obojti = (d: string) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) {
+          if (e.name !== "__tests__") obojti(p);
+        } else if (e.name.endsWith(".tsx")) {
+          const n = bezImeni(fs.readFileSync(p, "utf-8"));
+          if (n) plohie.push(`${path.relative(ROOT, p)}: ${n}`);
+        }
+      }
+    };
+    obojti(ROOT);
+    expect(plohie, "поле ввода без имени для диктора").toEqual([]);
+  });
+});

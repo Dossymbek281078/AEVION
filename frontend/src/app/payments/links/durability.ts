@@ -43,14 +43,20 @@ export type DurabilityNotice = {
   neverHint: string;
 };
 
+// ЯЗЫК. Текст английский, потому что английская вся страница и весь раздел
+// Payments Rail; один русский абзац посреди неё читался бы как поломка вёрстки,
+// а не как забота. Правило «вся проза по-русски» относится к ответам основателю,
+// а не к тексту интерфейса (см. feedback_russian_prose_default). Когда раздел
+// переведут целиком — переводить и эти строки, они здесь в одном месте.
 const LOST_ON_RESTART =
-  "Ссылки хранятся в памяти сервера и пропадут при его перезапуске. " +
-  "У вас в списке они останутся, а у плательщика ссылка перестанет открываться — " +
-  "и вы этого не увидите. Выпускайте короткие сроки и проверяйте ссылку перед отправкой.";
+  "Links are kept in the server's memory and disappear when it restarts. " +
+  "Your own list will still show them, but the payer's link stops opening — " +
+  "and nothing tells you that it did. Prefer short expiries and open the link " +
+  "yourself before sending it.";
 
 const UNKNOWN_STATE =
-  "Не удалось спросить сервер, где хранятся ссылки. Пока ответа нет, считайте " +
-  "хранение неустойчивым: срок «никогда» недоступен.";
+  "Could not ask the server where links are stored. Until it answers, treat " +
+  "storage as non-durable: the “never expires” option stays off.";
 
 /**
  * Разобрать поле `persistence` из ответа `/api/health`.
@@ -71,8 +77,8 @@ export function durabilityNotice(p: Persistence): DurabilityNotice {
     text,
     neverHint:
       p === "memory"
-        ? "Недоступно: сервер хранит ссылки в памяти и теряет их при перезапуске."
-        : "Недоступно: состояние хранилища неизвестно.",
+        ? "Unavailable: the server keeps links in memory and loses them on restart."
+        : "Unavailable: storage state is unknown.",
   };
 }
 

@@ -160,6 +160,24 @@ async function main() {
   const ver = await jget("/api/qskyway/verify?city=nyc");
   assert(ver.status === 200 && ver.json?.valid === true && ver.json?.alg === "Ed25519", "Ed25519 twin signature verifies");
 
+  // Подпись должна быть НАСТОЯЩЕЙ, а не временной.
+  //
+  // 21.08.2026 у соседнего модуля (QSign) нашлось ровно это: на проде он
+  // подписывал ХЕШЕМ, потому что не задан ключ, и режим был виден только в
+  // /health. Здесь такой же риск: без QSKYWAY_SIGN_SK библиотека генерирует
+  // ключ на запуск, подпись остаётся «валидной» и ничего не доказывает —
+  // проверить двойник против ВЧЕРАШНЕЙ записи станет нельзя.
+  //
+  // На проде это провал. Локально ключа обычно нет, и требовать его значило бы
+  // сделать смоук вечно красным — поэтому там честный SKIP с причиной, а не
+  // молчаливый пропуск.
+  if (isProdTarget) {
+    assert(ver.json?.ephemeral === false, "ключ подписи постоянный (не эфемерный)",
+      `ephemeral=${ver.json?.ephemeral} note=${String(ver.json?.keyNote || "").slice(0, 60)}`);
+  } else {
+    skip("ключ подписи постоянный (не эфемерный)", "локальный запуск — QSKYWAY_SIGN_SK обычно не задан");
+  }
+
   // ── heights the generator could not vouch for ─────────────────────────────
   // A wrong height tag enters the twin as MEASURED and therefore flies with zero
   // safety clearance: Astana carries height=382 on a 75-storey tower, 4.7x the

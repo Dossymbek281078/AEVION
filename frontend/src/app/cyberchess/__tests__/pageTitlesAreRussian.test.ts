@@ -74,3 +74,32 @@ describe("заголовки страниц модуля — по-русски",
     expect(plohie).toEqual([]);
   });
 });
+
+describe("подписи на главной странице модуля — русские", () => {
+  // 21.08. Перевёл 60 подписей из 73. Сторож держит те, что человек читает как
+  // кнопку или заголовок; имена и форматы (PGN, SVG, Syzygy, Twitch, Lichess),
+  // ники игроков и названия тем оформления сюда НЕ входят — они английские
+  // намеренно.
+  const ZAPRESHCHENO = [
+    ">Win Rate<", ">Rating<", ">Editor<", ">Insights<", ">Opening Trainer<",
+    ">🔁 Rematch<", ">↩ Undo<", ">💡 Hint<", ">⚔ Captured<", ">✕ Disconnect<",
+    ">🏆 Tournament Mode", ">🎲 Chess Variants", ">👻 Ghost Mode", ">Streak<",
+  ];
+
+  test("шаблоны узнают свои образцы", () => {
+    // Контроль: без него сторож молча зеленеет, если образец перестанет
+    // совпадать по форме записи — на этом я уже попадался сегодня.
+    const obrazec = '<div>Win Rate</div><span>🔁 Rematch</span>';
+    expect(ZAPRESHCHENO.filter((z) => obrazec.includes(z)).length).toBeGreaterThan(1);
+  });
+
+  test("английские подписи не вернулись", () => {
+    const src = fs.readFileSync(path.join(ROOT, "page.tsx"), "utf-8");
+    const kod = src
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("//"))
+      .join("\n");
+    const vernulis = ZAPRESHCHENO.filter((z) => kod.includes(z));
+    expect(vernulis, "английская подпись вернулась на главную").toEqual([]);
+  });
+});

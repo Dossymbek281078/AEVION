@@ -34,8 +34,19 @@ async function get(path, expect = 200) {
 
   // VeilNetX
   console.log("\nVeilNetX:");
-  await check("GET /api/veilnetx/health",    async () => { const d = await get("/api/veilnetx/health"); return d.status === "ok" || d.online; });
-  await check("GET /api/veilnetx/chain/head",async () => { const d = await get("/api/veilnetx/chain/head"); return d !== null; });
+  // 19.08.2026: обе проверки краснели на ЗДОРОВОМ проде — ожидания устарели.
+  //
+  // Здоровье: ручка отдаёт { ok: true, module, phase, eta, waitlistCount },
+  // а проверка искала поле status или online. Ни того ни другого там нет и,
+  // судя по остальным модулям, не было. Принимаем оба вида, чтобы смоук не
+  // ломался от косметики в ответе.
+  //
+  // Реестр: цепочка живёт по /api/veilnetx-ledger/chain/head (отдельный
+  // роутер veilnetxLedger.ts), а проверка стучалась в /api/veilnetx/chain/head
+  // и получала честный 404. Проверено: верный адрес отдаёт 200, head + length
+  // 783 записи.
+  await check("GET /api/veilnetx/health",           async () => { const d = await get("/api/veilnetx/health"); return d?.ok === true || d?.status === "ok" || d?.online; });
+  await check("GET /api/veilnetx-ledger/chain/head", async () => { const d = await get("/api/veilnetx-ledger/chain/head"); return typeof d?.head === "string" && typeof d?.length === "number"; });
 
   // QMaskCard
   console.log("\nQMaskCard:");

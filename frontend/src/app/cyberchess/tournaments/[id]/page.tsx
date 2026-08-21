@@ -598,9 +598,9 @@ export default function TournamentDetailPage({
           borderBottom: `1px solid ${T.border}`,
         }}
       >
-        <Tab id="bracket" active={tab} onClick={setTab} label="Bracket" />
-        <Tab id="standings" active={tab} onClick={setTab} label="Standings" />
-        <Tab id="schedule" active={tab} onClick={setTab} label="Schedule" />
+        <Tab id="bracket" active={tab} onClick={setTab} label="Сетка" />
+        <Tab id="standings" active={tab} onClick={setTab} label="Таблица" />
+        <Tab id="schedule" active={tab} onClick={setTab} label="Расписание" />
       </div>
 
       {/* Tab content */}

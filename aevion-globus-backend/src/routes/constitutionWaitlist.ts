@@ -134,10 +134,17 @@ constitutionWaitlistRouter.post(
 
       await ensureWaitlistTable();
       let storage: "postgres" | "memory" = "memory";
+      // Новая ли это подписка. Нужно, чтобы не слать письмо второй раз тому,
+      // кто нажал кнопку дважды: замер 21.08.2026 на проде — две подписки
+      // подряд дали ДВА одинаковых письма за две секунды. Это раздражает
+      // человека и жжёт суточный потолок Brevo (300 писем).
+      let isNew = true;
       if (dbAvailable) {
         try {
           const pool = getPool();
-          await pool.query(
+          // xmax = 0 у строки, которая была ВСТАВЛЕНА; у обновлённой конфликтом
+          // там номер транзакции. Штатный способ различить их в одном запросе.
+          const ins = await pool.query(
             `INSERT INTO constitution_waitlist ("email","source","createdAt")
              VALUES ($1,$2,$3)
              ON CONFLICT ("email") DO UPDATE SET "source" =
@@ -158,9 +165,11 @@ constitutionWaitlistRouter.post(
                             - position(',' in reverse(left(constitution_waitlist."source" || ',' || EXCLUDED."source", 250)))
                         )
                       )
-               END`,
+               END
+             RETURNING (xmax = 0) AS inserted`,
             [row.email, row.source, row.createdAt],
           );
+          isNew = ins.rows?.[0]?.inserted !== false;
           storage = "postgres";
         } catch (dbErr) {
           // Раньше тут стоял молчаливый провал в память. Человек получал
@@ -193,7 +202,13 @@ constitutionWaitlistRouter.post(
 
       // Письмо не задерживает ответ, но его провал обязан быть видимым: иначе
       // человек подписан, письма нет, и снаружи это неотличимо от задержки.
-      void sendWaitlistConfirm(row.email, row.source)
+      //
+      // Повторная подписка письма НЕ шлёт. Ответ при этом остаётся 201: с точки
+      // зрения человека он подписан, и рассказывать ему про устройство базы
+      // незачем. Если различить не удалось (база недоступна, isNew остаётся
+      // true) — письмо шлём: лучше лишнее письмо, чем молчание в ответ на
+      // первую подписку.
+      if (isNew) void sendWaitlistConfirm(row.email, row.source)
         .then((sent) => {
           if (!sent) capture(new Error("waitlist confirm email not sent"), { where: "waitlist.confirmEmail" });
         })
@@ -451,11 +466,22 @@ function aggregateBySource(rows: WaitlistRow[]): {
 }
 
 /**
- * Weekly digest cron — stub. When Pro launches and transactional
- * email provider (Brevo/Postmark/Resend) is wired up, replace this
- * with actual mail send. For now just no-op.
+ * Недельный дайджест подписчикам конституции.
  *
- * Call from cron scheduler (already exists in qcoreai.ts) every Sunday.
+ * ⚠️ ЭТО НЕ ЗАГЛУШКА. Комментарий здесь до 21.08.2026 гласил «For now just
+ * no-op», хотя функция давно шлёт НАСТОЯЩИЕ письма через Brevo (см. вызов
+ * sendDigestEmail ниже). Такая подпись опаснее отсутствия подписи: она
+ * приглашает вызвать функцию «чтобы проверить», а проверка окажется
+ * рассылкой по живому списку.
+ *
+ * Кто её зовёт: НИКТО. Проверено сплошным поиском по репозиторию 21.08.2026
+ * — ни ручки, ни расписания, ни скрипта. То есть механизм собран и не
+ * подключён; включать его — отдельное решение, потому что рассылка по
+ * живым адресам необратима.
+ *
+ * Для письма НА ЗАПУСК модуля эта функция не годится: она собирает дайджест
+ * артефактов конституции, а не анонс. Порядок отправки анонса —
+ * Desktop\АЕВИОН-CyberChess6-08-19-письмо-на-запуск-черновик.md
  */
 /**
  * `aborted` отличает «рассылать было некому» от «список не прочитался».

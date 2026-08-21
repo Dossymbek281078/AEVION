@@ -519,6 +519,7 @@ qventureRouter.get("/analyses/:id", async (req: Request, res: Response) => {
     if (!row) return res.status(404).json({ ok: false, error: "not_found" });
     res.json({ ok: true, data: redactInput(row) });
   } catch (e: unknown) {
+    if (e instanceof StorageUnavailable) return replyStorageUnavailable(res);
     captureQVentureError(e);
     res.status(500).json({ ok: false, error: "get_failed" });
   }
@@ -690,6 +691,7 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
     res.setHeader("Content-Disposition", `attachment; filename="qventure-${safeName}.pdf"`);
     return res.send(pdf);
   } catch (e: unknown) {
+    if (e instanceof StorageUnavailable) return replyStorageUnavailable(res);
     captureQVentureError(e);
     return res.status(500).json({ ok: false, error: "pdf_failed" });
   }
@@ -1129,6 +1131,25 @@ async function listExamples(): Promise<StoredAnalysis[]> {
   return memStore.filter((r) => r.id.startsWith(EXAMPLE_ID_PREFIX)).sort((a, b) => b.composite - a.composite);
 }
 
+/** Хранилище не ответило. Это НЕ «анализа нет» — разные новости. */
+class StorageUnavailable extends Error {
+  constructor() {
+    super("storage_unavailable");
+    this.name = "StorageUnavailable";
+  }
+}
+
+/** Общий ответ на отказ хранилища: один текст на все ручки модуля. */
+function replyStorageUnavailable(res: Response): void {
+  res.status(503).json({
+    ok: false,
+    error: "storage_unavailable",
+    warning:
+      "Хранилище временно недоступно. Это НЕ значит, что записи нет — " +
+      "прочитать её не удалось. Повторите запрос позже.",
+  });
+}
+
 async function getById(id: string): Promise<StoredAnalysis | null> {
   if (isQVentureDbReady()) {
     try {
@@ -1141,6 +1162,19 @@ async function getById(id: string): Promise<StoredAnalysis | null> {
       return null;
     } catch (e: unknown) {
       captureQVentureError(e);
+      // Раньше отсюда управление уходило ВНИЗ, в память (в проде пустую), и
+      // отказ базы возвращался вызывающему как null — то есть как «анализа
+      // нет». Ручка честно отвечала 404, и ответ никого не тревожил.
+      //
+      // Проверено положительным контролем 21.08.2026: с работающей базой та же
+      // ручка отдаёт 200 с данными, с падающей — 404. Значит база на пути, и
+      // её отказ подменялся отсутствием записи.
+      //
+      // Запасное хранилище ниже осмысленно ТОЛЬКО когда база не настроена
+      // (isQVentureDbReady() === false) — туда мы и так не попадаем из этой
+      // Все шесть вызывающих обёрнуты в try/catch; две ручки чтения по
+      // идентификатору различают этот класс и отвечают 503.
+      throw new StorageUnavailable();
     }
   }
   return memStore.find((r) => r.id === id) ?? null;

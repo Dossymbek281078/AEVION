@@ -47,7 +47,7 @@ export default function MirrorModePanel({
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <div>
-          <span style={{ fontSize: 15, fontWeight: 700, color: text }}>🪞 Mirror Mode</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: text }}>🪞 Зеркальный режим</span>
           {active && (
             <div style={{ fontSize: 11, color: accent, fontWeight: 600, marginTop: 1 }}>
               {t("mirror.plays_like_you")}

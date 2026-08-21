@@ -239,7 +239,7 @@ qsocialRouter.post("/posts", async (req: Request, res: Response) => {
     } else {
       memPosts.set(post.id, post);
     }
-    return res.status(201).json({ post });
+    return res.status(201).json({ post, storage: isQSocialDbReady() ? "db" : "memory" });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
@@ -268,7 +268,7 @@ qsocialRouter.patch("/posts/:id", async (req: Request, res: Response) => {
         `UPDATE "QSocialPost" SET "content"=$1,"isPublic"=$2,"updatedAt"=NOW() WHERE "id"=$3 RETURNING *`,
         [newContent, newPublic, id],
       );
-      return res.json({ post: updated[0] });
+      return res.json({ post: updated[0], storage: "db" });
     }
 
     const post = memPosts.get(id);
@@ -281,7 +281,7 @@ qsocialRouter.patch("/posts/:id", async (req: Request, res: Response) => {
     }
     if (typeof isPublic === "boolean") post.isPublic = isPublic;
     post.updatedAt = nowIso();
-    return res.json({ post });
+    return res.json({ post, storage: "memory" });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
@@ -343,7 +343,7 @@ qsocialRouter.post("/posts/:id/like", async (req: Request, res: Response) => {
         }
       }
       const { rows: postRows } = await pool.query(`SELECT "likesCount" FROM "QSocialPost" WHERE "id"=$1`, [postId]);
-      return res.json({ liked, likesCount: postRows[0]?.likesCount ?? 0 });
+      return res.json({ liked, likesCount: postRows[0]?.likesCount ?? 0, storage: "db" });
     }
 
     const key = likeKey(auth.sub, postId);
@@ -364,7 +364,7 @@ qsocialRouter.post("/posts/:id/like", async (req: Request, res: Response) => {
         addNotification(post.userId, { type: "like", fromUserId: auth.sub, resourceId: postId });
       }
     }
-    return res.json({ liked, likesCount: post.likesCount });
+    return res.json({ liked, likesCount: post.likesCount, storage: "memory" });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
@@ -439,7 +439,7 @@ qsocialRouter.post("/posts/:id/comments", async (req: Request, res: Response) =>
         }
       }
     }
-    return res.status(201).json({ comment });
+    return res.status(201).json({ comment, storage: isQSocialDbReady() ? "db" : "memory" });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
@@ -495,7 +495,7 @@ qsocialRouter.post("/follow/:userId", async (req: Request, res: Response) => {
         // Notify followee
         addNotification(followingId, { type: "follow", fromUserId: auth.sub, resourceId: auth.sub });
       }
-      return res.json({ following });
+      return res.json({ following, storage: "db" });
     }
 
     const key = followKey(auth.sub, followingId);
@@ -509,7 +509,7 @@ qsocialRouter.post("/follow/:userId", async (req: Request, res: Response) => {
       // Notify followee
       addNotification(followingId, { type: "follow", fromUserId: auth.sub, resourceId: auth.sub });
     }
-    return res.json({ following });
+    return res.json({ following, storage: "memory" });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
@@ -630,7 +630,17 @@ qsocialRouter.patch("/me/notifications/:id/read", async (req: Request, res: Resp
       if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found" });
       return res.json({ ok: true });
     }
-  } catch (e) { console.error("[QSocial] mark-read DB error", e); }
+  } catch (e) {
+    console.error("[QSocial] mark-read DB error", e);
+    // База объявлена готовой и упала. Ниже — запасная память, в проде пустая,
+    // и оттуда ушло бы «not_found» про уведомление, которое есть.
+    return res.status(503).json({
+      error: "storage_unavailable",
+      warning:
+        "Хранилище временно недоступно. Это НЕ значит, что записи нет — " +
+        "повторите запрос позже.",
+    });
+  }
 
   const all = memNotifications.get(auth.sub) ?? [];
   const notif = all.find((n) => n.id === notifId);
@@ -718,16 +728,23 @@ qsocialRouter.post("/dm/:userId", async (req: Request, res: Response) => {
         [msg.id, msg.fromId, msg.toId, msg.content],
       );
       addNotification(toId, { type: "mention", fromUserId: auth.sub, resourceId: msg.id });
-      return res.status(201).json({ message: msg });
+      return res.status(201).json({ message: msg, storage: "db" });
     }
   } catch (e) { console.error("[QSocial] DM send DB error", e); }
 
+  // Запасной путь для ЛИЧНОГО СООБЩЕНИЯ. Из десяти мест этого файла оно
+  // тяжелее прочих: человек видит письмо отправленным, оно появляется в
+  // переписке, и при следующей выкатке его нет ни у отправителя, ни у
+  // получателя. Потерянный лайк — досада, потерянное письмо — обманутое
+  // доверие, и цена ошибки не равна размеру кода.
+  //
+  // Признак в ответе не заменяет хранилища, но снимает ложное «отправлено».
   const key = dmKey(auth.sub, toId);
   const thread = memDMs.get(key) ?? [];
   thread.push(msg);
   memDMs.set(key, thread);
   addNotification(toId, { type: "mention", fromUserId: auth.sub, resourceId: msg.id });
-  return res.status(201).json({ message: msg });
+  return res.status(201).json({ message: msg, storage: "memory" });
 });
 
 // GET /api/qsocial/dm/:userId — get conversation
@@ -848,12 +865,12 @@ qsocialRouter.post("/stories", async (req: Request, res: Response) => {
          VALUES ($1,$2,$3,$4,$5,0,$6)`,
         [story.id, story.userId, story.content, story.mediaUrl, story.expiresAt, story.createdAt],
       );
-      return res.status(201).json({ story });
+      return res.status(201).json({ story, storage: "db" });
     }
   } catch (e) { console.error("[QSocial] story create DB error", e); }
 
   memStories.set(story.id, story);
-  return res.status(201).json({ story });
+  return res.status(201).json({ story, storage: "memory" });
 });
 
 // GET /api/qsocial/stories — public non-expired stories
@@ -904,14 +921,22 @@ qsocialRouter.post("/stories/:id/view", async (req: Request, res: Response) => {
         [id],
       );
       if (!rows[0]) return res.status(404).json({ error: "not_found" });
-      return res.json({ viewCount: rows[0].viewCount });
+      return res.json({ viewCount: rows[0].viewCount, storage: "db" });
     }
-  } catch (e) { console.error("[QSocial] story view DB error", e); }
+  } catch (e) {
+    console.error("[QSocial] story view DB error", e);
+    return res.status(503).json({
+      error: "storage_unavailable",
+      warning:
+        "Хранилище временно недоступно. Это НЕ значит, что истории нет — " +
+        "повторите запрос позже.",
+    });
+  }
 
   const story = memStories.get(id);
   if (!story) return res.status(404).json({ error: "not_found" });
   story.viewCount++;
-  return res.json({ viewCount: story.viewCount });
+  return res.json({ viewCount: story.viewCount, storage: "memory" });
 });
 
 // GET /api/qsocial/stats — platform aggregate stats (public)

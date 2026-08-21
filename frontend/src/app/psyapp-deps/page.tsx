@@ -27,6 +27,7 @@ export default function PsyAppDepsPage() {
   const [user, setUser] = useState<UserState | null>(null);
   const [streakDays, setStreakDays] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
   // Hydrate alias from localStorage on mount.
   useEffect(() => {
@@ -68,8 +69,13 @@ export default function PsyAppDepsPage() {
     if (alias) fetchUser(alias);
   }, [alias, fetchUser]);
 
-  function handleStarted(newAlias: string) {
+  function handleStarted(newAlias: string, storage?: string) {
     setAlias(newAlias);
+    setStorageWarning(
+      storage === "memory"
+        ? "Хранилище временно недоступно. Счёт начат, но НЕ переживёт перезапуск сервиса — зайдите позже и начните заново, чтобы он сохранился."
+        : null,
+    );
   }
 
   function handleRelapse() {
@@ -127,6 +133,18 @@ export default function PsyAppDepsPage() {
 
       {/* Main flow */}
       <section style={styles.section}>
+        {storageWarning && (
+          <div
+            role="alert"
+            style={{
+              border: "1px solid #fbbf24", background: "#fffbeb", color: "#78350f",
+              borderRadius: 10, padding: "12px 14px", marginBottom: 16,
+              fontSize: 14, lineHeight: 1.55,
+            }}
+          >
+            <b>Счёт сохранён не насовсем.</b> {storageWarning}
+          </div>
+        )}
         {loading ? (
           <div style={styles.placeholder}>Загружаю…</div>
         ) : !user ? (

@@ -1547,7 +1547,7 @@ pipelineRouter.get("/verify/:certId/log", async (req, res) => {
     const { certId } = req.params;
     const limit = Math.max(
       1,
-      Math.min(500, parseInt(String(req.query.limit ?? "100"), 10) || 100),
+      Math.min(500, Math.max(parseInt(String(req.query.limit ?? "100"), 10) || 100, 1)),
     );
 
     const { rows } = await pool.query(
@@ -1647,7 +1647,7 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
       typeof req.query.sort === "string" ? req.query.sort : "recent";
     const limit = Math.max(
       1,
-      Math.min(1000, parseInt(String(req.query.limit ?? "500"), 10) || 500),
+      Math.min(1000, Math.max(parseInt(String(req.query.limit ?? "500"), 10) || 500, 1)),
     );
 
     const conditions: string[] = [`"status" = 'active'`];

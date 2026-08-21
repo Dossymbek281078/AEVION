@@ -553,7 +553,17 @@ qjobsRouter.post("/jobs/:id/save", async (req: Request, res: Response) => {
         return res.json({ saved: true });
       }
     }
-  } catch (e) { console.error("[QJobs] save toggle DB error", e); }
+  } catch (e) {
+    console.error("[QJobs] save toggle DB error", e);
+    // Ниже вакансия ищется в памяти, и её отсутствие уходило как «not_found»:
+    // человек читал бы «такой вакансии нет» про существующую.
+    return res.status(503).json({
+      error: "storage_unavailable",
+      warning:
+        "Хранилище временно недоступно. Это НЕ значит, что вакансии нет — " +
+        "повторите запрос позже.",
+    });
+  }
 
   const job = memJobs.get(jobId);
   if (!job) return res.status(404).json({ error: "not_found" });

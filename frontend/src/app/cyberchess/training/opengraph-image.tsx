@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION CyberChess — Training Hub";
+export const alt = "AEVION CyberChess — тренировки";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -32,10 +32,10 @@ export default function Image() {
       </div>
 
       <div style={{ fontSize: 52, fontWeight: 900, color: "#f1f5f9", textAlign: "center", lineHeight: 1.15, marginBottom: 16 }}>
-        Training Hub
+        Тренировки
       </div>
       <div style={{ fontSize: 22, color: "#64748b", textAlign: "center", marginBottom: 52, maxWidth: 980 }}>
-        Daily plan · weak factor drill · variant of day · AEV bonus
+        План на день · тренировка слабой стороны · вариант дня · бонус AEV
       </div>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>

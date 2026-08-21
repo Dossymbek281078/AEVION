@@ -713,7 +713,7 @@ export default function SpectatorViewerPage(props: Props) {
                 lineHeight: 1.5,
               }}
             >
-              режим наблюдателя · ходы недоступны · обновляется через SSE
+              режим наблюдателя · ходы недоступны · обновляется автоматически
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@
 // CyberChess Daily Puzzle — real chess.js + 365 pool + leaderboard + streak
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { themeRu } from './themes';
 import { tournamentUserId, tournamentDisplayName } from '../tournaments/playerIdentity';
 import { Chess, Square } from 'chess.js';
 
@@ -281,7 +282,7 @@ export default function DailyPuzzlePage() {
       setBestStreak(rawBest);
       if (lastSolved === today) {
         setSolved(true);
-        setMessage(`Уже решено сегодня. Streak: ${curStreak}`);
+        setMessage(`Уже решено сегодня. Серия: ${curStreak}`);
       }
     } catch {
       // ignore
@@ -368,8 +369,8 @@ export default function DailyPuzzlePage() {
     stopTimer();
     setMessage(
       usedHints
-        ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Streak не растёт, но и не сбрасывается: ${newStreak}.`
-        : `Поздравляем! Решено за ${formatTime(totalMs)}. Streak +1 = ${newStreak}. Best: ${newBest}`
+        ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Серия не растёт, но и не сбрасывается: ${newStreak}.`
+        : `Поздравляем! Решено за ${formatTime(totalMs)}. Серия +1 = ${newStreak}. Рекорд: ${newBest}`
     );
 
     // Отправка на сервер. Изменилось два раза за 19.08.2026, и оба важны.
@@ -408,8 +409,8 @@ export default function DailyPuzzlePage() {
           if (j.streak !== newStreak) {
             setMessage(
               usedHints
-                ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Streak не растёт: ${j.streak}.`
-                : `Поздравляем! Решено за ${formatTime(totalMs)}. Streak: ${j.streak}.`
+                ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Серия не растёт: ${j.streak}.`
+                : `Поздравляем! Решено за ${formatTime(totalMs)}. Серия: ${j.streak}.`
             );
           }
         }
@@ -417,6 +418,39 @@ export default function DailyPuzzlePage() {
           setBestStreak(j.bestStreak);
           try { localStorage.setItem('cc_daily_best_streak', String(j.bestStreak)); } catch {}
         }
+      } else {
+        // ОТКАЗ СЕРВЕРА. Раньше здесь не было ничего: местная серия уже выросла,
+        // человек видел «Серия +1», а сервер её не признал — и назавтра число
+        // молча менялось. Это те же «два писателя одного значения», от которых
+        // защищается ветка выше, только в тихой половине.
+        //
+        // Технический код (moves_required, wrong_day) не показываем: сервер шлёт
+        // рядом человеческую подсказку, её и читаем, а код уходит в консоль.
+        let podskazka = 'Сервер не засчитал решение. Попробуйте ещё раз.';
+        try {
+          const j = (await r.json()) as { error?: string; hint?: string };
+          if (typeof j.hint === 'string' && j.hint) podskazka = j.hint;
+          console.warn('[daily] сервер отказал:', j.error ?? r.status);
+        } catch {
+          console.warn('[daily] сервер отказал:', r.status);
+        }
+        setMessage(podskazka);
+
+        // ОТКАТ. Серию мы прибавляем ДО запроса намеренно: страница обязана
+        // работать без сети, и обрыв связи (ветка catch ниже) местный счёт не
+        // трогает — он догонит при следующей удачной отправке.
+        //
+        // Но отказ сервера — не обрыв. Это определённое «нет»: ходы не те,
+        // день не тот. Оставить прибавку значит показывать человеку серию,
+        // которой у него нет, и молча расходиться с таблицей лидеров.
+        setStreak(streak);
+        setBestStreak(bestStreak);
+        setSolved(false);
+        try {
+          localStorage.setItem('cc_daily_streak', String(streak));
+          localStorage.setItem('cc_daily_best_streak', String(bestStreak));
+          localStorage.removeItem('cc_daily_last_solved');
+        } catch {}
       }
     } catch {
       // ignore network errors — local state already saved
@@ -640,10 +674,10 @@ export default function DailyPuzzlePage() {
             WebkitTextFillColor: 'transparent',
           }}
         >
-          🧩 Daily Puzzle
+          🧩 Задача дня
         </h1>
         <p style={{ color: '#9aa0b4', margin: '0 0 24px 0', fontSize: 14 }}>
-          Один пазл в день. Решай каждый день — держи streak. Многоходовые пазлы: бот отвечает за противника.
+          Один пазл в день. Решай каждый день — держи серию. Многоходовые пазлы: бот отвечает за противника.
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 24, alignItems: 'start' }}>
@@ -661,7 +695,7 @@ export default function DailyPuzzlePage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 12, color: '#9aa0b4' }}>Тема</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#00ff9d' }}>{puzzle.theme}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#00ff9d' }}>{themeRu(puzzle.theme)}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 12, color: '#9aa0b4' }}>Время</div>
@@ -901,7 +935,7 @@ export default function DailyPuzzlePage() {
                   padding: 16,
                 }}
               >
-                <div style={{ fontSize: 12, color: '#9aa0b4' }}>Текущий streak</div>
+                <div style={{ fontSize: 12, color: '#9aa0b4' }}>Текущая серия</div>
                 <div style={{ fontSize: 32, fontWeight: 800, color: '#00ff9d' }}>🔥 {streak}</div>
               </div>
               <div
@@ -912,7 +946,7 @@ export default function DailyPuzzlePage() {
                   padding: 16,
                 }}
               >
-                <div style={{ fontSize: 12, color: '#9aa0b4' }}>Лучший streak</div>
+                <div style={{ fontSize: 12, color: '#9aa0b4' }}>Лучшая серия</div>
                 <div style={{ fontSize: 32, fontWeight: 800, color: '#b56bff' }}>🏆 {bestStreak}</div>
               </div>
               <div

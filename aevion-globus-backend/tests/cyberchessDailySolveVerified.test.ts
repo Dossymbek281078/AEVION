@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, afterEach } from "vitest";
+import { describe, test, expect, vi, afterEach, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -55,11 +55,36 @@ async function app() {
 }
 
 const DAY = "2026-08-19";
-vi.useFakeTimers({ shouldAdvanceTime: true });
+
+// Часы подменяются ПЕРЕД КАЖДОЙ проверкой, а не один раз на файл.
+//
+// Было: useFakeTimers() на уровне модуля и useRealTimers() в afterEach. То есть
+// после первой же проверки часы становились настоящими, и три теста, которые
+// шлют day: "2026-08-19", сравнивались с СЕГОДНЯШНЕЙ датой. Сервер отвечал
+// wrong_day, а тесты ждали moves_required / wrong_solution / 200.
+//
+// Зелёными они были ровно два дня — пока календарь совпадал с зашитым DAY.
+// Поймано 21.08.2026 на полном прогоне: три падения, идентичные с моей правкой
+// и без неё. Это ставка на календарь, родня ставке на скорость машины.
+//
+// Проверки, которым нужен другой день, зовут setSystemTime сами и перекрывают
+// это значение.
+beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date(`${DAY}T12:00:00Z`));
+});
 
 afterEach(() => { vi.useRealTimers(); });
 
 describe("серию нельзя объявить, её можно только заработать", () => {
+  // Часы фиксируем ЯВНО. Без этого тест сверяет зашитый DAY с НАСТОЯЩИМ днём
+  // сервера: он зелен ровно до полуночи после даты, на которую написан, а
+  // потом отвечает wrong_day. Так и случилось — набор упал через сутки,
+  // и виноват был не код, а календарь.
+  // Часы уже зафиксированы общим beforeEach выше — тот вариант шире, он
+  // ещё и включает подменные часы заново. Здесь стоял дубль: этот же
+  // календарный дефект чинили две сессии независимо 21.08.2026.
+
   test("без ходов — отказ, и он говорит, чего не хватает", async () => {
     const r = await request(await app()).post("/api/cyberchess-daily/solve")
       .send({ day: DAY, userId: "u1", streak: 364 });

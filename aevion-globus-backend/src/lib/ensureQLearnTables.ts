@@ -74,6 +74,33 @@ export async function ensureQLearnTables(pool: PgPoolInstance): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS "QLearnEnrollment_uniq"
         ON "QLearnEnrollment" ("courseId", "userId");
     `);
+    // Сертификаты. Таблицы у них НЕ БЫЛО ВОВСЕ — жили в Map в памяти процесса,
+    // и после каждой выкатки список сертификатов у человека становился пустым,
+    // а запрос конкретного отвечал 404. Выкаток бэкенда за сутки бывает шесть.
+    //
+    // Хуже потери была подмена: при повторном завершении курса выдавался НОВЫЙ
+    // номер, а датой окончания ставился сегодняшний день вместо настоящего.
+    // Распечатанный или отправленный работодателю сертификат переставал
+    // совпадать, и каждый раз в QRight уходила ещё одна регистрация того же
+    // достижения.
+    //
+    // Уникальность по enrollmentId закрывает и это: повторный вызов возвращает
+    // существующий сертификат, а не создаёт второй.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "QLearnCertificate" (
+        "id"                TEXT PRIMARY KEY,
+        "enrollmentId"      TEXT NOT NULL UNIQUE,
+        "courseId"          TEXT NOT NULL,
+        "userId"            TEXT NOT NULL,
+        "courseTitle"       TEXT NOT NULL DEFAULT '',
+        "certificateNumber" TEXT NOT NULL,
+        "completedAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "QLearnCertificate_user_idx"
+        ON "QLearnCertificate" ("userId", "completedAt" DESC);
+    `);
     dbReady = true;
     console.log("[QLearn] Tables ready");
   } catch (e: unknown) {

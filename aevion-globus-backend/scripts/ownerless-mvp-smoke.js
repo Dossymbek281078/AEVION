@@ -14,7 +14,14 @@
 const FRONT = (process.env.FRONT || "https://aevion.app").replace(/\/+$/, "");
 
 const MVPS = [
-  { id: "qpersona", contains: ["QPersona", "doppelganger", "Style"] },
+  // 19.08.2026: смоук краснел на ЗДОРОВОЙ странице. Он искал английское
+  // "doppelganger", а страницу перевели на русский — там теперь «двойник».
+  // Размер 36 КБ, как у соседних проходящих, содержимое на месте.
+  //
+  // Слово-ожидание должно пережить перевод, иначе сторож краснеет на каждой
+  // работе над текстом и его отключают. Оставляем название модуля (оно не
+  // переводится) и принимаем оба языка для смыслового слова.
+  { id: "qpersona", contains: ["QPersona"], containsAny: ["doppelganger", "двойник"] },
   { id: "qlife", contains: ["QLife", "Personal", "OS"] },
   { id: "voice-of-earth", contains: ["Voice of Earth", "language", "royalty"] },
   { id: "kids-ai-content", contains: ["Kids AI", "safe", "AI"] },
@@ -31,7 +38,7 @@ const MVPS = [
 let pass = 0;
 let fail = 0;
 
-async function checkOne({ id, contains }) {
+async function checkOne({ id, contains, containsAny }) {
   const url = `${FRONT}/${id}`;
   const t0 = Date.now();
   try {
@@ -43,7 +50,15 @@ async function checkOne({ id, contains }) {
       return;
     }
     const html = await r.text();
-    const missing = contains.filter((kw) => !html.toLowerCase().includes(kw.toLowerCase()));
+    const lower = html.toLowerCase();
+    const missing = contains.filter((kw) => !lower.includes(kw.toLowerCase()));
+    // containsAny: достаточно ОДНОГО из вариантов. Так ожидание переживает
+    // перевод страницы, не переставая ловить пустую оболочку: название модуля
+    // в contains остаётся обязательным.
+    if (Array.isArray(containsAny) && containsAny.length
+        && !containsAny.some((kw) => lower.includes(kw.toLowerCase()))) {
+      missing.push(containsAny.join("|"));
+    }
     if (missing.length > 0) {
       console.log(`  ⚠️  /${id.padEnd(20)} (${ms}ms) missing: [${missing.join(", ")}]`);
       fail++;

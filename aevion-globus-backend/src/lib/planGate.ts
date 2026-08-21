@@ -245,7 +245,29 @@ export function paywallEnabledFor(moduleId: string): boolean {
   return set.has(id);
 }
 
-/** Sub-paths that stay open even on a gated module (introspection / health). */
+/**
+ * Sub-paths that stay open even on a gated module.
+ *
+ * Две группы, и вторая появилась 19.08.2026 после замера на проде:
+ *
+ *   служебные — health, статус, план, провайдеры: без них не понять, что с
+ *   модулем, и закрывать их нечего продавать;
+ *
+ *   сбор адресов — waitlist и subscribe. Лист ожидания по определению для тех,
+ *   у кого продукта ЕЩЁ НЕТ. Закрыв его тарифом, мы говорим человеку «купите
+ *   Full за $49, чтобы записаться в очередь» — и теряем адрес.
+ *
+ * Замер, из-за которого правка: POST /api/qfusionai/waitlist отвечал 402
+ * upgrade_required, а соседний POST /api/veilnetx/waitlist — 201 и счётчик 11.
+ * Разница только в том, что qfusionai попал в PAYWALL_MODULES.
+ *
+ * Горькая деталь: upgradeResponse() тут же записывает каждый 402 как «сигнал
+ * спроса». То есть спрос мы фиксировали, а человека, который его проявил,
+ * отправляли ни с чем. Ровно наоборот к тому, ради чего лист ожидания заведён.
+ *
+ * Границу держим узко: открываем ПОДПИСКУ на будущее, а не выдачу продукта.
+ * Всё, что отдаёт функциональность, остаётся за тарифом.
+ */
 function isExemptPath(req: Request): boolean {
   if (req.method === "OPTIONS") return true;
   const p = req.path.toLowerCase();
@@ -254,7 +276,9 @@ function isExemptPath(req: Request): boolean {
     p === "/me/plan" || p.endsWith("/me/plan") ||
     p === "/me/entitlements" || p.endsWith("/me/entitlements") ||
     p === "/providers" || p.endsWith("/providers") ||
-    p === "/status" || p.endsWith("/status")
+    p === "/status" || p.endsWith("/status") ||
+    p === "/waitlist" || p.endsWith("/waitlist") ||
+    p === "/subscribe" || p.endsWith("/subscribe")
   );
 }
 

@@ -21,6 +21,7 @@ import {
   isShadowNetDbReady,
 } from "../lib/ensureShadowNetTables";
 import { rateLimit } from "../lib/rateLimit";
+import { pgIntId, queryNumber } from "../lib/queryNumber";
 
 const captureShadowNetError = makeServiceCapture("shadownet");
 
@@ -416,7 +417,7 @@ shadownetRouter.post("/posts", async (req: Request, res: Response) => {
 // Gives the module a real list surface now that the generic mvpConcepts
 // scaffold no longer shadows this prefix (single-store consolidation).
 shadownetRouter.get("/posts", async (req: Request, res: Response) => {
-  const limit = Math.min(Number(req.query.limit ?? 50), 200);
+  const limit = Math.min(Math.max(queryNumber(req.query.limit, 50), 1), 200);
   if (isShadowNetDbReady()) {
     try {
       const result = await pool.query(
@@ -454,7 +455,18 @@ shadownetRouter.get("/posts/:alias", async (req: Request, res: Response) => {
         if (result.rows.length > 0) return ok(res, result.rows[0]);
       } catch (e) {
         console.error("[ShadowNet] GET /posts/:id db error:", e);
-        // fall through to memory
+        // Раньше управление уходило ниже, в память (в проде пустую), и запись
+        // объявлялась несуществующей. «Не найдено» на отказ базы законно и
+        // потому незаметно: ни тревоги, ни подозрения у читателя.
+        // Не через fail(): у него в ответе только код, а человеку нужна
+        // фраза — «нет записи» и «не смогли спросить» это разные новости.
+        res.status(503).json({
+          success: false,
+          error: "storage_unavailable",
+          warning:
+            "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.",
+        });
+        return;
       }
     }
     const byId = memPosts.get(Number(alias));
@@ -464,7 +476,7 @@ shadownetRouter.get("/posts/:alias", async (req: Request, res: Response) => {
   if (!isValidAlias(alias)) {
     return fail(res, "invalid alias");
   }
-  const limit = Math.min(Number(req.query.limit ?? 50), 200);
+  const limit = Math.min(Math.max(queryNumber(req.query.limit, 50), 1), 200);
 
   if (isShadowNetDbReady()) {
     try {
@@ -491,8 +503,8 @@ shadownetRouter.get("/posts/:alias", async (req: Request, res: Response) => {
 });
 
 shadownetRouter.delete("/posts/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) {
+  const id = pgIntId(req.params.id);
+  if (id === null) {
     return fail(res, "invalid id");
   }
   const alias = (req.body || {}).alias;

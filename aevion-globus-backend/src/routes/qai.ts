@@ -106,9 +106,52 @@ async function loadSession(id: string): Promise<QaiSession | null> {
       }
     } catch (err) {
       console.warn("[qai] loadSession failed:", err instanceof Error ? err.message : err);
+      // Раньше отсюда возвращался null, и вызывающий отвечал «Session not
+      // found». Отказ базы подменялся отсутствием сессии: человек, у которого
+      // сессия ЕСТЬ, получал 404 и уходил считать, что она пропала.
+      //
+      // Проверено положительным контролем 21.08.2026: с работающей базой та же
+      // ручка доходит до проверки владельца и отвечает 403, с падающей — 404.
+      // Значит база на пути, и её отказ читался как «нет записи».
+      throw new StorageUnavailable();
     }
   }
   return null;
+}
+
+/** Хранилище не ответило. Это НЕ «сессии нет» — разные новости. */
+class StorageUnavailable extends Error {
+  constructor() {
+    super("storage_unavailable");
+    this.name = "StorageUnavailable";
+  }
+}
+
+/**
+ * Сессия по идентификатору — или ответ клиенту, если её нельзя было прочитать.
+ *
+ * Возвращает null, когда ответ уже отправлен: вызывающему остаётся выйти.
+ * Сделано помощником, а не try/catch в каждом из четырёх обработчиков, чтобы
+ * формулировка отказа была одна и не разошлась при следующей правке.
+ */
+async function loadSessionOrReply(
+  sid: string,
+  res: Response,
+): Promise<QaiSession | null> {
+  try {
+    return await loadSession(sid);
+  } catch (e) {
+    if (e instanceof StorageUnavailable) {
+      res.status(503).json({
+        error: "storage_unavailable",
+        warning:
+          "Хранилище временно недоступно. Это НЕ значит, что сессии нет — " +
+          "прочитать её не удалось. Повторите запрос позже.",
+      });
+      return null;
+    }
+    throw e;
+  }
 }
 
 async function saveSession(s: QaiSession): Promise<void> {
@@ -395,9 +438,11 @@ qaiRouter.get("/sessions", async (req: Request, res: Response) => {
 qaiRouter.get("/sessions/:id/export", async (req: Request, res: Response) => {
   const ip = getIp(req);
   const sid = String(req.params.id);
-  const session = await loadSession(sid);
+  const session = await loadSessionOrReply(sid, res);
   if (!session) {
-    res.status(404).json({ error: "Session not found" });
+    // Помощник мог уже ответить 503: «не смогли прочитать» — не то же самое,
+    // что «сессии нет», и второй ответ уронил бы обработчик.
+    if (!res.headersSent) res.status(404).json({ error: "Session not found" });
     return;
   }
   if (session.ip !== ip) {
@@ -426,9 +471,11 @@ qaiRouter.get("/sessions/:id/export", async (req: Request, res: Response) => {
 qaiRouter.post("/sessions/:id/title", async (req: Request, res: Response) => {
   const ip = getIp(req);
   const sid = String(req.params.id);
-  const session = await loadSession(sid);
+  const session = await loadSessionOrReply(sid, res);
   if (!session) {
-    res.status(404).json({ error: "Session not found" });
+    // Помощник мог уже ответить 503: «не смогли прочитать» — не то же самое,
+    // что «сессии нет», и второй ответ уронил бы обработчик.
+    if (!res.headersSent) res.status(404).json({ error: "Session not found" });
     return;
   }
   if (session.ip !== ip) {
@@ -449,9 +496,11 @@ qaiRouter.post("/sessions/:id/title", async (req: Request, res: Response) => {
 qaiRouter.delete("/sessions/:id", async (req: Request, res: Response) => {
   const ip = getIp(req);
   const sid = String(req.params.id);
-  const session = await loadSession(sid);
+  const session = await loadSessionOrReply(sid, res);
   if (!session) {
-    res.status(404).json({ error: "Session not found" });
+    // Помощник мог уже ответить 503: «не смогли прочитать» — не то же самое,
+    // что «сессии нет», и второй ответ уронил бы обработчик.
+    if (!res.headersSent) res.status(404).json({ error: "Session not found" });
     return;
   }
   if (session.ip !== ip) {
@@ -471,8 +520,9 @@ qaiRouter.get("/personas", (_req: Request, res: Response) => {
 qaiRouter.get("/sessions/:id", async (req: Request, res: Response) => {
   const ip = getIp(req);
   const sid = String(req.params.id);
-  const session = await loadSession(sid);
-  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+  const session = await loadSessionOrReply(sid, res);
+  // Помощник мог уже ответить 503 — второй ответ уронил бы обработчик.
+  if (!session) { if (!res.headersSent) res.status(404).json({ error: "Session not found" }); return; }
   if (session.ip !== ip) { res.status(403).json({ error: "Forbidden" }); return; }
   const lastMsg = session.messages[session.messages.length - 1];
   res.json({

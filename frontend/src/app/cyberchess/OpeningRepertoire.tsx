@@ -503,7 +503,7 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
     { key: "branches", label: "Мои ветки" },
     { key: "drill", label: "Тренировка" },
     { key: "stats", label: "Статистика" },
-    { key: "gmgames", label: "GM партии" },
+    { key: "gmgames", label: "Партии гроссмейстеров" },
     { key: "settings", label: "Настройки" },
   ];
   return (
@@ -812,9 +812,16 @@ function BranchCard(props: {
             </span>
             <span style={{ color: COLORS.textDim }}>
               Успех:{" "}
-              <strong style={{ color: rate >= 70 ? COLORS.green : rate >= 40 ? COLORS.yellow : COLORS.red }}>
-                {rate}%
-              </strong>
+              {branch.attempts === 0 ? (
+                /* Ноль попыток — это «неизвестно», а не «плохо». Раньше здесь
+                   стояло красное «0%»: человеку сообщали о провале в том, чего
+                   он ещё не пробовал. */
+                <strong style={{ color: COLORS.textDim }}>— ещё не тренировали</strong>
+              ) : (
+                <strong style={{ color: rate >= 70 ? COLORS.green : rate >= 40 ? COLORS.yellow : COLORS.red }}>
+                  {rate}%
+                </strong>
+              )}
             </span>
           </div>
           {isEditing && (
@@ -845,10 +852,10 @@ function BranchCard(props: {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginLeft: 16 }}>
           <button onClick={onDrill} style={primaryBtn}>
-            ▶ Drill
+            ▶ Тренировать
           </button>
           <button onClick={onEditToggle} style={ghostBtn}>
-            {isEditing ? "✓ OK" : "✎ Edit"}
+            {isEditing ? "✓ Готово" : "✎ Изменить"}
           </button>
           <div style={{ display: "flex", gap: 4 }}>
             <button
@@ -1107,7 +1114,7 @@ function StatsTab({ branches }: { branches: RepertoireBranch[] }) {
       >
         <StatCard label="Всего веток" value={branches.length} />
         <StatCard label="Попыток" value={totals.attempts} />
-        <StatCard label="Общий успех" value={`${totals.rate}%`} accent />
+        <StatCard label="Общий успех" value={totals.attempts === 0 ? "—" : `${totals.rate}%`} accent />
       </div>
 
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: COLORS.accentBright }}>

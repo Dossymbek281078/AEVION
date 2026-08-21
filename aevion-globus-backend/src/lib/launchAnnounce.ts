@@ -1,4 +1,5 @@
 import type { ConstitutionEmailPayload } from "./constitutionBrevo";
+import { unsubscribeUrl, unsubContact } from "./waitlistUnsubToken";
 
 /**
  * Письмо «модуль открылся» и отбор получателей — ПОДГОТОВКА, без отправки.
@@ -111,9 +112,24 @@ export function matchesModule(source: string, moduleSlug: string): boolean {
   return parts.some((p) => p === slug || p.startsWith(`${slug}-`));
 }
 
-/** Ссылка отписки — та же механика, что в письме-подтверждении. */
-function unsubscribeUrl(email: string): string {
-  return `https://aevion.app/constitution/waitlist/unsubscribe?email=${encodeURIComponent(email)}`;
+/**
+ * Ссылка отписки берётся из ОБЩЕГО помощника, а не строится здесь.
+ *
+ * Своя копия и была дефектом: 21.08 выяснилось, что адрес, который она собирала,
+ * отдаёт 404 — страницы отписки не существовало вовсе. Второй способ делать то же
+ * самое означает, что чинить придётся дважды, а забудут — один раз.
+ */
+/** Готовая ссылка-якорь для HTML-подвала: либо ссылка, либо живой адрес почты. */
+function unsubHtml(email: string, color = "#5d5f66"): string {
+  const url = unsubscribeUrl(email);
+  return url
+    ? `<a href="${url}" style="color:${color}">Отписаться</a>`
+    : `Отписаться: напишите на <a href="mailto:${unsubContact()}" style="color:${color}">${unsubContact()}</a>`;
+}
+
+function unsubLine(email: string): string {
+  const url = unsubscribeUrl(email);
+  return url ? `Отписаться: ${url}` : `Отписаться: напишите на ${unsubContact()}`;
 }
 
 export function buildLaunchEmail(moduleSlug: string, email: string): ConstitutionEmailPayload {
@@ -136,7 +152,7 @@ export function buildLaunchEmail(moduleSlug: string, email: string): Constitutio
       <p style="color:#5d5f66;font-size:11.5px;line-height:1.5;margin:0">
         Это письмо пришло потому, что вы подписались на странице запуска ${m.name}.
         Одно письмо на модуль, больше ничего.<br>
-        <a href="${unsubscribeUrl(email)}" style="color:#5d5f66">Отписаться</a>
+        ${unsubHtml(email)}
       </p>
     </div>
   `;
@@ -146,7 +162,7 @@ export function buildLaunchEmail(moduleSlug: string, email: string): Constitutio
     // прямо в теме письма живому человеку — молча и убедительно.
     subject: m.date ? `${m.name} открыт — ${m.date}` : `${m.name} открыт`,
     htmlContent: html,
-    textContent: `${m.name} открыт. Доступно: ${m.opens}. Открыть: ${url}\n\nВы подписались на странице запуска ${m.name}. Отписаться: ${unsubscribeUrl(email)}`,
+    textContent: `${m.name} открыт. Доступно: ${m.opens}. Открыть: ${url}\n\nВы подписались на странице запуска ${m.name}. ${unsubLine(email)}`,
     tags: ["launch", `launch-${moduleSlug}`],
   };
 }

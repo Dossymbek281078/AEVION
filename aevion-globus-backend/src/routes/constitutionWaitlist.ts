@@ -20,6 +20,7 @@ import { validate, WaitlistSubscribeSchema } from "../lib/constitutionSchemas";
 import { sendWaitlistConfirm, sendWeeklyDigestEmail as sendDigestEmail } from "../lib/constitutionBrevo";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvFromRows } from "../lib/csv";
+import { unsubConfigured, unsubContact, verifyUnsubToken } from "../lib/waitlistUnsubToken";
 
 const capture = makeServiceCapture("constitutionWaitlist");
 
@@ -206,6 +207,97 @@ constitutionWaitlistRouter.post(
         detail: err instanceof Error ? err.message : "unknown",
       });
     }
+  },
+);
+
+/**
+ * GET /unsubscribe?email=…&t=… — отписка по ссылке из письма.
+ *
+ * До 21.08.2026 отписки не было ВООБЩЕ: письма звали на страницу
+ * `aevion.app/constitution/waitlist/unsubscribe`, которой не существует (404,
+ * наравне с выдуманным адресом), и ручки в API тоже не было. Рабочая отписка в
+ * платформе есть только у других модулей, и смоук проверял именно её — поэтому
+ * зелёная проверка соседствовала с мёртвой ссылкой у нас.
+ *
+ * Отвечаем СТРАНИЦЕЙ, а не JSON: по ссылке приходят из почты, и человек должен
+ * увидеть человеческий ответ, а не фигурные скобки.
+ *
+ * Три исхода различаются намеренно: нет секрета — 503 и адрес для отписки вручную
+ * (притворяться, что сработало, нельзя); нет или неверен токен — 400; всё верно —
+ * удаляем и говорим об этом. Отсутствие адреса в списке тоже считается успехом:
+ * человек просил не писать ему, и «вас тут и не было» — правильный ответ, а не ошибка.
+ */
+constitutionWaitlistRouter.get(
+  "/unsubscribe",
+  readLimit as unknown as (req: Request, res: Response, next: NextFunction) => void,
+  async (req: Request, res: Response) => {
+    const page = (title: string, body: string, code: number) => {
+      res.status(code).type("html").send(
+        `<!doctype html><html lang="ru"><head><meta charset="utf-8">` +
+          `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+          `<meta name="robots" content="noindex"><title>${title} — AEVION</title></head>` +
+          `<body style="font-family:Georgia,'Times New Roman',serif;background:#f7f6f2;color:#16161a;margin:0;padding:40px 20px">` +
+          `<div style="max-width:520px;margin:0 auto">` +
+          `<div style="font-family:monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a9781a">AEVION</div>` +
+          `<h1 style="font-size:24px;line-height:1.25;margin:10px 0 14px">${title}</h1>` +
+          `<p style="font-size:15px;line-height:1.6;margin:0">${body}</p></div></body></html>`,
+      );
+    };
+
+    if (!unsubConfigured()) {
+      return page(
+        "Отписка временно недоступна",
+        `Мы не смогли обработать ссылку автоматически. Напишите на ` +
+          `<a href="mailto:${unsubContact()}">${unsubContact()}</a> — отпишем руками в тот же день.`,
+        503,
+      );
+    }
+
+    const email = String(req.query.email ?? "").trim().toLowerCase();
+    const token = req.query.t;
+    if (!email || !token) {
+      return page("Ссылка неполная", "В ссылке не хватает адреса или кода. Откройте её из письма целиком.", 400);
+    }
+    if (!verifyUnsubToken(email, token)) {
+      return page(
+        "Ссылка не подошла",
+        `Код в ссылке не совпал с адресом. Так бывает, если ссылку изменили при пересылке. ` +
+          `Напишите на <a href="mailto:${unsubContact()}">${unsubContact()}</a>, и мы отпишем вас руками.`,
+        400,
+      );
+    }
+
+    let removedFromDb = false;
+    if (dbAvailable) {
+      try {
+        const pool = getPool();
+        const r = await pool.query(`DELETE FROM constitution_waitlist WHERE "email" = $1`, [email]);
+        removedFromDb = (r.rowCount ?? 0) > 0;
+      } catch (dbErr) {
+        // Молчать нельзя: человек увидит «готово», а письма продолжат приходить.
+        capture(dbErr, {
+          where: "waitlist.unsubscribe",
+          route: "constitution/waitlist/unsubscribe",
+          severity: "unsubscribe-failed",
+          note: "не удалось удалить адрес из Postgres — человек просил не писать ему",
+        });
+        console.error("[Constitution] ОТПИСКА НЕ ВЫПОЛНЕНА в базе:", dbErr instanceof Error ? dbErr.message : dbErr);
+        return page(
+          "Не получилось прямо сейчас",
+          `Мы не смогли завершить отписку из-за сбоя на нашей стороне. Напишите на ` +
+            `<a href="mailto:${unsubContact()}">${unsubContact()}</a> — отпишем руками, это не займёт времени.`,
+          500,
+        );
+      }
+    }
+    const removedFromMem = memList.delete(email);
+
+    return page(
+      "Готово — больше не напишем",
+      `Адрес <b>${email}</b> удалён из списка${removedFromDb || removedFromMem ? "" : " (его там уже не было)"}. ` +
+        `Если передумаете, форма подписки всегда на месте.`,
+      200,
+    );
   },
 );
 

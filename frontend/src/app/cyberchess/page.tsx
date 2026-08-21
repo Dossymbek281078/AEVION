@@ -1261,6 +1261,10 @@ export default function CyberChessPage(){
   type Opening = {eco:string;name:string;moves:string;desc:string};
   type OpeningIndexed = Opening & {fenKey:string;plyLen:number};
   const[openingsDb,sOpeningsDb]=useState<OpeningIndexed[]>([]);
+  // Пустой список после ОШИБКИ и пустой список ДО загрузки выглядят одинаково,
+  // а человеку это разные вещи: во втором случае надо ждать, в первом — ждать
+  // бесполезно. Без этого флага экран вечно писал «База дебютов загружается…».
+  const[openingsFailed,sOpeningsFailed]=useState(false);
   const openingMapRef=useRef<Map<string,OpeningIndexed>>(new Map());
   // Book-continuation map: fenKey позиции -> UCI следующего хода по книжной линии.
   // Заполняется при загрузке openings.json. Используется для стрелки-подсказки дебюта.
@@ -2798,7 +2802,7 @@ export default function CyberChessPage(){
           const existing=map.get(fenKey);if(!existing||existing.plyLen<entry.plyLen)map.set(fenKey,entry);
         }catch{}}
         openingMapRef.current=map;sOpeningsDb(indexed);
-      }).catch(()=>sOpeningsDb([]));
+      }).catch(()=>{sOpeningsDb([]);sOpeningsFailed(true)});
     };
     if(typeof window!=="undefined"&&"requestIdleCallback" in window){
       (window as any).requestIdleCallback(loadOpenings,{timeout:6000});
@@ -12356,7 +12360,11 @@ ${question.trim()}`;
             if(!q)return true;
             return op.name.toLowerCase().includes(q)||op.eco.toLowerCase().includes(q);
           }).slice(0,80);
-          if(openingsDb.length===0)return <div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>База дебютов загружается…</div>;
+          if(openingsDb.length===0)return <div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>
+            {openingsFailed
+              ? <><div style={{fontWeight:700,marginBottom:6}}>База дебютов не загрузилась</div><div style={{fontSize:12,opacity:0.85}}>Обновите страницу — ждать здесь бесполезно.</div></>
+              : "База дебютов загружается…"}
+          </div>;
           if(list.length===0)return <div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>Ничего не найдено</div>;
           return list.map((op,i)=>{
             const sans=(typeof op.moves==="string"?op.moves.split(/\s+/):[]).filter(Boolean);

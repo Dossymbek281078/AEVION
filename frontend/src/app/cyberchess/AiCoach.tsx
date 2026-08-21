@@ -706,7 +706,7 @@ ${quality === "blunder" || quality === "mistake"
             }}>
             {liveMode ? "🔴 LIVE" : "▶ Live"}
           </button>
-          <button onClick={onClose} style={{
+          <button aria-label="Закрыть" onClick={onClose} style={{
             background: "rgba(255,255,255,0.2)", border: "none", color: "#fff",
             borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer",
           }}>✕</button>

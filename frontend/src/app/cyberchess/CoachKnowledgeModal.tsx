@@ -288,7 +288,7 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
               </div>
             </div>
           </div>
-          <button onClick={onClose} style={{
+          <button aria-label="Закрыть" onClick={onClose} style={{
             background: "rgba(255,255,255,0.18)", border: "none", color: "#fff",
             borderRadius: 6, padding: "5px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer",
           }}>✕</button>

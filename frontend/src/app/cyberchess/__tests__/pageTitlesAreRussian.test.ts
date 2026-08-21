@@ -169,3 +169,44 @@ describe("подсказки и aria-label — по-русски", () => {
     expect(plohie).toEqual([]);
   });
 });
+
+describe("кнопки-значки имеют имя для диктора", () => {
+  // 21.08. Восемь кнопок были только значком — «✕», «⏮», «⏭» — без aria-label
+  // и без title. Экранный диктор объявляет такую кнопку словом «кнопка» и
+  // больше ничем: незрячий человек не знает, закроет он окно или переключит
+  // трек. Глазами этот класс не виден вовсе.
+  const ZNACHKI = ["✕", "⏮", "⏭"];
+
+  function bezImeni(src: string): string[] {
+    const out: string[] = [];
+    for (const m of src.matchAll(/<button([^>]{0,400})>([^<]{1,12})<\/button>/g)) {
+      const t = m[2].trim();
+      if (!ZNACHKI.includes(t)) continue;
+      if (/aria-label|title=/.test(m[1])) continue;
+      out.push(t);
+    }
+    return out;
+  }
+
+  test("детектор видит кнопку без имени", () => {
+    expect(bezImeni('<button style={{a:1}}>✕</button>').length).toBe(1);
+    expect(bezImeni('<button aria-label="Закрыть">✕</button>').length).toBe(0);
+  });
+
+  test("в модуле таких кнопок нет", () => {
+    const plohie: string[] = [];
+    const obojti = (d: string) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) {
+          if (e.name !== "__tests__") obojti(p);
+        } else if (e.name.endsWith(".tsx")) {
+          const n = bezImeni(fs.readFileSync(p, "utf-8")).length;
+          if (n) plohie.push(`${path.relative(ROOT, p)}: ${n}`);
+        }
+      }
+    };
+    obojti(ROOT);
+    expect(plohie, "кнопка-значок без имени для диктора").toEqual([]);
+  });
+});

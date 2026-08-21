@@ -937,7 +937,7 @@ function PipChess({ pip, onChange, onClose }: {
         <a href="/cyberchess" target="_blank" rel="noopener"
           title="Открыть полный CyberChess (Stockfish, AI Coach)"
           style={{ color: "#a78bfa", textDecoration: "none", padding: "1px 6px", borderRadius: 4, background: "rgba(124,58,237,0.18)", fontSize: 10, fontWeight: 800 }}>↗</a>
-        <button onClick={onClose}
+        <button aria-label="Закрыть" onClick={onClose}
           style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontWeight: 800 }}>✕</button>
       </div>
       <iframe src="/cyberchess?embed=1" title="PiP CyberChess"

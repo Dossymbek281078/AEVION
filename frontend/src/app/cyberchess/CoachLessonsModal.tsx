@@ -197,7 +197,7 @@ export default function CoachLessonsModal({ open, onClose, onLoadPosition, initi
               </div>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.18)", border: "none", color: "#fff", borderRadius: 6, padding: "5px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
+          <button aria-label="Закрыть" onClick={onClose} style={{ background: "rgba(255,255,255,0.18)", border: "none", color: "#fff", borderRadius: 6, padding: "5px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
         </div>
 
         {/* Lessons grid */}

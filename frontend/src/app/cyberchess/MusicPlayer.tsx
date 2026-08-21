@@ -266,9 +266,9 @@ export default function MusicPlayer({ open, onClose }: Props) {
             {currentIdx !== null && tracks[currentIdx] ? `▶ ${tracks[currentIdx].name}` : "Ничего не играет"}
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-            <button onClick={prevTrack} disabled={tracks.length === 0} style={{ padding: "6px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: tracks.length ? "pointer" : "not-allowed", fontWeight: 700 }}>⏮</button>
+            <button aria-label="Предыдущий трек" onClick={prevTrack} disabled={tracks.length === 0} style={{ padding: "6px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: tracks.length ? "pointer" : "not-allowed", fontWeight: 700 }}>⏮</button>
             <button onClick={togglePlay} disabled={tracks.length === 0} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: "#059669", color: "#fff", cursor: tracks.length ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 14 }}>{playing ? "⏸ Пауза" : "▶ Играть"}</button>
-            <button onClick={nextTrack} disabled={tracks.length === 0} style={{ padding: "6px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: tracks.length ? "pointer" : "not-allowed", fontWeight: 700 }}>⏭</button>
+            <button aria-label="Следующий трек" onClick={nextTrack} disabled={tracks.length === 0} style={{ padding: "6px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: tracks.length ? "pointer" : "not-allowed", fontWeight: 700 }}>⏭</button>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 12, color: "#64748b" }}>🔊</span>

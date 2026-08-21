@@ -67,3 +67,60 @@ describe("сбой загрузки не выдаётся за пустой ка
     expect(src).toMatch(/data\?\.warning/);
   });
 });
+
+/**
+ * Тот же класс на страницах команд: список участников/сессий опустевал при
+ * отказе, а прежний catch был помечен «silent» — отказ не оставлял следа
+ * вообще. Владелец организации видел её БЕЗ УЧАСТНИКОВ, включая себя, и рядом
+ * приглашение «invite someone below».
+ */
+const TEAM_PAGES: Array<[string, string]> = [
+  ["QCoreAI организации", "qcoreai/orgs/page.tsx"],
+  ["QCoreAI рабочие области", "qcoreai/workspaces/page.tsx"],
+];
+
+describe("списки команды: отказ не выдаётся за пустоту", () => {
+  test.each(TEAM_PAGES)("%s спрашивает код ответа", (_n, file) => {
+    const src = stripComments(readFileSync(join(ROOT, file), "utf8"));
+    expect(src.length).toBeGreaterThan(1000);
+    expect(src.includes(".ok"), "тело разбирается без проверки кода").toBe(true);
+    expect(src, "нет проверки, что список вообще пришёл").toMatch(/Array\.isArray/);
+  });
+
+  test.each(TEAM_PAGES)("%s показывает отказ человеку", (_n, file) => {
+    const src = stripComments(readFileSync(join(ROOT, file), "utf8"));
+    expect(src.includes(".ok"), "тело разбирается без проверки кода").toBe(true);
+    expect(src, "нет видимой плашки").toMatch(/role="alert"/);
+    expect(src, "нет текста про незагрузившийся список").toMatch(/не загрузил/);
+  });
+
+  test("удаление не считается сделанным до ответа сервера", () => {
+    // Список правился ДО проверки ответа: провал удаления выглядел как
+    // удаление, и человек уходил, считая дело сделанным. Проверяем по порядку
+    // строк ВНУТРИ каждой функции удаления, а не по наличию где-то в файле.
+    const src = stripComments(
+      readFileSync(join(ROOT, "qcoreai/workspaces/page.tsx"), "utf8"),
+    ).split(String.fromCharCode(10));
+
+    const starts = src
+      .map((l, i) => ({ l, i }))
+      .filter((x) => /const (deleteWorkspace|removeMember|removeSession) = async/.test(x.l));
+    expect(starts.length, "функции удаления не найдены — проверка была бы ни о чём").toBe(3);
+
+    for (const { l, i } of starts) {
+      const body = src.slice(i, i + 14);
+      const okAt = body.findIndex((b) => b.includes("!r.ok"));
+      const setAt = body.findIndex((b) => /set(Workspaces|Members|Sessions)\(\(prev\)/.test(b));
+      expect(okAt, `в ${l.trim().slice(0, 40)} нет проверки ответа`).toBeGreaterThan(-1);
+      expect(setAt, "не найдено обновление списка").toBeGreaterThan(-1);
+      expect(okAt, "список правится ДО проверки ответа").toBeLessThan(setAt);
+    }
+  });
+
+  test("контроль: молчаливый catch больше не молчит", () => {
+    for (const [, file] of TEAM_PAGES) {
+      const src = readFileSync(join(ROOT, file), "utf8");
+      expect(src, `в ${file} остался «silent» catch`).not.toMatch(/catch\s*\{\s*\/\*\s*silent/);
+    }
+  });
+});

@@ -21,6 +21,7 @@ export default function WorkspacesPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [detailsError, setDetailsError] = useState(false);
   const [authMissing, setAuthMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,9 +62,21 @@ export default function WorkspacesPage() {
       ]);
       const mData = await mRes.json().catch(() => ({}));
       const sData = await sRes.json().catch(() => ({}));
-      setMembers(mData.items || []);
-      setSessions(sData.items || []);
-    } catch { /* silent */ }
+      // Код ответа спрашивается ДО разбора тела: иначе отказ приходит как
+      // отсутствие поля `items`, `|| []` подставляет пустоту, и рабочая область
+      // выглядит пустой — без участников и без сессий. Прежний `catch` был
+      // помечен «silent», то есть отказ не оставлял вообще никакого следа.
+      const ok = mRes.ok && sRes.ok && Array.isArray(mData.items) && Array.isArray(sData.items);
+      if (!ok) {
+        setDetailsError(true);
+        return;
+      }
+      setDetailsError(false);
+      setMembers(mData.items);
+      setSessions(sData.items);
+    } catch {
+      setDetailsError(true);
+    }
   }, []);
 
   const createWorkspace = async () => {
@@ -106,10 +119,16 @@ export default function WorkspacesPage() {
   const deleteWorkspace = async (id: string) => {
     if (!confirm("Delete this workspace? Sessions and members will be unlinked.")) return;
     try {
-      await fetch(apiUrl(`/api/qcoreai/workspaces/${id}`), { method: "DELETE", headers: bearerHeader() });
+      const r = await fetch(apiUrl(`/api/qcoreai/workspaces/${id}`), { method: "DELETE", headers: bearerHeader() });
+      // Ответ спрашивается ДО того, как убрать область с экрана. Раньше она
+      // исчезала независимо от исхода, а `catch` был помечен «silent»: провал
+      // удаления выглядел как удаление. Человек уходил, считая дело сделанным.
+      if (!r.ok) { setError("Не удалось удалить рабочую область — она осталась на месте."); return; }
       setWorkspaces((prev) => prev.filter((w) => w.id !== id));
       if (selectedId === id) { setSelectedId(null); setMembers([]); setSessions([]); }
-    } catch { /* silent */ }
+    } catch {
+      setError("Не удалось удалить рабочую область — проверьте связь и попробуйте снова.");
+    }
   };
 
   const inviteMember = async () => {
@@ -135,17 +154,23 @@ export default function WorkspacesPage() {
   const removeMember = async (userId: string) => {
     if (!selectedId) return;
     try {
-      await fetch(apiUrl(`/api/qcoreai/workspaces/${selectedId}/members/${userId}`), { method: "DELETE", headers: bearerHeader() });
+      const r = await fetch(apiUrl(`/api/qcoreai/workspaces/${selectedId}/members/${userId}`), { method: "DELETE", headers: bearerHeader() });
+      if (!r.ok) { setError("Не удалось убрать участника — он остался в области."); return; }
       setMembers((prev) => prev.filter((m) => m.userId !== userId));
-    } catch { /* silent */ }
+    } catch {
+      setError("Не удалось убрать участника — проверьте связь и попробуйте снова.");
+    }
   };
 
   const removeSession = async (sessionId: string) => {
     if (!selectedId) return;
     try {
-      await fetch(apiUrl(`/api/qcoreai/workspaces/${selectedId}/sessions/${sessionId}`), { method: "DELETE", headers: bearerHeader() });
+      const r = await fetch(apiUrl(`/api/qcoreai/workspaces/${selectedId}/sessions/${sessionId}`), { method: "DELETE", headers: bearerHeader() });
+      if (!r.ok) { setError("Не удалось убрать сессию — она осталась в области."); return; }
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-    } catch { /* silent */ }
+    } catch {
+      setError("Не удалось убрать сессию — проверьте связь и попробуйте снова.");
+    }
   };
 
   const selected = workspaces.find((w) => w.id === selectedId);
@@ -227,6 +252,15 @@ export default function WorkspacesPage() {
 
                   {/* Members */}
                   <div style={{ fontWeight: 700, fontSize: 12, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8, marginTop: 12 }}>Members</div>
+                  {detailsError && (
+                    <div
+                      role="alert"
+                      style={{ fontSize: 13, color: "#b45309", marginBottom: 10, lineHeight: 1.5 }}
+                    >
+                      Участники и сессии не загрузились. Это не значит, что их нет —
+                      обновите страницу; если повторится, напишите нам.
+                    </div>
+                  )}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                     {members.map((m) => (
                       <div key={m.userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
@@ -255,7 +289,11 @@ export default function WorkspacesPage() {
                 {/* Sessions */}
                 <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 18 }}>
                   <div style={{ fontWeight: 700, fontSize: 12, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Sessions in workspace</div>
-                  {sessions.length === 0 ? (
+                  {detailsError ? (
+                    <div role="alert" style={{ color: "#b45309", fontSize: 13, lineHeight: 1.5 }}>
+                      Список сессий не загрузился — это не «сессий нет».
+                    </div>
+                  ) : sessions.length === 0 ? (
                     <div style={{ color: "#94a3b8", fontSize: 13 }}>No sessions added yet. Use the ⊞ button in Multi-agent sidebar to add a session to this workspace.</div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

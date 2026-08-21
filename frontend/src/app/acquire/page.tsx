@@ -549,11 +549,14 @@ export default function AcquirePage() {
 
         <div style={{ padding: 36, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 24 }}>
           {DEAL_TERMS.map((term, idx) => (
-            <div key={term.label} style={{ display: "grid", gridTemplateColumns: "minmax(200px, 220px) 1fr", gap: 24, padding: "16px 0", borderBottom: idx === DEAL_TERMS.length - 1 ? "none" : "1px solid rgba(255,255,255,0.06)" }}>
+            <div key={term.label} style={{ display: "grid", gridTemplateColumns: "minmax(0, 220px) minmax(0, 1fr)", gap: 24, padding: "16px 0", borderBottom: idx === DEAL_TERMS.length - 1 ? "none" : "1px solid rgba(255,255,255,0.06)" }}>
               <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.15em", color: "#94a3b8", textTransform: "uppercase", paddingTop: 2 }}>
                 {term.label}
               </div>
-              <div style={{ fontSize: 16, color: "#f1f5f9", lineHeight: 1.5 }}>
+              {/* overflowWrap: почта yahiin1978@gmail.com - неразрывное слово ~165px.
+                  Вместе с minmax(0,...) выше это и держало страницу шире экрана:
+                  замер 21.08.2026 на iPhone 13 давал документ 450px при экране 390. */}
+              <div style={{ fontSize: 16, color: "#f1f5f9", lineHeight: 1.5, overflowWrap: "anywhere" }}>
                 {term.value}
               </div>
             </div>

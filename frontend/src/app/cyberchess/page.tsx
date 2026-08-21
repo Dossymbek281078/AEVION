@@ -5790,8 +5790,8 @@ export default function CyberChessPage(){
         <div style={{display:"inline-flex",alignItems:"center",gap:2}}>
           <button
             onClick={()=>sShowShop(true)}
-            title={`Chessy · баланс ${chessy.balance} · всего заработано ${chessy.lifetime} · клик → магазин`}
-            aria-label="Chessy shop"
+            title={`Chessy за задачи, уроки и достижения · баланс ${chessy.balance} · всего заработано ${chessy.lifetime} · клик → магазин`}
+            aria-label="Магазин Chessy"
             className="cc-focus-ring cc-touch"
             style={{
               display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",

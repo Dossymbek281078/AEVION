@@ -45,8 +45,16 @@ export default function BookmarksPage() {
   }, []);
 
   const removeBookmark = async (runId: string) => {
-    await fetch(apiUrl(`/api/qcoreai/runs/${runId}/bookmark`), { method: "DELETE", headers: bearerHeader() });
-    setBookmarks((p) => p.filter((b) => b.runId !== runId));
+    // Ответ спрашивается ДО правки списка: раньше закладка исчезала с экрана
+    // независимо от исхода, и провал удаления выглядел как удаление.
+    try {
+      const r = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/bookmark`), { method: "DELETE", headers: bearerHeader() });
+      if (!r.ok) { setError("Не удалось убрать закладку — она осталась на месте."); return; }
+      setError(null);
+      setBookmarks((p) => p.filter((b) => b.runId !== runId));
+    } catch {
+      setError("Не удалось убрать закладку — проверьте связь и попробуйте снова.");
+    }
   };
 
   return (

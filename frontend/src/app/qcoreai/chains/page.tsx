@@ -107,7 +107,9 @@ export default function PromptChainsPage() {
 
   async function deleteChain(id: string) {
     if (!confirm("Delete this chain?")) return;
-    await fetch(apiUrl(`/api/qcoreai/prompt-chains/${id}`), { method: "DELETE", headers: bearerHeader() });
+    // Ответ спрашивается ДО правки списка: провал удаления выглядел как удаление.
+    const r = await fetch(apiUrl(`/api/qcoreai/prompt-chains/${id}`), { method: "DELETE", headers: bearerHeader() });
+    if (!r.ok) { alert("Не удалось удалить цепочку — она осталась на месте."); return; }
     setChains((p) => p.filter((c) => c.id !== id));
     setRunResults((p) => { const n = { ...p }; delete n[id]; return n; });
   }

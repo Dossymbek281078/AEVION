@@ -69,14 +69,24 @@ async function main(): Promise<number> {
     check(before?.db?.configured === true, "база настроена");
     check(before?.db?.connected === true, "подключение живое", String(before?.db?.lastErrorKind ?? ""));
 
+    // Решение доказывается ХОДАМИ, а не числом: с 19.08.2026 сервер сверяет их
+    // с задачей дня и считает серию сам. Ходы берём у него же — зашитый список
+    // разошёлся бы с банком при первой смене задачи, и проверка стала бы
+    // красной на исправном коде.
+    //
+    // Дату не шлём вовсе: её называет сервер. Прежняя версия слала свою, и на
+    // стыке суток UTC получала бы отказ wrong_day.
+    const puzzle = await (await fetch(`${base}/puzzle`)).json();
+    const moves = Array.isArray(puzzle?.puzzle?.sol) ? puzzle.puzzle.sol : [];
+    check(moves.length > 0, "задача дня отдала ходы решения", `${moves.length} ходов`);
+
     const solve = await fetch(`${base}/solve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         userId: USER_ID,
         name: "Проверка записи",
-        streak: 1,
-        day: new Date().toISOString().slice(0, 10),
+        moves,
         timeMs: 4242,
         hintsUsed: 0,
       }),

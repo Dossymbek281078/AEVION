@@ -184,7 +184,12 @@ export default function AdminIndexPage() {
       const [rec, pay, kycR, stuck, ana] = await Promise.all([
         fetch(apiUrl("/api/qpaynet/admin/reconcile"), { headers }),
         fetch(apiUrl("/api/qpaynet/admin/payouts/stats"), { headers }),
-        fetch(apiUrl("/api/qpaynet/admin/kyc/pending"), { headers }).catch(() => null),
+        // Маршрута /admin/kyc/pending НЕТ — бэкенд отдаёт список через
+        // GET /admin/kyc?status=pending. Проверено пробой 19.08.2026: прежний
+        // адрес возвращал 404, а `.catch(() => null)` это проглатывал, поэтому
+        // очередь проверки личности в админке была ВСЕГДА ПУСТА — поданные
+        // заявки никто не видел.
+        fetch(apiUrl("/api/qpaynet/admin/kyc?status=pending"), { headers }).catch(() => null),
         fetch(apiUrl("/api/qpaynet/admin/webhook-deliveries?status=stuck&limit=200"), { headers }),
         fetch(apiUrl("/api/qpaynet/admin/analytics?days=30"), { headers }),
       ]);
@@ -200,7 +205,12 @@ export default function AdminIndexPage() {
       }
       if (kycR && kycR.ok) {
         const d = await kycR.json();
-        setKyc({ count: Array.isArray(d.items) ? d.items.length : d.count });
+        // Ответ бэкенда — { submissions: [...] }. Полей `items` и `count` в нём
+        // нет вовсе: даже с верным адресом счётчик остался бы undefined.
+        // Прежние имена оставлены запасными на случай другой версии ручки.
+        const list = Array.isArray(d.submissions) ? d.submissions
+                   : Array.isArray(d.items) ? d.items : null;
+        setKyc({ count: list ? list.length : d.count });
       }
       if (stuck.ok) {
         const d = await stuck.json();

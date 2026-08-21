@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { knownUserId } from "./tournaments/playerIdentity";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -139,6 +140,17 @@ function ccPlural(n:number,one:string,few:string,many:string):string{
   if(b>1&&b<5)return few;
   if(b===1)return one;
   return many;
+}
+/** «17813 мин назад» — это 12 дней, и человеку так говорить нельзя.
+ *  Формула минуты→часы→дни в файле уже была (список последних партий),
+ *  но карточка «Незавершённая партия» её не звала. Один способ на оба места. */
+function ccAgoHuman(minutes:number):string{
+  if(minutes<1)return "только что";
+  if(minutes<60)return `${minutes} ${ccPlural(minutes,"минуту","минуты","минут")} назад`;
+  const h=Math.round(minutes/60);
+  if(h<24)return `${h} ${ccPlural(h,"час","часа","часов")} назад`;
+  const d=Math.round(minutes/1440);
+  return `${d} ${ccPlural(d,"день","дня","дней")} назад`;
 }
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -2068,6 +2080,49 @@ export default function CyberChessPage(){
       const params=new URLSearchParams(window.location.search);
       const mid=params.get("matchId");
       if(mid&&/^[a-zA-Z0-9-]{6,64}$/.test(mid))sMatchmakingId(mid);
+      // Цвет из ссылки разворачивает доску. Сервер кладёт его в ссылку
+      // (`&color=black`), а страница до 19.08.2026 его ВЫБРАСЫВАЛА: игрок за
+      // чёрных приходил из турнира и видел доску белыми к себе, переворачивая
+      // вручную. Параметр передавали — и не использовали.
+      const col=params.get("color");
+      if(col==="black")sFlip(true);
+      else if(col==="white")sFlip(false);
+    }catch{}
+  },[]);
+  // ── Серверный кошелёк Chessy ────────────────────────────────────────────
+  //
+  // Chessy за рейтинговые партии начисляет СЕРВЕР в таблицу CyberWallet, а
+  // баланс на этом экране всё время брался из localStorage. Две суммы никогда
+  // не встречались: заработанное в рейтинге было видно всем в таблице лидеров
+  // Chessy — и не видно самому игроку. Потратить его тоже нельзя, магазин
+  // работает с местным балансом.
+  //
+  // Здесь показываем ровно то, что знает сервер, и не смешиваем с местным:
+  // объединение двух валют — продуктовое решение, а не правка экрана.
+  const[srvWallet,sSrvWallet]=useState<{balance:number;earnedTotal:number}|"failed"|null>(null);
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    // knownUserId, а не своё чтение ключа: во-первых, мой же сторож считает
+    // прямые обращения и краснеет на пятом; во-вторых, по смыслу верно именно
+    // «кто я, если известно» — заводить личность ради запроса баланса нельзя.
+    const uid=knownUserId();
+    if(!uid)return; // личности ещё нет — спрашивать не о чем
+    let alive=true;
+    fetch(`/api-backend/api/cyberchess/matchmaking/wallet?userId=${encodeURIComponent(uid)}`)
+      .then(r=>r.ok?r.json():null)
+      .then(j=>{
+        if(!alive)return;
+        // Отказ и ноль — РАЗНЫЕ вещи: сервер отвечает 503, когда не смог
+        // спросить базу, и превращать это в «вы ничего не заработали» нельзя.
+        if(!j||j.ok!==true){sSrvWallet("failed");return}
+        sSrvWallet({balance:Number(j.balance)||0,earnedTotal:Number(j.earnedTotal)||0});
+      })
+      .catch(()=>{if(alive)sSrvWallet("failed")});
+    return()=>{alive=false};
+  },[]);
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    try{
     }catch{}
   },[]);
   useEffect(()=>{
@@ -5764,6 +5819,29 @@ export default function CyberChessPage(){
           >
             <Icon.Coin width={18} height={18}/>
             <span>{chessy.balance}</span>
+            {/* Заработанное на сервере — отдельным значком, а не в общей сумме.
+                Смешивать две валюты нельзя: местная копится за пазлы в этом
+                браузере, серверная — за рейтинговые партии, и объединение их
+                продуктовое решение. Но прятать от владельца то, что видно
+                другим в таблице лидеров, нельзя тем более. */}
+            {typeof srvWallet==="object"&&srvWallet!==null&&srvWallet.balance>0&&(
+              <span
+                data-testid="chessy-server-balance"
+                title={`На сервере за рейтинговые партии: ${srvWallet.balance} Chessy (всего заработано ${srvWallet.earnedTotal}). Это отдельный счёт от местного.`}
+                style={{fontSize:11,fontWeight:800,marginLeft:4,padding:"1px 5px",borderRadius:6,background:"rgba(120,53,15,0.12)"}}
+              >
+                +{srvWallet.balance}
+              </span>
+            )}
+            {srvWallet==="failed"&&(
+              <span
+                data-testid="chessy-server-unknown"
+                title="Не удалось запросить серверный счёт Chessy. Это НЕ значит, что он пуст."
+                style={{fontSize:11,fontWeight:800,marginLeft:4,opacity:0.55}}
+              >
+                ?
+              </span>
+            )}
             {chessy.owned.puzzle_boost&&<span title="Пазл-буст активен!" style={{fontSize:9,marginLeft:2,color:"#ea580c",fontWeight:900}}>⚡</span>}
             {chessy.owned.streak_shield&&<span title="Щит стрика активен!" style={{fontSize:9,marginLeft:1,color:"#3b82f6",fontWeight:900}}>🛡</span>}
           </button>
@@ -5832,7 +5910,7 @@ export default function CyberChessPage(){
           <div style={{fontSize:18}}>⏸</div>
           <div style={{flex:"1 1 200px",minWidth:0}}>
             <div style={{fontSize:14,fontWeight:800,color:"#92400e"}}>Незавершённая партия</div>
-            <div style={{fontSize:13,color:"#b45309"}}>{s.hist.length} ходов · {tcLabel} · {s.pCol==="w"?"белыми":"чёрными"} · {ago<1?"только что":`${ago} мин назад`}</div>
+            <div style={{fontSize:13,color:"#b45309"}}>{s.hist.length} ходов · {tcLabel} · {s.pCol==="w"?"белыми":"чёрными"} · {ccAgoHuman(ago)}</div>
           </div>
           <button onClick={()=>resumeGame(s)} style={{padding:"8px 16px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer"}}>▶ Продолжить</button>
           <button onClick={discardResume} style={{padding:"8px 14px",borderRadius:8,border:`1px solid #fcd34d`,background:"#fff",color:"#92400e",fontWeight:700,fontSize:13,cursor:"pointer"}}>Отменить</button>
@@ -6037,6 +6115,11 @@ export default function CyberChessPage(){
                     const sel=activeCat===c;
                     const tone={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Custom:CC.accent}[c];
                     const emoji={Bullet:"💨",Blitz:"⚡",Rapid:"🕐",Custom:"⚙"}[c];
+                    // Подписи по-русски В КОДЕ, а не машинным переводом на лету:
+                    // 21.08 на телефоне стояло «Custom», на десктопе в ту же
+                    // минуту — «Пользовательский». Перевод интерфейсной метки
+                    // асинхронный, и до него человек видит английское слово.
+                    const label={Bullet:"Пуля",Blitz:"Блиц",Rapid:"Рапид",Custom:"Свой"}[c];
                     return <button key={c} onClick={()=>{
                       if(c==="Custom"){sUseCustom(true);sShowCustom(true);return}
                       sUseCustom(false);
@@ -6054,7 +6137,7 @@ export default function CyberChessPage(){
                       transition:`all ${MOTION.fast} ${MOTION.ease}`,
                     }}>
                       <span style={{fontSize:13}}>{emoji}</span>
-                      <span>{c}</span>
+                      <span translate="no" className="notranslate">{label}</span>
                     </button>;
                   })}
                 </div>
@@ -11818,7 +11901,12 @@ ${question.trim()}`;
           1) "Включить" → opens the user's favorite Twitch stream (configurable, no hardcoded names)
           2) "×" → dismiss for the rest of the day (localStorage-keyed by date)
         Не показываем во время активной партии (!on) — чтобы не перекрывать доску. */}
-    {showPipSuggest&&!on&&!anyOnboardingModal&&<div
+    {/* На телефоне НЕ показываем вовсе. Замер 21.08 при ширине 390: плашка
+        (maxWidth 340, fixed bottom:20) ложилась ровно на главную кнопку
+        «Играть» и на нижнюю навигацию — то есть первый экран новичка вёл не
+        к игре, а к предложению включить чужой стрим. Про перекрытие доски
+        здесь уже думали (условие !on ниже), про мобильный первый экран — нет. */}
+    {showPipSuggest&&!on&&!anyOnboardingModal&&vwPx>=900&&<div
       role="alert"
       style={{
         position:"fixed",right:20,bottom:20,zIndex:7900,
@@ -12164,8 +12252,11 @@ ${question.trim()}`;
       <span style={{fontSize:11,fontWeight:700,opacity:0.85,background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:999}}>⏸ пауза</span>
     </button>}
 
-    {/* Floating keyboard hint pill — bottom-right, кликабельно открывает help */}
-    {!streamerMode&&!showHelp&&<button onClick={()=>sShowHelp(true)} title="Показать горячие клавиши"
+    {/* Floating keyboard hint pill — bottom-right, кликабельно открывает help.
+        Только там, где есть КЛАВИАТУРА. На телефоне подсказка про горячие
+        клавиши бессмысленна и при этом перекрывала главную кнопку «Играть»:
+        замер 21.08 при ширине 390 — пилюля на y=745, кнопка на y=710..784. */}
+    {!streamerMode&&!showHelp&&vwPx>=900&&<button onClick={()=>sShowHelp(true)} title="Показать горячие клавиши"
       style={{
         // bottom:64 (не 16) — пилюля AI-коуча уже сидит в правом нижнем углу;
         // ставим кнопку помощи НАД ней, чтобы не было наложения. (Фикс наезда справа.)

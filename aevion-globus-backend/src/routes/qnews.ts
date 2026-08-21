@@ -202,11 +202,11 @@ qnewsRouter.get("/trending", async (_req: Request, res: Response) => {
 // ─── GET /api/qnews/articles ─────────────────────────────────────────────────
 qnewsRouter.get("/articles", async (req: Request, res: Response) => {
   const { category, q, limit } = req.query as Record<string, string | undefined>;
-  // Тот же класс, что 40 мест выше, но в другой одежде: limit разбирается из
-  // req.query ЗАРАНЕЕ, и в этой строке его происхождения уже не видно. Мой
-  // первый шаблон искал `req.query.limit` рядом с Math.min и три таких места
-  // пропустил — нашлись они только по ошибкам с прода.
-  const limitN = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  // `|| 20` ловит NaN, но НЕ отрицательное: limit=-5 проходило дальше и
+  // уезжало в SQL как LIMIT -5, что Postgres отвергает пятисоткой. Проверено
+  // на проде 19.08.2026, и ровно эти ручки называл журнал ошибок
+  // («LIMIT must not be negative» x4 за неделю). Идиом — как в bureau.ts.
+  const limitN = Math.min(Math.max(parseInt(String(limit ?? "20"), 10) || 20, 1), 100);
 
   try {
     if (isQNewsDbReady()) {

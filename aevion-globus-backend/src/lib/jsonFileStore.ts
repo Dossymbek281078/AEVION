@@ -77,7 +77,44 @@ async function writeUnlocked(relativePath: string, data: unknown): Promise<void>
   const tmp = `${full}.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}.tmp`;
   const json = JSON.stringify(data);
   await fs.promises.writeFile(tmp, json, "utf8");
-  await fs.promises.rename(tmp, full);
+  await renameWithRetry(tmp, full);
+}
+
+/**
+ * Переименование с коротким повтором при EPERM.
+ *
+ * ЗАПИСИ в один файл выстроены в очередь (withFileLock), а ЧТЕНИЯ — нет, и
+ * это осознанно: сериализовать чтения значит платить пропускной способностью
+ * за редкую коллизию. Но на Windows переименование поверх файла, который
+ * прямо сейчас читают, падает с `EPERM: operation not permitted`.
+ *
+ * Замер 19.08.2026: в мультичате удаление беседы, идущее одновременно с
+ * чтением списка, падало 500 — воспроизводилось 5 из 5. Комментарий двумя
+ * абзацами выше этот случай ПРЕДСКАЗЫВАЛ, но закрыт он не был.
+ *
+ * На Linux (и в CI) такого нет — там переименование поверх открытого файла
+ * разрешено, поэтому дефект видели только на машинах разработчиков, и каждая
+ * сессия принимала его за свою поломку.
+ *
+ * Читатель отпускает файл за миллисекунды, поэтому лестницы задержек хватает
+ * с запасом. Всё, что не EPERM/EACCES, пробрасывается сразу: молча повторять
+ * незнакомую ошибку — значит прятать её.
+ */
+async function renameWithRetry(tmp: string, full: string): Promise<void> {
+  const DELAYS_MS = [5, 15, 40, 100, 250];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fs.promises.rename(tmp, full);
+      return;
+    } catch (e: unknown) {
+      const code =
+        e && typeof e === "object" && "code" in e && typeof (e as { code: unknown }).code === "string"
+          ? (e as { code: string }).code
+          : "";
+      if ((code !== "EPERM" && code !== "EACCES") || attempt >= DELAYS_MS.length) throw e;
+      await new Promise((r) => setTimeout(r, DELAYS_MS[attempt]));
+    }
+  }
 }
 
 /**

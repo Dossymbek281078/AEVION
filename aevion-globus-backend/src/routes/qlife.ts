@@ -241,7 +241,7 @@ qlifeRouter.get("/stats", readLimit, async (_req: Request, res: Response) => {
     res.json({ ok: true, ...stats });
   } catch (e: any) {
     captureQLifeError(e, { route: "GET /stats" });
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    res.status(500).json({ ok: false, error: "internal_error" });
   }
 });
 
@@ -252,7 +252,7 @@ qlifeRouter.get("/biomarkers/trends", readLimit, async (_req: Request, res: Resp
     res.json({ ok: true, trends });
   } catch (e: any) {
     captureQLifeError(e, { route: "GET /biomarkers/trends" });
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    res.status(500).json({ ok: false, error: "internal_error" });
   }
 });
 
@@ -265,7 +265,7 @@ qlifeRouter.get("/biomarkers", readLimit, async (req: Request, res: Response) =>
     // ?userId. Health data must not be enumerable across users.
     const auth   = verifyBearerOptional(req);
     const userId = auth?.sub ?? "anonymous";
-    const limit  = Math.min(Math.max(Number(req.query.limit) || 30, 1), 200);
+    const limit  = Math.min(Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1), 200);
 
     if (type && !VALID_TYPES.includes(type as BiomarkerType)) {
       res.status(400).json({ ok: false, error: `Invalid type. Valid: ${VALID_TYPES.join(", ")}` });
@@ -278,8 +278,13 @@ qlifeRouter.get("/biomarkers", readLimit, async (req: Request, res: Response) =>
 
     res.json({ ok: true, biomarkers, count: biomarkers.length });
   } catch (e: any) {
+    // Наружу — КАТЕГОРИЯ, а не сообщение драйвера. Проверено на проде 19.08.2026:
+    // `?limit=-5` возвращал клиенту дословное «LIMIT must not be negative», то
+    // есть ручка МЕДИЦИНСКИХ показателей рассказывала о своём хранилище. В таких
+    // сообщениях бывают хост, порт и пользователь базы. Подробность остаётся в
+    // журнале через captureQLifeError — она нужна нам, а не постороннему.
     captureQLifeError(e, { route: "GET /biomarkers" });
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    res.status(500).json({ ok: false, error: "internal_error" });
   }
 });
 
@@ -322,7 +327,7 @@ qlifeRouter.post("/biomarkers", writeLimit, async (req: Request, res: Response) 
     res.status(201).json({ ok: true, biomarker });
   } catch (e: any) {
     captureQLifeError(e, { route: "POST /biomarkers" });
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    res.status(500).json({ ok: false, error: "internal_error" });
   }
 });
 
@@ -388,7 +393,7 @@ qlifeRouter.post("/plan", aiLimit, async (req: Request, res: Response) => {
     res.json({ ok: true, plan, provider: providerId, model: result.model });
   } catch (e: any) {
     captureQLifeError(e, { route: "POST /plan" });
-    res.status(500).json({ ok: false, error: e?.message || "AI plan generation failed" });
+    res.status(500).json({ ok: false, error: "ai_plan_failed" });
   }
 });
 

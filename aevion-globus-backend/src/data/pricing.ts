@@ -145,6 +145,19 @@ export interface ModulePrice {
   availability: ModuleAvailability;
   /** Короткое value-предложение для прайс-листа (1 строка) */
   oneLiner: string;
+  /**
+   * Человеческое название — ТОЛЬКО для модулей, которых нет в `data/projects.ts`.
+   *
+   * Обычно имя берётся из реестра проектов (см. routes/pricing.ts). Но если
+   * модуля там нет, прежний запасной путь подставлял голый `id`, и покупатель
+   * видел в выпадающем списке тарифа Lite строку вроде «qmelanin» вместо
+   * названия. Замер 20.08.2026 на живом проде: 2 модуля из 43.
+   *
+   * Правильное решение — завести их в реестр, но это меняет ПУБЛИЧНОЕ число
+   * модулей платформы (41 в реестре против 43 в прайсе), а такое решение
+   * продуктовое, не техническое. Пока его нет, имя живёт здесь.
+   */
+  name?: string;
 }
 
 export interface PricingBundle {
@@ -548,6 +561,7 @@ export const MODULES_PRICING: ModulePrice[] = [
   // будет, лишнюю форму надо убрать, а не оставлять обе.
   {
     id: "qmelanin",
+    name: "QMelanin — протокол против седины",
     addonMonthly: 15,
     includedIn: ["medium", "full", "enterprise"],
     availability: "beta",
@@ -555,6 +569,7 @@ export const MODULES_PRICING: ModulePrice[] = [
   },
   {
     id: "qrenew",
+    name: "QRenew — клеточное обновление",
     addonMonthly: 29,
     includedIn: ["medium", "full", "enterprise"],
     availability: "beta",

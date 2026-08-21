@@ -69,7 +69,11 @@ export default function SpectatorHubPage() {
       setError(null);
       setLastRefresh(Date.now());
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось загрузить список");
+      // Запасной текст здесь был человеческий, а основной — нет: при отказе
+      // сервера показывалось «HTTP 500». Теперь наоборот: человеку понятная
+      // фраза всегда, техника — в консоль.
+      console.warn("[spectator] не удалось загрузить список:", e);
+      setError("Не удалось загрузить список трансляций. Попробуйте позже.");
     } finally {
       setLoading(false);
     }

@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "CyberChess — открываем 30 августа: 502 584 задачи, Stockfish 18, ИИ-коуч";
+export const alt = "CyberChess — открываем 30 августа: 500 000+ задачи, Stockfish 18, ИИ-коуч";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -9,7 +9,7 @@ export const contentType = "image/png";
 // ссылка в Telegram или LinkedIn показывалась голым текстом, хотя именно на эти
 // страницы ведёт трафик роликов.
 //
-// Числа здесь только те, что проверены замером на живом проде: 502 584 задачи
+// Числа здесь только те, что проверены замером на живом проде: 500 000+ задачи
 // (GET /api/cyberchess-puzzles/meta) и Stockfish 18 (виден в интерфейсе партии).
 // Ничего про турниры и рейтинги — их я не проверял, а карточка живёт в ленте
 // дольше, чем любая правка.

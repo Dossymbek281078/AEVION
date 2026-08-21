@@ -199,11 +199,22 @@ function aggregateBySource(rows: WaitlistRow[]): Array<{ source: string; count: 
 }
 
 /**
- * Weekly digest cron — stub. When Pro launches and transactional
- * email provider (Brevo/Postmark/Resend) is wired up, replace this
- * with actual mail send. For now just no-op.
+ * Недельный дайджест подписчикам конституции.
  *
- * Call from cron scheduler (already exists in qcoreai.ts) every Sunday.
+ * ⚠️ ЭТО НЕ ЗАГЛУШКА. Комментарий здесь до 21.08.2026 гласил «For now just
+ * no-op», хотя функция давно шлёт НАСТОЯЩИЕ письма через Brevo (см. вызов
+ * sendDigestEmail ниже). Такая подпись опаснее отсутствия подписи: она
+ * приглашает вызвать функцию «чтобы проверить», а проверка окажется
+ * рассылкой по живому списку.
+ *
+ * Кто её зовёт: НИКТО. Проверено сплошным поиском по репозиторию 21.08.2026
+ * — ни ручки, ни расписания, ни скрипта. То есть механизм собран и не
+ * подключён; включать его — отдельное решение, потому что рассылка по
+ * живым адресам необратима.
+ *
+ * Для письма НА ЗАПУСК модуля эта функция не годится: она собирает дайджест
+ * артефактов конституции, а не анонс. Порядок отправки анонса —
+ * Desktop\АЕВИОН-CyberChess6-08-19-письмо-на-запуск-черновик.md
  */
 export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: number }> {
   try {

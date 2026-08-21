@@ -5,6 +5,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 import { productById, withChannel } from "@/lib/products";
 import { BuyLink } from "@/components/BuyLink";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 
 // Longevity — the measure → act → re-measure protocol over the deterministic
 // backend. Three live tools: your assessment (flag out-of-range markers + get a
@@ -338,6 +339,21 @@ export default function LongevityClient({ channel = null }: { channel?: string |
           </BuyLink>
         )}
 
+
+        {/* Сбор адреса ставится ЗДЕСЬ, а не на /go, и вот почему.
+            /go — перевалочная страница: на ней не задерживаются. Ценность
+            человек получает тут: панель маркеров, стек с градацией
+            доказательности, двенадцать недель. Замер 20.08.2026: форма была
+            только на /go, то есть посетитель забирал всё и уходил, не оставив
+            контакта. Подписчиков в системе на тот момент было три. */}
+        <WaitlistCapture
+          source="longevity"
+          tone="dark"
+          title="Прислать, когда протокол обновится"
+          description="Разбор пересматривается, когда выходят новые исследования: что-то поднимается в градации, что-то опускается. Оставьте адрес — напишем, если изменится то, что вы уже делаете."
+          promise="Пишем только по делу — при изменении градации или панели. Отписка одной ссылкой."
+          buttonLabel="Присылать обновления"
+        />
         <p style={styles.foot}>
           Связанные модули: <a href="/qrenew" style={styles.link}>QRenew</a> (биовозраст) · <a href="/qmelanin" style={styles.link}>QMelanin</a> (пигмент, Zn:Cu) · <a href="/shop" style={styles.link}>магазин</a>.
         </p>

@@ -200,7 +200,7 @@ messagingRouter.get("/notifications", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
-    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "50"), 10) || 50, 1), 100);
 
     const [msgs, appUpdates, pending] = await Promise.all([
       pool.query(

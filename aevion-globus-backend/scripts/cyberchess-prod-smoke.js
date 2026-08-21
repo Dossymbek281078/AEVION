@@ -227,12 +227,17 @@ async function run() {
   // Проверено на проде до починки — `{"streak":364}` ставил отправителя первым.
   r = await req("POST", "/api/cyberchess-daily/solve", {
     streak: 999,
-    day: new Date().toISOString().slice(0, 10),
+    // Дату не шлём: её называет сервер (см. pages-live-smoke.js).
     userId: "smoke-forgery-probe",
     name: "smoke",
   });
-  if (r.status === 400 && r.body?.error === "moves_required") {
-    ok("серию нельзя объявить без ходов", "400 moves_required");
+  // Свойство, а не формулировка: любой отказ 4xx означает, что заявление без
+  // сыгранных ходов не засчитано. Придирка к тексту красила бы сторожа красным
+  // при живой защите.
+  // Отказ должен быть НАШИМ: 4xx плюс JSON с признаком отказа, иначе чужой
+  // 404 читался бы как работающая защита.
+  if (r.status >= 400 && r.status < 500 && r.body?.ok === false && typeof r.body?.error === "string") {
+    ok("серию нельзя объявить без ходов", `${r.status} ${r.body.error}`);
   } else {
     bad("серию нельзя объявить без ходов", `ответ ${r.status} ${JSON.stringify(r.body).slice(0, 70)} — подделка проходит`);
   }

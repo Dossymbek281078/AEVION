@@ -114,7 +114,13 @@ export default function ReplayHubPage() {
         if (alive) setItems(rs);
       })
       .catch((e: unknown) => {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        // Человеку — человеческое. Прежде сюда попадали «HTTP 500» и
+        // «API returned ok=false»: это язык разработчика, и ворота запуска
+        // требуют обратного («тексты ошибок человеческие, без кодов»).
+        // Технический текст не теряем — он уходит в консоль, где и нужен.
+        if (!alive) return;
+        console.warn("[replays] не удалось загрузить список:", e);
+        setError("Не удалось загрузить партии. Попробуйте обновить страницу.");
       });
     return () => {
       alive = false;

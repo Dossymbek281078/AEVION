@@ -157,12 +157,24 @@ async function checkChessPromises() {
     const r = await fetch(`${API}/api/cyberchess-daily/solve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ streak: 999, day: new Date().toISOString().slice(0, 10), userId: "pages-guard-probe", name: "guard" }),
+      // Дату НЕ шлём: её называет сервер, а расхождение даёт отдельный отказ
+      // wrong_day. На стыке суток UTC проба и сервер посчитали бы разные дни, и
+      // сторож раз в сутки кричал бы «подделка проходит» на исправной защите.
+      body: JSON.stringify({ streak: 999, userId: "pages-guard-probe", name: "guard" }),
       signal: AbortSignal.timeout(15000),
     });
     const j = await r.json().catch(() => ({}));
-    if (r.status === 400 && j?.error === "moves_required") {
-      pass++; console.log("  PASS серию нельзя объявить без ходов");
+    // Проверяется СВОЙСТВО «заявление без сыгранных ходов не засчитывается», а
+    // не конкретный текст отказа: сервер вправе отказать по любой причине, и
+    // придирка к формулировке делала бы сторожа красным при живой защите —
+    // например, пока новая версия ещё не выкачена. Красным он должен становиться
+    // тогда, когда заявление ПРОХОДИТ.
+    // Отказ должен быть НАШИМ: 4xx плюс JSON с признаком отказа. Иначе
+    // сторож зеленел на чужом 404 — проверено контролем, направив его на
+    // несуществующий адрес: «защита работает» при полном её отсутствии.
+    const нашОтказ = r.status >= 400 && r.status < 500 && j && j.ok === false && typeof j.error === "string";
+    if (нашОтказ) {
+      pass++; console.log(`  PASS серию нельзя объявить без ходов (${r.status} ${j.error})`);
     } else {
       fail++; failures.push("серию можно подделать");
       console.log(`  FAIL серию можно подделать — ${r.status} ${JSON.stringify(j).slice(0, 60)}`);

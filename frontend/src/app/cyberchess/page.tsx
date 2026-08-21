@@ -5578,7 +5578,7 @@ export default function CyberChessPage(){
       {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6,alignItems:"center"}}>
         <div style={{padding:"6px 12px",background:"rgba(124,58,237,0.2)",border:"1px solid rgba(124,58,237,0.4)",borderRadius:8,color:"#a78bfa",fontSize:12,fontWeight:800,letterSpacing:"0.05em"}}>📺 РЕЖИМ СТРИМЕРА</div>
         <button onClick={()=>streamerToolbarRef.current?.showYT()} title="Показать панель YouTube" style={{padding:"6px 10px",background:"rgba(255,0,51,0.18)",border:"1px solid rgba(255,0,51,0.5)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>+ YT</button>
-        <button onClick={()=>streamerToolbarRef.current?.showTW()} title="Show Twitch panel" style={{padding:"6px 10px",background:"rgba(145,70,255,0.18)",border:"1px solid rgba(145,70,255,0.5)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>+ Twitch</button>
+        <button onClick={()=>streamerToolbarRef.current?.showTW()} title="Показать панель Twitch" style={{padding:"6px 10px",background:"rgba(145,70,255,0.18)",border:"1px solid rgba(145,70,255,0.5)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>+ Twitch</button>
         <button onClick={()=>sStreamerMode(false)} style={{padding:"6px 10px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>
       </div>}
       {/* Sticky glass header */}
@@ -12301,7 +12301,7 @@ ${question.trim()}`;
     </Modal>
 
     {/* Opening Trainer modal — выбор дебюта */}
-    <Modal open={showOpeningTrainer} onClose={()=>sShowOpeningTrainer(false)} size="lg" title="🎓 Opening Trainer">
+    <Modal open={showOpeningTrainer} onClose={()=>sShowOpeningTrainer(false)} size="lg" title="🎓 Тренажёр дебютов">
       <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[3]}}>
         Выбери дебют — бот сыграет чёрными, ты ведёшь белыми по скрипту. За безошибочный — <b>+10 Chessy</b>, с ошибками — <b>+5</b>.
       </div>
@@ -13480,7 +13480,7 @@ ${question.trim()}`;
 
     {/* ═══ Coordinates Trainer (killer #13) ═══ */}
     <Modal open={showCoord} onClose={()=>{sShowCoord(false);sCoordSession(null);sCoordResult(null)}} size="lg"
-      title="🎯 Coordinates Trainer">
+      title="🎯 Тренажёр координат">
       {!coordSession?(()=>{
         const top=coordLB[0];
         return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
@@ -13595,7 +13595,7 @@ ${question.trim()}`;
 
     {/* ═══ Personality Quiz (killer #14) ═══ */}
     <Modal open={showQuiz} onClose={()=>{sShowQuiz(false);sQuizAnswers([]);sQuizResult(null)}} size="lg"
-      title="🧠 Chess Personality">
+      title="🧠 Шахматный характер">
       {(()=>{
         if(quizResult){
           const top=QUIZ_PLAYERS[quizResult.topId];
@@ -13689,7 +13689,7 @@ ${question.trim()}`;
 
     {/* ═══ Board Editor (killer #15) ═══ */}
     <Modal open={showEditor} onClose={()=>sShowEditor(false)} size="xl"
-      title="♛ Board Editor">
+      title="♛ Редактор позиции">
       {(()=>{
         const fenPreview=edToFen(editorBoard,editorSide);
         const palette:[("p"|"n"|"b"|"r"|"q"|"k"),"w"|"b"][]=ED_PIECES.flatMap(t=>[[t,"w" as const],[t,"b" as const]]);
@@ -14069,7 +14069,7 @@ ${question.trim()}`;
 
     {/* ═══ Master Games + Guess the Move (killer #17) ═══ */}
     <Modal open={showMasters} onClose={()=>{sShowMasters(false);sMasterCurrent(null)}} size="xl"
-      title="♛ Master Games">
+      title="♛ Партии мастеров">
       {(()=>{
         const games=ldMasterGames();
         if(!masterCurrent){
@@ -14252,7 +14252,7 @@ ${question.trim()}`;
 
     {/* ═══ Insights v2 (killer #16) ═══ */}
     <Modal open={showInsights} onClose={()=>sShowInsights(false)} size="xl"
-      title="📊 Insights v2">
+      title="📊 Разбор">
       {(()=>{
         if(savedGames.length<3){
           return <Card padding={SPACE[4]} tone="surface1" style={{textAlign:"center"}}>

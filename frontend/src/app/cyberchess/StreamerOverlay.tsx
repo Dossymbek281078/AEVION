@@ -238,9 +238,9 @@ function PanelHost({ kind, state, onChange, onClose }: PanelHostProps) {
         }}>
         <span style={{ width: 10, height: 10, borderRadius: 999, background: accent }} />
         <span style={{ color: "#fff", fontSize: 11, fontWeight: 800, letterSpacing: 0.5, flex: 1 }}>{label}</span>
-        <button title="Edit URL" onClick={() => setEditing(v => !v)} style={btnStyle}>✎</button>
+        <button title="Изменить адрес" onClick={() => setEditing(v => !v)} style={btnStyle}>✎</button>
         <button title={state.minimized ? "Expand" : "Minimize"} onClick={() => onChange({ minimized: !state.minimized })} style={btnStyle}>{state.minimized ? "▢" : "—"}</button>
-        <button title="Close" onClick={onClose} style={btnStyle}>✕</button>
+        <button title="Закрыть" onClick={onClose} style={btnStyle}>✕</button>
       </div>
       {!state.minimized && (
         <div style={{ flex: 1, position: "relative", background: "#000" }}>
@@ -300,7 +300,7 @@ function PanelHost({ kind, state, onChange, onClose }: PanelHostProps) {
             onPointerMove={onResizeMove}
             onPointerUp={onResizeUp}
             onPointerCancel={onResizeUp}
-            title="Drag to resize"
+            title="Потяните, чтобы изменить размер"
             style={{
               position: "absolute", right: 0, bottom: 0,
               width: 16, height: 16, cursor: "nwse-resize",

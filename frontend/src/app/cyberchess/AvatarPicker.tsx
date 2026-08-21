@@ -80,7 +80,7 @@ export default function AvatarPicker({
               background: surface2, border: `1px solid ${border}`,
               fontSize: 20,
             }}>{current}</div>
-            <button onClick={onClose} aria-label="Close"
+            <button onClick={onClose} aria-label="Закрыть"
               style={{
                 width: 32, height: 32, border: `1px solid ${border}`,
                 borderRadius: 8, background: surface2, color: text,

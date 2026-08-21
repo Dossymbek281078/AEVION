@@ -131,3 +131,41 @@ describe("подписи отделены от ключей", () => {
     expect(s).toContain('t:"GM"');
   });
 });
+
+describe("подсказки и aria-label — по-русски", () => {
+  // 21.08. Их не видно глазами: title всплывает при наведении, aria-label
+  // читает экранный диктор. На русской странице было 28 английских, в том числе
+  // aria-label="Close" в шести окнах — диктор объявлял «Close» по-английски.
+  const ZAPRESHCHENO = [
+    'aria-label="Close"', 'title="Close"', 'title="Edit URL"',
+    'title="Show Twitch panel"', 'title="🎓 Opening Trainer"',
+    'title="♛ Board Editor"', 'aria-label="loading"', 'aria-label="Choose voice"',
+  ];
+
+  test("шаблоны узнают свой образец", () => {
+    const obrazec = '<button aria-label="Close" title="Edit URL">';
+    expect(ZAPRESHCHENO.filter((z) => obrazec.includes(z)).length).toBe(2);
+  });
+
+  test("английских подсказок в модуле не осталось", () => {
+    const plohie: string[] = [];
+    const obojti = (d: string) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) {
+          if (e.name !== "__tests__") obojti(p);
+        } else if (e.name.endsWith(".tsx")) {
+          const kod = fs.readFileSync(p, "utf-8")
+            .split("\n")
+            .filter((l) => !l.trim().startsWith("//"))
+            .join("\n");
+          for (const z of ZAPRESHCHENO) {
+            if (kod.includes(z)) plohie.push(`${path.relative(ROOT, p)}: ${z}`);
+          }
+        }
+      }
+    };
+    obojti(ROOT);
+    expect(plohie).toEqual([]);
+  });
+});

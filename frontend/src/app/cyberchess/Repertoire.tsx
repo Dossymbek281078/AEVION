@@ -115,7 +115,7 @@ export default function RepertoireModal({ open, onClose, histSan, myColor, ecoHi
   if (!open) return null;
 
   return (
-    <div role="dialog" aria-label="Personal Opening Repertoire"
+    <div role="dialog" aria-label="Личный дебютный репертуар"
       style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(15,23,42,0.65)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(4px)" }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 720, maxHeight: "90vh", overflow: "auto", background: "#fff", borderRadius: 14, padding: 22, boxShadow: "0 30px 80px rgba(0,0,0,0.4)" }}>

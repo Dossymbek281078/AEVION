@@ -257,7 +257,7 @@ export default function MusicPlayer({ open, onClose }: Props) {
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>🎵 Музыкальный плеер</h2>
-          <button onClick={onClose} aria-label="Close" style={{ width: 32, height: 32, border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: "pointer", fontSize: 16 }}>✕</button>
+          <button onClick={onClose} aria-label="Закрыть" style={{ width: 32, height: 32, border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: "pointer", fontSize: 16 }}>✕</button>
         </div>
 
         {/* Player controls */}

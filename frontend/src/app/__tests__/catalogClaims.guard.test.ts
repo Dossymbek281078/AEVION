@@ -30,6 +30,29 @@ import { fileURLToPath } from "node:url";
 
 const APPS = join(dirname(fileURLToPath(import.meta.url)), "..", "apps", "page.tsx");
 
+// ДОБАВЛЕНО 21.08.2026. Сторож читал ТОЛЬКО страницу /apps, а те же самые
+// опровергнутые обещания жили в каталоге товаров и продавались там за $29/мес:
+// «подпись Ed25519» и «привязка ко времени через OpenTimestamps» на продукте,
+// который покупают ИМЕННО за доказуемость. Прожили два дня после того, как их
+// признали неподтверждёнными.
+//
+// Это класс «проверка охватывала одну страницу из многих»: сторож был, был
+// зелёным и защищал не то место.
+const CATALOG = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "lib", "products.ts");
+
+// Обещания записаны по-английски, а каталог на русском — поэтому сверяем по
+// КЛЮЧЕВОМУ слову, а не по фразе целиком. Иначе «подпись Ed25519» прошла бы
+// мимо запрета «Ed25519 signature», и сторож молчал бы на настоящем нарушении.
+const CLAIM_KEYWORDS: Record<string, string[]> = {
+  // Только ОДНОЗНАЧНЫЕ технические термины. Первая версия списка включала
+  // русские «виртуальны» и «безлимит» — и сторож покраснел на ПРАВДЕ:
+  // «Безлимит сохранений» у Constitution относится к другому продукту и
+  // подтверждён. Сторож, кричащий на правду, отключают в первый же день,
+  // поэтому список сознательно узкий: лучше меньше, но без ложных тревог.
+  "Ed25519 signature": ["Ed25519"],
+  OpenTimestamps: ["OpenTimestamps"],
+};
+
 /** Обещания, за которыми 19.08.2026 не нашлось реализации. */
 const DISPROVEN_CLAIMS: Array<{ text: string; why: string }> = [
   {
@@ -79,4 +102,84 @@ describe("витрина /apps не обещает несуществующег�
       expect(withoutComments).not.toContain(text);
     });
   }
+});
+
+describe("каталог товаров не обещает несуществующего", () => {
+  const src = readFileSync(CATALOG, "utf8");
+
+  // Тот же отрицательный контроль: переименуют файл — проверки станут
+  // зелёными молча.
+  it("каталог на месте и содержит товары", () => {
+    expect(src.length).toBeGreaterThan(1000);
+    expect(src).toContain("export const MODULES");
+    expect(src).toContain("priceUsd:");
+  });
+
+  for (const [claim, keywords] of Object.entries(CLAIM_KEYWORDS)) {
+    it(`не продаёт «${claim}»`, () => {
+      // Комментарии вырезаем: в них объясняется, ПОЧЕМУ обещание убрано,
+      // и запрет на само слово сделал бы объяснение невозможным.
+      const withoutComments = src
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/(^|[^:])\/\/.*$/gm, "$1");
+      for (const kw of keywords) {
+        expect(withoutComments.toLowerCase()).not.toContain(kw.toLowerCase());
+      }
+    });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// ДОБАВЛЕНО 21.08.2026: юридические страницы.
+//
+// Те же два обещания — «Ed25519» и «OpenTimestamps» — стоят в /terms и
+// /privacy, то есть в ДОГОВОРЕ. Замер: в qright.ts (модуль, выдающий
+// сертификаты авторства) ноль упоминаний Ed25519, OpenTimestamps, createHmac
+// и подписи вообще; импортируется только crypto для хеша.
+//
+// Оговорка ради справедливости: техника в коде ЕСТЬ и работает — в
+// dataQuality, pipeline, qskyway, quantum-shield. Это расхождение между
+// документом и сборкой продукта, а не выдумка.
+//
+// Текст договора здесь НЕ правится: формулировки контракта — решение
+// основателя (разбор с предлагаемой заменой лежит в
+// 15-Аудиты-и-сводки). Сторож фиксирует ГРАНИЦУ: обещания не расползутся
+// дальше, а когда текст поправят, проверка ниже заставит убрать файл из
+// списка.
+
+const LEGAL_PAGES = ["terms", "privacy"] as const;
+
+// Ждут решения по тексту договора. Список тает; добавлять сюда новое НЕЛЬЗЯ.
+const LEGAL_PENDING = new Set(["terms", "privacy"]);
+
+describe("юридические страницы: обещания криптографии", () => {
+  for (const page of LEGAL_PAGES) {
+    const file = join(dirname(fileURLToPath(import.meta.url)), "..", page, "page.tsx");
+
+    it(`${page}: состояние совпадает со списком ожидающих`, () => {
+      const src = readFileSync(file, "utf8");
+      const withoutComments = src
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/(^|[^:])\/\/.*$/gm, "$1");
+      const hit = ["Ed25519", "OpenTimestamps"].some((k) =>
+        withoutComments.includes(k),
+      );
+
+      if (LEGAL_PENDING.has(page)) {
+        // Пока текст не поправлен — обещание обязано БЫТЬ. Иначе список
+        // протух, и его надо сократить: сторож с выдуманными долгами
+        // так же бесполезен, как сторож без долгов.
+        expect(hit).toBe(true);
+      } else {
+        expect(hit).toBe(false);
+      }
+    });
+  }
+
+  it("контроль прибора: страницы читаются и непусты", () => {
+    for (const page of LEGAL_PAGES) {
+      const file = join(dirname(fileURLToPath(import.meta.url)), "..", page, "page.tsx");
+      expect(readFileSync(file, "utf8").length).toBeGreaterThan(1000);
+    }
+  });
 });

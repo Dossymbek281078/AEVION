@@ -122,7 +122,21 @@ const memRenderCache = new Map<string, string>();
 const pool = getPool();
 let dbWarmed = false;
 
-/** Best-effort upsert проекта (fire-and-forget: рендер важнее записи). */
+/**
+ * Запись проекта в базу. Остаётся «выстрелил и забыл» — рендер важнее записи,
+ * и это правильно: все чтения идут из `memProjects`, то есть во время работы
+ * процесса пользователь ничего не теряет.
+ *
+ * НО МОЛЧАТЬ НЕЛЬЗЯ. База здесь — единственное, что переживает перезапуск, а
+ * выкатки в общий сервис идут по нескольку раз в день. Если запись падает,
+ * проекты исчезают при первой же выкатке, и узнаём мы об этом от пользователя,
+ * а не от системы. Раньше здесь стоял `.catch(() => {})` — ни строки в журнале.
+ *
+ * Тот же класс уже чинили 12.08.2026 в `devhub.ts` (коммит 55bda8024,
+ * «проект, чьё сохранение не прошло, исчезает»). Там понадобилась подкладка
+ * из памяти при чтении, потому что чтения шли в базу. Здесь чтения и так из
+ * памяти, поэтому нужна ровно видимость — делать вторую подкладку незачем.
+ */
 function saveProject(p: Project): void {
   pool
     .query(
@@ -130,7 +144,12 @@ function saveProject(p: Project): void {
        ON CONFLICT ("id") DO UPDATE SET "data"=$3, "updatedAt"=NOW()`,
       [p.id, p.userId, JSON.stringify(p)]
     )
-    .catch(() => {});
+    .catch((e: Error) => {
+      console.warn(
+        `[qreal] проект ${p.id} НЕ сохранён в базу: ${e.message}. ` +
+          "В памяти он есть, но не переживёт перезапуск процесса.",
+      );
+    });
 }
 
 function saveCacheEntry(cacheKey: string, url: string): void {
@@ -139,7 +158,9 @@ function saveCacheEntry(cacheKey: string, url: string): void {
       `INSERT INTO "QRealRenderCache" ("cacheKey","url") VALUES ($1,$2) ON CONFLICT ("cacheKey") DO NOTHING`,
       [cacheKey, url]
     )
-    .catch(() => {});
+    .catch((e: Error) => {
+      console.warn(`[qreal] кэш рендера не записан: ${e.message}`);
+    });
 }
 
 async function loadProjectFromDb(id: string): Promise<Project | null> {
@@ -432,7 +453,9 @@ async function aiStoryboard(p: Project, variation: number): Promise<{ shots: Sho
       prompt: null, engine: null, engineRequestId: null, status: "draft", resultUrl: null, qc: null,
     }));
     memStoryboardCache.set(cacheKey, shots);
-    pool.query(`INSERT INTO "QRealStoryboardCache" ("briefHash","shots") VALUES ($1,$2) ON CONFLICT ("briefHash") DO NOTHING`, [cacheKey, JSON.stringify(shots)]).catch(() => {});
+    pool.query(`INSERT INTO "QRealStoryboardCache" ("briefHash","shots") VALUES ($1,$2) ON CONFLICT ("briefHash") DO NOTHING`, [cacheKey, JSON.stringify(shots)]).catch((e: Error) => {
+      console.warn(`[qreal] кэш раскадровки не записан: ${e.message}`);
+    });
     return { shots: cloneShotsForProject(shots), fromCache: false };
   } catch {
     return null; // честный fallback на stub, без маскировки под AI

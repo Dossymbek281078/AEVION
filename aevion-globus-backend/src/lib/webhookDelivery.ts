@@ -107,14 +107,28 @@ export async function deliverWebhook(
         `UPDATE "${cfg.webhookTable}" SET "lastDeliveredAt" = NOW(), "lastError" = NULL WHERE "id" = $1`,
         [opts.webhookId]
       )
-      .catch(() => {});
+      .catch((e: Error) => {
+        // Раньше здесь было `.catch(() => {})`. Отметка о доставке —
+        // единственное, по чему потом судят, дошёл ли вебхук; если запись
+        // не прошла, таблица показывает ПРОШЛОЕ состояние как настоящее.
+        // Соседняя запись в этой же функции уже пишет в журнал при отказе —
+        // непоследовательность внутри одного места и выдала дефект.
+        console.warn(`[webhook] отметка «успех» не записана для ${opts.webhookId}:`, e.message);
+      });
   } else {
     pool
       .query(
         `UPDATE "${cfg.webhookTable}" SET "lastFailedAt" = NOW(), "lastError" = $2 WHERE "id" = $1`,
         [opts.webhookId, error || "delivery failed"]
       )
-      .catch(() => {});
+      .catch((e: Error) => {
+        // Раньше здесь было `.catch(() => {})`. Отметка о доставке —
+        // единственное, по чему потом судят, дошёл ли вебхук; если запись
+        // не прошла, таблица показывает ПРОШЛОЕ состояние как настоящее.
+        // Соседняя запись в этой же функции уже пишет в журнал при отказе —
+        // непоследовательность внутри одного места и выдала дефект.
+        console.warn(`[webhook] отметка «доставлено» не записана для ${opts.webhookId}:`, e.message);
+      });
   }
   return { ok, statusCode, error };
 }

@@ -23,7 +23,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { gumroadPaymentProvider, verifyGumroadSale } from "../lib/payment/gumroadProvider";
+import { gumroadPaymentProvider, verifyGumroadSaleDetailed } from "../lib/payment/gumroadProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
@@ -159,7 +159,14 @@ function resolveReference(raw: Record<string, string>): string {
 
   // 4. Known AEVION permalinks — code-level default so entitlement never depends
   //    on an env var that was never set. See KNOWN_PERMALINK_REFERENCE above.
-  if (pingSlug && KNOWN_PERMALINK_REFERENCE[pingSlug]) {
+  // hasOwnProperty.call, а не просто KNOWN_PERMALINK_REFERENCE[pingSlug]: слаг
+  // приходит из ТЕЛА вебхука, а обычный объект наследует ключи прототипа.
+  // POST с `product_permalink=constructor` (адрес ping-ручки публично известен)
+  // возвращал отсюда функцию `Object` вместо строки-ссылки, и падало дальше —
+  // на `ref.toLowerCase()` в tierForReference, то есть 500 вместо честного
+  // разбора. Доступ никому не выдавался, но денежная ручка роняется одной
+  // строкой в теле запроса. Тот же класс, что и три другие находки 27.07.2026.
+  if (pingSlug && Object.prototype.hasOwnProperty.call(KNOWN_PERMALINK_REFERENCE, pingSlug)) {
     return KNOWN_PERMALINK_REFERENCE[pingSlug];
   }
 
@@ -299,7 +306,49 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   // Аварийный выключатель: GUMROAD_VERIFY_SALES=0.
   const signatureEnforced = Boolean(process.env.GUMROAD_WEBHOOK_SECRET);
   if (!signatureEnforced && process.env.GUMROAD_VERIFY_SALES !== "0") {
-    const verdict = await verifyGumroadSale(saleId);
+    // eslint-disable-next-line prefer-const
+    let { verdict, sale } = await verifyGumroadSaleDetailed(saleId);
+    // Флаг, а не ранний выход. Причина техническая и важная: освобождение
+    // ключа дедупликации живёт в ОДНОЙ строке ниже, и ветка
+    // launch/2026-08-30 заменяет её на общий модуль (`releaseWebhookKey`),
+    // убирая набор `SEEN` целиком. Два МОИХ новых обращения к `SEEN`
+    // пережили бы мерж без конфликта и сломали бы сборку: проверено
+    // `git merge-tree` — в слитом файле 2 обращения и 0 объявлений.
+    // Расширяя условие существующей строки, я не создаю новых обращений.
+    let claimMismatch: "email" | "product" | null = null;
+
+    // ЗАЯВЛЕННОЕ СВЕРЯЕТСЯ С ПОДТВЕРЖДЁННЫМ (19.08.2026).
+    //
+    // Проверка выше отвечает только на вопрос «такая продажа есть?». Товар и
+    // адрес до сих пор брались из ТЕЛА ЗАПРОСА, а его пишет отправитель. То
+    // есть обладатель настоящего дешёвого чека мог прислать его номер,
+    // подставив `product_id` дорогого тарифа, — существование продажи
+    // подтверждалось, и выдавался дорогой. Тем же способом права выписывались
+    // на чужой адрес.
+    //
+    // Сверяем только то, что Gumroad действительно вернул: если поля в ответе
+    // нет, молча пропускаем — придумывать за провайдера нельзя, а ложный
+    // отказ здесь означал бы, что оплативший человек не получил товар.
+    if (verdict === "confirmed" && sale) {
+      const saleEmail = String(sale.purchase_email ?? sale.email ?? "").trim().toLowerCase();
+      if (saleEmail && saleEmail !== email) claimMismatch = "email";
+      const saleProduct = String(sale.product_id ?? "").trim();
+      const saleShort = String(sale.short_product_id ?? "").trim();
+      const claimed = String(productId ?? "").trim();
+      if (claimed && (saleProduct || saleShort) && claimed !== saleProduct && claimed !== saleShort)
+        claimMismatch = "product";
+    }
+
+    // Несовпадение заявки ПРИРАВНИВАЕТСЯ к «такой продажи нет»: продажи,
+    // отвечающей этой заявке, действительно не существует. Так блок отказа
+    // ниже остаётся байт в байт как в main — а его переписывает ветка
+    // launch/2026-08-30, переводя освобождение ключа на общий модуль.
+    // Точная причина уходит в Sentry выше, наружу её не отдаём.
+    if (claimMismatch) {
+      console.warn(`[gumroad/webhook] ${claimMismatch} в пинге не совпал с продажей ${saleId} — отказ`);
+      capture(new Error(`gumroad_ping_${claimMismatch}_mismatch`), { route: "gumroad/webhook" });
+      verdict = "not_found";
+    }
     if (verdict === "not_found") {
       console.warn(`[gumroad/webhook] sale ${saleId} not found in Gumroad API — rejecting 401`);
       releaseWebhookKey("gumroad", dedupKey); // не занимать ключ отклонённым пингом

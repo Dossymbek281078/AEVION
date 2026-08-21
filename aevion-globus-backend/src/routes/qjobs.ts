@@ -11,6 +11,11 @@ import { callProvider, getProviders } from "../services/qcoreai/providers";
 
 const postLimiter = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "qjobs:post", message: "rate_limited" });
 const applyLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qjobs:apply", message: "rate_limited" });
+// Платный вызов модели. Без ограничителя ручка была открыта: замер 21.08.2026
+// нашёл 26 платных ручек, у 17 ограничителя не было, тринадцать закрывает
+// кампания в другой ветке — эта оставалась ничьей. Предел строже соседних,
+// потому что цена запроса здесь не в базе, а у поставщика.
+const aiMatchLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qjobs:ai-match", message: "rate_limited" });
 
 export const qjobsRouter = Router();
 
@@ -384,7 +389,7 @@ qjobsRouter.get("/me/jobs/:id/applicants", async (req: Request, res: Response) =
 });
 
 // ─── POST /api/qjobs/ai/match ─────────────────────────────────────────────────
-qjobsRouter.post("/ai/match", async (req: Request, res: Response) => {
+qjobsRouter.post("/ai/match", aiMatchLimiter, async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
 

@@ -106,11 +106,21 @@ async function run() {
     else fail(`GET /modules/${id}/health`, `${r.status}`);
   }
 
-  // 11. Unknown module
-  r = await req("GET", "/api/modules/__no_such__/health");
-  if (r.status === 404 || r.status === 400) {
-    ok("GET /modules/__no_such__/health → 4xx graceful", `status=${r.status}`);
-  } else fail("Unknown module should 4xx", `got=${r.status}`);
+  // 11. Unknown module.
+  //
+  // `__no_such__` проверяет правильную вещь, но таким входом дефект не поймать:
+  // 19.08.2026 эта проверка была ЗЕЛЁНОЙ, пока прод отвечал
+  // `{"ok":true,"message":"Registry entry healthy"}` на /api/modules/constructor/health.
+  // Реестр искался по обычному объекту, а тот наследует ключи прототипа —
+  // и ручка объявляла здоровым модуль, которого нет. Поэтому спрашиваем и
+  // обычным мусором, и служебными словами: регистр ручка не понижает, проходили
+  // все пять.
+  for (const bad of ["__no_such__", "constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+    r = await req("GET", `/api/modules/${bad}/health`);
+    if (r.status === 404 || r.status === 400) {
+      ok(`GET /modules/${bad}/health → 4xx graceful`, `status=${r.status}`);
+    } else fail(`Unknown module "${bad}" should 4xx`, `got=${r.status}`);
+  }
 
   // 12. byTier sums to total (sanity)
   if (status?.byTier) {

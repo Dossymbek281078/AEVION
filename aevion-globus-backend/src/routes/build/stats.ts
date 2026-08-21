@@ -198,7 +198,13 @@ statsRouter.get("/salary", async (req, res) => {
 statsRouter.get("/hires", async (req, res) => {
   res.setHeader("Cache-Control", "public, max-age=120, s-maxage=300");
   try {
-    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    // Нижняя граница обязательна, а не только верхняя: Number("-1") даёт -1,
+    // оно проходит проверку на истинность и уезжает в SQL как LIMIT -1, а
+    // Postgres на это отвечает ошибкой. Наружу это выглядело как авария
+    // сервера (500 hires_failed) и попадало в Sentry — за две недели пять раз,
+    // самая частая ошибка прода. Замер 20.08.2026: ?limit=-1 -> 500,
+    // ?limit=5 -> 200. Тот же приём применён в репозитории уже 45 раз.
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
     const r = await pool.query(
       `SELECT v."title" AS "vacancyTitle", p."title" AS "projectTitle", p."city" AS "projectCity",
               rc."name" AS "recruiterName", wk."name" AS "workerName",

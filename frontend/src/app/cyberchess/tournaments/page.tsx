@@ -707,12 +707,12 @@ function TournamentCard({ t }: { t: Tournament }) {
             Подробнее
           </Link>
           {t.status === "live" ? (
-            <button
-              onClick={() => alert(`[mock] Spectate ${t.title}`)}
-              style={btnPrimary(T.blue)}
+            <Link
+              href="/cyberchess/spectator"
+              style={{ ...btnPrimary(T.blue), textDecoration: "none", display: "inline-block" }}
             >
-              Spectate
-            </button>
+              Смотреть
+            </Link>
           ) : t.status === "upcoming" ? (
             <button
               disabled={full}
@@ -736,9 +736,16 @@ function TournamentCard({ t }: { t: Tournament }) {
                   );
                   const data = await r.json();
                   if (data?.ok) {
-                    alert(`Registered. Ticket ${data.ticketId}`);
+                    alert(`Вы записаны на «${t.title}». Номер участника: ${data.ticketId}`);
                   } else {
-                    alert(`Error: ${data?.error || "unknown"}`);
+                    // Человеку — человеческое; код ошибки уходит в консоль.
+                    // Раньше здесь было «Error: <код>»: слово чужого языка и
+                    // строка, которая ничего не говорит тому, кто её прочтёт.
+                    console.warn("[tournaments] регистрация отклонена:", data?.error);
+                    alert(
+                      `Не удалось записаться на «${t.title}». ` +
+                        `Попробуйте ещё раз — если не выйдет, напишите нам.`,
+                    );
                   }
                 } catch {
                   /* Здесь стояло «Registered (offline mock)» — то есть при

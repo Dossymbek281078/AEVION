@@ -88,6 +88,27 @@ const PAGES = [
   // ровно так же, как пропажа /go в июле.
   "/devhub/launch",           // запуск 13.09, самый дорогой чек платформы
   "/multichat-engine/launch", // запуск 20.09
+  // Страница проверки чека. Стоит здесь потому, что на неё ведёт ссылка с
+  // посадочной со словами «проверьте чек сами» — если адрес отдаст 404, сломается
+  // именно ОБЕЩАНИЕ, а не второстепенная страница, и снаружи это будет тихо.
+  "/multichat-engine/verify",
+
+  // CyberChess целиком. До 21.08 сторож знал пять адресов модуля из
+  // семнадцати: пропади любой из остальных двенадцати — никто бы не заметил,
+  // ровно как с /go в июле. Модуль выходит первым 30 августа, и «страница
+  // просто исчезла» здесь дороже всего.
+  "/cyberchess/cpi",
+  "/cyberchess/cpi/dashboard",
+  "/cyberchess/cpi/leaderboard",
+  "/cyberchess/economy",
+  "/cyberchess/history",
+  "/cyberchess/matchmaking",
+  "/cyberchess/repertoire",
+  "/cyberchess/replays",
+  "/cyberchess/spectator",
+  "/cyberchess/studio",
+  "/cyberchess/tournament",
+  "/cyberchess/training",
 ];
 
 let pass = 0;

@@ -4688,7 +4688,12 @@ qcoreaiRouter.get("/sessions/:id/presence", async (req, res) => {
    Returns: { answer: string, snippetsUsed: number }
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/notebook/qa", async (req, res) => {
+// Ограничитель на платный вызов. Замер 21.08.2026: платных ручек 26, без
+// ограничителя 17, и тринадцать из них закрывает кампания в другой ветке.
+// Эти оставались не закрытыми никем. Берётся СУЩЕСТВУЮЩИЙ chatLimiter, а не
+// новый: помощник generationLimit живёт в чужой незамёрженной ветке, и своя
+// копия с тем же именем дала бы при мерже два объявления.
+qcoreaiRouter.post("/notebook/qa", chatLimiter, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
@@ -5741,7 +5746,12 @@ qcoreaiRouter.post("/notebook/auto-tag", async (req, res) => {
   } catch (err: any) { captureQCoreAIError(err, { route: "notebook-auto-tag" }); res.status(500).json({ error: "auto-tag failed" }); }
 });
 
-qcoreaiRouter.get("/notebook/collections/:id/summary", async (req, res) => {
+// Ограничитель на платный вызов. Замер 21.08.2026: платных ручек 26, без
+// ограничителя 17, и тринадцать из них закрывает кампания в другой ветке.
+// Эти оставались не закрытыми никем. Берётся СУЩЕСТВУЮЩИЙ chatLimiter, а не
+// новый: помощник generationLimit живёт в чужой незамёрженной ветке, и своя
+// копия с тем же именем дала бы при мерже два объявления.
+qcoreaiRouter.get("/notebook/collections/:id/summary", chatLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
@@ -6118,7 +6128,12 @@ qcoreaiRouter.patch("/templates/:id/pin", async (req, res) => {
 // Cache results for 60s to avoid hammering provider APIs
 const providerHealthCache = new Map<string, { result: any; cachedAt: number }>();
 
-qcoreaiRouter.get("/providers/health", async (_req, res) => {
+// Ограничитель на платный вызов. Замер 21.08.2026: платных ручек 26, без
+// ограничителя 17, и тринадцать из них закрывает кампания в другой ветке.
+// Эти оставались не закрытыми никем. Берётся СУЩЕСТВУЮЩИЙ chatLimiter, а не
+// новый: помощник generationLimit живёт в чужой незамёрженной ветке, и своя
+// копия с тем же именем дала бы при мерже два объявления.
+qcoreaiRouter.get("/providers/health", chatLimiter, async (_req, res) => {
   const now = Date.now();
   const CACHE_TTL = 60_000;
 

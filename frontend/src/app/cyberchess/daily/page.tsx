@@ -435,6 +435,22 @@ export default function DailyPuzzlePage() {
           console.warn('[daily] сервер отказал:', r.status);
         }
         setMessage(podskazka);
+
+        // ОТКАТ. Серию мы прибавляем ДО запроса намеренно: страница обязана
+        // работать без сети, и обрыв связи (ветка catch ниже) местный счёт не
+        // трогает — он догонит при следующей удачной отправке.
+        //
+        // Но отказ сервера — не обрыв. Это определённое «нет»: ходы не те,
+        // день не тот. Оставить прибавку значит показывать человеку серию,
+        // которой у него нет, и молча расходиться с таблицей лидеров.
+        setStreak(streak);
+        setBestStreak(bestStreak);
+        setSolved(false);
+        try {
+          localStorage.setItem('cc_daily_streak', String(streak));
+          localStorage.setItem('cc_daily_best_streak', String(bestStreak));
+          localStorage.removeItem('cc_daily_last_solved');
+        } catch {}
       }
     } catch {
       // ignore network errors — local state already saved

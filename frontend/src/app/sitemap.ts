@@ -11,6 +11,17 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https
 // отсюда — /bureau/transparency и /qcontract/documents (страниц нет ни
 // в одной из веток) и /qcoreai/docs (страница есть, но её вырезал
 // незаякоренный шаблон docs/ в .vercelignore — починено там же).
+/**
+ * Запрещён ли адрес для поисковика. Вынесено на уровень модуля, чтобы
+ * сторож мог проверить предикат БЕЗ сети: карта сайта тянет живые
+ * списки вакансий и проектов, и тест, зовущий её целиком, проверял бы
+ * заодно доступность бэкенда — то есть краснел бы не по делу.
+ */
+export function isBlockedForCrawlers(u: string): boolean {
+  const p = u.replace(/^https?:\/\/[^/]+/, "");
+  return DISALLOWED_PATHS.some((d) => p === d || p === d.replace(/\/$/, "") || p.startsWith(d));
+}
+
 const TOP_LEVEL_ROUTES: Array<{
   path: string;
   changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
@@ -327,11 +338,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // /account и /constitution/admin. Обход каталогов их честно находил, просто
   // ничего не знал про запреты. Google на противоречие отвечает тем, что
   // показывает адрес в выдаче БЕЗ описания, — то есть ссылка на админку видна.
-  const blocked = (u: string) => {
-    const p = u.replace(/^https?:\/\/[^/]+/, "");
-    return DISALLOWED_PATHS.some((d) => p === d || p === d.replace(/\/$/, "") || p.startsWith(d));
-  };
-  const crawlable = all.filter((e) => !blocked(String(e.url)));
+  const crawlable = all.filter((e) => !isBlockedForCrawlers(String(e.url)));
 
   return crawlable.slice(0, 5000);
 }

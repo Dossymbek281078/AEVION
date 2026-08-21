@@ -19,6 +19,7 @@ import { authOauthRouter } from "./routes/authOauth";
 import { tiktokRouter } from "./routes/tiktok";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
+import { helpContactRouter } from "./routes/helpContact";
 import { statusRouter } from "./routes/status";
 import { entitlementsRouter } from "./routes/entitlements";
 import { requireModule } from "./lib/planGate";
@@ -460,6 +461,12 @@ app.get("/api/globus/projects/:id", (req, res) => {
 });
 
 app.use("/api/modules", modulesRouter);
+
+// Приём обращений со страницы помощи. Ручка вызывалась формой с 12.08 и
+// отвечала 404; запасная ветка (открыть почтовый клиент) срабатывала ВСЕГДА
+// и вела на домен без записей MX. Теперь обращение сохраняется, и «принято»
+// говорится только по факту записи.
+app.use("/api/help", helpContactRouter);
 app.use("/api/status", statusRouter);
 
 // Module paywall — dormant unless the module id is listed in PAYWALL_MODULES

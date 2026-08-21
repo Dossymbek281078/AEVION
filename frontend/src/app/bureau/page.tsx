@@ -97,6 +97,10 @@ export default function BureauPage() {
 function BureauPageInner() {
   const { showToast } = useToast();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
+  // «Сертификатов нет» и «не удалось узнать» — разные вещи. При сбое загрузки
+  // страница писала «No certificates yet» и звала защитить первую работу —
+  // человеку, у которого работы уже защищены (21.08.2026).
+  const [certsFailed, setCertsFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
 
@@ -259,8 +263,11 @@ function BureauPageInner() {
           setCertificates(certs);
           const totalVerifications = certs.reduce((sum: number, c: Certificate) => sum + (c.verifiedCount || 0), 0);
           setStats({ total: certs.length, totalVerifications });
+          setCertsFailed(false);
+        } else {
+          setCertsFailed(true);
         }
-      } catch {}
+      } catch { setCertsFailed(true); }
       finally { setLoading(false); }
     })();
   }, []);
@@ -736,6 +743,11 @@ function BureauPageInner() {
 
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Loading certificates...</div>
+          ) : certsFailed ? (
+            <div style={{ textAlign: "center", padding: "48px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>Не удалось загрузить сертификаты</div>
+              <div style={{ fontSize: 13, color: "#64748b" }}>Это не значит, что их нет: сервис не ответил. Обновите страницу.</div>
+            </div>
           ) : certificates.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>📜</div>

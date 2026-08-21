@@ -1135,16 +1135,23 @@ export const openapiSpec = {
         },
       },
     },
-    "/api/qcoreai/history": {
+    // Было `/api/qcoreai/history` — ручки с таким именем НЕ СУЩЕСТВУЕТ. Проверено
+    // пробой 21.08.2026: адрес отдаёт HTML-404, ровно как заведомо выдуманный
+    // путь, тогда как живой маршрут с отсутствующим ресурсом отвечает JSON-ом.
+    // Историю переписки отдаёт `/sessions`; имя сменили, документ не поправили,
+    // и спецификация полгода рекламировала несуществующее, а настоящее умалчивала.
+    //
+    // Описано по КОДУ обработчика, а не по прежнему тексту: авторизация здесь
+    // НЕОБЯЗАТЕЛЬНА (аноним получает общую выборку, поле `scope` это называет),
+    // предел зашит в 50 и параметром не управляется.
+    "/api/qcoreai/sessions": {
       get: {
-        summary: "Caller's chat-turn history (auth)",
-        parameters: [
-          { in: "query", name: "conversationId", schema: { type: "string" }, description: "Filter to one conversation. Multichat uses `${convId}:${agentId}` to isolate per-agent chains." },
-          { in: "query", name: "limit", schema: { type: "integer", minimum: 1, maximum: 500, default: 100 } },
-        ],
+        summary: "Список сессий вызывающего (авторизация необязательна)",
+        description:
+          "С токеном — сессии владельца (`scope: \"mine\"`), без токена — общая выборка (`scope: \"anonymous\"`). Предел 50, параметром не управляется.",
         responses: {
-          "200": { description: "{ items: ChatTurn[], total: number }" },
-          "401": { description: "auth required" },
+          "200": { description: "{ items: Session[], total: number, scope: \"mine\" | \"anonymous\" }" },
+          "500": { description: "list sessions failed" },
         },
       },
     },
@@ -1214,14 +1221,21 @@ export const openapiSpec = {
         responses: { "302": { description: "Redirect carrying ?token=<jwt>" }, "400": { description: "state mismatch / code missing" } },
       },
     },
-    "/api/auth/sign-out-everywhere": {
-      post: {
-        summary: "Bump tokenVersion — invalidate every JWT for caller (auth)",
-        description:
-          "Increments AEVIONUser.tokenVersion. The current token is rejected on the next request because requireAuth compares its tv claim with the bumped server-side counter. Other devices/tabs lose access within ~10s (cache TTL).",
-        responses: { "200": { description: "{ ok: true, tokenVersion: number }" }, "401": { description: "auth required" } },
-      },
-    },
+    // УБРАНО ИЗ СПЕЦИФИКАЦИИ 21.08.2026: `POST /api/auth/sign-out-everywhere`
+    // здесь описывался подробно, а маршрута с таким именем НЕ СУЩЕСТВУЕТ —
+    // проверено поиском по всему коду и пробой прода (HTML-404, как у заведомо
+    // выдуманного пути). Публичная спецификация не должна обещать средство
+    // безопасности, которого нет: на него могут положиться.
+    //
+    // Замысел сохраняю, чтобы не потерялся. Предполагалось: увеличить
+    // `AEVIONUser.tokenVersion`, после чего все ранее выданные токены
+    // отвергаются сверкой с полем `tv`.
+    //
+    // ⚠️ Прежде чем реализовывать, прочтите замер от 20.08.2026: ни выдачи `tv`,
+    // ни его сверки в коде НЕТ, а отзыв сессии уважают 2 проверки из ~598
+    // (только `/me` и `/whoami-strict`). Дописать одну ручку на такой основе —
+    // значит получить кнопку, уверенно сообщающую о защите, которой нет.
+    // Разбор: Desktop\АЕВИОН\15-Аудиты-и-сводки\ВЫХОД-со-всех-устройств-не-работает-19-08.md
     "/api/planet/artifacts/{artifactVersionId}/public": { get: { summary: "Public artifact + votes", security: [] } },
 
     // ──────────────────────────────────────────────────────────────────────

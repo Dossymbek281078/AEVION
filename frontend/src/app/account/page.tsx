@@ -122,6 +122,9 @@ export default function AccountPage() {
   // QVenture: тариф у него действительно free, а покупка живёт в другой
   // таблице, и кабинет её не читал.
   const [ownedApps, setOwnedApps] = useState<string[]>([]);
+  // «Список пуст» и «узнать не удалось» — РАЗНЫЕ вещи, и на денежном пути
+  // разница дороже всего (21.08.2026).
+  const [ownedUnknown, setOwnedUnknown] = useState(false);
   // Lite = 1 продукт на выбор: список доступных модулей + выбор + busy
   const [allModules, setAllModules] = useState<{ id: string; name: string }[]>([]);
   const [liteChoice, setLiteChoice] = useState<string>("");
@@ -168,8 +171,16 @@ export default function AccountPage() {
             if (ar.ok) {
               const aj = await ar.json();
               setOwnedApps(Array.isArray(aj.apps) ? aj.apps : []);
+              setOwnedUnknown(false);
+            } else {
+              // Ручка честно отвечает 500 при недоступной базе. Не притворяемся,
+              // что покупок нет: пустой список читается как «вы ничего не купили»,
+              // и заплативший увидит предложение купить ещё раз.
+              setOwnedUnknown(true);
             }
-          } catch { /* ignore */ }
+          } catch {
+            setOwnedUnknown(true);
+          }
         }
       } else if (meRes.status === 401) {
         setMe(null);
@@ -659,6 +670,13 @@ export default function AccountPage() {
                     </div>
                   )}
                   </>
+                ) : ownedUnknown ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                    <span style={{ fontSize: 13, color: "#b45309" }}>
+                      Не удалось узнать ваши подписки — сервис не ответил. Это не значит,
+                      что их нет: обновите страницу через минуту.
+                    </span>
+                  </div>
                 ) : ownedApps.length === 0 ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                     <span style={{ fontSize: 13, color: "#64748b" }}>Free plan — no active subscription.</span>

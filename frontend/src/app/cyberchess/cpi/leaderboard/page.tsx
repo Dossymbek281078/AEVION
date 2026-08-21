@@ -169,7 +169,7 @@ export default function CPILeaderboardPage() {
           <Link href="/cyberchess" style={{ color: C.dim, textDecoration: "none" }}>CyberChess</Link>
           {" / "}
           <Link href="/cyberchess/cpi" style={{ color: C.dim, textDecoration: "none" }}>CPI</Link>
-          {" / "}<span style={{ color: C.text }}>Leaderboard</span>
+          {" / "}<span style={{ color: C.text }}>Таблица лидеров</span>
         </div>
 
         {/* Hero */}
@@ -194,7 +194,7 @@ export default function CPILeaderboardPage() {
         </div>
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.025em", margin: "0 0 8px", lineHeight: 1.15 }}>
-            CPI <span style={{ color: C.purple }}>Leaderboard</span>
+            Таблица лидеров <span style={{ color: C.purple }}>CPI</span>
           </h1>
           <p style={{ fontSize: 14, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 640 }}>
             Топ игроков по AEVION Chess Performance Index — композитному рейтингу качества игры.
@@ -384,7 +384,7 @@ export default function CPILeaderboardPage() {
 
         {/* Related */}
         <div style={{ marginTop: 32, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
-          <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>← CPI Spec</Link>
+          <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>← Описание CPI</Link>
           <span style={{ color: C.faint }}>·</span>
           <Link href="/cyberchess/cpi/dashboard" style={{ color: C.purple, textDecoration: "none" }}>📊 Мой дашборд</Link>
           <span style={{ color: C.faint }}>·</span>

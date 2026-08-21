@@ -108,8 +108,21 @@ async function ensureTables(): Promise<void> {
   tablesReady = true;
 }
 
-qchaingovRouter.get("/health", (_req, res) => {
-  res.json({ status: "ok", service: "qchaingov", timestamp: new Date().toISOString() });
+// Состояние базы в ручке здоровья. Добавлено 19.08.2026: сторож запасного
+// хранилища видел 9 модулей из 12 — остальные не публиковали поле, и молчание
+// читалось как благополучие.
+//
+// У этого модуля, в отличие от соседей, нет готового признака готовности:
+// ensureTables() просто выполняет запросы и бросает при отказе. Поэтому здесь
+// дешёвая прямая проверка SELECT 1 — она стоит миллисекунды и отвечает на
+// вопрос честно, а не по флагу, который могли забыть обновить.
+qchaingovRouter.get("/health", async (_req, res) => {
+  let db: "postgres" | "memory" = "memory";
+  try {
+    await getPool().query("SELECT 1");
+    db = "postgres";
+  } catch { /* база недоступна — так и скажем, а не промолчим */ }
+  res.json({ status: "ok", service: "qchaingov", db, timestamp: new Date().toISOString() });
 });
 
 // ── POST /proposals — create draft proposal

@@ -11,6 +11,16 @@
  * (case-insensitive) — enough to catch full-page 500s, empty shells, and
  * hosting-level breakage without being brittle about copy or i18n.
  *
+ * ⚠️ Насколько какой критерий работает — замерено 21.08.2026, а не оценено.
+ * Мутация (в список подставлен несуществующий адрес) даёт:
+ *     FAIL /privacy-zzz — status=404 size=16212 brand=true
+ * То есть на ПРОПАЖЕ страницы держит только код ответа: страница 404 у Next
+ * весит 15-16 КБ и слово «aevion» в ней есть, оба остальных критерия её
+ * пропускают. Они не лишние — ловят 500 и пустую оболочку, — но считать их
+ * второй линией защиты от исчезновения страницы нельзя. Проверять сторожа
+ * этой же мутацией всякий раз, когда его правят: зелёный прогон не
+ * доказывает, что он умеет краснеть.
+ *
  * Env:
  *   PAGES_BASE  default https://aevion.vercel.app
  */
@@ -88,6 +98,84 @@ const PAGES = [
   // ровно так же, как пропажа /go в июле.
   "/devhub/launch",           // запуск 13.09, самый дорогой чек платформы
   "/multichat-engine/launch", // запуск 20.09
+  // Добавлено 19.08.2026. Замер покрытия: сторож смотрел 39 публичных
+  // страниц верхнего уровня из 92 — то есть был зелёным, наблюдая меньше
+  // половины сайта. Среди невидимых оказались условия и приватность (их
+  // чинили в тот же день), поддержка, магазин, страница состояния и почти
+  // все страницы модулей: сломайся любая, узнали бы от посетителя.
+  //
+  // Все 53 проверены ПЕРЕД добавлением: 200, больше 5000 байт, бренд на
+  // месте. Сторож, который краснеет с первого дня, отключают в тот же день,
+  // поэтому список не «на будущее», а по факту.
+  "/account",
+  "/aev",
+  "/agent",
+  "/api-explorer",
+  "/auth",
+  "/changelog",
+  "/coach",
+  "/data-deletion",
+  "/deepsan",
+  "/demo",
+  "/developers",
+  "/ecosystem",
+  "/fintech",
+  "/healthai",
+  "/help",
+  "/keys",
+  "/kids-ai-content",
+  "/launch-status",
+  "/lifebox",
+  "/mapreality",
+  "/modules",
+  "/payments",
+  "/pilot",
+  "/press",
+  "/privacy",
+  "/psyapp-deps",
+  "/qai",
+  "/qfusionai",
+  "/qgood",
+  "/qjobs",
+  "/qlearn",
+  "/qlife",
+  "/qmedia",
+  "/qnews",
+  "/qpersona",
+  "/qreal",
+  "/qstore",
+  "/qtradeoffline",
+  "/quantum-shield",
+  "/reconstruct-demo",
+  "/sdk",
+  "/sdks",
+  "/security",
+  "/shadownet",
+  "/startup-exchange",
+  "/status",
+  "/support",
+  "/terms",
+  "/tiktok-publisher",
+  "/ventures",
+  "/verify-offline",
+  "/voice-of-earth",
+  "/z-tide",
+  // Из ветки шахмат (сведено 21.08.2026): подстраницы модуля, которых
+  // не было в общем списке. Списки собирали два окна независимо,
+  // поэтому здесь ОБЪЕДИНЕНИЕ, а не выбор одной стороны.
+  "/multichat-engine/verify",
+  "/cyberchess/cpi",
+  "/cyberchess/cpi/dashboard",
+  "/cyberchess/cpi/leaderboard",
+  "/cyberchess/economy",
+  "/cyberchess/history",
+  "/cyberchess/matchmaking",
+  "/cyberchess/repertoire",
+  "/cyberchess/replays",
+  "/cyberchess/spectator",
+  "/cyberchess/studio",
+  "/cyberchess/tournament",
+  "/cyberchess/training",
 ];
 
 let pass = 0;

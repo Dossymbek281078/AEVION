@@ -6,7 +6,7 @@ import { apiUrl } from "@/lib/apiBase";
 type Addiction = "alcohol" | "smoking" | "other";
 
 interface Props {
-  onStarted: (alias: string) => void;
+  onStarted: (alias: string, storage?: string) => void;
 }
 
 const OPTIONS: { value: Addiction; label: string; emoji: string; hint: string }[] = [
@@ -52,7 +52,12 @@ export default function Onboarding({ onStarted }: Props) {
       } catch {
         // ignore quota errors
       }
-      onStarted(alias);
+      // Бэкенд с 19.08.2026 честно говорит, куда легла запись: при
+      // недоступной базе счётчик уходит в память процесса и обнулится при
+      // перезапуске. Здесь это не мелочь — человек считает дни трезвости, и
+      // потерянный счёт бьёт сильнее любой технической ошибки. До этой правки
+      // страница поле выбрасывала.
+      onStarted(alias, d.storage);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Сеть недоступна";
       setError(msg);

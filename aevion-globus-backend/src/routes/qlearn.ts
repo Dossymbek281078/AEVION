@@ -6,6 +6,9 @@ import { getPool } from "../lib/dbPool";
 import { ensureQLearnTables, isQLearnDbReady } from "../lib/ensureQLearnTables";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
 
+const WARN =
+  "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
+
 const captureQLearnError = makeServiceCapture("qlearn");
 
 /**
@@ -127,6 +130,103 @@ const memEnrollments = new Map<string, Enrollment>();
 const memQuizzes = new Map<string, QuizQuestion[]>();
 // key: enrollmentId -> Certificate
 const memCertificates = new Map<string, Certificate>();
+
+/* ── Хранилище сертификатов ──────────────────────────────────────────────────
+ *
+ * Таблицы у сертификатов не было ВООБЩЕ: они жили в Map выше, и после каждой
+ * выкатки список у человека становился пустым, а запрос конкретного отвечал
+ * 404. Выкаток бэкенда за сутки бывает шесть.
+ *
+ * Хуже потери была подмена. Повторное завершение курса выдавало НОВЫЙ номер и
+ * ставило датой окончания сегодняшний день вместо настоящего — распечатанный
+ * или отправленный работодателю сертификат переставал совпадать. И каждый раз
+ * в QRight уходила ещё одна регистрация того же достижения.
+ *
+ * Слой ниже прячет развилку «база или память» от восьми мест, которые ею
+ * пользовались. Развилка в одном месте — значит и чинить её потом в одном.
+ */
+
+function rowToCert(r: Record<string, unknown>): Certificate {
+  const at = r.completedAt;
+  return {
+    id: String(r.id),
+    enrollmentId: String(r.enrollmentId),
+    courseId: String(r.courseId),
+    userId: String(r.userId),
+    courseTitle: String(r.courseTitle ?? ""),
+    certificateNumber: String(r.certificateNumber),
+    completedAt: at instanceof Date ? at.toISOString() : String(at),
+  };
+}
+
+/**
+ * Создать сертификат ОДИН раз на зачисление.
+ *
+ * ON CONFLICT DO NOTHING + повторное чтение: если сертификат уже есть,
+ * возвращаем существующий, а не выдаём второй с новым номером и сегодняшней
+ * датой. Именно это и было главным дефектом.
+ */
+async function certIssue(cert: Certificate): Promise<{ cert: Certificate; created: boolean }> {
+  if (isQLearnDbReady()) {
+    try {
+      const ins = await pool.query(
+        `INSERT INTO "QLearnCertificate"
+           ("id","enrollmentId","courseId","userId","courseTitle","certificateNumber","completedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT ("enrollmentId") DO NOTHING
+         RETURNING *`,
+        [cert.id, cert.enrollmentId, cert.courseId, cert.userId, cert.courseTitle,
+         cert.certificateNumber, cert.completedAt],
+      );
+      if (ins.rows[0]) return { cert: rowToCert(ins.rows[0]), created: true };
+      const cur = await pool.query(
+        `SELECT * FROM "QLearnCertificate" WHERE "enrollmentId" = $1`, [cert.enrollmentId]);
+      if (cur.rows[0]) return { cert: rowToCert(cur.rows[0]), created: false };
+    } catch (e) {
+      console.warn("[QLearn] certificate insert failed, falling back to memory:", e);
+    }
+  }
+  const existing = memCertificates.get(cert.enrollmentId);
+  if (existing) return { cert: existing, created: false };
+  memCertificates.set(cert.enrollmentId, cert);
+  return { cert, created: true };
+}
+
+async function certByEnrollment(enrollmentId: string): Promise<Certificate | null> {
+  if (isQLearnDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM "QLearnCertificate" WHERE "enrollmentId" = $1`, [enrollmentId]);
+      if (rows[0]) return rowToCert(rows[0]);
+    } catch (e) { console.warn("[QLearn] certificate read failed:", e); }
+  }
+  return memCertificates.get(enrollmentId) ?? null;
+}
+
+async function certByNumber(certificateNumber: string): Promise<Certificate | null> {
+  if (isQLearnDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM "QLearnCertificate" WHERE "certificateNumber" = $1`, [certificateNumber]);
+      if (rows[0]) return rowToCert(rows[0]);
+    } catch (e) { console.warn("[QLearn] certificate lookup failed:", e); }
+  }
+  return Array.from(memCertificates.values())
+    .find((c) => c.certificateNumber === certificateNumber) ?? null;
+}
+
+async function certsByUser(userId: string): Promise<Certificate[]> {
+  if (isQLearnDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM "QLearnCertificate" WHERE "userId" = $1 ORDER BY "completedAt" DESC`, [userId]);
+      return rows.map(rowToCert);
+    } catch (e) { console.warn("[QLearn] certificate list failed:", e); }
+  }
+  return Array.from(memCertificates.values())
+    .filter((c) => c.userId === userId)
+    .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+}
 // Bookmarks: key = `${userId}::${courseId}` → { courseId, userId, bookmarkedAt }
 const memBookmarks = new Map<string, { courseId: string; userId: string; bookmarkedAt: string }>();
 // Streak/activity tracking: key = userId → { days: Set<YYYY-MM-DD>, lastTouched: ISO }
@@ -222,8 +322,13 @@ qlearnRouter.get("/courses", async (req: Request, res: Response) => {
       );
       res.json({ courses: rows.rows, total: rows.rowCount ?? rows.rows.length });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // Голый catch без возврата уводил управление ниже, в память (в проде
+      // пустую), и курс объявлялся несуществующим. Ответ «Course not found» на
+      // отказ базы — законный и потому незаметный.
+      console.error("[QLearn] GET /courses DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
     }
   }
 
@@ -249,8 +354,13 @@ qlearnRouter.get("/courses/:id", async (req: Request, res: Response) => {
       );
       res.json({ course: row.rows[0], lessons: lessons.rows });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // Голый catch без возврата уводил управление ниже, в память — в
+      // проде она пуста, и запись объявлялась несуществующей. «Не
+      // найдено» на отказ базы законно и потому незаметно.
+      console.error("[QLearn] GET /courses/:id DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
     }
   }
   const course = memCourses.get(id);
@@ -499,9 +609,14 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
   memEnrollmentActivity.set(`${enrollment.courseId}::${auth.sub}`, new Date().toISOString());
 
   // Auto-generate certificate at 100%
-  if (progress === 100 && !memCertificates.has(enrollmentId)) {
+  //
+  // certIssue() сам решает, выдавать ли новый: при повторном вызове вернёт
+  // существующий. Раньше проверка была `!memCertificates.has(...)`, и после
+  // перезапуска она отвечала «нет такого» — рождался второй сертификат с новым
+  // номером, сегодняшней датой и ещё одной регистрацией в QRight.
+  if (progress === 100) {
     const course = memCourses.get(enrollment.courseId);
-    const cert: Certificate = {
+    const { cert, created } = await certIssue({
       id: crypto.randomUUID(),
       enrollmentId,
       courseId: enrollment.courseId,
@@ -509,16 +624,17 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
       courseTitle: course?.title ?? "Unknown Course",
       completedAt: new Date().toISOString(),
       certificateNumber: "AEVION-" + Date.now(),
-    };
-    memCertificates.set(enrollmentId, cert);
-    void registerCertificateInQRight(cert); // QRight registration — best-effort
+    });
+    // В реестр — только при ПЕРВОЙ выдаче, иначе там копится по записи на
+    // каждую выкатку, все про одно достижение.
+    if (created) void registerCertificateInQRight(cert);
   }
 
   res.json({ enrollment });
 });
 
 // POST /api/qlearn/enrollments/:id/complete — manually mark as complete + issue cert
-qlearnRouter.post("/enrollments/:id/complete", (req: Request, res: Response) => {
+qlearnRouter.post("/enrollments/:id/complete", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
   const enrollmentId = param(req, "id");
@@ -530,9 +646,8 @@ qlearnRouter.post("/enrollments/:id/complete", (req: Request, res: Response) => 
     res.status(400).json({ error: "progress must be 100 to complete" }); return;
   }
 
-  if (memCertificates.has(enrollmentId)) {
-    res.json({ certificate: memCertificates.get(enrollmentId) }); return;
-  }
+  const already = await certByEnrollment(enrollmentId);
+  if (already) { res.json({ certificate: already }); return; }
 
   const course = memCourses.get(enrollment.courseId);
   const cert: Certificate = {
@@ -544,40 +659,38 @@ qlearnRouter.post("/enrollments/:id/complete", (req: Request, res: Response) => 
     completedAt: new Date().toISOString(),
     certificateNumber: "AEVION-" + Date.now(),
   };
-  memCertificates.set(enrollmentId, cert);
-  void registerCertificateInQRight(cert); // QRight registration — best-effort
-  res.status(201).json({ certificate: cert, qrightRegistered: true });
+  const { cert: issued, created } = await certIssue(cert);
+  if (created) void registerCertificateInQRight(issued);
+  // qrightRegistered больше не утверждается наперёд: регистрация запускается
+  // без ожидания, и до 19.08.2026 ответ объявлял успех, которого ещё не знал.
+  res.status(201).json({ certificate: issued, qrightRegistrationStarted: created });
 });
 
 // GET /api/qlearn/enrollments/:id/certificate — get certificate for enrollment
-qlearnRouter.get("/enrollments/:id/certificate", (req: Request, res: Response) => {
+qlearnRouter.get("/enrollments/:id/certificate", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
   const enrollmentId = param(req, "id");
 
-  const cert = memCertificates.get(enrollmentId);
+  const cert = await certByEnrollment(enrollmentId);
   if (!cert) { res.status(404).json({ error: "Certificate not found" }); return; }
   if (cert.userId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
   res.json({ certificate: cert });
 });
 
 // GET /api/qlearn/me/certificates — all my certificates
-qlearnRouter.get("/me/certificates", (req: Request, res: Response) => {
+qlearnRouter.get("/me/certificates", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
 
-  const certs = Array.from(memCertificates.values())
-    .filter((c) => c.userId === auth.sub)
-    .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+  const certs = await certsByUser(auth.sub);
   res.json({ certificates: certs, total: certs.length });
 });
 
 // GET /api/qlearn/certificates/:certificateNumber — public certificate verification
-qlearnRouter.get("/certificates/:certificateNumber", (req: Request, res: Response) => {
+qlearnRouter.get("/certificates/:certificateNumber", async (req: Request, res: Response) => {
   const certNumber = req.params.certificateNumber;
-  const cert = Array.from(memCertificates.values()).find(
-    (c) => c.certificateNumber === certNumber,
-  );
+  const cert = await certByNumber(String(certNumber));
   if (!cert) {
     res.json({ valid: false });
     return;
@@ -591,15 +704,15 @@ qlearnRouter.get("/certificates/:certificateNumber", (req: Request, res: Respons
 });
 
 // POST /api/qlearn/certificates/batch-verify — verify multiple certificates at once
-qlearnRouter.post("/certificates/batch-verify", (req: Request, res: Response) => {
+qlearnRouter.post("/certificates/batch-verify", async (req: Request, res: Response) => {
   const body = req.body as { certificateNumbers?: unknown };
   const nums = Array.isArray(body.certificateNumbers) ? body.certificateNumbers.slice(0, 50) : [];
   if (nums.length === 0) {
     res.status(400).json({ error: "certificateNumbers array required (max 50)" }); return;
   }
-  const results = nums.map((rawNum) => {
+  const results = await Promise.all(nums.map(async (rawNum) => {
     const num = String(rawNum).slice(0, 100);
-    const cert = Array.from(memCertificates.values()).find((c) => c.certificateNumber === num);
+    const cert = await certByNumber(num);
     if (!cert) return { certificateNumber: num, valid: false };
     return {
       certificateNumber: num,
@@ -607,16 +720,16 @@ qlearnRouter.post("/certificates/batch-verify", (req: Request, res: Response) =>
       courseTitle: cert.courseTitle,
       completedAt: cert.completedAt,
     };
-  });
+  }));
   const valid = results.filter((r) => r.valid).length;
   res.json({ results, summary: { total: results.length, valid, invalid: results.length - valid } });
 });
 
 // GET /api/qlearn/me/certificates/count — quick count of user's certificates (no full list)
-qlearnRouter.get("/me/certificates/count", (req: Request, res: Response) => {
+qlearnRouter.get("/me/certificates/count", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
-  const count = Array.from(memCertificates.values()).filter((c) => c.userId === auth.sub).length;
+  const count = (await certsByUser(auth.sub)).length;
   res.json({ count, userId: auth.sub });
 });
 
@@ -775,15 +888,18 @@ qlearnRouter.get("/me/streak", (req: Request, res: Response) => {
 });
 
 // GET /api/qlearn/me/progress — overview of all my courses with continue-learning ordering
-qlearnRouter.get("/me/progress", (req: Request, res: Response) => {
+qlearnRouter.get("/me/progress", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
 
   const mine = Array.from(memEnrollments.values()).filter((e) => e.userId === auth.sub);
+  const certIds = new Set((await certsByUser(auth.sub)).map((c) => c.enrollmentId));
   const hydrated = mine.map((e) => {
     const course = memCourses.get(e.courseId);
     const lastActivityAt = memEnrollmentActivity.get(`${e.courseId}::${auth.sub}`) ?? e.enrolledAt;
-    const hasCertificate = memCertificates.has(e.id);
+    // Раньше смотрели ТОЛЬКО в память: после выкатки у человека, прошедшего
+    // курс, значок сертификата исчезал вместе с самим сертификатом.
+    const hasCertificate = certIds.has(e.id);
     return {
       enrollmentId: e.id,
       courseId: e.courseId,

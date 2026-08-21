@@ -1,0 +1,46 @@
+/**
+ * Кабинет не имеет права говорить заплатившему, что он ничего не покупал.
+ *
+ * 21.08.2026: ручка /api/apps/access честно отвечает 500 при недоступной базе,
+ * а страница проверяла только `if (ar.ok)` и при неудаче оставляла список
+ * покупок пустым. Пустой список рисуется как «Free plan — no active
+ * subscription» с кнопкой Upgrade — то есть человеку, который уже заплатил,
+ * предлагали заплатить ещё раз.
+ *
+ * Правда останавливалась ровно на границе API: сервер знал, что не знает,
+ * а страница этого не спросила.
+ */
+import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+
+const PAGE = path.join(__dirname, "..", "page.tsx");
+const src = fs.readFileSync(PAGE, "utf8");
+
+describe("кабинет: «не знаем» отличается от «нет покупок»", () => {
+  it("страница читается и знает про неудачу запроса", () => {
+    expect(src.includes("ownedUnknown"), "признак неизвестности пропал").toBe(true);
+  });
+
+  it("неудачный ответ поднимает признак, а не молчит", () => {
+    // Ветка else у if (ar.ok) обязана существовать: без неё 500 снова станет
+    // «покупок нет».
+    const at = src.indexOf("apps/access?email=");
+    expect(at, "запрос доступа исчез").toBeGreaterThan(-1);
+    const block = src.slice(at, at + 700);
+    expect(/} else {[\s\S]{0,300}setOwnedUnknown\(true\)/.test(block),
+      "у ветки ar.ok нет else с признаком неизвестности").toBe(true);
+    expect(/catch\s*{[\s\S]{0,120}setOwnedUnknown\(true\)/.test(block),
+      "обработчик исключения снова молчит").toBe(true);
+  });
+
+  it("сообщение о неизвестности показывается РАНЬШЕ, чем Free plan", () => {
+    const unknown = src.indexOf("ownedUnknown ? (");
+    // Ищем РАЗМЕТКУ, а не слова: первое вхождение «Free plan» в файле —
+    // мой же комментарий про этот дефект, и тест сравнивал позицию с ним.
+    const free = src.indexOf(">Free plan");
+    expect(unknown, "ветка отрисовки пропала").toBeGreaterThan(-1);
+    expect(free).toBeGreaterThan(-1);
+    expect(unknown).toBeLessThan(free);
+  });
+});

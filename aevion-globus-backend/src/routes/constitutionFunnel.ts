@@ -19,6 +19,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { queryNumber } from "../lib/queryNumber";
 
 const capture = makeServiceCapture("constitutionFunnel");
 
@@ -196,7 +197,7 @@ constitutionFunnelAdminRouter.get(
   async (req: Request, res: Response) => {
     if (!isAdmin(req)) return res.status(403).json({ error: "admin_required" });
     try {
-      const hours = Math.max(1, Math.min(168, Number(req.query.hours ?? 24)));
+      const hours = Math.max(1, Math.min(168, queryNumber(req.query.hours, 24)));
       const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
       let rows: EventRow[] = [];

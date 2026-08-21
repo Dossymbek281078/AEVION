@@ -215,7 +215,7 @@ export default function ClockPressureDrill({ open, onClose, puzzles, surface1, s
         <div style={boxStyle}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontWeight: 900, fontSize: 18, color: text }}>⏱ Игра под цейтнот</span>
-            <button aria-label="Закрыть" onClick={onClose} style={{ background: "none", border: "none", color: textDim, fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
+            <button aria-label={t("common.close")} onClick={onClose} style={{ background: "none", border: "none", color: textDim, fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
           </div>
           <div style={{ textAlign: "center", padding: "12px 0" }}>
             <div style={{ fontSize: 56, fontWeight: 900, color: accent, lineHeight: 1 }}>{score}<span style={{ fontSize: 24, color: textDim }}>/10</span></div>
@@ -263,7 +263,7 @@ export default function ClockPressureDrill({ open, onClose, puzzles, surface1, s
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontWeight: 900, fontSize: 16, color: text }}>⏱ Игра под цейтнот</span>
-          <button aria-label="Закрыть" onClick={onClose} style={{ background: "none", border: "none", color: textDim, fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
+          <button aria-label={t("common.close")} onClick={onClose} style={{ background: "none", border: "none", color: textDim, fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
         </div>
 
         {/* Score bar */}

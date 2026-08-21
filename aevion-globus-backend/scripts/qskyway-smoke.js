@@ -14,7 +14,24 @@
 const BASE = (process.env.BASE || "http://127.0.0.1:4001").replace(/\/+$/, "");
 // Write legs (slot booking, registry entry) self-skip against prod so the daily
 // run can cover the whole read surface without leaving smoke rows behind.
-const READ_ONLY = process.env.READ_ONLY === "1";
+//
+// 21.08.2026: обещание выше НЕ ВЫПОЛНЯЛОСЬ. «Само» ничего не пропускалось —
+// признаком служила только переменная READ_ONLY, и запуск против прода без
+// неё писал в боевую базу. Так я и сделал: пять тестовых слотов уехали на
+// прод и попали в публичную витрину (она их помечает, но показывает).
+// На проде их к тому моменту накопилось 39, все от таких же прогонов.
+//
+// Теперь признак выводится из АДРЕСА: боевой хост -> только чтение, что бы
+// ни стояло в окружении. Переменная осталась, чтобы можно было запросить
+// режим чтения и локально.
+const PROD_HOST = /(^|\.)aevion\.app$|\.railway\.app$/i;
+const isProdTarget = (() => {
+  try { return PROD_HOST.test(new URL(BASE).hostname); } catch { return false; }
+})();
+const READ_ONLY = process.env.READ_ONLY === "1" || isProdTarget;
+if (isProdTarget && process.env.READ_ONLY !== "1") {
+  console.log("  [guard] цель боевая — записывающие проверки пропускаются принудительно");
+}
 let step = 0, failed = 0;
 let skipped = 0;
 const skip = (n, why) => { skipped++; console.log(`  ${String(++step).padStart(2, "0")}  SKIP  ${n}  — ${why}`); };

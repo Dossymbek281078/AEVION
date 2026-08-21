@@ -181,10 +181,37 @@ export const gumroadPaymentProvider: PaymentProvider = {
  */
 export type SaleVerdict = "confirmed" | "not_found" | "unverifiable";
 
+/**
+ * Подтверждение продажи ВМЕСТЕ С ЕЁ ДАННЫМИ.
+ *
+ * Зачем понадобилось (19.08.2026). Проверка существования продажи стоит здесь
+ * с 26.07 и работает — поддельный номер отвергается, проверено на проде.
+ * Но обработчик вебхука брал ТОВАР и АДРЕС из тела запроса, а не из
+ * подтверждённой продажи. Значит обладатель настоящего дешёвого чека мог
+ * прислать его номер, указав `product_id` дорогого тарифа, и получить дорогой;
+ * и он же мог выписать права на чужой адрес.
+ *
+ * Прежняя `verifyGumroadSale` оставлена БЕЗ ИЗМЕНЕНИЙ по подписи: её зовут
+ * четыре чужие незамёрженные ветки, и менять форму ответа значило бы создать
+ * им конфликт на ровном месте. Обе функции делят одну реализацию.
+ */
+export async function verifyGumroadSaleDetailed(
+  saleId: string,
+): Promise<{ verdict: SaleVerdict; sale: Record<string, unknown> | null }> {
+  const verdict = await verifyGumroadSaleImpl(saleId);
+  return verdict;
+}
+
 export async function verifyGumroadSale(saleId: string): Promise<SaleVerdict> {
-  if (!saleId) return "unverifiable";
+  return (await verifyGumroadSaleImpl(saleId)).verdict;
+}
+
+async function verifyGumroadSaleImpl(
+  saleId: string,
+): Promise<{ verdict: SaleVerdict; sale: Record<string, unknown> | null }> {
+  if (!saleId) return { verdict: "unverifiable", sale: null };
   const token = process.env.GUMROAD_ACCESS_TOKEN;
-  if (!token) return "unverifiable";
+  if (!token) return { verdict: "unverifiable", sale: null };
 
   try {
     const url = `${GUMROAD_BASE}/sales/${encodeURIComponent(saleId)}?access_token=${encodeURIComponent(token)}`;
@@ -192,15 +219,16 @@ export async function verifyGumroadSale(saleId: string): Promise<SaleVerdict> {
 
     // 404 — продажи с таким id у нас нет. Единственный случай, когда мы уверены,
     // что пинг поддельный или адресован не нам.
-    if (r.status === 404) return "not_found";
-    if (!r.ok) return "unverifiable";
+    if (r.status === 404) return { verdict: "not_found", sale: null };
+    if (!r.ok) return { verdict: "unverifiable", sale: null };
 
     const body = (await r.json()) as { success?: boolean; sale?: unknown };
-    if (body?.success === true && body.sale) return "confirmed";
+    if (body?.success === true && body.sale)
+      return { verdict: "confirmed", sale: body.sale as Record<string, unknown> };
     // success:false с кодом 200 Gumroad отдаёт на несуществующий id.
-    if (body?.success === false) return "not_found";
-    return "unverifiable";
+    if (body?.success === false) return { verdict: "not_found", sale: null };
+    return { verdict: "unverifiable", sale: null };
   } catch {
-    return "unverifiable";
+    return { verdict: "unverifiable", sale: null };
   }
 }

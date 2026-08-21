@@ -641,7 +641,25 @@ export default function QRightPage() {
   const PROCESSING_STEPS = [
     { label: "Hashing canonical content (SHA-256)...", icon: "📋" },
     { label: "Co-signing with AEVION + your browser key...", icon: "🔏" },
-    { label: "Splitting key, anchoring to Bitcoin...", icon: "🛡️" },
+    // ИСПРАВЛЕНО 21.08.2026. Здесь стояло «Splitting key, anchoring to
+    // Bitcoin...» — анимированный шаг, утверждавший действие, которого нет.
+    //
+    // Что проверено (обе стороны, а не одна — на этом я уже ошибся сегодня):
+    //   хеш SHA-256            — есть;
+    //   подпись автора Ed25519 — есть, ключ в браузере (lib/aevionAuthorKey.ts),
+    //                            сервер её ПРОВЕРЯЕТ (lib/cosign/authorCosign.ts);
+    //   подпись платформы      — есть, её ключ на стороне сервера;
+    //   якорение в биткойне    — НЕТ. Код якорения написан и работает, но живёт
+    //                            в демонстрационном конвейере, отключённом на
+    //                            проде (`/api/pipeline/demo-generate` отвечает
+    //                            DEMO_DISABLED). Обычная регистрация его не
+    //                            вызывает, отложенных задач нет, а сам модуль
+    //                            якорения о QRight не знает.
+    //
+    // Шаг заменён на то, что действительно происходит. Ложный шаг в ходе
+    // регистрации хуже строки в договоре: он утверждает действие ПРЯМО СЕЙЧАС,
+    // и человек видит его каждый раз.
+    { label: "Issuing certificate and public verify link...", icon: "🛡️" },
     { label: "Forever-verifiable certificate ready", icon: "✅" },
   ];
 

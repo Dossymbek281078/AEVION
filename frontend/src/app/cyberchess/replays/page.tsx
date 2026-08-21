@@ -209,8 +209,8 @@ export default function ReplayHubPage() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <label className="planet-muted" style={{ fontSize: 11.5 }}>Сортировка:</label>
-            <select
+            <label htmlFor="rp-sort" className="planet-muted" style={{ fontSize: 11.5 }}>Сортировка:</label>
+            <select id="rp-sort"
               value={sort}
               onChange={(e) => setSort(e.target.value as Sort)}
               className="planet-input"

@@ -1920,7 +1920,14 @@ export async function completePasswordReset(email: string, token: string, newPas
 }
 
 /** Request a verification email for the currently logged-in user. */
-export async function requestEmailVerification(): Promise<void> {
+export type EmailVerifyRequestResult = {
+  /** false — токен создан, но письмо НЕ ушло. Показывать это, а не «отправлено». */
+  emailSent: boolean;
+  alreadyVerified: boolean;
+  email: string | null;
+};
+
+export async function requestEmailVerification(): Promise<EmailVerifyRequestResult> {
   const token = typeof window !== "undefined"
     ? getAuthToken()
     : null;
@@ -1929,10 +1936,22 @@ export async function requestEmailVerification(): Promise<void> {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     cache: "no-store",
   });
+  const json = await res.json().catch(() => ({} as Record<string, unknown>));
   if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new BuildApiError(res.status, json?.error || "verify_request_failed", json);
+    throw new BuildApiError(res.status, (json as any)?.error || "verify_request_failed", json);
   }
+  // Тело возвращается вызывающему, а не выбрасывается.
+  //
+  // Ручка отвечает 200 и в том случае, когда токен создан, а ПИСЬМО НЕ УШЛО —
+  // именно для этого у неё есть поле `emailSent`. Прежняя подпись была
+  // `Promise<void>`, тело отбрасывалось, и оба вызывающих показывали «письмо
+  // отправлено» независимо от факта. Человек ждал письма, которого нет.
+  // Замер 21.08.2026: поле `emailSent` не читалось НИГДЕ во фронтенде.
+  return {
+    emailSent: (json as any)?.emailSent !== false,
+    alreadyVerified: Boolean((json as any)?.alreadyVerified),
+    email: typeof (json as any)?.email === "string" ? ((json as any).email as string) : null,
+  };
 }
 
 /** Complete email verification with the token from the verification link. */

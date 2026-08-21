@@ -10127,7 +10127,17 @@ export default function CyberChessPage(){
               </div>
               {puzzleListOpen&&<>
               <div style={{maxHeight:520,overflowY:"auto"}}>
-                {fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13,fontStyle:"italic"}}>Нет задач по фильтру</div>:
+                {/* Два РАЗНЫХ состояния, а не одно. Пустой фильтр при живом
+                    банке — это результат («сузьте условия»), а пустой БАНК —
+                    это сбой загрузки, и говорить о фильтре в этом случае
+                    значит выдавать отказ за законную пустоту: человек начнёт
+                    менять фильтры, которые ни при чём. Три места загрузки
+                    задач глотают ошибку молча, так что снаружи различить
+                    можно только здесь. */}
+                {PUZZLES.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13}}>
+                    <div style={{fontWeight:700,marginBottom:6}}>Задачи не загрузились</div>
+                    <div style={{fontSize:12,opacity:0.85}}>Это не фильтр — банк не ответил. Обновите страницу; если повторится, напишите нам.</div>
+                  </div>:fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13,fontStyle:"italic"}}>Нет задач по фильтру</div>:
                 fPz.slice(0,100).map((pz,i)=>{
                   // Build readable name: "Мат в 2 · f5+ Kxf5 · Эндшпиль"
                   const goalLabel=pz.goal==="Mate"?`Мат в ${pz.mateIn||1}`:"Лучший ход";

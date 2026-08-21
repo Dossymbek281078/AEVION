@@ -28,6 +28,7 @@ function VerifyEmailBody() {
   const [token, setToken] = useState(params.get("token") ?? "");
   const [status, setStatus] = useState<"idle" | "verifying" | "done" | "error">("idle");
   const [sending, setSending] = useState(false);
+  const [resendError, setResendError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -107,9 +108,17 @@ function VerifyEmailBody() {
                   onClick={async () => {
                     setSending(true);
                     try {
-                      await requestEmailVerification();
-                      setSent(true);
-                    } catch {/**/}
+                      const r = await requestEmailVerification();
+                      // 200 не значит «письмо ушло»: у ответа для этого есть
+                      // отдельное поле. Молчаливое «отправлено» стоило бы
+                      // человеку ожидания письма, которого нет.
+                      if (r.emailSent) setSent(true);
+                      else setResendError(t("build.verifyEmail.notSent"));
+                    } catch (e) {
+                      // Пустой catch здесь означал ПОЛНУЮ тишину после нажатия:
+                      // ни ошибки, ни подтверждения. Это хуже ошибки.
+                      setResendError(e instanceof Error ? e.message : t("build.verifyEmail.notSent"));
+                    }
                     finally { setSending(false); }
                   }}
                   className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
@@ -118,6 +127,15 @@ function VerifyEmailBody() {
                 </button>
               )}
             </div>
+
+            {resendError && (
+              // Сообщение обязано попасть НА ЭКРАН, а не только в состояние:
+              // «правда доходит до переменной и не доходит до человека» —
+              // ровно тот дефект, который здесь и чинится.
+              <p className="text-xs text-amber-300" role="status">
+                {resendError}
+              </p>
+            )}
 
             <Link href="/build" className="block text-xs text-slate-500 hover:text-slate-300">
               {t("build.verifyEmail.backHome")}

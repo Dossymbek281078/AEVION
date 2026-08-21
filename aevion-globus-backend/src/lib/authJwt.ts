@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { tokenVersionAccepted } from "./tokenVersion";
 
 declare global {
   namespace Express {
@@ -48,7 +49,12 @@ export function verifyBearerOptional(req: Request): JwtPayload | null {
   const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) return null;
   try {
-    return jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as JwtPayload;
+    const payload = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as JwtPayload;
+    // Подпись верна — но токен мог быть отозван. До 21.08.2026 этой проверки
+    // не было вовсе: поле `tv` описано абзацем выше и не читалось никем,
+    // то есть отозвать выданный токен было НЕЛЬЗЯ ничем.
+    if (!tokenVersionAccepted(payload?.sub, payload?.tv)) return null;
+    return payload;
   } catch {
     return null;
   }
@@ -62,7 +68,11 @@ export function verifyBearerOptional(req: Request): JwtPayload | null {
 export function verifyBearerToken(token: string | null | undefined): JwtPayload | null {
   if (!token) return null;
   try {
-    return jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as JwtPayload;
+    const payload = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as JwtPayload;
+    // То же и для веб-сокетов: без этого отозванный токен продолжал бы
+    // работать именно там, где соединение живёт долго.
+    if (!tokenVersionAccepted(payload?.sub, payload?.tv)) return null;
+    return payload;
   } catch {
     return null;
   }

@@ -28,8 +28,12 @@ export function EmailVerifyBanner({ email }: { email: string }) {
               setBusy(true);
               setErr(null);
               try {
-                await requestEmailVerification();
-                setSent(true);
+                const r = await requestEmailVerification();
+                // Ручка отвечает 200 и когда письмо НЕ ушло: токен создан,
+                // отправка не удалась. Прежде здесь стояло безусловное
+                // «отправлено», и человек ждал письма, которого нет.
+                if (r.emailSent) setSent(true);
+                else setErr("Письмо отправить не удалось. Токен создан — попробуйте позже или напишите нам.");
               } catch (e) {
                 const msg = e instanceof BuildApiError ? e.message : (e as Error).message;
                 setErr(msg);

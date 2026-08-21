@@ -1086,6 +1086,83 @@ async function computeNeedsRedeploy(project: DevHubProject): Promise<boolean> {
   }
 }
 
+/**
+ * Проект по идентификатору, принадлежащий этому пользователю, — или ответ
+ * клиенту, если его нельзя было прочитать. Возвращает null, когда ответ уже
+ * отправлен: вызывающему остаётся выйти.
+ *
+ * Заменяет блок, скопированный в 26 местах:
+ *
+ *   try { project = await dbGetProject(id); }
+ *   catch { project = memProjects.get(id) ?? null; }
+ *   if (!project || project.userId !== userId) return res.status(404)...
+ *
+ * Отказ базы подменялся пустой памятью (в проде она пуста), и наружу уходило
+ * «project not found». Для чтения это ложь о чужой записи; для удаления хуже —
+ * человек читает 404 как «уже удалено» и уходит, а проект на месте.
+ *
+ * Проверено положительным контролем 21.08.2026: с работающей базой PATCH и
+ * DELETE отвечают 200, с падающей — 404. Значит база на пути, и её отказ
+ * подменялся отсутствием записи.
+ *
+ * Память ниже осмысленна, когда база не настроена вовсе: тогда она И ЕСТЬ
+ * хранилище, и «не найдено» честно.
+ */
+/** Ответ на отказ хранилища — один текст на весь модуль. */
+function replyStorageUnavailable(res: {
+  status: (code: number) => { json: (body: unknown) => unknown };
+}): void {
+  res.status(503).json({
+    error: "storage_unavailable",
+    warning:
+      "Хранилище временно недоступно. Это НЕ значит, что проекта нет — " +
+      "прочитать его не удалось. Повторите запрос позже.",
+  });
+}
+
+/**
+ * Чтение проекта, отличающее «нет такого» от «не смогли спросить».
+ *
+ * Проверка владельца НЕ здесь: в файле их две разновидности — `userId !==` и
+ * `canAccess(project, userId)`, и сводить их в одну — отдельное решение, не
+ * моё. Помощник закрывает ровно то, что было сломано одинаково везде.
+ */
+async function readProject(
+  id: string,
+): Promise<{ project: DevHubProject | null; failed: boolean }> {
+  try {
+    return { project: await dbGetProject(id), failed: false };
+  } catch {
+    return { project: memProjects.get(id) ?? null, failed: true };
+  }
+}
+
+async function loadOwnedProjectOrReply(
+  id: string,
+  userId: string,
+  // Структурный тип, а не Response из express: в этом файле имя Response уже
+  // занято глобальным ответом fetch, и импорт express-версии его перекрывает.
+  res: { status: (code: number) => { json: (body: unknown) => unknown } },
+): Promise<DevHubProject | null> {
+  let project: DevHubProject | null;
+  let readFailed = false;
+  try {
+    project = await dbGetProject(id);
+  } catch {
+    project = memProjects.get(id) ?? null;
+    readFailed = true;
+  }
+  if (!project && readFailed) {
+    replyStorageUnavailable(res);
+    return null;
+  }
+  if (!project || project.userId !== userId) {
+    res.status(404).json({ error: "project not found" });
+    return null;
+  }
+  return project;
+}
+
 devhubRouter.get("/projects", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
@@ -1139,15 +1216,8 @@ devhubRouter.get("/projects/:id", async (req, res) => {
 devhubRouter.patch("/projects/:id", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const { name, description, status, deployUrl, repoUrl, customDomain } = req.body || {};
   if (name !== undefined) project.name = String(name).trim();
   if (description !== undefined) project.description = description ? String(description).trim() : null;
@@ -1179,15 +1249,8 @@ devhubRouter.patch("/projects/:id", async (req, res) => {
 devhubRouter.delete("/projects/:id", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   // Drop the project's database FIRST. A deleted project whose schema and
   // login role survive is worse than a leak: live credentials pointing at data
   // nobody owns any more, and nothing left in the UI to clean them up with.
@@ -1270,12 +1333,9 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
 devhubRouter.get("/projects/:id/files", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -1293,12 +1353,9 @@ devhubRouter.get("/projects/:id/files/:filepath", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
   const filePath = req.params.filepath || "";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -1317,12 +1374,9 @@ devhubRouter.get("/projects/:id/file", async (req, res) => {
   const userId = auth?.sub ?? "anonymous";
   const filePath = String(req.query.path || "");
   if (!filePath) return res.status(400).json({ error: "path query param required" });
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -1341,12 +1395,9 @@ devhubRouter.put("/projects/:id/file", async (req, res) => {
   const userId = auth?.sub ?? "anonymous";
   const filePath = String(req.body?.path || req.query.path || "");
   if (!filePath) return res.status(400).json({ error: "file path required" });
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || !canEdit(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -1386,12 +1437,9 @@ devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
   const userId = auth?.sub ?? "anonymous";
   const filePath = req.params.filepath || "";
   if (!filePath) return res.status(400).json({ error: "file path required" });
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || !canEdit(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -1430,15 +1478,8 @@ devhubRouter.delete("/projects/:id/file", async (req, res) => {
   const userId = auth?.sub ?? "anonymous";
   const filePath = String(req.query.path || req.body?.path || "");
   if (!filePath) return res.status(400).json({ error: "path required" });
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   try {
     await dbDeleteFile(req.params.id, filePath);
   } catch {
@@ -1454,15 +1495,8 @@ devhubRouter.delete("/projects/:id/files/:filepath", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
   const filePath = req.params.filepath || "";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   try {
     await dbDeleteFile(req.params.id, filePath);
   } catch {
@@ -1481,15 +1515,8 @@ devhubRouter.delete("/projects/:id/files/:filepath", async (req, res) => {
 devhubRouter.post("/projects/:id/generate", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
   if (!prompt || typeof prompt !== "string") {
     return res.status(400).json({ error: "prompt is required" });
@@ -1582,15 +1609,8 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
 devhubRouter.post("/projects/:id/generate/stream", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
   if (!prompt || typeof prompt !== "string") {
     return res.status(400).json({ error: "prompt is required" });
@@ -1656,15 +1676,8 @@ devhubRouter.post("/projects/:id/generate/stream", async (req, res) => {
 devhubRouter.post("/projects/:id/database/design", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const { description } = req.body || {};
   if (!description || typeof description !== "string" || !description.trim()) {
     return res.status(400).json({ error: "description is required" });
@@ -1704,15 +1717,8 @@ devhubRouter.post("/projects/:id/database/design", async (req, res) => {
 devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   if (!process.env.DEVHUB_DB_ADMIN_URL) {
     return res.status(503).json({
       error: "database provisioning is not configured — set DEVHUB_DB_ADMIN_URL on the server",
@@ -1761,9 +1767,9 @@ devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
 devhubRouter.get("/projects/:id/database", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
 
   const provisioned = !!project.envVars?.DATABASE_URL;
@@ -1787,15 +1793,8 @@ devhubRouter.get("/projects/:id/database", async (req, res) => {
 devhubRouter.delete("/projects/:id/database", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   if (!process.env.DEVHUB_DB_ADMIN_URL) {
     return res.status(503).json({ error: "database provisioning is not configured" });
   }
@@ -1823,12 +1822,9 @@ devhubRouter.delete("/projects/:id/database", async (req, res) => {
 devhubRouter.post("/projects/:id/generate/undo", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || !canEdit(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -1851,12 +1847,9 @@ devhubRouter.post("/projects/:id/generate/undo", async (req, res) => {
 devhubRouter.get("/projects/:id/checkpoints", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -1882,12 +1875,9 @@ devhubRouter.get("/projects/:id/checkpoints", async (req, res) => {
 devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || !canEdit(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -1952,15 +1942,8 @@ devhubRouter.post("/plan", async (req, res) => {
 devhubRouter.post("/projects/:id/deploy", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
 
   const deployCredit = await checkCredit(userId, "deploy");
   if (!deployCredit.allowed) {
@@ -2188,15 +2171,8 @@ Built, but ${url} did not answer 2xx in time`;
 devhubRouter.get("/projects/:id/deployments/:deployId/log", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
 
   const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
   const deployUrl = `https://${deploySlug}.aevion.app`;
@@ -2241,12 +2217,9 @@ devhubRouter.get("/projects/:id/deployments/:deployId/log", async (req, res) => 
 devhubRouter.get("/projects/:id/collaborators", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -2257,12 +2230,9 @@ devhubRouter.get("/projects/:id/collaborators", async (req, res) => {
 devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   // Only project owner can manage collaborators
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
@@ -2315,15 +2285,8 @@ devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
 devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const { collabUserId } = req.params;
   project.collaborators = project.collaborators.filter((c) => c.userId !== collabUserId);
   project.updatedAt = now();
@@ -2344,15 +2307,8 @@ devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res
 devhubRouter.post("/projects/:id/github/push", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!githubToken) {
     return res.json({
@@ -2457,15 +2413,8 @@ const SYNC_MAX_FILE_BYTES = 200_000;
 devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   if (!project.repoUrl) {
     return res.json({ ok: false, message: "No GitHub repo linked yet — push to GitHub first (POST /github/push)" });
   }
@@ -2557,15 +2506,8 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
 devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const { title, body: prBody, branch: branchInput } = req.body || {};
   if (!title || typeof title !== "string") {
     return res.status(400).json({ error: "title is required" });
@@ -2677,15 +2619,8 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
 devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const prNumber = Number(req.params.number);
   if (!Number.isInteger(prNumber) || prNumber <= 0) {
     return res.status(400).json({ error: "invalid pull request number" });
@@ -2735,15 +2670,8 @@ devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req,
 devhubRouter.get("/projects/:id/github/status", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ exists: false });
@@ -2788,15 +2716,8 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
 devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ branches: [], connected: false });
@@ -2847,15 +2768,8 @@ devhubRouter.get("/templates", (_req, res) => {
 devhubRouter.post("/projects/:id/apply-template", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const { templateId } = req.body || {};
   const template = TEMPLATES.find((t) => t.id === templateId);
   if (!template) return res.status(404).json({ error: "template not found" });
@@ -2895,15 +2809,8 @@ devhubRouter.post("/projects/:id/apply-template", async (req, res) => {
 devhubRouter.get("/projects/:id/env", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   // Return keys with masked values
   const masked = Object.keys(project.envVars).map((key) => ({
     key,
@@ -2917,15 +2824,8 @@ devhubRouter.get("/projects/:id/env", async (req, res) => {
 devhubRouter.put("/projects/:id/env", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const { key, value } = req.body || {};
   if (!key || typeof key !== "string") return res.status(400).json({ error: "key is required" });
   project.envVars[String(key)] = String(value ?? "");
@@ -2943,15 +2843,8 @@ devhubRouter.put("/projects/:id/env", async (req, res) => {
 devhubRouter.delete("/projects/:id/env/:key", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const key = req.params.key;
   delete project.envVars[key];
   project.updatedAt = now();
@@ -2972,15 +2865,8 @@ devhubRouter.delete("/projects/:id/env/:key", async (req, res) => {
 devhubRouter.post("/projects/:id/domain", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   const { domain } = req.body || {};
   if (!domain || typeof domain !== "string") return res.status(400).json({ error: "domain is required" });
   // Basic domain validation
@@ -3012,15 +2898,8 @@ devhubRouter.post("/projects/:id/domain", async (req, res) => {
 devhubRouter.get("/projects/:id/deployments", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
   try {
     const deployments = await dbListDeployments(req.params.id, 10);
     res.json({ deployments });
@@ -3185,15 +3064,8 @@ devhubRouter.post("/snippets/:id/star", async (req, res) => {
 devhubRouter.get("/projects/:id/env/validate", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
 
   // Required env vars per stack
   const requiredByStack: Record<string, string[]> = {
@@ -3721,9 +3593,9 @@ devhubRouter.post("/media/music", async (req, res) => {
 devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -3983,9 +3855,9 @@ devhubRouter.post("/media/drive-search", async (req, res) => {
 devhubRouter.post("/projects/:id/drive/import", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
 
   const { fileId, targetPath } = req.body || {};
@@ -4113,12 +3985,9 @@ const PREVIEW_PROXY_OVERLAY = `
 devhubRouter.get("/projects/:id/preview-proxy", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || !canAccess(project, userId)) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -4352,9 +4221,9 @@ function groupWorkflowSteps(steps: any[]): number[][] {
 devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
 
   const { steps } = req.body || {};
@@ -4430,9 +4299,9 @@ devhubRouter.get("/agent/templates", (_req, res) => {
 devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
 
   const { steps } = req.body || {};
@@ -4776,9 +4645,9 @@ devhubRouter.post("/media/translate", async (req, res) => {
 devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
 
   const { path, targetLang, saveAs } = req.body || {};
@@ -4933,9 +4802,9 @@ devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
   const filePath = String(req.query.path || "");
   if (!filePath) return res.status(400).json({ error: "path query param required" });
 
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
 
   let file: DevHubFile | null;
@@ -4962,9 +4831,9 @@ devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
 devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
 
   const { paths, targetLangs } = req.body || {};
@@ -5136,9 +5005,9 @@ function generateSDK(projectName: string, baseUrl: string, routes: DetectedRoute
 devhubRouter.get("/projects/:id/sdk", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
 
   const files = await dbListFiles(project.id);
@@ -5268,9 +5137,9 @@ export function buildZipStored(entries: Array<{ path: string; content: Buffer }>
 devhubRouter.get("/projects/:id/export", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
 
   try {
@@ -5318,15 +5187,8 @@ devhubRouter.get("/projects/:id/export", async (req, res) => {
 devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try {
-    project = await dbGetProject(req.params.id);
-  } catch {
-    project = memProjects.get(req.params.id) ?? null;
-  }
-  if (!project || project.userId !== userId) {
-    return res.status(404).json({ error: "project not found" });
-  }
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
 
   const vercelToken = process.env.VERCEL_API_TOKEN;
   if (!vercelToken) {
@@ -5460,9 +5322,9 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
 
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -5897,9 +5759,9 @@ const BINARY_EXTENSIONS = /\.(mp3|wav|ogg|png|jpg|jpeg|webp|gif|pdf|zip|woff2?|t
 devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
 
   const { base64Zip, overwrite } = req.body || {};
@@ -6207,9 +6069,9 @@ devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
 
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
@@ -6277,9 +6139,9 @@ devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
 
-  let project: DevHubProject | null;
-  try { project = await dbGetProject(req.params.id); }
-  catch { project = memProjects.get(req.params.id) ?? null; }
+  const read = await readProject(req.params.id);
+  if (!read.project && read.failed) return replyStorageUnavailable(res);
+  const project = read.project;
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }

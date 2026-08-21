@@ -32,7 +32,11 @@ function vidimyjTekst(src: string): string[] {
   const out: string[] = [];
   for (const m of bezKom.matchAll(/>([^<>{}]{12,300})</g)) {
     const txt = m[1].replace(/\s+/g, " ").trim();
-    if (!/[А-Яа-яЁё]/.test(txt)) continue;
+    // ЯЗЫК ТЕКСТА НЕ ВАЖЕН. Прежняя версия проверяла только строки, где есть
+    // русский, и потому пропускала чисто английский жаргон: на дашборде CPI
+    // человеку показывали «data: localStorage · key: aevion_cyberchess_cpi_v1».
+    // Сторож назывался «нет жаргона на экране», а проверял «нет жаргона в
+    // русских фразах» — уже своего имени.
     out.push(txt);
   }
   return out;

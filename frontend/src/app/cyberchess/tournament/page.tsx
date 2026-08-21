@@ -506,7 +506,7 @@ export default function TournamentHubPage() {
           <span style={{ color: C.faint }}>·</span>
           <Link href="/cyberchess/economy" style={{ color: C.purple, textDecoration: "none" }}>🪙 Economy</Link>
           <span style={{ color: C.faint }}>·</span>
-          <Link href="/cyberchess/training" style={{ color: C.purple, textDecoration: "none" }}>🎯 Training Hub</Link>
+          <Link href="/cyberchess/training" style={{ color: C.purple, textDecoration: "none" }}>🎯 Тренировки</Link>
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>

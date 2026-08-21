@@ -313,7 +313,7 @@ export default function CPIDashboardPage() {
 
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: C.purple, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>
-            F4 · CPI Dashboard
+            Мой CPI
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.025em", margin: "0 0 8px", lineHeight: 1.15 }}>
             Твой <span style={{ color: C.purple }}>CPI</span> и тренд качества игры
@@ -370,7 +370,7 @@ export default function CPIDashboardPage() {
               alignItems: "center",
             }}>
               <div>
-                <div style={{ fontSize: 11, color: C.faint, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Current CPI</div>
+                <div style={{ fontSize: 11, color: C.faint, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Текущий CPI</div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 16, flexWrap: "wrap" }}>
                   <div style={{ fontSize: 72, fontWeight: 900, color: tier.color, fontFamily: "ui-monospace, monospace", lineHeight: 1 }}>
                     {state!.cpi}
@@ -382,7 +382,7 @@ export default function CPIDashboardPage() {
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 10, color: C.faint, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>FIDE-equiv</div>
+                <div style={{ fontSize: 10, color: C.faint, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>в шкале FIDE</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: C.cyan, fontFamily: "ui-monospace, monospace" }}>~{fide}</div>
                 <div style={{
                   display: "inline-block",
@@ -516,7 +516,7 @@ export default function CPIDashboardPage() {
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>
-          F4 · 2026-05-12 · data: localStorage · key: aevion_cyberchess_cpi_v1
+          Данные хранятся только в вашем браузере и никуда не отправляются
         </div>
       </article>
     </main>

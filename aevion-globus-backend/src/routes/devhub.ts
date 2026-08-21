@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { requesterId } from "../lib/devhubGuest";
 import { noteEmailSent } from "../lib/brevoQuota";
 // Ограничитель дорогих ручек. Тот же помощник, что стоит на 27 соседних ручках в
 // коммите d9cc19ce0 (28.07) — он ждёт мержа 22 дня, поэтому здесь пока только две
@@ -1154,7 +1155,7 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
 // POST /api/devhub/projects
 devhubRouter.post("/projects", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const { name, description, stack = "next" } = req.body || {};
   if (!name || typeof name !== "string") {
     return res.status(400).json({ error: "name is required" });
@@ -1206,7 +1207,7 @@ async function computeNeedsRedeploy(project: DevHubProject): Promise<boolean> {
 
 devhubRouter.get("/projects", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   try {
     const projects = await dbListProjects(userId);
     const flags = await Promise.all(projects.map(computeNeedsRedeploy));
@@ -1221,7 +1222,7 @@ devhubRouter.get("/projects", async (req, res) => {
 // GET /api/devhub/projects/:id
 devhubRouter.get("/projects/:id", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   try {
     const project = await dbGetProject(req.params.id);
     if (!project || !canAccess(project, userId)) {
@@ -1238,7 +1239,7 @@ devhubRouter.get("/projects/:id", async (req, res) => {
 // PATCH /api/devhub/projects/:id
 devhubRouter.patch("/projects/:id", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -1268,7 +1269,7 @@ devhubRouter.patch("/projects/:id", async (req, res) => {
 // DELETE /api/devhub/projects/:id
 devhubRouter.delete("/projects/:id", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -1359,7 +1360,7 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
 // GET /api/devhub/projects/:id/files
 devhubRouter.get("/projects/:id/files", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -1381,7 +1382,7 @@ devhubRouter.get("/projects/:id/files", async (req, res) => {
 // GET /api/devhub/projects/:id/files/:filepath — get file by path
 devhubRouter.get("/projects/:id/files/:filepath", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const filePath = req.params.filepath || "";
   let project: DevHubProject | null;
   try {
@@ -1404,7 +1405,7 @@ devhubRouter.get("/projects/:id/files/:filepath", async (req, res) => {
 // GET /api/devhub/projects/:id/file — get file content by path in query string
 devhubRouter.get("/projects/:id/file", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const filePath = String(req.query.path || "");
   if (!filePath) return res.status(400).json({ error: "path query param required" });
   let project: DevHubProject | null;
@@ -1428,7 +1429,7 @@ devhubRouter.get("/projects/:id/file", async (req, res) => {
 // PUT /api/devhub/projects/:id/file — upsert file; path in body or query
 devhubRouter.put("/projects/:id/file", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const filePath = String(req.body?.path || req.query.path || "");
   if (!filePath) return res.status(400).json({ error: "file path required" });
   let project: DevHubProject | null;
@@ -1468,7 +1469,7 @@ devhubRouter.put("/projects/:id/file", async (req, res) => {
 // PUT /api/devhub/projects/:id/files/:filepath — upsert file with simple single-segment path
 devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const filePath = req.params.filepath || "";
   if (!filePath) return res.status(400).json({ error: "file path required" });
   let project: DevHubProject | null;
@@ -1508,7 +1509,7 @@ devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
 // DELETE /api/devhub/projects/:id/file — delete by path query param
 devhubRouter.delete("/projects/:id/file", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const filePath = String(req.query.path || req.body?.path || "");
   if (!filePath) return res.status(400).json({ error: "path required" });
   let project: DevHubProject | null;
@@ -1533,7 +1534,7 @@ devhubRouter.delete("/projects/:id/file", async (req, res) => {
 // DELETE /api/devhub/projects/:id/files/:filepath — delete single-segment file
 devhubRouter.delete("/projects/:id/files/:filepath", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const filePath = req.params.filepath || "";
   let project: DevHubProject | null;
   try {
@@ -1561,7 +1562,7 @@ devhubRouter.delete("/projects/:id/files/:filepath", async (req, res) => {
 // POST /api/devhub/projects/:id/generate
 devhubRouter.post("/projects/:id/generate", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -1662,7 +1663,7 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
 // something actually happening, never a fake progress animation.
 devhubRouter.post("/projects/:id/generate/stream", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -1736,7 +1737,7 @@ devhubRouter.post("/projects/:id/generate/stream", async (req, res) => {
 // class of lie the deploy paths just got cured of.
 devhubRouter.post("/projects/:id/database/design", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -1784,7 +1785,7 @@ devhubRouter.post("/projects/:id/database/design", async (req, res) => {
 // has one, then stores DATABASE_URL in the project's env vars.
 devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -1841,7 +1842,7 @@ devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
 // actually using. Measured, so quota talk is never a guess.
 devhubRouter.get("/projects/:id/database", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
   catch { project = memProjects.get(req.params.id) ?? null; }
@@ -1867,7 +1868,7 @@ devhubRouter.get("/projects/:id/database", async (req, res) => {
 // and stored DATABASE_URL. Destructive and irreversible, hence its own route.
 devhubRouter.delete("/projects/:id/database", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -1903,7 +1904,7 @@ devhubRouter.delete("/projects/:id/database", async (req, res) => {
 // undo reaches the one before it, not the same state again.
 devhubRouter.post("/projects/:id/generate/undo", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -1931,7 +1932,7 @@ devhubRouter.post("/projects/:id/generate/undo", async (req, res) => {
 // file content — that's only needed at restore time).
 devhubRouter.get("/projects/:id/checkpoints", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -1962,7 +1963,7 @@ devhubRouter.get("/projects/:id/checkpoints", async (req, res) => {
 // sequential single-step undos would reach, just in one call.
 devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -1998,7 +1999,7 @@ devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req,
 // project's files when `projectId` is given in the body.
 devhubRouter.post("/plan", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const { idea, projectId } = req.body || {};
   if (!idea || typeof idea !== "string" || !idea.trim()) {
     return res.status(400).json({ error: "idea is required" });
@@ -2032,7 +2033,7 @@ devhubRouter.post("/plan", async (req, res) => {
 // POST /api/devhub/projects/:id/deploy
 devhubRouter.post("/projects/:id/deploy", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2268,7 +2269,7 @@ Built, but ${url} did not answer 2xx in time`;
 // GET /api/devhub/projects/:id/deployments/:deployId/log — SSE build log stream
 devhubRouter.get("/projects/:id/deployments/:deployId/log", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2321,7 +2322,7 @@ devhubRouter.get("/projects/:id/deployments/:deployId/log", async (req, res) => 
 // GET /api/devhub/projects/:id/collaborators
 devhubRouter.get("/projects/:id/collaborators", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2337,7 +2338,7 @@ devhubRouter.get("/projects/:id/collaborators", async (req, res) => {
 // POST /api/devhub/projects/:id/collaborators
 devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2395,7 +2396,7 @@ devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
 // DELETE /api/devhub/projects/:id/collaborators/:userId
 devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2424,7 +2425,7 @@ devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res
 // POST /api/devhub/projects/:id/github/push
 devhubRouter.post("/projects/:id/github/push", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2537,7 +2538,7 @@ const SYNC_MAX_FILE_BYTES = 200_000;
 
 devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2637,7 +2638,7 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
 
 devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2757,7 +2758,7 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
 // POST /api/devhub/projects/:id/github/pull-request/:number/merge
 devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2815,7 +2816,7 @@ devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req,
 // GET /api/devhub/projects/:id/github/status — check if repo exists on GitHub
 devhubRouter.get("/projects/:id/github/status", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2868,7 +2869,7 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
 // GET /api/devhub/projects/:id/github/branches — list branches of linked repo
 devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2927,7 +2928,7 @@ devhubRouter.get("/templates", (_req, res) => {
 // POST /api/devhub/projects/:id/apply-template
 devhubRouter.post("/projects/:id/apply-template", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2975,7 +2976,7 @@ devhubRouter.post("/projects/:id/apply-template", async (req, res) => {
 // GET /api/devhub/projects/:id/env
 devhubRouter.get("/projects/:id/env", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -2997,7 +2998,7 @@ devhubRouter.get("/projects/:id/env", async (req, res) => {
 // PUT /api/devhub/projects/:id/env
 devhubRouter.put("/projects/:id/env", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -3023,7 +3024,7 @@ devhubRouter.put("/projects/:id/env", async (req, res) => {
 // DELETE /api/devhub/projects/:id/env/:key
 devhubRouter.delete("/projects/:id/env/:key", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -3052,7 +3053,7 @@ devhubRouter.delete("/projects/:id/env/:key", async (req, res) => {
 // POST /api/devhub/projects/:id/domain
 devhubRouter.post("/projects/:id/domain", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -3092,7 +3093,7 @@ devhubRouter.post("/projects/:id/domain", async (req, res) => {
 // GET /api/devhub/projects/:id/deployments
 devhubRouter.get("/projects/:id/deployments", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -3202,7 +3203,7 @@ devhubRouter.get("/snippets", async (req, res) => {
 // POST /api/devhub/snippets — create a snippet
 devhubRouter.post("/snippets", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const { title, content, language, tags } = req.body || {};
   if (!title || typeof title !== "string") return res.status(400).json({ error: "title is required" });
   if (typeof content !== "string") return res.status(400).json({ error: "content must be a string" });
@@ -3265,7 +3266,7 @@ devhubRouter.post("/snippets/:id/star", async (req, res) => {
 // GET /api/devhub/projects/:id/env/validate — check required env vars
 devhubRouter.get("/projects/:id/env/validate", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -3296,7 +3297,7 @@ devhubRouter.get("/projects/:id/env/validate", async (req, res) => {
 // POST /api/devhub/media/tts — text-to-speech via ElevenLabs
 devhubRouter.post("/media/tts", async (req, res) => {
   const ttsAuth = verifyBearerOptional(req);
-  const ttsUserId = ttsAuth?.sub ?? "anonymous";
+  const ttsUserId = requesterId(req, ttsAuth?.sub);
   const { text, voice = "Rachel" } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) {
     return res.status(400).json({ error: "text is required" });
@@ -3508,7 +3509,7 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
 // POST /api/devhub/media/image — generate image via OpenAI DALL-E 3
 devhubRouter.post("/media/image", async (req, res) => {
   const imgAuth = verifyBearerOptional(req);
-  const imgUserId = imgAuth?.sub ?? "anonymous";
+  const imgUserId = requesterId(req, imgAuth?.sub);
   const { prompt, size = "1024x1024", quality = "standard" } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt required" });
@@ -3721,7 +3722,7 @@ devhubRouter.post("/media/sfx", async (req, res) => {
 // POST /api/devhub/media/music — ElevenLabs music compose
 devhubRouter.post("/media/music", async (req, res) => {
   const musicAuth = verifyBearerOptional(req);
-  const musicUserId = musicAuth?.sub ?? "anonymous";
+  const musicUserId = requesterId(req, musicAuth?.sub);
   const { prompt, musicLengthMs } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt (music description) required" });
@@ -3807,7 +3808,7 @@ devhubRouter.post("/media/music", async (req, res) => {
 // POST /api/devhub/projects/:id/domain/auto-setup — Cloudflare DNS CNAME
 devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
   catch { project = memProjects.get(req.params.id) ?? null; }
@@ -4069,7 +4070,7 @@ devhubRouter.post("/media/drive-search", async (req, res) => {
 // POST /api/devhub/projects/:id/drive/import — import Drive file into project files
 devhubRouter.post("/projects/:id/drive/import", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
   catch { project = memProjects.get(req.params.id) ?? null; }
@@ -4195,7 +4196,7 @@ const PREVIEW_PROXY_OVERLAY = `
 
 devhubRouter.get("/projects/:id/preview-proxy", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -4434,7 +4435,7 @@ function groupWorkflowSteps(steps: any[]): number[][] {
 // POST /api/devhub/projects/:id/agent/workflow — orchestrate multi-step AI workflow
 devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
   catch { project = memProjects.get(req.params.id) ?? null; }
@@ -4512,7 +4513,7 @@ devhubRouter.get("/agent/templates", (_req, res) => {
 // POST /api/devhub/projects/:id/agent/workflow/stream — SSE per-step progress
 devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
   catch { project = memProjects.get(req.params.id) ?? null; }
@@ -4866,7 +4867,7 @@ devhubRouter.post("/media/translate", async (req, res) => {
 // POST /api/devhub/projects/:id/files/translate — translate project file → save as new file
 devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
   catch { project = memProjects.get(req.params.id) ?? null; }
@@ -5021,7 +5022,7 @@ function detectB64Mime(path: string): string | null {
 // GET /api/devhub/projects/:id/file-binary?path=... — decode base64 file and serve as binary
 devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const filePath = String(req.query.path || "");
   if (!filePath) return res.status(400).json({ error: "path query param required" });
 
@@ -5053,7 +5054,7 @@ devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
 
 devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
   catch { project = memProjects.get(req.params.id) ?? null; }
@@ -5227,7 +5228,7 @@ function generateSDK(projectName: string, baseUrl: string, routes: DetectedRoute
 // GET /api/devhub/projects/:id/sdk — return TypeScript SDK
 devhubRouter.get("/projects/:id/sdk", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
   catch { project = memProjects.get(req.params.id) ?? null; }
@@ -5359,7 +5360,7 @@ export function buildZipStored(entries: Array<{ path: string; content: Buffer }>
 // GET /api/devhub/projects/:id/export — download project as ZIP
 devhubRouter.get("/projects/:id/export", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
   catch { project = memProjects.get(req.params.id) ?? null; }
@@ -5409,7 +5410,7 @@ devhubRouter.get("/projects/:id/export", async (req, res) => {
 // POST /api/devhub/projects/:id/deploy/vercel — deploy to Vercel
 devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try {
     project = await dbGetProject(req.params.id);
@@ -5550,7 +5551,7 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 
 devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
 
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
@@ -5988,7 +5989,7 @@ const BINARY_EXTENSIONS = /\.(mp3|wav|ogg|png|jpg|jpeg|webp|gif|pdf|zip|woff2?|t
 
 devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
   catch { project = memProjects.get(req.params.id) ?? null; }
@@ -6089,7 +6090,7 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
 
 devhubRouter.post("/media/video", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const { prompt, model, duration, imageUrl, aspectRatio, resolution, negativePrompt, realism } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt is required" });
@@ -6204,7 +6205,7 @@ devhubRouter.post("/media/video", async (req, res) => {
 // nothing a game engine or a three.js scene could load.
 devhubRouter.post("/media/3d", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   const { imageUrl, model, textureSize, removeBackground } = req.body || {};
   if (!imageUrl || typeof imageUrl !== "string" || !/^https?:/.test(imageUrl)) {
     return res.status(400).json({ error: "imageUrl (http/https) is required - generate or upload an image first" });
@@ -6297,7 +6298,7 @@ devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {
 
 devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
 
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
@@ -6367,7 +6368,7 @@ devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
 
 devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
 
   let project: DevHubProject | null;
   try { project = await dbGetProject(req.params.id); }
@@ -6495,7 +6496,7 @@ devhubRouter.get("/studio/capabilities", (_req, res) => {
 
 devhubRouter.get("/studio/credits", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? "anonymous";
+  const userId = requesterId(req, auth?.sub);
   try {
     const result = await getAllMonthUsage(userId);
     return res.json({

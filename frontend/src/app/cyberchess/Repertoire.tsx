@@ -143,7 +143,7 @@ export default function RepertoireModal({ open, onClose, histSan, myColor, ecoHi
             {ecoHint && <span style={{ marginLeft: 6, padding: "1px 6px", background: "#10b981", color: "#fff", borderRadius: 3, fontSize: 10, fontWeight: 800 }}>{ecoHint.eco} · {ecoHint.name}</span>}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <input value={name} onChange={e => setName(e.target.value)}
+            <input aria-label="Название дебюта" value={name} onChange={e => setName(e.target.value)}
               placeholder={ecoHint?.name || "Название линии (опционально)"}
               style={{ flex: 1, padding: "8px 10px", border: "1px solid #d1fae5", borderRadius: 6, fontSize: 12 }}/>
             <button onClick={handleSave} disabled={!canSave}

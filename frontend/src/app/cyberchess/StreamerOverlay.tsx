@@ -252,7 +252,7 @@ function PanelHost({ kind, state, onChange, onClose }: PanelHostProps) {
               gap: 10, padding: 16,
             }}>
               <div style={{ color: accent, fontSize: 12, fontWeight: 800, letterSpacing: 0.5 }}>{label} stream URL</div>
-              <input
+              <input aria-label="Адрес трансляции"
                 autoFocus
                 value={state.url}
                 onChange={e => onChange({ url: e.target.value })}

@@ -1446,7 +1446,7 @@ function GMGamesTab({ branches }: { branches: RepertoireBranch[] }) {
         Партии мастеров (Lichess Masters DB — рейтинг ≥ 2200 OTB):
       </div>
 
-      <select
+      <select aria-label="Выбрать ветку"
         value={selectedId}
         onChange={(e) => setSelectedId(e.target.value)}
         style={{ ...inputStyle, marginBottom: 16 }}

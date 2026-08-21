@@ -9345,7 +9345,7 @@ export default function CyberChessPage(){
                   if(browseIdx<0||browseIdx>=hist.length-1){try{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null)}catch{}}
                   sReplaying(true);
                 }} style={{padding:"3px 9px",borderRadius:4,border:`1px solid ${replaying?T.accent:T.border}`,background:replaying?"rgba(5,150,105,0.1)":"#fff",color:replaying?T.accent:T.text,fontSize:11,fontWeight:800,cursor:"pointer"}} title={replaying?"Пауза":"Авто-воспроизведение"}>{replaying?"❚❚":"▶"}</button>
-                {replaying&&<select value={replaySpeed} onChange={e=>sReplaySpeed(+e.target.value)} style={{padding:"2px 4px",borderRadius:4,border:`1px solid ${T.border}`,fontSize:11,cursor:"pointer",background:"#fff"}} title="Скорость">
+                {replaying&&<select aria-label="Скорость повтора" value={replaySpeed} onChange={e=>sReplaySpeed(+e.target.value)} style={{padding:"2px 4px",borderRadius:4,border:`1px solid ${T.border}`,fontSize:11,cursor:"pointer",background:"#fff"}} title="Скорость">
                   <option value={2000}>0.5x</option>
                   <option value={1000}>1x</option>
                   <option value={500}>2x</option>
@@ -9512,7 +9512,7 @@ export default function CyberChessPage(){
                     </span>
                     {/* Inline comment editor — spans full grid row when active */}
                     {tab==="analysis"&&(commentEditPly===wIdx||commentEditPly===bIdx)&&<div style={{gridColumn:"1 / -1",padding:"4px 8px",background:"#f0f0ff",borderBottom:"1px solid #c7d2fe",display:"flex",gap:4,alignItems:"flex-start"}}>
-                      <textarea autoFocus value={commentEditVal} onChange={e=>sCommentEditVal(e.target.value)}
+                      <textarea aria-label="Комментарий к ходу" autoFocus value={commentEditVal} onChange={e=>sCommentEditVal(e.target.value)}
                         onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();const ply=commentEditPly!;if(commentEditVal.trim()){sMoveComments(p=>({...p,[ply]:commentEditVal.trim()}))}else{sMoveComments(p=>{const n={...p};delete n[ply];return n})}sCommentEditPly(null);}else if(e.key==="Escape"){sCommentEditPly(null);}}}
                         placeholder="Заметка к ходу… Enter — сохранить, Esc — отмена"
                         rows={2} style={{flex:1,fontSize:11,padding:"4px 6px",borderRadius:4,border:"1px solid #a5b4fc",resize:"vertical",background:"#ffffff",color:"#312e81",outline:"none"}}/>
@@ -9659,7 +9659,7 @@ export default function CyberChessPage(){
                         fontSize:11,fontWeight:800,cursor:"pointer"}}>{label}</button>;
                   })}
                   <span style={{fontSize:11,color:CC.textMute,marginLeft:4}}>сек:</span>
-                  <input type="number" min={30} max={3600} step={30}
+                  <input aria-label="Время на задачу, секунд" type="number" min={30} max={3600} step={30}
                     value={pzCustomSec}
                     onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=3600){sPzCustomSec(v);sPzTimeLeft(v)}}}
                     style={{width:78,padding:"5px 8px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:12,fontFamily:"ui-monospace,monospace",fontWeight:800,color:CC.text,background:CC.surface1}}/>
@@ -9694,7 +9694,7 @@ export default function CyberChessPage(){
                         fontSize:11,fontWeight:800,cursor:"pointer",
                         transition:`all ${MOTION.fast} ${MOTION.ease}`}}>{label}</button>;
                   })}
-                  <input type="number" min={30} max={1800} step={30}
+                  <input aria-label="Время на партию, секунд" type="number" min={30} max={1800} step={30}
                     value={[90,180,300,600].includes(rushDuration)?"":rushDuration}
                     onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=1800)sRushDuration(v)}}
                     placeholder="свой"
@@ -10064,7 +10064,7 @@ export default function CyberChessPage(){
                 </div>
                 <div>
                   <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Тема</div>
-                  <select value={pzFilterTheme} onChange={e=>{sPzFilterTheme(e.target.value);sPzI(0)}} style={{width:"100%",padding:"6px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,color:T.text,cursor:"pointer",fontWeight:600}}>
+                  <select aria-label="Тема задач" value={pzFilterTheme} onChange={e=>{sPzFilterTheme(e.target.value);sPzI(0)}} style={{width:"100%",padding:"6px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,color:T.text,cursor:"pointer",fontWeight:600}}>
                     <option value="all">Все темы</option>
                     {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><option key={th} value={th}>{th}</option>)}
                   </select>
@@ -10381,7 +10381,7 @@ export default function CyberChessPage(){
               </div>
               {/* Current FEN display only (import buttons are in "Источник позиции" above) */}
               <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                <input value={game.fen()} readOnly onClick={e=>(e.target as HTMLInputElement).select()} style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
+                <input aria-label="Позиция в формате FEN" value={game.fen()} readOnly onClick={e=>(e.target as HTMLInputElement).select()} style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
                 <button onClick={()=>{navigator.clipboard.writeText(game.fen());showToast("FEN скопирован","success")}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.dim,cursor:"pointer"}}>📋 Копировать</button>
               </div>
               {/* Position Notes — user annotations for current analysis session */}
@@ -10390,7 +10390,7 @@ export default function CyberChessPage(){
                 const[note,sNote]=typeof window!=="undefined"?[localStorage.getItem(PN_KEY)||"",(v:string)=>{try{localStorage.setItem(PN_KEY,v)}catch{}}]:["",()=>{}];
                 return<div style={{marginTop:8}}>
                   <div style={{fontSize:10,fontWeight:800,color:T.dim,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:4}}>📝 Заметки к позиции</div>
-                  <textarea defaultValue={note} onChange={e=>{sNote(e.target.value)}} placeholder="Запиши идею, план или комментарий к этой позиции…" rows={2}
+                  <textarea aria-label="Заметка к партии" defaultValue={note} onChange={e=>{sNote(e.target.value)}} placeholder="Запиши идею, план или комментарий к этой позиции…" rows={2}
                     style={{width:"100%",padding:"6px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,color:T.text,resize:"vertical",background:"#fafafa",boxSizing:"border-box"}}/>
                 </div>;
               })()}
@@ -10704,7 +10704,7 @@ ${question.trim()}`;
                   </div>}
                 </div>}
                 <div style={{display:"flex",gap:6}}>
-                  <input
+                  <input aria-label="Сообщение коучу"
                     value={coachChatInput}
                     onChange={e=>sCoachChatInput(e.target.value)}
                     onKeyDown={e=>{if(e.key==="Enter"&&coachChatInput.trim()&&!coachChatLoading){sendChat(coachChatInput)}}}
@@ -11363,10 +11363,10 @@ ${question.trim()}`;
 
         {/* Search + filter row */}
         <div style={{display:"flex",gap:SPACE[2],marginBottom:SPACE[2],flexWrap:"wrap",alignItems:"center"}}>
-          <input value={gamesSearch} onChange={e=>sGamesSearch(e.target.value)}
+          <input aria-label="Поиск по партиям" value={gamesSearch} onChange={e=>sGamesSearch(e.target.value)}
             placeholder="🔎 Поиск по дебюту, AI-уровню, результату…"
             style={{flex:"2 1 220px",minWidth:200,padding:"8px 12px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:13,background:CC.surface1,color:CC.text,outline:"none"}}/>
-          <select value={gamesSort} onChange={e=>sGamesSort(e.target.value as any)}
+          <select aria-label="Сортировка партий" value={gamesSort} onChange={e=>sGamesSort(e.target.value as any)}
             style={{padding:"8px 10px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:12,fontWeight:700,background:CC.surface1,color:CC.text,cursor:"pointer"}}>
             <option value="date">📅 Сначала новые</option>
             <option value="rating">⭐ По рейтингу</option>
@@ -12305,7 +12305,7 @@ ${question.trim()}`;
       <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[3]}}>
         Выбери дебют — бот сыграет чёрными, ты ведёшь белыми по скрипту. За безошибочный — <b>+10 Chessy</b>, с ошибками — <b>+5</b>.
       </div>
-      <input
+      <input aria-label="Фильтр дебютов"
         type="text"
         value={openingDrillFilter}
         onChange={e=>sOpeningDrillFilter(e.target.value)}
@@ -13005,7 +13005,7 @@ ${question.trim()}`;
           {renderMiniBoard()}
           {!brilliancyState.solved&&!brilliancyState.givenUp&&<>
             <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[3]}}>
-              <input type="text" value={brilliancyInput} onChange={e=>{sBrilliancyInput(e.target.value);sBrilliancyResult(null)}}
+              <input aria-label="Ход-кандидат" type="text" value={brilliancyInput} onChange={e=>{sBrilliancyInput(e.target.value);sBrilliancyResult(null)}}
                 placeholder="Введи ход (напр. Be7, Nxc3, O-O, e5)"
                 style={{flex:1,padding:"10px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:14,fontFamily:"ui-monospace, monospace",background:CC.surface1}}
                 onKeyDown={e=>{
@@ -13142,7 +13142,7 @@ ${question.trim()}`;
           <b>Импортируй до 50 партий с Lichess</b> — мы проанализируем дебюты, тактику, агрессию, размены — и создадим <b>бота-клона</b> с твоим стилем. Поделись ссылкой — друг сыграет «против тебя».
         </div>
         <div style={{display:"flex",gap:SPACE[2],marginBottom:SPACE[3]}}>
-          <input type="text" value={clonerUsername} onChange={e=>sClonerUsername(e.target.value.trim())}
+          <input aria-label="Ник игрока на Lichess" type="text" value={clonerUsername} onChange={e=>sClonerUsername(e.target.value.trim())}
             placeholder="Lichess username (например, DrNykterstein)"
             style={{flex:1,padding:"10px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:14,background:CC.surface1}}/>
           <Btn variant="primary" size="md" disabled={!clonerUsername||clonerLoading} onClick={async()=>{
@@ -13756,7 +13756,7 @@ ${question.trim()}`;
             </Card>
             <Card padding={SPACE[2]} tone="surface1">
               <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:6}}>FEN</div>
-              <textarea readOnly value={fenPreview} rows={3}
+              <textarea aria-label="Позиция в формате FEN" readOnly value={fenPreview} rows={3}
                 style={{width:"100%",padding:6,borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontFamily:"ui-monospace, monospace",fontSize:11,resize:"none",background:CC.surface2,color:CC.text}}/>
               <Btn size="sm" variant="secondary" full onClick={()=>{
                 navigator.clipboard?.writeText(fenPreview);
@@ -14185,7 +14185,7 @@ ${question.trim()}`;
               {masterMode==="guess"&&isGuessTurn&&<Card padding={SPACE[2]} tone="surface1" style={{background:"#ecfdf5",borderColor:"#6ee7b7"}}>
                 <div style={{fontSize:11,color:"#047857",fontWeight:800,marginBottom:4}}>Угадай ход {g.guessSide==="w"?"белых":"чёрных"} (SAN, например <code>Nf3</code> или <code>e4</code>):</div>
                 <div style={{display:"flex",gap:4}}>
-                  <input value={masterGuessInput} onChange={e=>sMasterGuessInput(e.target.value)}
+                  <input aria-label="Ваш ход" value={masterGuessInput} onChange={e=>sMasterGuessInput(e.target.value)}
                     onKeyDown={e=>{if(e.key==="Enter"){
                       const actual=g.moves[ply];
                       const result=masterScoreGuess(actual,masterGuessInput.trim());

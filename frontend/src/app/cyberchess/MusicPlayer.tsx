@@ -294,7 +294,7 @@ export default function MusicPlayer({ open, onClose }: Props) {
 
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 900, color: "#64748b", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>🔗 Добавить URL</div>
-          <input
+          <input aria-label="Имя трека"
             type="text"
             placeholder="Имя трека (опционально)"
             value={urlName}
@@ -302,7 +302,7 @@ export default function MusicPlayer({ open, onClose }: Props) {
             style={{ width: "100%", padding: "8px 10px", border: "1px solid #cbd5e1", borderRadius: 8, marginBottom: 6, fontSize: 13 }}
           />
           <div style={{ display: "flex", gap: 6 }}>
-            <input
+            <input aria-label="Адрес трека"
               type="text"
               placeholder="https://example.com/track.mp3"
               value={urlInput}

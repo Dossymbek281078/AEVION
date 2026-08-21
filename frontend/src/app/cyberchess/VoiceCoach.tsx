@@ -906,7 +906,7 @@ export default function VoiceCoach({
               }}
               placeholder="почему этот ход?"
               style={chatInputStyle}
-              aria-label="Question to coach"
+              aria-label="Сообщение коучу"
               disabled={chatLoading}
             />
             <button

@@ -376,7 +376,7 @@ export default function TournamentsHubPage() {
         </FilterGroup>
 
         <FilterGroup label="ELO диапазон">
-          <input
+          <input aria-label="ELO минимум"
             type="number"
             value={eloMin}
             onChange={(e) => setEloMin(Number(e.target.value) || 0)}
@@ -384,7 +384,7 @@ export default function TournamentsHubPage() {
             placeholder="от"
           />
           <span style={{ color: T.dim }}>—</span>
-          <input
+          <input aria-label="ELO максимум"
             type="number"
             value={eloMax}
             onChange={(e) => setEloMax(Number(e.target.value) || 0)}

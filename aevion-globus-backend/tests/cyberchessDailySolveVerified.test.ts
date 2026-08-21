@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, test, expect, vi, afterEach, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -77,6 +77,14 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); });
 
 describe("серию нельзя объявить, её можно только заработать", () => {
+  // Часы фиксируем ЯВНО. Без этого тест сверяет зашитый DAY с НАСТОЯЩИМ днём
+  // сервера: он зелен ровно до полуночи после даты, на которую написан, а
+  // потом отвечает wrong_day. Так и случилось — набор упал через сутки,
+  // и виноват был не код, а календарь.
+  // Часы уже зафиксированы общим beforeEach выше — тот вариант шире, он
+  // ещё и включает подменные часы заново. Здесь стоял дубль: этот же
+  // календарный дефект чинили две сессии независимо 21.08.2026.
+
   test("без ходов — отказ, и он говорит, чего не хватает", async () => {
     const r = await request(await app()).post("/api/cyberchess-daily/solve")
       .send({ day: DAY, userId: "u1", streak: 364 });

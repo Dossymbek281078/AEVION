@@ -61,7 +61,16 @@ frontend:
     - npm install --include=optional --no-audit --no-fund
     # Ловит EN-ключ без ru/kk-пары — иначе перевод молча падает на английский.
     - cd "$CI_PROJECT_DIR" && node scripts/i18n-kk-extract.mjs
-    - cd frontend && npm run build
+    # ESLint. До 30.07.2026 линтер не работал вовсе и в CI не вызывался, поэтому
+    # поломка была невидима; после починки он сразу нашёл семь дефектов, невидимых
+    # для tsc и next build. По каталогам — полный прогон падает с крашем V8
+    # (src/app не влезает в память Node). Пока `|| true`: накопленное не разобрано,
+    # ронять этим всю очередь нельзя. Снять, когда закрыто.
+    - cd frontend
+    - npx eslint src/lib || true
+    - npx eslint src/components || true
+    - npx eslint src/app/qbuild src/app/qventure src/app/fintech || true
+    - npm run build
 
 payments-smoke:
   stage: smoke

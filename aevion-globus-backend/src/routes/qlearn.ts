@@ -200,6 +200,59 @@ async function enrollmentById(
   return { enrollment: memEnrollments.get(id) ?? null, failed: false };
 }
 
+/**
+ * Мои зачисления вместе с курсом — из того же хранилища, где они лежат.
+ *
+ * Замер 23.08.2026: `GET /me/progress` не обращался к базе НИ РАЗУ, читал
+ * memEnrollments и memCourses. Контейнер на проде пересоздаётся при каждой
+ * выкатке (за сутки бывает несколько), поэтому раздел «Continue learning»
+ * на странице /qlearn был пуст ВСЕГДА — он питается именно этой ручкой.
+ *
+ * Новых таблиц не понадобилось: зачисления и курсы уже в базе. Тот же JOIN
+ * раньше жил СВОЕЙ копией внутри `/me/enrollments`; теперь у обеих ручек один
+ * источник, иначе получилось бы два способа спрашивать одно и то же.
+ */
+type EnrollmentWithCourse = Enrollment & {
+  courseTitle: string | null;
+  category: string | null;
+  level: string | null;
+  description: string | null;
+};
+
+async function myEnrollments(
+  userId: string,
+): Promise<{ rows: EnrollmentWithCourse[]; failed: boolean }> {
+  if (isQLearnDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT e.*, c."title" AS "courseTitle", c."category", c."level", c."description"
+           FROM "QLearnEnrollment" e
+           JOIN "QLearnCourse" c ON c."id" = e."courseId"
+          WHERE e."userId" = $1
+          ORDER BY e."enrolledAt" DESC`,
+        [userId],
+      );
+      return { rows: rows as EnrollmentWithCourse[], failed: false };
+    } catch (e) {
+      console.error("[QLearn] my enrollments read failed", e);
+      return { rows: [], failed: true };
+    }
+  }
+  const rows = Array.from(memEnrollments.values())
+    .filter((e) => e.userId === userId)
+    .map((e) => {
+      const c = memCourses.get(e.courseId);
+      return {
+        ...e,
+        courseTitle: c?.title ?? null,
+        category: c?.category ?? null,
+        level: c?.level ?? null,
+        description: c?.description ?? null,
+      };
+    });
+  return { rows, failed: false };
+}
+
 /** Название курса для сертификата — из того же хранилища, что и сам курс. */
 async function courseTitleById(courseId: string): Promise<string | null> {
   if (isQLearnDbReady()) {
@@ -635,28 +688,14 @@ qlearnRouter.get("/me/enrollments", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
 
-  if (isQLearnDbReady()) {
-    try {
-      const rows = await pool.query(
-        `SELECT e.*, c."title" AS "courseTitle", c."category", c."level"
-         FROM "QLearnEnrollment" e
-         JOIN "QLearnCourse" c ON c."id" = e."courseId"
-         WHERE e."userId" = $1
-         ORDER BY e."enrolledAt" DESC`,
-        [auth.sub],
-      );
-      res.json({ enrollments: rows.rows, total: rows.rowCount ?? rows.rows.length });
-      return;
-    } catch (e) {
-      // Пустой список на отказ базы читается как «вы никуда не записаны» —
-      // и человек записывается заново, платя второй раз за то же.
-      console.error("[QLearn] GET /me/enrollments DB error", e);
-      res.status(503).json({ error: "storage_unavailable", warning: WARN });
-      return;
-    }
+  const { rows, failed } = await myEnrollments(auth.sub);
+  if (failed) {
+    // Пустой список на отказ базы читается как «вы никуда не записаны»,
+    // и человек записывается заново, платя второй раз за тот же курс.
+    res.status(503).json({ error: "storage_unavailable", warning: WARN });
+    return;
   }
-  const enrollments = Array.from(memEnrollments.values()).filter((e) => e.userId === auth.sub);
-  res.json({ enrollments, total: enrollments.length });
+  res.json({ enrollments: rows, total: rows.length });
 });
 
 // PATCH /api/qlearn/enrollments/:id/progress
@@ -994,28 +1033,35 @@ qlearnRouter.get("/me/progress", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
 
-  const mine = Array.from(memEnrollments.values()).filter((e) => e.userId === auth.sub);
+  // Раньше здесь читалась ТОЛЬКО память: на проде она пуста после каждой
+  // выкатки, и раздел «Continue learning» на странице был пуст всегда.
+  const { rows: mine, failed } = await myEnrollments(auth.sub);
+  if (failed) {
+    // Пустая сводка на неотвеченный вопрос выглядит как «вы ничего не
+    // проходите» — то есть отказ хранилища притворяется фактом о человеке.
+    res.status(503).json({ error: "storage_unavailable", warning: WARN });
+    return;
+  }
   const certIds = new Set((await certsByUser(auth.sub)).map((c) => c.enrollmentId));
   const hydrated = mine.map((e) => {
-    const course = memCourses.get(e.courseId);
     const lastActivityAt = memEnrollmentActivity.get(`${e.courseId}::${auth.sub}`) ?? e.enrolledAt;
-    // Раньше смотрели ТОЛЬКО в память: после выкатки у человека, прошедшего
+    // Раньше смотрели ТОЛЬКО в память: после выкатки у человека оставался
     // курс, значок сертификата исчезал вместе с самим сертификатом.
     const hasCertificate = certIds.has(e.id);
     return {
       enrollmentId: e.id,
       courseId: e.courseId,
-      progress: e.progress,
+      progress: Number(e.progress),
       enrolledAt: e.enrolledAt,
       lastActivityAt,
       hasCertificate,
-      course: course
+      course: e.courseTitle
         ? {
-            id: course.id,
-            title: course.title,
-            category: course.category,
-            level: course.level,
-            description: course.description,
+            id: e.courseId,
+            title: e.courseTitle,
+            category: e.category,
+            level: e.level,
+            description: e.description,
           }
         : null,
     };

@@ -20,7 +20,10 @@ import jwt from "jsonwebtoken";
 
 const COURSE_ID = "course-1";
 const USER = "learner-1";
-const enrollments = new Map<string, { id: string; courseId: string; userId: string; progress: number }>();
+const enrollments = new Map<
+  string,
+  { id: string; courseId: string; userId: string; progress: number; enrolledAt: string }
+>();
 const certs = new Map<string, Record<string, string>>();
 
 vi.mock("../src/lib/dbPool", () => ({
@@ -37,10 +40,35 @@ vi.mock("../src/lib/dbPool", () => ({
           : { rows: [], rowCount: 0 };
       }
       if (s.includes('INSERT INTO "QLearnEnrollment"')) {
-        enrollments.set(p[0], { id: p[0], courseId: p[1], userId: p[2], progress: 0 });
+        // enrolledAt в базе NOT NULL DEFAULT NOW(); в стенде его не было, и
+        // сортировка обзора падала на undefined.localeCompare — 500. Дефект был
+        // в стенде, а не в маршруте, поэтому подставляем настоящее значение,
+        // а не прикрываем маршрут значением по умолчанию.
+        enrollments.set(p[0], {
+          id: p[0], courseId: p[1], userId: p[2], progress: 0,
+          enrolledAt: new Date().toISOString(),
+        });
         return { rows: [{ id: p[0] }], rowCount: 1 };
       }
       if (s.includes('UPDATE "QLearnCourse"')) return { rows: [], rowCount: 1 };
+      if (s.includes('JOIN "QLearnCourse"')) {
+        // Список моих зачислений вместе с курсом. Ветку держим ОТДЕЛЬНО от
+        // выборки по id: обе содержат FROM "QLearnEnrollment", и без этого
+        // условия JOIN попадал в ветку «найти по id» и отвечал пустотой —
+        // тест краснел бы на исправном коде.
+        const rows = [...enrollments.values()]
+          .filter((e) => e.userId === p[0])
+          .map((e) => ({
+            ...e,
+            // Стенд уважает СПИСОК КОЛОНОК: без этого «JOIN потерял название»
+            // было не отличить от исправного кода — мутация проходила молча.
+            courseTitle: s.includes('c."title"') ? "Настоящий курс" : null,
+            category: s.includes('c."category"') ? "tech" : null,
+            level: s.includes('c."level"') ? "beginner" : null,
+            description: s.includes('c."description"') ? "описание" : null,
+          }));
+        return { rows, rowCount: rows.length };
+      }
       if (s.includes('FROM "QLearnEnrollment"')) {
         const e = enrollments.get(p[0]);
         return e ? { rows: [e], rowCount: 1 } : { rows: [], rowCount: 0 };
@@ -180,5 +208,48 @@ describe("курс можно завершить, когда база жива",
       .set("Authorization", `Bearer ${TOKEN}`)
       .send({ progress: 100 });
     expect(certs.size, "в базу ничего не записано — сертификат живёт до перезапуска").toBe(before + 1);
+  });
+
+  test("обзор обучения видит курс при живой базе, а не пустоту", async () => {
+    // Раздел «Continue learning» на странице /qlearn питается этой ручкой.
+    // Она не обращалась к базе НИ РАЗУ и потому была пуста на проде всегда.
+    const enr = await request(app())
+      .post(`/x/courses/${COURSE_ID}/enroll`)
+      .set("Authorization", `Bearer ${TOKEN}`);
+    const id = enr.body.enrollmentId as string;
+
+    const fresh = await request(app())
+      .get("/x/me/progress")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(fresh.status).toBe(200);
+    expect(fresh.body?.summary?.total, "сводка пуста при живой базе").toBeGreaterThan(0);
+    expect(
+      fresh.body?.notStarted?.[0]?.course?.title,
+      "название курса не доехало: JOIN потерян",
+    ).toBe("Настоящий курс");
+
+    await request(app())
+      .patch(`/x/enrollments/${id}/progress`)
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .send({ progress: 50 });
+
+    const midway = await request(app())
+      .get("/x/me/progress")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(
+      midway.body?.continueLearning?.some((x: { enrollmentId: string }) => x.enrollmentId === id),
+      "начатый курс не попал в «продолжить обучение»",
+    ).toBe(true);
+  });
+
+  test("мои зачисления отдают курс, а не голый идентификатор", async () => {
+    await request(app())
+      .post(`/x/courses/${COURSE_ID}/enroll`)
+      .set("Authorization", `Bearer ${TOKEN}`);
+    const res = await request(app())
+      .get("/x/me/enrollments")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(res.status).toBe(200);
+    expect(res.body?.enrollments?.[0]?.courseTitle).toBe("Настоящий курс");
   });
 });

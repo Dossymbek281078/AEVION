@@ -298,14 +298,14 @@ venturesRouter.post("/submit", submitLimiter, async (req: Request, res: Response
          VALUES ($1, $2, $3, $4, $5, 'pending')`,
         [id, name, pitch, model, ceiling],
       );
-      return res.status(201).json({ ok: true, id, status: "pending", note: "Идея принята — попадёт на маркет после проверки." });
+      return res.status(201).json({ ok: true, id, status: "pending", note: "Идея принята — попадёт на маркет после проверки.", storage: "db" });
     } catch (err) {
       captureVenturesError(err, { route: "ventures/POST/submit" });
       // fall through to memory
     }
   }
   memSubmissions.push({ id, name, pitch, model, ceiling, status: "pending", createdAt });
-  res.status(201).json({ ok: true, id, status: "pending", note: "Идея принята — попадёт на маркет после проверки." });
+  res.status(201).json({ ok: true, id, status: "pending", note: "Идея принята — попадёт на маркет после проверки.", storage: "memory" });
 });
 
 venturesRouter.get("/submissions", async (_req, res) => {

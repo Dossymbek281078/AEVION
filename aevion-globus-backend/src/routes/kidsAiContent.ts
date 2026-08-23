@@ -42,6 +42,7 @@ import {
   type KidsAiSeedLesson,
 } from "../data/kidsAiSeed";
 import { containsUnsafe, gentleRedirect } from "../lib/kidsSafety";
+import { pgIntId } from "../lib/queryNumber";
 
 export const kidsAiContentRouter = Router();
 
@@ -325,8 +326,8 @@ kidsAiContentRouter.get("/lessons", async (req: Request, res: Response) => {
 // ─── GET /lessons/:id ───────────────────────────────────────────────────
 
 kidsAiContentRouter.get("/lessons/:id", async (req: Request, res: Response) => {
-  const id = Number(paramStr(req, "id"));
-  if (!Number.isFinite(id) || id <= 0) {
+  const id = pgIntId(paramStr(req, "id"));
+  if (id === null) {
     res.status(400).json({ error: "id must be a positive integer" });
     return;
   }
@@ -372,7 +373,7 @@ kidsAiContentRouter.post(
       lang?: unknown;
     };
 
-    const lessonId = Number(body.lessonId);
+    const lessonId = pgIntId(body.lessonId);
     const question =
       typeof body.question === "string" ? body.question.trim() : "";
     const lang = sanitizeLang(body.lang) ?? "ru";
@@ -400,7 +401,7 @@ kidsAiContentRouter.post(
 
     // Pull lesson context (best-effort — answer is still useful without it).
     let lessonContext: KidsLesson | null = null;
-    if (Number.isFinite(lessonId) && lessonId > 0) {
+    if (lessonId !== null) {
       if (isKidsAiDbReady()) {
         try {
           const r = await pool.query(
@@ -506,7 +507,7 @@ kidsAiContentRouter.post("/progress", async (req: Request, res: Response) => {
   };
 
   const alias = sanitizeAlias(body.childAlias);
-  const lessonId = Number(body.lessonId);
+  const lessonId = pgIntId(body.lessonId);
   const score =
     body.score === undefined || body.score === null
       ? null
@@ -516,7 +517,7 @@ kidsAiContentRouter.post("/progress", async (req: Request, res: Response) => {
     res.status(400).json({ error: "childAlias is required (1-64 chars)" });
     return;
   }
-  if (!Number.isFinite(lessonId) || lessonId <= 0) {
+  if (lessonId === null) {
     res.status(400).json({ error: "lessonId must be a positive integer" });
     return;
   }

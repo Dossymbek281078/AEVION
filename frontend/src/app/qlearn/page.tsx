@@ -321,6 +321,7 @@ function getToken(): string | null {
 
 export default function QLearnPage() {
   const [courses, setCourses] = useState<Course[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedLevel, setSelectedLevel] = useState("");
@@ -348,8 +349,22 @@ export default function QLearnPage() {
       if (selectedLevel) params.set("level", selectedLevel);
       const res = await fetch(apiUrl(`/api/qlearn/courses?${params}`));
       const data = await res.json();
+      // Отказ хранилища и пустой каталог — РАЗНЫЕ новости, а `|| []` и
+      // `catch { setCourses([]) }` превращали первое во второе: обе ветки
+      // вели к «курсов нет». С 21.08.2026 бэкенд отвечает 503 с объяснением.
+      if (!res.ok) {
+        setLoadError(
+          typeof data?.warning === "string"
+            ? data.warning
+            : "Каталог не загрузился. Это не значит, что курсов нет — попробуйте обновить страницу.",
+        );
+        setCourses([]);
+        return;
+      }
+      setLoadError(null);
       setCourses(data.courses || []);
     } catch {
+      setLoadError("Каталог не загрузился: не удалось связаться с сервером.");
       setCourses([]);
     } finally {
       setLoading(false);
@@ -832,6 +847,21 @@ export default function QLearnPage() {
           {loading ? (
             <div style={{ textAlign: "center", color: "#94a3b8", padding: "60px 0", fontSize: 15 }}>
               Loading courses...
+            </div>
+          ) : loadError ? (
+            // Отдельное состояние, а не «курсов нет»: пустой каталог при живой
+            // базе — ответ, пустой при упавшей — отказ. Говорить «пока пусто»
+            // в момент аварии значит выдавать сбой за законную пустоту.
+            <div
+              role="alert"
+              style={{ textAlign: "center", color: "#78350f", padding: "48px 20px" }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
+                Каталог не загрузился
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.55, maxWidth: 520, margin: "0 auto" }}>
+                {loadError}
+              </div>
             </div>
           ) : courses.length === 0 ? (
             <div style={{ textAlign: "center", color: "#94a3b8", padding: "60px 0" }}>

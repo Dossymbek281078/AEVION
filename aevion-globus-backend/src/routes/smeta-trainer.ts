@@ -611,7 +611,7 @@ smetaTrainerRouter.post("/student/:deviceId/attempt", writeLimiter, async (req, 
 smetaTrainerRouter.get("/student/:deviceId/attempts", readLimiter, async (req, res) => {
   const { deviceId } = req.params;
   if (!isValidDeviceId(deviceId)) return res.status(400).json({ error: "bad_device_id" });
-  const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
+  const limit = Math.max(1, Math.min(200, Math.max(Number(req.query.limit) || 50, 1)));
   const attempts = await loadAttempts();
   const filtered = attempts.filter((a) => a.deviceId === deviceId).slice(-limit).reverse();
   res.json({ attempts: filtered });
@@ -620,7 +620,7 @@ smetaTrainerRouter.get("/student/:deviceId/attempts", readLimiter, async (req, r
 // ── GET /leaderboard ───────────────────────────────────────────────
 // query: ?level=N&group=X&limit=20  (level/group optional)
 smetaTrainerRouter.get("/leaderboard", readLimiter, async (req, res) => {
-  const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
+  const limit = Math.max(1, Math.min(100, Math.max(Number(req.query.limit) || 20, 1)));
   const level = Number(req.query.level);
   const group = typeof req.query.group === "string" ? req.query.group.trim() : "";
   const students = await loadStudents();
@@ -684,7 +684,7 @@ smetaTrainerRouter.get("/groups", readLimiter, async (_req, res) => {
 smetaTrainerRouter.get("/admin/students", readLimiter, async (req, res) => {
   const userId = readUserIdFromBearer(req);
   if (!userId) return res.status(401).json({ error: "auth_required" });
-  const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 200));
+  const limit = Math.max(1, Math.min(500, Math.max(Number(req.query.limit) || 200, 1)));
   const group = typeof req.query.group === "string" ? req.query.group.trim() : "";
   const students = await loadStudents();
   let entries = Object.values(students);

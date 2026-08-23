@@ -7,6 +7,9 @@ import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { ensureQNewsTables, isQNewsDbReady } from "../lib/ensureQNewsTables";
 
+const WARN =
+  "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
+
 const captureQNewsError = makeServiceCapture("qnews");
 
 const pool = getPool();
@@ -161,7 +164,12 @@ function param(req: Request, key: string): string {
 
 // ─── GET /api/qnews/health ───────────────────────────────────────────────────
 qnewsRouter.get("/health", (_req: Request, res: Response) => {
-  res.json({ ok: true, service: "qnews" });
+  // Состояние базы в ручке здоровья. Добавлено 19.08.2026: сторож
+  // запасного хранилища опрашивает модули и до этого видел 9 из 12 —
+  // остальные просто не публиковали поле, и их молчание читалось как
+  // благополучие. Поле дешёвое, а без него нельзя ответить на вопрос
+  // «пишет ли прод в память вместо базы».
+  res.json({ ok: true, service: "qnews", db: isQNewsDbReady() ? "postgres" : "memory" });
 });
 
 // ─── GET /api/qnews/categories ───────────────────────────────────────────────
@@ -238,7 +246,12 @@ qnewsRouter.get("/articles/:id", async (req: Request, res: Response) => {
       if (rows[0]) return res.json({ article: rows[0] });
       return res.status(404).json({ error: "not_found" });
     }
-  } catch (e) { console.error("[QNews] GET /articles/:id DB error", e); }
+  } catch (e) {
+    console.error("[QNews] GET /articles/:id DB error", e);
+    // База объявлена готовой и упала — ниже пустая в проде память, и оттуда
+    // ушёл бы 404 на существующую статью.
+    return res.status(503).json({ error: "storage_unavailable", warning: WARN });
+  }
   const article = memNews.get(id);
   if (!article) return res.status(404).json({ error: "not_found" });
   return res.json({ article });
@@ -283,12 +296,12 @@ qnewsRouter.post("/articles", submitLimiter, async (req: Request, res: Response)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
         [article.id, article.title, article.summary, article.url, article.source, article.category, article.tags, auth.sub],
       );
-      return res.status(201).json({ article });
+      return res.status(201).json({ article, storage: "db" });
     }
   } catch (e) { console.error("[QNews] POST /articles DB error", e); }
 
   memNews.set(article.id, article);
-  return res.status(201).json({ article });
+  return res.status(201).json({ article, storage: "memory" });
 });
 
 // ─── POST /api/qnews/articles/:id/bookmark — toggle bookmark ─────────────────
@@ -311,7 +324,7 @@ qnewsRouter.post("/articles/:id/bookmark", async (req: Request, res: Response) =
           `INSERT INTO "QNewsBookmark"("id","userId","articleId") VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
           [crypto.randomUUID(), auth.sub, id],
         );
-        return res.json({ bookmarked: true });
+        return res.json({ bookmarked: true, storage: "db" });
       }
     }
   } catch (e) { console.error("[QNews] bookmark DB error", e); }
@@ -320,7 +333,7 @@ qnewsRouter.post("/articles/:id/bookmark", async (req: Request, res: Response) =
   const key = `${auth.sub}:${id}`;
   const bookmarked = !memBookmarks.get(key);
   if (bookmarked) memBookmarks.set(key, true); else memBookmarks.delete(key);
-  return res.json({ bookmarked });
+  return res.json({ bookmarked, storage: "memory" });
 });
 
 // ─── GET /api/qnews/me/bookmarks — my bookmarked articles ────────────────────

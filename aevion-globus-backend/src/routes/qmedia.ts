@@ -35,7 +35,7 @@ qmediaRouter.get("/tracks", async (req, res) => {
   try {
     const genre = typeof req.query.genre === "string" ? req.query.genre : null;
     const q = typeof req.query.q === "string" ? req.query.q.toLowerCase() : null;
-    const limit = Math.min(50, Number(req.query.limit) || 20);
+    const limit = Math.min(50, Math.max(Number(req.query.limit) || 20, 1));
     let tracks = Array.from(memTracks.values()).filter(t => t.isPublic);
     if (genre) tracks = tracks.filter(t => t.genre === genre);
     if (q) tracks = tracks.filter(t => t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q));
@@ -178,7 +178,7 @@ qmediaRouter.get("/videos", async (req, res) => {
   try {
     const category = typeof req.query.category === "string" ? req.query.category : null;
     const q = typeof req.query.q === "string" ? req.query.q.toLowerCase() : null;
-    const limit = Math.min(50, Number(req.query.limit) || 20);
+    const limit = Math.min(50, Math.max(Number(req.query.limit) || 20, 1));
     let videos = Array.from(memVideos.values()).filter(v => v.isPublic);
     if (category) videos = videos.filter(v => v.category === category);
     if (q) videos = videos.filter(v => v.title.toLowerCase().includes(q));

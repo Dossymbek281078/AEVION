@@ -1,0 +1,143 @@
+import { describe, test, expect } from "vitest";
+import express from "express";
+import request from "supertest";
+import { qmelaninRouter } from "../src/routes/qmelanin";
+import { longevityRouter } from "../src/routes/longevity";
+
+/**
+ * Пустая анкета — не «низкий риск».
+ *
+ * Найдено 20.08.2026 замером записей. `POST /api/qmelanin/assessment` с телом
+ * `{}` отвечал:
+ *
+ *   { riskScore: 0, riskBand: "low", factors: [] }
+ *
+ * У каждого поля есть умолчание — возраст 40, стресс 0, сон 7 часов, питание
+ * «смешанное», а familyHistory и smoking приходят через Boolean(undefined),
+ * то есть false. Ни одно из них человек не называл. Проверено на проде.
+ *
+ * В модуле про здоровье это опаснее отказа: отказ видно, а успокаивающий ответ
+ * принимают на веру. «Факторов не найдено» читается как «мы проверили».
+ * Отсутствие данных — не признак благополучия.
+ */
+
+function app() {
+  const a = express();
+  a.use(express.json());
+  a.use("/api/qmelanin", qmelaninRouter);
+  a.use("/api/longevity", longevityRouter);
+  return a;
+}
+
+describe("оценка риска не выдумывается из умолчаний", () => {
+  test("пустое тело даёт unknown, а не low", async () => {
+    const res = await request(app()).post("/api/qmelanin/assessment").send({});
+    expect(res.status).toBe(200);
+    expect(res.body.riskBand, "снова успокаивает без данных").not.toBe("low");
+    expect(res.body.riskBand).toBe("unknown");
+    expect(res.body.riskScore, "ноль читается как измерение").toBeNull();
+    expect(String(res.body.warning ?? ""), "нет объяснения человеку").toMatch(/не заполнена/);
+  });
+
+  test("не зная ничего, панель обследования не сужается", async () => {
+    const empty = await request(app()).post("/api/qmelanin/assessment").send({});
+    const low = await request(app())
+      .post("/api/qmelanin/assessment")
+      .send({ onsetAge: 55, familyHistory: false, smoking: false, stress: 1, sleepHours: 8, diet: "mixed" });
+    expect(low.body.riskBand).toBe("low");
+    expect(
+      empty.body.recommendedPanel.length,
+      "при пустой анкете панель урезана до короткой, как при подтверждённом низком риске",
+    ).toBeGreaterThan(low.body.recommendedPanel.length);
+  });
+
+  test("видно, что заполнено, а что подставлено", async () => {
+    const res = await request(app())
+      .post("/api/qmelanin/assessment")
+      .send({ smoking: true, age: 33 });
+    expect(res.body.answered).toEqual(["smoking"]);
+    expect(res.body.assumed).toContain("sleepHours");
+    expect(res.body.assumed).toContain("diet");
+    expect(res.body.riskBand, "одно поле — уже есть что оценивать").not.toBe("unknown");
+  });
+
+  test("контроль: заполненная анкета работает как раньше", async () => {
+    const res = await request(app())
+      .post("/api/qmelanin/assessment")
+      .send({ age: 30, onsetAge: 25, familyHistory: true, smoking: true, stress: 8, sleepHours: 5, diet: "vegan" });
+    expect(res.body.riskBand).toBe("high");
+    expect(res.body.riskScore).toBeGreaterThanOrEqual(5);
+    expect(res.body.factors.length).toBeGreaterThan(3);
+    expect(res.body.warning, "предупреждение не должно появляться на полной анкете").toBeUndefined();
+  });
+});
+
+describe("соседние ручки того же класса", () => {
+  test("longevity: пустое тело не выдаётся за «отклонений нет»", async () => {
+    const res = await request(app()).post("/api/longevity/assess").send({});
+    expect(res.status).toBe(200);
+    expect(res.body.flaggedCount).toBe(0); // само по себе верно
+    expect(res.body.measuredCount, "не видно, что мерить было нечего").toBe(0);
+    expect(String(res.body.warning ?? ""), "ноль без пояснения читается как хорошая новость").toMatch(
+      /не передано/,
+    );
+  });
+
+  test("longevity: контроль — с реальными значениями предупреждения нет", async () => {
+    const res = await request(app())
+      .post("/api/longevity/assess")
+      .send({ values: { vitD: 15 } });
+    expect(res.body.measuredCount).toBeGreaterThan(0);
+    expect(res.body.warning).toBeUndefined();
+  });
+
+  test("qmelanin /plan: пустое тело не выдаётся за «дефицитов нет»", async () => {
+    const res = await request(app()).post("/api/qmelanin/plan").send({});
+    expect(res.body.personalised, "общий план выдаётся за персональный").toBe(false);
+    expect(String(res.body.summary ?? ""), "сводка утверждает результат проверки").not.toMatch(
+      /дефицитов по порогам нет/,
+    );
+    expect(String(res.body.warning ?? "")).toMatch(/общий/);
+  });
+
+  test("qmelanin /plan: контроль — со списком дефицитов план персональный", async () => {
+    const res = await request(app())
+      .post("/api/qmelanin/plan")
+      .send({ deficientKeys: ["ferritin"] });
+    expect(res.body.personalised).toBe(true);
+    expect(res.body.targeted.length).toBeGreaterThan(0);
+    expect(res.body.warning).toBeUndefined();
+  });
+});
+
+describe("тело, которое реально шлёт витрина", () => {
+  // Зонд слал {}. Витрина шлёт `values` ВСЕГДА — при пустой форме это пустой
+  // объект, и первая версия признака (Boolean(b.values)) его пропускала:
+  // проверка молчала ровно в том случае, ради которого написана.
+  test("qmelanin /plan: values: {} — это тоже «данных нет»", async () => {
+    const res = await request(app()).post("/api/qmelanin/plan").send({ values: {} });
+    expect(res.body.personalised, "пустая форма выдаётся за персональный план").toBe(false);
+    expect(String(res.body.summary ?? "")).not.toMatch(/дефицитов по порогам нет/);
+  });
+
+  test("qmelanin /plan: пустой список дефицитов — тоже не результат проверки", async () => {
+    const res = await request(app()).post("/api/qmelanin/plan").send({ deficientKeys: [] });
+    expect(res.body.personalised).toBe(false);
+  });
+
+  test("контроль: одно настоящее значение включает персонализацию", async () => {
+    const res = await request(app())
+      .post("/api/qmelanin/plan")
+      .send({ values: { ferritin: 12 } });
+    expect(res.body.personalised).toBe(true);
+    expect(res.body.warning).toBeUndefined();
+  });
+
+  test("longevity: values: {} даёт measuredCount 0 и предупреждение", async () => {
+    const res = await request(app())
+      .post("/api/longevity/assess")
+      .send({ values: {}, flags: {} });
+    expect(res.body.measuredCount).toBe(0);
+    expect(String(res.body.warning ?? "")).toMatch(/не передано/);
+  });
+});

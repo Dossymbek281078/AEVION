@@ -278,7 +278,7 @@ function EventCard({
 
 // ─── Create Event Modal ───────────────────────────────────────────────────────
 
-function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreated: (event: QEvent) => void }) {
+function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreated: (event: QEvent, storage?: string) => void }) {
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -316,8 +316,12 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
         setError(j.error ?? "Failed to create");
         return;
       }
-      const { event } = await resp.json() as { event: QEvent };
-      onCreated(event);
+      // Бэкенд с 19.08.2026 честно говорит, куда легло событие: при
+      // недоступной базе оно уходит в память процесса и не переживёт
+      // перезапуск. До этой правки страница поле ВЫБРАСЫВАЛА — метка доехала,
+      // а человек её не видел, то есть починка была ровно наполовину.
+      const { event, storage } = await resp.json() as { event: QEvent; storage?: string };
+      onCreated(event, storage);
       onClose();
     } catch {
       setError("Network error");
@@ -585,6 +589,7 @@ export default function QEventsPage() {
   const [category, setCategory] = useState("");
   const [when, setWhen] = useState<WhenFilter>("upcoming");
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const currentUserId = getAuthSub();
 
@@ -613,8 +618,15 @@ export default function QEventsPage() {
     );
   }
 
-  function handleCreated(event: QEvent) {
+  function handleCreated(event: QEvent, storage?: string) {
     setEvents((prev) => [event, ...prev]);
+    // Человек только что позвал людей на встречу. Если запись не переживёт
+    // перезапуск, он должен узнать это сейчас, а не когда придут гости.
+    setStorageWarning(
+      storage === "memory"
+        ? "Хранилище временно недоступно. Событие создано, но НЕ переживёт перезапуск сервиса — сохраните данные и создайте его заново позже."
+        : null,
+    );
   }
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
@@ -639,6 +651,18 @@ export default function QEventsPage() {
         />
       )}
       <ProductPageShell>
+        {storageWarning && (
+          <div
+            role="alert"
+            style={{
+              border: "1px solid #fbbf24", background: "#fffbeb", color: "#78350f",
+              borderRadius: 10, padding: "12px 14px", marginBottom: 16,
+              fontSize: 14, lineHeight: 1.55,
+            }}
+          >
+            <b>Событие сохранено не насовсем.</b> {storageWarning}
+          </div>
+        )}
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
           <div>

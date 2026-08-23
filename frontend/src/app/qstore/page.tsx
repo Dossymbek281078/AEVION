@@ -210,6 +210,7 @@ interface CreateForm {
 export default function QStorePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [searchQ, setSearchQ] = useState("");
   const [sortBy, setSortBy] = useState<string>("popular");
@@ -235,6 +236,20 @@ export default function QStorePage() {
         if (sortBy) params.set("sort", sortBy);
         const res = await fetch(apiUrl(`/api/qstore/products?${params}`));
         const data = await res.json();
+        // Отказ хранилища и пустой каталог — РАЗНЫЕ новости, а `|| []`
+        // превращало первое во второе. С 21.08.2026 бэкенд отвечает 503 и
+        // объяснением вместо пустого списка; без этой проверки покупатель
+        // по-прежнему видел бы работающий пустой магазин и ушёл бы.
+        if (!res.ok) {
+          setLoadError(
+            typeof data?.warning === "string"
+              ? data.warning
+              : "Каталог не загрузился. Это не значит, что товаров нет — попробуйте обновить страницу.",
+          );
+          setProducts([]);
+          return;
+        }
+        setLoadError(null);
         setProducts(data.products || []);
       } else {
         const data = await catalog.qstore.products({
@@ -298,7 +313,13 @@ export default function QStorePage() {
       } else if (d.error?.includes("checkout_not_enabled")) {
         setNotice("Payment gateway is being verified — available within 1-3 days. Write us at support@aevion.app to purchase manually.");
       } else {
-        setNotice(d.error || "Purchase failed");
+        // Сервер отдаёт человеческий `message` рядом с машинным `error` —
+        // читаем именно его. Без этого покупатель видел бы код вроде
+        // "no_payment_provider": 19.08.2026 в бэкенде появились честные
+        // отказы вместо тихой выдачи товара без оплаты, и без этой строки
+        // одна незаметная неисправность заменилась бы другой — кнопкой,
+        // которая ругается непонятным словом.
+        setNotice(d.message || d.error || "Purchase failed");
       }
     } catch {
       setNotice("Network error");
@@ -613,6 +634,22 @@ export default function QStorePage() {
           {loading ? (
             <div style={{ textAlign: "center", color: "#94a3b8", padding: "60px 0", fontSize: 15 }}>
               Loading products...
+            </div>
+          ) : loadError ? (
+            // Отдельное состояние, а не «товаров нет». Пустой каталог при
+            // живой базе — это ответ; пустой при упавшей — отказ, и говорить
+            // «будьте первым» в этот момент значит выдавать сбой за законную
+            // пустоту: человек уйдёт, решив, что магазин пуст.
+            <div
+              role="alert"
+              style={{ textAlign: "center", color: "#78350f", padding: "48px 20px" }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
+                Каталог не загрузился
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.55, maxWidth: 520, margin: "0 auto" }}>
+                {loadError}
+              </div>
             </div>
           ) : products.length === 0 ? (
             <div style={{ textAlign: "center", color: "#94a3b8", padding: "60px 0" }}>

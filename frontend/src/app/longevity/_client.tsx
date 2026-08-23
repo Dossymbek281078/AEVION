@@ -5,6 +5,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 import { productById, withChannel } from "@/lib/products";
 import { BuyLink } from "@/components/BuyLink";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 
 // Longevity — the measure → act → re-measure protocol over the deterministic
 // backend. Three live tools: your assessment (flag out-of-range markers + get a
@@ -53,6 +54,10 @@ interface StackItem { id: string; name: string; domain: string; domainLabel: str
 interface Flagged { key: string; name: string; value: number; target: string; grade: string; }
 interface AssessResp {
   flaggedMarkers: Flagged[];
+  /** Сколько маркеров человек ВООБЩЕ прислал. Ноль отклонений при нуле
+   *  измерений — это не хорошая новость, а отсутствие обследования. */
+  measuredCount?: number;
+  warning?: string;
   recommendedStack: StackItem[];
   contraindicationGated: { name: string; reason: string }[];
   informOnly: { name: string; grade: string; note: string }[];
@@ -179,6 +184,15 @@ export default function LongevityClient({ channel = null }: { channel?: string |
 
           {assess && (
             <div style={styles.result}>
+              {/* Бэкенд с 20.08.2026 отличает «сдал анализы, всё в коридоре» от
+                  «не сдавал ничего». До этой вставки страница показывала оба
+                  случая одинаково — пустым списком отклонений, который человек
+                  читает как хорошую новость. */}
+              {assess.measuredCount === 0 && assess.warning && (
+                <div role="alert" style={styles.noDataWarning}>
+                  <b>Оценка не проведена.</b> {assess.warning}
+                </div>
+              )}
               {assess.flaggedMarkers.length > 0 && (
                 <>
                   <div style={styles.blockTitle}>Вне коридора ({assess.flaggedMarkers.length})</div>
@@ -338,6 +352,21 @@ export default function LongevityClient({ channel = null }: { channel?: string |
           </BuyLink>
         )}
 
+
+        {/* Сбор адреса ставится ЗДЕСЬ, а не на /go, и вот почему.
+            /go — перевалочная страница: на ней не задерживаются. Ценность
+            человек получает тут: панель маркеров, стек с градацией
+            доказательности, двенадцать недель. Замер 20.08.2026: форма была
+            только на /go, то есть посетитель забирал всё и уходил, не оставив
+            контакта. Подписчиков в системе на тот момент было три. */}
+        <WaitlistCapture
+          source="longevity"
+          tone="dark"
+          title="Прислать, когда протокол обновится"
+          description="Разбор пересматривается, когда выходят новые исследования: что-то поднимается в градации, что-то опускается. Оставьте адрес — напишем, если изменится то, что вы уже делаете."
+          promise="Пишем только по делу — при изменении градации или панели. Отписка одной ссылкой."
+          buttonLabel="Присылать обновления"
+        />
         <p style={styles.foot}>
           Связанные модули: <a href="/qrenew" style={styles.link}>QRenew</a> (биовозраст) · <a href="/qmelanin" style={styles.link}>QMelanin</a> (пигмент, Zn:Cu) · <a href="/shop" style={styles.link}>магазин</a>.
         </p>
@@ -443,4 +472,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     whiteSpace: "nowrap",
   },
+  noDataWarning: {
+    border: "1px solid #fbbf24", background: "#fffbeb", color: "#78350f",
+    borderRadius: 10, padding: "12px 14px", marginBottom: 16,
+    fontSize: 14, lineHeight: 1.55,
+  }
 };

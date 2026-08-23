@@ -39,7 +39,7 @@ export default function Image() {
         каждый ход считается
       </div>
       <div style={{ fontSize: 22, color: "#94a3b8", textAlign: "center", marginBottom: 48, maxWidth: 980, lineHeight: 1.4 }}>
-        AI-коуч Алексей · Composite Performance Index по 11 факторам · Game DNA · 5800+ пазлов · live-комментарии
+        AI-коуч Алексей · Composite Performance Index по 11 факторам · Game DNA · 500 000+ задач · live-комментарии
       </div>
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>

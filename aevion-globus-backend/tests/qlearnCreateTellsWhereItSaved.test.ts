@@ -4,14 +4,17 @@ import request from "supertest";
 import jwt from "jsonwebtoken";
 
 /**
- * Создание курса и урока: 201 не должен быть неотличим от сохранения.
+ * База НАСТРОЕНА, но упала: создание и чтение обязаны сказать «не смог»,
+ * а не выдать отсутствие или успех в памяти процесса.
  *
- * При отказе базы запись уходила в память процесса, а ответ был ровно тем же —
- * 201 с объектом. Автор считает курс созданным; курс живёт до перезапуска.
+ * Замер 21–23.08.2026. Курс и урок при отказе базы уходили в память и
+ * отвечали 201: автор считал курс созданным, добавлял к нему уроки и терял
+ * всё при перезапуске. Чтения отвечали ОТСУТСТВИЕМ: урок «не найден», список
+ * зачислений ПУСТ — человек решает, что не записан, и платит второй раз.
  *
- * Строка с признаком достижима в двух случаях, и оба честны: база не настроена
- * вовсе (тогда память И ЕСТЬ хранилище) и база упала. В обоих запись не в базе,
- * и говорить об этом надо одинаково.
+ * Признак `storage: "memory"` остаётся верным для развёртывания БЕЗ базы,
+ * где память и есть хранилище: он проверяется в qlearnNoDbTellsWhereItSaved.
+ * Здесь база есть, и «сохранено в памяти» — ловушка, а не сведения.
  */
 
 vi.mock("../src/lib/dbPool", () => ({
@@ -41,34 +44,61 @@ function app() {
   return a;
 }
 
-describe("QLearn: создание говорит, куда сохранило", () => {
-  test("курс", async () => {
+describe("база настроена, но упала: отказ вместо ложного успеха", () => {
+  test("создание курса — 503, а не «создан» в памяти процесса", async () => {
     const res = await request(app())
       .post("/x/me/courses")
       .set("Authorization", `Bearer ${TOKEN}`)
-      .send({ title: "Курс", description: "о чём-то", category: "tech", level: "beginner" });
-    expect(res.status, `неожиданный ответ ${res.status}: проверка не состоялась`).toBe(201);
-    expect(res.body?.storage, "201 неотличим от настоящего сохранения").toBe("memory");
-    expect(String(res.body?.warning ?? "")).toMatch(/до перезапуска/);
+      .send({ title: "Курс", description: "о чём-то", category: "tech" });
+    expect(res.status, `курс ответил ${res.status}: ${JSON.stringify(res.body)}`).toBe(503);
+    expect(res.body?.error).toBe("storage_unavailable");
   });
 
-  test("урок", async () => {
+  test("контроль: отказ приходит от ХРАНИЛИЩА, а не от разбора запроса", async () => {
+    // Без обязательного поля ответ обязан остаться 400: иначе «503 на всё»
+    // выглядело бы как работающая проверка, ничего на деле не проверяя.
     const res = await request(app())
+      .post("/x/me/courses")
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .send({ description: "без названия" });
+    expect(res.status).toBe(400);
+  });
+
+  test("отказ базы на прогрессе и завершении — 503, а не «зачисления нет»", async () => {
+    // «Спросить не удалось» и «такого нет» — разные ответы. 404 на отказ базы
+    // законен на вид и потому незаметен: человек решает, что записи нет, и
+    // записывается заново.
+    const prog = await request(app())
+      .patch("/x/enrollments/enr-1/progress")
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .send({ progress: 50 });
+    expect(prog.status, `прогресс ответил ${prog.status}: ${JSON.stringify(prog.body)}`).toBe(503);
+    expect(prog.body?.error).toBe("storage_unavailable");
+
+    const done = await request(app())
+      .post("/x/enrollments/enr-1/complete")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(done.status, `завершение ответило ${done.status}: ${JSON.stringify(done.body)}`).toBe(503);
+    expect(done.body?.error).toBe("storage_unavailable");
+  });
+
+  test("отказ базы на чтениях — 503, а не «ничего нет»", async () => {
+    // Три ручки отвечали отсутствием на неотвеченный вопрос: урок «не найден»,
+    // список зачислений ПУСТ («вы никуда не записаны» — и человек платит
+    // второй раз за тот же курс), курс «не найден» его же автору.
+    const lesson = await request(app()).get("/x/courses/c1/lessons/l1");
+    expect(lesson.status, `урок ответил ${lesson.status}`).toBe(503);
+
+    const mine = await request(app())
+      .get("/x/me/enrollments")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(mine.status, `список зачислений ответил ${mine.status}`).toBe(503);
+    expect(mine.body?.enrollments, "пустой список выдан за настоящий ответ").toBeUndefined();
+
+    const addLesson = await request(app())
       .post("/x/me/courses/c1/lessons")
       .set("Authorization", `Bearer ${TOKEN}`)
-      .send({ title: "Урок", content: "текст", order: 1 });
-    expect(res.status, `неожиданный ответ ${res.status}: проверка не состоялась`).toBe(201);
-    expect(res.body?.storage).toBe("memory");
-  });
-
-  test("контроль: курс всё же СОЗДАН, а не отвергнут", async () => {
-    // Признак не должен подменять работу: запись обязана существовать, просто
-    // не в базе. Иначе «честность» превратилась бы в потерю функции.
-    const res = await request(app())
-      .post("/x/me/courses")
-      .set("Authorization", `Bearer ${TOKEN}`)
-      .send({ title: "Второй", description: "d", category: "tech", level: "beginner" });
-    expect(res.body?.course?.id, "объект курса не вернулся").toBeTruthy();
-    expect(res.body?.course?.title).toBe("Второй");
+      .send({ title: "Урок", content: "текст" });
+    expect(addLesson.status, `добавление урока ответило ${addLesson.status}`).toBe(503);
   });
 });

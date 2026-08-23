@@ -172,6 +172,50 @@ function rowToCert(r: Record<string, unknown>): Certificate {
 }
 
 /**
+ * Прочитать зачисление ТАК ЖЕ, как оно записано.
+ *
+ * Замер 23.08.2026: `POST /courses/:id/enroll` при живой базе пишет в Postgres
+ * и в memEnrollments НЕ дублирует, а `POST /enrollments/:id/complete` читал
+ * ИМЕННО память — то есть на проде отвечал «Enrollment not found» о зачислении,
+ * которое сам же создал минуту назад. Курс нельзя было завершить, а сертификат
+ * получить, НИКОГДА, пока база жива. Тестов на это не было: все проверки шли по
+ * пути «базы нет», где память и есть хранилище.
+ *
+ * `failed` отличает «зачисления нет» от «спросить не удалось»: первое — 404,
+ * второе — 503. Неотвеченный вопрос не равен отсутствию.
+ */
+async function enrollmentById(
+  id: string,
+): Promise<{ enrollment: Enrollment | null; failed: boolean }> {
+  if (isQLearnDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM "QLearnEnrollment" WHERE "id" = $1`, [id]);
+      return { enrollment: rows[0] ? (rows[0] as Enrollment) : null, failed: false };
+    } catch (e) {
+      console.error("[QLearn] enrollment read failed", e);
+      return { enrollment: null, failed: true };
+    }
+  }
+  return { enrollment: memEnrollments.get(id) ?? null, failed: false };
+}
+
+/** Название курса для сертификата — из того же хранилища, что и сам курс. */
+async function courseTitleById(courseId: string): Promise<string | null> {
+  if (isQLearnDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT "title" FROM "QLearnCourse" WHERE "id" = $1`, [courseId]);
+      return rows[0] ? String(rows[0].title) : null;
+    } catch (e) {
+      console.error("[QLearn] course title read failed", e);
+      return null;
+    }
+  }
+  return memCourses.get(courseId)?.title ?? null;
+}
+
+/**
  * Создать сертификат ОДИН раз на зачисление.
  *
  * ON CONFLICT DO NOTHING + повторное чтение: если сертификат уже есть,
@@ -423,9 +467,17 @@ qlearnRouter.post("/me/courses", async (req: Request, res: Response) => {
       res.status(201).json({ course });
       return;
     } catch (e) {
+      // Курс, созданный ТОЛЬКО в памяти одного процесса, не создан: автор
+      // добавит к нему уроки и потеряет всё при перезапуске. Признак в теле
+      // (MEMORY_NOTE) честен, но состояние всё равно ловушка — поэтому отказ.
+      // Ниже по файлу тот же выбор сделан для записи на курс (21.08).
       console.error("[QLearn] POST /courses DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
     }
   }
+  // Сюда попадаем, только если базы НЕТ ВОВСЕ: тогда память И ЕСТЬ хранилище,
+  // и сказать об этом надо — но отказывать не в чем.
   memCourses.set(newId, course);
   res.status(201).json({ course, ...MEMORY_NOTE });
 });
@@ -446,8 +498,12 @@ qlearnRouter.post("/me/courses/:id/lessons", async (req: Request, res: Response)
       const courseRow = await pool.query(`SELECT "authorId" FROM "QLearnCourse" WHERE "id" = $1`, [courseId]);
       if (courseRow.rows.length === 0) { res.status(404).json({ error: "Course not found" }); return; }
       if (courseRow.rows[0].authorId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
-    } catch {
-      // fall through to in-memory check
+    } catch (e) {
+      // Отказ базы уводил в память: на проде она пуста, и автор существующего
+      // курса получал «Course not found». Урок при этом не создавался.
+      console.error("[QLearn] POST lessons DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
     }
   } else {
     const course = memCourses.get(courseId);
@@ -500,8 +556,12 @@ qlearnRouter.get("/courses/:id/lessons/:lessonId", async (req: Request, res: Res
       if (row.rows.length === 0) { res.status(404).json({ error: "Lesson not found" }); return; }
       res.json({ lesson: row.rows[0] });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // «Lesson not found» на отказ базы законен на вид и потому незаметен:
+      // человек решает, что урока нет, и уходит с курса.
+      console.error("[QLearn] GET lesson DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
     }
   }
   const lesson = memLessons.get(lessonId);
@@ -587,8 +647,12 @@ qlearnRouter.get("/me/enrollments", async (req: Request, res: Response) => {
       );
       res.json({ enrollments: rows.rows, total: rows.rowCount ?? rows.rows.length });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // Пустой список на отказ базы читается как «вы никуда не записаны» —
+      // и человек записывается заново, платя второй раз за то же.
+      console.error("[QLearn] GET /me/enrollments DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
     }
   }
   const enrollments = Array.from(memEnrollments.values()).filter((e) => e.userId === auth.sub);
@@ -607,6 +671,12 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
     return;
   }
 
+  // Раньше у ветки с живой базой был СВОЙ выход (res.json + return) до общего
+  // хвоста, и потому на проде не отрабатывало ничего из того, что ниже:
+  // ни отметка активности, ни выдача сертификата при 100%. Оба удобства
+  // работали только там, где база отсутствует, — то есть в тестах.
+  let enrollment: Enrollment | null = null;
+
   if (isQLearnDbReady()) {
     try {
       const row = await pool.query(`SELECT "userId" FROM "QLearnEnrollment" WHERE "id" = $1`, [enrollmentId]);
@@ -616,16 +686,22 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
         `UPDATE "QLearnEnrollment" SET "progress" = $2 WHERE "id" = $1 RETURNING *`,
         [enrollmentId, progress],
       );
-      res.json({ enrollment: updated.rows[0] });
+      enrollment = updated.rows[0] as Enrollment;
+    } catch (e) {
+      // Голый catch уводил управление вниз, в память: на проде она пуста, и
+      // отказ базы отвечал «Enrollment not found» либо тихо писал прогресс в
+      // память процесса и объявлял успех.
+      console.error("[QLearn] PATCH progress DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
       return;
-    } catch {
-      // fall through
     }
+  } else {
+    const mem = memEnrollments.get(enrollmentId);
+    if (!mem) { res.status(404).json({ error: "Enrollment not found" }); return; }
+    if (mem.userId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
+    mem.progress = progress;
+    enrollment = mem;
   }
-  const enrollment = memEnrollments.get(enrollmentId);
-  if (!enrollment) { res.status(404).json({ error: "Enrollment not found" }); return; }
-  if (enrollment.userId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
-  enrollment.progress = progress;
 
   // Streak + "continue learning" hooks
   recordActivity(auth.sub);
@@ -638,13 +714,13 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
   // перезапуска она отвечала «нет такого» — рождался второй сертификат с новым
   // номером, сегодняшней датой и ещё одной регистрацией в QRight.
   if (progress === 100) {
-    const course = memCourses.get(enrollment.courseId);
+    const courseTitle = await courseTitleById(enrollment.courseId);
     const { cert, created } = await certIssue({
       id: crypto.randomUUID(),
       enrollmentId,
       courseId: enrollment.courseId,
       userId: auth.sub,
-      courseTitle: course?.title ?? "Unknown Course",
+      courseTitle: courseTitle ?? "Unknown Course",
       completedAt: new Date().toISOString(),
       certificateNumber: "AEVION-" + Date.now(),
     });
@@ -662,23 +738,26 @@ qlearnRouter.post("/enrollments/:id/complete", async (req: Request, res: Respons
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
   const enrollmentId = param(req, "id");
 
-  const enrollment = memEnrollments.get(enrollmentId);
+  const { enrollment, failed } = await enrollmentById(enrollmentId);
+  if (failed) {
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
+  }
   if (!enrollment) { res.status(404).json({ error: "Enrollment not found" }); return; }
   if (enrollment.userId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
-  if (enrollment.progress !== 100) {
+  if (Number(enrollment.progress) !== 100) {
     res.status(400).json({ error: "progress must be 100 to complete" }); return;
   }
 
   const already = await certByEnrollment(enrollmentId);
   if (already) { res.json({ certificate: already }); return; }
 
-  const course = memCourses.get(enrollment.courseId);
+  const courseTitle = await courseTitleById(enrollment.courseId);
   const cert: Certificate = {
     id: crypto.randomUUID(),
     enrollmentId,
     courseId: enrollment.courseId,
     userId: auth.sub,
-    courseTitle: course?.title ?? "Unknown Course",
+    courseTitle: courseTitle ?? "Unknown Course",
     completedAt: new Date().toISOString(),
     certificateNumber: "AEVION-" + Date.now(),
   };

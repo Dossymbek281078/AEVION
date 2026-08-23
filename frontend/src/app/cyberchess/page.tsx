@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { knownUserId } from "./tournaments/playerIdentity";
+import { readDisplayName } from "./displayName";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -2031,7 +2032,7 @@ export default function CyberChessPage(){
     const evalCpHistory=analysis.length>0?analysis.map(a=>typeof a.cp==="number"?a.cp:0):undefined;
     const payload={
       gameId:spectatorGameIdRef.current||undefined,
-      hostName:(typeof window!=="undefined"?(localStorage.getItem("aevion_user_display_name")||"Anon"):"Anon"),
+      hostName:(readDisplayName()||"Игрок"),
       fen:game.fen(),
       hist,
       fenSnapshots:fenHist.length>0?fenHist:undefined,
@@ -2187,8 +2188,9 @@ export default function CyberChessPage(){
   useEffect(()=>{
     if(!matchmakingId||!on||hist.length===0)return;
     const candidateId=`mm_${matchmakingId}`;
-    const playerName=typeof window!=="undefined"
-      ?(localStorage.getItem("cyberchess.displayName")||"Игрок"):"Игрок";
+    // Через readDisplayName(), а не своим чтением одного ключа: там же лежат
+    // прежние названия, под которыми имя сохранилось у игравших раньше.
+    const playerName=readDisplayName()||"Игрок";
     const payload={
       gameId:mmSpectatorGameIdRef.current||candidateId,
       hostName:`⚔ P2P · ${playerName}`,

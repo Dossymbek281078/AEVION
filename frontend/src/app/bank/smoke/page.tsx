@@ -36,6 +36,7 @@
  */
 
 import Link from "next/link";
+import { setAuthToken } from "@/lib/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -87,7 +88,7 @@ function readToken(): string {
 
 function writeToken(t: string) {
   try {
-    localStorage.setItem(TOKEN_KEY, t);
+    setAuthToken(t);
   } catch {
     /* ignore */
   }

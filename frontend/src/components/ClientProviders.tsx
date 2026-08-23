@@ -1,5 +1,7 @@
 "use client";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { syncTokenAliases } from "@/lib/auth";
 import { I18nProvider } from "@/lib/i18n";
 import { ToastProvider } from "@/components/ToastProvider";
 import { PlanLimitToastBridge } from "@/components/PlanLimitToastBridge";
@@ -39,6 +41,15 @@ const BARE_PREFIXES = ["/go"];
 
 export function ClientProviders({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  // Псевдонимы токена — тем, кто вошёл ДО правки 10.08.2026. Десятки модулей
+  // читают токен под именами, которые боевой код никогда не писал; теперь их
+  // пишет владелец (src/lib/auth.ts), но у уже вошедших setAuthToken больше
+  // не вызовется — поэтому досинхронизация при старте. Идемпотентна и дешева:
+  // одно чтение localStorage, если пользователь не авторизован.
+  useEffect(() => {
+    syncTokenAliases();
+  }, []);
   const isApp = APP_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
   const isBare = BARE_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
   // CyberChess is a separate session/branch (see aevion-globus-backend/CLAUDE.md) —

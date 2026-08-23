@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
-import { getAuthToken } from "@/lib/auth";
 
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};

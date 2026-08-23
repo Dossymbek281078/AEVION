@@ -43,6 +43,26 @@ export const MODULE_NODES = 40;
 export const LIVE_MODULES = 36;
 /** Honest qualitative framing (from the #484 objectivity audit): deployed ≠ feature-complete. */
 export const FEATURE_COMPLETE_LABEL = "~a dozen feature-complete";
+/**
+ * Модули, у которых на /pitch есть собственная карточка-разбор с пруфами.
+ *
+ * Это НЕ реестровое «live» (LIVE_MODULES): реестр считает задеплоенное (36),
+ * а здесь — то, по чему в питче есть доказательный разбор (12). Числа разные
+ * по смыслу, поэтому и имена разные. Пока смысл был один («live»), герой
+ * страницы печатал «12 live MVPs of 33 planned nodes», а абзац ниже — «41
+ * product nodes»: читатель одной страницы видел два разных знаменателя.
+ *
+ * Заперто на длину массива `launchedModules` со `stage:"live"` сторожем
+ * pitchNumbers.guard.test.ts — считает файл, а не сверяет литерал с литералом.
+ */
+export const DEEP_DIVE_MODULES = 12;
+/**
+ * Узлы с обязательством отгрузить за 18 месяцев. Плановое число основателя,
+ * не замер: сторож проверяет только, что оно не больше MODULE_NODES и что
+ * «остальные N» в тексте рисков считаются из него, а не вписаны руками
+ * (было «13 из 41, остальные 15» — 13 + 15 не сходится ни с 40, ни с 41).
+ */
+export const COMMITTED_NODES = 13;
 
 // ── Market ─────────────────────────────────────────────────────────────────
 /** Top-down category context (IP licensing + creator economy + digital payments). */

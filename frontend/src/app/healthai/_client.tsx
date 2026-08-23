@@ -14,8 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { getAuthHeaders, getAuthToken, isAuthenticated } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import { getAuthToken, getAuthHeaders } from "@/lib/auth";
 import { getApiBase } from "@/lib/apiBase";
 
 // The rest of the frontend reaches the backend through getApiBase() — the

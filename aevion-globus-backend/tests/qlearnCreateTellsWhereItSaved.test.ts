@@ -95,6 +95,10 @@ describe("база настроена, но упала: отказ вместо 
     expect(mine.status, `список зачислений ответил ${mine.status}`).toBe(503);
     expect(mine.body?.enrollments, "пустой список выдан за настоящий ответ").toBeUndefined();
 
+    const quiz = await request(app()).get("/x/courses/c1/lessons/l1/quiz");
+    expect(quiz.status, `тест к уроку ответил ${quiz.status}`).toBe(503);
+    expect(quiz.body?.questions, "пустой тест выдан за «вопросов нет»").toBeUndefined();
+
     const marks = await request(app())
       .get("/x/me/bookmarks")
       .set("Authorization", `Bearer ${TOKEN}`);

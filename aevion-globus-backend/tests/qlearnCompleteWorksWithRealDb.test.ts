@@ -30,6 +30,10 @@ const enrollments = new Map<
 const certs = new Map<string, Record<string, string>>();
 const bookmarks = new Map<string, { userId: string; courseId: string; bookmarkedAt: string }>();
 const activity = new Set<string>();
+const quizzes: Array<{
+  id: string; lessonId: string; question: string;
+  options: string[]; correctIndex: number; explanation: string | null;
+}> = [];
 /** Метка, которую может поставить ТОЛЬКО база — память такую не породит. */
 const DB_ACTIVITY_STAMP = "2026-08-23T09:41:07.000Z";
 
@@ -92,6 +96,18 @@ vi.mock("../src/lib/dbPool", () => ({
         // не дали бы отличить чтение колонки от чтения памяти.
         if (s.includes('"lastActivityAt" = NOW()')) e.lastActivityAt = DB_ACTIVITY_STAMP;
         return { rows: [{ ...e }], rowCount: 1 };
+      }
+      if (s.includes('INSERT INTO "QLearnQuiz"')) {
+        quizzes.push({
+          id: p[0], lessonId: p[1], question: p[2],
+          options: JSON.parse(String(p[3])), correctIndex: Number(p[4]),
+          explanation: p[5] ?? null,
+        });
+        return { rows: [], rowCount: 1 };
+      }
+      if (s.includes('FROM "QLearnQuiz"')) {
+        const rows = quizzes.filter((q) => q.lessonId === p[0]);
+        return { rows, rowCount: rows.length };
       }
       if (s.includes('INSERT INTO "QLearnBookmark"')) {
         const k = `${p[0]}::${p[1]}`;
@@ -365,5 +381,56 @@ describe("курс можно завершить, когда база жива",
     expect(row?.lastActivityAt, "обзор взял дату не из колонки, а из памяти").toBe(
       DB_ACTIVITY_STAMP,
     );
+  });
+
+  test("вопрос теста ложится в базу, и автор видит правильный ответ", async () => {
+    // Права автора считались по памяти: при живой базе курс там отсутствует,
+    // поэтому автор получал 404 о своём курсе, а в чтении isAuthor был ложью
+    // всегда — правильных ответов он не видел.
+    const AUTHOR = jwt.sign({ sub: "author-1" }, "dev-auth-secret", {
+      algorithm: "HS256", expiresIn: "1h",
+    });
+    const before = quizzes.length;
+    const add = await request(app())
+      .post(`/x/me/courses/${COURSE_ID}/lessons/l1/quiz`)
+      .set("Authorization", `Bearer ${AUTHOR}`)
+      .send({ question: "Сколько?", options: ["один", "два"], correctIndex: 1 });
+    expect(add.status, `вопрос не добавлен: ${JSON.stringify(add.body)}`).toBe(201);
+    expect(quizzes.length, "вопрос не доехал до базы").toBe(before + 1);
+
+    const asAuthor = await request(app())
+      .get(`/x/courses/${COURSE_ID}/lessons/l1/quiz`)
+      .set("Authorization", `Bearer ${AUTHOR}`);
+    expect(asAuthor.status).toBe(200);
+    expect(
+      asAuthor.body?.questions?.[0]?.correctIndex,
+      "автор не видит правильного ответа в своём же тесте",
+    ).toBe(1);
+
+    const asLearner = await request(app())
+      .get(`/x/courses/${COURSE_ID}/lessons/l1/quiz`)
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(
+      asLearner.body?.questions?.[0]?.correctIndex,
+      "правильный ответ показан НЕ автору — это подсказка",
+    ).toBeUndefined();
+
+    const answer = await request(app())
+      .post(`/x/courses/${COURSE_ID}/lessons/l1/quiz/submit`)
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .send({ questionId: quizzes[quizzes.length - 1].id, answerIndex: 1 });
+    expect(answer.status, "ответ на существующий вопрос не принят").toBe(200);
+    expect(answer.body?.correct).toBe(true);
+  });
+
+  test("чужой курс: вопрос добавить нельзя", async () => {
+    const stranger = jwt.sign({ sub: "stranger-9" }, "dev-auth-secret", {
+      algorithm: "HS256", expiresIn: "1h",
+    });
+    const res = await request(app())
+      .post(`/x/me/courses/${COURSE_ID}/lessons/l1/quiz`)
+      .set("Authorization", `Bearer ${stranger}`)
+      .send({ question: "Чужой", options: ["a", "b"], correctIndex: 0 });
+    expect(res.status, "посторонний смог дописать вопрос в чужой курс").toBe(403);
   });
 });

@@ -255,44 +255,49 @@ async function myEnrollments(
   return { rows, failed: false };
 }
 
-/**
- * Карточка курса для списков (закладки и т.п.) — из того же хранилища.
- *
- * Отдельно от `courseTitleById`, потому что здесь нужен весь набор полей,
- * который показывает карточка на странице; сводить их в одну функцию с
- * необязательными полями значило бы получить два смысла в одном месте.
- */
-type CourseCard = {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  level: string;
-  price: number;
-  enrollmentCount: number;
-};
+/** Вопросы теста к уроку — слой хранилища. */
+async function quizAdd(q: QuizQuestion): Promise<{ failed: boolean }> {
+  if (isQLearnDbReady()) {
+    try {
+      await pool.query(
+        `INSERT INTO "QLearnQuiz" ("id","lessonId","question","options","correctIndex","explanation")
+         VALUES ($1,$2,$3,$4::jsonb,$5,$6)`,
+        [q.id, q.lessonId, q.question, JSON.stringify(q.options), q.correctIndex, q.explanation],
+      );
+      return { failed: false };
+    } catch (e) {
+      console.error("[QLearn] quiz insert failed", e);
+      return { failed: true };
+    }
+  }
+  const existing = memQuizzes.get(q.lessonId) ?? [];
+  existing.push(q);
+  memQuizzes.set(q.lessonId, existing);
+  return { failed: false };
+}
 
-async function courseCardById(courseId: string): Promise<CourseCard | null> {
+async function quizzesOf(lessonId: string): Promise<{ rows: QuizQuestion[]; failed: boolean }> {
   if (isQLearnDbReady()) {
     try {
       const { rows } = await pool.query(
-        `SELECT "id","title","description","category","level","price","enrollmentCount"
-           FROM "QLearnCourse" WHERE "id" = $1`,
-        [courseId],
-      );
-      return rows[0] ? (rows[0] as CourseCard) : null;
+        `SELECT * FROM "QLearnQuiz" WHERE "lessonId" = $1 ORDER BY "createdAt"`, [lessonId]);
+      return {
+        rows: rows.map((r: Record<string, unknown>) => ({
+          id: String(r.id),
+          lessonId: String(r.lessonId),
+          question: String(r.question),
+          options: Array.isArray(r.options) ? (r.options as string[]) : [],
+          correctIndex: Number(r.correctIndex),
+          explanation: r.explanation === null || r.explanation === undefined ? null : String(r.explanation),
+        })),
+        failed: false,
+      };
     } catch (e) {
-      console.error("[QLearn] course card read failed", e);
-      return null;
+      console.error("[QLearn] quiz list failed", e);
+      return { rows: [], failed: true };
     }
   }
-  const c = memCourses.get(courseId);
-  return c
-    ? {
-        id: c.id, title: c.title, description: c.description, category: c.category,
-        level: c.level, price: c.price, enrollmentCount: c.enrollmentCount,
-      }
-    : null;
+  return { rows: memQuizzes.get(lessonId) ?? [], failed: false };
 }
 
 /**
@@ -421,19 +426,28 @@ async function activityDays(
   return { days: rec?.days ?? new Set<string>(), lastTouched: rec?.lastTouched ?? null, failed: false };
 }
 
-/** Название курса для сертификата — из того же хранилища, что и сам курс. */
-async function courseTitleById(courseId: string): Promise<string | null> {
+/**
+ * Курс по идентификатору — ЕДИНСТВЕННЫЙ читатель таблицы курсов по id.
+ *
+ * Раньше их было три: за названием для сертификата, за карточкой для списка
+ * закладок и за автором для проверки прав. Три способа спросить одно и то же
+ * расходятся при первой же правке, поэтому здесь один, а вызывающие берут
+ * нужные поля сами.
+ *
+ * `failed` отличает «курса нет» от «спросить не удалось».
+ */
+async function courseById(courseId: string): Promise<{ course: Course | null; failed: boolean }> {
   if (isQLearnDbReady()) {
     try {
       const { rows } = await pool.query(
-        `SELECT "title" FROM "QLearnCourse" WHERE "id" = $1`, [courseId]);
-      return rows[0] ? String(rows[0].title) : null;
+        `SELECT * FROM "QLearnCourse" WHERE "id" = $1`, [courseId]);
+      return { course: rows[0] ? (rows[0] as Course) : null, failed: false };
     } catch (e) {
-      console.error("[QLearn] course title read failed", e);
-      return null;
+      console.error("[QLearn] course read failed", e);
+      return { course: null, failed: true };
     }
   }
-  return memCourses.get(courseId)?.title ?? null;
+  return { course: memCourses.get(courseId) ?? null, failed: false };
 }
 
 /**
@@ -913,7 +927,7 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
   // перезапуска она отвечала «нет такого» — рождался второй сертификат с новым
   // номером, сегодняшней датой и ещё одной регистрацией в QRight.
   if (progress === 100) {
-    const courseTitle = await courseTitleById(enrollment.courseId);
+    const courseTitle = (await courseById(enrollment.courseId)).course?.title ?? null;
     const { cert, created } = await certIssue({
       id: crypto.randomUUID(),
       enrollmentId,
@@ -950,7 +964,7 @@ qlearnRouter.post("/enrollments/:id/complete", async (req: Request, res: Respons
   const already = await certByEnrollment(enrollmentId);
   if (already) { res.json({ certificate: already }); return; }
 
-  const courseTitle = await courseTitleById(enrollment.courseId);
+  const courseTitle = (await courseById(enrollment.courseId)).course?.title ?? null;
   const cert: Certificate = {
     id: crypto.randomUUID(),
     enrollmentId,
@@ -1041,8 +1055,12 @@ qlearnRouter.post("/me/courses/:courseId/lessons/:lessonId/quiz", async (req: Re
   const courseId = param(req, "courseId");
   const lessonId = param(req, "lessonId");
 
-  // Verify author ownership
-  const course = memCourses.get(courseId);
+  // Проверка прав шла по memCourses: при живой базе курс там отсутствует, и
+  // автор получал «Course not found» о СВОЁМ существующем курсе.
+  const { course, failed: courseFailed } = await courseById(courseId);
+  if (courseFailed) {
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
+  }
   if (!course) { res.status(404).json({ error: "Course not found" }); return; }
   if (course.authorId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
 
@@ -1066,20 +1084,29 @@ qlearnRouter.post("/me/courses/:courseId/lessons/:lessonId/quiz", async (req: Re
     correctIndex,
     explanation: explanation ? String(explanation).trim() : null,
   };
-  const existing = memQuizzes.get(lessonId) ?? [];
-  existing.push(q);
-  memQuizzes.set(lessonId, existing);
+  const { failed } = await quizAdd(q);
+  if (failed) {
+    // «Вопрос добавлен» о том, чего нет, — автор соберёт тест и потеряет его.
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
+  }
   res.status(201).json({ question: q });
 });
 
 // GET /api/qlearn/courses/:courseId/lessons/:lessonId/quiz — get quiz questions (correctIndex hidden for non-authors)
-qlearnRouter.get("/courses/:courseId/lessons/:lessonId/quiz", (req: Request, res: Response) => {
+qlearnRouter.get("/courses/:courseId/lessons/:lessonId/quiz", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   const courseId = param(req, "courseId");
   const lessonId = param(req, "lessonId");
-  const course = memCourses.get(courseId);
-  const isAuthor = auth && course && course.authorId === auth.sub;
-  const questions = (memQuizzes.get(lessonId) ?? []).map((q) => {
+  // isAuthor тоже считался по memCourses: при живой базе он был ложью ВСЕГДА,
+  // и автор не видел правильных ответов в собственном тесте.
+  const { course } = await courseById(courseId);
+  const isAuthor = Boolean(auth && course && course.authorId === auth.sub);
+  const { rows, failed } = await quizzesOf(lessonId);
+  if (failed) {
+    // Пустой тест читается как «вопросов нет», а не как сбой.
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
+  }
+  const questions = rows.map((q) => {
     if (isAuthor) return q;
     const { correctIndex: _ci, explanation: _exp, ...safe } = q;
     void _ci; void _exp;
@@ -1097,7 +1124,12 @@ qlearnRouter.post("/courses/:courseId/lessons/:lessonId/quiz/submit", async (req
   if (!questionId) { res.status(400).json({ error: "questionId is required" }); return; }
   if (typeof answerIndex !== "number") { res.status(400).json({ error: "answerIndex is required" }); return; }
 
-  const questions = memQuizzes.get(lessonId) ?? [];
+  const { rows: questions, failed } = await quizzesOf(lessonId);
+  if (failed) {
+    // «Вопрос не найден» о вопросе, который человек видит на экране, —
+    // законный на вид ответ и потому незаметный.
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
+  }
   const q = questions.find((qq) => qq.id === questionId);
   if (!q) { res.status(404).json({ error: "Question not found" }); return; }
 
@@ -1152,7 +1184,13 @@ qlearnRouter.get("/me/bookmarks", async (req: Request, res: Response) => {
   }
   const items = await Promise.all(
     rows.map(async (b) => {
-      const course = await courseCardById(b.courseId);
+      const c = (await courseById(b.courseId)).course;
+      const course = c
+        ? {
+            id: c.id, title: c.title, description: c.description, category: c.category,
+            level: c.level, price: c.price, enrollmentCount: c.enrollmentCount,
+          }
+        : null;
       return { courseId: b.courseId, bookmarkedAt: b.bookmarkedAt, course };
     }),
   );

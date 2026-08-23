@@ -118,6 +118,24 @@ export async function ensureQLearnTables(pool: PgPoolInstance): Promise<void> {
     // Ключ составной, потому что предмет и есть пара: один человек — один
     // курс, один человек — один день. Повторная закладка и повторный заход в
     // тот же день не должны рождать вторую строку.
+    // Вопросы тестов к урокам. Таблицы не было: автор писал вопросы, они жили
+    // в Map и исчезали при ближайшей выкатке, а отвечающий получал «вопрос не
+    // найден» о вопросе, который только что видел на экране.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "QLearnQuiz" (
+        "id"           TEXT PRIMARY KEY,
+        "lessonId"     TEXT NOT NULL,
+        "question"     TEXT NOT NULL,
+        "options"      JSONB NOT NULL,
+        "correctIndex" INTEGER NOT NULL,
+        "explanation"  TEXT,
+        "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "QLearnQuiz_lesson_idx"
+        ON "QLearnQuiz" ("lessonId", "createdAt");
+    `);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "QLearnBookmark" (
         "userId"       TEXT NOT NULL,

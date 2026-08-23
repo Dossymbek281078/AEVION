@@ -473,10 +473,15 @@ export default function DevHubPage() {
               border: "1px solid #e2e8f0", background: "#fff", borderRadius: 12,
               padding: "12px 16px", marginBottom: 20, fontSize: 13, lineHeight: 1.6,
             }}>
-              <span style={{ fontWeight: 700, color: "#0f172a" }}>Сейчас работает: {live} из {caps.length}</span>
+              {/* «Настроено», а не «работает»: ручка /studio/capabilities отвечает на
+                  вопрос «ключ задан», и это НЕ то же самое, что «проверено сейчас».
+                  Замер 23.08.2026: среди «работающих» числился домен aevion.build,
+                  которого не существует — реестр отвечает «Non-existent domain».
+                  Слово «работает» превращало ответ одного вопроса в ответ другого. */}
+              <span style={{ fontWeight: 700, color: "#0f172a" }}>{t("caps.configured")}: {live} из {caps.length}</span>
               {off.length > 0 ? (
                 <>
-                  <span style={{ color: "#64748b" }}> · временно недоступно: </span>
+                  <span style={{ color: "#64748b" }}>{t("caps.off")}</span>
                   {off.map((c, i) => (
                     <span key={c.id} title={c.lastError || (c.status === "needs_token" ? "не настроено на сервере" : c.status)}>
                       <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{c.name}</span>
@@ -484,7 +489,7 @@ export default function DevHubPage() {
                     </span>
                   ))}
                   <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
-                    Всё остальное — код, база данных, превью, деплой — работает. Наведите на название, чтобы увидеть причину.
+                    {t("caps.note")}
                   </div>
                 </>
               ) : (

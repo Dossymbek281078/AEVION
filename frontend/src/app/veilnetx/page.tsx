@@ -606,7 +606,17 @@ export default function VeilNetXLanding() {
         }}
       />
 
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
+      {/*
+        flex-wrap gap-y-2: без переноса шапка не складывалась на телефоне, и
+        ценник с кнопкой «Купить» уезжал за правый край — кнопка оплаты вне
+        экрана. Замер на живой странице, до -> после:
+          1440 / 1024 / 768 — документ и положение кнопки БЕЗ изменений
+          430  — документ 466 -> 430, правый край кнопки 457 -> 349
+          390  — документ 466 -> 390, правый край кнопки 457 -> 349
+          320  — документ 466 -> 320, правый край кнопки 457 -> 287
+        Цена переноса — шапка на телефоне выше на 11px (97 -> 108).
+      */}
+      <header className="border-b border-slate-800 px-6 py-4 flex flex-wrap gap-y-2 items-center justify-between">
         <div className="flex items-center gap-3">
           <Link href="/" className="text-slate-400 hover:text-white text-sm">← AEVION</Link>
           <span className="text-slate-600">·</span>

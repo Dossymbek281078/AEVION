@@ -177,7 +177,7 @@ export default function ReplayHubPage() {
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Link href="/cyberchess/spectator" className="planet-btn">Live трансляции</Link>
+            <Link href="/cyberchess/spectator" className="planet-btn">Идут сейчас</Link>
             <Link href="/cyberchess" className="planet-btn">На главную</Link>
           </div>
         </header>

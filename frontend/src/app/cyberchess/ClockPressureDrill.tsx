@@ -214,7 +214,7 @@ export default function ClockPressureDrill({ open, onClose, puzzles, surface1, s
       <div style={overlayStyle} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
         <div style={boxStyle}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontWeight: 900, fontSize: 18, color: text }}>⏱ Clock Pressure Drill</span>
+            <span style={{ fontWeight: 900, fontSize: 18, color: text }}>⏱ Игра под цейтнот</span>
             <button onClick={onClose} style={{ background: "none", border: "none", color: textDim, fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
           </div>
           <div style={{ textAlign: "center", padding: "12px 0" }}>
@@ -262,7 +262,7 @@ export default function ClockPressureDrill({ open, onClose, puzzles, surface1, s
       <div style={boxStyle}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontWeight: 900, fontSize: 16, color: text }}>⏱ Clock Pressure Drill</span>
+          <span style={{ fontWeight: 900, fontSize: 16, color: text }}>⏱ Игра под цейтнот</span>
           <button onClick={onClose} style={{ background: "none", border: "none", color: textDim, fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
         </div>
 

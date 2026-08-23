@@ -270,14 +270,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .map((s) => s.skill?.trim())
     .filter((s): s is string => !!s)
     .slice(0, 50)
-    // Кодировать ОБЯЗАТЕЛЬНО: без этого навык «MIG/MAG welding» давал слаг
-    // "mig/mag-welding", косая черта становилась разделителем пути, и карта
-    // отдавала поисковику адрес /build/skill/mig/mag-welding — 404 (замер
-    // 21.08.2026: он был одним из четырёх мёртвых адресов в карте из 782).
-    // Точное зеркало того, что делает сама страница: slugToSkill() в
-    // build/skill/[slug]/page.tsx зовёт decodeURIComponent, а потом меняет
-    // дефисы на пробелы. Проверено на проде: /build/skill/mig%2Fmag-welding
-    // отдаёт заголовок «Mig/mag welding jobs».
+    // encodeURIComponent обязателен: у навыка может быть слэш в названии,
+    // и тогда адрес разваливается на ДВА сегмента, а маршрут [slug] —
+    // односегментный. Замер 20.08.2026: из двух популярных навыков один
+    // назывался "mig/mag welding", и карта сайта вела на 404.
+    // Проверено пробой на проде, а не рассуждением:
+    //   /build/skill/mig%2Fmag-welding -> 200
+    //   /build/skill/mig/mag-welding   -> 404
+    // Страница разбирает адрес через decodeURIComponent, так что
+    // процентная запись доходит до неё в исходном виде.
     .map((s) => encodeURIComponent(s.toLowerCase().replace(/\s+/g, "-")));
 
   // Merge strategy:

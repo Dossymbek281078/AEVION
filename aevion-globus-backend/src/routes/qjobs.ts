@@ -11,6 +11,11 @@ import { callProvider, getProviders } from "../services/qcoreai/providers";
 
 const postLimiter = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "qjobs:post", message: "rate_limited" });
 const applyLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qjobs:apply", message: "rate_limited" });
+// Платный вызов модели. Без ограничителя ручка была открыта: замер 21.08.2026
+// нашёл 26 платных ручек, у 17 ограничителя не было, тринадцать закрывает
+// кампания в другой ветке — эта оставалась ничьей. Предел строже соседних,
+// потому что цена запроса здесь не в базе, а у поставщика.
+const aiMatchLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qjobs:ai-match", message: "rate_limited" });
 
 export const qjobsRouter = Router();
 
@@ -384,7 +389,7 @@ qjobsRouter.get("/me/jobs/:id/applicants", async (req: Request, res: Response) =
 });
 
 // ─── POST /api/qjobs/ai/match ─────────────────────────────────────────────────
-qjobsRouter.post("/ai/match", async (req: Request, res: Response) => {
+qjobsRouter.post("/ai/match", aiMatchLimiter, async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
 
@@ -553,7 +558,17 @@ qjobsRouter.post("/jobs/:id/save", async (req: Request, res: Response) => {
         return res.json({ saved: true });
       }
     }
-  } catch (e) { console.error("[QJobs] save toggle DB error", e); }
+  } catch (e) {
+    console.error("[QJobs] save toggle DB error", e);
+    // Ниже вакансия ищется в памяти, и её отсутствие уходило как «not_found»:
+    // человек читал бы «такой вакансии нет» про существующую.
+    return res.status(503).json({
+      error: "storage_unavailable",
+      warning:
+        "Хранилище временно недоступно. Это НЕ значит, что вакансии нет — " +
+        "повторите запрос позже.",
+    });
+  }
 
   const job = memJobs.get(jobId);
   if (!job) return res.status(404).json({ error: "not_found" });

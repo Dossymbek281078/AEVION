@@ -194,7 +194,7 @@ export default function CyberChessHistoryPage() {
             )}
           </div>
           <div style={{ display: "flex", flexShrink: 0, gap: 8 }}>
-            <Link href="/cyberchess/leaderboard" className="planet-btn">Лидерборд</Link>
+            <Link href="/cyberchess/leaderboard" className="planet-btn">Таблица лидеров</Link>
             <Link href="/cyberchess" className="planet-btn">← к шахматам</Link>
           </div>
         </div>

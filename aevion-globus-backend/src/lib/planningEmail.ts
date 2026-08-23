@@ -71,7 +71,22 @@ export function sendWaitlistConfirmation(ctx: WaitlistEmailContext): void {
   void (async () => {
     try {
       const transport = getTransport();
-      if (!transport) return; // SMTP not configured — skip silently
+      if (!transport) {
+        // Молчаливый пропуск здесь опаснее, чем кажется: это письмо —
+        // подтверждение записи в лист ожидания, то есть ЕДИНСТВЕННОЕ, что
+        // человек получает, оставив адрес. Без настроек оно не уходило, и об
+        // этом не оставалось ничего: список подписчиков рос, и снаружи это
+        // выглядело как работающая воронка.
+        //
+        // Отправку не роняем — запись в лист ожидания важнее письма. Но след
+        // обязателен, иначе «письма не приходят» неотличимо от «письма не
+        // отправлялись». Тот же дефект был в lib/build/email.ts (19.08.2026).
+        console.warn(
+          `[planning/email] SMTP не настроен — подтверждение для ${ctx.toEmail} ` +
+            `(модуль ${ctx.moduleId}) НЕ отправлено. Задайте SMTP_HOST, SMTP_USER, SMTP_PASS.`,
+        );
+        return;
+      }
       const apiBase = (process.env.PUBLIC_BACKEND_URL ?? "https://api.aevion.app").replace(/\/$/, "");
       const moduleUrl = `${BASE}/${ctx.moduleId}`;
       const statusUrl = `${apiBase}/api/${ctx.moduleId}/status`;

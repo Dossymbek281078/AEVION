@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "CPI — Composite Performance Index",
+  title: "CPI — составной рейтинг качества игры",
   description:
     "Принципиально новый шахматный рейтинг: 11 факторов вместо одной Elo-цифры. Очки даже за поражение, если качество хода высокое. Лидерборд по любому фактору.",
   openGraph: {

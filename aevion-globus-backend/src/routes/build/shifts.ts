@@ -60,7 +60,19 @@ shiftsRouter.get("/my", async (req, res) => {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
 
+    // Значение уходит в SQL параметром — инъекции нет. Но Postgres падает на
+    // строке, которую не может прочитать как время, и отказ КЛИЕНТА
+    // превращается в отказ СЕРВЕРА: 500 попадает в Sentry и будит людей, хотя
+    // виноват запрос. Такие запросы шлют роботы и старые клиенты.
+    //
+    // Проверяем ФОРМАТОМ, а не одним `Date.parse`: `Date.parse("1")` в Node
+    // возвращает валидную дату (год 2001), которую Postgres не принимает, —
+    // то есть проверка через него одна слабее базы.
+    const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ][\d:.+\-Z]*)?$/;
     const from = typeof req.query.from === "string" ? req.query.from.trim() : null;
+    if (from !== null && from !== "" && (!ISO_DATE.test(from) || Number.isNaN(Date.parse(from)))) {
+      return fail(res, 400, "invalid_from");
+    }
     const params: unknown[] = [auth.sub, auth.sub];
     let timeCond = "";
     if (from) { params.push(from); timeCond = `AND s."shiftDate" >= $${params.length}`; }

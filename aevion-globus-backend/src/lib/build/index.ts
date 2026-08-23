@@ -385,6 +385,17 @@ async function _doEnsureBuildTables(): Promise<void> {
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  // Колонки процесса проверки. Отдельным ALTER, а не только в CREATE TABLE:
+  // CREATE TABLE IF NOT EXISTS к УЖЕ существующей таблице не добавляет ничего,
+  // поэтому боевая таблица, заведённая до переименования "verified*" в
+  // "reviewed*", этих колонок не получала — и все три ручки документов
+  // отвечали 500 на любой запрос. Замер 20.08.2026 на проде: /documents/user/<id>
+  // давал 500 и для выдуманного id, и для служебного слова, то есть падал не на
+  // данных, а на самом запросе. Рядом, у "BuildProfile", этот приём уже применён.
+  await pool.query(`ALTER TABLE "BuildDocument" ADD COLUMN IF NOT EXISTS "reviewedAt" TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE "BuildDocument" ADD COLUMN IF NOT EXISTS "reviewedBy" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildDocument" ADD COLUMN IF NOT EXISTS "reviewNote" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildDocument" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'PENDING';`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildDocument_user_idx" ON "BuildDocument" ("userId", "createdAt" DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildDocument_status_idx" ON "BuildDocument" ("status");`);
 

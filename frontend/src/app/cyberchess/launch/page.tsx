@@ -132,6 +132,18 @@ export default async function CyberChessLaunchPage({
           description="Одно письмо на запуск и условия раннего доступа. Ничего больше."
         />
 
+        {/* Приложение УЖЕ открыто, и это надо говорить рядом с формой, а не
+            только внизу страницы. Замер 21.08 на телефоне: единственная ссылка
+            «зайти и попробовать» лежала на y=1244 — полтора экрана вниз.
+            Человек, готовый попробовать прямо сейчас, до неё не доходил. */}
+        <p style={{ color: MUTED, fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>
+          Не хотите ждать?{" "}
+          <a href={channel ? `/cyberchess?c=${channel}` : "/cyberchess"} style={{ color: GOLD, fontWeight: 600 }}>
+            приложение уже открыто — попробовать сейчас
+          </a>
+          .
+        </p>
+
         <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <h2 style={{ fontFamily: "Georgia, serif", fontSize: 21, margin: 0 }}>Что уже работает</h2>
 
@@ -158,7 +170,10 @@ export default async function CyberChessLaunchPage({
 
           <p style={{ color: MUTED, fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>
             Пока идёт подготовка, приложение уже открыто:{" "}
-            <a href="/cyberchess" style={{ color: GOLD, fontWeight: 600 }}>
+            {/* Метку канала несём ДАЛЬШЕ: без неё цепочка измерения рвётся на
+                последнем шаге — мы знаем, какой ролик привёл человека на
+                посадочную, но не знаем, кто из них дошёл до самой игры. */}
+            <a href={channel ? `/cyberchess?c=${channel}` : "/cyberchess"} style={{ color: GOLD, fontWeight: 600 }}>
               зайти и попробовать
             </a>
             .

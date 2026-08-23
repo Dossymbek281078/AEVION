@@ -35,6 +35,10 @@ interface Targeted { nutrient: string; key: string; role: string; foods: string[
 interface FoundationBlock { block: string; foods: string[]; }
 interface Plan {
   summary: string;
+  /** Персональный план или общий. Общий выдаётся, когда человек не ввёл ни
+   *  одного значения — раньше он был неотличим от «проверили, дефицитов нет». */
+  personalised?: boolean;
+  warning?: string;
   targeted: Targeted[];
   foundation: FoundationBlock[];
   interactions: Interaction[];
@@ -192,6 +196,14 @@ export default function QMelaninClient() {
         {plan && (
           <section style={styles.card}>
             <h2 style={styles.h2}>Ваш 90-дневный протокол</h2>
+            {/* Бэкенд с 20.08.2026 отличает персональный план от общего.
+                До этой вставки страница показывала оба одинаково, и человек с
+                пустой формой читал сводку как результат проверки. */}
+            {plan.personalised === false && plan.warning && (
+              <div role="alert" style={styles.noDataWarning}>
+                <b>План общий, не персональный.</b> {plan.warning}
+              </div>
+            )}
             <p style={styles.summary}>{plan.summary}</p>
 
             {plan.targeted.length > 0 && (
@@ -310,6 +322,11 @@ const styles: Record<string, React.CSSProperties> = {
   btn: { marginTop: 20, background: "#c8823f", color: "#0a0a0a", border: "none", borderRadius: 10, padding: "12px 22px", fontSize: 15, fontWeight: 600, cursor: "pointer" },
   error: { color: "#e0787f", marginTop: 12 },
   summary: { color: "#c3d0e0", lineHeight: 1.6 },
+  noDataWarning: {
+    border: "1px solid #fbbf24", background: "#fffbeb", color: "#78350f",
+    borderRadius: 10, padding: "12px 14px", marginBottom: 16,
+    fontSize: 14, lineHeight: 1.55,
+  },
   block: { background: "#0a101c", border: "1px solid #1c2942", borderRadius: 12, padding: 14, marginTop: 10 },
   blockTitle: { fontWeight: 600 },
   blockRole: { fontSize: 12, color: "#8b9bb0", marginTop: 2 },

@@ -44,6 +44,27 @@ export interface ComparablesResult {
 // sector/stage/day is plenty. Only live results are cached; illustrative /
 // unavailable are not, so the next call retries live.
 const LIVE_TTL_MS = 24 * 60 * 60 * 1000;
+// Образцовый ответ тоже кладём в кэш, но на час, а не на сутки.
+// Причина: до 20.08.2026 он не кэшировался ВООБЩЕ, и каждый запрос к
+// публичной ручке без входа означал отдельный платный вызов модели —
+// включая повторные с тем же сектором. Замер: 6.5-11.6 с на ответ.
+// Час, а не сутки, чтобы появление SERPER_API_KEY не осталось незамеченным:
+// иначе живой режим был бы заперт суточным образцовым ответом.
+const ILLUSTRATIVE_TTL_MS = 60 * 60 * 1000;
+
+// Пустой ответ держим всего пять минут. Он бывает двух происхождений:
+// модель ничего не вернула по бессмысленному сектору (платный вызов УЖЕ
+// сделан, и повтор стоил бы ещё одного) либо провайдер отказал. Первое
+// кэшировать надо, второе — нельзя надолго, иначе восстановление
+// провайдера останется незамеченным. Пять минут закрывают перебор
+// случайных секторов, не пряча починку.
+const UNAVAILABLE_TTL_MS = 5 * 60 * 1000;
+
+function ttlFor(mode: ComparablesResult["mode"]): number {
+  if (mode === "live") return LIVE_TTL_MS;
+  if (mode === "illustrative") return ILLUSTRATIVE_TTL_MS;
+  return UNAVAILABLE_TTL_MS;
+}
 const liveCache = new Map<string, { at: number; result: ComparablesResult }>();
 
 function cacheKey(sectorLabel: string, stage: string): string {
@@ -102,7 +123,7 @@ export async function fetchComparables(sectorLabel: string, stage: string): Prom
   // Serve a still-fresh cached live result before spending a Serper credit.
   const key = cacheKey(sectorLabel, stage);
   const hit = liveCache.get(key);
-  if (hit && Date.now() - hit.at < LIVE_TTL_MS) {
+  if (hit && Date.now() - hit.at < ttlFor(hit.result.mode)) {
     return { ...hit.result, cached: true };
   }
 
@@ -148,22 +169,26 @@ export async function fetchComparables(sectorLabel: string, stage: string): Prom
       const { reply } = await callProvider(provider, messages, providerModel(provider), 0.2);
       const comps = parseJsonArray(reply).map((o) => toComp(o, false)).filter((c): c is Comparable => c !== null).slice(0, 5);
       if (comps.length > 0) {
-        return {
+        const result: ComparablesResult = {
           mode: "illustrative",
           comps,
           disclaimer: "Illustrative — recalled by the model from training data, not live-verified and possibly dated. Add SERPER_API_KEY to switch to live web search.",
           query,
         };
+        liveCache.set(key, { at: Date.now(), result });
+        return result;
       }
     } catch {
       // fall through
     }
   }
 
-  return {
+  const unavailable: ComparablesResult = {
     mode: "unavailable",
     comps: [],
     disclaimer: "Live comparable rounds need a market-data source. Set SERPER_API_KEY (or a configured AI provider) to enable this.",
     query,
   };
+  liveCache.set(key, { at: Date.now(), result: unavailable });
+  return unavailable;
 }

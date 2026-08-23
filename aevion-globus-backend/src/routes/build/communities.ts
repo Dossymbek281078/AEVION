@@ -51,7 +51,19 @@ communitiesRouter.get("/:slug", async (req, res) => {
     if (community.rowCount === 0) return fail(res, 404, "community_not_found");
 
     const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+    // Значение уходит в SQL параметром — инъекции нет. Но Postgres падает на
+    // строке, которую не может прочитать как время, и отказ КЛИЕНТА
+    // превращается в отказ СЕРВЕРА: 500 попадает в Sentry и будит людей, хотя
+    // виноват запрос. Такие запросы шлют роботы и старые клиенты.
+    //
+    // Проверяем ФОРМАТОМ, а не одним `Date.parse`: `Date.parse("1")` в Node
+    // возвращает валидную дату (год 2001), которую Postgres не принимает, —
+    // то есть проверка через него одна слабее базы.
+    const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ][\d:.+\-Z]*)?$/;
     const before = typeof req.query.before === "string" ? req.query.before : null;
+    if (before !== null && (!ISO_DATE.test(before) || Number.isNaN(Date.parse(before)))) {
+      return fail(res, 400, "invalid_before");
+    }
 
     const params: unknown[] = [community.rows[0].id, limit];
     let timeCond = "";

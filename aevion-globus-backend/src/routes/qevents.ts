@@ -242,7 +242,14 @@ qeventsRouter.post("/me/events", async (req: Request, res: Response) => {
     } else {
       memEvents.set(event.id, event);
     }
-    return res.status(201).json({ event });
+    // Признак хранилища в ответе. До 19.08.2026 обе ветки возвращали
+    // одинаковое, и человек не мог узнать, что его событие живёт только до
+    // следующего перезапуска. Выкаток бэкенда за один день бывает шесть.
+    //
+    // Флаг берём из того же вызова, что выбирал ветку, — считать его заново
+    // после записи нельзя: на восстановившейся базе ветка памяти вернула бы
+    // "db" и соврала снова, только реже.
+    return res.status(201).json({ event, storage: isQEventsDbReady() ? "db" : "memory" });
   } catch (err) {
     capture(err);
     return res.status(500).json({ error: "internal_error" });
@@ -409,7 +416,9 @@ qeventsRouter.post("/events/:id/rsvp", async (req: Request, res: Response) => {
       status = "going";
     }
 
-    return res.json({ status, attendeeCount: event.attendeeCount });
+    // Тот же признак: запись на событие при недоступной базе живёт в памяти,
+    // а ответ до 19.08.2026 был неотличим от настоящего сохранения.
+    return res.json({ status, attendeeCount: event.attendeeCount, storage: isQEventsDbReady() ? "db" : "memory" });
   } catch (err) {
     capture(err);
     return res.status(500).json({ error: "internal_error" });
@@ -464,6 +473,17 @@ qeventsRouter.get("/me/rsvps", async (req: Request, res: Response) => {
 qeventsRouter.get("/calendar", async (_req: Request, res: Response) => {
   const year = parseInt(String(_req.query.year ?? new Date().getFullYear()), 10);
   const month = parseInt(String(_req.query.month ?? new Date().getMonth() + 1), 10);
+  // Негодный год или месяц — ошибка ЗАПРОСА, а не сервера. Без этой проверки
+  // parseInt("abc") даёт NaN, ниже new Date(Date.UTC(NaN, …)) бросает
+  // RangeError, мягкий catch отвечает 500 — и обычный обход роботом выглядит
+  // как настоящая авария. Замер на проде 20.08.2026: ?year= , ?year=abc и
+  // ?year=99999999999 давали 500; без параметра и с верным годом — 200.
+  if (
+    !Number.isInteger(year) || year < 1970 || year > 2100 ||
+    !Number.isInteger(month) || month < 1 || month > 12
+  ) {
+    return res.status(400).json({ error: "invalid_year_or_month" });
+  }
   const ym = `${year}-${String(month).padStart(2, "0")}`;
   const days: Record<string, QEvent[]> = {};
   try {
@@ -531,7 +551,18 @@ qeventsRouter.post("/events/:id/waitlist", async (req: Request, res: Response) =
     const list = memWaitlist.get(eventId) ?? [];
     if (!list.includes(auth.sub)) list.push(auth.sub);
     memWaitlist.set(eventId, list);
-    return res.json({ position: list.indexOf(auth.sub) + 1 });
+    // Лист ожидания ветки с базой НЕ ИМЕЕТ ВОВСЕ — только memWaitlist. Он
+    // теряется при КАЖДОЙ выкатке, а не при сбое базы, поэтому здесь "memory"
+    // жёстко: человек должен знать, что очередь временная. Полноценная починка
+    // требует таблицы (образец создания на лету — lib/conceptBoardStore.ts) и
+    // вынесена отдельной задачей на доску.
+    return res.json({
+      position: list.indexOf(auth.sub) + 1,
+      storage: "memory",
+      warning: "Очередь хранится временно и не переживёт перезапуск сервиса. " +
+        "Мы сообщим, когда место освободится, только если запись сохранится — " +
+        "надёжнее вернуться на страницу события позже.",
+    });
   } catch (err) {
     capture(err);
     return res.status(500).json({ error: "internal_error" });

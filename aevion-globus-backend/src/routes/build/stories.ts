@@ -19,7 +19,30 @@ storiesRouter.get("/", async (req, res) => {
   try {
     const limitRaw = Number(req.query.limit ?? 20);
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, limitRaw), 50) : 20;
-    const beforeIso = typeof req.query.before === "string" ? req.query.before : null;
+    // `before` уходит в SQL параметром, поэтому инъекции нет — но Postgres
+    // падает на строке, которую не может прочитать как время, и запрос
+    // превращается в 500. Замер на живом проде 19.08.2026:
+    //
+    //   ?before=2026-08-19T00:00:00Z -> 200
+    //   ?before=zzz                  -> 500 stories_list_failed
+    //   ?before=9999-99-99           -> 500
+    //   ?before=1                    -> 500
+    //
+    // Именно эта ошибка пришла из Sentry в 06:54 UTC. Причина не в базе и не в
+    // нагрузке: достаточно одного запроса с непонятной датой, а такие шлют
+    // поисковые роботы и старые клиенты. Отвечаем 400 — это ответ о запросе,
+    // а не об отказе сервера, и он не поднимает тревогу на пустом месте.
+    // Проверяем ФОРМАТОМ, а не только `Date.parse`. Замер показал, что
+    // `Date.parse("1")` в Node возвращает валидную дату (год 2001), а Postgres
+    // такую строку не принимает — то есть проверка через один лишь Date.parse
+    // слабее базы и 500 остаётся. Параметр называется beforeIso, значит и
+    // требовать надо ISO: сначала форма, потом разбор.
+    const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ][\d:.+\-Z]*)?$/;
+    const beforeRaw = typeof req.query.before === "string" ? req.query.before : null;
+    if (beforeRaw !== null && (!ISO_DATE.test(beforeRaw) || Number.isNaN(Date.parse(beforeRaw)))) {
+      return fail(res, 400, "invalid_before");
+    }
+    const beforeIso = beforeRaw;
 
     const params: unknown[] = [];
     let where = "";

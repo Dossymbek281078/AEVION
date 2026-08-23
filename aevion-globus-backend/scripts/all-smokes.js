@@ -31,12 +31,58 @@ const SKIP = (process.env.SKIP || "").split(",").map((s) => s.trim()).filter(Boo
 const READ_ONLY = process.env.READ_ONLY === "1";
 
 const SMOKES = [
+  // Регрессии, найденные 19.08.2026: платный товар без оплаты, отрицательный
+  // limit роняет Postgres, приём оплаты без подписи, ручка состояния каналов.
+  // Ни один прежний смоук ни один из этих классов не проверял (поиск по всем
+  // скриптам дал ноль). Случаи, чьи починки ещё не выкачены, помечены внутри
+  // как PENDING и НЕ красят смоук — иначе он был бы красным с рождения и его
+  // перестали бы читать.
+  { name: "regression-19-08", script: "regression-19-08-smoke.js", readOnly: true },
   // Read-only public endpoints — safe to run anywhere, including prod.
   // Tier 3 amplifier surfaces (OG cards, sitemaps, RSS, badges).
   { name: "tier3", script: "tier3-smoke.js", readOnly: true },
   // Webhook signing — pure-crypto sign+verify roundtrip + rotation + replay rejection.
   // No backend needed; deterministic, always safe.
   { name: "webhook-sig", script: "webhook-sig-smoke.js", readOnly: true },
+
+  // Денежный путь на проде. Замер 19.08.2026: файл существовал, работал
+  // (17 assertions, 17 PASS) и НЕ ЗАПУСКАЛСЯ НИГДЕ — ни здесь, ни в
+  // .github/workflows, ни в задачах планировщика. Ноль упоминаний во всём
+  // репозитории, кроме самого файла.
+  //
+  // Проверяет то, что ломается тише всего: чекаут по шести сочетаниям
+  // тариф×период, живость вебхуков PayBox и PayPal, отклонение поддельной
+  // подписи (401) и корректную деградацию в каскад по умолчанию, когда
+  // переменные окружения не заданы. Сломайся любое — покупатель упирается в
+  // тупик, а мы узнаём из выручки, которой нет.
+  { name: "checkout-rails", script: "checkout-rails-prod-smoke.js", readOnly: true },
+
+  // Ещё шесть смоуков, не запускавшихся нигде (замер 19.08.2026: 12 файлов
+  // без единой ссылки в наборе, package.json и CI). Каждый прогнан против
+  // https://api.aevion.app ПЕРЕД добавлением — иначе набор покраснел бы с
+  // первого дня и его отключили бы вместе с полезной частью.
+  //
+  // Долголетие и QRenew делают по одному пишущему запросу, поэтому
+  // readOnly: false — в боевом прогоне (READ_ONLY=1) они пропускаются, а в
+  // локальном работают. Остальные четыре только читают.
+  { name: "longevity", script: "longevity-smoke.js", readOnly: false },       // 15/15
+  { name: "qrenew", script: "qrenew-smoke.js", readOnly: false },             // 27/27
+  { name: "devhub-pages", script: "devhub-smoke.js", readOnly: true },
+  { name: "qsocial", script: "qsocial-smoke.js", readOnly: true },
+  { name: "qtradeoffline", script: "qtradeoffline-smoke.js", readOnly: true },
+  { name: "qventure", script: "qventure-smoke.js", readOnly: true },
+
+  // Восьмой. Краснел на ЗДОРОВОМ проде из-за двух устаревших ожиданий:
+  // проверка здоровья искала поле status, а ручка отдаёт ok; реестр цепочки
+  // искали по /api/veilnetx/chain/head, а он живёт в отдельном роутере по
+  // /api/veilnetx-ledger/chain/head. Починено в самом смоуке, прод трогать
+  // не пришлось: 13/13 после правки.
+  { name: "fintech-all", script: "fintech-all-smoke.js", readOnly: true },
+
+  // Девятый. Тоже краснел на здоровой странице: искал английское
+  // doppelganger, а /qpersona перевели на русский. Починено ожиданием,
+  // которое переживает перевод (containsAny), 11/11.
+  { name: "ownerless-mvp", script: "ownerless-mvp-smoke.js", readOnly: true },
   // Hub catalog: read-only unified module discovery endpoint.
   { name: "hub-catalog", script: "hub-catalog-smoke.js", readOnly: true },
   // Waitlist unsubscribe: validates HMAC token rejection paths.

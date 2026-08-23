@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Training Hub — daily-задания, эндшпиль, координаты",
+  title: "Тренировки — задания дня, эндшпиль, координаты",
   description:
     "Дейли-челленджи, тренажёр эндшпиля (12 классических позиций), координатный тренажёр, тест личности и репертуар. Прокачка по всем фронтам.",
   openGraph: {
-    title: "CyberChess Training — daily, эндшпиль, координаты · CyberChess",
+    title: "Тренировки CyberChess — задания дня, эндшпиль, координаты",
     description:
       "Тренажёры: эндшпиль, координаты, личность, репертуар + ежедневные задания. Все упражнения в одном хабе.",
     type: "website",
@@ -13,8 +13,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "CyberChess Training Hub",
-    description: "Эндшпиль · координаты · daily · личность · репертуар. Все тренажёры под одной крышей.",
+    title: "Тренировки · CyberChess",
+    description: "Эндшпиль · координаты · задания дня · личность · репертуар. Все тренажёры под одной крышей.",
   },
 };
 

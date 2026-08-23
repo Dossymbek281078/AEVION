@@ -226,6 +226,15 @@ longevityRouter.post("/assess", (req: Request, res: Response) => {
     if (v === null) continue;
     if (markerFlagged(m, v)) flagged.push({ key: m.key, name: m.name, value: v, target: m.target, grade: m.grade });
   }
+  // Сколько измерений человек ВООБЩЕ прислал.
+  //
+  // `values` по умолчанию пустой объект, цикл выше на нём не делает ни одной
+  // итерации, и наружу уходило flaggedCount: 0 — «отклонений не найдено».
+  // Проверено на проде 20.08.2026 запросом с телом {}. Это не результат
+  // обследования, это его отсутствие, и путать их в модуле про здоровье
+  // нельзя: ноль отклонений принимают за хорошую новость.
+  const measuredCount = PANEL.filter((m) => num(values[m.key]) !== null).length;
+
   const flaggedKeys = new Set(flagged.map((f) => f.key));
 
   // 2. Build the recommended stack: all core "recommend" items, gating contraindications.
@@ -254,6 +263,16 @@ longevityRouter.post("/assess", (req: Request, res: Response) => {
   res.json({
     flaggedMarkers: flagged,
     flaggedCount: flagged.length,
+    // Сколько маркеров вообще прислали. Без этого числа ноль в flaggedCount
+    // неотличим от «сдал анализы, всё в коридоре».
+    measuredCount,
+    ...(measuredCount === 0
+      ? {
+          warning:
+            "Ни одного значения маркеров не передано. Это НЕ значит, что отклонений нет — " +
+            "их пока не по чему искать. Пришлите результаты анализов, чтобы получить оценку.",
+        }
+      : {}),
     recommendedStack: recommend.map((it) => ({
       id: it.id,
       name: it.name,

@@ -26,6 +26,7 @@ import {
   getLifeBoxDbError,
 } from "../lib/ensureLifeBoxTables";
 import { rateLimit } from "../lib/rateLimit";
+import { pgIntId } from "../lib/queryNumber";
 
 export const lifeboxRouter = Router();
 
@@ -443,8 +444,8 @@ lifeboxRouter.get("/capsules/:alias", readLimit, async (req: Request, res: Respo
 /** GET /api/lifebox/capsules/:id/unlock?alias=... */
 lifeboxRouter.get("/capsules/:id/unlock", readLimit, async (req: Request, res: Response) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) {
+    const id = pgIntId(req.params.id);
+    if (id === null) {
       res.status(400).json({ ok: false, error: "invalid id" });
       return;
     }
@@ -505,8 +506,8 @@ lifeboxRouter.get("/capsules/:id/unlock", readLimit, async (req: Request, res: R
 /** PATCH /api/lifebox/capsules/:id — only allowed while still locked */
 lifeboxRouter.patch("/capsules/:id", writeLimit, async (req: Request, res: Response) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) {
+    const id = pgIntId(req.params.id);
+    if (id === null) {
       res.status(400).json({ ok: false, error: "invalid id" });
       return;
     }
@@ -569,8 +570,8 @@ lifeboxRouter.patch("/capsules/:id", writeLimit, async (req: Request, res: Respo
 /** DELETE /api/lifebox/capsules/:id — hard delete; alias must match */
 lifeboxRouter.delete("/capsules/:id", writeLimit, async (req: Request, res: Response) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) {
+    const id = pgIntId(req.params.id);
+    if (id === null) {
       res.status(400).json({ ok: false, error: "invalid id" });
       return;
     }

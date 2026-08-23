@@ -21,6 +21,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { resolvePlan, checkSaveLimit, FREE_SAVE_LIMIT } from "../lib/constitutionGate";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { queryNumber } from "../lib/queryNumber";
 
 const capture = makeServiceCapture("planetConstitution");
 
@@ -253,7 +254,7 @@ planetConstitutionRouter.get(
   readLimit as unknown as (req: Request, res: Response, next: () => void) => void,
   async (req: Request, res: Response) => {
     try {
-      const limit = Math.max(1, Math.min(100, Number(req.query.limit ?? 20)));
+      const limit = Math.max(1, Math.min(100, queryNumber(req.query.limit, 20)));
       const regime = typeof req.query.regime === "string" ? req.query.regime : null;
       const sort = req.query.sort === "popular" ? "popular" : "recent";
 
@@ -408,7 +409,7 @@ planetConstitutionRouter.get(
   async (req: Request, res: Response) => {
     try {
       const id = String(req.params.id);
-      const limit = Math.max(1, Math.min(20, Number(req.query.limit ?? 6)));
+      const limit = Math.max(1, Math.min(20, queryNumber(req.query.limit, 6)));
 
       // Get the source artifact's sliders
       let source: Artifact | null = ring.find((x) => x.id === id) ?? null;

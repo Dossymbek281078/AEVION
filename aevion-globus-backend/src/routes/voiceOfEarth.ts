@@ -11,6 +11,10 @@ import {
   isVoiceOfEarthDbReady,
 } from "../lib/ensureVoiceOfEarthTables";
 import { VOICE_OF_EARTH_SEED, VoeSeedTrack } from "../data/voiceOfEarthSeed";
+import { pgIntId } from "../lib/queryNumber";
+
+const WARN =
+  "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
 
 const pool = getPool();
 (async () => {
@@ -179,8 +183,8 @@ voiceOfEarthRouter.get("/tracks", async (req: Request, res: Response) => {
 
 // ─── GET /api/voice-of-earth/tracks/:id ──────────────────────────────────────
 voiceOfEarthRouter.get("/tracks/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) {
+  const id = pgIntId(req.params.id);
+  if (id === null) {
     return res.status(400).json({ error: "invalid id" });
   }
   if (isVoiceOfEarthDbReady()) {
@@ -193,6 +197,9 @@ voiceOfEarthRouter.get("/tracks/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "not_found" });
     } catch (e) {
       console.error("[VoiceOfEarth] GET /tracks/:id DB error", e);
+      // База объявлена готовой и упала — ниже лежит пустая в проде память,
+      // и оттуда ушёл бы 404 на существующий трек.
+      return res.status(503).json({ error: "storage_unavailable", warning: WARN });
     }
   }
   const track = memTracks.find((t) => t.id === id);
@@ -261,7 +268,7 @@ voiceOfEarthRouter.post(
            RETURNING *`,
           [titleStored, artistAlias, language, lyrics, mood, audioUrl, contentHash],
         );
-        return res.status(201).json({ track: rows[0], contentHash });
+        return res.status(201).json({ track: rows[0], contentHash, storage: "db" });
       } catch (e) {
         console.error("[VoiceOfEarth] POST /tracks DB error", e);
       }
@@ -283,7 +290,7 @@ voiceOfEarthRouter.post(
     memTracks.push(track);
     // keep last 100 in memory
     if (memTracks.length > 100) memTracks.splice(0, memTracks.length - 100);
-    res.status(201).json({ track, contentHash });
+    res.status(201).json({ track, contentHash, storage: "memory" });
   },
 );
 
@@ -292,8 +299,8 @@ voiceOfEarthRouter.post(
   "/tracks/:id/vote",
   voteLimiter,
   async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) {
+    const id = pgIntId(req.params.id);
+    if (id === null) {
       return res.status(400).json({ error: "invalid id" });
     }
     const body = (req.body || {}) as { voterAlias?: unknown };

@@ -716,7 +716,7 @@ qcoreaiRouter.get("/me/webhook/log", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
-    const limit = Math.min(100, parseInt(String(req.query.limit || "50"), 10) || 50);
+    const limit = Math.min(100, Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1));
     const items = await listWebhookLogs(auth.sub, limit);
     res.json({ items });
   } catch (err: any) {
@@ -933,7 +933,7 @@ qcoreaiRouter.post("/pipelines", async (req, res) => {
 qcoreaiRouter.get("/pipelines/public", async (req, res) => {
   try {
     const q = typeof req.query.q === "string" ? req.query.q : undefined;
-    const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
+    const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1));
     res.json({ items: await listPublicPipelines(q, limit) });
   } catch (err: any) { captureQCoreAIError(err, { route: "pipelines-public" }); res.status(500).json({ error: "list public pipelines failed" }); }
 });
@@ -1653,7 +1653,7 @@ qcoreaiRouter.get("/search", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     const q = String(req.query.q ?? "").trim().slice(0, 200);
-    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const limit = Math.max(1, Math.min(100, Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1)));
     if (!q) return res.json({ items: [], query: "" });
     const items = await searchRuns(auth?.sub ?? null, q, limit);
     res.json({ items, query: q });
@@ -1671,7 +1671,7 @@ qcoreaiRouter.get("/search", async (req, res) => {
 qcoreaiRouter.get("/tags", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    const limit = Math.max(1, Math.min(100, Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1)));
     const items = await getTopUserTags(auth?.sub ?? null, limit);
     res.json({ items });
   } catch (err: any) {
@@ -1736,7 +1736,7 @@ qcoreaiRouter.post("/presets/share", async (req, res) => {
 qcoreaiRouter.get("/presets/public", async (req, res) => {
   try {
     const q = String(req.query.q ?? "").trim().slice(0, 80);
-    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const limit = Math.max(1, Math.min(100, Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1)));
     const items = await listPublicSharedPresets(q, limit);
     res.json({ items });
   } catch (err: any) {
@@ -1889,7 +1889,7 @@ qcoreaiRouter.get("/analytics/provider-latency", async (req, res) => {
     if (!isDbReady() || !auth?.sub) {
       return res.json({ items: [] });
     }
-    const limit = Math.min(20, parseInt(String(req.query.limit || "10"), 10) || 10);
+    const limit = Math.min(20, Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1));
     const r = await pool.query(
       `SELECT m."provider",
               AVG(m."durationMs") AS "avgDurationMs",
@@ -1920,7 +1920,7 @@ qcoreaiRouter.get("/analytics/provider-latency", async (req, res) => {
 qcoreaiRouter.get("/analytics/by-tag", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
+    const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1));
 
     if (!isDbReady()) {
       // In-memory: approximate using tags from runs
@@ -1958,7 +1958,7 @@ qcoreaiRouter.get("/analytics/sessions", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     const days = Math.min(90, parseInt(String(req.query.days || "7"), 10) || 7);
-    const limit = Math.min(50, parseInt(String(req.query.limit || "10"), 10) || 10);
+    const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1));
     const items = await getSessionCostSummary(auth?.sub ?? null, days, limit);
     res.json({ items });
   } catch (err: any) {
@@ -2955,7 +2955,7 @@ qcoreaiRouter.get("/eval/suites", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const limit = Math.max(1, Math.min(200, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+    const limit = Math.max(1, Math.min(200, Math.max(parseInt(String(req.query.limit ?? "50"), 10) || 50, 1)));
     const items = await listEvalSuites(auth.sub, limit);
     res.json({ items });
   } catch (err: any) {
@@ -2967,7 +2967,7 @@ qcoreaiRouter.get("/eval/suites", async (req, res) => {
 /* V33 — public eval suite gallery */
 qcoreaiRouter.get("/eval/suites/public", async (req, res) => {
   try {
-    const limit = Math.min(50, Number(req.query.limit) || 20);
+    const limit = Math.min(50, Math.max(Number(req.query.limit) || 20, 1));
     const items = await listPublicEvalSuites(limit);
     res.json({ items });
   } catch (err: any) {
@@ -3089,7 +3089,7 @@ qcoreaiRouter.get("/eval/suites/:id/runs", async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const suite = await getEvalSuite(String(req.params.id));
     if (!suite || suite.ownerUserId !== auth.sub) return res.status(404).json({ error: "suite not found" });
-    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const limit = Math.max(1, Math.min(100, Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1)));
     const items = await listSuiteRuns(suite.id, limit);
     res.json({ items });
   } catch (err: any) {
@@ -3129,7 +3129,7 @@ qcoreaiRouter.get("/prompts", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit ?? "100"), 10) || 100));
+    const limit = Math.max(1, Math.min(500, Math.max(parseInt(String(req.query.limit ?? "100"), 10) || 100, 1)));
     const items = await listPrompts(auth.sub, limit);
     res.json({ items });
   } catch (err: any) {
@@ -3141,7 +3141,7 @@ qcoreaiRouter.get("/prompts", async (req, res) => {
 qcoreaiRouter.get("/prompts/public", async (req, res) => {
   try {
     const q = String(req.query.q ?? "").trim().slice(0, 80);
-    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const limit = Math.max(1, Math.min(100, Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1)));
     const items = await listPublicPrompts(q, limit);
     res.json({ items });
   } catch (err: any) {
@@ -3361,7 +3361,7 @@ qcoreaiRouter.post("/templates", async (req, res) => {
 qcoreaiRouter.get("/templates/public", async (req, res) => {
   try {
     const q = typeof req.query.q === "string" ? req.query.q : undefined;
-    const limit = Math.min(50, parseInt(String(req.query.limit || "30"), 10) || 30);
+    const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "30"), 10) || 30, 1));
     const items = await listPublicTemplates(q, limit);
     res.json({ items });
   } catch (err: any) {
@@ -3920,7 +3920,7 @@ qcoreaiRouter.get("/bookmarks", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
-    const limit = Math.min(100, parseInt(String(req.query.limit || "50"), 10) || 50);
+    const limit = Math.min(100, Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1));
     const items = await listBookmarks(auth.sub, limit);
     res.json({ items });
   } catch (err: any) { captureQCoreAIError(err, { route: "list-bookmarks" }); res.status(500).json({ error: "list bookmarks failed" }); }
@@ -3964,7 +3964,7 @@ qcoreaiRouter.get("/runs/:id/rating", async (req, res) => {
 qcoreaiRouter.get("/ratings/top", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
+    const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1));
     const items = await listTopRatedRuns(auth?.sub ?? null, limit);
     res.json({ items });
   } catch (err: any) {
@@ -4370,7 +4370,7 @@ qcoreaiRouter.get("/me/annotations", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const limit = Math.min(100, Number(req.query.limit) || 50);
+    const limit = Math.min(100, Math.max(Number(req.query.limit) || 50, 1));
     const rows = await listAllAnnotations(auth.sub, limit);
     if (req.query.format === "csv") {
       const csv = ["id,runId,messageRole,messageIdx,note,color,createdAt",
@@ -4420,7 +4420,7 @@ qcoreaiRouter.get("/search", async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (!q) return res.json({ results: [] });
-    const limit = Math.min(50, Number(req.query.limit) || 20);
+    const limit = Math.min(50, Math.max(Number(req.query.limit) || 20, 1));
     const results = await searchQCore(auth.sub, q, limit);
     res.json({ results, query: q });
   } catch (err: any) {
@@ -4688,7 +4688,12 @@ qcoreaiRouter.get("/sessions/:id/presence", async (req, res) => {
    Returns: { answer: string, snippetsUsed: number }
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/notebook/qa", async (req, res) => {
+// Ограничитель на платный вызов. Замер 21.08.2026: платных ручек 26, без
+// ограничителя 17, и тринадцать из них закрывает кампания в другой ветке.
+// Эти оставались не закрытыми никем. Берётся СУЩЕСТВУЮЩИЙ chatLimiter, а не
+// новый: помощник generationLimit живёт в чужой незамёрженной ветке, и своя
+// копия с тем же именем дала бы при мерже два объявления.
+qcoreaiRouter.post("/notebook/qa", chatLimiter, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
@@ -4961,7 +4966,7 @@ qcoreaiRouter.get("/runs/:id/siblings", async (req, res) => {
     if (!run) return res.status(404).json({ error: "run not found" });
     const session = await getSession(run.sessionId, auth.sub);
     if (!session) return res.status(403).json({ error: "forbidden" });
-    const limit = Math.min(50, Number(req.query.limit) || 20);
+    const limit = Math.min(50, Math.max(Number(req.query.limit) || 20, 1));
     const allRuns = await listRuns(run.sessionId, limit + 1);
     const siblings = allRuns.filter((r: any) => r.id !== run.id).slice(0, limit);
     res.json({ runId: run.id, sessionId: run.sessionId, siblings, total: siblings.length });
@@ -5577,7 +5582,7 @@ qcoreaiRouter.post("/prompt-chains", async (req, res) => {
 
 qcoreaiRouter.get("/prompt-chains/public", async (req, res) => {
   try {
-    const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
+    const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1));
     const items = await listPublicPromptChains(limit);
     res.json({ items });
   } catch (err: any) { captureQCoreAIError(err, { route: "prompt-chains-public" }); res.status(500).json({ error: "list public chains failed" }); }
@@ -5741,7 +5746,12 @@ qcoreaiRouter.post("/notebook/auto-tag", async (req, res) => {
   } catch (err: any) { captureQCoreAIError(err, { route: "notebook-auto-tag" }); res.status(500).json({ error: "auto-tag failed" }); }
 });
 
-qcoreaiRouter.get("/notebook/collections/:id/summary", async (req, res) => {
+// Ограничитель на платный вызов. Замер 21.08.2026: платных ручек 26, без
+// ограничителя 17, и тринадцать из них закрывает кампания в другой ветке.
+// Эти оставались не закрытыми никем. Берётся СУЩЕСТВУЮЩИЙ chatLimiter, а не
+// новый: помощник generationLimit живёт в чужой незамёрженной ветке, и своя
+// копия с тем же именем дала бы при мерже два объявления.
+qcoreaiRouter.get("/notebook/collections/:id/summary", chatLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
@@ -6118,7 +6128,12 @@ qcoreaiRouter.patch("/templates/:id/pin", async (req, res) => {
 // Cache results for 60s to avoid hammering provider APIs
 const providerHealthCache = new Map<string, { result: any; cachedAt: number }>();
 
-qcoreaiRouter.get("/providers/health", async (_req, res) => {
+// Ограничитель на платный вызов. Замер 21.08.2026: платных ручек 26, без
+// ограничителя 17, и тринадцать из них закрывает кампания в другой ветке.
+// Эти оставались не закрытыми никем. Берётся СУЩЕСТВУЮЩИЙ chatLimiter, а не
+// новый: помощник generationLimit живёт в чужой незамёрженной ветке, и своя
+// копия с тем же именем дала бы при мерже два объявления.
+qcoreaiRouter.get("/providers/health", chatLimiter, async (_req, res) => {
   const now = Date.now();
   const CACHE_TTL = 60_000;
 

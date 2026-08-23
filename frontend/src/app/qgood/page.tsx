@@ -45,6 +45,10 @@ const NAV_TABS = [
 export default function QGoodPage() {
   const [tab, setTab] = useState<'mood' | 'chat' | 'exercises' | 'trend'>('mood');
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  // Пустой список ПОСЛЕ ошибки и пустой список ДО загрузки выглядят одинаково,
+  // и экран в обоих случаях писал «загружается…» — то есть человек ждал того,
+  // чего уже не будет. Тот же класс, что у задач и дебютов в шахматах (21.08).
+  const [exercisesFailed, setExercisesFailed] = useState(false);
   const [moodRefreshKey, setMoodRefreshKey] = useState(0);
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
   const [charity, setCharity] = useState<CharityStats | null>(null);
@@ -60,7 +64,7 @@ export default function QGoodPage() {
     fetch(apiUrl('/api/qgood/exercises'))
       .then(r => r.json())
       .then((d: { exercises?: Exercise[] }) => setExercises(d.exercises || []))
-      .catch(() => setExercises([]));
+      .catch(() => { setExercises([]); setExercisesFailed(true); });
 
     // Load charity stats (the donation platform half of this module)
     fetch(apiUrl('/api/qgood/stats'))
@@ -182,7 +186,14 @@ export default function QGoodPage() {
             </p>
             {exercises.length === 0 ? (
               <div style={{ textAlign: 'center', color: '#9ca3af', padding: 40 }}>
-                {t('qgood.exercises.loading')}
+                {exercisesFailed ? (
+                  <>
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>Упражнения не загрузились</div>
+                    <div style={{ fontSize: 13, opacity: 0.85 }}>Обновите страницу — ждать здесь бесполезно.</div>
+                  </>
+                ) : (
+                  t('qgood.exercises.loading')
+                )}
               </div>
             ) : (
               <div style={{ display: 'grid', gap: 16 }}>

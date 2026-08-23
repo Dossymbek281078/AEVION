@@ -546,17 +546,31 @@ export default function QSocialPage() {
     <>
       <Wave1Nav />
       <ProductPageShell>
+        {/*
+          Было grid "1fr 300px": боковая колонка жёстко 300px и не
+          складывалась, поэтому на телефоне страница разъезжалась вбок
+          (документ 497 при экране 390). Сеткой это не чинится без
+          media-запроса: auto-fit уравнял бы колонки и на десктопе
+          боковая стала бы 488 вместо 300. Flex с переносом сохраняет
+          пропорции точь-в-точь и складывается сам.
+          Замер на живой странице, до -> после (лента + боковая):
+            1440  676 + 300 -> 676 + 300   (без изменений)
+            1024  660 + 300 -> 660 + 300   (без изменений)
+             768  404 + 300 -> 404 + 300   (без изменений)
+             390  153 + 300 -> 350 + 300, друг под другом; документ 497 -> 390
+             320  153 + 300 -> 280 + 280;                  документ 497 -> 320
+        */}
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 300px",
+            display: "flex",
+            flexWrap: "wrap",
             gap: 24,
             maxWidth: 1000,
             margin: "0 auto",
           }}
         >
           {/* Feed column */}
-          <div>
+          <div style={{ flex: "1 1 320px", minWidth: 0 }}>
             {/* Header with stats + notifications */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div>
@@ -764,7 +778,7 @@ export default function QSocialPage() {
           </div>
 
           {/* Sidebar */}
-          <div>
+          <div style={{ flex: "0 1 300px", minWidth: 0 }}>
             <TrendingWidget posts={posts} />
             <div
               style={{

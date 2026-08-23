@@ -20,6 +20,7 @@ import {
 } from "../payments/links/durability";
 
 const PAGE = path.join(process.cwd(), "src/app/payments/links/page.tsx");
+const STATUS = path.join(process.cwd(), "src/app/payments/status/page.tsx");
 
 describe("платёжные ссылки: обещание не сильнее хранилища", () => {
   it("kv — предупреждать не о чем, «никогда» доступно", () => {
@@ -96,6 +97,17 @@ describe("платёжные ссылки: обещание не сильнее 
     expect(src).toContain("{durability.text}");
     // Подсказка на погашенной кнопке — тоже вывод, а не расчёт.
     expect(src).toContain("durability.neverHint");
+  });
+
+  it("страница состояния тоже показывает долговечность, а не только живость", () => {
+    const src = fs.readFileSync(STATUS, "utf8");
+    // Она обещает «live checks of every public endpoint» — то есть отвечает
+    // «сервер жив». Вопрос «переживут ли данные перезапуск» другой, и до
+    // 23.08.2026 она на него молчала, хотя ответ был в том же /api/health.
+    expect(src).toContain("readPersistence(health.persistence)");
+    expect(src).toContain("durabilityNotice(readPersistence(health.persistence)).text");
+    // Текст берём из общего модуля, а не пишем второй такой же.
+    expect(src).toContain('from "../links/durability"');
   });
 
   it("страница не предлагает «Never» в обход проверки", () => {

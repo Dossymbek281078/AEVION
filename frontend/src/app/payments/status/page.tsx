@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
+import { readPersistence, durabilityNotice } from "../links/durability";
 
 type Surface = { name: string; count: number; ok: boolean };
 
@@ -14,6 +15,9 @@ type Health = {
   version: string;
   runtime: string;
   memory_rss_mb: number | null;
+  // Ручка отдаёт это поле давно, а страница его не читала — и «состояние
+  // платёжного контура» молчало о том, что хранилище в памяти процесса.
+  persistence?: string;
   surfaces: Surface[];
 };
 
@@ -204,7 +208,37 @@ export default function StatusPage() {
               value={health?.memory_rss_mb ? `${health.memory_rss_mb} MB` : "—"}
               accent="#c4b5fd"
             />
+            <Stat
+              label="Storage"
+              value={health ? (readPersistence(health.persistence) === "kv" ? "durable (kv)" : readPersistence(health.persistence) === "memory" ? "in-memory" : "unknown") : "—"}
+              accent={health && readPersistence(health.persistence) === "kv" ? "#86efac" : "#fda4af"}
+            />
           </div>
+          {/*
+            Строка о долговечности. Страница обещает «live checks of every
+            public endpoint», то есть отвечает на вопрос «сервер жив», а не
+            «данные переживут перезапуск». Замер 21.08.2026: хранилище было в
+            памяти процесса, а страница состояния об этом молчала.
+            Текст берётся из того же модуля, что и у страницы выпуска ссылок:
+            второй способ говорить то же самое разошёлся бы с первым.
+          */}
+          {health && durabilityNotice(readPersistence(health.persistence)).warn ? (
+            <p
+              role="status"
+              style={{
+                margin: "14px 0 0",
+                padding: "10px 12px",
+                border: "1px solid #fbbf24",
+                background: "rgba(251,191,36,0.12)",
+                borderRadius: 10,
+                fontSize: 13,
+                lineHeight: 1.5,
+                color: "#fde68a",
+              }}
+            >
+              {durabilityNotice(readPersistence(health.persistence)).text}
+            </p>
+          ) : null}
         </div>
       </section>
 

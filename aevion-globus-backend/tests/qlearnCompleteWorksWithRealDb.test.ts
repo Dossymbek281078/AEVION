@@ -30,6 +30,7 @@ const enrollments = new Map<
 const certs = new Map<string, Record<string, string>>();
 const bookmarks = new Map<string, { userId: string; courseId: string; bookmarkedAt: string }>();
 const activity = new Set<string>();
+const lessons: Array<{ id: string; courseId: string; title: string; order: number }> = [];
 const quizzes: Array<{
   id: string; lessonId: string; question: string;
   options: string[]; correctIndex: number; explanation: string | null;
@@ -96,6 +97,13 @@ vi.mock("../src/lib/dbPool", () => ({
         // не дали бы отличить чтение колонки от чтения памяти.
         if (s.includes('"lastActivityAt" = NOW()')) e.lastActivityAt = DB_ACTIVITY_STAMP;
         return { rows: [{ ...e }], rowCount: 1 };
+      }
+      if (s.includes('INSERT INTO "QLearnLesson"')) {
+        lessons.push({ id: p[0], courseId: p[1], title: p[2], order: Number(p[6]) });
+        return { rows: [], rowCount: 1 };
+      }
+      if (s.includes('COUNT(*)') && s.includes('"QLearnLesson"')) {
+        return { rows: [{ n: lessons.filter((l) => l.courseId === p[0]).length }], rowCount: 1 };
       }
       if (s.includes('INSERT INTO "QLearnQuiz"')) {
         quizzes.push({
@@ -432,5 +440,46 @@ describe("курс можно завершить, когда база жива",
       .set("Authorization", `Bearer ${stranger}`)
       .send({ question: "Чужой", options: ["a", "b"], correctIndex: 0 });
     expect(res.status, "посторонний смог дописать вопрос в чужой курс").toBe(403);
+  });
+
+  test("урок, созданный автором, ложится в базу", async () => {
+    const AUTHOR = jwt.sign({ sub: "author-1" }, "dev-auth-secret", {
+      algorithm: "HS256", expiresIn: "1h",
+    });
+    const before = lessons.length;
+    const res = await request(app())
+      .post(`/x/me/courses/${COURSE_ID}/lessons`)
+      .set("Authorization", `Bearer ${AUTHOR}`)
+      .send({ title: "Первый урок", content: "текст" });
+    expect(res.status, `урок не создан: ${JSON.stringify(res.body)}`).toBe(201);
+    expect(lessons.length, "урок не доехал до базы").toBe(before + 1);
+    expect(
+      res.body?.storage,
+      "при ЖИВОЙ базе признак памяти неуместен: он означал бы, что урок потеряется",
+    ).toBeUndefined();
+  });
+
+  test("урок от ИИ тоже ложится в базу и нумеруется по базе", async () => {
+    // Права здесь считались по памяти, поэтому на проде автор получал 404 о
+    // своём курсе — генерация не работала вовсе.
+    const AUTHOR = jwt.sign({ sub: "author-1" }, "dev-auth-secret", {
+      algorithm: "HS256", expiresIn: "1h",
+    });
+    const beforeInCourse = lessons.filter((l) => l.courseId === COURSE_ID).length;
+    const beforeAll = lessons.length;
+    const res = await request(app())
+      .post(`/x/me/courses/${COURSE_ID}/ai-generate-lesson`)
+      .set("Authorization", `Bearer ${AUTHOR}`)
+      .send({ topic: "Основы" });
+    expect(
+      res.status,
+      `генерация ответила ${res.status}: ${JSON.stringify(res.body).slice(0, 200)}`,
+    ).toBe(201);
+    // Считаем ПРИРОСТ, а не «больше нуля»: в базе уже лежит урок из соседнего
+    // случая, и утверждение «больше нуля» держалось бы за него — мутация
+    // «урок снова только в память» проходила молча.
+    expect(lessons.length, "сгенерированный урок не доехал до базы").toBe(beforeAll + 1);
+    expect(res.body?.lesson?.order, "номер урока считался по памяти").toBe(beforeInCourse + 1);
+    expect(res.body?.storage, "при живой базе признак памяти неуместен").toBeUndefined();
   });
 });

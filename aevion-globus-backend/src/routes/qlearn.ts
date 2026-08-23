@@ -255,6 +255,48 @@ async function myEnrollments(
   return { rows, failed: false };
 }
 
+/**
+ * Сохранить урок. Один путь на обе ручки — обычное создание и генерацию ИИ.
+ *
+ * У генерации ИИ своей записи в базу не было вовсе: урок уходил в Map и
+ * исчезал при ближайшей выкатке, а ответ был неотличим от настоящего
+ * сохранения. Это при том, что «AI-тренер» стоит в описании товара.
+ */
+async function lessonSave(lesson: Lesson): Promise<{ failed: boolean }> {
+  if (isQLearnDbReady()) {
+    try {
+      await pool.query(
+        `INSERT INTO "QLearnLesson"
+         ("id","courseId","title","content","videoUrl","duration","order","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [lesson.id, lesson.courseId, lesson.title, lesson.content,
+         lesson.videoUrl, lesson.duration, lesson.order, lesson.createdAt],
+      );
+      return { failed: false };
+    } catch (e) {
+      console.error("[QLearn] lesson insert failed", e);
+      return { failed: true };
+    }
+  }
+  memLessons.set(lesson.id, lesson);
+  return { failed: false };
+}
+
+/** Сколько уроков уже в курсе — для порядкового номера следующего. */
+async function lessonCount(courseId: string): Promise<number> {
+  if (isQLearnDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM "QLearnLesson" WHERE "courseId" = $1`, [courseId]);
+      return Number(rows[0]?.n ?? 0);
+    } catch (e) {
+      console.error("[QLearn] lesson count failed", e);
+      return 0;
+    }
+  }
+  return Array.from(memLessons.values()).filter((l) => l.courseId === courseId).length;
+}
+
 /** Вопросы теста к уроку — слой хранилища. */
 async function quizAdd(q: QuizQuestion): Promise<{ failed: boolean }> {
   if (isQLearnDbReady()) {
@@ -750,23 +792,13 @@ qlearnRouter.post("/me/courses/:id/lessons", async (req: Request, res: Response)
     createdAt: now,
   };
 
-  if (isQLearnDbReady()) {
-    try {
-      await pool.query(
-        `INSERT INTO "QLearnLesson"
-         ("id","courseId","title","content","videoUrl","duration","order","createdAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [lesson.id, lesson.courseId, lesson.title, lesson.content,
-         lesson.videoUrl, lesson.duration, lesson.order, lesson.createdAt],
-      );
-      res.status(201).json({ lesson });
-      return;
-    } catch (e) {
-      console.error("[QLearn] POST /lessons DB error", e);
-    }
+  // Вторая try/catch этой ручки: первую (проверку прав) починили раньше, а эта
+  // тихо роняла урок в память и отвечала 201 — автор считал урок созданным.
+  const saved = await lessonSave(lesson);
+  if (saved.failed) {
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
   }
-  memLessons.set(lessonId, lesson);
-  res.status(201).json({ lesson, ...MEMORY_NOTE });
+  res.status(201).json(isQLearnDbReady() ? { lesson } : { lesson, ...MEMORY_NOTE });
 });
 
 // GET /api/qlearn/courses/:id/lessons/:lessonId
@@ -1304,7 +1336,13 @@ qlearnRouter.post("/me/courses/:courseId/ai-generate-lesson", async (req: Reques
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
   const courseId = param(req, "courseId");
 
-  const course = memCourses.get(courseId);
+  // Права считались по memCourses: при живой базе курса там нет, поэтому автор
+  // получал «Course not found» о СВОЁМ курсе — генерация ИИ не работала на
+  // проде вовсе, хотя «AI-тренер» стоит в описании товара.
+  const { course, failed: courseFailed } = await courseById(courseId);
+  if (courseFailed) {
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
+  }
   if (!course) { res.status(404).json({ error: "Course not found" }); return; }
   if (course.authorId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
 
@@ -1348,9 +1386,14 @@ qlearnRouter.post("/me/courses/:courseId/ai-generate-lesson", async (req: Reques
     content: `${content}\n\n**Summary:** ${summary}`,
     videoUrl: "",
     duration: 0,
-    order: (Array.from(memLessons.values()).filter((l) => l.courseId === courseId).length) + 1,
+    order: (await lessonCount(courseId)) + 1,
     createdAt: nowTs,
   };
-  memLessons.set(lessonId, lesson);
-  res.status(201).json({ lesson });
+  const saved = await lessonSave(lesson);
+  if (saved.failed) {
+    // Сгенерированный урок, лежащий в памяти одного процесса, не создан:
+    // автор увидит «готово», а к вечеру урока не будет.
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
+  }
+  res.status(201).json(isQLearnDbReady() ? { lesson } : { lesson, ...MEMORY_NOTE });
 });

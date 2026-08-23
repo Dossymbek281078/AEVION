@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { queryNumber } from "../lib/queryNumber";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import jwt from "jsonwebtoken";
@@ -372,7 +373,7 @@ pricingRouter.get("/leads", (req, res) => {
     return res.status(401).json({ error: "unauthorized" });
   }
 
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
+  const limit = Math.min(Math.max(queryNumber(req.query.limit, 100), 1), 500);
 
   try {
     if (!existsSync(LEADS_FILE)) return res.json({ items: [], total: 0 });
@@ -907,7 +908,7 @@ pricingRouter.get("/applications", (req, res) => {
   const file =
     kind === "affiliate" ? AFFILIATE_FILE : kind === "partner" ? PARTNERS_FILE : EDU_FILE;
 
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
+  const limit = Math.min(Math.max(queryNumber(req.query.limit, 100), 1), 500);
 
   try {
     if (!existsSync(file)) return res.json({ items: [], total: 0, kind });
@@ -942,7 +943,7 @@ pricingRouter.get("/newsletter/list", (req, res) => {
   if (got !== required) {
     return res.status(401).json({ error: "unauthorized" });
   }
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
+  const limit = Math.min(Math.max(queryNumber(req.query.limit, 100), 1), 500);
 
   try {
     if (!existsSync(NEWSLETTER_FILE)) return res.json({ items: [], total: 0 });
@@ -1326,8 +1327,8 @@ pricingRouter.get("/changelog", (req, res) => {
   const KIND_VALUES: ChangelogKind[] = ["added", "changed", "removed", "deprecated", "promo", "module"];
   const kind = typeof req.query.kind === "string" ? (req.query.kind as ChangelogKind) : undefined;
   const since = typeof req.query.since === "string" ? req.query.since : undefined;
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
-  const offset = Math.max(parseInt(String(req.query.offset ?? "0"), 10), 0);
+  const limit = Math.min(Math.max(queryNumber(req.query.limit, 100), 1), 500);
+  const offset = Math.max(queryNumber(req.query.offset, 0), 0);
 
   if (kind && !KIND_VALUES.includes(kind)) {
     return res.status(400).json({ error: "invalid_kind", kind });

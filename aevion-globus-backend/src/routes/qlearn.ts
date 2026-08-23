@@ -6,6 +6,18 @@ import { getPool } from "../lib/dbPool";
 import { ensureQLearnTables, isQLearnDbReady } from "../lib/ensureQLearnTables";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
 
+/**
+ * Признак того, что запись легла ТОЛЬКО в память процесса.
+ *
+ * Форма та же, что в остальных модулях: поле storage в теле ответа. Без него
+ * 201 неотличим от настоящего сохранения — автор считает курс созданным, а тот
+ * живёт до перезапуска сервиса.
+ */
+const MEMORY_NOTE = {
+  storage: "memory" as const,
+  warning: "Хранилище недоступно: запись сохранена только до перезапуска сервиса.",
+};
+
 const WARN =
   "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
 
@@ -410,12 +422,12 @@ qlearnRouter.post("/me/courses", async (req: Request, res: Response) => {
       );
       res.status(201).json({ course });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      console.error("[QLearn] POST /courses DB error", e);
     }
   }
   memCourses.set(newId, course);
-  res.status(201).json({ course });
+  res.status(201).json({ course, ...MEMORY_NOTE });
 });
 
 // POST /api/qlearn/me/courses/:id/lessons
@@ -467,12 +479,12 @@ qlearnRouter.post("/me/courses/:id/lessons", async (req: Request, res: Response)
       );
       res.status(201).json({ lesson });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      console.error("[QLearn] POST /lessons DB error", e);
     }
   }
   memLessons.set(lessonId, lesson);
-  res.status(201).json({ lesson });
+  res.status(201).json({ lesson, ...MEMORY_NOTE });
 });
 
 // GET /api/qlearn/courses/:id/lessons/:lessonId

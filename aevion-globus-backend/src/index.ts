@@ -1298,8 +1298,6 @@ app.use("/api/smeta-trainer", smetaTrainerRouter);
 // QContract — self-destruct smart documents
 app.use("/api/qcontract", qcontractRouter);
 
-// HealthAI — personal AI doctor
-app.use("/api/healthai", healthaiRouter);
 
 // QFusionAI — smart multi-provider LLM router
 app.use("/api/qfusionai", qfusionaiRouter);
@@ -1360,16 +1358,12 @@ app.use("/api/qrenew", qrenewRouter);
 app.use("/api/longevity", longevityRouter);
 // QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
-// MapReality — civic signals map (MVP: signals + supports)
-app.use("/api/mapreality", mapRealityRouter);
 // StartupX — startup ideas marketplace + investor interest
 app.use("/api/startupx", startupExchangeRouter);
 app.use("/api/ventures", venturesRouter);
 // QVenture + QSkyway now mounted via routes/moduleManifest.ts (EXTRA_MOUNTS)
 // Kids AI Content — multilang lesson catalog + AI tutor
 app.use("/api/kids-ai", kidsAiContentRouter);
-// Voice of Earth — multilang music tracks + voting
-app.use("/api/voice-of-earth", voiceOfEarthRouter);
 // QJobs → QBuild social hiring layer. Canonical: /api/build/jobs, legacy: /api/qjobs
 app.use("/api/build/jobs", qjobsRouter);
 app.use("/api/qjobs", qjobsRouter);
@@ -1383,12 +1377,6 @@ app.use("/api/revenue", revenueRouter);
 // Universal Search — /api/search?q=<query> across QStore/QLearn/QNews/QEvents/QJobs/QRight
 app.use("/api/search", searchRouter);
 
-// DeepSan — anti-chaos productivity (tasks, focus sessions, stats)
-app.use("/api/deepsan", deepSanRouter);
-// QPersona — digital avatar profiles (persona CRUD, AI bio, public gallery)
-app.use("/api/qpersona", qpersonaRouter);
-// QLife — longevity & anti-aging (biomarker log, trends, AI plan)
-app.use("/api/qlife", qlifeRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);

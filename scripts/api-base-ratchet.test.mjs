@@ -47,7 +47,7 @@ const APP = path.join(HERE, "..", "frontend", "src", "app");
  * Срез 10.08.2026: 25 — qpaynet 19, build 2, cyberchess 2, qcoreai 2.
  * Все четыре зоны заняты другими сессиями. startup-exchange закрыт здесь же.
  */
-const BASELINE = 25;
+const BASELINE = 23;
 
 /** Пути, которые обслуживает сам Next — для них голый fetch правильный. */
 const SAME_ORIGIN = ["/api/health", "/api/errors", "/api/metrics", "/api/openapi.json", "/api/pay/", "/api/payments/", "/api/revalidate-sdks"];

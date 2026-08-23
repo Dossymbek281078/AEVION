@@ -1,4 +1,4 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, afterAll } from "vitest";
 import express from "express";
 import request from "supertest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { pgIntId, PG_INT_MAX } from "../src/lib/queryNumber";
 import { mapRealityRouter } from "../src/routes/mapReality";
 import { voiceOfEarthRouter } from "../src/routes/voiceOfEarth";
+import { startupExchangeRouter } from "../src/routes/startupExchange";
 
 /**
  * `?id=99999999999999999999` — 400, а не тихий 404 с записью в Sentry.
@@ -57,16 +58,26 @@ describe("pgIntId", () => {
 });
 
 describe("ручки отвечают 400, а не тихим 404", () => {
+  // startupExchange на импорте запускает не-ожидаемую подготовку таблиц
+  // (IIFE с await внутри). Её лог приходит уже после конца файла, и vitest
+  // валит прогон EnvironmentTeardownError «Closing rpc while onUserConsoleLog
+  // was pending» — при девяти зелёных тестах. Даём ей досказать. Трогать сам
+  // модуль ради теста не стал: это чужая зона и другая задача.
+  afterAll(async () => {
+    await new Promise((r) => setTimeout(r, 300));
+  });
   const app = express();
   app.use(express.json());
   app.use("/api/mapreality", mapRealityRouter);
   app.use("/api/voiceofearth", voiceOfEarthRouter);
+  app.use("/api/startupx", startupExchangeRouter);
 
   const HUGE = "99999999999999999999";
 
   test.each([
     ["/api/mapreality/signals", "MapReality (тот самый из Sentry)"],
     ["/api/voiceofearth/tracks", "VoiceOfEarth"],
+    ["/api/startupx/ideas", "StartupExchange (замер на проде 23.08: отвечал тихим 404)"],
   ])("%s/<огромный id> → 400", async (base) => {
     const res = await request(app).get(`${base}/${HUGE}`);
     expect(
@@ -94,7 +105,14 @@ function tsFiles(dir: string): string[] {
   return out;
 }
 
-const OLD_SHAPE = /!Number\.isFinite\((\w*[Ii]d)\)\s*\|\|\s*\1\s*<=\s*0/;
+// Две записи одной ошибки. Сторож родился из случая в Sentry, где стояло
+// `Number.isFinite`, и знал ровно эту букву. Замер 23.08.2026: ещё семь мест
+// писали `Number.isInteger` — дробное они отбивают, а 1e20 проходит так же,
+// потому что 1e20 целое. Сторож их не видел, хотя дефект тот же.
+//
+// Верхняя граница у обеих форм отсутствует одинаково, поэтому и шаблон один.
+// Нижняя граница пишется и как `< 1`, и как `<= 0` — тоже одна и та же мысль.
+const OLD_SHAPE = /!Number\.(isFinite|isInteger)\((\w*[Ii]d|prNumber)\)\s*\|\|\s*\2\s*(<=\s*0|<\s*1)/;
 
 describe("сторож: проверка id без верхней границы не возвращается", () => {
   const files = tsFiles(join(__dirname, "..", "src", "routes"));
@@ -103,6 +121,12 @@ describe("сторож: проверка id без верхней границы
     expect(files.length).toBeGreaterThan(50);
     expect(OLD_SHAPE.test("if (!Number.isFinite(id) || id <= 0) return;")).toBe(true);
     expect(OLD_SHAPE.test("if (id === null) return;")).toBe(false);
+    // Вторая буква той же ошибки — из-за неё сторож молчал про семь мест.
+    expect(OLD_SHAPE.test("if (!Number.isInteger(id) || id < 1) return;")).toBe(true);
+    expect(OLD_SHAPE.test("if (!Number.isInteger(id) || id <= 0) return;")).toBe(true);
+    expect(OLD_SHAPE.test("if (!Number.isInteger(prNumber) || prNumber <= 0) {")).toBe(true);
+    // И контроль в другую сторону: починенная форма краснеть не должна.
+    expect(OLD_SHAPE.test("const id = pgIntId(req.params.id);")).toBe(false);
   });
 
   test("нигде нет проверки id, которую 1e20 проходит", () => {

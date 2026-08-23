@@ -70,7 +70,20 @@ function tsFiles(dir: string): string[] {
 }
 
 const ROUTES = join(__dirname, "..", "src", "routes");
-const RAW = /Number\(\s*req\.query\.[A-Za-z_]\w*\s*\?\?/;
+// Две формы, а не одна. Сторож родился, зная про `Number(req.query.X ?? D)`,
+// и ровно поэтому не видел `parseInt(String(req.query.X ?? "D"), 10)` — а это
+// та же дыра теми же руками. Замер 23.08.2026: четыре таких места в
+// routes/events.ts, и все четыре молчаливые. `?limit=abc` не обрезал выдачу,
+// а СНИМАЛ ограничение целиком (slice(-NaN) = slice(0) = весь файл);
+// `?hours=abc` делал каждое сравнение с NaN ложным, и отчёт выходил пустым —
+// снаружи неотличимо от «за этот срок ничего не происходило».
+//
+// Проверка, знающая одну форму из двух, пропускает вторую МОЛЧА. Здесь же
+// рядом лежал файл, где про это написано прямым текстом (next-params-type-check).
+// Граница слова обязательна: без неё шаблон ловит и `queryNumber(`, и
+// `vNumber(` — то есть ровно тех помощников, которые дыру и закрывают.
+// Поймано собственным контрольным тестом в первую же минуту.
+const RAW = /\b(?:Number|parseInt)\s*\(\s*(?:String\s*\(\s*)?req\.query\.[A-Za-z_]\w*/;
 
 describe("сторож: сырой Number(req.query.X ?? D) не возвращается в маршруты", () => {
   const files = tsFiles(ROUTES);
@@ -84,6 +97,9 @@ describe("сторож: сырой Number(req.query.X ?? D) не возвращ�
   test("контроль: сканер краснеет на заведомо дырявой строке", () => {
     expect(RAW.test("  const limit = Number(req.query.limit ?? 50);")).toBe(true);
     expect(RAW.test("  const limit = queryNumber(req.query.limit, 50);")).toBe(false);
+    // Вторая форма — та, из-за которой сторож три недели молчал.
+    expect(RAW.test('  const n = parseInt(String(req.query.hours ?? "24"), 10);')).toBe(true);
+    expect(RAW.test("  const n = Number.parseInt(String(req.query.recent), 10);")).toBe(true);
   });
 
   test("каждое оставшееся место защищено Number.isFinite рядом", () => {
@@ -95,8 +111,22 @@ describe("сторож: сырой Number(req.query.X ?? D) не возвращ�
         // комментарии не считаем — иначе сторож покраснеет на собственном разборе
         if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*")) return;
         if (!RAW.test(line)) return;
-        const window = lines.slice(i, i + 4).join("\n");
-        if (!window.includes("Number.isFinite")) {
+        // Окно шире четырёх строк и признак — `isFinite(`, а не только
+        // `Number.isFinite`. Замер 23.08.2026: на четырёх строках сторож
+        // обвинял три невиновных места (revenue.ts, mvpConcepts.ts,
+        // qventure.ts) — проверка там стояла пятой строкой или писалась
+        // голым isFinite. Сторож, который врёт в треть случаев, читать
+        // перестают, и он не спасает уже никого.
+        const window = lines.slice(i, i + 7).join("\n");
+        // Что честно считается защитой от NaN: явная проверка рядом,
+        // умолчание через || (оно ловит NaN, потому что NaN ложно) и
+        // канонический помощник. Без этого списка сторож покраснел бы на
+        // безопасных местах — а к красному, которое всегда красное, привыкают.
+        const guarded =
+          window.includes("isFinite(") ||
+          /\|\|\s*[-\d]/.test(code) ||
+          code.includes("queryNumber(");
+        if (!guarded) {
           bad.push(`${f.split(/[\/]/).slice(-2).join("/")}:${i + 1}  ${code}`);
         }
       });

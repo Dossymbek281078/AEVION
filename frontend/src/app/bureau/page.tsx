@@ -101,6 +101,30 @@ function BureauPageInner() {
   // страница писала «No certificates yet» и звала защитить первую работу —
   // человеку, у которого работы уже защищены (21.08.2026).
   const [certsFailed, setCertsFailed] = useState(false);
+  // Сколько нотариусов РЕАЛЬНО зарегистрировано.
+  //
+  // Тариф «Notarized» показывал жёсткую пометку «▲ live» рядом с платной
+  // ценой, а список нотариусов пуст: GET /api/bureau/notaries отвечает
+  // {"notaries":[]} (проверено на проде 21.08.2026). Человек читал «в прямом
+  // эфире», нажимал «Просмотреть реестр» и попадал в пустоту.
+  //
+  // null означает «ещё не спросили» или «спросить не удалось» — и это НЕ то же
+  // самое, что ноль. При неизвестном состоянии пометка остаётся прежней:
+  // пугать отказом из-за собственной неудачи нельзя.
+  const [notaryCount, setNotaryCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(apiUrl("/api/bureau/notaries"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        const list = Array.isArray(d?.notaries) ? d.notaries : null;
+        setNotaryCount(list ? list.length : null);
+      })
+      .catch(() => { /* оставляем null: «не знаю», а не «ноль» */ });
+    return () => { alive = false; };
+  }, []);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
 
@@ -548,7 +572,8 @@ function BureauPageInner() {
                 name: "Notarized",
                 price: "From $89 / cert",
                 blurb: "Licensed notary co-signs the certificate with Ed25519, producing an apostille-ready document admissible in EAEU courts.",
-                badge: "▲ live",
+                // Пометка по ФАКТУ: пустой реестр не называется «live».
+                badge: notaryCount === 0 ? "▲ by request" : "▲ live",
                 badgeColor: "#7c3aed",
                 cta: { label: "View Notary Registry", href: "/bureau/notaries" },
               },

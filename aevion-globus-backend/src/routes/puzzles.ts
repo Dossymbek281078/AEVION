@@ -3,6 +3,7 @@
  * Routes: GET /api/puzzles  GET /api/puzzles/themes  GET /api/puzzles/count  POST /api/puzzles/seed
  */
 import { Router, Request, Response } from "express";
+import { queryNumber } from "../lib/queryNumber";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
@@ -74,7 +75,8 @@ puzzlesRouter.get("/", async (req: Request, res: Response) => {
     const maxR = parseInt(req.query.maxR as string) || 3000;
     const goal = typeof req.query.goal === "string" && req.query.goal !== "all" ? req.query.goal : undefined;
     const side = (req.query.side === "w" || req.query.side === "b") ? req.query.side : undefined;
-    const mateIn = req.query.mateIn ? parseInt(req.query.mateIn as string) : undefined;
+    const mateInN = queryNumber(req.query.mateIn, 0); // мусор давал NaN; NaN ложен, и условие ниже его отбрасывало — сохраняем ровно это
+    const mateIn = mateInN > 0 ? mateInN : undefined;
     const random = req.query.random === "1";
     const conditions: string[] = [`"rating" >= $1 AND "rating" <= $2`];
     const params: (string | number)[] = [minR, maxR];

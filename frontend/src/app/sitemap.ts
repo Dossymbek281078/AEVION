@@ -1,7 +1,26 @@
 import type { MetadataRoute } from "next";
+import { DISALLOWED_PATHS } from "./robots";
 import { getApiBase } from "@/lib/apiBase";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
+
+// ⚠️ Руками сюда добавлять адрес МОЖНО только если страница уже есть:
+// обход каталогов ниже подхватывает новые страницы сам, а запись в этом
+// списке живёт вечно и не проверяется ничем. Замер 21.08.2026: карта
+// отдавала поисковику 4 мёртвых адреса из 782, и три из них пришли
+// отсюда — /bureau/transparency и /qcontract/documents (страниц нет ни
+// в одной из веток) и /qcoreai/docs (страница есть, но её вырезал
+// незаякоренный шаблон docs/ в .vercelignore — починено там же).
+/**
+ * Запрещён ли адрес для поисковика. Вынесено на уровень модуля, чтобы
+ * сторож мог проверить предикат БЕЗ сети: карта сайта тянет живые
+ * списки вакансий и проектов, и тест, зовущий её целиком, проверял бы
+ * заодно доступность бэкенда — то есть краснел бы не по делу.
+ */
+export function isBlockedForCrawlers(u: string): boolean {
+  const p = u.replace(/^https?:\/\/[^/]+/, "");
+  return DISALLOWED_PATHS.some((d) => p === d || p === d.replace(/\/$/, "") || p.startsWith(d));
+}
 
 const TOP_LEVEL_ROUTES: Array<{
   path: string;
@@ -332,5 +351,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // we prefer multiple smaller files long-term — single sitemap is enough
   // for now).
   const all = [...staticRoutes, ...skillRoutes, ...vacancyRoutes, ...projectRoutes, ...employerRoutes];
-  return all.slice(0, 5000);
+
+  // Не звать поисковика туда, куда сами его не пускаем.
+  //
+  // Список берём из robots.ts, а не переписываем: два списка неизбежно
+  // разъедутся. Замер 21.08.2026 до этого фильтра: карта отдавала 782 адреса,
+  // и 19 из них robots.txt запрещает — /admin/* (9), /qpaynet/admin/* (8),
+  // /account и /constitution/admin. Обход каталогов их честно находил, просто
+  // ничего не знал про запреты. Google на противоречие отвечает тем, что
+  // показывает адрес в выдаче БЕЗ описания, — то есть ссылка на админку видна.
+  const crawlable = all.filter((e) => !isBlockedForCrawlers(String(e.url)));
+
+  return crawlable.slice(0, 5000);
 }

@@ -33,7 +33,7 @@ const APP = path.join(HERE, "..", "frontend", "src", "app");
  * другими сессиями; из-за этих пяти сборка фронтенда красная.
  * Корневая [id] и четыре страницы smeta-trainer закрыты в 3d467d47e.
  */
-const BASELINE = 5;
+const BASELINE = 0;
 
 // `params` и `searchParams`, объявленные объектным типом — сами по себе или
 // в объединении с Promise. Данные вида `params: "текст"` и `let params: any`

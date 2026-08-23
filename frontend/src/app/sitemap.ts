@@ -13,7 +13,6 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qright", changeFrequency: "daily", priority: 0.9 },
   { path: "/qright/transparency", changeFrequency: "weekly", priority: 0.6 },
   { path: "/bureau", changeFrequency: "daily", priority: 0.9 },
-  { path: "/bureau/transparency", changeFrequency: "weekly", priority: 0.6 },
   { path: "/qsign", changeFrequency: "weekly", priority: 0.7 },
   { path: "/quantum-shield", changeFrequency: "weekly", priority: 0.7 },
   { path: "/planet", changeFrequency: "daily", priority: 0.8 },
@@ -65,7 +64,6 @@ const TOP_LEVEL_ROUTES: Array<{
   // QContract
   { path: "/qcontract", changeFrequency: "weekly", priority: 0.75 },
   { path: "/qcontract/create", changeFrequency: "weekly", priority: 0.6 },
-  { path: "/qcontract/documents", changeFrequency: "daily", priority: 0.5 },
   // DevHub — AI developer platform
   { path: "/devhub", changeFrequency: "weekly", priority: 0.8 },
   // Smeta Trainer
@@ -274,7 +272,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .map((s) => s.skill?.trim())
     .filter((s): s is string => !!s)
     .slice(0, 50)
-    .map((s) => s.toLowerCase().replace(/\s+/g, "-"));
+    // encodeURIComponent обязателен: у навыка может быть слэш в названии,
+    // и тогда адрес разваливается на ДВА сегмента, а маршрут [slug] —
+    // односегментный. Замер 20.08.2026: из двух популярных навыков один
+    // назывался "mig/mag welding", и карта сайта вела на 404.
+    // Проверено пробой на проде, а не рассуждением:
+    //   /build/skill/mig%2Fmag-welding -> 200
+    //   /build/skill/mig/mag-welding   -> 404
+    // Страница разбирает адрес через decodeURIComponent, так что
+    // процентная запись доходит до неё в исходном виде.
+    .map((s) => encodeURIComponent(s.toLowerCase().replace(/\s+/g, "-")));
 
   // Merge strategy:
   // 1. Every route in TOP_LEVEL_ROUTES keeps its hand-tuned changeFreq + priority

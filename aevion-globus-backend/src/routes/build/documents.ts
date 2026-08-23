@@ -33,6 +33,11 @@ documentsRouter.post("/", async (req, res) => {
     if ((result.rowCount ?? 0) === 0) return fail(res, 409, "document_already_exists");
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
+    // Причина отказа обязана быть НАЗВАНА. До 20.08.2026 все шесть
+    // обработчиков этого файла ловили ошибку и молчали: наружу шёл
+    // код вроде "documents_user_failed", и по нему нельзя было
+    // отличить нехватку колонки от сбоя базы. Ответ клиенту тот же.
+    console.error("[build/documents] document_upload_failed:", err);
     return fail(res, 500, "document_upload_failed");
   }
 });
@@ -48,6 +53,11 @@ documentsRouter.get("/me", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
+    // Причина отказа обязана быть НАЗВАНА. До 20.08.2026 все шесть
+    // обработчиков этого файла ловили ошибку и молчали: наружу шёл
+    // код вроде "documents_user_failed", и по нему нельзя было
+    // отличить нехватку колонки от сбоя базы. Ответ клиенту тот же.
+    console.error("[build/documents] documents_my_failed:", err);
     return fail(res, 500, "documents_my_failed");
   }
 });
@@ -70,6 +80,11 @@ documentsRouter.get("/user/:userId", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
+    // Причина отказа обязана быть НАЗВАНА. До 20.08.2026 все шесть
+    // обработчиков этого файла ловили ошибку и молчали: наружу шёл
+    // код вроде "documents_user_failed", и по нему нельзя было
+    // отличить нехватку колонки от сбоя базы. Ответ клиенту тот же.
+    console.error("[build/documents] documents_user_failed:", err);
     return fail(res, 500, "documents_user_failed");
   }
 });
@@ -89,6 +104,11 @@ documentsRouter.get("/admin/pending", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
+    // Причина отказа обязана быть НАЗВАНА. До 20.08.2026 все шесть
+    // обработчиков этого файла ловили ошибку и молчали: наружу шёл
+    // код вроде "documents_user_failed", и по нему нельзя было
+    // отличить нехватку колонки от сбоя базы. Ответ клиенту тот же.
+    console.error("[build/documents] admin_documents_failed:", err);
     return fail(res, 500, "admin_documents_failed");
   }
 });
@@ -108,6 +128,11 @@ documentsRouter.patch("/:id/verify", async (req, res) => {
     if (result.rowCount === 0) return fail(res, 404, "document_not_found");
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
+    // Причина отказа обязана быть НАЗВАНА. До 20.08.2026 все шесть
+    // обработчиков этого файла ловили ошибку и молчали: наружу шёл
+    // код вроде "documents_user_failed", и по нему нельзя было
+    // отличить нехватку колонки от сбоя базы. Ответ клиенту тот же.
+    console.error("[build/documents] document_verify_failed:", err);
     return fail(res, 500, "document_verify_failed");
   }
 });
@@ -128,6 +153,11 @@ documentsRouter.patch("/:id/reject", async (req, res) => {
     if (result.rowCount === 0) return fail(res, 404, "document_not_found");
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
+    // Причина отказа обязана быть НАЗВАНА. До 20.08.2026 все шесть
+    // обработчиков этого файла ловили ошибку и молчали: наружу шёл
+    // код вроде "documents_user_failed", и по нему нельзя было
+    // отличить нехватку колонки от сбоя базы. Ответ клиенту тот же.
+    console.error("[build/documents] document_reject_failed:", err);
     return fail(res, 500, "document_reject_failed");
   }
 });

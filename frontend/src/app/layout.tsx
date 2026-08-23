@@ -92,6 +92,31 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}
       >
+        {/*
+          Язык объявляется ДО отрисовки, из куки выбора языка.
+
+          Зачем. В корневом макете стоит lang="en", и для холодной отрисовки
+          это ВЕРНО: сервер отдаёт английский текст. Но страницы, которые
+          рисуются через getServerT (например /awards), отдают русский —
+          и объявление расходится с содержимым. Замер 21.08.2026 при
+          Accept-Language ru: на /awards 1284 знака кириллицы под lang="en".
+
+          Последствие не косметическое: браузер видит несоответствие и
+          предлагает (а при включённой настройке — молча делает) машинный
+          перевод НАШЕЙ страницы. Проверено на себе: Chrome показал
+          «Наборы средств разработки программного обеспечения» там, где
+          в исходнике стоит «SDK». Экранные читалки произносят русский
+          текст по английским правилам.
+
+          Почему не читать куку в самом макете. cookies() в корневом
+          макете переводит ВЕСЬ сайт на динамическую отрисовку и отключает
+          статику на всех страницах — цена несоразмерна поводу.
+
+          Провайдер языка тоже ставит lang, но ПОСЛЕ гидрации; браузер к
+          тому моменту уже принял решение о переводе. Этот скрипт
+          выполняется раньше и стоит меньше килобайта.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: "try{var c=document.cookie.split('; ');for(var i=0;i<c.length;i++){var p=c[i].split('=');if(p[0]==='aevion_lang_v1'){var l=decodeURIComponent(p[1]||'');if(l==='ru'||l==='kk'||l==='en'){document.documentElement.lang=l;}break;}}}catch(e){}" }} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}

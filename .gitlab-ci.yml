@@ -1,3 +1,14 @@
+# ОБЪЕДИНЕНО 21.08.2026 при сведении двух веток в одну.
+#
+# Взято: блок workflow отсюда (он строже — не даёт пайплайну возникнуть
+# вовсе, тогда как правила у отдельных задач пайплайн всё же создают),
+# и ВСЕ задачи обеих сторон: прогон тестов фронта + сборка бэкенда с
+# тестами, сборка фронта и смоук оплаты.
+#
+# Почему не выбором стороны: у одной был только прогон фронта, у другой —
+# три задачи без глобального ограничения. Любой выбор терял бы либо
+# проверки, либо защиту от сотен пайплайнов.
+#
 # CI для AEVION на GitLab.
 #
 # Зачем: пока аккаунт GitHub заблокирован, автоматических проверок нет вообще —
@@ -23,6 +34,8 @@ workflow:
 
 stages:
   - test
+  - build
+  - smoke
 
 frontend-tests:
   stage: test
@@ -44,3 +57,68 @@ frontend-tests:
   # не съедал бесплатные минуты молча.
   timeout: 20 minutes
   interruptible: true
+
+default:
+  image: node:24
+  # Кэш общий на ветку: npm install в трёх job подряд иначе тянет всё заново.
+  cache:
+    key: "$CI_COMMIT_REF_SLUG"
+    paths:
+      - aevion-globus-backend/node_modules/
+      - frontend/node_modules/
+
+# Гейт нужен на ветках, которые идут в main, и на самом main — как в ci.yml,
+# где стоят push[main,master,develop] + pull_request.
+# Второй блок workflow (из ready-wave2) удалён при сведении веток 21.08.2026.
+# YAML берёт ПОСЛЕДНИЙ одноимённый ключ, поэтому он молча отменял строгие
+# правила выше: пропадали `$CI_DEFAULT_BRANCH` и завершающее `when: never`,
+# зато добавлялся запуск из веб-интерфейса. Ни одного из этих изменений
+# никто не решал — они возникли из склейки. Правила у отдельных задач ниже
+# остаются: они дополнительно сужают, а не расширяют.
+backend:
+  stage: build
+  script:
+    - cd aevion-globus-backend
+    - npm install --ignore-scripts
+    # `|| true` сохранён из ci.yml намеренно: проверка информационная и не
+    # должна ронять пайплайн — она подсказывает, а не запрещает.
+    - NODE_ENV=production node scripts/check-prod-env.js || true
+    - npm run audit:projects-pricing
+    - npm run build
+    # ВАЖНО: тесты идут ПОСЛЕДОВАТЕЛЬНО (fileParallelism: false в
+    # vitest.config.ts). При параллельном прогоне падали 4 файла из 91 —
+    # они делят реестр модулей внутри воркера. Разбор и координаты для
+    # настоящего лечения записаны в самом конфиге.
+    - npm test
+
+frontend:
+  stage: build
+  script:
+    - cd frontend
+    - npm install --include=optional --no-audit --no-fund
+    # Ловит EN-ключ без ru/kk-пары — иначе перевод молча падает на английский.
+    - cd "$CI_PROJECT_DIR" && node scripts/i18n-kk-extract.mjs
+    - cd frontend && npm run build
+
+payments-smoke:
+  stage: smoke
+  needs: ["frontend"]
+  script:
+    - cd frontend
+    - npm install --include=optional --no-audit --no-fund
+    - npm run build
+    - npm start & echo $! > /tmp/next.pid
+    - |
+      for i in $(seq 1 40); do
+        if curl -sSf http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+          echo "next ready after ${i}s"; break
+        fi
+        sleep 1
+      done
+    - curl -sSf http://127.0.0.1:3000/api/health | tee /tmp/health.json
+    - apt-get update -qq && apt-get install -y -qq jq
+    - jq -e '.status == "ok"' /tmp/health.json
+    - jq -e '.version' /tmp/health.json
+  after_script:
+    # Сервер надо гасить явно: незавершённый процесс держит job до таймаута.
+    - if [ -f /tmp/next.pid ]; then kill "$(cat /tmp/next.pid)" 2>/dev/null || true; fi

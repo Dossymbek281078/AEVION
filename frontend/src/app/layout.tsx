@@ -115,8 +115,12 @@ export default function RootLayout({
           Провайдер языка тоже ставит lang, но ПОСЛЕ гидрации; браузер к
           тому моменту уже принял решение о переводе. Этот скрипт
           выполняется раньше и стоит меньше килобайта.
+
+          `data-lang-src="cookie"` ставится, чтобы второй скрипт (в конце
+          тела, определяет язык по содержимому) не перебил ВЫБОР человека
+          своей догадкой. Выбор всегда старше догадки.
         */}
-        <script dangerouslySetInnerHTML={{ __html: "try{var c=document.cookie.split('; ');for(var i=0;i<c.length;i++){var p=c[i].split('=');if(p[0]==='aevion_lang_v1'){var l=decodeURIComponent(p[1]||'');if(l==='ru'||l==='kk'||l==='en'){document.documentElement.lang=l;}break;}}}catch(e){}" }} />
+        <script dangerouslySetInnerHTML={{ __html: "try{var c=document.cookie.split('; ');for(var i=0;i<c.length;i++){var p=c[i].split('=');if(p[0]==='aevion_lang_v1'){var l=decodeURIComponent(p[1]||'');if(l==='ru'||l==='kk'||l==='en'){document.documentElement.lang=l;document.documentElement.setAttribute('data-lang-src','cookie');}break;}}}catch(e){}" }} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
@@ -128,6 +132,37 @@ export default function RootLayout({
         <ClientProviders>
           {children}
         </ClientProviders>
+        {/*
+          Если языка выбора нет, объявляем язык ПО СОДЕРЖИМОМУ страницы.
+
+          Замер 23.08.2026 на проде, запрос с Accept-Language ru:
+
+            /cyberchess   кириллицы 246, латиницы в тексте 20
+            /go           кириллицы 1318, латиницы 56
+
+          То есть две страницы, на которые ведут все ссылки к запуску 30.08,
+          отдаются по-русски под `lang="en"`. Chrome в таком случае предлагает —
+          а при включённой настройке молча делает — машинный перевод НАШЕЙ
+          страницы, и первое, что видит пришедший из соцсети человек, это наш
+          текст, пропущенный через переводчик.
+
+          Почему по содержимому, а не по `navigator.language`. Язык страницы —
+          свойство СТРАНИЦЫ, а не посетителя: у нас есть и английские страницы
+          (/pitch, /investor — они для инвесторов). Объявить их русскими из-за
+          настроек браузера значило бы соврать в другую сторону и получить от
+          Chrome предложение «перевести с русского» на английском тексте.
+
+          Почему не в корневом макете значением `lang`. `cookies()` там
+          переводит ВЕСЬ сайт на динамическую отрисовку; цена несоразмерна.
+
+          Порог намеренно НЕ «кириллицы больше»: у русской страницы в тексте
+          всегда есть латиница — названия модулей, AEVION, CyberChess. Условие
+          «кириллицы больше половины от латиницы и её хотя бы 40 знаков» на
+          замерах выше срабатывает уверенно, а на /auth до перевода (16 против
+          1161) — нет. Выбор языка человеком, если он есть, стоит ВЫШЕ: скрипт
+          выше ставит `data-lang-src` и этот тогда молчит.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: "(function(){try{var d=document.documentElement;if(d.getAttribute('data-lang-src'))return;var t=(document.body.textContent||'');var c=0,l=0;for(var i=0;i<t.length;i++){var k=t.charCodeAt(i);if((k>=1040&&k<=1103)||k===1025||k===1105)c++;else if((k>=65&&k<=90)||(k>=97&&k<=122))l++;}if(c>l*0.5&&c>40){d.lang='ru';d.setAttribute('data-lang-src','content');}}catch(e){}})()" }} />
       </body>
     </html>
   );

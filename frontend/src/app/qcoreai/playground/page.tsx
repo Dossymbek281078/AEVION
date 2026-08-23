@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import { apiUrl } from "@/lib/apiBase";
 import { apiFetchOrPaywall, PaywallError, type PaywallPayload } from "@/lib/paywall";
-import { getAuthToken } from "@/lib/auth";
 
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};

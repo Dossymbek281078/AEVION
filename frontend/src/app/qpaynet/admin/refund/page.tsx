@@ -1,10 +1,10 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { reportError } from "@/lib/reporter";
-import { getAuthToken } from "@/lib/auth";
 
 interface Refund {
   refundId: string;

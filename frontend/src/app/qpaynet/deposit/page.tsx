@@ -1,12 +1,12 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
 import { useI18n } from "@/lib/i18n";
-import { getAuthToken } from "@/lib/auth";
 
 function DepositForm() {
   const { t } = useI18n();

@@ -17,6 +17,7 @@
 // browser. No backend changes are required.
 
 import { apiUrl } from "@/lib/apiBase";
+import { setAuthToken } from "@/lib/auth";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 const DEMO_FLAG_KEY = "aevion_bank_quickdemo_v1";
@@ -55,7 +56,7 @@ export async function startQuickDemo(): Promise<QuickDemoResult> {
       return { ok: false, error: data?.error || `register failed (${res.status})` };
     }
     try {
-      localStorage.setItem(TOKEN_KEY, data.token);
+      setAuthToken(data.token);
       localStorage.setItem(
         DEMO_FLAG_KEY,
         JSON.stringify({ email: creds.email, startedAt: new Date().toISOString() }),

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken as getBuildToken } from "@/lib/build/auth";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type BuildApplication } from "@/lib/build/api";
-import { useBuildAuth, getAuthToken } from "@/lib/build/auth";
+import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 
 type ContractStatus = "pending" | "signed" | "expired";
@@ -87,7 +88,8 @@ function Body() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${typeof window !== "undefined" ? getAuthToken() ?? "" : ""}`,
+          // Токен модуля build (свой стор), а не мёртвый ключ "build_token".
+          ...(getBuildToken() ? { Authorization: `Bearer ${getBuildToken()}` } : {}),
         },
       });
       const json = await res.json();

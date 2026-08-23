@@ -31,12 +31,12 @@
  * игрока. Записываем только в платформенный.
  */
 
+import { readDisplayName } from "../displayName";
+
 /** Личность платформы: при входе в аккаунт сюда кладётся настоящий id. */
 const USER_ID_KEY = "cyberchess.userId";
 /** Прежний турнирный ключ. Только читается — ради тех, у кого он уже есть. */
 const LEGACY_USER_ID_KEY = "cc_user_id";
-/** Имя пишет матчмейкинг, когда игрок вводит его перед входом в очередь. */
-const DISPLAY_NAME_KEY = "cyberchess.displayName";
 
 /** Постоянный id игрока в этом браузере. Создаётся при первом обращении. */
 export function tournamentUserId(): string {
@@ -58,14 +58,16 @@ export function tournamentUserId(): string {
   return id;
 }
 
-/** Отображаемое имя. Пустая строка означает «пусть сервер придумает сам». */
+/**
+ * Отображаемое имя. Пустая строка означает «пусть сервер придумает сам».
+ *
+ * Читает через `readDisplayName()` из `../displayName`, а не сам: там же
+ * лежат ПРЕЖНИЕ названия ключа (`cc_display_name`, `aevion_user_display_name`),
+ * под которыми имя сохранилось у тех, кто играл раньше. Своё чтение одного
+ * ключа теряло бы их имя молча — хуже исходной поломки.
+ */
 export function tournamentDisplayName(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return window.localStorage.getItem(DISPLAY_NAME_KEY) || "";
-  } catch {
-    return "";
-  }
+  return readDisplayName();
 }
 
 /**

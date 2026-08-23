@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
-import { getAuthToken } from "@/lib/auth";
 
 interface ApiKey {
   id: string;

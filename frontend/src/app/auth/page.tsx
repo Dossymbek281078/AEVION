@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { setAuthToken } from "@/lib/auth";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -228,7 +229,10 @@ export default function AuthPage() {
       if (!res.ok) throw new Error(data?.error || "Sign in error");
       const nextToken = data.token as string;
       setToken(nextToken);
-      try { localStorage.setItem(TOKEN_KEY, nextToken); } catch {}
+      // Через владельца токена, а не напрямую: setAuthToken пишет ещё и
+  // псевдонимы, под которыми токен читают десятки модулей. Прямая
+  // запись оставляла бы их пустыми до следующего старта приложения.
+  setAuthToken(nextToken);
       showToast("Sign in выполнен", "success");
     } catch (e: any) {
       setErr(e?.message || "Error");
@@ -253,7 +257,10 @@ export default function AuthPage() {
       if (!res.ok) throw new Error(data?.error || "Registration error");
       const nextToken = data.token as string;
       setToken(nextToken);
-      try { localStorage.setItem(TOKEN_KEY, nextToken); } catch {}
+      // Через владельца токена, а не напрямую: setAuthToken пишет ещё и
+  // псевдонимы, под которыми токен читают десятки модулей. Прямая
+  // запись оставляла бы их пустыми до следующего старта приложения.
+  setAuthToken(nextToken);
       showToast("Account created! Welcome to AEVION", "success");
     } catch (e: any) {
       setErr(e?.message || "Error");

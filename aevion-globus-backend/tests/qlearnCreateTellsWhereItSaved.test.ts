@@ -95,6 +95,23 @@ describe("база настроена, но упала: отказ вместо 
     expect(mine.status, `список зачислений ответил ${mine.status}`).toBe(503);
     expect(mine.body?.enrollments, "пустой список выдан за настоящий ответ").toBeUndefined();
 
+    const marks = await request(app())
+      .get("/x/me/bookmarks")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(marks.status, `закладки ответили ${marks.status}`).toBe(503);
+    expect(marks.body?.bookmarks, "пустой список выдан за «я ничего не отмечал»").toBeUndefined();
+
+    const streak = await request(app())
+      .get("/x/me/streak")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(streak.status, `серия ответила ${streak.status}`).toBe(503);
+    expect(streak.body?.current, "«серия 0» — утверждение о человеке, а не отказ").toBeUndefined();
+
+    const mark = await request(app())
+      .post("/x/courses/c1/bookmark")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(mark.status, `постановка закладки ответила ${mark.status}`).toBe(503);
+
     const overview = await request(app())
       .get("/x/me/progress")
       .set("Authorization", `Bearer ${TOKEN}`);

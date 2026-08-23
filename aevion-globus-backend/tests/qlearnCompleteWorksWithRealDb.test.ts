@@ -22,9 +22,16 @@ const COURSE_ID = "course-1";
 const USER = "learner-1";
 const enrollments = new Map<
   string,
-  { id: string; courseId: string; userId: string; progress: number; enrolledAt: string }
+  {
+    id: string; courseId: string; userId: string; progress: number;
+    enrolledAt: string; lastActivityAt?: string;
+  }
 >();
 const certs = new Map<string, Record<string, string>>();
+const bookmarks = new Map<string, { userId: string; courseId: string; bookmarkedAt: string }>();
+const activity = new Set<string>();
+/** Метка, которую может поставить ТОЛЬКО база — память такую не породит. */
+const DB_ACTIVITY_STAMP = "2026-08-23T09:41:07.000Z";
 
 vi.mock("../src/lib/dbPool", () => ({
   getPool: () => ({
@@ -77,7 +84,38 @@ vi.mock("../src/lib/dbPool", () => ({
         const e = enrollments.get(p[0]);
         if (!e) return { rows: [], rowCount: 0 };
         e.progress = Number(p[1]);
+        // Колонку трогаем ТОЛЬКО если её обновляет сам запрос: иначе
+        // «перестали писать lastActivityAt» было бы не отличить от исправного
+        // кода — мутация проходила молча.
+        // Значение НАРОЧНО узнаваемое и не «сейчас»: память в этот же миг
+        // кладёт свой new Date(), и два одинаковых по миллисекунде значения
+        // не дали бы отличить чтение колонки от чтения памяти.
+        if (s.includes('"lastActivityAt" = NOW()')) e.lastActivityAt = DB_ACTIVITY_STAMP;
         return { rows: [{ ...e }], rowCount: 1 };
+      }
+      if (s.includes('INSERT INTO "QLearnBookmark"')) {
+        const k = `${p[0]}::${p[1]}`;
+        if (bookmarks.has(k)) return { rows: [], rowCount: 0 };   // ON CONFLICT DO NOTHING
+        bookmarks.set(k, { userId: p[0], courseId: p[1], bookmarkedAt: new Date().toISOString() });
+        return { rows: [], rowCount: 1 };
+      }
+      if (s.includes('DELETE FROM "QLearnBookmark"')) {
+        const had = bookmarks.delete(`${p[0]}::${p[1]}`);
+        return { rows: [], rowCount: had ? 1 : 0 };
+      }
+      if (s.includes('FROM "QLearnBookmark"')) {
+        const rows = [...bookmarks.values()].filter((b) => b.userId === p[0]);
+        return { rows, rowCount: rows.length };
+      }
+      if (s.includes('INSERT INTO "QLearnActivity"')) {
+        activity.add(`${p[0]}::${p[1]}`);
+        return { rows: [], rowCount: 1 };
+      }
+      if (s.includes('FROM "QLearnActivity"')) {
+        const rows = [...activity]
+          .filter((k) => k.startsWith(`${p[0]}::`))
+          .map((k) => ({ day: k.split("::")[1], touchedAt: new Date().toISOString() }));
+        return { rows, rowCount: rows.length };
       }
       if (s.includes('INSERT INTO "QLearnCertificate"')) {
         if (certs.has(p[1])) return { rows: [], rowCount: 0 };   // ON CONFLICT DO NOTHING
@@ -251,5 +289,81 @@ describe("курс можно завершить, когда база жива",
       .set("Authorization", `Bearer ${TOKEN}`);
     expect(res.status).toBe(200);
     expect(res.body?.enrollments?.[0]?.courseTitle).toBe("Настоящий курс");
+  });
+
+  test("закладка ложится в базу, а не в память процесса", async () => {
+    const before = bookmarks.size;
+    const add = await request(app())
+      .post(`/x/courses/${COURSE_ID}/bookmark`)
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(add.status, `закладка не поставлена: ${JSON.stringify(add.body)}`).toBe(201);
+    expect(bookmarks.size, "в базу ничего не ушло — закладка исчезнет при выкатке").toBe(before + 1);
+
+    const again = await request(app())
+      .post(`/x/courses/${COURSE_ID}/bookmark`)
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(again.status, "повтор породил вторую строку").toBe(200);
+    expect(again.body?.alreadyBookmarked).toBe(true);
+
+    const list = await request(app())
+      .get("/x/me/bookmarks")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(list.status).toBe(200);
+    expect(list.body?.total).toBeGreaterThan(0);
+    expect(
+      list.body?.bookmarks?.[0]?.course?.title,
+      "карточка курса не подтянулась из базы",
+    ).toBe("Настоящий курс");
+
+    const off = await request(app())
+      .delete(`/x/courses/${COURSE_ID}/bookmark`)
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(off.body?.removed, "снятие закладки не дошло до базы").toBe(true);
+    expect(bookmarks.size).toBe(before);
+  });
+
+  test("день занятий отмечается в базе и виден в серии", async () => {
+    await request(app())
+      .post(`/x/courses/${COURSE_ID}/enroll`)
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(activity.size, "запись на курс не отметила день занятий").toBeGreaterThan(0);
+
+    const streak = await request(app())
+      .get("/x/me/streak")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(streak.status).toBe(200);
+    expect(streak.body?.activeToday, "сегодняшний день не попал в серию").toBe(true);
+    expect(streak.body?.current).toBeGreaterThan(0);
+  });
+
+  test("занятие проставляет дату последней активности в базе", async () => {
+    // Порядок «продолжить обучение» держится на этой колонке. Пока она жила в
+    // памяти процесса, список после каждой выкатки выстраивался по дате
+    // записи на курс, а не по тому, чем человек занимался вчера.
+    const enr = await request(app())
+      .post(`/x/courses/${COURSE_ID}/enroll`)
+      .set("Authorization", `Bearer ${TOKEN}`);
+    const id = enr.body.enrollmentId as string;
+    expect(enrollments.get(id)?.lastActivityAt, "до занятия колонка должна быть пуста").toBeUndefined();
+
+    await request(app())
+      .patch(`/x/enrollments/${id}/progress`)
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .send({ progress: 30 });
+
+    expect(
+      enrollments.get(id)?.lastActivityAt,
+      "дата последней активности не доехала до базы",
+    ).toBeTruthy();
+
+    const overview = await request(app())
+      .get("/x/me/progress")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    const row = overview.body?.continueLearning?.find(
+      (x: { enrollmentId: string }) => x.enrollmentId === id,
+    );
+    expect(row?.lastActivityAt, "обзор взял дату не из колонки, а из памяти").toBe(
+      DB_ACTIVITY_STAMP,
+    );
   });
 });

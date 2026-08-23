@@ -213,6 +213,7 @@ async function enrollmentById(
  * источник, иначе получилось бы два способа спрашивать одно и то же.
  */
 type EnrollmentWithCourse = Enrollment & {
+  lastActivityAt: string | null;
   courseTitle: string | null;
   category: string | null;
   level: string | null;
@@ -244,6 +245,7 @@ async function myEnrollments(
       const c = memCourses.get(e.courseId);
       return {
         ...e,
+        lastActivityAt: memEnrollmentActivity.get(`${e.courseId}::${userId}`) ?? null,
         courseTitle: c?.title ?? null,
         category: c?.category ?? null,
         level: c?.level ?? null,
@@ -251,6 +253,172 @@ async function myEnrollments(
       };
     });
   return { rows, failed: false };
+}
+
+/**
+ * Карточка курса для списков (закладки и т.п.) — из того же хранилища.
+ *
+ * Отдельно от `courseTitleById`, потому что здесь нужен весь набор полей,
+ * который показывает карточка на странице; сводить их в одну функцию с
+ * необязательными полями значило бы получить два смысла в одном месте.
+ */
+type CourseCard = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  level: string;
+  price: number;
+  enrollmentCount: number;
+};
+
+async function courseCardById(courseId: string): Promise<CourseCard | null> {
+  if (isQLearnDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT "id","title","description","category","level","price","enrollmentCount"
+           FROM "QLearnCourse" WHERE "id" = $1`,
+        [courseId],
+      );
+      return rows[0] ? (rows[0] as CourseCard) : null;
+    } catch (e) {
+      console.error("[QLearn] course card read failed", e);
+      return null;
+    }
+  }
+  const c = memCourses.get(courseId);
+  return c
+    ? {
+        id: c.id, title: c.title, description: c.description, category: c.category,
+        level: c.level, price: c.price, enrollmentCount: c.enrollmentCount,
+      }
+    : null;
+}
+
+/**
+ * Закладки и дни активности — слой хранилища.
+ *
+ * До 23.08.2026 обе жили ТОЛЬКО в Map: замер дал ноль обращений к базе внутри
+ * `/me/bookmarks`, `/me/streak` и обеих записей. На проде это значит, что
+ * закладка исчезала при ближайшей выкатке, а серия дней обнулялась вместе с
+ * ней — и человек видел не «сбой», а «я, оказывается, ничего не отмечал».
+ *
+ * Возвращаем `failed` там, где иначе пришлось бы выдать ПУСТОТУ за ответ.
+ */
+async function bookmarkAdd(userId: string, courseId: string): Promise<{ created: boolean; failed: boolean }> {
+  if (isQLearnDbReady()) {
+    try {
+      const r = await pool.query(
+        `INSERT INTO "QLearnBookmark" ("userId","courseId") VALUES ($1,$2)
+         ON CONFLICT ("userId","courseId") DO NOTHING`,
+        [userId, courseId],
+      );
+      return { created: (r.rowCount ?? 0) > 0, failed: false };
+    } catch (e) {
+      console.error("[QLearn] bookmark add failed", e);
+      return { created: false, failed: true };
+    }
+  }
+  const key = `${userId}::${courseId}`;
+  if (memBookmarks.has(key)) return { created: false, failed: false };
+  memBookmarks.set(key, { courseId, userId, bookmarkedAt: new Date().toISOString() });
+  return { created: true, failed: false };
+}
+
+async function bookmarkRemove(userId: string, courseId: string): Promise<{ removed: boolean; failed: boolean }> {
+  if (isQLearnDbReady()) {
+    try {
+      const r = await pool.query(
+        `DELETE FROM "QLearnBookmark" WHERE "userId" = $1 AND "courseId" = $2`,
+        [userId, courseId],
+      );
+      return { removed: (r.rowCount ?? 0) > 0, failed: false };
+    } catch (e) {
+      console.error("[QLearn] bookmark remove failed", e);
+      return { removed: false, failed: true };
+    }
+  }
+  return { removed: memBookmarks.delete(`${userId}::${courseId}`), failed: false };
+}
+
+async function bookmarksOf(
+  userId: string,
+): Promise<{ rows: Array<{ courseId: string; bookmarkedAt: string }>; failed: boolean }> {
+  if (isQLearnDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT "courseId", "bookmarkedAt" FROM "QLearnBookmark"
+          WHERE "userId" = $1 ORDER BY "bookmarkedAt" DESC`,
+        [userId],
+      );
+      return {
+        rows: rows.map((r: { courseId: string; bookmarkedAt: unknown }) => ({
+          courseId: r.courseId,
+          bookmarkedAt: new Date(String(r.bookmarkedAt)).toISOString(),
+        })),
+        failed: false,
+      };
+    } catch (e) {
+      console.error("[QLearn] bookmark list failed", e);
+      return { rows: [], failed: true };
+    }
+  }
+  const rows = Array.from(memBookmarks.values())
+    .filter((b) => b.userId === userId)
+    .map((b) => ({ courseId: b.courseId, bookmarkedAt: b.bookmarkedAt }))
+    .sort((a, b) => b.bookmarkedAt.localeCompare(a.bookmarkedAt));
+  return { rows, failed: false };
+}
+
+/**
+ * Отметить день активности. Идемпотентно по паре (человек, день).
+ *
+ * Отказ НЕ роняет операцию, ради которой отметка ставится (урок, тест,
+ * прогресс), но и не остаётся невидимым: пишем в журнал ЧТО и КОМУ не
+ * удалось — след без этих двух вещей бесполезен.
+ */
+async function activityRecord(userId: string): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  if (isQLearnDbReady()) {
+    try {
+      await pool.query(
+        `INSERT INTO "QLearnActivity" ("userId","day") VALUES ($1,$2::date)
+         ON CONFLICT ("userId","day") DO NOTHING`,
+        [userId, today],
+      );
+      return;
+    } catch (e) {
+      console.error(`[QLearn] activity not recorded for user ${userId} on ${today}`, e);
+      return;
+    }
+  }
+  const rec = memActivity.get(userId) ?? { days: new Set<string>(), lastTouched: new Date().toISOString() };
+  rec.days.add(today);
+  rec.lastTouched = new Date().toISOString();
+  memActivity.set(userId, rec);
+}
+
+async function activityDays(
+  userId: string,
+): Promise<{ days: Set<string>; lastTouched: string | null; failed: boolean }> {
+  if (isQLearnDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT "day", "touchedAt" FROM "QLearnActivity" WHERE "userId" = $1 ORDER BY "day" DESC`,
+        [userId],
+      );
+      const days = new Set<string>(
+        rows.map((r: { day: unknown }) => new Date(String(r.day)).toISOString().slice(0, 10)),
+      );
+      const lastTouched = rows[0] ? new Date(String(rows[0].touchedAt)).toISOString() : null;
+      return { days, lastTouched, failed: false };
+    } catch (e) {
+      console.error("[QLearn] activity read failed", e);
+      return { days: new Set<string>(), lastTouched: null, failed: true };
+    }
+  }
+  const rec = memActivity.get(userId);
+  return { days: rec?.days ?? new Set<string>(), lastTouched: rec?.lastTouched ?? null, failed: false };
 }
 
 /** Название курса для сертификата — из того же хранилища, что и сам курс. */
@@ -342,15 +510,6 @@ const memBookmarks = new Map<string, { courseId: string; userId: string; bookmar
 const memActivity = new Map<string, { days: Set<string>; lastTouched: string }>();
 // Last activity per enrollment (courseId|userId) → ISO timestamp, for "Continue learning"
 const memEnrollmentActivity = new Map<string, string>();
-
-/** Record a daily activity entry for a user (idempotent per UTC date). */
-function recordActivity(userId: string): void {
-  const today = new Date().toISOString().slice(0, 10);
-  const rec = memActivity.get(userId) ?? { days: new Set<string>(), lastTouched: new Date().toISOString() };
-  rec.days.add(today);
-  rec.lastTouched = new Date().toISOString();
-  memActivity.set(userId, rec);
-}
 
 /** Compute current + longest streak from a set of YYYY-MM-DD strings. */
 function computeStreak(days: Set<string>): { current: number; longest: number; totalDays: number } {
@@ -678,7 +837,7 @@ qlearnRouter.post("/courses/:id/enroll", async (req: Request, res: Response) => 
     enrolledAt: new Date().toISOString(),
   });
   course.enrollmentCount += 1;
-  recordActivity(auth.sub);
+  await activityRecord(auth.sub);
   memEnrollmentActivity.set(`${courseId}::${auth.sub}`, new Date().toISOString());
   res.status(201).json({ enrollmentId });
 });
@@ -722,7 +881,8 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
       if (row.rows.length === 0) { res.status(404).json({ error: "Enrollment not found" }); return; }
       if (row.rows[0].userId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
       const updated = await pool.query(
-        `UPDATE "QLearnEnrollment" SET "progress" = $2 WHERE "id" = $1 RETURNING *`,
+        `UPDATE "QLearnEnrollment" SET "progress" = $2, "lastActivityAt" = NOW()
+          WHERE "id" = $1 RETURNING *`,
         [enrollmentId, progress],
       );
       enrollment = updated.rows[0] as Enrollment;
@@ -743,7 +903,7 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
   }
 
   // Streak + "continue learning" hooks
-  recordActivity(auth.sub);
+  await activityRecord(auth.sub);
   memEnrollmentActivity.set(`${enrollment.courseId}::${auth.sub}`, new Date().toISOString());
 
   // Auto-generate certificate at 100%
@@ -929,7 +1089,7 @@ qlearnRouter.get("/courses/:courseId/lessons/:lessonId/quiz", (req: Request, res
 });
 
 // POST /api/qlearn/courses/:courseId/lessons/:lessonId/quiz/submit — submit answer
-qlearnRouter.post("/courses/:courseId/lessons/:lessonId/quiz/submit", (req: Request, res: Response) => {
+qlearnRouter.post("/courses/:courseId/lessons/:lessonId/quiz/submit", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
   const lessonId = param(req, "lessonId");
@@ -942,7 +1102,7 @@ qlearnRouter.post("/courses/:courseId/lessons/:lessonId/quiz/submit", (req: Requ
   if (!q) { res.status(404).json({ error: "Question not found" }); return; }
 
   const correct = answerIndex === q.correctIndex;
-  recordActivity(auth.sub);
+  await activityRecord(auth.sub);
   res.json({ correct, explanation: q.explanation ?? undefined, correctIndex: q.correctIndex });
 });
 
@@ -951,58 +1111,51 @@ qlearnRouter.post("/courses/:courseId/lessons/:lessonId/quiz/submit", (req: Requ
 // ---------------------------------------------------------------------------
 
 // POST /api/qlearn/courses/:id/bookmark — bookmark a course
-qlearnRouter.post("/courses/:id/bookmark", (req: Request, res: Response) => {
+qlearnRouter.post("/courses/:id/bookmark", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
   const courseId = param(req, "id");
-  const course = memCourses.get(courseId);
-  // Verify course exists when we have in-memory record; tolerate missing for DB-only case
-  if (!course && memCourses.size > 0) {
+  if (!isQLearnDbReady() && memCourses.size > 0 && !memCourses.has(courseId)) {
     res.status(404).json({ error: "Course not found" }); return;
   }
-  const key = `${auth.sub}::${courseId}`;
-  if (memBookmarks.has(key)) {
-    res.status(200).json({ bookmarked: true, alreadyBookmarked: true }); return;
+  const { created, failed } = await bookmarkAdd(auth.sub, courseId);
+  if (failed) {
+    // Молча ответить «отмечено» нельзя: человек уйдёт со страницы, уверенный,
+    // что курс сохранён, и не найдёт его.
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
   }
-  memBookmarks.set(key, { courseId, userId: auth.sub, bookmarkedAt: new Date().toISOString() });
+  if (!created) { res.status(200).json({ bookmarked: true, alreadyBookmarked: true }); return; }
   res.status(201).json({ bookmarked: true });
 });
 
 // DELETE /api/qlearn/courses/:id/bookmark — remove bookmark
-qlearnRouter.delete("/courses/:id/bookmark", (req: Request, res: Response) => {
+qlearnRouter.delete("/courses/:id/bookmark", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
   const courseId = param(req, "id");
-  const key = `${auth.sub}::${courseId}`;
-  const existed = memBookmarks.delete(key);
-  res.json({ bookmarked: false, removed: existed });
+  const { removed, failed } = await bookmarkRemove(auth.sub, courseId);
+  if (failed) {
+    // «Снято» о том, что осталось на месте, — та же ложь, только наоборот.
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
+  }
+  res.json({ bookmarked: false, removed });
 });
 
 // GET /api/qlearn/me/bookmarks — list my bookmarked courses (hydrated)
-qlearnRouter.get("/me/bookmarks", (req: Request, res: Response) => {
+qlearnRouter.get("/me/bookmarks", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
-  const items = Array.from(memBookmarks.values())
-    .filter((b) => b.userId === auth.sub)
-    .map((b) => {
-      const course = memCourses.get(b.courseId);
-      return {
-        courseId: b.courseId,
-        bookmarkedAt: b.bookmarkedAt,
-        course: course
-          ? {
-              id: course.id,
-              title: course.title,
-              description: course.description,
-              category: course.category,
-              level: course.level,
-              price: course.price,
-              enrollmentCount: course.enrollmentCount,
-            }
-          : null,
-      };
-    })
-    .sort((a, b) => b.bookmarkedAt.localeCompare(a.bookmarkedAt));
+  const { rows, failed } = await bookmarksOf(auth.sub);
+  if (failed) {
+    // Пустой список читается как «я ничего не отмечал», а не как сбой.
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
+  }
+  const items = await Promise.all(
+    rows.map(async (b) => {
+      const course = await courseCardById(b.courseId);
+      return { courseId: b.courseId, bookmarkedAt: b.bookmarkedAt, course };
+    }),
+  );
   res.json({ bookmarks: items, total: items.length });
 });
 
@@ -1011,20 +1164,24 @@ qlearnRouter.get("/me/bookmarks", (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 // GET /api/qlearn/me/streak — current/longest daily streak + activity history
-qlearnRouter.get("/me/streak", (req: Request, res: Response) => {
+qlearnRouter.get("/me/streak", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
-  const rec = memActivity.get(auth.sub);
-  if (!rec) {
-    res.json({ current: 0, longest: 0, totalDays: 0, lastActiveAt: null, today: new Date().toISOString().slice(0, 10) });
+  const { days, lastTouched, failed } = await activityDays(auth.sub);
+  if (failed) {
+    // «Серия 0» — утверждение о человеке. Неотвеченный вопрос им не является.
+    res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  if (days.size === 0) {
+    res.json({ current: 0, longest: 0, totalDays: 0, lastActiveAt: null, today, activeToday: false });
     return;
   }
-  const stats = computeStreak(rec.days);
   res.json({
-    ...stats,
-    lastActiveAt: rec.lastTouched,
-    today: new Date().toISOString().slice(0, 10),
-    activeToday: rec.days.has(new Date().toISOString().slice(0, 10)),
+    ...computeStreak(days),
+    lastActiveAt: lastTouched,
+    today,
+    activeToday: days.has(today),
   });
 });
 
@@ -1044,7 +1201,15 @@ qlearnRouter.get("/me/progress", async (req: Request, res: Response) => {
   }
   const certIds = new Set((await certsByUser(auth.sub)).map((c) => c.enrollmentId));
   const hydrated = mine.map((e) => {
-    const lastActivityAt = memEnrollmentActivity.get(`${e.courseId}::${auth.sub}`) ?? e.enrolledAt;
+    // Порядок «продолжить обучение» держится на этом поле. Колонка появилась
+    // 23.08.2026; у записей, сделанных до неё, она пуста — тогда берём память
+    // текущего процесса, а если и там пусто, дату записи на курс. Ни один из
+    // трёх источников не выдаётся за другой: пустое значение не превращается
+    // в «занимался только что».
+    const lastActivityAt =
+      (e.lastActivityAt ? new Date(String(e.lastActivityAt)).toISOString() : null) ??
+      memEnrollmentActivity.get(`${e.courseId}::${auth.sub}`) ??
+      e.enrolledAt;
     // Раньше смотрели ТОЛЬКО в память: после выкатки у человека оставался
     // курс, значок сертификата исчезал вместе с самим сертификатом.
     const hasCertificate = certIds.has(e.id);

@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from "vitest";
+import { describe, test, expect, vi, beforeEach, beforeAll } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -41,11 +41,29 @@ vi.mock("pg", async () => {
   return { default: { Pool }, Pool };
 });
 
-async function app() {
-  const router = (await import("../src/routes/cyberchessTournaments")).default;
+/**
+ * Роутер грузится ОДИН раз в beforeAll, а не внутри первого теста.
+ *
+ * 23.08.2026 этот файл упал в общем прогоне с «Test timed out in 30000ms», а
+ * в одиночку проходил за 660 мс. Причина не в проверке: `await import()`
+ * тянет роутер со всеми его зависимостями, и первый тест платил эту цену
+ * ЦЕЛИКОМ из своего тридцатисекундного бюджета, конкурируя за диск с
+ * полусотней параллельных файлов (в том прогоне суммарный import — 86 с).
+ *
+ * Наращивать таймаут было бы неверно: он не про длительность проверки, а про
+ * то, что стоимость ЗАГРУЗКИ попала в бюджет УТВЕРЖДЕНИЯ. Настоящее место
+ * загрузки — подготовка, и там же ей задан свой запас.
+ */
+let tournamentsRouter: express.Router;
+
+beforeAll(async () => {
+  tournamentsRouter = (await import("../src/routes/cyberchessTournaments")).default;
+}, 60_000);
+
+function app() {
   const a = express();
   a.use(express.json());
-  a.use("/api/cyberchess-tournaments", router);
+  a.use("/api/cyberchess-tournaments", tournamentsRouter);
   return a;
 }
 
@@ -61,7 +79,7 @@ beforeEach(() => { db.games = 0; db.rating = 1200; db.отвечает = true; }
 
 describe("в турнир не пускают мимо объявленных рамок", () => {
   test("игрок с рейтингом ниже нижней границы получает понятный отказ", async () => {
-    const a = await app();
+    const a = app();
     const t = await турнирСРамками(a);
     expect(t, "не нашлось предстоящего турнира с рамками").toBeTruthy();
     db.games = 30;
@@ -74,7 +92,7 @@ describe("в турнир не пускают мимо объявленных р
   });
 
   test("игрок внутри рамок регистрируется, и это помечено как проверенное", async () => {
-    const a = await app();
+    const a = app();
     const t = await турнирСРамками(a);
     db.games = 30;
     db.rating = Math.round((t!.eloMin + t!.eloMax) / 2);
@@ -86,7 +104,7 @@ describe("в турнир не пускают мимо объявленных р
 
   test("игрока без сыгранных партий пускают, и ответ говорит почему", async () => {
     // Иначе к 30.08 турниры были бы пусты: рейтинга ещё не существует ни у кого.
-    const a = await app();
+    const a = app();
     const t = await турнирСРамками(a);
     db.games = 0;
     const r = await request(a).post(`/api/cyberchess-tournaments/${t!.id}/register`)

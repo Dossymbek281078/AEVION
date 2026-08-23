@@ -96,7 +96,7 @@ import { qchaingovRouter } from "./routes/qchaingov";
 import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } from "./lib/openapiFintechSpec";
 import { NEW_WAVE_OPENAPI_PATHS, NEW_WAVE_OPENAPI_SCHEMAS, NEW_WAVE_OPENAPI_TAGS } from "./lib/openapiNewWaveSpec";
 import { isSentryEnabled, captureException } from "./lib/sentry";
-import { makeHttpErrorHandler } from "./lib/httpErrorHandler";
+import { makeApiNotFoundHandler, makeHttpErrorHandler } from "./lib/httpErrorHandler";
 import { bodyLimitByPath } from "./lib/bodyLimitByPath";
 import { needsRawBody } from "./lib/rawBodyPolicy";
 import { devhubRouter } from "./routes/devhub";
@@ -1396,6 +1396,11 @@ startQpaynetRetryWorker();
 
 // QTradeOffline — offline-first P2P AEV payments (ECDSA P-256, /sync batch)
 app.use("/api/qtradeoffline", qtradeOfflineRouter);
+
+// Адрес, которого в API нет, отвечает JSON, а не страницей Express.
+// Ставится ПОСЛЕ всех роутеров и ПЕРЕД обработчиком ошибок: иначе он перехватил
+// бы живые маршруты. Разбор — в самом модуле.
+app.use(makeApiNotFoundHandler());
 
 // Обработчик ошибок живёт в src/lib/httpErrorHandler.ts — вынесен туда, чтобы
 // его можно было проверить тестом, не поднимая весь сервер. Разбор клиентских

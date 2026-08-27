@@ -130,6 +130,13 @@ export default function PitchPage() {
     qtradeOps: null,
   });
   const [metricsLive, setMetricsLive] = useState(false);
+  // Сколько источников из пяти ответило. Раньше был только булев признак
+  // «ответил хоть один», и значок горел зелёным «Live data from API», когда
+  // четыре числа живые, а пятое — демонстрационное. Замер 28.08.2026:
+  // /api/qtrade/summary отдавал 401, то есть на странице для ИНВЕСТОРОВ под
+  // зелёным значком стояло демо-число, ничем не отличимое от настоящих.
+  const МЕТРИК_ВСЕГО = 5;
+  const [metricsOkCount, setMetricsOkCount] = useState(0);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 720);
@@ -172,40 +179,44 @@ export default function PitchPage() {
         if (cancelled) return;
 
         let next: LiveMetrics = { ...DEMO_METRICS };
-        let anyOk = false;
+        let okCount = 0;
 
         if (qr && qr.ok) {
           const j = await qr.json().catch(() => null);
-          if (Array.isArray(j?.items)) { next.qrightObjects = j.items.length; anyOk = true; }
+          if (Array.isArray(j?.items)) { next.qrightObjects = j.items.length; okCount++; }
         }
         if (ps && ps.ok) {
           const j = await ps.json().catch(() => null);
           if (j) {
             next.certifiedArtifacts = j.certifiedArtifactVersions ?? next.certifiedArtifacts;
             next.participants = j.eligibleParticipants ?? next.participants;
-            anyOk = true;
+            okCount++;
           }
         }
         if (qs && qs.ok) {
           const j = await qs.json().catch(() => null);
-          if (Array.isArray(j?.items)) { next.shieldRecords = j.items.length; anyOk = true; }
+          if (Array.isArray(j?.items)) { next.shieldRecords = j.items.length; okCount++; }
         }
         if (qt && qt.ok) {
           const j = await qt.json().catch(() => null);
-          if (j?.operationCount != null) { next.qtradeOps = j.operationCount; anyOk = true; }
+          if (j?.operationCount != null) { next.qtradeOps = j.operationCount; okCount++; }
         }
         if (rev && rev.ok) {
           const j = await rev.json().catch(() => null);
-          if (j && typeof j.grossUsd === "number") { next.liveRevenueUsd = j.grossUsd; anyOk = true; }
+          if (j && typeof j.grossUsd === "number") { next.liveRevenueUsd = j.grossUsd; okCount++; }
         }
 
         if (!cancelled) {
           setMetrics(next);
-          setMetricsLive(anyOk);
+          // Зелёный значок — только когда живы ВСЕ источники. Иначе честнее
+          // назвать число: часть показанного всё равно демонстрационная.
+          setMetricsOkCount(okCount);
+          setMetricsLive(okCount === МЕТРИК_ВСЕГО);
         }
       } catch {
         if (!cancelled) {
           setMetrics(DEMO_METRICS);
+          setMetricsOkCount(0);
           setMetricsLive(false);
         }
       }
@@ -480,7 +491,11 @@ export default function PitchPage() {
               }}
             >
               <span style={{ width: 6, height: 6, borderRadius: 999, background: metricsLive ? "#34d399" : "#fbbf24" }} aria-hidden />
-              {metricsLive ? "Live data from API" : "Demo snapshot (backend offline)"}
+              {metricsLive
+                ? "Live data from API"
+                : metricsOkCount > 0
+                  ? `Живые данные: ${metricsOkCount} из ${МЕТРИК_ВСЕГО} источников, остальные — демо`
+                  : "Demo snapshot (backend offline)"}
             </span>
             <LivePill label="QRight records" value={metrics.qrightObjects} />
             <LivePill label="Bureau certs" value={metrics.certifiedArtifacts} />

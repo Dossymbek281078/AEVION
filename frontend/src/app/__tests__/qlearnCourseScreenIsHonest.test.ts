@@ -25,6 +25,9 @@ const SRC = stripComments(
   readFileSync(join(__dirname, "..", "qlearn", "components", "CourseDetail.tsx"), "utf8"),
 );
 const PAGE = stripComments(readFileSync(join(__dirname, "..", "qlearn", "page.tsx"), "utf8"));
+const VERIFY = stripComments(
+  readFileSync(join(__dirname, "..", "qlearn", "verify", "page.tsx"), "utf8"),
+);
 const QUIZ = stripComments(
   readFileSync(join(__dirname, "..", "qlearn", "components", "LessonQuiz.tsx"), "utf8"),
 );
@@ -151,5 +154,33 @@ describe("экран курса честен к сбоям", () => {
     expect(branch, "отказ не превращается в текст").toContain("setLoadError(");
     expect(branch, "отказ выдан за пустой тест").not.toContain("setQuestions(");
     expect(QUIZ).toContain("К уроку пока нет вопросов");
+  });
+
+  test("проверка сертификата не называет сбой подделкой", () => {
+    // «Недействителен» и «проверить не удалось» — разные ответы. Назвать сбой
+    // хранилища подделкой значит оболгать человека с настоящим сертификатом,
+    // и заметить это будет некому: он просто не получит работу.
+    const lines = VERIFY.split(String.fromCharCode(10));
+    const start = lines.findIndex((l) => l.includes("const check = async"));
+    expect(start, "не нашёл обработчик проверки").toBeGreaterThanOrEqual(0);
+    const body = lines.slice(start, start + 45);
+    const okAt = body.findIndex((l) => l.includes("if (!res.ok)"));
+    const setAt = body.findIndex((l) => l.includes("setVerdict({"));
+    expect(okAt, "ответ сервера не проверяется").toBeGreaterThanOrEqual(0);
+    expect(setAt, "вердикт нигде не выставляется").toBeGreaterThanOrEqual(0);
+    expect(okAt, "вердикт выставлен раньше, чем прочитан ответ").toBeLessThan(setAt);
+    const branch = body.slice(okAt, okAt + 8).join(String.fromCharCode(10));
+    expect(branch, "сбой выдан за отрицательный вердикт").not.toContain("setVerdict({");
+  });
+
+  test("проверка не показывает постороннему внутренний идентификатор владельца", () => {
+    // Ручка отдаёт userId. Проверяющему он не нужен ни для чего, а утечка
+    // внутренних идентификаторов бесплатной не бывает.
+    expect(VERIFY, "внутренний идентификатор владельца попал на экран").not.toContain("userId");
+  });
+
+  test("номер сертификата уходит в адрес закодированным", () => {
+    // Номер приходит из чужих рук: в нём может оказаться что угодно.
+    expect(VERIFY).toContain("encodeURIComponent(");
   });
 });

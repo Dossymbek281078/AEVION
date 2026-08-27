@@ -21,7 +21,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { includedLine, ctaFor, LIVE_MODULE_COUNT } from "../src/routes/provisioning";
+import { includedLine, ctaFor, welcomeHtml, LIVE_MODULE_COUNT } from "../src/routes/provisioning";
 import type { Subscription } from "../src/routes/provisioning";
 import { projects } from "../src/data/projects";
 
@@ -74,6 +74,38 @@ describe("письмо после оплаты описывает купленн
     expect(cta.href).toBe("/cyberchess");
     // Смысл всей правки: покупатель шахмат не должен получать чужой модуль.
     expect(cta.href).not.toBe("/qright");
+  });
+
+it("ссылка ведёт в модуль, только если он ЕСТЬ в реестре", () => {
+    // Слаг приезжает из custom_data чекаута, а адрес чекаута собирает сам
+    // покупатель. Подпись вебхука доказывает, что данные от Lemon Squeezy,
+    // но не то, что значение осмысленно.
+    expect(ctaFor(sub({ tierId: "lite", modules: ["cyberchess"] })).href).toBe("/cyberchess");
+    expect(ctaFor(sub({ tierId: "lite", modules: ["нет-такого-модуля"] })).href).toBe("/account");
+  });
+
+  it("подставленный слаг не уводит из письма наружу", () => {
+    // `//чужой-сайт` в href превратился бы в ссылку на другой домен прямо в
+    // нашем письме о покупке. Найдено вычиткой собственного дифа — тесты
+    // были зелёные.
+    for (const evil of ["//evil.example", "../../etc", 'x" onmouseover="1', "javascript:alert(1)"]) {
+      const href = ctaFor(sub({ tierId: "lite", modules: [evil] })).href;
+      expect(href, `опасный слаг доехал до ссылки: ${evil}`).toBe("/account");
+    }
+  });
+
+it("опасный слаг не попадает в разметку письма как разметка", () => {
+    // Мутация показала, что экранирование я добавил, а проверки на него нет.
+    // Слаг приходит из custom_data чекаута: строка, которую собрал покупатель.
+    const html = welcomeHtml(sub({ tierId: "lite", modules: ['<img src=x onerror="1">'] }));
+    expect(html, "тег доехал до письма как тег").not.toContain('<img src=x');
+    expect(html, "экранированный вид отсутствует — значит не экранировали").toContain("&lt;img");
+  });
+
+  it("контроль: обычное имя модуля не искажается", () => {
+    // Иначе проверка выше была бы зелёной и на коде, который ломает всё подряд.
+    const html = welcomeHtml(sub({ tierId: "lite", modules: ["cyberchess"] }));
+    expect(html).toContain("cyberchess");
   });
 
   it("когда модуль неизвестен — ведём в кабинет, а не наугад", () => {

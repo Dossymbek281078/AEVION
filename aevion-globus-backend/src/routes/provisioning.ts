@@ -305,10 +305,33 @@ export function includedLine(sub: Subscription): string {
  * когда он один и известен, иначе в кабинет, где человек видит свою подписку.
  */
 export function ctaFor(sub: Subscription): { href: string; label: string } {
-  if (sub.modules.length === 1) {
+  if (sub.modules.length === 1 && isKnownModule(sub.modules[0])) {
     return { href: `/${sub.modules[0]}`, label: "Открыть модуль" };
   }
   return { href: "/account", label: "Открыть кабинет" };
+}
+
+/**
+ * Слаг модуля — из реестра, а не «любая строка».
+ *
+ * Нашёл вычиткой СВОЕЙ ЖЕ правки, зелёные тесты этого не показывали. У тарифа
+ * Lite покупатель выбирает один продукт, и слаг приезжает так:
+ *
+ *   webhook -> payload.meta.custom_data.module -> sub.modules[0] -> ссылка
+ *
+ * Подпись вебхука доказывает, что данные пришли от Lemon Squeezy, но НЕ то,
+ * что значение осмысленно: адрес чекаута с `checkout[custom][module]=…`
+ * собирается на стороне покупателя. То есть в письмо попадала бы любая
+ * строка, а мой же `href="${FRONTEND_URL}/${slug}"` превращал бы её в ссылку —
+ * `//чужой-сайт` увёл бы человека наружу прямо из нашего письма о покупке.
+ *
+ * Сверяем с реестром: неизвестный слаг ведёт в кабинет, где человек видит,
+ * что у него на самом деле есть. Ссылка в письме о покупке обязана вести
+ * туда, куда мы намеревались, а не туда, что прислали.
+ */
+function isKnownModule(slug: string): boolean {
+  if (typeof slug !== "string" || slug.length === 0) return false;
+  return projects.some((p) => String((p as { id?: unknown }).id ?? "") === slug);
 }
 
 const TIER_DISPLAY: Record<TierId, string> = {
@@ -328,7 +351,26 @@ const TIER_DISPLAY: Record<TierId, string> = {
   business: "Full",
 };
 
-function welcomeHtml(sub: Subscription): string {
+
+/**
+ * Экранирование для HTML-версии письма.
+ *
+ * В блок «Что входит» попадает слаг модуля из `custom_data` чекаута, то есть
+ * строка, которую собрал покупатель. В текстовой версии это безвредно, а в
+ * HTML — вставка в разметку письма, которое мы же и отправляем. Экранируем в
+ * МЕСТЕ ВСТАВКИ, а не внутри includedLine: тогда текстовая версия остаётся
+ * читаемой, без &amp; вместо амперсанда.
+ */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function welcomeHtml(sub: Subscription): string {
   const tierName = TIER_DISPLAY[sub.tierId];
   const cta = ctaFor(sub);
   const trialBlock = sub.trialDays > 0
@@ -355,7 +397,7 @@ function welcomeHtml(sub: Subscription): string {
           ${trialBlock}
           <p style="font-size:13px;color:#64748b;line-height:1.5;margin:16px 0">
             <strong>Что входит:</strong><br/>
-            ${includedLine(sub)}
+            ${escapeHtml(includedLine(sub))}
           </p>
           <div style="margin:24px 0;text-align:center">
             <a href="${FRONTEND_URL}${cta.href}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#0d9488,#0ea5e9);color:#fff;text-decoration:none;border-radius:10px;font-weight:800;font-size:14px">

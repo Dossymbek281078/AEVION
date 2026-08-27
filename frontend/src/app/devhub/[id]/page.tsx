@@ -3207,6 +3207,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {f.path}
                       </span>
                     )}
+                    {/* Rename lived only in the right-click menu — which most
+                        people never try in a web app, and which no keyboard can
+                        reach. Delete already had a button here; rename gets one
+                        too. Same handler as the menu entry. */}
+                    {!isRenaming && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setRenamingFile(f); setRenameValue(f.path); }}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", fontSize: 12, padding: 2, flexShrink: 0 }}
+                        title="Rename file"
+                      >✎</button>
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); deleteFile(f.path); }}
                       style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", fontSize: 14, padding: 2, flexShrink: 0 }}

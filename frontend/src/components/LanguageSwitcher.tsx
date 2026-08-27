@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
-import { useI18n, LANGS, LANG_FULL, LANG_FLAG, LANG_SHORT, type Lang } from "@/lib/i18n";
+import { useI18n, LANG_FULL, LANG_FLAG, LANG_SHORT, type Lang } from "@/lib/i18n";
+import { coveragePercent, langsByCoverage } from "@/lib/langCoverage";
 
 interface Props {
   /** compact — только флаг + код (для header); full — флаг + полное название (для dropdown внутри) */
@@ -10,6 +11,7 @@ interface Props {
 
 export default function LanguageSwitcher({ variant = "compact" }: Props) {
   const { lang, setLang } = useI18n();
+  const { usable, partial } = langsByCoverage();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -101,8 +103,9 @@ export default function LanguageSwitcher({ variant = "compact" }: Props) {
             padding: "4px 0",
           }}
         >
-          {LANGS.map((l: Lang) => {
+          {[...usable, ...partial].map((l: Lang) => {
             const active = lang === l;
+            const partialShare = partial.includes(l) ? coveragePercent(l) : null;
             return (
               <button
                 key={l}
@@ -133,6 +136,14 @@ export default function LanguageSwitcher({ variant = "compact" }: Props) {
               >
                 <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{LANG_FLAG[l]}</span>
                 <span style={{ flex: 1 }}>{LANG_FULL[l]}</span>
+                {/* Choosing a language should not be a guess: a language that
+                    covers 1% of the interface says so before it is picked,
+                    instead of after, in the form of Russian text. */}
+                {partialShare !== null && (
+                  <span style={{ fontSize: 11, color: "#8a8886", flexShrink: 0 }}>
+                    переведено {partialShare}%
+                  </span>
+                )}
                 {active && <span style={{ fontSize: 12, color: "#98b800" }}>✓</span>}
               </button>
             );
@@ -146,7 +157,7 @@ export default function LanguageSwitcher({ variant = "compact" }: Props) {
             color: "#5d5b59",
             textAlign: "center",
           }}>
-            11 языков · добавляем переводы
+            {usable.length} из {usable.length + partial.length} переведены полностью
           </div>
         </div>
       )}

@@ -156,4 +156,19 @@ test.describe("DevHub IDE — controls that must not be decorative", () => {
     // Opening a file marks its row as the pressed one.
     await expect(row).toHaveAttribute("aria-pressed", "true", { timeout: 10_000 });
   });
+
+  test("a failure message is announced, not just drawn", async ({ page }) => {
+    // Every honest failure message added to this page — the file that was not
+    // saved, the collaborator whose access was not revoked — was silent to a
+    // screen reader: the local Toast carried no live region at all.
+    await mockBackend(page);
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    await page.getByTitle("New file").click({ timeout: 30_000 });
+    await page.getByPlaceholder("src/component.tsx").fill("src/App.jsx"); // already exists
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+
+    const toast = page.getByRole("status").filter({ hasText: /уже существует/ });
+    await expect(toast).toBeVisible({ timeout: 10_000 });
+    await expect(toast).toHaveAttribute("aria-live", "assertive");
+  });
 });

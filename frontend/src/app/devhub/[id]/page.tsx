@@ -341,14 +341,23 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
   const bg = type === "success" ? "#d1fae5" : type === "error" ? "#fee2e2" : type === "warning" ? "#fef3c7" : "#dbeafe";
   const fg = type === "success" ? "#065f46" : type === "error" ? "#991b1b" : type === "warning" ? "#92400e" : "#1e40af";
   return (
-    <div style={{
-      position: "fixed", bottom: 24, right: 24, background: bg, color: fg,
-      padding: "12px 18px", borderRadius: 10, fontWeight: 600, fontSize: 14,
-      boxShadow: "0 4px 20px rgba(0,0,0,0.12)", zIndex: 200, maxWidth: 380,
-      display: "flex", alignItems: "center", gap: 10,
-    }}>
+    // Announced, not just drawn. Every honest failure message added to this
+    // page today — the file that was not saved, the collaborator whose access
+    // was not revoked — was silent to a screen reader: this component, unlike
+    // the platform's shared ToastProvider, carried no live region. Errors
+    // interrupt (assertive); the rest waits its turn (polite).
+    <div
+      role="status"
+      aria-live={type === "error" ? "assertive" : "polite"}
+      style={{
+        position: "fixed", bottom: 24, right: 24, background: bg, color: fg,
+        padding: "12px 18px", borderRadius: 10, fontWeight: 600, fontSize: 14,
+        boxShadow: "0 4px 20px rgba(0,0,0,0.12)", zIndex: 200, maxWidth: 380,
+        display: "flex", alignItems: "center", gap: 10,
+      }}
+    >
       <span>{message}</span>
-      <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: fg, fontWeight: 800 }}>x</button>
+      <button onClick={onClose} aria-label="Закрыть уведомление" style={{ background: "none", border: "none", cursor: "pointer", color: fg, fontWeight: 800 }}>x</button>
     </div>
   );
 }
@@ -2975,6 +2984,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           {saving && <span style={{ fontSize: 12, color: "#94a3b8" }}>Saving...</span>}
           {saveError && (
             <span
+              role="status"
+              aria-live="assertive"
               title={saveError}
               style={{ fontSize: 12, fontWeight: 700, color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 6, padding: "3px 10px", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: 480 }}
             >

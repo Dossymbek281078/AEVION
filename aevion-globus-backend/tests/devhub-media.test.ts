@@ -59,6 +59,7 @@ vi.mock("../src/lib/wranglerPagesDeploy", () => ({
 
 // eslint-disable-next-line import/first
 import { devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork } from "../src/routes/devhub";
+import { __resetProviderHealth } from "../src/lib/providerHealth";
 // eslint-disable-next-line import/first
 import { getProviders, callProvider } from "../src/services/qcoreai/providers";
 
@@ -76,6 +77,10 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   __resetDevHubStore();
+  // Provider health is process-wide and in-memory: a route that recorded a
+  // real failure in one test made a later test see `degraded` where it
+  // expected the token-derived `live`. Same class as the deferred timers.
+  __resetProviderHealth();
   fetchMock = vi.fn();
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   mockDeployViaWrangler.mockReset();
@@ -1082,5 +1087,53 @@ describe("POST /api/devhub/media/email-template-create (Brevo)", () => {
     expect(r.status).toBe(200);
     const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
     expect(body.sender).toEqual({ email: "default@aevion.io", name: "AEVION Bot" });
+  });
+});
+
+
+describe("media capabilities report what the provider actually did", () => {
+  // Until now only image and video recorded outcomes, so voice kept reading
+  // "live" through the weeks its model had been removed, and translation read
+  // "live" while DeepL answered 456 to every call. Both are one call away from
+  // the truth — the call was already being made.
+  test("a failing ElevenLabs call marks the voice capability degraded", async () => {
+    const { __resetProviderHealth, getProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    process.env.ELEVENLABS_API_KEY = "el-test";
+    fetchMock.mockResolvedValue({ ok: false, status: 401, text: async () => "invalid api key" } as any);
+
+    const r = await request(makeApp()).post("/api/devhub/media/tts").send({ text: "привет" });
+    expect(r.status).toBe(401);
+    const h = getProviderHealth("audio_tts");
+    expect(h?.ok).toBe(false);
+    expect(h?.reason).toMatch(/401|invalid api key/i);
+    __resetProviderHealth();
+  });
+
+  test("a working ElevenLabs call clears it again", async () => {
+    const { __resetProviderHealth, getProviderHealth, noteProviderFailure } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    noteProviderFailure("audio_tts", "stale failure from an earlier call");
+    process.env.ELEVENLABS_API_KEY = "el-test";
+    fetchMock.mockResolvedValue({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(64) } as any);
+
+    const r = await request(makeApp()).post("/api/devhub/media/tts").send({ text: "привет" });
+    expect(r.status).toBe(200);
+    expect(getProviderHealth("audio_tts")?.ok).toBe(true);
+    __resetProviderHealth();
+  });
+
+  test("DeepL's 456 marks translation degraded with its own reason", async () => {
+    const { __resetProviderHealth, getProviderHealth } = await import("../src/lib/providerHealth");
+    __resetProviderHealth();
+    process.env.DEEPL_API_KEY = "dl-test";
+    fetchMock.mockResolvedValue({ ok: false, status: 456, text: async () => "Quota exceeded" } as any);
+
+    const r = await request(makeApp()).post("/api/devhub/media/translate").send({ text: "привет", targetLang: "EN" });
+    expect(r.status).toBe(456);
+    const h = getProviderHealth("translate");
+    expect(h?.ok).toBe(false);
+    expect(h?.reason).toMatch(/quota/i);
+    __resetProviderHealth();
   });
 });

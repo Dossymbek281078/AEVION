@@ -3555,9 +3555,14 @@ devhubRouter.post("/media/tts", async (req, res) => {
         }
       }
       if (!finalResp.ok) {
+        // The voice capability read "live" for weeks while every call failed
+        // on a model ElevenLabs had removed. Record what the call did, so the
+        // shop window can say degraded with this reason.
+        noteProviderFailure("audio_tts", `ElevenLabs HTTP ${finalResp.status}: ${firstErr.slice(0, 100)}`);
         return res.status(finalResp.status).json({ error: `ElevenLabs error: ${firstErr.slice(0, 200)}`, triedModels: [TTS_MODEL, ...TTS_MODEL_FALLBACKS] });
       }
     }
+    noteProviderSuccess("audio_tts");
 
     const audioBuffer = Buffer.from(await finalResp.arrayBuffer());
     res.setHeader("X-Tts-Model", usedModel);
@@ -5050,17 +5055,23 @@ devhubRouter.post("/media/translate", async (req, res) => {
       // translate call is refused — the account state is only visible from a
       // real call (verified against our own key, 2026-07-26).
       if (r.status === 456) {
+        noteProviderFailure("translate", "DeepL says the quota is exhausted (456) — the key's own /v2/usage can still read 0");
         return res.status(456).json({
           error: "Translation unavailable — the DeepL account is out of quota. Their usage page can still show 0 used, so check the account or swap DEEPL_API_KEY.",
           provider: "deepl",
           accountUrl: "https://www.deepl.com/account/usage",
         });
       }
+      noteProviderFailure("translate", `DeepL HTTP ${r.status}: ${errText.slice(0, 100)}`);
       return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json() as { translations: Array<{ text: string; detected_source_language: string }> };
     const first = data.translations?.[0];
-    if (!first) return res.status(500).json({ error: "no translation returned" });
+    if (!first) {
+      noteProviderFailure("translate", "DeepL answered 200 with no translation in the body");
+      return res.status(500).json({ error: "no translation returned" });
+    }
+    noteProviderSuccess("translate");
     res.json({
       ok: true,
       text: first.text,

@@ -28,6 +28,7 @@ vi.mock("../src/lib/wranglerPagesDeploy", () => ({
 
 // eslint-disable-next-line import/first
 import { devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork } from "../src/routes/devhub";
+import { __resetProviderHealth } from "../src/lib/providerHealth";
 // eslint-disable-next-line import/first
 import { getProviders, callProvider } from "../src/services/qcoreai/providers";
 
@@ -67,6 +68,10 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   __resetDevHubStore();
+  // Provider health is process-wide and in-memory: a route that recorded a
+  // real failure in one test made a later test see `degraded` where it
+  // expected the token-derived `live`. Same class as the deferred timers.
+  __resetProviderHealth();
   fetchMock = vi.fn();
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   mockDeployViaWrangler.mockReset();

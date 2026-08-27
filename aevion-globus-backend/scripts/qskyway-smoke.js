@@ -331,6 +331,44 @@ async function main() {
   assert(padded > 0 && maxPad > 0, "[tokyo] confidence-clearance raises corridors over uncertain buildings", `${padded} routes padded, max=${maxPad}m`);
   // clearance invariant already holds base+conf, so the per-city loop still shows 0 violations
 
+  // ── Честные числа рядом с уверенными (добавлено 27.08.2026) ────────────────
+  //
+  // Пять полей заведены в тот день, потому что соседнее поле про то же самое
+  // говорило иначе, а читатель верит короткому. Без проверок здесь они тихо
+  // откатятся, и никто не узнает: юнит-тесты живут в другом наборе, а прод
+  // смотрят этим смоуком.
+  const hq = await jget("/api/qskyway/health");
+  assert(typeof hq.json?.slotsBookedLive === "number" || hq.json?.slotsBookedLive === null,
+    "health reports live bookings apart from the total",
+    `booked=${hq.json?.slotsBooked} live=${hq.json?.slotsBookedLive} basis=${hq.json?.slotsLiveBasis}`);
+  assert(["all", "sample-500", "store-unavailable"].includes(hq.json?.slotsLiveBasis),
+    "health names what the live figure was counted on",
+    `basis=${hq.json?.slotsLiveBasis}`);
+  // Городская возможность обязана называть города, а идентификаторы — оставаться
+  // машинными: строка 60 этого файла сверяет пункт ТОЧНЫМ равенством.
+  const scope = hq.json?.featureScope?.["regulatory-airspace-ceilings"];
+  assert(Array.isArray(scope) && scope.length > 0 && scope.length < Object.keys(hq.json?.airspace ?? {}).length,
+    "city-scoped feature names its cities, and not all of them",
+    `scope=${JSON.stringify(scope)}`);
+  assert((hq.json?.features ?? []).every((f) => /^[a-z0-9-]+$/.test(f)),
+    "feature ids stay machine-readable (no parentheses)",
+    `${(hq.json?.features ?? []).filter((f) => !/^[a-z0-9-]+$/.test(f)).join(", ") || "ok"}`);
+
+  const ar = await jpost("/api/qskyway/route", { from: 0, to: 3, city: "astana" });
+  assert(ar.json?.blindHeight && typeof ar.json.blindHeight.inertPenaltySegments === "number"
+      && ar.json.blindHeight.clearedUpToM > 0,
+    "route says where the confidence padding did nothing",
+    `guessed=${ar.json?.blindHeight?.guessedSegments} inert=${ar.json?.blindHeight?.inertPenaltySegments} cleared<=${ar.json?.blindHeight?.clearedUpToM}m`);
+  assert(ar.json?.confClearOnObstaclesM === null || ar.json.confClearOnObstaclesM >= ar.json.avgConfClearM,
+    "padding over buildings is not diluted below the whole-route average",
+    `obstacles=${ar.json?.confClearOnObstaclesM} avg=${ar.json?.avgConfClearM}`);
+  assert(ar.json?.noFly && ar.json.noFly.cellsOnPathInsideZone === 0,
+    "corridor never crosses a prohibited zone",
+    `zones=${ar.json?.noFly?.zonesInCity} inside=${ar.json?.noFly?.cellsOnPathInsideZone}`);
+  assert(ar.json?.avoidsNoFly === ar.json?.noFly?.directLineCrosses,
+    "avoidsNoFly reports the route, not the city",
+    `avoids=${ar.json?.avoidsNoFly} directCrosses=${ar.json?.noFly?.directLineCrosses}`);
+
   // ── Phase 7: regulatory airspace ceilings (real FAA UASFM feed for NYC) ─────
   const asN = cityNyc.json?.airspace;
   assert(asN?.available === true && asN.authority === "FAA", "[nyc] twin carries a real regulator ceiling feed", `authority=${asN?.authority}`);

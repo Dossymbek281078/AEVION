@@ -26,7 +26,7 @@ import { join } from "node:path";
 
 const SECRET = "test-secret-for-waitlist-export-honesty-000";
 
-beforeAll(() => {
+beforeAll(async () => {
   process.env.AUTH_JWT_SECRET = SECRET;
   // Базы в тестах нет, и ручка это выясняет ПОПЫТКОЙ подключения. Пул по
   // умолчанию ждёт её 5 секунд (PG_POOL_CONN_MS), а при полном прогоне —
@@ -38,7 +38,14 @@ beforeAll(() => {
   // файлу, поэтому пул в этом файле создаётся уже с этим значением.
   process.env.PG_POOL_CONN_MS = "150";
   process.env.PG_STATEMENT_TIMEOUT_MS = "500";
-});
+
+  // И отдельно — стоимость ЗАГРУЗКИ роутера со всеми зависимостями. Она
+  // платилась внутри ПЕРВОГО теста: 27.08.2026 при полном прогоне (326 файлов)
+  // он ушёл в таймаут на 54-й секунде при бюджете 20, оставаясь зелёным в
+  // одиночку за 949 мс. Импорт кэшируется, поэтому дальше mount() бесплатен.
+  // Наращивать таймаут теста было бы неверно: он не про длительность проверки.
+  await import("../src/routes/constitutionWaitlist");
+}, 60_000);
 
 function adminToken(): string {
   return jwt.sign({ sub: "admin-1", email: "a@a.test", role: "admin" }, SECRET, {

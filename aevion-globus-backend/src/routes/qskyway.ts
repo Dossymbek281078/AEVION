@@ -1178,15 +1178,25 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
     // это правда, для седьмого — нет: сетку потолков публикует только FAA, и
     // ниже в этом же ответе `airspace.astana.available` и `airspace.tokyo`
     // честно отвечают false. Два наших же поля спорили друг с другом, и верить
-    // читатель будет короткому — списку. Поэтому городской пункт называет
-    // города прямо в строке (замер 27.08.2026: 1 город из 3).
+    // читатель будет короткому — списку.
+    //
+    // Границу выношу ОТДЕЛЬНЫМ полем, а не в саму строку. Первая попытка
+    // 27.08.2026 дописывала города в скобках прямо в пункт — и это ломало
+    // собственный смоук: строка 60 в scripts/qskyway-smoke.js проверяет
+    // `features.includes("regulatory-airspace-ceilings")`, то есть ТОЧНОЕ
+    // равенство, и падала бы с сообщением «сборка СТАРАЯ» — уводя читателя
+    // ровно в противоположную сторону от настоящей причины.
+    //
+    // Идентификаторы в списке машинные и стабильные; человеческая граница
+    // живёт рядом и никого не ломает.
     features: [
       "nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability",
-      "height-provenance", "confidence-clearance",
-      `regulatory-airspace-ceilings (${
-        Object.keys(CITIES).filter((id) => AIRSPACE[id]).join(", ") || "нет городов с фидом регулятора"
-      })`,
+      "height-provenance", "confidence-clearance", "regulatory-airspace-ceilings",
     ],
+    /** Возможности, работающие НЕ во всех городах, и где именно они есть. */
+    featureScope: {
+      "regulatory-airspace-ceilings": Object.keys(CITIES).filter((id) => AIRSPACE[id]),
+    },
     airspace: Object.fromEntries(Object.keys(CITIES).map((id) => [id, airspaceBlock(id, CITIES[id])])),
     slotsStore: slotsDbAvailable ? "postgres" : "memory",
     slotsBooked,

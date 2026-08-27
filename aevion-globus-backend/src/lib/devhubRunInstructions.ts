@@ -49,6 +49,24 @@ export function buildRunInstructions(args: {
       "```",
       "",
     );
+  } else if (stack === "python" || files.some((f) => /(^|\/)requirements\.txt$/.test(f.path))) {
+    // A Python project has no package.json and never will; telling its owner
+    // the folder "cannot be installed as-is" was simply wrong — my own bug,
+    // from writing the note around the JS case only.
+    const req = files.find((f) => /(^|\/)requirements\.txt$/.test(f.path));
+    const entry = files.find((f) => /(^|\/)(main|app|server)\.py$/.test(f.path)) || files.find((f) => f.path.endsWith(".py"));
+    lines.push("```bash", "python -m venv .venv", "source .venv/bin/activate  # Windows: .venv\\Scripts\\activate");
+    if (req) lines.push(`pip install -r ${req.path}`);
+    else lines.push("# зависимостей не объявлено — requirements.txt в проекте нет");
+    if (entry) lines.push(`python ${entry.path}`);
+    lines.push("```", "");
+    if (!req) {
+      lines.push(
+        "Файла `requirements.txt` нет: если код что-то импортирует помимо стандартной библиотеки,",
+        "запуск упадёт на первом импорте. Попросите DevHub собрать его — модель видит ваши импорты.",
+        "",
+      );
+    }
   } else if (!manifest) {
     // The honest case. Guessing dependencies here would produce a manifest
     // that installs and then fails at import time — worse than none.

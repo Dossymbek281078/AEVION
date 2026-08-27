@@ -85,3 +85,36 @@ describe("buildRunInstructions", () => {
     expect(out).toContain(".env.local");
   });
 });
+
+describe("buildRunInstructions — Python projects", () => {
+  test("a python project gets a venv and pip, not 'no package.json'", () => {
+    const out = buildRunInstructions({
+      projectName: "Api",
+      stack: "python",
+      files: [
+        { path: "main.py", content: "print(1)" },
+        { path: "requirements.txt", content: "fastapi\n" },
+      ],
+    });
+    expect(out).toContain("python -m venv .venv");
+    expect(out).toContain("pip install -r requirements.txt");
+    expect(out).toContain("python main.py");
+    // The Windows hint must survive escaping: a single backslash in the TS
+    // source would have shipped ".venvScriptsactivate".
+    expect(out).toContain(".venv\\Scripts\\activate");
+    // The JS advice must not leak into a language that has no package.json.
+    expect(out).not.toMatch(/нет `package\.json`/);
+    expect(out).not.toContain("npm install");
+  });
+
+  test("a python project without requirements.txt is told what is missing", () => {
+    const out = buildRunInstructions({
+      projectName: "Bare",
+      stack: "python",
+      files: [{ path: "app.py", content: "import fastapi" }],
+    });
+    expect(out).toContain("python -m venv .venv");
+    expect(out).toMatch(/requirements\.txt/);
+    expect(out).toContain("python app.py");
+  });
+});

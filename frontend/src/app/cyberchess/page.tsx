@@ -2511,7 +2511,7 @@ export default function CyberChessPage(){
     try{
       if(localStorage.getItem("aevion_chess_palette_hint_v1")==="1")return;
       const t=window.setTimeout(()=>{
-        showToast("⌕ Жми Ctrl+K чтобы найти любую команду — игру, пазл, анализ, стрим…","info");
+        showToast("⌕ Жми Ctrl+K чтобы найти любую команду — игру, задачу, анализ, стрим…","info");
         try{localStorage.setItem("aevion_chess_palette_hint_v1","1")}catch{}
       },2400);
       return()=>window.clearTimeout(t);
@@ -10893,7 +10893,7 @@ ${question.trim()}`;
                 flags.push({label:`✗ Слабый дебют: ${dna.worstOpening.opening}`,detail:`${dna.worstOpening.winPct}% побед в ${dna.worstOpening.total} партиях. Либо изучи его, либо смени на другой.`,tone:"warn"});
               }
               if(dna.currentStreak.type==="L"&&dna.currentStreak.count>=3){
-                flags.push({label:`💔 Серия проигрышей ×${dna.currentStreak.count}`,detail:`Возьми паузу 30 минут или поиграй пазлы для восстановления уверенности.`,tone:"warn"});
+                flags.push({label:`💔 Серия проигрышей ×${dna.currentStreak.count}`,detail:`Возьми паузу 30 минут или порешай задачи для восстановления уверенности.`,tone:"warn"});
               }
               return <div style={{borderRadius:10,background:"linear-gradient(135deg,#fef2f2,#fff1f2)",border:"1px solid #fca5a5",padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -11785,7 +11785,7 @@ ${question.trim()}`;
             })}
           </div>
           <div style={{fontSize:11,color:"#94a3b8",marginTop:SPACE[2],lineHeight:1.5}}>
-            💡 AEV — нативный токен AEVION. Можно заработать в QTrade, CyberChess (победы/пазлы), QShield, или купить за фиат через QPayNet.
+            💡 AEV — внутренняя валюта всей платформы AEVION. Её зарабатывают в QTrade, CyberChess (победы и задачи), QShield, или купить за фиат через QPayNet.
           </div>
         </div>
 
@@ -11850,7 +11850,7 @@ ${question.trim()}`;
           <div style={{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:SPACE[1]}}>💡 Как заработать Chessy</div>
           <div style={{fontSize:12,color:"#b45309",lineHeight:1.7}}>
             · Победа против AI: 5–160 (чем сильнее соперник и длиннее партия — тем больше)<br/>
-            · Пазл: 2–15 (по рейтингу)<br/>
+            · Задача: 2–15 (по рейтингу)<br/>
             · Daily-бонус: 5, 30 (streak 3), 100 (streak 7)<br/>
             · Достижения: 30–400 за вехи
           </div>
@@ -12128,7 +12128,7 @@ ${question.trim()}`;
     {tourStep>=0&&(()=>{
       const slides=[
         {icon:"♞",title:"Добро пожаловать в AEVION CyberChess",body:<>
-          <p style={{margin:"0 0 10px",lineHeight:1.6}}>Полноценный шахматный тренажёр: AI-движок Stockfish, живой тренер, 5000+ пазлов, 12 вариантов игры и своя валюта.</p>
+          <p style={{margin:"0 0 10px",lineHeight:1.6}}>Полноценный шахматный тренажёр: AI-движок Stockfish, живой тренер, 5000+ задач, 12 вариантов игры и своя валюта.</p>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:8}}>
             {["⚡ Puzzle Rush","🎓 Coach AI","🎲 12 вариантов","📊 Analysis","🏆 Турниры"].map(f=><span key={f} style={{fontSize:11,padding:"3px 9px",borderRadius:999,background:"rgba(5,150,105,0.12)",color:CC.brand,fontWeight:700}}>{f}</span>)}
           </div>
@@ -13419,7 +13419,7 @@ ${question.trim()}`;
     <Modal open={showChessyInfo} onClose={()=>sShowChessyInfo(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon.Coin width={20} height={20}/> Как работает Chessy</span>}>
       <div style={{fontSize:14,color:CC.text,lineHeight:1.55}}>
         <p style={{margin:`0 0 ${SPACE[3]}px`}}>
-          <b>Chessy</b> — игровая валюта AEVION CyberChess. Зарабатывай, играя и решая пазлы. Трать на премиум-функции, подсказки и тренировки.
+          <b>Chessy</b> — игровая валюта AEVION CyberChess. Зарабатывай, играя и решая задачи. Трать на премиум-функции, подсказки и тренировки.
         </p>
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[3],marginBottom:SPACE[4]}}>

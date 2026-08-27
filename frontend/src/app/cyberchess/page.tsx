@@ -1,6 +1,22 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
+
+/**
+ * Замер окна обязан случиться ДО того, как браузер покажет первый кадр.
+ *
+ * Ширина окна хранится в состоянии с начальным значением 1280 (для рендера на
+ * сервере, где окна нет). Пока замер жил в обычном useEffect, первый кадр на
+ * телефоне рисовался как десктоп: isMobileLayout был false, и всё, что от
+ * него зависит, вело себя наоборот. Отсюда на экране 375 пикселей появлялись
+ * подсказка «⌃K» и плавающая кнопка «горячие клавиши» — при том, что условия
+ * скрывать их были написаны и выглядели рабочими.
+ *
+ * useLayoutEffect выполняется до отрисовки, поэтому неверный кадр не доходит
+ * до глаз. На сервере его нет — там остаётся useEffect, и разметка первого
+ * рендера совпадает с серверной, то есть гидрация не ломается.
+ */
+const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { knownUserId } from "./tournaments/playerIdentity";
 import { readDisplayName } from "./displayName";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
@@ -1044,7 +1060,9 @@ export default function CyberChessPage(){
   const[boardScale,sBoardScale]=useState<number>(()=>{try{const v=parseFloat(localStorage.getItem("cc_board_scale_v1")||"1");return isNaN(v)?1:Math.max(0.5,Math.min(1.5,v))}catch{return 1}});
   useEffect(()=>{try{localStorage.setItem("cc_board_scale_v1",String(boardScale))}catch{}},[boardScale]);
   const[vwPx,sVwPx]=useState(1280);const[vhPx,sVhPx]=useState(800);
-  useEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
+  // Замер ДО отрисовки: см. комментарий у useIsoLayoutEffect наверху файла.
+  // Обычный useEffect здесь давал телефону один кадр в десктопной вёрстке.
+  useIsoLayoutEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
   // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
   // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
   // баннеры) чтобы доска НИКОГДА не вылезала за окно и не обрезалась снизу. По ширине

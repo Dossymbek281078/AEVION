@@ -85,4 +85,46 @@ test.describe("DevHub IDE — controls that must not be decorative", () => {
     await menu.getByRole("button", { name: "Rename", exact: true }).click();
     await expect(page.locator('input[type="text"]').first()).toBeVisible({ timeout: 10_000 });
   });
+
+  test("Undo last AI change actually asks the server to undo", async ({ page }) => {
+    await mockBackend(page);
+    const undoCalls: string[] = [];
+    await page.route("**/generate/undo", async (route) => {
+      undoCalls.push(route.request().url());
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, label: "generate: add a timer", revertedFiles: ["src/Timer.jsx"] }),
+      });
+    });
+
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    await page.getByRole("button", { name: "AI Generate", exact: true }).click({ timeout: 30_000 });
+    await page.getByRole("button", { name: /Undo last AI change/ }).click();
+
+    expect(undoCalls).toHaveLength(1);
+    await expect(page.getByText(/Reverted/)).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("Revert to here in History sends a restore for that checkpoint", async ({ page }) => {
+    await mockBackend(page);
+    const restores: string[] = [];
+    await page.route("**/checkpoints/*/restore", async (route) => {
+      restores.push(route.request().url());
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, revertedFiles: ["src/Timer.jsx"], restoredToLabel: "generate: add a timer", stepsApplied: 1 }),
+      });
+    });
+
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    await page.getByRole("button", { name: "AI Generate", exact: true }).click({ timeout: 30_000 });
+    await page.getByRole("button", { name: /History/ }).click();
+    // The newest entry is labelled just "Revert"; older ones say "Revert to here".
+    await page.getByRole("button", { name: /^Revert/ }).first().click();
+
+    expect(restores).toHaveLength(1);
+    expect(restores[0]).toContain("/checkpoints/c1/restore");
+  });
 });

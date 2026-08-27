@@ -1551,7 +1551,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const provisionDatabase = async () => {
     if (!project || provisioningDb) return;
     if (isCapabilityBlocked(caps, "database")) {
-      showToast(capabilityHint(caps, "database", "Database provisioning"), "warning");
+      showToast(capabilityHint(caps, "database", "База данных"), "warning");
       return;
     }
     setProvisioningDb(true);
@@ -1693,7 +1693,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const deploy = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "railway")) {
-      showToast(capabilityHint(caps, "railway", "Railway deploy"), "warning");
+      showToast(capabilityHint(caps, "railway", "Выкатка на Railway"), "warning");
       return;
     }
     setDeploying(true);
@@ -1977,7 +1977,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const deployToPages = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "pages")) {
-      showToast(capabilityHint(caps, "pages", "Cloudflare Pages deploy"), "warning");
+      showToast(capabilityHint(caps, "pages", "Публикация на Cloudflare Pages"), "warning");
       return;
     }
     setPagesDeploying(true);
@@ -2022,7 +2022,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const deployToVercel = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "vercel")) {
-      showToast(capabilityHint(caps, "vercel", "Vercel deploy"), "warning");
+      showToast(capabilityHint(caps, "vercel", "Выкатка на Vercel"), "warning");
       return;
     }
     setVercelDeploying(true);
@@ -2143,7 +2143,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateImage = async () => {
     if (!imgPrompt.trim()) return;
     if (isCapabilityBlocked(caps, "image")) {
-      setImgError(capabilityHint(caps, "image", "Image generation"));
+      setImgError(capabilityHint(caps, "image", "Генерация картинок"));
       return;
     }
     setImgLoading(true);
@@ -2204,7 +2204,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateMusic = async () => {
     if (!musicPrompt.trim()) return;
     if (isCapabilityBlocked(caps, "audio_music")) {
-      setMusicError(capabilityHint(caps, "audio_music", "Music generation"));
+      setMusicError(capabilityHint(caps, "audio_music", "Генерация музыки"));
       return;
     }
     setMusicLoading(true);
@@ -2991,7 +2991,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateTts = async () => {
     if (!mediaTtsText.trim()) return;
     if (isCapabilityBlocked(caps, "audio_tts")) {
-      setMediaTtsError(capabilityHint(caps, "audio_tts", "Voice (TTS)"));
+      setMediaTtsError(capabilityHint(caps, "audio_tts", "Озвучка"));
       return;
     }
     setMediaTtsLoading(true);
@@ -3104,7 +3104,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deploy}
             disabled={deploying}
-            title={capabilityHint(caps, "railway", "Deploy to Railway")}
+            title={capabilityHint(caps, "railway", "Выкатка на Railway")}
             style={{
               padding: "8px 18px", background: deploying ? "#99f6e4" : "#0d9488",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -3117,7 +3117,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deployToVercel}
             disabled={vercelDeploying}
-            title={capabilityHint(caps, "vercel", "Deploy to Vercel")}
+            title={capabilityHint(caps, "vercel", "Выкатка на Vercel")}
             style={{
               padding: "8px 14px", background: vercelDeploying ? "#e2e8f0" : "#000",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -3490,7 +3490,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 onClick={provisionDatabase}
                                 disabled={provisioningDb}
-                                title={capabilityHint(caps, "database", "Create the database")}
+                                title={capabilityHint(caps, "database", "Создание базы данных")}
                                 style={{ padding: "7px 14px", background: provisioningDb ? "#a5b4fc" : "#4f46e5", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: provisioningDb ? "not-allowed" : "pointer", opacity: isCapabilityBlocked(caps, "database") ? 0.45 : 1 }}
                               >
                                 {provisioningDb ? "Создаю базу…" : "Создать базу данных"}
@@ -4092,12 +4092,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: pagesDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {pagesDeploying ? "⏳ Deploying..." : project?.deployUrl?.includes("pages.dev") ? "🔄 Redeploy to Cloudflare Pages" : domainCapabilityWorks ? "🚀 Deploy to Cloudflare Pages + get aevion.build domain" : "🚀 Deploy to Cloudflare Pages"}
+                      {pagesDeploying ? "⏳ Deploying..." : project?.deployUrl?.includes("pages.dev") ? "🔄 Redeploy to Cloudflare Pages" : "🚀 Опубликовать на Cloudflare Pages"}
                     </button>
                     <div style={{ fontSize: 10, color: "#9a3412", marginTop: 6 }}>
-                      Requires <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_ACCOUNT_ID</code> + <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_API_TOKEN</code> in Railway.
                       {domainCapabilityWorks
-                        ? <>Add <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_ZONE_ID</code> for aevion.build domain.</>
+                        ? <>Свой поддомен выдаётся, только если Cloudflare его подтвердит; иначе адрес будет на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>
                         : <>Домен <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>aevion.build</code> пока не отвечает — зона не делегирована на Cloudflare, поэтому адрес выдаётся на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>}
                     </div>
                   </div>
@@ -4285,7 +4284,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   </div>
 
                   <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                    Set <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>GITHUB_TOKEN</code> env var on the server to enable GitHub integration.
+                    Связь с GitHub пока не подключена на нашей стороне.
                     Token needs <em>repo</em> scope.
                   </div>
                 </div>
@@ -4401,7 +4400,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           onClick={async () => {
                             if (!videoPrompt.trim()) { setVideoError("Enter a prompt first"); return; }
                             if (isCapabilityBlocked(caps, "video")) {
-                              setVideoError(capabilityHint(caps, "video", "Video generation"));
+                              setVideoError(capabilityHint(caps, "video", "Генерация видео"));
                               return;
                             }
                             setVideoLoading(true); setVideoError(null); setVideoUrl(null); setVideoPredictionId(null); setVideoStatus("starting");
@@ -4433,7 +4432,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             } catch (e: any) { setVideoError(e.message || "Failed"); setVideoLoading(false); }
                           }}
                           disabled={videoLoading || !videoPrompt.trim()}
-                          title={capabilityHint(caps, "video", "Generate video")}
+                          title={capabilityHint(caps, "video", "Генерация видео")}
                           style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
                         >
                           {videoLoading ? `${videoStatus || "generating..."}` : "Generate Video"}
@@ -4450,7 +4449,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                       )}
                       <div style={{ fontSize: 11, color: "#94a3b8", padding: "6px 10px", background: "#f8fafc", borderRadius: 6 }}>
-                        Powered by Replicate API. Requires REPLICATE_API_TOKEN in Railway. Generation takes 30–120s.
+                        Работает на Replicate. Генерация занимает 30–120 секунд.
                       </div>
                     </div>
                   )}
@@ -4619,7 +4618,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {mediaTtsLoading ? "Generating..." : "Generate Speech"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>
+                        
                       </div>
                     </div>
                   )}
@@ -4726,7 +4725,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {imgLoading ? "Generating..." : "Generate Image"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>OPENAI_API_KEY</code>. Powered by DALL-E 3.
+                         Powered by DALL-E 3.
                       </div>
                     </div>
                   )}
@@ -4780,7 +4779,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {sfxLoading ? "Generating..." : "Generate SFX"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>
+                        
                       </div>
                     </div>
                   )}
@@ -4834,7 +4833,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {musicLoading ? "Composing..." : "Compose Music"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>. Max 5 min.
+                         Max 5 min.
                       </div>
                     </div>
                   )}
@@ -4896,7 +4895,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {emailLoading ? "Sending..." : "Send Email"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code> + <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_DEFAULT_SENDER</code>
+                        
                       </div>
                     </div>
                   )}
@@ -5021,7 +5020,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
                         {payProvider === "gumroad"
                           ? <>Gumroad is the only live processor (Stripe/Paddle blocked by KYC). Link is a public product page — no server key needed. Sales arrive via <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>/api/gumroad/webhook</code>.</>
-                          : <>⚠️ Stripe is KYC-blocked — links won't collect real payments. Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>STRIPE_SECRET_KEY</code>.</>}
+                          : <>⚠️ Stripe is KYC-blocked — links won't collect real payments. </>}
                       </div>
                     </div>
                   )}
@@ -5112,7 +5111,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
 
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>DEEPL_API_KEY</code> (use :fx suffix for Free tier)
+                        (use :fx suffix for Free tier)
                       </div>
                     </div>
                   )}
@@ -5235,7 +5234,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       )}
 
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>DEEPL_API_KEY</code>
+                        
                       </div>
                     </div>
                   )}
@@ -5324,7 +5323,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Sender email (optional — falls back to BREVO_SENDER_EMAIL env)</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Адрес отправителя (необязательно — иначе письмо уйдёт с нашего адреса)</label>
                         <input value={tplBuilderSender} onChange={(e) => setTplBuilderSender(e.target.value)} placeholder="noreply@aevion.app"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
@@ -5362,7 +5361,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {tplBuilderLoading ? "Creating..." : "Create template"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code>, <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_SENDER_EMAIL</code>
+                        
                       </div>
                     </div>
                   )}
@@ -5408,7 +5407,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {smsLoading ? "Sending..." : "Send SMS"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code> + <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_SMS_SENDER</code>
+                        
                       </div>
                     </div>
                   )}
@@ -5453,7 +5452,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {waLoading ? "Sending..." : "Send WhatsApp"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code> + <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_WHATSAPP_SENDER_ID</code>. Template must be pre-approved by WhatsApp.
+                         Template must be pre-approved by WhatsApp.
                       </div>
                     </div>
                   )}
@@ -5523,7 +5522,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
                         Preview clones temporarily, renders TTS sample, then deletes the temp voice — no slot is consumed.
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>. Premium tier required.
+                         Premium tier required.
                       </div>
                     </div>
                   )}
@@ -5610,7 +5609,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                       )}
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>GOOGLE_DRIVE_ACCESS_TOKEN</code> (OAuth Bearer)
+                        (OAuth Bearer)
                       </div>
                     </div>
                   )}

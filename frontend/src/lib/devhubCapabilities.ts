@@ -36,11 +36,38 @@ export function isCapabilityBlocked(idx: CapabilityIndex | null, id: string): bo
   return c.status !== "live";
 }
 
-/** Human explanation for a blocked capability — used as button title and toast. */
+/**
+ * Объяснение для человека, который нажал недоступную кнопку.
+ *
+ * Раньше здесь возвращалось `"<label> is not configured — set VERCEL_API_TOKEN
+ * on the server"`, и эта строка показывалась ПОКУПАТЕЛЮ в всплывающем
+ * сообщении. Замер 28.08.2026: на проде `vercel` в состоянии `needs_token`, то
+ * есть именно это видел каждый, кто нажимал кнопку выкатки в платном модуле.
+ *
+ * Три беды в одной строке: имя переменной нашего сервера наружу; английский на
+ * русском экране; и указание сделать то, чего человек сделать НЕ МОЖЕТ —
+ * настройки сервера ему недоступны. Совет, который нельзя выполнить, хуже
+ * молчания: он выглядит объяснением и заставляет искать несуществующую кнопку.
+ *
+ * Теперь наружу идёт состояние и следующий шаг, а имена переменных остаются
+ * там, где они нужны, — в ответе `/api/devhub/studio/capabilities`, который
+ * читают мы, а не покупатель.
+ */
 export function capabilityHint(idx: CapabilityIndex | null, id: string, label: string): string {
   const c = idx?.[id];
   if (!c || !c.status || c.status === "live") return `${label}`;
-  const tokens = c.tokens?.length ? c.tokens : c.token ? [c.token] : [];
-  const needs = tokens.length ? ` — set ${tokens.join(" + ")} on the server` : "";
-  return `${label} is not configured${needs}`;
+  const alt = ALTERNATIVE[id];
+  return `${label}: канал пока не подключён на нашей стороне.${alt ? ` ${alt}` : ""}`;
 }
+
+/**
+ * Где у недоступного канала есть РАБОЧАЯ замена — называем её. Без этого
+ * сообщение честное, но бесполезное: человек узнаёт, что нельзя, и не узнаёт,
+ * что можно. Замер 28.08.2026: на проде `vercel` — `needs_token`, `railway` —
+ * `not_available`, а `pages` — `live`, то есть выкатка работает и обе
+ * недоступные кнопки имеют куда отослать.
+ */
+const ALTERNATIVE: Record<string, string> = {
+  vercel: "Публикуйте кнопкой «Опубликовать на Cloudflare Pages» — она работает.",
+  railway: "Публикуйте кнопкой «Опубликовать на Cloudflare Pages» — она работает.",
+};

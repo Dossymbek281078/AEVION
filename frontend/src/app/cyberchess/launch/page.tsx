@@ -4,6 +4,7 @@ import { channelFrom } from "@/lib/products";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { LandingView } from "@/components/LandingView";
+import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная страница запуска CyberChess — 30 августа 2026.
 //
@@ -93,6 +94,15 @@ export default async function CyberChessLaunchPage({
 
   return (
     <main style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px" }}>
+      {/*
+        Заходы на эту страницу считались НУЛЁМ до 28.08.2026, а запуск 30-го.
+        Без этого числа нельзя будет ответить на единственный важный вопрос
+        первого дня: продаж нет из-за страницы или из-за отсутствия трафика.
+        Первое лечат предложением и ценой, второе — трафиком, и выбирать
+        наугад дороже, чем измерить. Компонент уже стоит на десяти страницах
+        и сам читает ?c= из ссылки, поэтому канал тоже попадёт в замер.
+      */}
+      <PageTracking page="cyberchess-launch" />
       <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
         <header>
           <div style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: "0.12em", color: GOLD, textTransform: "uppercase" }}>

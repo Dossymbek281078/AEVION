@@ -21,6 +21,7 @@ const Globus3D = dynamic(() => import("./components/Globus3D"), {
 import { PlanetPulse } from "./components/PlanetPulse";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { PageTracking } from "@/components/PageTracking";
 import { countryByGlobusName } from "@/lib/constitution";
 import { MODULE_NODES, TAM, BOTTOM_UP_REGIONAL_ARR, BOTTOM_UP_BEACHHEAD_ARR } from "@/data/pitchFacts";
 
@@ -263,6 +264,11 @@ export default function HomePage() {
 
   return (
     <main style={{ padding: 0 }}>
+      {/* Заходы сюда не считались до 28.08.2026: страница собирает адреса, но
+          события page_view не слала. Воронка считает переходы ОТ page_view,
+          поэтому её посетители не попадали в знаменатель — конверсия выглядела
+          лучше, чем есть. Компонент сам читает ?c= из ссылки. */}
+      <PageTracking page="home" />
       <section
         style={{
           background: "linear-gradient(145deg, #0f172a 0%, #115e59 48%, #0d9488 100%)",

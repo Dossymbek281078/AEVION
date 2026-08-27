@@ -1,12 +1,29 @@
 # Dependabot — automated security & version updates.
 #
 # Strategy:
-#   - npm: weekly grouped PRs per ecosystem; auto-merge enabled for patch
-#     bumps, manual review for minor/major.
+#   - npm: weekly grouped PRs, ONE ECOSYSTEM PER WEEKDAY (see below).
 #   - github-actions: monthly grouped PR for Action version bumps.
 #
 # Ignored: nothing. Even framework majors should surface a PR — we triage
 # manually rather than freeze versions.
+#
+# ⚠️ ПОЧЕМУ РАЗНЕСЕНО ПО ДНЯМ И ЗАЖАТЫ ЛИМИТЫ (27.08.2026).
+# Аккаунт GitHub был приостановлен 27.07.2026 за всплеск активности: около
+# 165 коммитов, десятки пушей и 25 мержей за одни сутки выглядели машинными.
+# Прежняя настройка здесь могла воспроизвести ровно это САМА: пять наборов,
+# суммарный потолок 35 открытых PR, все npm-наборы в понедельник, два из них
+# в один час. То есть до тридцати PR за несколько минут раз в неделю.
+# Теперь потолок 12 и по одному набору в день. Группировка патчей уже
+# схлопывает мелочь в один PR, поэтому 2-3 на набор — не ограничение по сути.
+#
+# Живых обращений это не сокращает до нуля: dependabot всё равно ходит от
+# нашего аккаунта, и сторож темпа ~/.claude/hooks/github-push-guard.js его
+# НЕ ВИДИТ — он считает только вызовы из вкладок. Учитывать надо оба канала.
+#
+# Поправка того же дня: прежняя шапка обещала автоматический мерж патчевых
+# обновлений. Workflow, который бы его делал, в репозитории НЕТ (проверено грепом по
+# .github/workflows). Строка убрана: описание не должно обещать механизм,
+# которого не существует.
 
 version: 2
 
@@ -19,7 +36,7 @@ updates:
       day: "monday"
       time: "06:00"
       timezone: "UTC"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "backend"
@@ -43,10 +60,10 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "weekly"
-      day: "monday"
+      day: "tuesday"
       time: "06:00"
       timezone: "UTC"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "frontend"
@@ -70,8 +87,10 @@ updates:
     directory: "/frontend-qcore"
     schedule:
       interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
+      day: "wednesday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "frontend-qcore"
@@ -83,8 +102,10 @@ updates:
     directory: "/packages/qpaynet-client"
     schedule:
       interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
+      day: "thursday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "sdk"
@@ -96,8 +117,10 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
-      day: "monday"
-    open-pull-requests-limit: 5
+      day: "friday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "ci"

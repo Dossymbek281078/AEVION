@@ -12203,7 +12203,7 @@ ${question.trim()}`;
             </div>;
           })}
         </div>
-        <div style={{fontSize:10,color:CC.textMute,marginTop:SPACE[2],fontStyle:"italic"}}>Симулированный лидерборд для одиночной игры. Реальные таблицы появятся после связки с бэкендом.</div>
+        <div style={{fontSize:10,color:CC.textMute,marginTop:SPACE[2],fontStyle:"italic"}}>Это образец: в одиночной игре таблица заполняется примерами. Настоящие результаты появятся, когда сыграете онлайн.</div>
       </Modal>;
     })()}
 

@@ -18,6 +18,18 @@ const ROOT = path.join(__dirname, "..");
 const ZHARGON =
   /\b(fallback|mock|polling|SSE|endpoint|payload|localStorage|cache|weak factor|SR reminders|backend|deprecated|TODO|FIXME|daily-variant|Coach Knowledge|training hub)\b/i;
 
+// У кириллицы граница слова работает не так, как ждёшь, поэтому задаём её
+// перечислением. 27.08.2026 сторож пропустил фразу «Очередь и матчи живут в
+// памяти бэкенда» на странице поиска соперника: в списке было английское
+// backend, а на экране стояло русское «бэкенд». Сторож был уже своего
+// названия — обещал «нет жаргона», а ловил половину.
+const ZHARGON_RU =
+  /(^|[^а-яё])(бэкенд|бекенд|фронтенд|эндпоинт|деплой|пайплайн|фолбэк|поллинг|кэш|стейт|билд)(а|у|е|ом|ов|ам|ами|ах)?([^а-яё]|$)/i;
+
+function zhargon(t: string): boolean {
+  return ZHARGON.test(t) || ZHARGON_RU.test(t);
+}
+
 // Видимый текст берём между тегами и ЧЕРЕЗ ПЕРЕНОС СТРОКИ. Первая версия
 // сторожа искала «>текст<» в пределах одной строки и дала ЛОЖНЫЙ НОЛЬ: на
 // экране фраза разбита на две строки. Контроль на заведомо плохом файле — ниже.
@@ -59,13 +71,13 @@ describe("на экране нет жаргона разработчика", () 
             Твой план. Основан на CPI weak factor, due Coach reminders,
             и daily-variant ротации.
           </p>`;
-    const najdeno = vidimyjTekst(obrazec).filter((t) => ZHARGON.test(t));
+    const najdeno = vidimyjTekst(obrazec).filter((t) => zhargon(t));
     expect(najdeno.length, "детектор не видит фразу через перенос строки").toBeGreaterThan(0);
   });
 
   test("детектор не срабатывает на нормальной речи", () => {
     const obrazec = "<p>Твой личный план на день: слабая сторона, темы для повторения и вариант дня.</p>";
-    expect(vidimyjTekst(obrazec).filter((t) => ZHARGON.test(t))).toEqual([]);
+    expect(vidimyjTekst(obrazec).filter((t) => zhargon(t))).toEqual([]);
   });
 
   test("во всём модуле чисто", () => {
@@ -74,7 +86,7 @@ describe("на экране нет жаргона разработчика", () 
     const plohie: string[] = [];
     for (const f of files) {
       for (const t of vidimyjTekst(fs.readFileSync(f, "utf-8"))) {
-        if (ZHARGON.test(t)) plohie.push(`${path.relative(ROOT, f)}: ${t.slice(0, 70)}`);
+        if (zhargon(t)) plohie.push(`${path.relative(ROOT, f)}: ${t.slice(0, 70)}`);
       }
     }
     expect(plohie).toEqual([]);

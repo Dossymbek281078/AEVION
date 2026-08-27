@@ -1121,7 +1121,8 @@ function StatsTab({ branches }: { branches: RepertoireBranch[] }) {
         Книжная статистика
       </div>
       <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 14 }}>
-        Источник: Lichess Opening Explorer (community DB). Кэш по TTL из настроек.
+        Данные о ходах — из открытой базы партий Lichess. Мы держим их у себя
+        и обновляем по расписанию из настроек ниже.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1578,11 +1579,12 @@ function SettingsTab() {
   return (
     <div>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: COLORS.accentBright }}>
-        Кэш статистики Lichess
+        Как часто обновлять данные Lichess
       </div>
       <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 16 }}>
-        Lichess Explorer limit ~60 запросов/мин. Кэшируй агрессивно, обновляй вручную при
-        необходимости.
+        Lichess отвечает не чаще шестидесяти раз в минуту, поэтому мы держим
+        данные у себя и переспрашиваем реже. Если нужны свежие цифры прямо
+        сейчас — обновите вручную.
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -1633,7 +1635,7 @@ function SettingsTab() {
           fontSize: 13,
         }}
       >
-        Очистить кэш сейчас
+        Обновить данные сейчас
       </button>
     </div>
   );

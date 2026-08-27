@@ -359,9 +359,17 @@ async function main() {
       && ar.json.blindHeight.clearedUpToM > 0,
     "route says where the confidence padding did nothing",
     `guessed=${ar.json?.blindHeight?.guessedSegments} inert=${ar.json?.blindHeight?.inertPenaltySegments} cleared<=${ar.json?.blindHeight?.clearedUpToM}m`);
-  assert(ar.json?.confClearOnObstaclesM === null || ar.json.confClearOnObstaclesM >= ar.json.avgConfClearM,
-    "padding over buildings is not diluted below the whole-route average",
-    `obstacles=${ar.json?.confClearOnObstaclesM} avg=${ar.json?.avgConfClearM}`);
+  // Обе стороны, и это не педантизм: первая версия проверяла
+  // `=== null || >= avg` — и оставалась ЗЕЛЁНОЙ, когда поле всегда null.
+  // Мутация «вернуть null всегда» дала ALL PASS (151/151), то есть утверждение
+  // разрешало ровно то, ради чего заведено. Теперь при наличии зданий требуется
+  // ЧИСЛО, при их отсутствии — именно null.
+  assert(ar.json?.obstacleSegments > 0
+      ? (typeof ar.json.confClearOnObstaclesM === "number"
+         && ar.json.confClearOnObstaclesM >= ar.json.avgConfClearM)
+      : ar.json?.confClearOnObstaclesM === null,
+    "padding over buildings is a real figure, not diluted by open ground",
+    `obstacleSegments=${ar.json?.obstacleSegments} obstacles=${ar.json?.confClearOnObstaclesM} avg=${ar.json?.avgConfClearM}`);
   assert(ar.json?.noFly && ar.json.noFly.cellsOnPathInsideZone === 0,
     "corridor never crosses a prohibited zone",
     `zones=${ar.json?.noFly?.zonesInCity} inside=${ar.json?.noFly?.cellsOnPathInsideZone}`);

@@ -80,3 +80,41 @@ describe("письмо кандидату честно отчитывается"
     expect(notifyBody()).not.toMatch(/throw\s/);
   });
 });
+
+describe("оповещения о вакансиях считают принятое, а не разосланное", () => {
+  const ALERTS = path.join(__dirname, "..", "src", "routes", "build", "alerts.ts");
+  const alerts = () =>
+    fs
+      .readFileSync(ALERTS, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("//"))
+      .join("\n");
+
+  test("прибор работает: файл читается и рассылка в нём есть", () => {
+    const a = alerts();
+    expect(a.length).toBeGreaterThan(500);
+    expect(a).toContain("api.resend.com");
+  });
+
+  test("итог считает ПРИНЯТОЕ провайдером", () => {
+    const a = alerts();
+    // Раньше печаталось «sent to ${matches.length} subscribers» безусловно:
+    // отказ во всех пачках выглядел полной рассылкой.
+    expect(a, "итог снова считает разосланное нами, а не принятое").not.toMatch(
+      /job alerts sent to \$\{matches\.length\}/,
+    );
+    expect(a).toMatch(/accepted for \$\{accepted\} of \$\{matches\.length\}/);
+  });
+
+  test("отказ пачки назван вместе с числом адресов и вакансией", () => {
+    const a = alerts();
+    expect(a).toContain("ПАЧКА ОПОВЕЩЕНИЙ НЕ ПРИНЯТА");
+    expect(a).toMatch(/ПАЧКА ОПОВЕЩЕНИЙ НЕ ПРИНЯТА[^`]*\$\{batch\.length\}/);
+    expect(a).toMatch(/ПАЧКА ОПОВЕЩЕНИЙ НЕ ПРИНЯТА[^`]*vacancy\.id/);
+  });
+
+  test("ответ провайдера читается", () => {
+    expect(alerts()).toMatch(/if \(resp\.ok\)/);
+  });
+});

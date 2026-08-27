@@ -2545,6 +2545,10 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     // 3. Push each project file
     const files = await dbListFiles(project.id);
     let pushedFiles = 0;
+    // Files GitHub refused. Counting only the successes and still answering
+    // ok:true meant a repo missing half the project read as a clean push —
+    // and it is the repo a per-project deploy then builds from.
+    const failedFiles: Array<{ path: string; reason: string }> = [];
     for (const file of files) {
       try {
         const fileResp = await fetch(
@@ -2563,8 +2567,18 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
           },
         );
         if (fileResp.ok) pushedFiles += 1;
-      } catch {
-        // continue with other files
+        else {
+          const body = await fileResp.text().catch(() => "");
+          let reason = `HTTP ${fileResp.status}`;
+          try {
+            const parsed = JSON.parse(body);
+            if (parsed?.message) reason = `${reason}: ${parsed.message}`;
+          } catch { /* body was not JSON — the status alone is the reason */ }
+          failedFiles.push({ path: file.path, reason });
+        }
+      } catch (e) {
+        // Keep pushing the rest, but never lose the fact that this one didn't.
+        failedFiles.push({ path: file.path, reason: e instanceof Error ? e.message : String(e) });
       }
     }
 
@@ -2578,6 +2592,20 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
       memProjects.set(project.id, project);
     }
 
+    if (failedFiles.length > 0) {
+      return res.json({
+        ok: pushedFiles > 0,
+        repoUrl,
+        pushedFiles,
+        failedFiles,
+        ...degraded(
+          `${failedFiles.length} of ${files.length} file(s) were not pushed: ${failedFiles
+            .slice(0, 3)
+            .map((f) => `${f.path} (${f.reason})`)
+            .join("; ")}${failedFiles.length > 3 ? "; …" : ""}`,
+        ),
+      });
+    }
     return res.json({ ok: true, repoUrl, pushedFiles });
   } catch (e: any) {
     return res.json({ ok: false, message: e?.message || "GitHub push failed" });

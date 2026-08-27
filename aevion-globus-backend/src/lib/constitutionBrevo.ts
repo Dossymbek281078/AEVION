@@ -12,6 +12,10 @@
  */
 
 import { degraded } from "./degradedResponse";
+import { noteEmailSent } from "./brevoQuota";
+import { unsubscribeUrl, unsubContact } from "./waitlistUnsubToken";
+
+
 
 const BREVO_API = "https://api.brevo.com/v3";
 
@@ -69,6 +73,10 @@ async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise<{
       return { ok: false, error: `Brevo HTTP ${r.status}: ${text.slice(0, 200)}` };
     }
     const j = await r.json() as { messageId?: string };
+    // Считаем ОТПРАВЛЕННЫЕ, а не попытки: квоту Brevo расходует принятое письмо.
+    // Стоит и на пути без messageId — провайдер принял запрос, значит квота
+    // потрачена, даже если доставка не подтверждена.
+    noteEmailSent();
     if (!j.messageId) {
       const { degradedReason } = degraded("Brevo returned 2xx with no messageId — delivery not confirmed");
       return { ok: true, degraded: true, degradedReason };
@@ -97,8 +105,32 @@ async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise<{
  * Развилка идёт по `source`, а не по отдельному флагу: source уже хранится в
  * строке и уже отвечает на вопрос «откуда человек».
  */
+/**
+ * Блок отписки для подвала письма.
+ *
+ * До 21.08.2026 здесь стояла ссылка на страницу, которой НЕ СУЩЕСТВУЕТ (404), —
+ * то есть отписаться было нельзя ни одним способом. Теперь ссылка ведёт на рабочую
+ * ручку и несёт токен; если подписывать нечем (нет секрета), вместо ссылки в письме
+ * стоит живой адрес почты, а не ссылка, которая молча не сработает.
+ */
+function unsubBlock(email: string, color = "#64748b"): string {
+  const url = unsubscribeUrl(email);
+  return url
+    ? `<a href="${url}" style="color:${color}">Отписаться</a>`
+    : `Отписаться: напишите на <a href="mailto:${unsubContact()}" style="color:${color}">${unsubContact()}</a>`;
+}
+
 export function buildWaitlistConfirmEmail(email: string, source?: string): ConstitutionEmailPayload {
-  const fromConstitution = !source || /^constitution/i.test(source);
+  // Проверяется ВХОЖДЕНИЕ метки, а не начало строки. С 19.08 источник может
+  // быть списком через запятую («cyberchess,constitution»): при повторной
+  // подписке метка теперь дописывается, а не перезаписывает предыдущую. Условие
+  // `/^constitution/` на таком списке дало бы ложное «не наш» и отправило бы
+  // конституционному подписчику письмо про ранний доступ.
+  const marks = String(source ?? "")
+    .split(",")
+    .map((m) => m.trim().toLowerCase())
+    .filter(Boolean);
+  const fromConstitution = marks.length === 0 || marks.some((m) => m.startsWith("constitution"));
   if (!fromConstitution) return buildPlatformWaitlistEmail(email, source);
   const html = `
     <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf8;border-radius:12px">
@@ -114,7 +146,7 @@ export function buildWaitlistConfirmEmail(email: string, source?: string): Const
       <hr style="border:none;border-top:1px solid rgba(212,175,55,0.2);margin-bottom:16px">
       <p style="color:#64748b;font-size:11px;margin:0">
         Ты получил это письмо потому что подписался на waitlist на aevion.app/constitution/pricing.<br>
-        <a href="https://aevion.app/constitution/waitlist/unsubscribe?email=${encodeURIComponent(email)}" style="color:#64748b">Отписаться</a>
+        ${unsubBlock(email)}
       </p>
     </div>
   `;
@@ -183,7 +215,7 @@ export function buildPlatformWaitlistEmail(email: string, source?: string): Cons
       <hr style="border:none;border-top:1px solid rgba(212,175,55,0.2);margin-bottom:16px">
       <p style="color:#64748b;font-size:11px;margin:0">
         Вы получили это письмо, потому что оставили адрес на ${where}.<br>
-        <a href="https://aevion.app/constitution/waitlist/unsubscribe?email=${encodeURIComponent(email)}" style="color:#64748b">Отписаться</a>
+        ${unsubBlock(email)}
       </p>
     </div>
   `;

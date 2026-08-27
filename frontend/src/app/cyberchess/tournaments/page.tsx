@@ -376,7 +376,7 @@ export default function TournamentsHubPage() {
         </FilterGroup>
 
         <FilterGroup label="ELO диапазон">
-          <input
+          <input aria-label="ELO минимум"
             type="number"
             value={eloMin}
             onChange={(e) => setEloMin(Number(e.target.value) || 0)}
@@ -384,7 +384,7 @@ export default function TournamentsHubPage() {
             placeholder="от"
           />
           <span style={{ color: T.dim }}>—</span>
-          <input
+          <input aria-label="ELO максимум"
             type="number"
             value={eloMax}
             onChange={(e) => setEloMax(Number(e.target.value) || 0)}
@@ -940,8 +940,8 @@ function CreateTournamentModal({
         </p>
 
         <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>Название</label>
-          <input
+          <label htmlFor="t-name" style={labelStyle}>Название</label>
+          <input id="t-name"
             style={inputStyle}
             value={title}
             maxLength={80}
@@ -952,16 +952,16 @@ function CreateTournamentModal({
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
           <div>
-            <label style={labelStyle}>Формат</label>
-            <select style={inputStyle} value={format} onChange={(e) => setFormat(e.target.value as Format)}>
+            <label htmlFor="t-format" style={labelStyle}>Формат</label>
+            <select id="t-format" style={inputStyle} value={format} onChange={(e) => setFormat(e.target.value as Format)}>
               <option value="single_elimination">На вылет</option>
               <option value="swiss">Швейцарка</option>
               <option value="round_robin">Круговой</option>
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Контроль времени</label>
-            <select
+            <label htmlFor="t-tc" style={labelStyle}>Контроль времени</label>
+            <select id="t-tc"
               style={inputStyle}
               value={timeControl}
               onChange={(e) => setTimeControl(e.target.value as TimeControl)}
@@ -975,8 +975,8 @@ function CreateTournamentModal({
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
           <div>
-            <label style={labelStyle}>Игроков</label>
-            <input
+            <label htmlFor="t-players" style={labelStyle}>Игроков</label>
+            <input id="t-players"
               type="number"
               style={inputStyle}
               value={maxPlayers}
@@ -986,8 +986,8 @@ function CreateTournamentModal({
             />
           </div>
           <div>
-            <label style={labelStyle}>ELO мин</label>
-            <input
+            <label htmlFor="t-elo-min" style={labelStyle}>ELO мин</label>
+            <input id="t-elo-min"
               type="number"
               style={inputStyle}
               value={eloMin}
@@ -997,8 +997,8 @@ function CreateTournamentModal({
             />
           </div>
           <div>
-            <label style={labelStyle}>ELO макс</label>
-            <input
+            <label htmlFor="t-elo-max" style={labelStyle}>ELO макс</label>
+            <input id="t-elo-max"
               type="number"
               style={inputStyle}
               value={eloMax}
@@ -1011,8 +1011,8 @@ function CreateTournamentModal({
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
           <div>
-            <label style={labelStyle}>Приз (Chessy)</label>
-            <input
+            <label htmlFor="t-prize" style={labelStyle}>Приз (Chessy)</label>
+            <input id="t-prize"
               type="number"
               style={inputStyle}
               value={prizeChessy}
@@ -1021,8 +1021,8 @@ function CreateTournamentModal({
             />
           </div>
           <div>
-            <label style={labelStyle}>Старт (необязательно)</label>
-            <input
+            <label htmlFor="t-start" style={labelStyle}>Старт (необязательно)</label>
+            <input id="t-start"
               type="datetime-local"
               style={inputStyle}
               value={startsAt}
@@ -1032,8 +1032,8 @@ function CreateTournamentModal({
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <label style={labelStyle}>Описание (необязательно)</label>
-          <textarea
+          <label htmlFor="t-desc" style={labelStyle}>Описание (необязательно)</label>
+          <textarea id="t-desc"
             style={{ ...inputStyle, minHeight: 60, resize: "vertical" }}
             value={description}
             maxLength={300}

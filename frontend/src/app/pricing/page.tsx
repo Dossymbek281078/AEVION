@@ -1438,7 +1438,12 @@ export default function PricingPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            // На телефоне «1fr 1fr» не спасает: у элементов сетки min-width:auto,
+            // и первая колонка распирается до ширины своего содержимого (замер:
+            // 200px), выталкивая вторую за экран — документ 432 при экране 375.
+            // auto-fit складывает калькулятор в одну колонку на узком экране и
+            // оставляет две на широком (замер: 576/576 до и после).
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
             gap: 24,
           }}
         >

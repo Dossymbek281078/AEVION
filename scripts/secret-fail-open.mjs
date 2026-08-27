@@ -33,8 +33,16 @@
 // закрывается (403/503/throw/return false) или открывается (return true/next).
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = "C:/Users/user/aevion-money/aevion-globus-backend/src";
+// Корень — от самого скрипта. 27.08.2026 здесь стоял чужой worktree
+// ("C:/Users/user/aevion-money/..."), то есть проверка «секрет не задан —
+// ручка открывается или закрывается» отвечала про ЧУЖОЙ код. Для проверки,
+// связанной с секретами, это худший вид тихой ошибки.
+const ROOT = path.join(
+  path.dirname(path.dirname(fileURLToPath(import.meta.url))),
+  "aevion-globus-backend/src",
+);
 function walk(d, out = []) {
   for (const e of readdirSync(d)) {
     if (e === "node_modules") continue;

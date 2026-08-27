@@ -24,14 +24,14 @@ const APIS = [
     color: "#7dd3fc",
     href: "/qright",
     desc: "Authorship registration. SHA-256 + HMAC + Quantum Shield key derivation. Returns timestamped certificate ID.",
-    endpoints: ["POST /api/qright/register", "GET /api/qright/certificates/:id", "POST /api/qright/verify"],
+    endpoints: ["POST /api/qright/objects", "GET /api/qright/objects/:id", "GET /api/qright/embed/:id"],
   },
   {
     name: "QSign",
     color: "#a78bfa",
     href: "/qsign",
     desc: "Cryptographic signatures. Ed25519 + Dilithium preview. Idempotency keys, request-id middleware, OpenAPI 3.0 + Prometheus /metrics.",
-    endpoints: ["POST /api/qsign/sign", "POST /api/qsign/verify", "POST /api/qsign/batch", "POST /api/qsign/file"],
+    endpoints: ["POST /api/qsign/v2/sign", "POST /api/qsign/v2/verify", "POST /api/qsign/v2/sign/batch", "GET /api/qsign/v2/audit"],
   },
   {
     name: "Bureau",
@@ -42,14 +42,14 @@ const APIS = [
     // отвечает за проверку личности, оплату и доверие, а объект QRight +
     // Quantum Shield + сертификат целиком собирает pipelineRouter.post("/protect").
     // До 12.08.2026 здесь стоял /api/bureau/protect — адрес, которого нет.
-    endpoints: ["POST /api/pipeline/protect", "POST /api/pipeline/protect-batch", "GET /api/bureau/certificates/:id"],
+    endpoints: ["POST /api/pipeline/protect", "POST /api/pipeline/protect-batch", "GET /api/bureau/cert/:certId/embed"],
   },
   {
     name: "Planet",
     color: "#86efac",
     href: "/planet",
     desc: "Validator quorum. Submit artifacts (music/film/code/web), retrieve verdicts, public artifact pages.",
-    endpoints: ["GET /api/planet/stats", "GET /api/planet/artifacts/recent", "GET /api/planet/artifacts/:id/public", "POST /api/planet/submit"],
+    endpoints: ["GET /api/planet/stats", "GET /api/planet/artifacts/recent", "GET /api/planet/artifacts/:id/public", "POST /api/planet/submissions"],
   },
   {
     name: "QTrade",
@@ -70,7 +70,7 @@ const APIS = [
     color: "#fbbf24",
     href: "/qcoreai",
     desc: "5 LLM providers (Claude/GPT/Gemini/DeepSeek/Grok) behind one rate-limited endpoint. Per-user 30/min, per-conversation history, normalised token usage.",
-    endpoints: ["POST /api/qcoreai/chat", "GET /api/qcoreai/history", "GET /api/qcoreai/providers", "GET /api/qcoreai/health"],
+    endpoints: ["POST /api/qcoreai/chat", "GET /api/qcoreai/runs/:id", "GET /api/qcoreai/providers", "GET /api/qcoreai/health"],
   },
   {
     name: "Multichat",
@@ -167,7 +167,7 @@ const token = (await fetch("https://aevion.app/api/auth/login", {
 }).then(r => r.json())).token;
 
 // 2. Register IP in QRight
-const cert = await fetch("https://aevion.app/api/qright/register", {
+const cert = await fetch("https://aevion.app/api/qright/objects", {
   method: "POST",
   headers: {
     "Authorization": "Bearer " + token,
@@ -189,7 +189,7 @@ const signed = await fetch("https://aevion.app/api/qsign/sign", {
 }).then(r => r.json());
 
 // 4. Submit to Planet for validation
-await fetch("https://aevion.app/api/planet/submit", {
+await fetch("https://aevion.app/api/planet/submissions", {
   method: "POST",
   headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -235,7 +235,7 @@ TOKEN=$(curl -s https://aevion.app/api/auth/login \\
   -d '{"email":"you@example.com","password":"…"}' | jq -r .token)
 
 # 2. Register IP in QRight (idempotent; safe to retry)
-curl -s https://aevion.app/api/qright/register \\
+curl -s https://aevion.app/api/qright/objects \\
   -H "Authorization: Bearer $TOKEN" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: $(uuidgen)" \\
@@ -248,7 +248,7 @@ curl -s https://aevion.app/api/pipeline/protect \\
   -d '{"title":"Whitepaper v3","description":"draft","kind":"text"}'
 
 # 4. Verify a certificate by id (no auth required for verify)
-curl -s https://aevion.app/api/bureau/verify/CERT_ID
+curl -s https://aevion.app/api/bureau/verify/status/VERIFICATION_ID
 
 # 5. Sign out every live session for the caller
 curl -s -X POST https://aevion.app/api/auth/sign-out-everywhere \\

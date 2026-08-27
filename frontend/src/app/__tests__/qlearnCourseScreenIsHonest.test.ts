@@ -25,6 +25,9 @@ const SRC = stripComments(
   readFileSync(join(__dirname, "..", "qlearn", "components", "CourseDetail.tsx"), "utf8"),
 );
 const PAGE = stripComments(readFileSync(join(__dirname, "..", "qlearn", "page.tsx"), "utf8"));
+const QUIZ = stripComments(
+  readFileSync(join(__dirname, "..", "qlearn", "components", "LessonQuiz.tsx"), "utf8"),
+);
 
 /** Строки функции: от её объявления до следующего объявления того же уровня. */
 function fnLines(src: string, decl: string): string[] {
@@ -113,5 +116,40 @@ describe("экран курса честен к сбоям", () => {
     const joined = lines.join(String.fromCharCode(10));
     expect(joined, "признак хранилища не читается").toContain("data.storage");
     expect(joined, "объяснение не показывается автору").toContain("setAuthorNotice(");
+  });
+
+  test("тест к уроку: разбор показывается только после ответа сервера", () => {
+    // Три ручки теста жили без единого вызывающего. Появившись на экране, они
+    // приносят тот же класс: показать разбор до ответа значит выдать провал
+    // проверки за проверку.
+    const lines = QUIZ.split(String.fromCharCode(10));
+    const start = lines.findIndex((l) => l.includes("const answer = async"));
+    expect(start, "не нашёл обработчик ответа").toBeGreaterThanOrEqual(0);
+    const body = lines.slice(start, start + 40);
+    const okAt = body.findIndex((l) => l.includes("if (!ok)"));
+    const setAt = body.findIndex((l) => l.includes("setVerdicts("));
+    expect(okAt, "ответ сервера не проверяется").toBeGreaterThanOrEqual(0);
+    expect(setAt, "разбор нигде не показывается — тест смотрит не туда").toBeGreaterThanOrEqual(0);
+    expect(okAt, "разбор показан раньше, чем прочитан ответ").toBeLessThan(setAt);
+  });
+
+  test("правильный ответ не приходит учащемуся и не выдумывается на экране", () => {
+    // Сервер вырезает correctIndex всем, кроме автора. Экран не имеет права
+    // подставлять своё значение: тогда подсказка вернулась бы с другой стороны.
+    expect(QUIZ, "correctIndex объявлен обязательным — значит его ждут всегда")
+      .toContain("correctIndex?: number");
+    expect(QUIZ, "экран рисует правильный вариант не из вердикта сервера")
+      .not.toContain("item.correctIndex");
+  });
+
+  test("сбой загрузки теста не выдаётся за «вопросов нет»", () => {
+    const lines = QUIZ.split(String.fromCharCode(10));
+    const start = lines.findIndex((l) => l.includes("const load = useCallback"));
+    const body = lines.slice(start, start + 30);
+    const okAt = body.findIndex((l) => l.includes("if (!ok)"));
+    const branch = body.slice(okAt, okAt + 6).join(String.fromCharCode(10));
+    expect(branch, "отказ не превращается в текст").toContain("setLoadError(");
+    expect(branch, "отказ выдан за пустой тест").not.toContain("setQuestions(");
+    expect(QUIZ).toContain("К уроку пока нет вопросов");
   });
 });

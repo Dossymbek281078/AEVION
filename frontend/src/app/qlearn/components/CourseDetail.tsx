@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import LessonQuiz from "./LessonQuiz";
 
 /**
  * Экран курса: уроки, чтение урока, отметка прогресса, завершение и сертификат.
@@ -404,6 +405,12 @@ export default function CourseDetail({
           busy={busy}
           onMark={markProgress}
           onOpen={readLesson}
+        />
+        <LessonQuiz
+          courseId={courseId}
+          lessonId={openLesson.id}
+          token={token}
+          isAuthor={isAuthor}
         />
       </div>
     );

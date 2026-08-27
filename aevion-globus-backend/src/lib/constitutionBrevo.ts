@@ -185,6 +185,37 @@ const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: 
   { prefix: "multichat", name: "AEVION Multichat", plan: "20 сентября", page: "https://aevion.app/multichat-engine/launch" },
 ];
 
+/**
+ * Входы, где продукт УЖЕ работает. Отличать их от LAUNCH_MODULES обязательно:
+ * там человек ждёт открытия, здесь он уже получил ценность и ждать ему нечего.
+ *
+ * Замер 27.08.2026: подписчик со страницы протокола долголетия получал общий
+ * текст «платформа выпускает модули по одному, напишем в день запуска
+ * следующего». Он подписался РАДИ протокола и уже забрал его бесплатно —
+ * письмо не подтверждало ни того, что он получил, ни следующего шага. Это тот
+ * же класс, что чинили 19.08 для шахмат: источник доезжает до письма, а письмо
+ * про него не знает.
+ */
+const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep: string }> = [
+  {
+    prefix: "longevity",
+    name: "Протокол долголетия",
+    page: "https://aevion.app/longevity",
+    // Следующий шаг называем без цен и без скидок: цена живёт в каталоге, а
+    // условия решает основатель (это же сказано у соседнего письма выше).
+    nextStep:
+      "Протокол открыт целиком на странице — маркеры, стек по доказательности и двенадцать недель. " +
+      "Там же можно забрать его в PDF, чтобы заполнять на нулевой и двенадцатой неделе, " +
+      "и открыть подписку на остальные модули платформы.",
+  },
+];
+
+function liveEntryFromSource(source?: string) {
+  if (!source) return null;
+  const s = source.toLowerCase();
+  return LIVE_ENTRIES.find((m) => s === m.prefix || s.startsWith(`${m.prefix}-`)) ?? null;
+}
+
 function moduleFromSource(source?: string) {
   if (!source) return null;
   const s = source.toLowerCase();
@@ -192,25 +223,34 @@ function moduleFromSource(source?: string) {
 }
 
 export function buildPlatformWaitlistEmail(email: string, source?: string): ConstitutionEmailPayload {
-  const mod = moduleFromSource(source);
-  const where = mod
-    ? `странице запуска ${mod.name}`
-    : source === "go" || source?.startsWith("go-")
-      ? "странице aevion.app/go"
-      : "главной странице aevion.app";
+  const live = liveEntryFromSource(source);
+  const mod = live ? null : moduleFromSource(source);
+  const where = live
+    ? `странице «${live.name}»`
+    : mod
+      ? `странице запуска ${mod.name}`
+      : source === "go" || source?.startsWith("go-")
+        ? "странице aevion.app/go"
+        : "главной странице aevion.app";
   const html = `
     <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf8;border-radius:12px">
       <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION</div>
-      <p style="margin:0 0 16px">Адрес записан${mod ? ` — вы в списке раннего доступа к ${mod.name}` : " — вы в списке раннего доступа"}.</p>
+      <p style="margin:0 0 16px">${live
+        ? `Адрес записан — «${live.name}» уже открыт для вас.`
+        : `Адрес записан${mod ? ` — вы в списке раннего доступа к ${mod.name}` : " — вы в списке раннего доступа"}.`}</p>
       <p style="color:#9aa3c0;margin:0 0 16px">
-        ${mod
-          ? `Открываем по плану ${mod.plan}. Напишем вам в день запуска — с условиями раннего доступа, пока цена стартовая. Если дата сдвинется, письмо всё равно придёт в день, когда откроем.`
-          : "Платформа выпускает модули по одному. Как только выйдет следующий, вы получите письмо в день запуска — с условиями раннего доступа, пока цена стартовая."}
+        ${live
+          ? live.nextStep
+          : mod
+            ? `Открываем по плану ${mod.plan}. Напишем вам в день запуска — с условиями раннего доступа, пока цена стартовая. Если дата сдвинется, письмо всё равно придёт в день, когда откроем.`
+            : "Платформа выпускает модули по одному. Как только выйдет следующий, вы получите письмо в день запуска — с условиями раннего доступа, пока цена стартовая."}
       </p>
       <p style="color:#9aa3c0;margin:0 0 24px">
-        ${mod
-          ? `Страница запуска: <a href="${mod.page}" style="color:#22d3ee">${mod.page.replace("https://", "")}</a>`
-          : `Пока можно посмотреть, что уже работает: <a href="https://aevion.app/go" style="color:#22d3ee">aevion.app/go</a>`}
+        ${live
+          ? `Открыть: <a href="${live.page}" style="color:#22d3ee">${live.page.replace("https://", "")}</a>`
+          : mod
+            ? `Страница запуска: <a href="${mod.page}" style="color:#22d3ee">${mod.page.replace("https://", "")}</a>`
+            : `Пока можно посмотреть, что уже работает: <a href="https://aevion.app/go" style="color:#22d3ee">aevion.app/go</a>`}
       </p>
       <hr style="border:none;border-top:1px solid rgba(212,175,55,0.2);margin-bottom:16px">
       <p style="color:#64748b;font-size:11px;margin:0">
@@ -221,12 +261,18 @@ export function buildPlatformWaitlistEmail(email: string, source?: string): Cons
   `;
   return {
     to: [{ email }],
-    subject: mod ? `Вы в списке раннего доступа: ${mod.name}` : "Вы в списке раннего доступа AEVION",
+    subject: live
+      ? `${live.name} — открыт для вас`
+      : mod
+        ? `Вы в списке раннего доступа: ${mod.name}`
+        : "Вы в списке раннего доступа AEVION",
     htmlContent: html,
-    textContent: mod
-      ? `Адрес записан — вы в списке раннего доступа к ${mod.name}. Открываем по плану ${mod.plan}, напишем в день запуска. Страница: ${mod.page}`
-      : `Адрес записан — вы в списке раннего доступа AEVION. Напишем в день запуска следующего модуля. Что уже работает: aevion.app/go`,
-    tags: ["platform", "waitlist-confirm"],
+    textContent: live
+      ? `Адрес записан — «${live.name}» уже открыт. ${live.nextStep} Открыть: ${live.page}`
+      : mod
+        ? `Адрес записан — вы в списке раннего доступа к ${mod.name}. Открываем по плану ${mod.plan}, напишем в день запуска. Страница: ${mod.page}`
+        : `Адрес записан — вы в списке раннего доступа AEVION. Напишем в день запуска следующего модуля. Что уже работает: aevion.app/go`,
+    tags: live ? ["platform", "live-entry-confirm"] : ["platform", "waitlist-confirm"],
   };
 }
 

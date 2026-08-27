@@ -3990,10 +3990,15 @@ devhubRouter.post("/media/music", async (req, res) => {
     if (!r.ok) {
       const errText = await r.text();
       const fb = await musicGenFallback(`ElevenLabs ${r.status}`);
-      if (fb) return res.json(fb);
+      // Only both providers being out is a capability failure: a MusicGen
+      // fallback still hands the user a track, so calling that "degraded"
+      // would cry wolf.
+      if (fb) { noteProviderSuccess("audio_music"); return res.json(fb); }
+      noteProviderFailure("audio_music", `ElevenLabs HTTP ${r.status} and no MusicGen fallback available`);
       return res.status(r.status).json({ error: `ElevenLabs Music error: ${errText.slice(0, 300)}` });
     }
     const audioBuffer = Buffer.from(await r.arrayBuffer());
+    noteProviderSuccess("audio_music");
     await debitCredit(musicUserId, "music").catch(() => {});
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
@@ -4001,7 +4006,8 @@ devhubRouter.post("/media/music", async (req, res) => {
     res.send(audioBuffer);
   } catch (e: any) {
     const fb = await musicGenFallback(e?.message || "ElevenLabs request failed").catch(() => null);
-    if (fb) return res.json(fb);
+    if (fb) { noteProviderSuccess("audio_music"); return res.json(fb); }
+    noteProviderFailure("audio_music", `${e?.message || "ElevenLabs request failed"} and no MusicGen fallback available`);
     res.status(500).json({ error: e?.message || "Music compose failed" });
   }
 });
@@ -5911,6 +5917,11 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     deferred(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(pagesUrl);
+      // Pages is the one deploy path that actually works, so when it stops
+      // working the shop window should be the first to say it — not the user
+      // whose page never came up.
+      if (serves) noteProviderSuccess("pages");
+      else noteProviderFailure("pages", "the deployed page does not serve (2xx never came back after retries)");
       if (serves) {
         d.status = "live"; d.completedAt = now();
       } else {

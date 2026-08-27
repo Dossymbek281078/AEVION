@@ -64,6 +64,20 @@ describe("one language per page", () => {
     expect(offenders, '"use client" modules importing i18n-all').toEqual([]);
   });
 
+  it("keeps the dictionary out of i18n-data, where it used to live", () => {
+    // Everything client-side imports i18n-data, which is why the strings left
+    // it. Someone adding "just a few keys" back — the file was their home for a
+    // year — would put the whole weight back on every page, and only the size
+    // budget would notice, one spec away from here.
+    const dataFile = readFileSync(path.join(__dirname, "..", "i18n-data.ts"), "utf8");
+    expect(
+      /export\s+const\s+translations/.test(dataFile),
+      "translations belong in src/lib/i18n-lang/<lang>.ts — one file per language",
+    ).toBe(false);
+    // 200 lines of metadata is roomy; 20 000 means the strings came back.
+    expect(dataFile.split("\n").length, "i18n-data.ts should stay metadata-sized").toBeLessThan(300);
+  });
+
   it("keeps LANG_KEY_COUNT equal to what the dictionaries hold", () => {
     // The switcher draws its coverage label from this map instead of counting
     // live keys, which is the whole reason a percentage no longer costs eleven

@@ -11106,7 +11106,7 @@ ${question.trim()}`;
                 <button onClick={()=>{sEditorMode(true)}} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>✏️ Расставить вручную</button>
 
                 <button onClick={()=>sShowKnowledge(true)} style={{padding:"8px 10px",borderRadius:7,border:`1px solid #a7f3d0`,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#065f46",textAlign:"left"}}>📚 База знаний</button>
-                <button onClick={()=>sShowLessons(true)} style={{padding:"8px 10px",borderRadius:7,border:`1px solid #93c5fd`,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#1e3a8a",textAlign:"left"}}>📖 Курс (14 уроков)</button>
+                <button onClick={()=>sShowLessons(true)} style={{padding:"8px 10px",borderRadius:7,border:`1px solid #93c5fd`,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#1e3a8a",textAlign:"left"}}>📖 Курс ({LESSONS.length} уроков)</button>
                 <button onClick={()=>{sShowFlashcards(true);sFlashcardIdx(0);sFlashcardFlipped(false)}} style={{padding:"8px 10px",borderRadius:7,border:`1px solid #fde68a`,background:"linear-gradient(135deg,#fefce8,#fef9c3)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#92400e",textAlign:"left"}}>🃏 Флеш-карточки</button>
               </div>
             </div>
@@ -15090,7 +15090,7 @@ ${question.trim()}`;
         // ── COACH / TRAINING ──
         {id:"coach",        icon:"🎓",group:"Coach",   label:"Открыть Coach",      hint:"AI-наставник + база знаний 90+ тем",         run:()=>sTab("coach")},
         {id:"coach-knowledge",icon:"📚",group:"Coach", label:"Coach Knowledge",   hint:"9 категорий · дебюты / тактика / эндшпиль / время / память / roadmap",  run:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
-        {id:"coach-lessons",  icon:"📖",group:"Coach", label:"Coach Lessons (Курс)", hint:"14 уроков beginner→advanced с теорией+позициями+упражнениями", run:()=>{sTab("coach");setTimeout(()=>sShowLessons(true),50)}},
+        {id:"coach-lessons",  icon:"📖",group:"Coach", label:"Coach Lessons (Курс)", hint:`${LESSONS.length} уроков beginner→advanced с теорией+позициями+упражнениями`, run:()=>{sTab("coach");setTimeout(()=>sShowLessons(true),50)}},
         {id:"coord-trainer",icon:"🎯",group:"Coach",   label:"Координаты",         hint:"Тренировка чтения доски (30 сек)",          run:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},
         {id:"opening",      icon:"📖",group:"Coach",   label:"Opening Trainer",   hint:"Дрилл дебютов до автоматизма",              run:()=>sShowOpeningTrainer(true)},
         {id:"editor",       icon:"♟",group:"Coach",   label:"Position Editor",   hint:"FEN · ручная расстановка",                  run:()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}},

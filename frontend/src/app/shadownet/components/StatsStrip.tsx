@@ -27,7 +27,14 @@ export default function StatsStrip() {
         if (!r.ok) throw new Error(`stats request failed (${r.status})`);
         return r.json();
       })
-      .then((d) => { if (!cancelled) setStats(d); })
+      // Ручка отдаёт КОНВЕРТ: {"success":true,"data":{...}}, а не сами поля.
+      // Замер 28.08.2026 на живом проде: сюда клался конверт целиком, поэтому
+      // stats.totalPosts был undefined и строкой ниже падал .toLocaleString().
+      // Страница ловила это в error boundary — то есть полоса статистики была
+      // сломана у КАЖДОГО посетителя, молча.
+      // Разворачиваем и то и другое: если однажды ручка начнёт отдавать поля
+      // напрямую, компонент переживёт и это.
+      .then((d) => { if (!cancelled) setStats(d && d.data ? d.data : d); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
   }, []);
@@ -44,9 +51,12 @@ export default function StatsStrip() {
   if (!stats) return null;
 
   const items = [
-    { label: "Encrypted posts", value: stats.totalPosts.toLocaleString() },
+    // Все четыре поля защищены одинаково. Раньше два из четырёх стояли без
+    // защиты, а соседние — с `?? 0` и `?.`: разное обращение с однородными
+    // полями в одном списке почти всегда недосмотр, и здесь он им и оказался.
+    { label: "Encrypted posts", value: (stats.totalPosts ?? 0).toLocaleString() },
     { label: "Total size", value: fmtBytes(stats.totalSizeBytes ?? 0) },
-    { label: "Unique aliases", value: stats.uniqueAliases.toLocaleString() },
+    { label: "Unique aliases", value: (stats.uniqueAliases ?? 0).toLocaleString() },
     { label: "Top threat model", value: stats.topThreatModel?.id ?? "—" },
   ];
 

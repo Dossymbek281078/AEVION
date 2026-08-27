@@ -345,6 +345,11 @@ export default function KidsAiContentPage() {
           // (routes/mvpConcepts.ts) заданы свои: "items" и "listings".
           // Проверено пробой: /api/kids-ai-content/items -> 200,
           // /api/kids-ai-content/concept/messages -> 404.
+          //
+          // ⚠️ Пробуя это на других модулях, берите id ИМЕННО с доски, а не с
+          // соседнего чипа цены: на /z-tide чип объявлен как "z-tide", а доска
+          // как "ztide", и проба по первому даёт правдоподобный 404 у модуля,
+          // где всё работает. Я на этом успел ошибиться.
           noun="items"
           accent="rose"
           sectionTitle="Kids learning concept board"

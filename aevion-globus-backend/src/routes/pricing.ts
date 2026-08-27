@@ -1,3 +1,4 @@
+import { clientIp } from "../lib/rateLimit";
 import { Router } from "express";
 import { queryNumber } from "../lib/queryNumber";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
@@ -287,7 +288,10 @@ pricingRouter.get("/promo", (_req, res) => {
  * Returns: { ok: true, id }
  */
 pricingRouter.post("/lead", (req, res) => {
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  // Ключ ограничителя берём у прокси, а не у вызывающего: ЛЕВОЕ значение
+  // X-Forwarded-For пишет сам клиент, поэтому предел обходился одним
+  // заголовком — разбор в комментарии к lib/observedIp.ts.
+  const ip = clientIp(req);
   if (isRateLimited(ip)) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
@@ -517,7 +521,10 @@ interface NewsletterEntry {
  * Лёгкий signup-форм для лидгена тех, кто не готов покупать.
  */
 pricingRouter.post("/newsletter", (req, res) => {
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  // Ключ ограничителя берём у прокси, а не у вызывающего: ЛЕВОЕ значение
+  // X-Forwarded-For пишет сам клиент, поэтому предел обходился одним
+  // заголовком — разбор в комментарии к lib/observedIp.ts.
+  const ip = clientIp(req);
   if (newsletterRateLimited(ip)) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
@@ -752,7 +759,10 @@ async function notifyApplication(app: ProgramApplication): Promise<void> {
  * Заявка на участие в реферальной программе AEVION (20% recurring lifetime).
  */
 pricingRouter.post("/affiliate/apply", (req, res) => {
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  // Ключ ограничителя берём у прокси, а не у вызывающего: ЛЕВОЕ значение
+  // X-Forwarded-For пишет сам клиент, поэтому предел обходился одним
+  // заголовком — разбор в комментарии к lib/observedIp.ts.
+  const ip = clientIp(req);
   if (programRateLimited(ip, "affiliate")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
@@ -796,7 +806,10 @@ pricingRouter.post("/affiliate/apply", (req, res) => {
  * Body: { name, email, organization, country, partnerType, details? }
  */
 pricingRouter.post("/partners/apply", (req, res) => {
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  // Ключ ограничителя берём у прокси, а не у вызывающего: ЛЕВОЕ значение
+  // X-Forwarded-For пишет сам клиент, поэтому предел обходился одним
+  // заголовком — разбор в комментарии к lib/observedIp.ts.
+  const ip = clientIp(req);
   if (programRateLimited(ip, "partners")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
@@ -844,7 +857,10 @@ pricingRouter.post("/partners/apply", (req, res) => {
  * Body: { name, email, organization, institutionDomain, country?, details? }
  */
 pricingRouter.post("/edu/apply", (req, res) => {
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  // Ключ ограничителя берём у прокси, а не у вызывающего: ЛЕВОЕ значение
+  // X-Forwarded-For пишет сам клиент, поэтому предел обходился одним
+  // заголовком — разбор в комментарии к lib/observedIp.ts.
+  const ip = clientIp(req);
   if (programRateLimited(ip, "edu")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
@@ -1062,7 +1078,10 @@ function magicLinkHtml(
  * Всегда отвечает 204 (не раскрываем существование email).
  */
 pricingRouter.post("/affiliate/magic-link", (req, res) => {
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  // Ключ ограничителя берём у прокси, а не у вызывающего: ЛЕВОЕ значение
+  // X-Forwarded-For пишет сам клиент, поэтому предел обходился одним
+  // заголовком — разбор в комментарии к lib/observedIp.ts.
+  const ip = clientIp(req);
   if (programRateLimited(ip, "affiliate")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
@@ -1146,7 +1165,10 @@ pricingRouter.get("/affiliate/dashboard", (req, res) => {
  * Идентично affiliate, но для partners.
  */
 pricingRouter.post("/partners/magic-link", (req, res) => {
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  // Ключ ограничителя берём у прокси, а не у вызывающего: ЛЕВОЕ значение
+  // X-Forwarded-For пишет сам клиент, поэтому предел обходился одним
+  // заголовком — разбор в комментарии к lib/observedIp.ts.
+  const ip = clientIp(req);
   if (programRateLimited(ip, "partners")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }

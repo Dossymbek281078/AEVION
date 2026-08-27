@@ -89,6 +89,25 @@ export function paymentProviderMode(
   return v && v !== "stub" ? "live" : "stub";
 }
 
+/**
+ * Чем подписывает нотариус — настоящей Ed25519 или демонстрационной HMAC.
+ *
+ * Сам сертификат это уже называет (см. signNotarization ниже), то есть
+ * покупателя никто не вводит в заблуждение. Не хватало другого: узнать
+ * состояние СНАРУЖИ, не выпуская сертификат. Третий вопрос модуля из трёх —
+ * рядом с kyc и payment, чтобы на «настоящее ли это» отвечала одна команда.
+ *
+ * Секрета здесь не раскрывается: наличие ключа и так видно в каждом
+ * выпущенном сертификате.
+ */
+export function notarySignatureMode(
+  env: NodeJS.ProcessEnv = process.env,
+): "ed25519" | "demo" {
+  // Условие ровно то же, что в signNotarization: pem после trim непустой.
+  // Разойдутся — состояние будет описывать не тот код, что подписывает.
+  return env.BUREAU_NOTARY_SIGNING_KEY?.trim() ? "ed25519" : "demo";
+}
+
 bureauRouter.get("/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -100,6 +119,8 @@ bureauRouter.get("/health", (_req, res) => {
     // Второй барьер перед отметкой «Verified Author». Тоже обязан быть виден:
     // если оба в режиме заглушки, отметка достаётся без документа и без денег.
     payment: paymentProviderMode(),
+    // Третий вопрос: чем подписывает нотариус в платном тарифе Notarized.
+    notarySignature: notarySignatureMode(),
   });
 });
 

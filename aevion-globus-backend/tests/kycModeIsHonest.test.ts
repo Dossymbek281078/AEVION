@@ -17,6 +17,7 @@ import {
   bureauRouter,
   kycProviderMode,
   paymentProviderMode,
+  notarySignatureMode,
 } from "../src/routes/bureau";
 
 describe("режим проверки личности определяется по окружению", () => {
@@ -136,5 +137,58 @@ describe("режим приёма денег виден снаружи", () => {
       "stub",
       "stub",
     ]);
+  });
+});
+
+// ── Третий вопрос модуля: чем подписывает нотариус ──────────────────────
+//
+// Тариф Notarized (от $89) обещает подпись нотариуса Ed25519. В коде она
+// становится настоящей только при заданном BUREAU_NOTARY_SIGNING_KEY, иначе
+// это HMAC. Сам сертификат честно называет алгоритм — то есть покупателя не
+// вводят в заблуждение. Не хватало другого: узнать состояние СНАРУЖИ, не
+// выпуская сертификат.
+
+describe("режим подписи нотариуса виден снаружи", () => {
+  it("ключа нет — демонстрационный режим", () => {
+    expect(notarySignatureMode({} as NodeJS.ProcessEnv)).toBe("demo");
+  });
+
+  it.each([["пустая строка", ""], ["пробелы", "   "]])(
+    "%s → demo (условие совпадает с signNotarization: pem после trim)",
+    (_n, v) => {
+      expect(
+        notarySignatureMode({ BUREAU_NOTARY_SIGNING_KEY: v } as NodeJS.ProcessEnv),
+      ).toBe("demo");
+    },
+  );
+
+  it("ключ задан — настоящая подпись", () => {
+    expect(
+      notarySignatureMode({
+        BUREAU_NOTARY_SIGNING_KEY: "-----BEGIN PRIVATE KEY-----\nMC4C...\n-----END PRIVATE KEY-----",
+      } as NodeJS.ProcessEnv),
+    ).toBe("ed25519");
+  });
+
+  it("решение совпадает с тем, как судит сама подпись", () => {
+    // signNotarization берёт pem?.trim() и проверяет на истинность. Разойдись
+    // эти два места — состояние описывало бы не тот код, что подписывает.
+    const asSigner = (v?: string) => Boolean(v?.trim());
+    for (const v of [undefined, "", "   ", "key"]) {
+      const mine = notarySignatureMode({
+        ...(v === undefined ? {} : { BUREAU_NOTARY_SIGNING_KEY: v }),
+      } as NodeJS.ProcessEnv);
+      expect(mine === "ed25519", `значение ${JSON.stringify(v)}`).toBe(asSigner(v));
+    }
+  });
+
+  it("все три вопроса модуля отвечаются одной ручкой", async () => {
+    const a = express();
+    a.use(express.json());
+    a.use("/api/bureau", bureauRouter);
+    const r = await request(a).get("/api/bureau/health");
+    expect(["live", "stub"]).toContain(r.body.kyc);
+    expect(["live", "stub"]).toContain(r.body.payment);
+    expect(["ed25519", "demo"]).toContain(r.body.notarySignature);
   });
 });

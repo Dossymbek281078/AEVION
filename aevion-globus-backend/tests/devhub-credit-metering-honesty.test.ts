@@ -51,9 +51,16 @@ function makeApp() {
   return app;
 }
 
-function authHeader(sub: string) {
+function tokenFor(sub: string, role: string) {
   const secret = process.env.AUTH_JWT_SECRET || "dev-auth-secret";
-  return { Authorization: `Bearer ${jwt.sign({ sub, email: `${sub}@e.com`, role: "user" }, secret, { algorithm: "HS256" })}` };
+  return `Bearer ${jwt.sign({ sub, email: `${sub}@e.com`, role }, secret, { algorithm: "HS256" })}`;
+}
+function authHeader(sub: string) {
+  return { Authorization: tokenFor(sub, "user") };
+}
+/** POST /studio/tier is admin-only, and it addresses the target by targetUserId. */
+function adminHeader(sub: string) {
+  return { Authorization: tokenFor(sub, "admin") };
 }
 
 beforeEach(() => {
@@ -121,5 +128,54 @@ describe("a capability gate that could not read the meter says so", () => {
     // No provider is configured in this harness, so the route fails on the
     // provider — but the credit verdict it carries is what this pins.
     expect(r.body.creditUnverified).toBe(true);
+  });
+});
+
+describe("a tier that could not be read is not silently downgraded to free", () => {
+  // The mirror image of the usage bug, in the same two shapes:
+  //  - getUserTier() answered "free" on a failed read, so a paying customer
+  //    lost the plan they had bought for as long as the database wobbled;
+  //  - setUserTier() parked a failed write in an in-memory map that
+  //    getUserTier() only consulted with the database KNOWN to be down, so an
+  //    upgrade applied during a wobble never took effect at all.
+  test("the last known tier survives a failed read instead of collapsing to free", async () => {
+    const app = makeApp();
+    // An admin promotes a customer while the database is refusing: the write
+    // fails and setUserTier parks the value in memory.
+    databaseRefuses();
+    const set = await request(app)
+      .post("/api/devhub/studio/tier")
+      .set(adminHeader("admin1"))
+      .send({ targetUserId: "payer", tier: "pro" });
+    // Asserted, not guarded by an `if` — a conditional here would let the
+    // whole test pass while never running a single check.
+    expect(set.status).toBe(200);
+
+    const r = await request(app).get("/api/devhub/studio/credits").set(authHeader("payer"));
+
+    expect(r.body.tier).toBe("pro");
+    expect(r.body.tierKnown).toBe(false);
+  });
+
+  test("a user we have never seen still reads as free, and says the read failed", async () => {
+    databaseRefuses();
+    const app = makeApp();
+
+    const r = await request(app).get("/api/devhub/studio/credits").set(authHeader("stranger"));
+
+    // Nothing better than "free" is known about them, so free it is — but the
+    // answer must not present that guess as a fact.
+    expect(r.body.tier).toBe("free");
+    expect(r.body.tierKnown).toBe(false);
+  });
+
+  test("a readable tier is not flagged", async () => {
+    mockQuery.mockResolvedValue({ rows: [{ tier: "pro", used: 2 }] });
+    const app = makeApp();
+
+    const r = await request(app).get("/api/devhub/studio/credits").set(authHeader("u9"));
+
+    expect(r.body.tier).toBe("pro");
+    expect(r.body.tierKnown).not.toBe(false);
   });
 });

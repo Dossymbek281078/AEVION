@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { createHash } from "node:crypto";
 
 /**
  * Two shapes, one Map. A key is never shared between shapes: keyPrefix is unique
@@ -254,6 +255,22 @@ function looksLikeAddress(v: string): boolean {
   return /^[0-9a-fA-F:.]{3,45}$/.test(v) && /[.:]/.test(v);
 }
 
+/**
+ * Короткий НЕОБРАТИМЫЙ отпечаток ключа корзины — для диагностики снаружи.
+ *
+ * Зачем. 28.08.2026 я трижды подряд объяснял скачущий счётчик неверно, потому
+ * что снаружи не видно, ПО ЧЕМУ он считает. Каждая догадка стоила замера и
+ * оказывалась мимо. Отпечаток превращает вопрос «одна ли это корзина» из
+ * рассуждения в наблюдение: два запроса с одинаковым отпечатком — одна корзина.
+ *
+ * Восемь шестнадцатеричных знаков от sha256: подобрать по ним адрес нельзя, а
+ * отличить корзины — можно. Клиент и так знает свой адрес, так что нового о
+ * себе он отсюда не узнаёт.
+ */
+export function bucketFingerprint(key: string): string {
+  return createHash("sha256").update(key).digest("hex").slice(0, 8);
+}
+
 export function clientIp(req: {
   ip?: string;
   socket?: { remoteAddress?: string };
@@ -390,6 +407,8 @@ export function rateLimit(opts: RateLimitOptions) {
     const remaining = Math.max(0, max - bucket.count);
     res.setHeader("X-RateLimit-Limit", String(max));
     res.setHeader("X-RateLimit-Remaining", String(remaining));
+    // По чему считаем — иначе снаружи не отличить «одна корзина» от «несколько».
+    res.setHeader("X-RateLimit-Bucket", bucketFingerprint(key));
     res.setHeader("X-RateLimit-Reset", String(Math.ceil(bucket.resetAt / 1000)));
 
     if (bucket.count > max) {

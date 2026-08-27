@@ -3078,7 +3078,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <div style={{ maxWidth: 460 }}>
                       <div style={{ fontSize: 32, marginBottom: 12 }}>⚛️</div>
                       <div style={{ fontSize: 14, lineHeight: 1.5 }}>
-                        {reactPreviewError ?? "Building the live preview…"}
+                        {reactPreviewError ?? "Собираем живое превью…"}
                       </div>
                     </div>
                   </div>
@@ -3096,18 +3096,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
                   <div style={{ maxWidth: 420 }}>
                     <div style={{ fontSize: 32, marginBottom: 12 }}>🖱️</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: "#e2e8f0" }}>Deploy this project to use Visual Edit</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: "#e2e8f0" }}>Сначала разверните проект — тогда заработает правка кликами</div>
                     <div style={{ fontSize: 13, lineHeight: 1.5 }}>
-                      This project uses <b>{project?.stack}</b>, which needs a built page to render. Deploy it once —
-                      the deployed page then loads here and you can click elements and describe changes for AI to apply
-                      to the source.
+                      Проект собран на <b>{project?.stack}</b>, а такой странице нужна сборка, чтобы отрисоваться.
+                      Разверните её один раз — развёрнутая страница откроется прямо здесь, и вы сможете щёлкать по
+                      элементам и словами описывать изменения, а ИИ внесёт их в исходный код.
                     </div>
                   </div>
                 </div>
                 )
               ) : !visualEditSrcdoc ? (
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8" }}>
-                  <div style={{ fontSize: 15 }}>No index.html found — create one to use Visual Edit.</div>
+                  <div style={{ fontSize: 15 }}>Не найден index.html — создайте его, чтобы править кликами.</div>
                 </div>
               ) : (
                 <iframe

@@ -98,9 +98,26 @@ const CLAIM_KEYWORDS: Record<string, string[]> = {
  *                       поэтому запрет теперь на слово о клубах, а не на пару.
  */
 const DISPROVEN_CLAIMS: Array<{ text: string; why: string }> = [
+  // ⚠️ 27.08.2026: запись СУЖЕНА, прежняя была шире правды — третий случай
+  // одной и той же ошибки в этом файле.
+  //
+  // Прежний текст: «Virtual cards — выпуска карт нет». Замер прода:
+  //
+  //   GET /api/qmaskcard/stats -> active_masks 40, total_masks 56,
+  //                               authorized_charges 55, declined 16,
+  //                               volume_cents 45500
+  //   POST /api/qmaskcard/masks -> 401 (создание живо и под авторизацией)
+  //
+  // То есть карты-маски у платформы ЕСТЬ, работают и через них прошли
+  // настоящие списания. Запрещать это слово всему каталогу нельзя.
+  //
+  // Что действительно неверно — обещание карт у КОНКРЕТНОГО модуля qpaynet:
+  // в его роутере ноль упоминаний карт и ни одного маршрута выпуска, только
+  // wallets / deposit / withdraw / transfer / merchant. Карты живут в
+  // соседнем модуле qmaskcard, и это разные товары.
   {
-    text: "Virtual cards",
-    why: "выпуска карт нет; qpaynet принимает платежи и делает выплаты на карту",
+    text: "QPayNet virtual cards",
+    why: "у qpaynet нет ни одного маршрута карт (wallets/deposit/withdraw/transfer/merchant); карты-маски живут в qmaskcard — это другой товар",
   },
   {
     text: "Unlimited usage",

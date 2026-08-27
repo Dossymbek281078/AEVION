@@ -2580,6 +2580,9 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     });
     if (!userResp.ok) {
       const errText = await userResp.text();
+      // Capability-level: the token itself is the problem, so the shop window
+      // should stop calling GitHub live.
+      noteProviderFailure("github", `GitHub auth failed: ${String(errText).slice(0, 100)}`);
       return res.json({ ok: false, message: `GitHub auth error: ${errText}` });
     }
     const ghUser = await userResp.json() as { login: string };
@@ -2602,6 +2605,7 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     });
     if (!createResp.ok) {
       const errText = await createResp.text();
+      noteProviderFailure("github", `GitHub repo create failed: ${String(errText).slice(0, 100)}`);
       return res.json({ ok: false, message: `GitHub repo create error: ${errText}` });
     }
     const repoData = await createResp.json() as { html_url: string };
@@ -2659,6 +2663,11 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     }
 
     if (failedFiles.length > 0) {
+      // A file GitHub refused is a condition of this push — too large, a stale
+      // sha — not an outage of the integration; recording it as one would put
+      // the strip in the red over somebody's oversized asset. Nothing landing
+      // at all is different: that is the integration failing.
+      if (pushedFiles === 0) noteProviderFailure("github", `nothing reached the repo: ${failedFiles[0]?.reason ?? "all files refused"}`);
       return res.json({
         ok: pushedFiles > 0,
         repoUrl,
@@ -2672,6 +2681,7 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
         ),
       });
     }
+    noteProviderSuccess("github");
     return res.json({ ok: true, repoUrl, pushedFiles });
   } catch (e: any) {
     return res.json({ ok: false, message: e?.message || "GitHub push failed" });

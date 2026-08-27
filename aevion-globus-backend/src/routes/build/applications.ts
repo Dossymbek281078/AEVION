@@ -939,7 +939,13 @@ applicationsRouter.post("/:id/flag", async (req, res) => {
 
 async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECTED") {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return; // email not configured
+  if (!apiKey) {
+    // Пропуск без следа значит, что кандидат НЕ УЗНАЛ решения по своей заявке,
+    // и об этом не знает никто: ни он, ни рекрутер, ни дежурный. Решение
+    // «не отправлять» остаётся, видимость появляется.
+    console.warn(`[build] ПИСЬМО НЕ ОТПРАВЛЕНО (RESEND_API_KEY не задан): кандидат ${candidateId}, решение ${status}`);
+    return;
+  }
   try {
     const u = await pool.query(`SELECT "email","name" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`, [candidateId]);
     if (!u.rows[0]) return;
@@ -950,11 +956,22 @@ async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECT
     const text = status === "ACCEPTED"
       ? `Hi ${name},\n\nGreat news! Your application was accepted. The employer will reach out via AEVION QBuild messages.\n\nhttps://aevion.app/build/applications\n\n— AEVION QBuild`
       : `Hi ${name},\n\nThis employer has decided not to move forward. Keep browsing open vacancies.\n\nhttps://aevion.app/build/vacancies\n\n— AEVION QBuild`;
-    await fetch("https://api.resend.com/emails", {
+    const resp = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from: "QBuild <noreply@aevion.app>", to: email, subject, text }),
     });
+    // Ответ ОБЯЗАН быть прочитан: раньше строка «email sent» печаталась
+    // независимо от кода, и отказ провайдера выглядел в журнале удачей. Это
+    // хуже отсутствия журнала — на такую запись потом ссылаются как на
+    // доказательство отправки.
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.warn(
+        `[build] ПИСЬМО НЕ ПРИНЯТО ПРОВАЙДЕРОМ (${resp.status}): кандидат ${candidateId}, решение ${status}: ${body.slice(0, 200)}`,
+      );
+      return;
+    }
     console.info(`[build] email sent to ${email} (${status})`);
   } catch (e) {
     console.warn("[build] email notify failed:", (e as Error).message);

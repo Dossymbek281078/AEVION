@@ -146,23 +146,40 @@ export default function RootLayout({
           страницы, и первое, что видит пришедший из соцсети человек, это наш
           текст, пропущенный через переводчик.
 
+          🔴 ДВЕ ПОЧИНКИ 27.08.2026 — первая версия этого скрипта НЕ РАБОТАЛА
+          на проде ни на одной странице. Замер по выкаченному HTML:
+
+            страница      видимый текст        document.body.textContent
+            /cyberchess   кир 16   лат 2       кир 235   лат 9507
+            /go           кир 1157 лат 44      кир 2365  лат 14083
+
+          1. `textContent` тела включает текст ВНУТРИ <script>, а Next.js
+             кладёт туда свой payload — тысячи латинских знаков. Порог не
+             проходил никогда. Теперь считается только то, что видит человек:
+             обход текстовых узлов мимо script/style/noscript/template.
+          2. У страниц, которые рисуются на клиенте, в момент разбора тела
+             текста почти нет (16 знаков при пороге 40). Поэтому решение
+             перепроверяется на DOMContentLoaded и на load — до этих событий
+             браузер решения о переводе не принимает.
+
+          Мой тест не поймал ни того, ни другого: он клал чистый текст прямо в
+          `document.body.textContent`, то есть проверял форму входа, которой в
+          жизни не бывает. Теперь в тесте настоящая разметка со <script>.
+
           Почему по содержимому, а не по `navigator.language`. Язык страницы —
           свойство СТРАНИЦЫ, а не посетителя: у нас есть и английские страницы
-          (/pitch, /investor — они для инвесторов). Объявить их русскими из-за
-          настроек браузера значило бы соврать в другую сторону и получить от
-          Chrome предложение «перевести с русского» на английском тексте.
+          (/pitch, /investor). Объявить их русскими из-за настроек браузера
+          значило бы соврать в другую сторону.
 
           Почему не в корневом макете значением `lang`. `cookies()` там
           переводит ВЕСЬ сайт на динамическую отрисовку; цена несоразмерна.
 
           Порог намеренно НЕ «кириллицы больше»: у русской страницы в тексте
-          всегда есть латиница — названия модулей, AEVION, CyberChess. Условие
-          «кириллицы больше половины от латиницы и её хотя бы 40 знаков» на
-          замерах выше срабатывает уверенно, а на /auth до перевода (16 против
-          1161) — нет. Выбор языка человеком, если он есть, стоит ВЫШЕ: скрипт
-          выше ставит `data-lang-src` и этот тогда молчит.
+          всегда есть латиница — названия модулей, AEVION, CyberChess. Выбор
+          языка человеком стоит ВЫШЕ: скрипт выше ставит `data-lang-src`, и
+          этот тогда молчит.
         */}
-        <script dangerouslySetInnerHTML={{ __html: "(function(){try{var d=document.documentElement;if(d.getAttribute('data-lang-src'))return;var t=(document.body.textContent||'');var c=0,l=0;for(var i=0;i<t.length;i++){var k=t.charCodeAt(i);if((k>=1040&&k<=1103)||k===1025||k===1105)c++;else if((k>=65&&k<=90)||(k>=97&&k<=122))l++;}if(c>l*0.5&&c>40){d.lang='ru';d.setAttribute('data-lang-src','content');}}catch(e){}})()" }} />
+        <script dangerouslySetInnerHTML={{ __html: "(function(){try{var d=document.documentElement;function seen(){var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null),s='',n,t;while((n=w.nextNode())){t=n.parentNode&&n.parentNode.nodeName;if(t==='SCRIPT'||t==='STYLE'||t==='NOSCRIPT'||t==='TEMPLATE')continue;s+=n.nodeValue;if(s.length>20000)break;}return s;}function decide(){if(d.getAttribute('data-lang-src'))return true;var t=seen(),c=0,l=0,i,k;for(i=0;i<t.length;i++){k=t.charCodeAt(i);if((k>=1040&&k<=1103)||k===1025||k===1105)c++;else if((k>=65&&k<=90)||(k>=97&&k<=122))l++;}if(c>l*0.5&&c>40){d.lang='ru';d.setAttribute('data-lang-src','content');return true;}return false;}if(decide())return;document.addEventListener('DOMContentLoaded',decide);window.addEventListener('load',decide);}catch(e){}})()" }} />
       </body>
     </html>
   );

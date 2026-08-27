@@ -27,7 +27,7 @@ const C = {
 type FactorKey = "overall" | "E" | "T" | "O" | "B1" | "M1" | "M2" | "M3" | "H" | "Br";
 
 const FACTOR_META: Record<FactorKey, { label: string; emoji: string; desc: string }> = {
-  overall: { label: "Общий CPI",        emoji: "🏆", desc: "Композитный рейтинг (все 11 факторов)" },
+  overall: { label: "Общий CPI",        emoji: "🏆", desc: "Композитный рейтинг — сводит все факторы ниже" },
   E:       { label: "Точность",         emoji: "🎯", desc: "Насколько ходы близки к лучшим" },
   T:       { label: "Время",             emoji: "⏱",  desc: "Равномерное распределение времени" },
   O:       { label: "Дебюты",            emoji: "📖", desc: "Доля ходов из первой десятки книги" },
@@ -38,6 +38,19 @@ const FACTOR_META: Record<FactorKey, { label: string; emoji: string; desc: strin
   H:       { label: "Чистая игра",       emoji: "🛡",  desc: "Меньше всего зевков" },
   Br:      { label: "Бриллианты",        emoji: "💎", desc: "Самые яркие ходы" },
 };
+
+/**
+ * Сколько факторов ЭТА страница даёт сортировать. Число считается, а не
+ * набирается руками: 27.08.2026 на одной странице стояли два разных — текст
+ * обещал «9 факторов», а описание сводного рейтинга говорило «все 11». Одиннадцать
+ * — это набор СЕРВЕРА (`CPI_FACTORS` в бэкенде), и он другой: там accuracy,
+ * tactics, endgame, timing и так далее, а здесь E/T/O/B1/M1/M2/M3/H/Br. Страница
+ * занимала чужое число, и из-за этого её собственные цифры перестали сходиться.
+ *
+ * `overall` из счёта исключён намеренно: это сводка по остальным, а не фактор
+ * наравне с ними.
+ */
+export const SORTABLE_FACTOR_COUNT = (Object.keys(FACTOR_META) as FactorKey[]).filter((k) => k !== "overall").length;
 
 // Mock leaderboard data. In production, this would be /api/cyberchess/cpi/leaderboard.
 type Entry = {
@@ -198,7 +211,7 @@ export default function CPILeaderboardPage() {
           </h1>
           <p style={{ fontSize: 14, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 640 }}>
             Топ игроков по AEVION Chess Performance Index — композитному рейтингу качества игры.
-            Можешь сортировать по любому из 9 факторов чтобы найти лидера в нужной области.
+            Можешь сортировать по любому из {SORTABLE_FACTOR_COUNT} факторов, чтобы найти лидера в нужной области.
           </p>
         </div>
 

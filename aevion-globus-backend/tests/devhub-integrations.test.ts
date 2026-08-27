@@ -31,8 +31,30 @@ import { devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork } from "../
 // eslint-disable-next-line import/first
 import { getProviders, callProvider } from "../src/services/qcoreai/providers";
 
+/**
+ * Каждому запросу — свой адрес клиента, как у разных пользователей.
+ *
+ * Зачем (20.08.2026): отправляющие ручки получили предел частоты — 5 в минуту на
+ * адрес, потому что у Brevo потолок 300 писем в сутки и общий предел 30/мин
+ * позволял выжечь суточную квоту платформы с одного адреса за десять минут. Этот
+ * файл делает 271 запрос из одного процесса, то есть с ОДНОГО адреса, и упирался
+ * в предел на шестом: 13 проверок валидации падали не по своей причине.
+ *
+ * Ослаблять предел ради тестов нельзя — тогда защиты не будет там, где она нужна.
+ * Правильно здесь другое: тесты проверяют валидацию и ответы провайдеров, а не
+ * частоту, и настоящие пользователи приходят с разных адресов. Сам предел
+ * проверяется отдельно и по поведению — tests/devhubSendingRateLimited.test.ts,
+ * там адреса задаются явно.
+ */
+let testClientIp = 0;
 function makeApp() {
   const app = express();
+  app.set("trust proxy", true);
+  app.use((req, _res, next) => {
+    testClientIp += 1;
+    req.headers["x-forwarded-for"] = `10.1.${Math.floor(testClientIp / 250) % 250}.${(testClientIp % 250) + 1}`;
+    next();
+  });
   app.use(express.json({ limit: "10mb" }));
   app.use("/api/devhub", devhubRouter);
   return app;

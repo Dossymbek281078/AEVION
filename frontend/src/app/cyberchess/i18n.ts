@@ -563,11 +563,31 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
   },
 };
 
+/**
+ * Ключ, под которым язык хранит ПЕРЕКЛЮЧАТЕЛЬ В ШАПКЕ САЙТА (lib/i18n.tsx).
+ * Он другой, чем наш: у страницы шахмат два переключателя — свой в настройках
+ * и общий в шапке, — и до 21.08.2026 они друг о друге не знали. Человек
+ * выбирал английский в шапке, а панели шахмат оставались на языке браузера.
+ */
+const SITE_LANG_KEY = "aevion_lang_v1";
+
+/** Языки сайта шире наших трёх; de/fr отдаём английскому, а не роняем в русский. */
+function siteLangToCc(v: string | null): CcLocale | null {
+  if (v === "ru" || v === "en" || v === "kk") return v;
+  if (v === "de" || v === "fr") return "en";
+  return null;
+}
+
 export function loadLocale(): CcLocale {
   if (typeof window === "undefined") return DEFAULT_LOCALE;
   try {
+    // 1. Свой явный выбор — старше всех: человек выбрал язык именно для шахмат.
     const stored = localStorage.getItem(LOCALE_KEY);
     if (stored === "ru" || stored === "en" || stored === "kk") return stored;
+    // 2. Выбор в шапке сайта. Раньше этой ступени не было, и общий
+    //    переключатель на панели шахмат не действовал вовсе.
+    const site = siteLangToCc(localStorage.getItem(SITE_LANG_KEY));
+    if (site) return site;
   } catch {}
   // Auto-detect by browser navigator.language prefix
   try {
@@ -604,9 +624,18 @@ export function useCcI18n() {
     };
     window.addEventListener("cc-locale-changed", handler as EventListener);
     window.addEventListener("storage", handler);
+    // Переключатель в шапке события не шлёт, но выставляет lang на корневом
+    // элементе (lib/i18n.tsx). Наблюдаем за ним — иначе смена языка в шапке
+    // доходила бы до шахмат только после перезагрузки страницы.
+    let observer: MutationObserver | null = null;
+    if (typeof MutationObserver !== "undefined" && typeof document !== "undefined") {
+      observer = new MutationObserver(() => setLocaleState(loadLocale()));
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+    }
     return () => {
       window.removeEventListener("cc-locale-changed", handler as EventListener);
       window.removeEventListener("storage", handler);
+      observer?.disconnect();
     };
   }, []);
 

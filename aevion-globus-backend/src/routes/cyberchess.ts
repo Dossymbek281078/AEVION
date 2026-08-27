@@ -74,41 +74,156 @@ cyberchessRouter.get("/results.csv", requireAuth, async (req, res) => {
 // so the UI always has something visible without forcing partners to
 // pre-populate. Persistence lives in ecosystemStore (Postgres or JSON
 // file) — survives restarts and webhook-driven status changes.
-const DEMO_SEED: Tournament[] = [
+//
+// СМЕЩЕНИЕ, А НЕ ДАТА. Раньше `startsAt` считался как `Date.now() + 24ч`
+// ПРЯМО ЗДЕСЬ, то есть один раз при загрузке модуля, и уезжал в постоянное
+// хранилище. `ensureDemoSeed` второй раз не срабатывает (записи уже есть),
+// поэтому дата застывала навсегда. Замер на проде 27.08.2026: ручка с именем
+// `/upcoming` отдавала два турнира со статусом `upcoming` и датами старта
+// **4 и 6 мая** — три с половиной месяца назад. Со временем расхождение
+// только росло, и починить его перезапуском было нельзя.
+//
+// 🔴 ЧИСЛА У ОБРАЗЦА — НУЛЕВЫЕ, И ЭТО НЕ КОСМЕТИКА (27.08.2026).
+//
+// Здесь стояли `prizePool: 250` и `entries: 32`. Это не заглушки, которых
+// никто не видит: `bank/_components/ChessWinnings.tsx` печатает призовой фонд
+// человеку, отформатированный как деньги — «$250». То есть витрина обещала
+// призовой фонд, которого нет, участников, которых нет, а после починки дат
+// один из этих образцов приходится ровно на день запуска, 30 августа.
+//
+// Обещание, которого продукт не держит, — первый пункт ворот запуска. Дату
+// образцу освежать можно (он для того и заведён, чтобы показать, как выглядит
+// раздел), а придумывать за него деньги и людей — нельзя.
+//
+// Поэтому: `demo: true` в самом ответе, чтобы любой читатель мог отличить
+// образец от настоящего турнира, и нули там, где число должно приходить из
+// жизни. Настоящий турнир к 30 августа — решение основателя, его надо завести,
+// а не нарисовать.
+const DEMO_SEED: { offsetMs: number; t: Omit<Tournament, "startsAt"> }[] = [
   {
-    id: "tour_demo_swiss_001",
-    startsAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
-    format: "Swiss · 3+2 · 7 rounds",
-    prizePool: 250,
-    entries: 32,
-    capacity: 64,
-    status: "upcoming",
+    offsetMs: 24 * 3600_000,
+    t: {
+      id: "tour_demo_swiss_001",
+      format: "Swiss · 3+2 · 7 rounds",
+      prizePool: 0,
+      entries: 0,
+      capacity: 64,
+      status: "upcoming",
+    },
   },
   {
-    id: "tour_demo_arena_002",
-    startsAt: new Date(Date.now() + 3 * 24 * 3600_000).toISOString(),
-    format: "Arena · 1+0 · 60 min",
-    prizePool: 100,
-    entries: 14,
-    capacity: 100,
-    status: "upcoming",
+    offsetMs: 3 * 24 * 3600_000,
+    t: {
+      id: "tour_demo_arena_002",
+      format: "Arena · 1+0 · 60 min",
+      prizePool: 0,
+      entries: 0,
+      capacity: 100,
+      status: "upcoming",
+    },
   },
 ];
 
-let demoSeeded = false;
-async function ensureDemoSeed(): Promise<void> {
-  if (demoSeeded) return;
-  demoSeeded = true;
+/** Идентификаторы образцов. Единственный источник правды о том, что образец. */
+const DEMO_IDS = new Set(DEMO_SEED.map((d) => d.t.id));
+
+/**
+ * Вид турнира ДЛЯ ЧИТАТЕЛЯ: образец не приносит с собой выдуманных чисел.
+ *
+ * Считается на ответе, а не хранится. Причин две, и обе замерены:
+ *
+ *  1. В таблице `cyberchess_tournaments` колонки под такой признак нет, и
+ *     `saveTournament` его молча терял бы — поле, которое пишут и не читают,
+ *     хуже отсутствующего.
+ *  2. Записи образцов уже лежат на проде с `prizePool: 250` и `entries: 32`.
+ *     Посев срабатывает только на ПУСТОМ хранилище, поэтому правка одного лишь
+ *     `DEMO_SEED` до прода не доехала бы вовсе — ровно так же, как не доезжала
+ *     починка даты, пока её не начали освежать при чтении.
+ *
+ * Настоящий турнир проходит насквозь: его числа приходят из жизни.
+ */
+export function asPublicTournament(t: Tournament): Tournament {
+  if (!DEMO_IDS.has(t.id)) return t;
+  return { ...t, prizePool: 0, entries: 0, demo: true };
+}
+
+function seedNow(): Tournament[] {
+  const now = Date.now();
+  return DEMO_SEED.map(({ offsetMs, t }) => ({ ...t, startsAt: new Date(now + offsetMs).toISOString() }));
+}
+
+/**
+ * Отдаёт турниры, попутно освежая дату протухшим ОБРАЗЦАМ.
+ *
+ * Флага «уже сделано» здесь намеренно НЕТ. Он был, и это был второй дефект того
+ * же класса: образец освежается на сутки вперёд, значит через трое суток он
+ * протухает снова — а одноразовый флаг больше не пускает починку, и на
+ * долгоживущем процессе ручка опять начинает врать. Проверка стоит дёшево:
+ * хранилище читается для ответа всё равно, а запись случается не чаще раза в
+ * сутки на образец.
+ */
+async function loadWithFreshDemos(): Promise<Tournament[]> {
   const existing = await loadTournaments();
   if (existing.length === 0) {
-    for (const t of DEMO_SEED) await saveTournament(t);
+    const seeded = seedNow();
+    for (const t of seeded) await saveTournament(t);
+    return seeded;
   }
+  // Протухшему ОБРАЗЦУ дату обновляем: он для того и заведён, чтобы показывать,
+  // как раздел выглядит. Настоящему турниру дату НЕ трогаем ни при каких
+  // условиях — это была бы подделка расписания, а не починка витрины.
+  // ЕДИНСТВЕННЫЙ сторож здесь — поиск по этой карте: она построена из
+  // `DEMO_SEED`, поэтому настоящий турнир в ней не найдётся никогда. Отдельная
+  // проверка «это образец?» в условии ниже СТОЯЛА и была снята: мутационная
+  // проверка показала, что её удаление ничего не меняет, то есть она была
+  // декоративной. Две защиты от одного, из которых работает одна, хуже одной:
+  // читатель верит обеим.
+  const fresh = new Map(seedNow().map((t) => [t.id, t]));
+  const now = Date.now();
+  const out: Tournament[] = [];
+  for (const t of existing) {
+    const at = Date.parse(t.startsAt);
+    const stale = !Number.isFinite(at) || at <= now;
+    const replacement = t.status === "upcoming" && stale ? fresh.get(t.id) : undefined;
+    if (!replacement) {
+      out.push(t);
+      continue;
+    }
+    const updated = { ...t, startsAt: replacement.startsAt };
+    await saveTournament(updated);
+    out.push(updated);
+  }
+  return out;
+}
+
+/**
+ * Прошедшее не показывается как предстоящее.
+ *
+ * Ручка называется `/upcoming`, и это обещание: событие, чьё время старта уже
+ * прошло, «предстоящим» быть не может. Статус в хранилище узкий
+ * (`upcoming | finalized`), поэтому переименовать состояние нельзя — такой
+ * элемент просто не попадает в ответ.
+ *
+ * Неразбираемая дата — это «не знаю», а не «предстоит»: такой элемент тоже не
+ * выдаём, но МОЛЧА этого не делаем (иначе элемент исчезает бесследно).
+ */
+export function keepOnlyStillUpcoming(items: Tournament[], now = Date.now()): Tournament[] {
+  return items.filter((t) => {
+    if (t.status !== "upcoming") return true;
+    const at = Date.parse(t.startsAt);
+    if (!Number.isFinite(at)) {
+      console.warn("[CyberChess] турнир с неразбираемой датой старта скрыт из /upcoming:", t.id, t.startsAt);
+      return false;
+    }
+    return at > now;
+  });
 }
 
 cyberchessRouter.get("/upcoming", async (_req, res) => {
   try {
-    await ensureDemoSeed();
-    const items = await loadTournaments();
+    // asPublicTournament — последним: образец не должен уносить наружу
+    // призовой фонд и число участников, которых не существует.
+    const items = keepOnlyStillUpcoming(await loadWithFreshDemos()).map(asPublicTournament);
     res.json({ items });
   } catch (err: any) {
     captureCyberChessError(err, { route: "upcoming" });

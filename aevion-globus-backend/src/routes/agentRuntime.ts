@@ -1,3 +1,5 @@
+import { generationLimit } from "../lib/rateLimit";
+import { checkAiInputBudget, isAnonymousRequest } from "../lib/aiInputBudget";
 /**
  * agentRuntime route — POST /api/agent-runtime/run.
  *
@@ -73,9 +75,31 @@ agentRuntimeRouter.get("/health", async (_req, res) => {
   });
 });
 
-agentRuntimeRouter.post("/run", async (req, res) => {
+agentRuntimeRouter.post("/run", generationLimit("agentruntime_run"), async (req, res) => {
   const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
   if (!message) return res.status(400).json({ error: "message required" });
+
+  // ЦЕНА ОДНОГО АНОНИМНОГО ВЫЗОВА.
+  //
+  // Длина `message` не ограничивалась ничем, кроме общего предела тела (10 МБ),
+  // а `maxSteps` — до восьми, то есть до восьми обращений к платному провайдеру
+  // за ОДИН запрос. Проверено на проде 27.08.2026: ручка отвечает без входа в
+  // аккаунт (пустое тело даёт 400 «message required», а не 401).
+  //
+  // Ворота безопасны для законного вызывающего, и это ПРОВЕРЕНО, а не
+  // предположено: зовёт `components/AgentDock.tsx` — глобальный виджет на
+  // продуктовых страницах, и шлёт он ОДНО сообщение, набранное человеком.
+  // Двадцать четыре тысячи знаков для набранного вопроса — с запасом.
+  //
+  // Соседняя ручка `/api/i18n/translate` выглядела таким же кандидатом, но там
+  // законный вызывающий шлёт СТО строк интерфейса разом, и тот же предел сломал
+  // бы перевод страницы живому человеку. Разбор — в шапке aiInputBudget.ts.
+  const budget = checkAiInputBudget([{ content: message }], isAnonymousRequest(req));
+  if (!budget.ok) {
+    return res
+      .status(413)
+      .json({ error: budget.error, message: budget.message, limit: budget.limit, got: budget.got });
+  }
 
   const port = process.env.PORT || "4001";
   const baseUrl = process.env.SELF_BASE_URL || `http://127.0.0.1:${port}`;

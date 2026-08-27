@@ -101,3 +101,71 @@ describe("ворота стоят на обеих платных ручках", 
     expect(gate.slice(0, 400)).toContain("status(413)");
   });
 });
+
+describe("ИИ-тренер шахмат под теми же воротами", () => {
+  // 27.08.2026 проверено на проде: POST /api/coach/chat БЕЗ входа в аккаунт
+  // возвращает разбор позиции от claude-opus-4-8. Это третье обещание карточки
+  // модуля («тренер, который объясняет ход») — и оно же самый посещаемый
+  // платный вызов на день запуска.
+  //
+  // Собственные пределы ручки: 40 сообщений x 16 000 знаков + 8 000 системных =
+  // 648 000 знаков, около 162 тысяч входных токенов ЗА ОДИН ВЫЗОВ. Это в
+  // двадцать семь раз больше, чем разрешено анониму в qcoreai.
+  const src = readFileSync(join(__dirname, "..", "src", "routes", "coach.ts"), "utf8");
+
+  test("обе платные ручки тренера спрашивают предел", () => {
+    // /chat и /chat/stream — обе зовут Anthropic. Считаются ВЫЗОВЫ, а не
+    // упоминания имени: рядом стоит комментарий, где оно тоже есть.
+    expect(src.split("checkAiInputBudget(messages").length - 1).toBe(2);
+  });
+
+  test("обе стоят под ограничителем частоты", () => {
+    expect(src).toContain('generationLimit("coach_chat")');
+    expect(src).toContain('generationLimit("coach_chat_stream")');
+  });
+
+  test("у ручек РАЗНЫЕ ключи счётчика", () => {
+    // Один ключ на две ручки означал бы общий бюджет: поток съедал бы лимит
+    // обычного разбора. Ровно этот дефект уже находили у шести лимитеров,
+    // забывших keyPrefix. Считаем ВХОЖДЕНИЯ каждого ключа: их должно быть по
+    // одному, а не два одинаковых.
+    const keys = src.split("generationLimit(").slice(1).map((chunk) => chunk.slice(0, chunk.indexOf(")")));
+    expect(keys.length, "ограничителей не два").toBe(2);
+    expect(new Set(keys).size, "обе ручки считают в ОДИН счётчик").toBe(2);
+  });
+
+  test("отказ — 413, а не 500", () => {
+    const at = src.indexOf("checkAiInputBudget(messages");
+    expect(src.slice(at, at + 400)).toContain("status(413)");
+  });
+});
+
+describe("агент под теми же воротами, а переводчик — намеренно НЕТ", () => {
+  const agent = readFileSync(join(__dirname, "..", "src", "routes", "agentRuntime.ts"), "utf8");
+  const i18n = readFileSync(join(__dirname, "..", "src", "routes", "i18n.ts"), "utf8");
+
+  test("agent-runtime спрашивает предел", () => {
+    // Длина сообщения не ограничивалась ничем, кроме 10 МБ на тело, а шагов
+    // агента до восьми — до восьми обращений к провайдеру за один запрос.
+    expect(agent).toContain("checkAiInputBudget([{ content: message }]");
+  });
+
+  test("agent-runtime под ограничителем частоты", () => {
+    expect(agent).toContain('generationLimit("agentruntime_run")');
+  });
+
+  test("i18n под ограничителем, но БЕЗ предела для анонима", () => {
+    // Не забытая работа, а решение. Переводчик зовёт AutoTranslate.tsx из
+    // браузера обычного посетителя пачками по сто строк интерфейса: предел
+    // «для анонима» сломал бы перевод страницы живому человеку.
+    //
+    // Проверка стоит здесь, чтобы следующий не «дочинил» по аналогии: тест
+    // покраснеет, и он прочитает причину, а не восстановит поломку.
+    expect(i18n).toContain('generationLimit("i_n_translate")');
+    expect(
+      i18n.includes("checkAiInputBudget"),
+      "на переводчик поставили предел для анонима — он сломает перевод страницы, " +
+        "см. шапку aiInputBudget.ts",
+    ).toBe(false);
+  });
+});

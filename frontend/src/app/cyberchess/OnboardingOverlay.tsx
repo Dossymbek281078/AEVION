@@ -16,6 +16,10 @@
 
 "use client";
 
+// Число уроков — из данных. Вписанное рядом с источником оно устаревает
+// молча: 28.08.2026 то же «14» стояло в трёх местах сразу.
+import { LESSONS } from "./coachLessons";
+
 export type OnboardingChoice = {
   intent: "play" | "learn" | "puzzles";
 };
@@ -95,7 +99,7 @@ const INTENTS: Array<{
   hint: string;
 }> = [
   { intent: "play", icon: "♟", title: "Играть", hint: "Партия против AI 800–2400 — 5 секунд до старта" },
-  { intent: "learn", icon: "🎓", title: "Учиться", hint: "Курс из 14 уроков и живой AI-тренер" },
+  { intent: "learn", icon: "🎓", title: "Учиться", hint: `Курс из ${LESSONS.length} уроков и живой AI-тренер` },
   { intent: "puzzles", icon: "⚡", title: "Пазлы", hint: "Тысячи задач под твой уровень" },
 ];
 

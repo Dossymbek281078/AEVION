@@ -42,3 +42,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Отметка версии: создаётся сборкой и выкаткой, в репозитории ей не место —
+# закоммиченная, она начинает врать при каждом мерже (сторож buildStamp.guard).
+public/version.json

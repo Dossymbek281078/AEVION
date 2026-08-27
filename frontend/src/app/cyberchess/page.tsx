@@ -1380,7 +1380,7 @@ export default function CyberChessPage(){
   const[pzStreak,sPzStreak]=useState<{cur:number;best:number}>(()=>{try{const v=JSON.parse(localStorage.getItem(PZ_STREAK_KEY)||"{}");return{cur:v.cur??0,best:v.best??0}}catch{return{cur:0,best:0}}});
   const savePzStreak=(s:{cur:number;best:number})=>{try{localStorage.setItem(PZ_STREAK_KEY,JSON.stringify(s))}catch{}};
   const incPzStreak=()=>sPzStreak(s=>{const n=s.cur+1;const nb=Math.max(s.best,n);const ns={cur:n,best:nb};savePzStreak(ns);return ns});
-  const resetPzStreak=()=>sPzStreak(s=>{if(chessy.owned.streak_shield&&s.cur>=3){sChessy(c=>({...c,owned:{...c.owned,streak_shield:false}}));showToast("🛡 Щит стрика поглотил ошибку!","success");return s;}const ns={cur:0,best:s.best};savePzStreak(ns);return ns});
+  const resetPzStreak=()=>sPzStreak(s=>{if(chessy.owned.streak_shield&&s.cur>=3){sChessy(c=>({...c,owned:{...c.owned,streak_shield:false}}));showToast("🛡 Щит серии спас: ошибка не прервала её","success");return s;}const ns={cur:0,best:s.best};savePzStreak(ns);return ns});
   // Daily goals tracking — stored by todayKey() in localStorage
   const DG_KEY="aevion_daily_goals_v1";
   const[dailyGoals,sDailyGoals]=useState<{coachOpened:boolean;gamesGoal:number;puzzleGoal:number;date:string}>(()=>{
@@ -5932,7 +5932,7 @@ export default function CyberChessPage(){
               </span>
             )}
             {chessy.owned.puzzle_boost&&<span title="Ускорение задач включено!" style={{fontSize:9,marginLeft:2,color:"#ea580c",fontWeight:900}}>⚡</span>}
-            {chessy.owned.streak_shield&&<span title="Щит стрика активен!" style={{fontSize:9,marginLeft:1,color:"#3b82f6",fontWeight:900}}>🛡</span>}
+            {chessy.owned.streak_shield&&<span title="Щит серии включён!" style={{fontSize:9,marginLeft:1,color:"#3b82f6",fontWeight:900}}>🛡</span>}
           </button>
           <button
             onClick={()=>sShowChessyInfo(true)}
@@ -9879,7 +9879,7 @@ export default function CyberChessPage(){
                       {rushStreak>=3?<div style={{fontSize:22,fontWeight:900,color:rushStreak>=5?"#ef4444":"#f97316",display:"flex",alignItems:"center",gap:2}}>
                         {Array.from({length:Math.min(rushStreak,5)}).map((_,i)=><span key={i} style={{filter:`hue-rotate(${i*10}deg)`,animation:`cc-pulse-glow ${0.8+i*0.1}s ease-in-out infinite`,fontSize:16+i*2}}>🔥</span>)}
                         <span style={{fontSize:18,fontWeight:900,marginLeft:2}}>{rushStreak}</span>
-                      </div>:rushStreak>0?<div style={{fontSize:16,fontWeight:900,color:"#fb923c"}}>🔥 {rushStreak}</div>:<div style={{fontSize:12,color:"#475569",fontWeight:700}}>Без стрика</div>}
+                      </div>:rushStreak>0?<div style={{fontSize:16,fontWeight:900,color:"#fb923c"}}>🔥 {rushStreak}</div>:<div style={{fontSize:12,color:"#475569",fontWeight:700}}>Серии пока нет</div>}
                       <div style={{fontSize:9,color:"#78716c",fontWeight:700}}>СЕРИЯ</div>
                     </div>
                     <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
@@ -11631,8 +11631,8 @@ ${question.trim()}`;
         {id:"theme_ice",name:"Тема Ice ❄️",desc:"Холодный ледяной стиль",cost:40,kind:"unlock"},
         {id:"theme_rose",name:"Тема Rose 🌹",desc:"Розовая романтика",cost:40,kind:"unlock"},
         {id:"theme_dark",name:"Тема Dark 🌑",desc:"Тёмный минималистичный",cost:35,kind:"unlock"},
-        {id:"streak_shield",name:"Щит стрика 🛡",desc:"Один раз защитит серию решений от обнуления",cost:25,kind:"action",onBuy:()=>{
-          sChessy(c=>({...c,owned:{...c.owned,streak_shield:true}}));sShowShop(false);showToast("🛡 Щит стрика активирован!","success");
+        {id:"streak_shield",name:"Щит серии 🛡",desc:"Один раз защитит серию решений от обнуления",cost:25,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,owned:{...c.owned,streak_shield:true}}));sShowShop(false);showToast("🛡 Щит серии включён!","success");
         }},
         {id:"puzzle_boost",name:"Ускорение ⚡",desc:"Следующие 10 задач с двойным Chessy-бонусом",cost:30,kind:"action",onBuy:()=>{
           sChessy(c=>({...c,owned:{...c.owned,puzzle_boost:true}}));sShowShop(false);showToast("⚡ Ускорение включено на 10 задач!","success");
@@ -11799,7 +11799,7 @@ ${question.trim()}`;
         }}>
           <div style={{fontSize:24}}>📅</div>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:12,fontWeight:900,color:CC.text}}>Ежедневный стрик</div>
+            <div style={{fontSize:12,fontWeight:900,color:CC.text}}>Серия дней подряд</div>
             <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>
               День {chessy.streak||1} подряд · следующий вход = +{Math.min(50,10+((chessy.streak||0)+1)*5)} Chessy
             </div>
@@ -11985,7 +11985,7 @@ ${question.trim()}`;
           {dailyReward.isWelcome?"🎉":dailyReward.streak>=14?"🔥":dailyReward.streak>=7?"⭐":dailyReward.streak>=3?"✨":"☀"}
         </div>
         <div style={{fontSize:22,fontWeight:900,marginBottom:4}}>
-          {dailyReward.isWelcome?"Добро пожаловать!":dailyReward.streak>=7?"Недельный стрик!":dailyReward.streak>=3?"Отличная серия!":"Ежедневный бонус"}
+          {dailyReward.isWelcome?"Добро пожаловать!":dailyReward.streak>=7?"Неделя без пропусков!":dailyReward.streak>=3?"Отличная серия!":"Ежедневный бонус"}
         </div>
         <div style={{fontSize:15,color:CC.textDim,marginBottom:16,lineHeight:1.4}}>
           {dailyReward.isWelcome?"Твой первый визит — начнём вместе":"День "+dailyReward.streak+" подряд — продолжай в том же духе!"}

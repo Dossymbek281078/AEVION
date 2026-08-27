@@ -919,10 +919,25 @@ export default function QSkywayClient() {
                       scopeNote: t("qskyway.reg.zones.scope"),
                     }}
                   />
-                  <span
-                    onClick={verify === "checking" ? undefined : verifySignature}
+                  {/* Настоящая кнопка, а не кликабельный текст.
+                      До 28.08.2026 здесь был <span> с onClick: с клавиатуры
+                      недостижим, диктор объявляет текстом, а подсказка живёт в
+                      title — то есть на телефоне её нет вовсе. И это главное
+                      действие блока доверия: проверка подписи двойника.
+                      Сторож clickableA11y написан 19.08 ровно про этот элемент,
+                      но лежал в несмёрженной ветке и потому никого не стерёг. */}
+                  <button
+                    type="button"
+                    onClick={verifySignature}
+                    disabled={verify === "checking"}
+                    aria-label={t("qskyway.tip.verifySig")}
                     title={t("qskyway.tip.verifySig")}
                     style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      font: "inherit",
+                      textAlign: "left",
                       cursor: verify === "checking" ? "wait" : "pointer",
                       textDecoration: "underline dotted",
                       color: verify === "valid" ? "#2dd4bf" : verify === "invalid" ? "#fb7185" : verify === "unknown" ? "#94a3b8" : "#2dd4bf",
@@ -945,7 +960,7 @@ export default function QSkywayClient() {
                     {verify === "unknown" && (
                       <span style={{ color: "#94a3b8" }}>{t("qskyway.verify.unknown")}</span>
                     )}
-                  </span>
+                  </button>
                   <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: t("qskyway.unit.buildings") }} />
                   {meta.suspect.length > 0 && (
                     <span

@@ -29,6 +29,43 @@ function callSites(): string[] {
   if (existsSync(WORKFLOWS)) {
     for (const f of readdirSync(WORKFLOWS)) out.push(readFileSync(path.join(WORKFLOWS, f), "utf8"));
   }
+  // Пусковые .cmd — тоже место монтирования, и на этой машине главное.
+  //
+  // 28.08.2026: сторож считал несмонтированными smoke-db-setup, smoke-with-server
+  // и smoke-report-on-fail, хотя их зовёт run-qskyway-smoke-scheduled.cmd —
+  // пусковой файл ежедневной задачи планировщика. Модель "смонтирован" знала про
+  // package.json, all-smokes.js и workflow, но не про .cmd, а на Windows именно
+  // он и запускает ночной прогон.
+  //
+  // Признак того, что дело в модели, а не в скриптах: смоук РЕАЛЬНО отработал
+  // 155 проверок через этот .cmd в тот же вечер.
+  for (const f of readdirSync(SCRIPTS)) {
+    if (f.endsWith(".cmd")) out.push(readFileSync(path.join(SCRIPTS, f), "utf8"));
+  }
+  // Раскрываем ЦЕПОЧКУ вызовов, а не прямые.
+  //
+  // smoke-with-server.mjs зовёт не пусковой .cmd, а smoke-report-on-fail.mjs,
+  // который сам смонтирован в этот .cmd. Модель "смонтирован" из одного шага
+  // объявляла бы его сиротой при исправной цепочке.
+  //
+  // Неподвижная точка: скрипт, УЖЕ упомянутый в корпусе, добавляет свой текст —
+  // и так пока корпус растёт. Самоупоминание невозможно: файл добавляется только
+  // если назван КЕМ-ТО ДРУГИМ, потому что своё имя мы ищем в уже собранном
+  // тексте до его добавления.
+  const all = readdirSync(SCRIPTS).filter((f) => /\.(ts|js|mjs)$/.test(f));
+  const added = new Set<string>();
+  for (let pass = 0; pass < 5; pass++) {
+    let grew = false;
+    for (const f of all) {
+      if (added.has(f)) continue;
+      if (out.some((text) => text.includes(f))) {
+        out.push(readFileSync(path.join(SCRIPTS, f), "utf8"));
+        added.add(f);
+        grew = true;
+      }
+    }
+    if (!grew) break;
+  }
   return out;
 }
 

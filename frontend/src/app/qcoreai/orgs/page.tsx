@@ -19,6 +19,7 @@ export default function OrgsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [membersError, setMembersError] = useState(false);
   const [authMissing, setAuthMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,8 +54,19 @@ export default function OrgsPage() {
       const h = bearerHeader();
       const r = await fetch(apiUrl(`/api/qcoreai/orgs/${id}/members`), { headers: h });
       const data = await r.json().catch(() => ({}));
-      setMembers(data.members || []);
-    } catch { /* silent */ }
+      // Код ответа спрашивается ДО разбора тела. Иначе отказ приходит как
+      // отсутствие поля `members`, `|| []` подставляет пустоту, и владелец
+      // организации видит её БЕЗ УЧАСТНИКОВ, включая себя, — а рядом
+      // приглашение «invite someone below». Отказ выдавался за факт.
+      if (!r.ok || !Array.isArray(data.members)) {
+        setMembersError(true);
+        return;
+      }
+      setMembersError(false);
+      setMembers(data.members);
+    } catch {
+      setMembersError(true);
+    }
   }, []);
 
   const createOrg = async () => {
@@ -233,7 +245,15 @@ export default function OrgsPage() {
                 <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   Members ({members.length})
                 </p>
-                {members.length === 0 ? (
+                {membersError ? (
+                  <p
+                    role="alert"
+                    style={{ fontSize: 13, color: "#b45309", marginBottom: 16, lineHeight: 1.5 }}
+                  >
+                    Список участников не загрузился. Это не значит, что их нет —
+                    обновите страницу; если повторится, напишите нам.
+                  </p>
+                ) : members.length === 0 ? (
                   <p style={{ fontSize: 13, color: "#9ca3af", marginBottom: 16 }}>No members yet — invite someone below.</p>
                 ) : (
                   <div style={{ marginBottom: 16 }}>

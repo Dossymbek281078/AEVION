@@ -37,7 +37,12 @@ const cols = new Map<string, Set<string>>();
 for (const { s } of files) {
   for (const m of s.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?"(\w+)"\s*\(([\s\S]*?)\n\s*\)\s*;/g)) {
     const set = cols.get(m[1]) ?? new Set<string>();
-    for (const c of m[2].matchAll(/^\s*"(\w+)"/gm)) set.add(c[1]);
+    // Имя колонки стоит после «(» или запятой, а НЕ обязательно в начале
+    // строки. Прежний якорь ^ видел только первую колонку в строке: в
+    // схемах, где их пишут по две-три через запятую (QMedia), сторож
+    // «терял» userId, description и updatedAt и краснел на ИСПРАВНОЙ
+    // схеме. Ложная краснота опаснее пропуска: её отключают целиком.
+    for (const c of m[2].matchAll(/(?:^|[(,])\s*"(\w+)"/gm)) set.add(c[1]);
     cols.set(m[1], set);
   }
 }

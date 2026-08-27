@@ -46,6 +46,7 @@ const pool = getPool();
 import { rateLimit } from "../lib/rateLimit";
 import { clientIp } from "../lib/rateLimit/inMemoryWindow";
 import { isWebhookConfigured, listWebhookLogs, notifyEvent, notifyRunCompleted } from "../lib/qcoreWebhook";
+import { safeErrorText } from "../lib/safeError";
 import {
   fetchQRightAttachments,
   normalizeAttachmentIds,
@@ -425,7 +426,7 @@ qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
       usage: result.usage,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "chat failed";
+    const msg = err instanceof Error ? err.message : "chat failed"; // только для журнала
     // Keep the full message in our own logs / Sentry — strip it from the
     // wire response so we never echo a leaked provider key, internal URL,
     // or stack frame back to anonymous callers.
@@ -522,7 +523,7 @@ qcoreaiRouter.post("/chat-stream", chatLimiter, async (req, res) => {
       send({ kind: "error", message: "empty stream" });
     }
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "stream failed";
+    const msg = err instanceof Error ? err.message : "stream failed"; // только для журнала
     console.error("[QCoreAI stream]", msg);
     captureQCoreAIError(err, { route: "chat-stream" });
     if (!aborted) send({ kind: "error", message: msg });
@@ -1649,7 +1650,7 @@ qcoreaiRouter.post("/runs/:id/refine", refineLimiter, async (req, res) => {
     const msg = err?.message || "refine failed";
     console.error("[QCoreAI] refine error:", msg);
     captureQCoreAIError(err, { route: "refine" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "refine failed", "qcoreai") });
   }
 });
 

@@ -132,9 +132,14 @@ export default function SchedulePage() {
   const remove = async (id: string) => {
     if (!confirm("Delete this schedule?")) return;
     try {
-      await fetch(apiUrl(`/api/qcoreai/schedules/${id}`), { method: "DELETE", headers: bearerHeader() });
+      // Ответ спрашивается ДО правки списка. Прежний catch был помечен «noop»:
+      // расписание исчезало с экрана и при отказе, и при обрыве связи.
+      const r = await fetch(apiUrl(`/api/qcoreai/schedules/${id}`), { method: "DELETE", headers: bearerHeader() });
+      if (!r.ok) { alert("Не удалось удалить расписание — оно осталось на месте."); return; }
       setSchedules((p) => p.filter((s) => s.id !== id));
-    } catch { /* noop */ }
+    } catch {
+      alert("Не удалось удалить расписание — проверьте связь и попробуйте снова.");
+    }
   };
 
   const runNow = async (id: string) => {

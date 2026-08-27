@@ -8,6 +8,7 @@ import {
 } from "../services/qcoreai/providers";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
+import { safeErrorText } from "../lib/safeError";
 
 const capture = makeServiceCapture("qai");
 
@@ -311,8 +312,9 @@ qaiRouter.post("/chat", async (req: Request, res: Response) => {
     capture(err);
     // Remove the user message we appended if the call failed
     session.messages.pop();
-    const msg = err instanceof Error ? err.message : "AI provider unavailable";
-    res.status(500).json({ error: msg });
+    const msg = err instanceof Error ? err.message : "AI provider unavailable"; // только для журнала
+    const msgPublic = safeErrorText(err, "AI provider unavailable", "qai");
+    res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -409,8 +411,9 @@ qaiRouter.post("/chat/stream", async (req: Request, res: Response) => {
     capture(err);
     session.messages.pop(); // remove user message on error
     if (!closed) {
-      const msg = err instanceof Error ? err.message : "stream failed";
-      res.write(`data: ${JSON.stringify({ type: "error", message: msg })}\n\n`);
+      const msg = err instanceof Error ? err.message : "stream failed"; // только для журнала
+      const msgPublic = safeErrorText(err, "stream failed", "qai");
+      res.write(`data: ${JSON.stringify({ type: "error", message: msgPublic })}\n\n`);
     }
   } finally {
     res.end();

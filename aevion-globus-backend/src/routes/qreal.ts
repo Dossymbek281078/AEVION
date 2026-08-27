@@ -20,6 +20,7 @@
 //   POST /api/qreal/projects/:id/shots/:sid/qc     ← отчёт реализма
 //   GET  /api/qreal/projects/:id/provenance        ← подписанный манифест
 import { Router } from "express";
+import { readBuildInfo } from "../lib/buildInfo";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -185,6 +186,12 @@ async function warmFromDb(): Promise<void> {
       if (p?.id) memProjects.set(p.id, p);
     }
   } catch { /* in-memory режим */ }
+}
+
+/** Короткий коммит образа, или null — «не знаю» вместо выдуманного. */
+function buildCommit(): string | null {
+  const c = readBuildInfo().commit;
+  return c && c !== "unknown" ? c.slice(0, 8) : null;
 }
 
 qrealRouter.use((_req, _res, next) => { warmFromDb().finally(() => next()); });
@@ -602,7 +609,11 @@ qrealRouter.get("/health", (_req, res) => {
   res.json({
     ok: true,
     module: "qreal",
-    commit: (process.env.RAILWAY_GIT_COMMIT_SHA || "").slice(0, 8) || null,
+    // Читаем отметку тем же способом, что и главный /health: из файла в
+    // образе, а переменные только запасным путём. Раньше здесь стояла ТОЛЬКО
+    // переменная RAILWAY_GIT_COMMIT_SHA, а выкатка идёт папкой и её не ставит —
+    // поле было null всегда, и смоук модуля краснел на нём постоянно.
+    commit: buildCommit(),
     label: "QReal Studio",
     tagline: "Полностью живое AI-видео без съёмки актёра — с неотключаемой AI-маркировкой",
     pipeline: ["brief", "storyboard", "render-prompts", "engine", "realism-qc", "assembly", "provenance"],

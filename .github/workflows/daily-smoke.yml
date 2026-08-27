@@ -11,9 +11,9 @@
 #
 # Failure semantics:
 #   The orchestrator exits 1 on any smoke failure. This job goes red, the
-#   GitHub UI shows which step exited; downstream issue creation is wired
-#   only on cron runs (manual dispatch surfaces the failure to the human
-#   who triggered it, no extra noise needed).
+#   GitHub UI shows which step exited, и с 27.08.2026 падение свипа заводит
+#   задачу (одну открытую, с комментариями). До этого дня комментарий здесь
+#   обещал ровно это, а шага не было — проверка краснела и не говорила никому.
 
 name: Daily smoke
 
@@ -307,3 +307,48 @@ jobs:
           name: prod-readonly-sweep-log
           path: aevion-globus-backend/prod-sweep-full.log
           retention-days: 30
+
+      # Отчёт о падении. До 27.08.2026 его НЕ БЫЛО: в шапке файла написано
+      # «downstream issue creation is wired only on cron runs», а шага не
+      # существовало — слово issue встречалось во всём файле ровно один раз,
+      # в том самом комментарии. Ежедневная проверка 59 поверхностей прода
+      # краснела и не говорила никому: красный прогон видит лишь тот, кто сам
+      # зайдёт во вкладку Actions.
+      #
+      # Образец взят у capability-truth-check.yml, чтобы не заводить второй
+      # способ сообщать об одном и том же: одна открытая задача с
+      # комментариями, а не новая каждое утро.
+      - name: Report a red prod sweep
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          TAIL=$(tail -30 aevion-globus-backend/prod-sweep-full.log 2>/dev/null || echo "лог не сохранился")
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "Daily prod sweep is red in:title" --json number -q ".[0].number")
+          BODY="Ежедневный свип прода упал.
+
+          Прогон: $RUN_URL
+
+          Хвост лога:
+
+          $TAIL"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "🔴 Daily prod sweep is red" --body "$BODY"
+          fi
+
+      - name: Close the issue once the sweep is green again
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "Daily prod sweep is red in:title" --json number -q ".[].number" |
+            while read -r n; do
+              [ -n "$n" ] && gh issue close "$n" --repo "$GITHUB_REPOSITORY" \
+                --comment "Свип снова зелёный: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            done

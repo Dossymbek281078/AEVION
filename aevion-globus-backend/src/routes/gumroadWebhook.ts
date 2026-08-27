@@ -207,11 +207,38 @@ function moduleSlugForReference(ref: string): string | null {
 // webhook. Return a tiny JSON manifest instead so admins can sanity-check the
 // endpoint by visiting it.
 gumroadWebhookRouter.get("/webhook", (_req: Request, res: Response) => {
+  // Поля названы так, чтобы по ответу было видно, ЗАЩИЩЁН ли денежный путь,
+  // а не только жив ли адрес.
+  //
+  // Раньше ручка сообщала одно `signed` — и этого недостаточно. Замер на
+  // проде 28.08.2026: `signed: false`, то есть подпись не проверяется, а
+  // Ping-адрес публично известен. Единственная защита в этом режиме —
+  // подтверждение продажи через API Gumroad, и оно требует
+  // GUMROAD_ACCESS_TOKEN. Без токена `verifyGumroadSaleImpl` возвращает
+  // "unverifiable", а обработчик на этом вердикте ПРОВИЖИНИТ (сознательно:
+  // настоящий покупатель не должен терять доступ из-за сбоя у Gumroad).
+  //
+  // То есть «подписи нет» + «токена нет» = любой POST выдаёт платный тариф.
+  // Ответ молчал ровно о второй половине этой пары, и снаружи отличить
+  // защищённое состояние от беззащитного было нельзя.
+  //
+  // Ни секрет, ни токен наружу не отдаются — только признак наличия.
+  const signed = Boolean(process.env.GUMROAD_WEBHOOK_SECRET);
+  const saleCheckEnabled = process.env.GUMROAD_VERIFY_SALES !== "0";
+  const canVerifySales = Boolean(process.env.GUMROAD_ACCESS_TOKEN);
   res.json({
     ok: true,
     endpoint: "gumroad webhook",
     accepts: "POST application/x-www-form-urlencoded",
-    signed: Boolean(process.env.GUMROAD_WEBHOOK_SECRET),
+    signed,
+    saleVerification: !saleCheckEnabled
+      ? "disabled"
+      : canVerifySales
+        ? "api"
+        : "unavailable",
+    // Одно поле, по которому видно главное. false означает: пинг никем не
+    // удостоверяется, и провижининг произойдёт по любому запросу.
+    pingAuthenticated: signed || (saleCheckEnabled && canVerifySales),
     info: "Gumroad sends sale/refund pings here as POST form-encoded. GET is for liveness check only.",
   });
 });

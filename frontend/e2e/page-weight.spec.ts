@@ -33,6 +33,15 @@ const BUDGET_KB: Record<string, number> = {
   "/": 1500, // measured 1254 KB in 16 files
   "/devhub": 1500, // measured 1264 KB in 16 files
   "/compare": 1500, // measured 1237 KB in 16 files
+  // The regression this catches — another route's code folded into a chunk
+  // every page loads — lands wherever the bundler decides, not on the three
+  // pages that happened to be measured first. These are the rest of the doors
+  // into the platform.
+  "/shop": 1500, // measured 1202 KB in 15 files
+  "/pricing": 1600, // measured 1334 KB in 18 files
+  "/explore": 1500, // measured 1227 KB in 16 files
+  "/qright": 1600, // measured 1305 KB in 17 files
+  "/build": 1600, // measured 1272 KB in 19 files
 };
 
 async function blockingScriptWeight(

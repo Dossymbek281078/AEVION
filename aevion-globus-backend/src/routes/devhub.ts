@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { pgIntId } from "../lib/queryNumber";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
@@ -2649,8 +2650,8 @@ devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req,
   const userId = auth?.sub ?? "anonymous";
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
-  const prNumber = Number(req.params.number);
-  if (!Number.isInteger(prNumber) || prNumber <= 0) {
+  const prNumber = pgIntId(req.params.number);
+  if (prNumber === null) {
     return res.status(400).json({ error: "invalid pull request number" });
   }
   const mergeMethodInput = typeof req.body?.mergeMethod === "string" ? req.body.mergeMethod : "squash";

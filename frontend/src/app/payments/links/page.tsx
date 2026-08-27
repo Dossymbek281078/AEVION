@@ -2,6 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  readPersistence,
+  durabilityNotice,
+  coerceExpiry,
+  isExpiryAllowed,
+  EXPIRY_CHOICES_DAYS,
+  type Persistence,
+} from "./durability";
 
 type Currency = "USD" | "EUR" | "KZT" | "AEC";
 type SettlementTarget = "bank" | "aec";
@@ -103,6 +111,34 @@ export default function PaymentLinksPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [origin, setOrigin] = useState<string>("");
   const [syncedIds, setSyncedIds] = useState<Set<string>>(new Set());
+
+  // Долговечность ссылок. Начальное состояние — «не знаю», а НЕ «всё хорошо»:
+  // до ответа сервера обещать вечную ссылку нельзя. Подробности и замер —
+  // в шапке ./durability.ts.
+  const [persistence, setPersistence] = useState<Persistence>("unknown");
+  const durability = durabilityNotice(persistence);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/health", { cache: "no-store" });
+        const d = (await r.json()) as { persistence?: unknown };
+        if (alive) setPersistence(readPersistence(d?.persistence));
+      } catch {
+        // Отказ оставляет «unknown» — предупреждение останется на месте.
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Если хранилище перестало держать «никогда», уже выбранный срок приводим к
+  // конечному: иначе форма отправит обещание, которого сервер не выполнит.
+  useEffect(() => {
+    setExpiresInDays((d) => coerceExpiry(d, persistence));
+  }, [persistence]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -374,6 +410,28 @@ export default function PaymentLinksPage() {
             New payment link
           </div>
 
+          {/*
+            Честная строка о хранении. Стоит ДО полей, а не мелким шрифтом
+            внизу: продавец должен узнать про неустойчивость раньше, чем
+            выпустит ссылку и отправит её покупателю.
+          */}
+          {durability.warn ? (
+            <div
+              role="status"
+              style={{
+                border: "1px solid #fbbf24",
+                background: "#fffbeb",
+                color: "#78350f",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              {durability.text}
+            </div>
+          ) : null}
+
           <div>
             <label style={labelStyle}>Title</label>
             <input
@@ -456,18 +514,29 @@ export default function PaymentLinksPage() {
           <div>
             <label style={labelStyle}>Expires in</label>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {[1, 7, 30, 0].map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setExpiresInDays(d)}
-                  style={
-                    expiresInDays === d ? chipActive("#0f172a") : chipBase
-                  }
-                >
-                  {d === 0 ? "Never" : `${d}d`}
-                </button>
-              ))}
+              {EXPIRY_CHOICES_DAYS.map((d) => {
+                const allowed = isExpiryAllowed(d, persistence);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    disabled={!allowed}
+                    title={allowed ? undefined : durability.neverHint}
+                    aria-disabled={!allowed}
+                    onClick={() => allowed && setExpiresInDays(d)}
+                    style={{
+                      ...(expiresInDays === d
+                        ? chipActive("#0f172a")
+                        : chipBase),
+                      ...(allowed
+                        ? null
+                        : { opacity: 0.45, cursor: "not-allowed" }),
+                    }}
+                  >
+                    {d === 0 ? "Never" : `${d}d`}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

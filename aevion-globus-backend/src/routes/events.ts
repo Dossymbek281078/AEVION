@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { queryNumber } from "../lib/queryNumber";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 
@@ -291,8 +292,8 @@ eventsRouter.get("/summary", (req, res) => {
     });
   }
 
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "5000"), 10), 100), 50000);
-  const sinceHours = Math.min(Math.max(parseInt(String(req.query.hours ?? "24"), 10), 1), 720);
+  const limit = Math.min(Math.max(queryNumber(req.query.limit, 5000), 100), 50000);
+  const sinceHours = Math.min(Math.max(queryNumber(req.query.hours, 24), 1), 720);
   const sinceMs = Date.now() - sinceHours * 60 * 60 * 1000;
 
   let content = "";
@@ -385,7 +386,7 @@ eventsRouter.get("/aggregate", (req, res) => {
   const period = req.query.period === "hour" ? "hour" : "day";
   const GROUP_DIMS = new Set(["source", "type", "tier", "industry"]);
   const groupBy = GROUP_DIMS.has(String(req.query.groupBy)) ? String(req.query.groupBy) : "type";
-  const sinceHours = Math.min(Math.max(parseInt(String(req.query.hours ?? "168"), 10) || 168, 1), 720);
+  const sinceHours = Math.min(Math.max(queryNumber(req.query.hours, 168), 1), 720);
   const sinceMs = Date.now() - sinceHours * 60 * 60 * 1000;
 
   if (!existsSync(EVENTS_FILE)) {
@@ -453,7 +454,7 @@ eventsRouter.get("/recent", (req, res) => {
     return res.json({ items: [], total: 0 });
   }
 
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 1000);
+  const limit = Math.min(Math.max(queryNumber(req.query.limit, 100), 1), 1000);
 
   let content = "";
   try {
@@ -497,7 +498,7 @@ eventsRouter.get("/by-variant", (req, res) => {
     }
   }
 
-  const sinceHours = Math.min(Math.max(parseInt(String(req.query.hours ?? "168"), 10), 1), 720);
+  const sinceHours = Math.min(Math.max(queryNumber(req.query.hours, 168), 1), 720);
   const sinceMs = Date.now() - sinceHours * 60 * 60 * 1000;
   const keys = (typeof req.query.keys === "string" ? req.query.keys : "hero,tierCards")
     .split(",")

@@ -82,8 +82,66 @@ mkdirSync(dirname(OUT), { recursive: true });
  *
  * Правило: пустой ответ не имеет права затирать непустой.
  */
+/**
+ * Отметка, которую положил скрипт выкатки, — она про ЭТУ сборку.
+ *
+ * `src/lib/buildStamp.ts` переписывается `scripts/vercel-deploy.sh` прямо
+ * перед загрузкой, поэтому на машине Vercel это единственный источник, который
+ * заведомо описывает текущую выкатку. Привезённый `public/version.json` таким
+ * не является: он остаётся в рабочем каталоге от прошлых прогонов (его пишет
+ * `prebuild` при любом локальном билде) и уезжает как есть.
+ *
+ * Замер 23.08.2026: выкатка коммита 141f123c3ae7 везла version.json от
+ * fd6b9563479c — на один коммит старше. `/api/health` при этом отвечал верно,
+ * потому что читает BUILD_STAMP, а вот `/version.json` отдавал бы другой
+ * ответ на тот же вопрос. Два ответа хуже одного неточного: непонятно, какому
+ * верить.
+ */
+function fromBuildStamp() {
+  try {
+    const src = readFileSync(join(HERE, "..", "src", "lib", "buildStamp.ts"), "utf8");
+    // Разбор БЕЗ регулярки намеренно. Первая версия строила её из строки, и
+    // экранирование схлопнулось по дороге: шаблон превратился в «commits*:s*»
+    // и не находил ничего. Поймано отрицательным контролем (подложил заведомо
+    // старую отметку и увидел, что она осталась), а не чтением кода.
+    // Ищем ПРИСВОЕНИЕ (field: "..."), а не просто «field:». Вторая ловушка
+    // подряд в этом же разборе: в файле сначала идёт объявление типа
+    // (`branch: string;`), и поиск по «branch:» попадал в него, а следующая
+    // кавычка принадлежала уже значению commit — то есть branch и builtAt
+    // возвращали КОММИТ. У commit это совпало случайно и выглядело рабочим.
+    // Видно только если печатать все три поля, а не одно.
+    const body = src.slice(Math.max(0, src.indexOf("BUILD_STAMP:")));
+    const pick = (field) => {
+      const marker = field + ': "';
+      const at = body.indexOf(marker);
+      if (at < 0) return "";
+      const from = at + marker.length;
+      const to = body.indexOf('"', from);
+      return to > from ? body.slice(from, to) : "";
+    };
+    const commit = pick("commit");
+    if (!commit || commit === "unknown") return null;
+    return { commit, branch: pick("branch") || "unknown", builtAt: pick("builtAt") || null };
+  } catch {
+    return null;
+  }
+}
+
 let keep = null;
 if (info.commit === "unknown") {
+  const stamped = fromBuildStamp();
+  if (stamped) {
+    keep = {
+      commit: stamped.commit,
+      branch: stamped.branch,
+      builtAt: stamped.builtAt ?? new Date().toISOString(),
+      source: "stamped-at-deploy",
+    };
+    writeFileSync(OUT, JSON.stringify(keep, null, 2) + "\n", "utf8");
+    console.log(`version.json: взята отметка выкатки ${keep.commit} (${keep.branch}) из buildStamp.ts`);
+    keep = null; // записали сами — ниже ничего печатать не нужно
+    process.exit(0);
+  }
   try {
     const prev = JSON.parse(readFileSync(OUT, "utf8"));
     if (prev && typeof prev.commit === "string" && prev.commit && prev.commit !== "unknown") {

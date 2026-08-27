@@ -13,6 +13,7 @@ import {
 } from "../lib/qcoreQuota";
 import { resolveUserPlan } from "../lib/planGate";
 import { getTier, TIERS } from "../data/pricing";
+import { checkAiInputBudget, isAnonymousRequest } from "../lib/aiInputBudget";
 import {
   callProvider,
   callProviderResilient,
@@ -383,6 +384,10 @@ qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
     if (!messages) {
       return res.status(400).json({ error: "messages required" });
     }
+    const budget = checkAiInputBudget(messages, isAnonymousRequest(req));
+    if (!budget.ok) {
+      return res.status(413).json({ error: budget.error, message: budget.message, limit: budget.limit, got: budget.got });
+    }
     const requestedProvider = typeof req.body?.provider === "string" ? req.body.provider : undefined;
     const providerId = resolveProvider(requestedProvider);
 
@@ -443,12 +448,16 @@ export { clampTemperature, publicErrorCategory };
                                               data: { kind: "error", message }
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/chat-stream", async (req, res) => {
+qcoreaiRouter.post("/chat-stream", chatLimiter, async (req, res) => {
   if (await enforceFreeTokenQuota(req, res)) return;
   const auth = verifyBearerOptional(req);
   const messages = sanitizeMessages(req.body?.messages);
   if (!messages) {
     return res.status(400).json({ error: "messages required" });
+  }
+  const budget = checkAiInputBudget(messages, isAnonymousRequest(req));
+  if (!budget.ok) {
+    return res.status(413).json({ error: budget.error, message: budget.message, limit: budget.limit, got: budget.got });
   }
   const requestedProvider = typeof req.body?.provider === "string" ? req.body.provider : undefined;
   const providerId = resolveProvider(requestedProvider);

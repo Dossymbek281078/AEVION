@@ -173,14 +173,39 @@ qnewsRouter.get("/health", (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/qnews/categories ───────────────────────────────────────────────
-qnewsRouter.get("/categories", (_req: Request, res: Response) => {
+const QNEWS_STORAGE_DOWN =
+  "Хранилище временно недоступно. Пустая лента сейчас НЕ значит, что новостей нет.";
+
+qnewsRouter.get("/categories", async (_req: Request, res: Response) => {
   const counts: Record<string, number> = {};
   for (const cat of CATEGORIES) counts[cat] = 0;
+
+  // Счёт идёт в SQL: тянуть все статьи ради подсчёта — лишняя работа, которая
+  // растёт вместе с лентой. Раньше здесь читалась ПАМЯТЬ, пустая на проде, и
+  // все разделы показывали ноль при полной базе.
+  if (isQNewsDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT "category", COUNT(*)::int AS n FROM "QNewsArticle" GROUP BY "category"`,
+      );
+      for (const r of rows as Array<{ category: string; n: number }>) {
+        if (counts[r.category] !== undefined) counts[r.category] = Number(r.n);
+      }
+      res.json({ categories: CATEGORIES.map((cat) => ({ id: cat, count: counts[cat] ?? 0 })) });
+      return;
+    } catch (e) {
+      console.error("[QNews] /categories DB error", e);
+      // Нули на отказе базы читаются как «новостей нет», поэтому отказ здесь
+      // называем отказом, а не показываем пустой рубрикатор.
+      res.status(503).json({ error: "storage_unavailable", warning: QNEWS_STORAGE_DOWN });
+      return;
+    }
+  }
+
   for (const item of memNews.values()) {
     if (counts[item.category] !== undefined) counts[item.category] += 1;
   }
-  const result = CATEGORIES.map((cat) => ({ id: cat, count: counts[cat] ?? 0 }));
-  res.json({ categories: result });
+  res.json({ categories: CATEGORIES.map((cat) => ({ id: cat, count: counts[cat] ?? 0 })) });
 });
 
 // ─── GET /api/qnews/trending — top 5 most recently added ────────────────────
@@ -378,10 +403,29 @@ qnewsRouter.get("/me/bookmarks", async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/qnews/rss — RSS 2.0 feed of latest 20 articles ─────────────────
-qnewsRouter.get("/rss", (_req: Request, res: Response) => {
-  const articles = Array.from(memNews.values())
-    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
-    .slice(0, 20);
+qnewsRouter.get("/rss", async (_req: Request, res: Response) => {
+  // Лента отдаётся читалкам и агрегаторам. Пустой RSS они запоминают: канал,
+  // который однажды отдал ноль записей, часть читалок опрашивает реже. Раньше
+  // здесь читалась память — на проде пустая.
+  let articles: NewsItem[] = [];
+  if (isQNewsDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM "QNewsArticle" ORDER BY "publishedAt" DESC LIMIT 20`,
+      );
+      articles = rows as NewsItem[];
+    } catch (e) {
+      console.error("[QNews] /rss DB error", e);
+      // Отдать пустую ленту на отказе базы нельзя — лучше честный отказ,
+      // читалка повторит попытку.
+      res.status(503).json({ error: "storage_unavailable", warning: QNEWS_STORAGE_DOWN });
+      return;
+    }
+  } else {
+    articles = Array.from(memNews.values())
+      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+      .slice(0, 20);
+  }
 
   const escXml = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -506,8 +550,23 @@ qnewsRouter.post("/ai/summarize", aiLimiter, async (req: Request, res: Response)
 });
 
 // ─── GET /api/qnews/stats ─────────────────────────────────────────────────────
-qnewsRouter.get("/stats", (_req: Request, res: Response) => {
-  const articles = Array.from(memNews.values());
+qnewsRouter.get("/stats", async (_req: Request, res: Response) => {
+  // Сводка по ленте. Раньше считалась по памяти: на проде она пуста, значит
+  // «всего 0 статей» при полной базе. Ноль на витрине статистики читается как
+  // «модуль мёртв», и проверить это никто не идёт.
+  let articles: NewsItem[];
+  if (isQNewsDbReady()) {
+    try {
+      const { rows } = await pool.query(`SELECT * FROM "QNewsArticle"`);
+      articles = rows as NewsItem[];
+    } catch (e) {
+      console.error("[QNews] /stats DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: QNEWS_STORAGE_DOWN });
+      return;
+    }
+  } else {
+    articles = Array.from(memNews.values());
+  }
   const byCategory = CATEGORIES.reduce((acc, c) => {
     acc[c] = articles.filter((a) => a.category === c).length;
     return acc;

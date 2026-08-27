@@ -31,6 +31,10 @@ const PAGES = [
   "/",
   "/explore",
   "/devhub",
+  // The comparison page states what the product does against named rivals — a
+  // page that quietly 404s or empties out is worse than one that never
+  // existed, because it is the page an investor is sent to.
+  "/compare",
   "/studio",
   "/pricing",
   "/apps",

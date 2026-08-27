@@ -1140,7 +1140,12 @@ export default function StudioPage() {
         </div>
 
         {/* Presets */}
-        <div style={{ display: "inline-flex", gap: 4 }}>
+        {/* Перенос: четыре пресета в один ряд не помещаются на узком телефоне.
+            Замер 28.08.2026 на ширине 320 — ряд «Игра + Стрим · Турнирный штаб
+            · Игра + 2 стрима · Только игра» шириной 342 при окне 305, страница
+            уезжала вбок на 42 пикселя. Сторож указывал на последнюю кнопку,
+            но переполнял сам ряд. */}
+        <div style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
           {PRESET_LAYOUTS.map(p => (
             <Tooltip key={p.id} label={p.label}>
               <button onClick={() => applyPreset(p.id)} className="cc-focus-ring"

@@ -10,6 +10,7 @@ import AevionProjectsBanner from "./AevionProjectsBanner";
 import { PageTracking } from "@/components/PageTracking";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
+import SetupBoardPreview from "./SetupBoardPreview";
 import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledgeModal";
 import { COACH_KNOWLEDGE } from "./coachKnowledge";
@@ -104,7 +105,7 @@ import { generatePositionExplanation, explainMove, spotTactics, identifyOpening,
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
 import { loadBookmarks, addBookmark, removeBookmark, type Bookmark } from "./bookmarks";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
-import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
+import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, variantsPlayedCount, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
 import { computeThreatMap, cellColor as threatCellColor, reportThreatMap, type ThreatMap } from "./threatMap";
 import { startSession as coordStart, registerHit as coordHit, isExpired as coordExpired, timeLeftMs as coordTimeLeft, summarize as coordSummarize, saveToLeaderboard as coordSaveLB, loadLeaderboard as coordLoadLB, rankTitle as coordRank, type CoordSession, type CoordResult, type CoordLeaderboardEntry } from "./coordTrainer";
@@ -2369,7 +2370,10 @@ export default function CyberChessPage(){
     pzSolvedCount, pzBestStreak: 0,
     rushBestScore: 0,
     rating: rat,
-    variantsTried: Object.keys(variantStats||{}).filter(v=>v!=="standard").length,
+    // Считаем СЫГРАННЫЕ варианты, а не ключи заготовки: makeEmptyStats()
+    // заводит запись каждому варианту сразу, и подсчёт ключей выдавал
+    // «Попробуй 5 вариантов» новичку в первую секунду.
+    variantsTried: variantsPlayedCount(variantStats),
     coachUsed: coachUsedCount,
     repertoireBranches: repertoire?.entries?.length||0,
     ecosystemVisits: ecosystemVisits.length,
@@ -2480,6 +2484,11 @@ export default function CyberChessPage(){
   // with the welcome toast on first visit.
   useEffect(()=>{
     if(typeof window==="undefined")return;
+    // На телефоне не показываем вовсе: Ctrl+K там нажать нечем, а подсказка
+    // приходит ровно в те секунды, когда человек читает окно приветствия.
+    // Замер 27.08 на 375px: поверх интерфейса у новичка одновременно висели
+    // окно, плашка установки, два уведомления и эта подсказка.
+    if(isMobileLayout)return;
     try{
       if(localStorage.getItem("aevion_chess_palette_hint_v1")==="1")return;
       const t=window.setTimeout(()=>{
@@ -2488,7 +2497,7 @@ export default function CyberChessPage(){
       },2400);
       return()=>window.clearTimeout(t);
     }catch{}
-  },[showToast]);
+  },[showToast,isMobileLayout]);
   // Opening Explorer + Tablebase: fetch when on Analysis tab + position changes
   useEffect(()=>{
     if(tab!=="analysis"||!showOpeningExp){sOpeningData(null);return}
@@ -5737,11 +5746,15 @@ export default function CyberChessPage(){
           }}>
           <span style={{fontSize:14}}>⌕</span>
           <span>Команды</span>
-          <kbd style={{
+          {/* Подсказка сочетания клавиш — только там, где клавиатура есть.
+              На телефоне «⌃K» не подсказка, а шум: нажать это нечем, а место
+              в шапке первого экрана стоит дорого. Замер 27.08 на 375px: шапка
+              занимала треть экрана и содержала 13 управляющих элементов. */}
+          {!isMobileLayout&&<kbd style={{
             fontFamily:"ui-monospace, SFMono-Regular, monospace",fontSize:9.5,fontWeight:800,
             padding:"1px 5px",borderRadius:3,
             background:"#fff",color:"#475569",border:`1px solid #cbd5e1`,
-          }}>⌃K</kbd>
+          }}>⌃K</kbd>}
         </button>
         {/* «Все разделы» — видимый навигационный хаб. Делает обнаружимыми ВСЕ режимы и
             киллер-фичи (Турниры/Экономика/Тренинг/Реплеи/Студия/CPI), которые раньше были
@@ -5981,6 +5994,25 @@ export default function CyberChessPage(){
           else break;
         }
         return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
+
+          {/* ─── ДОСКА ПЕРВЫМ ДЕЛОМ ───
+              Человек, открывший шахматы, доски не видел вовсе: экран начинался
+              с панели настроек, а доска появлялась только после «ИГРАТЬ». Замер
+              27.08.2026 на телефоне 375px — ни на первом экране, ни на втором
+              ни одной шахматной клетки. Для пришедшего с ролика это решается за
+              секунды: пришёл играть, а видит форму.
+              Доска показывает начальную расстановку в его теме и наборе фигур,
+              развёрнута по выбранному цвету, и нажатие по ней начинает партию —
+              то есть она заодно самая большая и понятная кнопка на экране. */}
+          <SetupBoardPreview
+            orientation={pCol}
+            light={bT.light}
+            dark={bT.dark}
+            border={bT.border}
+            maxPx={isMobileLayout?340:420}
+            label="Начать партию"
+            onStart={()=>{sHotseat(false);sRivalMode(false);newG()}}
+          />
 
           {/* ─── Медиа-панель (YouTube/Twitch) на стартовом экране ───
               Раньше WorkspaceMediaPane рендерился только внутри cc-main-row (в игре),

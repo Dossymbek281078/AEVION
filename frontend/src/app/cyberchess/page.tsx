@@ -74,7 +74,7 @@ import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 import { getTopWithMe, getFullBoardAroundMe, findMyRank, CATEGORY_LABEL, type LbCategory, type LbEntry } from "./leaderboards";
-import { createTierPaymentRequest, pollPaymentRequest, type ChessyTier } from "./billing";
+import { createTierPaymentRequest, pollPaymentRequest, verifyPaymentRequest, type ChessyTier } from "./billing";
 import MultiPanel from "./MultiPanel";
 import { useWorkspace } from "./useWorkspace";
 import WorkspaceToolbar from "./WorkspaceToolbar";
@@ -2686,13 +2686,41 @@ export default function CyberChessPage(){
       // Return from /bank purchase: ?paid=pro|ultimate → activate tier
       const paid=params.get("paid");
       if(paid==="pro"||paid==="ultimate"){
-        sChessy(c=>({...c,owned:{...c.owned,[paid]:true}}));
-        setTimeout(()=>{
-          showToast(`✨ ${paid==="ultimate"?"Ultimate":"Pro"} активирован! Добро пожаловать в ${paid==="ultimate"?"Ultimate":"Pro"}`,"success");
-          sShowShop(true); // show shop so user sees their new tier
-        },600);
+        // ТАРИФ ВЫДАЁТСЯ ТОЛЬКО ПОСЛЕ ПОДТВЕРЖДЕНИЯ ОПЛАТЫ У СЕРВЕРА.
+        //
+        // Раньше здесь стояло `sChessy(... owned[paid]=true)` сразу по параметру
+        // адреса: любой, кто открыл /cyberchess?paid=ultimate, получал Ultimate
+        // бесплатно. Ни подписи, ни токена, ни запроса — клиент заявил, клиент
+        // и выдал. Тест-активацию ради готовности к запуску закрыли за
+        // отладочный флаг, а рядом оставалась дверь, открываемая строкой в
+        // адресе, и знал о ней каждый, кто видел ссылку возврата.
+        //
+        // Механизм проверки был написан (billing.ts знает токен счёта и умеет
+        // спрашивать /api/qpaynet/requests/:token), просто путь возврата им не
+        // пользовался. Теперь пользуется: без токена ничего не выдаётся.
+        const payToken=params.get("token")||params.get("payment_token")||"";
+        const tierName=paid==="ultimate"?"Ultimate":"Pro";
+        void (async()=>{
+          const verdict=payToken?await verifyPaymentRequest(payToken):"unpaid";
+          if(verdict==="paid"){
+            sChessy(c=>({...c,owned:{...c.owned,[paid]:true}}));
+            showToast(`✨ ${tierName} активирован! Добро пожаловать в ${tierName}`,"success");
+            sShowShop(true); // show shop so user sees their new tier
+            return;
+          }
+          // Три исхода, а не два: «не смогли спросить» не равно «не оплачено».
+          // Заплатившему нельзя сказать «оплата не найдена», а неоплатившему
+          // нельзя выдать тариф — поэтому тексты разные.
+          if(verdict==="unknown"){
+            showToast("Не удалось проверить оплату. Тариф включится, как только связь восстановится.","error");
+          }else{
+            showToast("Оплата не найдена. Тариф не активирован.","error");
+          }
+        })();
         // Clean URL param so refresh doesn't re-activate
-        try{const u=new URL(window.location.href);u.searchParams.delete("paid");u.searchParams.delete("amount");window.history.replaceState({},"",u.pathname+u.search);}catch{}
+        // Токен счёта убираем тоже: он уже прочитан выше и в адресной строке
+        // ему делать нечего — оттуда он попадает в историю и в реферер.
+        try{const u=new URL(window.location.href);u.searchParams.delete("paid");u.searchParams.delete("amount");u.searchParams.delete("token");u.searchParams.delete("payment_token");window.history.replaceState({},"",u.pathname+u.search);}catch{}
       }
       const fenParam=params.get("fen");
       if(fenParam){

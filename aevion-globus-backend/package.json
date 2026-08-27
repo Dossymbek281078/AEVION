@@ -63,6 +63,8 @@
     "test": "vitest run && npm run test:qreal-suite",
     "test:qreal-suite": "node ../scripts/qreal-judge.test.mjs && node ../scripts/qreal-characters.test.mjs && node ../scripts/qreal-continuity.test.mjs && node ../scripts/qreal-sync-rubric.mjs --check && node ../scripts/multichat-dissent.test.mjs && node ../scripts/multichat-receipt.test.mjs && node ../scripts/multichat-contrast.test.mjs && node ../scripts/auth-token-key-ratchet.test.mjs && node ../scripts/api-base-ratchet.test.mjs && node ../scripts/next-params-type-check.mjs",
     "test:watch": "vitest",
+    "check:scripts": "tsc --noEmit --project tsconfig.scripts.json",
+    "launch:dry": "ts-node -T scripts/launch-announce-dry.ts",
     "backup": "node scripts/backup.mjs",
     "backup:list": "node scripts/restore.mjs --list",
     "restore": "node scripts/restore.mjs"

@@ -94,6 +94,15 @@ async function run() {
   const bad = await req("POST", "/api/devhub/snippets", { content: "no title" });
   assert("POST /snippets without title → 400", bad.status === 400, String(bad.status));
 
+  console.log("\n10. Cleanup — снять свой сниппет с публичной полки");
+  // Без уборки каждый прогон оставлял на витрине DevHub ещё один
+  // "console.log(hello from smoke test)" — и убрать его было НЕЧЕМ:
+  // ручки удаления не существовало вовсе.
+  const removed = await req("DELETE", `/api/devhub/snippets/${snippetId}`);
+  assert("DELETE /snippets/:id → 200", removed.status === 200, String(removed.status));
+  const gone = await req("GET", `/api/devhub/snippets/${snippetId}`);
+  assert("снятый сниппет больше не отдаётся → 404", gone.status === 404, String(gone.status));
+
   console.log(`\nDevHub Snippet Shelf: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

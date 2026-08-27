@@ -132,6 +132,27 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qventure/a/demo-neurodx", changeFrequency: "monthly", priority: 0.6 },
   // Launch status
   { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
+  // Посадочные запуска. Замер 19.08.2026: на обе НЕ ВЕЛА ни одна ссылка — ни из
+  // карты сайта, ни с какой-либо страницы. Единственные упоминания в коде были в
+  // собственном тесте и в комментарии, то есть страницы собирали адреса, попасть
+  // на которые было нельзя. Модули пока не запущены и цены у них нет, поэтому
+  // приоритет умеренный, а частота — недельная.
+  // Посадочные запуска — все четыре, и вот ЗАЧЕМ, потому что первая версия этого
+  // комментария врала («карта собирается списком, а не обходом»).
+  //
+  // Обход каталогов ниже рекурсивный и берёт КАЖДУЮ page.tsx, поэтому в обычной
+  // сборке страница попадает в карту и без записи здесь. Запись даёт две вещи,
+  // которых обход не даёт:
+  //   1. осознанный приоритет вместо DEFAULT_PRIORITY — шахматы и бюро выходят
+  //      раньше остальных (30.08 и 06.09), им 0.7, а не общий уровень;
+  //   2. запас на случай, когда обход файловой системы вернул ПУСТО (edge-рантайм,
+  //      песочница — см. комментарий у overrideMap). Тогда в карте остаётся ровно
+  //      этот список, и незанесённая посадочная исчезает целиком.
+  // Второе и охраняет sitemapCoversLaunchPages: он читает ЭТОТ файл текстом.
+  { path: "/cyberchess/launch", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/bureau/launch", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/devhub/launch", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/multichat-engine/launch", changeFrequency: "weekly", priority: 0.6 },
   // Constitution module
   { path: "/constitution",             changeFrequency: "daily",   priority: 0.9 },
   { path: "/constitution/leaderboard", changeFrequency: "hourly",  priority: 0.8 },

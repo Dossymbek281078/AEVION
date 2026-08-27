@@ -1,11 +1,21 @@
 import type { Metadata } from "next";
 import paper from "@/styles/aevionPaper.module.css";
-import { probeLive, daysUntil } from "@/lib/probeLive";
+import { probeJson, probeLive } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { LandingView } from "@/components/LandingView";
 
-// Посадочная запуска Multichat — 20 сентября (дата из scripts/launch-readiness.mjs).
+// Посадочная запуска Multichat.
+//
+// ПОЧЕМУ ЗДЕСЬ НЕТ ДАТЫ ОТКРЫТИЯ. Первая версия этой страницы объявляла дату в
+// заголовке, в OG-карточке и обратным отсчётом «через N дн.». Я проверил её
+// происхождение и не нашёл опоры ВНЕ собственной работы: каждое вхождение вело в
+// файлы, которые я же написал в тот день. Единственная подтверждённая дата на
+// платформе — 30 августа у шахмат (ветка launch/2026-08-30 и независимая сводка
+// вкладки CyberChess). Дата запуска — решение основателя, и выдуманная дата на
+// странице, где у человека просят адрес, есть обещание, которого платформа не
+// давала. Поэтому здесь честное «напишем в день запуска», а оно к тому же и есть
+// настоящая причина оставить адрес.
 //
 // ПОЧЕМУ ЗДЕСЬ НЕТ ЧИСЛА «17 МОДЕЛЕЙ». Замер 18.08 на живом проде: реестр
 // провайдеров отвечает 17 записей, но с настроенным ключом из них ЧЕТЫРЕ —
@@ -41,11 +51,11 @@ import { LandingView } from "@/components/LandingView";
 //     вторая была бы неправдой.
 
 export const metadata: Metadata = {
-  title: "AEVION Multichat — запуск 20 сентября",
+  title: "AEVION Multichat — ранний доступ",
   description:
     "Один вопрос — ответы моделей четырёх независимых поставщиков рядом, с картой расхождений и чеком, который проверяется по ссылке.",
   openGraph: {
-    title: "AEVION Multichat — запуск 20 сентября",
+    title: "AEVION Multichat — ранний доступ",
     description:
       "Совет моделей вместо одного ответа: видно, где они расходятся. Ранний доступ по адресу почты.",
     // Контент посадочных русский, а корневой layout объявляет lang="en":
@@ -58,13 +68,28 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Склонение слова «поставщик» после числа. Без него страница написала бы
+ * «4 независимых поставщик» — мелочь, которая сразу читается как машинный текст.
+ */
+function pluralProviders(n: number): string {
+  const last2 = n % 100;
+  const last = n % 10;
+  if (last2 >= 11 && last2 <= 14) return "независимых поставщиков";
+  if (last === 1) return "независимый поставщик";
+  if (last >= 2 && last <= 4) return "независимых поставщика";
+  return "независимых поставщиков";
+}
+
 export default async function MultichatLaunchPage({
   searchParams,
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
-  const [modelsUp, receiptUp, sharedUp] = await Promise.all([
-    probeLive("/api/qcoreai/providers"),
+  const [providers, receiptUp, sharedUp] = await Promise.all([
+    probeJson<{
+      providers?: { id?: string; name?: string; configured?: boolean; free?: boolean }[];
+    }>("/api/qcoreai/providers"),
     probeLive("/api/multichat/receipt/verify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -78,7 +103,19 @@ export default async function MultichatLaunchPage({
     // контуре. Токен намеренно несуществующий — проба ничего не создаёт.
     probeLive("/api/multichat/shared/launch-page-probe", undefined, { aliveOn404: true }),
   ]);
-  const left = daysUntil(2026, 8, 20);
+
+  // Числа и названия поставщиков берутся ИЗ ОТВЕТА, а не пишутся руками.
+  //
+  // Замер 19.08.2026: ручка отдаёт 17 поставщиков, из них `configured: true` ровно
+  // четыре (anthropic, openai, gemini, openrouter), и бесплатных среди них два.
+  // Прежний текст называл те же числа и те же имена — и был точен. Но зашитое
+  // число не может остаться верным само: убери ключ провайдера, и страница
+  // продолжит обещать «четыре независимых поставщика». Ровно этого правила — числа
+  // только из фактического прогона — я и держусь в остальном.
+  const ready = (providers?.providers ?? []).filter((p) => p.configured);
+  const freeReady = ready.filter((p) => p.free);
+  // Совет имеет смысл от двух независимых поставщиков: один — это не совет.
+  const modelsUp = ready.length >= 2;
 
   // Метка канала — та же механика, что на посадочных бюро и шахмат: без неё
   // после запуска не ответить, какой источник привёл людей именно сюда.
@@ -107,9 +144,7 @@ export default async function MultichatLaunchPage({
             Опишите задачу словами — вопрос уходит сразу нескольким моделям, ответы
             встают рядом, и отдельно показано, <b>где они расходятся</b>. Именно
             расхождение чаще всего и есть то место, которое стоит проверить самому.
-            {left > 0
-              ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`} — 20 сентября.`
-              : " Уже открыто."}
+            {" Дату открытия объявим отдельно — оставьте адрес, и письмо придёт в день запуска."}
           </p>
         </header>
 
@@ -131,8 +166,19 @@ export default async function MultichatLaunchPage({
 
           <Step
             n={1}
-            title="Один вопрос — четыре независимых поставщика"
-            note="Anthropic, OpenAI, Gemini и OpenRouter отвечают на один и тот же вопрос. Два из четырёх — на бесплатных моделях, поэтому совет можно собрать, не платя за каждый ответ."
+            title={
+              modelsUp
+                ? `Один вопрос — ${ready.length} ${pluralProviders(ready.length)}`
+                : "Один вопрос — несколько независимых поставщиков"
+            }
+            note={
+              modelsUp
+                ? `${ready.map((p) => p.name ?? p.id).join(", ")} отвечают на один и тот же вопрос.` +
+                  (freeReady.length
+                    ? ` ${freeReady.length} из ${ready.length} — на бесплатных моделях, поэтому совет можно собрать, не платя за каждый ответ.`
+                    : "")
+                : "Сколько поставщиков подключено, страница спросит у боевого сервера при сборке. Сейчас ответ не получен, поэтому числа здесь нет."
+            }
             live={modelsUp}
           />
           <Step
@@ -177,8 +223,15 @@ export default async function MultichatLaunchPage({
             Пока идёт подготовка, открыт сам модуль:{" "}
             <a className={paper.link} href="/multichat-engine">
               посмотреть Multichat
+            </a>{" "}
+            — там же кнопка «показать на примере», она работает без входа. Проверить
+            чужой чек тоже можно без аккаунта:{" "}
+            <a className={paper.link} href="/multichat-engine/verify">
+              страница проверки
             </a>
-            . Отписка — одной ссылкой в каждом письме.
+            . Ссылка нужна по делу: страница выше обещает, что чек проверяется по
+            ссылке, а проверить это было негде — единственный выход со страницы вёл в
+            модуль. Отписка — одной ссылкой в каждом письме.
           </p>
         </footer>
       </div>

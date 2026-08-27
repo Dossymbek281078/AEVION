@@ -174,7 +174,9 @@ function ccAgoHuman(minutes:number):string{
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
 type TC = {name:string;ini:number;inc:number;cat:"Bullet"|"Blitz"|"Rapid"|"Classical"};
-type AL = {name:string;elo:number;depth:number;color:string;rand:number;thinkMs:number};
+// name — машинное имя: уходит в поле aiLevel на сервер и в заголовки PGN, не переводить.
+// ru — то, что читает человек на экране.
+type AL = {name:string;ru:string;elo:number;depth:number;color:string;rand:number;thinkMs:number};
 type Pre = {from:Square;to:Square;pr?:"q"|"r"|"b"|"n"};
 
 const TCS: TC[] = [
@@ -189,15 +191,15 @@ const TCS: TC[] = [
   {name:"15+0",ini:900,inc:0,cat:"Rapid"},{name:"15+1",ini:900,inc:1,cat:"Rapid"},{name:"15+2",ini:900,inc:2,cat:"Rapid"},
 ];
 const ALS: AL[] = [
-  {name:"Beginner",elo:400,depth:1,color:"#94a3b8",rand:200,thinkMs:600},
-  {name:"Casual",elo:800,depth:2,color:"#10b981",rand:80,thinkMs:480},
-  {name:"Club",elo:1200,depth:3,color:"#3b82f6",rand:30,thinkMs:380},
-  {name:"Advanced",elo:1600,depth:4,color:"#a78bfa",rand:12,thinkMs:280},
-  {name:"Expert",elo:2000,depth:5,color:"#f87171",rand:5,thinkMs:180},
-  {name:"Master",elo:2400,depth:6,color:"#fbbf24",rand:2,thinkMs:100},
+  {name:"Beginner",ru:"Новичок",elo:400,depth:1,color:"#94a3b8",rand:200,thinkMs:600},
+  {name:"Casual",ru:"Любитель",elo:800,depth:2,color:"#10b981",rand:80,thinkMs:480},
+  {name:"Club",ru:"Клубный",elo:1200,depth:3,color:"#3b82f6",rand:30,thinkMs:380},
+  {name:"Advanced",ru:"Продвинутый",elo:1600,depth:4,color:"#a78bfa",rand:12,thinkMs:280},
+  {name:"Expert",ru:"Эксперт",elo:2000,depth:5,color:"#f87171",rand:5,thinkMs:180},
+  {name:"Master",ru:"Мастер",elo:2400,depth:6,color:"#fbbf24",rand:2,thinkMs:100},
   // Максимум: полная сила Stockfish 18 — глубокий поиск (depth 20), без рандома.
   // Практически непобедим для человека (~3500). thinkMs 0 — без искусственной задержки.
-  {name:"Stockfish",elo:3500,depth:8,color:"#06b6d4",rand:0,thinkMs:0},
+  {name:"Stockfish",ru:"Stockfish",elo:3500,depth:8,color:"#06b6d4",rand:0,thinkMs:0},
 ];
 // Реальная глубина поиска Stockfish по индексу уровня (useSF=aiI>=3).
 // Master=16, Stockfish(max)=20 — настоящий максимум силы движка.
@@ -3472,7 +3474,7 @@ export default function CyberChessPage(){
             if(doubleActive){
               sChessy(c=>({...c,ach:{...c.ach,chessy_double:0}}));
             }
-            setTimeout(()=>{addChessy(reward,`победа над ${lv.name}${doubleActive?" 💰x2":""}`);bumpDaily("game")},400);
+            setTimeout(()=>{addChessy(reward,`победа над ${lv.ru}${doubleActive?" 💰x2":""}`);bumpDaily("game")},400);
             // Achievements
             const newWinCount=sts.w+1;
             setTimeout(()=>{
@@ -3917,7 +3919,7 @@ export default function CyberChessPage(){
       if(a.mate!==0&&Math.abs(a.mate)<=3)moments.push({ply:i,type:"mate_threat",sev:3});
     }
     const top=moments.sort((a,b)=>b.sev-a.sev).slice(0,3).sort((a,b)=>a.ply-b.ply);
-    const ai=lv.name;
+    const ai=lv.ru;
     for(const m of top){
       const num=Math.floor(m.ply/2)+1;const dot=m.ply%2===0?"":"…";
       if(m.type==="user_brilliant")lines.push(`БЛЕСТЯЩИЙ ход на ${num}-м — ты нашёл жертву или тактику, которую движок не видел сразу!`);
@@ -6326,7 +6328,7 @@ export default function CyberChessPage(){
                     value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
                     onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
-                  <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.name} · {lv.elo}{aiI>=5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
+                  <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.ru} · {lv.elo}{aiI>=5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
                 </div>
                 {!(chessy.owned.master_ai||isPro)&&<button onClick={()=>sShowShop(true)}
                   className="cc-focus-ring"
@@ -7224,7 +7226,7 @@ export default function CyberChessPage(){
             const bMat=capW.reduce((s,c)=>s+pieceVal(c),0);
             const al=ALS[aiI];
             const PRow=({isAI,getSeconds,isActive,captures,advantage}:{isAI:boolean;getSeconds:()=>number;isActive:boolean;captures:string[];advantage:number})=>{
-              const name=isAI?al.name+" AI":"Вы";
+              const name=isAI?al.ru+" AI":"Вы";
               const elo=isAI?al.elo:rat;
               return <div style={{
                 display:"flex",alignItems:"center",justifyContent:"space-between",
@@ -8131,7 +8133,7 @@ export default function CyberChessPage(){
                 // Probability-based AI acceptance: Beginner=100% ... Master=0%
                 const prob=Math.max(0,(5-aiI)/5);
                 if(Math.random()>prob){
-                  showToast(`${ALS[aiI].name} отклонил запрос ↩`,"error");
+                  showToast(`${ALS[aiI].ru} отклонил запрос ↩`,"error");
                   return;
                 }
               }
@@ -8657,7 +8659,7 @@ export default function CyberChessPage(){
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                  <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{useSF?"Stockfish":lv.name}</span>
+                  <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{useSF?"Stockfish":lv.ru}</span>
                   <Badge tone={useSF?"accent":"info"} size="xs">{lv.elo}</Badge>
                   {think&&<Badge tone="gold" size="xs" icon={<Spinner size={10}/>}>думаю</Badge>}
                 </div>
@@ -9461,8 +9463,8 @@ export default function CyberChessPage(){
                 {refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const,animation:"pulse 1.4s ease-in-out infinite"}}>⚡ уточняю d18...</span>}
               </span>
               {hist.length>0&&<div style={{display:"flex",gap:3,alignItems:"center"}}>
-                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.name,black:pCol==="b"?"Вы":lv.name,result:over||"*",event:currentOpening?.name},moveAnnotations);navigator.clipboard.writeText(pgn).then(()=>showToast("PGN скопирован","success")).catch(()=>showToast("Ошибка копирования","error"));}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title="Скопировать PGN в буфер">📋</button>
-                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.name,black:pCol==="b"?"Вы":lv.name,result:over||"*",event:currentOpening?.name},moveAnnotations);const b=new Blob([pgn],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`cyberchess_${new Date().toISOString().slice(0,10)}.pgn`;a.click();URL.revokeObjectURL(a.href);showToast("PGN скачан","success");}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title="Скачать PGN">⬇</button>
+                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);navigator.clipboard.writeText(pgn).then(()=>showToast("PGN скопирован","success")).catch(()=>showToast("Ошибка копирования","error"));}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title="Скопировать PGN в буфер">📋</button>
+                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);const b=new Blob([pgn],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`cyberchess_${new Date().toISOString().slice(0,10)}.pgn`;a.click();URL.revokeObjectURL(a.href);showToast("PGN скачан","success");}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title="Скачать PGN">⬇</button>
                 <span style={{width:1,height:14,background:T.border,flexShrink:0}}/>
                 <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="В начало">⏮</button>
                 <button onClick={()=>{sReplaying(false);const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Назад">◀</button>
@@ -14848,7 +14850,7 @@ ${question.trim()}`;
                   color:active?al.color:"#878481",
                   cursor:"pointer",fontSize:12,fontWeight:700,
                   transition:"border-color 0.12s,background 0.12s,color 0.12s",
-                }}>{al.name}</button>;
+                }}>{al.ru}</button>;
               })}
             </div>
           </div>
@@ -14858,7 +14860,7 @@ ${question.trim()}`;
             background:"#759900",border:"none",color:"#fff",
             fontSize:16,fontWeight:900,cursor:"pointer",
             boxShadow:"0 4px 16px rgba(117,153,0,0.35)",
-          }}>▶ Играть · {useCustom?`${customMin}+${customInc}`:(TCS[tcI]?.name||"?")} · {ALS[aiI]?.name}</button>
+          }}>▶ Играть · {useCustom?`${customMin}+${customInc}`:(TCS[tcI]?.name||"?")} · {ALS[aiI]?.ru}</button>
           <button onClick={()=>{sShowQuickSetupModal(false);sTab("play");sSetup(true);}} style={{
             display:"block",margin:"12px auto 0",background:"none",
             border:"none",color:"#5d5b59",cursor:"pointer",fontSize:13,

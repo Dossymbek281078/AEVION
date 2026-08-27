@@ -10,7 +10,7 @@ import { productById, channelFrom, withChannel } from "@/lib/products";
 // ЗАЧЕМ. Русскому зрителю мы отдаём протокол долголетия даром на /longevity, и
 // это работающая часть воронки. Английского аналога не было: адрес отдавал 404
 // (замер 28.08.2026), то есть англоязычному трафику нечего было предложить
-// бесплатно, а самый дешёвый вход стоил $9.
+// бесплатно, а самый дешёвый вход был платным.
 //
 // ОТКУДА СОДЕРЖАНИЕ. Не переведено с русской страницы и не сочинено: всё взято
 // из готового английского издания протокола
@@ -354,7 +354,14 @@ export default async function EnLongevityPage({
             that happens — nothing else.
           </p>
           <div style={{ marginTop: 12 }}>
-            <WaitlistCapture source="en-longevity" />
+            <WaitlistCapture
+              source="en-longevity"
+              lang="en"
+              title="Told when the grading changes"
+              description="This breakdown is revised when new research lands: some items move up the grading, some move down."
+              promise="Only when the grading or the panel changes. Unsubscribe with a single link."
+              buttonLabel="Keep me posted"
+            />
           </div>
         </section>
 

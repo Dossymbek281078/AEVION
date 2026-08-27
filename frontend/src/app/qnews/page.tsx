@@ -537,9 +537,19 @@ export default function QNewsPage() {
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 24 }}>
+        {/*
+          Было grid "1fr 300px": боковая колонка жёстко 300px и не складывалась,
+          поэтому на телефоне страница разъезжалась вбок (документ 566 при
+          экране 375). Сеткой это не чинится без media-запроса, а страница
+          написана инлайновыми стилями: auto-fit уравнял бы колонки, и на
+          десктопе боковая стала бы вдвое шире задуманного.
+          Flex с переносом сохраняет пропорции точь-в-точь и складывается сам.
+          Приём взят у соседней вкладки — она решила тот же случай на /qsocial
+          (коммит a06225310); второго способа делать одно и то же не заводим.
+        */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
           {/* Main column */}
-          <div>
+          <div style={{ flex: "1 1 320px", minWidth: 0 }}>
             {/* Search + bookmarks filter */}
             <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
               <input
@@ -613,7 +623,7 @@ export default function QNewsPage() {
           </div>
 
           {/* Sidebar */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div style={{ flex: "0 1 300px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
             {/* AI Digest */}
             <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 18 }}>
               <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>

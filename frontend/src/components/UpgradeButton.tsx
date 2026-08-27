@@ -59,7 +59,23 @@ export function UpgradeButton({
   if (variant === "banner") {
     return (
       <div className={`w-full ${className}`}>
-        <div className="bg-gradient-to-r from-blue-600/20 to-violet-600/20 border border-blue-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
+        {/* flex-wrap + max-w-full на кнопке: без них баннер уводил страницу вбок на
+              телефоне. Кнопке передают длинную подпись ("QStore Pro — безлимитные
+              листинги, 14 дней бесплатно"), а shrink-0 запрещал ей ужиматься, и
+              она вырастала до 428px при экране 375. Замер живых страниц 27.08.2026,
+              ширина документа при экране 375 до -> после этой правки:
+              qstore 537->375, qpersona 556->375, psyapp-deps 478->375, healthai 475->375,
+              lifebox 572->378, qlearn 451->440. У последних двух остаток НЕ от баннера:
+              там есть второй, независимый виновник (lifebox — блок в header шириной 308,
+              qlearn — кнопка шириной 112), и чинится он отдельно.
+              shrink-0 оставлен намеренно: на широком экране кнопка не должна
+              сжиматься рядом с текстом, а max-width:100% там ни на что не влияет.
+              sm:flex-nowrap — не украшение, а следствие замера. С одним только
+              flex-wrap кнопка уходила на свою строку и НА ШИРОКОМ экране тоже:
+              баннер /lifebox рос с 88px до 124px при 1440, 1024 и 768, /qstore —
+              при 768. Перенос нужен ровно там, где не помещается, поэтому выше
+              640px поведение остаётся прежним, побайтно. */}
+        <div className="bg-gradient-to-r from-blue-600/20 to-violet-600/20 border border-blue-500/30 rounded-xl p-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-4">
           <div>
             {/* This button opens the Gumroad product `xpxzam`, NOT a tier checkout,
                 so the price must come from the product catalogue — not from the tier
@@ -74,7 +90,7 @@ export function UpgradeButton({
           <button
             onClick={handleClick}
             disabled={loading}
-            className="shrink-0 px-5 py-2 bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+            className="shrink-0 max-w-full break-words px-5 py-2 bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
           >
             {text}
           </button>

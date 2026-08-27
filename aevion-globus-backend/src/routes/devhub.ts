@@ -4435,6 +4435,22 @@ devhubRouter.get("/projects/:id/preview-proxy", async (req, res) => {
 // others (matches the existing "report per-step errors, don't abort" contract).
 type WorkflowStepResult = { step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string };
 
+/**
+ * Runs one step of an agent workflow.
+ *
+ * Note on saving: these steps call dbUpsertFile directly and let it throw.
+ * They used to wrap it in `try { … } catch { memFiles.set(f.id, f) }`, which
+ * was wrong twice over. dbUpsertFile already handles "no database configured"
+ * itself, so that catch only ever fired on a genuine database failure — and it
+ * then reported the step as ok with a savedAs path, telling someone a file
+ * exists when it does not survive a restart. It also wrote to memFiles keyed by
+ * f.id, which dbUpsertFile's own comment calls out as the way to leave a stale
+ * duplicate that later reads return instead of the new content.
+ *
+ * A throw here becomes `{ ok: false, error }` for that step and nothing else,
+ * so one failed save no longer passes for a success and no longer takes the
+ * rest of the run down with it.
+ */
 async function executeWorkflowStep(
   project: DevHubProject,
   userId: string,
@@ -4488,7 +4504,7 @@ async function executeWorkflowStep(
         id: crypto.randomUUID(), projectId: project.id, path: savedAs,
         content: url, language: detectLanguage(savedAs), updatedAt: now(),
       };
-      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      await dbUpsertFile(f);
       return { step: i, type, ok: true, output: { url }, savedAs };
     }
     if (type === "tts") {
@@ -4516,7 +4532,7 @@ async function executeWorkflowStep(
           id: crypto.randomUUID(), projectId: project.id, path: savedAs,
           content: cdnUrl, language: "plaintext", updatedAt: now(),
         };
-        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        await dbUpsertFile(f);
         return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
       }
       const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
@@ -4524,7 +4540,7 @@ async function executeWorkflowStep(
         id: crypto.randomUUID(), projectId: project.id, path: savedAs,
         content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
       };
-      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      await dbUpsertFile(f);
       return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
     }
     if (type === "sfx") {
@@ -4550,7 +4566,7 @@ async function executeWorkflowStep(
           id: crypto.randomUUID(), projectId: project.id, path: savedAs,
           content: cdnUrl, language: "plaintext", updatedAt: now(),
         };
-        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        await dbUpsertFile(f);
         return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
       }
       const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
@@ -4558,7 +4574,7 @@ async function executeWorkflowStep(
         id: crypto.randomUUID(), projectId: project.id, path: savedAs,
         content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
       };
-      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      await dbUpsertFile(f);
       return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
     }
     if (type === "music") {
@@ -4586,7 +4602,7 @@ async function executeWorkflowStep(
           id: crypto.randomUUID(), projectId: project.id, path: savedAs,
           content: cdnUrl, language: "plaintext", updatedAt: now(),
         };
-        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        await dbUpsertFile(f);
         return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
       }
       const savedAs = step.saveAs ? String(step.saveAs) : `public/music-${i}.mp3.b64`;
@@ -4594,7 +4610,7 @@ async function executeWorkflowStep(
         id: crypto.randomUUID(), projectId: project.id, path: savedAs,
         content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
       };
-      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      await dbUpsertFile(f);
       return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
     }
     return { step: i, type, ok: false, error: `unknown step type: ${type}` };

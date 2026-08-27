@@ -26,8 +26,16 @@ const ZHARGON =
 const ZHARGON_RU =
   /(^|[^а-яё])(бэкенд|бекенд|фронтенд|эндпоинт|деплой|пайплайн|фолбэк|поллинг|кэш|стейт|билд)(а|у|е|ом|ов|ам|ами|ах)?([^а-яё]|$)/i;
 
+// Технические следы: адрес серверной ручки, имя файла исходника, «Powered by».
+// 28.08.2026 на «Турнирном хабе» посетителю показывали «Powered by
+// buildBracket(players, results) из tournament.ts» и «Leaderboard: GET
+// /api/cyberchess-tournaments/leaderboard (live, с фоллбэком на демо)» —
+// три таких места на одной странице. Ни одно не ловилось: в списке были
+// отдельные слова, а не эти формы.
+const ТЕХСЛЕД = /(Powered by|GET \/api\/|POST \/api\/|\/api\/[a-z-]+\/|[a-zA-Z][a-zA-Z0-9]*\.tsx?)/;
+
 function zhargon(t: string): boolean {
-  return ZHARGON.test(t) || ZHARGON_RU.test(t);
+  return ZHARGON.test(t) || ZHARGON_RU.test(t) || ТЕХСЛЕД.test(t);
 }
 
 // Видимый текст берём между тегами и ЧЕРЕЗ ПЕРЕНОС СТРОКИ. Первая версия

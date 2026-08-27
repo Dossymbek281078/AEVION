@@ -108,8 +108,17 @@ test.describe("DevHub — writes that must not lose a file", () => {
     await expect(insert).toBeVisible({ timeout: 15_000 });
     await insert.click();
 
+    // Polled, not read straight after the click: the insert sends the write and
+    // returns, so asserting immediately is a race against the request. It won
+    // on a quiet machine and lost inside the full suite, which reads as a
+    // product regression when it is only the test being early.
+    await expect
+      .poll(() => puts.filter((p) => p.path === "src/App.jsx").length, {
+        message: "the insert never wrote the open file",
+      })
+      .toBeGreaterThan(0);
+
     const written = puts.filter((p) => p.path === "src/App.jsx");
-    expect(written.length).toBeGreaterThan(0);
     const last = written[written.length - 1].content;
     // The regression: this used to be exactly the URL and nothing else.
     expect(last).toContain("export default function App()");

@@ -24,6 +24,10 @@ const blocks = splitTranslations(source);
  * Any split that reads the source text alone silently drops most of the
  * dictionary — including every key French has. The splitter therefore has to
  * be fed the runtime object, not the file, and that is the next step.
+ *
+ * It also found that those eight languages were being assigned over rather than
+ * merged into, which silently dropped 320 finished translations; that is fixed,
+ * and guarded by i18n-language-merge.test.ts.
  */
 
 /** The generated modules are plain object literals; read them back as data. */
@@ -57,18 +61,6 @@ describe("splitting i18n-data by language", () => {
           .toBeGreaterThan(1);
       }
     }
-  });
-
-  it("shows that the eight thin languages lose their literal keys at runtime", () => {
-    // Not a split defect — a property of the data worth knowing before anyone
-    // wires this up: the section below the literal replaces those objects
-    // wholesale instead of merging, so keys written in the German literal never
-    // reach a German-speaking visitor at all.
-    const literalDe = parse(blocks.de);
-    const runtimeDe = translations.de as Record<string, string>;
-    const dropped = Object.keys(literalDe).filter((k) => runtimeDe[k] === undefined);
-    expect(dropped.length, "German literal keys that never reach the page").toBeGreaterThan(0);
-    expect(Object.keys(runtimeDe).length, "runtime German stays tiny").toBeLessThan(200);
   });
 
   it("keeps the strings that break naive splitting", () => {

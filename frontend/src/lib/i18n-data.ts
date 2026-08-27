@@ -23220,7 +23220,12 @@ Object.assign(translations.kk, MODULE_PAGE_EXTRA_KK);
 
 // Новые языки — базовые переводы. Fallback на EN через t() для непереведённых ключей.
 // Постепенно расширяется через DeepL.
-Object.assign(translations, {
+// Merged per language, not assigned over it. Assigning `{ de: {...} }` onto
+// `translations` replaced the whole German object, so the 52 keys written
+// above (lines 45-200) were dropped before anyone could read them — measured
+// 28.07.2026: 40 keys per language, 320 finished translations that never
+// reached a page. `_ext` below already merges the right way.
+const NEW_LANG_BASE: Record<string, Record<string, string>> = {
   de: {
     "nav.demo": "Ökosystem-Demo",
     "nav.auth": "Anmeldung",
@@ -23333,7 +23338,12 @@ Object.assign(translations, {
     "home.title": "Dijital varlıklar ve fikri mülkiyet için güven altyapısı",
     "home.cta.demo": "Tam demo →",
   },
-} as Record<string, Record<string, string>>);
+};
+for (const [lang, keys] of Object.entries(NEW_LANG_BASE)) {
+  const tbl = translations as unknown as Record<string, Record<string, string>>;
+  if (tbl[lang]) Object.assign(tbl[lang], keys);
+  else tbl[lang] = { ...keys };
+}
 
 // Extended translations — stats, auth, qright, pipeline, bank, chess, footer, help, shield
 // Added 2026-05-19 to give full UI coverage for all 8 non-RU/EN languages.

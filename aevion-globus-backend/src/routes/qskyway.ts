@@ -1140,6 +1140,30 @@ async function bookSlot(
 // ── routes ────────────────────────────────────────────────────────────────────
 qskywayRouter.get("/health", async (_req: Request, res: Response) => {
   const slotsBooked = await countSlots();
+  // `slotsBooked` — ВСЕ записи, включая брони нашего же смока. 27.08.2026 на
+  // проде их было 39 из 39: смок бронирует 5–6 слотов каждый прогон и за собой
+  // не убирает. То есть здоровье публиковало 39 как спрос, тогда как настоящих
+  // бронирований НОЛЬ — и модуль это знал: ручка /slots с 10.08 отдаёт рядом
+  // честный `liveCount`. Два наших собственных ответа спорили друг с другом, а
+  // число из здоровья короче и потому убедительнее.
+  //
+  // Правило «это смок» живёт в одном месте (lib/slotOrigin), поэтому считаем
+  // живые НЕ отдельным запросом в базу, а тем же признаком по загруженному
+  // списку: второй способ решать тот же вопрос сам стал бы источником
+  // расхождения.
+  //
+  // listSlots ограничен 500 строками, поэтому живое число может быть посчитано
+  // по части записей. Молчать об этом нельзя — говорим прямо в ответе.
+  let slotsLive: number | null = null;
+  let slotsLiveBasis: "all" | "sample-500" | "store-unavailable" = "all";
+  try {
+    const listed = await listSlots();
+    slotsLive = countLiveSlots(listed);
+    if (listed.length < slotsBooked) slotsLiveBasis = "sample-500";
+  } catch {
+    // Нечитаемое хранилище — это НЕ «живых ноль». Отдаём null и говорим почему.
+    slotsLiveBasis = "store-unavailable";
+  }
   res.json({
     status: "ok",
     module: "qskyway",
@@ -1166,6 +1190,9 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
     airspace: Object.fromEntries(Object.keys(CITIES).map((id) => [id, airspaceBlock(id, CITIES[id])])),
     slotsStore: slotsDbAvailable ? "postgres" : "memory",
     slotsBooked,
+    /** Брони без наших же тестовых. null означает «спросить не удалось», а не ноль. */
+    slotsBookedLive: slotsLive,
+    slotsLiveBasis,
     wind: metarStatus(),
     disclaimer: DISCLAIMER,
   });

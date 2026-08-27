@@ -189,4 +189,24 @@ test.describe("DevHub — writes that must not lose a file", () => {
     await expect(page.getByText(/could not be dropped/)).toBeVisible({ timeout: 10_000 });
     await expect(card).toBeVisible();
   });
+
+  test("a refused save offers the work back as a download", async ({ page }) => {
+    await mockBackend(page, { putStatus: 404 });
+    await page.goto(`/devhub/${PROJECT_ID}`);
+
+    await page.getByRole("button", { name: "Media", exact: true }).click();
+    await page.getByRole("button", { name: "DALL-E", exact: true }).click();
+    await page.getByPlaceholder(/serene mountain landscape/i).fill("a cat");
+    await page.getByRole("button", { name: "Generate Image" }).click();
+    await page.getByRole("button", { name: "Insert into file" }).click({ timeout: 15_000 });
+    await expect(page.getByText(/НЕ сохранён/)).toBeVisible({ timeout: 10_000 });
+
+    // At this point the text exists only in this tab. It has to be able to
+    // leave it.
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: /Скачать копию/ }).click(),
+    ]);
+    expect(download.suggestedFilename()).toBe("App.jsx");
+  });
 });

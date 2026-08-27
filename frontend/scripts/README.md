@@ -1,3 +1,30 @@
+# frontend scripts
+
+## `page-weight.mjs`
+
+Prints how much JavaScript a page must download before it can answer a tap:
+the `<script src>` tags in the HTML the server actually sends, fetched and
+summed. Lazy chunks are excluded on purpose — they arrive after the first
+screen.
+
+```sh
+npm run build && npx next start -p 3187 &
+node scripts/page-weight.mjs http://127.0.0.1:3187 / /devhub /compare
+```
+
+Use it, not a remembered number, whenever page weight is the argument. On
+10.08.2026 it retired a claim that the two bundlers differed 5.5× on the shelf:
+that comparison had put webpack's blocking set against Turbopack's entire
+download. Measured alike they sit within a few per cent — Turbopack 2494 KB
+blocking on `/devhub`, webpack 2693 KB. `e2e/page-weight.spec.ts` keeps those
+numbers under a budget in the gate.
+
+## `build-webpack.mjs`
+
+The same app built with webpack instead of Turbopack. Diagnostic only —
+production ships Turbopack. Its use is that webpack type-checks route entries
+and Turbopack does not.
+
 # CyberChess scripts
 
 ## `import-lichess-puzzles.mjs`

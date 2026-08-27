@@ -14,6 +14,7 @@
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install --with-deps chromium",
     "analyze": "next experimental-analyze",
+    "_comment_build_webpack": "Диагностическая сборка, НЕ продовая: webpack проверяет типы параметров маршрутов, которые Turbopack не смотрит (так нашлись 8 сломанных страниц 28.07.2026). По весу страниц разницы между сборщиками почти нет — замер 10.08.2026 в scripts/page-weight.mjs.",
     "build:webpack": "node scripts/build-webpack.mjs"
   },
   "dependencies": {

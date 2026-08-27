@@ -2,8 +2,12 @@
 // Тот же класс, что мёртвый ключ входа: отказа нет, поведение молча другое.
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = "C:/Users/user/aevion-money";
+// Корень — от самого скрипта, а не строкой. 27.08.2026 здесь стоял
+// "C:/Users/user/aevion-money" — чужой worktree, и проверка из любого каталога
+// отвечала про ТОТ репозиторий. Отказа при этом нет, вывод правдоподобен.
+const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const CODE_ROOTS = ["aevion-globus-backend/src", "frontend/src", "scripts"];
 const DOC_FILES = [
   ".env.example",

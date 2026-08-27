@@ -292,10 +292,27 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         return res.json({ ok: true, action: "app_activated", appSlug, email });
       }
       if (DEACTIVATE_EVENTS.has(event)) {
-        await upsertAppSubscription(email, appSlug, "cancelled", lsSubId);
-        // Без этого отмена подписки за $149 не забирала доступ: строка
-        // помечалась cancelled, а тариф DevHub оставался "pro" навсегда.
+        // ПОРЯДОК ЗДЕСЬ ЗНАЧИМ, и он обратный порядку активации.
+        //
+        // Записей две: строка прав (AppSubscription) и тариф, который РЕАЛЬНО
+        // открывает доступ (DevHubTier/DevHubEmailTier — строку прав пока
+        // никто не читает). Между ними возможен сбой, и тогда важно, в какую
+        // сторону мы промахнёмся.
+        //
+        // Было: сперва «отменено» в правах, потом снятие тарифа. Упади второе
+        // — права говорят «отменено», а доступ ОСТАЁТСЯ. Магазин повторит
+        // доставку (ниже 500 и освобождение ключа дедупликации), но если
+        // повторы кончатся, платный доступ останется навсегда после отмены.
+        //
+        // Стало: сперва снимаем тариф. Упади вторая запись — доступа уже нет,
+        // а строка прав всего лишь отстала, и её поправит повтор. Отказ
+        // направлен в безопасную сторону.
+        //
+        // На активации порядок остаётся прежним намеренно: там безопасная
+        // сторона другая — человек заплатил, и открыть доступ раньше, чем
+        // дописать учёт, для него лучше.
         if (appSlug === "devhub") await upgradeDevHubByEmail(email, "free");
+        await upsertAppSubscription(email, appSlug, "cancelled", lsSubId);
         console.log(`[ls/webhook] ${event} → app_sub cancelled: ${appSlug} for ${email}`);
         return res.json({ ok: true, action: "app_cancelled", appSlug, email });
       }

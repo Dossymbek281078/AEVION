@@ -257,7 +257,7 @@ export default function MusicPlayer({ open, onClose }: Props) {
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>🎵 Музыкальный плеер</h2>
-          <button onClick={onClose} aria-label="Close" style={{ width: 32, height: 32, border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: "pointer", fontSize: 16 }}>✕</button>
+          <button onClick={onClose} aria-label="Закрыть" style={{ width: 32, height: 32, border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: "pointer", fontSize: 16 }}>✕</button>
         </div>
 
         {/* Player controls */}
@@ -266,9 +266,9 @@ export default function MusicPlayer({ open, onClose }: Props) {
             {currentIdx !== null && tracks[currentIdx] ? `▶ ${tracks[currentIdx].name}` : "Ничего не играет"}
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-            <button onClick={prevTrack} disabled={tracks.length === 0} style={{ padding: "6px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: tracks.length ? "pointer" : "not-allowed", fontWeight: 700 }}>⏮</button>
+            <button aria-label="Предыдущий трек" onClick={prevTrack} disabled={tracks.length === 0} style={{ padding: "6px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: tracks.length ? "pointer" : "not-allowed", fontWeight: 700 }}>⏮</button>
             <button onClick={togglePlay} disabled={tracks.length === 0} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: "#059669", color: "#fff", cursor: tracks.length ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 14 }}>{playing ? "⏸ Пауза" : "▶ Играть"}</button>
-            <button onClick={nextTrack} disabled={tracks.length === 0} style={{ padding: "6px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: tracks.length ? "pointer" : "not-allowed", fontWeight: 700 }}>⏭</button>
+            <button aria-label="Следующий трек" onClick={nextTrack} disabled={tracks.length === 0} style={{ padding: "6px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", cursor: tracks.length ? "pointer" : "not-allowed", fontWeight: 700 }}>⏭</button>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 12, color: "#64748b" }}>🔊</span>
@@ -294,7 +294,7 @@ export default function MusicPlayer({ open, onClose }: Props) {
 
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 900, color: "#64748b", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>🔗 Добавить URL</div>
-          <input
+          <input aria-label="Имя трека"
             type="text"
             placeholder="Имя трека (опционально)"
             value={urlName}
@@ -302,7 +302,7 @@ export default function MusicPlayer({ open, onClose }: Props) {
             style={{ width: "100%", padding: "8px 10px", border: "1px solid #cbd5e1", borderRadius: 8, marginBottom: 6, fontSize: 13 }}
           />
           <div style={{ display: "flex", gap: 6 }}>
-            <input
+            <input aria-label="Адрес трека"
               type="text"
               placeholder="https://example.com/track.mp3"
               value={urlInput}

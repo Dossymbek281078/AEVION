@@ -200,7 +200,7 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
       {/* Input bar */}
       {showInputBar && (
         <div style={{ padding: "3px 5px", background: "#0b1220", borderBottom: "1px solid #1e293b", display: "flex", gap: 3 }}>
-          <input
+          <input aria-label="Адрес источника"
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && draft.trim()) apply(draft.trim()); }}
@@ -225,7 +225,7 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
       {/* Body */}
       <div style={{ flex: 1, position: "relative", background: "#000", minHeight: 0 }}>
         {p.tab === "notes" ? (
-          <textarea
+          <textarea aria-label="Заметки к панели"
             value={p.notes}
             onChange={e => onUpdate({ ...p, notes: e.target.value })}
             onClick={(e) => e.stopPropagation()}

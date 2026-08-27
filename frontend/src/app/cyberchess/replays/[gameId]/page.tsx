@@ -406,7 +406,7 @@ export default function ReplayViewerPage() {
               <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8 }}>
                 <button onClick={() => setCurrentPly(0)} className="planet-btn" title="К началу (Home)">◀◀</button>
                 <button onClick={() => setCurrentPly((p) => Math.max(0, p - 1))} className="planet-btn" title="Назад (←)">◀</button>
-                <button onClick={() => setIsPlaying((x) => !x)} className="planet-btn active" title="Play / Pause (Space)">
+                <button onClick={() => setIsPlaying((x) => !x)} className="planet-btn active" title="Играть / пауза (пробел)">
                   {isPlaying ? "⏸ Пауза" : "▶ Играть"}
                 </button>
                 <button onClick={() => setCurrentPly((p) => Math.min(maxPly, p + 1))} className="planet-btn" title="Вперёд (→)">▶</button>

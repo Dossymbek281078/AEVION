@@ -288,7 +288,7 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
               </div>
             </div>
           </div>
-          <button onClick={onClose} style={{
+          <button aria-label="Закрыть" onClick={onClose} style={{
             background: "rgba(255,255,255,0.18)", border: "none", color: "#fff",
             borderRadius: 6, padding: "5px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer",
           }}>✕</button>
@@ -362,7 +362,7 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
             <span style={{ fontSize: 13 }}>🧠</span>
             {!dq?.answered ? <>
               <span style={{ fontSize: 11, fontWeight: 900, color: "#92400e", flex: 1 }}>Вопрос дня: {dqEntry.title} — лучший ход?</span>
-              {dqOpen ? <><input value={dqInput} onChange={e => sDqInput(e.target.value)} placeholder="SAN ход" style={{ width: 90, padding: "3px 6px", borderRadius: 5, border: "1px solid #fcd34d", fontSize: 11 }}
+              {dqOpen ? <><input aria-label="Ответ на вопрос" value={dqInput} onChange={e => sDqInput(e.target.value)} placeholder="SAN ход" style={{ width: 90, padding: "3px 6px", borderRadius: 5, border: "1px solid #fcd34d", fontSize: 11 }}
                 onKeyDown={e => { if (e.key !== "Enter" || !dqEntry.bestMove) return; const ok = dqInput.trim().toLowerCase() === dqEntry.bestMove.toLowerCase(); const u: DQState = { ...dq!, answered: true, correct: ok }; sDq(u); try { localStorage.setItem(DQ_KEY, JSON.stringify(u)); } catch {} sDqOpen(false); }} />
                 <button onClick={() => { if (!dqEntry.bestMove) return; const ok = dqInput.trim().toLowerCase() === dqEntry.bestMove.toLowerCase(); const u: DQState = { ...dq!, answered: true, correct: ok }; sDq(u); try { localStorage.setItem(DQ_KEY, JSON.stringify(u)); } catch {} sDqOpen(false); }} style={{ padding: "3px 8px", borderRadius: 5, border: "none", background: "#f59e0b", color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>✓</button></>
               : <button onClick={() => sDqOpen(true)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #fcd34d", background: "#fffbeb", color: "#92400e", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>ответить</button>}

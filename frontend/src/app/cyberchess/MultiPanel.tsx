@@ -129,7 +129,7 @@ export default function MultiPanel({ open, onClose }: Props) {
         <span style={{ fontSize: 16, fontWeight: 900, color: "#fff", letterSpacing: 0.4 }}>📺 Несколько экранов</span>
         <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>{panes.length}/4</span>
         <div style={{ flex: 1 }} />
-        <input
+        <input aria-label="Адрес трансляции"
           value={draft}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") addPane(draft); }}

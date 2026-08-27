@@ -400,7 +400,11 @@ export default function TournamentsHubPage() {
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+          // min(340px, 100%) вместо жёстких 340: на экране уже 340 колонка
+          // перестаёт требовать невозможного и сжимается до ширины экрана.
+          // Замер 28.08.2026 на ширине 320: карточки были 340 при окне 305,
+          // и страница уезжала вбок на 52 пикселя. На 375 этого не видно.
+          gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))",
           gap: 16,
         }}
       >
@@ -556,9 +560,15 @@ function TournamentCard({ t }: { t: Tournament }) {
         animation: isLive ? "cc-hub-live-glow 2.2s ease-in-out infinite" : undefined,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: 17, color: T.text }}>{t.title}</h3>
+      {/* minWidth:0 у левого блока и flexShrink:0 у метки — не косметика.
+          Без первого блок с названием не может стать уже своего текста, и на
+          узком телефоне карточка вылезает за экран, утаскивая за собой всю
+          страницу. Замер 28.08.2026 на ширине 320: страница уезжала вбок на
+          52 пикселя, виновником сторож назвал метку «Завершён».
+          На 375 этого не видно — поломка живёт только на узких экранах. */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontSize: 17, color: T.text, overflowWrap: "anywhere" }}>{t.title}</h3>
           <div style={{ marginTop: 4, fontSize: 12, color: T.dim }}>{человеческаяДата(t.startsAt)}</div>
         </div>
         <span
@@ -571,6 +581,8 @@ function TournamentCard({ t }: { t: Tournament }) {
             display: "flex",
             alignItems: "center",
             gap: 6,
+            flexShrink: 0,
+            whiteSpace: "nowrap",
           }}
         >
           {isLive && (

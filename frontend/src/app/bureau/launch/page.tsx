@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
+import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { LandingView } from "@/components/LandingView";
@@ -57,13 +58,6 @@ async function probe(path: string): Promise<boolean> {
   }
 }
 
-function daysUntilLaunch(): number {
-  const launch = Date.UTC(2026, 8, 6); // 6 сентября 2026
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return Math.round((launch - today) / 86_400_000);
-}
-
 export default async function BureauLaunchPage({
   searchParams,
 }: {
@@ -74,7 +68,7 @@ export default async function BureauLaunchPage({
     probe("/api/qsign/v2/health"),
     probe("/api/bureau/health"),
   ]);
-  const left = daysUntilLaunch();
+  const left = daysUntilLaunch(Date.UTC(2026, 8, 6)); // 6 сентября 2026
 
   // Метка канала — та же механика, что на посадочной шахмат: без неё после
   // запуска не ответить, какой источник привёл людей именно в бюро.

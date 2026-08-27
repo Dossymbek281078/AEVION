@@ -57,20 +57,50 @@ function langScripts(): { cookie: string; content: string } {
   return { cookie: cookie!, content: content! };
 }
 
-const RU_PAGE =
+const RU_TEXT =
   "Шахматы с ИИ-коучем. Разбор партии, задачи дня, турниры. " +
   "Играйте бесплатно и получайте объяснение каждого хода на понятном языке. " +
   "Рейтинг, история партий и подсказки тренера AEVION CyberChess.";
-const EN_PAGE =
+const EN_TEXT =
   "AEVION raises a returnable advance to finish the platform. " +
   "Forty product nodes, one trust graph, bottom-up modelled ARR across three flagships.";
 
-function render(text: string) {
+/**
+ * Payload, который Next.js кладёт в <script> на каждой странице.
+ *
+ * Он здесь не для правдоподобия. Первая версия скрипта читала
+ * `document.body.textContent`, а тот включает текст ВНУТРИ script — и на проде
+ * порог не проходил НИ НА ОДНОЙ странице: у /cyberchess выходило кир 235 при
+ * лат 9507. Прежний тест этого не видел, потому что клал чистый текст прямо в
+ * textContent, то есть проверял форму входа, которой в жизни не бывает.
+ */
+const NEXT_PAYLOAD =
+  'self.__next_f.push([1,"' +
+  ("routerState modules chunk static prefetch segment layout template loading error " +
+    "notFound forbidden unauthorized parallelRoutes buildId assetPrefix nextExport ").repeat(40) +
+  '"])';
+
+/** Разметка того же вида, что уезжает в браузер: видимый текст + payload. */
+function render(visible: string, opts: { clientRendered?: boolean } = {}) {
   document.documentElement.removeAttribute("data-lang-src");
   document.documentElement.lang = "en";
-  document.body.textContent = text;
+  document.body.innerHTML = "";
+  const holder = document.createElement("div");
+  // Страница, которая рисуется на клиенте, в момент разбора тела почти пуста —
+  // видимый текст появляется позже. Замер: у /cyberchess было 16 знаков.
+  holder.textContent = opts.clientRendered ? "Загрузка" : visible;
+  document.body.appendChild(holder);
+  const script = document.createElement("script");
+  // Тип нужен, чтобы jsdom не ПОПЫТАЛСЯ выполнить payload как код. Для самой
+  // проверки это ничего не меняет: определитель смотрит на имя узла (SCRIPT),
+  // а не на его тип, и в браузере пропустит и обычный <script>.
+  script.type = "application/json";
+  script.textContent = NEXT_PAYLOAD;
+  document.body.appendChild(script);
+  return holder;
 }
 
+/** Выполняет ТУ САМУЮ строку, которая уезжает в разметку. */
 function runContentScript() {
   const { content } = langScripts();
   // eslint-disable-next-line no-new-func
@@ -83,13 +113,37 @@ describe("объявленный язык совпадает с содержим
   });
 
   test("русская страница объявляется как ru", () => {
-    render(RU_PAGE);
+    render(RU_TEXT);
     runContentScript();
     expect(document.documentElement.lang).toBe("ru");
   });
 
+  test("payload Next.js в <script> не считается за латиницу", () => {
+    // Отрицательный контроль к самому дефекту: на проде payload перевешивал
+    // видимый текст в сорок раз, и скрипт молчал на всех страницах.
+    const holder = render(RU_TEXT);
+    const payloadLen = (document.body.textContent || "").length;
+    expect(payloadLen, "payload не попал в разметку — контроль недействителен").toBeGreaterThan(
+      (holder.textContent || "").length * 5,
+    );
+    runContentScript();
+    expect(document.documentElement.lang).toBe("ru");
+  });
+
+  test("страница, нарисованная на клиенте, получает ru ПОСЛЕ отрисовки", () => {
+    // При разборе тела видимого текста ещё нет; решение обязано быть
+    // пересмотрено на DOMContentLoaded / load, иначе весь клиентский рендер
+    // остаётся под неверным языком.
+    const holder = render(RU_TEXT, { clientRendered: true });
+    runContentScript();
+    expect(document.documentElement.lang, "порог сработал на скелете загрузки").toBe("en");
+    holder.textContent = RU_TEXT;
+    window.dispatchEvent(new Event("load"));
+    expect(document.documentElement.lang).toBe("ru");
+  });
+
   test("английская страница остаётся en", () => {
-    render(EN_PAGE);
+    render(EN_TEXT);
     runContentScript();
     expect(document.documentElement.lang).toBe("en");
   });
@@ -97,7 +151,7 @@ describe("объявленный язык совпадает с содержим
   test("русский текст с латинскими названиями всё равно ru", () => {
     // У любой нашей русской страницы в тексте есть латиница: AEVION,
     // CyberChess, QRight. Порог «кириллицы больше латиницы» на них ломался бы.
-    render(RU_PAGE + " AEVION CyberChess QRight QBuild QCoreAI Gumroad Railway Vercel");
+    render(RU_TEXT + " AEVION CyberChess QRight QBuild QCoreAI Gumroad Railway Vercel");
     runContentScript();
     expect(document.documentElement.lang).toBe("ru");
   });
@@ -110,7 +164,7 @@ describe("объявленный язык совпадает с содержим
   });
 
   test("ВЫБОР человека старше догадки по содержимому", () => {
-    render(RU_PAGE);
+    render(RU_TEXT);
     document.documentElement.lang = "en";
     document.documentElement.setAttribute("data-lang-src", "cookie");
     runContentScript();

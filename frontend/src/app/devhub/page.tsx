@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { useDevhubT } from "./i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
@@ -29,7 +30,9 @@ interface Project {
 
 interface Snippet {
   id: string;
-  userId: string;
+  /** Мой ли это сниппет. Личность автора наружу не отдаётся: по ней можно
+   *  было бы назваться им (см. publicSnippet в routes/devhub.ts). */
+  mine?: boolean;
   title: string;
   content: string;
   language: string;
@@ -80,6 +83,7 @@ function formatDate(iso: string) {
 const STUDIO_PRO = productById("devhub");
 
 export default function DevHubPage() {
+  const t = useDevhubT();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [userTier, setUserTier] = useState<"free" | "pro" | "enterprise" | null>(null);
@@ -109,7 +113,7 @@ export default function DevHubPage() {
         body: JSON.stringify({ name, description: idea, stack: "react" }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Failed to create project");
+      if (!r.ok) throw new Error(data.error || t("err.create"));
       try { localStorage.setItem(`devhub_autoprompt_${data.project.id}`, idea); } catch { /* quota */ }
       router.push(`/devhub/${data.project.id}`);
     } catch (e: any) {
@@ -172,7 +176,7 @@ export default function DevHubPage() {
   };
 
   const deleteProject = async (id: string) => {
-    if (!confirm("Delete this project and all its files?")) return;
+    if (!confirm(t("proj.confirmDelete"))) return;
     try {
       await fetch(apiUrl(`/api/devhub/projects/${id}`), { method: "DELETE" });
       setProjects((ps) => ps.filter((p) => p.id !== id));
@@ -250,6 +254,21 @@ export default function DevHubPage() {
     }
   };
 
+  const removeSnippet = async (s: Snippet) => {
+    const prev = snippets;
+    setSnippets((arr) => arr.filter((x) => x.id !== s.id));
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/snippets/${s.id}`), { method: "DELETE" });
+      if (!r.ok) throw new Error(String(r.status));
+    } catch {
+      // Возврат обязателен: если снять не удалось, сниппет ОСТАЛСЯ на публичной
+      // полке. Показать пустое место значило бы соврать — человек решит, что
+      // убрал опубликованное, а оно на месте.
+      setSnippets(prev);
+      setSnippetError(t("snip.removeErr"));
+    }
+  };
+
   const starSnippet = async (s: Snippet) => {
     // Optimistic update.
     setSnippets((arr) =>
@@ -267,7 +286,7 @@ export default function DevHubPage() {
       setSnippets((arr) =>
         arr.map((x) => (x.id === s.id ? { ...x, stars: Math.max(0, x.stars - 1) } : x))
       );
-      setSnippetError("Could not star snippet");
+      setSnippetError(t("snip.starErr"));
     }
   };
 
@@ -286,7 +305,7 @@ export default function DevHubPage() {
               DevHub
             </h1>
             <p style={{ color: "#64748b", marginTop: 6, fontSize: 15 }}>
-              Build and deploy apps with AI. No GitHub or cloud accounts needed.
+              {t("hero.sub")}
             </p>
           </div>
           <button
@@ -297,7 +316,7 @@ export default function DevHubPage() {
               cursor: "pointer",
             }}
           >
-            + New Project
+            {t("project.new")}
           </button>
         </div>
 
@@ -372,10 +391,10 @@ export default function DevHubPage() {
           }}>
             <div>
               <p style={{ color: "#fff", fontWeight: 700, fontSize: 15, margin: 0 }}>
-                Studio Pro — unlock the full IDE
+                {t("pro.title")}
               </p>
               <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, margin: "4px 0 0" }}>
-                50 AI videos · 200 images · unlimited deploys · public *.pages.dev URL · team collaborators
+                {t("pro.perks")}
               </p>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
@@ -399,7 +418,7 @@ export default function DevHubPage() {
                 href="/apps"
                 style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", textDecoration: "underline", whiteSpace: "nowrap" }}
               >
-                See all plans →
+                {t("pro.plans")}
               </a>
             </div>
           </div>
@@ -413,16 +432,14 @@ export default function DevHubPage() {
         }}>
           <div style={{ maxWidth: 640 }}>
             <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
-              🖱️ New: Visual Edit — click the page, not the code
+              {t("ve.title")}
             </p>
             <p style={{ fontSize: 13, color: "#475569", margin: "4px 0 0", lineHeight: 1.5 }}>
-              Open any Static project, click an element in the live preview, and edit its text, color, size and
-              alignment in place — or describe a change and let AI apply it. Every AI change is checkpointed with
-              one-click undo. Click an image to generate a replacement from a prompt.
+              {t("ve.body")}
             </p>
           </div>
           <span style={{ padding: "6px 12px", background: "#0d9488", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>
-            In the IDE → 🖱️ Visual Edit tab
+            {t("ve.where")}
           </span>
         </div>
 
@@ -434,16 +451,14 @@ export default function DevHubPage() {
         }}>
           <div style={{ maxWidth: 640 }}>
             <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
-              🌐 Deploy → живой публичный адрес за один клик
+              {t("dep.title")}
             </p>
             <p style={{ fontSize: 13, color: "#475569", margin: "4px 0 0", lineHeight: 1.5 }}>
-              One click deploys a Static project to Cloudflare's edge and provisions a real subdomain.
-              A deploy is only marked live after the backend has actually opened the page and got a 2xx —
-              no fake green statuses.
+              {t("dep.body")}
             </p>
           </div>
           <span style={{ padding: "6px 12px", background: "#7c3aed", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>
-            In the IDE → Deploy
+            {t("dep.where")}
           </span>
         </div>
 
@@ -458,10 +473,15 @@ export default function DevHubPage() {
               border: "1px solid #e2e8f0", background: "#fff", borderRadius: 12,
               padding: "12px 16px", marginBottom: 20, fontSize: 13, lineHeight: 1.6,
             }}>
-              <span style={{ fontWeight: 700, color: "#0f172a" }}>Сейчас работает: {live} из {caps.length}</span>
+              {/* «Настроено», а не «работает»: ручка /studio/capabilities отвечает на
+                  вопрос «ключ задан», и это НЕ то же самое, что «проверено сейчас».
+                  Замер 23.08.2026: среди «работающих» числился домен aevion.build,
+                  которого не существует — реестр отвечает «Non-existent domain».
+                  Слово «работает» превращало ответ одного вопроса в ответ другого. */}
+              <span style={{ fontWeight: 700, color: "#0f172a" }}>{t("caps.configured")}: {live} из {caps.length}</span>
               {off.length > 0 ? (
                 <>
-                  <span style={{ color: "#64748b" }}> · временно недоступно: </span>
+                  <span style={{ color: "#64748b" }}>{t("caps.off")}</span>
                   {off.map((c, i) => (
                     <span key={c.id} title={c.lastError || (c.status === "needs_token" ? "не настроено на сервере" : c.status)}>
                       <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{c.name}</span>
@@ -469,7 +489,7 @@ export default function DevHubPage() {
                     </span>
                   ))}
                   <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
-                    Всё остальное — код, база данных, превью, деплой — работает. Наведите на название, чтобы увидеть причину.
+                    {t("caps.note")}
                   </div>
                 </>
               ) : (
@@ -536,17 +556,17 @@ export default function DevHubPage() {
 
         {/* Loading */}
         {loading ? (
-          <div style={{ textAlign: "center", padding: 60, color: "#94a3b8" }}>Loading projects...</div>
+          <div style={{ textAlign: "center", padding: 60, color: "#94a3b8" }}>{t("proj.loading")}</div>
         ) : projects.length === 0 ? (
           <div style={{ textAlign: "center", padding: 80 }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🏗</div>
-            <h2 style={{ fontSize: 20, color: "#0f172a", marginBottom: 8 }}>No projects yet</h2>
-            <p style={{ color: "#64748b", marginBottom: 24 }}>Create your first project and let AI build it for you.</p>
+            <h2 style={{ fontSize: 20, color: "#0f172a", marginBottom: 8 }}>{t("proj.empty")}</h2>
+            <p style={{ color: "#64748b", marginBottom: 24 }}>{t("proj.emptyHint")}</p>
             <button
               onClick={() => setShowModal(true)}
               style={{ padding: "10px 24px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer" }}
             >
-              + New Project
+              {t("project.new")}
             </button>
           </div>
         ) : (
@@ -573,7 +593,7 @@ export default function DevHubPage() {
                     </span>
                     {p.needsRedeploy && (
                       <span
-                        title="Files were edited after the last deploy — the live page is behind. Open the IDE and deploy to update it."
+                        title={t("proj.stale")}
                         style={{ padding: "3px 10px", borderRadius: 6, background: "#fef3c7", color: "#92400e", fontSize: 12, fontWeight: 700 }}
                       >
                         ⟳ Redeploy needed
@@ -631,10 +651,10 @@ export default function DevHubPage() {
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
             <div>
               <h2 className="text-xl font-bold tracking-tight text-white">
-                Snippet shelf
+                {t("snip.title")}
               </h2>
               <p className="text-sm text-slate-400 mt-1">
-                Last 5 publicly shared snippets. Copy, star, or share your own.
+                {t("snip.sub")}
               </p>
             </div>
             <button
@@ -659,10 +679,10 @@ export default function DevHubPage() {
           )}
 
           {snippetsLoading ? (
-            <div className="text-center text-slate-500 py-10">Loading snippets…</div>
+            <div className="text-center text-slate-500 py-10">{t("snip.loading")}</div>
           ) : snippets.length === 0 ? (
             <div className="text-center text-slate-500 py-10 border border-dashed border-slate-800 rounded-lg">
-              No snippets yet. Be the first to share one below.
+              {t("snip.empty")}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -709,6 +729,15 @@ export default function DevHubPage() {
                         <span aria-hidden>★</span>
                         <span>{s.stars}</span>
                       </button>
+                      {s.mine && (
+                        <button
+                          onClick={() => removeSnippet(s)}
+                          className="text-xs font-semibold px-2.5 py-1 rounded-md border border-slate-700 bg-slate-800 hover:bg-rose-900/60 hover:border-rose-800 text-slate-300 hover:text-rose-200 transition-colors ml-auto mr-2"
+                          aria-label={t("snip.removeAria")}
+                        >
+                          {t("snip.remove")}
+                        </button>
+                      )}
                       <button
                         onClick={() => copySnippet(s)}
                         className={
@@ -730,7 +759,7 @@ export default function DevHubPage() {
           {/* Share form */}
           <div className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
             <h3 className="text-sm font-semibold text-white mb-3">
-              Share a snippet
+              {t("snip.share")}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input
@@ -748,7 +777,7 @@ export default function DevHubPage() {
                 onChange={(e) =>
                   setSnippetForm((f) => ({ ...f, language: e.target.value }))
                 }
-                placeholder="Language (e.g. javascript)"
+                placeholder={t("snip.phLang")}
                 className="px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
               />
             </div>
@@ -757,7 +786,7 @@ export default function DevHubPage() {
               onChange={(e) =>
                 setSnippetForm((f) => ({ ...f, content: e.target.value }))
               }
-              placeholder="// paste your snippet here"
+              placeholder={t("snip.phCode")}
               rows={5}
               className="mt-3 w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700 resize-y"
             />
@@ -767,7 +796,7 @@ export default function DevHubPage() {
               onChange={(e) =>
                 setSnippetForm((f) => ({ ...f, tags: e.target.value }))
               }
-              placeholder="tags, comma, separated"
+              placeholder={t("snip.phTags")}
               className="mt-3 w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
             />
             <div className="mt-4 flex justify-end">
@@ -787,7 +816,7 @@ export default function DevHubPage() {
                     : "bg-teal-600 hover:bg-teal-500 text-white")
                 }
               >
-                {snippetSubmitting ? "Sharing…" : "Share snippet"}
+                {snippetSubmitting ? t("snip.sharing") : t("snip.shareBtn")}
               </button>
             </div>
           </div>
@@ -801,7 +830,7 @@ export default function DevHubPage() {
           onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
         >
           <div style={{ background: "#fff", borderRadius: 16, padding: "20px clamp(16px, 4vw, 32px)", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
-            <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 20, color: "#0f172a" }}>New Project</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 20, color: "#0f172a" }}>{t("modal.title")}</h2>
 
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
@@ -811,7 +840,7 @@ export default function DevHubPage() {
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="My awesome app"
+                placeholder={t("modal.phName")}
                 style={{ width: "100%", padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 16, boxSizing: "border-box" }}
                 autoFocus
               />
@@ -825,7 +854,7 @@ export default function DevHubPage() {
                 type="text"
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="Short description of the project"
+                placeholder={t("modal.phDesc")}
                 style={{ width: "100%", padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 16, boxSizing: "border-box" }}
               />
             </div>

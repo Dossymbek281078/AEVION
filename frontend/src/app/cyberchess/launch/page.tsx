@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { channelFrom } from "@/lib/products";
+import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { LandingView } from "@/components/LandingView";
 
@@ -70,20 +71,13 @@ async function fetchTournamentCount(): Promise<number | null> {
   }
 }
 
-function daysUntilLaunch(): number {
-  const launch = Date.UTC(2026, 7, 30); // 30 августа 2026
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return Math.round((launch - today) / 86_400_000);
-}
-
 export default async function CyberChessLaunchPage({
   searchParams,
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
   const [bank, tournaments] = await Promise.all([fetchPuzzleBank(), fetchTournamentCount()]);
-  const left = daysUntilLaunch();
+  const left = daysUntilLaunch(Date.UTC(2026, 7, 30)); // 30 августа 2026
 
   // Метка канала из адреса: /cyberchess/launch?c=tt в подписи ролика TikTok,
   // ?c=ig в шапке Instagram. Без неё все адреса лягут с одинаковым

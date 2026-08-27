@@ -1,0 +1,91 @@
+/**
+ * Сторож: на стартовом экране видна доска.
+ *
+ * До 27.08.2026 человек, открывший шахматы, доски не видел вовсе — экран
+ * начинался с панели настроек партии, а доска появлялась только после
+ * нажатия «ИГРАТЬ». Замер на телефоне 375 пикселей: ни на первом экране, ни
+ * на втором ни одной шахматной клетки. Для пришедшего с ролика это решается
+ * за секунды — он пришёл играть, а видит форму.
+ *
+ * Проверяется САМ компонент предпросмотра (64 клетки, 32 фигуры, разворот по
+ * цвету, нажатие начинает партию) плюс одна структурная проверка, что он
+ * действительно вставлен в стартовый экран страницы. Без второй первый набор
+ * остался бы зелёным, даже если компонент выкинуть из разметки: это класс
+ * «правда останавливается на границе» — модуль правильный, читателя нет.
+ */
+import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import SetupBoardPreview from "../SetupBoardPreview";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const PAGE = readFileSync(join(HERE, "..", "page.tsx"), "utf8");
+
+function draw(orientation: "w" | "b", onStart = () => {}) {
+  return render(
+    <SetupBoardPreview
+      orientation={orientation}
+      light="#eee"
+      dark="#769656"
+      border="#769656"
+      onStart={onStart}
+    />,
+  );
+}
+
+describe("доска на стартовом экране", () => {
+  it("рисует все 64 клетки", () => {
+    const { container } = draw("w");
+    const grid = container.querySelector("div[style*='repeat(8,1fr)']");
+    expect(grid, "сетка доски не найдена").not.toBeNull();
+    expect(grid!.children.length).toBe(64);
+  });
+
+  it("расставляет 32 фигуры — полный комплект", () => {
+    const { container } = draw("w");
+    // Набор фигур рисуется вложенным элементом внутри клетки; пустые клетки
+    // остаются без содержимого.
+    const grid = container.querySelector("div[style*='repeat(8,1fr)']")!;
+    const занятых = Array.from(grid.children).filter((c) => c.children.length > 0).length;
+    expect(занятых).toBe(32);
+  });
+
+  it("нижние два ряда заняты, середина пуста", () => {
+    const { container } = draw("w");
+    const cells = Array.from(
+      container.querySelector("div[style*='repeat(8,1fr)']")!.children,
+    );
+    const занята = (i: number) => cells[i].children.length > 0;
+    // Ряды 0-1 и 6-7 заняты, 2-5 пусты — иначе это не начальная позиция.
+    for (const i of [0, 7, 8, 15, 48, 55, 56, 63]) expect(занята(i), `клетка ${i}`).toBe(true);
+    for (const i of [16, 23, 24, 31, 32, 39, 40, 47]) expect(занята(i), `клетка ${i}`).toBe(false);
+  });
+
+  it("разворачивается по выбранному цвету", () => {
+    // Играя чёрными, человек должен видеть свою сторону снизу. Сравниваем
+    // разметку двух ориентаций: она обязана отличаться.
+    const белые = draw("w").container.innerHTML;
+    const чёрные = draw("b").container.innerHTML;
+    expect(чёрные, "доска не разворачивается — чёрные видят чужую сторону").not.toBe(белые);
+  });
+
+  it("нажатие по доске начинает партию", () => {
+    const start = vi.fn();
+    draw("w", start);
+    // Доска — это кнопка: она заодно самая крупная цель на экране.
+    screen.getByRole("button", { name: "Начать партию" }).click();
+    expect(start).toHaveBeenCalledOnce();
+  });
+
+  it("стартовый экран страницы действительно её показывает", () => {
+    // Структурная проверка: без неё компонент мог бы остаться правильным и
+    // не отрисованным. Закрепляем связку с состоянием setup и со стартом.
+    const i = PAGE.indexOf("<SetupBoardPreview");
+    expect(i, "компонент не вставлен в страницу").toBeGreaterThan(-1);
+    const блок = PAGE.slice(i, i + 500);
+    expect(блок, "доска не разворачивается по выбранному цвету").toContain("orientation={pCol}");
+    expect(блок, "нажатие по доске не начинает партию").toContain("newG()");
+  });
+});

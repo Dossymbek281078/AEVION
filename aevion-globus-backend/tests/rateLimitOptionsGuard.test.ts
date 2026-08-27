@@ -81,7 +81,15 @@ function topLevelKeys(body: string): string[] {
     if (ch === "}") { depth--; continue; }
     if (depth === 1 && /[A-Za-z_$]/.test(ch)) {
       const m = /^([\w$]+)\s*:/.exec(body.slice(i));
-      if (m) { keys.push(m[1]); i += m[0].length - 1; }
+      // Тернарник — не ключ. В `max: raw > 0 ? raw : 30` имя после `?` стоит
+      // ровно в той же форме «слово, потом двоеточие», и разбор считал его
+      // отдельной опцией: сторож сообщил о лишней опции «raw» на исправном коде
+      // (19.08.2026, devhub.ts). Ложное красное здесь дороже пропуска — к нему
+      // привыкают и перестают читать. Отличаем по символу ПЕРЕД именем.
+      const before = body.slice(0, i).replace(/\s+$/, "");
+      const isTernaryBranch = before.endsWith("?");
+      if (m && !isTernaryBranch) { keys.push(m[1]); i += m[0].length - 1; }
+      else if (m) { i += m[1].length - 1; }
       else { const w = /^[\w$]+/.exec(body.slice(i))!; i += w[0].length - 1; }
     }
   }

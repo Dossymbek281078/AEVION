@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { DevHubGuestIdentity } from "@/components/DevHubGuestIdentity";
 
 export const metadata: Metadata = {
   title: "DevHub — AEVION",
@@ -6,5 +7,10 @@ export const metadata: Metadata = {
 };
 
 export default function DevHubLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <DevHubGuestIdentity />
+      {children}
+    </>
+  );
 }

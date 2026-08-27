@@ -363,7 +363,7 @@ export default function WorkspacePiP({ initialSource, defaultPosition, onClose, 
               display: "flex", flexDirection: "column", alignItems: "center",
               justifyContent: "center", gap: 6, padding: 12, zIndex: 3,
             }}>
-              <input
+              <input aria-label="Адрес источника"
                 autoFocus
                 value={draft}
                 onChange={e => setDraft(e.target.value)}

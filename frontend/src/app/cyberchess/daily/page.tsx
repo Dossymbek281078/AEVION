@@ -680,9 +680,12 @@ export default function DailyPuzzlePage() {
           Один пазл в день. Решай каждый день — держи серию. Многоходовые пазлы: бот отвечает за противника.
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 24, alignItems: 'start' }}>
+        {/* Перенос вместо сетки: жёсткие 360px боковой колонки плюс отступ 24 не
+            помещались в телефон (замер: документ 408 при экране 375). При переносе
+            широкий экран не меняется — колонки те же 896/360, проверено. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
           {/* Left: board + controls */}
-          <div>
+          <div style={{ flex: '1 1 520px', minWidth: 0 }}>
             <div
               style={{
                 background: 'rgba(20, 20, 32, 0.6)',
@@ -966,6 +969,8 @@ export default function DailyPuzzlePage() {
           {/* Right: leaderboard */}
           <div
             style={{
+              flex: '0 1 360px',
+              minWidth: 0,
               background: 'rgba(20, 20, 32, 0.6)',
               border: '1px solid rgba(181, 107, 255, 0.2)',
               borderRadius: 16,

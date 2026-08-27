@@ -159,6 +159,31 @@ function warnKeyFnFallback(prefix: string, why: string): void {
  * человек получал бы РАЗНЫЕ корзины в шахматах и в остальной платформе — а
  * это и есть обход: две записи одного адреса считаются двумя посетителями.
  */
+/**
+ * ВЗЯТО ЦЕЛИКОМ из ветки fix/build-closed-vacancy-feed (коммит d9cc19ce0 от
+ * 28.07.2026), а не написано заново: там эта функция уже стоит на 27 дорогих
+ * ручках, и второй способ ограничивать те же вызовы разошёлся бы с первым на
+ * первом же краевом случае. Ветка ждёт мержа; когда он случится, эта копия и
+ * тамошний оригинал совпадут дословно.
+ *
+ * Оговорка, которой у оригинала не было: счётчик живёт в памяти ПРОЦЕССА, а
+ * процессов у сервиса несколько (замер 23.08: 100 запросов за 11 с при пределе
+ * 30 дали 2 отказа). Настоящий предел примерно вчетверо выше объявленного.
+ * Поэтому у платных ручек рядом обязана стоять граница ЦЕНЫ одного вызова —
+ * см. aiInputBudget.ts, она от числа процессов не зависит.
+ */
+export function generationLimit(keyPrefix: string) {
+  const raw = Number(process.env.GENERATION_RATE_LIMIT);
+  const max = Number.isFinite(raw) && raw > 0 ? raw : 30;
+  return rateLimit({
+    windowMs: 60_000,
+    max,
+    keyPrefix,
+    message: "Слишком много запросов к генерации. Подождите минуту.",
+  });
+}
+
+
 export function clientIp(req: { ip?: string; socket?: { remoteAddress?: string } }): string {
   const raw = req.ip || req.socket?.remoteAddress || "unknown";
   return raw === "unknown" ? raw : normalizeAddressForKey(raw);

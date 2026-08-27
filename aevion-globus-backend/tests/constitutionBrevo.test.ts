@@ -96,9 +96,34 @@ describe("constitutionBrevo — письмо соответствует исто
   });
 
   test("адрес для отписки подставлен в обе ветки", () => {
+    // Секрет задаётся здесь намеренно. С 21.08 ссылка отписки несёт ТОКЕН, и без
+    // секрета её не существует вовсе: письмо тогда честно пишет адрес почты вместо
+    // ссылки, которая молча не сработает. Замысел этого теста — проверить, что
+    // необычный адрес (`a+b@c.com`) кодируется правильно, — поэтому даём секрет и
+    // проверяем то же самое на рабочей ссылке.
+    process.env.AUTH_JWT_SECRET = "test-secret-at-least-16-chars-long";
     for (const src of ["home", "constitution-pricing"]) {
       const p = buildWaitlistConfirmEmail("a+b@c.com", src);
       expect(p.htmlContent).toContain("unsubscribe?email=a%2Bb%40c.com");
+      expect(p.htmlContent).toMatch(/&t=[0-9a-f]{32}/);
+    }
+  });
+
+  test("без секрета письмо даёт живой адрес почты, а не мёртвую ссылку", () => {
+    // Обратная сторона того же решения: раньше в письме стояла ссылка на страницу,
+    // которой не существует (404). Тишина или нерабочая ссылка здесь хуже, чем
+    // просьба написать письмом.
+    const saved = process.env.AUTH_JWT_SECRET;
+    const savedUnsub = process.env.WAITLIST_UNSUB_SECRET;
+    delete process.env.AUTH_JWT_SECRET;
+    delete process.env.WAITLIST_UNSUB_SECRET;
+    try {
+      const p = buildWaitlistConfirmEmail("a+b@c.com", "home");
+      expect(p.htmlContent).not.toMatch(/unsubscribe\?email=/);
+      expect(p.htmlContent).toMatch(/mailto:/);
+    } finally {
+      if (saved) process.env.AUTH_JWT_SECRET = saved;
+      if (savedUnsub) process.env.WAITLIST_UNSUB_SECRET = savedUnsub;
     }
   });
 });

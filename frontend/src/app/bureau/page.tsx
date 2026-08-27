@@ -125,6 +125,24 @@ function BureauPageInner() {
       .catch(() => { /* оставляем null: «не знаю», а не «ноль» */ });
     return () => { alive = false; };
   }, []);
+
+  // Настроен ли НАСТОЯЩИЙ поставщик проверки личности. null — «не знаю»:
+  // спросить не удалось. Замер на проде 27.08.2026 — "stub", то есть поток
+  // работает, а паспорт не смотрит никто, при том что тариф стоит $19.
+  const [kycMode, setKycMode] = useState<"live" | "stub" | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(apiUrl("/api/bureau/health"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        const v = d?.kyc;
+        setKycMode(v === "live" || v === "stub" ? v : null);
+      })
+      .catch(() => { /* оставляем null: своя неудача — не «настроено» */ });
+    return () => { alive = false; };
+  }, []);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
 
@@ -563,8 +581,20 @@ function BureauPageInner() {
               {
                 name: "Verified",
                 price: "$19 / cert",
-                blurb: "Author identity verified by KYC partner (passport / national ID). Bureau attests real-name authorship and stamps cert with the verification fingerprint.",
-                badge: "▲ available now",
+                // Описание идёт от ФАКТА: пока поставщик не подключён, поток
+                // проходится демонстрационной заглушкой, и обещать проверку
+                // паспорта нельзя. Промолчать тоже нельзя — тариф платный.
+                blurb:
+                  kycMode === "stub"
+                    ? "Identity check is in demo mode right now: the flow works end to end, but no document is actually verified yet. Ask us before buying this tier."
+                    : "Author identity verified by KYC partner (passport / national ID). Bureau attests real-name authorship and stamps cert with the verification fingerprint.",
+                // Три исхода, а не два: «спросить не удалось» — не «доступно».
+                badge:
+                  kycMode === "stub"
+                    ? "▲ demo mode"
+                    : kycMode === "live"
+                      ? "▲ available now"
+                      : "▲ by request",
                 badgeColor: "#4f46e5",
                 cta: { label: "Upgrade a cert", href: "/bureau" },
               },

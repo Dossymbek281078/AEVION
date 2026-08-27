@@ -62,4 +62,24 @@ test.describe("Comparison page — a table that can be checked", () => {
     await expect(page.getByText(/\$162/)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/мы не мерили и потому не пишем/)).toBeVisible();
   });
+
+  test("the ecosystem table names what is missing instead of inventing an edge", async ({ page }) => {
+    // The founder asked for every module with an analogue. Only a few have
+    // facts, and the page has to say that rather than fill the gaps.
+    await mock(page, CAPS);
+    await page.goto("/compare");
+
+    const chess = page.getByRole("row").filter({ hasText: "CyberChess" });
+    await expect(chess).toBeVisible({ timeout: 30_000 });
+    await expect(chess.getByText(/476 ходов/)).toBeVisible();
+    await expect(chess.getByText(/не сравнивали/)).toBeVisible();
+
+    // QReal carries the standing decision not to publish a comparison.
+    const qreal = page.getByRole("row").filter({ hasText: "QReal Studio" });
+    await expect(qreal.getByText(/публиковать его нельзя/)).toBeVisible();
+
+    // And the rest are named as needing a measurement, not given an advantage.
+    const rest = page.getByRole("row").filter({ hasText: "Остальные модули" });
+    await expect(rest.getByText(/нужен замер/)).toBeVisible();
+  });
 });

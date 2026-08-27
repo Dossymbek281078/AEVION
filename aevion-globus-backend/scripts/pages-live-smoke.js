@@ -31,6 +31,10 @@ const PAGES = [
   "/",
   "/explore",
   "/devhub",
+  // The comparison page states what the product does against named rivals — a
+  // page that quietly 404s or empties out is worse than one that never
+  // existed, because it is the page an investor is sent to.
+  "/compare",
   "/studio",
   "/pricing",
   "/apps",
@@ -157,6 +161,16 @@ const PAGES = [
   "/terms",
   "/tiktok-publisher",
   "/ventures",
+  // Страница проверки сертификата. Идентификатор здесь ЗАВЕДОМО несуществующий,
+  // и это осознанно: адрес настоящего сертификата привязал бы сторожа к данным
+  // (записи из реестра могут удалить), а вопрос у нас другой — доехал ли САМ
+  // МАРШРУТ до площадки. Отсутствующая страница даёт 404, живая отвечает 200 и
+  // рисует своё «сертификат не найден». Замер 27.08.2026: 200.
+  //
+  // Проверено, что проба различает случаи: /verify без сегмента даёт 404,
+  // /verify/<настоящий id> — 200. Это тот самый адрес, на который ведёт
+  // QR-код КАЖДОГО выданного сертификата, и до сегодня он не проверялся.
+  "/verify/cert-smoke-no-such-id",
   "/verify-offline",
   "/voice-of-earth",
   "/z-tide",
@@ -170,12 +184,16 @@ const PAGES = [
   "/cyberchess/economy",
   "/cyberchess/history",
   "/cyberchess/matchmaking",
+  "/cyberchess/offline",
   "/cyberchess/repertoire",
   "/cyberchess/replays",
   "/cyberchess/spectator",
   "/cyberchess/studio",
   "/cyberchess/tournament",
   "/cyberchess/training",
+  // Дописано при сведении 21.08: этих адресов не было в их списке.
+  "/build/verify-email",
+  "/pricing/cases",
 ];
 
 let pass = 0;

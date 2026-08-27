@@ -49,8 +49,17 @@
 // зарегистрирована на бэкенде. Статически — без сети.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = "C:/Users/user/aevion-money";
+// Корень берётся ОТ САМОГО СКРИПТА, а не прописан строкой.
+//
+// Замер 27.08.2026: здесь стояло `const ROOT = "C:/Users/user/aevion-money"` —
+// чужой worktree. Из любого каталога инструмент читал файлы ТОГО репозитория и
+// уверенно печатал число расхождений, которое к вашей ветке отношения не имело.
+// Я на этом попался: поправил 18 адресов на страницах, перезапустил проверку и
+// получил ровно те же 22 — потому что она смотрела не туда. Ошибка тихая:
+// вывод выглядит осмысленным всегда, ведь тот репозиторий существует.
+const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DOCS = [
   "frontend/src/app/developers/page.tsx",
   "frontend/src/app/pricing/api-pricing/page.tsx",

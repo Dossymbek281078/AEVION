@@ -1,5 +1,7 @@
 "use client";
 
+import { человеческаяДата } from "./tournamentDate";
+
 // AEVION CyberChess — Tournament Hub (list view)
 // Zone: aevion-core/main owns frontend/src/app/cyberchess/**
 // Reads from /api/cyberchess-tournaments/list; falls back to mock if offline.
@@ -557,7 +559,7 @@ function TournamentCard({ t }: { t: Tournament }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
           <h3 style={{ margin: 0, fontSize: 17, color: T.text }}>{t.title}</h3>
-          <div style={{ marginTop: 4, fontSize: 12, color: T.dim }}>{t.startsAt}</div>
+          <div style={{ marginTop: 4, fontSize: 12, color: T.dim }}>{человеческаяДата(t.startsAt)}</div>
         </div>
         <span
           style={{

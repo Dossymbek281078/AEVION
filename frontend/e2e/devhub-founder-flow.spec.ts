@@ -53,7 +53,7 @@ test.describe("founder flow: describe → built app", () => {
     expect(paths.some((p) => /^src\/.+\.(jsx|tsx|js|ts)$/.test(p))).toBe(true);
 
     // Live preview renders: open Visual Edit and ask the overlay for element 0.
-    await page.getByRole("button", { name: /Visual Edit/ }).click();
+    await page.getByRole("tab", { name: /Visual Edit/ }).click();
     const iframe = page.locator('iframe[sandbox="allow-scripts"]');
     await expect(iframe).toBeVisible({ timeout: 30_000 });
 
@@ -126,7 +126,7 @@ test.describe("founder flow: describe → built app", () => {
       expect(paths.length).toBeGreaterThan(0);
 
       await page.goto(`/devhub/${projectId}`);
-      await page.getByRole("button", { name: /Visual Edit/ }).click();
+      await page.getByRole("tab", { name: /Visual Edit/ }).click();
       const iframe = page.locator('iframe[sandbox="allow-scripts"]');
       await expect(iframe).toBeVisible({ timeout: 30_000 });
 

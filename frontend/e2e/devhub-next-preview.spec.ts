@@ -90,7 +90,7 @@ test.describe("DevHub — Next.js live preview without a deploy", () => {
   test("renders a page built from next/link, next/image, next/font and CSS Modules", async ({ page }) => {
     await page.goto(`/devhub/${PROJECT_ID}`);
 
-    await page.getByRole("button", { name: /Visual Edit/ }).click();
+    await page.getByRole("tab", { name: /Visual Edit/ }).click();
 
     const iframe = page.locator('iframe[sandbox="allow-scripts"]');
     await expect(iframe).toBeVisible({ timeout: 20_000 });
@@ -152,7 +152,7 @@ test.describe("DevHub — Next.js live preview without a deploy", () => {
     });
 
     await page.goto(`/devhub/${PROJECT_ID}`);
-    await page.getByRole("button", { name: /Visual Edit/ }).click();
+    await page.getByRole("tab", { name: /Visual Edit/ }).click();
 
     await expect(page.getByText(/Server Component/i)).toBeVisible({ timeout: 20_000 });
     await expect(page.locator('iframe[sandbox="allow-scripts"]')).toHaveCount(0);

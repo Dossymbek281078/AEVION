@@ -5920,7 +5920,13 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
 
     deployment.status = "building";
     deployment.deployUrl = pagesUrl;
-    deployment.buildLog = `CF Pages deployment uploaded via wrangler`;
+    // Пропущенные файлы называются поимённо: молчаливый пропуск означал бы,
+    // что на сайте не хватает страницы, а выкатка отчиталась успехом.
+    deployment.buildLog =
+      `CF Pages deployment uploaded via wrangler` +
+      (wranglerResult.skipped.length
+        ? ` | НЕ ЗАГРУЖЕНЫ ${wranglerResult.skipped.length} файл(ов) с недопустимым путём: ${wranglerResult.skipped.slice(0, 10).join(", ")}`
+        : "");
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
     await debitQuietly(userId, "deploy");
 

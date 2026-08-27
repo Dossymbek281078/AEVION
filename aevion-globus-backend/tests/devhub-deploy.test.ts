@@ -159,7 +159,7 @@ describe("GET /api/devhub/projects — needsRedeploy staleness flag", () => {
     await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>v1</h1>" });
 
     fetchMock.mockResolvedValueOnce(jsonResp(200, { success: true }));
-    mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://stale.pages.dev", output: "" });
+    mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://stale.pages.dev", output: "", skipped: []});
     const dep = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
     expect(dep.status).toBe(200);
     // The pages route flips project.deployUrl in a deferred "mark live" step
@@ -215,7 +215,7 @@ describe("POST /api/devhub/projects/:id/deploy/pages — redeploy of an existing
       // Live 2026-07-21: CF answered with this message under a code ≠ 8000000
       errors: [{ code: 8000007, message: "A project with this name already exists. Choose a different project name." }],
     }));
-    mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://t-abc123.pages.dev", output: "" });
+    mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://t-abc123.pages.dev", output: "", skipped: []});
 
     const r = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
 
@@ -233,7 +233,7 @@ describe("POST /api/devhub/projects/:id/deploy/pages — redeploy of an existing
     await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>hi</h1>" });
 
     fetchMock.mockResolvedValueOnce(jsonResp(200, { success: true }));
-    mockDeployViaWrangler.mockResolvedValueOnce({ ok: false, error: "wrangler exited with code 1: auth error", output: "" });
+    mockDeployViaWrangler.mockResolvedValueOnce({ ok: false, error: "wrangler exited with code 1: auth error", output: "", skipped: []});
 
     const r = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
 
@@ -615,7 +615,7 @@ describe("aevion.build subdomain is only promised when it resolves", () => {
     // wrangler upload, CNAME creation, then the domain probe fails (the zone
     // is not delegated) while pages.dev answers.
     vi.doMock("../src/lib/wranglerPagesDeploy", () => ({
-      wranglerPagesDeploy: async () => ({ ok: true, url: "https://abc.aevion-x.pages.dev" }),
+      wranglerPagesDeploy: async () => ({ ok: true, url: "https://abc.aevion-x.pages.dev", skipped: []}),
     }));
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true, result: {} }), text: async () => "" } as any);
 
@@ -850,7 +850,7 @@ describe("the domain capability reports what deploys actually observed", () => {
     process.env.CLOUDFLARE_API_TOKEN = "cf";
     process.env.CLOUDFLARE_ZONE_ID = "zone";
     vi.doMock("../src/lib/wranglerPagesDeploy", () => ({
-      wranglerPagesDeploy: async () => ({ ok: true, url: "https://abc.aevion-x.pages.dev" }),
+      wranglerPagesDeploy: async () => ({ ok: true, url: "https://abc.aevion-x.pages.dev", skipped: []}),
     }));
     // Cloudflare API calls succeed; the domain probe itself never answers 2xx.
     fetchMock.mockImplementation(async (url: string) =>

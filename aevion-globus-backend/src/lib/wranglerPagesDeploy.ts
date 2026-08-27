@@ -15,8 +15,8 @@ import path from "path";
  */
 
 export type WranglerDeployResult =
-  | { ok: true; url: string; output: string }
-  | { ok: false; error: string; output: string };
+  | { ok: true; url: string; output: string; skipped: string[] }
+  | { ok: false; error: string; output: string; skipped: string[] };
 
 const WRANGLER_TIMEOUT_MS = 180_000;
 
@@ -25,13 +25,21 @@ export async function deployViaWrangler(
   projectName: string,
   opts: { accountId: string; apiToken: string; branch?: string }
 ): Promise<WranglerDeployResult> {
+  /** Пути, отброшенные как попытка выйти за пределы папки сборки. */
+  const skipped: string[] = [];
   const dir = await mkdtemp(path.join(tmpdir(), "devhub-pages-"));
   try {
     for (const f of files) {
       const safe = f.path.replace(/^\/+/, "");
       // The IDE stores repo-relative paths; anything trying to escape the
       // temp dir is dropped rather than written outside it.
-      if (safe.split(/[\\/]/).includes("..")) continue;
+      // Отбрасывать — верно, а делать это МОЛЧА было нельзя: файл исчезал из
+      // выкатки, сборка отчитывалась успехом, и на сайте не хватало страницы
+      // без единого следа. Решение не изменилось, изменилась видимость.
+      if (safe.split(/[\\/]/).includes("..")) {
+        skipped.push(f.path);
+        continue;
+      }
       const full = path.join(dir, safe);
       await mkdir(path.dirname(full), { recursive: true });
       await writeFile(full, f.content, "utf8");
@@ -41,10 +49,10 @@ export async function deployViaWrangler(
       opts
     );
     const m = output.match(/https:\/\/[\w.-]+\.pages\.dev/);
-    if (m) return { ok: true, url: m[0], output };
-    return { ok: false, error: "wrangler finished without printing a deployment URL", output };
+    if (m) return { ok: true, url: m[0], output, skipped };
+    return { ok: false, error: "wrangler finished without printing a deployment URL", output, skipped };
   } catch (e: any) {
-    return { ok: false, error: e?.message || "wrangler deploy failed", output: String(e?.wranglerOutput || "") };
+    return { ok: false, error: e?.message || "wrangler deploy failed", output: String(e?.wranglerOutput || ""), skipped };
   } finally {
     rm(dir, { recursive: true, force: true }).catch(() => {});
   }

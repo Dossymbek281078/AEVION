@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
-import { getAuthToken } from "@/lib/auth";
 
 /* ═══════════════════════════════════════════════════════════════════════
    Types

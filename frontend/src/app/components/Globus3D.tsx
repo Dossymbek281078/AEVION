@@ -1,6 +1,8 @@
 // @ts-nocheck — three@0.183 ships without complete typings; runtime API matches classic Three.js.
 "use client";
 
+import { detectLocale, type GlobeLocale } from "./globusLocale";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
@@ -233,21 +235,6 @@ const COUNTRY_I18N: Record<string, { ru?: string; kk?: string }> = {
   Mongolia: { ru: "Монголия", kk: "Моңғолия" },
   World: { ru: "Мир", kk: "Әлем" },
 };
-
-function detectLocale(): "en" | "ru" | "kk" {
-  if (typeof window === "undefined") return "en";
-  try {
-    const stored = window.localStorage.getItem("aevion:locale");
-    if (stored === "ru" || stored === "kk" || stored === "en") return stored;
-  } catch {}
-  const lang =
-    typeof navigator !== "undefined" && navigator.language
-      ? navigator.language.toLowerCase()
-      : "en";
-  if (lang.startsWith("ru")) return "ru";
-  if (lang.startsWith("kk") || lang.startsWith("kz")) return "kk";
-  return "en";
-}
 
 function displayCountry(name: string, locale: "en" | "ru" | "kk"): string {
   if (locale === "en") return name;
@@ -864,9 +851,19 @@ export default function Globus3D({
   }, [motdCountry, layers.motd]);
 
   /** Локаль для отображения country names. */
-  const [locale, setLocale] = useState<"en" | "ru" | "kk">("en");
+  const [locale, setLocale] = useState<GlobeLocale>("en");
   useEffect(() => {
     setLocale(detectLocale());
+    // Одного замера при монтировании мало: переключатель языка не
+    // перемонтирует глобус, поэтому подписи стран оставались на прежнем
+    // языке до перезагрузки страницы. I18nProvider на каждом переключении
+    // проставляет `lang` на <html> — за ним и следим. Это надёжнее события
+    // `storage`: то приходит только в ДРУГИЕ вкладки, а не в текущую.
+    if (typeof document === "undefined") return;
+    const html = document.documentElement;
+    const observer = new MutationObserver(() => setLocale(detectLocale()));
+    observer.observe(html, { attributes: true, attributeFilter: ["lang"] });
+    return () => observer.disconnect();
   }, []);
   const [topCountries, setTopCountries] = useState<Array<[string, number]>>([]);
   const topCountriesRef = useRef<Array<[string, number]>>([]);

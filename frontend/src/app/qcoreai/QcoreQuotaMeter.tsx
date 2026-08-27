@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthHeaders } from "@/lib/auth";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthToken } from "@/lib/auth";
@@ -18,6 +19,10 @@ import { getAuthToken } from "@/lib/auth";
  * "free" only when tier === "free", generic "monthly limit" otherwise, so a
  * paid subscriber under QCOREAI_TIER_QUOTA doesn't see a "free limit" label.
  */
+// Токен берётся через общий хелпер. Здесь читались "aevion_token" и
+// "qcoreai_token" — имена, в которые НИКТО в приложении не пишет: вход
+// сохраняет JWT в "aevion_auth_token_v1" (src/lib/auth.ts). Заголовок
+// уходил пустым, и залогиненный пользователь получал 401 как аноним.
 function bearerHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};
   const t = getAuthToken() ?? "";

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
-import { getAuthToken } from "@/lib/auth";
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 

@@ -65,6 +65,11 @@ describe("ключ токена: один логин должен работат
   it("канонический ключ объявлен ровно в одном месте", () => {
     const declarations: string[] = [];
     for (const file of FILES) {
+      // Сами сторожа пропускаем: чтобы проверить ключ, тест обязан его назвать,
+      // и без этого исключения проверка краснела бы на СОСЕДНЕМ стороже
+      // (authKeyDefs.guard.test.ts) — то есть на своей же породе. Красный без
+      // причины читают ровно один раз, потом перестают.
+      if (rel(file).includes("__tests__/")) continue;
       const src = readFileSync(file, "utf8");
       if (/AUTH_TOKEN_KEY\s*=\s*"/.test(src)) declarations.push(rel(file));
     }

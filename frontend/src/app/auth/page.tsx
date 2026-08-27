@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { setAuthToken } from "@/lib/auth";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -21,14 +22,14 @@ function checkEmail(raw: string): string | null {
   if (!e) return null; // empty = neutral (not an error yet)
   // Must contain exactly one @, with non-empty local + domain, and a TLD.
   const at = e.indexOf("@");
-  if (at < 1 || at !== e.lastIndexOf("@")) return "Email must contain a single @";
+  if (at < 1 || at !== e.lastIndexOf("@")) return "В адресе должна быть ровно одна @";
   const local = e.slice(0, at);
   const domain = e.slice(at + 1);
-  if (!local || local.length > 64) return "Local part must be 1–64 chars";
-  if (!domain || !domain.includes(".")) return "Domain must contain a dot (e.g. .com)";
+  if (!local || local.length > 64) return "Часть до @ — от 1 до 64 символов";
+  if (!domain || !domain.includes(".")) return "После @ нужна точка — например, mail.ru";
   const tld = domain.split(".").pop() || "";
-  if (tld.length < 2) return "TLD must be at least 2 chars";
-  if (/\s/.test(e)) return "Email cannot contain spaces";
+  if (tld.length < 2) return "После последней точки нужно хотя бы две буквы";
+  if (/\s/.test(e)) return "В адресе не должно быть пробелов";
   return null;
 }
 
@@ -43,12 +44,12 @@ type PasswordStrength = {
 // claim (backend bcrypt + min-6 enforcement still applies), just user guidance.
 function scorePassword(pw: string): PasswordStrength {
   const hints: string[] = [];
-  if (pw.length < 6) hints.push("≥ 6 chars");
-  if (pw.length < 12) hints.push("≥ 12 chars for stronger");
-  if (!/[a-z]/.test(pw)) hints.push("lowercase letter");
-  if (!/[A-Z]/.test(pw)) hints.push("uppercase letter");
-  if (!/[0-9]/.test(pw)) hints.push("digit");
-  if (!/[^A-Za-z0-9]/.test(pw)) hints.push("symbol");
+  if (pw.length < 6) hints.push("минимум 6 знаков");
+  if (pw.length < 12) hints.push("12 знаков — надёжнее");
+  if (!/[a-z]/.test(pw)) hints.push("строчную букву");
+  if (!/[A-Z]/.test(pw)) hints.push("заглавную букву");
+  if (!/[0-9]/.test(pw)) hints.push("цифру");
+  if (!/[^A-Za-z0-9]/.test(pw)) hints.push("знак вроде ! или -");
 
   let s = 0;
   if (pw.length >= 6) s++;
@@ -58,11 +59,11 @@ function scorePassword(pw: string): PasswordStrength {
   const score = Math.min(4, s) as 0 | 1 | 2 | 3 | 4;
 
   const map: Record<number, { label: string; color: string }> = {
-    0: { label: "too short", color: "#94a3b8" },
-    1: { label: "weak", color: "#dc2626" },
-    2: { label: "fair", color: "#f59e0b" },
-    3: { label: "good", color: "#0d9488" },
-    4: { label: "strong", color: "#16a34a" },
+    0: { label: "коротковат", color: "#94a3b8" },
+    1: { label: "слабый", color: "#dc2626" },
+    2: { label: "средний", color: "#f59e0b" },
+    3: { label: "хороший", color: "#0d9488" },
+    4: { label: "надёжный", color: "#16a34a" },
   };
   return { score, label: map[score].label, color: map[score].color, hints };
 }
@@ -189,7 +190,7 @@ export default function AuthPage() {
       } catch (e: any) {
         if (cancelled) return;
         // Non-fatal — email/password path still works. Show a quiet hint.
-        setOauthLoadErr(e?.message || "could not load OAuth providers");
+        setOauthLoadErr(e?.message || "список способов входа не загрузился");
         setOauthProviders([]);
       }
     })();
@@ -214,7 +215,7 @@ export default function AuthPage() {
   const signIn = async () => {
     setErr(null); setMe(null); setBusy(true);
     try {
-      if (!email.trim() || !password.trim()) throw new Error("Email and password required");
+      if (!email.trim() || !password.trim()) throw new Error("Введите адрес почты и пароль");
       // Run inline validators before hitting backend — saves a round-trip
       // and gives the user the same feedback as the inline hint.
       const ee = checkEmail(email);
@@ -225,14 +226,17 @@ export default function AuthPage() {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Sign in error");
+      if (!res.ok) throw new Error(data?.error || "Не удалось войти");
       const nextToken = data.token as string;
       setToken(nextToken);
-      try { localStorage.setItem(TOKEN_KEY, nextToken); } catch {}
-      showToast("Sign in выполнен", "success");
+      // Через владельца токена, а не напрямую: setAuthToken пишет ещё и
+  // псевдонимы, под которыми токен читают десятки модулей. Прямая
+  // запись оставляла бы их пустыми до следующего старта приложения.
+  setAuthToken(nextToken);
+      showToast("Вы вошли", "success");
     } catch (e: any) {
       setErr(e?.message || "Error");
-      showToast(e?.message || "Sign in error", "error");
+      showToast(e?.message || "Не удалось войти", "error");
     } finally { setBusy(false); }
   };
 
@@ -243,28 +247,31 @@ export default function AuthPage() {
       // Mirror backend min-6 + run inline email validator.
       const ee = checkEmail(email);
       if (ee) throw new Error(ee);
-      if (password.length < 6) throw new Error("Password must be at least 6 characters");
+      if (password.length < 6) throw new Error("Пароль — не короче 6 знаков");
       const res = await fetch(apiUrl("/api/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Registration error");
+      if (!res.ok) throw new Error(data?.error || "Не удалось зарегистрироваться");
       const nextToken = data.token as string;
       setToken(nextToken);
-      try { localStorage.setItem(TOKEN_KEY, nextToken); } catch {}
-      showToast("Account created! Welcome to AEVION", "success");
+      // Через владельца токена, а не напрямую: setAuthToken пишет ещё и
+  // псевдонимы, под которыми токен читают десятки модулей. Прямая
+  // запись оставляла бы их пустыми до следующего старта приложения.
+  setAuthToken(nextToken);
+      showToast("Аккаунт создан. Добро пожаловать в AEVION", "success");
     } catch (e: any) {
       setErr(e?.message || "Error");
-      showToast(e?.message || "Registration error", "error");
+      showToast(e?.message || "Не удалось зарегистрироваться", "error");
     } finally { setBusy(false); }
   };
 
   const logout = () => {
     try { localStorage.removeItem(TOKEN_KEY); } catch {}
     setToken(""); setMe(null);
-    showToast("Signed out", "info");
+    showToast("Вы вышли", "info");
   };
 
   // Kick off the OAuth dance. Server's /start endpoint will 302 to the
@@ -296,10 +303,11 @@ export default function AuthPage() {
         <div style={{ borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden" }}>
           <div style={{ background: "linear-gradient(135deg, #0f172a, #1e293b)", padding: "28px 24px 20px", color: "#fff" }}>
             <h1 style={{ fontSize: 24, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
-              AEVION Identity
+              Вход в AEVION
             </h1>
             <p style={{ margin: 0, fontSize: 14, opacity: 0.85, lineHeight: 1.5 }}>
-              Single account for all ecosystem modules. Register or sign in to get a JWT token.
+              Один аккаунт на все модули: шахматы, ИИ-помощник, бюро прав, кошелёк.
+              Зарегистрируйтесь или войдите — это займёт минуту.
             </p>
           </div>
           <div style={{ padding: "24px 24px 28px" }}>
@@ -344,24 +352,24 @@ export default function AuthPage() {
                       >
                         <span style={{ width: 6, height: 6, borderRadius: 999, background: "currentColor" }} />
                         {remaining.tone === "expired"
-                          ? "Session expired — sign in again"
-                          : `Session ends in ${remaining.text}`}
+                          ? "Сессия истекла — войдите снова"
+                          : `Сессия закончится через ${remaining.text}`}
                       </div>
                     ) : null}
                   </div>
                   <button onClick={logout} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.06)", color: "#dc2626", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                    Sign out
+                    Выйти
                   </button>
                 </div>
                 <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <Link href="/qright" style={{ padding: "8px 14px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
-                    Create object in QRight →
+                    Зарегистрировать работу в QRight →
                   </Link>
                   <Link href="/planet" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #0f766e", color: "#0f766e", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
                     🌍 Planet Lab
                   </Link>
                   <Link href="/account" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
-                    ⚙ Account settings
+                    ⚙ Настройки аккаунта
                   </Link>
                 </div>
               </div>
@@ -370,7 +378,7 @@ export default function AuthPage() {
             <div style={{ display: "inline-flex", borderRadius: 12, border: "1px solid rgba(15,23,42,0.12)", overflow: "hidden", marginBottom: 20 }}>
               {(["register", "login"] as const).map((m) => (
                 <button key={m} onClick={() => setMode(m)} disabled={busy} style={{ padding: "10px 20px", border: "none", background: mode === m ? "#0f172a" : "#fff", color: mode === m ? "#fff" : "#64748b", fontWeight: mode === m ? 800 : 600, fontSize: 14, cursor: "pointer" }}>
-                  {m === "register" ? "Register" : "Sign in"}
+                  {m === "register" ? "Регистрация" : "Вход"}
                 </button>
               ))}
             </div>
@@ -390,7 +398,7 @@ export default function AuthPage() {
                         disabled={!p.configured || busy}
                         title={
                           p.configured
-                            ? `Sign in with ${p.name}`
+                            ? `Войти через ${p.name}`
                             : `Provider not configured. Set ${meta.envHint} on the backend.`
                         }
                         aria-disabled={!p.configured}
@@ -442,7 +450,7 @@ export default function AuthPage() {
                           {meta.brand}
                         </span>
                         <span>
-                          {mode === "register" ? "Sign up with" : "Continue with"} {p.name}
+                          {mode === "register" ? "Регистрация через" : "Войти через"} {p.name}
                         </span>
                         {!p.configured ? (
                           <span
@@ -459,7 +467,7 @@ export default function AuthPage() {
                               border: "1px solid rgba(245,158,11,0.3)",
                             }}
                           >
-                            Not set up
+                            Не настроен
                           </span>
                         ) : null}
                       </button>
@@ -480,7 +488,7 @@ export default function AuthPage() {
                   }}
                 >
                   <span style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.08)" }} />
-                  <span>or with email</span>
+                  <span>или по почте</span>
                   <span style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.08)" }} />
                 </div>
               </div>
@@ -500,19 +508,19 @@ export default function AuthPage() {
                   fontSize: 12,
                 }}
               >
-                Couldn&apos;t load OAuth providers ({oauthLoadErr}). Email sign-in still works.
+                Не удалось загрузить способы входа ({oauthLoadErr}). Вход по почте работает.
               </div>
             ) : null}
 
             <div style={{ display: "grid", gap: 14, maxWidth: 440 }}>
               {mode === "register" ? (
                 <div>
-                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Name</div>
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" style={inputStyle} disabled={busy} />
+                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Имя</div>
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Как к вам обращаться" style={inputStyle} disabled={busy} />
                 </div>
               ) : null}
               <div>
-                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Email</div>
+                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Почта</div>
                 <input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -536,13 +544,13 @@ export default function AuthPage() {
                   </div>
                 ) : email && !emailError ? (
                   <div id="email-hint" style={{ marginTop: 6, fontSize: 12, color: "#0d9488", fontWeight: 600 }}>
-                    ✓ Email looks good
+                    ✓ Адрес выглядит верно
                   </div>
                 ) : null}
               </div>
               <div>
-                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Password</div>
-                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Minimum 6 characters" style={inputStyle} disabled={busy} />
+                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Пароль</div>
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Не короче 6 знаков" style={inputStyle} disabled={busy} />
                 {password ? (
                   <div style={{ marginTop: 8 }}>
                     {/* Strength bar — 4 segments, fills left→right by score. */}
@@ -566,7 +574,7 @@ export default function AuthPage() {
                       </span>
                       {pwStrength.hints.length > 0 && mode === "register" ? (
                         <span style={{ color: "#64748b", textAlign: "right" }}>
-                          Add: {pwStrength.hints.slice(0, 2).join(", ")}
+                          Добавьте: {pwStrength.hints.slice(0, 2).join(", ")}
                         </span>
                       ) : null}
                     </div>
@@ -574,7 +582,7 @@ export default function AuthPage() {
                 ) : null}
               </div>
               <button onClick={mode === "login" ? signIn : register} disabled={submitDisabled} style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: submitDisabled ? "#94a3b8" : "linear-gradient(135deg, #0d9488, #0ea5e9)", color: "#fff", cursor: submitDisabled ? "default" : "pointer", fontWeight: 900, fontSize: 15, boxShadow: submitDisabled ? "none" : "0 4px 14px rgba(13,148,136,0.35)" }}>
-                {busy ? "Please wait..." : mode === "register" ? "Create account" : "Sign in"}
+                {busy ? "Секунду…" : mode === "register" ? "Создать аккаунт" : "Войти"}
               </button>
             </div>
 
@@ -587,7 +595,7 @@ export default function AuthPage() {
             {token ? (
               <details style={{ marginTop: 20 }}>
                 <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#64748b" }}>
-                  JWT token (for developers)
+                  Токен доступа (нужен только разработчикам)
                 </summary>
                 <textarea readOnly value={token} rows={3} style={{ width: "100%", fontFamily: "monospace", fontSize: 11, padding: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.1)", marginTop: 8, color: "#475569", background: "#f8fafc" }} />
               </details>
@@ -597,15 +605,15 @@ export default function AuthPage() {
 
         {/* What you get */}
         <div style={{ marginTop: 20, padding: "18px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)" }}>
-          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>What your AEVION identity unlocks</div>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Что открывает аккаунт AEVION</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
             {[
-              { icon: "📝", title: "IP Registration", desc: "Register and protect your digital works with SHA-256 hash" },
-              { icon: "🔐", title: "Cryptographic Signing", desc: "Sign documents with standards-based HMAC-SHA256" },
-              { icon: "💰", title: "Digital Wallet", desc: "Earn AEC credits, receive royalties automatically" },
-              { icon: "♟️", title: "Chess & Gaming", desc: "Play CyberChess, earn ratings and compete in tournaments" },
-              { icon: "🏆", title: "Awards", desc: "Submit music and film to AEVION Awards, win prizes" },
-              { icon: "📊", title: "Trust Score", desc: "Build your reputation across the entire ecosystem" },
+              { icon: "📝", title: "Права на работы", desc: "Зарегистрировать и защитить свои файлы отпечатком SHA-256" },
+              { icon: "🔐", title: "Подпись документов", desc: "Подписать договор или акт по стандарту HMAC-SHA256" },
+              { icon: "💰", title: "Кошелёк", desc: "Копить кредиты AEC и получать отчисления автоматически" },
+              { icon: "♟️", title: "Шахматы", desc: "Играть в CyberChess, набирать рейтинг и участвовать в турнирах" },
+              { icon: "🏆", title: "Премия", desc: "Подать музыку или фильм на AEVION Awards и побороться за приз" },
+              { icon: "📊", title: "Рейтинг доверия", desc: "Накапливать репутацию, общую для всех модулей платформы" },
             ].map((item) => (
               <div key={item.title} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                 <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>

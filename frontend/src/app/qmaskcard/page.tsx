@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import { apiFetchOrPaywall, PaywallError, type PaywallPayload } from "@/lib/paywall";
 import ModulePricingChip from "@/components/ModulePricingChip";
-import { getAuthToken } from "@/lib/auth";
 
 /**
  * QMaskCard — virtual card masking layer (interactive UI).

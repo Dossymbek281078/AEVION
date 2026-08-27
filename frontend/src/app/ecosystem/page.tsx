@@ -23,6 +23,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 
@@ -259,7 +260,7 @@ export default function EcosystemPage() {
             </span>
           </div>
           <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-            What's happening across the 27 AEVION modules, in one feed — plus a
+            What's happening across the {MODULE_NODES} AEVION modules, in one feed — plus a
             live health-matrix of every node. Earnings, posts, registrations,
             submissions blend into the same stream.
           </p>

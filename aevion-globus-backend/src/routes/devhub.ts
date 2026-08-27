@@ -5933,12 +5933,23 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
         const domainSlug = `${slugify(project.name)}-${project.id.slice(0, 6)}`;
         const fullDomain = `${domainSlug}.aevion.build`;
 
-        // 4a. Add custom domain to CF Pages project
-        await fetch(`${cfBase}/pages/projects/${pageName}/domains`, {
+        // 4a. Add custom domain to CF Pages project.
+        //
+        // Ответ ОБЯЗАН быть прочитан. Раньше все три вызова к Cloudflare шли без
+        // проверки, а ниже безусловно выполнялось `customDomain = fullDomain` —
+        // то есть при отказе провайдера выкатка всё равно сообщала поддомен,
+        // которого не существует. Зона aevion.build не делегирована, так что
+        // это не гипотеза: отказ здесь — обычный случай, а не редкий.
+        const addResp = await fetch(`${cfBase}/pages/projects/${pageName}/domains`, {
           method: "POST",
           headers: { ...cfHeaders, "Content-Type": "application/json" },
           body: JSON.stringify({ name: fullDomain }),
         });
+        // 409 — домен уже привязан к этому проекту, это не отказ.
+        if (!addResp.ok && addResp.status !== 409) {
+          const body = await addResp.text().catch(() => "");
+          throw new Error(`Pages domain refused (${addResp.status}): ${body.slice(0, 200)}`);
+        }
 
         // 4b. CNAME DNS record: fullDomain → pageName.pages.dev
         const dnsTarget = `${pageName}.pages.dev`;
@@ -5948,10 +5959,12 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
         const existingId = listData.result?.[0]?.id;
 
         const dnsBody = JSON.stringify({ type: "CNAME", name: fullDomain, content: dnsTarget, ttl: 1, proxied: true });
-        if (existingId) {
-          await fetch(`${zoneBase}/${existingId}`, { method: "PUT", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
-        } else {
-          await fetch(zoneBase, { method: "POST", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
+        const dnsResp = existingId
+          ? await fetch(`${zoneBase}/${existingId}`, { method: "PUT", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody })
+          : await fetch(zoneBase, { method: "POST", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
+        if (!dnsResp.ok) {
+          const body = await dnsResp.text().catch(() => "");
+          throw new Error(`DNS record refused (${dnsResp.status}): ${body.slice(0, 200)}`);
         }
 
         customDomain = fullDomain;

@@ -5683,7 +5683,12 @@ export default function CyberChessPage(){
             fontSize:19,color:"#fff",boxShadow:SHADOW.sm
           }}>♞</div>
           <div style={{lineHeight:1.15}}>
-            <div style={{fontSize:15,fontWeight:900,color:CC.text,letterSpacing:0.2,display:"inline-flex",alignItems:"center",gap:6}}>
+            {/* Заголовок первого уровня, а не крупный текст. Замер 27.08.2026:
+                на ГЛАВНОЙ странице модуля не было ни одного h1 — для экранного
+                диктора страница безымянна, а поиск не понимает, о чём она.
+                Глазами не отличить: выглядит ровно так же. Размеры и цвета
+                заданы явно, поэтому вид не меняется. */}
+            <h1 style={{fontSize:15,fontWeight:900,color:CC.text,letterSpacing:0.2,display:"inline-flex",alignItems:"center",gap:6,margin:0}}>
               <span>CyberChess</span>
               {isPro&&<span title={isUltimate?"Ultimate активен":"Pro активен"} style={{
                 display:"inline-flex",alignItems:"center",gap:3,
@@ -5694,7 +5699,7 @@ export default function CyberChessPage(){
               }}>
                 {isUltimate?"✨ Ultimate":"✨ Pro"}
               </span>}
-            </div>
+            </h1>
             <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
               SF18 · {(pzTotal??PUZZLES.length).toLocaleString("ru-RU")} {ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")}{useSF&&sfOk?" · ⚡":""}
             </div>

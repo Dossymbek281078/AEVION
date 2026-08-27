@@ -336,7 +336,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md",
               <div style={{ fontSize: 16, fontWeight: 800, color: COLOR.text, flex: 1 }}>{title}</div>
               <button
                 onClick={onClose}
-                aria-label="Close"
+                aria-label="Закрыть"
                 className="cc-focus-ring"
                 style={{
                   width: 32, height: 32, borderRadius: RADIUS.md,

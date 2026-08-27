@@ -185,7 +185,7 @@ export default function PlayerStatsDashboard({
               {metrics.total} партий · рейтинг {rating} · {pzSolvedCount} пазлов · {achievementsUnlocked}/{achievementsTotal} ачивок
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close"
+          <button onClick={onClose} aria-label={t("common.close")}
             style={{
               width: 32, height: 32, border: `1px solid ${border}`,
               borderRadius: 8, background: surface2, color: text,

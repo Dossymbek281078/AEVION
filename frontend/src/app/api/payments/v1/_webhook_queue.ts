@@ -1,5 +1,5 @@
 import { signHmac } from "./_lib";
-import { kvList, kvSet } from "./_persist";
+import { kvList, kvListChecked, kvPush, kvSet } from "./_persist";
 
 export type QueuedAttempt = {
   id: string;
@@ -47,9 +47,12 @@ export async function enqueueAttempt(opts: {
     last_http_code: null,
     status: "pending",
   };
-  const all = await readQueue();
-  all.unshift(attempt);
-  await persistQueue(all);
+  // Раньше здесь было «прочитать всю очередь → unshift → записать обратно».
+  // При упавшем чтении очередь читалась как пустая, и запись стирала ВСЕ
+  // ожидающие доставки. kvPush делает ровно то же добавление в начало с тем
+  // же ограничением длины, но при неудачном чтении не трогает ключ и
+  // придерживает запись — поэтому здесь он, а не своя копия этой логики.
+  await kvPush(QUEUE_KEY, attempt, QUEUE_CAP);
   return attempt;
 }
 
@@ -122,10 +125,24 @@ export type ProcessResult = {
   delivered: number;
   failed: number;
   retrying: number;
+  /**
+   * true = очередь прочитать НЕ удалось, поэтому обработки не было.
+   * Без этого поля нули неотличимы от честного «очередь пуста»: вызывающий
+   * увидел бы scanned: 0 и решил, что доставлять нечего.
+   */
+  unread?: boolean;
 };
 
 export async function processDue(maxBatch = 20): Promise<ProcessResult> {
-  const all = await readQueue();
+  // Проверяемое чтение: ниже очередь перезаписывается целиком. При обычном
+  // readQueue упавшее чтение дало бы пустой список, persistQueue стёр бы всю
+  // очередь, а функция вернула бы scanned: 0 — то есть отчиталась «пусто,
+  // всё спокойно» ровно в тот момент, когда доставки были уничтожены.
+  const read = await kvListChecked<QueuedAttempt>(QUEUE_KEY);
+  if (!read.ok) {
+    return { scanned: 0, processed: 0, delivered: 0, failed: 0, retrying: 0, unread: true };
+  }
+  const all = read.value;
   const now = Date.now();
   const due = all
     .filter((a) => a.status === "pending" && a.next_retry_at <= now)

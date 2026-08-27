@@ -97,7 +97,7 @@ export default function StreamSourceModal({ open, onClose, onPlay, initialUrl }:
 
         {/* URL input + live-detect badge */}
         <div style={{ position: "relative", marginBottom: 6 }}>
-          <input
+          <input aria-label="Адрес источника"
             ref={inputRef}
             type="text"
             value={url}

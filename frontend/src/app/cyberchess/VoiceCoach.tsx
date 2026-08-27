@@ -750,7 +750,7 @@ export default function VoiceCoach({
           style={selectStyle}
           value={voiceId}
           onChange={(e) => setVoiceId(e.target.value)}
-          aria-label="Choose voice"
+          aria-label="Выбрать голос"
         >
           {voices.map((v) => (
             <option key={v.id} value={v.id}>
@@ -906,7 +906,7 @@ export default function VoiceCoach({
               }}
               placeholder="почему этот ход?"
               style={chatInputStyle}
-              aria-label="Question to coach"
+              aria-label="Сообщение коучу"
               disabled={chatLoading}
             />
             <button

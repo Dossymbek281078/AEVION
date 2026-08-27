@@ -620,7 +620,14 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
             // that come back unchanged) — so they are cached and never re-sent
             // on the next pass. Only a real change triggers a re-apply walk.
             map[batch[i]] = tr;
-            cache[batch[i]] = tr;
+            // Persist only real translations. An answer equal to the source is
+            // either a brand token or the shape a failure takes, and writing it
+            // to localStorage makes that permanent for this visitor: the page
+            // would keep its Russian captions even after the service recovered.
+            // In-session it is still remembered in `map`, so nothing is re-sent
+            // twice on one visit. (Measured 28.07.2026: 39 home-page captions
+            // stuck this way on prod, server-side, for every German visitor.)
+            if (tr !== batch[i]) cache[batch[i]] = tr;
             translatedValues.add(tr);
             if (tr !== batch[i]) changed = true;
           }

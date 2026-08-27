@@ -7031,7 +7031,7 @@ export default function CyberChessPage(){
                 onChange={(v)=>sGamesFilter(v)}
                 tabs={[
                   {value:"all",label:"Все"},
-                  {value:"Bullet",label:"Bullet"},
+                  {value:"Bullet",label:"Пуля"},
                   {value:"Blitz",label:"Blitz"},
                   {value:"Rapid",label:"Rapid"},
                 ]}
@@ -13762,7 +13762,7 @@ ${question.trim()}`;
               }}>💾 Сохранить</Btn>
               <Btn variant="secondary" onClick={()=>{
                 const txt=`Я как ${top.name} ${top.emoji} в шахматах! Найди свой стиль на AEVION CyberChess.`;
-                if(navigator.share)navigator.share({title:"Chess Personality",text:txt}).catch(()=>{});
+                if(navigator.share)navigator.share({title:"Твой шахматный характер",text:txt}).catch(()=>{});
                 else{navigator.clipboard?.writeText(txt);showToast("Скопировано в буфер","success")}
               }}>📤 Поделиться</Btn>
               <Btn variant="ghost" onClick={()=>{sQuizAnswers([]);sQuizResult(null)}}>↻ Заново</Btn>
@@ -15082,7 +15082,7 @@ ${question.trim()}`;
         {id:"pz-rush",      icon:"⚡",group:"Puzzles", label:"Puzzle Rush",        hint:"Решай как можно больше за время",           run:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-3min",      icon:"⏱", group:"Puzzles", label:"3-минутный режим",  hint:"Реши как можно больше за 3 мин · +3с за каждый верный ответ", run:()=>{sTab("puzzles");sPzMode("timed3");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-5min",      icon:"⏱", group:"Puzzles", label:"5-минутный режим",  hint:"300 секунд на одну задачу",                 run:()=>{sTab("puzzles");sPzMode("timed5");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-        {id:"pz-lichess",   icon:"🌐",group:"Puzzles", label:"Lichess Daily Puzzle",hint:"Задача дня с lichess.org (live)",          run:async()=>{
+        {id:"pz-lichess",   icon:"🌐",group:"Puzzles", label:"Задача дня с Lichess",hint:"Задача дня с lichess.org (live)",          run:async()=>{
           if(lichessLoading)return;sLichessLoading(true);showToast("⏳ Загружаю Lichess Daily…","info");
           try{
             const r=await fetch("https://lichess.org/api/puzzle/daily",{headers:{Accept:"application/json"}});
@@ -15107,14 +15107,14 @@ ${question.trim()}`;
         {id:"coach-knowledge",icon:"📚",group:"Coach", label:"База знаний тренера",   hint:"9 категорий · дебюты / тактика / эндшпиль / время / память / roadmap",  run:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
         {id:"coach-lessons",  icon:"📖",group:"Coach", label:"Coach Lessons (Курс)", hint:`${LESSONS.length} уроков beginner→advanced с теорией+позициями+упражнениями`, run:()=>{sTab("coach");setTimeout(()=>sShowLessons(true),50)}},
         {id:"coord-trainer",icon:"🎯",group:"Coach",   label:"Координаты",         hint:"Тренировка чтения доски (30 сек)",          run:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},
-        {id:"opening",      icon:"📖",group:"Coach",   label:"Opening Trainer",   hint:"Дрилл дебютов до автоматизма",              run:()=>sShowOpeningTrainer(true)},
-        {id:"editor",       icon:"♟",group:"Coach",   label:"Position Editor",   hint:"FEN · ручная расстановка",                  run:()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}},
+        {id:"opening",      icon:"📖",group:"Coach",   label:"Тренажёр дебютов",   hint:"Дрилл дебютов до автоматизма",              run:()=>sShowOpeningTrainer(true)},
+        {id:"editor",       icon:"♟",group:"Coach",   label:"Редактор позиции",   hint:"FEN · ручная расстановка",                  run:()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}},
 
         // ── ANALYSIS ──
-        {id:"analysis",     icon:"▲", group:"Analysis", label:"Открыть Анализ",   hint:"Eval bar + Opening Explorer",               run:()=>{sTab("analysis");sShowAnal(true)}},
+        {id:"analysis",     icon:"▲", group:"Analysis", label:"Открыть Анализ",   hint:"Полоса оценки и обзор дебютов",               run:()=>{sTab("analysis");sShowAnal(true)}},
         {id:"masters",      icon:"★", group:"Analysis", label:"Партии классиков",hint:"Capablanca / Tal / Carlsen · режим «угадай»",run:()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}},
-        {id:"game-dna",     icon:"🧬",group:"Analysis", label:"Game DNA",         hint:"Стиль игры из последних партий",            run:()=>sShowGameDna(true)},
-        {id:"insights",     icon:"🔬",group:"Analysis", label:"Insights",         hint:"Слабости и сильные стороны",                run:()=>sShowInsights(true)},
+        {id:"game-dna",     icon:"🧬",group:"Analysis", label:"ДНК твоей игры",         hint:"Стиль игры из последних партий",            run:()=>sShowGameDna(true)},
+        {id:"insights",     icon:"🔬",group:"Analysis", label:"Наблюдения об игре",         hint:"Слабости и сильные стороны",                run:()=>sShowInsights(true)},
         {id:"share-fen",    icon:"🔗",group:"Analysis", label:"Поделиться позицией (FEN)",hint:"Скопировать ссылку с текущей позицией",hotkey:"S",run:()=>{
           try{const fen=game.fen();const url=`${window.location.origin}/cyberchess?fen=${encodeURIComponent(fen)}`;
             navigator.clipboard?.writeText(url).then(()=>showToast("📋 Ссылка скопирована","success"),()=>showToast(`FEN: ${fen}`,"info"));
@@ -15153,8 +15153,8 @@ ${question.trim()}`;
 
         // ── SETTINGS ──
         {id:"shop",         icon:"💰",group:"Settings", label:"Магазин Chessy",       hint:`Баланс: ${chessy.balance}`,    run:()=>sShowShop(true)},
-        {id:"streamer",     icon:"📺",group:"Settings", label:"Streamer Mode toggle", hint:"OBS-ready dark UI",            run:()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode ON","info")}},
-        {id:"multi-panel",  icon:"📺",group:"Settings", label:"Multi-Panel split",    hint:"4 окна с YouTube/Twitch",      run:()=>sShowMultiPanel(true)},
+        {id:"streamer",     icon:"📺",group:"Settings", label:"Режим для трансляции", hint:"Тёмный вид, готовый для трансляции",            run:()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode ON","info")}},
+        {id:"multi-panel",  icon:"📺",group:"Settings", label:"Несколько панелей сразу",    hint:"4 окна с YouTube/Twitch",      run:()=>sShowMultiPanel(true)},
         {id:"help-tour",    icon:"🧭",group:"Settings", label:"Обзорный тур",         hint:"4 шага — как всё устроено",    run:()=>sTourStep(0)},
 
         // ── РАЗДЕЛЫ — навигация на маршруты, которые раньше были доступны только по URL ──

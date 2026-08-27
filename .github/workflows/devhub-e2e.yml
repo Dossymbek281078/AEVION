@@ -38,6 +38,8 @@ on:
   push:
     branches: [main]
     paths: *gate_paths
+    paths:
+    paths:
 
 jobs:
   devhub-e2e:

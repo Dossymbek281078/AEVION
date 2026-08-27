@@ -3175,7 +3175,21 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 return (
                   <div
                     key={f.path}
+                    // A file row was a plain div: no keyboard could focus it,
+                    // so opening a file — the first thing anyone does here —
+                    // was mouse-only. It behaves like a button, so it says so.
+                    role="button"
+                    tabIndex={isRenaming ? -1 : 0}
+                    aria-pressed={isSelected}
+                    aria-label={`Открыть ${f.path}`}
                     onClick={() => !isRenaming && loadFile(f)}
+                    onKeyDown={(e) => {
+                      if (isRenaming) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault(); // Space would scroll the tree
+                        loadFile(f);
+                      }
+                    }}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setContextMenu({ x: e.clientX, y: e.clientY, file: f });

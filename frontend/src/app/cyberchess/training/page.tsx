@@ -311,10 +311,10 @@ export default function TrainingHubPage() {
             padding: "16px 18px",
           }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: C.gold, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>
-              🪙 Daily Chessy
+              🪙 Ежедневный Chessy
             </div>
             <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 4 }}>
-              {dailyClaimed ? "Сегодня забрано ✓" : "Заберать ежедневный бонус"}
+              {dailyClaimed ? "Сегодня уже получено ✓" : "Забрать ежедневный бонус"}
             </div>
             <div style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.5 }}>
               <strong style={{ color: C.gold }}>+25 AEV</strong> за визит в центр обучения. Используй в «Экономике» для аукциона или аренды тренера.
@@ -360,7 +360,7 @@ export default function TrainingHubPage() {
             <Link href="/cyberchess/cpi/dashboard" style={{
               fontSize: 12, color: C.purple, textDecoration: "none", fontWeight: 700,
             }}>
-              📊 Открыть дашборд →
+              📊 Открыть сводку →
             </Link>
           </div>
         )}
@@ -374,7 +374,7 @@ export default function TrainingHubPage() {
             {[
               { href: "/cyberchess/cpi/leaderboard", emoji: "🏆", label: "CPI Leaderboard", desc: "Топ-15 по композитному рейтингу" },
               { href: "/cyberchess/economy", emoji: "🪙", label: "Economy", desc: "Аукцион, тренеры, стримеры" },
-              { href: "/cyberchess/cpi", emoji: "📐", label: "CPI Spec", desc: "Полная формула + примеры" },
+              { href: "/cyberchess/cpi", emoji: "📐", label: "Как считается CPI", desc: "Полная формула и примеры" },
               { href: "/cyberchess", emoji: "♞", label: "Играть", desc: "Главная — играть партии" },
             ].map((r) => (
               <Link key={r.href} href={r.href} style={{

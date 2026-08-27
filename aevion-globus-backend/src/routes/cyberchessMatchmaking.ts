@@ -271,8 +271,22 @@ function submitServerAnticheatSignals(m: Match): void {
         instantMoves: stats.instantMoves,
       });
     }
-  } catch {
-    // Anti-cheat signal is best-effort — never let it affect match settlement.
+  } catch (e) {
+    // Best-effort остаётся best-effort: расчёт партии античит ронять не должен.
+    // Но МОЛЧАТЬ он права не имеет. Посадочная страница обещает человеку
+    // «подозрительные партии помечаются автоматически, без ручного разбора»;
+    // если разбор начнёт падать, обещание станет ложным, а узнать об этом
+    // будет неоткуда: партии засчитываются, ошибок нет, всё выглядит рабочим.
+    // След обязан называть ЧТО и по КОМУ не удалось — без этого он бесполезен.
+    console.error(
+      "[cyberchess/anticheat] разбор партии не выполнен — партия засчитана без проверки",
+      {
+        matchId: m.matchId,
+        players: [m.white.userId, m.black.userId],
+        moves: m.moves.length,
+        error: e instanceof Error ? e.message : String(e),
+      },
+    );
   }
 }
 

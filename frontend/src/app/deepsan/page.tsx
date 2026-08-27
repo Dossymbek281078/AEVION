@@ -337,16 +337,25 @@ export default function DeepSanPage() {
         )}
 
         {/* Main layout: Kanban + Timer */}
+        {/*
+          Было grid "1fr 300px": таймер жёстко 300px и не складывался, поэтому
+          на телефоне страница разъезжалась вбок. Сеткой это не чинится без
+          media-запроса, а страница написана инлайновыми стилями: auto-fit
+          уравнял бы колонки, и на десктопе таймер стал бы вдвое шире.
+          Flex с переносом сохраняет пропорции и складывается сам. Приём взят
+          у соседней вкладки (/qsocial, коммит a06225310) — второго способа
+          делать одно и то же не заводим.
+        */}
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 300px",
+            display: "flex",
+            flexWrap: "wrap",
             gap: "24px",
-            alignItems: "start",
+            alignItems: "flex-start",
           }}
         >
           {/* Kanban */}
-          <div>
+          <div style={{ flex: "1 1 320px", minWidth: 0 }}>
             <AddTaskForm onAdd={handleAddTask} busy={addBusy} />
             {tasksLoading ? (
               <div style={{ color: "#475569", fontSize: "13px", padding: "20px 0" }}>
@@ -356,7 +365,10 @@ export default function DeepSanPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
+                  // Три колонки доски жёстко в ряд не помещаются на телефоне.
+                  // Здесь auto-fit уместен, в отличие от внешней сетки: колонки
+                  // РАВНОПРАВНЫ, и складывание их не перекашивает.
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
                   gap: "16px",
                 }}
               >
@@ -439,7 +451,7 @@ export default function DeepSanPage() {
           </div>
 
           {/* Sidebar: Focus Timer */}
-          <div style={{ position: "sticky", top: "72px" }}>
+          <div style={{ flex: "0 1 300px", minWidth: 0, position: "sticky", top: "72px" }}>
             {focusTaskId !== null && (
               <div
                 style={{

@@ -2238,6 +2238,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         const decoder = new TextDecoder();
         let buffer = "";
         const accumulated: typeof agentResults = [];
+        // The server ends a finished run with a "complete" event. Without this
+        // flag, a stream that simply stopped — the process died, the connection
+        // dropped, a proxy timed out — ended the run in silence: no summary, no
+        // error, the button just went back to normal. Steps that never reported
+        // look exactly like steps that were never run.
+        let completed = false;
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
@@ -2258,6 +2264,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 });
                 setAgentResults([...accumulated]);
               } else if (evt.type === "complete") {
+                completed = true;
                 setAgentSummary({
                   totalSteps: evt.totalSteps, successCount: evt.successCount, failureCount: evt.failureCount,
                 });
@@ -2265,6 +2272,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               }
             } catch { /* tolerate bad events */ }
           }
+        }
+        if (!completed) {
+          showToast(
+            `Прогон оборвался: отчитались ${accumulated.length} из ${agentSteps.length} шагов. Остальные могли не выполниться.`,
+            "error",
+          );
         }
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json();

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, act, waitFor } from "@testing-library/react";
-import { I18nProvider } from "@/lib/i18n";
+import { I18nProvider, loadDict } from "@/lib/i18n";
 import { AutoTranslate } from "../AutoTranslate";
 
 // JSX like `smart call{n === 1 ? "" : "s"}` renders ONE phrase as two sibling
@@ -8,7 +8,11 @@ import { AutoTranslate } from "../AutoTranslate";
 // "3 умный вызовs" (seen live on /pricing) — the walker must join sibling
 // text nodes and translate the whole phrase.
 describe("AutoTranslate — fragmented text nodes", () => {
-  beforeEach(() => {
+  // Since 10.08.2026 only English is compiled into a page and the rest arrive
+  // as chunks, so the translating pass waits for the dictionary it seeds from.
+  // Awaiting it here makes that wait explicit instead of a race against waitFor.
+  beforeEach(async () => {
+    await loadDict("ru");
     localStorage.clear();
     localStorage.setItem("aevion_lang_v1", "ru");
     // Pre-seed the persisted translation cache so no network round-trip is

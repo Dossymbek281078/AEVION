@@ -441,8 +441,17 @@ export default function DevHubPage() {
               </p>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+              {/* Кнопки НЕТ, если товара нет в каталоге.
+                  Раньше стояло `href={STUDIO_PRO?.href ?? "#"}`: при пропаже записи
+                  человек видел бы «Upgrade — $149/mo», нажимал и не попадал никуда.
+                  Хуже мёртвой кнопки было второе: событие «начал оплату» уходило
+                  ВСЁ РАВНО, и в воронке появлялись начатые оплаты, которых не было —
+                  то есть отчёт о деньгах врал бы правдоподобно.
+                  Цена берётся только из каталога: зашитая рядом «149» — второй
+                  источник, который однажды разойдётся с настоящей ценой. */}
+              {STUDIO_PRO ? (
               <a
-                href={STUDIO_PRO?.href ?? "#"}
+                href={STUDIO_PRO.href}
                 target="_blank"
                 rel="noopener noreferrer"
                 // Studio Pro sells through its own Lemon Squeezy variant, so the
@@ -455,8 +464,13 @@ export default function DevHubPage() {
                   whiteSpace: "nowrap",
                 }}
               >
-                Upgrade — {`$${STUDIO_PRO?.priceUsd ?? 149}`}/mo
+                {t("pro.upgrade")} — {`$${STUDIO_PRO.priceUsd}`}{t("pro.perMonth")}
               </a>
+              ) : (
+                <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: 600 }}>
+                  {t("pro.unavailable")}
+                </span>
+              )}
               <a
                 href="/apps"
                 style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", textDecoration: "underline", whiteSpace: "nowrap" }}

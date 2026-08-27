@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { KEY_QUIZ_BEST } from "../../progressKeys";
 
 /* ───────────────────────── ТИПЫ И КОНСТАНТЫ ───────────────────────── */
 
@@ -68,7 +69,6 @@ interface ChecklistsData {
 }
 
 const KEY_DRAWINGS  = "aevion-smeta-drawings-v1";
-const KEY_QUIZ_BEST = "aevion-smeta-quiz-best-v1";
 const KEY_CHECKLISTS = "smeta-checklists-v1";
 const KEY_DASHBOARD = "aevion-smeta-dashboard-v1";
 

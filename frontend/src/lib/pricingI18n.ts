@@ -1,6 +1,7 @@
 "use client";
 
 import { useI18n } from "./i18n";
+import { MODULE_NODES } from "@/data/pitchFacts";
 import { migrationsDict } from "./pricingI18n/sections/migrations";
 
 /**
@@ -77,7 +78,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     /* Modules matrix */
     "modules.title": "Все модули",
-    "modules.subtitle": "27 продуктов AEVION. Покупаются отдельно или входят в тарифы.",
+    "modules.subtitle": `${MODULE_NODES} продуктов AEVION. Покупаются отдельно или входят в тарифы.`,
     "modules.colModule": "Модуль",
     "modules.colDescription": "Описание",
     "modules.colStatus": "Статус",
@@ -569,7 +570,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "logos.label": "TRUSTED BY TEAMS ACROSS 30+ COUNTRIES",
 
     "modules.title": "All modules",
-    "modules.subtitle": "27 AEVION products. Buy individually or get them in tiers.",
+    "modules.subtitle": `${MODULE_NODES} AEVION products. Buy individually or get them in tiers.`,
     "modules.colModule": "Module",
     "modules.colDescription": "Description",
     "modules.colStatus": "Status",

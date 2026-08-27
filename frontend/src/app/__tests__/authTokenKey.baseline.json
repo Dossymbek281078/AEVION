@@ -1,0 +1,19 @@
+[
+  "app/bank/statement/page.tsx",
+  "app/fintech/playground/page.tsx",
+  "app/qcoreai/QCoreAIClient.tsx",
+  "app/qcoreai/analytics/page.tsx",
+  "app/qcoreai/eval/[suiteId]/compare/page.tsx",
+  "app/qcoreai/eval/[suiteId]/page.tsx",
+  "app/qcoreai/eval/page.tsx",
+  "app/qcoreai/orgs/page.tsx",
+  "app/qcoreai/prompts/page.tsx",
+  "app/qcoreai/search/page.tsx",
+  "app/qcoreai/workspaces/page.tsx",
+  "app/qjobs/page.tsx",
+  "app/qmedia/music/page.tsx",
+  "app/qmedia/videos/page.tsx",
+  "app/qnews/page.tsx",
+  "app/qsign/keys/page.tsx",
+  "lib/build/applySource.ts"
+]

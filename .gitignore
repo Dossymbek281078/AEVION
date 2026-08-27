@@ -104,3 +104,5 @@ benchmark-out/
 # .aevion-data-test-12348/ и подобные. Правило `.aevion-data/` их НЕ ловит,
 # и 19.08.2026 такой каталог попал под `git add -A` при сборке ветки выкатки.
 .aevion-data-test-*/
+
+.vercel

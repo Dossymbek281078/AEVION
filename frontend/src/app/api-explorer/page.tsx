@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import { repoPath } from "@/lib/repoUrl";
+import { REGISTRY_ENTRIES } from "@/data/pitchFacts";
 
 export const metadata: Metadata = {
   title: "AEVION API explorer — interactive playground for the Hub catalog",
@@ -117,7 +118,10 @@ const CARDS = [
 
 export default async function ApiExplorerIndexPage() {
   const stats = await fetchStats();
-  const total = stats?.total ?? 29;
+  // Запасное значение — из pitchFacts, а не числом: было 29 при 41 записи
+  // в реестре, и показывалось оно ровно тогда, когда бэкенд не ответил, —
+  // то есть в самый неудачный момент страница ещё и занижала платформу.
+  const total = stats?.total ?? REGISTRY_ENTRIES;
   return (
     <main style={{ minHeight: "100vh", background: "#f8fafc", color: "#0f172a" }}>
       <div style={{ maxWidth: 1080, margin: "0 auto", padding: "60px 20px" }}>

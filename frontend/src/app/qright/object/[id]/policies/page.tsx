@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { fixDoubledScheme } from "@/lib/urls";
-import { getAuthToken } from "@/lib/auth";
 
 type Policy = {
   id: string;

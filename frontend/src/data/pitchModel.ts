@@ -4,7 +4,23 @@
  *
  * Everything here is plain data. UI components read it and render.
  * AutoTranslate (DOM walker, ru-only) handles RU rendering at runtime.
+ *
+ * СЧЁТЧИКИ МОДУЛЕЙ БЕРУТСЯ ИЗ pitchFacts, А НЕ ПИШУТСЯ ЦИФРОЙ.
+ * До 10.08.2026 они были литералами прямо в текстах, и /pitch на проде
+ * противоречил сам себе в пределах одного экрана: «12 live MVPs of 33
+ * planned nodes» в шапке, «41 product nodes» в лиде, «one of 41 modules»
+ * в сравнении и «13 of 41 nodes committed, remaining 15» в рисках. Реестр
+ * при этом отдавал 41 запись / 36 живых. pitchFacts заперт на реестр
+ * считающим сторожем — вписывать сюда число заново значит вернуть расхождение.
  */
+
+import {
+  COMMITTED_NODES,
+  DEEP_DIVE_MODULES,
+  FEATURE_COMPLETE_LABEL,
+  LIVE_MODULES,
+  MODULE_NODES,
+} from "./pitchFacts";
 
 export type LaunchStage = "live" | "beta" | "alpha" | "vision";
 export type ValueBucket =
@@ -48,13 +64,14 @@ export const thesis = {
   title: "The trust layer for the next decade of digital creation",
   lead:
     "AEVION is one identity, one signing layer, one IP registry, one authorship & prior-art bureau, one compliance " +
-    "rail and one wallet — already wired together as a working system. 41 product nodes, 12 with " +
-    "live MVPs, all sharing the same Trust Graph. We monetise three of the largest underserved " +
+    `rail and one wallet — already wired together as a working system. ${MODULE_NODES} product nodes, ` +
+    `${LIVE_MODULES} deployed and reachable today (${FEATURE_COMPLETE_LABEL}), all sharing the same ` +
+    "Trust Graph. We monetise three of the largest underserved " +
     "markets at once: IP enforcement, the creator economy, and digital assets.",
   pillars: [
     {
       kicker: "ONE IDENTITY",
-      title: "Single AEVION account → 41 nodes",
+      title: `Single AEVION account → ${MODULE_NODES} nodes`,
       body:
         "JWT issued once by Auth unlocks every product. No fragmentation, no Stripe-style integration tax for new modules.",
     },
@@ -148,7 +165,7 @@ export const unitEconomics = {
   ],
   totals: { beachhead: "≈ $0.85M ARR", regional: "≈ $9.65M ARR" },
   note:
-    "Three flagships only — the other 38 modules are upside, not in this figure. Deliberately modest " +
+    `Three flagships only — the other ${MODULE_NODES - 3} modules are upside, not in this figure. Deliberately modest ` +
     "and defensible: a first-question-of-due-diligence model, not a hockey stick. Market-size and " +
     "conversion inputs are the assumptions most worth challenging. Totals moved DOWN from ≈$1.2M / ≈$13.7M " +
     "on 2026-08-18 for one reason only — the All-Access flagship is the live Full tier, repriced " +
@@ -286,7 +303,7 @@ export const launchedModules: PitchModule[] = [
     href: "/auth",
     stage: "live",
     bucket: "infrastructure",
-    tagline: "Single AEVION account — JWT that unlocks all 41 modules.",
+    tagline: `Single AEVION account — JWT that unlocks all ${MODULE_NODES} modules.`,
     problem:
       "Every fintech, IP-tech and creator-tech product reinvents auth. The integration tax kills new modules and confuses users.",
     killerFeature:
@@ -396,7 +413,7 @@ export const launchedModules: PitchModule[] = [
     networkRole:
       "QCoreAI is the intelligence backbone for Multichat, Bank Advisor, Bank Copilot and every future agent. Centralised model usage accounting → predictable per-token economics.",
     proof: ["5 production providers wired", "Suggestion deck explains the ecosystem", "/api/qcoreai/providers live"],
-    valueLine: "Centralised LLM spend across 41 nodes vs. 27 separate API contracts — single biggest OPEX win in the company.",
+    valueLine: `Centralised LLM spend across ${MODULE_NODES} nodes vs. 27 separate API contracts — single biggest OPEX win in the company.`,
   },
   {
     id: "qtrade",
@@ -565,7 +582,7 @@ export const billionDefense = {
     },
     {
       number: "05",
-      title: "41 modules, near-zero marginal cost per node",
+      title: `${MODULE_NODES} modules, near-zero marginal cost per node`,
       body:
         "Auth + Bureau + Bank + QCoreAI are shared infrastructure. Adding a new vertical (HealthAI, QPersona, Kids-AI) is mostly UI. Each new node makes every existing node more valuable — scope effect compounds without OPEX.",
     },
@@ -782,7 +799,7 @@ export const useCases = {
 export const team = {
   title: "Team & advisors",
   intro:
-    "Capital-efficient lean team — 12 working MVPs already shipped is the proof of velocity. " +
+    `Capital-efficient lean team — ${DEEP_DIVE_MODULES} working MVPs already shipped is the proof of velocity. ` +
     "Specific founding-team biographies and advisors are available under NDA via the investor demo.",
   slots: [
     { role: "Founder · CEO / Product", note: "Under NDA — book a demo" },
@@ -791,7 +808,7 @@ export const team = {
     { role: "Advisors (IP law, fintech, AI)", note: "Available on request" },
   ],
   proof:
-    "Proof points instead of bios: 12 production MVPs shipped, /pitch with live API metrics, " +
+    `Proof points instead of bios: ${DEEP_DIVE_MODULES} production MVPs shipped, /pitch with live API metrics, ` +
     "41-node roadmap with shared infrastructure, multilingual EN/RU/KK production codebase.",
 } as const;
 
@@ -811,7 +828,7 @@ export const competitive = {
       weakness:
         "Sign-only. No registry, no compliance, no creator economy, no wallet. Customers still need 4 other vendors.",
       aevionWin:
-        "QSign is one of 41 modules — same payload format, same Trust Graph edge, same audit log. Bundled at zero marginal cost.",
+        `QSign is one of ${MODULE_NODES} modules — same payload format, same Trust Graph edge, same audit log. Bundled at zero marginal cost.`,
     },
     {
       name: "Blockchain timestamping (OpenTimestamps, Bitcoin OP_RETURN)",
@@ -883,9 +900,11 @@ export const risks = {
     },
     {
       severity: "medium",
-      risk: "Execution risk on 41 nodes — focus dilution",
+      risk: `Execution risk on ${MODULE_NODES} nodes — focus dilution`,
       mitigation:
-        "Only 13 of 41 nodes are committed to ship in the next 18 months. Remaining 15 are roadmap signals (cheap optionality), not parallel work-streams. Engineering capital concentrated on the 4 highest-revenue modules first.",
+        `Only ${COMMITTED_NODES} of ${MODULE_NODES} nodes are committed to ship in the next 18 months. ` +
+        `The remaining ${MODULE_NODES - COMMITTED_NODES} are roadmap signals (cheap optionality), not parallel ` +
+        "work-streams. Engineering capital concentrated on the 4 highest-revenue modules first.",
     },
     {
       severity: "low",
@@ -899,7 +918,7 @@ export const risks = {
 export const ask = {
   title: "The ask",
   body:
-    "We're raising for a focused 18-month sprint: harden the launched 12 modules, ship 4 of the 15 emerging nodes, and lock 2 enterprise compliance pilots. Capital is for engineering, GTM in three creator verticals, and one regulatory partnership. The offer is one, not a ladder: a partnership — $10M returnable advance plus resources (compute, engineers, distribution, brand), revenue split 51% founder / 49% partner, founder stays as Chief Idea Officer. Not a buyout.",
+    `We're raising for a focused 18-month sprint: harden the launched ${DEEP_DIVE_MODULES} modules, ship 4 of the ${MODULE_NODES - DEEP_DIVE_MODULES} emerging nodes, and lock 2 enterprise compliance pilots. Capital is for engineering, GTM in three creator verticals, and one regulatory partnership. The offer is one, not a ladder: a partnership — $10M returnable advance plus resources (compute, engineers, distribution, brand), revenue split 51% founder / 49% partner, founder stays as Chief Idea Officer. Not a buyout.`,
   termsHref: "/acquire",
   termsLabel: "See the full deal ladder (1% → 95%)",
   ctaPrimary: { label: "Book an investor demo", href: "mailto:yahiin1978@gmail.com?subject=AEVION investor demo" },

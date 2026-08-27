@@ -9,6 +9,7 @@
 // any third-party asset can read it via Referer.
 
 import { useEffect, useState } from "react";
+import { setAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
@@ -51,7 +52,7 @@ export default function AuthSuccessPage() {
     if (p && PROVIDERS[p]) setProvider(p);
 
     try {
-      localStorage.setItem(TOKEN_KEY, t);
+      setAuthToken(t);
     } catch {}
     // Strip token from URL bar immediately so referer / history sync /
     // server logs can't leak the secret.

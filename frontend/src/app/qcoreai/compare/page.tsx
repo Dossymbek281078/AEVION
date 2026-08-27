@@ -1,12 +1,12 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
-import { getAuthToken } from "@/lib/auth";
 
 /** Simple word-level diff — returns spans with add/remove/same highlighting */
 function wordDiff(textA: string, textB: string): React.ReactNode[] {

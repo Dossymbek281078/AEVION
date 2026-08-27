@@ -6,6 +6,14 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ModuleOfTheDayCard } from "@/components/ModuleOfTheDayCard";
 import { apiUrl } from "@/lib/apiBase";
 import { repoLabel, repoUrl } from "@/lib/repoUrl";
+// Запасное значение счётчика — из pitchFacts, заперт на реестр сторожем.
+// Здесь стояло `?? 27` при 41 записи в реестре. Запасное значение видно не
+// «иногда»: серверный HTML отдаётся ДО того, как отработает запрос, поэтому
+// «27 modules tracked» показывалось в исходнике страницы, превью-карточках
+// и всем, у кого запрос не дошёл. Инвесторская страница занижала платформу
+// в полтора раза, и заметить это прогоном было нельзя — в браузере число
+// подменялось живым.
+import { REGISTRY_ENTRIES } from "@/data/pitchFacts";
 
 // metadata must live in a server component — moved to layout or generateMetadata.
 // Kept as a plain object for <head> tags injected by the client shell.
@@ -173,7 +181,7 @@ export default function InvestorPage() {
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
               <div style={{ fontSize: 38, fontWeight: 900, color: "#f1f5f9", letterSpacing: "-0.03em", lineHeight: 1 }}>
-                {registry?.total ?? 27}
+                {registry?.total ?? REGISTRY_ENTRIES}
               </div>
               <div style={{ fontSize: 12, color: "#94a3b8" }}>modules tracked</div>
             </div>
@@ -181,7 +189,7 @@ export default function InvestorPage() {
               { label: "Health endpoint", stat: registry?.coverage?.health, color: "#8b5cf6" },
               { label: "OpenAPI documented", stat: registry?.coverage?.openapi, color: "#3b82f6" },
             ].map((row) => {
-              const total = row.stat?.total ?? registry?.total ?? 27;
+              const total = row.stat?.total ?? registry?.total ?? REGISTRY_ENTRIES;
               const v = row.stat?.count ?? 0;
               const pct = row.stat?.percent != null ? Math.round(row.stat.percent) : (total > 0 ? Math.round((v / total) * 100) : 0);
               return (

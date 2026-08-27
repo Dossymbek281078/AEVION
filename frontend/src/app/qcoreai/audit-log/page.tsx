@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { getAuthHeaders } from "@/lib/auth";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthToken } from "@/lib/auth";
@@ -49,9 +50,12 @@ export default function AuditLogPage() {
     setLoading(true);
     setError(null);
     try {
+      // Читалось из "qcore_token" — имени, в которое никто не пишет. Ручка
+      // /api/qcoreai/me/audit-log без токена отдаёт 401, поэтому страница
+      // показывала «Not authenticated» ВСЕГДА, в том числе залогиненному.
       const token = typeof window !== "undefined" ? getAuthToken() : null;
       const res = await fetch(apiUrl("/api/qcoreai/me/audit-log?limit=50"), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: getAuthHeaders(),
       });
       if (!res.ok) {
         if (res.status === 401) { setError("Not authenticated. Please log in."); return; }

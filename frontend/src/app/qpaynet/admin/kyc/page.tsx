@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { getAuthToken } from "@/lib/auth";
+import Link from "next/link";
 
 interface Submission {
   owner_id: string;

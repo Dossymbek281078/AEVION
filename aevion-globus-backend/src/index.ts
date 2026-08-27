@@ -97,7 +97,7 @@ import { qchaingovRouter } from "./routes/qchaingov";
 import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } from "./lib/openapiFintechSpec";
 import { NEW_WAVE_OPENAPI_PATHS, NEW_WAVE_OPENAPI_SCHEMAS, NEW_WAVE_OPENAPI_TAGS } from "./lib/openapiNewWaveSpec";
 import { isSentryEnabled, captureException } from "./lib/sentry";
-import { makeHttpErrorHandler } from "./lib/httpErrorHandler";
+import { makeApiNotFoundHandler, makeHttpErrorHandler } from "./lib/httpErrorHandler";
 import { bodyLimitByPath } from "./lib/bodyLimitByPath";
 import { needsRawBody } from "./lib/rawBodyPolicy";
 import { devhubRouter } from "./routes/devhub";
@@ -1305,8 +1305,6 @@ app.use("/api/smeta-trainer", smetaTrainerRouter);
 // QContract — self-destruct smart documents
 app.use("/api/qcontract", qcontractRouter);
 
-// HealthAI — personal AI doctor
-app.use("/api/healthai", healthaiRouter);
 
 // QFusionAI — smart multi-provider LLM router
 app.use("/api/qfusionai", qfusionaiRouter);
@@ -1367,16 +1365,12 @@ app.use("/api/qrenew", qrenewRouter);
 app.use("/api/longevity", longevityRouter);
 // QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
-// MapReality — civic signals map (MVP: signals + supports)
-app.use("/api/mapreality", mapRealityRouter);
 // StartupX — startup ideas marketplace + investor interest
 app.use("/api/startupx", startupExchangeRouter);
 app.use("/api/ventures", venturesRouter);
 // QVenture + QSkyway now mounted via routes/moduleManifest.ts (EXTRA_MOUNTS)
 // Kids AI Content — multilang lesson catalog + AI tutor
 app.use("/api/kids-ai", kidsAiContentRouter);
-// Voice of Earth — multilang music tracks + voting
-app.use("/api/voice-of-earth", voiceOfEarthRouter);
 // QJobs → QBuild social hiring layer. Canonical: /api/build/jobs, legacy: /api/qjobs
 app.use("/api/build/jobs", qjobsRouter);
 app.use("/api/qjobs", qjobsRouter);
@@ -1390,12 +1384,6 @@ app.use("/api/revenue", revenueRouter);
 // Universal Search — /api/search?q=<query> across QStore/QLearn/QNews/QEvents/QJobs/QRight
 app.use("/api/search", searchRouter);
 
-// DeepSan — anti-chaos productivity (tasks, focus sessions, stats)
-app.use("/api/deepsan", deepSanRouter);
-// QPersona — digital avatar profiles (persona CRUD, AI bio, public gallery)
-app.use("/api/qpersona", qpersonaRouter);
-// QLife — longevity & anti-aging (biomarker log, trends, AI plan)
-app.use("/api/qlife", qlifeRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);
@@ -1403,6 +1391,11 @@ startQpaynetRetryWorker();
 
 // QTradeOffline — offline-first P2P AEV payments (ECDSA P-256, /sync batch)
 app.use("/api/qtradeoffline", qtradeOfflineRouter);
+
+// Адрес, которого в API нет, отвечает JSON, а не страницей Express.
+// Ставится ПОСЛЕ всех роутеров и ПЕРЕД обработчиком ошибок: иначе он перехватил
+// бы живые маршруты. Разбор — в самом модуле.
+app.use(makeApiNotFoundHandler());
 
 // Обработчик ошибок живёт в src/lib/httpErrorHandler.ts — вынесен туда, чтобы
 // его можно было проверить тестом, не поднимая весь сервер. Разбор клиентских

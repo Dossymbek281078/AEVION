@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { queryNumber } from "../lib/queryNumber";
 import crypto from "node:crypto";
 import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
@@ -621,7 +622,7 @@ smetaTrainerRouter.get("/student/:deviceId/attempts", readLimiter, async (req, r
 // query: ?level=N&group=X&limit=20  (level/group optional)
 smetaTrainerRouter.get("/leaderboard", readLimiter, async (req, res) => {
   const limit = Math.max(1, Math.min(100, Math.max(Number(req.query.limit) || 20, 1)));
-  const level = Number(req.query.level);
+  const level = queryNumber(req.query.level, -1); // -1 так же непригоден для isValidLevel, как прежний NaN
   const group = typeof req.query.group === "string" ? req.query.group.trim() : "";
   const students = await loadStudents();
   let entries = Object.values(students);

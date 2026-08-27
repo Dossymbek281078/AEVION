@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { reportError } from "@/lib/reporter";
-import { getAuthToken } from "@/lib/auth";
 
 interface Delivery {
   id: string;

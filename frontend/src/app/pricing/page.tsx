@@ -1450,7 +1450,7 @@ export default function PricingPage() {
             // min(100%, 280px), а не 280px: на экране 320 контейнер уже 216,
             // и жёсткий пол в 280 сам стал бы источником переполнения.
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
             gap: 24,
           }}
         >

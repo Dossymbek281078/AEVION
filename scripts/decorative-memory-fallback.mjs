@@ -97,9 +97,31 @@ function countReads(source, name) {
   return n;
 }
 
+/**
+ * Recurses. The first version read one flat directory, so pointing it at
+ * `src/services` printed "No in-catch memory fallbacks found" without ever
+ * opening `src/services/qcoreai/*`. A clean report from a scan that did not
+ * look is worse than no scan at all — it closes the question.
+ */
+function collectTsFiles(root) {
+  const found = [];
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name === "dist" || entry.name === "build") continue;
+      found.push(...collectTsFiles(full));
+    } else if (entry.name.endsWith(".ts")) {
+      found.push(full);
+    }
+  }
+  return found;
+}
+
+const files = collectTsFiles(dir);
 const rows = [];
-for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".ts"))) {
-  const source = stripComments(fs.readFileSync(path.join(dir, file), "utf8"));
+for (const full of files) {
+  const file = path.relative(dir, full);
+  const source = stripComments(fs.readFileSync(full, "utf8"));
   const names = new Set();
   let m;
   CATCH_WRITE.lastIndex = 0;

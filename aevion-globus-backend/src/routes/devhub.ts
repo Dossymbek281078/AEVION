@@ -412,6 +412,32 @@ export function __clearDeferredDevHubWork() {
   deferredTimers.clear();
 }
 
+// ── Deferred post-deploy work ────────────────────────────────────────────────
+// Deploy routes answer immediately and then verify, seconds later, that the
+// deployed URL actually serves (backend CLAUDE.md §10). Those timers outlive
+// the request — and in tests they outlive the test that started them, firing
+// during a later one and consuming its mocked fetch. That is what made the
+// backend suite fail on a different test each run (issue #982): a real
+// timing dependency, not a mystery.
+//
+// Prod behaviour is unchanged; the timers are merely tracked so a test can
+// drop the ones still pending.
+const deferredTimers = new Set<ReturnType<typeof setTimeout>>();
+
+function deferred(fn: () => void | Promise<void>, ms: number): void {
+  const t = setTimeout(() => {
+    deferredTimers.delete(t);
+    void fn();
+  }, ms);
+  deferredTimers.add(t);
+}
+
+/** Drop post-deploy verification still waiting to run. Tests only. */
+export function __clearDeferredDevHubWork() {
+  for (const t of deferredTimers) clearTimeout(t);
+  deferredTimers.clear();
+}
+
 // ── Exported reset helpers for tests ─────────────────────────────────────────
 export function __resetDevHubStore() {
   memProjects.clear();

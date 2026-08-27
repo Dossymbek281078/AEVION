@@ -357,18 +357,27 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
 function FileContextMenu({
   x, y, onRename, onDelete, onClose,
 }: { x: number; y: number; onRename: () => void; onDelete: () => void; onClose: () => void }) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The close-on-outside-click listener used to fire for clicks INSIDE the
+  // menu too: mousedown closed it, the menu unmounted, and the click never
+  // reached the button — so Rename and Delete did nothing at all. The React
+  // onMouseDown/stopPropagation that was meant to prevent this does not run
+  // before a native listener on document. Ask the DOM directly instead.
   useEffect(() => {
-    const handler = () => onClose();
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      onClose();
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [onClose]);
   return (
     <div
+      ref={menuRef}
       style={{
         position: "fixed", left: x, top: y, background: "#fff", border: "1px solid #e2e8f0",
         borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 300, minWidth: 140, overflow: "hidden",
       }}
-      onMouseDown={(e) => e.stopPropagation()}
     >
       <button
         onClick={() => { onRename(); onClose(); }}

@@ -47,7 +47,21 @@ async function seedQStore() {
   for (const p of products) {
     if (!JWT) { log("⏭", `Skipping QStore (no JWT): ${p.title}`); continue; }
     // Check if exists
-    const list = await req("GET", `/api/qstore/products?search=${encodeURIComponent(p.title.slice(0, 20))}&limit=1`);
+    // Параметр называется `q`, а НЕ `search`, и обрезка до одной записи здесь
+    // ломала всё. Что было: `?search=...&limit=1` — ручка чужой параметр
+    // игнорирует и отдаёт ВСЕ товары, а limit=1 оставляет один произвольный.
+    // Проверка спрашивала «совпадает ли название первого попавшегося с моим»,
+    // почти всегда получала «нет» и создавала копию — по одной за запуск.
+    //
+    // Замер на проде 21.08.2026: 20 записей, уникальных названий 6, копий до
+    // четырёх. При этом в шапке скрипта написано «idempotent via title dedup
+    // checks» — обещание было, механизма не было.
+    //
+    // Проверено, что `q` действительно фильтрует: q=QCoreAI -> 4, q=<мусор> -> 0.
+    const list = await req(
+      "GET",
+      `/api/qstore/products?q=${encodeURIComponent(p.title)}&limit=50`,
+    );
     if (list.body?.products?.some((x) => x.title === p.title)) {
       log("✓", `QStore already has: ${p.title.slice(0, 50)}`); ok++; continue;
     }

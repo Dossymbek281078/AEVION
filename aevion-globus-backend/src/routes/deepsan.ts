@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { pgIntId } from "../lib/queryNumber";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import rateLimit from "express-rate-limit";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
@@ -193,8 +194,8 @@ deepSanRouter.post("/tasks", async (req: Request, res: Response) => {
 // ─── PATCH /api/deepsan/tasks/:id ────────────────────────────────────────────
 
 deepSanRouter.patch("/tasks/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id < 1) return fail(res, "invalid id");
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid id");
 
   const { title, done, priority, dueDate } = req.body ?? {};
   if (priority !== undefined && !validPriority(priority)) {
@@ -239,8 +240,8 @@ deepSanRouter.patch("/tasks/:id", async (req: Request, res: Response) => {
 // ─── DELETE /api/deepsan/tasks/:id ───────────────────────────────────────────
 
 deepSanRouter.delete("/tasks/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id < 1) return fail(res, "invalid id");
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid id");
 
   if (isDeepSanDbReady()) {
     try {
@@ -322,8 +323,8 @@ deepSanRouter.get("/focus/active", async (_req: Request, res: Response) => {
 // ─── PATCH /api/deepsan/focus/:id/done ───────────────────────────────────────
 
 deepSanRouter.patch("/focus/:id/done", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id < 1) return fail(res, "invalid id");
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid id");
 
   const { actualDurationMin } = req.body ?? {};
   const actual = actualDurationMin != null ? Number(actualDurationMin) : null;

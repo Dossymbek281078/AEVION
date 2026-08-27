@@ -7,6 +7,7 @@
  * GET /api/search?q=ai&limit=20&types=qstore,qlearn,qnews
  */
 import { Router, type Request, type Response } from "express";
+import { queryNumber } from "../lib/queryNumber";
 import { getPool } from "../lib/dbPool";
 import rateLimit from "express-rate-limit";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -188,7 +189,7 @@ searchRouter.get("/", searchLimit, async (req: Request, res: Response) => {
     return res.status(400).json({ error: "q too long (max 100 chars)" });
   }
 
-  const limit = Math.min(10, Math.max(1, parseInt(String(req.query.limit ?? "5"), 10)));
+  const limit = Math.min(10, Math.max(1, queryNumber(req.query.limit, 5)));
   const typesParam = String(req.query.types ?? "qstore,qlearn,qnews,qevents,qjobs,qright");
   const types = new Set(typesParam.split(",").map(t => t.trim()));
 

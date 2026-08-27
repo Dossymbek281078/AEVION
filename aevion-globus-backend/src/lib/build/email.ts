@@ -30,14 +30,83 @@ function getTransport() {
 const FROM = process.env.SMTP_FROM || "AEVION QBuild <noreply@aevion.app>";
 const BASE = process.env.FRONTEND_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
-/** Fire-and-forget send — never throws. */
-async function send(to: string, subject: string, html: string): Promise<void> {
+/**
+ * Настроен ли транспорт. Отдельная функция, потому что вызывающему бывает
+ * нужно ЗНАТЬ ответ до отправки: ручка подтверждения адреса обязана сказать
+ * человеку «письмо не отправлено», а не молча ответить `{ok:true}`.
+ */
+export function canSendEmail(): boolean {
+  return getTransport() !== null || Boolean(process.env.RESEND_API_KEY?.trim());
+}
+
+/**
+ * Второй транспорт — Resend по HTTP.
+ *
+ * Он появился здесь не «на всякий случай». В `routes/build/` уже есть ПЯТЬ
+ * мест, отправляющих письма прямым вызовом `api.resend.com` (оповещения о
+ * вакансиях, отклики, подтверждение анкеты, выдача доступа). То есть сервер
+ * вполне может быть настроен ТОЛЬКО на Resend, без SMTP. Если бы этот модуль
+ * умел один SMTP, регистрация на таком сервере честно отвечала бы «отправка
+ * не настроена» — и это было бы неправдой: соседний код в ту же секунду
+ * успешно шлёт письма.
+ */
+async function sendViaResend(to: string, subject: string, html: string): Promise<boolean> {
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (!key) return false;
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: FROM, to, subject, html }),
+    });
+    if (!r.ok) {
+      // Тело не печатаем: в ответе провайдера бывает адрес получателя.
+      console.warn("[build/email] resend rejected:", r.status);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn("[build/email] resend failed:", (e as Error).message);
+    return false;
+  }
+}
+
+/**
+ * Отправка. Возвращает, УШЛО ли письмо.
+ *
+ * Раньше возвращала `void` и в обоих неудачных случаях — нет транспорта и
+ * ошибка SMTP — молчала. Вызывающий не мог отличить «отправлено» от «не
+ * отправлено» никак, и именно поэтому регистрация отвечала `{ok:true}`,
+ * не отправив ни одного письма. Значение возвращается всегда; кто хочет
+ * прежнее поведение «выстрелил и забыл», по-прежнему пишет `void send(...)`.
+ */
+async function send(to: string, subject: string, html: string): Promise<boolean> {
   try {
     const transport = getTransport();
-    if (!transport) return; // SMTP not configured — skip silently
+    if (!transport) {
+      // Два намерения, слитые вместе (19.08.2026).
+      //
+      // Из fix/email-silent-skip: молчаливый `return` — худший вид отказа,
+      // ненастроенный SMTP выглядел как успешная отправка. След обязателен,
+      // иначе «письма не дошли» неотличимо от «письма не отправлялись».
+      //
+      // Отсюда: прежде чем признать отправку несостоявшейся, пробуем ВТОРОЙ
+      // транспорт. В routes/build/ пять мест шлют через Resend, то есть
+      // сервер вполне может быть настроен только на него, и жаловаться на
+      // отсутствие SMTP при рабочей почте было бы неправдой.
+      if (await sendViaResend(to, subject, html)) return true;
+      console.warn(
+        `[build/email] письмо «${subject}» для ${to} НЕ отправлено: ни SMTP, ни Resend не настроены. ` +
+          "Задайте SMTP_HOST, SMTP_USER и SMTP_PASS либо RESEND_API_KEY.",
+      );
+      return false;
+    }
     await transport.sendMail({ from: FROM, to, subject, html });
+    return true;
   } catch (e) {
     console.warn("[build/email] send failed:", (e as Error).message);
+    // SMTP есть, но сорвался — пробуем второй транспорт, если он настроен.
+    return sendViaResend(to, subject, html);
   }
 }
 
@@ -193,13 +262,13 @@ export function sendTrialTaskApproved(opts: {
 
 // ── Auth emails ──────────────────────────────────────────────────────
 
-export function sendVerificationEmail(opts: {
+export async function sendVerificationEmail(opts: {
   to: string;
   name: string;
   token: string;
-}): void {
+}): Promise<boolean> {
   const link = `${BASE}/build/verify-email?token=${encodeURIComponent(opts.token)}`;
-  void send(
+  return send(
     opts.to,
     "Подтвердите email — AEVION QBuild",
     layout(`
@@ -215,13 +284,13 @@ export function sendVerificationEmail(opts: {
   );
 }
 
-export function sendPasswordResetEmail(opts: {
+export async function sendPasswordResetEmail(opts: {
   to: string;
   name: string;
   token: string;
-}): void {
+}): Promise<boolean> {
   const link = `${BASE}/build/reset-password?token=${encodeURIComponent(opts.token)}&email=${encodeURIComponent(opts.to)}`;
-  void send(
+  return send(
     opts.to,
     "Сброс пароля — AEVION QBuild",
     layout(`

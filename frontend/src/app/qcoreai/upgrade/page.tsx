@@ -28,11 +28,9 @@ const ENTERPRISE_BENEFITS = [
   "On-prem / private cloud deployment",
 ];
 
-type PayMethod = "card" | "paybox";
 
 export default function QCoreUpgradePage() {
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
-  const [payMethod, setPayMethod] = useState<PayMethod>("card");
   const [plan, setPlan] = useState<"pro" | "enterprise">("pro");
 
   const proPrice = billing === "monthly" ? 19 : Math.round(19 * 0.8);
@@ -241,7 +239,16 @@ export default function QCoreUpgradePage() {
             </div>
           </div>
 
-          {/* Payment method */}
+          {/* Оплата происходит НЕ на этой странице.
+              До 23.08.2026 здесь стояли поля «Card number», «MM / YY» и «CVC» —
+              без value, без onChange, без формы и без единого вызова API во всём
+              файле. Человек мог ввести настоящие данные карты, и они не уходили
+              никуда: страница их даже не читала. Рядом обещалось «Card via
+              Stripe» и «You will be redirected to PayBox KZ», хотя касса
+              платформы работает через Lemon Squeezy (замер 23.08.2026:
+              /api/pricing/checkout/healthz -> primaryProvider lemonsqueezy).
+              Карту на своём домене мы не принимаем вообще — оплата идёт на
+              стороне поставщика, и просить её здесь нельзя ни в каком виде. */}
           <div
             style={{
               background: "#f8fafc",
@@ -251,110 +258,27 @@ export default function QCoreUpgradePage() {
               marginBottom: 28,
             }}
           >
-            <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 16 }}>
-              Payment method
+            <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 8 }}>
+              Payment
             </div>
-            <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
-              <button
-                onClick={() => setPayMethod("card")}
-                style={{
-                  flex: 1,
-                  padding: "12px 16px",
-                  borderRadius: 10,
-                  border: payMethod === "card" ? "2px solid #0d9488" : "2px solid #e2e8f0",
-                  background: payMethod === "card" ? "#f0fdfa" : "#fff",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  fontSize: 14,
-                  color: payMethod === "card" ? "#0d9488" : "#374151",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                }}
-              >
-                <span style={{ fontSize: 18 }}>💳</span>
-                Card via Stripe
-              </button>
-              <button
-                onClick={() => setPayMethod("paybox")}
-                style={{
-                  flex: 1,
-                  padding: "12px 16px",
-                  borderRadius: 10,
-                  border: payMethod === "paybox" ? "2px solid #7c3aed" : "2px solid #e2e8f0",
-                  background: payMethod === "paybox" ? "#faf5ff" : "#fff",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  fontSize: 14,
-                  color: payMethod === "paybox" ? "#7c3aed" : "#374151",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                }}
-              >
-                <span style={{ fontSize: 18 }}>🇰🇿</span>
-                PayBox KZ
-              </button>
-            </div>
-
-            {payMethod === "card" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <input
-                  placeholder="Card number"
-                  style={{
-                    padding: "10px 14px",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: 8,
-                    fontSize: 14,
-                    outline: "none",
-                  }}
-                />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <input
-                    placeholder="MM / YY"
-                    style={{
-                      padding: "10px 14px",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 8,
-                      fontSize: 14,
-                      outline: "none",
-                    }}
-                  />
-                  <input
-                    placeholder="CVC"
-                    style={{
-                      padding: "10px 14px",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 8,
-                      fontSize: 14,
-                      outline: "none",
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {payMethod === "paybox" && (
-              <div
-                style={{
-                  background: "#f0fdf4",
-                  border: "1px solid #bbf7d0",
-                  borderRadius: 10,
-                  padding: "14px 16px",
-                  fontSize: 14,
-                  color: "#166534",
-                }}
-              >
-                You will be redirected to <strong>PayBox KZ</strong> to complete payment.
-                Supports Kaspi, Halyk, and local KZ bank cards. Price in KZT at current rate.
-              </div>
-            )}
+            <p style={{ margin: 0, fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
+              We never ask for card details on this site. Checkout opens on our payment
+              provider&apos;s own secure page, and the current plans and prices live on the
+              pricing page.
+            </p>
           </div>
 
-          {/* CTA */}
+          {/* Кнопка ведёт на страницу тарифов — там настоящая касса.
+              До 23.08.2026 у неё не было ни onClick, ни type="submit", ни формы
+              вокруг: нажатие не делало ничего, при том что страница обещала
+              переход к оплате. Цену в подписи не пишу намеренно — на странице
+              указано $19/мес за Pro, а касса считает по тарифу pro = $149/мес
+              (src/data/pricing.ts). Расхождение восьмикратное, и выбор цены —
+              решение основателя, а не правка кода. */}
           <button
+            onClick={() => {
+              window.location.href = "/pricing";
+            }}
             style={{
               width: "100%",
               padding: "16px 24px",

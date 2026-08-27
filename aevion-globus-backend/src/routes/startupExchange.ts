@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { pgIntId } from "../lib/queryNumber";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
@@ -270,8 +271,8 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
 
 // ─── GET /api/startupx/ideas/:id ─────────────────────────────────────────────
 startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid_id", 400);
 
   try {
     if (isStartupExchangeDbReady()) {
@@ -433,8 +434,8 @@ startupExchangeRouter.post(
   "/ideas/:id/ai-score",
   aiScoreLimiter,
   async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+    const id = pgIntId(req.params.id);
+    if (id === null) return fail(res, "invalid_id", 400);
 
     // ── Fetch the idea ────────────────────────────────────────────────────────
     let idea: IdeaRow | undefined;
@@ -533,8 +534,8 @@ startupExchangeRouter.post(
 
 // ─── POST /api/startupx/ideas/:id/interest ──────────────────────────────────
 startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid_id", 400);
 
   const investorEmail = clampStr(req.body?.investorEmail, MAX_EMAIL);
   const message = clampStr(req.body?.message, MAX_MESSAGE);

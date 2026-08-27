@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
-import { getAuthToken } from "@/lib/auth";
 
 function authHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};

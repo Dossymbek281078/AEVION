@@ -8,6 +8,11 @@
  * and stays Chief Idea Officer; partner pays mostly in resources, not capital.
  */
 
+// Счётчик модулей — из pitchFacts, а не цифрой в тексте: здесь стояло «30
+// modules» при 40 узлах в реестре, и лист, который распечатывают партнёру,
+// занижал масштаб ровно в той строке, где объясняется, за что платят.
+import { MODULE_NODES } from "@/data/pitchFacts";
+
 const css = `
   @page { size: A4; margin: 16mm 14mm; }
   html, body { background: #fff !important; color: #111 !important; font-family: Inter, Helvetica, Arial, sans-serif; }
@@ -76,7 +81,7 @@ export default function AcquireWaysPage() {
         <h3>And if your instinct is “we could build this ourselves”</h3>
         <ul>
           <li>The asset is already live today — rebuilding it is 200+ engineer-years and 36+ months.</li>
-          <li>The value isn’t the 30 modules (those copy); it is the person who produced them in six months and will produce the next 30. That is what you retain — cheaply.</li>
+          <li>The value isn’t the {MODULE_NODES} modules (those copy); it is the person who produced them in six months and will produce the next {MODULE_NODES}. That is what you retain — cheaply.</li>
           <li>Your brand is trustworthy, non-predatory AI. Taking an openly-shared idea without its author is exactly what your values forbid — the open trust is the protection.</li>
           <li>The window is now: partnering with what is already live beats an internal project that competes for roadmap priority.</li>
         </ul>

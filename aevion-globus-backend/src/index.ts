@@ -96,13 +96,14 @@ import { qchaingovRouter } from "./routes/qchaingov";
 import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } from "./lib/openapiFintechSpec";
 import { NEW_WAVE_OPENAPI_PATHS, NEW_WAVE_OPENAPI_SCHEMAS, NEW_WAVE_OPENAPI_TAGS } from "./lib/openapiNewWaveSpec";
 import { isSentryEnabled, captureException } from "./lib/sentry";
-import { makeHttpErrorHandler } from "./lib/httpErrorHandler";
+import { makeApiNotFoundHandler, makeHttpErrorHandler } from "./lib/httpErrorHandler";
 import { bodyLimitByPath } from "./lib/bodyLimitByPath";
 import { needsRawBody } from "./lib/rawBodyPolicy";
 import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
 import { paymentsRouter } from "./routes/payments";
 import { qaiRouter } from "./routes/qai";
+import { channelsHealthRouter } from "./routes/channelsHealth";
 import { qstoreRouter } from "./routes/qstore";
 import { qlearnRouter } from "./routes/qlearn";
 import { qmelaninRouter } from "./routes/qmelanin";
@@ -376,13 +377,22 @@ app.get("/api/health/deep", async (_req, res) => {
     await ensureEcosystemLoaded();
     const q = getQtradeMetrics();
     const e = getEcosystemMetrics();
+    // Проверка ПРОДУКТА, а не только процесса. До 20.08.2026 эта ручка
+    // отвечала "ok", измеряя время работы, память и флаги — ни одного поля
+    // про то, работает ли хоть что-нибудь. За ту же неделю три ручки отдавали
+    // 500 на каждый запрос, и проверка не могла покраснеть в принципе.
+    // Запросы с LIMIT 0 стоят ноль строк, но падают, если колонки нет.
+    const { checkQueriedSchemas } = await import("./lib/schemaHealth");
+    const schema = await checkQueriedSchemas();
     const mem = process.memoryUsage();
     res.json({
-      status: "ok",
+      status: schema.ok ? "ok" : "degraded",
       service: "AEVION Globus Backend",
       timestamp: new Date().toISOString(),
       uptimeSec: Math.floor((Date.now() - STARTED_AT) / 1000),
       sentry: isSentryEnabled(),
+      schema,
+      tokenRevocation: (await import("./lib/tokenVersion")).tokenVersionStatus(),
       ledger: {
         accounts: q.accounts,
         transfers: q.transfers,
@@ -412,6 +422,13 @@ app.get("/api/health/deep", async (_req, res) => {
     });
   }
 });
+
+// Состояние ОБЕЩАННЫХ каналов одним запросом: может ли человек
+// зарегистрироваться и заплатить. Отдельные ручки были у двух каналов из
+// шести, про остальные снаружи нельзя было сказать ничего — и 19.08.2026
+// это стоило нам неработающей регистрации, которую не видела ни одна
+// проверка (сайт 200, /health ok, Sentry молчит).
+app.use("/api/health", channelsHealthRouter);
 
 // Проверка соединения
 app.get("/api/globus/ping", (_req, res) => {
@@ -1281,8 +1298,6 @@ app.use("/api/smeta-trainer", smetaTrainerRouter);
 // QContract — self-destruct smart documents
 app.use("/api/qcontract", qcontractRouter);
 
-// HealthAI — personal AI doctor
-app.use("/api/healthai", healthaiRouter);
 
 // QFusionAI — smart multi-provider LLM router
 app.use("/api/qfusionai", qfusionaiRouter);
@@ -1343,16 +1358,12 @@ app.use("/api/qrenew", qrenewRouter);
 app.use("/api/longevity", longevityRouter);
 // QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
-// MapReality — civic signals map (MVP: signals + supports)
-app.use("/api/mapreality", mapRealityRouter);
 // StartupX — startup ideas marketplace + investor interest
 app.use("/api/startupx", startupExchangeRouter);
 app.use("/api/ventures", venturesRouter);
 // QVenture + QSkyway now mounted via routes/moduleManifest.ts (EXTRA_MOUNTS)
 // Kids AI Content — multilang lesson catalog + AI tutor
 app.use("/api/kids-ai", kidsAiContentRouter);
-// Voice of Earth — multilang music tracks + voting
-app.use("/api/voice-of-earth", voiceOfEarthRouter);
 // QJobs → QBuild social hiring layer. Canonical: /api/build/jobs, legacy: /api/qjobs
 app.use("/api/build/jobs", qjobsRouter);
 app.use("/api/qjobs", qjobsRouter);
@@ -1366,12 +1377,6 @@ app.use("/api/revenue", revenueRouter);
 // Universal Search — /api/search?q=<query> across QStore/QLearn/QNews/QEvents/QJobs/QRight
 app.use("/api/search", searchRouter);
 
-// DeepSan — anti-chaos productivity (tasks, focus sessions, stats)
-app.use("/api/deepsan", deepSanRouter);
-// QPersona — digital avatar profiles (persona CRUD, AI bio, public gallery)
-app.use("/api/qpersona", qpersonaRouter);
-// QLife — longevity & anti-aging (biomarker log, trends, AI plan)
-app.use("/api/qlife", qlifeRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);
@@ -1379,6 +1384,11 @@ startQpaynetRetryWorker();
 
 // QTradeOffline — offline-first P2P AEV payments (ECDSA P-256, /sync batch)
 app.use("/api/qtradeoffline", qtradeOfflineRouter);
+
+// Адрес, которого в API нет, отвечает JSON, а не страницей Express.
+// Ставится ПОСЛЕ всех роутеров и ПЕРЕД обработчиком ошибок: иначе он перехватил
+// бы живые маршруты. Разбор — в самом модуле.
+app.use(makeApiNotFoundHandler());
 
 // Обработчик ошибок живёт в src/lib/httpErrorHandler.ts — вынесен туда, чтобы
 // его можно было проверить тестом, не поднимая весь сервер. Разбор клиентских
@@ -1393,6 +1403,19 @@ const httpServer = app.listen(PORT, () => {
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
   // QSign v2 — DB-backed webhook delivery queue. Survives restarts.
   startWebhookWorker();
+
+  // Карта версий токенов. Пока она не загружена, проверка отзыва НЕ
+  // применяется (см. lib/tokenVersion.ts): это осознанный выбор направления
+  // отказа — падать закрыто значило бы не пустить вообще никого при недоступной
+  // базе. Но слепота не бывает молчаливой: модуль кричит в журнал, а состояние
+  // видно снаружи в /api/health/deep.
+  //
+  // Перезагрузка раз в 5 минут нужна для второго экземпляра сервиса: он
+  // увеличивает счётчик в базе, а наша карта об этом узнает только так.
+  void import("./lib/tokenVersion").then(async ({ loadTokenVersions }) => {
+    await loadTokenVersions();
+    setInterval(() => void loadTokenVersions(), 5 * 60 * 1000).unref();
+  });
 });
 
 // Last-resort process-level backstops. Express 5 auto-forwards async request-

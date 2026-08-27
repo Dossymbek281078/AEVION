@@ -1,11 +1,12 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken as getBuildToken } from "@/lib/build/auth";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
-import { useBuildAuth, getAuthToken } from "@/lib/build/auth";
+import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 
 type Shift = {
@@ -85,7 +86,8 @@ function Body() {
     try {
       const res = await fetch(apiUrl(`/api/build/safety-briefing/shift/${shiftId}`), {
         headers: {
-          Authorization: `Bearer ${typeof window !== "undefined" ? getAuthToken() ?? "" : ""}`,
+          // Токен модуля build (свой стор), а не мёртвый ключ "build_token".
+          ...(getBuildToken() ? { Authorization: `Bearer ${getBuildToken()}` } : {}),
         },
       });
       const json = await res.json();
@@ -129,7 +131,8 @@ function Body() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${typeof window !== "undefined" ? getAuthToken() ?? "" : ""}`,
+          // Токен модуля build (свой стор), а не мёртвый ключ "build_token".
+          ...(getBuildToken() ? { Authorization: `Bearer ${getBuildToken()}` } : {}),
         },
         body: JSON.stringify({ shiftId: selectedShiftId, items: signedItems }),
       });

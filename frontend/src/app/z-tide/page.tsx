@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { getAuthToken } from "@/lib/auth";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import TideCharts from "./TideCharts";
-import { getAuthToken } from "@/lib/auth";
 
 /**
  * Z-Tide — adaptive reputation / contribution layer.

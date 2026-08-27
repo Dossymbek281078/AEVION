@@ -12,6 +12,48 @@ const WARN =
 
 const captureQStoreError = makeServiceCapture("qstore");
 
+/**
+ * 🔴 ПЛАТНЫЙ ТОВАР НЕ ВЫДАЁТСЯ БЕЗ ОПЛАТЫ.
+ *
+ * Найдено 19.08.2026. В обработчике покупки было ТРИ пути, каждый из которых
+ * записывал `status:'paid'`, `paidAt:NOW()` и увеличивал счётчик продаж, не
+ * получив ни тенге:
+ *
+ *   1) `gumroadConfigured("qstore")` ложно — то есть на сервере просто не
+ *      задан permalink. Замер того же дня: прод не отдаёт `permalink` ни у
+ *      одного тарифа;
+ *   2) `createIntent` бросил исключение — оно ловилось и «падало» в прямую
+ *      выдачу, то есть сбой платёжного провайдера раздавал товары даром;
+ *   3) база недоступна — запасной путь в памяти отвечал `status:"paid"`.
+ *
+ * Ровно этот класс уже чинили 26.07 в `routes/checkout.ts` (коммит 5890f9a15,
+ * «stub выписывал платную подписку без оплаты»). Здесь он остался: та починка
+ * трогала другой файл. Поэтому решение взято ИХ — честный отказ в проде,
+ * прежнее поведение в разработке, — а не придумано второе.
+ *
+ * Почему отказ, а не «тихо выдать»: молчаливая выдача портит и деньги, и
+ * отчётность — в `QStorePurchase` появляются строки с суммой, которой не
+ * было, и выручка в дашборде становится выдумкой.
+ */
+function refusePaidWithoutProvider(
+  res: Response,
+  ctx: { productId: string; price: number; reason: string },
+): boolean {
+  if (process.env.NODE_ENV !== "production") return false; // в разработке путь остаётся
+  console.error(
+    `[QStore] НЕТ ПРОЦЕССИНГА для товара ${ctx.productId} (цена ${ctx.price}, ${ctx.reason}) — покупка НЕ выдана`,
+  );
+  captureQStoreError(new Error(`qstore_no_payment_provider:${ctx.reason}`), {
+    route: "qstore/products/:id/purchase",
+    productId: ctx.productId,
+  });
+  res.status(503).json({
+    error: "no_payment_provider",
+    message: "Оплата временно недоступна. Товар не выдан, деньги не списаны — напишите нам.",
+  });
+  return true;
+}
+
 const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "https://aevion.app").replace(/\/$/, "");
 
 /** A Gumroad checkout is "real" only when a product permalink is configured. */
@@ -122,7 +164,21 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
     trending: `"salesCount" DESC, "createdAt" DESC`,
     rating: `"avgRating" DESC NULLS LAST, "salesCount" DESC`,
   };
-  const orderClause = orderBySql[sort] ?? orderBySql.popular;
+  // `??` здесь НЕ защита: обычный объект наследует ключи прототипа, и
+  // `orderBySql["constructor"]` возвращает функцию `Object` — она не null и не
+  // undefined, поэтому откат на "popular" не срабатывает. Дальше текст функции
+  // уезжает в ORDER BY, запрос падает, и витрина отдаёт ПУСТОЙ список товаров.
+  //
+  // Проверено на живом проде 19.08.2026:
+  //   ?sort=zzqwezzqwez  -> 10924 байта, товары на месте
+  //   ?sort=constructor  -> {"products":[],"total":0,"sort":"constructor"}
+  //   ?sort=__proto__    -> то же
+  //
+  // Контрольное слово той же длины, не являющееся ключом прототипа, работает
+  // правильно — значит дело именно в наследовании, а не в длине или символах.
+  const orderClause = Object.prototype.hasOwnProperty.call(orderBySql, sort)
+    ? orderBySql[sort]
+    : orderBySql.popular;
 
   if (isQStoreDbReady()) {
     try {
@@ -362,11 +418,17 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
           res.status(201).json({ purchaseId, checkoutUrl: intent.checkoutUrl, mode: "gumroad", status: "pending" });
           return;
         } catch (gumroadErr) {
-          console.warn("[QStore] Gumroad error, falling back to direct:", gumroadErr instanceof Error ? gumroadErr.message : gumroadErr);
+          console.warn("[QStore] Gumroad error:", gumroadErr instanceof Error ? gumroadErr.message : gumroadErr);
+          // Раньше здесь был проход в прямую выдачу: сбой провайдера означал
+          // бесплатный товар. Теперь платный товар при сбое НЕ выдаётся.
+          if (refusePaidWithoutProvider(res, { productId: pRow.id, price: pRow.price, reason: "provider_error" })) return;
         }
       }
 
-      // Direct purchase (free items or Gumroad not configured)
+      // Прямая выдача — законна ТОЛЬКО для бесплатных товаров.
+      if (pRow.price > 0 && refusePaidWithoutProvider(res, { productId: pRow.id, price: pRow.price, reason: "permalink_not_configured" })) return;
+
+      // Direct purchase (free items, or non-production without a permalink)
       await pool.query(
         `INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","status","paidAt","createdAt")
          VALUES ($1,$2,$3,$4,'paid',NOW(),NOW())`,
@@ -389,6 +451,9 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
   // In-memory fallback
   const product = memProducts.get(id);
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+  // Третья поверхность той же меры: при недоступной базе запасной путь тоже
+  // отвечал `status:"paid"`. Сбой базы не может быть основанием отдать товар.
+  if (product.price > 0 && refusePaidWithoutProvider(res, { productId: product.id, price: product.price, reason: "db_unavailable" })) return;
   const purchaseId = crypto.randomUUID();
   memPurchases.set(purchaseId, {
     id: purchaseId,

@@ -6994,11 +6994,12 @@ qcoreaiRouter.get("/collab/:token", async (req, res) => {
     if (isDbReady()) {
       collab = await collabTakeAndCount(token);
     } else {
+      // Базы нет вовсе (локальный запуск): считаем просмотр в памяти и отдаём
+      // КОПИЮ, чтобы ответ нельзя было изменить через ссылку на хранимый объект.
       pruneExpiredCollabs();
       const c = memCollabSessions.get(token);
-      collab = c ? { ...c } : null;
       if (c) c.viewers += 1;
-      if (collab) collab.viewers += 1;
+      collab = c ? { ...c } : null;
     }
     if (!collab) return res.status(404).json({ error: "collab link not found or expired" });
     const session = await getSession(collab.sessionId, null);

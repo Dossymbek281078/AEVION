@@ -162,12 +162,12 @@ export default function AccountPage() {
         const d = await meRes.json();
         setMe(d.user || null);
         setName(d.user?.name || "");
-        // Купленные поштучно модули лежат отдельно от тарифа. Ручка публичная и
+        // Купленные поштучно модули лежат отдельно от тарифа. Ручка тепеличная и
         // работает по почте, поэтому спрашиваем сразу, как почта стала известна.
         const email = d.user?.email;
         if (email) {
           try {
-            const ar = await fetch(apiUrl(`/api/apps/access?email=${encodeURIComponent(email)}`));
+            const ar = await fetch(apiUrl("/api/apps/access"), { headers: authHeaders() });
             if (ar.ok) {
               const aj = await ar.json();
               setOwnedApps(Array.isArray(aj.apps) ? aj.apps : []);

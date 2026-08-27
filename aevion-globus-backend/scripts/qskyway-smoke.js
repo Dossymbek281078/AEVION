@@ -338,12 +338,20 @@ async function main() {
   // откатятся, и никто не узнает: юнит-тесты живут в другом наборе, а прод
   // смотрят этим смоуком.
   const hq = await jget("/api/qskyway/health");
-  assert(typeof hq.json?.slotsBookedLive === "number" || hq.json?.slotsBookedLive === null,
+  // Эти два утверждения были декоративны ВМЕСТЕ: первое разрешало null
+  // безусловно, второе — основание "store-unavailable". То есть при полностью
+  // неработающем хранилище оба оставались зелёными, хотя это ровно та поломка,
+  // которую они должны ловить (проверено отдельным прогоном предикатов).
+  //
+  // Смоук гоняется против ЖИВОГО бэкенда, где хранилище доступно. Значит здесь
+  // "не смогли посчитать" — это находка, а не допустимый исход.
+  assert(typeof hq.json?.slotsBookedLive === "number"
+      && hq.json.slotsBookedLive <= hq.json.slotsBooked,
     "health reports live bookings apart from the total",
     `booked=${hq.json?.slotsBooked} live=${hq.json?.slotsBookedLive} basis=${hq.json?.slotsLiveBasis}`);
-  assert(["all", "sample-500", "store-unavailable"].includes(hq.json?.slotsLiveBasis),
-    "health names what the live figure was counted on",
-    `basis=${hq.json?.slotsLiveBasis}`);
+  assert(hq.json?.slotsLiveBasis === "all" || hq.json?.slotsLiveBasis === "sample-500",
+    "health counted the live figure, not gave up on it",
+    `basis=${hq.json?.slotsLiveBasis} (store-unavailable means the market could not be read)`);
   // Городская возможность обязана называть города, а идентификаторы — оставаться
   // машинными: строка 60 этого файла сверяет пункт ТОЧНЫМ равенством.
   const scope = hq.json?.featureScope?.["regulatory-airspace-ceilings"];

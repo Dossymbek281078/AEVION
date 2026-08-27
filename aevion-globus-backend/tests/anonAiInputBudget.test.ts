@@ -101,3 +101,41 @@ describe("ворота стоят на обеих платных ручках", 
     expect(gate.slice(0, 400)).toContain("status(413)");
   });
 });
+
+describe("ИИ-тренер шахмат под теми же воротами", () => {
+  // 27.08.2026 проверено на проде: POST /api/coach/chat БЕЗ входа в аккаунт
+  // возвращает разбор позиции от claude-opus-4-8. Это третье обещание карточки
+  // модуля («тренер, который объясняет ход») — и оно же самый посещаемый
+  // платный вызов на день запуска.
+  //
+  // Собственные пределы ручки: 40 сообщений x 16 000 знаков + 8 000 системных =
+  // 648 000 знаков, около 162 тысяч входных токенов ЗА ОДИН ВЫЗОВ. Это в
+  // двадцать семь раз больше, чем разрешено анониму в qcoreai.
+  const src = readFileSync(join(__dirname, "..", "src", "routes", "coach.ts"), "utf8");
+
+  test("обе платные ручки тренера спрашивают предел", () => {
+    // /chat и /chat/stream — обе зовут Anthropic. Считаются ВЫЗОВЫ, а не
+    // упоминания имени: рядом стоит комментарий, где оно тоже есть.
+    expect(src.split("checkAiInputBudget(messages").length - 1).toBe(2);
+  });
+
+  test("обе стоят под ограничителем частоты", () => {
+    expect(src).toContain('generationLimit("coach_chat")');
+    expect(src).toContain('generationLimit("coach_chat_stream")');
+  });
+
+  test("у ручек РАЗНЫЕ ключи счётчика", () => {
+    // Один ключ на две ручки означал бы общий бюджет: поток съедал бы лимит
+    // обычного разбора. Ровно этот дефект уже находили у шести лимитеров,
+    // забывших keyPrefix. Считаем ВХОЖДЕНИЯ каждого ключа: их должно быть по
+    // одному, а не два одинаковых.
+    const keys = src.split("generationLimit(").slice(1).map((chunk) => chunk.slice(0, chunk.indexOf(")")));
+    expect(keys.length, "ограничителей не два").toBe(2);
+    expect(new Set(keys).size, "обе ручки считают в ОДИН счётчик").toBe(2);
+  });
+
+  test("отказ — 413, а не 500", () => {
+    const at = src.indexOf("checkAiInputBudget(messages");
+    expect(src.slice(at, at + 400)).toContain("status(413)");
+  });
+});

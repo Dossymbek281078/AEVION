@@ -16,6 +16,7 @@ import type { TierId, BillingPeriod } from "../data/pricing";
 import { projects } from "../data/projects";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { degraded } from "../lib/degradedResponse";
+import { rateLimit } from "../lib/rateLimit";
 
 const capture = makeServiceCapture("provisioning");
 
@@ -571,7 +572,31 @@ provisioningRouter.get("/stats", (_req, res) => {
   }
 });
 
-provisioningRouter.get("/history", (req, res) => {
+
+/**
+ * Ограничитель на публичный поиск подписки по адресу.
+ *
+ * Ручка `/history` намеренно открыта: страница /pricing/provisioning даёт
+ * человеку посмотреть свою подписку без входа. Цена этого решения в том, что
+ * тем же запросом можно спросить про ЧУЖОЙ адрес и увидеть тариф, сумму
+ * оплаты, промокод и модули (замер 28.08.2026 на проде: 200 без токена).
+ *
+ * Требовать вход здесь — значит убрать работающую функцию, и это решение
+ * основателя, а не моё. Что можно сделать, ничего не ломая: сделать НЕВОЗМОЖНЫМ
+ * перебор. Свой человек смотрит свою подписку раз-другой; тому, кто проверяет
+ * список адресов, нужны тысячи запросов.
+ *
+ * keyPrefix задан явно: без него шесть вызовов этого помощника делили один
+ * счётчик, и каждый сравнивал общую сумму со своим пределом.
+ */
+const historyLookupLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyPrefix: "provisioning-history-lookup",
+  message: "Слишком много запросов. Подождите минуту и попробуйте снова.",
+});
+
+provisioningRouter.get("/history", historyLookupLimiter, (req, res) => {
   try {
     const email = (req.query.email as string | undefined)?.trim();
     if (!email) return res.status(400).json({ error: "missing_email", hint: "use ?email=..." });

@@ -57,12 +57,19 @@ describe("экран курса честен к сбоям", () => {
     ["загрузка курса", "const load = useCallback"],
     ["чтение урока", "const readLesson = async"],
     ["отметка прогресса", "const markProgress = async"],
+    ["добавление урока", "const addLesson = async"],
+    ["генерация урока", "const generateLesson = async"],
   ])("%s смотрит на res.ok ДО того, как менять экран", (_name, decl) => {
     const lines = fnLines(SRC, decl);
     expect(lines.length, `не нашёл функцию ${decl}`).toBeGreaterThan(4);
     const okAt = lines.findIndex((l) => l.includes("if (!ok)"));
     const setAt = lines.findIndex(
-      (l) => l.includes("setCourse(") || l.includes("setOpenLesson(") || l.includes("setProgress("),
+      (l) =>
+        l.includes("setCourse(") ||
+        l.includes("setOpenLesson(") ||
+        l.includes("setProgress(") ||
+        l.includes("await load()") ||
+        l.includes("setLessonTitle(\"\")"),
     );
     expect(okAt, "нет проверки ответа вовсе").toBeGreaterThanOrEqual(0);
     expect(setAt, "функция ничего не меняет на экране — тест смотрит не туда").toBeGreaterThanOrEqual(0);
@@ -89,5 +96,22 @@ describe("экран курса честен к сбоям", () => {
   test("текст отказа берётся из ответа сервера, а не выдумывается", () => {
     // Бэкенд объясняет 503 полем warning; терять это объяснение нельзя.
     expect(SRC, "объяснение сервера не читается").toContain("data.warning");
+  });
+
+  test("автору видно, что курс без уроков пройти нельзя", () => {
+    // Сайт умел создать курс, но НЕ умел добавить в него урок: каталог мог
+    // быть только пустым, и мой же экран показывал бы «уроков нет» всегда.
+    expect(SRC, "формы добавления урока нет").toContain("api/qlearn/me/courses/");
+    expect(SRC, "нет запуска генерации урока").toContain("ai-generate-lesson");
+    expect(SRC, "инструменты автора показываются всем").toContain("isAuthor &&");
+  });
+
+  test("признак «сохранено только в памяти» доходит до автора", () => {
+    // Бэкенд ставит storage:"memory", когда базы нет вовсе. Молча съесть это
+    // значит пообещать сохранение, которого не будет после перезапуска.
+    const lines = fnLines(SRC, "const addLesson = async");
+    const joined = lines.join(String.fromCharCode(10));
+    expect(joined, "признак хранилища не читается").toContain("data.storage");
+    expect(joined, "объяснение не показывается автору").toContain("setAuthorNotice(");
   });
 });

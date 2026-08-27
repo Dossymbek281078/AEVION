@@ -33,6 +33,7 @@ interface LessonFull extends LessonRef {
 
 interface CourseFull {
   id: string;
+  authorId: string;
   title: string;
   description: string;
   category: string;
@@ -98,6 +99,32 @@ const noticeStyle: React.CSSProperties = {
   marginBottom: 14,
 };
 
+/**
+ * Чей это токен — ТОЛЬКО чтобы решить, показывать ли автору его инструменты.
+ * Подпись не проверяется и проверять её здесь нечем: права решает сервер, он
+ * отвечает 403 независимо от того, что нарисовано на экране.
+ *
+ * ⚠ Такой же разбор уже лежит приватно в `app/auth/page.tsx` (там достают exp).
+ * Не свёл в общий помощник намеренно: `lib/auth.ts` и та страница расходятся
+ * сейчас в двух чужих ветках, и правка там стоила бы им конфликта. Свести —
+ * когда те ветки сольют.
+ */
+function readJwtSub(jwt: string | null): string | null {
+  if (!jwt) return null;
+  try {
+    const parts = jwt.split(".");
+    if (parts.length !== 3) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const json = typeof atob === "function" ? atob(padded) : "";
+    if (!json) return null;
+    const payload = JSON.parse(json) as { sub?: unknown };
+    return typeof payload.sub === "string" ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Разобрать ответ так, чтобы сбой не превратился в пустоту. */
 async function readJson(res: Response): Promise<{ ok: boolean; data: Record<string, unknown> }> {
   let data: Record<string, unknown> = {};
@@ -137,6 +164,13 @@ export default function CourseDetail({
   const [certificate, setCertificate] = useState<Certificate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const [lessonTitle, setLessonTitle] = useState("");
+  const [lessonBody, setLessonBody] = useState("");
+  const [aiTopic, setAiTopic] = useState("");
+  const [authorBusy, setAuthorBusy] = useState(false);
+  const [authorNotice, setAuthorNotice] = useState<string | null>(null);
+  const isAuthor = Boolean(course && readJwtSub(token) && course.authorId === readJwtSub(token));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -252,6 +286,74 @@ export default function CourseDetail({
     }
   };
 
+  /** Добавить урок вручную. Список обновляем ТОЛЬКО после ответа сервера. */
+  const addLesson = async () => {
+    if (!token || !lessonTitle.trim()) {
+      setAuthorNotice("Название урока обязательно.");
+      return;
+    }
+    setAuthorBusy(true);
+    setAuthorNotice(null);
+    try {
+      const res = await fetch(apiUrl(`/api/qlearn/me/courses/${courseId}/lessons`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          title: lessonTitle.trim(),
+          content: lessonBody,
+          order: lessons.length + 1,
+        }),
+      });
+      const { ok, data } = await readJson(res);
+      if (!ok) {
+        // Список не трогаем: иначе урок появится на экране и исчезнет при
+        // следующей загрузке — это хуже честного отказа.
+        setAuthorNotice(errorText(data, "Урок не сохранён."));
+        return;
+      }
+      setLessonTitle("");
+      setLessonBody("");
+      if (typeof data.storage === "string") {
+        // Бэкенд честно сказал, что база отсутствует и запись живёт до
+        // перезапуска. Молчать об этом нельзя.
+        setAuthorNotice(String(data.warning ?? "Сохранено только до перезапуска сервиса."));
+      }
+      await load();
+    } catch {
+      setAuthorNotice("Сеть недоступна. Урок не сохранён.");
+    } finally {
+      setAuthorBusy(false);
+    }
+  };
+
+  /** Сгенерировать урок по теме. Тот же порядок: сначала ответ, потом экран. */
+  const generateLesson = async () => {
+    if (!token || !aiTopic.trim()) {
+      setAuthorNotice("Тема обязательна.");
+      return;
+    }
+    setAuthorBusy(true);
+    setAuthorNotice(null);
+    try {
+      const res = await fetch(apiUrl(`/api/qlearn/me/courses/${courseId}/ai-generate-lesson`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ topic: aiTopic.trim() }),
+      });
+      const { ok, data } = await readJson(res);
+      if (!ok) {
+        setAuthorNotice(errorText(data, "Урок не сгенерирован."));
+        return;
+      }
+      setAiTopic("");
+      await load();
+    } catch {
+      setAuthorNotice("Сеть недоступна. Урок не сгенерирован.");
+    } finally {
+      setAuthorBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={wrap}>
@@ -358,6 +460,90 @@ export default function CourseDetail({
 
       {notice && <div style={noticeStyle}>{notice}</div>}
       {lessonError && <div style={noticeStyle}>{lessonError}</div>}
+
+      {isAuthor && (
+        <div
+          style={{
+            border: "1px dashed #cbd5e1",
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 20,
+            background: "#f8fafc",
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a", marginBottom: 4 }}>
+            Вы автор курса
+          </div>
+          <div style={{ fontSize: 13, color: "#64748b", marginBottom: 12 }}>
+            Добавьте урок — без уроков курс не пройти.
+          </div>
+          {authorNotice && <div style={noticeStyle}>{authorNotice}</div>}
+          <input
+            value={lessonTitle}
+            onChange={(e) => setLessonTitle(e.target.value)}
+            placeholder="Название урока"
+            aria-label="Название урока"
+            style={{
+              width: "100%", padding: "9px 12px", borderRadius: 8,
+              border: "1px solid #e2e8f0", fontSize: 14, marginBottom: 8,
+            }}
+          />
+          <textarea
+            value={lessonBody}
+            onChange={(e) => setLessonBody(e.target.value)}
+            placeholder="Текст урока"
+            aria-label="Текст урока"
+            rows={4}
+            style={{
+              width: "100%", padding: "9px 12px", borderRadius: 8,
+              border: "1px solid #e2e8f0", fontSize: 14, marginBottom: 10,
+              fontFamily: "inherit", resize: "vertical",
+            }}
+          />
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              onClick={() => void addLesson()}
+              disabled={authorBusy || !lessonTitle.trim()}
+              style={{
+                ...primaryBtn,
+                opacity: authorBusy || !lessonTitle.trim() ? 0.5 : 1,
+                cursor: authorBusy || !lessonTitle.trim() ? "default" : "pointer",
+              }}
+            >
+              {authorBusy ? "Сохраняем…" : "Добавить урок"}
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: 14, paddingTop: 14, borderTop: "1px solid #e2e8f0",
+              display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center",
+            }}
+          >
+            <input
+              value={aiTopic}
+              onChange={(e) => setAiTopic(e.target.value)}
+              placeholder="Тема — сгенерирую урок"
+              aria-label="Тема для генерации урока"
+              style={{
+                flex: "1 1 220px", padding: "9px 12px", borderRadius: 8,
+                border: "1px solid #e2e8f0", fontSize: 14,
+              }}
+            />
+            <button
+              onClick={() => void generateLesson()}
+              disabled={authorBusy || !aiTopic.trim()}
+              style={{
+                ...quietBtn,
+                opacity: authorBusy || !aiTopic.trim() ? 0.5 : 1,
+                cursor: authorBusy || !aiTopic.trim() ? "default" : "pointer",
+              }}
+            >
+              Сгенерировать
+            </button>
+          </div>
+        </div>
+      )}
 
       <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 10px" }}>
         Уроки {lessons.length > 0 && <span style={{ color: "#94a3b8" }}>· {lessons.length}</span>}

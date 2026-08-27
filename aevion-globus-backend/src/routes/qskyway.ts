@@ -1150,7 +1150,19 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
     grid: { cols: CITY.grid.cols, rows: CITY.grid.rows, cellM: CITY.grid.cell },
     altitude: { floorM: FLOOR, bandM: BAND, clearanceM: CLEAR },
     clearanceModel: { baseM: CLEAR, byHeightSourceM: { measured: SRC_CLEARANCE[0], derived: SRC_CLEARANCE[1], guessed: SRC_CLEARANCE[2] }, note: "Страховочный просвет растёт при низкой уверенности высоты; лучше данные (LiDAR/LOD2/3D Tiles) → ниже крейсер." },
-    features: ["nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability", "height-provenance", "confidence-clearance", "regulatory-airspace-ceilings"],
+    // Плоский список читается как «умеем во всех городах». Для шести пунктов
+    // это правда, для седьмого — нет: сетку потолков публикует только FAA, и
+    // ниже в этом же ответе `airspace.astana.available` и `airspace.tokyo`
+    // честно отвечают false. Два наших же поля спорили друг с другом, и верить
+    // читатель будет короткому — списку. Поэтому городской пункт называет
+    // города прямо в строке (замер 27.08.2026: 1 город из 3).
+    features: [
+      "nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability",
+      "height-provenance", "confidence-clearance",
+      `regulatory-airspace-ceilings (${
+        Object.keys(CITIES).filter((id) => AIRSPACE[id]).join(", ") || "нет городов с фидом регулятора"
+      })`,
+    ],
     airspace: Object.fromEntries(Object.keys(CITIES).map((id) => [id, airspaceBlock(id, CITIES[id])])),
     slotsStore: slotsDbAvailable ? "postgres" : "memory",
     slotsBooked,

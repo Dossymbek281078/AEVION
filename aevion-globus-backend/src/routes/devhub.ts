@@ -3611,6 +3611,9 @@ devhubRouter.post("/media/email", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      // Brevo answered 401 to every call from one IP for a week while the
+      // capability read "live" — the key existed, that was the whole test.
+      noteProviderFailure("email", `Brevo HTTP ${r.status}: ${errText.slice(0, 100)}`);
       return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json().catch(() => ({}));
@@ -3621,6 +3624,8 @@ devhubRouter.post("/media/email", async (req, res) => {
     // «сторож занижал свой охват». SMS и WhatsApp сюда НЕ входят: у них отдельная
     // квота, и смешивать их значило бы врать обоими числами.
     noteEmailSent();
+    if (messageId) noteProviderSuccess("email");
+    else noteProviderFailure("email", "Brevo accepted the request but returned no messageId — delivery not confirmed");
     res.json({
       ok: true, messageId,
       ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),
@@ -4806,10 +4811,13 @@ devhubRouter.post("/media/sms", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      noteProviderFailure("sms", `Brevo HTTP ${r.status}: ${errText.slice(0, 100)}`);
       return res.status(r.status).json({ error: `Brevo SMS error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json().catch(() => ({}));
     const messageId = (data as any)?.messageId ?? null;
+    if (messageId) noteProviderSuccess("sms");
+    else noteProviderFailure("sms", "Brevo accepted the SMS but returned no messageId — delivery not confirmed");
     res.json({
       ok: true,
       reference: (data as any)?.reference ?? null,
@@ -4855,10 +4863,13 @@ devhubRouter.post("/media/whatsapp", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      noteProviderFailure("whatsapp", `Brevo HTTP ${r.status}: ${errText.slice(0, 100)}`);
       return res.status(r.status).json({ error: `Brevo WhatsApp error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json().catch(() => ({}));
     const messageId = (data as any)?.messageId ?? null;
+    if (messageId) noteProviderSuccess("whatsapp");
+    else noteProviderFailure("whatsapp", "Brevo accepted the request but returned no messageId — delivery not confirmed");
     res.json({
       ok: true, messageId,
       ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),

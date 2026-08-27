@@ -276,6 +276,19 @@ jobs:
       - name: Install backend deps
         run: npm install --ignore-scripts
 
+      # Two of the 45 smokes (qcore-fleet, qcore-autoroute) require compiled
+      # modules — dist/services/qcoreai/{providers,orchestrator}.js. Without a
+      # build they die instantly with `Cannot find module`, the orchestrator
+      # exits 1, and the whole sweep goes red while 43 of 45 prod checks pass.
+      #
+      # Measured 2026-08-19: EVERY scheduled run of this workflow has failed —
+      # 32 of 32 since it was created, zero successes. Push-triggered runs pass
+      # 46 of 68 because they use the job above, which does build. So the daily
+      # prod watchdog has never actually reported prod health; it reported a
+      # missing build. Permanently red checks train people to stop looking.
+      - name: Build backend (two smokes read from dist/)
+        run: npm run build
+
       # tee the full output into a file AND fail on the orchestrator's exit
       # code (pipefail) — 2026-07-22 lesson: reading a truncated tail hid 10
       # failing scripts for a day. The artifact preserves every assertion line.

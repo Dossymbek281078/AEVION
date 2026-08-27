@@ -14,27 +14,28 @@ export type LbEntry = {
 export type LbCategory = "blitz" | "rapid" | "bullet" | "puzzles" | "rush";
 
 const FIRST_NAMES = [
-  "Magnus","Hikaru","Fabiano","Ding","Ian","Anish","Wesley","Maxime","Levon","Sergey",
-  "Alexander","Nodirbek","Wei","Vincent","Arjun","Praggnanandhaa","Erigaisi","Gukesh","Alireza","Rauf",
-  "Vladimir","Teimour","Peter","Shakhriyar","Veselin","Boris","Garry","Anatoly","Vassily","Vladislav",
-  "Daniil","Andrey","Evgeny","Sergei","Kirill","Mikhail","Roman","Dmitry","Ivan","Pavel",
-  "Alexei","Nikolai","Yuri","Oleg","Stanislav","Artem","Maksim","Egor","Timur","Ruslan",
-  "Aida","Dinara","Bibisara","Alina","Bayasgalan","Kateryna","Anna","Mariya","Tan","Hou",
-  "Aleksandra","Polina","Olga","Daria","Ekaterina","Nika","Valentina","Irina","Natalia","Alexandra",
+  // Только выдуманные ники — намеренно, и вот почему.
+  //
+  // Раньше здесь стояли имена ЖИВЫХ гроссмейстеров, а в фамилиях — фамилии
+  // чемпионов мира. Таблица при этом синтетическая (бэкенд отдаёт leaderboard
+  // total=0), пометки «демо» на странице нет, а флаги подставляются независимым
+  // индексом — то есть люди оказывались под чужими флагами. Получалось, что
+  // страница показывает выдуманные результаты под именами реальных людей.
+  //
+  // Их собственный смоук cyberchess-prod-smoke это ловит и был красным на проде.
+  // Настоящих имён здесь быть не должно: ни в этом массиве, ни в LAST_NAMES.
   "Cyber","Zen","Ghost","Nova","Pixel","Rocket","Shadow","Storm","Vortex","Phoenix",
-  "Neo","Echo","Quantum","Zero","Apex","Blaze","Crash","Drift","Edge","Flash"
+  "Neo","Echo","Quantum","Zero","Apex","Blaze","Crash","Drift","Edge","Flash",
+  "Onyx","Lumen","Raven","Delta","Karma","Vector","Prism","Nyx","Orbit","Rune",
+  "Sable","Talon","Umbra","Vega","Wisp","Xeno","Yarrow","Zephyr","Aster","Bolt"
 ];
 
 const LAST_NAMES = [
-  "Carlsen","Nakamura","Caruana","Liren","Nepomniachtchi","Giri","So","Vachier","Aronian","Karjakin",
-  "Grischuk","Abdusattorov","Yi","Keymer","Erigaisi","Praggnanandhaa","Gukesh","Firouzja","Mamedyarov","Wojtaszek",
-  "Kramnik","Radjabov","Svidler","Topalov","Gelfand","Kasparov","Karpov","Ivanchuk","Artemiev","Andreikin",
-  "Dubov","Esipenko","Tomashevsky","Karjakin","Sjugirov","Sarana","Antipov","Khismatullin","Bogdanovich","Najer",
-  "Shirov","Korobov","Hess","Robson","Caruana","Sadorra","Onischuk","Kamsky","Akobian",
-  "Kulaots","Stefanova","Lagno","Goryachkina","Muzychuk","Krush","Kosteniuk","Polgar","Cramling","Hou",
-  "Wenjun","Shuwen","Vega","Mastrovasilis","Negi","Nielsen","Howell","Adams","Short","McShane",
-  "Wraith","Nightfall","Cipher","Specter","Wraith","Cyclone","Tempest","Inferno","Maverick","Rogue",
-  "Solace","Reverb","Glitch","Synthwave","Static","Verge","Surge","Blitz","Pulse","Fractal"
+  // Тот же принцип: ни одной настоящей фамилии.
+  "Wraith","Nightfall","Cipher","Specter","Cyclone","Tempest","Inferno","Maverick","Rogue","Solace",
+  "Reverb","Glitch","Synthwave","Static","Verge","Surge","Blitzwave","Pulse","Fractal","Halcyon",
+  "Ironside","Jetstream","Kilowatt","Lodestar","Mirage","Northwind","Obsidian","Paradox","Quicksilver","Riptide",
+  "Sandstorm","Thunderhead","Updraft","Vanguard","Wavelength","Xenon","Yardarm","Zenith","Afterglow","Bedrock"
 ];
 
 const COUNTRIES = ["🇳🇴","🇺🇸","🇮🇹","🇨🇳","🇷🇺","🇳🇱","🇺🇸","🇫🇷","🇦🇲","🇷🇺","🇷🇺","🇺🇿","🇨🇳","🇩🇪","🇮🇳","🇮🇳","🇮🇳","🇮🇷","🇦🇿","🇵🇱","🇰🇿","🇧🇾","🇺🇦","🇬🇪","🇧🇬"];

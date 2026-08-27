@@ -176,6 +176,9 @@ const PAGES = [
   "/cyberchess/studio",
   "/cyberchess/tournament",
   "/cyberchess/training",
+  // Дописано при сведении 21.08: этих адресов не было в их списке.
+  "/build/verify-email",
+  "/pricing/cases",
 ];
 
 let pass = 0;

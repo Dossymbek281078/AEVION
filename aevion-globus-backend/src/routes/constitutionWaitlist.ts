@@ -20,6 +20,7 @@ import { validate, WaitlistSubscribeSchema } from "../lib/constitutionSchemas";
 import { sendWaitlistConfirm, sendWeeklyDigestEmail as sendDigestEmail } from "../lib/constitutionBrevo";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvFromRows } from "../lib/csv";
+import { unsubConfigured, unsubContact, verifyUnsubToken } from "../lib/waitlistUnsubToken";
 
 const capture = makeServiceCapture("constitutionWaitlist");
 
@@ -30,6 +31,37 @@ type WaitlistRow = {
 };
 
 const memList = new Map<string, WaitlistRow>();
+
+/**
+ * Склейка меток источника — та же логика, что в SQL при ON CONFLICT.
+ *
+ * Держать её здесь И в запросе — вынужденное повторение: SQL нельзя вызвать без
+ * базы, а память обязана вести себя одинаково с ней, иначе запасной путь молча
+ * теряет интерес подписчика. Правило одно, записано дважды, и оба места помечены
+ * ссылкой друг на друга.
+ *
+ * Новая метка дописывается В КОНЕЦ (первый интерес остаётся первым), уже
+ * существующая не дублируется, обрезка идёт по последней ЦЕЛОЙ метке: обрубленная
+ * посередине не совпала бы ни с чем при отборе получателей.
+ */
+export function mergeSources(prev: string, next: string, limit = 250): string {
+  const parts = String(prev || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const add = String(next || "").trim();
+  if (!add) return parts.join(",");
+  if (parts.some((p) => p.toLowerCase() === add.toLowerCase())) return parts.join(",");
+
+  parts.push(add);
+  let out = parts.join(",");
+  while (out.length > limit && parts.length > 1) {
+    // Выбрасываем самую позднюю метку, а не режем строку: у обрубка нет смысла.
+    parts.pop();
+    out = parts.join(",");
+  }
+  return out.slice(0, limit);
+}
 let tableReady = false;
 let dbAvailable = false;
 
@@ -67,12 +99,21 @@ function isAdmin(req: Request): boolean {
   return false;
 }
 
-const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,24}$/;
+// Формат email проверяется Zod-схемой WaitlistSubscribeSchema
+// (z.string().email().max(120)) на входе в маршрут. Здесь раньше лежала
+// вторая, НИКЕМ НЕ ВЫЗЫВАЕМАЯ регулярка: читающий видел её и считал, что
+// есть ещё один слой проверки, которого не было. Убрана, чтобы код не
+// обещал того, чего не делает.
 
 export const constitutionWaitlistRouter = Router();
 export const constitutionWaitlistAdminRouter = Router();
 
-const writeLimit = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "constitution-waitlist" });
+// Предел на публичную подписку: КАЖДЫЙ запрос шлёт письмо, а у Brevo потолок
+// 300 писем в сутки. При «10 в минуту» один адрес выбирал суточную квоту за
+// полчаса, после чего подтверждения не приходили НИКОМУ — и выглядело это как
+// «письма задерживаются». Три в минуту человеку хватает с запасом (он подписывается
+// один раз), а квоту так с одного адреса не выбрать.
+const writeLimit = rateLimit({ windowMs: 60_000, max: 3, keyPrefix: "constitution-waitlist" });
 const readLimit  = rateLimit({ windowMs: 60_000, max: 30, keyPrefix: "constitution-waitlist-read" });
 
 constitutionWaitlistRouter.post(
@@ -106,19 +147,58 @@ constitutionWaitlistRouter.post(
           const ins = await pool.query(
             `INSERT INTO constitution_waitlist ("email","source","createdAt")
              VALUES ($1,$2,$3)
-             ON CONFLICT ("email") DO UPDATE SET "source" = EXCLUDED."source"
+             ON CONFLICT ("email") DO UPDATE SET "source" =
+               CASE
+                 -- Метка уже в списке — оставляем как есть.
+                 WHEN constitution_waitlist."source" = EXCLUDED."source" THEN constitution_waitlist."source"
+                 WHEN string_to_array(constitution_waitlist."source", ',') @> ARRAY[EXCLUDED."source"] THEN constitution_waitlist."source"
+                 -- Новая метка дописывается В КОНЕЦ: первый интерес остаётся
+                 -- первым, и развилка письма, читающая начало строки, не меняет
+                 -- поведения для тех, кто подписался на конституцию раньше.
+                 -- Обрезка не по 60 символам, а по последней целой метке:
+                 -- обрубленная посередине метка не совпала бы ни с чем при отборе.
+                 ELSE left(
+                        constitution_waitlist."source" || ',' || EXCLUDED."source",
+                        greatest(
+                          length(constitution_waitlist."source"),
+                          length(left(constitution_waitlist."source" || ',' || EXCLUDED."source", 250))
+                            - position(',' in reverse(left(constitution_waitlist."source" || ',' || EXCLUDED."source", 250)))
+                        )
+                      )
+               END
              RETURNING (xmax = 0) AS inserted`,
             [row.email, row.source, row.createdAt],
           );
           isNew = ins.rows?.[0]?.inserted !== false;
           storage = "postgres";
         } catch (dbErr) {
-          // база не приняла подписку — дальше она ляжет только в память процесса, а та живёт до ближайшей выкатки.
-          capture(dbErr, { where: "waitlist.insert" });
-          console.error("[waitlist] waitlist.insert:", dbErr);
+          // Раньше тут стоял молчаливый провал в память. Человек получал
+          // «вы записаны» и письмо-подтверждение, а запись жила в памяти
+          // одного инстанса — до ближайшего перезапуска. Никто об этом не
+          // узнавал: заявки просто испарялись. Запись в память оставляем
+          // (в пределах жизни процесса это лучше, чем потерять сразу), но
+          // теперь об этом кричим.
+          capture(dbErr, {
+            where: "waitlist.insert",
+            route: "constitution/waitlist/subscribe",
+            severity: "leads-at-risk",
+            note: "запись в Postgres не удалась — заявка лежит только в памяти инстанса и будет потеряна при перезапуске",
+          });
+          console.error(
+            "[Constitution] ЗАЯВКА НЕ СОХРАНЕНА В БАЗУ — только в памяти, будет потеряна при перезапуске.",
+            dbErr instanceof Error ? dbErr.message : dbErr,
+          );
         }
       }
-      if (!memList.has(row.email)) memList.set(row.email, row);
+      // Память ведёт себя КАК БАЗА: метка дописывается, а не игнорируется.
+      //
+      // Прежняя строка была `if (!memList.has(...))` — то есть повторная подписка
+      // в памяти не меняла ничего, тогда как в Postgres источник (до 19.08)
+      // перезаписывался. Два хранилища с разной семантикой: на запасном пути
+      // интерес не накапливался вовсе, и никакой тест этого не показывал, потому
+      // что в тестах база недоступна и работает как раз память.
+      const prev = memList.get(row.email);
+      memList.set(row.email, prev ? { ...prev, source: mergeSources(prev.source, row.source) } : row);
 
       // Письмо не задерживает ответ, но его провал обязан быть видимым: иначе
       // человек подписан, письма нет, и снаружи это неотличимо от задержки.
@@ -145,6 +225,97 @@ constitutionWaitlistRouter.post(
   },
 );
 
+/**
+ * GET /unsubscribe?email=…&t=… — отписка по ссылке из письма.
+ *
+ * До 21.08.2026 отписки не было ВООБЩЕ: письма звали на страницу
+ * `aevion.app/constitution/waitlist/unsubscribe`, которой не существует (404,
+ * наравне с выдуманным адресом), и ручки в API тоже не было. Рабочая отписка в
+ * платформе есть только у других модулей, и смоук проверял именно её — поэтому
+ * зелёная проверка соседствовала с мёртвой ссылкой у нас.
+ *
+ * Отвечаем СТРАНИЦЕЙ, а не JSON: по ссылке приходят из почты, и человек должен
+ * увидеть человеческий ответ, а не фигурные скобки.
+ *
+ * Три исхода различаются намеренно: нет секрета — 503 и адрес для отписки вручную
+ * (притворяться, что сработало, нельзя); нет или неверен токен — 400; всё верно —
+ * удаляем и говорим об этом. Отсутствие адреса в списке тоже считается успехом:
+ * человек просил не писать ему, и «вас тут и не было» — правильный ответ, а не ошибка.
+ */
+constitutionWaitlistRouter.get(
+  "/unsubscribe",
+  readLimit as unknown as (req: Request, res: Response, next: NextFunction) => void,
+  async (req: Request, res: Response) => {
+    const page = (title: string, body: string, code: number) => {
+      res.status(code).type("html").send(
+        `<!doctype html><html lang="ru"><head><meta charset="utf-8">` +
+          `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+          `<meta name="robots" content="noindex"><title>${title} — AEVION</title></head>` +
+          `<body style="font-family:Georgia,'Times New Roman',serif;background:#f7f6f2;color:#16161a;margin:0;padding:40px 20px">` +
+          `<div style="max-width:520px;margin:0 auto">` +
+          `<div style="font-family:monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a9781a">AEVION</div>` +
+          `<h1 style="font-size:24px;line-height:1.25;margin:10px 0 14px">${title}</h1>` +
+          `<p style="font-size:15px;line-height:1.6;margin:0">${body}</p></div></body></html>`,
+      );
+    };
+
+    if (!unsubConfigured()) {
+      return page(
+        "Отписка временно недоступна",
+        `Мы не смогли обработать ссылку автоматически. Напишите на ` +
+          `<a href="mailto:${unsubContact()}">${unsubContact()}</a> — отпишем руками в тот же день.`,
+        503,
+      );
+    }
+
+    const email = String(req.query.email ?? "").trim().toLowerCase();
+    const token = req.query.t;
+    if (!email || !token) {
+      return page("Ссылка неполная", "В ссылке не хватает адреса или кода. Откройте её из письма целиком.", 400);
+    }
+    if (!verifyUnsubToken(email, token)) {
+      return page(
+        "Ссылка не подошла",
+        `Код в ссылке не совпал с адресом. Так бывает, если ссылку изменили при пересылке. ` +
+          `Напишите на <a href="mailto:${unsubContact()}">${unsubContact()}</a>, и мы отпишем вас руками.`,
+        400,
+      );
+    }
+
+    let removedFromDb = false;
+    if (dbAvailable) {
+      try {
+        const pool = getPool();
+        const r = await pool.query(`DELETE FROM constitution_waitlist WHERE "email" = $1`, [email]);
+        removedFromDb = (r.rowCount ?? 0) > 0;
+      } catch (dbErr) {
+        // Молчать нельзя: человек увидит «готово», а письма продолжат приходить.
+        capture(dbErr, {
+          where: "waitlist.unsubscribe",
+          route: "constitution/waitlist/unsubscribe",
+          severity: "unsubscribe-failed",
+          note: "не удалось удалить адрес из Postgres — человек просил не писать ему",
+        });
+        console.error("[Constitution] ОТПИСКА НЕ ВЫПОЛНЕНА в базе:", dbErr instanceof Error ? dbErr.message : dbErr);
+        return page(
+          "Не получилось прямо сейчас",
+          `Мы не смогли завершить отписку из-за сбоя на нашей стороне. Напишите на ` +
+            `<a href="mailto:${unsubContact()}">${unsubContact()}</a> — отпишем руками, это не займёт времени.`,
+          500,
+        );
+      }
+    }
+    const removedFromMem = memList.delete(email);
+
+    return page(
+      "Готово — больше не напишем",
+      `Адрес <b>${email}</b> удалён из списка${removedFromDb || removedFromMem ? "" : " (его там уже не было)"}. ` +
+        `Если передумаете, форма подписки всегда на месте.`,
+      200,
+    );
+  },
+);
+
 constitutionWaitlistAdminRouter.get(
   "/list",
   readLimit as unknown as (req: Request, res: Response, next: NextFunction) => void,
@@ -153,6 +324,13 @@ constitutionWaitlistAdminRouter.get(
     try {
       await ensureWaitlistTable();
       let rows: WaitlistRow[] = [];
+      // Откуда список и не обрезан ли он. Без этого выгрузка при сбое базы
+      // отдавала почти пустой список из памяти КАК ПОЛНЫЙ: владелец видел три
+      // строки и делал вывод, что заявок нет. Решение принимается по этому
+      // файлу, значит он обязан говорить о себе правду.
+      const ROW_CAP = 5000;
+      let source: "postgres" | "memory" = "memory";
+      let dbQueryFailed = false;
       if (dbAvailable) {
         try {
           const pool = getPool();
@@ -160,7 +338,7 @@ constitutionWaitlistAdminRouter.get(
             `SELECT "email","source","createdAt"
              FROM constitution_waitlist
              ORDER BY "createdAt" DESC
-             LIMIT 5000`,
+             LIMIT ${ROW_CAP}`,
           );
           rows = r.rows.map((x: Record<string, unknown>) => ({
             email: String(x.email),
@@ -169,13 +347,29 @@ constitutionWaitlistAdminRouter.get(
               ? x.createdAt.toISOString()
               : String(x.createdAt),
           }));
+          source = "postgres";
         } catch (dbErr) {
-          // чтение списка не удалось — ниже подставится память процесса, и список покажется коротким, а не сломанным.
-          capture(dbErr, { where: "waitlist.list" });
-          console.error("[waitlist] waitlist.list:", dbErr);
+          dbQueryFailed = true;
+          capture(dbErr, {
+            where: "waitlist.list",
+            route: "constitution/waitlist/list",
+            note: "список заявок не прочитан из Postgres — выгрузка идёт из памяти и полной не является",
+          });
+          console.error(
+            "[Constitution] ВЫГРУЗКА ЗАЯВОК ИЗ ПАМЯТИ, НЕ ИЗ БАЗЫ — список неполный:",
+            dbErr instanceof Error ? dbErr.message : dbErr,
+          );
         }
       }
-      if (rows.length === 0) rows = Array.from(memList.values());
+      if (rows.length === 0) {
+        rows = Array.from(memList.values());
+        source = "memory";
+      }
+      const truncated = exportTruncated(source, rows.length, ROW_CAP);
+      // Для CSV поля в тело не положить — поэтому признаки уходят заголовками:
+      // файл сам по себе выглядит одинаково полным в любом случае.
+      res.setHeader("X-Data-Source", source);
+      res.setHeader("X-Data-Truncated", String(truncated));
       const fmt = String(req.query.format ?? "json");
       if (fmt === "csv") {
         // Экранирования тут не было ВООБЩЕ: поля клеились в строку как есть.
@@ -193,7 +387,14 @@ constitutionWaitlistAdminRouter.get(
       res.json({
         total: rows.length,
         items: rows,
-        bySource: aggregateBySource(rows),
+        ...aggregateBySource(rows),
+        // `total` — это столько, сколько отдали, а не сколько есть. При
+        // truncated=true или source="memory" по нему нельзя судить о размере
+        // списка заявок.
+        source,
+        dbQueryFailed,
+        truncated,
+        rowCap: ROW_CAP,
       });
     } catch (err) {
       capture(err);
@@ -205,12 +406,63 @@ constitutionWaitlistAdminRouter.get(
   },
 );
 
-function aggregateBySource(rows: WaitlistRow[]): Array<{ source: string; count: number }> {
+/**
+ * Разбивка по источникам — по ОТДЕЛЬНЫМ меткам, а не по строке целиком.
+ *
+ * С 19.08 источник накапливается: у человека, подписавшегося на шахматах и потом
+ * на DevHub, в поле стоит «cyberchess,devhub». Прежняя версия считала эту строку
+ * отдельным источником, и отчёт распадался на НАБОРЫ интересов: «cyberchess» — 1,
+ * «devhub» — 1, «cyberchess,devhub» — 1. Ответить «сколько людей ждёт шахматы» по
+ * такой разбивке нельзя.
+ *
+ * Сумма по группам теперь МОЖЕТ БЫТЬ БОЛЬШЕ числа подписчиков — один человек
+ * считается в каждой своей группе. Это правильно по смыслу и обязано быть
+ * названо: иначе первый же отчёт, где 12 подписчиков дают 15 по группам,
+ * прочитают как ошибку счёта. Поэтому рядом отдаётся `uniqueEmails`.
+ */
+/**
+ * Обрезана ли выгрузка. Вынесено из обработчика, чтобы это можно было проверить.
+ *
+ * Замер 19.08.2026 мутациями: одиннадцать тестов «признаки честности выгрузки» НЕ
+ * ловили ни `truncated = false` всегда, ни снижение предела до пяти строк. Тесты не
+ * лгали — в них нет базы, поэтому путь `postgres` не проходится вовсе, а признак
+ * обрезки считался только там. То есть свойство было непроверяемо по ОБСТОЯТЕЛЬСТВАМ,
+ * а не по природе, и это отговорка: решение — чистое, три аргумента.
+ *
+ * Почему `>=`, а не `>`: запрос идёт с `LIMIT cap`, и ровно `cap` строк означает
+ * «возможно, есть ещё» — при `>` последняя страница молча выдавалась бы за полную.
+ */
+export function exportTruncated(source: string, rowCount: number, cap: number): boolean {
+  return source === "postgres" && rowCount >= cap;
+}
+
+function aggregateBySource(rows: WaitlistRow[]): {
+  bySource: Array<{ source: string; count: number }>;
+  uniqueEmails: number;
+  note: string;
+} {
   const m = new Map<string, number>();
-  for (const r of rows) m.set(r.source, (m.get(r.source) ?? 0) + 1);
-  return Array.from(m.entries())
-    .map(([source, count]) => ({ source, count }))
-    .sort((a, b) => b.count - a.count);
+  const emails = new Set<string>();
+  for (const r of rows) {
+    emails.add(String(r.email || "").trim().toLowerCase());
+    const marks = String(r.source || "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    // Пустой источник — тоже факт: «неизвестно» лучше молчания, иначе такие
+    // записи просто исчезнут из отчёта.
+    for (const mark of marks.length ? marks : ["unknown"]) {
+      m.set(mark, (m.get(mark) ?? 0) + 1);
+    }
+  }
+  return {
+    bySource: Array.from(m.entries())
+      .map(([source, count]) => ({ source, count }))
+      .sort((a, b) => b.count - a.count),
+    uniqueEmails: emails.size,
+    note:
+      "Счёт по МЕТКАМ: один адрес попадает в каждую свою группу, поэтому сумма по группам может превышать uniqueEmails.",
+  };
 }
 
 /**
@@ -231,7 +483,12 @@ function aggregateBySource(rows: WaitlistRow[]): Array<{ source: string; count: 
  * артефактов конституции, а не анонс. Порядок отправки анонса —
  * Desktop\АЕВИОН-CyberChess6-08-19-письмо-на-запуск-черновик.md
  */
-export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: number }> {
+/**
+ * `aborted` отличает «рассылать было некому» от «список не прочитался».
+ * Без этого флага вызывающий видит одинаковый ноль в обоих случаях, а это
+ * разные вещи: во втором подписчики есть, просто мы их не увидели.
+ */
+export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: number; aborted?: boolean }> {
   try {
     // 1. Get top-5 artifacts by votes in last 7 days
     await ensureWaitlistTable();
@@ -271,9 +528,22 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
         const r = await pool.query(`SELECT "email" FROM constitution_waitlist ORDER BY "createdAt" ASC LIMIT 5000`);
         subscribers = r.rows.map((x: Record<string, unknown>) => ({ email: String(x.email) }));
       } catch (dbErr) {
-        // чтение подписчиков не удалось — рассылка ушла бы по пустому списку из памяти и отчиталась «отправлено 0».
-        capture(dbErr, { where: "digest.readSubscribers" });
-        console.error("[waitlist] digest.readSubscribers:", dbErr);
+        // Раньше при сбое базы дайджест уходил по списку из ПАМЯТИ — в проде
+        // это почти пустой список, — и функция рапортовала об успехе. То есть
+        // недельная рассылка считалась отправленной, не дойдя ни до кого.
+        // Отправка по неполному списку хуже неотправки: письмо нельзя послать
+        // второй раз «уже правильно», а отчёт врёт.
+        capture(dbErr, {
+          where: "digest.readSubscribers",
+          route: "constitution/digest",
+          severity: "digest-aborted",
+          note: "список подписчиков не прочитан из Postgres — рассылка отменена, чтобы не уйти по неполному списку из памяти",
+        });
+        console.error(
+          "[Constitution] ДАЙДЖЕСТ ОТМЕНЁН: список подписчиков не прочитан из базы.",
+          dbErr instanceof Error ? dbErr.message : dbErr,
+        );
+        return { sent: 0, skipped: 0, aborted: true };
       }
     }
     if (!subscribers.length) return { sent: 0, skipped: 0 };

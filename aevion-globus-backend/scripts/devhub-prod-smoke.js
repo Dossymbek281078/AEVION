@@ -176,6 +176,18 @@ async function run() {
   if (snipList.status === 200 && Array.isArray(snipList.body?.snippets)) ok("GET /snippets?tag= → 200");
   else fail("GET /snippets", `${snipList.status}`);
 
+  if (snipId) {
+    // Уборка за собой. Пока ручка не выкачена, отличаем «её нет» от «нельзя
+    // удалить» по ТЕЛУ: наш обработчик отвечает {"error":"snippet not found"},
+    // а отсутствующий маршрут — страницей Express. По одному коду 404 эти два
+    // случая неразличимы, и смоук краснел бы на непривезённой починке.
+    const rm = await req("DELETE", `/api/devhub/snippets/${snipId}`);
+    const ourHandler = rm.body && typeof rm.body === "object" && rm.body.error === "snippet not found";
+    if (rm.status === 200) ok("DELETE /snippets/:id → 200 (cleanup)");
+    else if (rm.status === 404 && !ourHandler) info("DELETE /snippets/:id", "ручка ещё не выкачена — сниппет останется на полке");
+    else fail("DELETE /snippets/:id", `${rm.status} — свой сниппет снять не удалось`);
+  }
+
   const snipBad = await req("POST", "/api/devhub/snippets", { content: "no title" });
   if (snipBad.status === 400) ok("POST /snippets missing title → 400");
   else fail("POST /snippets validation", `${snipBad.status}`);

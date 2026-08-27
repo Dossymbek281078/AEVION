@@ -1064,6 +1064,15 @@ export default function CyberChessPage(){
   const[vwPx,sVwPx]=useState(1280);const[vhPx,sVhPx]=useState(800);
   // Замер ДО отрисовки: см. комментарий у useIsoLayoutEffect наверху файла.
   // Обычный useEffect здесь давал телефону один кадр в десктопной вёрстке.
+  // Приветствие новичка — ДО первого видимого кадра, а не после.
+  // Раньше оно ставилось в обычном useEffect да ещё с паузой 400 мс, и
+  // получалось окно, в котором экран уже принимает нажатия, а приветствия
+  // ещё нет: человек успевал нажать «ИГРАТЬ», и модальное окно выпрыгивало
+  // ему в лицо ПОСЛЕ действия. Замер 28.08.2026 на телефонной ширине
+  // показывал ровно это. Layout-эффект выполняется до отрисовки кадра, так
+  // что человек либо видит приветствие сразу, либо не видит вовсе.
+  useIsoLayoutEffect(()=>{if(!hasCompletedOnboarding())sShowOnboarding(true)},[]);
+
   useIsoLayoutEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
   // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
   // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
@@ -2816,7 +2825,7 @@ export default function CyberChessPage(){
     // Chessy welcome + daily bonus + first-time tour
     const c=ldChessy();const tk=todayKey();
     // First-time onboarding overlay (3-step color/AI/time choice) — runs BEFORE tour.
-    if(!hasCompletedOnboarding())setTimeout(()=>sShowOnboarding(true),400);
+
     if(!c.welcome){
       sChessy(x=>({...x,balance:x.balance+50,lifetime:x.lifetime+50,welcome:true,lastDaily:tk,streak:1}));
       // Первый визит: НЕ стопкой. Очередь — онбординг → приветствие → тур.

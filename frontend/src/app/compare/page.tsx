@@ -25,6 +25,11 @@ const SHOW_WEAKNESSES = true;
 /** When the competitor column was read off public pricing pages and docs. */
 const COMPETITOR_DATA_DATE = "22 июля 2026";
 
+/** The ecosystem table's competitor figures were collected separately, later.
+ *  One date for both would have been wrong by six days — small, and exactly
+ *  the kind of inaccuracy this page exists to refuse. */
+const ECOSYSTEM_DATA_DATE = "28 июля 2026";
+
 type Origin = "measured" | "public" | "unmeasured" | "broken";
 
 const ORIGIN_STYLE: Record<Origin, { dot: string; label: string }> = {
@@ -47,7 +52,7 @@ const COMPETITORS = ["Bolt.new", "Lovable", "v0", "Replit"] as const;
 const ROWS: Row[] = [
   {
     feature: "Сколько стоит ИИ пользователю",
-    aevion: { text: "Бесплатный флот моделей; роутинг сэкономил 99% на наших прогонах", origin: "measured" },
+    aevion: { text: "Бесплатный флот моделей; роутинг сэкономил 99% — замер по трём прогонам, $0,23 против расчётных $30", origin: "measured" },
     others: {
       "Bolt.new": { text: "$20/мес, главная жалоба — сгорают токены", origin: "public" },
       Lovable: { text: "кредиты", origin: "public" },
@@ -282,7 +287,38 @@ export default function ComparePage() {
           </div>
         )}
 
-        <div style={{ overflowX: "auto", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12 }}>
+        {/* Two presentations of the same array: a table where there is room and
+            stacked cards on a phone. Reading five columns of a 1270px table
+            through a 390px window is not reading. Nothing is duplicated but
+            markup — both render from ROWS, so they cannot drift apart. */}
+        <style>{`
+          .cmp-wide { display: block; }
+          .cmp-narrow { display: none; }
+          @media (max-width: 780px) {
+            .cmp-wide { display: none; }
+            .cmp-narrow { display: block; }
+          }
+        `}</style>
+
+        <div className="cmp-narrow">
+          {ROWS.map((row) => (
+            <div key={row.feature} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "14px 16px", marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 10, lineHeight: 1.35 }}>{row.feature}</div>
+              <div style={{ background: "#f0fdfa", borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: "#0d9488", marginBottom: 4 }}>AEVION DevHub</div>
+                <CellView cell={row.aevion} />
+              </div>
+              {COMPETITORS.map((c) => (
+                <div key={c} style={{ display: "flex", gap: 10, padding: "6px 0", borderTop: "1px solid #f8fafc" }}>
+                  <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, minWidth: 78, flexShrink: 0 }}>{c}</div>
+                  <div style={{ flex: 1 }}><CellView cell={row.others[c]} /></div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        <div className="cmp-wide" style={{ overflowX: "auto", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12 }}>
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
             <thead>
               <tr style={{ background: "#f1f5f9" }}>
@@ -335,7 +371,8 @@ export default function ComparePage() {
           <p style={{ fontSize: 13.5, color: "#475569", lineHeight: 1.6, marginBottom: 14 }}>
             В AEVION 38 модулей, у части есть аналоги. Но сравнивать по фактам можно
             только те, где мы что-то измерили. Остальные названы честно — с тем, чего
-            не хватает.
+            не хватает. Цифры по чужим продуктам в этой таблице собраны{" "}
+            {ECOSYSTEM_DATA_DATE} — отдельно от таблицы выше.
           </p>
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>

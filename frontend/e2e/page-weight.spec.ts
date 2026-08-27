@@ -22,11 +22,17 @@ import { test, expect } from "@playwright/test";
  * nagging about a new component.
  */
 
-/** Measured 10.08.2026 on the production (Turbopack) build, plus headroom. */
+/**
+ * Measured 10.08.2026 on the production build, plus headroom.
+ *
+ * These halved the same day, when the eleven-language dictionary stopped being
+ * compiled into every page (2485 -> 1254 KB on the home page). What remains is
+ * mostly the English dictionary, which has to be there for the first render.
+ */
 const BUDGET_KB: Record<string, number> = {
-  "/": 2900, // measured 2485 KB in 16 files
-  "/devhub": 2900, // measured 2494 KB in 16 files
-  "/compare": 2900, // measured 2468 KB in 16 files
+  "/": 1500, // measured 1254 KB in 16 files
+  "/devhub": 1500, // measured 1264 KB in 16 files
+  "/compare": 1500, // measured 1237 KB in 16 files
 };
 
 async function blockingScriptWeight(

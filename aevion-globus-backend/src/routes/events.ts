@@ -3,6 +3,7 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import { queryNumber } from "../lib/queryNumber";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
+import { clientIp } from "../lib/rateLimit";
 
 const captureEventsError = makeServiceCapture("qevents");
 
@@ -205,10 +206,9 @@ function isRateLimited(ip: string): boolean {
  * (или sendBeacon). Дёшево, надёжно, без потери при unload.
  */
 eventsRouter.post("/", (req, res) => {
-  const ip =
-    (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
-    req.ip ||
-    "unknown";
+  // Ключ ограничителя, а не журнал: левый элемент X-Forwarded-For задаёт
+  // клиент, и предел снимался сменой заголовка на каждом запросе.
+  const ip = clientIp(req);
 
   if (isRateLimited(ip)) {
     return res.status(429).json({ error: "rate_limited" });

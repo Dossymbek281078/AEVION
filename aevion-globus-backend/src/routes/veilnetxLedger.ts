@@ -131,9 +131,9 @@ veilnetxLedgerRouter.get("/health", (_req, res) => {
 
 veilnetxLedgerRouter.post("/entries", writeLimit, async (req, res) => {
   try {
-    await ensureTables();
     const auth = verifyBearerOptional(req);
     if (!auth) return res.status(401).json({ error: "auth required" });
+    await ensureTables();
     const { module, kind, fromIdentifier, toIdentifier, amountCents, currency = "USD", meta } = req.body || {};
     if (!KNOWN_MODULES.has(module)) {
       return res.status(400).json({ error: "invalid_module", allowed: Array.from(KNOWN_MODULES) });

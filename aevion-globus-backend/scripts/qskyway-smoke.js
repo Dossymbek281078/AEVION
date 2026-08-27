@@ -373,7 +373,12 @@ async function main() {
   assert(ar.json?.noFly && ar.json.noFly.cellsOnPathInsideZone === 0,
     "corridor never crosses a prohibited zone",
     `zones=${ar.json?.noFly?.zonesInCity} inside=${ar.json?.noFly?.cellsOnPathInsideZone}`);
-  assert(ar.json?.avoidsNoFly === ar.json?.noFly?.directLineCrosses,
+  // `undefined === undefined` истинно, поэтому голого сравнения мало: пропади оба
+  // поля разом — утверждение осталось бы зелёным. Требуем, чтобы это были ЛОГИЧЕСКИЕ
+  // значения, и только потом сверяем их между собой.
+  assert(typeof ar.json?.avoidsNoFly === "boolean"
+      && typeof ar.json?.noFly?.directLineCrosses === "boolean"
+      && ar.json.avoidsNoFly === ar.json.noFly.directLineCrosses,
     "avoidsNoFly reports the route, not the city",
     `avoids=${ar.json?.avoidsNoFly} directCrosses=${ar.json?.noFly?.directLineCrosses}`);
 

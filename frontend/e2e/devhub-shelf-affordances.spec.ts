@@ -103,21 +103,28 @@ test.describe("DevHub shelf — controls that must not be decorative", () => {
   });
 
   test("what you type while the page is still loading is not thrown away", async ({ page }) => {
-    // It was: the projects and snippets sections switched branches when their
-    // fetches landed, and because those branches had no keys React reconciled
-    // them by position and remounted the form below — so anyone typing during
-    // load lost it. The snippet spec had been failing on exactly this.
+    // Measured cause (28.07.2026): the page paints and accepts keys before it
+    // hydrates. Those characters reach the DOM but no onChange has run, so
+    // state is still empty — and the first data-driven re-render writes the
+    // empty state back onto the very same node. The input element is never
+    // replaced; it is simply blanked a second or two after typing. On a slow
+    // phone that window is long enough to lose a whole idea.
     await mockBackend(page);
     await page.goto("/devhub", { waitUntil: "domcontentloaded" });
 
+    // The idea box first: it is the way into the product, so losing text here
+    // costs more than losing a snippet.
+    const idea = page.getByPlaceholder(/трекер привычек/);
     const title = page.getByPlaceholder("Title");
     const body = page.getByPlaceholder(/paste your snippet here/i);
+    await idea.fill("трекер привычек с календарём");
     await title.fill("Typed during load");
     await body.fill("const kept = true;");
 
     // Give every late fetch time to land and re-render.
     await page.waitForTimeout(2_500);
 
+    await expect(idea).toHaveValue("трекер привычек с календарём");
     await expect(title).toHaveValue("Typed during load");
     await expect(body).toHaveValue("const kept = true;");
   });

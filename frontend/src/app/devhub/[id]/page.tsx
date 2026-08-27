@@ -482,6 +482,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   // Env vars
   const [envList, setEnvList] = useState<Array<{ key: string; value: string; set: boolean }>>([]);
+  // "Could not load" is not the same fact as "there are none". Both lists used
+  // to swallow their error and render empty, so a failed read looked like an
+  // empty project — someone could conclude DATABASE_URL was never set.
+  const [envLoadError, setEnvLoadError] = useState<string | null>(null);
+  const [deploymentsLoadError, setDeploymentsLoadError] = useState<string | null>(null);
   const [newEnvKey, setNewEnvKey] = useState("");
   const [newEnvVal, setNewEnvVal] = useState("");
 
@@ -1650,9 +1655,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deployments`), { cache: "no-store" });
+      if (!r.ok) throw new Error(`сервер ответил ${r.status}`);
       const data = await r.json();
       setDeployments(data.deployments || []);
-    } catch {}
+      setDeploymentsLoadError(null);
+    } catch (e: any) {
+      setDeploymentsLoadError(e?.message || "нет связи с сервером");
+    }
   }, [project]);
 
   useEffect(() => {
@@ -1663,9 +1672,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/env`), { cache: "no-store" });
+      if (!r.ok) throw new Error(`сервер ответил ${r.status}`);
       const data = await r.json();
       setEnvList(data.env || []);
-    } catch {}
+      setEnvLoadError(null);
+    } catch (e: any) {
+      setEnvLoadError(e?.message || "нет связи с сервером");
+    }
   }, [project]);
 
   useEffect(() => {
@@ -3842,6 +3855,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               {/* Env Vars Tab */}
               {activeTab === "env" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {envLoadError && (
+                    <div style={{ background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", borderRadius: 7, padding: "8px 12px", fontSize: 12.5, marginBottom: 8 }}>
+                      ⚠ Список переменных не загрузился ({envLoadError}) — пусто здесь значит «неизвестно», а не «переменных нет».
+                    </div>
+                  )}
                   {envList.map((e) => (
                     <div key={e.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#f8fafc", borderRadius: 8 }}>
                       <span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: "#0f172a", flex: 1 }}>{e.key}</span>
@@ -3953,6 +3971,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   </div>
 
                   {/* Deploy history */}
+                  {deploymentsLoadError && (
+                    <div style={{ background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", borderRadius: 7, padding: "8px 12px", fontSize: 12.5, marginBottom: 8 }}>
+                      ⚠ История деплоев не загрузилась ({deploymentsLoadError}) — пусто здесь значит «неизвестно», а не «деплоев не было».
+                    </div>
+                  )}
                   {deployments.length > 0 && (
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>HISTORY</div>

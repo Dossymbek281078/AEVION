@@ -83,6 +83,8 @@ jobs:
             e2e/devhub-capability-strip.spec.ts \
             e2e/devhub-deploy-honesty.spec.ts \
             e2e/devhub-snippet.spec.ts \
+            e2e/devhub-github-honesty.spec.ts \
+            e2e/studio-credits-honesty.spec.ts \
             e2e/devhub-agent-results.spec.ts \
             e2e/language-honesty.spec.ts \
             e2e/translation-canary.spec.ts \

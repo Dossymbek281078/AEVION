@@ -19,7 +19,19 @@ import path from "node:path";
 const DEAD = path.join(__dirname, "..", "..", "..", "frontend");
 
 /** Counted 10.08.2026, after the README gained its warning header. */
-const EXPECTED_FILES = 55;
+/**
+ * Снимок приведён к 53 при переносе этого сторожа (27.08.2026).
+ *
+ * Число 55 пришло из ветки, откуда сторож перенесён, и её мёртвая копия была на
+ * два файла больше. Здесь их 53 — столько же, сколько в выкаченном коммите
+ * прода, то есть снимок совпадает с настоящим состоянием, а не подогнан.
+ *
+ * Расхождение было 54: с переносом приехал артефакт прогона Playwright
+ * (`frontend/frontend/test-results/.last-run.json`). Он снят с отслеживания —
+ * артефакты прогонов в истории не хранятся, ради этого в том же долге лежит
+ * отдельный коммит.
+ */
+const EXPECTED_FILES = 53;
 
 function countFiles(dir: string): number {
   let n = 0;

@@ -42,6 +42,7 @@ import { applyHealth, noteProviderFailure, noteProviderSuccess } from "../lib/pr
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
 import { classifyGithubResponse, githubUnreachable } from "../lib/githubFailure";
+import { buildRunInstructions } from "../lib/devhubRunInstructions";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
 import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
 
@@ -5632,6 +5633,21 @@ devhubRouter.get("/projects/:id/export", async (req, res) => {
     };
     entries.push({ path: "aevion-export.json", content: Buffer.from(JSON.stringify(meta, null, 2), "utf8") });
 
+    // ...and a note saying how to actually run what we just handed over. The
+    // export was a folder with no instructions: whether it could be started,
+    // and with which command, was left to whoever downloaded it.
+    entries.push({
+      path: "HOW-TO-RUN.md",
+      content: Buffer.from(
+        buildRunInstructions({
+          projectName: project.name,
+          stack: project.stack,
+          files: files.map((f) => ({ path: f.path, content: f.content })),
+        }),
+        "utf8",
+      ),
+    });
+
     const zip = buildZipStored(entries);
     const filename = `${slugify(project.name)}-${project.id.slice(0, 8)}.zip`;
     res.setHeader("Content-Type", "application/zip");
@@ -6259,7 +6275,12 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
 
   for (const entry of parsed) {
     // Skip metadata + directory entries
-    if (entry.path === "aevion-export.json") { skipped.push({ path: entry.path, reason: "metadata" }); continue; }
+    // Both files the export adds itself. Without this, a project that is
+    // exported and re-imported gains a file each round.
+    if (entry.path === "aevion-export.json" || entry.path === "HOW-TO-RUN.md") {
+      skipped.push({ path: entry.path, reason: "metadata" });
+      continue;
+    }
     if (entry.path.endsWith("/")) { skipped.push({ path: entry.path, reason: "directory" }); continue; }
     if (entry.path.includes("..")) { skipped.push({ path: entry.path, reason: "path traversal" }); continue; }
     if (entry.path.length > 240) { skipped.push({ path: entry.path, reason: "path too long" }); continue; }

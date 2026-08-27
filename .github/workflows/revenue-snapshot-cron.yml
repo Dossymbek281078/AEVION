@@ -18,11 +18,20 @@ on:
     - cron: "30 2 * * *" # once daily, 02:30 UTC
   workflow_dispatch: {}
 
+# Расписание, о падении которого никто не узнаёт, работой не является.
+# issues:write нужно шагам ниже; без него gh отвечает 403, и сторож отказывает
+# невидимо — ровно это и случилось с daily-smoke.yml. 28.08.2026.
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   snapshot:
     name: POST /api/revenue/snapshot
     runs-on: ubuntu-latest
     steps:
+      # Нужен для локального действия .github/actions/report-red-run.
+      - uses: actions/checkout@v7
       - name: Capture revenue snapshot
         run: |
           set -o pipefail
@@ -41,3 +50,19 @@ jobs:
         env:
           BASE: ${{ secrets.REVENUE_SNAPSHOT_BASE || 'https://api.aevion.app' }}
           TOKEN: ${{ secrets.REVENUE_SNAPSHOT_TOKEN || '' }}
+
+      - name: Report a red run
+        if: failure()
+        uses: ./.github/actions/report-red-run
+        with:
+          title: "🔴 Revenue snapshot cron is red"
+          outcome: failure
+          token: ${{ github.token }}
+
+      - name: Clear the issue once green again
+        if: success()
+        uses: ./.github/actions/report-red-run
+        with:
+          title: "🔴 Revenue snapshot cron is red"
+          outcome: success
+          token: ${{ github.token }}

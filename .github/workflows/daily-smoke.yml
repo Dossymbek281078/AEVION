@@ -38,6 +38,14 @@ on:
       - "aevion-globus-backend/scripts/all-smokes.js"
       - ".github/workflows/daily-smoke.yml"
 
+# Без issues:write шаги «завести issue при красном свипе» падают с 403, то есть
+# сторож, поставленный ради видимости отказа, сам отказывает невидимо. Добавлено
+# 28.08.2026: шаги были написаны накануне, а прав им не дали — проверено против
+# capability-truth-check.yml и founder-flow-nightly.yml, где эти права есть.
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   daily-smoke:
     name: Daily smoke (ephemeral pg + backend)

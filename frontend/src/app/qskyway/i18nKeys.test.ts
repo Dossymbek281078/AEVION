@@ -35,6 +35,13 @@ import { allTranslations } from "../__tests__/localeSource";
 const LOCALES = ["en", "ru", "kk"] as const;
 
 const KEYS = [
+  // Добавлены 28.08.2026 вместе с переводом четырёх мест, где страница
+  // говорила по-русски независимо от выбранного языка: единицы ветра,
+  // сообщение об ошибке сети и два чипа влияния спорной высоты.
+  "qskyway.meta.wind",
+  "qskyway.err.network",
+  "qskyway.disp.affects",
+  "qskyway.disp.noAffect",
   "qskyway.pad.prohibited",
   "qskyway.pad.cityProhibited",
   "qskyway.subst.head",

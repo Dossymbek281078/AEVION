@@ -163,7 +163,7 @@ function airspaceRegSource(a: AirspaceSummary | undefined, ru: boolean): Regulat
     }
     return { tier: "none", scopeNote: ru ? a?.note : (a?.noteEn ?? a?.note) };
   }
-  const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} м` : "";
+  const range = a.minCeilingM != null && a.maxCeilingM != null ? ` ${a.minCeilingM}–${a.maxCeilingM} ${ru ? "м" : "m"}` : "";
   return {
     tier: "official",
     authority: a.authority,
@@ -440,7 +440,7 @@ export default function QSkywayClient() {
       altMaxRef.current = FLOOR + Math.ceil((mh + CLEAR - FLOOR) / BAND) * BAND + BAND;
       setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null, confClearOnObstaclesM: null });
       setMeta({
-        wind: city.wind ? `${city.wind.groundMs}→${city.wind.topMs} м/с (от ${city.wind.fromDeg}°)` : "—",
+        wind: city.wind ? t("qskyway.meta.wind", { g: city.wind.groundMs, top: city.wind.topMs, deg: city.wind.fromDeg }) : "—",
         windSource: city.wind?.source ?? "illustrative",
         signed: city._signature ? city._signature.contentHash.slice(0, 12) : "—",
         nofly: city.nofly?.length ?? 0,
@@ -710,7 +710,7 @@ export default function QSkywayClient() {
       const j = await res.json();
       setBooking(j.ok ? `✓ ${j.slot.id} · ${j.slot.receipt}` : `✗ ${j.error}`);
       if (j.ok) fetchSlots();
-    } catch (e) { setBooking("ошибка сети: " + String(e)); }
+    } catch (e) { setBooking(t("qskyway.err.network") + String(e)); }
   }, [cityId, fetchSlots]);
 
   // ── filing document ────────────────────────────────────────────────────────
@@ -999,8 +999,8 @@ export default function QSkywayClient() {
                       {disputeImpact?.available && (
                         <span style={{ color: disputeImpact.affectedPairs > 0 ? "#fb7185" : "#5f7086" }}>
                           {disputeImpact.affectedPairs > 0
-                            ? ` · на маршруты влияет: ${disputeImpact.affectedPairs} из ${disputeImpact.routable}`
-                            : ` · на маршруты не влияет (0 из ${disputeImpact.routable})`}
+                            ? t("qskyway.disp.affects", { n: disputeImpact.affectedPairs, m: disputeImpact.routable })
+                            : t("qskyway.disp.noAffect", { m: disputeImpact.routable })}
                         </span>
                       )}
                     </span>

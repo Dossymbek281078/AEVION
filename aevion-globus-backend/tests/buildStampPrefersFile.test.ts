@@ -13,7 +13,11 @@ import * as path from "node:path";
 // поведенческую: поднять index.ts в тесте нельзя — он тянет весь сервер с
 // планировщиками и внешними ключами.
 
-const SRC = path.join(__dirname, "..", "src", "index.ts");
+// Читатель отметки вынесен из index.ts в lib/buildInfo 27.08.2026: то же
+// самое поле commit заполнял ещё и routes/qreal.ts, но ИЗ ПЕРЕМЕННОЙ
+// окружения — на выкатке папкой она не ставится, и поле было null всегда.
+// Правило этот сторож стережёт прежнее, изменился только адрес.
+const SRC = path.join(__dirname, "..", "src", "lib", "buildInfo.ts");
 
 function readBuildInfoBody(): string {
   const src = fs.readFileSync(SRC, "utf-8");

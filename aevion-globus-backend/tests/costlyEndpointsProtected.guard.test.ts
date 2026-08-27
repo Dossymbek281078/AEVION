@@ -47,6 +47,22 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+
+/**
+ * Пути, к которым middleware применён списком на уровне роутера:
+ *   router.use(["/a", "/b"], someLimiter);
+ * Берём только те вызовы .use, где среди аргументов есть что-то похожее на
+ * ограничитель, — иначе сюда попали бы монтирования вложенных роутеров.
+ */
+function routerPathLists(src: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of src.matchAll(/\.use\(\s*\[([^\]]+)\]\s*,([^;]*?)\)\s*;/gs)) {
+    if (!PROTECTED.test(m[2])) continue;
+    for (const p of m[1].matchAll(/"([^"]+)"/g)) out.add(p[1]);
+  }
+  return out;
+}
+
 export function findUnprotectedCostly(files: string[]): {
   offenders: string[];
   costly: number;
@@ -80,6 +96,18 @@ export function findUnprotectedCostly(files: string[]): {
       costly++;
       // Защита ищется в объявлении (middleware) ИЛИ в теле (квота).
       if (PROTECTED.test(body)) continue;
+      // ...И на уровне РОУТЕРА, списком путей.
+      //
+      // 28.08.2026: сторож относил к незащищённым четыре ручки devhub
+      // (/media/email, /media/sms, /media/whatsapp, /media/email-template-send),
+      // хотя ограничитель применён к ним разом:
+      //
+      //   devhubRouter.use(["/media/email", ... ], dhSendLimit());
+      //
+      // Соседняя вкладка прочитала код и написала, что предел есть; мой прибор
+      // утверждал обратное. Из двух ответов неверным был мой — искал защиту
+      // только в объявлении маршрута. Из 29 "находок" четыре были ложными.
+      if (routerPathLists(src).has(path)) continue;
       if (ALLOWED.some((a) => a.file === rel && a.path === path)) continue;
       void start;
       offenders.push(`${rel}  ${path}`);
@@ -110,16 +138,12 @@ describe("дорогие ручки защищены от перебора", () 
   const KNOWN_UNPROTECTED = new Set([
     "agentRuntime.ts  /run",
     "coach.ts  /chat",
-    "devhub.ts  /media/email",
     "devhub.ts  /media/sfx",
     "devhub.ts  /media/voice-clone",
     "devhub.ts  /media/voice-clone/preview",
     "devhub.ts  /media/stt",
-    "devhub.ts  /media/sms",
-    "devhub.ts  /media/whatsapp",
     "devhub.ts  /media/translate",
     "devhub.ts  /projects/:id/files/translate",
-    "devhub.ts  /media/email-template-send",
     "devhub.ts  /projects/:id/files/translate-bulk",
     "devhub.ts  /media/email-template-create",
     "healthai.ts  /check-llm",

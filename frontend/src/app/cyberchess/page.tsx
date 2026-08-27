@@ -11965,10 +11965,16 @@ ${question.trim()}`;
     {dailyReward&&<div role="dialog" aria-modal="true"
       style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:250,padding:16}}
       onClick={closeDailyReward}>
+      {/* Цвета берём из темы модуля, а не зашиваем. Раньше здесь стоял
+          тёмно-синий градиент с белым текстом — единственное тёмное окно во
+          всём светлом интерфейсе, и именно оно встречает человека, вернувшегося
+          на второй день. Замер 27.08 на телефоне: окно занимало 55% экрана и
+          выглядело чужеродно рядом со светлыми страницами.
+          С токенами окно следует теме: светлое в светлой, тёмное в тёмной. */}
       <div onClick={e=>e.stopPropagation()} style={{
-        background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)",color:"#fff",
+        background:CC.surface1,color:CC.text,
         borderRadius:20,maxWidth:360,width:"100%",padding:"28px 32px",textAlign:"center",
-        boxShadow:"0 24px 64px -8px rgba(15,23,42,0.6)",border:"1px solid rgba(167,139,250,0.3)",
+        boxShadow:SHADOW.lg,border:`1px solid ${CC.borderStrong}`,
       }}>
         <div style={{fontSize:64,lineHeight:1,marginBottom:10}}>
           {dailyReward.isWelcome?"🎉":dailyReward.streak>=14?"🔥":dailyReward.streak>=7?"⭐":dailyReward.streak>=3?"✨":"☀"}
@@ -11976,7 +11982,7 @@ ${question.trim()}`;
         <div style={{fontSize:22,fontWeight:900,marginBottom:4}}>
           {dailyReward.isWelcome?"Добро пожаловать!":dailyReward.streak>=7?"Недельный стрик!":dailyReward.streak>=3?"Отличная серия!":"Ежедневный бонус"}
         </div>
-        <div style={{fontSize:15,color:"#cbd5e1",marginBottom:16,lineHeight:1.4}}>
+        <div style={{fontSize:15,color:CC.textDim,marginBottom:16,lineHeight:1.4}}>
           {dailyReward.isWelcome?"Твой первый визит — начнём вместе":"День "+dailyReward.streak+" подряд — продолжай в том же духе!"}
         </div>
         <div style={{
@@ -11992,12 +11998,12 @@ ${question.trim()}`;
         {!dailyReward.isWelcome&&<div style={{display:"flex",gap:4,justifyContent:"center",marginBottom:16}}>
           {[1,2,3,4,5,6,7].map(d=><div key={d} style={{
             width:28,height:28,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,
-            background:d<=dailyReward.streak?"linear-gradient(135deg,#f59e0b,#fcd34d)":"rgba(255,255,255,0.08)",
-            color:d<=dailyReward.streak?"#78350f":"rgba(255,255,255,0.3)",
-            border:d===dailyReward.streak?"2px solid #fbbf24":"1px solid rgba(255,255,255,0.1)",
+            background:d<=dailyReward.streak?"linear-gradient(135deg,#f59e0b,#fcd34d)":CC.surface2,
+            color:d<=dailyReward.streak?"#78350f":CC.textMute,
+            border:d===dailyReward.streak?"2px solid #fbbf24":`1px solid ${CC.border}`,
           }}>{d<=dailyReward.streak?"✓":d}</div>)}
         </div>}
-        <div style={{fontSize:11,color:"#94a3b8",marginBottom:16}}>
+        <div style={{fontSize:11,color:CC.textMute,marginBottom:16}}>
           {dailyReward.streak>=14?"Следующий бонус: +200 (14 дней)":dailyReward.streak>=7?"Следующий рубеж: 14 дней → +200":dailyReward.streak>=3?"Следующий рубеж: 7 дней → +100":"Следующий рубеж: 3 дня → +30"}
         </div>
         <button onClick={closeDailyReward} style={{

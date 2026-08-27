@@ -25,6 +25,12 @@
  *   1 — есть расхождения, читайте вывод
  *   2 — сверку выполнить НЕ УДАЛОСЬ (сеть, разбор каталога). Это не «чисто».
  *
+ * ⚠️ Как проверять этого сторожа мутацией. Код выхода для этого НЕ годится,
+ * если находка уже записана в известные: снимешь проверку — известная строка
+ * просто исчезнет, а код останется 0, и мутация скажет «не поймана». Проверять
+ * надо ДО записи базы (тогда находка новая и даёт код 1) либо по ТЕКСТУ вывода.
+ * Наступил на это 28.08.2026 сразу после того, как сам же добавил «известные».
+ *
  * Запуск:
  *   node scripts/checkout-claims-watch.mjs            сверить с базовой линией
  *   node scripts/checkout-claims-watch.mjs --update   принять текущее как базу
@@ -62,6 +68,46 @@ const FORBIDDEN = {
     },
   ],
 };
+
+/**
+ * Кассы, которых НЕТ в каталоге товаров.
+ *
+ * Первая версия сторожа читала только `products.ts` и рапортовала «проверено
+ * касс: 7 из 7» — знаменатель был её собственным, а не настоящим. Обход
+ * фронтенда 28.08.2026 нашёл ещё семь живых касс: четыре на Gumroad
+ * (два языка «Анти-седины», Constitution Pro и Team) и три варианта Lemon
+ * Squeezy (Planet Monthly, Planet Annual, отдельный Smeta).
+ *
+ * То есть половина денежных страниц не проверялась, а отчёт выглядел полным.
+ * Это тот же дефект, что «свип без знаменателя»: 7 из 7 звучит исчерпывающе.
+ */
+function scanFrontendCheckouts() {
+  const base = path.join(ROOT, "frontend", "src");
+  if (!fs.existsSync(base)) return [];
+  const found = new Map();
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name === "node_modules" || e.name === "__tests__") continue;
+        walk(p);
+        continue;
+      }
+      if (!/\.(ts|tsx)$/.test(e.name)) continue;
+      const src = fs.readFileSync(p, "utf8");
+      // Ссылки с подстановкой (${...}) пропускаем: это шаблон, а не адрес.
+      const re =
+        /https:\/\/aevion\.(?:gumroad\.com\/l\/([a-z0-9]+)|lemonsqueezy\.com\/checkout\/buy\/([0-9a-f-]{36}))/g;
+      let m;
+      while ((m = re.exec(src))) {
+        const url = m[0];
+        if (!found.has(url)) found.set(url, m[1] ? `gumroad:${m[1]}` : `ls:${m[2].slice(0, 8)}`);
+      }
+    }
+  };
+  walk(base);
+  return [...found].map(([url, id]) => ({ id, price: null, url }));
+}
 
 /** Достаёт из каталога пары id -> ссылка кассы. Бросает, если разбор не удался. */
 function readCatalog() {
@@ -160,6 +206,11 @@ async function main() {
   let products;
   try {
     products = readCatalog();
+    // Дополняем кассами вне каталога, не задваивая уже известные адреса.
+    const seen = new Set(products.map((p) => p.url));
+    for (const extra of scanFrontendCheckouts()) {
+      if (!seen.has(extra.url)) products.push(extra);
+    }
   } catch (e) {
     console.log(`СВЕРКА НЕ ВЫПОЛНЕНА: каталог не разобран — ${e.message}`);
     process.exitCode = 2;
@@ -227,6 +278,28 @@ async function main() {
     process.exitCode = 2;
     return;
   }
+
+  // Два РАЗНЫХ товара с дословно одинаковым описанием — почти всегда недосмотр,
+  // и он бьёт по деньгам: 28.08.2026 так нашлись Constitution Pro и
+  // Constitution Team с одним и тем же текстом «unlimited saves, AI advisor,
+  // clean PDF, embed widget». Покупатель в момент выбора между тарифами не
+  // видит НИКАКОЙ разницы, а платит разное.
+  const byDescription = new Map();
+  for (const [id, v] of Object.entries(now)) {
+    if (!v.description) continue;
+    const key = v.description.trim();
+    if (!byDescription.has(key)) byDescription.set(key, []);
+    byDescription.get(key).push(id);
+  }
+  for (const [desc, ids] of byDescription) {
+    if (ids.length < 2) continue;
+    findings.push(
+      `[${ids.join(" = ")}] разные товары, ОДНО описание\n` +
+        `      покупатель не видит, чем они отличаются, а цены разные\n` +
+        `      текст: ${desc.slice(0, 140)}`,
+    );
+  }
+
 
   if (UPDATE) {
     // В базу кладём и СПИСОК ИЗВЕСТНЫХ находок. Иначе сторож останется

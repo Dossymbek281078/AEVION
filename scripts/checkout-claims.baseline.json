@@ -34,10 +34,41 @@
       "title": "AEVION QContract",
       "description": "Self-destructing secure documents. View-count & expiry limits, password & e-signature gates.",
       "price": "19"
+    },
+    "ls:a6a35e07": {
+      "title": "AEVION Planet — Annual",
+      "description": "All AEVION apps — annual commitment at $200/month. Every module, cross-app workflows, 3 team seats, priority support.",
+      "price": null
+    },
+    "ls:23fa912b": {
+      "title": "AEVION Planet — Monthly",
+      "description": "All AEVION apps — now and future — in one subscription. Every module, cross-app workflows, 3 team seats, priority support.",
+      "price": null
+    },
+    "gumroad:pyiaz": {
+      "title": "Constitution Pro",
+      "description": "Political economy simulator — unlimited saves, AI advisor, clean PDF, embed widget",
+      "price": null
+    },
+    "gumroad:wjvquw": {
+      "title": "Constitution Team",
+      "description": "Political economy simulator — unlimited saves, AI advisor, clean PDF, embed widget",
+      "price": null
+    },
+    "gumroad:tmuyxw": {
+      "title": "Протокол «Анти-седина» — наука о седине и что реально её замедляет",
+      "description": "Почти весь контент про «убрать седину» — ложь в обёртке быстрого решения. Этот гайд наоборот.Внутри (PDF, ~10 страниц): Почему волос реально седеет: настоящая биология (истощение стволовых клеток, окислительный стресс, механизм каталаза/H2O2) - Седина как биомаркер: что она говорит про B12, железо, щитовидку - Рычаги, которые выдерживают проверку, vs хайп: баланс медь/цинк, витамины B, спермидин, ",
+      "price": null
+    },
+    "gumroad:kkiavh": {
+      "title": "The Anti-Grey Protocol — the science of pigment aging & what actually slows it",
+      "description": "Most \"reverse grey hair\" content online is a lie dressed as a shortcut. This guide does the opposite.Inside (PDF, ~10 pages): Why hair actually goes grey - the real biology (stem-cell depletion, oxidative stress, the catalase/H2O2 mechanism) - Grey hair as a biomarker - what it quietly tells you about B12, iron, thyroid and oxidative load - The levers that hold up vs the hype - copper/zi",
+      "price": null
     }
   },
   "known": [
     "[bureau] касса обещает «OpenTimestamps»",
-    "[qpaynet] касса обещает «virtual card»"
+    "[qpaynet] касса обещает «virtual card»",
+    "[gumroad:pyiaz = gumroad:wjvquw] разные товары, ОДНО описание"
   ]
 }

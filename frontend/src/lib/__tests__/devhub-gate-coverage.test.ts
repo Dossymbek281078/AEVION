@@ -15,7 +15,10 @@ import path from "node:path";
  * the workflow or be excluded here with a reason someone can argue with.
  */
 
-const GATE_PREFIXES = ["devhub-", "i18n-", "translation-", "language-", "page-weight", "globe-lazy"];
+// "studio-" joined on 2026-08-12: the Studio usage panel renders DevHub's
+// credit meter, so a spec for it that nobody runs is the same drift this guard
+// exists to catch — just under a different name.
+const GATE_PREFIXES = ["devhub-", "i18n-", "translation-", "language-", "page-weight", "globe-lazy", "studio-"];
 
 /** Left out on purpose. Each entry is a claim that has to stay true. */
 const EXCLUDED: Record<string, string> = {

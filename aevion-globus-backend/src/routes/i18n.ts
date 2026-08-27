@@ -244,6 +244,42 @@ i18nRouter.post("/translate", async (req, res) => {
   }
 });
 
+/**
+ * POST /api/i18n/cache/clear   header X-Admin-Token
+ *
+ * Drops the server-side translation cache. It exists because the cache lives in
+ * process memory: when a bad answer got in — the engine occasionally returns a
+ * string unchanged — every visitor was served that echo until the next deploy.
+ * Measured 28.07.2026: 104 visible strings across six pages were stuck in
+ * Russian for German visitors this way. Caching such answers is fixed above;
+ * this is the way to recover a cache that was poisoned before the fix, without
+ * waiting for a deploy or restarting the service.
+ *
+ * Fails closed. Every miss costs a paid call to DeepL or Claude, so an open
+ * endpoint would be a way to burn the budget; without ADMIN_TOKEN configured it
+ * refuses rather than allowing anyone to clear it.
+ */
+i18nRouter.post("/cache/clear", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) {
+    return res.status(503).json({ error: "ADMIN_TOKEN not configured; refusing to expose cache control" });
+  }
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+  if (got !== required) return res.status(401).json({ error: "unauthorized" });
+
+  const target = typeof req.query.target === "string" ? req.query.target.trim() : "";
+  let cleared = 0;
+  if (target) {
+    for (const key of [...cache.keys()]) {
+      if (key.startsWith(target)) { cache.delete(key); cleared++; }
+    }
+  } else {
+    cleared = cache.size;
+    cache.clear();
+  }
+  res.json({ cleared, remaining: cache.size, target: target || "all" });
+});
+
 i18nRouter.get("/health", (_req, res) => {
   const deeplConfigured = !!process.env.DEEPL_API_KEY?.trim();
   const anthropicConfigured = !!process.env.ANTHROPIC_API_KEY?.trim();

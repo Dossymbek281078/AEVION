@@ -6785,6 +6785,12 @@ devhubRouter.get("/studio/capabilities", (_req, res) => {
     { id: "pages", name: "Cloudflare Pages Deploy", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
     { id: "domain", name: "Domain (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
     { id: "video", name: "Video Generation", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
+    // 3D объявлен на странице модуля среди возможностей «в одном проекте»,
+    // а в этом списке его не было вовсе: панель показывала «настроено N из 16»,
+    // и человек, считающий по списку, обещания не находил. Ключ тот же, что у
+    // видео, поэтому состояние честно совпадает — но называться должно своим
+    // именем: интерфейс до сих пор спрашивал про 3D под идентификатором video.
+    { id: "3d", name: "3D Generation", description: "Image → 3D mesh via Replicate (TRELLIS, Hunyuan3D)", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
     { id: "image", name: "Image Generation", description: "AI images — OpenAI → Workers AI (flux) → Together fallback chain", status: (process.env.OPENAI_API_KEY || (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) || process.env.TOGETHER_API_KEY) ? "live" : "needs_token", tokens: ["OPENAI_API_KEY", "CLOUDFLARE_API_TOKEN", "TOGETHER_API_KEY"] },
     { id: "screenshot_code", name: "Screenshot → Code", description: "Attach a design screenshot in the AI chat — a vision model recreates it as code", status: (process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) ? "live" : "needs_token", tokens: ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"] },
     { id: "audio_tts", name: "Voice (TTS)", description: "ElevenLabs text-to-speech", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },

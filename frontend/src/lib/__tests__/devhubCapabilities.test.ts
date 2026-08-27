@@ -70,10 +70,13 @@ describe("devhubCapabilities", () => {
     // for are pinned against the list in devhub.ts /studio/capabilities.
     const BACKEND_IDS = [
       "code", "github", "railway", "vercel", "pages", "domain",
-      "video", "image", "screenshot_code", "audio_tts", "audio_music",
+      // "3d" заведён 28.08.2026: страница обещает 3D среди возможностей «в одном
+      // проекте», а в списке его не было, и интерфейс спрашивал про него под
+      // идентификатором "video" — то есть панель о 3D молчала.
+      "video", "3d", "image", "screenshot_code", "audio_tts", "audio_music",
       "email", "sms", "whatsapp",
     ];
-    const USED_BY_IDE = ["railway", "vercel", "pages", "video", "image", "audio_tts", "audio_music"];
+    const USED_BY_IDE = ["railway", "vercel", "pages", "video", "3d", "image", "audio_tts", "audio_music"];
     for (const id of USED_BY_IDE) expect(BACKEND_IDS).toContain(id);
   });
 

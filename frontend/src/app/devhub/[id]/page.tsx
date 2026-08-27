@@ -4491,7 +4491,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <button
                         onClick={async () => {
                           if (!threeDImageUrl.trim()) { setThreeDError("Вставьте ссылку на картинку"); return; }
-                          if (isCapabilityBlocked(caps, "video")) { setThreeDError(capabilityHint(caps, "video", "3D-генерация")); return; }
+                          if (isCapabilityBlocked(caps, "3d")) { setThreeDError(capabilityHint(caps, "3d", "3D-генерация")); return; }
                           setThreeDLoading(true); setThreeDError(null); setThreeDUrl(null); setThreeDStatus("starting");
                           try {
                             const r = await fetch(apiUrl("/api/devhub/media/3d"), {
@@ -4526,7 +4526,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           } catch (e: any) { setThreeDError(e.message || "Не удалось"); setThreeDLoading(false); }
                         }}
                         disabled={threeDLoading || !threeDImageUrl.trim()}
-                        title={capabilityHint(caps, "video", "Сгенерировать 3D")}
+                        title={capabilityHint(caps, "3d", "Сгенерировать 3D")}
                         style={{ padding: "8px 20px", background: threeDLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: threeDLoading ? "default" : "pointer", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
                       >
                         {threeDLoading ? (threeDStatus || "generating…") : "Сделать 3D-модель"}

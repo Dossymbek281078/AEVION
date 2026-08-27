@@ -34,9 +34,45 @@ export type WaitlistCaptureProps = {
   buttonLabel?: string;
   /** Тёмная плашка для светлых страниц, светлая — для тёмных секций. */
   tone?: "dark" | "light";
+  /** Язык подсказки и сообщений об отказе. По умолчанию русский. */
+  lang?: "ru" | "en";
 };
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,24}$/;
+
+/**
+ * Тексты, которые НЕЛЬЗЯ передать пропом: подсказка в поле, сообщения об
+ * отказах и надпись во время отправки. Заголовок и кнопка уже настраиваются
+ * снаружи, а эти строки были зашиты по-русски — и на английских страницах
+ * (/en/go, /en/longevity, заведены 28.08.2026) человек видел кириллицу ровно в
+ * той точке, где оставляет контакт.
+ *
+ * По умолчанию русский: ни одна существующая страница не меняет поведения.
+ */
+const COPY = {
+  ru: {
+    placeholder: "вы@почта.рф",
+    sending: "Отправляем…",
+    emailLabel: "Адрес электронной почты",
+    typo: "Похоже, в адресе опечатка. Проверьте — и отправьте ещё раз.",
+    done: "Готово — адрес записан. Напишем, когда будет что показать.",
+    tooMany: "Слишком много попыток подряд. Подождите минуту и повторите.",
+    rejected: "Сервер не принял адрес. Проверьте написание.",
+    ourFault: "Не смогли сохранить адрес — это на нашей стороне. Попробуйте ещё раз через минуту.",
+    offline: "Не дозвонились до сервера. Проверьте связь и повторите.",
+  },
+  en: {
+    placeholder: "you@example.com",
+    sending: "Sending…",
+    emailLabel: "Email address",
+    typo: "That address looks like a typo. Check it and send again.",
+    done: "Done — the address is saved. We write when there is something to show.",
+    tooMany: "Too many attempts in a row. Wait a minute and try again.",
+    rejected: "The server did not accept the address. Check the spelling.",
+    ourFault: "We could not save the address — that is on our side. Try again in a minute.",
+    offline: "Could not reach the server. Check the connection and try again.",
+  },
+} as const;
 
 export function WaitlistCapture({
   source,
@@ -45,7 +81,9 @@ export function WaitlistCapture({
   promise = "Письмо приходит на запуск модуля. Отписка — одной ссылкой в каждом письме.",
   buttonLabel = "Получить ранний доступ",
   tone = "dark",
+  lang = "ru",
 }: WaitlistCaptureProps) {
+  const copy = COPY[lang];
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
@@ -59,7 +97,7 @@ export function WaitlistCapture({
     const value = email.trim().toLowerCase();
     if (!EMAIL_RE.test(value)) {
       setStatus("error");
-      setMessage("Похоже, в адресе опечатка. Проверьте — и отправьте ещё раз.");
+      setMessage(copy.typo);
       return;
     }
     setStatus("sending");
@@ -72,7 +110,7 @@ export function WaitlistCapture({
       });
       if (r.ok) {
         setStatus("done");
-        setMessage("Готово — адрес записан. Напишем, когда будет что показать.");
+        setMessage(copy.done);
         setEmail("");
         return;
       }
@@ -80,17 +118,17 @@ export function WaitlistCapture({
       // человеку, повторять ему попытку или исправлять адрес.
       if (r.status === 429) {
         setStatus("error");
-        setMessage("Слишком много попыток подряд. Подождите минуту и повторите.");
+        setMessage(copy.tooMany);
       } else if (r.status === 400) {
         setStatus("error");
-        setMessage("Сервер не принял адрес. Проверьте написание.");
+        setMessage(copy.rejected);
       } else {
         setStatus("error");
-        setMessage("Не смогли сохранить адрес — это на нашей стороне. Попробуйте ещё раз через минуту.");
+        setMessage(copy.ourFault);
       }
     } catch {
       setStatus("error");
-      setMessage("Не дозвонились до сервера. Проверьте связь и повторите.");
+      setMessage(copy.offline);
     }
   }
 
@@ -114,7 +152,7 @@ export function WaitlistCapture({
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
         <label htmlFor={`waitlist-email-${source}`} style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
-          Адрес электронной почты
+          {copy.emailLabel}
         </label>
         <input
           id={`waitlist-email-${source}`}
@@ -122,7 +160,7 @@ export function WaitlistCapture({
           name="email"
           autoComplete="email"
           inputMode="email"
-          placeholder="вы@почта.рф"
+          placeholder={copy.placeholder}
           value={email}
           onChange={(e) => {
             setEmail(e.target.value);
@@ -163,7 +201,7 @@ export function WaitlistCapture({
             whiteSpace: "nowrap",
           }}
         >
-          {status === "sending" ? "Отправляем…" : buttonLabel}
+          {status === "sending" ? copy.sending : buttonLabel}
         </button>
       </div>
 

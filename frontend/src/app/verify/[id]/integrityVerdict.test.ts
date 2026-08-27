@@ -171,3 +171,39 @@ describe("обещание баннера сходится с плитками �
     }
   });
 });
+
+describe("правило хеша названо человеку", () => {
+  it("сертификат v1: плитка зелёная, но ограничение произнесено", () => {
+    const d = legacy();
+    d.integrity.contentHashRule = "v1";
+    const hash = buildIntegrityChecks(d).find((c) => c.label === "Content Hash")!;
+    expect(hash.status).toBe(true);
+    expect(hash.detail).toMatch(/v1 rule/);
+    expect(hash.detail).toMatch(/location not covered/i);
+    expect(hash.tip?.text).toMatch(/not the country and city/i);
+  });
+
+  it("сертификат v2: подписи про ограничение нет", () => {
+    const d = healthy();
+    d.integrity.contentHashRule = "v2";
+    const hash = buildIntegrityChecks(d).find((c) => c.label === "Content Hash")!;
+    expect(hash.detail).toBe("SHA-256 verified");
+    expect(hash.tip?.text).not.toMatch(/not the country and city/i);
+  });
+
+  it("хеш не сошёлся — правило не упоминается вовсе", () => {
+    const d = healthy();
+    d.integrity.contentHashValid = false;
+    d.integrity.contentHashRule = null;
+    const hash = buildIntegrityChecks(d).find((c) => c.label === "Content Hash")!;
+    expect(hash.detail).toBe("Hash mismatch");
+    expect(hash.status).toBe(false);
+  });
+
+  it("старая сборка бэкенда не прислала поле — ведём себя как при v2", () => {
+    const d = healthy();
+    delete d.integrity.contentHashRule;
+    const hash = buildIntegrityChecks(d).find((c) => c.label === "Content Hash")!;
+    expect(hash.detail).toBe("SHA-256 verified");
+  });
+});

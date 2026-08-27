@@ -168,32 +168,90 @@ describe("Проверка сертификата говорит правду", 
 });
 
 describe("Спека описывает то, что ручка действительно отдаёт", () => {
-  test("каждое поле из спеки есть в настоящем ответе", async () => {
-    const r = await get();
+  // ⚠️ ПЕРВАЯ ВЕРСИЯ ЭТОГО СТОРОЖА СРАВНИВАЛА ТОЛЬКО ВЕРХНИЙ УРОВЕНЬ.
+  // Поймано мутацией 27.08.2026: переименование поля внутри integrity прошло
+  // мимо обоих тестов, хотя они назывались «каждое поле». То есть сторож
+  // отчитывался охватом, которого у него не было, — а таблица проверок на
+  // странице собрана как раз из вложенных полей.
+
+  const props = () => {
     const spec = openapiSpec as unknown as Record<string, any>;
-    const props =
-      spec.paths["/api/pipeline/verify/{certId}"].get.responses["200"].content[
-        "application/json"
-      ].schema.properties;
-    const documented = Object.keys(props);
+    return spec.paths["/api/pipeline/verify/{certId}"].get.responses["200"]
+      .content["application/json"].schema.properties;
+  };
+
+  const isPlainObject = (v: unknown) =>
+    typeof v === "object" && v !== null && !Array.isArray(v);
+
+  /** Поля спеки, которых нет в ответе — с обходом вложенных объектов. */
+  function specFieldsMissingFrom(
+    schemaProps: Record<string, any>,
+    body: Record<string, any>,
+    path = "",
+  ): string[] {
+    const out: string[] = [];
+    for (const [key, schema] of Object.entries(schemaProps)) {
+      const here = path ? path + "." + key : key;
+      if (!(key in body)) {
+        out.push(here);
+        continue;
+      }
+      // Спускаемся только там, где в ответе действительно объект: у
+      // необязательных веток (bitcoinAnchor, shardDistribution) значения может
+      // не быть вовсе, и требовать их поля здесь значило бы краснеть всегда.
+      if (schema?.properties && isPlainObject(body[key])) {
+        out.push(...specFieldsMissingFrom(schema.properties, body[key], here));
+      }
+    }
+    return out;
+  }
+
+  /** Поля ответа, которых нет в спеке — с обходом вложенных объектов. */
+  function bodyFieldsMissingFromSpec(
+    body: Record<string, any>,
+    schemaProps: Record<string, any>,
+    path = "",
+  ): string[] {
+    const out: string[] = [];
+    for (const [key, value] of Object.entries(body)) {
+      const here = path ? path + "." + key : key;
+      const schema = schemaProps?.[key];
+      if (!schema) {
+        out.push(here);
+        continue;
+      }
+      if (isPlainObject(value) && schema.properties) {
+        out.push(...bodyFieldsMissingFromSpec(value, schema.properties, here));
+      }
+    }
+    return out;
+  }
+
+  test("контроль: сторож видит вложенные поля, а не только верхний уровень", async () => {
+    const r = await get();
+    // Без этого теста прошлая версия сторожа выглядела бы исправной: она
+    // сравнивала 10 ключей верхнего уровня и молчала про полсотни вложенных.
+    const seen = bodyFieldsMissingFromSpec(
+      { integrity: { ...r.body.integrity, выдуманноеПоле: 1 } },
+      props(),
+    );
+    expect(seen).toContain("integrity.выдуманноеПоле");
+  });
+
+  test("каждое поле из спеки есть в настоящем ответе — включая вложенные", async () => {
+    const r = await get();
+    const documented = Object.keys(props());
     expect(documented.length, "контроль: спека вообще прочиталась").toBeGreaterThan(3);
-    const missing = documented.filter((k) => !(k in r.body));
     expect(
-      missing,
+      specFieldsMissingFrom(props(), r.body),
       "спека называет поля, которых в ответе нет — сгенерированный клиент прочтёт undefined",
     ).toEqual([]);
   });
 
-  test("каждое поле ответа описано в спеке", async () => {
+  test("каждое поле ответа описано в спеке — включая вложенные", async () => {
     const r = await get();
-    const spec = openapiSpec as unknown as Record<string, any>;
-    const props =
-      spec.paths["/api/pipeline/verify/{certId}"].get.responses["200"].content[
-        "application/json"
-      ].schema.properties;
-    const undocumented = Object.keys(r.body).filter((k) => !(k in props));
     expect(
-      undocumented,
+      bodyFieldsMissingFromSpec(r.body, props()),
       "ручка отдаёт поля, которых нет в спеке — читатель спеки о них не узнает",
     ).toEqual([]);
   });

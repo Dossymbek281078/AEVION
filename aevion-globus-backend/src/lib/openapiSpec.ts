@@ -797,6 +797,13 @@ export const openapiSpec = {
                       description: "Послойный разбор: каждое поле — отдельная независимая проверка",
                       properties: {
                         contentHashValid: { type: "boolean" },
+                        contentHashRule: {
+                          type: "string",
+                          enum: ["v1", "v2"],
+                          nullable: true,
+                          description:
+                            "Каким правилом сошёлся хеш. null — не сошёлся ни одним. v1 — правило до канонизации: страна и город хешем НЕ покрыты.",
+                        },
                         signatureHmacValid: { type: "boolean", nullable: true, description: "null = проверять нечего" },
                         signatureHmacReason: { type: "string", enum: ["OK", "NO_SIGNED_AT", "MISMATCH", "ERROR"] },
                         qsignKeyVersion: { type: "integer" },

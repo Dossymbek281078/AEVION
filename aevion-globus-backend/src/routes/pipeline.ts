@@ -13,7 +13,10 @@ import {
   SHAMIR_THRESHOLD,
 } from "../config/qright";
 import { QRightError, type QRightErrorCode } from "../lib/errors/QRightError";
-import { canonicalContentHash } from "../lib/contentHash";
+import {
+  canonicalContentHash,
+  verifyContentHash,
+} from "../lib/contentHash";
 import {
   combineAndVerify,
   generateEphemeralEd25519,
@@ -1310,15 +1313,26 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       // never let logging failures affect the verify outcome
     }
 
-    /* Re-verify content hash (canonical: NFC + sorted keys + null defaults) */
-    const hashCheck = canonicalContentHash({
-      title: cert.title,
-      description: cert.description,
-      kind: cert.kind,
-      country: cert.country,
-      city: cert.city,
-    });
-    const hashValid = hashCheck === cert.contentHash;
+    /* Re-verify content hash under the rule that was in effect at issuance.
+     *
+     * Проверять только нынешним правилом значило объявлять недействительным
+     * всё, что выдано до канонизации. Замер 27.08.2026 по публичному реестру:
+     * 4 сертификата из 5 совпадали с правилом v1 и получали «hash mismatch» —
+     * то есть страница обвиняла в подделке записи, которые сама же и выдала.
+     *
+     * Порядок проб — v2, затем v1 (см. verifyContentHash). */
+    const hashVerdict = verifyContentHash(
+      {
+        title: cert.title,
+        description: cert.description,
+        kind: cert.kind,
+        country: cert.country,
+        city: cert.city,
+      },
+      cert.contentHash,
+    );
+    const hashValid = hashVerdict.valid;
+    const contentHashRule = hashVerdict.rule;
 
     /* Re-verify QSign HMAC using stored signedAt (null for pre-v2 rows) */
     let signatureHmacValid: boolean | null = null;
@@ -1469,6 +1483,12 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       },
       integrity: {
         contentHashValid: hashValid,
+        /**
+         * Каким правилом сошёлся хеш. null — не сошёлся ни одним.
+         * "v1" означает, что страна и город хешем НЕ покрыты: это надо
+         * показывать человеку, а не прятать за общим зелёным.
+         */
+        contentHashRule,
         signatureHmacValid,
         signatureHmacReason,
         qsignKeyVersion:

@@ -42,6 +42,12 @@ export type VerdictInput = {
   certificate: { status: string };
   integrity: {
     contentHashValid: boolean;
+    /**
+     * Каким правилом сошёлся хеш. Появилось 27.08.2026; у старой сборки поля
+     * нет. "v1" — правило до канонизации: страна и город хешем НЕ покрыты,
+     * и человеку это говорится прямо, а не прячется за общим зелёным.
+     */
+    contentHashRule?: "v1" | "v2" | null;
     signatureHmacValid: boolean | null;
     signatureHmacReason?: "OK" | "NO_SIGNED_AT" | "MISMATCH" | "ERROR";
     qsignKeyVersion?: number;
@@ -117,10 +123,19 @@ export function buildIntegrityChecks(data: VerdictInput): IntegrityCheck[] {
       label: "Content Hash",
       status: integrity.contentHashValid,
       tier: "core",
-      detail: integrity.contentHashValid ? "SHA-256 verified" : "Hash mismatch",
+      detail: !integrity.contentHashValid
+        ? "Hash mismatch"
+        : integrity.contentHashRule === "v1"
+          ? // Названо прямо: под старым правилом место регистрации хешем не
+            // покрывалось, значит его правку этот сертификат не обнаружит.
+            "SHA-256 verified under the v1 rule — location not covered"
+          : "SHA-256 verified",
       tip: {
         name: "Content Hash",
-        text: "We re-hash the certificate's metadata with SHA-256 and compare it to the stored value. Match means the registered fields have not changed since protection.",
+        text:
+          integrity.contentHashRule === "v1"
+            ? "We re-hash the certificate's metadata with SHA-256 and compare it to the stored value. This certificate was issued before AEVION canonicalised the hash: it covers the title, description and work type, but not the country and city. Those two fields are recorded on the certificate but not protected by this hash."
+            : "We re-hash the certificate's metadata with SHA-256 and compare it to the stored value. Match means the registered fields have not changed since protection.",
       },
     },
     {

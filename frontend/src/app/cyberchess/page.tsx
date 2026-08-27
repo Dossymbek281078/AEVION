@@ -5754,8 +5754,13 @@ export default function CyberChessPage(){
           <span>{VARIANTS.find(v=>v.id===variant)?.name}</span>
         </button>}
 
-        {/* Command palette opener — discovery for Ctrl+K. */}
-        <button onClick={()=>sPalOpen(true)} title="Поиск любого действия (Ctrl+K)" className="cc-focus-ring"
+        {/* Command palette opener — discovery for Ctrl+K.
+            На телефоне не показываем: это витрина сочетания клавиш, которого
+            там нет, а место в шапке дорогое — замер 27.08 на 375 пикселях дал
+            ЧЕТЫРЕ ряда кнопок над содержимым. Доступ не теряется: навигация
+            есть в «Все разделы» рядом, а сама палитра открывается из панели
+            быстрых действий в партии («⚙ Ещё»). */}
+        {!isMobileLayout&&<button onClick={()=>sPalOpen(true)} title="Поиск любого действия (Ctrl+K)" className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:6,
             padding:"7px 12px 7px 10px",borderRadius:RADIUS.full,
@@ -5773,7 +5778,7 @@ export default function CyberChessPage(){
             padding:"1px 5px",borderRadius:3,
             background:"#fff",color:"#475569",border:`1px solid #cbd5e1`,
           }}>⌃K</kbd>}
-        </button>
+        </button>}
         {/* «Все разделы» — видимый навигационный хаб. Делает обнаружимыми ВСЕ режимы и
             киллер-фичи (Турниры/Экономика/Тренинг/Реплеи/Студия/CPI), которые раньше были
             доступны только по прямому URL или через Ctrl+K. Зелёный акцент = заметность. */}

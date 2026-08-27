@@ -38,7 +38,11 @@ vi.mock("../src/lib/dbPool", () => ({
       const q = String(sql);
       if (q.includes('SELECT * FROM "IPCertificate"')) return { rows: [certRow] };
       if (q.includes('FROM "QuantumShield"')) {
-        return { rows: [{ status: "active", legacy: false, distribution_policy: "real_2of3" }] };
+        // Значение ровно то, которое пишет выдача (см. INSERT в protectOne).
+        // Раньше здесь стояло "real_2of3" — состояние, которого в проде не
+        // бывает, и код читает его как legacy_all_local. Фикстура, описывающая
+        // несуществующий мир, тихо проверяет не тот путь.
+        return { rows: [{ status: "active", legacy: false, distribution_policy: "distributed_v2" }] };
       }
       return { rows: [] };
     }),

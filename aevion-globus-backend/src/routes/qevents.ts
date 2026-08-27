@@ -1,3 +1,4 @@
+import { rateLimit } from "../lib/rateLimit";
 import { Router, Request, Response } from "express";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
@@ -597,8 +598,29 @@ qeventsRouter.get("/events/:id/waitlist", async (req: Request, res: Response) =>
   }
 });
 
+/**
+ * Предел на «поделиться».
+ *
+ * ЗАЧЕМ. Это единственная ручка модуля БЕЗ входа: остальные четыре отвечают
+ * 401 без токена, а эта отвечает всем. При этом каждый вызов пишет строку в
+ * "QEventShare", и таблицу никто никогда не читает — ни одного SELECT по ней в
+ * коде нет. То есть любой мог неограниченно наращивать платную базу данными,
+ * которые никому не пригодятся.
+ *
+ * Ключ берётся ограничителем из нормализованного адреса (умолчание rateLimit),
+ * поэтому подбор адреса внутри своей же IPv6-подсети не даёт свежего окна.
+ *
+ * 20 в минуту — по-человечески щедро: поделиться событием чаще нескольких раз
+ * подряд живой человек не станет.
+ */
+const shareRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  keyPrefix: "qevents:share",
+});
+
 // ─── POST /api/qevents/events/:id/share ──────────────────────────────────────
-qeventsRouter.post("/events/:id/share", async (req: Request, res: Response) => {
+qeventsRouter.post("/events/:id/share", shareRateLimit, async (req: Request, res: Response) => {
   const id = param(req, "id");
   try {
     if (isQEventsDbReady()) {

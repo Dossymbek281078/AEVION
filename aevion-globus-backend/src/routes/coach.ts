@@ -35,6 +35,8 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import { randomUUID } from "crypto";
 import { Readable } from "stream";
 import { requireAuth } from "../lib/authJwt";
+import { generationLimit } from "../lib/rateLimit";
+import { checkAiInputBudget, isAnonymousRequest } from "../lib/aiInputBudget";
 
 const captureCoachError = makeServiceCapture("coach");
 
@@ -106,7 +108,7 @@ function trimStore<T>(store: Map<string, T>, max: number) {
 // Not auth-gated: stateless proxy with no owner-keyed state to protect.
 // CyberChess board UI consumes this without a JWT (separate auth surface).
 // Abuse / cost mitigation belongs in a rate-limiter, not here.
-coachRouter.post("/chat", async (req: Request, res: Response) => {
+coachRouter.post("/chat", generationLimit("coach_chat"), async (req: Request, res: Response) => {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -158,6 +160,23 @@ coachRouter.post("/chat", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "First message must have role=user" });
     }
 
+    // ЦЕНА ОДНОГО АНОНИМНОГО ВЫЗОВА.
+    //
+    // Собственные пределы ручки щедры: 40 сообщений по 16 000 знаков плюс 8 000
+    // системных — 648 000 знаков, около 162 тысяч входных токенов за ОДИН вызов,
+    // и уходят они в claude-opus-4-8 (проверено на проде 27.08.2026: ручка
+    // отвечает без входа в аккаунт). Учёта расхода у анонима нет, а ограничитель
+    // частоты считает в памяти процесса и потому слабее объявленного.
+    //
+    // Тот же предел, что у qcoreai, и та же функция: два способа ограничивать
+    // одно и то же разошлись бы на первом краевом случае. Вошедшего не касается.
+    const budget = checkAiInputBudget(messages, isAnonymousRequest(req));
+    if (!budget.ok) {
+      return res
+        .status(413)
+        .json({ error: budget.error, message: budget.message, limit: budget.limit, got: budget.got });
+    }
+
     // Resolve max_tokens with sensible clamping.
     let resolvedMaxTokens = DEFAULT_MAX_TOKENS;
     if (typeof maxTokens === "number" && maxTokens > 0) {
@@ -206,7 +225,7 @@ coachRouter.post("/chat", async (req: Request, res: Response) => {
 // токен за токеном (живая печать, lichess/ChatGPT-стиль). Фронт парсит
 // content_block_delta (delta.type==="text_delta") и дописывает текст.
 // Без thinking — быстрый первый токен для коротких подсказок.
-coachRouter.post("/chat/stream", async (req: Request, res: Response) => {
+coachRouter.post("/chat/stream", generationLimit("coach_chat_stream"), async (req: Request, res: Response) => {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -234,6 +253,23 @@ coachRouter.post("/chat/stream", async (req: Request, res: Response) => {
     }
     if (messages[0].role !== "user") {
       return res.status(400).json({ error: "First message must have role=user" });
+    }
+
+    // ЦЕНА ОДНОГО АНОНИМНОГО ВЫЗОВА.
+    //
+    // Собственные пределы ручки щедры: 40 сообщений по 16 000 знаков плюс 8 000
+    // системных — 648 000 знаков, около 162 тысяч входных токенов за ОДИН вызов,
+    // и уходят они в claude-opus-4-8 (проверено на проде 27.08.2026: ручка
+    // отвечает без входа в аккаунт). Учёта расхода у анонима нет, а ограничитель
+    // частоты считает в памяти процесса и потому слабее объявленного.
+    //
+    // Тот же предел, что у qcoreai, и та же функция: два способа ограничивать
+    // одно и то же разошлись бы на первом краевом случае. Вошедшего не касается.
+    const budget = checkAiInputBudget(messages, isAnonymousRequest(req));
+    if (!budget.ok) {
+      return res
+        .status(413)
+        .json({ error: budget.error, message: budget.message, limit: budget.limit, got: budget.got });
     }
     let resolvedMaxTokens = DEFAULT_MAX_TOKENS;
     if (typeof maxTokens === "number" && maxTokens > 0) {

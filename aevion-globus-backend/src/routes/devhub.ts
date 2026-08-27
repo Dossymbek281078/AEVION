@@ -34,7 +34,7 @@ function dhCostlyLimit(keyPrefix: string) {
   });
 }
 import { getPool } from "../lib/dbPool";
-import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
+import { ensureDevHubTables, isDevHubDbReady, getDevHubDbError } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders, type ChatImage } from "../services/qcoreai/providers";
 import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcoreai/jsonReply";
 import { smartComplete } from "../services/qcoreai/smartComplete";
@@ -101,10 +101,27 @@ devhubRouter.use(
 
 // GET /api/devhub/health — module health probe for aevion hub
 devhubRouter.get("/health", (_req, res) => {
+  // `status` был КОНСТАНТОЙ "ok" — строкой, записанной в исходнике. Он не
+  // проверял ничего, в том числе базу: при упавшем Postgres поле `db`
+  // честно показывало "in-memory", а `status` продолжал говорить "ok".
+  //
+  // Дороже всего это стоило смоуку: он сверяет именно `status === "ok"`, то
+  // есть его проверка здоровья не могла покраснеть в принципе, пока процесс
+  // вообще отвечает. Проверка, которая не умеет краснеть, хуже отсутствующей —
+  // на неё ссылаются как на доказательство.
+  //
+  // Код ответа остаётся 200: хаб модулей считает живым всё, что ответило 2xx,
+  // и деградация базы не означает, что модуль недоступен. Меняется поле, а
+  // не доступность.
+  //
+  // Причина отдаётся ПРИЗНАКОМ, а не текстом: сообщение об ошибке подключения
+  // несёт адрес, порт и имя пользователя базы, и наружу таким вещам нельзя.
+  const dbReady = isDevHubDbReady();
   res.json({
-    status: "ok",
+    status: dbReady ? "ok" : "degraded",
     module: "devhub",
-    db: isDevHubDbReady() ? "postgres" : "in-memory",
+    db: dbReady ? "postgres" : "in-memory",
+    dbError: dbReady ? null : Boolean(getDevHubDbError()),
     timestamp: new Date().toISOString(),
   });
 });

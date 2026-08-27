@@ -112,7 +112,10 @@ async function run() {
   console.log("1. Health");
   const h = await req("GET", "/api/devhub/health");
   if (h.status === 200 && h.body?.status === "ok") ok("GET /devhub/health", `db=${h.body.db}`);
-  else { fail("GET /devhub/health", `${h.status}`); process.exitCode = 1; return; }
+  // Печатаем и КОД, и поле: с 28.08 `status` отражает состояние базы, поэтому
+  // деградация приходит как 200 + "degraded". Без поля вывод «✗ health ↳ 200»
+  // выглядел бы противоречием и заставлял лезть в код.
+  else { fail("GET /devhub/health", `HTTP ${h.status}, status=${h.body?.status ?? "нет поля"}, db=${h.body?.db ?? "?"}`); process.exitCode = 1; return; }
 
   // ── 2. Project CRUD ───────────────────────────────────────────────────
   console.log("\n2. Project CRUD");

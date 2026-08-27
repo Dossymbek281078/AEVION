@@ -354,7 +354,14 @@ export default async function EnLongevityPage({
             that happens — nothing else.
           </p>
           <div style={{ marginTop: 12 }}>
-            <WaitlistCapture source="en-longevity" />
+            <WaitlistCapture
+              source="en-longevity"
+              lang="en"
+              title="Told when the grading changes"
+              description="This breakdown is revised when new research lands: some items move up the grading, some move down."
+              promise="Only when the grading or the panel changes. Unsubscribe with a single link."
+              buttonLabel="Keep me posted"
+            />
           </div>
         </section>
 

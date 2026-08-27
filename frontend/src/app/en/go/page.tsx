@@ -215,7 +215,14 @@ export default async function EnGoPage({
           {/* source="en-go": по нему видно, что подписчик пришёл с английской
               посадочной, и письмо можно писать на его языке. */}
           <div style={{ marginTop: 12 }}>
-            <WaitlistCapture source="en-go" />
+            <WaitlistCapture
+              source="en-go"
+              lang="en"
+              title="Told when the next module lands"
+              description="AEVION ships modules one at a time. Leave an address and you get a note on launch day, with early-access terms."
+              promise="One email per launch. Unsubscribe with a single link in every message."
+              buttonLabel="Keep me posted"
+            />
           </div>
         </section>
 

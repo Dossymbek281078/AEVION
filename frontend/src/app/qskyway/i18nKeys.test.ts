@@ -88,6 +88,7 @@ const KEYS = [
   "qskyway.unit.min",
   "qskyway.tel.windSuffix",
   "qskyway.tel.byBuildings",
+  "qskyway.tel.blindInert",
   "qskyway.tel.confClearance",
   "qskyway.route.noCeilingLimit",
   "qskyway.route.withinCeiling",

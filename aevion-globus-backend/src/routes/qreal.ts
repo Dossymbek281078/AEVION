@@ -36,6 +36,7 @@ import { REALISM_DIRECTIVES } from "../services/qreal/directives";
 import { CONTINUITY_CRITERIA, CONTINUITY_ANCHORS, continuityThreshold, buildContinuityPrompt, scoreContinuity, isMeasurable } from "../services/qreal/continuity";
 import { ensureQRealTables } from "../lib/ensureQRealTables";
 import { getPool } from "../lib/dbPool";
+import { clientIp } from "../lib/rateLimit";
 
 const captureQRealError = makeServiceCapture("qreal");
 
@@ -275,7 +276,9 @@ async function takeRenderQuota(
     counters.byIp.clear();
     counters.total = 0;
   }
-  const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  // Левый элемент X-Forwarded-For пишет сам клиент: квота рендера и судейства
+  // снималась сменой заголовка. Берём адрес так же, как ограничитель платформы.
+  const fwd = clientIp(req);
   // Ключ ведра входит в ip-ключ: у рендера и судейства раздельные счётчики,
   // иначе судейство съедало бы квоту рендера и наоборот.
   const ip = (isJudge ? "judge:" : "") + (fwd || req.ip || "unknown");

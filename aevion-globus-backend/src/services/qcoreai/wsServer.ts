@@ -57,6 +57,7 @@ import {
   renameSessionIfDefault,
   touchSession,
 } from "./store";
+import { clientIp } from "../../lib/rateLimit";
 
 const MAX_PAYLOAD_BYTES = 64 * 1024;
 const GUIDANCE_QUEUE_MAX = 8;
@@ -117,7 +118,8 @@ export function attachQCoreWebSocket(server: HttpServer, path = "/api/qcoreai/ws
       const reqUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
       if (reqUrl.pathname !== path) return; // not our ws — let other handlers (or default) deal with it.
 
-      const ip = (req.headers["x-forwarded-for"]?.toString().split(",")[0].trim()) || req.socket.remoteAddress || "unknown";
+      // Ключ ограничителя апгрейда: левый элемент заголовка пишет клиент.
+      const ip = clientIp(req as unknown as { ip?: string; socket?: { remoteAddress?: string } });
       if (!rateLimitUpgrade(ip)) {
         socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
         socket.destroy();

@@ -1879,6 +1879,83 @@ bureauRouter.get("/admin/whoami", (req, res) => {
 });
 
 // 🔹 Admin: list verifications (?status, ?limit≤200).
+/**
+ * GET /api/bureau/admin/waitlist
+ *
+ * ЗАЧЕМ. Таблица "BureauWaitlist" до 28.08.2026 только ЗАПОЛНЯЛАСЬ: INSERT при
+ * записи человека и COUNT(*) ради числа на экране. Прочитать сам список было
+ * нечем — ни ручки, ни скрипта, ни выгрузки.
+ *
+ * То есть форма говорила «You're on the waitlist!», а механизма когда-либо
+ * этим списком воспользоваться не существовало. Обещание без механизма: люди
+ * оставляют адрес в ожидании письма, которое некому отправить.
+ *
+ * Доступ — ровно как у соседних админских ручек этого файла (isBureauAdmin,
+ * Bearer + роль/почта из BUREAU_ADMIN_EMAILS). Здесь это не формальность:
+ * наружу отдаются чужие адреса.
+ *
+ * Пагинация обычная, `before` — курсор по времени записи.
+ */
+bureauRouter.get("/admin/waitlist", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureBureauTables();
+
+  const limit = Math.min(
+    Math.max(parseInt(String(req.query.limit || "100"), 10) || 100, 1),
+    500,
+  );
+  const source = String(req.query.source || "").trim();
+
+  // Курсор проверяется ДО подстановки: строка произвольного вида уходила бы в
+  // SQL как время и роняла запрос пятисоткой вместо честного 400.
+  const beforeRaw = String(req.query.before || "").trim();
+  let before: Date | null = null;
+  if (beforeRaw) {
+    const t = Date.parse(beforeRaw);
+    if (!Number.isFinite(t)) {
+      return res.status(400).json({ error: "invalid_before", hint: "ISO-8601 timestamp" });
+    }
+    before = new Date(t);
+  }
+
+  const args: unknown[] = [];
+  const conds: string[] = [];
+  if (source) {
+    args.push(source);
+    conds.push(`"source" = $${args.length}`);
+  }
+  if (before) {
+    args.push(before);
+    conds.push(`"createdAt" < $${args.length}`);
+  }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  args.push(limit);
+
+  try {
+    const r = await pool.query(
+      `SELECT "email","source","createdAt"
+         FROM "BureauWaitlist" ${where}
+        ORDER BY "createdAt" DESC LIMIT $${args.length}`,
+      args,
+    );
+    const total = await pool.query(`SELECT COUNT(*)::int AS "n" FROM "BureauWaitlist"`);
+    res.json({
+      rows: r.rows,
+      // Сколько ВСЕГО, отдельно от того, сколько показано: число, равное
+      // пределу выборки, иначе читается как весь список.
+      total: total.rows?.[0]?.n ?? null,
+      returned: r.rows.length,
+      limit,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "waitlist read failed";
+    console.error("[Bureau] admin waitlist:", msg);
+    captureBureauError(err, { route: "admin waitlist" });
+    res.status(500).json({ error: "waitlist_read_failed" });
+  }
+});
+
 bureauRouter.get("/admin/verifications", async (req, res) => {
   const a = isBureauAdmin(req);
   if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });

@@ -30,7 +30,10 @@ const FILES = [{ id: "f1", path: "src/App.jsx", content: APP_JSX, language: "jav
 type Put = { path: string; content: string };
 
 /** Mock the whole DevHub API and record every file write. */
-async function mockBackend(page: import("@playwright/test").Page, opts: { putStatus?: number } = {}) {
+async function mockBackend(
+  page: import("@playwright/test").Page,
+  opts: { putStatus?: number; collaboratorDeleteStatus?: number } = {},
+) {
   const puts: Put[] = [];
   const deletes: string[] = [];
 
@@ -40,6 +43,11 @@ async function mockBackend(page: import("@playwright/test").Page, opts: { putSta
     const json = (body: unknown, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
+    if (url.includes("/collaborators/")) {
+      const status = opts.collaboratorDeleteStatus ?? 200;
+      deletes.push(url);
+      return json(status === 200 ? { ok: true } : { error: "nope" }, status);
+    }
     if (url.includes("/file")) {
       const path = new URL(url).searchParams.get("path") || "";
       if (req.method() === "DELETE") {
@@ -67,6 +75,7 @@ async function mockBackend(page: import("@playwright/test").Page, opts: { putSta
           stack: "react",
           deployUrl: null,
           userId: "anonymous",
+          collaborators: [{ userId: "teammate@example.com", role: "editor" }],
         },
         files: FILES,
       });
@@ -131,5 +140,21 @@ test.describe("DevHub — writes that must not lose a file", () => {
     // ...and refused, so the header must admit it — a toast would have faded
     // while the file stayed unsaved.
     await expect(page.getByText(/НЕ сохранён/)).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("a collaborator the server refused to remove stays on the list", async ({ page }) => {
+    const { deletes } = await mockBackend(page, { collaboratorDeleteStatus: 500 });
+    await page.goto(`/devhub/${PROJECT_ID}`);
+
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const row = page.getByTitle("teammate@example.com");
+    await expect(row).toBeVisible();
+
+    await page.getByTitle("Remove collaborator").click();
+    await expect(page.getByText(/Доступ НЕ отозван/)).toBeVisible({ timeout: 10_000 });
+    expect(deletes.length).toBe(1);
+    // Their access is still live on the server; a list that hides them is
+    // worse than the error.
+    await expect(row).toBeVisible();
   });
 });

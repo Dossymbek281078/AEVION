@@ -19,6 +19,8 @@ import jwt from "jsonwebtoken";
 
 const tracks = new Map<string, Record<string, unknown>>();
 const playlists = new Map<string, Record<string, unknown>>();
+const videos = new Map<string, Record<string, unknown>>();
+const likes = new Set<string>();
 
 /**
  * Стенд обязан отдавать КОПИИ, как настоящая база.
@@ -38,6 +40,48 @@ vi.mock("../src/lib/dbPool", () => ({
       const head = s.trimStart().toUpperCase();
       if (head.startsWith("CREATE") || head.startsWith("ALTER") || head.startsWith("SELECT 1")) {
         return { rows: [], rowCount: 0 };
+      }
+      if (s.includes('INSERT INTO "QMediaVideo"')) {
+        videos.set(String(p[0]), {
+          id: p[0], userId: p[1], title: p[2], description: p[3], url: p[4],
+          thumbnailUrl: p[5], duration: p[6], viewCount: p[7], isPublic: p[8],
+          category: p[9], tags: p[10], createdAt: p[11], updatedAt: p[12],
+        });
+        return { rows: [], rowCount: 1 };
+      }
+      if (s.includes('UPDATE "QMediaVideo"') && s.includes('"viewCount" + 1')) {
+        const v = videos.get(String(p[0]));
+        if (!v) return { rows: [], rowCount: 0 };
+        v.viewCount = Number(v.viewCount) + 1;
+        return { rows: [{ viewCount: v.viewCount }], rowCount: 1 };
+      }
+      if (s.includes('DELETE FROM "QMediaVideo"')) {
+        const v = videos.get(String(p[0]));
+        if (!v || v.userId !== p[1]) return { rows: [], rowCount: 0 };
+        videos.delete(String(p[0]));
+        return { rows: [], rowCount: 1 };
+      }
+      if (s.includes('FROM "QMediaVideo"')) {
+        let rows = [...videos.values()].map(copy);
+        if (s.includes('"id" = $1')) rows = rows.filter((r) => r.id === p[0]);
+        else if (s.includes('"userId" = $1')) rows = rows.filter((r) => r.userId === p[0]);
+        else if (s.includes('"isPublic" = TRUE')) rows = rows.filter((r) => r.isPublic === true);
+        return { rows, rowCount: rows.length };
+      }
+      if (s.includes('DELETE FROM "QMediaLike"')) {
+        const k = `${p[0]}|${p[1]}|${p[2]}`;
+        const had = likes.delete(k);
+        return { rows: [], rowCount: had ? 1 : 0 };
+      }
+      if (s.includes('INSERT INTO "QMediaLike"')) {
+        likes.add(`${p[0]}|${p[1]}|${p[2]}`);
+        return { rows: [], rowCount: 1 };
+      }
+      if (s.includes('FROM "QMediaLike"')) {
+        const rows = [...likes]
+          .filter((k) => k.split("|")[0] === p[0])
+          .map((k) => ({ resourceId: k.split("|")[1], resourceType: k.split("|")[2] }));
+        return { rows, rowCount: rows.length };
       }
       if (s.includes('INSERT INTO "QMediaPlaylist"')) {
         playlists.set(String(p[0]), {
@@ -226,5 +270,40 @@ describe("треки QMedia переживают перезапуск", () => {
       .set("Authorization", `Bearer ${stranger}`)
       .send({ trackId: "t-2" });
     expect(denied.status, "посторонний правит чужой плейлист").toBe(403);
+  });
+
+  test("видео ложится в базу, просмотр считается там же", async () => {
+    const before = videos.size;
+    const made = await request(app())
+      .post("/x/me/videos")
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .send({ title: "Ролик", isPublic: true });
+    expect(made.status, `видео не создано: ${JSON.stringify(made.body)}`).toBe(201);
+    expect(videos.size, "видео не доехало до базы").toBe(before + 1);
+
+    const id = made.body.id as string;
+    const view = await request(app()).post(`/x/videos/${id}/view`);
+    expect(view.status).toBe(200);
+    expect(view.body.viewCount).toBe(1);
+    expect(videos.get(id)?.viewCount, "счётчик вырос только на экране").toBe(1);
+  });
+
+  test("лайк ложится в базу и снимается там же", async () => {
+    const before = likes.size;
+    const on = await request(app())
+      .post("/x/track/t-99/like")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(on.status).toBe(200);
+    expect(on.body.liked).toBe(true);
+    expect(likes.size, "лайк не доехал до базы").toBe(before + 1);
+
+    const list = await request(app()).get("/x/me/likes").set("Authorization", `Bearer ${TOKEN}`);
+    expect(list.body.items.some((l: { id: string }) => l.id === "t-99")).toBe(true);
+
+    const off = await request(app())
+      .post("/x/track/t-99/like")
+      .set("Authorization", `Bearer ${TOKEN}`);
+    expect(off.body.liked, "повторное нажатие не сняло лайк").toBe(false);
+    expect(likes.size, "снятие лайка не дошло до базы").toBe(before);
   });
 });

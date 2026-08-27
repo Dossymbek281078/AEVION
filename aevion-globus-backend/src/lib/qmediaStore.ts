@@ -396,3 +396,254 @@ export async function deletePlaylist(
   memPlaylists.delete(id);
   return { removed: true, failed: false };
 }
+
+
+/* ── Видео ────────────────────────────────────────────────────────────── */
+
+export type VideoRow = {
+  id: string;
+  userId: string;
+  title: string;
+  description: string | null;
+  url: string | null;
+  thumbnailUrl: string | null;
+  duration: number;
+  viewCount: number;
+  isPublic: boolean;
+  category: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const memVideos = new Map<string, VideoRow>();
+
+const V_COLS =
+  '"id","userId","title","description","url","thumbnailUrl","duration",' +
+  '"viewCount","isPublic","category","tags","createdAt","updatedAt"';
+
+function rowToVideo(r: Record<string, unknown>): VideoRow {
+  return {
+    id: String(r.id),
+    userId: String(r.userId),
+    title: String(r.title ?? ""),
+    description: r.description === null || r.description === undefined ? null : String(r.description),
+    url: r.url === null || r.url === undefined ? null : String(r.url),
+    thumbnailUrl: r.thumbnailUrl === null || r.thumbnailUrl === undefined ? null : String(r.thumbnailUrl),
+    duration: Number(r.duration ?? 0),
+    viewCount: Number(r.viewCount ?? 0),
+    isPublic: Boolean(r.isPublic),
+    category: String(r.category ?? "other"),
+    tags: Array.isArray(r.tags) ? (r.tags as string[]).map(String) : [],
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  };
+}
+
+/** Публичные видео. Фильтры — в SQL, порядок по просмотрам, как было. */
+export async function listPublicVideos(
+  limit: number,
+  opts: { category?: string | null; q?: string | null } = {},
+): Promise<{ rows: VideoRow[]; failed: boolean }> {
+  const category = opts.category ?? null;
+  const q = opts.q ?? null;
+  if (isQMediaDbReady()) {
+    try {
+      const params: unknown[] = [];
+      const where = ['"isPublic" = TRUE'];
+      if (category) { params.push(category); where.push(`"category" = $${params.length}`); }
+      if (q) { params.push(`%${q}%`); where.push(`"title" ILIKE $${params.length}`); }
+      params.push(limit);
+      const { rows } = await pool.query(
+        `SELECT ${V_COLS} FROM "QMediaVideo" WHERE ${where.join(" AND ")}
+          ORDER BY "viewCount" DESC LIMIT $${params.length}`,
+        params,
+      );
+      return { rows: rows.map(rowToVideo), failed: false };
+    } catch (e) {
+      console.error("[QMedia] публичные видео не прочитаны", e);
+      return { rows: [], failed: true };
+    }
+  }
+  const needle = q ? q.toLowerCase() : null;
+  const rows = [...memVideos.values()]
+    .filter((v) => v.isPublic)
+    .filter((v) => (category ? v.category === category : true))
+    .filter((v) => (needle ? v.title.toLowerCase().includes(needle) : true))
+    .sort((a, b) => b.viewCount - a.viewCount)
+    .slice(0, limit);
+  return { rows, failed: false };
+}
+
+export async function listMyVideos(userId: string): Promise<{ rows: VideoRow[]; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT ${V_COLS} FROM "QMediaVideo" WHERE "userId" = $1 ORDER BY "createdAt" DESC`,
+        [userId],
+      );
+      return { rows: rows.map(rowToVideo), failed: false };
+    } catch (e) {
+      console.error("[QMedia] мои видео не прочитаны", e);
+      return { rows: [], failed: true };
+    }
+  }
+  const rows = [...memVideos.values()]
+    .filter((v) => v.userId === userId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { rows, failed: false };
+}
+
+export async function getVideo(id: string): Promise<{ video: VideoRow | null; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const { rows } = await pool.query(`SELECT ${V_COLS} FROM "QMediaVideo" WHERE "id" = $1`, [id]);
+      return { video: rows[0] ? rowToVideo(rows[0]) : null, failed: false };
+    } catch (e) {
+      console.error("[QMedia] видео не прочитано", e);
+      return { video: null, failed: true };
+    }
+  }
+  return { video: memVideos.get(id) ?? null, failed: false };
+}
+
+export async function saveVideo(v: VideoRow): Promise<{ failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      await pool.query(
+        `INSERT INTO "QMediaVideo" (${V_COLS})
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         ON CONFLICT ("id") DO UPDATE SET
+           "title"=$3,"description"=$4,"url"=$5,"thumbnailUrl"=$6,"duration"=$7,
+           "viewCount"=$8,"isPublic"=$9,"category"=$10,"tags"=$11,"updatedAt"=$13`,
+        [v.id, v.userId, v.title, v.description, v.url, v.thumbnailUrl, v.duration,
+         v.viewCount, v.isPublic, v.category, v.tags, v.createdAt, v.updatedAt],
+      );
+      return { failed: false };
+    } catch (e) {
+      console.error("[QMedia] видео не сохранено", e);
+      return { failed: true };
+    }
+  }
+  memVideos.set(v.id, v);
+  return { failed: false };
+}
+
+export async function deleteVideo(
+  id: string,
+  userId: string,
+): Promise<{ removed: boolean; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const r = await pool.query(
+        `DELETE FROM "QMediaVideo" WHERE "id" = $1 AND "userId" = $2`, [id, userId]);
+      return { removed: (r.rowCount ?? 0) > 0, failed: false };
+    } catch (e) {
+      console.error("[QMedia] видео не удалено", e);
+      return { removed: false, failed: true };
+    }
+  }
+  const v = memVideos.get(id);
+  if (!v || v.userId !== userId) return { removed: false, failed: false };
+  memVideos.delete(id);
+  return { removed: true, failed: false };
+}
+
+/** Просмотр: счётчик растёт В БАЗЕ одним запросом, как и у прослушиваний. */
+export async function bumpViewCount(
+  id: string,
+): Promise<{ viewCount: number | null; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `UPDATE "QMediaVideo" SET "viewCount" = "viewCount" + 1, "updatedAt" = NOW()
+          WHERE "id" = $1 RETURNING "viewCount"`,
+        [id],
+      );
+      if (!rows[0]) return { viewCount: null, failed: false };
+      return { viewCount: Number(rows[0].viewCount), failed: false };
+    } catch (e) {
+      console.error("[QMedia] просмотр не засчитан", e);
+      return { viewCount: null, failed: true };
+    }
+  }
+  const v = memVideos.get(id);
+  if (!v) return { viewCount: null, failed: false };
+  v.viewCount += 1;
+  v.updatedAt = new Date().toISOString();
+  return { viewCount: v.viewCount, failed: false };
+}
+
+
+/* ── Лайки ────────────────────────────────────────────────────────────── */
+
+export const memLikes = new Map<string, boolean>();
+
+/**
+ * Переключить лайк. Возвращает НОВОЕ состояние.
+ *
+ * Ключ составной (человек, ресурс, тип) — он и есть первичный ключ таблицы,
+ * поэтому повторное нажатие не рождает вторую строку.
+ */
+export async function toggleLike(
+  userId: string,
+  resourceId: string,
+  resourceType: string,
+): Promise<{ liked: boolean; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const del = await pool.query(
+        `DELETE FROM "QMediaLike"
+          WHERE "userId" = $1 AND "resourceId" = $2 AND "resourceType" = $3`,
+        [userId, resourceId, resourceType],
+      );
+      if ((del.rowCount ?? 0) > 0) return { liked: false, failed: false };
+      await pool.query(
+        `INSERT INTO "QMediaLike" ("userId","resourceId","resourceType")
+         VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+        [userId, resourceId, resourceType],
+      );
+      return { liked: true, failed: false };
+    } catch (e) {
+      console.error("[QMedia] лайк не сохранён", e);
+      return { liked: false, failed: true };
+    }
+  }
+  const key = `${userId}:${resourceType}:${resourceId}`;
+  const liked = !memLikes.get(key);
+  if (liked) memLikes.set(key, true);
+  else memLikes.delete(key);
+  return { liked, failed: false };
+}
+
+export async function listMyLikes(
+  userId: string,
+): Promise<{ rows: Array<{ type: string; id: string }>; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT "resourceType","resourceId" FROM "QMediaLike"
+          WHERE "userId" = $1 ORDER BY "createdAt" DESC`,
+        [userId],
+      );
+      return {
+        rows: rows.map((r: { resourceType: unknown; resourceId: unknown }) => ({
+          type: String(r.resourceType),
+          id: String(r.resourceId),
+        })),
+        failed: false,
+      };
+    } catch (e) {
+      console.error("[QMedia] мои лайки не прочитаны", e);
+      return { rows: [], failed: true };
+    }
+  }
+  const prefix = `${userId}:`;
+  const rows = [...memLikes.keys()]
+    .filter((k) => k.startsWith(prefix))
+    .map((k) => {
+      const parts = k.split(":");
+      return { type: parts[1], id: parts.slice(2).join(":") };
+    });
+  return { rows, failed: false };
+}

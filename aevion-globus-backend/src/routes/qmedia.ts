@@ -6,6 +6,8 @@ import { ensureQMediaTables } from "../lib/ensureQMediaTables";
 import {
   listPublicTracks, listMyTracks, getTrack, saveTrack, deleteTrack, bumpPlayCount,
   allTracks, listPublicPlaylists, listMyPlaylists, getPlaylist, savePlaylist, deletePlaylist,
+  listPublicVideos, listMyVideos, getVideo, saveVideo, deleteVideo, bumpViewCount,
+  toggleLike, listMyLikes,
   type TrackRow as StoredTrackRow, type PlaylistRow as StoredPlaylistRow,
 } from "../lib/qmediaStore";
 import { getPool } from "../lib/dbPool";
@@ -21,8 +23,6 @@ type PlaylistCollaborator = { userId: string; canEdit: boolean };
 type PlaylistRow = { id: string; userId: string; name: string; description: string | null; isPublic: boolean; trackIds: string[]; collaborators?: PlaylistCollaborator[]; createdAt: string; updatedAt: string };
 type VideoRow = { id: string; userId: string; title: string; description: string | null; url: string | null; thumbnailUrl: string | null; duration: number; viewCount: number; isPublic: boolean; category: string; tags: string[]; createdAt: string; updatedAt: string };
 
-const memVideos = new Map<string, VideoRow>();
-const memLikes = new Map<string, boolean>();
 
 function nowIso() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
@@ -226,10 +226,9 @@ qmediaRouter.get("/videos", async (req, res) => {
     const category = typeof req.query.category === "string" ? req.query.category : null;
     const q = typeof req.query.q === "string" ? req.query.q.toLowerCase() : null;
     const limit = Math.min(50, Math.max(Number(req.query.limit) || 20, 1));
-    let videos = Array.from(memVideos.values()).filter(v => v.isPublic);
-    if (category) videos = videos.filter(v => v.category === category);
-    if (q) videos = videos.filter(v => v.title.toLowerCase().includes(q));
-    res.json({ items: videos.sort((a, b) => b.viewCount - a.viewCount).slice(0, limit) });
+    const { rows, failed } = await listPublicVideos(limit, { category, q });
+    if (failed) return replyQMediaStorageDown(res);
+    res.json({ items: rows });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "list videos failed" }); }
 });
 
@@ -237,7 +236,9 @@ qmediaRouter.get("/me/videos", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    res.json({ items: Array.from(memVideos.values()).filter(v => v.userId === auth.sub).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) });
+    const { rows, failed } = await listMyVideos(auth.sub);
+    if (failed) return replyQMediaStorageDown(res);
+    res.json({ items: rows });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "list my videos failed" }); }
 });
 
@@ -247,8 +248,9 @@ qmediaRouter.post("/me/videos", async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { title, description, url, thumbnailUrl, duration, category, isPublic, tags } = req.body || {};
     if (!title || typeof title !== "string") return res.status(400).json({ error: "title required" });
-    const video: VideoRow = { id: uid(), userId: auth.sub, title: title.slice(0, 200), description: description ? String(description).slice(0, 1000) : null, url: url ? String(url) : null, thumbnailUrl: thumbnailUrl ? String(thumbnailUrl) : null, duration: typeof duration === "number" ? duration : 0, viewCount: 0, isPublic: Boolean(isPublic), category: typeof category === "string" ? category : "other", tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
-    memVideos.set(video.id, video);
+    const video: VideoRow = { id: uid(), userId: auth.sub, title: title.slice(0, 200), description: description ? String(description).slice(0, 1000) : null, url: url ? String(url) : null, thumbnailUrl: thumbnailUrl ? String(thumbnailUrl) : null, duration: Number(duration) || 0, viewCount: 0, isPublic: Boolean(isPublic), category: typeof category === "string" ? category : "other", tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
+    const saved = await saveVideo(video);
+    if (saved.failed) return replyQMediaStorageDown(res);
     res.status(201).json(video);
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "create video failed" }); }
 });
@@ -257,7 +259,9 @@ qmediaRouter.patch("/me/videos/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const video = memVideos.get(req.params.id);
+    const found = await getVideo(req.params.id);
+    if (found.failed) return replyQMediaStorageDown(res);
+    const video = found.video;
     if (!video || video.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     const { title, description, url, thumbnailUrl, isPublic, category } = req.body || {};
     if (title) video.title = String(title).slice(0, 200);
@@ -267,16 +271,18 @@ qmediaRouter.patch("/me/videos/:id", async (req, res) => {
     if (isPublic !== undefined) video.isPublic = Boolean(isPublic);
     if (category) video.category = String(category);
     video.updatedAt = nowIso();
+    const saved = await saveVideo(video);
+    if (saved.failed) return replyQMediaStorageDown(res);
     res.json(video);
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "update video failed" }); }
 });
 
 qmediaRouter.post("/videos/:id/view", async (req, res) => {
   try {
-    const video = memVideos.get(req.params.id);
-    if (!video) return res.status(404).json({ error: "not found" });
-    video.viewCount++;
-    res.json({ viewCount: video.viewCount });
+    const { viewCount, failed } = await bumpViewCount(req.params.id);
+    if (failed) return replyQMediaStorageDown(res);
+    if (viewCount === null) return res.status(404).json({ error: "not found" });
+    res.json({ viewCount });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "view failed" }); }
 });
 
@@ -284,9 +290,9 @@ qmediaRouter.delete("/me/videos/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const video = memVideos.get(req.params.id);
-    if (!video || video.userId !== auth.sub) return res.status(404).json({ error: "not found" });
-    memVideos.delete(req.params.id);
+    const { removed, failed } = await deleteVideo(req.params.id, auth.sub);
+    if (failed) return replyQMediaStorageDown(res);
+    if (!removed) return res.status(404).json({ error: "not found" });
     res.json({ deleted: true });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "delete video failed" }); }
 });
@@ -299,9 +305,9 @@ qmediaRouter.post("/:type/:id/like", async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { type, id } = req.params;
     if (!["track", "video", "playlist"].includes(type)) return res.status(400).json({ error: "invalid type" });
-    const key = `${auth.sub}:${type}:${id}`;
-    const liked = !memLikes.get(key);
-    if (liked) memLikes.set(key, true); else memLikes.delete(key);
+    const { liked, failed } = await toggleLike(auth.sub, id, type);
+    // «Отметил» о том, чего нет в хранилище, человек проверит завтра и не найдёт.
+    if (failed) return replyQMediaStorageDown(res);
     res.json({ liked });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "like failed" }); }
 });
@@ -310,9 +316,9 @@ qmediaRouter.get("/me/likes", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const prefix = `${auth.sub}:`;
-    const likes = Array.from(memLikes.keys()).filter(k => k.startsWith(prefix)).map(k => { const parts = k.split(":"); return { type: parts[1], resourceId: parts[2] }; });
-    res.json({ items: likes });
+    const { rows, failed } = await listMyLikes(auth.sub);
+    if (failed) return replyQMediaStorageDown(res);
+    res.json({ items: rows });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "list likes failed" }); }
 });
 
@@ -472,13 +478,14 @@ qmediaRouter.get("/recommendations", async (req, res) => {
 
     const userId = auth.sub;
 
-    // Liked track ids of this user
-    const likedTrackIds = new Set<string>();
-    for (const key of memLikes.keys()) {
-      if (!key.startsWith(`${userId}:track:`)) continue;
-      const parts = key.split(":");
-      if (parts.length === 3) likedTrackIds.add(parts[2]);
-    }
+    // Лайки этого человека — из хранилища. Раньше читалась карта в памяти:
+    // при живой базе рекомендации строились бы по пустому множеству, то есть
+    // «мне нравится» переставало влиять на выдачу, и молча.
+    const likes = await listMyLikes(userId);
+    if (likes.failed) return replyQMediaStorageDown(res);
+    const likedTrackIds = new Set<string>(
+      likes.rows.filter((l) => l.type === "track").map((l) => l.id),
+    );
 
     // Build taste profile from liked tracks + tracks user authored
     const genreScore = new Map<string, number>();

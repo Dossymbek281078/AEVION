@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  dashboardNotice,
+  readServerPersistence,
+  type ServerPersistence,
+} from "./persistenceNotice";
 
 type Currency = "USD" | "EUR" | "KZT" | "AEC";
 
@@ -116,6 +121,25 @@ export default function DashboardPage() {
   const [flagged, setFlagged] = useState<FlaggedTxn[]>([]);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [methodsState, setMethodsState] = useState<Record<string, boolean>>({});
+  // Состояние серверного хранилища. "unknown" — начальное И при отказе: своя
+  // неудача спросить не должна выглядеть как «всё сохраняется».
+  const [serverPersistence, setServerPersistence] =
+    useState<ServerPersistence>("unknown");
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/health")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (alive) setServerPersistence(readServerPersistence(j));
+      })
+      .catch(() => {
+        /* оставляем "unknown": это не «всё хорошо», а отсутствие ответа */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     setLinks(readJson<PaymentLink[]>(KEYS.links, []));
@@ -287,8 +311,46 @@ export default function DashboardPage() {
     deliveries.length === 0 &&
     flagged.length === 0;
 
+  // Надпись про хранение видна ВСЕГДА, а не только на пустом экране. Раньше
+  // оговорка про localStorage жила в блоке «No data yet» и исчезала ровно
+  // тогда, когда у человека появлялись данные, — то есть когда цена ошибки
+  // становилась выше. Разбор — в комментарии к persistenceNotice.ts.
+  const notice = dashboardNotice(serverPersistence, !isEmpty);
+
   return (
     <main style={{ padding: 0 }}>
+      <div
+        role="status"
+        style={{
+          background: notice.tone === "warn" ? "#fffbeb" : "#f8fafc",
+          borderBottom: `1px solid ${
+            notice.tone === "warn" ? "#fcd34d" : "#e2e8f0"
+          }`,
+          padding: "12px 24px",
+        }}
+      >
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <div
+            style={{
+              fontWeight: 800,
+              fontSize: 13,
+              color: notice.tone === "warn" ? "#92400e" : "#0f172a",
+              marginBottom: 4,
+            }}
+          >
+            {notice.title}
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              lineHeight: 1.55,
+              color: notice.tone === "warn" ? "#78350f" : "#475569",
+            }}
+          >
+            {notice.body}
+          </div>
+        </div>
+      </div>
       <section
         style={{
           background:

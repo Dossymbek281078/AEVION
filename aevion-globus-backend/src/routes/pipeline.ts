@@ -2174,15 +2174,46 @@ pipelineRouter.get("/health", async (_req, res) => {
   let storageOk = true;
   let certificateCount: number | null = null;
   let lastProtectedAt: string | null = null;
+  /**
+   * Состояние якорения в биткойн. Витрина обещает «Bitcoin-anchored», а
+   * проверить это снаружи до 27.08.2026 было НЕЧЕМ: в этом ответе про якорь
+   * не было ни слова. Обещание без ручки состояния — это обещание, про
+   * которое нельзя узнать, что оно перестало выполняться.
+   *
+   * Считается ТЕМ ЖЕ запросом и только по базе: ни одного обращения в сеть,
+   * иначе проверка состояния сама станет источником отказов.
+   *
+   * null во всех полях означает «спросить не удалось» — это НЕ ноль.
+   */
+  let anchoring: {
+    stamped: number;
+    pending: number;
+    confirmed: number;
+    lastStampedAt: string | null;
+  } | null = null;
   try {
     await ensureTables();
     const { rows } = await pool.query(
-      `SELECT COUNT(*)::int AS "count", MAX("protectedAt") AS "last" FROM "IPCertificate" WHERE "status" = 'active'`,
+      `SELECT COUNT(*)::int AS "count", MAX("protectedAt") AS "last",
+              COUNT("otsProof")::int AS "stamped",
+              COUNT(*) FILTER (WHERE "otsStatus" = 'pending')::int AS "pending",
+              COUNT("otsBitcoinBlockHeight")::int AS "confirmed",
+              MAX("otsStampedAt") AS "lastStamped"
+         FROM "IPCertificate" WHERE "status" = 'active'`,
     );
     const row = rows?.[0];
     certificateCount = typeof row?.count === "number" ? row.count : null;
     lastProtectedAt =
       row?.last instanceof Date ? row.last.toISOString() : row?.last ?? null;
+    anchoring = {
+      stamped: Number(row?.stamped ?? 0),
+      pending: Number(row?.pending ?? 0),
+      confirmed: Number(row?.confirmed ?? 0),
+      lastStampedAt:
+        row?.lastStamped instanceof Date
+          ? row.lastStamped.toISOString()
+          : (row?.lastStamped ?? null),
+    };
   } catch (err) {
     storageOk = false;
     console.error(
@@ -2231,6 +2262,12 @@ pipelineRouter.get("/health", async (_req, res) => {
       secretConfigured,
       hmacKeyVersion: HMAC_KEY_VERSION,
     },
+    /**
+     * Якорение в биткойн — то, что обещает витрина («Bitcoin-anchored»).
+     * null означает «спросить не удалось», а не «якорений ноль»: своя
+     * неудача чтения не должна выглядеть как факт о продукте.
+     */
+    anchoring,
     uptimeSeconds: Math.round(process.uptime()),
     responseTimeMs: Date.now() - startedAt,
     at: new Date().toISOString(),

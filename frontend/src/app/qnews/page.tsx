@@ -301,6 +301,16 @@ function saveLocalBookmarks(ids: Set<string>): void {
 
 export default function QNewsPage() {
   const [articles, setArticles] = useState<NewsItem[]>([]);
+  // Почему отдельное состояние, а не просто пустой список.
+  //
+  // Замер 28.08.2026 на живом проде: `/api/qnews/articles` отвечает 402
+  // (нужна оплата), а человек читал «📰 Статьи не найдены». Это ложь в самую
+  // дорогую сторону: посетитель страницы, которая продаёт модуль за $19/мес,
+  // делал вывод, что продукт ПУСТОЙ, и уходил. Отказ в доступе показывался
+  // как отсутствие товара.
+  //
+  // Три исхода, а не два: «нет статей», «нужен доступ», «не удалось спросить».
+  const [articlesState, setArticlesState] = useState<"ok" | "paywall" | "error">("ok");
   const [trending, setTrending] = useState<NewsItem[]>([]);
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(true);
@@ -340,7 +350,19 @@ export default function QNewsPage() {
       if (resp.ok) {
         const data = await resp.json() as { articles: NewsItem[] };
         setArticles(data.articles ?? []);
+        setArticlesState("ok");
+      } else if (resp.status === 402 || resp.status === 401 || resp.status === 403) {
+        // Платная стена и «не вошёл» — это про ДОСТУП, а не про содержимое.
+        setArticles([]);
+        setArticlesState("paywall");
+      } else {
+        setArticles([]);
+        setArticlesState("error");
       }
+    } catch {
+      // Сеть не ответила — тоже не «не найдены».
+      setArticles([]);
+      setArticlesState("error");
     } finally {
       setLoading(false);
     }
@@ -598,7 +620,15 @@ export default function QNewsPage() {
                 }}
               >
                 <div style={{ fontSize: 40, marginBottom: 12 }}>{showBookmarksOnly ? "🔖" : "📰"}</div>
-                <div>{showBookmarksOnly ? "Пока нет закладок — нажми 📎 на статье." : "Статьи не найдены"}</div>
+                <div>{
+                  showBookmarksOnly
+                    ? "Пока нет закладок — нажми 📎 на статье."
+                    : articlesState === "paywall"
+                      ? "Лента QNews входит в тариф Lite и выше. Оформите доступ кнопкой «Купить» выше — статьи появятся сразу."
+                      : articlesState === "error"
+                        ? "Не удалось загрузить статьи. Обновите страницу — это сбой связи, а не пустая лента."
+                        : "Статьи не найдены"
+                }</div>
               </div>
             )}
             {displayedArticles.map((article) => (

@@ -5737,11 +5737,15 @@ export default function CyberChessPage(){
           }}>
           <span style={{fontSize:14}}>⌕</span>
           <span>Команды</span>
-          <kbd style={{
+          {/* Подсказка сочетания клавиш — только там, где клавиатура есть.
+              На телефоне «⌃K» не подсказка, а шум: нажать это нечем, а место
+              в шапке первого экрана стоит дорого. Замер 27.08 на 375px: шапка
+              занимала треть экрана и содержала 13 управляющих элементов. */}
+          {!isMobileLayout&&<kbd style={{
             fontFamily:"ui-monospace, SFMono-Regular, monospace",fontSize:9.5,fontWeight:800,
             padding:"1px 5px",borderRadius:3,
             background:"#fff",color:"#475569",border:`1px solid #cbd5e1`,
-          }}>⌃K</kbd>
+          }}>⌃K</kbd>}
         </button>
         {/* «Все разделы» — видимый навигационный хаб. Делает обнаружимыми ВСЕ режимы и
             киллер-фичи (Турниры/Экономика/Тренинг/Реплеи/Студия/CPI), которые раньше были

@@ -22,10 +22,12 @@
  * Exit 0 always — this is a lead generator, not a gate. Every hit needs a human
  * to answer one question: is the read reachable with a live database?
  *
- * Known false positive: a real read-through cache (qreal.ts's
- * memStoryboardCache) writes near a catch but reads unconditionally at the top
- * of its function. Judge by whether the read is on the ordinary path, not by
- * the shape of the write.
+ * A hit is a lead, not a verdict. Judge it by whether the READ is on the
+ * ordinary path — a genuine read-through cache also writes near a failure
+ * handler, and that is not this defect. As of 2026-08-12 the scan is clean of
+ * known false positives: comments, `${...}` interpolations and `.catch(`
+ * promise handlers are all excluded, and the five hits it reports are the five
+ * real DevHub maps.
  */
 
 import fs from "node:fs";
@@ -49,8 +51,14 @@ if (!fs.existsSync(dir)) {
  * `${userId}:${month}` closes a brace before the `.set(` is reached. So the
  * interpolations are removed first (see `stripComments`), and the window stays
  * strict.
+ *
+ * The lookbehind rejects `.catch(` — the promise handler, not the block. That
+ * was the whole reason qreal's read-through cache kept showing up: a
+ * `.catch(() => null)` on one line and an unrelated `.set(` three lines later
+ * looked like a swallowed write. A tool whose only remaining hit is a known
+ * false positive teaches its reader to ignore it.
  */
-const CATCH_WRITE = /catch[^{]*\{[^}]{0,400}?\b(mem[A-Za-z0-9_]*)\s*\.set\(/gs;
+const CATCH_WRITE = /(?<![.\w])catch\s*(?:\([^)]*\))?\s*\{[^}]{0,400}?\b(mem[A-Za-z0-9_]*)\s*\.set\(/gs;
 const READ_SUFFIXES = [".get(", ".values(", ".has(", ".find("];
 
 /**

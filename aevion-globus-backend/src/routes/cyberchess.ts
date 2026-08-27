@@ -82,14 +82,31 @@ cyberchessRouter.get("/results.csv", requireAuth, async (req, res) => {
 // `/upcoming` отдавала два турнира со статусом `upcoming` и датами старта
 // **4 и 6 мая** — три с половиной месяца назад. Со временем расхождение
 // только росло, и починить его перезапуском было нельзя.
+//
+// 🔴 ЧИСЛА У ОБРАЗЦА — НУЛЕВЫЕ, И ЭТО НЕ КОСМЕТИКА (27.08.2026).
+//
+// Здесь стояли `prizePool: 250` и `entries: 32`. Это не заглушки, которых
+// никто не видит: `bank/_components/ChessWinnings.tsx` печатает призовой фонд
+// человеку, отформатированный как деньги — «$250». То есть витрина обещала
+// призовой фонд, которого нет, участников, которых нет, а после починки дат
+// один из этих образцов приходится ровно на день запуска, 30 августа.
+//
+// Обещание, которого продукт не держит, — первый пункт ворот запуска. Дату
+// образцу освежать можно (он для того и заведён, чтобы показать, как выглядит
+// раздел), а придумывать за него деньги и людей — нельзя.
+//
+// Поэтому: `demo: true` в самом ответе, чтобы любой читатель мог отличить
+// образец от настоящего турнира, и нули там, где число должно приходить из
+// жизни. Настоящий турнир к 30 августа — решение основателя, его надо завести,
+// а не нарисовать.
 const DEMO_SEED: { offsetMs: number; t: Omit<Tournament, "startsAt"> }[] = [
   {
     offsetMs: 24 * 3600_000,
     t: {
       id: "tour_demo_swiss_001",
       format: "Swiss · 3+2 · 7 rounds",
-      prizePool: 250,
-      entries: 32,
+      prizePool: 0,
+      entries: 0,
       capacity: 64,
       status: "upcoming",
     },
@@ -99,13 +116,36 @@ const DEMO_SEED: { offsetMs: number; t: Omit<Tournament, "startsAt"> }[] = [
     t: {
       id: "tour_demo_arena_002",
       format: "Arena · 1+0 · 60 min",
-      prizePool: 100,
-      entries: 14,
+      prizePool: 0,
+      entries: 0,
       capacity: 100,
       status: "upcoming",
     },
   },
 ];
+
+/** Идентификаторы образцов. Единственный источник правды о том, что образец. */
+const DEMO_IDS = new Set(DEMO_SEED.map((d) => d.t.id));
+
+/**
+ * Вид турнира ДЛЯ ЧИТАТЕЛЯ: образец не приносит с собой выдуманных чисел.
+ *
+ * Считается на ответе, а не хранится. Причин две, и обе замерены:
+ *
+ *  1. В таблице `cyberchess_tournaments` колонки под такой признак нет, и
+ *     `saveTournament` его молча терял бы — поле, которое пишут и не читают,
+ *     хуже отсутствующего.
+ *  2. Записи образцов уже лежат на проде с `prizePool: 250` и `entries: 32`.
+ *     Посев срабатывает только на ПУСТОМ хранилище, поэтому правка одного лишь
+ *     `DEMO_SEED` до прода не доехала бы вовсе — ровно так же, как не доезжала
+ *     починка даты, пока её не начали освежать при чтении.
+ *
+ * Настоящий турнир проходит насквозь: его числа приходят из жизни.
+ */
+export function asPublicTournament(t: Tournament): Tournament {
+  if (!DEMO_IDS.has(t.id)) return t;
+  return { ...t, prizePool: 0, entries: 0, demo: true };
+}
 
 function seedNow(): Tournament[] {
   const now = Date.now();
@@ -181,7 +221,9 @@ export function keepOnlyStillUpcoming(items: Tournament[], now = Date.now()): To
 
 cyberchessRouter.get("/upcoming", async (_req, res) => {
   try {
-    const items = keepOnlyStillUpcoming(await loadWithFreshDemos());
+    // asPublicTournament — последним: образец не должен уносить наружу
+    // призовой фонд и число участников, которых не существует.
+    const items = keepOnlyStillUpcoming(await loadWithFreshDemos()).map(asPublicTournament);
     res.json({ items });
   } catch (err: any) {
     captureCyberChessError(err, { route: "upcoming" });

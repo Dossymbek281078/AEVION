@@ -366,6 +366,31 @@ async function debitCredit(userId: string, capability: CapabilityKey, amount = 1
   }
 }
 
+/**
+ * Списание, которое не имеет права уронить уже выполненную работу — но и молчать
+ * не имеет права.
+ *
+ * Девять маршрутов зовут списание как `debitQuietly(...)`. Это
+ * защита в глубину, а не рабочая ветка: `debitCredit` сам ловит отказ базы и
+ * паркует списание в память, а чтение тарифа тоже не бросает. То есть сегодня
+ * внешний catch сработать не может.
+ *
+ * Убирать его всё равно нельзя: если внутренности однажды начнут бросать,
+ * маршрут упадёт УЖЕ ПОСЛЕ удачной генерации, и человек потеряет результат, за
+ * который заплатил. Но проглатывать молча — значит согласиться, что о пропаже
+ * списания никто не узнает: ни журнал, ни Sentry, ни счётчик расхода.
+ *
+ * Поэтому отказ остаётся не смертельным и становится ВИДИМЫМ, с указанием, ЧТО
+ * и У КОГО не списалось — след без этих двух вещей бесполезен.
+ */
+function debitQuietly(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
+  return debitCredit(userId, capability, amount).catch((e) => {
+    const why = e instanceof Error ? e.message : String(e);
+    console.error(`[DevHub] СПИСАНИЕ НЕ ВЫПОЛНЕНО: ${capability} x${amount} для ${userId}: ${why}`);
+    captureException(e, { route: "devhub/debitCredit", userId, capability, amount });
+  });
+}
+
 type UsageCell = { used: number; limit: number; usedKnown?: false };
 
 async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; tierKnown: boolean; month: string; usage: Record<CapabilityKey, UsageCell>; anyUnknown: boolean }> {
@@ -2205,7 +2230,7 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
       upgrade: "/studio#upgrade",
     });
   }
-  await debitCredit(userId, "deploy").catch(() => {});
+  await debitQuietly(userId, "deploy");
 
   const deploymentId = crypto.randomUUID();
   const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
@@ -3865,7 +3890,7 @@ devhubRouter.post("/media/image", async (req, res) => {
   // A provider in the chain worked — clear any earlier failure so the shop
   // window goes green again on its own.
   noteProviderSuccess("image");
-  await debitCredit(imgUserId, "image").catch(() => {});
+  await debitQuietly(imgUserId, "image");
   res.json({
     ok: true, url: imageUrl, storage, provider: result.provider,
     ...(attempts.length ? { fallbackFrom: attempts.map((a) => a.provider) } : {}),
@@ -3961,7 +3986,7 @@ devhubRouter.post("/media/music", async (req, res) => {
     });
     if (!rr.ok) return null;
     const pred = await rr.json() as { id: string; status: string };
-    await debitCredit(musicUserId, "music").catch(() => {});
+    await debitQuietly(musicUserId, "music");
     // Async unlike the ElevenLabs path — say so instead of handing back a
     // body the caller cannot play.
     return { ok: true, provider: "replicate/musicgen", async: true, predictionId: pred.id, status: pred.status, fallbackFrom: reason };
@@ -4000,7 +4025,7 @@ devhubRouter.post("/media/music", async (req, res) => {
     }
     const audioBuffer = Buffer.from(await r.arrayBuffer());
     noteProviderSuccess("audio_music");
-    await debitCredit(musicUserId, "music").catch(() => {});
+    await debitQuietly(musicUserId, "music");
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
     res.setHeader("Cache-Control", "no-store");
@@ -5764,7 +5789,7 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
       }
     }, 5000);
 
-    await debitCredit(userId, "deploy").catch(() => {});
+    await debitQuietly(userId, "deploy");
     return res.json({
       ok: true,
       deploymentId,
@@ -5885,7 +5910,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     deployment.deployUrl = pagesUrl;
     deployment.buildLog = `CF Pages deployment uploaded via wrangler`;
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
-    await debitCredit(userId, "deploy").catch(() => {});
+    await debitQuietly(userId, "deploy");
 
     // 4. Provision aevion.build domain (best-effort — don't fail deploy if zone not configured)
     let customDomain: string | null = null;
@@ -6448,7 +6473,7 @@ devhubRouter.post("/media/video", async (req, res) => {
     }
 
     const prediction = await resp.json() as { id: string; status: string; urls?: { get?: string } };
-    await debitCredit(userId, "video").catch(() => {});
+    await debitQuietly(userId, "video");
     return res.json({
       ok: true,
       predictionId: prediction.id,
@@ -6509,7 +6534,7 @@ devhubRouter.post("/media/3d", async (req, res) => {
       return res.status(r.status).json({ error: `Replicate error: ${t.slice(0, 300)}` });
     }
     const prediction = await r.json() as { id: string; status: string };
-    await debitCredit(userId, "video").catch(() => {});
+    await debitQuietly(userId, "video");
     res.json({ ok: true, predictionId: prediction.id, status: prediction.status, model: chosen.id, modelLabel: chosen.label, format: "glb" });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "3D generation failed" });

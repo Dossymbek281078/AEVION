@@ -61,7 +61,7 @@ test.describe("DevHub IDE — controls that must not be decorative", () => {
     await page.goto(`/devhub/${PROJECT_ID}`);
     // The toggle lives inside the AI Generate tab, which is the default —
     // but click it explicitly so the case does not depend on that staying true.
-    await page.getByRole("button", { name: "AI Generate", exact: true }).click({ timeout: 30_000 });
+    await page.getByRole("tab", { name: "AI Generate", exact: true }).click({ timeout: 30_000 });
     await page.getByRole("button", { name: /History/ }).click();
     await expect(page.getByText("generate: add a timer")).toBeVisible({ timeout: 10_000 });
   });
@@ -99,7 +99,7 @@ test.describe("DevHub IDE — controls that must not be decorative", () => {
     });
 
     await page.goto(`/devhub/${PROJECT_ID}`);
-    await page.getByRole("button", { name: "AI Generate", exact: true }).click({ timeout: 30_000 });
+    await page.getByRole("tab", { name: "AI Generate", exact: true }).click({ timeout: 30_000 });
     await page.getByRole("button", { name: /Undo last AI change/ }).click();
 
     expect(undoCalls).toHaveLength(1);
@@ -119,7 +119,7 @@ test.describe("DevHub IDE — controls that must not be decorative", () => {
     });
 
     await page.goto(`/devhub/${PROJECT_ID}`);
-    await page.getByRole("button", { name: "AI Generate", exact: true }).click({ timeout: 30_000 });
+    await page.getByRole("tab", { name: "AI Generate", exact: true }).click({ timeout: 30_000 });
     await page.getByRole("button", { name: /History/ }).click();
     // The newest entry is labelled just "Revert"; older ones say "Revert to here".
     await page.getByRole("button", { name: /^Revert/ }).first().click();
@@ -170,5 +170,25 @@ test.describe("DevHub IDE — controls that must not be decorative", () => {
     const toast = page.getByRole("status").filter({ hasText: /уже существует/ });
     await expect(toast).toBeVisible({ timeout: 10_000 });
     await expect(toast).toHaveAttribute("aria-live", "assertive");
+  });
+
+  test("the panel tabs behave like tabs, including arrow keys", async ({ page }) => {
+    // They were nine plain buttons: announced as unrelated controls, and arrow
+    // keys did nothing.
+    await mockBackend(page);
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    const tablist = page.getByRole("tablist");
+    await expect(tablist).toBeVisible({ timeout: 30_000 });
+
+    const chat = page.getByRole("tab", { name: "AI Generate" });
+    await expect(chat).toHaveAttribute("aria-selected", "true");
+    await chat.focus();
+    await page.keyboard.press("ArrowRight");
+
+    const visual = page.getByRole("tab", { name: /Visual Edit/ });
+    await expect(visual).toHaveAttribute("aria-selected", "true");
+    await expect(visual).toBeFocused();
+    // And the panel says which tab it belongs to.
+    await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "devhub-tab-visual");
   });
 });

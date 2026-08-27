@@ -99,7 +99,7 @@ test.describe("DevHub — writes that must not lose a file", () => {
     const { puts } = await mockBackend(page);
     await page.goto(`/devhub/${PROJECT_ID}`);
 
-    await page.getByRole("button", { name: "Media", exact: true }).click();
+    await page.getByRole("tab", { name: "Media", exact: true }).click();
     await page.getByRole("button", { name: "DALL-E", exact: true }).click();
     await page.getByPlaceholder(/serene mountain landscape/i).fill("a cat");
     await page.getByRole("button", { name: "Generate Image" }).click();
@@ -135,7 +135,7 @@ test.describe("DevHub — writes that must not lose a file", () => {
     const { puts } = await mockBackend(page, { putStatus: 404 });
     await page.goto(`/devhub/${PROJECT_ID}`);
 
-    await page.getByRole("button", { name: "Media", exact: true }).click();
+    await page.getByRole("tab", { name: "Media", exact: true }).click();
     await page.getByRole("button", { name: "DALL-E", exact: true }).click();
     await page.getByPlaceholder(/serene mountain landscape/i).fill("a cat");
     await page.getByRole("button", { name: "Generate Image" }).click();
@@ -151,7 +151,7 @@ test.describe("DevHub — writes that must not lose a file", () => {
     const { deletes } = await mockBackend(page, { collaboratorDeleteStatus: 500 });
     await page.goto(`/devhub/${PROJECT_ID}`);
 
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("tab", { name: "Settings", exact: true }).click();
     const row = page.getByTitle("teammate@example.com");
     await expect(row).toBeVisible();
 
@@ -199,7 +199,7 @@ test.describe("DevHub — writes that must not lose a file", () => {
     await mockBackend(page, { putStatus: 404 });
     await page.goto(`/devhub/${PROJECT_ID}`);
 
-    await page.getByRole("button", { name: "Media", exact: true }).click();
+    await page.getByRole("tab", { name: "Media", exact: true }).click();
     await page.getByRole("button", { name: "DALL-E", exact: true }).click();
     await page.getByPlaceholder(/serene mountain landscape/i).fill("a cat");
     await page.getByRole("button", { name: "Generate Image" }).click();
@@ -219,7 +219,7 @@ test.describe("DevHub — writes that must not lose a file", () => {
     await mockBackend(page, { collaboratorAddStatus: 500 });
     await page.goto(`/devhub/${PROJECT_ID}`);
 
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("tab", { name: "Settings", exact: true }).click();
     const existing = page.getByTitle("teammate@example.com");
     await expect(existing).toBeVisible();
 
@@ -253,7 +253,7 @@ test.describe("DevHub — writes that must not lose a file", () => {
     });
 
     await page.goto(`/devhub/${PROJECT_ID}`);
-    await page.getByRole("button", { name: "Env Vars", exact: true }).click();
+    await page.getByRole("tab", { name: "Env Vars", exact: true }).click();
     await expect(page.getByText(/не загрузился/)).toBeVisible({ timeout: 10_000 });
   });
 
@@ -277,7 +277,7 @@ test.describe("DevHub — writes that must not lose a file", () => {
     });
 
     await page.goto(`/devhub/${PROJECT_ID}`);
-    await page.getByRole("button", { name: "Env Vars", exact: true }).click();
+    await page.getByRole("tab", { name: "Env Vars", exact: true }).click();
     const key = page.getByPlaceholder(/KEY|ключ/i).first();
     await expect(key).toBeVisible({ timeout: 15_000 });
     await key.fill("DATABASE_URL");

@@ -210,3 +210,29 @@ describe("an undo point whose save failed must not be invisible", () => {
     }
   });
 });
+
+describe("a deployment record whose save failed is still listed", () => {
+  // The deployments list is the only place the IDE learns a deploy happened.
+  // A missing row does not read as "we lost the record" — it reads as
+  // "nothing was deployed", which is a different and wrong answer.
+  test("the deploy appears in the project's list", async () => {
+    writesFailReadsWork();
+    const app = makeApp();
+    const created = await request(app).post("/api/devhub/projects").send({ name: "D" });
+    const id = created.body.project.id as string;
+    await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>x</h1>" });
+
+    const dep = await request(app).post(`/api/devhub/projects/${id}/deploy`).send({});
+    // 501 is the expected answer here and not an accident: backend deploys are
+    // deliberately refused until per-project Railway services exist. That path
+    // still writes a deployment record (status "failed", with the reason), and
+    // it is exactly the record that used to be lost — a refusal nobody can
+    // find afterwards reads as "the button did nothing".
+    expect(dep.status).toBe(501);
+    expect(dep.body.deploymentId).toBeTruthy();
+
+    const list = await request(app).get(`/api/devhub/projects/${id}/deployments`);
+    expect(list.status).toBe(200);
+    expect((list.body.deployments ?? []).length).toBeGreaterThan(0);
+  });
+});

@@ -27,11 +27,11 @@ const C = {
 type FactorKey = "overall" | "E" | "T" | "O" | "B1" | "M1" | "M2" | "M3" | "H" | "Br";
 
 const FACTOR_META: Record<FactorKey, { label: string; emoji: string; desc: string }> = {
-  overall: { label: "Overall CPI",      emoji: "🏆", desc: "Композитный рейтинг (все 11 факторов)" },
-  E:       { label: "Точность",         emoji: "🎯", desc: "Минимум центипавн-loss на ход" },
+  overall: { label: "Общий CPI",        emoji: "🏆", desc: "Композитный рейтинг (все 11 факторов)" },
+  E:       { label: "Точность",         emoji: "🎯", desc: "Насколько ходы близки к лучшим" },
   T:       { label: "Время",             emoji: "⏱",  desc: "Равномерное распределение времени" },
-  O:       { label: "Дебюты",            emoji: "📖", desc: "% попаданий в TOP-10 книги" },
-  B1:      { label: "Best line",        emoji: "①",   desc: "% ходов = engine #1" },
+  O:       { label: "Дебюты",            emoji: "📖", desc: "Доля ходов из первой десятки книги" },
+  B1:      { label: "Лучший ход",       emoji: "①",   desc: "Доля ходов, совпавших с выбором движка" },
   M1:      { label: "Мат-1 зрение",      emoji: "💀", desc: "% найденных матов в 1 ход" },
   M2:      { label: "Мат-2 зрение",      emoji: "💀💀", desc: "% найденных матов в 2 хода" },
   M3:      { label: "Мат-3 зрение",      emoji: "💀💀💀", desc: "% найденных матов в 3 хода" },

@@ -350,9 +350,13 @@ async function main() {
   assert(Array.isArray(scope) && scope.length > 0 && scope.length < Object.keys(hq.json?.airspace ?? {}).length,
     "city-scoped feature names its cities, and not all of them",
     `scope=${JSON.stringify(scope)}`);
-  assert((hq.json?.features ?? []).every((f) => /^[a-z0-9-]+$/.test(f)),
+  // `every` на ПУСТОМ массиве истинно всегда — и на отсутствующем поле тоже
+  // (проверено отдельно: оба случая давали true). Поэтому сначала требуем, чтобы
+  // список вообще был и был непустым, и лишь потом проверяем формат.
+  assert(Array.isArray(hq.json?.features) && hq.json.features.length >= 6
+      && hq.json.features.every((f) => /^[a-z0-9-]+$/.test(f)),
     "feature ids stay machine-readable (no parentheses)",
-    `${(hq.json?.features ?? []).filter((f) => !/^[a-z0-9-]+$/.test(f)).join(", ") || "ok"}`);
+    `n=${hq.json?.features?.length} bad=${(hq.json?.features ?? []).filter((f) => !/^[a-z0-9-]+$/.test(f)).join(", ") || "none"}`);
 
   const ar = await jpost("/api/qskyway/route", { from: 0, to: 3, city: "astana" });
   assert(ar.json?.blindHeight && typeof ar.json.blindHeight.inertPenaltySegments === "number"

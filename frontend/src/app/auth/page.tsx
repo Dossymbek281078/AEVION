@@ -8,6 +8,10 @@ import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import {
+  providerHint,
+  shouldShowOauthBlock,
+} from "./oauthVisibility";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 
@@ -383,8 +387,10 @@ export default function AuthPage() {
               ))}
             </div>
 
-            {/* OAuth providers — only rendered when /providers returned at least one. */}
-            {!token && oauthProviders && oauthProviders.length > 0 ? (
+            {/* Блок показывается, только если ХОТЬ ОДИН провайдер настроен.
+                Раньше условием была длина массива, а он приходит непустым и
+                при нуле настроенных — см. комментарий в oauthVisibility.ts. */}
+            {!token && oauthProviders && shouldShowOauthBlock(oauthProviders) ? (
               <div style={{ maxWidth: 440, marginBottom: 20 }}>
                 <div style={{ display: "grid", gap: 8 }}>
                   {oauthProviders.map((p) => {
@@ -396,11 +402,7 @@ export default function AuthPage() {
                         type="button"
                         onClick={() => p.configured && startOauth(p.id)}
                         disabled={!p.configured || busy}
-                        title={
-                          p.configured
-                            ? `Войти через ${p.name}`
-                            : `Provider not configured. Set ${meta.envHint} on the backend.`
-                        }
+                        title={providerHint(p)}
                         aria-disabled={!p.configured}
                         style={{
                           display: "flex",

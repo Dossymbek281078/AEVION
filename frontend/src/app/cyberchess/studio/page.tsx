@@ -1104,13 +1104,18 @@ export default function StudioPage() {
           borderRadius: RADIUS.md, background: "#1f2229", border: "1px solid #2a2d34",
         }}>← CyberChess</Link>
 
-        <div style={{
+        {/* Заголовок первого уровня и по-русски. Было «🎬 STUDIO MODE» в
+            обычном блоке: для экранного диктора страница безымянна, а
+            английские слова на русской странице человек читает как чужие.
+            Размеры и цвета прежние — вид не меняется. */}
+        <h1 style={{
           display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px",
           borderRadius: RADIUS.full, background: "linear-gradient(135deg,#7c3aed20,#059669 20)",
           border: "1px solid #7c3aed", color: "#a78bfa", fontSize: 11, fontWeight: 900, letterSpacing: 0.5,
+          margin: 0,
         }}>
-          🎬 STUDIO MODE
-        </div>
+          🎬 Студия
+        </h1>
 
         <div style={{ flex: 1 }} />
 
@@ -1151,16 +1156,16 @@ export default function StudioPage() {
         </div>
 
         {/* Mute / unmute all */}
-        <Tooltip label="Mute все стримы">
+        <Tooltip label="Выключить звук у всех трансляций">
           <button onClick={() => muteAll(true)} className="cc-focus-ring"
             style={{ padding: "5px 10px", borderRadius: RADIUS.md, border: "1px solid #2a2d34", background: "#1f2229", color: "#e5e7eb", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-            🔇 mute
+            🔇 без звука
           </button>
         </Tooltip>
-        <Tooltip label="Unmute все">
+        <Tooltip label="Включить звук у всех трансляций">
           <button onClick={() => muteAll(false)} className="cc-focus-ring"
             style={{ padding: "5px 10px", borderRadius: RADIUS.md, border: "1px solid #2a2d34", background: "#1f2229", color: "#e5e7eb", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-            🔊 unmute
+            🔊 со звуком
           </button>
         </Tooltip>
         <Tooltip label={pip.open ? "Скрыть PiP мини-шахматы" : "Показать плавающую мини-шахматную доску — играй пока смотришь стрим"}>

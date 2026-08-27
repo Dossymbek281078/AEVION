@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import PageViewBeacon from "./PageViewBeacon";
 import { LandingView } from "@/components/LandingView";
 import {
   GUIDES,
@@ -198,6 +199,8 @@ export default async function GoPage({
             note="Партия с движком, задача дня и тренер, который объясняет ход. Оставьте адрес — напишем в день запуска."
           />
         </section>
+        {/* Заход на /go считается тем же источником, что и покупка с неё. */}
+        <PageViewBeacon source={goSource} channel={channel} />
         <section style={styles.section}>
           <LandingView source={goSource} />
           <WaitlistCapture

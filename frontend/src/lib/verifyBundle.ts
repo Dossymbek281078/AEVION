@@ -125,6 +125,35 @@ async function recomputeContentHash(inputs: {
   return sha256Hex(new TextEncoder().encode(JSON.stringify(sorted)));
 }
 
+/**
+ * ПРАВИЛО v1 — то, которым считались хеши до канонизации: обычный
+ * JSON.stringify трёх полей, страна и город в хеш НЕ входили.
+ *
+ * Зачем оно здесь. Офлайн-проверка — вторая поверхность того же обещания
+ * («проверяемо, даже если AEVION исчезнет»), и до 27.08.2026 она знала
+ * только нынешнее правило. То есть четыре сертификата из пяти в публичном
+ * реестре в автономном пакете читались как подделка — ровно тот же дефект,
+ * что был на сервере, только чинить его пришлось бы отдельно.
+ *
+ * Воспроизведено ТОЛЬКО для проверки. Ничего нового этим правилом не
+ * считается и не выдаётся.
+ */
+async function legacyContentHashV1(inputs: {
+  title: string;
+  description: string;
+  kind: string;
+}): Promise<string> {
+  return sha256Hex(
+    new TextEncoder().encode(
+      JSON.stringify({
+        title: inputs.title,
+        description: inputs.description,
+        kind: inputs.kind,
+      }),
+    ),
+  );
+}
+
 const SPKI_ED25519_PREFIX_BYTES = hexToBytes("302a300506032b6570032100");
 
 async function importEd25519Spki(spki: Uint8Array): Promise<CryptoKey> {
@@ -173,16 +202,28 @@ export async function verifyAevionBundle(
   /* ── 1) Content hash ── */
   try {
     const inputs = bundle.proofs.contentHash.canonicalInputs;
+    const stored = bundle.proofs.contentHash.value;
     const recomputed = await recomputeContentHash(inputs);
-    if (recomputed === bundle.proofs.contentHash.value) {
+    if (recomputed === stored) {
       result.contentHash = {
         status: "pass",
         detail: "SHA-256 of canonical inputs matches the stored contentHash",
       };
+    } else if ((await legacyContentHashV1(inputs)) === stored) {
+      // Сертификат выдан до канонизации. Проверяем правилом времени выдачи —
+      // и сразу говорим, чего это правило НЕ покрывало: молча принять старое
+      // правило значило бы обещать защиту полей, которой у него не было.
+      result.contentHash = {
+        status: "pass",
+        detail:
+          "SHA-256 matches under the v1 rule this certificate was issued with " +
+          "(title, description and work type only — country and city are recorded " +
+          "on the certificate but not covered by this hash)",
+      };
     } else {
       result.contentHash = {
         status: "fail",
-        detail: `Recomputed ${recomputed.slice(0, 12)}... but bundle says ${bundle.proofs.contentHash.value.slice(0, 12)}...`,
+        detail: `Recomputed ${recomputed.slice(0, 12)}... but bundle says ${stored.slice(0, 12)}...`,
       };
     }
   } catch (e) {

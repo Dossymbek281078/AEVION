@@ -7170,7 +7170,16 @@ export default function CyberChessPage(){
         {/* Колонка доски: не растягиваем (flex:0 1 auto) — иначе мелкая доска центрируется
             в широкой колонке и правый рейл уезжает далеко. Группа [доска+рейл] центрируется
             через justifyContent на cc-main-row, рейл встаёт вплотную (gap 12). */}
-        <div style={{flex:"0 1 auto",minWidth:0,display:"flex",flexDirection:"column",alignItems:"center"}}>
+        {/* minHeight:0 — не косметика. Без него у flex-колонки действует
+            min-height:auto, то есть она не может стать ниже своего содержимого
+            и ПЕРЕПОЛНЯЕТ родителя вверх, наезжая на панель быстрых действий.
+            Замер 27.08 на телефоне 375×812: колонка 685 пикселей внутри
+            области в 449, доска вылезала вверх на 48 и закрывала собой 36
+            пикселей панели «Анализ · Коуч · Пазлы». Играя чёрными, человек не
+            видел свой верхний ряд и не мог по нему нажать.
+            На планшете вылезало на 5 пикселей, на десктопе — ноль, поэтому
+            глазами на большом экране дефекта не видно вовсе. */}
+        <div style={{flex:"0 1 auto",minWidth:0,minHeight:0,display:"flex",flexDirection:"column",alignItems:"center"}}>
           {/* ─── Active Lesson banner — shown when user loaded a position from a Coach Lesson ─── */}
           {activeLesson&&<div style={{
             marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,

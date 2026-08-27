@@ -2483,6 +2483,11 @@ export default function CyberChessPage(){
   // with the welcome toast on first visit.
   useEffect(()=>{
     if(typeof window==="undefined")return;
+    // На телефоне не показываем вовсе: Ctrl+K там нажать нечем, а подсказка
+    // приходит ровно в те секунды, когда человек читает окно приветствия.
+    // Замер 27.08 на 375px: поверх интерфейса у новичка одновременно висели
+    // окно, плашка установки, два уведомления и эта подсказка.
+    if(isMobileLayout)return;
     try{
       if(localStorage.getItem("aevion_chess_palette_hint_v1")==="1")return;
       const t=window.setTimeout(()=>{
@@ -2491,7 +2496,7 @@ export default function CyberChessPage(){
       },2400);
       return()=>window.clearTimeout(t);
     }catch{}
-  },[showToast]);
+  },[showToast,isMobileLayout]);
   // Opening Explorer + Tablebase: fetch when on Analysis tab + position changes
   useEffect(()=>{
     if(tab!=="analysis"||!showOpeningExp){sOpeningData(null);return}

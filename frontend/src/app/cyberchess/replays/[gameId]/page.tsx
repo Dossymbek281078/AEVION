@@ -365,7 +365,7 @@ export default function ReplayViewerPage() {
 
         {/* Main grid */}
         <div style={{ display: "grid", gap: 20, gridTemplateColumns: "1fr", alignItems: "start" }}>
-          <div style={{ display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", alignItems: "start" }}>
+          <div style={{ display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit,minmax(min(320px,100%),1fr))", alignItems: "start" }}>
             {/* Board + eval bar + controls */}
             <section style={{ display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", gap: 12 }}>

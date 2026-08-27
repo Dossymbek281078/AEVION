@@ -254,7 +254,9 @@ export default function SpectatorHubPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+              // min(...) вместо жёстких 320: на экране такой же ширины
+              // колонка иначе требует невозможного и тянет страницу вбок.
+              gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))",
               gap: 14,
             }}
           >

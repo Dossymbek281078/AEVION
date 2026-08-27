@@ -1658,7 +1658,6 @@ export default function CyberChessPage(){
   // QPayNet payment-request flow for Chessy Pro/Ultimate tiers (see ./billing.ts)
   const[billingPending,sBillingPending]=useState<null|{tier:ChessyTier;tierName:string;requestId:string;token:string;payUrl:string;busy:boolean}>(null);
   const[showChessyInfo,sShowChessyInfo]=useState(false);
-  const[showPuzzleExpand,sShowPuzzleExpand]=useState(false);
   const[showClockDrill,sShowClockDrill]=useState(false);
   const[showGameDna,sShowGameDna]=useState(false);
   const gameDna=useMemo<GameDNA>(()=>computeGameDNA(savedGames),[savedGames]);
@@ -6412,7 +6411,7 @@ export default function CyberChessPage(){
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,
                     border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
-                  ◆ Решить задачу <span style={{color:CC.textMute,fontWeight:600,fontSize:11}}>{PUZZLES.length.toLocaleString()}</span>
+                  ◆ Решить задачу <span style={{color:CC.textMute,fontWeight:600,fontSize:11}}>{(pzTotal??PUZZLES.length).toLocaleString("ru-RU")}</span>
                 </button>
                 <button onClick={()=>{sTab("puzzles");sPzMode("rush" as any);if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
                   className="cc-focus-ring"
@@ -6732,7 +6731,7 @@ export default function CyberChessPage(){
           {false&&(()=>{
             const hero=[
               {sym:SYM.play,title:"Сыграть прямо сейчас",sub:"AI любого уровня · 5 секунд до старта",cta:"Начать партию",onClick:()=>{sSetup(true);sTab("play")}},
-              {sym:SYM.puzzle,title:"Решить задачу",sub:`Случайная из ${PUZZLES.length.toLocaleString()} тактических`,cta:"Попробовать",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+              {sym:SYM.puzzle,title:"Решить задачу",sub:`Случайная из ${(pzTotal??PUZZLES.length).toLocaleString("ru-RU")} тактических`,cta:"Попробовать",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
               {sym:SYM.masters,title:"Изучить классику",sub:"Партии чемпионов · режим «угадай ход»",cta:"Открыть",onClick:()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}},
             ];
             return <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:SPACE[2]}}>
@@ -10232,7 +10231,6 @@ export default function CyberChessPage(){
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
               <div role="button" tabIndex={0} onClick={()=>sPuzzleListOpen(!puzzleListOpen)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();sPuzzleListOpen(!puzzleListOpen)}}} style={{width:"100%",padding:"10px 14px",borderBottom:puzzleListOpen?`1px solid ${T.border}`:"none",background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
                 <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>📋 Список задач ({fPz.length}/{PUZZLES.length})</span>
-                {PUZZLES.length<5000&&<button onClick={e=>{e.stopPropagation();sShowPuzzleExpand(true)}} className="cc-focus-ring" style={{marginLeft:"auto",padding:"3px 10px",borderRadius:RADIUS.full,background:CC.accentSoft,color:CC.accent,border:`1px solid ${CC.accent}`,fontSize:11,fontWeight:800,cursor:"pointer"}}>+ Расширить до 20k</button>}
                 <span style={{fontSize:11,color:T.dim,fontWeight:700,transform:puzzleListOpen?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
               </div>
               {puzzleListOpen&&<>
@@ -12626,41 +12624,6 @@ ${question.trim()}`;
     </Modal>
 
     {/* Puzzle Expansion instructions */}
-    <Modal open={showPuzzleExpand} onClose={()=>sShowPuzzleExpand(false)} size="md" title="🧩 Расширить базу пазлов до 20 000">
-      <div style={{fontSize:13,color:CC.text,lineHeight:1.6}}>
-        <p style={{margin:`0 0 ${SPACE[3]}px`}}>
-          Lichess выложил <b>~4 миллиона</b> пазлов под CC0. Мы можем импортировать лучшие 20 000 (~5 MB) с стратифицированной выборкой по рейтингу и темам — <b>~5 минут работы</b>, делается один раз.
-        </p>
-        <ol style={{margin:0,paddingLeft:20,fontSize:13,lineHeight:1.8}}>
-          <li>
-            Скачай CSV:&nbsp;
-            <a href="https://database.lichess.org/#puzzles" target="_blank" rel="noreferrer" style={{color:CC.brand,fontWeight:700}}>
-              database.lichess.org/#puzzles
-            </a>
-            &nbsp;(~300 МБ .zst)
-          </li>
-          <li>Распакуй (7-Zip на Windows или <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>zstd -d</code>)</li>
-          <li>Положи <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>lichess_db_puzzle.csv</code> в корень проекта <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>aevion-core/</code></li>
-          <li>
-            В PowerShell из корня:
-            <div style={{marginTop:SPACE[2],padding:SPACE[2],background:"#0f172a",color:"#d1d5db",borderRadius:RADIUS.sm,fontSize:11,fontFamily:"ui-monospace, monospace",overflowX:"auto",whiteSpace:"nowrap"}}>
-              node frontend/scripts/import-lichess-puzzles.mjs --in ./lichess_db_puzzle.csv --out ./frontend/public/puzzles.json --limit 20000 --min-rating 600 --max-rating 2600 --min-plays 100 --min-popularity 80
-            </div>
-          </li>
-          <li>Обнови страницу — <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>PUZZLES.length</code> станет 20 000.</li>
-        </ol>
-        <div style={{marginTop:SPACE[3],padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`,fontSize:12,color:"#065f46"}}>
-          💡 Скрипт применяет стартовый ход соперника к FEN, так что загружаемая позиция уже «студент ходит». Фильтр по popularity/plays убирает шумные пазлы.
-        </div>
-        <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[4]}}>
-          <Btn variant="secondary" size="md" full onClick={()=>sShowPuzzleExpand(false)}>Закрыть</Btn>
-          <Btn variant="primary" size="md" full onClick={()=>{
-            const cmd="node frontend/scripts/import-lichess-puzzles.mjs --in ./lichess_db_puzzle.csv --out ./frontend/public/puzzles.json --limit 20000 --min-rating 600 --max-rating 2600 --min-plays 100 --min-popularity 80";
-            try{navigator.clipboard.writeText(cmd).then(()=>showToast("✓ Команда скопирована","success")).catch(()=>showToast("Не получилось","error"))}catch{showToast("Clipboard недоступен","error")}
-          }}>📋 Копировать команду</Btn>
-        </div>
-      </div>
-    </Modal>
 
     {/* ═══ Tournament Mode (killer #6) ═══ */}
     <Modal open={showTournament} onClose={()=>sShowTournament(false)} size="lg"
@@ -15113,7 +15076,7 @@ ${question.trim()}`;
         {id:"play-tournament",icon:"🏆",group:"Play",label:"Турнир",                hint:"Свисс / Round-Robin",                       run:()=>sShowTournament(true)},
 
         // ── PUZZLES ──
-        {id:"pz-random",    icon:"◆", group:"Puzzles", label:"Случайная задача",  hint:`Из ${PUZZLES.length.toLocaleString()} тактических`, run:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-random",    icon:"◆", group:"Puzzles", label:"Случайная задача",  hint:`Из ${(pzTotal??PUZZLES.length).toLocaleString("ru-RU")} тактических`, run:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-rush",      icon:"⚡",group:"Puzzles", label:"Puzzle Rush",        hint:"Решай как можно больше за время",           run:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-3min",      icon:"⏱", group:"Puzzles", label:"3-минутный режим",  hint:"Реши как можно больше за 3 мин · +3с за каждый верный ответ", run:()=>{sTab("puzzles");sPzMode("timed3");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-5min",      icon:"⏱", group:"Puzzles", label:"5-минутный режим",  hint:"300 секунд на одну задачу",                 run:()=>{sTab("puzzles");sPzMode("timed5");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},

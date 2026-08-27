@@ -69,8 +69,13 @@ export function UpgradeButton({
               там есть второй, независимый виновник (lifebox — блок в header шириной 308,
               qlearn — кнопка шириной 112), и чинится он отдельно.
               shrink-0 оставлен намеренно: на широком экране кнопка не должна
-              сжиматься рядом с текстом, а max-width:100% там ни на что не влияет. */}
-        <div className="bg-gradient-to-r from-blue-600/20 to-violet-600/20 border border-blue-500/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+              сжиматься рядом с текстом, а max-width:100% там ни на что не влияет.
+              sm:flex-nowrap — не украшение, а следствие замера. С одним только
+              flex-wrap кнопка уходила на свою строку и НА ШИРОКОМ экране тоже:
+              баннер /lifebox рос с 88px до 124px при 1440, 1024 и 768, /qstore —
+              при 768. Перенос нужен ровно там, где не помещается, поэтому выше
+              640px поведение остаётся прежним, побайтно. */}
+        <div className="bg-gradient-to-r from-blue-600/20 to-violet-600/20 border border-blue-500/30 rounded-xl p-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-4">
           <div>
             {/* This button opens the Gumroad product `xpxzam`, NOT a tier checkout,
                 so the price must come from the product catalogue — not from the tier

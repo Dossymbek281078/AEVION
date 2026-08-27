@@ -104,7 +104,7 @@ import { generatePositionExplanation, explainMove, spotTactics, identifyOpening,
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
 import { loadBookmarks, addBookmark, removeBookmark, type Bookmark } from "./bookmarks";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
-import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
+import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, variantsPlayedCount, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
 import { computeThreatMap, cellColor as threatCellColor, reportThreatMap, type ThreatMap } from "./threatMap";
 import { startSession as coordStart, registerHit as coordHit, isExpired as coordExpired, timeLeftMs as coordTimeLeft, summarize as coordSummarize, saveToLeaderboard as coordSaveLB, loadLeaderboard as coordLoadLB, rankTitle as coordRank, type CoordSession, type CoordResult, type CoordLeaderboardEntry } from "./coordTrainer";
@@ -2369,7 +2369,10 @@ export default function CyberChessPage(){
     pzSolvedCount, pzBestStreak: 0,
     rushBestScore: 0,
     rating: rat,
-    variantsTried: Object.keys(variantStats||{}).filter(v=>v!=="standard").length,
+    // Считаем СЫГРАННЫЕ варианты, а не ключи заготовки: makeEmptyStats()
+    // заводит запись каждому варианту сразу, и подсчёт ключей выдавал
+    // «Попробуй 5 вариантов» новичку в первую секунду.
+    variantsTried: variantsPlayedCount(variantStats),
     coachUsed: coachUsedCount,
     repertoireBranches: repertoire?.entries?.length||0,
     ecosystemVisits: ecosystemVisits.length,

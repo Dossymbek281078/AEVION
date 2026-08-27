@@ -170,6 +170,7 @@ const PAGES = [
   "/cyberchess/economy",
   "/cyberchess/history",
   "/cyberchess/matchmaking",
+  "/cyberchess/offline",
   "/cyberchess/repertoire",
   "/cyberchess/replays",
   "/cyberchess/spectator",

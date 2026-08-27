@@ -87,6 +87,8 @@ interface JustDoc {
   twinContentHash: string; windSource: string; heightConfidencePct: number; issuedAt: string;
   /** участков коридора со зданием под крылом и сколько из них на городском обмере */
   obstacleSegments?: number; measuredObstacleSegments?: number;
+  /** где страховочный запас за неуверенность съеден полом коридора — под подписью */
+  blindHeight?: { guessedSegments: number; inertPenaltySegments: number; clearedUpToM: number };
   airspace: null | { authority: string; source: string; regime: string; effective: string; contentHash: string | null; compliant: boolean | null; exceedingSegments: number; maxExceedanceM: number; lowestCeilingM: number | null };
 }
 interface JustAttestation { alg: string; contentHash: string; signature: string; publicKey: string; ephemeral: boolean }

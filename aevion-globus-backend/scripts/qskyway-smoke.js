@@ -460,6 +460,27 @@ async function main() {
   assert(jd.airspace?.effective === asN.effective && jd.airspace?.authority === "FAA", "justification names the authority and edition", `${jd.airspace?.authority} ${jd.airspace?.effective}`);
   assert(typeof jd.airspace?.compliant === "boolean", "justification states the verdict, green or not");
   assert(typeof just.json?.scope === "string" && just.json.scope.includes("НЕ"), "scope limit travels with the document");
+  // Бумага обязана называть и то, где обещанный просвет НЕ гарантирован.
+  // Добавлено 27.08.2026: до этого документ говорил, где высоту ПОДСТАВИЛИ, но
+  // молчал про участки, где страховочный запас съеден полом коридора. На таком
+  // маршруте бумага выглядела чистой. Проверяем на Астане: там обмера нет вовсе,
+  // и слепой дефолт встречается на каждом коридоре со зданиями.
+  const jastana = await jpost("/api/qskyway/route/justification", { from: 0, to: 3, city: "astana" });
+  const jda = jastana.json?.document;
+  assert(jda?.blindHeight && typeof jda.blindHeight.inertPenaltySegments === "number"
+      && typeof jda.blindHeight.guessedSegments === "number"
+      && jda.blindHeight.clearedUpToM > 0
+      && jda.blindHeight.inertPenaltySegments <= jda.blindHeight.guessedSegments,
+    "[astana] filing states where the promised clearance is not guaranteed",
+    `guessed=${jda?.blindHeight?.guessedSegments} inert=${jda?.blindHeight?.inertPenaltySegments} cleared<=${jda?.blindHeight?.clearedUpToM}m`);
+  // И это поле — ПОД подписью, а не рядом: подмена обязана ломать хеш.
+  const jtamper = await jpost("/api/qskyway/route/justification/verify", {
+    document: { ...jda, blindHeight: { ...jda.blindHeight, inertPenaltySegments: 0 } },
+    attestation: jastana.json.attestation,
+  });
+  assert(jtamper.json?.valid === false && jtamper.json?.hashValid === false,
+    "[astana] rewriting the clearance caveat breaks the signature",
+    `valid=${jtamper.json?.valid} hashValid=${jtamper.json?.hashValid}`);
   const jver = await jpost("/api/qskyway/route/justification/verify", { document: jd, attestation: just.json.attestation });
   assert(jver.json?.valid === true && jver.json?.hashValid === true && jver.json?.signatureValid === true, "justification verifies round-trip");
   // Tampering must be caught and attributed: a changed value is a hash failure,

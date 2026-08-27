@@ -139,3 +139,33 @@ describe("ИИ-тренер шахмат под теми же воротами",
     expect(src.slice(at, at + 400)).toContain("status(413)");
   });
 });
+
+describe("агент под теми же воротами, а переводчик — намеренно НЕТ", () => {
+  const agent = readFileSync(join(__dirname, "..", "src", "routes", "agentRuntime.ts"), "utf8");
+  const i18n = readFileSync(join(__dirname, "..", "src", "routes", "i18n.ts"), "utf8");
+
+  test("agent-runtime спрашивает предел", () => {
+    // Длина сообщения не ограничивалась ничем, кроме 10 МБ на тело, а шагов
+    // агента до восьми — до восьми обращений к провайдеру за один запрос.
+    expect(agent).toContain("checkAiInputBudget([{ content: message }]");
+  });
+
+  test("agent-runtime под ограничителем частоты", () => {
+    expect(agent).toContain('generationLimit("agentruntime_run")');
+  });
+
+  test("i18n под ограничителем, но БЕЗ предела для анонима", () => {
+    // Не забытая работа, а решение. Переводчик зовёт AutoTranslate.tsx из
+    // браузера обычного посетителя пачками по сто строк интерфейса: предел
+    // «для анонима» сломал бы перевод страницы живому человеку.
+    //
+    // Проверка стоит здесь, чтобы следующий не «дочинил» по аналогии: тест
+    // покраснеет, и он прочитает причину, а не восстановит поломку.
+    expect(i18n).toContain('generationLimit("i_n_translate")');
+    expect(
+      i18n.includes("checkAiInputBudget"),
+      "на переводчик поставили предел для анонима — он сломает перевод страницы, " +
+        "см. шапку aiInputBudget.ts",
+    ).toBe(false);
+  });
+});

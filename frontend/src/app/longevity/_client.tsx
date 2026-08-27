@@ -17,6 +17,22 @@ const GRADE_COLOR: Record<string, string> = { A: "#55C093", B: "#5BB6D0", C: "#D
 /** PDF-версия этого же протокола. Позиция каталога, а не хардкод цены/ссылки. */
 const PROTOCOL_PDF = productById("oijxmq");
 
+/**
+ * Следующая ступень воронки. Замер 27.08.2026: весь трафик с роликов вёл на один
+ * чек $19, а подписка и модули дороже в воронке не встречались вообще. На цель в
+ * миллион это разница между десятками тысяч разовых продаж и парой тысяч
+ * подписчиков — при том же контенте и той же аудитории.
+ *
+ * Числами цены здесь намеренно НЕ названы: сторож retiredPrices.guard поймал
+ * первую версию этого комментария на «$39» — отставном номинале тарифа. Цена
+ * живёт в каталоге, и повторять её в прозе значит заводить вторую копию,
+ * которая устареет молча.
+ *
+ * Позиция каталога, а не хардкод: цена подписки уже менялась, и вторая её копия
+ * в коде разошлась бы с чекаутом молча.
+ */
+const ALL_ACCESS = productById("xpxzam");
+
 interface AField { key: string; label: string; unit: string; placeholder: string; }
 const ASSESS_FIELDS: AField[] = [
   { key: "vitD", label: "Витамин D", unit: "нг/мл", placeholder: "35" },
@@ -352,6 +368,36 @@ export default function LongevityClient({ channel = null }: { channel?: string |
           </BuyLink>
         )}
 
+        {/* Ступень после $19 — и только ПОСЛЕ него, а не вместо.
+            Человек уже получил обещанное бесплатно и увидел, что протокол
+            настоящий: предлагать подписку раньше значит просить денег до того,
+            как показал ценность. Формулировка без обещаний результата — тема
+            здоровья ограничена и у поисковиков, и у рекламных систем. */}
+        {ALL_ACCESS && (
+          <BuyLink
+            href={withChannel(ALL_ACCESS.href, channel, "longevity-upsell")}
+            source="longevity-upsell"
+            productId={ALL_ACCESS.id}
+            priceUsd={ALL_ACCESS.priceUsd}
+            channel={channel}
+            style={styles.upsellCard}
+          >
+            <div style={styles.buyLeft}>
+              <div style={styles.upsellKicker}>{ALL_ACCESS.format}</div>
+              <div style={styles.buyTitle}>Дальше — вся платформа</div>
+              <p style={styles.buyDesc}>
+                Протокол долголетия — один из модулей AEVION. По подписке
+                открываются остальные: реестр прав, подпись документов, ИИ-инструменты,
+                платежи. Одна подписка вместо покупки по одному.
+              </p>
+            </div>
+            <div style={styles.buyRight}>
+              <div style={styles.buyPrice}>${ALL_ACCESS.priceUsd}<span style={styles.upsellPer}>/мес</span></div>
+              <div style={styles.upsellBtn}>Открыть&nbsp;→</div>
+            </div>
+          </BuyLink>
+        )}
+
 
         {/* Сбор адреса ставится ЗДЕСЬ, а не на /go, и вот почему.
             /go — перевалочная страница: на ней не задерживаются. Ценность
@@ -470,6 +516,40 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "11px 20px",
     fontSize: 14,
     fontWeight: 700,
+    whiteSpace: "nowrap",
+  },
+  // Вторая карточка намеренно ТИШЕ первой: одинаковый вид двух предложений
+  // подряд читается как стена продаж, и человек уходит от обеих.
+  upsellCard: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 18,
+    background: "#0c1320",
+    border: "1px solid #24344c",
+    borderRadius: 16,
+    padding: 22,
+    marginTop: 12,
+    textDecoration: "none",
+    color: "#dbe5f0",
+  },
+  upsellKicker: {
+    fontFamily: "monospace",
+    fontSize: 11.5,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: "#7f9bc0",
+  },
+  upsellPer: { fontSize: 14, fontWeight: 500, color: "#8b9bb0" },
+  upsellBtn: {
+    background: "transparent",
+    color: "#9fd8ce",
+    border: "1px solid #35c9b3",
+    borderRadius: 10,
+    padding: "10px 18px",
+    fontSize: 14,
+    fontWeight: 600,
     whiteSpace: "nowrap",
   },
   noDataWarning: {

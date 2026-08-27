@@ -13,7 +13,11 @@
 import { describe, expect, it } from "vitest";
 import request from "supertest";
 import express from "express";
-import { bureauRouter, kycProviderMode } from "../src/routes/bureau";
+import {
+  bureauRouter,
+  kycProviderMode,
+  paymentProviderMode,
+} from "../src/routes/bureau";
 
 describe("режим проверки личности определяется по окружению", () => {
   it("переменной нет — это заглушка, а не «настроено»", () => {
@@ -80,5 +84,57 @@ describe("ручка состояния отдаёт режим наружу", (
     const r = await request(app()).get("/api/bureau/health");
     expect(r.body.service).toBe("bureau");
     expect(r.body.status).toBe("ok");
+  });
+});
+
+// ── Второй барьер: приём денег ────────────────────────────────────────
+//
+// Отметка «Verified Author» ставится только при одобренной проверке И
+// подтверждённой оплате. Разобрав первый барьер (заглушка), я сказал, что
+// второй держит — по коду. А getPayProvider() по умолчанию возвращает ту же
+// заглушку: `BUREAU_PAYMENT_PROVIDER || "stub"`, и её parseWebhook тоже не
+// смотрит заголовки. Держит барьер или нет — зависит от переменной, которую
+// снаружи не видно. Значит она обязана быть видна.
+
+describe("режим приёма денег виден снаружи", () => {
+  it("переменной нет — это заглушка (так же решает getPayProvider)", () => {
+    expect(paymentProviderMode({} as NodeJS.ProcessEnv)).toBe("stub");
+  });
+
+  it.each([["явное stub", "stub"], ["регистр не важен", "STUB"], ["пусто", ""]])(
+    "%s → stub",
+    (_n, v) => {
+      expect(
+        paymentProviderMode({ BUREAU_PAYMENT_PROVIDER: v } as NodeJS.ProcessEnv),
+      ).toBe("stub");
+    },
+  );
+
+  it.each([["stripe", "stripe"], ["lemonsqueezy", "lemonsqueezy"], ["gumroad", "gumroad"]])(
+    "%s → live",
+    (_n, v) => {
+      expect(
+        paymentProviderMode({ BUREAU_PAYMENT_PROVIDER: v } as NodeJS.ProcessEnv),
+      ).toBe("live");
+    },
+  );
+
+  it("оба режима отдаются в /health", async () => {
+    const a = express();
+    a.use(express.json());
+    a.use("/api/bureau", bureauRouter);
+    const r = await request(a).get("/api/bureau/health");
+    expect(["live", "stub"]).toContain(r.body.kyc);
+    expect(["live", "stub"]).toContain(r.body.payment);
+  });
+
+  it("оба барьера в режиме заглушки — это состояние, которое обязано быть заметным", () => {
+    // Тест не запрещает такую настройку (в разработке она нужна), он
+    // закрепляет, что её МОЖНО УВИДЕТЬ. Незаметное — самое дорогое.
+    const env = {} as NodeJS.ProcessEnv;
+    expect([kycProviderMode(env), paymentProviderMode(env)]).toEqual([
+      "stub",
+      "stub",
+    ]);
   });
 });

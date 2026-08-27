@@ -215,7 +215,7 @@ export default function QSkywayClient() {
 
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", heightConfidencePct: null as number | null, avgConfClearM: null as number | null, etaStill: null as number | null, obstacleSegments: null as number | null, measuredObstacleSegments: null as number | null, blindInert: null as number | null, blindClearedUpToM: null as number | null });
+  const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", heightConfidencePct: null as number | null, avgConfClearM: null as number | null, etaStill: null as number | null, obstacleSegments: null as number | null, measuredObstacleSegments: null as number | null, blindInert: null as number | null, blindClearedUpToM: null as number | null, confClearOnObstaclesM: null as number | null });
   const [booking, setBooking] = useState<string>("");
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
@@ -342,7 +342,7 @@ export default function QSkywayClient() {
     const city = cityRef.current!;
     const distKm = t.alts.length * city.grid.cell / 1000;
     const cruise = t.alts.reduce((m, v) => Math.max(m, v), 0);
-    setStats((s) => ({ ...s, distKm: +distKm.toFixed(2), cruiseAlt: Math.round(cruise), eta: +((distKm / 90) * 60).toFixed(1), heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null }));
+    setStats((s) => ({ ...s, distKm: +distKm.toFixed(2), cruiseAlt: Math.round(cruise), eta: +((distKm / 90) * 60).toFixed(1), heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null, confClearOnObstaclesM: null }));
   }, [makeTaxi]);
 
   // ── hero route: real backend A* (obeys no-fly + wind ETA), falls back to
@@ -380,7 +380,7 @@ export default function QSkywayClient() {
           setJustState("idle");
           // There is no flight — leaving the previous route's telemetry on screen
           // next to a "refused" banner would read as if those numbers described it.
-          setStats((s) => ({ ...s, distKm: 0, cruiseAlt: 0, eta: 0, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null }));
+          setStats((s) => ({ ...s, distKm: 0, cruiseAlt: 0, eta: 0, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null, confClearOnObstaclesM: null }));
           return;
         }
       }
@@ -395,7 +395,7 @@ export default function QSkywayClient() {
       setJustification(null);
       setJustState("idle");
       heroRef.current = { path: r.path, alts: r.alts, seg: 0, u: 0, speed: 1.1 + Math.random() * 0.5, hero: true, slow: 0 };
-      setStats((s) => ({ ...s, distKm: r.distanceKm, cruiseAlt: Math.round(r.cruiseAltM), eta: r.etaMinWind, heightConfidencePct: r.heightConfidencePct ?? null, avgConfClearM: r.avgConfClearM ?? null, etaStill: r.etaMinStill ?? null, obstacleSegments: r.obstacleSegments ?? null, measuredObstacleSegments: r.measuredObstacleSegments ?? null, blindInert: r.blindHeight?.inertPenaltySegments ?? null, blindClearedUpToM: r.blindHeight?.clearedUpToM ?? null }));
+      setStats((s) => ({ ...s, distKm: r.distanceKm, cruiseAlt: Math.round(r.cruiseAltM), eta: r.etaMinWind, heightConfidencePct: r.heightConfidencePct ?? null, avgConfClearM: r.avgConfClearM ?? null, etaStill: r.etaMinStill ?? null, obstacleSegments: r.obstacleSegments ?? null, measuredObstacleSegments: r.measuredObstacleSegments ?? null, blindInert: r.blindHeight?.inertPenaltySegments ?? null, blindClearedUpToM: r.blindHeight?.clearedUpToM ?? null, confClearOnObstaclesM: r.confClearOnObstaclesM ?? null }));
     } catch {
       setCeilingBlocked(null);
       setAirspaceRoute(null);
@@ -436,7 +436,7 @@ export default function QSkywayClient() {
       taxisRef.current = []; heroRef.current = null; conflictsRef.current = 0;
       let mh = 0; for (const h of city.grid.heights) if (h > mh) mh = h;
       altMaxRef.current = FLOOR + Math.ceil((mh + CLEAR - FLOOR) / BAND) * BAND + BAND;
-      setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null });
+      setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null, confClearOnObstaclesM: null });
       setMeta({
         wind: city.wind ? `${city.wind.groundMs}→${city.wind.topMs} м/с (от ${city.wind.fromDeg}°)` : "—",
         windSource: city.wind?.source ?? "illustrative",
@@ -1087,9 +1087,22 @@ export default function QSkywayClient() {
                     // плитка честно называет метры, которых в этих участках нет.
                     // Приписка говорит, на скольких участках так вышло и до какой
                     // настоящей высоты здания обещанный просвет вообще выдержан.
+                    // Показываем запас ПО ЗДАНИЯМ, а не среднее по всему коридору.
+                    //
+                    // Замер 27.08.2026, живой маршрут Астаны 0→3: среднее по всем
+                    // участкам дало 0.7 м при настоящих 16 м на каждом из четырёх
+                    // участков со зданием — 93 участка из 97 это открытая земля с
+                    // нулевым запасом. «0.7 м» читается как «мы почти ничего не
+                    // добавляем» и спорит с чипом города, где заявлены 16.
+                    //
+                    // Разбавленное число не выбрасываем, а прячем в подсказку:
+                    // оно правдиво отвечает на свой вопрос («сколько в среднем по
+                    // маршруту»), просто этот вопрос не тот, который читают.
                     [t("qskyway.tel.confClearance"), stats.avgConfClearM == null ? "—" : (
                       <>
-                        {stats.avgConfClearM} {t("qskyway.unit.m")}
+                        <span title={`По всему коридору в среднем ${stats.avgConfClearM} ${t("qskyway.unit.m")}, включая участки над открытой землёй, где запас не нужен и равен нулю.`}>
+                          {stats.confClearOnObstaclesM ?? stats.avgConfClearM} {t("qskyway.unit.m")}
+                        </span>
                         {(stats.blindInert ?? 0) > 0 && (
                           <span
                             title={`На ${stats.blindInert} участк(ах) высота под крылом угадана, а страховочный запас съеден полом коридора: коридор лёг туда же, куда лёг бы без запаса. Обещанный просвет выдержан, только если здание не выше ${stats.blindClearedUpToM} м.`}

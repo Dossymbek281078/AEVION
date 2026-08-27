@@ -334,7 +334,15 @@ interface RouteResult {
   distanceKm: number; cruiseAltM: number;
   etaMinStill: number; etaMinWind: number; avgWindMs: number; windFromDeg: number;
   avoidsNoFly: boolean;
-  avgConfClearM: number; heightConfidencePct: number;
+  avgConfClearM: number;
+  /**
+   * Страховочный запас, усреднённый по участкам СО ЗДАНИЕМ, а не по всем.
+   * null, если здания под крылом не было ни разу. Зачем отдельно от
+   * avgConfClearM — см. комментарий у присваивания: открытая земля даёт нулевой
+   * запас и топит среднее в 20+ раз.
+   */
+  confClearOnObstaclesM: number | null;
+  heightConfidencePct: number;
   /**
    * Участков коридора, у которых под крылом ВООБЩЕ есть здание, и сколько из
    * них стоят на обмеренной высоте.
@@ -387,6 +395,7 @@ function buildRoute(
   const obstacles: number[] = [];
   let timeStill = 0, timeWind = 0, windSum = 0, confSum = 0, measuredEdges = 0;
   let guessedSegments = 0, guessedInertSegments = 0;
+  let confSumOnObstacles = 0;
   let obstacleSegments = 0, measuredObstacleSegments = 0;
   for (let k = 0; k < path.length - 1; k++) {
     const alt = edgeAlt(path[k].c, path[k].r, path[k + 1].c, path[k + 1].r);
@@ -420,6 +429,7 @@ function buildRoute(
     if (maxObst > 0) {
       obstacleSegments++;
       if (worstSrc === 0) measuredObstacleSegments++;
+      confSumOnObstacles += confClear(worstSrc);
     }
     const segLen = Math.hypot(path[k + 1].c - path[k].c, path[k + 1].r - path[k].r) * cell;
     const tw = tailwind(cityId, path[k].c, path[k].r, path[k + 1].c, path[k + 1].r, alt);
@@ -440,6 +450,21 @@ function buildRoute(
     windFromDeg: w0.fromDeg,
     avoidsNoFly: zones.length > 0,
     avgConfClearM: +(confSum / Math.max(1, alts.length)).toFixed(1),
+    // То же число, но по участкам, где под крылом ВООБЩЕ есть здание.
+    //
+    // Замер 27.08.2026, живой маршрут Астаны 0→3: avgConfClearM = 0.7 при
+    // страховочном запасе 16 м на каждом из 4 участков со зданием — потому что
+    // делится на все 97 участков, а 93 из них открытая земля с нулевым запасом.
+    // 4 × 16 / 97 = 0.66. Плитка «Запас на неувер-ть: 0.7 м» читается как «мы
+    // почти ничего не добавляем», тогда как там, где запас нужен, он в 23 раза
+    // больше показанного.
+    //
+    // Ровно эту разбавку уже чинили 12.08 для heightConfidencePct (см. коммент
+    // у obstacleSegments): открытая земля топила метрику. В соседнем поле она
+    // осталась. Старое поле не трогаю — на него мог кто-то опереться.
+    confClearOnObstaclesM: obstacleSegments > 0
+      ? +(confSumOnObstacles / obstacleSegments).toFixed(1)
+      : null,
     heightConfidencePct: Math.round(100 * measuredEdges / Math.max(1, alts.length)),
     obstacleSegments, measuredObstacleSegments,
     // Где обещанный просвет держится на догадке, а страховочный штраф не сработал.

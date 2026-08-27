@@ -6311,6 +6311,7 @@ const en: Record<string, string> = {
   "qskyway.subst.head": "height taken from type statistics: {n} building(s)",
   "qskyway.subst.noRoutes": " · does not affect any route (0 of {routable})",
   "qskyway.subst.underRoutes": " · under corridors {under} of {total}, routes affected {pairs} of {routable}",
+  "qskyway.tel.blindInert": "⚠ {n} without effect",
   "qskyway.tel.byBuildings": "(by buildings {pct}%)",
   "qskyway.tel.confClearance": "Uncertainty clearance",
   "qskyway.tel.cruiseAlt": "Cruise altitude",

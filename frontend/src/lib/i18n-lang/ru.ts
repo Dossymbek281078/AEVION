@@ -6311,6 +6311,7 @@ const ru: Record<string, string> = {
   "qskyway.subst.head": "подставлено по типу: {n}",
   "qskyway.subst.noRoutes": " · на маршруты не влияет (0 из {routable})",
   "qskyway.subst.underRoutes": " · под коридорами {under} из {total}, задето маршрутов {pairs} из {routable}",
+  "qskyway.tel.blindInert": "⚠ {n} без эффекта",
   "qskyway.tel.byBuildings": "(по зданиям {pct}%)",
   "qskyway.tel.confClearance": "Запас на неувер-ть",
   "qskyway.tel.cruiseAlt": "Крейсер. высота",

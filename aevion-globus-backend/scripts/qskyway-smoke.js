@@ -331,6 +331,69 @@ async function main() {
   assert(padded > 0 && maxPad > 0, "[tokyo] confidence-clearance raises corridors over uncertain buildings", `${padded} routes padded, max=${maxPad}m`);
   // clearance invariant already holds base+conf, so the per-city loop still shows 0 violations
 
+  // ── Честные числа рядом с уверенными (добавлено 27.08.2026) ────────────────
+  //
+  // Пять полей заведены в тот день, потому что соседнее поле про то же самое
+  // говорило иначе, а читатель верит короткому. Без проверок здесь они тихо
+  // откатятся, и никто не узнает: юнит-тесты живут в другом наборе, а прод
+  // смотрят этим смоуком.
+  const hq = await jget("/api/qskyway/health");
+  // Эти два утверждения были декоративны ВМЕСТЕ: первое разрешало null
+  // безусловно, второе — основание "store-unavailable". То есть при полностью
+  // неработающем хранилище оба оставались зелёными, хотя это ровно та поломка,
+  // которую они должны ловить (проверено отдельным прогоном предикатов).
+  //
+  // Смоук гоняется против ЖИВОГО бэкенда, где хранилище доступно. Значит здесь
+  // "не смогли посчитать" — это находка, а не допустимый исход.
+  assert(typeof hq.json?.slotsBookedLive === "number"
+      && hq.json.slotsBookedLive <= hq.json.slotsBooked,
+    "health reports live bookings apart from the total",
+    `booked=${hq.json?.slotsBooked} live=${hq.json?.slotsBookedLive} basis=${hq.json?.slotsLiveBasis}`);
+  assert(hq.json?.slotsLiveBasis === "all" || hq.json?.slotsLiveBasis === "sample-500",
+    "health counted the live figure, not gave up on it",
+    `basis=${hq.json?.slotsLiveBasis} (store-unavailable means the market could not be read)`);
+  // Городская возможность обязана называть города, а идентификаторы — оставаться
+  // машинными: строка 60 этого файла сверяет пункт ТОЧНЫМ равенством.
+  const scope = hq.json?.featureScope?.["regulatory-airspace-ceilings"];
+  assert(Array.isArray(scope) && scope.length > 0 && scope.length < Object.keys(hq.json?.airspace ?? {}).length,
+    "city-scoped feature names its cities, and not all of them",
+    `scope=${JSON.stringify(scope)}`);
+  // `every` на ПУСТОМ массиве истинно всегда — и на отсутствующем поле тоже
+  // (проверено отдельно: оба случая давали true). Поэтому сначала требуем, чтобы
+  // список вообще был и был непустым, и лишь потом проверяем формат.
+  assert(Array.isArray(hq.json?.features) && hq.json.features.length >= 6
+      && hq.json.features.every((f) => /^[a-z0-9-]+$/.test(f)),
+    "feature ids stay machine-readable (no parentheses)",
+    `n=${hq.json?.features?.length} bad=${(hq.json?.features ?? []).filter((f) => !/^[a-z0-9-]+$/.test(f)).join(", ") || "none"}`);
+
+  const ar = await jpost("/api/qskyway/route", { from: 0, to: 3, city: "astana" });
+  assert(ar.json?.blindHeight && typeof ar.json.blindHeight.inertPenaltySegments === "number"
+      && ar.json.blindHeight.clearedUpToM > 0,
+    "route says where the confidence padding did nothing",
+    `guessed=${ar.json?.blindHeight?.guessedSegments} inert=${ar.json?.blindHeight?.inertPenaltySegments} cleared<=${ar.json?.blindHeight?.clearedUpToM}m`);
+  // Обе стороны, и это не педантизм: первая версия проверяла
+  // `=== null || >= avg` — и оставалась ЗЕЛЁНОЙ, когда поле всегда null.
+  // Мутация «вернуть null всегда» дала ALL PASS (151/151), то есть утверждение
+  // разрешало ровно то, ради чего заведено. Теперь при наличии зданий требуется
+  // ЧИСЛО, при их отсутствии — именно null.
+  assert(ar.json?.obstacleSegments > 0
+      ? (typeof ar.json.confClearOnObstaclesM === "number"
+         && ar.json.confClearOnObstaclesM >= ar.json.avgConfClearM)
+      : ar.json?.confClearOnObstaclesM === null,
+    "padding over buildings is a real figure, not diluted by open ground",
+    `obstacleSegments=${ar.json?.obstacleSegments} obstacles=${ar.json?.confClearOnObstaclesM} avg=${ar.json?.avgConfClearM}`);
+  assert(ar.json?.noFly && ar.json.noFly.cellsOnPathInsideZone === 0,
+    "corridor never crosses a prohibited zone",
+    `zones=${ar.json?.noFly?.zonesInCity} inside=${ar.json?.noFly?.cellsOnPathInsideZone}`);
+  // `undefined === undefined` истинно, поэтому голого сравнения мало: пропади оба
+  // поля разом — утверждение осталось бы зелёным. Требуем, чтобы это были ЛОГИЧЕСКИЕ
+  // значения, и только потом сверяем их между собой.
+  assert(typeof ar.json?.avoidsNoFly === "boolean"
+      && typeof ar.json?.noFly?.directLineCrosses === "boolean"
+      && ar.json.avoidsNoFly === ar.json.noFly.directLineCrosses,
+    "avoidsNoFly reports the route, not the city",
+    `avoids=${ar.json?.avoidsNoFly} directCrosses=${ar.json?.noFly?.directLineCrosses}`);
+
   // ── Phase 7: regulatory airspace ceilings (real FAA UASFM feed for NYC) ─────
   const asN = cityNyc.json?.airspace;
   assert(asN?.available === true && asN.authority === "FAA", "[nyc] twin carries a real regulator ceiling feed", `authority=${asN?.authority}`);
@@ -405,6 +468,27 @@ async function main() {
   assert(jd.airspace?.effective === asN.effective && jd.airspace?.authority === "FAA", "justification names the authority and edition", `${jd.airspace?.authority} ${jd.airspace?.effective}`);
   assert(typeof jd.airspace?.compliant === "boolean", "justification states the verdict, green or not");
   assert(typeof just.json?.scope === "string" && just.json.scope.includes("НЕ"), "scope limit travels with the document");
+  // Бумага обязана называть и то, где обещанный просвет НЕ гарантирован.
+  // Добавлено 27.08.2026: до этого документ говорил, где высоту ПОДСТАВИЛИ, но
+  // молчал про участки, где страховочный запас съеден полом коридора. На таком
+  // маршруте бумага выглядела чистой. Проверяем на Астане: там обмера нет вовсе,
+  // и слепой дефолт встречается на каждом коридоре со зданиями.
+  const jastana = await jpost("/api/qskyway/route/justification", { from: 0, to: 3, city: "astana" });
+  const jda = jastana.json?.document;
+  assert(jda?.blindHeight && typeof jda.blindHeight.inertPenaltySegments === "number"
+      && typeof jda.blindHeight.guessedSegments === "number"
+      && jda.blindHeight.clearedUpToM > 0
+      && jda.blindHeight.inertPenaltySegments <= jda.blindHeight.guessedSegments,
+    "[astana] filing states where the promised clearance is not guaranteed",
+    `guessed=${jda?.blindHeight?.guessedSegments} inert=${jda?.blindHeight?.inertPenaltySegments} cleared<=${jda?.blindHeight?.clearedUpToM}m`);
+  // И это поле — ПОД подписью, а не рядом: подмена обязана ломать хеш.
+  const jtamper = await jpost("/api/qskyway/route/justification/verify", {
+    document: { ...jda, blindHeight: { ...jda.blindHeight, inertPenaltySegments: 0 } },
+    attestation: jastana.json.attestation,
+  });
+  assert(jtamper.json?.valid === false && jtamper.json?.hashValid === false,
+    "[astana] rewriting the clearance caveat breaks the signature",
+    `valid=${jtamper.json?.valid} hashValid=${jtamper.json?.hashValid}`);
   const jver = await jpost("/api/qskyway/route/justification/verify", { document: jd, attestation: just.json.attestation });
   assert(jver.json?.valid === true && jver.json?.hashValid === true && jver.json?.signatureValid === true, "justification verifies round-trip");
   // Tampering must be caught and attributed: a changed value is a hash failure,

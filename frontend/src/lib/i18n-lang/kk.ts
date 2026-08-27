@@ -6274,6 +6274,7 @@ const kk: Record<string, string> = {
   "qskyway.subst.head": "түрі бойынша қойылған биіктік: {n} ғимарат",
   "qskyway.subst.noRoutes": " · маршруттарға әсер етпейді ({routable} ішінен 0)",
   "qskyway.subst.underRoutes": " · дәліздер астында {total} ішінен {under}, әсер еткен маршрут {routable} ішінен {pairs}",
+  "qskyway.tel.blindInert": "⚠ {n} әсерсіз",
   "qskyway.tel.byBuildings": "(ғимараттар бойынша {pct}%)",
   "qskyway.tel.confClearance": "Белгісіздікке қор",
   "qskyway.tel.cruiseAlt": "Круиздік биіктік",

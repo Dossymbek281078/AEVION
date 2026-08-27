@@ -571,10 +571,14 @@ export default function DevHubPage() {
         )}
 
         {/* Loading */}
+        {/* Each branch carries its own key. Without them React reconciles these
+            by position, and when a late fetch flips the branch it remounts the
+            siblings below — including the snippet form, so anyone typing in it
+            during load lost what they had written. */}
         {loading ? (
-          <div style={{ textAlign: "center", padding: 60, color: "#94a3b8" }}>{t("proj.loading")}</div>
+          <div key="projects-loading" style={{ textAlign: "center", padding: 60, color: "#94a3b8" }}>{t("proj.loading")}</div>
         ) : projects.length === 0 ? (
-          <div style={{ textAlign: "center", padding: 80 }}>
+          <div key="projects-empty" style={{ textAlign: "center", padding: 80 }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🏗</div>
             <h2 style={{ fontSize: 20, color: "#0f172a", marginBottom: 8 }}>{t("proj.empty")}</h2>
             <p style={{ color: "#64748b", marginBottom: 24 }}>{t("proj.emptyHint")}</p>
@@ -586,7 +590,7 @@ export default function DevHubPage() {
             </button>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))", gap: 20 }}>
+          <div key="projects-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))", gap: 20 }}>
             {projects.map((p) => {
               const stackStyle = STACK_COLORS[p.stack] ?? { bg: "#64748b", fg: "#fff" };
               const statusStyle = STATUS_STYLES[p.status] ?? STATUS_STYLES.draft;
@@ -695,13 +699,13 @@ export default function DevHubPage() {
           )}
 
           {snippetsLoading ? (
-            <div className="text-center text-slate-500 py-10">{t("snip.loading")}</div>
+            <div key="snippets-loading" className="text-center text-slate-500 py-10">{t("snip.loading")}</div>
           ) : snippets.length === 0 ? (
-            <div className="text-center text-slate-500 py-10 border border-dashed border-slate-800 rounded-lg">
+            <div key="snippets-empty" className="text-center text-slate-500 py-10 border border-dashed border-slate-800 rounded-lg">
               {t("snip.empty")}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div key="snippets-grid" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {snippets.map((s) => {
                 const preview = (s.content || "").slice(0, 200);
                 const truncated = (s.content || "").length > 200;

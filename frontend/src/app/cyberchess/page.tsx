@@ -4487,7 +4487,7 @@ export default function CyberChessPage(){
   /* ── P2P status → connect toast ── */
   useEffect(()=>{
     if(p2p.status==="connected")showToast(`🤝 ${p2pOpponentName} подключился — игра началась!`,"success");
-    if(p2p.status==="closed"&&p2pMode)showToast("P2P соединение закрыто","error");
+    if(p2p.status==="closed"&&p2pMode)showToast("Связь с соперником прервалась","error");
   },[p2p.status]);// eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── AI turn trigger ── */
@@ -6335,7 +6335,7 @@ export default function CyberChessPage(){
                   style={{marginTop:6,padding:"3px 8px",borderRadius:RADIUS.sm,
                     border:"1px solid #fcd34d",background:"#fef3c7",color:"#92400e",
                     fontSize:10,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
-                  🔒 Master AI · 30 Chessy
+                  🔒 Мастер · 30 Chessy
                 </button>}
               </div>
 
@@ -6389,7 +6389,7 @@ export default function CyberChessPage(){
                   style={{background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
                     border:"1px solid #bfdbfe",color:CC.info}}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>👥 Vs Человек</span>
+                    <span>👥 Два игрока</span>
                     <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>один экран</span>
                   </div>
                 </Btn>
@@ -6551,7 +6551,7 @@ export default function CyberChessPage(){
           {false&&(()=>{
             type DashId="play"|"learn"|"meta";
             const dashes:{id:DashId;icon:string;title:string;hint:string;tint:string;ring:string;active:number}[]=[
-              {id:"play", icon:"🎮",title:"Игра",         hint:"12 вариантов · Hotseat · P2P · Ghost Duel", tint:"linear-gradient(135deg,#dbeafe,#bfdbfe)",ring:"#3b82f6",active:(variant!=="standard"?1:0)+(hotseat?1:0)+(p2pMode?1:0)+(ghostDuelMode?1:0)},
+              {id:"play", icon:"🎮",title:"Игра",         hint:"12 вариантов · вдвоём · по сети · Ghost Duel", tint:"linear-gradient(135deg,#dbeafe,#bfdbfe)",ring:"#3b82f6",active:(variant!=="standard"?1:0)+(hotseat?1:0)+(p2pMode?1:0)+(ghostDuelMode?1:0)},
               {id:"learn",icon:"🎓",title:"Тренировка",   hint:"Координаты · Эндшпиль · Личность · Editor",tint:"linear-gradient(135deg,#fef3c7,#fde68a)",ring:"#d97706",active:0},
               {id:"meta", icon:"📊",title:"Анализ & Стрим",hint:"Game DNA · Insights · OBS · Live-озвучка", tint:"linear-gradient(135deg,#ede9fe,#ddd6fe)",ring:"#7c3aed",active:(streamerMode?1:0)+(liveCommentary?1:0)},
             ];
@@ -6638,7 +6638,7 @@ export default function CyberChessPage(){
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>{variant!=="standard"?VARIANTS.find(v=>v.id===variant)?.emoji||"🎲":"🎲"}</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>12 Вариантов</span></div>
                     <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Fischer 960 · Atomic · KotH · Crazyhouse · Three-Check +6. Сейчас: <strong>{variant==="standard"?"Стандарт":VARIANTS.find(v=>v.id===variant)?.name}</strong></div>
                   </button>
-                  <button onClick={()=>{sHotseat(v=>!v);showToast(hotseat?"Hotseat выкл":"Hotseat вкл — играй вдвоём за одной доской","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${hotseat?"#3b82f6":CC.border}`,background:hotseat?"linear-gradient(135deg,#dbeafe,#bfdbfe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                  <button onClick={()=>{sHotseat(v=>!v);showToast(hotseat?"Режим «вдвоём» выключен":"Играете вдвоём за одной доской","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${hotseat?"#3b82f6":CC.border}`,background:hotseat?"linear-gradient(135deg,#dbeafe,#bfdbfe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>👥</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>За одним экраном</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:hotseat?"#3b82f6":"#e5e7eb",color:hotseat?"#fff":CC.textDim}}>{hotseat?"ON":"OFF"}</span></div>
                     <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Без AI — оба игрока ходят на одном устройстве.</div>
                   </button>
@@ -15071,9 +15071,9 @@ ${question.trim()}`;
     <CommandPalette open={palOpen} onClose={()=>sPalOpen(false)} commands={(()=>{
       const cmds:PaletteCommand[]=[
         // ── PLAY ──
-        {id:"play-quick",   icon:"▶",  group:"Play", label:"Быстрая игра",        hint:"Quick start с текущими настройками",       hotkey:"N", run:()=>{sHotseat(false);sRivalMode(false);sTab("play");newG()}},
-        {id:"play-matchme", icon:"⚡", group:"Play", label:"Match Me",             hint:"AI под мой рейтинг",                        run:()=>{const ti=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;const c=(chessy.owned.master_ai||isPro)?ti:Math.min(ti,4);sAiI(c);sHotseat(false);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
-        {id:"play-hotseat", icon:"👥", group:"Play", label:"Vs Человек (Hotseat)", hint:"Один экран · два игрока",                   run:()=>{sHotseat(true);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
+        {id:"play-quick",   icon:"▶",  group:"Play", label:"Быстрая игра",        hint:"Быстрый старт с текущими настройками",       hotkey:"N", run:()=>{sHotseat(false);sRivalMode(false);sTab("play");newG()}},
+        {id:"play-matchme", icon:"⚡", group:"Play", label:"Соперник по рейтингу",             hint:"AI под мой рейтинг",                        run:()=>{const ti=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;const c=(chessy.owned.master_ai||isPro)?ti:Math.min(ti,4);sAiI(c);sHotseat(false);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
+        {id:"play-hotseat", icon:"👥", group:"Play", label:"Вдвоём за одним экраном", hint:"Один экран · два игрока",                   run:()=>{sHotseat(true);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
         {id:"play-variants",icon:"🎲", group:"Play", label:"Выбрать вариант шахмат",hint:"Fischer 960 / Atomic / Crazyhouse / +9",   run:()=>sShowVariants(true)},
         {id:"play-tournament",icon:"🏆",group:"Play",label:"Турнир",                hint:"Свисс / Round-Robin",                       run:()=>sShowTournament(true)},
 
@@ -15104,7 +15104,7 @@ ${question.trim()}`;
 
         // ── COACH / TRAINING ──
         {id:"coach",        icon:"🎓",group:"Coach",   label:"Открыть Coach",      hint:"AI-наставник + база знаний 90+ тем",         run:()=>sTab("coach")},
-        {id:"coach-knowledge",icon:"📚",group:"Coach", label:"Coach Knowledge",   hint:"9 категорий · дебюты / тактика / эндшпиль / время / память / roadmap",  run:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
+        {id:"coach-knowledge",icon:"📚",group:"Coach", label:"База знаний тренера",   hint:"9 категорий · дебюты / тактика / эндшпиль / время / память / roadmap",  run:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
         {id:"coach-lessons",  icon:"📖",group:"Coach", label:"Coach Lessons (Курс)", hint:`${LESSONS.length} уроков beginner→advanced с теорией+позициями+упражнениями`, run:()=>{sTab("coach");setTimeout(()=>sShowLessons(true),50)}},
         {id:"coord-trainer",icon:"🎯",group:"Coach",   label:"Координаты",         hint:"Тренировка чтения доски (30 сек)",          run:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},
         {id:"opening",      icon:"📖",group:"Coach",   label:"Opening Trainer",   hint:"Дрилл дебютов до автоматизма",              run:()=>sShowOpeningTrainer(true)},

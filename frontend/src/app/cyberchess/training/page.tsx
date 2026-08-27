@@ -141,8 +141,8 @@ export default function TrainingHubPage() {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "@id": "https://aevion.app/cyberchess/training",
-        name: "AEVION CyberChess Training Hub",
-        description: "Персональный ежедневный план тренировок — CPI weak factor, daily variant, Coach Knowledge spaced-repetition, AEV bonus.",
+        name: "Тренировки CyberChess — ежедневный план",
+        description: "Личный план на день: слабая сторона игры, вариант дня, темы для повторения и награда за выполнение.",
         isPartOf: { "@type": "WebSite", url: "https://aevion.app", name: "AEVION" },
         about: { "@type": "Thing", name: "Chess training" },
       }) }} />

@@ -50,7 +50,11 @@ const FACTOR_META: Record<FactorKey, { label: string; emoji: string; desc: strin
  * `overall` из счёта исключён намеренно: это сводка по остальным, а не фактор
  * наравне с ними.
  */
-export const SORTABLE_FACTOR_COUNT = (Object.keys(FACTOR_META) as FactorKey[]).filter((k) => k !== "overall").length;
+// Не export: Next.js разрешает файлу страницы экспортировать только default
+// и служебные поля (metadata, generateStaticParams и т.п.), а лишний export
+// даёт ошибку типов в сгенерированном .next/types. Константу читает только
+// эта страница; сторож factorCountIsDerived сверяет её по тексту исходника.
+const SORTABLE_FACTOR_COUNT = (Object.keys(FACTOR_META) as FactorKey[]).filter((k) => k !== "overall").length;
 
 // Mock leaderboard data. In production, this would be /api/cyberchess/cpi/leaderboard.
 type Entry = {

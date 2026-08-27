@@ -1755,8 +1755,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         showToast("Studio Pro required — upgrade to add collaborators", "error");
         return;
       }
-      const data = await resp.json();
-      setProject((p) => p ? { ...p, collaborators: data.collaborators || [] } : p);
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !Array.isArray(data?.collaborators)) {
+        // Two lies in one line before this: a green "added" toast, and
+        // `data.collaborators || []` wiping everyone already on the project
+        // off the screen because a failed response carries no list.
+        showToast(`Соавтор НЕ добавлен — сервер ответил ${resp.status}`, "error");
+        return;
+      }
+      setProject((p) => p ? { ...p, collaborators: data.collaborators } : p);
       setSettingsCollab("");
       showToast(`Collaborator added (${collabRole})`, "success");
     } catch {

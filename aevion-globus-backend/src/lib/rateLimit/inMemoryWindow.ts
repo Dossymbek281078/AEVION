@@ -1,3 +1,4 @@
+import { normalizeAddressForKey } from "../rateLimit";
 interface WindowState {
   hits: number[];
 }
@@ -57,5 +58,19 @@ export function clientIp(req: {
   ip?: string;
   headers: Record<string, string | string[] | undefined>;
 }): string {
-  return req.ip || "unknown";
+  const raw = req.ip || "unknown";
+  // ⚠️ 27.08.2026: комментарий выше обещал «то же правило, что clientIp() в
+  // lib/rateLimit.ts», и это перестало быть правдой. Там адрес проходит через
+  // normalizeAddressForKey (схлопывает IPv6 до /64), здесь возвращался сырым.
+  //
+  // Следствие практическое: у обычной домашней IPv6-выдачи весь /64 в
+  // распоряжении одного человека, и каждый запрос с нового адреса получал
+  // СВЕЖЕЕ окно. Ограничители, построенные на этом помощнике, — в том числе
+  // 20 регистраций работ в минуту на /api/pipeline/protect — обходились
+  // подбором адреса внутри собственной подсети, при этом снаружи выглядели
+  // работающими.
+  //
+  // Правило теперь ОДНО и живёт в одном месте: здесь оно вызывается, а не
+  // переписывается заново — третья копия разошлась бы так же, как вторая.
+  return raw === "unknown" ? raw : normalizeAddressForKey(raw);
 }

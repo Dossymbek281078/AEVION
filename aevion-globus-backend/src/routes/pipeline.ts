@@ -808,7 +808,9 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
  */
 pipelineRouter.post("/protect", async (req, res) => {
   try {
-    const ip = (req.ip || req.socket.remoteAddress || "unknown") as string;
+    // clientIp(), а не сырой req.ip: он схлопывает IPv6 до /64, иначе
+    // ограничитель обходится подбором адреса внутри своей же подсети.
+    const ip = clientIp(req);
     const rl = protectRateLimiter.check(ip);
     if (!rl.allowed) {
       res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
@@ -859,7 +861,9 @@ const MAX_BATCH_PROTECT = 25;
 
 pipelineRouter.post("/protect-batch", async (req, res) => {
   try {
-    const ip = (req.ip || req.socket.remoteAddress || "unknown") as string;
+    // clientIp(), а не сырой req.ip: он схлопывает IPv6 до /64, иначе
+    // ограничитель обходится подбором адреса внутри своей же подсети.
+    const ip = clientIp(req);
     const rl = protectRateLimiter.check(ip);
     if (!rl.allowed) {
       res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
@@ -1256,7 +1260,9 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
     // Per-(IP, certId) limiter so the verifiedCount column can't be pumped
     // by a single attacker — the bureau «Most verified» sort would otherwise
     // be game-able for free.
-    const ip = (req.ip || req.socket.remoteAddress || "unknown") as string;
+    // clientIp(), а не сырой req.ip: он схлопывает IPv6 до /64, иначе
+    // ограничитель обходится подбором адреса внутри своей же подсети.
+    const ip = clientIp(req);
     const rl = verifyRateLimiter.check(`${ip}:${certId}`);
     const skipIncrement = !rl.allowed;
     const { rows } = await pool.query(

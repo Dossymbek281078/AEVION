@@ -88,4 +88,17 @@ test.describe("DevHub shelf — controls that must not be decorative", () => {
     await copy.click();
     await expect(page.getByRole("button", { name: "Copied!", exact: true })).toBeVisible({ timeout: 10_000 });
   });
+
+  test("Escape closes the New Project dialog", async ({ page }) => {
+    // The backdrop click already closed it; Escape did nothing, so a keyboard
+    // had no way out of the dialog at all.
+    await mockBackend(page);
+    await page.goto("/devhub");
+    await page.getByRole("button", { name: /New Project/ }).first().click({ timeout: 30_000 });
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
+  });
 });

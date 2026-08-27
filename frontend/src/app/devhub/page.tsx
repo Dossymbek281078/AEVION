@@ -844,9 +844,17 @@ export default function DevHubPage() {
         <div
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
+          // Clicking the backdrop already closed this; Escape did nothing, so a
+          // keyboard had no way out of the dialog at all.
+          onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setShowModal(false); } }}
         >
-          <div style={{ background: "#fff", borderRadius: 16, padding: "20px clamp(16px, 4vw, 32px)", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
-            <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 20, color: "#0f172a" }}>{t("modal.title")}</h2>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="devhub-new-project-title"
+            style={{ background: "#fff", borderRadius: 16, padding: "20px clamp(16px, 4vw, 32px)", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}
+          >
+            <h2 id="devhub-new-project-title" style={{ fontSize: 20, fontWeight: 800, marginBottom: 20, color: "#0f172a" }}>{t("modal.title")}</h2>
 
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>

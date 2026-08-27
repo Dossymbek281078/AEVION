@@ -800,6 +800,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     toastTimer.current = setTimeout(drainToasts, toastQueue.current.length > 0 ? 2200 : 4000);
   }, []);
 
+  // Leaving the page mid-queue must not leave a timer running against a screen
+  // that is gone.
+  useEffect(() => () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+  }, []);
+
   const showToast = (message: string, type: "success" | "error" | "info" | "warning" = "success") => {
     const queue = toastQueue.current;
     // Saying the same thing twice in a row is noise, not information.

@@ -323,4 +323,52 @@ test.describe("DevHub — writes that must not lose a file", () => {
     await expect(page.getByText(/Файл НЕ удалён/)).toBeVisible({ timeout: 10_000 });
     await expect(row).toBeVisible();
   });
+
+  test("renaming onto an existing file is refused, and neither file is touched", async ({ page }) => {
+    // Only reachable at all since the context menu was fixed: before that,
+    // right-click → Rename did nothing, so this guard had never run for a user.
+    const TWO = [
+      ...FILES,
+      { id: "f2", path: "src/Timer.jsx", content: "timer", language: "javascript" },
+    ];
+    const writes: string[] = [];
+    const deletes: string[] = [];
+    await page.route("**/api/devhub/**", async (route) => {
+      const req = route.request();
+      const url = req.url();
+      const json = (body: unknown, status = 200) =>
+        route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (url.includes("/file")) {
+        if (req.method() === "PUT") writes.push(url);
+        if (req.method() === "DELETE") deletes.push(url);
+      }
+      if (url.includes(`/projects/${PROJECT_ID}/files`)) return json({ files: TWO });
+      if (url.includes(`/projects/${PROJECT_ID}`)) {
+        return json({
+          project: { id: PROJECT_ID, name: "ren", description: "", stack: "react", deployUrl: null, userId: "anonymous", collaborators: [] },
+          files: TWO,
+        });
+      }
+      if (url.includes("/studio/capabilities")) return json({ capabilities: [] });
+      return json({ ok: true });
+    });
+
+    await page.goto(`/devhub/${PROJECT_ID}`);
+    const row = page.getByText("src/Timer.jsx", { exact: true }).first();
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await row.click({ button: "right" });
+
+    const menu = page.locator('div[style*="position: fixed"]').filter({ hasText: "Rename" });
+    await menu.getByRole("button", { name: "Rename", exact: true }).click();
+
+    const input = page.locator('input[type="text"]').first();
+    await expect(input).toBeVisible({ timeout: 10_000 });
+    await input.fill("src/App.jsx");
+    await input.press("Enter");
+
+    await expect(page.getByText(/уже существует/)).toBeVisible({ timeout: 10_000 });
+    // Nothing may move: a rename onto an occupied path used to overwrite it.
+    expect(writes).toHaveLength(0);
+    expect(deletes).toHaveLength(0);
+  });
 });

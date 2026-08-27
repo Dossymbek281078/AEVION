@@ -235,7 +235,53 @@ export function generationLimit(keyPrefix: string) {
 }
 
 
-export function clientIp(req: { ip?: string; socket?: { remoteAddress?: string } }): string {
+/**
+ * Адрес ВНУТРЕННЕГО прокси Railway.
+ *
+ * Документировано вендором: внутренние узлы всегда в 100.0.0.0/8, и именно по
+ * этому признаку рекомендуется решать, доверять ли заголовкам. Проверка нужна
+ * ровно одна: «мы точно за их прокси». Снаружи попасть к нам с адреса 100.x
+ * нельзя, поэтому подделать доверие этим способом клиент не может.
+ */
+function isRailwayInternal(ip: string): boolean {
+  const bare = ip.replace(/^::ffff:/, "");
+  if (bare === "127.0.0.1" || bare === "::1") return true; // локальный запуск
+  return /^100\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(bare);
+}
+
+/** Похоже ли значение на адрес. Дешёвая проверка формы, не валидация. */
+function looksLikeAddress(v: string): boolean {
+  return /^[0-9a-fA-F:.]{3,45}$/.test(v) && /[.:]/.test(v);
+}
+
+export function clientIp(req: {
+  ip?: string;
+  socket?: { remoteAddress?: string };
+  headers?: Record<string, unknown>;
+}): string {
+  // X-Real-IP — ЕДИНСТВЕННЫЙ источник правды у Railway, и без него ключ
+  // ограничителя оказывается адресом их ВНУТРЕННЕГО прокси.
+  //
+  // Замер на проде 28.08.2026, четыре контроля (подробности в шапке файла):
+  // при постоянном собственном адресе и принудительном IPv4 остаток лимита в
+  // отдельных соединениях шёл вразнобой — 29 28 29 29 28 29 27 27 28 26, — а
+  // внутри ОДНОГО соединения был идеален. То есть один человек получал
+  // несколько лимитов, а все, кто пришёл через один внутренний узел, делили
+  // один. Предел не «на посетителя» ни в одну сторону.
+  //
+  // Причина: `trust proxy = 1` берёт ОДИН узел, а у Railway их больше, и
+  // `req.ip` останавливается на внутреннем прокси.
+  //
+  // Заголовку доверяем ТОЛЬКО когда сокет пришёл от внутреннего узла Railway.
+  // Клиент снаружи не может прийти с адреса 100.x, значит подсунуть себе
+  // чужой X-Real-IP он не может. Нет заголовка или мы не за прокси — ведём
+  // себя ровно как раньше: отказ здесь не должен ломать ограничитель.
+  const peer = String(req.socket?.remoteAddress || "");
+  const realRaw = req.headers?.["x-real-ip"];
+  const real = typeof realRaw === "string" ? realRaw.trim() : "";
+  if (real && looksLikeAddress(real) && isRailwayInternal(peer)) {
+    return normalizeAddressForKey(real);
+  }
   const raw = req.ip || req.socket?.remoteAddress || "unknown";
   return raw === "unknown" ? raw : normalizeAddressForKey(raw);
 }

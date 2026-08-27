@@ -538,6 +538,15 @@ export default function DevHubPage() {
               ) : (
                 <span style={{ color: "#64748b" }}> · все интеграции отвечают</span>
               )}
+              {/* The comparison belongs next to the live state, not on a
+                  marketing page: both answer the same question — what is real
+                  right now — and the strip is what makes the table checkable. */}
+              <div style={{ marginTop: 8, fontSize: 12.5 }}>
+                <Link href="/compare" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "none" }}>
+                  Как мы выглядим рядом с Bolt, Lovable, v0 и Replit →
+                </Link>
+                <span style={{ color: "#94a3b8" }}> — с пометкой, откуда взята каждая строка</span>
+              </div>
             </div>
           );
         })()}

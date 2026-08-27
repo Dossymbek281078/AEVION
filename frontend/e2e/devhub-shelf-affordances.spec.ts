@@ -128,4 +128,29 @@ test.describe("DevHub shelf — controls that must not be decorative", () => {
     await expect(title).toHaveValue("Typed during load");
     await expect(body).toHaveValue("const kept = true;");
   });
+
+  test("the main button admits it cannot work yet instead of pretending", async ({ request, page }) => {
+    // Measured 28.07 against the live site on a mid-range phone profile
+    // (CPU x6, 1.6 Mbps): painted at 6.9s, first tap answered at 18.7s. For
+    // those ~12 seconds "⚡ Построить" and the example chips looked ready and
+    // swallowed every tap in silence — the same class of lie as a control that
+    // does nothing. The served HTML, which is what a person sees first, must
+    // carry the honest state.
+    const html = await (await request.get("/devhub")).text();
+    const at = html.indexOf("Секунду, загружаюсь…");
+    expect(at, "the served HTML must say the page is still loading").toBeGreaterThan(-1);
+    const tagStart = html.lastIndexOf("<button", at);
+    expect(
+      html.slice(tagStart, at),
+      "and that button must actually be disabled, not merely labelled",
+    ).toContain("disabled");
+
+    // Once the page is alive the label and the button go back to normal.
+    await mockBackend(page);
+    await page.goto("/devhub");
+    const build = page.getByRole("button", { name: /Построить/ });
+    await expect(build).toBeVisible({ timeout: 30_000 });
+    await page.getByPlaceholder(/трекер привычек/).fill("лендинг кофейни");
+    await expect(build).toBeEnabled();
+  });
 });

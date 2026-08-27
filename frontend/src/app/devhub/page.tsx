@@ -206,6 +206,13 @@ export default function DevHubPage() {
   });
   const [snippetSubmitting, setSnippetSubmitting] = useState(false);
 
+  // Painted is not the same as working: measured 28.07 on a mid-range phone
+  // (CPU x6, 1.6 Mbps), the live shelf paints at 6.9s and only answers a tap
+  // at 18.7s. For those ~12 seconds every control here looked ready and did
+  // nothing. Say so instead.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+
   // Anything typed into either form before hydration lives only in the DOM;
   // adopt it on mount so the first data-driven re-render does not wipe it.
   const ideaFieldRef = useRef<HTMLDivElement>(null);
@@ -380,14 +387,14 @@ export default function DevHubPage() {
             />
             <button
               onClick={startFromIdea}
-              disabled={ideaStarting || !ideaPrompt.trim()}
+              disabled={!hydrated || ideaStarting || !ideaPrompt.trim()}
               style={{
-                padding: "0 26px", minHeight: 56, background: ideaStarting || !ideaPrompt.trim() ? "#134e4a" : "#0d9488",
+                padding: "0 26px", minHeight: 56, background: !hydrated || ideaStarting || !ideaPrompt.trim() ? "#134e4a" : "#0d9488",
                 color: "#fff", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 15,
-                cursor: ideaStarting || !ideaPrompt.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+                cursor: !hydrated || ideaStarting || !ideaPrompt.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap",
               }}
             >
-              {ideaStarting ? "Создаю…" : "⚡ Построить"}
+              {!hydrated ? "Секунду, загружаюсь…" : ideaStarting ? "Создаю…" : "⚡ Построить"}
             </button>
           </div>
           {/* An empty box is the hardest thing to answer. These are not
@@ -404,6 +411,7 @@ export default function DevHubPage() {
               <button
                 key={example}
                 onClick={() => setIdeaPrompt(example)}
+                disabled={!hydrated}
                 style={{
                   padding: "5px 11px", background: "rgba(255,255,255,0.12)", color: "#ccfbf1",
                   border: "1px solid rgba(255,255,255,0.22)", borderRadius: 999,

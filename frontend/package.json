@@ -13,7 +13,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install --with-deps chromium",
-    "analyze": "next experimental-analyze"
+    "analyze": "next experimental-analyze",
+    "build:webpack": "node scripts/build-webpack.mjs"
   },
   "dependencies": {
     "@aevion-io/catalog-client": "file:../packages/aevion-catalog-client",

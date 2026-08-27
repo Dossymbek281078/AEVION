@@ -3,6 +3,10 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureQMediaTables } from "../lib/ensureQMediaTables";
+import {
+  listPublicTracks, listMyTracks, getTrack, saveTrack, deleteTrack, bumpPlayCount,
+  allTracks, type TrackRow as StoredTrackRow,
+} from "../lib/qmediaStore";
 import { getPool } from "../lib/dbPool";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
 
@@ -11,18 +15,31 @@ const captureQMediaError = makeServiceCapture("qmedia");
 const pool = getPool();
 export const qmediaRouter = Router();
 
-type TrackRow = { id: string; userId: string; title: string; artist: string; genre: string; duration: number; url: string | null; coverUrl: string | null; lyrics: string | null; playCount: number; isPublic: boolean; tags: string[]; createdAt: string; updatedAt: string };
+type TrackRow = StoredTrackRow;
 type PlaylistCollaborator = { userId: string; canEdit: boolean };
 type PlaylistRow = { id: string; userId: string; name: string; description: string | null; isPublic: boolean; trackIds: string[]; collaborators?: PlaylistCollaborator[]; createdAt: string; updatedAt: string };
 type VideoRow = { id: string; userId: string; title: string; description: string | null; url: string | null; thumbnailUrl: string | null; duration: number; viewCount: number; isPublic: boolean; category: string; tags: string[]; createdAt: string; updatedAt: string };
 
-const memTracks = new Map<string, TrackRow>();
 const memPlaylists = new Map<string, PlaylistRow>();
 const memVideos = new Map<string, VideoRow>();
 const memLikes = new Map<string, boolean>();
 
 function nowIso() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
+
+/**
+ * Отказ хранилища — ОТКАЗ, а не пустота и не мнимый успех.
+ *
+ * До 28.08.2026 модуль вообще не обращался к базе: всё жило в памяти
+ * процесса и исчезало при каждой выкатке, а /health при этом перечислял
+ * четыре таблицы. Теперь база подключена, и её отказ надо называть.
+ */
+function replyQMediaStorageDown(res: { status: (c: number) => { json: (b: unknown) => unknown } }) {
+  return res.status(503).json({
+    error: "storage_unavailable",
+    warning: "Хранилище временно недоступно. Данные НЕ сохранены, повторите позже.",
+  });
+}
 
 qmediaRouter.use(async (_req, _res, next) => {
   await ensureQMediaTables(pool).catch(() => {});
@@ -36,10 +53,11 @@ qmediaRouter.get("/tracks", async (req, res) => {
     const genre = typeof req.query.genre === "string" ? req.query.genre : null;
     const q = typeof req.query.q === "string" ? req.query.q.toLowerCase() : null;
     const limit = Math.min(50, Math.max(Number(req.query.limit) || 20, 1));
-    let tracks = Array.from(memTracks.values()).filter(t => t.isPublic);
-    if (genre) tracks = tracks.filter(t => t.genre === genre);
-    if (q) tracks = tracks.filter(t => t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q));
-    res.json({ items: tracks.sort((a, b) => b.playCount - a.playCount).slice(0, limit) });
+    // Фильтры уходят в хранилище, а не применяются после выборки: иначе limit
+    // отрезал бы записи ДО фильтрации и редкий жанр отдавал бы пустоту.
+    const { rows, failed } = await listPublicTracks(limit, { genre, q });
+    if (failed) return replyQMediaStorageDown(res);
+    res.json({ items: rows });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "list tracks failed" }); }
 });
 
@@ -47,7 +65,11 @@ qmediaRouter.get("/me/tracks", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    res.json({ items: Array.from(memTracks.values()).filter(t => t.userId === auth.sub).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) });
+    const { rows, failed } = await listMyTracks(auth.sub);
+    // Пустой список читается как «я ничего не загружал». Выдавать его за отказ
+    // хранилища нельзя: человек решит, что потерял своё, и загрузит заново.
+    if (failed) return replyQMediaStorageDown(res);
+    res.json({ items: rows });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "list my tracks failed" }); }
 });
 
@@ -57,8 +79,11 @@ qmediaRouter.post("/me/tracks", async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { title, artist, genre, duration, url, coverUrl, lyrics, isPublic, tags } = req.body || {};
     if (!title || typeof title !== "string") return res.status(400).json({ error: "title required" });
-    const track: TrackRow = { id: uid(), userId: auth.sub, title: String(title).slice(0, 200), artist: typeof artist === "string" ? artist.slice(0, 200) : "", genre: typeof genre === "string" ? genre : "other", duration: typeof duration === "number" ? duration : 0, url: typeof url === "string" ? url : null, coverUrl: typeof coverUrl === "string" ? coverUrl : null, lyrics: typeof lyrics === "string" ? lyrics.slice(0, 10000) : null, playCount: 0, isPublic: Boolean(isPublic), tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
-    memTracks.set(track.id, track);
+    const track: TrackRow = { id: uid(), userId: auth.sub, title: String(title).slice(0, 200), artist: typeof artist === "string" ? artist.slice(0, 200) : "", genre: typeof genre === "string" ? genre : "other", duration: Number(duration) || 0, url: url ? String(url) : null, coverUrl: coverUrl ? String(coverUrl) : null, lyrics: lyrics ? String(lyrics).slice(0, 10000) : null, playCount: 0, isPublic: Boolean(isPublic), tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
+    const saved = await saveTrack(track);
+    // 201 о том, чего нет в хранилище, — обещание, которого мы не сдержим:
+    // трек исчезнет при ближайшей выкатке, а человек будет считать его загруженным.
+    if (saved.failed) return replyQMediaStorageDown(res);
     res.status(201).json(track);
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "create track failed" }); }
 });
@@ -67,7 +92,9 @@ qmediaRouter.patch("/me/tracks/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const track = memTracks.get(req.params.id);
+    const found = await getTrack(req.params.id);
+    if (found.failed) return replyQMediaStorageDown(res);
+    const track = found.track;
     if (!track || track.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     const { title, artist, genre, url, coverUrl, lyrics, isPublic, tags } = req.body || {};
     if (title) track.title = String(title).slice(0, 200);
@@ -79,6 +106,8 @@ qmediaRouter.patch("/me/tracks/:id", async (req, res) => {
     if (isPublic !== undefined) track.isPublic = Boolean(isPublic);
     if (Array.isArray(tags)) track.tags = tags.slice(0, 10).map(String);
     track.updatedAt = nowIso();
+    const saved = await saveTrack(track);
+    if (saved.failed) return replyQMediaStorageDown(res);
     res.json(track);
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "update track failed" }); }
 });
@@ -87,19 +116,22 @@ qmediaRouter.delete("/me/tracks/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const track = memTracks.get(req.params.id);
-    if (!track || track.userId !== auth.sub) return res.status(404).json({ error: "not found" });
-    memTracks.delete(req.params.id);
+    const { removed, failed } = await deleteTrack(req.params.id, auth.sub);
+    if (failed) return replyQMediaStorageDown(res);
+    // «Удалено» о том, что осталось на месте, — та же ложь, только наоборот.
+    if (!removed) return res.status(404).json({ error: "not found" });
     res.json({ deleted: true });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "delete track failed" }); }
 });
 
 qmediaRouter.post("/tracks/:id/play", async (req, res) => {
   try {
-    const track = memTracks.get(req.params.id);
-    if (!track) return res.status(404).json({ error: "not found" });
-    track.playCount++;
-    res.json({ playCount: track.playCount });
+    // Счётчик наращивается одним запросом В БАЗЕ: чтение с последующей записью
+    // потеряло бы показ, если два слушателя нажали одновременно.
+    const { playCount, failed } = await bumpPlayCount(req.params.id);
+    if (failed) return replyQMediaStorageDown(res);
+    if (playCount === null) return res.status(404).json({ error: "not found" });
+    res.json({ playCount });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "play failed" }); }
 });
 
@@ -345,13 +377,18 @@ qmediaRouter.post("/ai/describe-video", async (req, res) => {
 
 qmediaRouter.post("/me/playlists/:id/smart", async (req, res) => {
   try {
+    // Набор берётся из хранилища: до 28.08.2026 здесь читалась память
+    // процесса, и при живой базе эта выборка была бы пуста всегда.
+    const loaded = await allTracks();
+    if (loaded.failed) return replyQMediaStorageDown(res);
+    const allTracksNow = loaded.rows;
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const playlist = memPlaylists.get(req.params.id);
     if (!playlist || playlist.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     const { rules } = req.body || {};
     const { genre, mood, minDuration, maxDuration } = (rules as { genre?: string; mood?: string; minDuration?: number; maxDuration?: number }) ?? {};
-    let matched = Array.from(memTracks.values()).filter((t) => t.isPublic);
+    let matched = allTracksNow.filter((t) => t.isPublic);
     if (genre) matched = matched.filter((t) => t.genre === genre);
     if (minDuration !== undefined) matched = matched.filter((t) => t.duration >= minDuration);
     if (maxDuration !== undefined) matched = matched.filter((t) => t.duration <= maxDuration);
@@ -393,9 +430,14 @@ qmediaRouter.post("/me/playlists/:id/collaborators", async (req, res) => {
  */
 qmediaRouter.get("/recommendations", async (req, res) => {
   try {
+    // Набор берётся из хранилища: до 28.08.2026 здесь читалась память
+    // процесса, и при живой базе эта выборка была бы пуста всегда.
+    const loaded = await allTracks();
+    if (loaded.failed) return replyQMediaStorageDown(res);
+    const allTracksNow = loaded.rows;
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
     const auth = verifyBearerOptional(req);
-    const allPublic = Array.from(memTracks.values()).filter((t) => t.isPublic);
+    const allPublic = allTracksNow.filter((t) => t.isPublic);
 
     // Anonymous → popular fallback
     if (!auth?.sub) {
@@ -418,10 +460,10 @@ qmediaRouter.get("/recommendations", async (req, res) => {
     const tagScore = new Map<string, number>();
     const seedTracks: TrackRow[] = [];
     for (const id of likedTrackIds) {
-      const t = memTracks.get(id);
+      const t = allTracksNow.find((x) => x.id === id);
       if (t) seedTracks.push(t);
     }
-    for (const t of memTracks.values()) {
+    for (const t of allTracksNow) {
       if (t.userId === userId) seedTracks.push(t);
     }
     for (const t of seedTracks) {
@@ -437,7 +479,7 @@ qmediaRouter.get("/recommendations", async (req, res) => {
 
     // Score every candidate the user hasn't already liked or authored
     const seen = new Set<string>([...likedTrackIds]);
-    for (const t of memTracks.values()) if (t.userId === userId) seen.add(t.id);
+    for (const t of allTracksNow) if (t.userId === userId) seen.add(t.id);
 
     const scored = allPublic
       .filter((t) => !seen.has(t.id))
@@ -476,7 +518,12 @@ qmediaRouter.get("/recommendations", async (req, res) => {
  */
 qmediaRouter.get("/trending", async (_req, res) => {
   try {
-    const allPublic = Array.from(memTracks.values()).filter((t) => t.isPublic);
+    // Набор берётся из хранилища: до 28.08.2026 здесь читалась память
+    // процесса, и при живой базе эта выборка была бы пуста всегда.
+    const loaded = await allTracks();
+    if (loaded.failed) return replyQMediaStorageDown(res);
+    const allTracksNow = loaded.rows;
+    const allPublic = allTracksNow.filter((t) => t.isPublic);
     const items = [...allPublic].sort((a, b) => b.playCount - a.playCount).slice(0, 10);
     const genreAgg = new Map<string, number>();
     for (const t of allPublic) genreAgg.set(t.genre, (genreAgg.get(t.genre) ?? 0) + t.playCount);
@@ -492,8 +539,13 @@ qmediaRouter.get("/trending", async (_req, res) => {
 
 qmediaRouter.get("/radio/:genre", async (req, res) => {
   try {
+    // Набор берётся из хранилища: до 28.08.2026 здесь читалась память
+    // процесса, и при живой базе эта выборка была бы пуста всегда.
+    const loaded = await allTracks();
+    if (loaded.failed) return replyQMediaStorageDown(res);
+    const allTracksNow = loaded.rows;
     const genre = String(req.params.genre);
-    let tracks = Array.from(memTracks.values()).filter((t) => t.isPublic && t.genre === genre);
+    let tracks = allTracksNow.filter((t) => t.isPublic && t.genre === genre);
     // shuffle
     for (let i = tracks.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -505,9 +557,14 @@ qmediaRouter.get("/radio/:genre", async (req, res) => {
 
 qmediaRouter.get("/tracks/:id/similar", async (req, res) => {
   try {
-    const track = memTracks.get(req.params.id);
+    // Набор берётся из хранилища: до 28.08.2026 здесь читалась память
+    // процесса, и при живой базе эта выборка была бы пуста всегда.
+    const loaded = await allTracks();
+    if (loaded.failed) return replyQMediaStorageDown(res);
+    const allTracksNow = loaded.rows;
+    const track = allTracksNow.find((x) => x.id === req.params.id);
     if (!track) return res.status(404).json({ error: "not found" });
-    const similar = Array.from(memTracks.values())
+    const similar = allTracksNow
       .filter((t) => t.isPublic && t.genre === track.genre && t.id !== track.id)
       .slice(0, 5);
     res.json({ tracks: similar });

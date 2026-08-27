@@ -1,0 +1,255 @@
+/**
+ * Хранилище QMedia: база, а не память процесса.
+ *
+ * Замер 27.08.2026, тремя способами:
+ *   · в `routes/qmedia.ts` НОЛЬ вызовов pool.query на 31 маршрут;
+ *   · четыре таблицы создаются при старте, и ни одну из них модуль не
+ *     запрашивает (единственный читатель `QMediaTrack` — ecosystem.ts, ради
+ *     счётчика);
+ *   · прод: `/api/qmedia/health` перечисляет все четыре таблицы, а
+ *     `/api/qmedia/tracks` и `/videos` отдают пустые списки.
+ *
+ * То есть модуль за $15/мес (входит в medium, full, enterprise; статус `live`)
+ * терял всё загруженное при каждой выкатке, а ручка состояния при этом
+ * обещала хранилище. Схема таблиц была написана полностью и правильно — её
+ * просто не подключили.
+ *
+ * Идиома взята из qlearn, чтобы у платформы не появилось второго способа
+ * делать то же самое: сначала база, память — только когда базы НЕТ ВОВСЕ;
+ * `failed` отличает «ничего нет» от «спросить не удалось», и вызывающий
+ * отвечает на второе отказом, а не пустотой.
+ */
+
+import { getPool } from "./dbPool";
+import { isQMediaDbReady } from "./ensureQMediaTables";
+
+const pool = getPool();
+
+export type TrackRow = {
+  id: string;
+  userId: string;
+  title: string;
+  artist: string;
+  genre: string;
+  duration: number;
+  url: string | null;
+  coverUrl: string | null;
+  lyrics: string | null;
+  playCount: number;
+  isPublic: boolean;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Память — хранилище ТОЛЬКО там, где базы нет вовсе (разработка, демо). */
+export const memTracks = new Map<string, TrackRow>();
+
+function iso(v: unknown): string {
+  if (v instanceof Date) return v.toISOString();
+  const s = String(v ?? "");
+  const ms = Date.parse(s);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : new Date(0).toISOString();
+}
+
+function rowToTrack(r: Record<string, unknown>): TrackRow {
+  return {
+    id: String(r.id),
+    userId: String(r.userId),
+    title: String(r.title ?? ""),
+    artist: String(r.artist ?? ""),
+    genre: String(r.genre ?? "other"),
+    duration: Number(r.duration ?? 0),
+    url: r.url === null || r.url === undefined ? null : String(r.url),
+    coverUrl: r.coverUrl === null || r.coverUrl === undefined ? null : String(r.coverUrl),
+    lyrics: r.lyrics === null || r.lyrics === undefined ? null : String(r.lyrics),
+    playCount: Number(r.playCount ?? 0),
+    isPublic: Boolean(r.isPublic),
+    tags: Array.isArray(r.tags) ? (r.tags as string[]).map(String) : [],
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  };
+}
+
+const COLS =
+  '"id","userId","title","artist","genre","duration","url","coverUrl","lyrics",' +
+  '"playCount","isPublic","tags","createdAt","updatedAt"';
+
+/**
+ * Публичные треки. Фильтры уходят В SQL, а не применяются после выборки:
+ * иначе LIMIT отрезал бы записи ДО фильтрации, и жанр с редкими треками
+ * возвращал бы пустоту при полной базе. Порядок — по числу прослушиваний,
+ * как было в маршруте до переноса: поведение здесь не меняется.
+ */
+export async function listPublicTracks(
+  limit: number,
+  opts: { genre?: string | null; q?: string | null } = {},
+): Promise<{ rows: TrackRow[]; failed: boolean }> {
+  const genre = opts.genre ?? null;
+  const q = opts.q ?? null;
+  if (isQMediaDbReady()) {
+    try {
+      const params: unknown[] = [];
+      const where = ['"isPublic" = TRUE'];
+      if (genre) { params.push(genre); where.push(`"genre" = $${params.length}`); }
+      if (q) {
+        params.push(`%${q}%`);
+        where.push(`("title" ILIKE $${params.length} OR "artist" ILIKE $${params.length})`);
+      }
+      params.push(limit);
+      const { rows } = await pool.query(
+        `SELECT ${COLS} FROM "QMediaTrack" WHERE ${where.join(" AND ")}
+          ORDER BY "playCount" DESC LIMIT $${params.length}`,
+        params,
+      );
+      return { rows: rows.map(rowToTrack), failed: false };
+    } catch (e) {
+      console.error("[QMedia] список публичных треков не прочитан", e);
+      return { rows: [], failed: true };
+    }
+  }
+  const needle = q ? q.toLowerCase() : null;
+  const rows = [...memTracks.values()]
+    .filter((t) => t.isPublic)
+    .filter((t) => (genre ? t.genre === genre : true))
+    .filter((t) =>
+      needle
+        ? t.title.toLowerCase().includes(needle) || t.artist.toLowerCase().includes(needle)
+        : true,
+    )
+    .sort((a, b) => b.playCount - a.playCount)
+    .slice(0, limit);
+  return { rows, failed: false };
+}
+
+/**
+ * Все треки — для производных выборок: рекомендации, тренды, радио, похожие,
+ * умные плейлисты. Они считают по всему набору, а не по странице, поэтому
+ * пагинация здесь была бы неверной: топ по жанру нельзя собрать из первых N
+ * записей.
+ *
+ * ⚠️ Честная граница: это выборка БЕЗ предела. Сегодня в модуле ноль треков,
+ * и цена нулевая; при росте эти пять маршрутов надо переписать на агрегаты в
+ * SQL, а не наращивать лимит. Пишу прямо, чтобы это не всплыло сюрпризом.
+ */
+export async function allTracks(): Promise<{ rows: TrackRow[]; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const { rows } = await pool.query(`SELECT ${COLS} FROM "QMediaTrack"`);
+      return { rows: rows.map(rowToTrack), failed: false };
+    } catch (e) {
+      console.error("[QMedia] полный список треков не прочитан", e);
+      return { rows: [], failed: true };
+    }
+  }
+  return { rows: [...memTracks.values()], failed: false };
+}
+
+/** Мои треки — и публичные, и черновики. */
+export async function listMyTracks(
+  userId: string,
+): Promise<{ rows: TrackRow[]; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT ${COLS} FROM "QMediaTrack" WHERE "userId" = $1 ORDER BY "createdAt" DESC`,
+        [userId],
+      );
+      return { rows: rows.map(rowToTrack), failed: false };
+    } catch (e) {
+      console.error("[QMedia] список моих треков не прочитан", e);
+      return { rows: [], failed: true };
+    }
+  }
+  const rows = [...memTracks.values()]
+    .filter((t) => t.userId === userId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { rows, failed: false };
+}
+
+export async function getTrack(
+  id: string,
+): Promise<{ track: TrackRow | null; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const { rows } = await pool.query(`SELECT ${COLS} FROM "QMediaTrack" WHERE "id" = $1`, [id]);
+      return { track: rows[0] ? rowToTrack(rows[0]) : null, failed: false };
+    } catch (e) {
+      console.error("[QMedia] трек не прочитан", e);
+      return { track: null, failed: true };
+    }
+  }
+  return { track: memTracks.get(id) ?? null, failed: false };
+}
+
+export async function saveTrack(t: TrackRow): Promise<{ failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      await pool.query(
+        `INSERT INTO "QMediaTrack" (${COLS})
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         ON CONFLICT ("id") DO UPDATE SET
+           "title"=$3,"artist"=$4,"genre"=$5,"duration"=$6,"url"=$7,"coverUrl"=$8,
+           "lyrics"=$9,"playCount"=$10,"isPublic"=$11,"tags"=$12,"updatedAt"=$14`,
+        [t.id, t.userId, t.title, t.artist, t.genre, t.duration, t.url, t.coverUrl,
+         t.lyrics, t.playCount, t.isPublic, t.tags, t.createdAt, t.updatedAt],
+      );
+      return { failed: false };
+    } catch (e) {
+      console.error("[QMedia] трек не сохранён", e);
+      return { failed: true };
+    }
+  }
+  memTracks.set(t.id, t);
+  return { failed: false };
+}
+
+export async function deleteTrack(
+  id: string,
+  userId: string,
+): Promise<{ removed: boolean; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const r = await pool.query(
+        `DELETE FROM "QMediaTrack" WHERE "id" = $1 AND "userId" = $2`,
+        [id, userId],
+      );
+      return { removed: (r.rowCount ?? 0) > 0, failed: false };
+    } catch (e) {
+      console.error("[QMedia] трек не удалён", e);
+      return { removed: false, failed: true };
+    }
+  }
+  const t = memTracks.get(id);
+  if (!t || t.userId !== userId) return { removed: false, failed: false };
+  memTracks.delete(id);
+  return { removed: true, failed: false };
+}
+
+/**
+ * Прослушивание. Счётчик наращивается В БАЗЕ одним запросом, а не чтением с
+ * последующей записью: два слушателя одновременно потеряли бы один показ.
+ */
+export async function bumpPlayCount(
+  id: string,
+): Promise<{ playCount: number | null; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `UPDATE "QMediaTrack" SET "playCount" = "playCount" + 1, "updatedAt" = NOW()
+          WHERE "id" = $1 RETURNING "playCount"`,
+        [id],
+      );
+      if (!rows[0]) return { playCount: null, failed: false };
+      return { playCount: Number(rows[0].playCount), failed: false };
+    } catch (e) {
+      console.error("[QMedia] прослушивание не засчитано", e);
+      return { playCount: null, failed: true };
+    }
+  }
+  const t = memTracks.get(id);
+  if (!t) return { playCount: null, failed: false };
+  t.playCount += 1;
+  t.updatedAt = new Date().toISOString();
+  return { playCount: t.playCount, failed: false };
+}

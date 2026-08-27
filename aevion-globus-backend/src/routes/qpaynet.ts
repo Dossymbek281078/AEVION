@@ -50,6 +50,7 @@ import { validateOr400 } from "../lib/qpaynetValidate";
 import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } from "../lib/qpaynetCrypto";
 import { csvNeutralizeFormula } from "../lib/csv";
 import { queryNumber } from "../lib/queryNumber";
+import { queryDate } from "../lib/queryDate";
 
 export const qpaynetRouter = Router();
 
@@ -2915,7 +2916,10 @@ qpaynetRouter.get("/admin/refunds", async (req, res) => {
   if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
 
   const limit = Math.max(1, Math.min(200, queryNumber(req.query.limit, 50)));
-  const before = (req.query.before as string | undefined)?.trim();
+  // Значение уходит в сравнение с колонкой времени; без проверки формы
+  // `?before=zzz` даёт 500 вместо 400 (см. lib/queryDate).
+  const before = queryDate(req.query.before);
+  if (before === undefined) return res.status(400).json({ error: "invalid_before" });
   const params: unknown[] = [limit];
   let where = "type = 'refund'";
   if (before) {
@@ -2959,7 +2963,10 @@ qpaynetRouter.get("/admin/refunds.csv", async (req, res) => {
   if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
 
   const limit = Math.max(1, Math.min(5000, queryNumber(req.query.limit, 1000)));
-  const before = (req.query.before as string | undefined)?.trim();
+  // Значение уходит в сравнение с колонкой времени; без проверки формы
+  // `?before=zzz` даёт 500 вместо 400 (см. lib/queryDate).
+  const before = queryDate(req.query.before);
+  if (before === undefined) return res.status(400).json({ error: "invalid_before" });
   const params: unknown[] = [limit];
   let where = "type = 'refund'";
   if (before) {
@@ -3168,7 +3175,10 @@ qpaynetRouter.get("/admin/audit", async (req, res) => {
 
   const action = (req.query.action as string | undefined)?.trim();
   const owner = (req.query.owner as string | undefined)?.trim();
-  const before = (req.query.before as string | undefined)?.trim();
+  // Значение уходит в сравнение с колонкой времени; без проверки формы
+  // `?before=zzz` даёт 500 вместо 400 (см. lib/queryDate).
+  const before = queryDate(req.query.before);
+  if (before === undefined) return res.status(400).json({ error: "invalid_before" });
   const limit = Math.max(1, Math.min(500, queryNumber(req.query.limit, 100)));
 
   const where: string[] = [];

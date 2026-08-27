@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { queryNumber } from "../lib/queryNumber";
+import { queryDate } from "../lib/queryDate";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import jwt from "jsonwebtoken";
@@ -1341,7 +1342,13 @@ pricingRouter.post("/partners/deals", (req, res) => {
 pricingRouter.get("/changelog", (req, res) => {
   const KIND_VALUES: ChangelogKind[] = ["added", "changed", "removed", "deprecated", "promo", "module"];
   const kind = typeof req.query.kind === "string" ? (req.query.kind as ChangelogKind) : undefined;
-  const since = typeof req.query.since === "string" ? req.query.since : undefined;
+  // `?since=zzz` раньше молча отдавал ПУСТОЙ журнал: сравнение строк
+  // ("2026-01-01" >= "zzz") ложно, и неверный запрос выглядел честным
+  // ответом «изменений нет». 500 тут не было, потому потребитель мягче
+  // СУБД — но неверный ответ хуже отказа: на него сошлются как на факт.
+  const sinceRaw = queryDate(req.query.since);
+  if (sinceRaw === undefined) return res.status(400).json({ error: "invalid_since" });
+  const since = sinceRaw ?? undefined;
   const limit = Math.min(Math.max(queryNumber(req.query.limit, 100), 1), 500);
   const offset = Math.max(queryNumber(req.query.offset, 0), 0);
 

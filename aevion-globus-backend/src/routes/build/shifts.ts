@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
 import { sendToUser } from "./push";
+import { queryDate } from "../../lib/queryDate";
 
 export const shiftsRouter = Router();
 
@@ -68,9 +69,8 @@ shiftsRouter.get("/my", async (req, res) => {
     // Проверяем ФОРМАТОМ, а не одним `Date.parse`: `Date.parse("1")` в Node
     // возвращает валидную дату (год 2001), которую Postgres не принимает, —
     // то есть проверка через него одна слабее базы.
-    const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ][\d:.+\-Z]*)?$/;
-    const from = typeof req.query.from === "string" ? req.query.from.trim() : null;
-    if (from !== null && from !== "" && (!ISO_DATE.test(from) || Number.isNaN(Date.parse(from)))) {
+    const from = queryDate(req.query.from);
+    if (from === undefined) {
       return fail(res, 400, "invalid_from");
     }
     const params: unknown[] = [auth.sub, auth.sub];

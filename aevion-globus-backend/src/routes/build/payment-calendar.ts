@@ -9,6 +9,7 @@ import {
   vNumber,
   vEnum,
 } from "../../lib/build";
+import { queryDate } from "../../lib/queryDate";
 
 export const paymentCalendarRouter = Router();
 
@@ -68,8 +69,12 @@ paymentCalendarRouter.get("/my", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
-    const from = typeof req.query.from === "string" ? req.query.from : null;
-    const to = typeof req.query.to === "string" ? req.query.to : null;
+    // Значения уходят в сравнение с колонкой даты; без проверки формы
+    // `?from=zzz` даёт 500 вместо 400 (см. lib/queryDate).
+    const from = queryDate(req.query.from);
+    const to = queryDate(req.query.to);
+    if (from === undefined) return fail(res, 400, "invalid_from");
+    if (to === undefined) return fail(res, 400, "invalid_to");
 
     const params: unknown[] = [auth.sub, auth.sub];
     let where = `"clientId" = $1 OR "workerId" = $2`;

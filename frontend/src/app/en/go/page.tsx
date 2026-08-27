@@ -19,12 +19,15 @@ import { productById, channelFrom, withChannel, type Product } from "@/lib/produ
 // ничего чужого. Это НЕ дубль: у неё своя, более узкая задача — один вход для
 // англоязычного трафика, без разделов про запуски русских модулей.
 //
-// ЧЕСТНОСТЬ ОФФЕРА. Бесплатного англоязычного лид-магнита у нас НЕТ: русскому
-// зрителю мы отдаём протокол долголетия целиком на /longevity, а английского
-// аналога не существует. Поэтому страница ничего бесплатного НЕ обещает и
-// строится вокруг самого низкого порога входа — книги за $9. Два английских
-// ролика («Free book», «3 chapters free») этому противоречат и публиковаться в
-// исходном виде не должны.
+// ЧЕСТНОСТЬ ОФФЕРА. На момент заведения страницы бесплатного англоязычного
+// входа не существовало: русскому зрителю мы отдаём протокол долголетия целиком
+// на /longevity, а английского аналога не было. Тем же заходом заведена
+// /en/longevity — тот же разбор, из готового английского издания протокола, —
+// и теперь бесплатное стоит на странице ПЕРВЫМ, до всякой цены, как в
+// работающей русской воронке.
+//
+// Два английских ролика («Free book», «3 chapters free») всё равно неверны:
+// бесплатен протокол, а не книга и не её главы. Они пересобраны отдельно.
 export const metadata: Metadata = {
   title: "AEVION — the book behind the videos",
   description:
@@ -128,6 +131,28 @@ export default async function EnGoPage({
             attention — and the book walks through the mechanism, not the magic.
           </p>
         </header>
+
+        {/* Бесплатное — ПЕРВЫМ, до всякой цены. Так устроена работающая русская
+            воронка: человек получает обещанное роликом, убеждается, что разбор
+            настоящий, и только потом видит платное. На 28.08.2026 английского
+            бесплатного входа не существовало вовсе — /en/longevity заведена
+            тем же заходом. */}
+        <section style={styles.section}>
+          <h2 style={styles.h2}>Free, and the whole thing</h2>
+          <a href="/en/longevity" style={styles.card}>
+            <div style={styles.cardKicker}>free · no email required</div>
+            <div style={styles.cardTitle}>The Longevity Protocol</div>
+            <p style={styles.cardNote}>
+              What to measure, which interventions are actually evidenced
+              (graded A/B/C) and which popular ones are not. Twelve weeks,
+              measure and measure again.
+            </p>
+            <div style={styles.cardFoot}>
+              <span style={styles.cardPrice}>$0</span>
+              <span style={styles.cardBtn}>Read it</span>
+            </div>
+          </a>
+        </section>
 
         <section style={styles.section}>
           <h2 style={styles.h2}>Start here</h2>

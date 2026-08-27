@@ -36,6 +36,7 @@
 // user on /auth/success?token=… which is the same JWT the email login
 // path returns, so the frontend session model is unchanged.
 
+import { observedIp } from "../lib/observedIp";
 import { Router } from "express";
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
@@ -190,15 +191,11 @@ async function ensureAuthSessionTable(): Promise<void> {
   ensuredAuthSession = true;
 }
 
-function clientIp(req: { headers: any; socket?: any; ip?: string }): string | null {
-  const xff = req.headers?.["x-forwarded-for"];
-  const first = Array.isArray(xff)
-    ? xff[0]
-    : typeof xff === "string"
-    ? xff.split(",")[0]?.trim()
-    : null;
-  return first || req.ip || req.socket?.remoteAddress || null;
-}
+// Адрес для записи берём из общего модуля: раньше здесь читалось ЛЕВОЕ
+// значение X-Forwarded-For, которое пишет сам вызывающий, — разбор в
+// комментарии к lib/observedIp.ts. Копий этой функции в проекте было четыре,
+// и они разошлись; поэтому теперь одно правило, а не пятая копия.
+const clientIp = observedIp;
 
 function clientUa(req: { headers: any }): string | null {
   const ua = req.headers?.["user-agent"];

@@ -274,24 +274,54 @@ async function setUserTier(userId: string, tier: StudioTier): Promise<void> {
   } catch { memTiers.set(userId, tier); }
 }
 
-async function getMonthUsage(userId: string, month: string, capability: CapabilityKey): Promise<number> {
-  if (!isDevHubDbReady()) return memUsage.get(`${userId}:${month}:${capability}`) ?? 0;
+/**
+ * Returns `null` when the meter could not be read — NOT 0.
+ *
+ * Zero is the honest answer for a fresh month, so answering 0 on a failed read
+ * made a database outage indistinguishable from a user who had spent nothing,
+ * and every quota gate opened for as long as it lasted. Callers have to decide
+ * what to do about an unknown; they can no longer be handed a wrong number.
+ */
+async function getMonthUsage(userId: string, month: string, capability: CapabilityKey): Promise<number | null> {
+  const memKey = `${userId}:${month}:${capability}`;
+  if (!isDevHubDbReady()) return memUsage.get(memKey) ?? 0;
   try {
     const r = await pool.query(
       `SELECT "used" FROM "DevHubUsage" WHERE "userId"=$1 AND "month"=$2 AND "capability"=$3`,
       [userId, month, capability]
     );
-    return r.rows[0]?.used ?? 0;
-  } catch { return 0; }
+    // debitCredit() parks a charge here when its own write failed. That map was
+    // previously only read with the database KNOWN to be down, so with the
+    // database nominally up the debit went nowhere at all. Adding it back is
+    // the only way the fallback means anything.
+    return (r.rows[0]?.used ?? 0) + (memUsage.get(memKey) ?? 0);
+  } catch { return null; }
 }
 
-async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<{ allowed: boolean; used: number; limit: number; tier: StudioTier }> {
+type CreditVerdict = { allowed: boolean; used: number; limit: number; tier: StudioTier; usedKnown: boolean };
+
+async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<CreditVerdict> {
   const tier = await getUserTier(userId);
   const limit = TIER_LIMITS[tier][capability];
-  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier };
+  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier, usedKnown: true };
   const month = creditMonth();
   const used = await getMonthUsage(userId, month, capability);
-  return { allowed: used + amount <= limit, used, limit, tier };
+  if (used === null) {
+    // Letting the request through is the lesser mistake — blocking a paying
+    // customer over a database blip is worse than one uncharged generation.
+    // What is not acceptable is passing in silence, which is how a whole
+    // unmetered month left no trace anywhere.
+    return { allowed: true, used: 0, limit, tier, usedKnown: false };
+  }
+  return { allowed: used + amount <= limit, used, limit, tier, usedKnown: true };
+}
+
+/**
+ * Spread into a metered route's response so an unverified allowance travels
+ * with the answer instead of being inferred from its absence.
+ */
+function creditNote(verdict: CreditVerdict): { creditUnverified: true } | Record<string, never> {
+  return verdict.usedKnown ? {} : { creditUnverified: true };
 }
 
 async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
@@ -316,16 +346,22 @@ async function debitCredit(userId: string, capability: CapabilityKey, amount = 1
   }
 }
 
-async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; month: string; usage: Record<CapabilityKey, { used: number; limit: number }> }> {
+type UsageCell = { used: number; limit: number; usedKnown?: false };
+
+async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; month: string; usage: Record<CapabilityKey, UsageCell>; anyUnknown: boolean }> {
   const tier = await getUserTier(userId);
   const month = creditMonth();
   const caps: CapabilityKey[] = ["video", "image", "tts", "music", "deploy"];
-  const usage: Record<string, { used: number; limit: number }> = {};
+  const usage: Record<string, UsageCell> = {};
+  let anyUnknown = false;
   for (const cap of caps) {
     const used = await getMonthUsage(userId, month, cap);
-    usage[cap] = { used, limit: TIER_LIMITS[tier][cap] };
+    // A capability whose meter could not be read is shown as 0 so the screen
+    // still renders, but carries the flag that says the 0 is not a measurement.
+    if (used === null) anyUnknown = true;
+    usage[cap] = { used: used ?? 0, limit: TIER_LIMITS[tier][cap], ...(used === null ? { usedKnown: false as const } : {}) };
   }
-  return { tier, month, usage: usage as Record<CapabilityKey, { used: number; limit: number }> };
+  return { tier, month, usage: usage as Record<CapabilityKey, UsageCell>, anyUnknown };
 }
 
 // ── Deferred post-deploy work ────────────────────────────────────────────────
@@ -3600,6 +3636,7 @@ devhubRouter.post("/media/image", async (req, res) => {
       return res.status(503).json({
         error: "No image provider configured — set OPENAI_API_KEY, or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID (Workers AI), or TOGETHER_API_KEY",
         setupUrl: "https://platform.openai.com/api-keys",
+        ...creditNote(imgCredit),
       });
     }
     // Single provider: preserve its upstream status + error text verbatim
@@ -3627,6 +3664,7 @@ devhubRouter.post("/media/image", async (req, res) => {
         : "All image providers failed",
       providersBlocked: fixes.length > 0,
       attempts,
+      ...creditNote(imgCredit),
     });
   }
 
@@ -3652,7 +3690,10 @@ devhubRouter.post("/media/image", async (req, res) => {
     ok: true, url: imageUrl, storage, provider: result.provider,
     ...(attempts.length ? { fallbackFrom: attempts.map((a) => a.provider) } : {}),
     revisedPrompt: result.revisedPrompt, creditsUsed: 1,
-    creditsRemaining: imgCredit.limit === -1 ? -1 : imgCredit.limit - imgCredit.used - 1,
+    // A balance computed from an unreadable meter is an invented number, so it
+    // is withheld rather than printed as if it were counted.
+    creditsRemaining: imgCredit.limit === -1 ? -1 : imgCredit.usedKnown ? imgCredit.limit - imgCredit.used - 1 : null,
+    ...creditNote(imgCredit),
   });
 });
 
@@ -6168,7 +6209,9 @@ devhubRouter.post("/media/video", async (req, res) => {
       audio: chosen.audio,
       realism: wantsRealism,
       creditsUsed: 1,
-      creditsRemaining: credit.limit === -1 ? -1 : credit.limit - credit.used - 1,
+      // Withheld rather than invented when the meter could not be read.
+      creditsRemaining: credit.limit === -1 ? -1 : credit.usedKnown ? credit.limit - credit.used - 1 : null,
+      ...creditNote(credit),
     });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Video generation failed" });
@@ -6473,16 +6516,27 @@ devhubRouter.get("/studio/credits", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   try {
-    const result = await getAllMonthUsage(userId);
+    const { anyUnknown, ...result } = await getAllMonthUsage(userId);
     return res.json({
       ...result,
-      // Отдаём ТУ ЖЕ таблицу, по которой стоит ограничитель (см. TIER_LIMITS и
-      // его использование в проверке расхода). Здесь лежала её литеральная
-      // копия — два источника правды об одном и том же. Пока числа совпадали,
-      // это было незаметно; стоило бы поднять тариф в одном месте — и витрина
-      // обещала бы одно, а ограничитель считал другое. Расхождение такого рода
-      // не падает и не пишется в журнал: человек просто упирается в предел
-      // раньше обещанного.
+      // Сведено вручную из двух правок, и обе нужны.
+      //
+      // ОТ ПЕРЕНОСИМОГО КОММИТА: пометка «расход прочитать не удалось». Ноль —
+      // честный ответ для нового месяца, поэтому отказ базы был неотличим от
+      // пользователя, который ничего не потратил, и каждый предел открывался.
+      //
+      // ОТ ТЕКУЩЕЙ ВЕТКИ: `tierInfo` отдаёт ТУ ЖЕ таблицу, по которой стоит
+      // ограничитель. В переносимой версии здесь лежала её литеральная копия —
+      // два источника правды об одном.
+      //
+      // Адрес взят ТЕКУЩИЙ: в переносимой версии он ещё `aevion.vercel.app`,
+      // и принять её сторону целиком значило бы откатить домен.
+      ...(anyUnknown
+        ? degraded(
+            "Расход за месяц не удалось прочитать из базы — показанные числа не являются замером, " +
+              "и предел при этой проверке не применялся",
+          )
+        : {}),
       tierInfo: TIER_LIMITS,
       upgradeUrl: "https://aevion.app/studio#upgrade",
     });

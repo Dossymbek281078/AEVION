@@ -240,23 +240,6 @@ export default function DeepSanPage() {
           backdropFilter: "blur(12px)",
           padding: "12px 24px",
           display: "flex",
-          // Перенос: ссылка «← AEVION · DeepSan», чип цены и метка «Anti-chaos
-          // MVP» в один ряд при экране 375 не помещаются.
-          //
-          // Граница доказательства, честно. В ОДИНОЧКУ эта правка ширину не
-          // меняет: замер на живой странице дал документ 732 -> 732 при 375,
-          // потому что сейчас страницу уводят вбок куски крупнее (сетка и
-          // баннер — они закрыты отдельно). Что шапка остаётся ПОСЛЕДНИМИ 5px,
-          // показал разбор aevion-overflow-who.mjs --plan: он применяет правки
-          // накопительно и меряет каждый шаг, и его последний шаг — «div внутри
-          // header -> родителю flex-wrap», 380 -> 375.
-          //
-          // Отрицательного эффекта нет: при 375 высота шапки 218 -> 214,
-          // при 1440 — 124 -> 120, ширина в обоих случаях не менялась.
-          // Перемерить в одиночку станет можно только после выкатки первых двух
-          // правок — тогда остаток и должен стать ровно этой шапкой.
-          flexWrap: "wrap",
-          rowGap: "8px",
           alignItems: "center",
           justifyContent: "space-between",
         }}
@@ -267,7 +250,7 @@ export default function DeepSanPage() {
         >
           ← AEVION · DeepSan
         </Link>
-        <div style={{ display: "flex", flexWrap: "wrap", rowGap: "8px", alignItems: "center", gap: "12px", minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <ModulePricingChip moduleId="deepsan" theme="dark" />
           <span
             style={{

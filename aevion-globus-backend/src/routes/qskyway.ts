@@ -345,6 +345,21 @@ interface RouteResult {
    * чипом города «0% обмерено» это два наших же ответа, спорящих друг с другом.
    */
   obstacleSegments: number; measuredObstacleSegments: number;
+  /**
+   * Участки, где высота УГАДАНА, и на скольких из них страховочный запас за
+   * неуверенность не изменил высоту коридора (его поглотил пол FLOOR).
+   *
+   * Это единственное место, где видно, что заявленная в /health функция
+   * confidence-clearance в конкретном коридоре не сработала. Без этого поля
+   * снаружи она неотличима от работающей: features её перечисляет, а
+   * byHeightSourceM показывает 16 метров, которые в такие участки не идут.
+   */
+  blindHeight: {
+    guessedSegments: number;
+    inertPenaltySegments: number;
+    clearedUpToM: number;
+    note: string;
+  };
   respectCeiling: boolean;
   airspace: AirspaceCompliance;
 }
@@ -371,6 +386,7 @@ function buildRoute(
   const alts: number[] = [];
   const obstacles: number[] = [];
   let timeStill = 0, timeWind = 0, windSum = 0, confSum = 0, measuredEdges = 0;
+  let guessedSegments = 0, guessedInertSegments = 0;
   let obstacleSegments = 0, measuredObstacleSegments = 0;
   for (let k = 0; k < path.length - 1; k++) {
     const alt = edgeAlt(path[k].c, path[k].r, path[k + 1].c, path[k + 1].r);
@@ -380,6 +396,25 @@ function buildRoute(
     const worstSrc = Math.max(src(path[k].c, path[k].r), src(path[k + 1].c, path[k + 1].r));
     confSum += confClear(worstSrc);
     if (worstSrc === 0) measuredEdges++;
+    // Страховочный запас за неуверенность бывает СЪЕДЕН полом коридора.
+    //
+    // Замер 27.08.2026 по твину Астаны: из 237 зданий с угаданной высотой 199
+    // сидят на слепом дефолте 12 м, и для них 12 + 15 запаса + 16 штрафа = 43,
+    // что МЕНЬШЕ пола в 50 м. Ступеней вверх ноль, коридор ложится ровно туда
+    // же, куда лёг бы вообще без штрафа. То есть функция, обещанная в
+    // /health как confidence-clearance, включается на зданиях, про которые мы
+    // кое-что знаем, и молчит на тех, про которые не знаем ничего — обратная
+    // зависимость от заявленной.
+    //
+    // Высоту здесь НЕ меняем: крейсер во всех трёх городах — продуктовое
+    // решение. Но молчать об этом нельзя, иначе снаружи неотличимо от
+    // работающей защиты. Считаем, на скольких участках так вышло.
+    if (worstSrc === 2) {
+      guessedSegments++;
+      const bandNoPenalty = Math.max(0, Math.ceil((maxObst + CLEAR - FLOOR) / BAND));
+      const bandWithPenalty = Math.max(0, Math.ceil((maxObst + CLEAR + confClear(worstSrc) - FLOOR) / BAND));
+      if (bandWithPenalty === bandNoPenalty) guessedInertSegments++;
+    }
     // Участок с настоящим препятствием — только там вопрос «а обмерена ли эта
     // высота?» вообще имеет смысл.
     if (maxObst > 0) {
@@ -407,6 +442,18 @@ function buildRoute(
     avgConfClearM: +(confSum / Math.max(1, alts.length)).toFixed(1),
     heightConfidencePct: Math.round(100 * measuredEdges / Math.max(1, alts.length)),
     obstacleSegments, measuredObstacleSegments,
+    // Где обещанный просвет держится на догадке, а страховочный штраф не сработал.
+    // clearedUpToM — настоящая высота здания, выше которой заявленный запас CLEAR
+    // над этим коридором НЕ выдержан: коридор стоит на полу, значит терпит
+    // препятствие не выше (пол − запас).
+    blindHeight: {
+      guessedSegments,
+      inertPenaltySegments: guessedInertSegments,
+      clearedUpToM: FLOOR - CLEAR,
+      note: guessedInertSegments > 0
+        ? `На ${guessedInertSegments} участк(ах) высота угадана, а страховочный запас за неуверенность съеден полом коридора: просвет ${CLEAR} м гарантирован только если здание не выше ${FLOOR - CLEAR} м.`
+        : "Все участки с угаданной высотой получили настоящий страховочный запас.",
+    },
     respectCeiling,
     airspace: assessCeiling(field, path, alts),
   };

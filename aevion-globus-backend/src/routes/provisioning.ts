@@ -13,6 +13,7 @@ import { Router } from "express";
 import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { join, dirname } from "path";
 import type { TierId, BillingPeriod } from "../data/pricing";
+import { projects } from "../data/projects";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { degraded } from "../lib/degradedResponse";
 
@@ -265,6 +266,50 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
   }
 }
 
+/**
+ * Сколько модулей мы реально отдаём — СЧИТАЕТСЯ из реестра, не пишется рукой.
+ *
+ * В письме покупателю стояло «Все 27 модулей AEVION». Число пришло из
+ * документации апреля 2026 и с тех пор устарело: в `data/projects.ts` сейчас
+ * 41 запись, из них 36 со статусом live. То есть письмо, которое человек
+ * получает СРАЗУ ПОСЛЕ ОПЛАТЫ, занижало продукт на девять живых модулей.
+ *
+ * Занижение опаснее завышения ровно тем, что его никто не поймает: на
+ * завышение приходит жалоба, на заниженное обещание — тишина.
+ */
+export const LIVE_MODULE_COUNT = projects.filter((p) => String(p.status) === "live").length;
+
+/**
+ * Что написать в блоке «Что входит».
+ *
+ * Пустой `modules` значит РАЗНОЕ у разных тарифов, и прежний текст этого не
+ * различал: у `full` пустой список это «всё», а у `lite` — «модуль ещё не
+ * выбран». Подписчику Lite уходило «Все N модулей», то есть обещание,
+ * которого его тариф не даёт.
+ */
+export function includedLine(sub: Subscription): string {
+  if (sub.modules.length > 0) return sub.modules.join(" · ");
+  if (sub.tierId === "lite") {
+    return "Один модуль на ваш выбор — выберите его в кабинете";
+  }
+  if (sub.tierId === "free") return "Бесплатный доступ к открытым модулям";
+  return `Все модули AEVION (сейчас ${LIVE_MODULE_COUNT} в работе)`;
+}
+
+/**
+ * Куда вести из письма.
+ *
+ * Раньше здесь был зашитый QRight — и кнопку «Открыть QRight» получал каждый,
+ * включая того, кто только что купил CyberChess. Ведём в купленный модуль,
+ * когда он один и известен, иначе в кабинет, где человек видит свою подписку.
+ */
+export function ctaFor(sub: Subscription): { href: string; label: string } {
+  if (sub.modules.length === 1) {
+    return { href: `/${sub.modules[0]}`, label: "Открыть модуль" };
+  }
+  return { href: "/account", label: "Открыть кабинет" };
+}
+
 const TIER_DISPLAY: Record<TierId, string> = {
   free: "Free",
   lite: "Lite",
@@ -284,6 +329,7 @@ const TIER_DISPLAY: Record<TierId, string> = {
 
 function welcomeHtml(sub: Subscription): string {
   const tierName = TIER_DISPLAY[sub.tierId];
+  const cta = ctaFor(sub);
   const trialBlock = sub.trialDays > 0
     ? `<div style="margin:16px 0;padding:14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;color:#78350f">
          <strong>Триал-период активен до ${new Date(Date.now() + sub.trialDays * 86400000).toLocaleDateString("ru-RU")}.</strong>
@@ -308,11 +354,11 @@ function welcomeHtml(sub: Subscription): string {
           ${trialBlock}
           <p style="font-size:13px;color:#64748b;line-height:1.5;margin:16px 0">
             <strong>Что входит:</strong><br/>
-            ${sub.modules.length > 0 ? sub.modules.join(" · ") : "Все 27 модулей AEVION"}
+            ${includedLine(sub)}
           </p>
           <div style="margin:24px 0;text-align:center">
-            <a href="${FRONTEND_URL}/qright" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#0d9488,#0ea5e9);color:#fff;text-decoration:none;border-radius:10px;font-weight:800;font-size:14px">
-              Открыть QRight
+            <a href="${FRONTEND_URL}${cta.href}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#0d9488,#0ea5e9);color:#fff;text-decoration:none;border-radius:10px;font-weight:800;font-size:14px">
+              ${cta.label}
             </a>
           </div>
           <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
@@ -337,9 +383,9 @@ function welcomeText(sub: Subscription): string {
 
 Ваша подписка активна.${trial}
 Что входит:
-${sub.modules.length > 0 ? sub.modules.join(" · ") : "Все 27 модулей AEVION"}
+${includedLine(sub)}
 
-Открыть QRight: ${FRONTEND_URL}/qright
+${ctaFor(sub).label}: ${FRONTEND_URL}${ctaFor(sub).href}
 
 ID подписки: ${sub.id}
 Поддержка: hello@aevion.app

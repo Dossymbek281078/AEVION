@@ -161,6 +161,27 @@ function edgeAltOf(g: CityData["grid"]) {
   };
 }
 
+/**
+ * Пересекает ли ПРЯМАЯ между двумя площадками хоть одну запретную зону.
+ *
+ * Это и есть честный ответ на вопрос «обход состоялся?»: если прямая свободна,
+ * коридор никого не обходил, и сообщать об обходе — вранье в приятную сторону.
+ *
+ * Геометрия без выборки точек: расстояние от центра зоны до ОТРЕЗКА (не до
+ * бесконечной прямой — иначе зона позади площадки считалась бы пересечённой).
+ */
+function directLineCrossesNoFly(a: { x: number; y: number }, b: { x: number; y: number }, zones: ZoneXY[]): boolean {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  for (const z of zones) {
+    let t = len2 === 0 ? 0 : ((z.x - a.x) * dx + (z.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const px = a.x + t * dx, py = a.y + t * dy;
+    if (Math.hypot(z.x - px, z.y - py) <= z.radiusM) return true;
+  }
+  return false;
+}
+
 // cell-in-no-fly test (metres)
 function noFlyTest(city: CityData, zones: ZoneXY[]) {
   const cell = city.grid.cell;
@@ -333,7 +354,9 @@ interface RouteResult {
   city: string; from: number; to: number; path: Cell[]; alts: number[]; obstacles: number[];
   distanceKm: number; cruiseAltM: number;
   etaMinStill: number; etaMinWind: number; avgWindMs: number; windFromDeg: number;
+  /** Обход РЕАЛЬНО состоялся: прямая между площадками режет зону, коридор — нет. */
   avoidsNoFly: boolean;
+  noFly: { zonesInCity: number; directLineCrosses: boolean; cellsOnPathInsideZone: number };
   avgConfClearM: number;
   /**
    * Страховочный запас, усреднённый по участкам СО ЗДАНИЕМ, а не по всем.
@@ -448,7 +471,28 @@ function buildRoute(
     etaMinWind: +(timeWind / 60).toFixed(2),
     avgWindMs: +(windSum / Math.max(1, alts.length)).toFixed(2),
     windFromDeg: w0.fromDeg,
-    avoidsNoFly: zones.length > 0,
+    // ⚠ Поле называет свойство МАРШРУТА, а считалось по ГОРОДУ.
+    //
+    // Было `zones.length > 0`, то есть «в этом городе вообще есть запретные
+    // зоны». У всех трёх городов их по две, значит поле всегда отвечало true и
+    // о маршруте не сообщало ничего. А в городе без зон оно отвечало бы false —
+    // «этот коридор запретные зоны НЕ обходит», хотя обходить нечего.
+    //
+    // Разворот молчаливый: движок зоны честно обходит (noFlyTest режет ячейки),
+    // врал только отчёт. Проверено 27.08.2026, потребителей у поля не было ни
+    // во фронте, ни в тестах — поэтому чиню значение, а не завожу третье поле.
+    //
+    // Теперь true означает то, что написано: прямая между площадками проходит
+    // сквозь зону, а построенный коридор — нет, то есть обход действительно
+    // состоялся.
+    avoidsNoFly: directLineCrossesNoFly(a, b, zones),
+    noFly: {
+      zonesInCity: zones.length,
+      directLineCrosses: directLineCrossesNoFly(a, b, zones),
+      // Инвариант: A* не имеет права вести коридор сквозь зону. Считаем вслух,
+      // потому что «ноль» проверяемый, а «мы уверены» — нет.
+      cellsOnPathInsideZone: path.reduce((n, p) => n + (blocked(p.c, p.r) ? 1 : 0), 0),
+    },
     avgConfClearM: +(confSum / Math.max(1, alts.length)).toFixed(1),
     // То же число, но по участкам, где под крылом ВООБЩЕ есть здание.
     //
@@ -789,7 +833,7 @@ function allPairRoutes(cityId: string, city: CityData): (RouteResult | null)[] {
  * от того, работает он или сломан. Проверять сам факт молчания — значит принять
  * тихий no-op за фичу, поэтому тест подставляет сюда синтетический твин.
  */
-export const __engineForTests = { buildRoute, heightDisputeFor, suspectCellsOf, slotReceipt };
+export const __engineForTests = { buildRoute, heightDisputeFor, suspectCellsOf, slotReceipt, directLineCrossesNoFly };
 
 // ── vertiport suitability (шаг к муниципальным площадкам) ──────────────────────
 interface VertiportScore {

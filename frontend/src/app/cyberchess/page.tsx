@@ -224,7 +224,7 @@ const CAT: Record<"play"|"learn"|"compete"|"watch"|"economy", {c:string; label:s
 // и оттенки вкладок отличались между двумя местами → путаная навигация по цвету).
 const TAB_META: Record<"play"|"puzzles"|"analysis"|"coach", {hue:string; icon:string; label:string}> = {
   play:     {hue:"#059669", icon:"♟",  label:"Играть"},
-  puzzles:  {hue:"#0891b2", icon:"🧩", label:"Пазлы"},
+  puzzles:  {hue:"#0891b2", icon:"🧩", label:"Задачи"},
   analysis: {hue:"#2563eb", icon:"📊", label:"Анализ"},
   coach:    {hue:"#7c3aed", icon:"🎓", label:"Коуч"},
 };
@@ -550,9 +550,9 @@ const ACH_LABELS:Record<string,string>={
   wins_50:"🏅 50 побед",
   beat_expert:"⚔ Победа над Expert",
   beat_master:"👑 Победа над Master",
-  puzzles_10:"🧩 10 пазлов",
-  puzzles_50:"🧠 50 пазлов",
-  puzzles_100:"🎯 100 пазлов",
+  puzzles_10:"🧩 10 задач",
+  puzzles_50:"🧠 50 задач",
+  puzzles_100:"🎯 100 задач",
   endgame_master:"🏰 Мастер эндшпилей",
 };
 
@@ -889,7 +889,7 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,bran
     : "play";
   const items=[
     {id:"play",    icon:"▶", label:"Играть",  action:onPlay},
-    {id:"puzzles", icon:"🧩",label:"Пазлы",   action:onPuzzles},
+    {id:"puzzles", icon:"🧩",label:"Задачи",   action:onPuzzles},
     {id:"analysis",icon:"📊",label:"Анализ",  action:onAnalysis},
     {id:"coach",   icon:"🎓",label:"Коуч",    action:onCoach},
     {id:"profile", icon:"👤",label:"Профиль", action:onProfile},
@@ -1719,7 +1719,7 @@ export default function CyberChessPage(){
     if(pzFilterRating[0]===0&&pzFilterRating[1]===3000&&savedGames.length>=3){
       const lo=Math.max(0,adaptivePzRating-150),hi=Math.min(3000,adaptivePzRating+150);
       sPzFilterRating([lo,hi]);sPzI(0);pzAutoTuned.current=true;
-      showToast(`Пазлы подобраны под твой уровень ${adaptivePzRating} (${lo}–${hi})`,"info");
+      showToast(`Задачи подобраны под твой уровень ${adaptivePzRating} (${lo}–${hi})`,"info");
     }
   },[tab]);
   // Auto-persist FIDE estimate so matchmaking can read it from localStorage
@@ -2653,7 +2653,7 @@ export default function CyberChessPage(){
     seen.add(pick.fen);
     if(seen.size>Math.min(300,Math.floor(full.length*0.7))){seen.clear();seen.add(pick.fen);} // не заперемся, когда пул мал
     const fIdx=list===full?idx:full.indexOf(pick); // pzI — индекс в полном fPz (подсветка списка)
-    let g;try{g=new Chess(pick.fen)}catch{showToast("Битый пазл, пропускаю","error");return}
+    let g;try{g=new Chess(pick.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}
     setGame(g);sBk(k=>k+1);sPzI(fIdx>=0?fIdx:0);sPzCurrent(pick);sPzAttempt("idle");
     sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pick.fen]);
     sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);
@@ -2683,7 +2683,7 @@ export default function CyberChessPage(){
   useEffect(()=>{
     if(tab!=="puzzles"||fPz.length===0||PUZZLES.length===0)return;
     const pz=fPz[0];if(!pz)return;
-    let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+    let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
   },[pzCategory]);
 
   // Recompute daily puzzle whenever puzzles are loaded (once we know total count)
@@ -3271,7 +3271,7 @@ export default function CyberChessPage(){
                   showToast(`✓ Решено! ${pzCurrent.name}`,"success");
                 }
                 const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
-                addChessy(reward,"пазл решён");
+                addChessy(reward,"задача решена");
                 if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
                 {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
                 bumpDaily("puzzle");
@@ -3279,7 +3279,7 @@ export default function CyberChessPage(){
                 if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
                   const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
                   bumpDaily("daily-puzzle");
-                  setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
+                  setTimeout(()=>addChessy(50,"☀ задача дня"),800);
                 }
               }
             }catch{}
@@ -3310,7 +3310,7 @@ export default function CyberChessPage(){
             showToast(`✓ Решено! ${pzCurrent.name}`,"success");
           }
           const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
-          addChessy(reward,"пазл решён");
+          addChessy(reward,"задача решена");
           if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
           {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
           bumpDaily("puzzle");
@@ -3319,7 +3319,7 @@ export default function CyberChessPage(){
           if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
             const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
             bumpDaily("daily-puzzle");
-            setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
+            setTimeout(()=>addChessy(50,"☀ задача дня"),800);
           }
         }
         return true;
@@ -4409,9 +4409,9 @@ export default function CyberChessPage(){
 
   /* ── Puzzle achievement tracker ── */
   useEffect(()=>{
-    if(pzSolvedCount===10)unlockAch("puzzles_10",30,"10 пазлов решено");
-    if(pzSolvedCount===50)unlockAch("puzzles_50",150,"50 пазлов решено");
-    if(pzSolvedCount===100)unlockAch("puzzles_100",400,"100 пазлов решено");
+    if(pzSolvedCount===10)unlockAch("puzzles_10",30,"10 задач решено");
+    if(pzSolvedCount===50)unlockAch("puzzles_50",150,"50 задач решено");
+    if(pzSolvedCount===100)unlockAch("puzzles_100",400,"100 задач решено");
   },[pzSolvedCount,unlockAch]);
 
   /* ── Move list auto-scroll к browseIdx ── */
@@ -4998,13 +4998,13 @@ export default function CyberChessPage(){
     }catch{showToast("Не удалось загрузить эндшпиль","error")}
   };
   const loadDailyPuzzle=()=>{
-    if(!dailyState||PUZZLES.length===0){showToast("Пазлы ещё грузятся…","info");return}
+    if(!dailyState||PUZZLES.length===0){showToast("Задачи ещё грузятся…","info");return}
     const pz=PUZZLES[dailyState.idx]||PUZZLES[0];
     sTab("puzzles");
-    let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
-    showToast(`☀ Пазл дня · ${pz.r}`,"info");
+    let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
+    showToast(`☀ Задача дня · ${pz.r}`,"info");
   };
-  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Пазлы ещё грузятся…","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("Нет пазлов под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Задачи ещё грузятся…","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("Нет задач под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode. В rush НЕ трогаем работающий дедлайн (ручной выбор пазла
     // посреди раша не должен обнулять часы).
     if(pzMode==="timed3")startClock(180);
@@ -5043,7 +5043,7 @@ export default function CyberChessPage(){
       if(!mv){
         // Битый/нелегальный ход в линии решения — не крутим вхолостую остаток, чистый стоп.
         pzSolPlayingRef.current=false;
-        showToast(i===0?"Решение недоступно для этого пазла":"Показал решение до конца доступной линии","info");
+        showToast(i===0?"Решение недоступно для этой задачи":"Показал решение до конца доступной линии","info");
         return;
       }
       sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,g.fen()]);sBk(k=>k+1);snd(mv.captured?"capture":"move");
@@ -5207,8 +5207,8 @@ export default function CyberChessPage(){
   // Sync timer to current mode (fires on mode switch, even mid-puzzle)
   useEffect(()=>{
     if(tab!=="puzzles")return;
-    if(pzMode==="timed3"){startClock(180);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);pzSeenRef.current.clear();showToast("⏱ 3 минуты — решай как можно больше пазлов, +3с за каждый правильный","info")}
-    else if(pzMode==="timed5"){startClock(300);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);pzSeenRef.current.clear();showToast("⏱ 5 минут — решай как можно больше пазлов, +3с за каждый правильный","info")}
+    if(pzMode==="timed3"){startClock(180);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);pzSeenRef.current.clear();showToast("⏱ 3 минуты — решай как можно больше задач, +3с за каждый правильный","info")}
+    else if(pzMode==="timed5"){startClock(300);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);pzSeenRef.current.clear();showToast("⏱ 5 минут — решай как можно больше задач, +3с за каждый правильный","info")}
     else if(pzMode==="custom"){startClock(pzCustomSec);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);pzSeenRef.current.clear();showToast(`⏱ Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")} — таймер пошёл`,"info")}
     else if(pzMode==="rush"){
       // Survival — таймер как длинная страховка (10 мин); Timed — выбранная длительность.
@@ -5276,7 +5276,7 @@ export default function CyberChessPage(){
     // раньше Rush ставил таймер, но пазл не грузился → «Rush не работает»).
     const idx=Math.floor(Math.random()*fPz.length);
     const pz=fPz[idx];
-    let g;try{g=new Chess(pz.fen)}catch{showToast("Битый пазл, пропускаю","error");return}
+    let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}
     setGame(g);sBk(k=>k+1);sPzI(idx);sPzCurrent(pz);sPzAttempt("idle");
     sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);
     sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
@@ -5931,7 +5931,7 @@ export default function CyberChessPage(){
                 ?
               </span>
             )}
-            {chessy.owned.puzzle_boost&&<span title="Пазл-буст активен!" style={{fontSize:9,marginLeft:2,color:"#ea580c",fontWeight:900}}>⚡</span>}
+            {chessy.owned.puzzle_boost&&<span title="Ускорение задач включено!" style={{fontSize:9,marginLeft:2,color:"#ea580c",fontWeight:900}}>⚡</span>}
             {chessy.owned.streak_shield&&<span title="Щит стрика активен!" style={{fontSize:9,marginLeft:1,color:"#3b82f6",fontWeight:900}}>🛡</span>}
           </button>
           <button
@@ -6194,7 +6194,7 @@ export default function CyberChessPage(){
               {/* Goal chips */}
               {([
                 {icon:"♟",label:`Сыграй ${dailyGoals.gamesGoal}`,cur:g1,max:dailyGoals.gamesGoal,done:g1done,onClick:()=>{}},
-                {icon:"◆",label:`Реши ${dailyGoals.puzzleGoal} пазлов`,cur:g2,max:dailyGoals.puzzleGoal,done:g2done,onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+                {icon:"◆",label:`Реши ${dailyGoals.puzzleGoal} задач`,cur:g2,max:dailyGoals.puzzleGoal,done:g2done,onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
                 {icon:"🎓",label:"Открой Coach",cur:g3done?1:0,max:1,done:g3done,onClick:()=>{sTab("coach");sSetup(false)}},
               ]).map(g=><button key={g.label} onClick={g.onClick} style={{
                 display:"inline-flex",alignItems:"center",gap:5,
@@ -6843,9 +6843,9 @@ export default function CyberChessPage(){
           {savedGames.length<3&&(()=>{
             const tiles:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
               {emoji:"♟",title:"Сыграй первую партию",desc:"AI любого уровня. От 800 до 2400. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
-              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:pzTotal?`${pzTotal.toLocaleString("ru-RU")} ${ccPlural(pzTotal,"задача","задачи","задач")} в банке.`:"Полмиллиона задач в банке."}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
+              {emoji:"◆",title:"Реши задачу",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:pzTotal?`${pzTotal.toLocaleString("ru-RU")} ${ccPlural(pzTotal,"задача","задачи","задач")} в банке.`:"Полмиллиона задач в банке."}`,cta:"К задачам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
               {emoji:"🎓",title:"Спроси Coach",desc:"AI-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
-              {emoji:"📅",title:"Задача дня",desc:"Один пазл каждый день. Серия, таблица лидеров, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
+              {emoji:"📅",title:"Задача дня",desc:"Одна задача каждый день. Серия, таблица лидеров, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
             ];
             return <Card padding={SPACE[3]} elevation="sm">
               <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:SPACE[3]}}>
@@ -7102,7 +7102,7 @@ export default function CyberChessPage(){
             ...(isHumanGame?[]:[
               {icon:TAB_META.analysis.icon,label:TAB_META.analysis.label,hint:"Анализ позиции",accent:TAB_META.analysis.hue, act:()=>sTab("analysis")},
               {icon:TAB_META.coach.icon,   label:TAB_META.coach.label,   hint:"AI-коуч",       accent:TAB_META.coach.hue,    act:()=>sTab("coach")},
-              {icon:TAB_META.puzzles.icon, label:TAB_META.puzzles.label, hint:"Случайный пазл", accent:TAB_META.puzzles.hue,  act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+              {icon:TAB_META.puzzles.icon, label:TAB_META.puzzles.label, hint:"Случайная задача", accent:TAB_META.puzzles.hue,  act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
             ]),
             {icon:spectatorPublish?"📡":"📡",label:spectatorPublish?"Live●":"Стрим",hint:spectatorPublish?"Стрим идёт":"Стрим для зрителей",accent:"#ef4444",act:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
             {icon:pip.open?"⏏":"📺",label:pip.open?"Видео✓":"Видео",hint:"YouTube/Twitch поверх доски (PiP) — смотри стрим во время партии",accent:"#ec4899",act:()=>{if(pip.open){pip.hide();return}let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}openStreamSource(def);}},
@@ -9657,7 +9657,7 @@ export default function CyberChessPage(){
                 <div style={{fontSize:32,marginBottom:SPACE[2],opacity:0.6}}>♟</div>
                 <div style={{fontSize:13,fontWeight:700,color:CC.textDim}}>Пока нет ходов</div>
                 <div style={{fontSize:11,color:CC.textMute,marginTop:4,lineHeight:1.5}}>
-                  {tab==="play"||tab==="coach"?"Сделай первый ход — история появится здесь":tab==="puzzles"?"Выбери позицию или загрузи пазл":"Загрузи PGN/FEN или введи ходы"}
+                  {tab==="play"||tab==="coach"?"Сделай первый ход — история появится здесь":tab==="puzzles"?"Выбери позицию или загрузи задачу":"Загрузи PGN/FEN или введи ходы"}
                 </div>
               </div>}
             </div>
@@ -10219,7 +10219,7 @@ export default function CyberChessPage(){
                       // Адаптивно — цель = рейтинг + бонус за серию решений (растёт с победами).
                       const lo=Math.max(0,adaptivePzRating-150),hi=Math.min(3000,adaptivePzRating+150);
                       sPzFilterRating([lo,hi]);sPzI(0);pzAutoTuned.current=true;
-                      showToast(`Пазлы под твой уровень ${adaptivePzRating} (${lo}–${hi})${pzStreak.cur>0?` · серия +${Math.min(300,pzStreak.cur*40)}`:""}`,"info");
+                      showToast(`Задачи под твой уровень ${adaptivePzRating} (${lo}–${hi})${pzStreak.cur>0?` · серия +${Math.min(300,pzStreak.cur*40)}`:""}`,"info");
                     }} title={`Адаптивная цель: рейтинг ${rat}${pzStreak.cur>0?` + серия ${pzStreak.cur} (+${Math.min(300,pzStreak.cur*40)})`:""}`} style={{padding:"4px 9px",borderRadius:6,border:"1px solid #7c3aed",background:Math.abs(pzFilterRating[0]-(Math.max(0,adaptivePzRating-150)))<40?"#7c3aed":"transparent",color:Math.abs(pzFilterRating[0]-(Math.max(0,adaptivePzRating-150)))<40?"#fff":"#7c3aed",fontSize:11,fontWeight:800,cursor:"pointer"}}>
                       ⚡ Мой уровень {adaptivePzRating}{pzStreak.cur>0?` 🔥${pzStreak.cur}`:""}
                     </button>
@@ -10398,26 +10398,26 @@ export default function CyberChessPage(){
 
                 {/* Current puzzle */}
                 <button onClick={()=>{
-                  if(!pzCurrent){showToast("Нет активного пазла","error");return}
+                  if(!pzCurrent){showToast("Нет активной задачи","error");return}
                   const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`Пазл · ${pzCurrent.name}`,"success");
-                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🧩 Текущий пазл</button>
+                  showToast(`Задача · ${pzCurrent.name}`,"success");
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🧩 Текущая задача</button>
 
                 {/* Random puzzle */}
                 <button onClick={()=>{
-                  if(PUZZLES.length===0){showToast("Пазлы не загружены","error");return}
+                  if(PUZZLES.length===0){showToast("Задачи не загружены","error");return}
                   const pz=PUZZLES[Math.floor(Math.random()*PUZZLES.length)];
                   const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`🎲 Случайный пазл · ${pz.r} · ${pz.name}`,"info");
-                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🎲 Random пазл</button>
+                  showToast(`🎲 Случайная задача · ${pz.r} · ${pz.name}`,"info");
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🎲 Случайная задача</button>
 
                 {/* Daily puzzle */}
                 <button onClick={()=>{
                   if(!dailyState||!PUZZLES[dailyState.idx]){showToast("Задача дня не готова","error");return}
                   const pz=PUZZLES[dailyState.idx];
                   const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`☀ Пазл дня · ${pz.r}`,"info");
-                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>☀ Daily пазл</button>
+                  showToast(`☀ Задача дня · ${pz.r}`,"info");
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>☀ Задача дня</button>
 
                 {/* Random endgame study */}
                 <button onClick={()=>{
@@ -10999,9 +10999,9 @@ ${question.trim()}`;
               const weakThemes=Object.entries(themePerf).filter(([,v])=>v.c+v.w>=3&&v.c/(v.c+v.w)<0.5).sort((a,b)=>(a[1].c/(a[1].c+a[1].w))-(b[1].c/(b[1].c+b[1].w)));
               if(weakThemes.length>0){
                 const wt=weakThemes[0][0];
-                plan.push({day:"Вт",task:`Пазлы: ${wt}`,icon:"🎯",action:()=>{sTab("puzzles");sPzFilterTheme(wt);sPzI(0);sPzCategory("all")}});
+                plan.push({day:"Вт",task:`Задачи: ${wt}`,icon:"🎯",action:()=>{sTab("puzzles");sPzFilterTheme(wt);sPzI(0);sPzCategory("all")}});
               }else{
-                plan.push({day:"Вт",task:"Реши 10 пазлов",icon:"🎯",action:()=>{sTab("puzzles");sPzMode("learn" as any)}});
+                plan.push({day:"Вт",task:"Реши 10 задач",icon:"🎯",action:()=>{sTab("puzzles");sPzMode("learn" as any)}});
               }
               // Wednesday: Coach knowledge reading
               plan.push({day:"Ср",task:"Читай базу знаний",icon:"📚",action:()=>{sShowKnowledge(true)}});
@@ -11073,10 +11073,10 @@ ${question.trim()}`;
                       if(el)el.scrollIntoView({behavior:"smooth",block:"start"});
                       showToast("Выбери источник ниже","info");
                     })}
-                    {modeBtn("🧩","Из пазлов","активный пазл",()=>{
-                      if(!pzCurrent){showToast("Сначала выбери пазл во вкладке «Пазлы»","info");sTab("puzzles");return}
+                    {modeBtn("🧩","Из задач","активная задача",()=>{
+                      if(!pzCurrent){showToast("Сначала выбери задачу во вкладке «Задачи»","info");sTab("puzzles");return}
                       const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sCoachAIEnabled(false);sEditorMode(false);
-                      showToast(`Пазл: ${pzCurrent.name}`,"success");
+                      showToast(`Задача: ${pzCurrent.name}`,"success");
                     })}
                     {modeBtn("📜",savedGames.length>0?`Библиотека · ${savedGames.length}`:"Библиотека","твои партии",()=>{
                       if(savedGames.length===0){showToast("Нет сыгранных партий — сыграй хотя бы одну","error");return}
@@ -11120,10 +11120,10 @@ ${question.trim()}`;
                 }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>📜 Последняя партия</button>
 
                 <button onClick={()=>{
-                  if(!pzCurrent){showToast("Нет активного пазла","error");return}
+                  if(!pzCurrent){showToast("Нет активной задачи","error");return}
                   const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`Из пазла · ${pzCurrent.name}`,"success");
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🧩 Текущий пазл</button>
+                  showToast(`Из задачи · ${pzCurrent.name}`,"success");
+                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🧩 Текущая задача</button>
 
                 <label style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left",display:"block"}}>
                   📁 PGN файл
@@ -11631,11 +11631,11 @@ ${question.trim()}`;
         {id:"theme_ice",name:"Тема Ice ❄️",desc:"Холодный ледяной стиль",cost:40,kind:"unlock"},
         {id:"theme_rose",name:"Тема Rose 🌹",desc:"Розовая романтика",cost:40,kind:"unlock"},
         {id:"theme_dark",name:"Тема Dark 🌑",desc:"Тёмный минималистичный",cost:35,kind:"unlock"},
-        {id:"streak_shield",name:"Щит стрика 🛡",desc:"Защита от сброса стрика пазлов один раз",cost:25,kind:"action",onBuy:()=>{
+        {id:"streak_shield",name:"Щит стрика 🛡",desc:"Один раз защитит серию решений от обнуления",cost:25,kind:"action",onBuy:()=>{
           sChessy(c=>({...c,owned:{...c.owned,streak_shield:true}}));sShowShop(false);showToast("🛡 Щит стрика активирован!","success");
         }},
-        {id:"puzzle_boost",name:"Пазл-буст ⚡",desc:"Следующие 10 пазлов с двойным Chessy-бонусом",cost:30,kind:"action",onBuy:()=>{
-          sChessy(c=>({...c,owned:{...c.owned,puzzle_boost:true}}));sShowShop(false);showToast("⚡ Пазл-буст активирован на 10 пазлов!","success");
+        {id:"puzzle_boost",name:"Ускорение ⚡",desc:"Следующие 10 задач с двойным Chessy-бонусом",cost:30,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,owned:{...c.owned,puzzle_boost:true}}));sShowShop(false);showToast("⚡ Ускорение включено на 10 задач!","success");
         }},
         // ── Shop v2 (2026-05-18) ──
         {id:"hint_pack_5",name:"Пакет подсказок ×5",desc:"5 ghost-подсказок на любые партии (счётчик хранится в профиле)",cost:60,kind:"action",onBuy:()=>{
@@ -12134,10 +12134,10 @@ ${question.trim()}`;
           </div>
           <p style={{margin:"12px 0 0",color:CC.textDim,fontSize:13}}>+50 Chessy уже на счёте. Начнём?</p>
         </>},
-        {icon:"🎯",title:"5000+ пазлов и тайм-режимы",body:<>
+        {icon:"🎯",title:"5000+ задач и режимы на время",body:<>
           <p style={{margin:"0 0 10px",lineHeight:1.6}}><b>Puzzle Rush</b> — реши как можно больше за 3 минуты. Streak 🔥 увеличивает Chessy-бонус.</p>
           <p style={{margin:"0 0 10px",lineHeight:1.6}}><b>Тайм-режимы</b> — 3мин / 5мин / свой: авто-переход после каждого решения, итоговый экран с WR%.</p>
-          <p style={{margin:0,color:CC.textDim,fontSize:13}}>Нажми <b>Пазлы</b> в верхней навигации → Выбери режим → Вперёд!</p>
+          <p style={{margin:0,color:CC.textDim,fontSize:13}}>Нажми <b>Задачи</b> в верхней навигации → Выбери режим → Вперёд!</p>
         </>},
         {icon:"🎓",title:"AI Coach с Anthropic Claude",body:<>
           <p style={{margin:"0 0 10px",lineHeight:1.6}}>Задай вопрос во вкладке Coach — тренер видит текущую позицию, оценку движка и историю ходов.</p>
@@ -12275,10 +12275,10 @@ ${question.trim()}`;
           ["J","◆ Прыгнуть на пред. ключевой момент (зевок/ошибка/блеск)"],
           ["K","◆ Прыгнуть на след. ключевой момент"],
         ]},
-        {title:"Пазлы",rows:[
+        {title:"Задачи",rows:[
           ["H","💡 Показать решение (5 Chessy)"],
-          ["N / →","▶ Следующий пазл"],
-          ["R","↺ Заново текущий пазл"],
+          ["N / →","▶ Следующая задача"],
+          ["R","↺ Заново текущую задачу"],
         ]},
         {title:"Эксклюзивные фичи AEVION",rows:[
           ["⚔ в «Мои партии»","Ghost Duel — дуэль с прошлой собой"],
@@ -12314,11 +12314,11 @@ ${question.trim()}`;
           ]},
           {title:"Учиться",cat:"learn",items:[
             {e:"🎓",t:"AI-Коуч",d:"Разбор уровня супер-GM (Opus 4.8)",act:()=>sTab("coach"),hot:true},
-            {e:"🧩",t:"Пазлы",d:"Тактика · Rush · разбор решения на доске",act:()=>sTab("puzzles")},
+            {e:"🧩",t:"Задачи",d:"Тактика · Rush · разбор решения на доске",act:()=>sTab("puzzles")},
             {e:"📊",t:"Анализ",d:"Движок · стрелки · WhatIf-объяснения",act:()=>sTab("analysis")},
             {e:"📚",t:"Репертуар",d:"Тренажёр дебютов + Lichess Masters",to:"/cyberchess/repertoire"},
             {e:"🎯",t:"Тренинг",d:"Ежедневный хаб упражнений",to:"/cyberchess/training"},
-            {e:"📅",t:"Задача дня",d:"Один пазл в день, серия",to:"/cyberchess/daily"},
+            {e:"📅",t:"Задача дня",d:"Одна задача в день, серия",to:"/cyberchess/daily"},
           ]},
           {title:"Соревноваться",cat:"compete",items:[
             {e:"🏆",t:"Турниры онлайн",d:"Swiss · Round-robin · нокаут",to:"/cyberchess/tournaments",hot:true},
@@ -12333,7 +12333,7 @@ ${question.trim()}`;
           ]},
           {title:"Экономика",cat:"economy",items:[
             {e:"🪙",t:"Chessy Экономика",d:"Аукцион · аренда коуча · подписки",to:"/cyberchess/economy",hot:true},
-            {e:"🛒",t:"Магазин",d:"Буст-пазлы · щит серии · темы",act:()=>sShowShop(true)},
+            {e:"🛒",t:"Магазин",d:"Задачи с ускорением · щит серии · темы",act:()=>sShowShop(true)},
           ]},
         ];
         // Цвет категории задаёт левый бордюр карточки + чип иконки → цвет = навигационный сигнал.
@@ -13428,10 +13428,10 @@ ${question.trim()}`;
             <div style={{fontSize:12,fontWeight:900,color:CC.brand,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>💰 Как заработать</div>
             <ul style={{margin:0,paddingLeft:18,fontSize:12,color:CC.text,lineHeight:1.8}}>
               <li><b>Победа</b> 5–160 (зависит от силы AI и времени)</li>
-              <li><b>Пазл</b> 2–15 (по рейтингу задачи)</li>
+              <li><b>Задача</b> 2–15 (по рейтингу задачи)</li>
               <li><b>Задача дня</b> +50 за первое решение в день</li>
               <li><b>Ежедневный бонус</b> +5 / +30 (серия 3) / +100 (серия 7)</li>
-              <li><b>Puzzle Rush</b> 2 за пазл + бонус по best streak</li>
+              <li><b>Puzzle Rush</b> 2 за задачу + бонус за серию</li>
               <li><b>Исправленная ошибка</b> +3 (разбор зевка)</li>
               <li><b>Достижения</b> 30–400</li>
               <li><b>Первый визит</b> +50 при первом визите</li>
@@ -13442,7 +13442,7 @@ ${question.trim()}`;
             <div style={{fontSize:12,fontWeight:900,color:CC.danger,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>🛒 На что тратить</div>
             <ul style={{margin:0,paddingLeft:18,fontSize:12,color:CC.text,lineHeight:1.8}}>
               <li><b>Отмена хода</b> 3 (откат хода в партии vs AI)</li>
-              <li><b>Подсказка в пазле</b> 5</li>
+              <li><b>Подсказка в задаче</b> 5</li>
               <li><b>Ghost-подсказка</b> 15 (стрелка лучшего хода)</li>
               <li><b>Глубокий разбор</b> 20 (коуч)</li>
               <li><b>Открытие Master AI</b> 30 (2400 ELO)</li>

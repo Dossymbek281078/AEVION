@@ -68,6 +68,27 @@ export type ContentHashRule =
   /** Правило выдачи до канонизации. Страна и город хешем НЕ покрыты. */
   | "v1";
 
+/**
+ * Подпись под хешем в PDF-сертификате.
+ *
+ * Вынесено сюда, потому что проверить это в самом PDF нельзя: PDFKit кодирует
+ * текст подмножеством шрифта, и в потоке документа нет ASCII — извлекатель,
+ * который «ищет надпись в байтах», молча сравнивал бы пустоту. Решение
+ * отделено от рисования и проверяется напрямую.
+ */
+export function pdfContentHashLabel(
+  verdict: ContentHashVerdict,
+  todayIso: string,
+): string {
+  if (!verdict.valid)
+    return "CONTENT HASH (SHA-256) — DOES NOT MATCH THE FIELDS ABOVE";
+  const day = todayIso.slice(0, 10);
+  return (
+    `CONTENT HASH (SHA-256) — re-verified ${day}` +
+    (verdict.rule === "v1" ? " under the v1 rule (location not covered)" : "")
+  );
+}
+
 export type ContentHashVerdict =
   | { valid: true; rule: ContentHashRule }
   | { valid: false; rule: null };

@@ -21,6 +21,7 @@ import { describe, test, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express from "express";
 import crypto from "node:crypto";
+import zlib from "node:zlib";
 
 /* ── Фальшивая база: хранит то, что положили, и отдаёт это же ─────────── */
 
@@ -137,7 +138,10 @@ process.env.SHARD_HMAC_SECRET_V1 =
 // eslint-disable-next-line import/first
 import { pipelineRouter } from "../src/routes/pipeline";
 // eslint-disable-next-line import/first
-import { canonicalContentHash } from "../src/lib/contentHash";
+import {
+  canonicalContentHash,
+  pdfContentHashLabel,
+} from "../src/lib/contentHash";
 
 const app = () => {
   const a = express();
@@ -327,5 +331,68 @@ describe("соподпись автора — слой, который дела�
     // Отказ обязан быть ДО записи, иначе в реестре осядет полусертификат.
     expect(store.IPCertificate ?? []).toHaveLength(0);
     expect(store.QuantumShield ?? []).toHaveLength(0);
+  });
+});
+
+describe("PDF не утверждает больше, чем проверено", () => {
+  // PDF — то, что покупатель уносит с собой и показывает третьей стороне.
+  // До 27.08.2026 он печатал строку из базы как факт, ничего не пересчитывая:
+  // у записи с подменённым названием получался такой же документ, как у целой.
+  //
+  // ⚠️ Надписи в PDF проверить чтением байтов НЕЛЬЗЯ: PDFKit кодирует текст
+  // подмножеством шрифта, в потоке документа ASCII нет. Первая версия этого
+  // теста искала там строки — и контроль извлекателя это поймал, иначе
+  // проверки сравнивали бы пустоту и были бы вечно зелёными на отрицаниях.
+  // Поэтому решение отделено от рисования и проверяется напрямую.
+
+  async function pdf(certId: string) {
+    return request(app())
+      .get(`/api/pipeline/certificate/${certId}/pdf`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(c));
+        res.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+  }
+
+  test("контроль: PDF отдаётся и это действительно PDF", async () => {
+    const issued = await issue();
+    const r = await pdf(issued.body.certificate.id);
+    expect(r.status).toBe(200);
+    expect(r.headers["content-type"]).toMatch(/application\/pdf/);
+    expect(r.body.toString("latin1").slice(0, 5)).toBe("%PDF-");
+  });
+
+  test("PDF рисуется и когда хеш НЕ сходится — документ не падает", async () => {
+    // Важно именно это: при расхождении рисуется дополнительная полоса.
+    // Ошибка в её координатах уронила бы выдачу документа целиком.
+    const issued = await issue();
+    const id = issued.body.certificate.id;
+    store.IPCertificate[0].title = "Чужое название";
+    const r = await pdf(id);
+    expect(r.status).toBe(200);
+    expect(r.body.toString("latin1").slice(0, 5)).toBe("%PDF-");
+  });
+
+  test("подпись под хешем: сошлось по нынешнему правилу", () => {
+    expect(
+      pdfContentHashLabel({ valid: true, rule: "v2" }, "2026-08-27T10:00:00.000Z"),
+    ).toBe("CONTENT HASH (SHA-256) — re-verified 2026-08-27");
+  });
+
+  test("подпись под хешем: сошлось по прежнему правилу — ограничение названо", () => {
+    const label = pdfContentHashLabel(
+      { valid: true, rule: "v1" },
+      "2026-08-27T10:00:00.000Z",
+    );
+    expect(label).toMatch(/re-verified 2026-08-27/);
+    expect(label).toMatch(/location not covered/);
+  });
+
+  test("подпись под хешем: НЕ сошлось — ни слова о подтверждении", () => {
+    const label = pdfContentHashLabel({ valid: false, rule: null }, "2026-08-27T10:00:00.000Z");
+    expect(label).toMatch(/DOES NOT MATCH/);
+    expect(label).not.toMatch(/verified/);
   });
 });

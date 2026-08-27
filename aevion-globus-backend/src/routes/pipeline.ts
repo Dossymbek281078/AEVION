@@ -15,6 +15,7 @@ import {
 import { QRightError, type QRightErrorCode } from "../lib/errors/QRightError";
 import {
   canonicalContentHash,
+  pdfContentHashLabel,
   verifyContentHash,
 } from "../lib/contentHash";
 import {
@@ -1835,6 +1836,26 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
     }
 
     const cert = rows[0];
+
+    /* Пересчитываем хеш ПРЯМО СЕЙЧАС, а не печатаем сохранённое как факт.
+     *
+     * До 27.08.2026 PDF брал строку из базы и печатал «CERTIFICATE OF
+     * INTELLECTUAL PROPERTY PROTECTION» над её полями, ничего не проверяя.
+     * То есть у записи с подменённым названием получался такой же красивый
+     * документ, как у целой, — а именно PDF покупатель уносит с собой и
+     * показывает третьей стороне. Утверждение обязано быть не сильнее
+     * проверки, которая за ним стоит. */
+    const pdfHashVerdict = verifyContentHash(
+      {
+        title: cert.title,
+        description: cert.description,
+        kind: cert.kind,
+        country: cert.country,
+        city: cert.city,
+      },
+      cert.contentHash,
+    );
+
     const PDFDocument = (await import("pdfkit")).default;
     const QRCode = await import("qrcode");
 
@@ -1904,6 +1925,22 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
         yTitle + 52,
         { align: "center", width: W },
       );
+
+    /* ── Расхождение видно на первом экране, а не в мелком блоке внизу ── */
+    if (!pdfHashVerdict.valid) {
+      doc.rect(50, yTitle + 66, W, 16).fill("#fef2f2");
+      doc
+        .fontSize(8)
+        .font("Helvetica-Bold")
+        .fillColor("#b91c1c")
+        .text(
+          "INTEGRITY CHECK FAILED — the fields above do not match the recorded content hash. " +
+            "Verify at the link below before relying on this document.",
+          50,
+          yTitle + 70,
+          { align: "center", width: W },
+        );
+    }
 
     /* ── Divider ── */
     const yDiv1 = yTitle + 75;
@@ -2007,10 +2044,17 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
       .text("Cryptographic Proof", 50, yCryptoTitle);
 
     const fields = [
-      { label: "CONTENT HASH (SHA-256)", value: cert.contentHash },
+      {
+        // Не «хеш», а «хеш и что с ним прямо сейчас»: подпись строки без
+        // результата проверки читается как подтверждение, которого не было.
+        label: pdfContentHashLabel(pdfHashVerdict, new Date().toISOString()),
+        value: cert.contentHash,
+      },
       { label: "HMAC-SHA256 SIGNATURE", value: cert.signatureHmac },
       {
-        label: "Ed25519 SIGNATURE",
+        // Обрезанной подписью проверить нельзя ничего. Пока печатаем не всю —
+        // называем вещи своими именами, чтобы её не приняли за подпись.
+        label: "Ed25519 SIGNATURE (first 64 chars — full value at the link below)",
         value: (cert.signatureEd25519 || "").slice(0, 64) + "...",
       },
       { label: "ALGORITHM", value: cert.algorithm },

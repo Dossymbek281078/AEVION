@@ -645,8 +645,8 @@ function AddBranchPanel({
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <div>
-          <label style={labelStyle}>ECO / Дебют</label>
-          <select
+          <label htmlFor="rep-eco" style={labelStyle}>ECO / Дебют</label>
+          <select id="rep-eco"
             value={selectedEco}
             onChange={(e) => {
               setSelectedEco(e.target.value);
@@ -680,8 +680,8 @@ function AddBranchPanel({
           </div>
         </div>
       </div>
-      <label style={labelStyle}>Своё название (опционально)</label>
-      <input
+      <label htmlFor="rep-title" style={labelStyle}>Своё название (опционально)</label>
+      <input id="rep-title"
         value={customName}
         onChange={(e) => setCustomName(e.target.value)}
         placeholder={preset.name}
@@ -776,7 +776,7 @@ function BranchCard(props: {
               {branch.eco}
             </span>
             {isEditing ? (
-              <input
+              <input aria-label="Название ветки"
                 value={branch.name}
                 onChange={(e) => onUpdate({ name: e.target.value })}
                 style={{ ...inputStyle, fontSize: 15, fontWeight: 600, padding: "4px 8px" }}
@@ -826,8 +826,8 @@ function BranchCard(props: {
           </div>
           {isEditing && (
             <div style={{ marginTop: 12 }}>
-              <label style={labelStyle}>Заметки</label>
-              <textarea
+              <label htmlFor="rep-notes" style={labelStyle}>Заметки</label>
+              <textarea id="rep-notes"
                 value={branch.notes || ""}
                 onChange={(e) => onUpdate({ notes: e.target.value })}
                 rows={3}
@@ -1446,7 +1446,7 @@ function GMGamesTab({ branches }: { branches: RepertoireBranch[] }) {
         Партии мастеров (Lichess Masters DB — рейтинг ≥ 2200 OTB):
       </div>
 
-      <select
+      <select aria-label="Выбрать ветку"
         value={selectedId}
         onChange={(e) => setSelectedId(e.target.value)}
         style={{ ...inputStyle, marginBottom: 16 }}

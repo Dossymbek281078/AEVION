@@ -367,7 +367,7 @@ function SourcePicker({ open, onClose, onPick }: {
       {tab === "live" && (
         <div>
           <div style={{ display: "flex", gap: SPACE[2], marginBottom: SPACE[2], alignItems: "center" }}>
-            <input
+            <input aria-label="Поиск"
               value={search} onChange={e => setSearch(e.target.value)}
               placeholder="🔍 По имени, языку или title (GM/IM)…"
               style={{ flex: 1, padding: "8px 12px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 13 }}
@@ -464,7 +464,7 @@ function SourcePicker({ open, onClose, onPick }: {
       {(tab === "twitch-presets" || tab === "youtube-presets") && (
         <div>
           <div style={{ display: "flex", gap: SPACE[2], marginBottom: SPACE[3], alignItems: "center" }}>
-            <input
+            <input aria-label="Поиск"
               value={search} onChange={e => setSearch(e.target.value)}
               placeholder="🔍 Поиск по имени или описанию…"
               style={{ flex: 1, padding: "8px 12px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 13 }}
@@ -529,7 +529,7 @@ function SourcePicker({ open, onClose, onPick }: {
           <div style={{ fontSize: 12, color: CC.textDim }}>
             Имя канала или URL Twitch. Например: <code style={{ background: CC.surface3, padding: "1px 5px", borderRadius: 3 }}>gmhikaru</code> или <code style={{ background: CC.surface3, padding: "1px 5px", borderRadius: 3 }}>https://twitch.tv/gmhikaru</code>
           </div>
-          <input
+          <input aria-label="Канал на Twitch"
             value={twitchInput} onChange={e => sTwitchInput(e.target.value)}
             placeholder="gmhikaru или https://twitch.tv/..."
             style={{ padding: "10px 14px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 14 }}
@@ -566,7 +566,7 @@ function SourcePicker({ open, onClose, onPick }: {
               Channel ID (например, <code>UCQHX6ViZmPsWiYSFAyS0a3Q</code>) — найдёшь в URL канала на youtube.com
             </div>
             <div style={{ display: "flex", gap: SPACE[2] }}>
-              <input value={ytChannelInput} onChange={e => sYtChannelInput(e.target.value)}
+              <input aria-label="Канал на YouTube" value={ytChannelInput} onChange={e => sYtChannelInput(e.target.value)}
                 placeholder="UCQHX6ViZmPsWiYSFAyS0a3Q"
                 style={{ flex: 1, padding: "10px 14px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 14 }} />
               <Btn variant="primary" disabled={!ytChannelInput.trim()} onClick={() => {
@@ -656,7 +656,7 @@ function SourcePicker({ open, onClose, onPick }: {
           <div style={{ fontSize: 12, color: CC.textDim }}>
             Любой embed-friendly URL. Многие сайты блокируют iframing — если белый экран, источник не разрешает встраивание.
           </div>
-          <input value={urlInput} onChange={e => sUrlInput(e.target.value)}
+          <input aria-label="Адрес источника" value={urlInput} onChange={e => sUrlInput(e.target.value)}
             placeholder="https://..."
             style={{ padding: "10px 14px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 14 }} />
           <Btn variant="primary" disabled={!urlInput.trim()} onClick={() => {
@@ -937,7 +937,7 @@ function PipChess({ pip, onChange, onClose }: {
         <a href="/cyberchess" target="_blank" rel="noopener"
           title="Открыть полный CyberChess (Stockfish, AI Coach)"
           style={{ color: "#a78bfa", textDecoration: "none", padding: "1px 6px", borderRadius: 4, background: "rgba(124,58,237,0.18)", fontSize: 10, fontWeight: 800 }}>↗</a>
-        <button onClick={onClose}
+        <button aria-label="Закрыть" onClick={onClose}
           style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontWeight: 800 }}>✕</button>
       </div>
       <iframe src="/cyberchess?embed=1" title="PiP CyberChess"

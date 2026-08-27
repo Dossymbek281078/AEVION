@@ -117,6 +117,37 @@ export async function createTierPaymentRequest(
  * @param _jwt   Reserved — kept in signature for forward-compat (no auth needed today).
  * @param opts   intervalMs (default 3000), timeoutMs (default 60000).
  */
+/**
+ * Разовая проверка «оплачен ли счёт». Для пути возврата, где ждать минуту
+ * нельзя: человек уже вернулся на страницу и смотрит на неё.
+ *
+ * ТРИ исхода, а не два. «Не смогли спросить» — это не «не оплачено»:
+ * по первому нельзя выдавать тариф (иначе его получит кто угодно), но и
+ * отказывать заплатившему нельзя. Их различает вызывающий.
+ */
+export type PaymentVerdict = "paid" | "unpaid" | "unknown";
+
+export async function verifyPaymentRequest(token: string): Promise<PaymentVerdict> {
+  if (!token || !token.trim()) return "unpaid";
+  try {
+    const res = await fetch(`/api/qpaynet/requests/${encodeURIComponent(token)}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    // 404 — такого счёта нет, это честное «не оплачено»: выдумать токен
+    // может кто угодно. Прочие коды означают «сервер не ответил по делу».
+    if (res.status === 404) return "unpaid";
+    if (!res.ok) return "unknown";
+    const j = (await res.json()) as { status?: string; paidAt?: string | null };
+    if (j && (j.status === "paid" || j.paidAt)) return "paid";
+    if (j && typeof j.status === "string") return "unpaid";
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export async function pollPaymentRequest(
   token: string,
   _jwt: string,

@@ -136,9 +136,18 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
   }
 
   return (
+    // flexWrap + maxWidth: чип стоит в шапке модуля рядом с логотипом, и без
+    // переноса он не давал шапке сложиться на телефоне — страница ехала вбок.
+    // Замер 27.08.2026 при экране 375: /lifebox чип 231px -> 203px, документ
+    // 572 -> 375 (вместе с починкой баннера в UpgradeButton.tsx).
+    // Чип общий для 37 модульных страниц, поэтому правка здесь, а не в каждой
+    // шапке: соседняя вкладка (deploy/mobile-fixes-2026-08-27, коммит 7bdc947a1)
+    // чинит шапки по одной, и эти две правки складываются, не конфликтуя.
     <span
       style={{
         display: "inline-flex",
+        flexWrap: "wrap",
+        maxWidth: "100%",
         alignItems: "center",
         gap: 10,
         padding: "6px 8px 6px 12px",
@@ -152,7 +161,7 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
     >
       <Link
         href={`/pricing?module=${encodeURIComponent(moduleId)}`}
-        style={{ display: "inline-flex", alignItems: "center", gap: 8, color: palette.text, textDecoration: "none" }}
+        style={{ display: "inline-flex", flexWrap: "wrap", maxWidth: "100%", alignItems: "center", gap: 8, color: palette.text, textDecoration: "none" }}
         title="Сравнить тарифы — Lite, Medium, Full"
       >
         <span><strong style={{ fontWeight: 800 }}>{litePrice}</strong>/мес · <span translate="no" className="notranslate">{lite.name || "Lite"}</span></span>

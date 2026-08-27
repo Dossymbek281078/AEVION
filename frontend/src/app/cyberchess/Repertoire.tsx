@@ -115,7 +115,7 @@ export default function RepertoireModal({ open, onClose, histSan, myColor, ecoHi
   if (!open) return null;
 
   return (
-    <div role="dialog" aria-label="Personal Opening Repertoire"
+    <div role="dialog" aria-label="Личный дебютный репертуар"
       style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(15,23,42,0.65)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(4px)" }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 720, maxHeight: "90vh", overflow: "auto", background: "#fff", borderRadius: 14, padding: 22, boxShadow: "0 30px 80px rgba(0,0,0,0.4)" }}>
@@ -143,7 +143,7 @@ export default function RepertoireModal({ open, onClose, histSan, myColor, ecoHi
             {ecoHint && <span style={{ marginLeft: 6, padding: "1px 6px", background: "#10b981", color: "#fff", borderRadius: 3, fontSize: 10, fontWeight: 800 }}>{ecoHint.eco} · {ecoHint.name}</span>}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <input value={name} onChange={e => setName(e.target.value)}
+            <input aria-label="Название дебюта" value={name} onChange={e => setName(e.target.value)}
               placeholder={ecoHint?.name || "Название линии (опционально)"}
               style={{ flex: 1, padding: "8px 10px", border: "1px solid #d1fae5", borderRadius: 6, fontSize: 12 }}/>
             <button onClick={handleSave} disabled={!canSave}

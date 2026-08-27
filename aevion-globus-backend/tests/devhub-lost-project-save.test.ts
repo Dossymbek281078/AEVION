@@ -160,3 +160,53 @@ describe("the rescue does not resurrect what was deleted", () => {
     expect(after.status).toBe(404);
   });
 });
+
+describe("an undo point whose save failed must not be invisible", () => {
+  /**
+   * Worse than the project case. A checkpoint is the safety net taken BEFORE
+   * files are overwritten — the Pull-from-repo button's own tooltip promises
+   * "undo restores the pre-sync state". If its save fails and the parked copy
+   * is unreadable, the operation still overwrites the files, and a later undo
+   * restores an OLDER checkpoint on top of the user's work. Silently, and in
+   * the wrong direction: the safety net makes the damage.
+   */
+  test("the newest checkpoint is the one undo sees, even if its save failed", async () => {
+    writesFailReadsWork();
+    const originalFetch = globalThis.fetch;
+    // A plain file write takes no checkpoint — only AI generation, agent steps
+    // and the GitHub pull do. The pull is the one whose button promises undo.
+    const b64 = (x: string) => Buffer.from(x, "utf8").toString("base64");
+    globalThis.fetch = (async (url: string) => {
+      const u = String(url);
+      const body =
+        u.endsWith("/repos/o/r") ? { default_branch: "main" }
+        : u.includes("/git/trees/") ? { tree: [{ path: "a.ts", type: "blob", sha: "s1", size: 10 }] }
+        : u.includes("/git/blobs/s1") ? { content: b64("from repo"), encoding: "base64" }
+        : {};
+      return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+    }) as unknown as typeof fetch;
+    process.env.GITHUB_TOKEN = "gh-fake";
+
+    try {
+      const app = makeApp();
+      const created = await request(app).post("/api/devhub/projects").send({ name: "CP" });
+      const id = created.body.project.id as string;
+      await request(app).put(`/api/devhub/projects/${id}/file?path=a.ts`).send({ content: "mine" });
+      await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: "https://github.com/o/r" });
+
+      // The pull overwrites a.ts and takes a checkpoint first — whose save fails.
+      const sync = await request(app).post(`/api/devhub/projects/${id}/github/sync`);
+      expect(sync.body.ok).toBe(true);
+
+      const list = await request(app).get(`/api/devhub/projects/${id}/checkpoints`);
+
+      expect(list.status).toBe(200);
+      // Without the overlay this list is empty, and undo has nothing — or worse,
+      // an older entry — to restore over the user's file.
+      expect((list.body.checkpoints ?? []).length).toBeGreaterThan(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+      delete process.env.GITHUB_TOKEN;
+    }
+  });
+});

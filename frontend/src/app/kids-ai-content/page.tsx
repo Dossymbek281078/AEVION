@@ -337,7 +337,15 @@ export default function KidsAiContentPage() {
       <section style={{ maxWidth: 900, margin: "0 auto", padding: "0 20px 32px" }}>
         <MvpConceptBoard
           moduleId="kids-ai-content"
-          noun="concept/messages"
+          // Имя ручки у ЭТОГО модуля — "items", а не общее "concept/messages".
+          // Замер 28.08.2026: страница просила общее имя и получала 404
+          // (route_not_found), то есть доска идей на ней не работала вовсе —
+          // ни прочитать, ни отправить. Общее имя верно для 12 модулей из 17,
+          // но у kids-ai-content и startup-exchange в реестре бэкенда
+          // (routes/mvpConcepts.ts) заданы свои: "items" и "listings".
+          // Проверено пробой: /api/kids-ai-content/items -> 200,
+          // /api/kids-ai-content/concept/messages -> 404.
+          noun="items"
           accent="rose"
           sectionTitle="Kids learning concept board"
           sectionHint="Какие темы для детских уроков нужны? Какие safe-defaults важны для разных возрастов?"

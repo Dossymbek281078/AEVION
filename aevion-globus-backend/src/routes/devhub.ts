@@ -6476,11 +6476,14 @@ devhubRouter.get("/studio/credits", async (req, res) => {
     const result = await getAllMonthUsage(userId);
     return res.json({
       ...result,
-      tierInfo: {
-        free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
-        pro:        { video: 50,  image: 200, tts: 30000,  music: 100, deploy: -1 },
-        enterprise: { video: -1,  image: -1,  tts: -1,     music: -1,  deploy: -1 },
-      },
+      // Отдаём ТУ ЖЕ таблицу, по которой стоит ограничитель (см. TIER_LIMITS и
+      // его использование в проверке расхода). Здесь лежала её литеральная
+      // копия — два источника правды об одном и том же. Пока числа совпадали,
+      // это было незаметно; стоило бы поднять тариф в одном месте — и витрина
+      // обещала бы одно, а ограничитель считал другое. Расхождение такого рода
+      // не падает и не пишется в журнал: человек просто упирается в предел
+      // раньше обещанного.
+      tierInfo: TIER_LIMITS,
       upgradeUrl: "https://aevion.app/studio#upgrade",
     });
   } catch (e: any) {

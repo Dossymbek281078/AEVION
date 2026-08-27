@@ -1,29 +1,4 @@
 {
-  "savedAt": "2026-08-19T12:00:00.000Z",
-  "leaderboard": [
-    {
-      "userId": "u-fake",
-      "name": "Player_u-fake",
-      "country": "🌍",
-      "streak": 1,
-      "score": 400,
-      "updatedAt": "2026-08-19T12:00:00.400Z"
-    },
-    {
-      "userId": "u-fast",
-      "name": "Player_u-fast",
-      "country": "🌍",
-      "streak": 1,
-      "score": 397,
-      "updatedAt": "2026-08-19T12:00:00.000Z"
-    },
-    {
-      "userId": "u-honest",
-      "name": "Player_u-hone",
-      "country": "🌍",
-      "streak": 1,
-      "score": 310,
-      "updatedAt": "2026-08-19T12:00:00.480Z"
-    }
-  ]
+  "savedAt": "2026-08-27T00:00:00.000Z",
+  "leaderboard": []
 }

@@ -18,6 +18,17 @@ import jwt from "jsonwebtoken";
  */
 
 const tracks = new Map<string, Record<string, unknown>>();
+const playlists = new Map<string, Record<string, unknown>>();
+
+/**
+ * Стенд обязан отдавать КОПИИ, как настоящая база.
+ *
+ * Пока он отдавал те же объекты, что хранил, правка в маршруте меняла
+ * «базу» напрямую — и мутация «сохранение убрано» проходила молча: данные
+ * всё равно оказывались на месте. Настоящий Postgres так не делает, и тест,
+ * который этого не воспроизводит, стережёт не то.
+ */
+const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 vi.mock("../src/lib/dbPool", () => ({
   getPool: () => ({
@@ -27,6 +38,27 @@ vi.mock("../src/lib/dbPool", () => ({
       const head = s.trimStart().toUpperCase();
       if (head.startsWith("CREATE") || head.startsWith("ALTER") || head.startsWith("SELECT 1")) {
         return { rows: [], rowCount: 0 };
+      }
+      if (s.includes('INSERT INTO "QMediaPlaylist"')) {
+        playlists.set(String(p[0]), {
+          id: p[0], userId: p[1], name: p[2], description: p[3], isPublic: p[4],
+          trackIds: JSON.parse(String(p[5])), collaborators: JSON.parse(String(p[6])),
+          createdAt: p[7], updatedAt: p[8],
+        });
+        return { rows: [], rowCount: 1 };
+      }
+      if (s.includes('DELETE FROM "QMediaPlaylist"')) {
+        const pl = playlists.get(String(p[0]));
+        if (!pl || pl.userId !== p[1]) return { rows: [], rowCount: 0 };
+        playlists.delete(String(p[0]));
+        return { rows: [], rowCount: 1 };
+      }
+      if (s.includes('FROM "QMediaPlaylist"')) {
+        let rows = [...playlists.values()].map(copy);
+        if (s.includes('"id" = $1')) rows = rows.filter((r) => r.id === p[0]);
+        else if (s.includes('"userId" = $1')) rows = rows.filter((r) => r.userId === p[0]);
+        else if (s.includes('"isPublic" = TRUE')) rows = rows.filter((r) => r.isPublic === true);
+        return { rows, rowCount: rows.length };
       }
       if (s.includes('INSERT INTO "QMediaTrack"')) {
         tracks.set(String(p[0]), {
@@ -49,7 +81,7 @@ vi.mock("../src/lib/dbPool", () => ({
         return { rows: [{ playCount: t.playCount }], rowCount: 1 };
       }
       if (s.includes('FROM "QMediaTrack"')) {
-        let rows = [...tracks.values()];
+        let rows = [...tracks.values()].map(copy);
         if (s.includes('"id" = $1')) rows = rows.filter((r) => r.id === p[0]);
         else if (s.includes('"userId" = $1')) rows = rows.filter((r) => r.userId === p[0]);
         else if (s.includes('"isPublic" = TRUE')) rows = rows.filter((r) => r.isPublic === true);
@@ -154,5 +186,45 @@ describe("треки QMedia переживают перезапуск", () => {
     expect(res.status).toBe(200);
     const body = JSON.stringify(res.body);
     expect(body, "тренды не видят треков из базы").toContain("Первый трек");
+  });
+
+  test("плейлист и права соавтора ложатся в базу", async () => {
+    const before = playlists.size;
+    const made = await request(app())
+      .post("/x/me/playlists")
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .send({ name: "Вечерний", isPublic: true });
+    expect(made.status, `плейлист не создан: ${JSON.stringify(made.body)}`).toBe(201);
+    expect(playlists.size, "плейлист не доехал до базы").toBe(before + 1);
+    const id = made.body.id as string;
+
+    // Соавторы: колонки для них не существовало вовсе, хотя поле в типе было.
+    const collab = await request(app())
+      .post(`/x/me/playlists/${id}/collaborators`)
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .send({ userId: "friend-1", canEdit: true });
+    expect(collab.status).toBe(200);
+    const stored = playlists.get(id) as { collaborators?: Array<{ userId: string }> };
+    expect(stored.collaborators?.[0]?.userId, "право соавтора не сохранено").toBe("friend-1");
+
+    // И соавтор действительно может править — права читаются из базы.
+    const friend = jwt.sign({ sub: "friend-1" }, "dev-auth-secret", { algorithm: "HS256", expiresIn: "1h" });
+    const add = await request(app())
+      .post(`/x/me/playlists/${id}/tracks`)
+      .set("Authorization", `Bearer ${friend}`)
+      .send({ trackId: "t-1" });
+    expect(add.status, "соавтор с правом правки получил отказ").toBe(200);
+    // Код ответа сам по себе ничего не доказывает: проверяем, что трек ЛЁГ
+    // в хранилище. Без этого «добавление не сохраняется» проходило молча.
+    const afterAdd = playlists.get(id) as { trackIds?: string[] };
+    expect(afterAdd.trackIds, "трек не доехал до плейлиста в базе").toContain("t-1");
+
+    // А посторонний — нет.
+    const stranger = jwt.sign({ sub: "nobody-2" }, "dev-auth-secret", { algorithm: "HS256", expiresIn: "1h" });
+    const denied = await request(app())
+      .post(`/x/me/playlists/${id}/tracks`)
+      .set("Authorization", `Bearer ${stranger}`)
+      .send({ trackId: "t-2" });
+    expect(denied.status, "посторонний правит чужой плейлист").toBe(403);
   });
 });

@@ -5,7 +5,8 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureQMediaTables } from "../lib/ensureQMediaTables";
 import {
   listPublicTracks, listMyTracks, getTrack, saveTrack, deleteTrack, bumpPlayCount,
-  allTracks, type TrackRow as StoredTrackRow,
+  allTracks, listPublicPlaylists, listMyPlaylists, getPlaylist, savePlaylist, deletePlaylist,
+  type TrackRow as StoredTrackRow, type PlaylistRow as StoredPlaylistRow,
 } from "../lib/qmediaStore";
 import { getPool } from "../lib/dbPool";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
@@ -20,7 +21,6 @@ type PlaylistCollaborator = { userId: string; canEdit: boolean };
 type PlaylistRow = { id: string; userId: string; name: string; description: string | null; isPublic: boolean; trackIds: string[]; collaborators?: PlaylistCollaborator[]; createdAt: string; updatedAt: string };
 type VideoRow = { id: string; userId: string; title: string; description: string | null; url: string | null; thumbnailUrl: string | null; duration: number; viewCount: number; isPublic: boolean; category: string; tags: string[]; createdAt: string; updatedAt: string };
 
-const memPlaylists = new Map<string, PlaylistRow>();
 const memVideos = new Map<string, VideoRow>();
 const memLikes = new Map<string, boolean>();
 
@@ -139,7 +139,9 @@ qmediaRouter.post("/tracks/:id/play", async (req, res) => {
 
 qmediaRouter.get("/playlists", async (_req, res) => {
   try {
-    res.json({ items: Array.from(memPlaylists.values()).filter(p => p.isPublic).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 20) });
+    const { rows, failed } = await listPublicPlaylists();
+    if (failed) return replyQMediaStorageDown(res);
+    res.json({ items: rows });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "list playlists failed" }); }
 });
 
@@ -147,7 +149,9 @@ qmediaRouter.get("/me/playlists", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    res.json({ items: Array.from(memPlaylists.values()).filter(p => p.userId === auth.sub).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) });
+    const { rows, failed } = await listMyPlaylists(auth.sub);
+    if (failed) return replyQMediaStorageDown(res);
+    res.json({ items: rows });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "list my playlists failed" }); }
 });
 
@@ -157,8 +161,9 @@ qmediaRouter.post("/me/playlists", async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { name, description, isPublic } = req.body || {};
     if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
-    const playlist: PlaylistRow = { id: uid(), userId: auth.sub, name: name.slice(0, 100), description: description ? String(description).slice(0, 500) : null, isPublic: Boolean(isPublic), trackIds: [], createdAt: nowIso(), updatedAt: nowIso() };
-    memPlaylists.set(playlist.id, playlist);
+    const playlist: PlaylistRow = { id: uid(), userId: auth.sub, name: name.slice(0, 100), description: description ? String(description).slice(0, 500) : null, isPublic: Boolean(isPublic), trackIds: [], collaborators: [], createdAt: nowIso(), updatedAt: nowIso() };
+    const saved = await savePlaylist(playlist);
+    if (saved.failed) return replyQMediaStorageDown(res);
     res.status(201).json(playlist);
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "create playlist failed" }); }
 });
@@ -167,9 +172,13 @@ qmediaRouter.post("/me/playlists/:id/tracks", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const playlist = memPlaylists.get(req.params.id);
+    const found = await getPlaylist(req.params.id);
+    if (found.failed) return replyQMediaStorageDown(res);
+    const playlist = found.playlist;
     if (!playlist) return res.status(404).json({ error: "not found" });
-    // Allow owner OR collaborator with canEdit=true
+    // Владелец ИЛИ соавтор с правом правки. Права хранятся в колонке
+    // "collaborators": до 28.08.2026 её не было вовсе, хотя поле в типе было —
+    // модуль не писал в базу, и расхождение никак себя не проявляло.
     const isOwner = playlist.userId === auth.sub;
     const isEditor = (playlist.collaborators ?? []).some((c) => c.userId === auth.sub && c.canEdit);
     if (!isOwner && !isEditor) return res.status(403).json({ error: "forbidden" });
@@ -177,6 +186,8 @@ qmediaRouter.post("/me/playlists/:id/tracks", async (req, res) => {
     if (!trackId) return res.status(400).json({ error: "trackId required" });
     if (!playlist.trackIds.includes(String(trackId))) playlist.trackIds.push(String(trackId));
     playlist.updatedAt = nowIso();
+    const saved = await savePlaylist(playlist);
+    if (saved.failed) return replyQMediaStorageDown(res);
     res.json(playlist);
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "add track failed" }); }
 });
@@ -185,10 +196,14 @@ qmediaRouter.delete("/me/playlists/:id/tracks/:trackId", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const playlist = memPlaylists.get(req.params.id);
+    const found = await getPlaylist(req.params.id);
+    if (found.failed) return replyQMediaStorageDown(res);
+    const playlist = found.playlist;
     if (!playlist || playlist.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     playlist.trackIds = playlist.trackIds.filter(id => id !== req.params.trackId);
     playlist.updatedAt = nowIso();
+    const saved = await savePlaylist(playlist);
+    if (saved.failed) return replyQMediaStorageDown(res);
     res.json(playlist);
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "remove track failed" }); }
 });
@@ -197,9 +212,9 @@ qmediaRouter.delete("/me/playlists/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const playlist = memPlaylists.get(req.params.id);
-    if (!playlist || playlist.userId !== auth.sub) return res.status(404).json({ error: "not found" });
-    memPlaylists.delete(req.params.id);
+    const { removed, failed } = await deletePlaylist(req.params.id, auth.sub);
+    if (failed) return replyQMediaStorageDown(res);
+    if (!removed) return res.status(404).json({ error: "not found" });
     res.json({ deleted: true });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "delete playlist failed" }); }
 });
@@ -384,7 +399,9 @@ qmediaRouter.post("/me/playlists/:id/smart", async (req, res) => {
     const allTracksNow = loaded.rows;
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const playlist = memPlaylists.get(req.params.id);
+    const foundPl = await getPlaylist(req.params.id);
+    if (foundPl.failed) return replyQMediaStorageDown(res);
+    const playlist = foundPl.playlist;
     if (!playlist || playlist.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     const { rules } = req.body || {};
     const { genre, mood, minDuration, maxDuration } = (rules as { genre?: string; mood?: string; minDuration?: number; maxDuration?: number }) ?? {};
@@ -396,6 +413,8 @@ qmediaRouter.post("/me/playlists/:id/smart", async (req, res) => {
     const ids = matched.slice(0, 50).map((t) => t.id);
     playlist.trackIds = ids;
     playlist.updatedAt = nowIso();
+    const savedSmart = await savePlaylist(playlist);
+    if (savedSmart.failed) return replyQMediaStorageDown(res);
     res.json({ playlist, tracksAdded: ids.length });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "smart playlist failed" }); }
 });
@@ -404,7 +423,9 @@ qmediaRouter.post("/me/playlists/:id/collaborators", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const playlist = memPlaylists.get(req.params.id);
+    const foundCollab = await getPlaylist(req.params.id);
+    if (foundCollab.failed) return replyQMediaStorageDown(res);
+    const playlist = foundCollab.playlist;
     if (!playlist || playlist.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     const { userId, canEdit } = (req.body || {}) as { userId?: string; canEdit?: boolean };
     if (!userId) return res.status(400).json({ error: "userId required" });
@@ -413,6 +434,10 @@ qmediaRouter.post("/me/playlists/:id/collaborators", async (req, res) => {
     if (existing) { existing.canEdit = Boolean(canEdit); }
     else { playlist.collaborators.push({ userId, canEdit: Boolean(canEdit) }); }
     playlist.updatedAt = nowIso();
+    // Права соавтора обязаны пережить перезапуск: иначе человек, которому
+    // выдали доступ, потеряет его при ближайшей выкатке и молча.
+    const savedCollab = await savePlaylist(playlist);
+    if (savedCollab.failed) return replyQMediaStorageDown(res);
     res.json({ playlist });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "add collaborator failed" }); }
 });

@@ -253,3 +253,146 @@ export async function bumpPlayCount(
   t.updatedAt = new Date().toISOString();
   return { playCount: t.playCount, failed: false };
 }
+
+
+/* ── Плейлисты ────────────────────────────────────────────────────────── */
+
+export type PlaylistCollaborator = { userId: string; canEdit: boolean };
+
+export type PlaylistRow = {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  isPublic: boolean;
+  trackIds: string[];
+  collaborators?: PlaylistCollaborator[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const memPlaylists = new Map<string, PlaylistRow>();
+
+const PL_COLS =
+  '"id","userId","name","description","isPublic","trackIds","collaborators","createdAt","updatedAt"';
+
+function asArray<T>(v: unknown): T[] {
+  if (Array.isArray(v)) return v as T[];
+  // JSONB приходит объектом; строкой — только если колонку объявили TEXT.
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      return Array.isArray(parsed) ? (parsed as T[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function rowToPlaylist(r: Record<string, unknown>): PlaylistRow {
+  return {
+    id: String(r.id),
+    userId: String(r.userId),
+    name: String(r.name ?? ""),
+    description: r.description === null || r.description === undefined ? null : String(r.description),
+    isPublic: Boolean(r.isPublic),
+    trackIds: asArray<string>(r.trackIds).map(String),
+    collaborators: asArray<PlaylistCollaborator>(r.collaborators),
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  };
+}
+
+export async function listPublicPlaylists(): Promise<{ rows: PlaylistRow[]; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT ${PL_COLS} FROM "QMediaPlaylist" WHERE "isPublic" = TRUE ORDER BY "updatedAt" DESC`,
+      );
+      return { rows: rows.map(rowToPlaylist), failed: false };
+    } catch (e) {
+      console.error("[QMedia] публичные плейлисты не прочитаны", e);
+      return { rows: [], failed: true };
+    }
+  }
+  const rows = [...memPlaylists.values()]
+    .filter((p) => p.isPublic)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return { rows, failed: false };
+}
+
+export async function listMyPlaylists(userId: string): Promise<{ rows: PlaylistRow[]; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT ${PL_COLS} FROM "QMediaPlaylist" WHERE "userId" = $1 ORDER BY "updatedAt" DESC`,
+        [userId],
+      );
+      return { rows: rows.map(rowToPlaylist), failed: false };
+    } catch (e) {
+      console.error("[QMedia] мои плейлисты не прочитаны", e);
+      return { rows: [], failed: true };
+    }
+  }
+  const rows = [...memPlaylists.values()]
+    .filter((p) => p.userId === userId)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return { rows, failed: false };
+}
+
+export async function getPlaylist(id: string): Promise<{ playlist: PlaylistRow | null; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const { rows } = await pool.query(`SELECT ${PL_COLS} FROM "QMediaPlaylist" WHERE "id" = $1`, [id]);
+      return { playlist: rows[0] ? rowToPlaylist(rows[0]) : null, failed: false };
+    } catch (e) {
+      console.error("[QMedia] плейлист не прочитан", e);
+      return { playlist: null, failed: true };
+    }
+  }
+  return { playlist: memPlaylists.get(id) ?? null, failed: false };
+}
+
+export async function savePlaylist(p0: PlaylistRow): Promise<{ failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      await pool.query(
+        `INSERT INTO "QMediaPlaylist" (${PL_COLS})
+         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9)
+         ON CONFLICT ("id") DO UPDATE SET
+           "name"=$3,"description"=$4,"isPublic"=$5,"trackIds"=$6::jsonb,
+           "collaborators"=$7::jsonb,"updatedAt"=$9`,
+        [p0.id, p0.userId, p0.name, p0.description, p0.isPublic,
+         JSON.stringify(p0.trackIds), JSON.stringify(p0.collaborators ?? []),
+         p0.createdAt, p0.updatedAt],
+      );
+      return { failed: false };
+    } catch (e) {
+      console.error("[QMedia] плейлист не сохранён", e);
+      return { failed: true };
+    }
+  }
+  memPlaylists.set(p0.id, p0);
+  return { failed: false };
+}
+
+export async function deletePlaylist(
+  id: string,
+  userId: string,
+): Promise<{ removed: boolean; failed: boolean }> {
+  if (isQMediaDbReady()) {
+    try {
+      const r = await pool.query(
+        `DELETE FROM "QMediaPlaylist" WHERE "id" = $1 AND "userId" = $2`, [id, userId]);
+      return { removed: (r.rowCount ?? 0) > 0, failed: false };
+    } catch (e) {
+      console.error("[QMedia] плейлист не удалён", e);
+      return { removed: false, failed: true };
+    }
+  }
+  const pl = memPlaylists.get(id);
+  if (!pl || pl.userId !== userId) return { removed: false, failed: false };
+  memPlaylists.delete(id);
+  return { removed: true, failed: false };
+}

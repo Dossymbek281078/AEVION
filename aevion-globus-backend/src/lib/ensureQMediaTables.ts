@@ -52,6 +52,12 @@ export async function ensureQMediaTables(pool: PgPoolInstance): Promise<void> {
       "trackIds" JSONB NOT NULL DEFAULT '[]'::jsonb,
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(), "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );`);
+    // Соавторы плейлиста. В типе PlaylistRow поле было с самого начала, а
+    // колонки не существовало — потому что модуль не писал в базу вовсе и
+    // расхождение никак себя не проявляло. Добавляем отдельно, чтобы права
+    // редактирования не терялись при переносе на хранилище.
+    await pool.query(`ALTER TABLE "QMediaPlaylist"
+      ADD COLUMN IF NOT EXISTS "collaborators" JSONB NOT NULL DEFAULT '[]'::jsonb;`);
     await pool.query(`CREATE INDEX IF NOT EXISTS "QMediaPlaylist_user_idx" ON "QMediaPlaylist" ("userId", "updatedAt" DESC);`);
     await pool.query(`CREATE TABLE IF NOT EXISTS "QMediaVideo" (
       "id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL,

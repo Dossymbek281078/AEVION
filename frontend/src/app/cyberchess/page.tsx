@@ -10,6 +10,7 @@ import AevionProjectsBanner from "./AevionProjectsBanner";
 import { PageTracking } from "@/components/PageTracking";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
+import SetupBoardPreview from "./SetupBoardPreview";
 import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledgeModal";
 import { COACH_KNOWLEDGE } from "./coachKnowledge";
@@ -5993,6 +5994,25 @@ export default function CyberChessPage(){
           else break;
         }
         return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
+
+          {/* ─── ДОСКА ПЕРВЫМ ДЕЛОМ ───
+              Человек, открывший шахматы, доски не видел вовсе: экран начинался
+              с панели настроек, а доска появлялась только после «ИГРАТЬ». Замер
+              27.08.2026 на телефоне 375px — ни на первом экране, ни на втором
+              ни одной шахматной клетки. Для пришедшего с ролика это решается за
+              секунды: пришёл играть, а видит форму.
+              Доска показывает начальную расстановку в его теме и наборе фигур,
+              развёрнута по выбранному цвету, и нажатие по ней начинает партию —
+              то есть она заодно самая большая и понятная кнопка на экране. */}
+          <SetupBoardPreview
+            orientation={pCol}
+            light={bT.light}
+            dark={bT.dark}
+            border={bT.border}
+            maxPx={isMobileLayout?340:420}
+            label="Начать партию"
+            onStart={()=>{sHotseat(false);sRivalMode(false);newG()}}
+          />
 
           {/* ─── Медиа-панель (YouTube/Twitch) на стартовом экране ───
               Раньше WorkspaceMediaPane рендерился только внутри cc-main-row (в игре),

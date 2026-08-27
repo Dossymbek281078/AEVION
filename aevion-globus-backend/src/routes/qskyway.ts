@@ -312,13 +312,31 @@ interface AirspaceCompliance {
   noteEn: string;
 }
 
-function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[]): AirspaceCompliance {
+function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[], cityId?: string): AirspaceCompliance {
   if (!field) {
+    // «Фида нет» ≠ «правила регулятора нет».
+    //
+    // Замер 27.08.2026: ответ маршрута по Астане говорил «регуляторный фид не
+    // подключён», и это читается как «здесь регулятор не при чём». А правило
+    // есть и ПРИМЕНЯЕТСЯ: запретная зона UAP28 из AIP Казахстана заведена как
+    // no-fly и коридор её обходит. То же у Токио — слой MLIT. Сетки ПОТОЛКОВ
+    // нет только у них, а это другой вопрос.
+    //
+    // Расхождение было наше же: страница честно говорит «правило регулятора в
+    // 3 городах из 3», здоровье прикладывает блок permission, а ответ маршрута
+    // отвечал так, будто города вне регулирования. Из двух наших ответов
+    // читатель поверит тому, что ближе к делу, — маршруту.
+    const perm = cityId ? permissionSummary(cityId) : null;
+    const hasPermission = Boolean(perm && (perm as { available?: boolean }).available);
     return {
       available: false, compliant: null, coveragePct: 0, exceedingSegments: 0,
       zeroCeilingSegments: 0, maxExceedanceM: 0, lowestCeilingM: null,
-      note: "Регуляторный фид для этого города не подключён — соответствие потолку не проверялось.",
-      noteEn: "No regulator feed is wired for this city — compliance with a ceiling was not checked.",
+      note: hasPermission
+        ? "Сетки потолков высоты у этого города нет, поэтому соответствие потолку не проверялось. Правило регулятора при этом действует и учтено: см. permission в /health — его запретные зоны коридор обходит."
+        : "Регуляторный фид для этого города не подключён — соответствие потолку не проверялось.",
+      noteEn: hasPermission
+        ? "This city publishes no ceiling grid, so ceiling compliance was not checked. A published regulator rule does apply and is honoured: see permission in /health — the corridor routes around its prohibited zones."
+        : "No regulator feed is wired for this city — compliance with a ceiling was not checked.",
     };
   }
   let covered = 0, exceeding = 0, zeroSegs = 0, maxExc = 0;
@@ -524,7 +542,7 @@ function buildRoute(
         : "Все участки с угаданной высотой получили настоящий страховочный запас.",
     },
     respectCeiling,
-    airspace: assessCeiling(field, path, alts),
+    airspace: assessCeiling(field, path, alts, cityId),
   };
 }
 

@@ -161,10 +161,48 @@ function verifySignature(rawBody: string, presented: string | undefined, secret:
   }
 }
 
+/**
+ * Состояние вебхука — GET, для человека и для сторожа.
+ *
+ * Раньше ручки не было вовсе, и снаружи нельзя было отличить рабочий вебхук
+ * от заглушки. Разница при этом денежная: без секрета POST ниже отвечает
+ * `{ok:true, mode:"stub"}` — то есть говорит магазину «доставлено», ничего не
+ * провижинит, и повторной доставки не будет. Покупка исчезает молча, а через
+ * этот вебхук идут ВСЕ семь товаров каталога.
+ *
+ * Секрет наружу не отдаётся — только признак наличия. Сделано по образцу
+ * такой же ручки у Gumroad, чтобы у обоих денежных каналов ответ читался
+ * одинаково.
+ */
+lemonSqueezyWebhookRouter.get("/webhook", (_req, res) => {
+  const configured = Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim());
+  res.json({
+    ok: true,
+    endpoint: "lemon squeezy webhook",
+    accepts: "POST application/json with x-signature",
+    signed: configured,
+    // false означает: покупки НЕ провижинятся, и магазин об этом не узнает.
+    provisioningLive: configured,
+    mode: configured ? "live" : "stub",
+    info: "GET is a status check. Without LEMON_SQUEEZY_WEBHOOK_SECRET the POST route is a no-op stub.",
+  });
+});
+
 lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
   const secret = process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim();
   if (!secret) {
-    console.log("[ls/webhook] STUB — LEMON_SQUEEZY_WEBHOOK_SECRET unset, ignoring");
+    // Отвечаем 200 намеренно: 5xx заставил бы магазин повторять доставку, а
+    // при СОЗНАТЕЛЬНО пустом секрете (превью, локальный запуск) это был бы
+    // поток повторов. Но молчать нельзя: в бою это означает, что оплаченная
+    // покупка исчезла и никто не узнал. Поэтому след громкий — ошибка в
+    // журнал и в Sentry, а не строчка console.log среди тысяч других.
+    console.error(
+      "[ls/webhook] STUB — LEMON_SQUEEZY_WEBHOOK_SECRET unset: покупка НЕ провижинена и повтора не будет",
+    );
+    capture(
+      new Error("lemonSqueezy webhook received while unconfigured — purchase dropped"),
+      { route: "lemonsqueezy/webhook", mode: "stub" },
+    );
     return res.json({ ok: true, mode: "stub" });
   }
 

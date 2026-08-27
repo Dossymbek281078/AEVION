@@ -1,3 +1,4 @@
+import { generationLimit } from "../lib/rateLimit";
 /**
  * AEVION i18n — live batch translation for the client-side DOM translator.
  *
@@ -175,7 +176,7 @@ async function translateBatch(target: string, texts: string[]): Promise<string[]
   return claudeBatch(texts, LANG_NAME[target] || target);
 }
 
-i18nRouter.post("/translate", async (req, res) => {
+i18nRouter.post("/translate", generationLimit("i_n_translate"), async (req, res) => {
   try {
     const target = String(req.body?.target || "").toLowerCase().trim();
     const raw = req.body?.texts;

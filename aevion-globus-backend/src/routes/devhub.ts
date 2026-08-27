@@ -2302,7 +2302,19 @@ Built, but ${url} did not answer 2xx in time`;
         project.updatedAt = now();
         try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
       }
-    })().catch(() => {});
+    })().catch((e) => {
+      // Эта задача решает, ЖИВ ли деплой, и записывает вердикт. Если она
+      // бросит, выкатка навсегда останется в промежуточном состоянии, а на
+      // экране это неотличимо от «ещё собирается».
+      //
+      // Сегодня бросить она не может: verifyDeploymentServes ловит сетевые
+      // ошибки внутри и всегда возвращает ответ, а записи прикрыты своими
+      // try/catch с запасной памятью. Перехват остаётся защитой в глубину —
+      // но не молчаливой: без следа о застрявшей выкатке никто не узнает.
+      const why = e instanceof Error ? e.message : String(e);
+      console.error(`[DevHub] ВЕРДИКТ ВЫКАТКИ НЕ ЗАПИСАН: ${deployment.id} для проекта ${project.id}: ${why}`);
+      captureException(e, { route: "devhub/deploy:verify", deploymentId: deployment.id, projectId: project.id });
+    });
 
     return res.json({ ok: true, deploymentId: deployment.id, status: "building", url, serviceId: result.serviceId, reusedService: !result.created });
   }

@@ -1,12 +1,42 @@
+# Группировка у ВСЕХ пяти наборов (добавлено 27.08.2026).
+#
+# У qcore, qpaynet-client и github-actions её не было: каждая зависимость
+# приходила отдельным PR. Соседняя вкладка в тот же день зажала потолки
+# (35 -> 12) и развела наборы по дням — это ограничивает СКОЛЬКО PR может
+# накопиться, но не уменьшает их число у источника. Группировка уменьшает:
+# патчевые подъёмы схлопываются в один PR на набор.
+#
+# Почему это про блокировку. 27.07.2026 аккаунт отключили за всплеск: около
+# 165 коммитов, десятки пушей и 25 мержей за сутки. Опасны не сами PR
+# dependabot (их открывает его бот), а НАШ ответ на них: смёрзить два
+# десятка за вечер — ровно та машинная картина, за которую банят.
+#
 # Dependabot — automated security & version updates.
 #
 # Strategy:
-#   - npm: weekly grouped PRs per ecosystem; auto-merge enabled for patch
-#     bumps, manual review for minor/major.
+#   - npm: weekly grouped PRs, ONE ECOSYSTEM PER WEEKDAY (see below).
 #   - github-actions: monthly grouped PR for Action version bumps.
 #
 # Ignored: nothing. Even framework majors should surface a PR — we triage
 # manually rather than freeze versions.
+#
+# ⚠️ ПОЧЕМУ РАЗНЕСЕНО ПО ДНЯМ И ЗАЖАТЫ ЛИМИТЫ (27.08.2026).
+# Аккаунт GitHub был приостановлен 27.07.2026 за всплеск активности: около
+# 165 коммитов, десятки пушей и 25 мержей за одни сутки выглядели машинными.
+# Прежняя настройка здесь могла воспроизвести ровно это САМА: пять наборов,
+# суммарный потолок 35 открытых PR, все npm-наборы в понедельник, два из них
+# в один час. То есть до тридцати PR за несколько минут раз в неделю.
+# Теперь потолок 12 и по одному набору в день. Группировка патчей уже
+# схлопывает мелочь в один PR, поэтому 2-3 на набор — не ограничение по сути.
+#
+# Живых обращений это не сокращает до нуля: dependabot всё равно ходит от
+# нашего аккаунта, и сторож темпа ~/.claude/hooks/github-push-guard.js его
+# НЕ ВИДИТ — он считает только вызовы из вкладок. Учитывать надо оба канала.
+#
+# Поправка того же дня: прежняя шапка обещала автоматический мерж патчевых
+# обновлений. Workflow, который бы его делал, в репозитории НЕТ (проверено грепом по
+# .github/workflows). Строка убрана: описание не должно обещать механизм,
+# которого не существует.
 
 version: 2
 
@@ -19,7 +49,7 @@ updates:
       day: "monday"
       time: "06:00"
       timezone: "UTC"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "backend"
@@ -43,10 +73,10 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "weekly"
-      day: "monday"
+      day: "tuesday"
       time: "06:00"
       timezone: "UTC"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "frontend"
@@ -70,37 +100,76 @@ updates:
     directory: "/frontend-qcore"
     schedule:
       interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
+      day: "wednesday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "frontend-qcore"
     commit-message:
       prefix: "deps(qcore)"
+    groups:
+      qcore-patch:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      qcore-security:
+        applies-to: security-updates
+        update-types:
+          - "patch"
+          - "minor"
+          - "major"
 
   # ── SDK packages ───────────────────────────────────────────────────────
   - package-ecosystem: "npm"
     directory: "/packages/qpaynet-client"
     schedule:
       interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
+      day: "thursday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "sdk"
     commit-message:
       prefix: "deps(sdk-qpaynet)"
+    groups:
+      qpaynet-patch:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      qpaynet-security:
+        applies-to: security-updates
+        update-types:
+          - "patch"
+          - "minor"
+          - "major"
 
   # ── GitHub Actions ─────────────────────────────────────────────────────
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
-      day: "monday"
-    open-pull-requests-limit: 5
+      day: "friday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "ci"
     commit-message:
       prefix: "ci(deps)"
       include: "scope"
+    groups:
+      actions-patch:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      actions-security:
+        applies-to: security-updates
+        update-types:
+          - "patch"
+          - "minor"
+          - "major"

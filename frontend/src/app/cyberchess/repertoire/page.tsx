@@ -287,7 +287,7 @@ function SearchView({ branches }: { branches: RepertoireBranch[] }) {
         <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.accentBright, marginBottom: 10 }}>
           Поиск по веткам
         </div>
-        <input
+        <input aria-label="Поиск по репертуару"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="ECO, имя, заметки, ходы…"

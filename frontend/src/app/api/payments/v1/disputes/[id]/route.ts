@@ -6,7 +6,7 @@ import {
   store,
   withCors,
 } from "../../_lib";
-import { kvList, kvSet } from "../../_persist";
+import { kvList, kvListChecked, kvSet } from "../../_persist";
 import { logAudit } from "../../_audit";
 import { enqueueAttempt } from "../../_webhook_queue";
 
@@ -37,6 +37,31 @@ type ApiDispute = {
 
 async function loadAll(): Promise<ApiDispute[]> {
   return (await kvList<ApiDispute>(DISPUTES_KEY)) ?? [];
+}
+
+/**
+ * Отказ хранилища — это 503 «попробуйте позже», а НЕ 404 «такого спора нет».
+ *
+ * Раньше упавшее чтение давало пустой список, и обе ручки этого файла
+ * отвечали «No dispute with id …» про живой спор. Для оспаривания платежа
+ * такой ответ хуже ошибки: продавец решает, что запись потеряна, и заводит
+ * второй спор по тому же платежу.
+ */
+function storageUnavailable(rateHeaders: Record<string, string>): Response {
+  return attachRateHeaders(
+    withCors(
+      Response.json(
+        {
+          error: {
+            type: "storage_unavailable",
+            message: "Dispute storage is temporarily unreachable. Please retry.",
+          },
+        },
+        { status: 503 }
+      )
+    ),
+    rateHeaders
+  );
 }
 
 async function persistAll(items: ApiDispute[]): Promise<void> {
@@ -77,7 +102,9 @@ export async function GET(
   const gate = gateRequest(req);
   if (!gate.ok) return gate.response;
   const { id } = await ctx.params;
-  const all = await loadAll();
+  const read = await kvListChecked<ApiDispute>(DISPUTES_KEY);
+  if (!read.ok) return storageUnavailable(gate.rateHeaders);
+  const all = read.value;
   const dispute = all.find((d) => d.id === id);
   if (!dispute) {
     return attachRateHeaders(
@@ -126,7 +153,12 @@ export async function POST(
     );
   }
 
-  const all = await loadAll();
+  // Здесь список ниже перезаписывается целиком, поэтому чтение обязано быть
+  // проверяемым дважды: иначе не только ложное «спора нет», но и стирание
+  // всех остальных споров записью пустого списка.
+  const read = await kvListChecked<ApiDispute>(DISPUTES_KEY);
+  if (!read.ok) return storageUnavailable(gate.rateHeaders);
+  const all = read.value;
   const idx = all.findIndex((d) => d.id === id);
   if (idx === -1) {
     return attachRateHeaders(

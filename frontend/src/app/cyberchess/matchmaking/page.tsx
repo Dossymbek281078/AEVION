@@ -393,8 +393,12 @@ export default function CyberChessMatchmakingPage() {
 
           {/* Display name */}
           <div style={{ marginBottom: 20 }}>
-            <label className="planet-eyebrow" style={{ display: "block", marginBottom: 6, fontSize: 11 }}>Ник</label>
+            {/* htmlFor + id связывают подпись с полем. Без этого диктор читает
+                «поле ввода» и не называет, чего от человека хотят: подпись рядом
+                видна глазами, но программно с полем не связана. */}
+            <label htmlFor="mm-nick" className="planet-eyebrow" style={{ display: "block", marginBottom: 6, fontSize: 11 }}>Ник</label>
             <input
+              id="mm-nick"
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value.slice(0, 32))}
@@ -430,7 +434,7 @@ export default function CyberChessMatchmakingPage() {
           {/* Rating slider */}
           <div style={{ marginBottom: 8 }}>
             <div style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <label className="planet-eyebrow" style={{ fontSize: 11 }}>Твой рейтинг</label>
+              <label htmlFor="mm-rating" className="planet-eyebrow" style={{ fontSize: 11 }}>Твой рейтинг</label>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {serverRating && (
                   <span
@@ -450,6 +454,7 @@ export default function CyberChessMatchmakingPage() {
               </div>
             </div>
             <input
+              id="mm-rating"
               type="range"
               min={100}
               max={3000}

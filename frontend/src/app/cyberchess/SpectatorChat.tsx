@@ -286,7 +286,7 @@ export default function SpectatorChat(props: Props) {
         <span>имя:</span>
         {usernameEditing ? (
           <>
-            <input
+            <input aria-label="Ваше имя в чате"
               type="text"
               value={username}
               maxLength={32}
@@ -442,7 +442,7 @@ export default function SpectatorChat(props: Props) {
 
       {/* Input bar */}
       <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
-        <input
+        <input aria-label="Сообщение в чат"
           type="text"
           value={draft}
           maxLength={MAX_TEXT}

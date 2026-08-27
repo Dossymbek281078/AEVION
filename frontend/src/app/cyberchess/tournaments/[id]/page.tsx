@@ -1893,7 +1893,7 @@ function RegPanel({
 function Spinner({ color }: { color: string }) {
   return (
     <span
-      aria-label="loading"
+      aria-label="загрузка"
       style={{
         display: "inline-block",
         width: 18,

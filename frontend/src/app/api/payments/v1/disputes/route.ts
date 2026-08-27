@@ -9,7 +9,7 @@ import {
   withCors,
   type ApiLink,
 } from "../_lib";
-import { kvList, kvSet } from "../_persist";
+import { kvListChecked, kvPush } from "../_persist";
 import { logAudit } from "../_audit";
 import { enqueueAttempt } from "../_webhook_queue";
 
@@ -54,13 +54,13 @@ const ALLOWED_REASONS: DisputeReason[] = [
   "general",
 ];
 
-async function loadAll(): Promise<ApiDispute[]> {
-  return (await kvList<ApiDispute>(DISPUTES_KEY)) ?? [];
-}
+// loadAll убран вместе с persistAll: он возвращал пустой список и при отказе
+// хранилища, из-за чего продавец видел «споров нет». Обе ручки этого файла
+// теперь читают через kvListChecked и отвечают 503, когда спросить не удалось.
 
-async function persistAll(items: ApiDispute[]): Promise<void> {
-  await kvSet(DISPUTES_KEY, items.slice(0, 1000));
-}
+// persistAll убран намеренно: перезапись всего списка из этого файла и была
+// тем местом, где упавшее чтение стирало прежние споры. Добавление идёт через
+// kvPush, обновление — в disputes/[id]/route.ts, где чтение проверяется.
 
 async function fanoutDisputeWebhook(event: string, dispute: ApiDispute): Promise<void> {
   const enabled = Array.from(store.webhooks.values()).filter(
@@ -95,7 +95,26 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const status = url.searchParams.get("status");
   const linkId = url.searchParams.get("link_id");
-  let data = await loadAll();
+  // Отказ хранилища — не «споров нет». Пустой список здесь читается продавцом
+  // как «всё закрыто», а это ровно противоположный вывод.
+  const read = await kvListChecked<ApiDispute>(DISPUTES_KEY);
+  if (!read.ok) {
+    return attachRateHeaders(
+      withCors(
+        Response.json(
+          {
+            error: {
+              type: "storage_unavailable",
+              message: "Dispute storage is temporarily unreachable. Please retry.",
+            },
+          },
+          { status: 503 }
+        )
+      ),
+      gate.rateHeaders
+    );
+  }
+  let data = read.value;
   data.sort((a, b) => b.created - a.created);
   if (status) data = data.filter((d) => d.status === status);
   if (linkId) data = data.filter((d) => d.link_id === linkId);
@@ -198,9 +217,10 @@ export async function POST(req: NextRequest) {
     updated: now,
   };
 
-  const all = await loadAll();
-  all.unshift(dispute);
-  await persistAll(all);
+  // Не «прочитать всё → добавить → записать обратно»: при упавшем чтении
+  // список читался бы как пустой, и запись стёрла бы все прежние споры.
+  // kvPush делает то же добавление, но непрочитанный ключ не трогает.
+  await kvPush(DISPUTES_KEY, dispute, 1000);
 
   void logAudit(req, "dispute.created", dispute.id, {
     link_id: dispute.link_id,

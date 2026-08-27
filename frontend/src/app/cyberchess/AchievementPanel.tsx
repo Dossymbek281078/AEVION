@@ -83,7 +83,7 @@ export default function AchievementPanel({
               {unlockedCount} / {totalCount} ({completion}%) · {t("ach.earned")} {totalEarned}
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close"
+          <button onClick={onClose} aria-label={t("common.close")}
             style={{
               width: 32, height: 32, border: `1px solid ${border}`,
               borderRadius: 8, background: surface2, color: text,

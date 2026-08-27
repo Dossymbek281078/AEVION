@@ -1,20 +1,63 @@
 #!/usr/bin/env node
 /**
- * DevHub PROD smoke — full coverage of all 8 tabs + 15 media subtabs.
+ * DevHub PROD smoke — все 8 вкладок и 15 подвкладок медиа.
  *
- * Strategy for media endpoints:
- *   - Missing required field  → always 400 (tests validation gate)
- *   - Valid input, no API key → 503 graceful (not a test failure)
- *   - Valid input, key set    → 200/201 (bonus pass)
+ * ⚠️ У ЭТОГО СКРИПТА ЕСТЬ ЦЕНА, И ДО 28.08.2026 ОНА БЫЛА СКРЫТА.
  *
- * Usage:
- *   BASE=https://aevion-production-a70c.up.railway.app node scripts/devhub-prod-smoke.js
+ * Проверка каждой медиа-ручки состояла из двух запросов: с неполным телом
+ * (ждём 400 — это бесплатно) и с ПОЛНЫМ, годным телом. Второй запрос на проде,
+ * где ключи заданы, выполняется по-настоящему. То есть каждый прогон:
+ *
+ *   • тратил платную генерацию — озвучка, картинка, звук, музыка;
+ *   • отправлял НАСТОЯЩЕЕ письмо на test@example.com (отскок от несуществующего
+ *     адреса бьёт по репутации отправителя и жжёт суточный потолок Brevo в 300);
+ *   • отправлял НАСТОЯЩИЕ SMS и WhatsApp на +79001234567 — живой номер
+ *     постороннего человека;
+ *   • создавал в БОЕВОМ магазине платёжную позицию «Smoke Item» за $9.99.
+ *
+ * При этом сам файл называется prod-smoke, а строка запуска предлагала боевой
+ * адрес первым. То есть он приглашал сделать ровно то, чего делать нельзя.
+ * След на проде остался: среди проектов DevHub лежат prod-smoke-test,
+ * react-preview-smoke, pomodoro retest и cf-pages-test — прогоны были.
+ *
+ * ТЕПЕРЬ ПО УМОЛЧАНИЮ ТРАТЯЩАЯ ПОЛОВИНА НЕ ВЫПОЛНЯЕТСЯ. Остаются ворота
+ * проверки (неполное тело → 400) и чтения — они бесплатны и ничего не шлют.
+ * Пропуск виден в выводе и в итоговой строке: молчаливый пропуск превратил бы
+ * «не проверяли» в «проверено», а это хуже отсутствия проверки.
+ *
+ * Запуск:
+ *   node scripts/devhub-prod-smoke.js                       # безопасно, по умолчанию
  *   BASE=http://localhost:4001 node scripts/devhub-prod-smoke.js
+ *   DEVHUB_SMOKE_ALLOW_SPEND=1 node scripts/devhub-prod-smoke.js   # тратит деньги и шлёт
+ *
+ * Флаг включать осознанно и вручную. В расписание ставить ТОЛЬКО версию по
+ * умолчанию: ежедневная трата и ежедневная отправка постороннему — это решение
+ * основателя, а не побочный эффект сторожа.
  */
 
 const BASE = (process.env.BASE || process.env.BACKEND_URL || "https://aevion-production-a70c.up.railway.app").replace(/\/+$/, "");
 
-let passed = 0; let failed = 0;
+/**
+ * Тратящая половина — только по явному флагу. Умолчание безопасное: скрипт
+ * зовут и вручную, и (после 28.08) из расписания, а «по умолчанию тратим»
+ * означает трату при каждом невнимательном запуске.
+ */
+const ALLOW_SPEND = process.env.DEVHUB_SMOKE_ALLOW_SPEND === "1";
+
+/**
+ * Пишущая половина: создание проекта, правка переменных и файлов, снипеты.
+ * Денег не стоит и наружу не шлёт, но ПИШЕТ В БОЕВУЮ БАЗУ, а уборка в конце
+ * срабатывает не всегда: на проде до сих пор лежат prod-smoke-test,
+ * react-preview-smoke и pomodoro retest — следы прежних прогонов.
+ *
+ * Поэтому в расписании остаются только чтения и ворота проверки: сторож,
+ * который сам ежедневно мусорит в продуктовой базе, — плохой сторож.
+ */
+const ALLOW_WRITE = process.env.DEVHUB_SMOKE_ALLOW_WRITE === "1";
+
+let passed = 0; let failed = 0; let skipped = 0;
+/** Пропуск ВИДЕН. Молчаливый превратил бы «не проверяли» в «проверено». */
+function skip(l, why) { skipped++; console.log(`  ○ ${l} — пропущено: ${why}`); }
 function ok(l, e)   { passed++; console.log(`  ✓ ${l}${e ? "  " + e : ""}`); }
 function fail(l, r) { failed++; console.error(`  ✗ ${l}${r ? "  ↳ " + r : ""}`); }
 function info(l, e) { console.log(`  ℹ ${l}${e ? "  " + e : ""}`); }
@@ -44,6 +87,10 @@ async function mediaTest(label, path, badBody, goodBody) {
   //    503     = API key not set (graceful)
   //    4xx     = key configured but external API error (quota/model/etc) — still OK
   //    0       = network timeout — informational only
+  if (!ALLOW_SPEND) {
+    skip(`${label} — запрос с годным телом`, "тратит деньги или шлёт наружу; DEVHUB_SMOKE_ALLOW_SPEND=1 чтобы выполнить");
+    return;
+  }
   const good = await req("POST", path, goodBody);
   if (good.status === 200 || good.status === 201) {
     ok(`${label} → configured + 200`, `keys set`);
@@ -65,14 +112,17 @@ async function run() {
   console.log("1. Health");
   const h = await req("GET", "/api/devhub/health");
   if (h.status === 200 && h.body?.status === "ok") ok("GET /devhub/health", `db=${h.body.db}`);
-  else { fail("GET /devhub/health", `${h.status}`); process.exit(1); }
+  else { fail("GET /devhub/health", `${h.status}`); process.exitCode = 1; return; }
 
   // ── 2. Project CRUD ───────────────────────────────────────────────────
   console.log("\n2. Project CRUD");
   // Create
-  const created = await req("POST", "/api/devhub/projects", { name: `Smoke-${Date.now()}`, stack: "next" });
+  const created = ALLOW_WRITE
+    ? await req("POST", "/api/devhub/projects", { name: `Smoke-${Date.now()}`, stack: "next" })
+    : (skip("Project CRUD", "пишет в боевую базу; DEVHUB_SMOKE_ALLOW_WRITE=1 чтобы выполнить"), { status: -1, body: {} });
   let projId = null;
-  if (created.status === 201 && created.body?.project?.id) {
+  if (created.status === -1) { /* пропущено осознанно, уже сказано */ }
+  else if (created.status === 201 && created.body?.project?.id) {
     projId = created.body.project.id;
     ok("POST /projects → 201", `id=${projId.slice(0, 8)}`);
   } else fail("POST /projects → 201", `${created.status}`);
@@ -158,9 +208,12 @@ async function run() {
   // ── 9. Snippets ───────────────────────────────────────────────────────
   console.log("\n9. Snippets");
   const tag = `smoke-${Date.now()}`;
-  const snip = await req("POST", "/api/devhub/snippets", { title: "Smoke", content: "// test", language: "javascript", tags: [tag] });
+  const snip = ALLOW_WRITE
+    ? await req("POST", "/api/devhub/snippets", { title: "Smoke", content: "// test", language: "javascript", tags: [tag] })
+    : (skip("Snippets", "пишет в боевую базу; DEVHUB_SMOKE_ALLOW_WRITE=1 чтобы выполнить"), { status: -1, body: {} });
   let snipId = null;
-  if (snip.status === 201 && snip.body?.snippet?.id) { snipId = snip.body.snippet.id; ok("POST /snippets → 201", `id=${snipId.slice(0,8)}`); }
+  if (snip.status === -1) { /* пропущено осознанно, уже сказано */ }
+  else if (snip.status === 201 && snip.body?.snippet?.id) { snipId = snip.body.snippet.id; ok("POST /snippets → 201", `id=${snipId.slice(0,8)}`); }
   else fail("POST /snippets → 201", `${snip.status}`);
 
   if (snipId) {
@@ -239,8 +292,14 @@ async function run() {
   if (payBad.status === 400) ok("Payment validation gate → 400");
   else fail("Payment validation", `${payBad.status}`);
 
-  const payGood = await req("POST", "/api/devhub/media/payment-link", { name: "Smoke Item", amountCents: 999 });
-  if (payGood.status === 200 || payGood.status === 201) ok("Payment → configured + 200");
+  // Этот запрос СОЗДАЁТ позицию в боевом магазине Lemon Squeezy. Не по расписанию.
+  const payGood = ALLOW_SPEND
+    ? await req("POST", "/api/devhub/media/payment-link", { name: "Smoke Item", amountCents: 999 })
+    : (skip("Payment — создание позиции", "создаёт товар в боевом магазине"), { status: -1, body: {} });
+  // Осознанный пропуск НЕ должен краснеть: сторож, дающий FAIL там, где мы
+  // сами решили не тратить, приучает не читать его вывод.
+  if (payGood.status === -1) { /* пропущено, уже сказано в skip() */ }
+  else if (payGood.status === 200 || payGood.status === 201) ok("Payment → configured + 200");
   else if (payGood.status === 503) ok("Payment → graceful 503 (LS keys not set)");
   else if (payGood.status >= 400) ok("Payment → key set, LS API error", `${payGood.status}`);
   else fail("Payment unexpected", `${payGood.status}`);
@@ -295,8 +354,16 @@ async function run() {
   else fail("GET /projects non-existent", `${projNotFound.status}`);
 
   // ── Final ─────────────────────────────────────────────────────────────
-  console.log(`\n${passed + failed} assertions — ${passed} PASS  ${failed} FAIL\n`);
-  process.exit(failed > 0 ? 1 : 0);
+  console.log(
+    `\n${passed + failed} проверок — ${passed} PASS  ${failed} FAIL  ${skipped} пропущено` +
+    (skipped && !ALLOW_SPEND
+      ? `\nПропущено потому, что тратит деньги или шлёт наружу. Это НЕ «проверено».`
+      : "") + "\n"
+  );
+  // process.exit() поверх незакрытых соединений undici роняет node на Windows
+  // ассертом libuv (src/win/async.c:76) — инструмент печатает итог и возвращает
+  // 127, то есть код выхода врёт. Воспроизведено на этом же скрипте 28.08.2026.
+  process.exitCode = failed > 0 ? 1 : 0;
 }
 
-run().catch((e) => { console.error("crash:", e); process.exit(2); });
+run().catch((e) => { console.error("crash:", e); process.exitCode = 2; });

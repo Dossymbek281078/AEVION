@@ -396,6 +396,26 @@ function makeEmptyStats(): VariantStats {
   for (const v of VARIANTS) out[v.id] = { w: 0, l: 0, d: 0 };
   return out;
 }
+/**
+ * Сколько вариантов человек ДЕЙСТВИТЕЛЬНО попробовал.
+ *
+ * Считать ключи объекта нельзя: makeEmptyStats() заводит запись для каждого
+ * варианта сразу, с нулями. Из-за этого достижение «Попробуй 5 вариантов
+ * шахмат» выдавалось новичку в первую секунду — вариантов в заготовке
+ * дюжина, а сыграно ноль. Замер 27.08.2026 на живом сайте: награда
+ * «Экспериментатор · +50 Chessy» приходила тому, кто ещё ничего не открыл.
+ *
+ * Наличие ключа — не событие. Событие — сыгранная партия.
+ */
+export function variantsPlayedCount(stats: VariantStats | null | undefined): number {
+  if (!stats) return 0;
+  return Object.entries(stats).filter(([id, s]) => {
+    if (id === "standard") return false;
+    const r = s as { w?: number; l?: number; d?: number } | undefined;
+    return ((r?.w ?? 0) + (r?.l ?? 0) + (r?.d ?? 0)) > 0;
+  }).length;
+}
+
 export function recordVariantResult(stats: VariantStats, variant: VariantId, result: "w" | "l" | "d"): VariantStats {
   return { ...stats, [variant]: { ...stats[variant], [result]: stats[variant][result] + 1 } };
 }

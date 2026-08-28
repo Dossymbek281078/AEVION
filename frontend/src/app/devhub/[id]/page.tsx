@@ -1859,7 +1859,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
-      showToast(`Шаблон применён — файлов: ${(data.files || []).length}`, "success");
+      if (data.storage === "memory") {
+        showToast("Шаблон применён, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.", "error");
+      } else {
+        showToast(`Шаблон применён — файлов: ${(data.files || []).length}`, "success");
+      }
     } catch (e: any) {
       showToast(e.message || "Не удалось", "error");
     } finally {
@@ -2663,7 +2667,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setBulkResults(d.results || []);
       setBulkSummary({ total: d.total, successCount: d.successCount, failureCount: d.failureCount });
       if (d.successCount > 0) {
-        showToast(`Переведено ${d.successCount} из ${d.total}`, "success");
+        // Перевод платный: результат в памяти исчезнет при перезапуске, а деньги
+        // уже потрачены. Молчать тут дороже всего.
+        if (d.storage === "memory") {
+          showToast(`Переведено ${d.successCount} из ${d.total}, но база была недоступна: результат пока в памяти и может пропасть при перезапуске. Сохраните копию.`, "error");
+        } else {
+          showToast(`Переведено ${d.successCount} из ${d.total}`, "success");
+        }
         await fetchProject();
       } else {
         showToast(`Ни один из ${d.total} переводов не удался`, "error");
@@ -2760,7 +2770,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         ok: true,
         text: `Imported ${d.importedCount} file(s), skipped ${d.skippedCount}`,
       });
-      showToast(`Из ${file.name} импортировано файлов: ${d.importedCount}`, "success");
+      if (d.storage === "memory") {
+        showToast("Файлы импортированы, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.", "error");
+      } else {
+        showToast(`Из ${file.name} импортировано файлов: ${d.importedCount}`, "success");
+      }
       await fetchProject();
     } catch (e: any) {
       setZipResult({ ok: false, text: e?.message || "Импорт не удался" });

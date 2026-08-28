@@ -16,7 +16,7 @@ import { isSmokeSlot, countSmokeSlots } from "./slotSource";
 // в тесте, а для этого он должен рендериться отдельно от канваса.
 import { HeightDisputePanel, type HeightDispute } from "./HeightDisputePanel";
 import { padProhibition } from "./padPermission";
-import { verifyVerdict } from "./verifyVerdict";
+import { verifyVerdict, verifyReasonOf } from "./verifyVerdict";
 import { measuredObstaclePct } from "./heightQuality";
 
 // QSkyway — навигационный слой городского неба для аэротакси.
@@ -808,11 +808,18 @@ export default function QSkywayClient() {
       // А действия противоположные: документ изменён после подписи — скачай
       // заново, своя же копия устарела. Подпись не наша — кто-то выдаёт чужую
       // бумагу за нашу, и это уже не про кнопку «скачать».
-      setVerifyReason(
-        v === "invalid"
-          ? (j?.hashValid === false ? "tampered" : "forged")
-          : null,
-      );
+      // ⚠️ Обвинять — только по ПОЛОЖИТЕЛЬНОМУ признаку.
+      //
+      // Прежняя версия писала «подпись не наша» всякий раз, когда `hashValid`
+      // не был строго `false` — то есть и когда поля не было вовсе. Сегодня
+      // такой ответ недостижим (бэкенд отдаёт обе половины, а отказ 400 даёт
+      // вердикт "unknown"), но ДЕФОЛТ был выбран в сторону более тяжёлого
+      // обвинения: «вы принесли чужую бумагу» вместо «не сошлось».
+      //
+      // Из двух половин это разные разговоры: изменённый документ человек
+      // перевыпустит сам, а поддельная подпись — это уже не про кнопку
+      // «скачать». Сказать второе по отсутствующим данным нельзя.
+      setVerifyReason(verifyReasonOf(v, j?.hashValid, j?.signatureValid));
     } catch { setJustState("unknown"); setVerifyReason(null); }
   }, [justification]);
 

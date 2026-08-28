@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { verifyVerdict } from "./verifyVerdict";
+import { verifyVerdict, verifyReasonOf } from "./verifyVerdict";
 
 /**
  * Главное утверждение набора одно: НИ ОДИН исход, кроме явного `valid: false`,
@@ -43,5 +43,41 @@ describe("вердикт проверки подписи различает тр
       .filter(({ ok, v }) => verifyVerdict(ok, v) === "invalid");
 
     expect(invalidCases).toEqual([{ ok: true, v: false }]);
+  });
+});
+
+
+describe("какая половина не сошлась — только по положительному признаку", () => {
+  test("хэш не сошёлся -> документ изменён", () => {
+    expect(verifyReasonOf("invalid", false, true)).toBe("tampered");
+  });
+
+  test("подпись не сошлась -> подпись не наша", () => {
+    expect(verifyReasonOf("invalid", true, false)).toBe("forged");
+  });
+
+  test("обе не сошлись -> называем изменение документа", () => {
+    // Человеку это ближе и действие понятнее: перевыпустить. Обвинение в
+    // подделке приберегаем для случая, когда изменения документа НЕ было.
+    expect(verifyReasonOf("invalid", false, false)).toBe("tampered");
+  });
+
+  test("🔴 полей нет вовсе -> НИКАКОГО обвинения", () => {
+    // Ровно тот случай, ради которого помощник вынесен из компонента: прежняя
+    // версия говорила «подпись не наша» по отсутствующим данным, то есть
+    // выбирала более тяжёлое из двух обвинений там, где не знала ничего.
+    expect(verifyReasonOf("invalid", undefined, undefined)).toBeNull();
+    expect(verifyReasonOf("invalid", null, null)).toBeNull();
+  });
+
+  test("не-булевы значения тоже не повод обвинять", () => {
+    expect(verifyReasonOf("invalid", "false", "false")).toBeNull();
+    expect(verifyReasonOf("invalid", 0, 0)).toBeNull();
+  });
+
+  test("вердикт не invalid -> причины нет ни при каких полях", () => {
+    for (const v of ["valid", "unknown"] as const) {
+      expect(verifyReasonOf(v, false, false)).toBeNull();
+    }
   });
 });

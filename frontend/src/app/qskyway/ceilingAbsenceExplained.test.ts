@@ -88,6 +88,6 @@ describe("почему нет чисел по потолкам — сказан�
       ).not.toBe(dicts[lang]["qskyway.just.forged"]);
     }
     // И страница обязана РАЗЛИЧАТЬ их по ответу, а не показывать одну всегда.
-    expect(SRC.includes("hashValid === false"), "страница не смотрит, что именно не сошлось").toBe(true);
+    expect(SRC.includes("verifyReasonOf("), "страница не различает, ЧТО именно не сошлось").toBe(true);
   });
 });

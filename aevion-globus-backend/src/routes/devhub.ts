@@ -2183,12 +2183,19 @@ devhubRouter.delete("/projects/:id/database", async (req, res) => {
   const { DATABASE_URL: _dropped, ...rest } = project.envVars || {};
   project.envVars = rest;
   project.updatedAt = now();
+  // База УЖЕ удалена по-настоящему — схема и роль на сервере снесены. Если
+  // запись об этом легла только в память, после перезапуска проект снова будет
+  // считать, что у него есть DATABASE_URL на удалённую базу, и приложение
+  // человека упадёт с невнятной ошибкой подключения.
+  //
+  // Зеркало случая с ВЫДАЧЕЙ базы: там ссылка терялась, здесь остаётся лишней.
+  let storageFallback = false;
   try {
     await dbSaveProject(project);
   } catch {
-    memProjects.set(project.id, project);
+    memProjects.set(project.id, project); storageFallback = true;
   }
-  res.json({ ok: true, note: "Schema, role and DATABASE_URL removed. The data is gone." });
+  res.json({ ok: true, note: "Schema, role and DATABASE_URL removed. The data is gone.", ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // POST /api/devhub/projects/:id/generate/undo — revert the project's most

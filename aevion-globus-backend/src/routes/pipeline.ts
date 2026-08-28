@@ -35,6 +35,7 @@ import {
   verifyProof as otsVerifyProof,
 } from "../lib/opentimestamps/anchor";
 import { computeWitnessCid } from "../lib/shamir/witnessCid";
+import { anchorSummary } from "../lib/opentimestamps/anchorSummary";
 import {
   CosignError,
   reverifyAuthorCosign,
@@ -1532,8 +1533,10 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         witness: witnessInfo,
       },
       bitcoinAnchor: {
-        status: cert.otsStatus ?? "not_stamped",
-        bitcoinBlockHeight: cert.otsBitcoinBlockHeight ?? null,
+        // Считается общим помощником — тем же, которым отвечают список,
+        // поиск по хешу и выгрузка. Здесь раньше был свой экземпляр той же
+        // арифметики: `?? "not_stamped"` и `?? null` слово в слово.
+        ...anchorSummary(cert as unknown as Record<string, unknown>),
         stampedAt: cert.otsStampedAt ?? null,
         upgradedAt: cert.otsUpgradedAt ?? null,
         hasProof: Boolean(cert.otsProof),
@@ -1643,7 +1646,7 @@ pipelineRouter.get("/certificates", async (_req, res) => {
     await ensureTables();
 
     const { rows } = await pool.query(
-      `SELECT "id","objectId","shieldId","title","kind","authorName","country","city","contentHash","fileHash","algorithm","status","protectedAt","verifiedCount"
+      `SELECT "id","objectId","shieldId","title","kind","authorName","country","city","contentHash","fileHash","algorithm","status","protectedAt","verifiedCount","otsStatus","otsBitcoinBlockHeight"
        FROM "IPCertificate" WHERE "status" = 'active' ORDER BY "protectedAt" DESC LIMIT 100`,
     );
 
@@ -1660,6 +1663,13 @@ pipelineRouter.get("/certificates", async (_req, res) => {
         protectedAt: r.protectedAt,
         verifiedCount: r.verifiedCount || 0,
         shieldId: r.shieldId || null,
+        // Состояние якоря в биткойне. До 28.08.2026 публичный реестр его не
+        // показывал вовсе: главный козырь продукта был невидим на его витрине.
+        //
+        // Имя поля — то же, что у ручки проверки (`bitcoinAnchor`), намеренно:
+        // второе имя для одного и того же понятия — это второй способ отвечать
+        // на один вопрос, и однажды они разойдутся.
+        bitcoinAnchor: anchorSummary(r),
         verifyUrl: `https://aevion.app/verify/${r.id}`,
       })),
       total: rows.length,
@@ -1711,8 +1721,8 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
     params.push(limit);
 
     const { rows } = await pool.query(
-      `SELECT "id","title","kind","authorName","country","city","contentHash","fileHash","algorithm","protectedAt","verifiedCount"
-       FROM "IPCertificate" WHERE ${conditions.join(" AND ")} ORDER BY ${orderBy} LIMIT $${params.length}`,
+      `SELECT "id","title","kind","authorName","country","city","contentHash","fileHash","algorithm","protectedAt","verifiedCount","otsStatus","otsBitcoinBlockHeight"
+       FROM "IPCertificate" WHERE ${conditions.join(" AND ")} ORDER BY ${orderBy} LIMIT ${params.length}`,
       params,
     );
 
@@ -1731,6 +1741,11 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
       "algorithm",
       "protectedAt",
       "verifiedCount",
+      // Столбцы якоря дописаны В КОНЕЦ намеренно: у CSV позиционный контракт,
+      // и вставка в середину сдвинула бы столбцы у всех, кто уже разбирает
+      // выгрузку по номеру.
+      "bitcoinAnchorStatus",
+      "bitcoinBlockHeight",
       "verifyUrl",
     ];
     const lines = [header.join(",")];
@@ -1751,6 +1766,8 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
               : r.protectedAt,
           ),
           esc(r.verifiedCount || 0),
+          esc(anchorSummary(r).status),
+          esc(anchorSummary(r).bitcoinBlockHeight ?? ""),
           esc(`https://aevion.app/verify/${r.id}`),
         ].join(","),
       );
@@ -1789,7 +1806,7 @@ pipelineRouter.get("/lookup/:hash", async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      `SELECT "id","title","kind","authorName","country","city","contentHash","fileHash","algorithm","protectedAt","verifiedCount"
+      `SELECT "id","title","kind","authorName","country","city","contentHash","fileHash","algorithm","protectedAt","verifiedCount","otsStatus","otsBitcoinBlockHeight"
        FROM "IPCertificate" WHERE "status" = 'active' AND ("contentHash" = $1 OR "fileHash" = $1) LIMIT 1`,
       [hash],
     );
@@ -1812,6 +1829,10 @@ pipelineRouter.get("/lookup/:hash", async (req, res) => {
         algorithm: r.algorithm,
         protectedAt: r.protectedAt,
         verifiedCount: r.verifiedCount || 0,
+        // Поиск по хешу — то, чем пользуется ТРЕТЬЯ сторона: «эта работа уже
+        // зарегистрирована?». Ответ без состояния якоря отвечает на половину
+        // вопроса: важно не только что запись есть, но и чем она подтверждена.
+        bitcoinAnchor: anchorSummary(r),
         verifyUrl: `https://aevion.app/verify/${r.id}`,
       },
     });

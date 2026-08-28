@@ -9,6 +9,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 import { getDeviceId } from "@/lib/aevApi";
+import { anchorBadge, ANCHOR_TONE_COLORS } from "./anchorBadge";
 
 type Certificate = {
   id: string;
@@ -26,6 +27,12 @@ type Certificate = {
   verifiedName?: string | null;
   verifiedAt?: string | null;
   shieldId?: string | null;
+  /**
+   * Состояние якоря в биткойне. Поле МОЖЕТ отсутствовать: бэкенд, который его
+   * отдаёт, выкатывается отдельно. Отсутствие — «не сказали», а не «якоря нет»,
+   * и обрабатывается в anchorBadge().
+   */
+  bitcoinAnchor?: { status?: string | null; bitcoinBlockHeight?: number | null } | null;
 };
 
 const KIND_ICONS: Record<string, string> = {
@@ -911,6 +918,21 @@ blurb: "A licensed notary co-signs the certificate with Ed25519. The notary regi
                       ) : (
                         <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>✓ CERTIFIED</span>
                       )}
+                      {(() => {
+                        // Состояние якоря в биткойне — главный козырь продукта,
+                        // и до 28.08.2026 его не было видно в реестре вовсе.
+                        const b = anchorBadge(cert.bitcoinAnchor);
+                        if (!b) return null;
+                        const c = ANCHOR_TONE_COLORS[b.tone];
+                        return (
+                          <span
+                            title={b.title}
+                            style={{ padding: "3px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: c.bg, color: c.fg, whiteSpace: "nowrap" as const }}
+                          >
+                            {b.label}
+                          </span>
+                        );
+                      })()}
                       {cert.verifiedCount > 0 && <span style={{ fontSize: 10, color: "#94a3b8" }}>Verified {cert.verifiedCount}x</span>}
                     </div>
                   </div>

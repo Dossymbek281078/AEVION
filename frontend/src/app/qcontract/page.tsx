@@ -43,6 +43,11 @@ export default function QContractHome() {
   const [token, setToken] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  // Отказ отзыва раньше не показывался никак: ответ сервера не проверялся,
+  // и документ помечался отозванным в списке даже когда сервер отказал.
+  // Человек считал отзыв состоявшимся и мог на это положиться. То же самое
+  // было на странице документа — починено отдельно.
+  const [revokeError, setRevokeError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -59,12 +64,24 @@ export default function QContractHome() {
   async function revoke(id: string) {
     if (!confirm(t("qcontract.home.confirm.revoke"))) return;
     setRevoking(id);
-    await fetch(apiUrl(`/api/qcontract/documents/${id}`), {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    setDocs((prev) => prev.map((d) => d.id === id ? { ...d, revokedAt: new Date().toISOString(), expired: true } : d));
-    setRevoking(null);
+    setRevokeError(null);
+    try {
+      const r = await fetch(apiUrl(`/api/qcontract/documents/${id}`), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        setRevokeError((d && (d.error || d.message)) || `Отозвать не удалось (${r.status}). Документ действует.`);
+        setRevoking(null);
+        return;
+      }
+      setDocs((prev) => prev.map((d) => d.id === id ? { ...d, revokedAt: new Date().toISOString(), expired: true } : d));
+    } catch {
+      setRevokeError("Не удалось связаться с сервером — документ НЕ отозван.");
+    } finally {
+      setRevoking(null);
+    }
   }
 
   async function extend(id: string) {
@@ -224,6 +241,12 @@ export default function QContractHome() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {revokeError && (
+            <div role="alert" className="mb-4 bg-red-50 border border-red-300 text-red-700 rounded-lg px-3 py-2 text-sm">
+              {revokeError}
             </div>
           )}
 

@@ -53,6 +53,20 @@ export function SubmitIdeaForm({ onSubmitted }: Props) {
         setError(typeof data?.error === "string" ? data.error : `HTTP ${resp.status}`);
         return;
       }
+      // Ручка честно называет, КУДА легла идея. Запасной путь кладёт её в Map
+      // до перезапуска, и до 19.08.2026 такой ответ был неотличим от настоящего
+      // — включая contentHash, по которому человек считает идею защищённой.
+      // Признак добавили тогда же, но читать его здесь забыли: форма
+      // показывала успех и СБРАСЫВАЛА поля, то есть человек терял набранный
+      // текст, а запись жила до ближайшего перезапуска.
+      const storage = data?.data?.storage ?? data?.storage ?? "db";
+      if (storage !== "db" && storage !== "postgres") {
+        setError(
+          "Идея принята, но сохранить её насовсем сейчас не вышло — это на нашей " +
+            "стороне. Текст оставили в форме: отправьте ещё раз через минуту.",
+        );
+        return;
+      }
       onSubmitted({
         id: data.data.id,
         qrightProtected: Boolean(data.data.qrightProtected),

@@ -72,7 +72,7 @@ const PIPELINE_STEPS = [
     icon: "🛡",
     code: "SHIELD + BUREAU",
     title: "Ed25519 + Shamir → certificate",
-    body: "High-value records auto-shard via Quantum Shield (2-of-3). Bureau wraps everything in an admissible-evidence PDF.",
+    body: "High-value records auto-shard via Quantum Shield (2-of-3). Bureau wraps everything into a signed, timestamped PDF.",
     duration: "~30s",
   },
   {

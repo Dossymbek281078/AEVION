@@ -1,4 +1,6 @@
 import { describe, test, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 /**
  * ⚠️ ЕСЛИ ЭТОТ ИМПОРТ СЛОМАЛСЯ — не чините его вслепую.
@@ -172,6 +174,71 @@ describe("ключи перевода qskyway", () => {
       // Квитанция обязана остаться: оговорка не должна вытеснить сам номер.
       expect(text, `в ${lang} потерян номер брони`).toContain("{id}");
       expect(text, `в ${lang} потеряна квитанция`).toContain("{receipt}");
+    }
+  });
+});
+
+/**
+ * Охват выводится ИЗ СТРАНИЦЫ, а не перечисляется руками.
+ *
+ * ПОВОД. Список `KEYS` выше зашит, и он отстал: страница зовёт 114 ключей,
+ * в списке 94. Двадцать пять оставались без проверки — просто потому, что
+ * никто не дописал их после добавления. Это беда всех положительных списков:
+ * они не краснеют от того, что чего-то не знают.
+ *
+ * Сегодня непереведённых среди них нет (проверено), то есть дефекта в продукте
+ * не было. Но охват был на пятую часть меньше, чем выглядел, и следующая
+ * добавленная строка снова прошла бы мимо.
+ *
+ * Поэтому здесь список СЧИТАЕТСЯ по исходнику страницы: добавили `t("...")` —
+ * ключ проверяется сам, без правки теста.
+ */
+describe("охват проверки переводов не отстаёт от страницы", () => {
+  const SRC = ["_client.tsx", "HeightDisputePanel.tsx"]
+    .map((f) => {
+      try {
+        return readFileSync(path.join(__dirname, f), "utf8");
+      } catch {
+        return "";
+      }
+    })
+    .join(String.fromCharCode(10));
+
+  const usedKeys = Array.from(
+    new Set(Array.from(SRC.matchAll(/t\(\s*"(qskyway\.[A-Za-z0-9_.]+)"/g)).map((m) => m[1])),
+  )
+    // Ключ, оканчивающийся точкой, — это ПРЕФИКС из склейки
+    // (`t("qskyway.just." + reason)`), а не имя строки. Такой отдельно
+    // проверяется ниже перечислением значений.
+    .filter((k) => !k.endsWith("."))
+    .sort();
+
+  test("страница вообще зовёт переводы — иначе проверка пустая", () => {
+    // Отрицательный контроль: если разбор сломается, список станет пустым и
+    // все проверки ниже пройдут, ничего не проверив.
+    expect(usedKeys.length).toBeGreaterThan(50);
+  });
+
+  for (const key of usedKeys) {
+    test(key + " — есть во всех трёх языках", () => {
+      const dicts = allTranslations() as Record<string, Record<string, string>>;
+      for (const lang of LOCALES) {
+        expect(dicts[lang]?.[key], key + " отсутствует в локали " + lang).toBeTruthy();
+      }
+    });
+  }
+
+  test("динамические ключи проверки подписи тоже на месте", () => {
+    // `t("qskyway.just." + verifyReason)` статически не виден: собирается из
+    // куска. Перечисляем ЗНАЧЕНИЯ, которые может принять причина.
+    const dicts = allTranslations() as Record<string, Record<string, string>>;
+    for (const reason of ["tampered", "forged"]) {
+      for (const lang of LOCALES) {
+        expect(
+          dicts[lang]?.["qskyway.just." + reason],
+          "qskyway.just." + reason + " отсутствует в " + lang,
+        ).toBeTruthy();
+      }
     }
   });
 });

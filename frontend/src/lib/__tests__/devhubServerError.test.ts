@@ -137,3 +137,44 @@ describe("техническое сообщение не доезжает до �
     expect(shown).toContain("widget frobnicator stalled");
   });
 });
+
+describe("правила, добавленные по замеру 29.08", () => {
+  // Все входы взяты ДОСЛОВНО из src/routes/devhub.ts. Придуманные проверяли
+  // бы мою фантазию: я бы сочинил ровно то, что мои же правила и ловят.
+  const CASES: Array<[string, string[]]> = [
+    ["prompt too long (max 2000 chars)", ["2000", "Описание"]],
+    ["text too long (max 128k chars)", ["128k"]],
+    ["max 20 steps per workflow", ["20"]],
+    ["max 500 files per import", ["500"]],
+    ["recipient must be E.164 format (e.g. +14155552671)", ["формате"]],
+    ["invalid domain format", ["example.com"]],
+    ["project has no files to deploy — add at least index.html", ["index.html"]],
+    ["project has no https deployment yet", ["опубликуйте"]],
+    ["bad CD entry signature", ["Архив"]],
+    ["no voice_id returned for preview", ["результата"]],
+    ["Video provider has no credit — top up the Replicate account to generate", ["видео"]],
+  ];
+
+  it("каждое сообщение становится русским и сохраняет числа", () => {
+    expect(CASES.length, "список входов пуст — проверка ничего не утверждает").toBeGreaterThan(9);
+    for (const [raw, must] of CASES) {
+      const out = devhubServerError(raw, "Не получилось.");
+      // Английский оригинал НЕ должен доехать до человека.
+      expect(out, raw).not.toContain(raw);
+      expect(out, raw).toMatch(/[а-яА-ЯёЁ]/);
+      for (const m of must) expect(out, raw + " -> " + out).toContain(m);
+    }
+  });
+
+  it("предел без числа не выдумывает число", () => {
+    // Обратный контроль: правило с захватом не должно подставлять пустоту
+    // или мусор, если числа в сообщении нет.
+    const out = devhubServerError("prompt too long", "Не получилось.");
+    expect(out).not.toContain("$1");
+  });
+
+  it("названия провайдеров не уходят человеку в тексте про видео", () => {
+    const out = devhubServerError("Replicate fetch failed", "Не получилось.");
+    expect(out).not.toContain("Replicate");
+  });
+});

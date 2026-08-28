@@ -16,7 +16,11 @@ import { devhubServerError } from "../devhubServerError";
  * правило — опустите число.
  */
 const ROUTER = join(__dirname, "..", "..", "..", "..", "aevion-globus-backend", "src", "routes", "devhub.ts");
-const DEBT = 54;
+// Замер 29.08.2026, после дописывания правил: непереведённых НОЛЬ.
+// Держим тройку запаса намеренно: ноль означал бы, что новое сообщение
+// на сервере ломает проверку фронта в ту же секунду. Такую связку
+// отключают, а не соблюдают. Тройка ловит ВОЛНУ и терпит единичное.
+const DEBT = 3;
 
 function englishMessages(): string[] {
   const src = readFileSync(ROUTER, "utf8");

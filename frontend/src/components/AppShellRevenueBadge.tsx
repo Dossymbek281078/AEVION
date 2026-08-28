@@ -6,11 +6,44 @@
 // rendered on /cyberchess: that surface is owned by a separate session/branch
 // (see aevion-globus-backend/CLAUDE.md) and stays untouched from here.
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useRevenueGoal } from "@/lib/useRevenueGoal";
+
+/**
+ * Порог, ниже которого плашка не рисуется.
+ *
+ * Она прибита к левому верхнему углу, а в этом же углу у оболочек живёт
+ * навигация. Замер сторожа вёрстки 28.08.2026 на экране 320: на /qright
+ * плашка перекрыла «← Глобус» и «Демо» — кнопки стало НЕЛЬЗЯ НАЖАТЬ.
+ *
+ * Выбор простой: работающая навигация важнее информационной подсказки.
+ * Прогресс к цели человек всё равно видит на /revenue, а вот обойти
+ * перекрытую кнопку он не может никак.
+ *
+ * 420 берёт и 320, и 375 (обычный iPhone) — то есть телефоны целиком.
+ * Двигать плашку вниз нельзя: там нижняя навигация телефона, и мы уже
+ * наступали на это тремя плавающими элементами разом.
+ */
+const MIN_WIDTH_PX = 420;
 
 export function AppShellRevenueBadge() {
   const { goals, summary, pct, days } = useRevenueGoal();
+  // На сервере ширины нет. Начинаем со «слишком узко» и включаем плашку уже
+  // в браузере: иначе на телефоне она мелькнёт поверх навигации до гидрации.
+  const [wideEnough, setWideEnough] = useState(false);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia(`(min-width: ${MIN_WIDTH_PX}px)`);
+    const apply = () => setWideEnough(mq.matches);
+    apply();
+    // Поворот экрана меняет ширину; без подписки плашка застревает в том
+    // состоянии, в котором страница открылась.
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  if (!wideEnough) return null;
   if (!goals || !summary || pct === null || days === null) return null;
 
   const tip = `$${summary.grossUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })} raised toward $1M · ${days} days to the deadline ($20M stretch goal)`;

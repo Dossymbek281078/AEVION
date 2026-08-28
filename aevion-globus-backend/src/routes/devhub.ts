@@ -1463,7 +1463,17 @@ devhubRouter.get("/projects", async (req, res) => {
   try {
     const projects = await dbListProjects(userId);
     const flags = await Promise.all(projects.map(computeNeedsRedeploy));
-    res.json({ projects: projects.map((p, i) => ({ ...p, needsRedeploy: flags[i] })), total: projects.length });
+    // Признак хранилища в ОТВЕТЕ, а не только в /health. Когда база не
+    // поднялась, модуль честно работает по памяти — но пустой список тогда
+    // неотличим от «у вас нет проектов», а проекты лежат в Postgres и просто
+    // не читаются. Замер 28.08 подтвердил: ответ был `{projects:[],total:0}`
+    // без единого намёка. Соседи отдают такой признак давно (подписка на
+    // ранний доступ — поле `storage`), здесь его не было.
+    res.json({
+      projects: projects.map((p, i) => ({ ...p, needsRedeploy: flags[i] })),
+      total: projects.length,
+      storage: isDevHubDbReady() ? "postgres" : "memory",
+    });
   } catch (e: any) {
     captureException(e, { route: "devhub/projects:list", userId });
     // Раньше отсюда уходил список из запасной памяти — в проде пустой, — и

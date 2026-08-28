@@ -149,7 +149,16 @@ export async function verifyAnchoredTrustScore(body: unknown): Promise<AnchorVer
       // Порядок ветвей важен: сперва спрашиваем, ПРОШЛА ли проверка, и только
       // потом — подтверждена ли она Bitcoin. Прежняя версия смотрела лишь на
       // высоту блока, поэтому непрошедшее доказательство получало "pending".
-      status: !v.ok ? "invalid" : v.bitcoinBlockHeight !== null ? "bitcoin-confirmed" : "pending",
+      // Различаем по ПРИЧИНЕ из источника, а не по `ok`: он ложен и когда
+      // привязки к блоку ещё нет (честное ожидание), и когда доказательство
+      // не сходится вовсе. Первое — «повторите позже», второе — «ждать
+      // бессмысленно», и звать оба "pending" значит советовать ждать зря.
+      status:
+        v.reason === "proof-error"
+          ? "invalid"
+          : v.bitcoinBlockHeight !== null
+            ? "bitcoin-confirmed"
+            : "pending",
       upgraded: up.upgraded,
       bitcoinBlockHeight: v.bitcoinBlockHeight,
       attestations: v.attestations,
@@ -161,8 +170,8 @@ export async function verifyAnchoredTrustScore(body: unknown): Promise<AnchorVer
       ? `Fully proven: AEVION's Ed25519 key signed this exact Trust Score, and its hash is Bitcoin-anchored at block ${v.bitcoinBlockHeight}.`
       : !ed25519.valid
         ? "Ed25519 check failed — the snapshot value or signature does not verify."
-        : !v.ok
-          ? "Ed25519 valid, but the OpenTimestamps proof does not verify against this hash — see ots.error."
+        : v.reason === "proof-error"
+          ? "Ed25519 valid, but the OpenTimestamps proof does not verify against this hash — see ots.error. Waiting will not help."
           : "Ed25519 valid, but the Bitcoin anchor is not confirmed yet (pending). Re-verify later once a block attestation appears.",
   };
 }

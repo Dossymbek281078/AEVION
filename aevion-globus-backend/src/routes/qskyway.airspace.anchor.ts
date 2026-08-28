@@ -104,7 +104,7 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
   const fail = (error: string, errorEn: string): AirspaceAnchorVerify => ({
     city,
     matchesCurrentSnapshot: false,
-    ots: { verified: false, status: "pending", upgraded: false, bitcoinBlockHeight: null, attestations: [], otsProofB64, error, errorEn },
+    ots: { verified: false, status: "not-submitted", upgraded: false, bitcoinBlockHeight: null, attestations: [], otsProofB64, error, errorEn },
     fullyProven: false,
     note: "Проверка не завершена — см. поле error.",
     noteEn: "Verification did not complete — see the error field.",
@@ -116,11 +116,16 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
   const src = city ? AIRSPACE[city] : undefined;
   const matchesCurrentSnapshot = Boolean(src) && airspaceContentHash(src!) === contentHash;
 
-  let proof: Buffer;
-  try {
-    proof = Buffer.from(otsProofB64, "base64");
-  } catch {
+  // ⚠️ `Buffer.from(x, "base64")` НЕ БРОСАЕТ: недопустимые символы молча
+  // отбрасываются, поэтому прежний try/catch не мог сработать ни разу — защита
+  // была на вид, а мусор уезжал вглубь и падал уже в сверке доказательства.
+  const looksBase64 = /^[A-Za-z0-9+/]*={0,2}$/.test(otsProofB64.replace(/\s+/g, ""));
+  if (!looksBase64) {
     return fail("otsProofB64 не является корректным base64", "otsProofB64 is not valid base64");
+  }
+  const proof = Buffer.from(otsProofB64, "base64");
+  if (proof.length === 0) {
+    return fail("otsProofB64 декодируется в пустоту", "otsProofB64 decodes to nothing");
   }
 
   const up = await upgradeProof(proof);
@@ -132,7 +137,20 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
     matchesCurrentSnapshot,
     ots: {
       verified: v.ok,
-      status: v.bitcoinBlockHeight !== null ? "bitcoin-confirmed" : "pending",
+      // Сперва спрашиваем, ПРОШЛА ли проверка, и только потом — подтверждена ли
+      // она Bitcoin. Прежняя версия смотрела лишь на высоту блока, поэтому
+      // непрошедшее доказательство докладывалось как "pending" — «зайдите
+      // позже» вместо «недействительно». Та же строка была и в lib/trustAnchor.
+      // Различаем по ПРИЧИНЕ из источника, а не по `ok`: он ложен и когда
+      // привязки к блоку ещё нет (честное ожидание), и когда доказательство
+      // не сходится вовсе. Первое — «повторите позже», второе — «ждать
+      // бессмысленно», и звать оба "pending" значит советовать ждать зря.
+      status:
+        v.reason === "proof-error"
+          ? "invalid"
+          : v.bitcoinBlockHeight !== null
+            ? "bitcoin-confirmed"
+            : "pending",
       upgraded: up.upgraded,
       bitcoinBlockHeight: v.bitcoinBlockHeight,
       attestations: v.attestations,
@@ -145,13 +163,17 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
       errorEn: v.error,
     },
     fullyProven: v.ok,
-    note: !v.ok
-      ? "Bitcoin-подтверждение ещё не получено (pending) либо пруф не сходится — повторите позже."
+    note: v.reason === "proof-error"
+      ? "Доказательство не сходится с этим хэшем — см. поле error. Ждать бессмысленно."
+      : !v.ok
+        ? "Bitcoin-подтверждение ещё не получено (pending) — повторите проверку позже."
       : matchesCurrentSnapshot
         ? `Доказано: этот набор ограничений существовал не позднее блока ${v.bitcoinBlockHeight} и совпадает с тем, что отдаётся сейчас.`
         : `Доказано для прошлой редакции: хэш привязан к блоку ${v.bitcoinBlockHeight}, но текущий снимок уже другой (регулятор перевыпустил карту). Это корректная историческая запись, а не ошибка.`,
-    noteEn: !v.ok
-      ? "Bitcoin confirmation has not arrived yet (pending), or the proof does not check out — try again later."
+    noteEn: v.reason === "proof-error"
+      ? "The proof does not check out against this hash — see error. Waiting will not help."
+      : !v.ok
+        ? "Bitcoin confirmation has not arrived yet (pending) — re-verify later."
       : matchesCurrentSnapshot
         ? `Proven: this set of restrictions existed no later than block ${v.bitcoinBlockHeight} and matches what is served now.`
         : `Proven for an earlier edition: the hash is anchored to block ${v.bitcoinBlockHeight}, but the current snapshot differs (the regulator reissued the map). This is a correct historical record, not an error.`,

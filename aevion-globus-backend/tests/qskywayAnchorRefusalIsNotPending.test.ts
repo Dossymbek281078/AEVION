@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { verifyAnchoredTrustScore } from "../src/lib/trustAnchor";
+import { verifyAnchoredAirspace } from "../src/routes/qskyway.airspace.anchor";
 
 /**
  * Отказ не имеет права выглядеть ожиданием.
@@ -72,4 +73,30 @@ describe("проверка якоря: отказ называет себя от
       expect(r.ots.bitcoinBlockHeight).toBeNull();
     }
   });
+});
+
+/**
+ * ⚠️ ТА ЖЕ проверка для ручки, которую я мерил на проде.
+ *
+ * Первую починку я внёс в `lib/trustAnchor.ts` — аналог, а не то, что мерил.
+ * Ручка `/airspace/anchor/verify` зовёт ДРУГУЮ функцию, в которой те же три
+ * дефекта лежали дословно. Нашлось свипом по своему же модулю, не чтением.
+ */
+describe("воздушный якорь: отказ называет себя отказом", () => {
+  const BAD: Array<[string, unknown]> = [
+    ["пустое тело", {}],
+    ["нет доказательства", { city: "nyc", contentHash: "ab".repeat(32) }],
+    ["не base64, но декодируемое", { city: "nyc", contentHash: "ab".repeat(32), otsProofB64: "AAAA!!!!" }],
+  ];
+  for (const [name, body] of BAD) {
+    test(name + " -> не pending и не доказано", async () => {
+      const r = await verifyAnchoredAirspace(body);
+      expect(r.ots.status, "отказ доложен как ожидание").not.toBe("pending");
+      expect(r.ots.status).toBe("not-submitted");
+      expect(r.fullyProven).toBe(false);
+      // Пояснение НЕ имеет права утверждать доказанность.
+      expect(String(r.note).includes("Доказано"), "отказ назван доказанным").toBe(false);
+      expect(String(r.noteEn).toLowerCase().includes("proven"), "refusal called proven").toBe(false);
+    });
+  }
 });

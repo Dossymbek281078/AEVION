@@ -47,6 +47,17 @@ export interface AnchorVerifyResult {
   bitcoinBlockHeight: number | null;
   attestations: string[];         // human-readable list
   error: string | null;
+  /**
+   * ПОЧЕМУ не получилось — различитель, без которого `ok:false` двусмыслен.
+   *
+   * `ok` ложен в ДВУХ разных случаях: доказательство ещё не привязано к блоку
+   * (честное ожидание, повторите позже) и доказательство не сходится вовсе
+   * (ждать бессмысленно). Раньше вызывающие не могли их отличить и звали оба
+   * "pending" — то есть недействительному доказательству отвечали «зайдите
+   * позже». Угадывать по тексту ошибки нельзя: он приходит из чужой
+   * библиотеки и меняется с её версией.
+   */
+  reason: "awaiting-bitcoin" | "proof-error" | null;
 }
 
 function extractBitcoinHeight(detached: any): number | null {
@@ -200,6 +211,7 @@ export async function verifyProof(
         bitcoinBlockHeight: null,
         attestations: summary,
         error: "no Bitcoin attestation yet (still pending)",
+        reason: "awaiting-bitcoin",
       };
     }
     // verify() returns a Map<Buffer, number> of attestations verified against
@@ -210,6 +222,7 @@ export async function verifyProof(
       bitcoinBlockHeight: height,
       attestations: summary,
       error: null,
+      reason: null,
     };
   } catch (err: unknown) {
     return {
@@ -217,6 +230,7 @@ export async function verifyProof(
       bitcoinBlockHeight: null,
       attestations: [],
       error: err instanceof Error ? err.message : String(err),
+      reason: "proof-error",
     };
   }
 }

@@ -1143,7 +1143,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           .map((m) =>
             m.role === "user"
               ? { role: "user", text: m.text }
-              : { role: "assistant", text: m.files.length ? `Changed files: ${m.files.map((fc) => fc.path).join(", ")}` : (m.note || "No changes") }
+              : { role: "assistant", text: m.files.length ? `Изменённые файлы: ${m.files.map((fc) => fc.path).join(", ")}` : (m.note || "No changes") }
           ),
         ...(sentImage ? { imageBase64: sentImage.dataBase64, imageMediaType: sentImage.mediaType } : {}),
       });
@@ -1611,8 +1611,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           at: new Date().toISOString(),
           files: [],
           note: data.appliedSchemaSql
-            ? `Database ready — schema ${data.schema} created, tables from db/schema.sql applied, DATABASE_URL saved to Env Vars.`
-            : `Database ready — schema ${data.schema} created. No db/schema.sql yet, so no tables were made.`,
+            ? `База готова — схема ${data.schema} created, tables from db/schema.sql applied, DATABASE_URL saved to Env Vars.`
+            : `База готова — схема ${data.schema} created. No db/schema.sql yet, so no tables were made.`,
         },
       ]);
       // Refresh the project so the Env Vars tab shows DATABASE_URL.
@@ -2140,7 +2140,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setEmailMsg({ ok: true, degraded: true, text: `Sent to ${emailTo}, but Brevo didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setEmailTo(""); setEmailSubject(""); setEmailBody("");
       } else {
-        setEmailMsg({ ok: true, text: `Email sent to ${emailTo}` });
+        setEmailMsg({ ok: true, text: `Письмо отправлено на ${emailTo}` });
         setEmailTo(""); setEmailSubject(""); setEmailBody("");
       }
     } catch (e: any) {
@@ -2471,7 +2471,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setSmsMsg({ ok: true, degraded: true, text: `Brevo accepted the SMS, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setSmsRecipient(""); setSmsContent("");
       } else {
-        setSmsMsg({ ok: true, text: `SMS sent (${d.smsCount} segment${d.smsCount === 1 ? "" : "s"}, ref ${d.reference})` });
+        setSmsMsg({ ok: true, text: `SMS отправлено (${d.smsCount} segment${d.smsCount === 1 ? "" : "s"}, ref ${d.reference})` });
         setSmsRecipient(""); setSmsContent("");
       }
     } catch (e: any) {
@@ -2512,7 +2512,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setWaMsg({ ok: true, degraded: true, text: `Brevo accepted the WhatsApp message, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setWaContact(""); setWaTemplateId(""); setWaParams("");
       } else {
-        setWaMsg({ ok: true, text: `WhatsApp sent (msg ${d.messageId})` });
+        setWaMsg({ ok: true, text: `WhatsApp отправлен (сообщение ${d.messageId})` });
         setWaContact(""); setWaTemplateId(""); setWaParams("");
       }
     } catch (e: any) {
@@ -2566,7 +2566,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (!r.ok || !d.ok) {
         setTrFileMsg({ ok: false, text: devhubServerError(d.error, "Не удалось перевести") });
       } else {
-        setTrFileMsg({ ok: true, text: `Translated to ${d.path} (${d.bytes} bytes)` });
+        setTrFileMsg({ ok: true, text: `Переведено в ${d.path} (${d.bytes} bytes)` });
         // Reload file tree
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json();
@@ -2631,7 +2631,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (!r.ok || !d.ok) {
         setTplSendMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
       } else {
-        setTplSendMsg({ ok: true, text: `Sent template #${templateId} (msg ${d.messageId})` });
+        setTplSendMsg({ ok: true, text: `Отправлен шаблон №${templateId} (msg ${d.messageId})` });
       }
     } catch (e: any) {
       setTplSendMsg({ ok: false, text: e?.message || "Send failed" });
@@ -2732,7 +2732,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setTplBuilderMsg({ ok: false, text: devhubServerError(d.error, "Не удалось создать шаблон") });
         return;
       }
-      setTplBuilderMsg({ ok: true, text: `Created template #${d.id} — "${d.name}"` });
+      setTplBuilderMsg({ ok: true, text: `Создан шаблон №${d.id} — "${d.name}"` });
       // Refresh templates list if user already opened it
       if (emailTemplates.length > 0) await loadEmailTemplates();
     } catch (e: any) {

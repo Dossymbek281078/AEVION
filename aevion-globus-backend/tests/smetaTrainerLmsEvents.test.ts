@@ -23,6 +23,11 @@ import path from "node:path";
 
 import { smetaTrainerRouter } from "../src/routes/smeta-trainer";
 
+// Ручки /admin тренажёра закрыты проверкой роли (28.08.2026). Этот прогон
+// проверяет доставку, а не доступ, поэтому отдушина включается ЯВНО —
+// раньше она включалась сама при NODE_ENV=test и прятала настоящую логику.
+process.env.SMETA_ADMIN_TEST_BYPASS = "1";
+
 const SECRET = "test-secret-smeta-lms-0123456789";
 const DEVICE = "lms-device-000001";
 

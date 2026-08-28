@@ -89,11 +89,14 @@ const readLimiter = rateLimit({
  * `SMETA_ADMIN_EMAILS` (через запятую) — иначе они потеряют доступ.
  */
 function isSmetaAdmin(req: Request): { ok: boolean; reason: string | null } {
-  // Отдушина та же, что у проверки адреса вебхука: в тестах роль не выдаётся,
-  // а существующие прогоны LMS регистрируют вебхуки обычным токеном. В проде
-  // NODE_ENV не равен "test", поэтому защита остаётся включённой.
-  if (process.env.NODE_ENV === "test") {
-    return { ok: Boolean(req.headers?.authorization?.startsWith("Bearer ")), reason: "test-env" };
+  // Отдушина для прогонов — ЯВНАЯ и по своей переменной. Раньше она стояла на
+  // общем `NODE_ENV === "test"`, и цена оказалась выше пользы: под ней настоящая
+  // логика ролей ниже не исполнялась в тестах ВООБЩЕ, то есть защиту нельзя было
+  // ни проверить, ни удержать от отката — сломай её кто-нибудь, все прогоны
+  // остались бы зелёными. Теперь её включают два прогона доставки, которым нужен
+  // доступ к ручке, а сторож smetaAdminGate проверяет настоящую логику.
+  if (process.env.SMETA_ADMIN_TEST_BYPASS === "1") {
+    return { ok: Boolean(req.headers?.authorization?.startsWith("Bearer ")), reason: "test-bypass" };
   }
   const header = req.headers?.authorization;
   if (!header?.startsWith("Bearer ")) return { ok: false, reason: "no-bearer" };

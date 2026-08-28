@@ -190,6 +190,36 @@ test("офлайн-пакет называет состояние якоря с�
     expect(c.bitcoinAnchor.bitcoinBlockHeight).toBeNull();
   });
 
+test("страница автора: у каждой работы есть состояние якоря", async () => {
+    // Седьмая поверхность. Публичная страница автора показывает его работы —
+    // и до 28.08.2026 не говорила про якорь ничего, хотя это главное, чем
+    // запись отличается от строки в чьей-то базе.
+    const r = await request(app()).get("/api/pipeline/authors/dosymbek");
+    expect(r.status).toBe(200);
+    const c = r.body.certificates?.[0];
+    expect(c, "ответ без работ — проверка смотрит не туда").toBeTruthy();
+    expect(c.bitcoinAnchor, "у работы на странице автора нет поля bitcoinAnchor").toBeDefined();
+    expect(c.bitcoinAnchor.status).toBe("bitcoin-confirmed");
+    expect(c.bitcoinAnchor.bitcoinBlockHeight).toBe(912345);
+  });
+
+  test("страница автора: колонки якоря ЗАПРОШЕНЫ у базы", async () => {
+    await request(app()).get("/api/pipeline/authors/dosymbek");
+    const sel = selects();
+    expect(sel.length).toBeGreaterThan(0);
+    for (const q of sel) {
+      expect(q, "в SELECT нет otsStatus — на живой базе якорь у всех станет not_stamped").toContain(`"otsStatus"`);
+      expect(q).toContain(`"otsBitcoinBlockHeight"`);
+    }
+  });
+
+  test("страница автора: не якорённая работа не выдаётся за ожидающую", async () => {
+    row.otsStatus = null;
+    row.otsBitcoinBlockHeight = null;
+    const r = await request(app()).get("/api/pipeline/authors/dosymbek");
+    expect(r.body.certificates[0].bitcoinAnchor.status).toBe("not_stamped");
+  });
+
   test("три состояния дают три разных ответа во всех трёх поверхностях", async () => {
     const seen = { list: new Set<string>(), lookup: new Set<string>(), csv: new Set<string>() };
     for (const s of [null, "pending", "bitcoin-confirmed"]) {

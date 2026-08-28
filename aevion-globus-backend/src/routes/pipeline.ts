@@ -3351,10 +3351,12 @@ pipelineRouter.get("/authors/:slug", async (req: Request, res: Response) => {
       id: string; title: string; kind: string; description: string;
       authorName: string | null; country: string | null; city: string | null;
       contentHash: string; protectedAt: Date; verifiedCount: number;
+      otsStatus: string | null; otsBitcoinBlockHeight: number | null;
     };
     const queryResult = await pool.query(
       `SELECT id, title, kind, description, "authorName", country, city,
-              "contentHash", "protectedAt", COALESCE("verifiedCount", 0) AS "verifiedCount"
+              "contentHash", "protectedAt", COALESCE("verifiedCount", 0) AS "verifiedCount",
+              "otsStatus", "otsBitcoinBlockHeight"
          FROM "IPCertificate"
         WHERE status = 'active'
           AND (
@@ -3386,6 +3388,10 @@ pipelineRouter.get("/authors/:slug", async (req: Request, res: Response) => {
         country: r.country, city: r.city, contentHash: r.contentHash,
         protectedAt: r.protectedAt?.toISOString() ?? "",
         verifiedCount: Number(r.verifiedCount) || 0,
+        // Публичная страница автора — то, что человек показывает миру наравне
+        // со страницей самой работы. Состояние якоря считается тем же общим
+        // помощником, что и на остальных поверхностях реестра.
+        bitcoinAnchor: anchorSummary(r as unknown as Record<string, unknown>),
       })),
     });
   } catch (err: unknown) {

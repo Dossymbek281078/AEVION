@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { anchorBadge, ANCHOR_TONE_COLORS } from "@/app/bureau/anchorBadge";
 import { apiUrl } from "@/lib/apiBase";
 
 type Cert = {
@@ -19,6 +20,11 @@ type Cert = {
   contentHash: string;
   protectedAt: string;
   verifiedCount: number;
+  /**
+   * Состояние якоря в биткойне. Может отсутствовать: бэкенд, который его
+   * отдаёт, выкатывается отдельно. Отсутствие — «не сказали», а не «якоря нет».
+   */
+  bitcoinAnchor?: { status?: string | null; bitcoinBlockHeight?: number | null } | null;
 };
 
 type AuthorProfile = {
@@ -284,6 +290,22 @@ export default function AuthorPage() {
                       <span title={new Date(c.protectedAt).toLocaleString()} style={{ fontSize: 11, color: "#94a3b8" }}>
                         {formatRelative(c.protectedAt)}
                       </span>
+                      {(() => {
+                        // Седьмая поверхность того же вопроса: страница автора —
+                        // то, что человек показывает миру наравне со страницей
+                        // работы. Пометка та же, что в реестре, общим модулем.
+                        const b = anchorBadge(c.bitcoinAnchor);
+                        if (!b) return null;
+                        const t = ANCHOR_TONE_COLORS[b.tone];
+                        return (
+                          <span
+                            title={b.title}
+                            style={{ padding: "2px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: t.bg, color: t.fg, whiteSpace: "nowrap" as const }}
+                          >
+                            {b.label}
+                          </span>
+                        );
+                      })()}
                       {c.verifiedCount > 0 && (
                         <span style={{ fontSize: 11, color: "#94a3b8" }}>verified {c.verifiedCount}×</span>
                       )}

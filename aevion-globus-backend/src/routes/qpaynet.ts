@@ -701,7 +701,20 @@ async function saveIdempotency(
      VALUES ($1,$2,$3,$4,$5::jsonb)
      ON CONFLICT (owner_id, key) DO NOTHING`,
     [ownerId, key, bodyHash, status, JSON.stringify(response)],
-  ).catch(() => {});
+  ).catch((e: unknown) => {
+    // Ронять ответ здесь НЕЛЬЗЯ: запрос уже выполнен, и отказ заставил бы
+    // клиента повторить его — а без этой записи повтор обработается ЗАНОВО,
+    // то есть создаст дубль платёжного запроса. Ровно от этого ключ
+    // идемпотентности и защищает.
+    //
+    // Но и молчать нельзя. `readIdempotency` при отсутствии строки возвращает
+    // «ничего», и вызывающий считает повтор новым запросом. То есть провал
+    // ЭТОЙ записи снимает защиту от дубля, и снаружи это неотличимо от
+    // штатной работы.
+    const why = e instanceof Error ? e.message : String(e);
+    console.error(`[QPayNet] ЗАПИСЬ ИДЕМПОТЕНТНОСТИ НЕ ПРОШЛА: ключ ${key} владельца ${ownerId}: ${why}`);
+    captureException(e, { route: "qpaynet/saveIdempotency", ownerId, key, status });
+  });
 }
 
 // Periodic GC of idempotency keys older than 24h (keeps table small).
@@ -1806,7 +1819,14 @@ async function ensureRequestsTable(): Promise<void> {
     -- column-level encryption via pgcrypto when available; fallback unchanged.
     CREATE INDEX IF NOT EXISTS idx_qpr_notify_due ON qpaynet_payment_requests (notify_next_retry_at)
       WHERE notify_url IS NOT NULL AND notified_at IS NULL;
-  `).catch(() => {});
+  `).catch((e: unknown) => {
+    // Молчаливый провал ЭТОЙ миграции опаснее, чем кажется: колонок не станет,
+    // а запросы к ним прикрыты мягкими catch выше по стеку и отвечают 200. То
+    // есть уведомления мерчанту перестанут отправляться, и никто не узнает.
+    const why = e instanceof Error ? e.message : String(e);
+    console.error(`[QPayNet] МИГРАЦИЯ КОЛОНОК УВЕДОМЛЕНИЙ НЕ ПРОШЛА: ${why}`);
+    captureException(e, { route: "qpaynet/ensureNotifyColumns" });
+  });
 }
 
 // Exponential backoff: 30s, 2m, 10m, 30m, 2h, then give up at 5 attempts.
@@ -2165,7 +2185,16 @@ qpaynetRouter.post("/requests/:token/pay", moneyLimiter, async (req, res) => {
           [result.error?.slice(0, 500) ?? "unknown", next, pr.id],
         );
       }
-    }).catch(() => {});
+    }).catch((e: unknown) => {
+      // Здесь ведётся УЧЁТ отправки: notified_at, число попыток и время
+      // следующей. Провал молча означает одно из двух, и оба плохи: либо
+      // уведомление уйдёт мерчанту повторно (notified_at не записан), либо
+      // повторы будут идти вечно (счётчик не вырос). Снаружи и то и другое
+      // выглядит как штатная работа.
+      const why = e instanceof Error ? e.message : String(e);
+      console.error(`[QPayNet] УЧЁТ УВЕДОМЛЕНИЯ НЕ ЗАПИСАН: заявка ${pr.id}: ${why}`);
+      captureException(e, { route: "qpaynet/notifyBookkeeping", requestId: pr.id });
+    });
   }
 
   const responseBody = { ok: true, txId: txOutId, txInId, amount: fromTiin(tiin), fee: fromTiin(fee), newBalance };

@@ -18,36 +18,26 @@ const SRC = readFileSync(join(__dirname, "..", "src", "routes", "devhub.ts"), "u
 const LINES = SRC.split(String.fromCharCode(10));
 
 function risky(): string[] {
-  // Окно поиска — ВЕСЬ обработчик, а не 25 строк назад.
+  // Условия «а есть ли рядом обращение к базе» здесь БОЛЬШЕ НЕТ, и это
+  // третья редакция правила.
   //
-  // Первая версия смотрела на 25 строк выше и пропустила 11 мест: у ручки
-  // видео вызов провайдера стоит на 6697, а показ ошибки на 6747 — пятьдесят
-  // строк разницы. Сторож при этом уверенно отвечал «нарушений нет», то есть
-  // занижал не количество дефектов, а СОБСТВЕННЫЙ охват.
+  // Первая смотрела на 25 строк выше показа — не достала до вызова, стоявшего
+  // за пятьдесят строк, и занизила класс на треть.
+  // Вторая брала обработчик целиком — и всё равно промахнулась на трёх местах:
+  // обращение к базе стояло ЗА помощником (getAllMonthUsage, setUserTier), в
+  // теле обработчика его не видно вовсе. След теряется на границе функции, и
+  // никакой статический радиус этого не чинит.
+  //
+  // Правильное правило проще всех предыдущих: сырой текст исключения в ответе
+  // не нужен НИКОГДА. Очистка убирает адреса, роли и длину — нашим
+  // собственным сообщениям она не вредит, а чужому тексту не даёт пройти.
   const out: string[] = [];
-  const starts: number[] = [];
   LINES.forEach((l, i) => {
-    if (l.startsWith("devhubRouter.")) starts.push(i);
+    if (l.includes("safeErrorText")) return;
+    if (!l.includes("e?.message") && !l.includes("err?.message")) return;
+    if (!l.includes("res.status") && !l.includes("res.json")) return;
+    out.push(String(i + 1));
   });
-  starts.push(LINES.length);
-  for (let s = 0; s < starts.length - 1; s++) {
-    const from = starts[s];
-    const to = starts[s + 1];
-    const body = LINES.slice(from, to).join(String.fromCharCode(10));
-    const external =
-      body.includes("pool.query") ||
-      body.includes("await db") ||
-      body.includes("fetch(") ||
-      body.includes("callProvider");
-    if (!external) continue;
-    for (let i = from; i < to; i++) {
-      const l = LINES[i];
-      if (l.includes("safeErrorText")) continue;
-      if (!l.includes("e?.message") && !l.includes("err?.message")) continue;
-      if (!l.includes("res.status") && !l.includes("res.json")) continue;
-      out.push(String(i + 1));
-    }
-  }
   return out;
 }
 

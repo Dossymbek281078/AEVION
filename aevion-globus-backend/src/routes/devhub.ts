@@ -2101,7 +2101,7 @@ devhubRouter.post("/projects/:id/database/design", async (req, res) => {
         : "Files generated — set DATABASE_URL in Env Vars and run the schema to go live. No database was provisioned.",
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "database design failed" });
+    res.status(500).json({ error: safeErrorText(e) || "database design failed" });
   }
 });
 
@@ -7143,7 +7143,7 @@ devhubRouter.get("/studio/credits", async (req, res) => {
       upgradeUrl: "https://aevion.app/studio#upgrade",
     });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Credits fetch failed" });
+    return res.status(500).json({ error: safeErrorText(e) || "Credits fetch failed" });
   }
 });
 
@@ -7163,6 +7163,6 @@ devhubRouter.post("/studio/tier", async (req, res) => {
     await setUserTier(target, tier as StudioTier);
     return res.json({ ok: true, userId: target, tier });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Tier update failed" });
+    return res.status(500).json({ error: safeErrorText(e) || "Tier update failed" });
   }
 });

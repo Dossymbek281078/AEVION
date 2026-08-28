@@ -10843,7 +10843,7 @@ ${question.trim()}`;
               return <div style={{borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",border:"1px solid #93c5fd",padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <span style={{fontSize:14}}>💬</span>
-                  <span style={{fontSize:11,fontWeight:900,color:T.blue,letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Спроси Coach — chat с AI</span>
+                  <span style={{fontSize:11,fontWeight:900,color:T.blue,letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Спроси Coach — разговор с ИИ-тренером</span>
                   {coachChat.length>0&&<span style={{fontSize:9,color:T.dim,fontWeight:600}}>{coachChat.length} сообщ.</span>}
                   {coachChat.length>0&&<button onClick={()=>sCoachChat([])} title="Очистить историю" style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,fontWeight:700,color:T.dim,cursor:"pointer"}}>× очистить</button>}
                 </div>

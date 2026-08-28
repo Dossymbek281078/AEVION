@@ -110,6 +110,11 @@ export default async function CyberChessLaunchPage({
           <div style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: "0.12em", color: GOLD, textTransform: "uppercase" }}>
             AEVION · CyberChess
           </div>
+          {/* Заголовок тоже зависит от даты. 29.08.2026 он был статичным
+              («Открываем 30 августа»), а абзац под ним уже умел переключаться на
+              «Уже открыто» — то есть 30-го страница спорила сама с собой: шапка
+              обещает будущее, текст сообщает, что всё случилось. Человек верит
+              крупному, а крупное было бы неправдой. */}
           <h1
             style={{
               fontFamily: "Georgia, 'Times New Roman', serif",
@@ -119,7 +124,7 @@ export default async function CyberChessLaunchPage({
               letterSpacing: "-0.01em",
             }}
           >
-            Открываем 30 августа
+            {left > 0 ? "Открываем 30 августа" : "CyberChess открыт"}
           </h1>
           <p style={{ color: MUTED, fontSize: 15.5, lineHeight: 1.6, margin: "12px 0 0" }}>
             {left > 0

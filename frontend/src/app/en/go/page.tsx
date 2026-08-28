@@ -3,7 +3,7 @@ import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { LandingView } from "@/components/LandingView";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
-import { productById, channelFrom, withChannel, type Product } from "@/lib/products";
+import { productById, channelFrom, withChannel, keepChannel, type Product } from "@/lib/products";
 
 // /en/go — англоязычная посадочная под ссылку в профиле.
 //
@@ -109,6 +109,10 @@ export default async function EnGoPage({
   // Метка канала обязана доехать до кассы: без неё покупка приходит в отчёт
   // как «источник неизвестен», и после всех роликов нельзя сказать, сработали
   // ли они.
+  // Метка канала обязана доехать и до кассы, и до внутренних переходов: без неё
+  // покупка приходит в отчёт как «источник неизвестен», и после всех роликов
+  // нельзя сказать, сработали ли они. keepChannel — общий механизм каталога,
+  // он же не даёт подставить нормализованное значение вместо короткого ключа.
   const channel = channelFrom((await searchParams).c);
   const book = productById("orcfbo");
   const bookAudio = productById("lelzw");
@@ -139,7 +143,7 @@ export default async function EnGoPage({
             тем же заходом. */}
         <section style={styles.section}>
           <h2 style={styles.h2}>Free, and the whole thing</h2>
-          <a href="/en/longevity" style={styles.card}>
+          <a href={keepChannel("/en/longevity", channel)} style={styles.card}>
             <div style={styles.cardKicker}>free · no email required</div>
             <div style={styles.cardTitle}>The Longevity Protocol</div>
             <p style={styles.cardNote}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { keepChannel } from "@/lib/products";
 
 /**
  * Маленький калькулятор отклонений: человек вводит свои цифры и сразу видит,
@@ -61,7 +62,10 @@ export function verdict(value: number, b: Bound): "low" | "high" | "ok" {
   return "ok";
 }
 
-export function LongevityTool() {
+// channel приходит со страницы: человек, дочитавший бесплатный протокол и
+// пошедший смотреть остальное, — самый тёплый переход к покупке во всей
+// воронке. Без метки этот переход в отчёте выглядит как заход «ниоткуда».
+export function LongevityTool({ channel = null }: { channel?: string | null }) {
   const [vals, setVals] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState(false);
 
@@ -150,7 +154,7 @@ export function LongevityTool() {
               продажей на чужом доверии. */}
           <p style={styles.next}>
             Everything AEVION sells sits on one page —{" "}
-            <a href="/en/go" style={styles.nextLink}>
+            <a href={keepChannel("/en/go", channel)} style={styles.nextLink}>
               the book behind the videos, the protocols and the subscription →
             </a>
           </p>

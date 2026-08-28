@@ -30,5 +30,11 @@ export function safeErrorText(e: unknown): string {
     // имя пользователя и роль базы
     .replace(/\buser=\S+/gi, "user=<скрыт>")
     .replace(/\brole "[^"]+"/gi, 'role "<скрыта>"')
+    // Формы, найденные прогоном 29.08.2026 (не чтением — читая, я их не
+    // видел): Postgres пишет имя пользователя и в КАВЫЧКАХ, а не только
+    // через user=. Плюс наружу уходили имя базы и путь к сокету.
+    .replace(/user "[^"]+"/gi, 'user "<скрыт>"')
+    .replace(/database "[^"]+"/gi, 'database "<скрыта>"')
+    .replace(/socket "[^"]+"/gi, 'socket "<скрыт>"')
     .slice(0, 200);
 }

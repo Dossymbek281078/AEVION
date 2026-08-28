@@ -45,6 +45,28 @@ describe("текст ошибки не выдаёт устройство сис�
     }
   });
 
+  test("учётные данные и имена в КАВЫЧКАХ тоже прячутся", () => {
+    // Найдено прогоном форм списком: правило знало только user=, а
+    // Postgres чаще пишет user "app". Заодно наружу шли имя базы и
+    // путь к сокету — та же форма записи, тот же класс.
+    const cases: Array<[string, string]> = [
+      ["password authentication failed for user " + JSON.stringify("app_rw"), "app_rw"],
+      ["FATAL: database " + JSON.stringify("aevion_prod") + " does not exist", "aevion_prod"],
+      ["could not connect to server on socket " + JSON.stringify("/var/run/postgresql/x"), "/var/run"],
+    ];
+    expect(cases.length).toBeGreaterThan(2);
+    for (const [raw, secret] of cases) {
+      expect(safeErrorText(new Error(raw)), raw).not.toContain(secret);
+    }
+  });
+
+  test("имя таблицы остаётся — оно помогает разбирать отказ", () => {
+    // Граница: прячем то, что описывает НАШУ инфраструктуру, а не то,
+    // что объясняет причину. Имя таблицы карту сети не выдаёт.
+    const out = safeErrorText(new Error("relation " + JSON.stringify("DevHubFile") + " does not exist"));
+    expect(out).toContain("DevHubFile");
+  });
+
   test("обычное время не принимается за адрес", () => {
     // Обратный контроль: правило, вычищающее лишнее, портит сообщения
     // и этим так же мешает разбирать отказ.

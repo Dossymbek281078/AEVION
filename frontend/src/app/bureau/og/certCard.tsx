@@ -72,6 +72,7 @@ export async function renderCertCard(certId: string) {
   const author = (cert?.author || "").trim();
   const who = author && author.toLowerCase() !== "anonymous" ? author : "Anonymous author";
   const when = (cert?.protectedAt || "").slice(0, 10);
+  const whoLine = when ? `${who} · ${when}` : who;
 
   return new ImageResponse(
     (
@@ -95,10 +96,10 @@ export async function renderCertCard(certId: string) {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <div style={{ fontSize: 60, fontWeight: 800, lineHeight: 1.1 }}>{title}</div>
-          <div style={{ fontSize: 30, opacity: 0.85 }}>
-            {who}
-            {when ? ` · ${when}` : ""}
-          </div>
+          {/* Одна строка, а не два узла: отрисовщик требует явного
+              display:flex у блока с НЕСКОЛЬКИМИ детьми и иначе бросает.
+              Поймано тестом, который рисует карточку по-настоящему. */}
+          <div style={{ fontSize: 30, opacity: 0.85 }}>{whoLine}</div>
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", fontSize: 26 }}>

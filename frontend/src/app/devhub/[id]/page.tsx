@@ -1305,7 +1305,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const data = await r.json();
       if (!r.ok) throw new Error(devhubServerError(data.error, "Отменить не удалось"));
       if (data.ok === false) {
-        showToast(data.message || "Отменять нечего — правок ИИ не было", "info");
+        showToast("Отменять нечего — правок ИИ не было", "info");
         return;
       }
       await reloadAfterRevert(Array.isArray(data.revertedFiles) ? data.revertedFiles : []);
@@ -1333,7 +1333,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const data = await r.json();
       if (!r.ok) throw new Error(devhubServerError(data.error, "Восстановить не удалось"));
       if (data.ok === false) {
-        showToast(data.message || "Эта контрольная точка больше недоступна", "info");
+        showToast("Эта контрольная точка больше недоступна", "info");
         loadCheckpointHistory();
         return;
       }
@@ -1685,12 +1685,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/sync`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok || data.ok === false) throw new Error(data.error || data.message || "Синхронизация не удалась");
+      if (!r.ok || data.ok === false) throw new Error(devhubServerError(data.error, "Синхронизация не удалась"));
       // A sync that could not read some files leaves the project part-new and
       // part-stale — and that mixture is what a later push or deploy builds
       // from. A green toast over that reads as "all of it arrived".
       showToast(
-        data.message || "Синхронизировано",
+        "Синхронизировано",
         data.degraded ? "warning" : (data.updated?.length || data.created?.length) ? "success" : "info",
       );
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });

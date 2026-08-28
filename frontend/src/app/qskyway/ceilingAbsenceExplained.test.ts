@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { allTranslations } from "../__tests__/localeSource";
 
@@ -89,5 +89,43 @@ describe("почему нет чисел по потолкам — сказан�
     }
     // И страница обязана РАЗЛИЧАТЬ их по ответу, а не показывать одну всегда.
     expect(SRC.includes("verifyReasonOf("), "страница не различает, ЧТО именно не сошлось").toBe(true);
+  });
+});
+
+/**
+ * Причина отказа, по которой ветвится страница, — та же строка, что шлёт бэкенд.
+ *
+ * ПОВОД. Страница показывает объяснение «маршрут упирается в потолок» только
+ * если `j.reason === "airspace-ceiling"`. Это НЕТИПИЗИРОВАННАЯ строка, живущая
+ * по обе стороны HTTP.
+ *
+ * Асимметрия, из-за которой пишется этот тест: бэкенд проверяет, что слово
+ * ОТПРАВЛЯЕТСЯ, а что страница читает то же самое — не проверял никто.
+ * Переименуют причину — тесты бэкенда покраснеют, их поправят, а страница
+ * молча перестанет объяснять человеку, почему маршрут отклонён. Тихая потеря
+ * объяснения хуже отказа: снаружи выглядит как «просто нет маршрута».
+ *
+ * Тест фронта читает файл бэкенда — граница пересечена НАМЕРЕННО, как и в
+ * паре slotOrigin. Пока знание живёт в двух местах, связь лучше видимая.
+ */
+describe("причина отказа совпадает с той, что шлёт бэкенд", () => {
+  const BACKEND = path.join(
+    __dirname, "..", "..", "..", "..", "aevion-globus-backend", "src", "routes", "qskyway.ts",
+  );
+
+  it("файл бэкенда на месте — иначе связь надо переписать, а не удалять", () => {
+    expect(existsSync(BACKEND), "не нашёл " + BACKEND + ": поправьте путь в этом тесте").toBe(true);
+  });
+
+  it("строка, по которой ветвится страница, ОТПРАВЛЯЕТСЯ бэкендом", () => {
+    const page = readFileSync(path.join(__dirname, "_client.tsx"), "utf8");
+    const m = page.match(/j\.reason === "([^"]+)"/);
+    expect(m, "страница больше не ветвится по reason — проверку надо переписать").toBeTruthy();
+    const compared = String(m![1]);
+    const backend = readFileSync(BACKEND, "utf8");
+    expect(
+      backend.includes('reason: "' + compared + '"'),
+      "страница ждёт reason=" + JSON.stringify(compared) + ", а бэкенд такого не шлёт",
+    ).toBe(true);
   });
 });

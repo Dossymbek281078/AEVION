@@ -97,7 +97,21 @@ const CLAIM_KEYWORDS: Record<string, string[]> = {
  *                       single_elimination). Нет только управления клубами,
  *                       поэтому запрет теперь на слово о клубах, а не на пару.
  */
-const DISPROVEN_CLAIMS: Array<{ text: string; why: string }> = [
+interface DisprovenClaim {
+  text: string;
+  why: string;
+  /**
+   * Условие, при котором запрет снимается САМ.
+   *
+   * Есть не у каждой записи, и это честно: «нет управления клубами» или
+   * «есть месячная квота» проверяются чтением, а не поиском строки. Там,
+   * где условие выразимо машиной, оно записано — тогда запрет отпускает
+   * тот, кто устранил причину, а не тот, кто помнит про этот файл.
+   */
+  releaseWhen?: { file: string; containsAny: string[] };
+}
+
+const DISPROVEN_CLAIMS: DisprovenClaim[] = [
   // ⚠️ 27.08.2026: запись СУЖЕНА, прежняя была шире правды — третий случай
   // одной и той же ошибки в этом файле.
   //
@@ -118,6 +132,20 @@ const DISPROVEN_CLAIMS: Array<{ text: string; why: string }> = [
   {
     text: "QPayNet virtual cards",
     why: "у qpaynet нет ни одного маршрута карт (wallets/deposit/withdraw/transfer/merchant); карты-маски живут в qmaskcard — это другой товар",
+    // Условие СНЯТИЯ запрета, проверяемое машиной.
+    //
+    // Без него список запретов закрепляет состояние мира: чтобы разрешить
+    // слово, когда карты у qpaynet появятся, пришлось бы править ЭТОТ файл.
+    // Так уже было 27.08 — сторож запрещал Ed25519 и OpenTimestamps после
+    // того, как они заработали, и снимал запрет человек, а не факт.
+    //
+    // Теперь запрет живёт ровно до тех пор, пока в роутере qpaynet нет
+    // маршрута карт. Появится — проверка отпустит сама, и отпустит её тот,
+    // кто написал маршрут.
+    releaseWhen: {
+      file: "aevion-globus-backend/src/routes/qpaynet.ts",
+      containsAny: ["/cards", "issueCard", "virtualCard"],
+    },
   },
   {
     text: "Unlimited usage",
@@ -146,6 +174,21 @@ const DISPROVEN_CLAIMS: Array<{ text: string; why: string }> = [
  * Хвостовые комментарии вырезаются с оглядкой на `https://` — отсюда
  * проверка символа перед парой слэшей.
  */
+/**
+ * Снят ли запрет реальностью. Читает НАЗВАННЫЙ файл в бэкенде; если файла
+ * нет — запрет остаётся (отсутствие ответа не равно «условие выполнено»).
+ */
+function releasedByReality(claim: DisprovenClaim): boolean {
+  if (!claim.releaseWhen) return false;
+  const p = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", claim.releaseWhen.file);
+  try {
+    const src = readFileSync(p, "utf8");
+    return claim.releaseWhen.containsAny.some((needle) => src.includes(needle));
+  } catch {
+    return false;
+  }
+}
+
 function stripComments(source: string): string {
   return source
     .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -164,12 +207,14 @@ describe("витрина /apps не обещает несуществующег�
     expect(src).toContain("highlights:");
   });
 
-  for (const { text, why } of DISPROVEN_CLAIMS) {
+  for (const claim of DISPROVEN_CLAIMS) {
+    const { text, why } = claim;
     it(`не обещает «${text}» — ${why}`, () => {
       // Ищем в тексте карточек, а не в комментариях: разбор 19.08 ссылается на
       // эти же слова, и запрет на упоминание сделал бы невозможным объяснить,
       // почему их убрали.
       const withoutComments = stripComments(src);
+      if (releasedByReality(claim)) return;
       expect(withoutComments).not.toContain(text);
     });
   }
@@ -191,8 +236,11 @@ describe("каталог товаров не обещает несуществу
   // пустой. Мутация это и показала: «Virtual cards», вписанное в карточку,
   // прошло насквозь. Каталог проверяется тем же списком, что и витрина:
   // пустой сторож опаснее отсутствующего, потому что его считают защитой.
-  for (const { text, why } of DISPROVEN_CLAIMS) {
+  for (const claim of DISPROVEN_CLAIMS) {
+    const { text, why } = claim;
     it(`не продаёт «${text}» — ${why}`, () => {
+      // Реальность изменилась — запрет снят, и снял его тот, кто написал код.
+      if (releasedByReality(claim)) return;
       expect(stripComments(src)).not.toContain(text);
     });
   }

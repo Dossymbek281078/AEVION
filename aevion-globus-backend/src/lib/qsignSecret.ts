@@ -1,3 +1,4 @@
+import { PublicError } from "./safeError";
 /**
  * Resolve the QSign HMAC signing secret with production fail-closed gating.
  *
@@ -34,7 +35,7 @@ export function requireProdSecret(envKey: string, devFallback: string): string {
   const secret = process.env[envKey];
   if (process.env.NODE_ENV === "production") {
     if (!secret || secret.length < 32 || secret.startsWith("dev-")) {
-      throw new Error(
+      throw new PublicError(
         `${envKey} is missing or weak in production — refusing to use a default. Set ${envKey} to a 32+ char random string.`,
       );
     }

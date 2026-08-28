@@ -20,6 +20,7 @@ import express from "express";
 import request from "supertest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { stripComments } from "./helpers/sourceCode";
 
 // База, которая всегда падает: так выглядит недоступное хранилище.
 vi.mock("../src/lib/dbPool", () => ({
@@ -66,10 +67,10 @@ describe("упавшее хранилище не отчитывается усп
 });
 
 describe("cyberchess-puzzles: пустой пул и пустой фильтр — разные вещи", () => {
-  const src = readFileSync(
+  const src = stripComments(readFileSync(
     path.join(__dirname, "..", "src", "routes", "cyberchessPuzzles.ts"),
     "utf8",
-  );
+  ));
   // Комментарии вырезаются: в этом файле они называют ровно те строки, что
   // ищет сторож, и без вырезания он краснел бы на собственном объяснении.
   const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");

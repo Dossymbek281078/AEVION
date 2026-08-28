@@ -106,7 +106,9 @@ export default function PipelinePage() {
 
   const del = async (id: string) => {
     if (!confirm("Delete this pipeline?")) return;
-    await fetch(apiUrl(`/api/qcoreai/pipelines/${id}`), { method: "DELETE", headers: bearerHeader() });
+    // Ответ спрашивается ДО правки списка: провал удаления выглядел как удаление.
+    const r = await fetch(apiUrl(`/api/qcoreai/pipelines/${id}`), { method: "DELETE", headers: bearerHeader() });
+    if (!r.ok) { alert("Не удалось удалить конвейер — он остался на месте."); return; }
     setPipelines((prev) => prev.filter((p) => p.id !== id));
   };
 

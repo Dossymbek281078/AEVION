@@ -63,3 +63,32 @@ export function pgIntId(raw: unknown): number | null {
   if (n < 1 || n > PG_INT_MAX) return null;
   return n;
 }
+
+/**
+ * Отметка времени из строки запроса — или null, если это не отметка времени.
+ *
+ * Живёт рядом с queryNumber намеренно: у файла одна забота — значения из
+ * запроса, пригодные для того, кто их примет дальше. Имя файла осталось от
+ * первой функции.
+ *
+ * Зачем не просто Date.parse. Он принимает `"1"` и выдаёт 2000-12-31 — то есть
+ * «проверка» пропустила бы курсор, которого пользователь не писал, и выдача
+ * молча съехала бы на четверть века. Поэтому форма требуется явно: дата, при
+ * желании со временем.
+ *
+ * Замер 21.08.2026: три ручки qpaynet клали `?before=` прямо в SQL как
+ * `created_at < $n`, без единой проверки. Postgres на «zzz» отвечает ошибкой,
+ * наружу уходит 500 — то есть ошибка КЛИЕНТА поднимает людей и копится в
+ * наблюдении (правило 15г).
+ */
+const ISO_SHAPE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+
+export function queryIsoTimestamp(raw: unknown): string | null {
+  const one = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof one !== "string") return null;
+  const s = one.trim();
+  if (!s || !ISO_SHAPE.test(s)) return null;
+  const ms = Date.parse(s);
+  if (!Number.isFinite(ms)) return null; // «2026-13-45» проходит форму, но не дату
+  return new Date(ms).toISOString();
+}

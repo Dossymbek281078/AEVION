@@ -4,6 +4,7 @@ import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { LandingView } from "@/components/LandingView";
+import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная запуска «патентного бюро» (QRight + QSign + IP Bureau) — 6 сентября.
 //
@@ -77,6 +78,11 @@ export default async function BureauLaunchPage({
 
   return (
     <main style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px" }}>
+      {/* Заходы сюда не считались до 28.08.2026: страница собирает адреса, но
+          события page_view не слала. Воронка считает переходы ОТ page_view,
+          поэтому её посетители не попадали в знаменатель — конверсия выглядела
+          лучше, чем есть. Компонент сам читает ?c= из ссылки. */}
+      <PageTracking page="bureau-launch" />
       <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
         <header>
           <div style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: "0.12em", color: GOLD, textTransform: "uppercase" }}>

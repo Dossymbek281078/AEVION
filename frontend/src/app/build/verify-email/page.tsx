@@ -37,16 +37,18 @@ function VerifyEmailBody() {
     const t = params.get("token");
     if (t) {
       setToken(t);
-      void verify(t);
+      void verify(t, params.get("id") ?? undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function verify(t: string) {
+  // tokenId приходит из ссылки письма и позволяет завершить подтверждение БЕЗ
+  // входа: человек чаще всего открывает письмо на телефоне, где сессии нет.
+  async function verify(t: string, tokenId?: string) {
     setStatus("verifying");
     setMsg(null);
     try {
-      await completeEmailVerification(t);
+      await completeEmailVerification(t, tokenId);
       if (user) setUser({ ...user, emailVerifiedAt: new Date().toISOString() });
       setStatus("done");
       setTimeout(() => router.push("/build/profile"), 2500);
@@ -83,7 +85,7 @@ function VerifyEmailBody() {
               />
               <button
                 disabled={!token.trim() || status === "verifying"}
-                onClick={() => verify(token.trim())}
+                onClick={() => verify(token.trim(), params.get("id") ?? undefined)}
                 className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
               >
                 {status === "verifying" ? "…" : t("build.verifyEmail.confirmButton")}
@@ -92,9 +94,24 @@ function VerifyEmailBody() {
 
             {msg && (
               <p className="text-sm text-rose-300">
-                {msg === "invalid_or_expired_token"
-                  ? t("build.verifyEmail.invalidOrExpired")
-                  : msg}
+                {/*
+                  Человеческий текст на ЛЮБУЮ ошибку, а не только на одну.
+
+                  Раньше перевод стоял ровно на `invalid_or_expired_token`, а
+                  всё остальное показывалось дословно от сервера. Замер на
+                  проде 28.08.2026: по ссылке с устаревшим id человек видел
+                  «отсутствует токен bearer» — это внутренний жаргон, и хуже
+                  того, он намекает на вход, хотя вход здесь не нужен.
+
+                  Для человека все эти ответы значат одно: ссылка не сработала,
+                  запросите письмо заново. Поэтому показываем один понятный
+                  текст, а технический код оставляем рядом мелким шрифтом —
+                  чтобы поддержка могла спросить «что написано серым».
+                */}
+                {t("build.verifyEmail.invalidOrExpired")}
+                {msg !== "invalid_or_expired_token" && (
+                  <span className="ml-2 text-xs text-slate-500">({msg})</span>
+                )}
               </p>
             )}
 

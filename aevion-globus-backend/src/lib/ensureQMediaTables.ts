@@ -1,10 +1,38 @@
 import type pg from "pg";
 type PgPoolInstance = InstanceType<typeof pg.Pool>;
 let ensured = false;
+let dbReady: boolean | null = null;
+let dbError: string | null = null;
+
+/**
+ * Готова ли база модуля.
+ *
+ * Признака здесь НЕ БЫЛО, и это было не косметикой: маршруты qmedia не
+ * обращались к базе вовсе, а `catch` глотал любую ошибку создания таблиц.
+ * `/api/qmedia/health` при этом перечислял четыре таблицы — то есть обещал
+ * хранилище, которого модуль не использовал. Замер 27.08.2026 на проде:
+ * health называет таблицы, списки треков и видео пусты, а в коде ноль вызовов
+ * pool.query. Модуль продаётся за $15/мес и входит в medium/full/enterprise.
+ */
+export function isQMediaDbReady(): boolean {
+  return dbReady === true;
+}
+
+export function getQMediaDbError(): string | null {
+  return dbError;
+}
 
 export async function ensureQMediaTables(pool: PgPoolInstance): Promise<void> {
   if (ensured) return;
   ensured = true;
+  try {
+    await pool.query("SELECT 1");
+  } catch (e: unknown) {
+    dbReady = false;
+    dbError = e instanceof Error ? e.message : "database unavailable";
+    console.warn(`[QMedia] База недоступна — работаем в памяти: ${dbError}`);
+    return;
+  }
   try {
     await pool.query(`CREATE TABLE IF NOT EXISTS "QMediaTrack" (
       "id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL,
@@ -24,6 +52,12 @@ export async function ensureQMediaTables(pool: PgPoolInstance): Promise<void> {
       "trackIds" JSONB NOT NULL DEFAULT '[]'::jsonb,
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(), "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );`);
+    // Соавторы плейлиста. В типе PlaylistRow поле было с самого начала, а
+    // колонки не существовало — потому что модуль не писал в базу вовсе и
+    // расхождение никак себя не проявляло. Добавляем отдельно, чтобы права
+    // редактирования не терялись при переносе на хранилище.
+    await pool.query(`ALTER TABLE "QMediaPlaylist"
+      ADD COLUMN IF NOT EXISTS "collaborators" JSONB NOT NULL DEFAULT '[]'::jsonb;`);
     await pool.query(`CREATE INDEX IF NOT EXISTS "QMediaPlaylist_user_idx" ON "QMediaPlaylist" ("userId", "updatedAt" DESC);`);
     await pool.query(`CREATE TABLE IF NOT EXISTS "QMediaVideo" (
       "id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL,
@@ -40,5 +74,12 @@ export async function ensureQMediaTables(pool: PgPoolInstance): Promise<void> {
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY ("userId", "resourceId", "resourceType")
     );`);
-  } catch { /* in-memory fallback */ }
+    dbReady = true;
+  } catch (e: unknown) {
+    // Молчать нельзя: пока признака не было, отказ базы выглядел точно так же,
+    // как её отсутствие, и обе ситуации молча превращались в память.
+    dbReady = false;
+    dbError = e instanceof Error ? e.message : "table creation failed";
+    console.warn(`[QMedia] Таблицы не созданы — работаем в памяти: ${dbError}`);
+  }
 }

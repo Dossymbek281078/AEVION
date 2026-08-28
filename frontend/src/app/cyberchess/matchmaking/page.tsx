@@ -566,6 +566,13 @@ export default function CyberChessMatchmakingPage() {
               <button type="button" onClick={() => setState({ phase: "idle" })} className="planet-btn">
                 Попробовать снова
               </button>
+              {/* Выход к движку. 30 августа игроков в очереди почти не будет, и
+                  «попробуй ещё раз» ведёт в ту же пустоту: человек, пришедший
+                  играть, уходит ни с чем. Партия против движка доступна сразу и
+                  работает — проверено на проде. */}
+              <a href="/cyberchess" className="planet-muted" style={{ fontSize: 12.5, textDecoration: "underline" }}>
+                Соперника нет? Сыграть с движком прямо сейчас →
+              </a>
             </div>
           )}
         </section>

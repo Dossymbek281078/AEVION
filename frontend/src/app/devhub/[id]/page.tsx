@@ -4524,7 +4524,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <video src={videoUrl} controls style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0", maxHeight: 360 }} />
                           <div style={{ display: "flex", gap: 8 }}>
                             <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "center", textDecoration: "none" }}>Скачать</a>
-                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title="Appends a <video> tag to the file open in the editor" style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Вставить в файл</button>
+                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title="Добавит тег видео в открытый файл" style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Вставить в файл</button>
                           </div>
                         </div>
                       )}
@@ -4754,7 +4754,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       {imgResult && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={cfImgPermanentUrl || imgResult.url} alt="generated" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                          <img src={cfImgPermanentUrl || imgResult.url} alt="сгенерированная картинка" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
                           {imgResult.revisedPrompt && (
                             <div style={{ fontSize: 11, color: "#64748b", fontStyle: "italic" }}>
                               Revised prompt: {imgResult.revisedPrompt}
@@ -4780,7 +4780,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             )}
                             <button
                               onClick={() => appendAssetToFile(cfImgPermanentUrl || imgResult.url, "image")}
-                              title="Appends an <img> tag to the file open in the editor"
+                              title="Добавит тег картинки в открытый файл"
                               style={{ padding: "4px 10px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
                             >
                               Insert into file

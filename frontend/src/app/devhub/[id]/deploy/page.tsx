@@ -332,7 +332,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
               {project.name}
             </Link>
             <span>/</span>
-            <span style={{ color: "#94a3b8" }}>Deploy</span>
+            <span style={{ color: "#94a3b8" }}>Публикация</span>
           </div>
 
           {/* ── Header row ── */}
@@ -415,7 +415,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
             }}>
               <span style={{ color: "#22c55e", fontSize: 16 }}>&#10003;</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: "#86efac", fontWeight: 600 }}>Deployed</div>
+                <div style={{ fontSize: 12, color: "#86efac", fontWeight: 600 }}>Опубликовано</div>
                 <a
                   href={liveUrl}
                   target="_blank"

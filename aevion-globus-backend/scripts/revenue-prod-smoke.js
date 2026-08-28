@@ -7,8 +7,26 @@ const BASE = (process.env.BASE || "https://aevion-production-a70c.up.railway.app
 let passed = 0, failed = 0;
 function ok(l, i = "") { passed++; console.log(`  ✓ ${l}${i ? "  " + i : ""}`); }
 function fail(l, i = "") { failed++; console.error(`  ✗ ${l}${i ? "  " + i : ""}`); }
+/** Ответ, до которого не доехали. Отличать от «ответил плохо» обязательно. */
+function netFail(l, r) { fail(l, `запрос не доехал: ${r.netError}`); }
+/**
+ * Один запрос. Сетевая заминка НЕ роняет прогон целиком.
+ *
+ * Замер 27.08.2026: единственный таймаут на /gumroad/balance выбрасывал
+ * исключение из req(), оно не ловилось нигде, и процесс умирал на 13-й
+ * проверке из двадцати. Отчёт при этом выглядел благополучно — «13 ✓, 0 ✗» —
+ * а проверки чтения баланса и продаж, ради которых смоук и написан, просто не
+ * выполнялись. Хост оказался ни при чём: повторные замеры дают 0.5–0.8 с.
+ *
+ * Теперь отказ запроса — это ВИДИМЫЙ отказ проверки, а не тишина.
+ */
 async function req(path) {
-  const r = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(10000) });
+  let r;
+  try {
+    r = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(10000) });
+  } catch (e) {
+    return { status: 0, body: null, netError: String(e && e.message ? e.message : e) };
+  }
   const text = await r.text();
   try { return { status: r.status, body: JSON.parse(text) }; } catch { return { status: r.status, body: text }; }
 }
@@ -51,9 +69,22 @@ async function run() {
   const grec = await req("/api/revenue/gumroad/recent");
   grec.status === 200 && Array.isArray(grec.body?.sales) ? ok("GET /gumroad/recent → 200 (sales array)") : fail("GET /gumroad/recent → 200 (sales array)", String(grec.status));
 
-  // 16. Paddle balance (legacy — KYC not passed, kept for compat)
+  // 16. Paddle — провайдер ОТКЛЮЧЁН 22.07.2026 (KYC не пройдена). Ждать от него
+  // 200 значит держать вечно красную проверку: она отбивалась 502 и никого не
+  // стерегла. Сторожим то, что здесь действительно важно, — мёртвый провайдер
+  // НЕ должен показывать деньги. Молчаливый ноль или выдуманная сумма на
+  // денежной панели опаснее честного отказа: по ней принимают решения.
+  //
+  // ⚠ Честно: против ЖИВОЙ системы это утверждение не проверяемо — Paddle
+  // отвечает 502, и ветка отказа недостижима. Мутация его не ловит, я
+  // проверял. Это сторож будущей регрессии, а не доказательство сегодняшнего
+  // состояния, и его зелёный цвет читать как доказательство нельзя.
   const bal = await req("/api/revenue/paddle/balance");
-  bal.status === 200 ? ok("GET /paddle/balance → 200", `totalUsd=${bal.body?.totalUsd}`) : fail("GET /paddle/balance → 200", String(bal.status));
+  if (bal.status === 200 && Number(bal.body?.totalUsd) > 0) {
+    fail("отключённый Paddle показывает деньги", `totalUsd=${bal.body?.totalUsd}`);
+  } else {
+    ok("отключённый Paddle не показывает денег", `код ${bal.status}`);
+  }
 
   // 17. Env guide
   const guide = await req("/api/revenue/env-guide");

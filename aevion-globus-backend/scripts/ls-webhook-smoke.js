@@ -34,6 +34,21 @@
 const crypto = require("crypto");
 
 const BASE = (process.env.BASE || "http://127.0.0.1:4001").replace(/\/+$/, "");
+
+/**
+ * Вариант, который бэкенд УМЕЕТ сопоставить с тарифом. Без него ветка
+ * «выдали доступ» непроверяема, и до 27.08.2026 смоук просто краснел: он слал
+ * выдуманный 999999 и ждал 200, тогда как с 12.08 неизвестный вариант
+ * правильно отвечает 500 и НИЧЕГО не выдаёт (до той правки покупатель DevHub
+ * за $149 получал доступ уровня $19).
+ *
+ * Постоянно красная проверка хуже отсутствующей: к ней привыкают. Поэтому
+ * ветка выдачи теперь честно пропускается, когда сопоставимый вариант не
+ * назван, а защита от неизвестного варианта проверяется ВСЕГДА.
+ *
+ *   LS_MAPPED_VARIANT=9002 node scripts/ls-webhook-smoke.js
+ */
+const MAPPED_VARIANT = process.env.LS_MAPPED_VARIANT?.trim() || null;
 const SECRET = process.env.LEMON_SQUEEZY_WEBHOOK_SECRET || "";
 const PATH = "/api/lemonsqueezy/webhook";
 const EMAIL = `ls-smoke-${Date.now()}@test.aevion.dev`;
@@ -73,7 +88,7 @@ async function post(payloadObj, signature = "valid") {
   return { status: res.status, json };
 }
 
-function subPayload(event, { email = EMAIL, id = `sub_${Math.random().toString(36).slice(2, 10)}`, variantId = 999999, renewsAt = "2026-06-25T00:00:00.000Z" } = {}) {
+function subPayload(event, { email = EMAIL, id = `sub_${Math.random().toString(36).slice(2, 10)}`, variantId = MAPPED_VARIANT ?? 999999, renewsAt = "2026-06-25T00:00:00.000Z" } = {}) {
   return {
     meta: { event_name: event, custom_data: { email } },
     data: {
@@ -119,11 +134,25 @@ function subPayload(event, { email = EMAIL, id = `sub_${Math.random().toString(3
   }
 
   // ── Activate ────────────────────────────────────────────────────────────────
-  const created = await post(subPayload("subscription_created"));
-  if (created.status === 200 && created.json.action === "activated" && created.json.tierId === "pro") {
-    ok("subscription_created → 200 activated (tierId=pro)");
+  // Защита от неизвестного варианта — проверяется ВСЕГДА, она и есть самое
+  // дорогое место: молчаливая выдача «наугад» стоила покупателя за $149.
+  const unknown = await post(subPayload("subscription_created", { variantId: 999999 }));
+  if (unknown.status === 500 && unknown.json.error === "unmapped_variant") {
+    ok("неизвестный вариант → 500 unmapped_variant, ничего не выдано");
   } else {
-    ko("subscription_created → 200 activated", `got ${created.status} ${JSON.stringify(created.json)}`);
+    ko("неизвестный вариант → 500 unmapped_variant", `got ${unknown.status} ${JSON.stringify(unknown.json)}`);
+  }
+
+  if (MAPPED_VARIANT) {
+    const created = await post(subPayload("subscription_created"));
+    if (created.status === 200 && created.json.action === "activated") {
+      ok(`известный вариант ${MAPPED_VARIANT} → 200 activated (tierId=${created.json.tierId})`);
+    } else {
+      ko("известный вариант → 200 activated", `got ${created.status} ${JSON.stringify(created.json)}`);
+    }
+  } else {
+    console.log("  [skip] ветка выдачи: назовите LS_MAPPED_VARIANT=<id>, который бэкенд знает.");
+    console.log("         Разбор выдачи целиком покрыт tests/lemonSqueezyWebhookEntitlement.test.ts");
   }
 
   // ── Deactivate ────────────────────────────────────────────────────────────────
@@ -158,7 +187,13 @@ function subPayload(event, { email = EMAIL, id = `sub_${Math.random().toString(3
   const dedupPayload = subPayload("subscription_created", { id: "dedup-fixed-id", renewsAt: "2026-07-01T00:00:00.000Z" });
   const first = await post(dedupPayload);
   const replay = await post(dedupPayload);
-  if (first.status === 200 && replay.status === 200 && replay.json.deduped === true) {
+  if (!MAPPED_VARIANT) {
+    // На неизвестном варианте ключ дедупликации ОСВОБОЖДАЕТСЯ намеренно:
+    // иначе повторная доставка магазина была бы отброшена как «уже видели»,
+    // и покупка осталась бы без выдачи навсегда. Значит проверять дедуп
+    // здесь нечем — это не отказ, а неприменимость.
+    console.log("  [skip] дедупликация: нужна LS_MAPPED_VARIANT (на неизвестном варианте ключ отпускается намеренно).");
+  } else if (first.status === 200 && replay.status === 200 && replay.json.deduped === true) {
     ok("replayed identical payload → 200 deduped");
   } else {
     ko("replayed identical payload → 200 deduped", `first=${first.status} replay=${replay.status} ${JSON.stringify(replay.json)}`);

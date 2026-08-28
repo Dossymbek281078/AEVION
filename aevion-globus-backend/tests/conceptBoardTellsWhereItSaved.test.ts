@@ -1,4 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
+import { stripComments } from "./helpers/sourceCode";
 
 /**
  * Доска концептов обязана говорить, ГДЕ сообщение оказалось.
@@ -56,7 +57,7 @@ describe("доска концептов называет своё хранили
     // Если поле однажды уберут, обе проверки выше стали бы сравнивать undefined
     // с чем-то и могли бы пройти. Проверяем, что оно объявлено обязательным.
     const src = await import("node:fs").then((fs) =>
-      fs.readFileSync(new URL("../src/lib/conceptBoardStore.ts", import.meta.url), "utf8"),
+      stripComments(fs.readFileSync(new URL("../src/lib/conceptBoardStore.ts", import.meta.url), "utf8")),
     );
     expect(src, "поле storage исчезло из ConceptMessage").toMatch(/storage:\s*"db"\s*\|\s*"memory";/);
     expect(src, "признак не уходит наружу — клиент не сможет сказать правду").toMatch(/storage:\s*msg\.storage/);

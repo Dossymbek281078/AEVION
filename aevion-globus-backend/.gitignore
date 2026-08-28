@@ -15,6 +15,11 @@ data/leads.jsonl
 data/events.jsonl
 data/newsletter.jsonl
 data/subscriptions.jsonl
+# Ключи дедупликации вебхуков — рантайм-состояние, как и соседи выше.
+# В списке его не было: файл появляется только когда вебхук реально
+# доставляли, поэтому в чистом клоне его никто не видел, а после первого
+# же теста платежа он попадал в git add -A вместе с тестовыми ключами.
+data/webhook-dedup.jsonl
 data/affiliate.jsonl
 data/partners.jsonl
 data/edu.jsonl

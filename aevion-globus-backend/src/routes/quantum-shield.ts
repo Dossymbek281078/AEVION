@@ -33,6 +33,7 @@ import {
 import { _legacyGenerateShards } from "../lib/shamir/legacy";
 void _legacyGenerateShards;
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
+import { safeErrorText } from "../lib/safeError";
 
 export const quantumShieldRouter = Router();
 const pool = getPool();
@@ -1072,9 +1073,10 @@ async function handleCreate(req: Request, res: Response): Promise<void> {
       });
       res.status(201).json(created);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : String(e); // только для журнала
+      const msgPublic = safeErrorText(e, String(e), "quantum-shield");
       if (msg === "objectTitle or payload is required") {
-        res.status(400).json({ error: msg });
+        res.status(400).json({ error: msgPublic });
         return;
       }
       throw e;

@@ -5,6 +5,7 @@ import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { csvNeutralizeFormula } from "../lib/csv";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { safeErrorText } from "../lib/safeError";
 
 const capture = makeServiceCapture("qcontract");
 
@@ -656,7 +657,7 @@ qcontractRouter.get("/health", async (_req, res) => {
     res.json({ status: "ok", service: "qcontract", documents: Number(r.rows[0]?.n ?? 0) });
   } catch (err) {
     capture(err);
-    res.status(503).json({ status: "error", service: "qcontract", error: err instanceof Error ? err.message : String(err) });
+    res.status(503).json({ status: "error", service: "qcontract", error: safeErrorText(err, "internal error", "qcontract") });
   }
 });
 

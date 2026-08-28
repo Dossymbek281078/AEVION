@@ -56,11 +56,19 @@ describe("сертификаты QLearn переживают перезапус�
   test("чтения идут через слой, а не прямо в память", () => {
     // Вне слоя обращений к memCertificates быть не должно: иначе после выкатки
     // список снова окажется пустым при живых данных в базе.
-    const outside = ROUTE.split("\n")
+    //
+    // Граница слоя — НЕ номер строки, а СМЫСЛ: хранилище кончается там, где
+    // начинаются маршруты. Прежняя версия сверялась с числом 230, и любая
+    // вставка выше молча делала сторожа красным — случилось 23.08.2026:
+    // четыре добавленные вверху строки увели certsByUser с 226-й на 238-ю.
+    const lines = ROUTE.split("\n");
+    const firstRoute = lines.findIndex((l) => l.trimStart().startsWith("qlearnRouter."));
+    expect(firstRoute, "не нашёл ни одного маршрута — граница слоя не определена").toBeGreaterThan(0);
+    const outside = lines
       .map((l, i) => ({ l: l.trim(), n: i + 1 }))
       .filter(({ l }) => /memCertificates\b/.test(l))
       .filter(({ l }) => !l.startsWith("//") && !l.startsWith("*"))
-      .filter(({ n }) => n > 230);   // ниже слоя хранилища
-    expect(outside.map((x) => `${x.n}: ${x.l}`), "прямое обращение к памяти вне слоя").toEqual([]);
+      .filter(({ n }) => n > firstRoute);
+    expect(outside.map((x) => `${x.n}: ${x.l}`), "прямое обращение к памяти вне слоя хранилища").toEqual([]);
   });
 });

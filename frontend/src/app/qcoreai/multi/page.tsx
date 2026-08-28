@@ -527,6 +527,11 @@ export default function QCoreMultiAgentPage() {
 
   // V55 — Invite copy feedback (sessionId that was just invited).
   const [inviteCopiedSid, setInviteCopiedSid] = useState<string | null>(null);
+  // 28.08.2026 — the share link itself, shown when the clipboard write fails
+  // (permissions, insecure context). Claiming "Link copied!" when nothing was
+  // copied is a false success: the user pastes stale content and blames us.
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteFailed, setInviteFailed] = useState(false);
 
   // V48 — Run timeline points.
   type TimelinePoint = { runId: string; startedAt: string; durationMs: number | null; costUsd: number | null; strategy: string | null; status: string };
@@ -3693,20 +3698,40 @@ export default function QCoreMultiAgentPage() {
               {activeSessionId && (
                 <button
                   onClick={async () => {
+                    setInviteFailed(false);
+                    setInviteLink(null);
                     try {
-                      const res = await fetch(apiUrl(`/api/qcoreai/sessions/${activeSessionId}/invites`), {
+                      // 28.08.2026 — was POST /invites, and the link pointed at
+                      // /qcoreai/multi?invite=<token>. That page never reads the
+                      // parameter, and GET /invites/:token returns only
+                      // {sessionId, role} — no content — so a signed-out
+                      // recipient could not see anything at all. The collab
+                      // endpoint returns a self-contained read-only snapshot and
+                      // needs no account, which is what a shared link is for.
+                      const res = await fetch(apiUrl(`/api/qcoreai/sessions/${activeSessionId}/collab`), {
                         method: "POST",
                         headers: { "Content-Type": "application/json", ...bearerHeader() },
-                        body: JSON.stringify({ role: "viewer" }),
+                        body: JSON.stringify({}),
                       });
                       if (!res.ok) throw new Error(`HTTP ${res.status}`);
                       const invite = await res.json();
-                      const link = `${typeof window !== "undefined" ? window.location.origin : ""}/qcoreai/multi?invite=${invite.token}`;
-                      try { await navigator.clipboard.writeText(link); } catch { /* ignore */ }
-                      const prev = inviteCopiedSid;
-                      setInviteCopiedSid(activeSessionId);
-                      setTimeout(() => setInviteCopiedSid((cur) => cur === activeSessionId ? null : cur), 2000);
-                    } catch { /* ignore */ }
+                      const origin = typeof window !== "undefined" ? window.location.origin : "";
+                      const link = invite.url || `${origin}/qcoreai/collab/${invite.token}`;
+                      try {
+                        await navigator.clipboard.writeText(link);
+                        setInviteCopiedSid(activeSessionId);
+                        setTimeout(() => setInviteCopiedSid((cur) => (cur === activeSessionId ? null : cur)), 2000);
+                      } catch {
+                        // Clipboard denied — the link exists, so show it instead
+                        // of pretending it was copied.
+                        setInviteLink(link);
+                      }
+                    } catch {
+                      // Silence here used to mean the button did nothing at all
+                      // and said nothing about it.
+                      setInviteFailed(true);
+                      setTimeout(() => setInviteFailed(false), 4000);
+                    }
                   }}
                   style={{
                     padding: "3px 10px", borderRadius: 8,
@@ -3714,12 +3739,42 @@ export default function QCoreMultiAgentPage() {
                     color: "#6d28d9", fontSize: 11, fontWeight: 700, cursor: "pointer",
                     display: "flex", alignItems: "center", gap: 4,
                   }}
-                  title="Create read-only invite link and copy to clipboard"
+                  title="Create a read-only share link and copy it to the clipboard"
                 >
-                  {inviteCopiedSid === activeSessionId ? "Link copied!" : "🔗 Invite"}
+                  {inviteFailed
+                    ? "Link failed"
+                    : inviteCopiedSid === activeSessionId
+                      ? "Link copied!"
+                      : "🔗 Invite"}
                 </button>
               )}
             </div>
+            {inviteLink && (
+              // Clipboard refused; the link is real, so hand it over to copy by
+              // hand rather than lose it behind a success message.
+              <div style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 10px" }}>
+                <span style={{ fontSize: 11, color: "#64748b", whiteSpace: "nowrap" }}>Copy manually:</span>
+                <input
+                  readOnly
+                  value={inviteLink}
+                  onFocus={(e) => e.currentTarget.select()}
+                  style={{
+                    flex: 1, minWidth: 0, fontSize: 11, padding: "4px 8px",
+                    border: "1px solid #cbd5e1", borderRadius: 6, color: "#0f172a", background: "#fff",
+                  }}
+                />
+                <button
+                  onClick={() => setInviteLink(null)}
+                  style={{
+                    border: "none", background: "transparent", color: "#64748b",
+                    fontSize: 14, cursor: "pointer", lineHeight: 1,
+                  }}
+                  title="Hide"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <div
               ref={timelineRef}
               onScroll={onTimelineScroll}

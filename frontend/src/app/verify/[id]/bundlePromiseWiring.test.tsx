@@ -8,7 +8,7 @@
 // «every proof» безусловно.
 
 import { describe, test, expect, afterEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "AEV-TEST-0002" }),
@@ -86,5 +86,36 @@ describe("обещание про пакет доезжает до экрана 
     await waitFor(() => expect(caveat()).not.toBeNull());
     // Прежний текст обещал «every proof» независимо от содержимого пакета.
     expect(document.body.textContent).not.toMatch(/\.json.*with every proof/i);
+  });
+});
+
+describe("подпись под полем Ed25519 доезжает до экрана в нужном виде", () => {
+  // InfoTip показывает текст ТОЛЬКО по нажатию (см. src/components/InfoTip.tsx:
+  // {text} рисуется под условием open). Первая версия этой проверки читала
+  // атрибуты и body — и мутация «отдать старой схеме текст про пакет» её
+  // ПЕРЕЖИЛА: проверка была пустой. Поэтому здесь кнопка нажимается.
+  async function openTip(): Promise<string> {
+    const btn = await screen.findByLabelText("What is Ed25519?");
+    fireEvent.click(btn);
+    const panel = await screen.findByText(/asymmetric digital signature/i);
+    return panel.textContent || "";
+  }
+
+  test("старая схема — поле не зовёт в пакет за подписью, которой там нет", async () => {
+    stubFetch(reply("NO_SIGNED_AT"));
+    render(<VerifyPage />);
+    await waitFor(() => expect(caveat()).not.toBeNull());
+    const t = await openTip();
+    expect(t, "поле зовёт за подписью в пакет, где её нет").not.toMatch(/download the verification bundle/i);
+    expect(t).toMatch(/cannot be reconstructed/i);
+  });
+
+  test("контроль: нынешняя схема — зовёт в пакет", async () => {
+    stubFetch(reply("OK"));
+    render(<VerifyPage />);
+    await waitFor(() => expect(screen.getAllByText("Independent of AEVION").length).toBeGreaterThan(0));
+    const t = await openTip();
+    expect(t).toMatch(/download the verification bundle/i);
+    expect(t).not.toMatch(/cannot be reconstructed/i);
   });
 });

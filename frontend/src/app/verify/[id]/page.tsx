@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
 import { InfoTip } from "@/components/InfoTip";
-import { bundleContents } from "./bundleContents";
+import { bundleContents, ed25519FieldNote } from "./bundleContents";
 import {
   buildIntegrityChecks,
   deriveVerdict,
@@ -410,7 +410,10 @@ export default function VerifyPage() {
                   // возможна.
                   label: "Ed25519 Signature (first 64 chars)",
                   value: cert.signatureEd25519 || "N/A",
-                  tip: { name: "Ed25519", text: "An asymmetric digital signature. This page shows only the beginning of it. To check it yourself, download the verification bundle below: it carries the full signature and AEVION's public key, and the offline verifier validates them without contacting us." },
+                  // Текст зависит от того, ЕСТЬ ЛИ что проверять: у старой
+                  // схемы подписанный текст утрачен вместе с временной меткой,
+                  // и звать за проверкой в пакет означало бы обещать невозможное.
+                  tip: { name: "Ed25519", text: ed25519FieldNote(integrity.signatureHmacReason) },
                 },
                 { label: "Algorithm", value: cert.algorithm },
                 { label: "Certificate ID", value: cert.id },

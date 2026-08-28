@@ -44,3 +44,45 @@ export function bundleContents(reason: HmacReason): BundleContents {
   // сойдётся, и это как раз то, что офлайн-проверка обязана показать.
   return { hasAevionSignature: true, note: null };
 }
+
+/**
+ * Подпись под полем «Ed25519 Signature» на странице проверки.
+ *
+ * ⚠️ Это ПОПРАВКА к собственной правке, сделанной часом раньше 28.08.2026.
+ * Тогда текст под полем стал звать за проверкой в офлайн-пакет — и это было
+ * безусловное обещание ровно того же рода, которое я в тот же вечер чинил
+ * этажом ниже: у пяти записей из семи подписи в пакете НЕТ.
+ *
+ * И причина глубже, чем «поля не положили». Апрельская форма подписи была
+ * такой (git eb94351bf, 12.04.2026):
+ *
+ *     JSON.stringify({ objectId, title, contentHash, signatureHmac,
+ *                      timestamp: Date.now() })
+ *
+ * `Date.now()` НИГДЕ НЕ СОХРАНЯЛСЯ. Значит подписанный текст этих сертификатов
+ * восстановить нельзя ни нам, ни кому-либо ещё: байты подписи есть, а сообщение,
+ * которое они покрывают, утрачено. Такую подпись не проверить в принципе.
+ *
+ * Отсюда следует, что нынешнее поведение пакета ПРАВИЛЬНО: класть в него
+ * подпись, которую заведомо не с чем сверить, значило бы приглашать к проверке,
+ * обязанной провалиться. Единственное, что здесь можно сделать честно, — сказать
+ * это словами.
+ */
+export function ed25519FieldNote(reason: HmacReason): string {
+  if (reason === "NO_SIGNED_AT") {
+    return (
+      "An asymmetric digital signature. This page shows only its beginning. " +
+      "This certificate was issued under an earlier scheme whose signed payload " +
+      "included a timestamp that was never stored, so the exact signed message " +
+      "cannot be reconstructed — by us or by anyone. The signature bytes are kept " +
+      "for the record, but this layer cannot be re-verified; the content hash, the " +
+      "shard witness and the Bitcoin anchor can."
+    );
+  }
+  return (
+    "An asymmetric digital signature. This page shows only the beginning of it. " +
+    "To check it yourself, download the verification bundle below: it carries the " +
+    "full signature and AEVION's public key, and the offline verifier validates " +
+    "them without contacting us."
+  );
+}

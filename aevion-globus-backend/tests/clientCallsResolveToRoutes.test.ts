@@ -71,6 +71,18 @@ const BASELINE: Record<string, string> = {
   "/api/qpaynet/admin/wallets/:p/:p": "предел прибора: действие — переменный сегмент",
 };
 
+/** Известные расхождения по МЕТОДУ на 28.08.2026. Только сокращать. */
+const VERB_BASELINE: Record<string, string> = {
+  "POST /api/build/shifts/:p/checkin": "ДЕФЕКТ: сервер ждёт PATCH — работник не может начать смену",
+  "POST /api/build/shifts/:p/checkout": "ДЕФЕКТ: сервер ждёт PATCH — не может закончить смену",
+  "GET /api/build/payment-calendar": "ДЕФЕКТ: сервер отдаёт GET /payment-calendar/my",
+  "POST /api/metrics":
+    "НЕ дефект: ручку обслуживает сам Next, и она экспортирует POST и GET " +
+    "(проверено чтением frontend/src/app/api/metrics/route.ts). Резолвер методы " +
+    "Next-ручек до карты не доносит — ДОЛГ ПРИБОРА, причина пока не найдена. " +
+    "Записано так, а не с выдуманным объяснением: непонятое лучше назвать непонятым.",
+};
+
 function walk(dir: string, ok: (f: string) => boolean, acc: string[] = []): string[] {
   if (!existsSync(dir)) return acc;
   for (const name of readdirSync(dir)) {
@@ -84,7 +96,10 @@ function walk(dir: string, ok: (f: string) => boolean, acc: string[] = []): stri
 const lastIdent = (s: string): string | null => /([A-Za-z_]\w*)\s*$/.exec(s.trim())?.[1] ?? null;
 
 /** Все маршруты, которые сервер (или сам Next) действительно отдаёт. */
+const VERBS = new Map<string, Set<string>>();
+
 function allRoutes(): string[] {
+  VERBS.clear();
   const files = walk(BACKEND, (n) => n.endsWith(".ts"));
   const src = new Map<string, string>();
   for (const f of files) src.set(f, readFileSync(f, "utf8"));
@@ -167,24 +182,34 @@ function allRoutes(): string[] {
     const own = new Set(
       [...s.matchAll(/^(?:export )?const ([A-Za-z_]\w*)\s*(?::[^=]+)?=\s*(?:express\.)?Router\(/gm)].map((m) => m[1]),
     );
-    for (const m of s.matchAll(/^([a-zA-Z_]\w*)\.(?:get|post|put|patch|delete)\(\s*[`"']([^`"']*)[`"']/gm)) {
+    for (const m of s.matchAll(/^([a-zA-Z_]\w*)\.(get|post|put|patch|delete)\(\s*[`"']([^`"']*)[`"']/gm)) {
       if (!own.has(m[1])) continue;
       for (const pre of prefixes.get(`${f}::${m[1]}`) ?? []) {
-        routes.add((pre.replace(/\/$/, "") + "/" + m[2].replace(/^\//, "")).replace(/\/$/, "") || "/");
+        const full = (pre.replace(/\/$/, "") + "/" + m[3].replace(/^\//, "")).replace(/\/$/, "") || "/";
+        routes.add(full);
+        VERBS.set(full, (VERBS.get(full) ?? new Set<string>()).add(m[2].toUpperCase()));
       }
     }
   }
   // Маршруты, объявленные прямо на app — их легко забыть, и один такой
   // (/api/globus/projects) уже попадал в «мёртвые», отвечая на проде 200.
-  for (const m of src.get(idx)!.matchAll(/^app\.(?:get|post|put|patch|delete)\(\s*[`"']([/][^`"']*)[`"']/gm)) {
-    routes.add(m[1].replace(/\/$/, "") || "/");
+  for (const m of src.get(idx)!.matchAll(/^app\.(get|post|put|patch|delete)\(\s*[`"']([/][^`"']*)[`"']/gm)) {
+    const full = m[2].replace(/\/$/, "") || "/";
+    routes.add(full);
+    VERBS.set(full, (VERBS.get(full) ?? new Set<string>()).add(m[1].toUpperCase()));
   }
   // Собственные ручки Next: часть /api/* обслуживает сам сайт.
   for (const f of walk(path.join(FRONTEND, "app", "api"), (n) => n.startsWith("route."))) {
     const rel = f.slice(f.indexOf("/app/api") + 4);
-    routes.add(
-      rel.replace(/\/route\.[tj]sx?$/, "").replace(/\[\.\.\.[^\]]+\]/g, "*").replace(/\[[^\]]+\]/g, ":p") || "/",
-    );
+    const full =
+      rel.replace(/\/route\.[tj]sx?$/, "").replace(/\[\.\.\.[^\]]+\]/g, "*").replace(/\[[^\]]+\]/g, ":p") || "/";
+    routes.add(full);
+    // Методы Next-ручки — её экспорты. Без них POST /api/metrics выглядел бы
+    // расхождением: сама ручка экспортирует и GET, и POST.
+    const body = readFileSync(f, "utf8");
+    for (const vm of body.matchAll(/export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)/g)) {
+      VERBS.set(full, (VERBS.get(full) ?? new Set<string>()).add(vm[1]));
+    }
   }
   return [...routes];
 }
@@ -217,6 +242,40 @@ function toRe(route: string): RegExp {
     .map((p) => (p.startsWith(":") ? "[^/]+" : p === "*" ? ".*" : p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
     .join("/");
   return new RegExp("^" + body + "$");
+}
+
+/**
+ * Вызовы, у которых метод указан ЯВНО: `call("POST", "/api/...")` или
+ * `fetch("/api/...", { method: "PATCH" })`. Совпадения пути мало — express
+ * отвечает 404 и когда путь есть, а глагол другой, и снаружи это неотличимо
+ * от отсутствующего адреса.
+ */
+function callsWithVerb(): Array<{ verb: string; path: string; where: string }> {
+  const out: Array<{ verb: string; path: string; where: string }> = [];
+  const seen = new Set<string>();
+  const files = walk(FRONTEND, (n) => (n.endsWith(".ts") || n.endsWith(".tsx")) && !n.includes(".test."))
+    .filter((f) => !f.includes("__tests__"));
+  const norm = (raw: string) =>
+    (raw.split("?")[0].replace(/[$]{[^}]*}/g, ":p").replace(/\$/, "") || "/");
+  for (const f of files) {
+    const src = readFileSync(f, "utf8");
+    const where = f.slice(f.indexOf("/frontend/") + 1);
+    const push = (verb: string, raw: string) => {
+      const path = norm(raw);
+      if (path.includes("${")) return;
+      const key = verb + " " + path;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ verb, path, where });
+    };
+    for (const m of src.matchAll(
+      /\b(?:call|req|request)\s*(?:<[^>]*>)?\s*\(\s*["'](GET|POST|PUT|PATCH|DELETE)["']\s*,\s*["`'](?:\/api-backend)?(\/api\/[^"`'\s]*)["`']/g,
+    )) push(m[1], m[2]);
+    for (const m of src.matchAll(
+      /fetch\s*\(\s*["`'](?:\/api-backend)?(\/api\/[^"`'\s]*)["`'][^)]{0,300}?method:\s*["'](GET|POST|PUT|PATCH|DELETE)["']/gs,
+    )) push(m[2], m[1]);
+  }
+  return out;
 }
 
 describe("сайт не зовёт адресов, которых сервер не отдаёт", () => {
@@ -252,6 +311,32 @@ describe("сайт не зовёт адресов, которых сервер �
     ).toEqual([]);
   });
 
+  test("метод вызова совпадает с методом маршрута", () => {
+    // Путь совпал, а глагол нет — express отвечает тем же 404, и отличить это
+    // от отсутствующего адреса снаружи нельзя. Так в модуле build работник не
+    // мог ни начать смену, ни закончить её: клиент шлёт POST, сервер ждёт PATCH.
+    const paths = allRoutes();
+    const pats = paths.map((p) => [p, toRe(p)] as const);
+    const bad: string[] = [];
+    for (const { verb, path, where } of callsWithVerb()) {
+      const probe = path.replace(/:p/g, "__X__");
+      const hits = pats.filter(([, rx]) => rx.test(probe)).map(([p]) => p);
+      if (hits.length === 0) continue; // путь не найден — это другой класс, он выше
+      const allowed = new Set<string>();
+      for (const h of hits) for (const v of VERBS.get(h) ?? []) allowed.add(v);
+      if (allowed.size === 0) continue; // метод маршрута не распознан — не выдумываем
+      if (allowed.has(verb)) continue;
+      const key = `${verb} ${path}`;
+      if (VERB_BASELINE[key]) continue;
+      bad.push(`${key}  сервер: ${[...allowed].sort().join(",")}  <- ${where}`);
+    }
+    expect(
+      bad,
+      "клиент шлёт не тот глагол. Снаружи это неотличимо от несуществующего " +
+        "адреса: express отвечает 404, и жаловаться придёт пользователь.",
+    ).toEqual([]);
+  });
+
   test("починенное вычеркнуто из списка", () => {
     const pats = allRoutes().map(toRe);
     const calls = clientCalls();
@@ -261,6 +346,26 @@ describe("сайт не зовёт адресов, которых сервер �
     expect(
       stale,
       "эти адреса уже сходятся или больше не зовутся — вычеркните их из BASELINE",
+    ).toEqual([]);
+
+    // Линия по МЕТОДАМ протухает так же и молча: сервер начнёт принимать
+    // нужный глагол, а строка останется и однажды прикроет настоящий дефект.
+    const paths = allRoutes();
+    const live = new Map<string, Set<string>>();
+    for (const { verb, path: p } of callsWithVerb()) {
+      live.set(p, (live.get(p) ?? new Set<string>()).add(verb));
+    }
+    const staleVerbs = Object.keys(VERB_BASELINE).filter((key) => {
+      const [verb, p] = key.split(" ");
+      if (!live.get(p)?.has(verb)) return true; // так больше не зовут
+      const hits = paths.filter((r) => toRe(r).test(p.replace(/:p/g, "__X__")));
+      const allowed = new Set<string>();
+      for (const h of hits) for (const v of VERBS.get(h) ?? []) allowed.add(v);
+      return allowed.size > 0 && allowed.has(verb); // сервер уже принимает
+    });
+    expect(
+      staleVerbs,
+      "эти расхождения по методу уже сошлись — вычеркните их из VERB_BASELINE",
     ).toEqual([]);
   });
 });

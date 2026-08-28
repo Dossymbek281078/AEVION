@@ -94,22 +94,25 @@ describe("отпечаток корзины: видно снаружи, но н�
   });
 });
 
-describe("диагностическая запись: один раз и без адреса посетителя", () => {
-  test("печатается ровно один раз за жизнь процесса", async () => {
-    const { vi } = await import("vitest");
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    // Первый вызов мог случиться в тестах выше, поэтому проверяем ПРИРОСТ.
-    const before = warn.mock.calls.length;
-    clientIp({ ip: "1.1.1.1", socket: { remoteAddress: "1.1.1.1" }, headers: {} });
-    clientIp({ ip: "2.2.2.2", socket: { remoteAddress: "2.2.2.2" }, headers: {} });
-    clientIp({ ip: "3.3.3.3", socket: { remoteAddress: "3.3.3.3" }, headers: {} });
-    expect(warn.mock.calls.length - before).toBeLessThanOrEqual(1);
-    warn.mockRestore();
+describe("диагностическая запись: по форме, а не по первому вызову", () => {
+  test("путь входит в форму: служебная проверка и запрос посетителя различимы", async () => {
+    // Ради этого зонд и переписан. Одноразовая версия напечатала строку про
+    // проверку живости платформы (локальная петля, без заголовков), и по ней
+    // напрашивался вывод обо ВСЕХ посетителях.
+    const { readFileSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..", "src", "lib", "rateLimit.ts"),
+      "utf8",
+    );
+    const at = src.indexOf("const shape = [");
+    expect(at, "форма корзины собирается не списком — проверь зонд").toBeGreaterThan(-1);
+    expect(src.slice(at, at + 120)).toContain("where");
+    expect(src).toContain('url.startsWith("/api")');
   });
 
   test("в строке нет полного адреса — только его форма", async () => {
-    const { vi } = await import("vitest");
-    // Проверяем САМ шаблон в исходнике: печатается первый октет, а не адрес.
     const { readFileSync } = await import("node:fs");
     const { join, dirname } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
@@ -120,10 +123,8 @@ describe("диагностическая запись: один раз и без
     const at = src.indexOf("форма соседа по сокету");
     expect(at).toBeGreaterThan(-1);
     const call = src.slice(at, at + 400);
-    // Ни peer, ни bare целиком в аргументы не уходят — только производные.
     expect(call).toContain("firstOctet");
     expect(/,\s*peer\s*[,)]/.test(call), "в журнал уходит полный адрес соседа").toBe(false);
     expect(/,\s*bare\s*[,)]/.test(call), "в журнал уходит полный адрес соседа").toBe(false);
-    void vi;
   });
 });

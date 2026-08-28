@@ -306,20 +306,42 @@ export function bucketFingerprint(key: string): string {
  * Строка одноразовая намеренно: журнал, куда каждую секунду капает диагностика,
  * перестают читать — тот же класс, что тревога без читателя.
  */
-let peerShapeLogged = false;
+// Диагностика формы соседа по сокету: по одной строке на КАЖДУЮ НОВУЮ форму,
+// не больше трёх за жизнь процесса.
+//
+// Первая версия была ОДНОРАЗОВОЙ — и ответила про другого звонящего. Строку
+// напечатала проверка живости платформы: она приходит по локальной петле и без
+// заголовков, поэтому в журнале стояло «префикс=127, заголовков нет», и по ней
+// напрашивался вывод обо всех посетителях. Вывод был бы ложным: расчёт показал,
+// что отпечаток ключа от адреса 127.0.0.1 не совпадает НИ С ОДНИМ из семи
+// наблюдавшихся на проде.
+//
+// Урок общий: одноразовый зонд отвечает про ПЕРВЫЙ вызов, а не про типичный, и
+// первым к серверу обращается платформа, а не человек.
+const peerShapesLogged = new Set<string>();
+const PEER_SHAPE_LOG_LIMIT = 3;
 
-function logPeerShapeOnce(peer: string, headers: Record<string, unknown> | undefined): void {
-  if (peerShapeLogged) return;
-  peerShapeLogged = true;
+function logPeerShapeOnce(
+  peer: string,
+  headers: Record<string, unknown> | undefined,
+  where: string,
+): void {
+  if (peerShapesLogged.size >= PEER_SHAPE_LOG_LIMIT) return;
   const bare = peer.replace(/^::ffff:/, "");
   const family = bare.includes(":") ? "ipv6" : "ipv4";
   const firstOctet = family === "ipv4" ? bare.split(".")[0] : bare.split(":")[0];
+  const real = headers?.["x-real-ip"] ? "есть" : "нет";
+  const xff = headers?.["x-forwarded-for"] ? "есть" : "нет";
+  const shape = [family, firstOctet || "?", real, xff, where].join("|");
+  if (peerShapesLogged.has(shape)) return;
+  peerShapesLogged.add(shape);
   console.warn(
-    "[rateLimit] форма соседа по сокету: семейство=%s префикс=%s | x-real-ip=%s x-forwarded-for=%s",
+    "[rateLimit] форма соседа по сокету: семейство=%s префикс=%s | x-real-ip=%s x-forwarded-for=%s | путь=%s",
     family,
     firstOctet || "?",
-    headers?.["x-real-ip"] ? "есть" : "нет",
-    headers?.["x-forwarded-for"] ? "есть" : "нет",
+    real,
+    xff,
+    where,
   );
 }
 
@@ -327,6 +349,8 @@ export function clientIp(req: {
   ip?: string;
   socket?: { remoteAddress?: string };
   headers?: Record<string, unknown>;
+  originalUrl?: string;
+  path?: string;
 }): string {
   // X-Real-IP — ЕДИНСТВЕННЫЙ источник правды у Railway, и без него ключ
   // ограничителя оказывается адресом их ВНУТРЕННЕГО прокси.
@@ -346,7 +370,10 @@ export function clientIp(req: {
   // чужой X-Real-IP он не может. Нет заголовка или мы не за прокси — ведём
   // себя ровно как раньше: отказ здесь не должен ломать ограничитель.
   const peer = String(req.socket?.remoteAddress || "");
-  logPeerShapeOnce(peer, req.headers);
+  // Путь огрубляется до «/api» или «прочее»: он нужен только чтобы отличить
+  // запрос посетителя от служебной проверки живости, а не для наблюдения.
+  const url = String(req.originalUrl || req.path || "");
+  logPeerShapeOnce(peer, req.headers, url.startsWith("/api") ? "/api" : "прочее");
   const realRaw = req.headers?.["x-real-ip"];
   const real = typeof realRaw === "string" ? realRaw.trim() : "";
   if (real && looksLikeAddress(real) && isRailwayInternal(peer)) {

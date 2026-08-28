@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
@@ -226,5 +226,114 @@ describe("дата запуска обязана называть свой ис�
     const mail = buildLaunchEmail("cyberchess", "kto-to@primer.ru");
     expect(mail.htmlContent).toMatch(/Кнопка не нажимается/);
     expect(mail.htmlContent).toContain(">https://aevion.app/cyberchess<");
+  });
+
+  // Найдено 28.08.2026: /go — единственная кликабельная ссылка в соцсетях и
+  // главный вход воронки. Её форма обещает письмо в день запуска следующего
+  // модуля, а отбор шёл только по метке модуля — эти люди не получили бы
+  // ничего. Тест держит именно обещание, а не реализацию.
+  test("подписавшиеся на «следующий запуск» получают письмо модуля", () => {
+    const rows = [
+      { email: "sam@primer.ru", source: "cyberchess" },
+      { email: "iz-soceti@primer.ru", source: "go" },
+      { email: "s-kanalom@primer.ru", source: "go-tt" },
+      { email: "pro-dolgoletie@primer.ru", source: "longevity" },
+      { email: "angliyskiy@primer.ru", source: "en-go" },
+    ];
+    const plan = planLaunchAnnounce("cyberchess", rows);
+    expect(plan.recipients).toContain("sam@primer.ru");
+    expect(plan.recipients, "общая очередь /go обещана письмом в день запуска").toContain("iz-soceti@primer.ru");
+    expect(plan.recipients, "метка канала go-<канал> — та же общая очередь").toContain("s-kanalom@primer.ru");
+    // Тематическая подписка на другое — не общая очередь.
+    expect(plan.recipients).not.toContain("pro-dolgoletie@primer.ru");
+    // Английской версии письма нет; молчание честнее русского письма.
+    expect(plan.recipients, "en-go исключён намеренно: письма по-английски нет").not.toContain("angliyskiy@primer.ru");
+  });
+
+  test("общая очередь получает КАЖДЫЙ запуск, как и обещано", () => {
+    const rows = [{ email: "iz-soceti@primer.ru", source: "go" }];
+    for (const slug of Object.keys(LAUNCH_MODULES)) {
+      expect(planLaunchAnnounce(slug, rows).recipients, `${slug}: общая очередь пропущена`).toContain("iz-soceti@primer.ru");
+    }
+  });
+
+  test("строгость отбора по модулю не ослабла", () => {
+    // Расширяя охват, легко случайно превратить сравнение в подстроку.
+    expect(matchesModule("olddevhub", "devhub")).toBe(false);
+    expect(matchesModule("gogo", "cyberchess")).toBe(false);
+    const plan = planLaunchAnnounce("cyberchess", [{ email: "chuzhoy@primer.ru", source: "gogol" }]);
+    expect(plan.recipients).toHaveLength(0);
+  });
+
+  // 28.08.2026: рассылка отбирала получателей по метке, которую пишет форма
+  // страницы запуска, и совпадение этих двух мест никто не проверял. У шахмат
+  // оно сошлось случайно, а стоило бы разойтись — письмо ушло бы в пустоту, и
+  // узнали бы мы об этом в день запуска. Проверка держит связь фронта и
+  // бэкенда, которую иначе не держит ничто.
+  test("метка формы на странице запуска совпадает с ключом рассылки", () => {
+    const appDir = join(__dirname, "..", "..", "frontend", "src", "app");
+    expect(existsSync(appDir), `каталога страниц нет: ${appDir}`).toBe(true);
+
+    // Берём страницы запуска, которые ЕСТЬ, и спрашиваем каждую: какую метку
+    // она пишет и признаёт ли её хоть один модуль реестра.
+    const launchPages = readdirSync(appDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && existsSync(join(appDir, d.name, "launch", "page.tsx")))
+      .map((d) => ({ dir: d.name, file: join(appDir, d.name, "launch", "page.tsx") }));
+    expect(launchPages.length, "страниц запуска не найдено вовсе — проверка стала бы пустой").toBeGreaterThan(0);
+
+    for (const p of launchPages) {
+      const src = readFileSync(p.file, "utf8");
+      // Метка задаётся двумя способами, и оба надо уметь читать: прямо
+      // (`source="bureau"`) и тернаром с каналом
+      // (`source = channel ? \`bureau-${channel}\` : "bureau"`). Первая версия
+      // проверки знала только первый способ и упала на странице бюро — прибор
+      // сам себя и поймал (28.08).
+      const labels: string[] = [];
+      // Перевод строки собираем кодом: обратный слэш в литерале не переживает
+      // передачу правки и превращается в настоящий разрыв строки (28.08).
+      for (const line of src.split(String.fromCharCode(10))) {
+        if (!line.includes("source")) continue;
+        for (const m of line.matchAll(/"([a-z0-9-]+)"/g)) labels.push(m[1]);
+        for (const m of line.matchAll(/`([a-z0-9-]+)-\$\{channel\}`/g)) labels.push(m[1]);
+      }
+      expect(labels.length, `${p.dir}: на странице запуска не нашёл метки источника`).toBeGreaterThan(0);
+      for (const label of new Set(labels)) {
+        const owner = Object.keys(LAUNCH_MODULES).find((slug) => matchesModule(label, slug));
+        expect(
+          owner,
+          `${p.dir}: форма пишет метку «${label}», но её не признаёт ни один модуль рассылки ` +
+            `(${Object.keys(LAUNCH_MODULES).join(", ")}) — письмо запуска ушло бы в пустоту`,
+        ).toBeDefined();
+      }
+    }
+  });
+
+  // У модуля с назначенной датой страница запуска обязана существовать: именно
+  // на ней собирают адреса, которым потом уходит письмо.
+  test("у модуля с датой есть страница запуска", () => {
+    const appDir = join(__dirname, "..", "..", "frontend", "src", "app");
+    for (const [slug, m] of Object.entries(LAUNCH_MODULES)) {
+      if (!m.date) continue;
+      const dir = m.page.replace(/^\//, "");
+      expect(
+        existsSync(join(appDir, dir, "launch", "page.tsx")),
+        `${slug}: дата ${m.date} назначена, а страницы ${m.page}/launch нет — собирать адреса негде`,
+      ).toBe(true);
+    }
+  });
+
+  // Расширив охват на общую очередь, легко прислать человеку ДВА письма: он
+  // мог подписаться и на /go, и на самой странице запуска — это две строки в
+  // базе с одним адресом. Дедупликация в planLaunchAnnounce была и раньше,
+  // но до 28.08 пересечься эти два списка не могли, и никто это не проверял.
+  test("подписавшийся дважды получает одно письмо", () => {
+    const plan = planLaunchAnnounce("cyberchess", [
+      { email: "oba@primer.ru", source: "go" },
+      { email: "OBA@primer.ru", source: "cyberchess" },
+      { email: " oba@primer.ru ", source: "cyberchess-ig" },
+      { email: "odin@primer.ru", source: "go-tt" },
+    ]);
+    expect(plan.recipients.filter((e) => e === "oba@primer.ru")).toHaveLength(1);
+    expect(plan.recipients).toHaveLength(2);
   });
 });

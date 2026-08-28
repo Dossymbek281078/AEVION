@@ -6503,6 +6503,16 @@ export default function CyberChessPage(){
                   </div>
                 </Btn>
               </div>
+              {/* Ворота 6 окна запуска: человеку, который не готов платить, негде было
+                  оставить контакт — на странице не было ни поля почты, ни ссылки на /go.
+                  Параметр c=chess обязателен: без него не ответить, какой канал привёл. */}
+              <a href="/go?c=chess" style={{display:"block",marginTop:SPACE[2],padding:SPACE[3],
+                borderRadius:12,border:"1px dashed "+CC.border,background:CC.surface1,
+                textDecoration:"none",color:CC.text,textAlign:"center"}}>
+                <div style={{fontSize:14,fontWeight:800}}>Написать вам, когда откроются турниры?</div>
+                <div style={{fontSize:12,color:CC.textDim,marginTop:2,fontWeight:600}}>
+                  Оставьте адрес — пришлём приглашение и разбор партий. Без спама.</div>
+              </a>
 
               {/* Tertiary: задача / классика / база партий — small inline pills, не доминируют */}
               <div style={{marginTop:SPACE[2],display:"flex",gap:SPACE[2],flexWrap:"wrap",alignItems:"center"}}>

@@ -82,11 +82,16 @@ function lsStoreId(): string | null { return process.env.LEMON_SQUEEZY_STORE_ID 
  */
 function gumroadPermalink(tier: Tier): string | null {
   const upper = tier.toUpperCase();
-  return process.env[`GUMROAD_CONSTITUTION_${upper}_PERMALINK`]
-    ?? process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK
+  // Запасное имя ...PRO_PERMALINK годится ТОЛЬКО для тарифа pro. Оно досталось
+  // от прежней проверки готовности, где было почти безвредно: адрес всё равно
+  // строился из другого источника. Как только адрес начал браться отсюда,
+  // цена ошибки выросла — покупателя тарифа Team увело бы на товар Pro, то
+  // есть на чужой продукт по чужой цене. Общий `GUMROAD_DEFAULT_PERMALINK`
+  // оставлен намеренно: он задуман как catch-all для любого тарифа.
+  const tierSpecific = process.env[`GUMROAD_CONSTITUTION_${upper}_PERMALINK`]
     ?? process.env[`GUMROAD_PERMALINK_CONSTITUTION_${upper}`]
-    ?? process.env.GUMROAD_DEFAULT_PERMALINK
-    ?? null;
+    ?? (tier === "pro" ? process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK : undefined);
+  return tierSpecific ?? process.env.GUMROAD_DEFAULT_PERMALINK ?? null;
 }
 
 function lsReady(tier: Tier): boolean {

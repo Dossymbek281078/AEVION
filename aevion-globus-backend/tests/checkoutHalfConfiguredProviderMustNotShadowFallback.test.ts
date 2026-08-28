@@ -34,6 +34,7 @@ const KEYS = [
   "LEMON_SQUEEZY_CONSTITUTION_PRO_VARIANT_ID",
   "GUMROAD_CONSTITUTION_PRO_PERMALINK",
   "GUMROAD_PERMALINK_CONSTITUTION_PRO",
+  "GUMROAD_CONSTITUTION_TEAM_PERMALINK",
   "GUMROAD_DEFAULT_PERMALINK",
 ];
 let saved: Record<string, string | undefined> = {};
@@ -134,5 +135,33 @@ describe("Gumroad: решение о готовности и сама ссылк
       .send({ tier: "pro" });
 
     expect(res.body.provider, "рабочая настройка объявлена отсутствующей").toBe("gumroad");
+  });
+});
+
+describe("тариф Team не уводится на товар Pro", () => {
+  test("настроен только Pro — покупателя Team НЕ ведут на чужой товар", async () => {
+    process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK = "pyiaz"; // товар Pro
+
+    const res = await request(app)
+      .post("/api/constitution/checkout/session")
+      .send({ tier: "team" });
+
+    expect(res.status).toBe(200);
+    expect(
+      String(res.body.checkoutUrl ?? ""),
+      "покупатель тарифа Team уходит на товар Pro — чужой продукт и чужая цена",
+    ).not.toContain("pyiaz");
+    expect(res.body.provider).toBe("stub");
+  });
+
+  test("свой товар у Team работает", async () => {
+    process.env.GUMROAD_CONSTITUTION_TEAM_PERMALINK = "wjvquw"; // товар Team
+
+    const res = await request(app)
+      .post("/api/constitution/checkout/session")
+      .send({ tier: "team" });
+
+    expect(res.body.provider).toBe("gumroad");
+    expect(String(res.body.checkoutUrl)).toContain("wjvquw");
   });
 });

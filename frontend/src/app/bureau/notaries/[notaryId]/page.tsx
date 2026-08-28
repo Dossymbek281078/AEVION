@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 
@@ -18,22 +19,40 @@ type NotaryDetail = {
   deactivatedAt: string | null;
 };
 
-async function loadNotary(id: string): Promise<NotaryDetail | null> {
+/**
+ * Три исхода, а не два.
+ *
+ * `if (!r.ok) return null` уравнивал «такого нотариуса нет» с «мы не смогли
+ * спросить», и страница на любой выдуманный id отвечала 200 с полной
+ * вёрсткой. Таких id бесконечно много — бесконечный индексируемый мусор,
+ * причём на реестре, то есть на доверительной поверхности.
+ *
+ * 404 ставим ТОЛЬКО по авторитетному ответу сервера: отдать его при
+ * временной аварии значит сказать поисковику, что живых страниц нет.
+ */
+type Loaded =
+  | { state: "found"; data: NotaryDetail }
+  | { state: "absent" }
+  | { state: "unknown" };
+
+async function loadNotary(id: string): Promise<Loaded> {
   try {
     const r = await fetch(`${getApiBase()}/api/bureau/notaries/${encodeURIComponent(id)}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(6000),
     });
-    if (!r.ok) return null;
-    return (await r.json()) as NotaryDetail;
+    if (r.status === 404 || r.status === 410) return { state: "absent" };
+    if (!r.ok) return { state: "unknown" };
+    return { state: "found", data: (await r.json()) as NotaryDetail };
   } catch {
-    return null;
+    return { state: "unknown" };
   }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ notaryId: string }> }): Promise<Metadata> {
   const { notaryId } = await params;
-  const n = await loadNotary(notaryId);
+  const zm = await loadNotary(notaryId);
+  const n = zm.state === "found" ? zm.data : null;
   return {
     title: n ? `${n.fullName} — AEVION Notary Registry` : "Notary — AEVION IP Bureau",
   };
@@ -41,7 +60,12 @@ export async function generateMetadata({ params }: { params: Promise<{ notaryId:
 
 export default async function NotaryDetailPage({ params }: { params: Promise<{ notaryId: string }> }) {
   const { notaryId } = await params;
-  const n = await loadNotary(notaryId);
+  const zagruzka = await loadNotary(notaryId);
+  // Нотариуса НЕТ — честный 404. Текст ответа переехал в not-found.tsx рядом:
+  // это РЕЕСТР, и «такого нет в реестре» — ответ, за которым пришли.
+  // При "unknown" (не смогли спросить) остаётся 200 и прежний вид.
+  if (zagruzka.state === "absent") notFound();
+  const n = zagruzka.state === "found" ? zagruzka.data : null;
 
   if (!n) {
     return (

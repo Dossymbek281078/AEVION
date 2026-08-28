@@ -21,7 +21,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -119,12 +119,37 @@ function pageFileFor(app: string): string {
   return join(HERE, "..", PAGE_PATH[app] ?? app, "page.tsx");
 }
 
+/**
+ * Фронтендовых способов закрыть модуль тоже НЕСКОЛЬКО. Первая версия знала
+ * один (`fetchOrPaywall`) — и это была та же ошибка, что и во всей истории
+ * этого счёта: мерка уже предмета. Найдено спросом «что экспортируют
+ * библиотеки», а не перебором по памяти.
+ */
+const FRONT_PRIMITIVES = [
+  "fetchOrPaywall", "apiFetchOrPaywall", "checkAppAccess",
+  "installPaywallInterceptor", "triggerPaywall", "PaywallModal", "PaywallScreen",
+];
+
+/** Смотрим ВЕСЬ каталог модуля, а не только page.tsx: закрытие бывает вложенным. */
 function frontendPaywalled(app: string): boolean {
-  try {
-    return readFileSync(pageFileFor(app), "utf8").includes("fetchOrPaywall");
-  } catch {
-    return false; // страницы нет — это не «закрыто», а «нечего закрывать»
+  const dir = join(HERE, "..", PAGE_PATH[app] ?? app);
+  const stack = [dir];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    let entries: string[];
+    try { entries = readdirSync(cur); } catch { continue; }
+    for (const e of entries) {
+      const p = join(cur, e);
+      let isDir = false;
+      try { isDir = statSync(p).isDirectory(); } catch { continue; }
+      if (isDir) { stack.push(p); continue; }
+      if (!/[.]tsx?$/.test(e)) continue;
+      let s = "";
+      try { s = readFileSync(p, "utf8"); } catch { continue; }
+      if (FRONT_PRIMITIVES.some((w) => s.includes(w))) return true;
+    }
   }
+  return false;
 }
 
 function canWithhold(app: string, gated: Set<string>): boolean {

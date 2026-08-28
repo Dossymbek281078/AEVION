@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { formatSalary } from "@/lib/build/format";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
@@ -74,12 +75,17 @@ type Bundle = {
   }[];
 };
 
-async function load(id: string): Promise<Bundle | null> {
+async function load(id: string): Promise<Bundle | null | "absent"> {
   try {
     const res = await fetch(
       `${getApiBase()}/api/build/profiles/${encodeURIComponent(id)}`,
       { cache: "no-store", signal: AbortSignal.timeout(6000) },
     );
+    // 404 от сервера — «такого профиля нет», это факт. Прочие неуспехи и
+    // `success:false` при коде 200 — «мы не смогли спросить»: признак
+    // отсутствия берём из КОДА ответа, а не из тела, иначе временный сбой
+    // API выбросил бы живые профили людей из выдачи.
+    if (res.status === 404 || res.status === 410) return "absent" as const;
     if (!res.ok) return null;
     const json = (await res.json()) as { success: boolean; data?: Bundle };
     if (!json?.success || !json.data) return null;
@@ -109,6 +115,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
   if (!id) return fallback;
   const data = await load(id);
+  // В метаданных отсутствие и недоступность ведут к одному — не
+  // индексировать. Различать их надо на странице, где от этого зависит
+  // КОД ОТВЕТА, а не заголовок.
+  if (data === "absent") return fallback;
   if (!data) return fallback;
   const titleLine = `${data.name}${data.title ? " · " + data.title : ""}`;
   const desc = [
@@ -133,6 +143,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicProfilePage({ params }: Props) {
   const { id } = await params;
   const data = await load(id);
+  // Профиля НЕТ — честный 404. При «не смогли спросить» остаётся 200 и
+  // прежний вид: 404 при аварии выбросил бы живые профили людей из выдачи.
+  if (data === "absent") notFound();
 
   if (!data) {
     return (
@@ -476,7 +489,15 @@ async function MatchingVacanciesBlock({ skill }: { skill: string }) {
     );
     if (!res.ok) return null;
     const j = await res.json();
-    const items = j?.data?.items as { id: string; title: string; salary: number; city: string | null }[];
+    // salaryCurrency читаем из фида: без него formatSalary ниже показывал бы
+    // сумму дефолтной валютой (issue гигиены витрины, 27.07).
+    const items = j?.data?.items as {
+      id: string;
+      title: string;
+      salary: number;
+      salaryCurrency?: string | null;
+      city: string | null;
+    }[];
     if (!items || items.length === 0) return null;
     return (
       <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5">
@@ -492,7 +513,7 @@ async function MatchingVacanciesBlock({ skill }: { skill: string }) {
             >
               <span className="text-white">{v.title}</span>
               <span className="text-emerald-300">
-                {formatSalary(v.salary)}
+                {formatSalary(v.salary, v.salaryCurrency)}
                 {v.city ? ` · ${v.city}` : ""}
               </span>
             </Link>

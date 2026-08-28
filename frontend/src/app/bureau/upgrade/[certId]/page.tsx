@@ -8,6 +8,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { InfoTip } from "@/components/InfoTip";
 import { useToast } from "@/components/ToastProvider";
 import { apiUrl } from "@/lib/apiBase";
+import { upgradeDisclosure, type KycMode } from "../kycDisclosure";
 
 type Step =
   | "intro"
@@ -43,6 +44,28 @@ export default function BureauUpgradePage() {
   const { showToast } = useToast();
 
   const [step, setStep] = useState<Step>("intro");
+
+  /**
+   * Подключён ли НАСТОЯЩИЙ поставщик проверки личности. null — «спросить не
+   * удалось»: страница тогда не обещает паспорт, но и не пугает заглушкой.
+   * Разбор направления осторожности — в kycDisclosure.ts.
+   */
+  const [kycMode, setKycMode] = useState<KycMode>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(apiUrl("/api/bureau/health"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        const v = d?.kyc;
+        setKycMode(v === "live" || v === "stub" ? v : null);
+      })
+      .catch(() => { /* оставляем null */ });
+    return () => { alive = false; };
+  }, []);
+
+  const disclosure = upgradeDisclosure(kycMode);
   const [declaredName, setDeclaredName] = useState("");
   const [declaredCountry, setDeclaredCountry] = useState("KZ");
   const [verificationId, setVerificationId] = useState<string | null>(null);
@@ -219,13 +242,21 @@ export default function BureauUpgradePage() {
           <div style={{ borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", padding: "20px 22px" }}>
             <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", marginBottom: 8 }}>What you&apos;ll do</div>
             <ol style={{ margin: 0, paddingLeft: 22, fontSize: 13, color: "#0f172a", lineHeight: 1.7 }}>
-              <li><b>Identity check</b> via our KYC partner — passport / national ID upload, ~2 minutes.</li>
+              <li>{disclosure.identityStep}</li>
               <li><b>Pay $19</b> for the Verified-tier upgrade.</li>
               <li><b>Certificate is upgraded</b> with your real-name attestation; the verify page now shows &ldquo;Verified Author&rdquo;.</li>
             </ol>
             <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", fontSize: 11, color: "#92400e", lineHeight: 1.55 }}>
-              <b>Privacy:</b> we store the KYC decision (verified name, country, document type) — not your ID image. Raw documents stay with the KYC vendor under their retention policy.
+              {disclosure.vendorNote}
             </div>
+            {disclosure.notice && (
+              <div
+                role="alert"
+                style={{ marginTop: 12, padding: "12px 14px", borderRadius: 10, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.25)", fontSize: 12, color: "#b91c1c", lineHeight: 1.6, fontWeight: 600 }}
+              >
+                {disclosure.notice}
+              </div>
+            )}
             <button onClick={() => setStep("kyc-form")} style={{ marginTop: 16, padding: "12px 18px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
               Start identity check →
             </button>

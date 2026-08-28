@@ -30,6 +30,7 @@ const APP = join(HERE, "..");
 const RU_PAGES: Array<[string, string]> = [
   ["/go", join(APP, "go", "page.tsx")],
   ["/longevity", join(APP, "longevity", "_client.tsx")],
+  ["/shop", join(APP, "shop", "page.tsx")],
 ];
 
 describe("русские страницы объявляют свой язык", () => {

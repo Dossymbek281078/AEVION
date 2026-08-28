@@ -30,7 +30,7 @@ const BRANDS = ["GitHub", "SMS", "WhatsApp", "Railway", "Vercel", "Cloudflare", 
 function capabilityNames(): string[] {
   const i = SRC.indexOf('devhubRouter.get("/studio/capabilities"');
   expect(i, "блок возможностей не найден — сторож смотрит не туда").toBeGreaterThan(0);
-  const block = SRC.slice(i, i + 5000);
+  const block = SRC.slice(i, i + 40000);
   const out: string[] = [];
   let from = 0;
   for (;;) {
@@ -67,5 +67,46 @@ describe("имена возможностей — на языке человек
       .match(/id: "([^"]+)"/g) ?? [];
     const cyrillic = ids.filter((s) => /[а-яА-ЯёЁ]/.test(s));
     expect(cyrillic, "идентификатор стал человеческим текстом").toEqual([]);
+  });
+});
+
+/**
+ * Описания шаблонов тоже на языке человека.
+ *
+ * Замер 28.08.2026: восемь описаний шаблонов были на латинице — и они
+ * ПОКАЗЫВАЮТСЯ: подписью в списке и подсказкой при наведении. Я успел записать
+ * утром, что «описания на экран не выводятся» — это было верно для описаний
+ * ВОЗМОЖНОСТЕЙ, а у шаблонов иначе. Одно слово «описание» про две разные вещи
+ * и увело вывод.
+ */
+describe("описания шаблонов на языке человека", () => {
+  const CYR = /[а-яА-ЯёЁ]/;
+
+  function descriptionsIn(marker: string): string[] {
+    const i = SRC.indexOf(marker);
+    if (i < 0) return [];
+    const block = SRC.slice(i, i + 40000);
+    const out: string[] = [];
+    let from = 0;
+    for (;;) {
+      const k = block.indexOf('description: "', from);
+      if (k < 0) break;
+      const e = block.indexOf('"', k + 14);
+      if (e < 0) break;
+      out.push(block.slice(k + 14, e));
+      from = e + 1;
+    }
+    return out;
+  }
+
+  test("прибор исправен: описания найдены", () => {
+    const all = [...descriptionsIn("export const TEMPLATES"), ...descriptionsIn("AGENT_TEMPLATES")];
+    expect(all.length, "описаний не найдено — сторож смотрит не туда").toBeGreaterThanOrEqual(5);
+  });
+
+  test("ни одно описание шаблона не на латинице", () => {
+    const bad = [...descriptionsIn("export const TEMPLATES"), ...descriptionsIn("AGENT_TEMPLATES")]
+      .filter((d) => !CYR.test(d));
+    expect(bad, "описание шаблона на латинице — а его читает человек").toEqual([]);
   });
 });

@@ -883,7 +883,7 @@ export const TEMPLATES = [
   {
     id: "next-app",
     name: "Next.js App",
-    description: "Full-stack React with API routes",
+    description: "React с серверными маршрутами — фронт и API в одном проекте",
     stack: "next",
     files: [
       {
@@ -906,7 +906,7 @@ export const TEMPLATES = [
   {
     id: "express-api",
     name: "Express API",
-    description: "REST API with TypeScript",
+    description: "REST API на TypeScript",
     stack: "express",
     files: [
       {
@@ -937,7 +937,7 @@ export const TEMPLATES = [
   {
     id: "landing",
     name: "Landing Page",
-    description: "Static HTML/CSS/JS landing page",
+    description: "Посадочная страница на чистых HTML, CSS и JS",
     stack: "static",
     files: [
       {
@@ -960,7 +960,7 @@ export const TEMPLATES = [
   {
     id: "react-spa",
     name: "React SPA",
-    description: "Single page app with Vite",
+    description: "Одностраничное приложение на Vite",
     stack: "react",
     files: [
       {
@@ -1008,7 +1008,7 @@ export const TEMPLATES = [
   {
     id: "dashboard",
     name: "Analytics Dashboard",
-    description: "Charts and data visualization with Next.js",
+    description: "Графики и визуализация данных на Next.js",
     stack: "next",
     files: [
       {
@@ -4903,7 +4903,7 @@ const AGENT_WORKFLOW_TEMPLATES = [
   {
     id: "landing",
     name: "Landing page",
-    description: "Hero + headline + CTA + voiceover + sound effect",
+    description: "Заглавный экран: заголовок, кнопка, озвучка и звук",
     steps: [
       { type: "code", prompt: "Modern landing page: hero section with headline, subheadline, and CTA button. Tailwind, dark theme.", saveAs: "pages/index.tsx" },
       { type: "image", prompt: "Futuristic abstract gradient, purple and teal, soft glow, hero background", size: "1792x1024", saveAs: "public/hero.url.txt" },
@@ -4915,7 +4915,7 @@ const AGENT_WORKFLOW_TEMPLATES = [
   {
     id: "blog",
     name: "Blog post",
-    description: "Article with header image + audio narration",
+    description: "Статья с картинкой в шапке и озвучкой",
     steps: [
       { type: "code", prompt: "Blog post page with title, date, hero image, and markdown article body in Next.js", saveAs: "pages/post.tsx" },
       { type: "image", prompt: "Editorial illustration, flat design, vibrant colors, abstract concept", size: "1024x1024", saveAs: "public/article-hero.url.txt" },

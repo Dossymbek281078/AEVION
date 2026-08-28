@@ -174,16 +174,69 @@ async function claudeBatch(texts: string[], langName: string): Promise<string[]>
  * fall back to Claude instead of failing the whole request — a broken or
  * over-quota DeepL key must not take down site-wide translation.
  */
+/**
+ * Передышка после исчерпанной квоты DeepL.
+ *
+ * Замер на проде 28.08.2026: в журнале 34 строки подряд
+ * «DeepL failed (456: Quota exceeded); falling back to Claude». Исчерпанная
+ * квота — состояние НАДОЛГО, а не разовый сбой: мы всё равно ходили в DeepL
+ * перед каждым переводом, получали тот же отказ и только потом звали запасной
+ * путь. То есть на каждый перевод — лишний сетевой вызов, лишняя задержка и
+ * строка в журнале, которая заглушает настоящие ошибки.
+ *
+ * Заметив именно квоту, молчим полчаса. Прочие ошибки DeepL (сеть, ключ) сюда
+ * НЕ попадают: они бывают разовыми, и гасить их на полчаса было бы хуже.
+ */
+export const DEEPL_QUOTA_COOLDOWN_MS = 30 * 60 * 1000;
+let deeplQuotaUntil = 0;
+
+/** Спрашивать ли DeepL сейчас. Экспортировано ради проверки: без этого
+ *  «передышку» пришлось бы утверждать по тексту исходника, а такая проверка
+ *  остаётся зелёной, когда передышку убирают целиком (проверено мутацией). */
+export function shouldAskDeepl(now = Date.now()): boolean {
+  return now >= deeplQuotaUntil;
+}
+
+/** Запомнить, что квота исчерпана. */
+export function noteQuotaExhausted(now = Date.now()): void {
+  deeplQuotaUntil = now + DEEPL_QUOTA_COOLDOWN_MS;
+}
+
+/** Только для тестов: вернуть состояние в исходное. */
+export function resetQuotaCooldownForTests(): void {
+  deeplQuotaUntil = 0;
+}
+
+export function isQuotaError(e: unknown): boolean {
+  const m = e instanceof Error ? e.message : String(e);
+  // Границы слова пишутся классами символов НАМЕРЕННО. Первая версия этой
+  // строки содержала «», и обратный слэш потерялся при передаче правки:
+  // в файл уехал НЕВИДИМЫЙ символ backspace, глазами не видный, а ветка про
+  // код 456 стала мёртвой. Проверять такое надо не взглядом, а repr.
+  return m.toLowerCase().includes("quota exceeded") || /(^|[^0-9])456([^0-9]|$)/.test(m);
+}
+
 async function translateBatch(target: string, texts: string[]): Promise<string[]> {
   const deeplReady = !!process.env.DEEPL_API_KEY?.trim();
   const deeplTarget = DEEPL_TARGET[target];
-  if (deeplReady && deeplTarget) {
+  const now = Date.now();
+  if (deeplReady && deeplTarget && shouldAskDeepl(now)) {
     try {
       return await deeplBatch(texts, deeplTarget);
     } catch (e) {
-      console.warn(
-        `[i18n] DeepL failed for "${target}" (${e instanceof Error ? e.message : e}); falling back to Claude`
-      );
+      if (isQuotaError(e)) {
+        noteQuotaExhausted(now);
+        // Одна строка на передышку, а не на каждый перевод: журнал, забитый
+        // одинаковыми записями, перестают читать, и настоящая авария в нём
+        // теряется.
+        console.warn(
+          `[i18n] квота DeepL исчерпана — не спрашиваем его ${DEEPL_QUOTA_COOLDOWN_MS / 60000} мин, переводим запасным путём`
+        );
+      } else {
+        console.warn(
+          `[i18n] DeepL failed for "${target}" (${e instanceof Error ? e.message : e}); falling back to Claude`
+        );
+      }
     }
   }
   return claudeBatch(texts, LANG_NAME[target] || target);

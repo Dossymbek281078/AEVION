@@ -285,23 +285,37 @@ function callsWithVerb(): Array<{ verb: string; path: string; where: string }> {
   return out;
 }
 
+// Сканирование файлов делается ОДИН раз на файл, а не в каждом тесте.
+//
+// Было: четыре теста, и каждый заново обходил бэкенд и фронт (allRoutes() +
+// clientCalls()). В одиночку файл проходил, а в общем прогоне под нагрузкой
+// последний тест падал по таймауту 30 с — 28.08.2026 это дважды выглядело как
+// провал правки, которая тут ни при чём, и один раз обесценило мутационную
+// проверку (на красной базе она всегда отвечает «поймана»).
+//
+// Наращивать таймаут НЕ стал намеренно: в правилах записано, что это ложный
+// путь. Причина была в четырёхкратной работе, её и убрал.
+const ROUTES = allRoutes();
+const PATS = ROUTES.map(toRe);
+const CALLS = clientCalls();
+
 describe("сайт не зовёт адресов, которых сервер не отдаёт", () => {
   test("контроль прибора: обе стороны собраны", () => {
     // Пустая любая сторона дала бы зелёный на любом состоянии кода.
-    const routes = allRoutes();
+    const routes = ROUTES;
     expect(routes.length, "маршруты сервера не собрались").toBeGreaterThan(1000);
-    expect(clientCalls().size, "вызовы сайта не собрались").toBeGreaterThan(500);
+    expect(CALLS.size, "вызовы сайта не собрались").toBeGreaterThan(500);
     // Заведомо существующий адрес обязан находиться, заведомо выдуманный — нет.
-    const pats = routes.map(toRe);
+    const pats = PATS;
     const hit = (c: string) => pats.some((rx) => rx.test(c));
     expect(hit("/api/build/vacancies"), "не видит заведомо живого адреса").toBe(true);
     expect(hit("/api/build/vydumannyi-xyz-zzz"), "признал выдуманный адрес").toBe(false);
   });
 
   test("список несовпадений не пополнился", () => {
-    const pats = allRoutes().map(toRe);
+    const pats = PATS;
     const fresh: string[] = [];
-    for (const [c, where] of clientCalls()) {
+    for (const [c, where] of CALLS) {
       if (c.startsWith("/api-backend")) continue;
       if (/\.\.\.|\{|\[|\]/.test(c)) continue;
       if (BASELINE[c]) continue;
@@ -322,7 +336,7 @@ describe("сайт не зовёт адресов, которых сервер �
     // Путь совпал, а глагол нет — express отвечает тем же 404, и отличить это
     // от отсутствующего адреса снаружи нельзя. Так в модуле build работник не
     // мог ни начать смену, ни закончить её: клиент шлёт POST, сервер ждёт PATCH.
-    const paths = allRoutes();
+    const paths = ROUTES;
     const pats = paths.map((p) => [p, toRe(p)] as const);
     const bad: string[] = [];
     for (const { verb, path, where } of callsWithVerb()) {
@@ -345,8 +359,8 @@ describe("сайт не зовёт адресов, которых сервер �
   });
 
   test("починенное вычеркнуто из списка", () => {
-    const pats = allRoutes().map(toRe);
-    const calls = clientCalls();
+    const pats = PATS;
+    const calls = CALLS;
     const stale = Object.keys(BASELINE).filter(
       (c) => !calls.has(c) || pats.some((rx) => rx.test(c.replace(/:p/g, "__X__"))),
     );
@@ -357,7 +371,7 @@ describe("сайт не зовёт адресов, которых сервер �
 
     // Линия по МЕТОДАМ протухает так же и молча: сервер начнёт принимать
     // нужный глагол, а строка останется и однажды прикроет настоящий дефект.
-    const paths = allRoutes();
+    const paths = ROUTES;
     const live = new Map<string, Set<string>>();
     for (const { verb, path: p } of callsWithVerb()) {
       live.set(p, (live.get(p) ?? new Set<string>()).add(verb));

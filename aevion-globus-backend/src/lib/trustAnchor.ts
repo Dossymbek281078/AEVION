@@ -60,12 +60,19 @@ export async function anchorTrustScore(asOf: string): Promise<AnchoredTrustScore
       bitcoinBlockHeight: r.bitcoinBlockHeight,
       calendars: r.calendars,
       error: r.error,
+      // ⚠️ Ветвь по статусу — ЯВНАЯ, без «иначе». Раньше последняя ветка ловила
+      // всё незнакомое и объявляла это сетевым сбоем календарей. Пока значений
+      // было три, она попадала; с добавлением "not-submitted" такой «иначе»
+      // выдал бы уверенное и ложное объяснение — тот самый класс, ради которого
+      // всё это и правится.
       note:
         r.status === "pending"
-          ? "Submitted to OpenTimestamps calendars. Bitcoin confirmation follows in ~1-6h. Keep otsProofB64 and POST {snapshot, otsProofB64} to /trust-score/anchor/verify to upgrade & verify."
+          ? "Submitted to OpenTimestamps calendars. Bitcoin confirmation follows in ~1-6h. Keep otsProofB64."
           : r.status === "bitcoin-confirmed"
             ? "Anchored to Bitcoin — the Trust Score hash is trustlessly timestamped."
-            : "Calendar submission failed (network). The Ed25519 signature is unaffected; retry the anchor later.",
+            : r.status === "failed"
+              ? "Calendar submission failed (network). The Ed25519 signature is unaffected; retry the anchor."
+              : "No proof to evaluate — see error for what was missing.",
     },
   };
 }
@@ -105,7 +112,7 @@ export async function verifyAnchoredTrustScore(body: unknown): Promise<AnchorVer
 
   const ed25519 = verifySignedTrustScore(snapshot);
 
-  const otsFail = (error: string, status: AnchorStatus = "pending"): AnchorVerifyResult => ({
+  const otsFail = (error: string, status: AnchorStatus = "not-submitted"): AnchorVerifyResult => ({
     ed25519,
     ots: { verified: false, status, upgraded: false, bitcoinBlockHeight: null, attestations: [], otsProofB64, error },
     fullyProven: false,
@@ -120,12 +127,14 @@ export async function verifyAnchoredTrustScore(body: unknown): Promise<AnchorVer
       : undefined;
   if (typeof hash !== "string") return otsFail("snapshot has no attestation.contentHash");
 
-  let proof: Buffer;
-  try {
-    proof = Buffer.from(otsProofB64, "base64");
-  } catch {
-    return otsFail("otsProofB64 is not valid base64");
-  }
+  // ⚠️ `Buffer.from(x, "base64")` НЕ БРОСАЕТ: недопустимые символы молча
+  // отбрасываются, поэтому прежний try/catch не мог сработать никогда — защита
+  // была на вид, а мусор проходил дальше и падал уже в проверке доказательства.
+  // Спрашиваем формат прямо.
+  const looksBase64 = /^[A-Za-z0-9+/]*={0,2}$/.test(otsProofB64.replace(/\s+/g, ""));
+  if (!looksBase64) return otsFail("otsProofB64 is not valid base64");
+  const proof = Buffer.from(otsProofB64, "base64");
+  if (proof.length === 0) return otsFail("otsProofB64 decodes to nothing");
 
   // Pull any fresh Bitcoin attestation (idempotent — no-op if already confirmed).
   const up = await upgradeProof(proof);
@@ -137,7 +146,10 @@ export async function verifyAnchoredTrustScore(body: unknown): Promise<AnchorVer
     ed25519,
     ots: {
       verified: v.ok,
-      status: v.bitcoinBlockHeight !== null ? "bitcoin-confirmed" : "pending",
+      // Порядок ветвей важен: сперва спрашиваем, ПРОШЛА ли проверка, и только
+      // потом — подтверждена ли она Bitcoin. Прежняя версия смотрела лишь на
+      // высоту блока, поэтому непрошедшее доказательство получало "pending".
+      status: !v.ok ? "invalid" : v.bitcoinBlockHeight !== null ? "bitcoin-confirmed" : "pending",
       upgraded: up.upgraded,
       bitcoinBlockHeight: v.bitcoinBlockHeight,
       attestations: v.attestations,
@@ -149,6 +161,8 @@ export async function verifyAnchoredTrustScore(body: unknown): Promise<AnchorVer
       ? `Fully proven: AEVION's Ed25519 key signed this exact Trust Score, and its hash is Bitcoin-anchored at block ${v.bitcoinBlockHeight}.`
       : !ed25519.valid
         ? "Ed25519 check failed — the snapshot value or signature does not verify."
-        : "Ed25519 valid, but the Bitcoin anchor is not confirmed yet (pending). Re-verify later once a block includes it.",
+        : !v.ok
+          ? "Ed25519 valid, but the OpenTimestamps proof does not verify against this hash — see ots.error."
+          : "Ed25519 valid, but the Bitcoin anchor is not confirmed yet (pending). Re-verify later once a block attestation appears.",
   };
 }

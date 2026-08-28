@@ -14,7 +14,17 @@ import * as OpenTimestamps from "opentimestamps";
 export type AnchorStatus =
   | "pending"            // submitted to OT calendars, no Bitcoin attestation yet
   | "bitcoin-confirmed"  // at least one BitcoinBlockHeaderAttestation present
-  | "failed";            // network failure during stamp; proof not created
+  | "failed"             // network failure during stamp; proof not created
+  // Нечего оценивать: доказательство не прислали, прислали не-base64 или у
+  // снимка нет хеша. Раньше эти случаи докладывались как "pending", то есть
+  // «подано, ждём Bitcoin» — и это про продукт о доказуемости было хуже
+  // отсутствия поля: снаружи неотличимо от честного ожидания.
+  | "not-submitted"
+  // Доказательство прислали, и оно проверку НЕ прошло. Раньше этот случай
+  // тоже докладывался как "pending": статус считался по высоте блока и не
+  // смотрел на исход проверки вовсе. Снаружи «недействительно» выглядело
+  // как «ещё не подтвердилось, зайдите позже» — ложь в выгодную нам сторону.
+  | "invalid";
 
 export interface AnchorStampResult {
   status: AnchorStatus;

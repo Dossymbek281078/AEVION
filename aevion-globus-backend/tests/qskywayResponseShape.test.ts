@@ -71,4 +71,29 @@ describe("сопутствующие поля ответов QSkyway на мес
     expect(present(list[0], "openRadiusM"), "openRadiusM исчез").toBe(true);
     expect(present(list[0], "clearanceM"), "clearanceM исчез").toBe(true);
   });
+
+  test("числа, которые читает регулятор, есть в документе и конечны", async () => {
+    // Перемер 28.08.2026 показал: часть полей ответа не упомянута НИ В ОДНОМ
+    // тесте, и среди них те, что человек понесёт в ведомство. Пропажа или NaN
+    // здесь не роняет ничего: документ подпишется и с пустым полем.
+    //
+    // Проверяем наличие и конечность, а не значение: значения зависят от твина
+    // и меняются законно, а вот `undefined` или NaN в подписанной бумаге —
+    // всегда дефект.
+    const res = await request(app())
+      .post("/api/qskyway/route/justification")
+      .send({ from: 0, to: 1, city: "astana" });
+    expect(res.status).toBe(200);
+    const doc = res.body?.document ?? {};
+
+    for (const key of ["distanceKm", "cruiseAltM", "etaMinWind", "heightConfidencePct", "obstacleSegments"]) {
+      const v = doc[key];
+      expect(typeof v, key + " исчез из документа или стал не числом").toBe("number");
+      expect(Number.isFinite(v), key + " не конечен (NaN или Infinity уедут в подписанную бумагу)").toBe(true);
+    }
+    // Расстояние и высота — не отрицательные: знак минус в бумаге для
+    // регулятора читается как ошибка расчёта, а не как значение.
+    expect(doc.distanceKm, "отрицательная длина маршрута").toBeGreaterThan(0);
+    expect(doc.cruiseAltM, "отрицательная крейсерская высота").toBeGreaterThan(0);
+  });
 });

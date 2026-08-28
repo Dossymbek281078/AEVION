@@ -9,7 +9,7 @@ import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
 import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } from "@/lib/devhubHints";
 import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
-import { indexCapabilities, isCapabilityBlocked, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
+import { indexCapabilities, isCapabilityBlocked, isCapabilityConfirmed, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
 import { devhubServerError } from "@/lib/devhubServerError";
@@ -1581,7 +1581,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Say "aevion.build" only when the server reports that capability working.
   // It reports `degraded` as soon as a deploy observes the domain not
   // resolving, which is the state it has been in since the zone was created.
-  const domainCapabilityWorks = !isCapabilityBlocked(caps, "domain");
+  // Это ОБЕЩАНИЕ, а не блокировка кнопки: на незнании молчим (см. помощник).
+  const domainCapabilityWorks = isCapabilityConfirmed(caps, "domain");
 
   const provisionDatabase = async () => {
     if (!project || provisioningDb) return;

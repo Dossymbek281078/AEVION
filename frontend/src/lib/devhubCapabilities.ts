@@ -37,6 +37,26 @@ export function isCapabilityBlocked(idx: CapabilityIndex | null, id: string): bo
 }
 
 /**
+ * ПОДТВЕРЖДЕНА ли возможность. Не путать с isCapabilityBlocked.
+ *
+ * У двух вопросов разные правильные умолчания, и это не мелочь:
+ *
+ *   «блокировать ли кнопку?»  — на незнании НЕ блокируем (fail open):
+ *                                иначе человек упрётся в мёртвую кнопку из-за
+ *                                нашей незагруженной панели;
+ *   «обещать ли вслух?»       — на незнании НЕ обещаем (fail closed):
+ *                                обещание, которое через секунду исчезнет,
+ *                                хуже отсутствия обещания.
+ *
+ * Замер 28.08.2026: обещание собственного домена *.aevion.build выводилось
+ * через isCapabilityBlocked, то есть показывалось ДО загрузки возможностей —
+ * а зона не делегирована, и адрес не открылся бы.
+ */
+export function isCapabilityConfirmed(idx: CapabilityIndex | null, id: string): boolean {
+  return idx?.[id]?.status === "live";
+}
+
+/**
  * Объяснение для человека, который нажал недоступную кнопку.
  *
  * Раньше здесь возвращалось `"<label> is not configured — set VERCEL_API_TOKEN

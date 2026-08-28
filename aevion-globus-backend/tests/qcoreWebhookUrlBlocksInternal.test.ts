@@ -79,5 +79,16 @@ describe("вебхук пользователя не указывает внут
     expect(isInternalHost("169.254.169.254")).toBe(true);
     expect(isInternalHost("metadata.google.internal")).toBe(true);
     expect(isInternalHost("example.com")).toBe(false);
+
+    // Имена НАШЕЙ площадки: на Railway сервисы видят друг друга как
+    // <сервис>.railway.internal, и это адреса нашей же базы. Проверено
+    // 28.08 — попадают под правило `.internal`.
+    expect(isInternalHost("backend.railway.internal"), "внутреннее имя Railway").toBe(true);
+    expect(isInternalHost("postgres.railway.internal"), "база на Railway").toBe(true);
+
+    // И контроль в другую сторону: слово internal ВНУТРИ имени — не повод
+    // блокировать, иначе сторож начнёт мешать законным адресам.
+    expect(isInternalHost("internal-tools.example.com"), "ложная тревога").toBe(false);
+    expect(isInternalHost("api.aevion.app"), "наш публичный домен").toBe(false);
   });
 });

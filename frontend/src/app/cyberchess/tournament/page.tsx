@@ -377,7 +377,7 @@ export default function TournamentHubPage() {
           }}>
             {bracket.length > 0
               ? <BracketView bracket={bracket} />
-              : <div style={{ color: C.faint, fontStyle: "italic" }}>Bracket пуст</div>
+              : <div style={{ color: C.faint, fontStyle: "italic" }}>Сетка пока пуста</div>
             }
             {/* Было «Powered by buildBracket(players, results) из
                 tournament.ts» — имя функции и файла исходного кода на экране

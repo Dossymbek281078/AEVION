@@ -646,7 +646,7 @@ function BracketView({
   liveMatchId: string | null;
 }) {
   if (loading && rounds.length === 0) {
-    return <SkeletonBox label="Загружаем bracket..." />;
+    return <SkeletonBox label="Загружаем сетку турнира..." />;
   }
   if (rounds.length === 0) {
     return <EmptyBox label="Сетка ещё не сформирована." />;

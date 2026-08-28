@@ -35,7 +35,7 @@ export default function Image() {
         Tournament Hub
       </div>
       <div style={{ fontSize: 22, color: "#64748b", textAlign: "center", marginBottom: 52, maxWidth: 980 }}>
-        Bracket viz · cross-tournament leaderboard · badges
+        Сетка турнира · таблица лидеров · трофеи
       </div>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>

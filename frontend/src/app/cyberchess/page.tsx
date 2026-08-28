@@ -12424,7 +12424,7 @@ ${question.trim()}`;
           {title:"Играть",cat:"play",items:[
             {e:"♟",t:"Быстрая игра",d:"Партия против ИИ или человека",act:()=>{sTab("play");sSetup(true);}},
             {e:"🎲",t:"12 вариантов",d:"Atomic · Fischer960 · KotH · Crazyhouse…",act:()=>sShowVariants(true),hot:true},
-            {e:"🏆",t:"Турнир-нокаут",d:"8 игроков · bracket · трофеи Chessy",act:()=>sShowTournament(true)},
+            {e:"🏆",t:"Турнир-нокаут",d:"8 игроков · сетка на выбывание · трофеи Chessy",act:()=>sShowTournament(true)},
             {e:"🌐",t:"Онлайн-матч",d:"Матчмейкинг с реальными игроками",to:"/cyberchess/matchmaking"},
           ]},
           {title:"Учиться",cat:"learn",items:[

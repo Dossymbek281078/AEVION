@@ -49,6 +49,24 @@ function lsVariantId(tier: Tier): string | null {
 
 function lsApiKey(): string | null { return process.env.LEMON_SQUEEZY_API_KEY ?? null; }
 function lsStoreId(): string | null { return process.env.LEMON_SQUEEZY_STORE_ID ?? null; }
+
+/**
+ * Готов ли LemonSqueezy ПОЛНОСТЬЮ — то есть можно ли реально создать чек.
+ *
+ * Проверять один только ключ API нельзя, и это не педантизм: `createLsCheckout`
+ * требует ТРИ значения (ключ, магазин, вариант тарифа) и бросает, если нет
+ * любого. Пока здесь стоял `Boolean(lsApiKey())`, наполовину настроенный
+ * LemonSqueezy ВКЛЮЧАЛ свою ветку, заслонял готовый запасной Gumroad — и
+ * покупатель получал 500 вместо кассы. Ровно это и пришло в Sentry с прода:
+ * "LemonSqueezy not configured. Required: LEMON_SQUEEZY_API_KEY,
+ * LEMON_SQUEEZY_STORE_ID, LEMON_SQUEEZY_CONSTITUTION_PRO_VARIANT_ID".
+ *
+ * Признак живёт в ОДНОЙ функции намеренно: у него два места вызова, и стоит
+ * повторить условие копией — они разъедутся, а сторож этого не заметит.
+ */
+function lsReady(tier: Tier): boolean {
+  return Boolean(lsApiKey() && lsStoreId() && lsVariantId(tier));
+}
 function publicBase(): string {
   return (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 }
@@ -134,7 +152,7 @@ constitutionCheckoutRouter.post(
       const email = typeof body.email === "string" ? body.email.trim() : undefined;
 
       // Provider priority: LemonSqueezy (if configured) → Gumroad → stub
-      const hasLs = Boolean(lsApiKey());
+      const hasLs = lsReady(tier);
       const gumroadPermalink = process.env[`GUMROAD_CONSTITUTION_${tier.toUpperCase()}_PERMALINK`]
         ?? process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK;
       const hasGumroad = Boolean(gumroadPermalink);
@@ -194,7 +212,7 @@ constitutionCheckoutRouter.get(
   limiter as unknown as (req: Request, res: Response, next: () => void) => void,
   async (req: Request, res: Response) => {
     const tier = (req.params.tier === "team" ? "team" : "pro") as Tier;
-    const hasLs = Boolean(lsApiKey());
+    const hasLs = lsReady(tier);
     const hasGumroad = Boolean(
       process.env[`GUMROAD_CONSTITUTION_${tier.toUpperCase()}_PERMALINK`]
       ?? process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK

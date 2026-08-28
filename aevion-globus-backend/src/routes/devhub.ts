@@ -1890,6 +1890,7 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
   const existingFiles = await dbListFiles(project.id);
   const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress);
   onProgress?.("saving");
+  let storage: "db" | "memory" = "db";
   const checkpointId = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
   for (const gf of generatedFiles) {
     const file: DevHubFile = {
@@ -1903,6 +1904,11 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
     try {
       await dbUpsertFile(file);
     } catch {
+      // Генерация — ПЛАТНЫЙ шаг. Если файлы легли только в память процесса,
+      // человек заплатил и потеряет результат при перезапуске, ничего об этом
+      // не узнав. Признак ведётся здесь, в общем помощнике, поэтому его
+      // получают обе точки генерации: обычная и потоковая.
+      storage = "memory";
       const existing = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === gf.path);
       if (existing) {
         existing.content = file.content;
@@ -1916,7 +1922,7 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
   return {
     files: generatedFiles, aiGenerated, ...(continued ? { continued } : {}),
     ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
-    checkpointId, projectId: project.id,
+    checkpointId, projectId: project.id, storage,
   };
 }
 

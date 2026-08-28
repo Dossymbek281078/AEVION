@@ -804,7 +804,7 @@ async function createCheckpoint(
   label: string,
   targetPaths: string[],
   existingFiles: Array<{ path: string; content: string }>
-): Promise<string | null> {
+): Promise<{ id: string; storage: "db" | "memory" } | null> {
   if (targetPaths.length === 0) return null;
   const checkpoint: DevHubCheckpoint = {
     id: crypto.randomUUID(),
@@ -817,8 +817,13 @@ async function createCheckpoint(
     })),
     createdAt: now(),
   };
-  try { await dbSaveCheckpoint(checkpoint); } catch { memCheckpoints.set(checkpoint.id, checkpoint); }
-  return checkpoint.id;
+  // Отказ записи проглатывался в память, а наружу уходил только id — то есть
+  // вызывающий не мог отличить сохранённую точку от живущей до перезапуска.
+  // Для отката это дорого: человек видит кнопку «отменить правки ИИ», жмёт её
+  // назавтра, а точки уже нет. Признак теперь уходит вместе с id.
+  let storage: "db" | "memory" = "db";
+  try { await dbSaveCheckpoint(checkpoint); } catch { memCheckpoints.set(checkpoint.id, checkpoint); storage = "memory"; }
+  return { id: checkpoint.id, storage };
 }
 
 /** Reverts every file a single checkpoint touched to its prior content (or
@@ -1917,7 +1922,12 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
   const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress);
   onProgress?.("saving");
   let storage: "db" | "memory" = "db";
-  const checkpointId = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
+  const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
+  const checkpointId = cpRes?.id ?? null;
+  // Точка могла лечь только в память — тогда «отменить правки ИИ» не
+  // переживёт перезапуска. Это часть ТОГО ЖЕ обещания, что и файлы,
+  // поэтому признак у ответа общий: memory, если подвело хоть одно.
+  if (cpRes?.storage === "memory") storage = "memory";
   for (const gf of generatedFiles) {
     const file: DevHubFile = {
       id: crypto.randomUUID(),
@@ -2896,10 +2906,13 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
 
     let checkpointId: string | null = null;
     if (toWrite.length > 0) {
-      checkpointId = await createCheckpoint(
+      const cp = await createCheckpoint(
         project.id, userId, `GitHub sync from ${owner}/${repo}@${branch}`,
         toWrite.map((f) => f.path), existing
       );
+      checkpointId = cp?.id ?? null;
+      // Точка могла лечь только в память — тогда «отменить» переживёт
+      // не дольше перезапуска. Признак есть у cp.storage.
       for (const f of toWrite) {
         const file: DevHubFile = {
           id: crypto.randomUUID(), projectId: project.id, path: f.path,
@@ -4639,7 +4652,8 @@ async function executeWorkflowStep(
         : (step.saveAs ? [String(step.saveAs)] : []);
       const existingFiles = await dbListFiles(project.id);
       const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
-      const checkpointId = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
+      const cpStep = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
+      const checkpointId = cpStep?.id ?? null;
       for (const gf of files) {
         const f: DevHubFile = {
           id: crypto.randomUUID(), projectId: project.id, path: gf.path,
@@ -6516,13 +6530,16 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
     catch {
       existingFiles = [...memFiles.values()].filter((f) => f.projectId === project!.id);
     }
-    checkpointId = await createCheckpoint(
+    const cp = await createCheckpoint(
       project.id,
       userId,
       `ZIP import (${toWrite.length} file${toWrite.length === 1 ? "" : "s"})`,
       toWrite.map((w) => w.file.path),
       existingFiles,
     );
+    checkpointId = cp?.id ?? null;
+    // Точка могла лечь только в память — тогда «отменить» переживёт
+    // не дольше перезапуска. Признак есть у cp.storage.
   }
 
   for (const { file: f, bytes, binary } of toWrite) {

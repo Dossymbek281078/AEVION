@@ -1,3 +1,4 @@
+import { warnIfStubInProduction } from "../providerGuard";
 import { PaymentProvider } from "./provider";
 import { stubPaymentProvider } from "./stubProvider";
 import { stripePaymentProvider } from "./stripeProvider";
@@ -12,6 +13,8 @@ export { gumroadPaymentProvider } from "./gumroadProvider";
 
 export function getPaymentProvider(): PaymentProvider {
   const id = (process.env.BUREAU_PAYMENT_PROVIDER || "stub").toLowerCase();
+  // Заглушка в проде больше не молчит — см. lib/providerGuard.ts.
+  warnIfStubInProduction("BUREAU_PAYMENT_PROVIDER", id);
   switch (id) {
     case "lemonsqueezy":
     case "lemon-squeezy":

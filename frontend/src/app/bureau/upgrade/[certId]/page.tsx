@@ -325,7 +325,12 @@ export default function BureauUpgradePage() {
         {step === "payment" && (
           <div style={{ borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", padding: "20px 22px" }}>
             <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-              <span aria-hidden>✓</span> Identity verified
+              {/* В демонстрационном режиме проверять было нечего: заглушка
+                  одобряет по умолчанию. Писать «Identity verified» здесь —
+                  то же переобещание, что на первом шаге, только уже ПОСЛЕ
+                  прохождения и прямо перед оплатой. */}
+              <span aria-hidden>✓</span>{" "}
+              {kycMode === "stub" ? "Identity step completed (demo mode)" : "Identity verified"}
               {status?.kyc.verifiedName && (
                 <span style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>
                   &nbsp;· <b>{status.kyc.verifiedName}</b>
@@ -334,8 +339,8 @@ export default function BureauUpgradePage() {
             </div>
             <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.6, marginBottom: 14 }}>
               Last step: $19 for the Verified-tier upgrade. After payment, the
-              certificate is stamped with your real-name attestation
-              automatically.
+              certificate is stamped with the name you declared
+              {kycMode === "stub" ? " (identity provider not connected yet)" : " as attested by our KYC provider"}.
             </div>
             {!status?.payment.intentId ? (
               <button onClick={startPayment} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #4f46e5, #6366f1)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>

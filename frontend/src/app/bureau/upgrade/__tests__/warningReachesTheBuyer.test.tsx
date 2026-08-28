@@ -74,3 +74,44 @@ describe("страница оплаты $19 не обещает того, чег
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+describe("шаг оплаты не объявляет личность проверенной, если её не проверяли", () => {
+  // Найдено обходом СЕМЕЙСТВА формулировок, а не слова: правку про «паспорт» я
+  // сделал часом раньше и счёл вопрос закрытым, а рядом, уже ПОСЛЕ заглушки и
+  // прямо перед кнопкой оплаты, стояло «✓ Identity verified».
+  function stubFlow(kyc: "stub" | "live") {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const u = String(url);
+        if (u.includes("/api/bureau/health")) return { ok: true, status: 200, json: async () => ({ kyc }) };
+        return { ok: true, status: 200, json: async () => ({}) };
+      }) as unknown as typeof fetch,
+    );
+  }
+
+  test("исходник: текст шага оплаты зависит от режима поставщика", async () => {
+    // Шаг оплаты достигается только через настоящий поток KYC, поэтому здесь
+    // проверяется ИСХОДНИК: обещание не должно быть безусловным.
+    const fs = await import("node:fs");
+    // Путь строится СКЛЕЙКОЙ, а не через URL: скобки [certId] в адресе
+    // кодируются, и чтение уходит не туда (поймал этим же тестом).
+    const path = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const src = fs.readFileSync(path.join(here, "..", "[certId]", "page.tsx"), "utf8");
+    // Якорь — именно БЛОК ОТРИСОВКИ, а не первое вхождение строки: первое
+    // попадает в индикатор шагов, и проверка смотрела бы не туда (поймал сразу).
+    const i = src.indexOf('{step === "payment" && (');
+    expect(i, "блок оплаты не найден — проверка смотрит не туда").toBeGreaterThan(0);
+    const block = src.slice(i, i + 1200);
+    expect(block, "«Identity verified» обещано безусловно").toContain("kycMode");
+    expect(block).toContain("demo mode");
+  });
+
+  test("контроль: страница вообще читает режим поставщика", async () => {
+    stubFlow("stub");
+    renderPage();
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeNull());
+  });
+});

@@ -207,7 +207,7 @@ export default function TrainingHubPage() {
             ) : (
               <>
                 <div style={{ fontSize: 13, color: C.dim, marginBottom: 10, lineHeight: 1.5 }}>
-                  Сыграй 3+ партии чтобы Coach определил твою слабую зону.
+                  Сыграй 3 партии или больше — тренер определит твою слабую зону.
                 </div>
                 <Link href="/cyberchess" style={{
                   display: "inline-block",
@@ -256,7 +256,7 @@ export default function TrainingHubPage() {
             padding: "16px 18px",
           }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: C.green, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>
-              🎓 Coach Review
+              🎓 Повторение с тренером
             </div>
             {reminders.length > 0 ? (
               <>
@@ -317,7 +317,7 @@ export default function TrainingHubPage() {
               {dailyClaimed ? "Сегодня уже получено ✓" : "Забрать ежедневный бонус"}
             </div>
             <div style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.5 }}>
-              <strong style={{ color: C.gold }}>+25 AEV</strong> за визит в центр обучения. Используй в «Экономике» для аукциона или аренды тренера.
+              <strong style={{ color: C.gold }}>+25 Chessy</strong> за визит в центр обучения. Используй в «Экономике» для аукциона или аренды тренера.
             </div>
             <button
               onClick={claimDaily}
@@ -331,7 +331,7 @@ export default function TrainingHubPage() {
                 cursor: dailyClaimed ? "default" : "pointer",
               }}
             >
-              {dailyClaimed ? "✓ Получено" : "Забрать +25 AEV"}
+              {dailyClaimed ? "✓ Получено" : "Забрать +25 Chessy"}
             </button>
           </div>
         </div>
@@ -372,8 +372,8 @@ export default function TrainingHubPage() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 10 }}>
             {[
-              { href: "/cyberchess/cpi/leaderboard", emoji: "🏆", label: "CPI Leaderboard", desc: "Топ-15 по композитному рейтингу" },
-              { href: "/cyberchess/economy", emoji: "🪙", label: "Economy", desc: "Аукцион, тренеры, стримеры" },
+              { href: "/cyberchess/cpi/leaderboard", emoji: "🏆", label: "Таблица лидеров CPI", desc: "Первые 15 по составному рейтингу" },
+              { href: "/cyberchess/economy", emoji: "🪙", label: "Экономика", desc: "Аукцион, тренеры, стримеры" },
               { href: "/cyberchess/cpi", emoji: "📐", label: "Как считается CPI", desc: "Полная формула и примеры" },
               { href: "/cyberchess", emoji: "♞", label: "Играть", desc: "Главная — играть партии" },
             ].map((r) => (

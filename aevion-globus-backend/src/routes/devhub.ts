@@ -6931,7 +6931,17 @@ devhubRouter.get("/studio/capabilities", (_req, res) => {
     { id: "railway", name: "Выкатка на Railway", description: "Deploy backends to Railway — not available yet (per-project services not implemented)", status: process.env.DEVHUB_RAILWAY_PER_PROJECT ? "live" : "not_available", token: "RAILWAY_API_TOKEN" },
     { id: "vercel", name: "Выкатка на Vercel", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
     { id: "pages", name: "Публикация на Cloudflare Pages", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
-    { id: "domain", name: "Домен (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
+    // Замер 28.08.2026 на проде: панель считала домен НАСТРОЕННЫМ, потому что
+    // три переменные заданы. А наша же проверка провайдеров в этом самом файле
+    // спрашивает Cloudflare о зоне и требует status === "active" — на проде она
+    // отвечает "unknown". То есть два наших ответа об одном и том же расходились,
+    // и человек читал «Настроено: 14 из 16», где домен был среди настроенных.
+    //
+    // Наличие ключа — не то же самое, что делегированная зона. Пока она не
+    // делегирована, честный ответ — not_available, как у Railway. Флаг
+    // DEVHUB_AEVION_BUILD_ZONE_ACTIVE включает возможность обратно, когда зона
+    // заработает: возвращать её должен человек, который это проверил.
+    { id: "domain", name: "Домен (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: process.env.DEVHUB_AEVION_BUILD_ZONE_ACTIVE ? "live" : "not_available", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
     { id: "video", name: "Генерация видео", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
     // 3D объявлен на странице модуля среди возможностей «в одном проекте»,
     // а в этом списке его не было вовсе: панель показывала «настроено N из 16»,

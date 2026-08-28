@@ -1,117 +1,133 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * `canonical` в МАКЕТЕ раздела прячет от Google все его страницы.
+ * Страница лежит в карте сайта и при этом просит индексировать ДРУГОЙ адрес.
  *
- * Next применяет метаданные макета ко всем дочерним маршрутам. Значит строка
+ * Next применяет метаданные макета ко всем дочерним маршрутам, поэтому строка
  *
- *     // app/qmaskcard/layout.tsx
- *     alternates: { canonical: `${SITE}/qmaskcard` }
+ *     // app/bank/layout.tsx
+ *     alternates: { canonical: "/bank" }
  *
- * заставляет КАЖДУЮ страницу раздела отвечать поисковику «я дубликат
- * /qmaskcard, индексируй его». А карта сайта одновременно подаёт эти же адреса
- * как самостоятельные. Два наших источника противоречат друг другу, и Google
- * слушается страницу.
+ * заставляет каждую страницу раздела отвечать поисковику «я дубликат /bank».
+ * А карта сайта одновременно подаёт те же адреса как самостоятельные. Два наших
+ * источника противоречат друг другу, и Google слушается страницу.
  *
- * ЗАМЕР 28.08.2026, по исходникам: 25 таких макетов, под ними 157 страниц, и
- * 119 из них лежат в карте сайта. Search Console 17.08 присылал ровно эту
- * причину («вариант страницы с тегом canonical»), а переходов из поиска за 28
- * дней — ПЯТЬ.
+ * Найдено 28.08.2026 из письма Search Console («вариант страницы с тегом
+ * canonical», 17.08) — при пяти переходах из поиска за 28 дней.
  *
- * ЧТО СТЕРЕЖЁТ ЭТОТ ФАЙЛ. Не 119 страниц, а 25 макетов: дефект живёт там, и
- * чинить его надо там же. Известные 25 — в базовой линии: они ждут решения
- * основателя ПО КАЖДОМУ РАЗДЕЛУ (у содержательных canonical надо убрать, у
- * кабинетов — убрать адреса из карты), и одним махом это не решается.
+ * ⚠️ ВАЖНО ПРО ПОДСЧЁТ, я на этом ошибся. Вложенный макет ПЕРЕОПРЕДЕЛЯЕТ
+ * canonical родителя: у `/awards/film` стоит свой, на себя, и такая страница в
+ * порядке. Считать надо ДЕЙСТВУЮЩИЙ canonical — ближайший макет вверх по
+ * дереву, — а не «есть ли canonical у предка». Первая версия считала вторым
+ * способом и завысила находку со 65 до 119.
  *
- * Красный с рождения сторож отключают в первый же день, поэтому здесь он
- * зелёный и ловит ТОЛЬКО новое: ещё один такой макет — и набор краснеет.
+ * Замер после исправления: 764 адреса в карте, 65 из них уводят на другой
+ * адрес; по всем 839 страницам приложения таких 103.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
 const APP = join(here, "..");
+const SITE = "https://aevion.app";
 
-/** Макеты, объявляющие canonical, под которыми есть вложенные страницы. */
-export function findCanonicalLayouts(root: string): string[] {
-  const out: string[] = [];
-  const walk = (dir: string) => {
+/** canonical, объявленный В ЭТОМ каталоге (не в предках). */
+function declaredCanonical(dir: string): string | null {
+  const f = join(dir, "layout.tsx");
+  if (!existsSync(f)) return null;
+  const src = readFileSync(f, "utf8");
+  const i = src.indexOf("canonical:");
+  if (i < 0) return null;
+  const rest = src.slice(i + "canonical:".length);
+  const m = /^[\s]*[`"']([^`"']+)/.exec(rest);
+  return m ? m[1] : null;
+}
+
+/** Действующий canonical страницы — ближайший объявленный вверх по дереву. */
+export function effectiveCanonical(appRoot: string, segments: string[]): string | null {
+  for (let i = segments.length; i >= 0; i--) {
+    const c = declaredCanonical(join(appRoot, ...segments.slice(0, i)));
+    if (c) return c;
+  }
+  return null;
+}
+
+/** Все страницы (каталоги с page.tsx) как массивы сегментов. */
+function allPages(root: string): string[][] {
+  const out: string[][] = [];
+  const walk = (dir: string, segs: string[]) => {
     let names: string[];
     try { names = readdirSync(dir); } catch { return; }
-    if (names.includes("layout.tsx")) {
-      const src = readFileSync(join(dir, "layout.tsx"), "utf8");
-      if (src.includes("canonical") && hasNestedPage(dir)) {
-        out.push(relative(root, dir).split("\\").join("/") || ".");
-      }
-    }
+    if (names.includes("page.tsx")) out.push(segs);
     for (const n of names) {
       if (n === "node_modules" || n.startsWith(".") || n === "__tests__") continue;
       const p = join(dir, n);
       let st; try { st = statSync(p); } catch { continue; }
-      if (st.isDirectory()) walk(p);
+      if (st.isDirectory()) walk(p, [...segs, n]);
     }
   };
-  walk(root);
-  return out.sort();
+  walk(root, []);
+  return out;
 }
 
-/** Есть ли страница ГЛУБЖЕ одного уровня — только такие и прячутся макетом. */
-function hasNestedPage(dir: string): boolean {
-  let found = false;
-  const walk = (d: string, depth: number) => {
-    if (found) return;
-    let names: string[];
-    try { names = readdirSync(d); } catch { return; }
-    if (depth > 0 && names.includes("page.tsx")) { found = true; return; }
-    for (const n of names) {
-      if (n === "node_modules" || n.startsWith(".") || n === "__tests__") continue;
-      const p = join(d, n);
-      let st; try { st = statSync(p); } catch { continue; }
-      if (st.isDirectory()) walk(p, depth + 1);
-    }
-  };
-  walk(dir, 0);
-  return found;
+/** Сегменты -> адрес. Группы `(x)` и слоты `@x` в адрес не входят. */
+function toUrl(segs: string[]): string {
+  const parts = segs.filter((s) => !(s.startsWith("(") && s.endsWith(")")) && !s.startsWith("@"));
+  return "/" + parts.join("/");
 }
 
 /**
- * Известные на 28.08.2026 — ЖДУТ РЕШЕНИЯ ПО КАЖДОМУ РАЗДЕЛУ, а не забыты.
+ * Известные на 28.08.2026 — ждут решения ПО КАЖДОМУ РАЗДЕЛУ. У содержательных
+ * canonical надо убрать из макета, у служебных (`/auth/success`) — наоборот,
+ * убрать адрес из карты сайта. Одним махом не решается, поэтому здесь число, а
+ * не список: список из 65 строк устаревал бы каждую неделю.
  *
- * Список СНЯТ ТЕМ ЖЕ ОБХОДОМ, а не выписан руками: первую версию я набрал
- * по памяти из вывода «крупнейшие разделы» и промахнулся в обе стороны —
- * десять разделов пропустил, шесть вписал лишних. Базовая линия, собранная
- * на глаз, прячет ровно то, ради чего сторож написан.
- * Убирая canonical из макета (или адреса из карты), удаляйте строку и отсюда.
+ * ⚠️ СЛАБОЕ МЕСТО ЛЮБОГО ХРАПОВИКА — эта самая константа. Мутация проверена:
+ * поднять её со 103 до 200 набор НЕ ловит, и поймать не может — ослабленное
+ * утверждение падать не на чем. Защита тут одна: вычитка дифа. Растёт число —
+ * значит появился раздел, прячущий свои страницы, и правильный ответ «разобрать
+ * раздел», а не «поднять порог».
+ *
+ * Мутация «сломать разбор действующего canonical» поймана — значит проверка
+ * держится на анализе, а не на константе.
  */
-const KNOWN = new Set([
-  "aev", "auth", "awards", "bank", "build",
-  "bureau", "constitution", "demo", "multichat-engine", "payments",
-  "pitch", "planet", "pricing", "qchaingov", "qcontract",
-  "qgood", "qmaskcard", "qpersona", "qright", "qsign",
-  "quantum-shield", "qventure", "veilnetx", "z-tide",
-]);
+const KNOWN_COUNT = 103;
 
-describe("canonical в макете не прячет страницы раздела", () => {
-  const found = findCanonicalLayouts(APP);
+/**
+ * ⚠️ 103, а не 65 — и это НЕ противоречие, а разные множества.
+ *
+ * Сторож считает ВСЕ страницы приложения (839). Основателю названо число 65 —
+ * это только те, что лежат в КАРТЕ САЙТА, то есть поданы Google как
+ * самостоятельные. Остальные 38 canonical тоже уводит, но их никто не подавал,
+ * и вреда от них нет.
+ *
+ * Карту сайта строит `sitemap.ts` обходом файловой системы; повторять её логику
+ * здесь значило бы завести второй источник правды, который разойдётся с первым.
+ * Поэтому сторож стережёт более широкое множество — он поймает и рост внутри
+ * карты, и рост вне её.
+ */
 
-  it("сам обход работает — иначе проверка была бы пустой", () => {
-    expect(found.length, "не нашёл ни одного макета — обход сломан").toBeGreaterThan(5);
+describe("страница в карте сайта не уводит canonical на другой адрес", () => {
+  const pages = allPages(APP);
+  const away = pages
+    .map((segs) => ({ url: toUrl(segs), canon: effectiveCanonical(APP, segs) }))
+    .filter((x) => x.canon !== null)
+    .map((x) => ({ url: x.url, canon: (x.canon as string).replace("${SITE}", "").replace(SITE, "") }))
+    .filter((x) => x.canon.replace(/\/+$/, "") !== x.url.replace(/\/+$/, ""));
+
+  it("обход работает — иначе проверка была бы пустой", () => {
+    expect(pages.length, "не нашёл страниц — обход сломан").toBeGreaterThan(100);
+    const withCanon = pages.filter((s) => effectiveCanonical(APP, s) !== null).length;
+    expect(withCanon, "ни у одной страницы нет canonical — разбор сломан").toBeGreaterThan(50);
   });
 
-  it("новых разделов с canonical в макете не появилось", () => {
-    // Сверяем по ПЕРВОМУ сегменту: решение принимается по разделу целиком.
-    const fresh = found
-      .map((d) => d.split("/")[0])
-      .filter((top) => !KNOWN.has(top));
-    expect([...new Set(fresh)], `новый макет с canonical: ${[...new Set(fresh)].join(", ")}`).toEqual([]);
-  });
-
-  it("известные разделы всё ещё в этом состоянии", () => {
-    // Починили раздел — строка из KNOWN должна уйти, иначе базовая линия
-    // начнёт прятать уже несуществующее.
-    const tops = new Set(found.map((d) => d.split("/")[0]));
-    const stale = [...KNOWN].filter((k) => !tops.has(k));
-    expect(stale, `починено, но осталось в KNOWN: ${stale.join(", ")}`).toEqual([]);
+  it("уводящих canonical не стало БОЛЬШЕ известного", () => {
+    // Строго «не больше»: починили — число падает, и это не должно ронять
+    // набор. Выросло — появился новый раздел, прячущий свои страницы.
+    expect(
+      away.length,
+      `было ${KNOWN_COUNT}, стало ${away.length}. Примеры: ${away.slice(0, 5).map((x) => `${x.url} -> ${x.canon}`).join("; ")}`,
+    ).toBeLessThanOrEqual(KNOWN_COUNT);
   });
 });

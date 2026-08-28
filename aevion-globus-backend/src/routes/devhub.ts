@@ -6916,6 +6916,45 @@ devhubRouter.get("/providers/health", async (_req, res) => {
       });
       return { ok: r.ok, detail: r.ok ? "key valid (billing not visible here)" : `HTTP ${r.status}` };
     }),
+    // Добавлено 28.08.2026. Замер показал границу: проверок было ПЯТЬ на
+    // семнадцать возможностей, то есть панель говорила «настроено» по наличию
+    // переменной, а по-настоящему проверялась меньше трети. Ниже — четыре
+    // недостающих провайдера, на которых держатся перевод, публикация,
+    // выгрузка в репозиторий и вся озвучка.
+    //
+    // Все вызовы читающие и бесплатные: спрашиваем, действителен ли ключ.
+    // Витрина эту ручку НЕ зовёт (проверено), поэтому лишней нагрузки на
+    // посетителя не появляется — платят только смоук и человек руками.
+    probe("deepl", async () => {
+      if (!process.env.DEEPL_API_KEY) return { ok: false, detail: "DEEPL_API_KEY not set" };
+      const r = await fetch("https://api-free.deepl.com/v2/usage", {
+        headers: { Authorization: `DeepL-Auth-Key ${process.env.DEEPL_API_KEY}` },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("github", async () => {
+      if (!process.env.GITHUB_TOKEN) return { ok: false, detail: "GITHUB_TOKEN not set" };
+      const r = await fetch("https://api.github.com/user", {
+        headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, "User-Agent": "aevion-devhub" },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("vercel", async () => {
+      if (!process.env.VERCEL_API_TOKEN) return { ok: false, detail: "VERCEL_API_TOKEN not set" };
+      const r = await fetch("https://api.vercel.com/v2/user", {
+        headers: { Authorization: `Bearer ${process.env.VERCEL_API_TOKEN}` },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("elevenlabs", async () => {
+      if (!process.env.ELEVENLABS_API_KEY) return { ok: false, detail: "ELEVENLABS_API_KEY not set" };
+      const r = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
+        headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY },
+      });
+      // Ключ действителен. Остаток знаков отсюда виден, но судить по нему
+      // здесь не берёмся: это ответ на другой вопрос.
+      return { ok: r.ok, detail: r.ok ? "key valid" : `HTTP ${r.status}` };
+    }),
   ]);
 
   const failing = checks.filter((c) => !c.ok);

@@ -227,4 +227,41 @@ describe("дата запуска обязана называть свой ис�
     expect(mail.htmlContent).toMatch(/Кнопка не нажимается/);
     expect(mail.htmlContent).toContain(">https://aevion.app/cyberchess<");
   });
+
+  // Найдено 28.08.2026: /go — единственная кликабельная ссылка в соцсетях и
+  // главный вход воронки. Её форма обещает письмо в день запуска следующего
+  // модуля, а отбор шёл только по метке модуля — эти люди не получили бы
+  // ничего. Тест держит именно обещание, а не реализацию.
+  test("подписавшиеся на «следующий запуск» получают письмо модуля", () => {
+    const rows = [
+      { email: "sam@primer.ru", source: "cyberchess" },
+      { email: "iz-soceti@primer.ru", source: "go" },
+      { email: "s-kanalom@primer.ru", source: "go-tt" },
+      { email: "pro-dolgoletie@primer.ru", source: "longevity" },
+      { email: "angliyskiy@primer.ru", source: "en-go" },
+    ];
+    const plan = planLaunchAnnounce("cyberchess", rows);
+    expect(plan.recipients).toContain("sam@primer.ru");
+    expect(plan.recipients, "общая очередь /go обещана письмом в день запуска").toContain("iz-soceti@primer.ru");
+    expect(plan.recipients, "метка канала go-<канал> — та же общая очередь").toContain("s-kanalom@primer.ru");
+    // Тематическая подписка на другое — не общая очередь.
+    expect(plan.recipients).not.toContain("pro-dolgoletie@primer.ru");
+    // Английской версии письма нет; молчание честнее русского письма.
+    expect(plan.recipients, "en-go исключён намеренно: письма по-английски нет").not.toContain("angliyskiy@primer.ru");
+  });
+
+  test("общая очередь получает КАЖДЫЙ запуск, как и обещано", () => {
+    const rows = [{ email: "iz-soceti@primer.ru", source: "go" }];
+    for (const slug of Object.keys(LAUNCH_MODULES)) {
+      expect(planLaunchAnnounce(slug, rows).recipients, `${slug}: общая очередь пропущена`).toContain("iz-soceti@primer.ru");
+    }
+  });
+
+  test("строгость отбора по модулю не ослабла", () => {
+    // Расширяя охват, легко случайно превратить сравнение в подстроку.
+    expect(matchesModule("olddevhub", "devhub")).toBe(false);
+    expect(matchesModule("gogo", "cyberchess")).toBe(false);
+    const plan = planLaunchAnnounce("cyberchess", [{ email: "chuzhoy@primer.ru", source: "gogol" }]);
+    expect(plan.recipients).toHaveLength(0);
+  });
 });

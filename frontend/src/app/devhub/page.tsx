@@ -95,6 +95,17 @@ const STUDIO_PRO = productById("devhub");
  * «Нет ключа» и «не сделано» — разные вещи, и человеку полезно различать: первое
  * мы настроим, второе ещё не существует.
  */
+/** Названия возможностей для строки остатка. Отдельной картой, а не через
+ *  словарь: ключи приходят от сервера, а `t()` типизирован фиксированным
+ *  набором — динамический ключ там не проходит проверку типов, и это верно. */
+const USAGE_LABEL: Record<string, string> = {
+  video: "видео",
+  image: "картинки",
+  tts: "знаков озвучки",
+  music: "музыка",
+  deploy: "выкаток",
+};
+
 function capabilityOffReason(status: string | undefined): string {
   switch (status) {
     case "needs_token":
@@ -118,6 +129,10 @@ export default function DevHubPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [userTier, setUserTier] = useState<"free" | "pro" | "enterprise" | null>(null);
+  // Ручка остатка отдаёт и ЧИСЛА (`usage: {video:{used,limit}, ...}`), а витрина
+  // брала из ответа только тариф. То есть модуль знал, сколько у человека
+  // осталось, и не говорил — предел человек узнавал, упершись в него.
+  const [usage, setUsage] = useState<Record<string, { used: number; limit: number }> | null>(null);
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [ideaPrompt, setIdeaPrompt] = useState("");
@@ -187,7 +202,7 @@ export default function DevHubPage() {
   useEffect(() => {
     fetch(apiUrl("/api/devhub/studio/credits"), { cache: "no-store" })
       .then((r) => r.json())
-      .then((d) => { if (d.tier) setUserTier(d.tier); })
+      .then((d) => { if (d.tier) setUserTier(d.tier); if (d.usage) setUsage(d.usage); })
       .catch(() => {});
   }, []);
 
@@ -461,6 +476,30 @@ export default function DevHubPage() {
             ))}
           </div>
         </div>
+
+        {/* ОСТАТОК ЗА МЕСЯЦ. Модуль знал числа и молчал: человек упирался в предел,
+            не подозревая о нём. Показываем только то, у чего предел ЕСТЬ (-1 значит
+            без предела — про такое говорить нечего) и только когда данные пришли:
+            выдумывать «0 из 0» при неответившей ручке хуже, чем не показать ничего. */}
+        {usage && (
+          <div style={{
+            border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 14px",
+            marginBottom: 16, fontSize: 13, color: "#334155", background: "#f8fafc",
+          }}>
+            <span style={{ fontWeight: 600 }}>{t("usage.title")}</span>{" "}
+            {Object.entries(usage)
+              .filter(([, v]) => v && v.limit > 0)
+              .map(([k, v]) => {
+                const left = Math.max(0, v.limit - v.used);
+                const tight = left <= Math.max(1, Math.floor(v.limit * 0.2));
+                return (
+                  <span key={k} style={{ marginRight: 12, color: tight ? "#b45309" : "#334155" }}>
+                    {USAGE_LABEL[k] ?? k}: <b>{left}</b> из {v.limit}
+                  </span>
+                );
+              })}
+          </div>
+        )}
 
         {/* Studio Pro upgrade banner */}
         {userTier === "free" && (

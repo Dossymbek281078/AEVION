@@ -549,6 +549,12 @@ export default function DevHubPage() {
                 <>
                   <span style={{ color: "#64748b" }}>{t("caps.off")}</span>
                   {off.map((c, i) => (
+                    {/* c.lastError ручка /studio/capabilities НЕ отдаёт: она отвечает на вопрос
+                        «ключ задан», ошибок при этом не собирает. Поле осталось от ожидания,
+                        что диагностика придёт оттуда же. Ветка не мёртвая — читатель обязан
+                        знать, что подсказка ВСЕГДА запасная, иначе будет искать в ней причину.
+                        Настоящие ошибки провайдеров живут в /api/devhub/providers/health;
+                        подключить их сюда — отдельная работа, не правка на ходу. */}
                     <span key={c.id} title={c.lastError || (c.status === "needs_token" ? "не настроено на сервере" : c.status)}>
                       <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{c.name}</span>
                       {i < off.length - 1 ? <span style={{ color: "#64748b" }}>, </span> : null}

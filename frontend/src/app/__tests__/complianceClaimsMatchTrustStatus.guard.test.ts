@@ -1,0 +1,117 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/**
+ * Витрина не имеет права называть нас сертифицированными, пока наш же источник
+ * правды говорит «в процессе».
+ *
+ * Найдено 28.08.2026 на живом проде. Страница `aevion.app/pricing/glossary`
+ * отдавала:
+ *
+ *   "AEVION is ISO 27001 certified for Enterprise tier"
+ *   "AEVION is SOC 2 Type II certified"
+ *
+ * А `backend/src/data/trust.ts` про те же два идентификатора:
+ *
+ *   { id: "iso27001", status: "in progress (Q4 2026)" }
+ *   { id: "soc2",     status: "in progress (Q3 2026)" }
+ *
+ * Две наши поверхности утверждали противоположное об одном и том же, и
+ * покупатель видел ту, что говорит увереннее.
+ *
+ * ПОЧЕМУ ОТДЕЛЬНЫЙ СТОРОЖ, А НЕ СТРОКА В catalogClaims. Тот держит СПИСОК
+ * уличённых формулировок руками — он ловит ровно то, что уже поймали. Здесь
+ * проверка ВЫВОДИТСЯ из данных: сверяются идентификаторы, а не фразы. Появится
+ * третий стандарт со статусом «в процессе» — сторож поймает его сам, без
+ * правки.
+ *
+ * ⚠️ Направление важно: сторож запрещает называться сертифицированным при
+ * незавершённом статусе, но НЕ требует обратного. Получим сертификат, поменяем
+ * статус на "live" — сторож замолчит сам, и правка текста не будет заблокирована.
+ */
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(here, "..", "..", "..", "..");
+const trustPath = join(repoRoot, "aevion-globus-backend", "src", "data", "trust.ts");
+const glossaryPath = join(here, "..", "pricing", "glossary", "page.tsx");
+
+/** id -> status из TRUST_BADGES. Разбор строковый: файл — данные, не код. */
+function readTrustStatuses(src: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of src.split("\n")) {
+    if (!line.includes("id:") || !line.includes("status:")) continue;
+    const id = between(line, 'id: "', '"');
+    const status = between(line, 'status: "', '"');
+    if (id && status) out.set(id, status);
+  }
+  return out;
+}
+
+function between(s: string, a: string, b: string): string | null {
+  const i = s.indexOf(a);
+  if (i < 0) return null;
+  const j = s.indexOf(b, i + a.length);
+  return j < 0 ? null : s.slice(i + a.length, j);
+}
+
+/** Строки глоссария с их id — по одной на запись. */
+function readGlossaryEntries(src: string): Array<{ id: string; text: string }> {
+  const out: Array<{ id: string; text: string }> = [];
+  for (const line of src.split("\n")) {
+    const id = between(line, '{ id: "', '"');
+    if (id) out.push({ id, text: line });
+  }
+  return out;
+}
+
+const CLAIMS_CERTIFIED = ["certified", "сертифицирован"];
+
+/**
+ * Известные расхождения на 28.08.2026 — ЖДУТ РЕШЕНИЯ ОСНОВАТЕЛЯ, а не забыты.
+ *
+ * Оба живут на проде прямо сейчас и записаны основателю красным пунктом:
+ * какая из двух версий правда, знает только он. Если сертификатов нет —
+ * правится текст глоссария; если получены, а `trust.ts` устарел — правится
+ * `trust.ts`, иначе следующая правка вернёт страницу обратно.
+ *
+ * Держим их здесь, а не оставляем сторожа красным: постоянно красную проверку
+ * перестают читать и отключают, и тогда НОВОЕ расхождение пройдёт незамеченным.
+ * Убрать строку отсюда — часть починки, а не отдельная задача.
+ */
+const KNOWN_PENDING_DECISION = new Set(["soc2", "iso27001"]);
+
+describe("витрина не называет нас сертифицированными раньше времени", () => {
+  const trust = readTrustStatuses(readFileSync(trustPath, "utf8"));
+  const glossary = readGlossaryEntries(readFileSync(glossaryPath, "utf8"));
+
+  it("сам разбор работает — иначе проверка была бы пустой", () => {
+    // Без этого утверждения пустая карта дала бы зелёный прогон при любом тексте.
+    expect(trust.size, "не разобрал ни одного статуса из trust.ts").toBeGreaterThan(3);
+    expect(glossary.length, "не разобрал ни одной записи глоссария").toBeGreaterThan(3);
+    expect(trust.has("iso27001"), "нет опорного идентификатора iso27001").toBe(true);
+  });
+
+  it("известные расхождения не исчезли из виду", () => {
+    // Если строку убрали из базовой линии, а расхождение осталось — проверка
+    // выше промолчит. Поэтому список известных сверяется с данными отдельно.
+    for (const id of KNOWN_PENDING_DECISION) {
+      expect(trust.has(id), `известное расхождение ${id} исчезло из trust.ts — проверить, не переименовали ли`).toBe(true);
+    }
+  });
+
+  it("ни одна незавершённая сертификация не объявлена полученной", () => {
+    const bad: string[] = [];
+    for (const { id, text } of glossary) {
+      const status = trust.get(id);
+      if (!status || status === "live") continue;
+      if (KNOWN_PENDING_DECISION.has(id)) continue;
+      const lower = text.toLowerCase();
+      if (CLAIMS_CERTIFIED.some((w) => lower.includes(w))) {
+        bad.push(`${id}: trust.ts говорит "${status}", а глоссарий пишет «сертифицирован»`);
+      }
+    }
+    expect(bad, bad.join("; ")).toEqual([]);
+  });
+});

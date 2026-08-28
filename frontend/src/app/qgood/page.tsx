@@ -118,7 +118,7 @@ export default function QGoodPage() {
       </div>
 
       {/* Nav tabs */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e8d5f5', position: 'sticky', top: 0, zIndex: 10 }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e8d5f5', position: 'sticky', top: 'var(--aevion-header-h, 0px)', zIndex: 10 }}>
         <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', overflowX: 'auto' }}>
           {NAV_TABS.map(nt => (
             <button

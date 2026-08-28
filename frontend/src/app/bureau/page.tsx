@@ -101,17 +101,17 @@ function BureauPageInner() {
   // страница писала «No certificates yet» и звала защитить первую работу —
   // человеку, у которого работы уже защищены (21.08.2026).
   const [certsFailed, setCertsFailed] = useState(false);
-  // Сколько нотариусов РЕАЛЬНО зарегистрировано.
+
+  // Сколько нотариусов РЕАЛЬНО зарегистрировано, и настроен ли настоящий
+  // поставщик проверки личности. Оба значения читаются с прода, а не пишутся
+  // строкой в коде: соседняя ветка честно отметила «прочитать значение на проде
+  // я не могу» — теперь можно, ручка /api/bureau/health добавлена 27.08.
   //
-  // Тариф «Notarized» показывал жёсткую пометку «▲ live» рядом с платной
-  // ценой, а список нотариусов пуст: GET /api/bureau/notaries отвечает
-  // {"notaries":[]} (проверено на проде 21.08.2026). Человек читал «в прямом
-  // эфире», нажимал «Просмотреть реестр» и попадал в пустоту.
-  //
-  // null означает «ещё не спросили» или «спросить не удалось» — и это НЕ то же
-  // самое, что ноль. При неизвестном состоянии пометка остаётся прежней:
-  // пугать отказом из-за собственной неудачи нельзя.
+  // null означает «ещё не спросили» или «спросить не удалось», и это НЕ ноль:
+  // при неизвестном состоянии карточка говорит «по запросу», то есть не
+  // обещает и не пугает. Пока бэкенд с ручкой не выкачен, так и будет.
   const [notaryCount, setNotaryCount] = useState<number | null>(null);
+  const [kycMode, setKycMode] = useState<"live" | "stub" | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -126,11 +126,6 @@ function BureauPageInner() {
     return () => { alive = false; };
   }, []);
 
-  // Настроен ли НАСТОЯЩИЙ поставщик проверки личности. null — «не знаю»:
-  // спросить не удалось. Замер на проде 27.08.2026 — "stub", то есть поток
-  // работает, а паспорт не смотрит никто, при том что тариф стоит $19.
-  const [kycMode, setKycMode] = useState<"live" | "stub" | null>(null);
-
   useEffect(() => {
     let alive = true;
     fetch(apiUrl("/api/bureau/health"))
@@ -143,6 +138,12 @@ function BureauPageInner() {
       .catch(() => { /* оставляем null: своя неудача — не «настроено» */ });
     return () => { alive = false; };
   }, []);
+
+  // Чем закончилась загрузка панели вошедшего человека. Три исхода, а не два:
+  // «идёт», «загрузилось», «не удалось» — и последний обязан быть виден.
+  // До 28.08 неудача оставляла dashboard в null, весь блок не рисовался вовсе,
+  // и человек с оплаченными сертификатами видел страницу так, будто их нет.
+  const [dashboardFailed, setDashboardFailed] = useState<null | "auth" | "error">(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
 
@@ -327,8 +328,17 @@ function BureauPageInner() {
         const r = await fetch(apiUrl("/api/bureau/dashboard"), {
           headers: { Authorization: `Bearer ${raw}` },
         });
-        if (r.ok) setDashboard((await r.json()) as DashboardData);
-      } catch {}
+        if (r.ok) {
+          setDashboard((await r.json()) as DashboardData);
+          setDashboardFailed(null);
+        } else {
+          // Отказы РАЗЛИЧАЮТСЯ: устаревший вход лечится входом, сбой сервиса — нет.
+          setDashboardFailed(r.status === 401 || r.status === 403 ? "auth" : "error");
+        }
+      } catch {
+        // Сети не было. Это тоже не «сертификатов нет».
+        setDashboardFailed("error");
+      }
     })();
   }, []);
 
@@ -428,12 +438,20 @@ function BureauPageInner() {
         </div>
 
         {/* ── My Identity (authed users only) ── */}
-        {authed && (myIdentity || inFlightUpgrade || (dashboard && dashboard.certificates.length > 0)) && (
+        {authed && (dashboardFailed || myIdentity || inFlightUpgrade || (dashboard && dashboard.certificates.length > 0)) && (
           <div style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(99,102,241,0.25)", background: "linear-gradient(135deg, rgba(99,102,241,0.04), rgba(79,70,229,0.04))", padding: "18px 22px" }}>
             <div style={{ fontSize: 13, fontWeight: 900, color: "#312e81", marginBottom: 8 }}>
               My Bureau identity
             </div>
-            {myIdentity ? (
+            {dashboardFailed ? (
+              <div style={{ fontSize: 12, color: "#7f1d1d", lineHeight: 1.6 }}>
+                <b>Не удалось загрузить ваши сертификаты.</b> Это сбой загрузки, а не
+                утверждение о том, что их нет: ничего не потеряно.
+                {dashboardFailed === "auth"
+                  ? " Похоже, вход устарел — войдите заново и откройте страницу ещё раз."
+                  : " Обновите страницу через минуту."}
+              </div>
+            ) : myIdentity ? (
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
                 <div style={{ flex: "1 1 240px" }}>
                   <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a" }}>
@@ -467,7 +485,7 @@ function BureauPageInner() {
             ) : (
               <div>
                 <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.6, marginBottom: 8 }}>
-                  Anonymous certificates are fully cryptographically protected. Upgrade any one of yours to <b>Verified</b> ({dashboard ? `$${(dashboard.pricing.verifiedTierCents / 100).toFixed(2)}` : "$19"}) and the bureau will attest your real-name authorship — useful evidence in court.
+                  Anonymous certificates are fully cryptographically protected. Upgrade any one of yours to <b>Verified</b> ({dashboard ? `$${(dashboard.pricing.verifiedTierCents / 100).toFixed(2)}` : "$19"}) and the bureau will record your declared name alongside the certificate, with the identity check its provider performs.
                 </div>
               </div>
             )}
@@ -581,14 +599,23 @@ function BureauPageInner() {
               {
                 name: "Verified",
                 price: "$19 / cert",
-                // Описание идёт от ФАКТА: пока поставщик не подключён, поток
-                // проходится демонстрационной заглушкой, и обещать проверку
-                // паспорта нельзя. Промолчать тоже нельзя — тариф платный.
-                blurb:
+                // Третья поверхность той же формулировки (28.08). Две другие — карточка бюро и
+// страница объекта QRight — смягчены ранее в этой же ветке; эта осталась
+// утверждать проверку паспорта как совершившийся факт, хотя ГЛУБИНА проверки
+// зависит от переменной окружения BUREAU_KYC_PROVIDER, которая по умолчанию
+// равна "stub" (aevion-globus-backend/src/lib/kyc/index.ts:18). Прочитать её
+// значение на проде я не могу, поэтому не утверждаю ни того, ни другого:
+// описываю механизм, а глубину называет сам провайдер отпечатком.
+// Вернуть сильную формулировку — в тот день, когда провайдер настроен и это
+// видно снаружи (решение основателя, красный пункт в сводке 28.08).
+blurb:
                   kycMode === "stub"
-                    ? "Identity check is in demo mode right now: the flow works end to end, but no document is actually verified yet. Ask us before buying this tier."
-                    : "Author identity verified by KYC partner (passport / national ID). Bureau attests real-name authorship and stamps cert with the verification fingerprint.",
-                // Три исхода, а не два: «спросить не удалось» — не «доступно».
+                    ? "Identity check is in demo mode right now: the flow runs end to end, but no document is actually verified yet. Ask us before buying this tier."
+                    : "Identity check performed by our KYC provider. Bureau records the declared name alongside the certificate together with the provider's verification fingerprint.",
+                // Значок — из живого состояния бюро, три исхода вместо двух.
+                // «available now» говорится только когда поставщик действительно
+                // настроен; заглушка называется заглушкой ДО покупки, а своя
+                // неосведомлённость даёт нейтральное «by request».
                 badge:
                   kycMode === "stub"
                     ? "▲ demo mode"
@@ -596,14 +623,41 @@ function BureauPageInner() {
                       ? "▲ available now"
                       : "▲ by request",
                 badgeColor: "#4f46e5",
-                cta: { label: "Upgrade a cert", href: "/bureau" },
+                // Кнопка вела на /bureau — на страницу, где человек уже стоит:
+                // единственная кнопка платного тарифа не делала ничего видимого.
+                // Ведёт в реестр: обновление начинается с выбора сертификата,
+                // и у каждой карточки там есть своя кнопка «Upgrade to Verified».
+                cta: { label: "Pick a cert to upgrade", href: "#registry" },
               },
               {
                 name: "Notarized",
                 price: "From $89 / cert",
-                blurb: "Licensed notary co-signs the certificate with Ed25519, producing an apostille-ready document admissible in EAEU courts.",
-                // Пометка по ФАКТУ: пустой реестр не называется «live».
-                badge: notaryCount === 0 ? "▲ by request" : "▲ live",
+                // Обещание переписано вместе со значком (28.08). Прежний текст утверждал
+// готовый результат — «apostille-ready document admissible in EAEU courts» —
+// у тарифа, исполнить который сегодня некому. Допустимость в конкретном суде
+// зависит от юрисдикции и самого спора, мы её обеспечить не можем; описываем
+// МЕХАНИЗМ и честную доступность, а вывод о суде оставляем юристу покупателя.
+blurb: "A licensed notary co-signs the certificate with Ed25519. The notary registry is still being assembled — check it for current availability.",
+                // ⚠️ 28.08.2026: значок был «▲ live» при НУЛЕ нотариусов в реестре.
+                //
+                //   GET https://api.aevion.app/api/bureau/notaries -> {"notaries":[]}
+                //   (ручка отдаёт только активных; неактивный подписать не может)
+                //
+                // Тариф обещает подпись лицензированного нотариуса, а исполнить
+                // это сегодня физически некому. (Цену намеренно не называю числом: сторож
+                // retiredPrices ловит отставные номиналы в тексте страниц, и мой
+                // комментарий его справедливо уронил — он прав, а не я.)
+                // Цена и состав пакета — решение владельца
+                // продукта, их не трогаю; но «live» — утверждение о ДОСТУПНОСТИ, то есть
+                // факт, и он был неверен.
+                //
+                // Вернуть «▲ live» следует в тот день, когда в реестре появится первый
+                // активный нотариус, — не раньше.
+                // Значок идёт от реестра, а не от строки: ноль активных нотариусов
+                // и «спросить не удалось» одинаково дают «by request», и только
+                // непустой реестр даёт «live». (Заодно карточка снова целиком
+                // по-английски — русское «в плане» стояло среди английских.)
+                badge: notaryCount && notaryCount > 0 ? "▲ live" : "▲ by request",
                 badgeColor: "#7c3aed",
                 cta: { label: "View Notary Registry", href: "/bureau/notaries" },
               },
@@ -920,7 +974,7 @@ function BureauPageInner() {
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>Legal Framework</div>
           <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
-            AEVION IP Bureau operates under established international copyright and digital signature laws. Our certificates serve as cryptographic proof of prior art — admissible evidence in IP disputes worldwide.
+            AEVION IP Bureau builds on established international copyright and digital signature law. Our certificates are cryptographic proof that a work existed at a recorded time — how much weight that carries depends on the forum and on the frameworks listed below.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
             {LEGAL_FRAMEWORKS.map((l) => (

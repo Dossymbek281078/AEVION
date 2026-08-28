@@ -2296,7 +2296,7 @@ pipelineRouter.get("/ots/:certId/proof", async (req, res) => {
     await ensureTables();
     const { certId } = req.params;
     const { rows } = await pool.query(
-      `SELECT "otsProof","contentHash" FROM "IPCertificate" WHERE "id" = $1`,
+      `SELECT "otsProof","contentHash","otsStatus" FROM "IPCertificate" WHERE "id" = $1`,
       [certId],
     );
     if (rows.length === 0) {
@@ -2304,9 +2304,28 @@ pipelineRouter.get("/ots/:certId/proof", async (req, res) => {
     }
     const proof = rows[0].otsProof as Buffer | null;
     if (!proof) {
+      // «Не начинали» и «идёт» — РАЗНЫЕ ответы, и до 28.08 оба назывались PENDING.
+      // Апрельские сертификаты выданы до появления якорения: доказательства у них
+      // нет и не будет, а третьей стороне мы обещали «скоро». Различение уже есть
+      // в двух соседних ручках этого же файла (проверка и дообновление) — здесь
+      // просто не спрашивали колонку.
+      const otsStatus = (rows[0].otsStatus as string | null) ?? "not_stamped";
+      const reason =
+        otsStatus === "not_stamped"
+          ? "OT_NOT_STAMPED"
+          : otsStatus === "failed"
+            ? "OT_STAMP_FAILED"
+            : "OT_PROOF_PENDING";
       return res.status(404).json({
         error: "proof not ready",
-        reason: "OT_PROOF_PENDING",
+        reason,
+        status: otsStatus,
+        note:
+          otsStatus === "not_stamped"
+            ? "this certificate predates Bitcoin anchoring; no proof will become available"
+            : otsStatus === "failed"
+              ? "anchoring failed for this certificate; no proof is expected"
+              : "anchoring is in progress; retry after the next Bitcoin block",
       });
     }
     res.setHeader("Content-Type", "application/octet-stream");
@@ -2528,7 +2547,7 @@ pipelineRouter.post("/ots/:certId/verify", async (req, res) => {
     await ensureTables();
     const { certId } = req.params;
     const { rows } = await pool.query(
-      `SELECT "otsProof","contentHash" FROM "IPCertificate" WHERE "id" = $1`,
+      `SELECT "otsProof","contentHash","otsStatus" FROM "IPCertificate" WHERE "id" = $1`,
       [certId],
     );
     if (rows.length === 0) {
@@ -2537,9 +2556,19 @@ pipelineRouter.post("/ots/:certId/verify", async (req, res) => {
     const proof = rows[0].otsProof as Buffer | null;
     const contentHash = String(rows[0].contentHash || "");
     if (!proof || !contentHash) {
+      // Та же ветвь класса, что и у /proof: без статуса сторонний проверяющий не
+      // отличает «якорь ещё готовится» от «якоря не будет никогда».
+      const otsStatus = (rows[0].otsStatus as string | null) ?? "not_stamped";
       return res.status(409).json({
         ok: false,
         error: "proof or hash missing",
+        status: otsStatus,
+        note:
+          otsStatus === "not_stamped"
+            ? "this certificate predates Bitcoin anchoring; no proof will become available"
+            : otsStatus === "failed"
+              ? "anchoring failed for this certificate; no proof is expected"
+              : "anchoring is in progress; retry after the next Bitcoin block",
       });
     }
     const v = await otsVerifyProof(contentHash, proof);

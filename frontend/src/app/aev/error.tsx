@@ -32,11 +32,13 @@ export default function AevError({
       }}>
         <div style={{ fontSize: 32, marginBottom: 8 }}>⚠</div>
         <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 8 }}>
-          Что-то пошло не так на /aev
+          Кошелёк не открылся
         </h1>
         <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.5, marginBottom: 14 }}>
-          Произошла ошибка при рендеринге AEV-кошелька. Это могло случиться из-за поврежденного состояния
-          в localStorage или временного сбоя UI. Попробуй reset secondary state — данные wallet сохранены.
+          Не удалось показать кошелёк. Обычно это разовый сбой или сохранённые
+          в браузере настройки, которые повредились. Ваши монеты и история в
+          порядке — они хранятся не здесь. Нажмите «Попробовать снова»; если не
+          поможет, перезагрузите страницу.
         </p>
         {error.digest && (
           <div style={{

@@ -56,7 +56,6 @@ const OZHIDAYUT = new Set([
   "app/admin/modules/page.tsx",
   "app/admin/planet/page.tsx",
   "app/admin/qright/page.tsx",
-  "app/aev/error.tsx",
   "app/aev/page.tsx",
   "app/api-explorer/catalog/page.tsx",
   "app/api-explorer/health/page.tsx",

@@ -5036,7 +5036,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               />
                             </div>
                             <div style={{ flex: 1 }}>
-                              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Currency</label>
+                              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Валюта</label>
                               <select
                                 value={payCurrency}
                                 onChange={(e) => setPayCurrency(e.target.value)}
@@ -5065,7 +5065,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       )}
                       {payResult && (
                         <div style={{ padding: "10px 12px", background: "#d1fae5", borderRadius: 7, display: "flex", flexDirection: "column", gap: 6 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#065f46" }}>Payment link created</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#065f46" }}>Ссылка на оплату создана</div>
                           <a href={payResult.url} target="_blank" rel="noopener noreferrer"
                             style={{ fontSize: 12, color: "#0d9488", wordBreak: "break-all" }}>
                             {payResult.url}
@@ -5108,7 +5108,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {/* DeepL Translate */}
                   {mediaTab === "translate" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Translate text</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Перевести текст</div>
                       <div>
                         <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder="Text to translate..."
                           rows={4}
@@ -5119,12 +5119,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Source (auto if empty)</label>
                           <select value={trSource} onChange={(e) => setTrSource(e.target.value)}
                             style={{ width: "100%", padding: "6px 8px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12 }}>
-                            <option value="">Auto-detect</option>
+                            <option value="">Определить язык</option>
                             {["EN", "RU", "DE", "FR", "ES", "IT", "JA", "KO", "ZH", "PT", "TR", "UK"].map((c) => <option key={c} value={c}>{c}</option>)}
                           </select>
                         </div>
                         <div style={{ flex: 1 }}>
-                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Target</label>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Язык перевода</label>
                           <select value={trTarget} onChange={(e) => setTrTarget(e.target.value)}
                             style={{ width: "100%", padding: "6px 8px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12 }}>
                             {["EN", "RU", "DE", "FR", "ES", "IT", "JA", "KO", "ZH", "PT", "TR", "UK"].map((c) => <option key={c} value={c}>{c}</option>)}
@@ -5161,7 +5161,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
                       {/* File translate */}
                       <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9" }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Translate project file</div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Перевести файл проекта</div>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <select value={trFilePath} onChange={(e) => setTrFilePath(e.target.value)}
                             style={{ flex: 2, minWidth: 160, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontFamily: "monospace" }}>
@@ -5219,7 +5219,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                         <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 7, padding: "6px 0", background: "#fff" }}>
                           {files.length === 0 ? (
-                            <div style={{ padding: 12, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>No files in project</div>
+                            <div style={{ padding: 12, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>В проекте нет файлов</div>
                           ) : (
                             files.map((f) => (
                               <label key={f.path} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontFamily: "monospace" }}>
@@ -5335,9 +5335,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                       )}
                       {emailTemplatesLoading ? (
-                        <div style={{ color: "#94a3b8", fontSize: 12 }}>Loading templates...</div>
+                        <div style={{ color: "#94a3b8", fontSize: 12 }}>Загружаем шаблоны…</div>
                       ) : emailTemplates.length === 0 && !emailTemplatesError ? (
-                        <div style={{ color: "#94a3b8", fontSize: 12 }}>No templates found</div>
+                        <div style={{ color: "#94a3b8", fontSize: 12 }}>Шаблонов не найдено</div>
                       ) : (
                         <>
                           {/* Send config */}
@@ -5393,7 +5393,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         Create new email template
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Template name</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Название шаблона</label>
                         <input value={tplBuilderName} onChange={(e) => setTplBuilderName(e.target.value)} placeholder="welcome-v1"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
@@ -5541,7 +5541,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "clone" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Voice Name</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Название голоса</label>
                         <input value={voiceCloneName} onChange={(e) => setVoiceCloneName(e.target.value)} placeholder="My Custom Voice"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
@@ -5557,7 +5557,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {voiceCloneFile && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{voiceCloneFile.name} ({Math.round(voiceCloneFile.size / 1024)} KB)</div>}
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Preview text</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Текст для примера</label>
                         <input value={voicePreviewText} onChange={(e) => setVoicePreviewText(e.target.value)}
                           placeholder="AEVION voice preview — your custom voice is ready"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
@@ -5611,7 +5611,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "stt" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Audio file</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Звуковой файл</label>
                         <input type="file" accept="audio/*" onChange={(e) => setSttFile(e.target.files?.[0] || null)}
                           style={{ width: "100%", fontSize: 12 }} />
                         {sttFile && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{sttFile.name} ({Math.round(sttFile.size / 1024)} KB)</div>}
@@ -5634,7 +5634,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{sttResult.text}</div>
                           <button onClick={() => navigator.clipboard.writeText(sttResult.text)}
                             style={{ alignSelf: "flex-start", padding: "4px 10px", background: "#0d9488", color: "#fff",
-                              border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy text</button>
+                              border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Скопировать текст</button>
                         </div>
                       )}
                       <button
@@ -5709,7 +5709,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {/* Templates picker */}
                   {agentTemplates.length > 0 && (
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Quick start templates</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Шаблоны для быстрого старта</div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         {agentTemplates.map((tpl) => (
                           <button
@@ -5880,7 +5880,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     </div>
                   )}
                   <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Project Name</label>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Название проекта</label>
                     <input
                       type="text"
                       value={settingsName}
@@ -5889,7 +5889,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Description</label>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Описание</label>
                     <input
                       type="text"
                       value={settingsDesc}
@@ -5899,7 +5899,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Custom Domain</label>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Свой домен</label>
                     <input
                       type="text"
                       value={settingsDomain}
@@ -5947,11 +5947,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {/* Collaborators — Studio Pro */}
                   <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 16 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Collaborators</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Соучастники</span>
                       <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: "#fef3c7", color: "#92400e", fontWeight: 700 }}>Studio Pro</span>
                     </div>
                     {(project.collaborators || []).length === 0 && (
-                      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>No collaborators yet. Add by email or user ID.</div>
+                      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Соучастников пока нет. Добавьте по адресу почты или идентификатору.</div>
                     )}
                     {(project.collaborators || []).map((c) => (
                       <div key={c.userId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f8fafc" }}>
@@ -5981,8 +5981,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         onChange={(e) => setCollabRole(e.target.value as "editor" | "viewer")}
                         style={{ padding: "7px 8px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, background: "#fff", cursor: "pointer", flexShrink: 0 }}
                       >
-                        <option value="editor">Editor</option>
-                        <option value="viewer">Viewer</option>
+                        <option value="editor">Редактор</option>
+                        <option value="viewer">Чтение</option>
                       </select>
                       <button
                         onClick={addCollaborator}

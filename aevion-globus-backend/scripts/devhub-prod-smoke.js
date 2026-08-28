@@ -289,6 +289,32 @@ async function run() {
   if (emailTmpls.status === 200 || emailTmpls.status === 503) ok("GET /media/email-templates", `${emailTmpls.status}`);
   else fail("GET /media/email-templates", `${emailTmpls.status}`);
 
+  // ── 17б. Каталоги и состояние студии ───────────────────────────────
+  // Пять ручек, которые НИЧЕГО не стоят и не зависят от проекта: каталоги
+  // моделей, панель возможностей, здоровье провайдеров и остаток кредитов.
+  // Добавлены 28.08.2026 — до этого смоук их не спрашивал, хотя на первых двух
+  // держатся ОБЕЩАНИЯ посадочной («видео», «3D»): она читает `configured` и
+  // показывает раздел только когда провайдер настроен. Отвалится ключ — витрина
+  // тихо перестанет обещать, и узнать об этом было неоткуда.
+  console.log("\n17б. Каталоги и состояние студии");
+  for (const [label, path, key] of [
+    ["каталог видеомоделей", "/api/devhub/media/video/models", "models"],
+    ["каталог 3D-моделей", "/api/devhub/media/3d/models", "models"],
+    ["панель возможностей", "/api/devhub/studio/capabilities", "capabilities"],
+    ["здоровье провайдеров", "/api/devhub/providers/health", null],
+    ["остаток кредитов", "/api/devhub/studio/credits", null],
+  ]) {
+    const r = await req("GET", path);
+    if (r.status !== 200) { fail(`GET ${path}`, `${r.status}`); continue; }
+    if (key) {
+      // Список, а не просто 200: пустой каталог тоже вернул бы 200, и обещание
+      // на витрине оказалось бы без содержимого.
+      const arr = r.body?.[key];
+      if (Array.isArray(arr) && arr.length > 0) ok(`${label} → ${arr.length}`);
+      else fail(`${label}`, `поле ${key} пусто или не список`);
+    } else ok(`${label} → 200`);
+  }
+
   // ── 18. Media: Payment Link ───────────────────────────────────────────
   console.log("\n18. Media — Payment (Lemon Squeezy)");
   const payBad = await req("POST", "/api/devhub/media/payment-link", {});

@@ -133,7 +133,21 @@ export default function MapRealityPage() {
               MVP
             </span>
           </Link>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Перенос внутренней группе шапки. Родительский ряд складывается
+              (flexWrap выше), а эта группа — нет: чип цены + подпись + поле
+              «Ваш псевдоним» дают 394px при экране 375, и страница ехала вбок
+              (документ 412).
+
+              Замер на живой странице, документ / высота шапки:
+                375   412 -> 375, шапка 125 -> 113
+                768   без изменений
+                1440  без изменений
+
+              ⚠️ Мерить эту страницу надо ПОСЛЕ появления поля ввода: до его
+              отрисовки группа узкая и страница помещается. Три моих пробы
+              подряд дали «уже починено», пока я не стал ждать `header input`.
+              Одиночный замер здесь врёт. */}
+          <div style={{ display: "flex", flexWrap: "wrap", rowGap: 8, alignItems: "center", gap: 8 }}>
             <ModulePricingChip moduleId="mapreality" theme="dark" />
             <label style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>Your alias</label>
             <input

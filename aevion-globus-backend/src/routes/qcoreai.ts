@@ -326,6 +326,39 @@ export const chatLimiter = rateLimit({
   message: "rate_limit_exceeded: max 30 chat requests per minute",
 });
 
+// ОБЩИЙ потолок расхода на всех анонимов сразу. Намеренно один ключ на всех —
+// это не тот дефект «дефолт, который делит корзину», а осознанная мера.
+//
+// Почему пришлось. 28.08.2026 замерено отпечатком ключа: один посетитель
+// получает СЕМЬ корзин вместо одной. Ключ анонима строится по адресу, а адрес
+// на этой платформе не доходит: X-Real-IP заполняет сама платформа одним из
+// ~7 своих внутренних адресов. Проверено четырьмя способами — принудительный
+// IPv4, своё значение заголовка, одно соединение против многих и прямой расчёт
+// отпечатка по собственному адресу (62fbd24d; среди наблюдавшихся его нет).
+// Зонд на проде подтвердил, что ветка X-Real-IP срабатывает — то есть ключ
+// берётся из значения, которое посетителю не принадлежит.
+//
+// Отсюда следствие в обе стороны: один человек может получить 7x30 обращений в
+// минуту к платной модели, а разные люди за одним внутренним узлом делят одну
+// корзину. Чинить сам ключ нечем: X-Forwarded-For подделывается клиентом, и
+// подмена сделала бы корзины БЕСКОНЕЧНЫМИ вместо семи.
+//
+// Поэтому ограничиваем не посетителя, а РАСХОД: 120 анонимных обращений в
+// минуту на всю платформу. Для человека это не предел (он один расходует
+// единицы), для перебора — жёсткий потолок. Авторизованные считаются по своему
+// id и сюда не попадают: у них ключ точный, а строгий предел им ставит
+// chatLimiter выше.
+export const anonChatCeiling = rateLimit({
+  windowMs: 60_000,
+  max: 120,
+  keyPrefix: "qcoreai:chat:anon-ceiling",
+  keyFn: (req) => {
+    const auth = verifyBearerOptional(req);
+    return auth?.sub ? `u:${auth.sub}` : "anon";
+  },
+  message: "rate_limit_exceeded: too many anonymous requests platform-wide, sign in to continue",
+});
+
 // Clamp temperature into the range every provider documents. Negative values
 // or huge numbers either error out the upstream call or burn extra tokens.
 function clampTemperature(raw: unknown, fallback = 0.6): number {
@@ -375,7 +408,7 @@ function usageToTokens(u: unknown): { tokensIn: number; tokensOut: number } {
   return { tokensIn, tokensOut };
 }
 
-qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
+qcoreaiRouter.post("/chat", anonChatCeiling, chatLimiter, async (req, res) => {
   try {
     if (await enforceFreeTokenQuota(req, res)) return;
     const auth = verifyBearerOptional(req);
@@ -447,7 +480,7 @@ export { clampTemperature, publicErrorCategory };
                                               data: { kind: "error", message }
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/chat-stream", chatLimiter, async (req, res) => {
+qcoreaiRouter.post("/chat-stream", anonChatCeiling, chatLimiter, async (req, res) => {
   if (await enforceFreeTokenQuota(req, res)) return;
   const auth = verifyBearerOptional(req);
   const messages = sanitizeMessages(req.body?.messages);

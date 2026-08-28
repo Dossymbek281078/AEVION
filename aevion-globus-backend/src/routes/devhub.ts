@@ -387,7 +387,7 @@ async function debitCredit(userId: string, capability: CapabilityKey, amount = 1
  * Списание, которое не имеет права уронить уже выполненную работу — но и молчать
  * не имеет права.
  *
- * Девять маршрутов зовут списание как `debitQuietly(...)`. Это
+ * Десять маршрутов зовут списание как `debitQuietly(...)`. Это
  * защита в глубину, а не рабочая ветка: `debitCredit` сам ловит отказ базы и
  * паркует списание в память, а чтение тарифа тоже не бросает. То есть сегодня
  * внешний catch сработать не может.
@@ -3621,7 +3621,7 @@ devhubRouter.post("/media/tts", async (req, res) => {
 
     const audioBuffer = Buffer.from(await finalResp.arrayBuffer());
     res.setHeader("X-Tts-Model", usedModel);
-    await debitCredit(ttsUserId, "tts", text.trim().length).catch(() => {});
+    await debitQuietly(ttsUserId, "tts", text.trim().length);
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
     res.setHeader("Cache-Control", "no-store");

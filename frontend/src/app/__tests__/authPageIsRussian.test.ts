@@ -69,3 +69,17 @@ describe("экран входа объявляет свой язык", () => {
     expect(src).toContain('<main lang="ru">');
   });
 });
+
+describe("после входа человеку видно, куда идти дальше", () => {
+  test("шахматы — первое действие, и оно ведёт в модуль запуска", () => {
+    // Замер 28.08.2026 на живом сайте: после входа предлагались QRight,
+    // Planet Lab и настройки. Шахмат не было вовсе — а 30 августа открываются
+    // именно они, и почти весь трафик этих дней придёт за ними.
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "auth", "page.tsx"), "utf8");
+    const at = src.indexOf('Играть в шахматы');
+    expect(at, "ссылки на шахматы после входа нет").toBeGreaterThan(-1);
+    expect(src.slice(at - 400, at)).toContain('href="/cyberchess"');
+    // Именно ПЕРВОЕ: иначе человек, пришедший играть, снова его не найдёт.
+    expect(at).toBeLessThan(src.indexOf("Зарегистрировать работу в QRight"));
+  });
+});

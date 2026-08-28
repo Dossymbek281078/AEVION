@@ -159,8 +159,14 @@ export default function LongevityClient({ channel = null }: { channel?: string |
 
   const scoreColor = prog ? (prog.trajectory === "improving" ? "#55C093" : prog.trajectory === "worsening" ? "#E0787F" : "#DDB253") : "#c3d0e0";
 
+  // Язык объявляется на самом блоке: в корневом макете стоит lang="en"
+  // (большая часть сайта английская), а эта страница русская — и
+  // несоответствие браузер лечит машинным переводом НАШЕГО текста.
+  // Ближайший lang выигрывает у корневого, поэтому общий шаблон трогать
+  // не нужно. Приём взят у cyberchess/launch, чтобы способ был один.
+  // Протокол целиком по-русски; английское издание живёт на /en/longevity.
   return (
-    <main style={styles.page}>
+    <main lang="ru" style={styles.page}>
       <div style={styles.wrap}>
         <div style={styles.eyebrow}>AEVION · Longevity</div>
         <h1 style={styles.h1}>Протокол долголетия: измерь → воздействуй → перемерь</h1>

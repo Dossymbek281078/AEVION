@@ -18,7 +18,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { validateWebhookUrl, isInternalHost } from "../src/services/qcoreai/userWebhooks";
+import { validateWebhookUrl } from "../src/services/qcoreai/userWebhooks";
+import { isInternalHost } from "../src/lib/internalHost";
 
 /** Формы, которые обязаны блокироваться. Каждая проверена прогоном 28.08. */
 const MUST_BLOCK: Array<[string, string]> = [

@@ -1,3 +1,4 @@
+import { isInternalHost } from "../lib/internalHost";
 import { Router, type Request, type Response } from "express";
 import { queryNumber } from "../lib/queryNumber";
 import crypto from "node:crypto";
@@ -871,6 +872,19 @@ smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
   if (!userId) return res.status(401).json({ error: "auth_required" });
   const { url, label, events } = req.body ?? {};
   if (typeof url !== "string" || !/^https?:\/\//.test(url) || url.length > 500) {
+    return res.status(400).json({ error: "bad_url" });
+  }
+  // 28.08.2026: адрес не проверялся на «указывает внутрь нашей сети». Путь
+  // называется /admin/, но администратором быть НЕ требуется — проверяется
+  // только подпись токена. То есть любой зарегистрированный пользователь мог
+  // назвать http://169.254.169.254/ (метаданные облака), а соседняя ручка
+  // /admin/webhooks/:id/test тут же сходила бы туда с нашего сервера.
+  // Список общий с вебхуками QCoreAI — намеренно один, чтобы не разошёлся.
+  try {
+    if (isInternalHost(new URL(url).hostname)) {
+      return res.status(400).json({ error: "bad_url", reason: "internal_target" });
+    }
+  } catch {
     return res.status(400).json({ error: "bad_url" });
   }
   if (typeof label !== "string" || label.length < 1 || label.length > 60) {

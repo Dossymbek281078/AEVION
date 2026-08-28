@@ -12,6 +12,7 @@ import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPrevie
 import { indexCapabilities, isCapabilityBlocked, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
+import { devhubServerError } from "@/lib/devhubServerError";
 
 /**
  * A write whose result the UI is about to act on.
@@ -1179,7 +1180,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
         );
         data = await r.json();
-        if (!r.ok) throw new Error(data.error || "Генерация не удалась");
+        if (!r.ok) throw new Error(devhubServerError(data.error, "Генерация не удалась"));
       }
       const newGenerated = data.files || [];
       setGeneratedFiles(newGenerated.map((f: any) => ({ path: f.path, language: f.language })));
@@ -1290,7 +1291,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate/undo`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Отменить не удалось");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Отменить не удалось"));
       if (data.ok === false) {
         showToast(data.message || "Отменять нечего — правок ИИ не было", "info");
         return;
@@ -1311,7 +1312,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/checkpoints/${checkpointId}/restore`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Восстановить не удалось");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Восстановить не удалось"));
       if (data.ok === false) {
         showToast(data.message || "Эта контрольная точка больше недоступна", "info");
         loadCheckpointHistory();
@@ -1338,7 +1339,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ idea: planIdea, ...(project ? { projectId: project.id } : {}) }),
       });
       const data = await r.json();
-      if (!r.ok || data.ok === false) throw new Error(data.error || "Не удалось составить план");
+      if (!r.ok || data.ok === false) throw new Error(devhubServerError(data.error, "Не удалось составить план"));
       setPlan(data);
       if (data.aiGenerated === false) {
         showToast("Провайдер ИИ не подключён — показан общий план вместо составленного под задачу", "warning");
@@ -1463,7 +1464,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ prompt: visualEditImgPrompt.trim() }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Не удалось создать картинку");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось создать картинку"));
       const doc = visualEditSourceDocRef.current;
       const el = doc.querySelector(`[data-vid="${visualEditSelected.vid}"]`);
       if (!el) throw new Error("Element no longer in the preview — it was rebuilt, click it again");
@@ -1511,7 +1512,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
       );
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Не удалось спроектировать базу");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось спроектировать базу"));
       const changes = (data.files || []).map((gf: { path: string; language?: string; content: string }) => {
         const before = files.find((ff) => ff.path === gf.path)?.content ?? "";
         const d = diffLines(before, gf.content ?? "");
@@ -1578,7 +1579,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
       );
       const data = await r.json();
-      if (!r.ok || !data.ok) throw new Error(data.error || "Не удалось выделить ресурсы");
+      if (!r.ok || !data.ok) throw new Error(devhubServerError(data.error, "Не удалось выделить ресурсы"));
       setChatHistory((h) => [
         ...h.filter((m) => !(m.role === "hint" && m.kind === "provision_db")),
         {
@@ -1627,7 +1628,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ prompt, stack: project.stack, ...(visualEditHtmlPath ? { targetFiles: [visualEditHtmlPath] } : {}) }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Правка ИИ не удалась");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Правка ИИ не удалась"));
       if (data.aiGenerated === false) {
         showToast("Провайдер ИИ не подключён — страница настоящей правкой ИИ не менялась", "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
@@ -1717,7 +1718,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Выкатка не удалась");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Выкатка не удалась"));
       const deploymentId: string = data.deploymentId;
       // Start streaming build log
       streamBuildLog(project.id, deploymentId);

@@ -162,6 +162,41 @@ async function gumroadRealPrices(rows) {
  * сайт обещал Kaspi, а страница интеграций показывала его как доступный.
  * Теперь состояние касс — часть карты, и берётся оно запросом, а не из памяти.
  */
+/**
+ * Что о выручке говорит САМА платформа.
+ *
+ * В карте выручка лежит в SALES_SNAPSHOT — числе, вписанном руками из панели
+ * Gumroad, с датой замера. Это честно, но замер стареет: на 28.08.2026 ему
+ * было две недели.
+ *
+ * У платформы есть свой счёт: `/api/revenue/summary`. Замер 28.08.2026 показал,
+ * что источники РАСХОДЯТСЯ: снимок говорит 3 продажи на $29.97, ручка — 2 на
+ * $19.98. Разница ровно в одну покупку $9.99, и рядом ручка сообщает про 2
+ * ВНУТРЕННИЕ (проверочные) покупки, которые в выручку не входят. Похоже, в
+ * ручной снимок попала одна из них.
+ *
+ * Разрешить спор может только панель Gumroad, то есть рука основателя. Пока
+ * этого не произошло, карта показывает ОБА числа с их источниками: одно число
+ * без второго читалось бы как истина.
+ */
+async function liveRevenue() {
+  try {
+    const j = await getJson(`${API}/api/revenue/summary`);
+    return {
+      grossUsd: Number(j.grossUsd ?? 0),
+      saleCount: Number(j.saleCount ?? 0),
+      internalUsd: Number(j.internalUsd ?? 0),
+      internalCount: Number(j.internalCount ?? 0),
+      // Ручка сама помечает неполный экспорт. Отсутствие метки — это «данные
+      // полные», а не «мы не проверяли».
+      degraded: Boolean(j.degraded ?? j.incomplete ?? false),
+    };
+  } catch (e) {
+    // Отказ — это «не знаю», а не «ноль выручки».
+    return null;
+  }
+}
+
 async function cashDesks() {
   try {
     const j = await getJson(`${API}/api/pricing/checkout/healthz`);
@@ -357,7 +392,7 @@ function row(cells) {
 }
 
 function main(data) {
-  const { pricing, shop, gum, real, nameToModule, measuredAt, desks, claims, regressions, pending } = data;
+  const { pricing, shop, gum, real, live, nameToModule, measuredAt, desks, claims, regressions, pending } = data;
 
   const tierPrice = new Map(pricing.tiers.map((t) => [t.id, t.priceMonthly]));
 
@@ -567,7 +602,18 @@ function main(data) {
   writeFileSync(OUT, html, "utf8");
   console.log(`Карта собрана: ${OUT}`);
   console.log(`  товаров ${totalProducts} · модулей с ценой ${modRows.length} · расхождений цены ${mismatches}`);
-  console.log(`  заработано ${soldTotal.toFixed(2)} за ${soldCount} продаж (замер ${SALES_SNAPSHOT.measuredAt})`);
+  console.log(`  заработано ${soldTotal.toFixed(2)} за ${soldCount} продаж (ручной замер ${SALES_SNAPSHOT.measuredAt})`);
+  // Второе число — от самой платформы. Показываем рядом, а не вместо: одно
+  // без другого читается как истина, а они расходятся.
+  if (live) {
+    const diff = Math.abs(live.grossUsd - soldTotal) > 0.005 || live.saleCount !== soldCount;
+    console.log(`  платформа считает: $${live.grossUsd.toFixed(2)} за ${live.saleCount} продаж` +
+      (live.internalCount ? ` (плюс ${live.internalCount} внутренних на $${live.internalUsd.toFixed(2)}, в выручку не входят)` : "") +
+      (live.degraded ? " · ⚠️ экспорт НЕПОЛНЫЙ" : "") +
+      (diff ? " · 🔴 РАСХОДИТСЯ с ручным замером" : ""));
+  } else {
+    console.log("  платформа о выручке: спросить не удалось — это НЕ ноль");
+  }
   // Отдельная строка про КАССУ. Три исхода, а не два: сошлось / разошлось /
   // спросить не удалось. Третий не сливаем с первым — молчаливое «сошлось»
   // про деньги хуже отсутствия проверки.
@@ -598,6 +644,7 @@ try {
     real: await gumroadRealPrices(gumRows),
     nameToModule: storeNameToModule(),
     desks: await cashDesks(),
+    live: await liveRevenue(),
     claims: await scaleClaims(),
     regressions: await prodRegressions(),
     pending: awaitingFounder(),

@@ -72,6 +72,18 @@ const DISPROVEN_CLAIMS: Array<{ text: string; why: string }> = [
     why: "в qcoreai есть месячная квота токенов бесплатного тарифа",
   },
   {
+    text: "Deploy: Railway",
+    why: "выкатка проекта пользователя в Railway отвечает 501 (сервисы на проект за "
+      + "невыпущенным флагом), а у Vercel нет токена на проде — работает только "
+      + "Cloudflare Pages. Обещание было в тарифе DevHub и правилось 27.07",
+  },
+  {
+    text: "aevion.build subdomain",
+    why: "зона aevion.build не делегирована — такие адреса не открываются "
+      + "(проверено NS-запросом с живым контролем на aevion.app). Настоящий "
+      + "адрес *.pages.dev",
+  },
+  {
     text: "Club & tournament",
     why: "управления клубами нет; Club это рейтинговый разряд и категория косметики",
   },

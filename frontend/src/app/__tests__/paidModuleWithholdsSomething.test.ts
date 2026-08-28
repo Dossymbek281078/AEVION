@@ -50,7 +50,7 @@ const ROUTE_PREFIX: Record<string, string> = {
  * Когда механизм появится, тест сам потребует убрать строку отсюда.
  */
 const KNOWN_WITHOUT: Record<string, string> = {
-  "smeta-trainer": "$49/мес, ноль примитивов; поднято основателю 28.08",
+
   "cyberchess": "$19/мес, 12 файлов маршрутов, ноль примитивов; задача выдана окну шахмат 28.08",
 };
 
@@ -93,8 +93,27 @@ function ownPrimitives(app: string): string[] {
   return [...found];
 }
 
+/**
+ * Четвёртый путь, найденный 28.08 уже ПОСЛЕ первой версии этого сторожа:
+ * страница модуля закрывается на фронтенде — `fetchOrPaywall()` спрашивает
+ * бэкенд и рисует `PaywallScreen`. Так закрыты 10 страниц, и Smeta Trainer в
+ * их числе; первая версия сторожа объявила её незакрытой, потому что смотрела
+ * только бэкенд.
+ *
+ * Это ровно та ошибка, ради которой сторож и написан: мерка знала меньше
+ * способов, чем система. Поэтому список путей ведётся здесь, и его пополняют.
+ */
+function frontendPaywalled(app: string): boolean {
+  const page = join(HERE, "..", app, "page.tsx");
+  try {
+    return readFileSync(page, "utf8").includes("fetchOrPaywall");
+  } catch {
+    return false; // страницы нет — это не «закрыто», а «нечего закрывать»
+  }
+}
+
 function canWithhold(app: string, gated: Set<string>): boolean {
-  return gated.has(app) || ownPrimitives(app).length > 0;
+  return gated.has(app) || ownPrimitives(app).length > 0 || frontendPaywalled(app);
 }
 
 describe("платный модуль умеет удерживать доступ", () => {

@@ -11,6 +11,13 @@ import { anchorAirspace, verifyAnchoredAirspace } from "./qskyway.airspace.ancho
 import { AIRSPACE_PROOFS } from "./qskyway.airspace.proof";
 import { PERMISSION, permissionSummary, type CityPermission } from "./qskyway.permission";
 import { getPool } from "../lib/dbPool";
+// Общее правило платформы, а не своё: `safeErrorText` живёт в lib и уже
+// используется bureau, lifebox, pipeline и вебхуком платежей. Свой санитайзер
+// я написал этим вечером, не увидев его, — это был второй способ делать то же
+// самое, и он к тому же СЛАБЕЕ: фильтровал опознавательное, тогда как общий
+// пропускает наружу ТОЛЬКО помеченное публичным. Утечка у него невозможна по
+// устройству, а не по полноте списка шаблонов.
+import { safeErrorText } from "../lib/safeError";
 import { isSmokeSlot, countLiveSlots } from "../lib/slotOrigin";
 import { heightReviewFor, heightReviewsForCity } from "../data/qskywayHeightReview";
 import { rateLimit } from "../lib/rateLimit";
@@ -1251,44 +1258,6 @@ const rowToSlot = (r: Record<string, unknown>): Slot => ({
   holder: String(r.holder), issued: String(r.issued), receipt: String(r.receipt),
 });
 
-/**
- * Текст ошибки для КЛИЕНТА: причина названа, устройство системы — нет.
- *
- * Замер 28.08.2026 (тест `qskywayErrorDetailIsSafe`): при отказе хранилища в
- * поле `detail` уходило `connect ECONNREFUSED 10.130.0.7:5432` — внутренний
- * адрес и порт базы, прямо в браузер посетителю. Причина полезна, адрес — нет:
- * по нему строят карту нашей сети.
- *
- * ⚠️ ЭКСПОРТ — РАДИ ПРОВЕРКИ, А НЕ РАДИ ПОВТОРНОГО ИСПОЛЬЗОВАНИЯ. Импортировать
- * эту функцию из других модулей НЕ НАДО: тянуть общий приём из файла маршрутов
- * — способ развести две копии правила. Замер 28.08.2026: по бэкенду 101 место,
- * где сырое сообщение может уйти клиенту, и 41 из них рядом с базой или сетью.
- * Если решат закрывать их все, функция переезжает в `lib/` одним заходом —
- * разбор в Desktop/АЕВИОН/15-Аудиты-и-сводки/2026-08-28-адрес-базы-уходил-клиенту.md
- *
- * Не удаляем поле целиком: «рынок недоступен» без причины не отличает
- * «база отказала» от «мы сломались», а это разные вещи для того, кто ждёт
- * квитанцию. Убираем ровно опознавательное.
- */
-export function safeDetail(e: unknown): string {
-  const raw = e instanceof Error ? e.message : String(e);
-  return raw
-    // адрес:порт и голый IPv4
-    .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?/g, "<адрес скрыт>")
-    // ⚠️ Имя пользователя postgres называет ТРЕМЯ способами, и первая версия
-    // знала один. Проверка на пяти настоящих формулировках (см.
-    // qskywayErrorDetailIsSafe) показала утечку на «for user "aevion_prod"» —
-    // самой частой из них. Одной формы мало.
-    .replace(/\buser=\S+/gi, "user=<скрыт>")
-    .replace(/\b(for )?user "[^"]+"/gi, "user <скрыт>")
-    .replace(/\brole "[^"]+"/gi, "role <скрыта>")
-    // имя узла: postgres печатает его при ENOTFOUND и в строке подключения
-    .replace(/\b[a-z0-9-]+(\.[a-z0-9-]+){1,}\b/gi, "<узел скрыт>")
-    // порт отдельным словом: «connection to server at "...", port 5432 failed»
-    .replace(/\bport \d{2,5}\b/gi, "port <скрыт>")
-    .slice(0, 200);
-}
-
 async function listSlots(): Promise<Slot[]> {
   await ensureSlotTable();
   if (slotsDbAvailable) {
@@ -2423,7 +2392,7 @@ qskywayRouter.get("/slots", async (_req: Request, res: Response) => {
       error: "рынок слотов недоступен: не удалось прочитать хранилище",
       errorEn: "the slot market is unavailable: the store could not be read",
       store: "postgres",
-      detail: safeDetail(e),
+      detail: safeErrorText(e, "хранилище недоступно"),
     });
   }
   // `count` остаётся прежним (все записи) — на него опирается прод-смок и
@@ -2464,7 +2433,7 @@ qskywayRouter.get("/slots/:id/verify", async (req: Request, res: Response) => {
     return res.status(503).json({
       error: "проверка невозможна: хранилище слотов недоступно",
       errorEn: "verification is impossible: the slot store is unavailable",
-      detail: safeDetail(e),
+      detail: safeErrorText(e, "хранилище недоступно"),
     });
   }
   const slot = slots.find((s) => s.id === String(req.params.id));

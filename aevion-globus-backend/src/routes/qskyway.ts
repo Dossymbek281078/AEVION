@@ -1427,6 +1427,35 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
       "regulatory-airspace-ceilings": Object.keys(CITIES).filter((id) => AIRSPACE[id]),
     },
     airspace: Object.fromEntries(Object.keys(CITIES).map((id) => [id, airspaceBlock(id, CITIES[id])])),
+    /**
+     * Открытая половина ключа, которым подписаны документы модуля.
+     *
+     * ЗАЧЕМ. 28.08.2026 прочитал подписанный документ глазами того, кто понесёт
+     * его регулятору. Подпись настоящая Ed25519, ключ приложен — но приложен В
+     * ТОМ ЖЕ документе. Проверка ключом из проверяемого документа доказывает
+     * только внутреннюю связность: подписать своим ключом и приложить его может
+     * кто угодно. Ключ не публиковался НИГДЕ — ни здесь, ни в реестре ключей
+     * платформы (`/api/qsign/v2/keys` держит ключи QSign, не наши).
+     *
+     * Теперь его можно взять у живой службы по TLS и сравнить с тем, что в
+     * документе. Это не делает подпись доказательством перед тем, кто не
+     * доверяет домену, — но убирает случай «кто угодно подписал что угодно».
+     *
+     * `ephemeral` говорит правду и здесь: без `QSKYWAY_SIGN_SK` ключ рождается
+     * при старте и живёт до перезапуска, а значит проверять по нему старый
+     * документ бессмысленно. Молчать об этом было бы хуже, чем не публиковать.
+     */
+    signing: {
+      alg: "Ed25519",
+      publicKey: SIGN_PK_B64,
+      ephemeral: SIGN_EPHEMERAL,
+      note: SIGN_EPHEMERAL
+        ? "Ключ создан при старте процесса и сменится при перезапуске: документы, подписанные до него, этим ключом не проверятся."
+        : "Постоянный ключ службы. Сверьте его с полем attestation.publicKey в документе.",
+      noteEn: SIGN_EPHEMERAL
+        ? "The key was created at process start and changes on restart: documents signed earlier will not verify against it."
+        : "The service's persistent key. Compare it with attestation.publicKey in the document.",
+    },
     slotsStore: slotsDbAvailable ? "postgres" : "memory",
     slotsBooked,
     /** Брони без наших же тестовых. null означает «спросить не удалось», а не ноль. */
@@ -2005,6 +2034,39 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
     scope: scopeText.ru,
     scopeEn: scopeText.en,
     verify: "POST /api/qskyway/route/justification/verify {document, attestation}",
+    /**
+     * Как проверить документ БЕЗ НАС.
+     *
+     * ЗАЧЕМ. Поле `verify` выше отправляет проверяющего к нашей же ручке. Для
+     * того, кто несёт бумагу регулятору, это половина обещания: наш ответ
+     * «подпись верна» стоит ровно столько, сколько доверия к нам.
+     *
+     * Проверить самому можно — всё нужное в документе есть. Но НЕОЧЕВИДНО, на
+     * чём стоит подпись: не на тексте документа, а на БАЙТАХ ХЕША. Я сам
+     * ошибся на этом, когда писал проверку: подписал JSON и получил «не
+     * сходится». Посторонний ошибётся так же, и решит, что документ поддельный.
+     *
+     * Поэтому рецепт — в самом документе, а не в документации, которую к
+     * бумаге не приложат.
+     */
+    verifyYourself: {
+      steps: [
+        "1. canonical = JSON.stringify(document) — поля уже в нужном порядке, менять их нельзя",
+        "2. contentHash = sha256(canonical), в hex — обязан совпасть с attestation.contentHash",
+        "3. подпись Ed25519 стоит на БАЙТАХ этого хэша (Buffer.from(contentHash, 'hex')), НЕ на тексте",
+        "4. ключ возьмите у службы: GET /api/qskyway/health -> signing.publicKey (SPKI, base64)",
+        "5. сверьте его с attestation.publicKey: расхождение значит, что подписал не этот сервис",
+      ],
+      stepsEn: [
+        "1. canonical = JSON.stringify(document) - fields are already ordered, do not reorder",
+        "2. contentHash = sha256(canonical) in hex - must equal attestation.contentHash",
+        "3. the Ed25519 signature covers the BYTES of that hash (Buffer.from(contentHash, 'hex')), not the text",
+        "4. take the key from the service: GET /api/qskyway/health -> signing.publicKey (SPKI, base64)",
+        "5. compare it with attestation.publicKey: a mismatch means this service did not sign it",
+      ],
+      limit: "Это доказывает, что документ не менялся после подписи и что подписал его владелец ключа с этого адреса. Что владелец — AEVION, доказывает TLS домена, а не сама подпись.",
+      limitEn: "This proves the document was not altered after signing and that it was signed by the holder of the key served at this address. That the holder is AEVION is proven by the domain's TLS, not by the signature itself.",
+    },
   });
 });
 

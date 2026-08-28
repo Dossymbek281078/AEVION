@@ -12,7 +12,14 @@ import path from "node:path";
  * Машинные имена (id вкладки puzzles, PUZZLES, puzzleGoal) и название режима
  * Puzzle Rush — не в счёт: их читает код, а не человек.
  */
-const PAGE = path.join(__dirname, "..", "page.tsx");
+// Весь модуль, а не только page.tsx. 28.08.2026 сторож был зелёным, пока
+// слово «Пазлы» жило в OnboardingOverlay.tsx — на карточке ПЕРВОГО экрана
+// новичка, то есть в самом видном месте из возможных. Проверять один файл
+// там, где текст разложен по многим, — это обещать охват, которого нет.
+const FAJLY = ["page.tsx", "OnboardingOverlay.tsx", "CommandPalette.tsx"]
+  .map((f) => path.join(__dirname, "..", f))
+  .filter((f) => fs.existsSync(f));
+const PAGE = FAJLY[0];
 
 /** Видимые человеку строки: текст между тегами и строковые литералы. */
 function vidimoe(src: string): string[] {
@@ -44,7 +51,7 @@ function govoritPazl(t: string): boolean {
 
 describe("тактическая позиция называется задачей, а не пазлом", () => {
   it("в видимом тексте модуля слова «пазл» нет", () => {
-    const najdeno = vidimoe(fs.readFileSync(PAGE, "utf8")).filter(govoritPazl);
+    const najdeno = FAJLY.flatMap((f) => vidimoe(fs.readFileSync(f, "utf8"))).filter(govoritPazl);
     expect(najdeno.map((t) => t.slice(0, 60))).toEqual([]);
   });
 

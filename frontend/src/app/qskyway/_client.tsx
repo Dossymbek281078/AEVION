@@ -406,7 +406,9 @@ export default function QSkywayClient() {
     } finally {
       heroBusyRef.current = false;
     }
-  }, [localHero]);
+    // `lang` обязателен: внутри выбирается note/noteEn и русский запасной текст.
+    // Без него посетитель, переключивший язык, получает прежний.
+  }, [localHero, lang]);
 
   // ── city loading (switchable) ─────────────────────────────────────────────────
   const loadCity = useCallback(async (id: string) => {
@@ -467,7 +469,8 @@ export default function QSkywayClient() {
       newHero();
       for (let i = 0; i < 5; i++) { const t = makeTaxi(false); if (t) taxisRef.current.push(t); }
     } catch (e) { setErr(String(e)); }
-  }, [newHero, makeTaxi]);
+    // `t` обязателен по той же причине: строка про ветер собирается словарём.
+  }, [newHero, makeTaxi, t]);
 
   // ── rendering / bootstrap ──────────────────────────────────────────────────────
   useEffect(() => {

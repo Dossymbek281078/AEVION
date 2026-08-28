@@ -112,6 +112,11 @@ export default function QCoreAnalyticsPage() {
   const [goalRuns, setGoalRuns] = useState("");
   const [goalCost, setGoalCost] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Разделы, которые НЕ загрузились. Нужны, потому что раньше их отказ был
+  // неотличим от пустоты: у пяти запросов ниже не проверялся res.ok, и ответ
+  // 500 или 402 (платная стена) просто не давал items — раздел рисовался
+  // пустым. Человек читает это как «данных нет», а не «не загрузилось».
+  const [partial, setPartial] = useState<string[]>([]);
 
   const refresh = async () => {
     setError(null);
@@ -123,24 +128,32 @@ export default function QCoreAnalyticsPage() {
         fetch(apiUrl("/api/qcoreai/analytics/sessions?days=7&limit=5"), { headers: bearerHeader() }),
         fetch(apiUrl("/api/qcoreai/analytics/by-tag?limit=15"), { headers: bearerHeader() }),
       ]);
+      const failed: string[] = [];
       const json = await aRes.json();
       if (!aRes.ok) throw new Error(json?.error || `HTTP ${aRes.status}`);
       setData(json);
       const tsJson = await tsRes.json().catch(() => ({}));
+      if (!tsRes.ok) failed.push("динамика по дням");
       if (Array.isArray(tsJson?.items)) setTimeseries(tsJson.items);
       const tagJson = await tagRes.json().catch(() => ({}));
+      if (!tagRes.ok) failed.push("топ тегов");
       if (Array.isArray(tagJson?.items)) setTopTags(tagJson.items);
       const sessJson = await sessRes.json().catch(() => ({}));
+      if (!sessRes.ok) failed.push("сессии");
       if (Array.isArray(sessJson?.items)) setTopSessions(sessJson.items);
       const tagCostJson = await tagCostRes.json().catch(() => ({}));
+      if (!tagCostRes.ok) failed.push("стоимость по тегам");
       if (Array.isArray(tagCostJson?.items)) setTagCosts(tagCostJson.items);
 
       // Provider latency
       try {
         const latRes = await fetch(apiUrl("/api/qcoreai/analytics/provider-latency"), { headers: bearerHeader() });
         const latData = await latRes.json().catch(() => ({}));
+        if (!latRes.ok) failed.push("задержки провайдеров");
         if (Array.isArray(latData?.items)) setProviderLatency(latData.items);
       } catch { /* non-critical */ }
+
+      setPartial(failed);
 
       // Load analytics goals
       try {
@@ -257,6 +270,19 @@ export default function QCoreAnalyticsPage() {
             </a>
           </div>
         </div>
+
+        {partial.length > 0 && (
+          <div
+            style={{
+              color: "#92400e", background: "rgba(245,158,11,0.08)",
+              border: "1px solid rgba(245,158,11,0.25)",
+              borderRadius: 10, padding: "8px 12px", fontSize: 12, marginBottom: 12,
+            }}
+          >
+            Часть данных не загрузилась: {partial.join(", ")}. Показанное неполно —
+            это не значит, что у вас нет данных.
+          </div>
+        )}
 
         {error && (
           <div

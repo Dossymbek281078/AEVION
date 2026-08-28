@@ -47,3 +47,52 @@ export function anchorSummary(row: Record<string, unknown>): AnchorSummary {
 
 /** Колонки, которые надо взять из "IPCertificate", чтобы это посчитать. */
 export const ANCHOR_COLUMNS = `"otsStatus","otsBitcoinBlockHeight"`;
+
+/**
+ * Строка про якорь для PDF-сертификата.
+ *
+ * ЗАЧЕМ. PDF — это документ, который человек показывает суду, работодателю или
+ * площадке. Замер 28.08.2026: во всей ручке выдачи PDF (347 строк) якорь не
+ * упоминался НИ РАЗУ, хотя данные у неё на руках — она делает `SELECT *`. То
+ * есть самое сильное доказательство продукта отсутствовало ровно в том
+ * артефакте, ради которого продукт покупают. При этом правовой блок того же
+ * документа утверждает, что он «serves as admissible evidence of prior art».
+ *
+ * ЧЕТЫРЕ ИСХОДА, И НИ ОДИН НЕ МОЛЧИТ. Отсутствие строки читалось бы как
+ * «якорь есть, просто не написали» — а для апрельских сертификатов это неправда
+ * и никогда правдой не станет. Поэтому «якоря нет» пишется словами.
+ *
+ * Решение вынесено отдельной функцией намеренно: текст из PDFKit не
+ * извлекается (шрифт уезжает подмножеством), и проверка «нет ли в документе
+ * лишнего обещания» была бы пустой всегда. Проверяется решение, а не документ.
+ */
+export function pdfAnchorField(a: AnchorSummary): { label: string; value: string } {
+  if (a.status === "bitcoin-confirmed") {
+    return {
+      label: "BITCOIN ANCHOR (verifiable without AEVION)",
+      value:
+        a.bitcoinBlockHeight === null
+          ? "OpenTimestamps -> Bitcoin, confirmed"
+          : `OpenTimestamps -> Bitcoin, block ${a.bitcoinBlockHeight}`,
+    };
+  }
+  if (a.status === "pending") {
+    return {
+      label: "BITCOIN ANCHOR",
+      value: "submitted to OpenTimestamps calendars; Bitcoin confirmation pending",
+    };
+  }
+  if (a.status === "failed") {
+    return {
+      label: "BITCOIN ANCHOR",
+      value: "stamping failed; the other proof layers below remain in force",
+    };
+  }
+  if (a.status === "not_stamped") {
+    return {
+      label: "BITCOIN ANCHOR",
+      value: "none - this certificate predates Bitcoin anchoring and will not receive one",
+    };
+  }
+  return { label: "BITCOIN ANCHOR", value: a.status };
+}

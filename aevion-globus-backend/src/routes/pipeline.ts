@@ -35,7 +35,7 @@ import {
   verifyProof as otsVerifyProof,
 } from "../lib/opentimestamps/anchor";
 import { computeWitnessCid } from "../lib/shamir/witnessCid";
-import { anchorSummary } from "../lib/opentimestamps/anchorSummary";
+import { anchorSummary, pdfAnchorField } from "../lib/opentimestamps/anchorSummary";
 import {
   CosignError,
   reverifyAuthorCosign,
@@ -2078,6 +2078,10 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
         value: cert.contentHash,
       },
       { label: "HMAC-SHA256 SIGNATURE", value: cert.signatureHmac },
+      // Якорь в биткойне печатается ВСЕГДА, включая случай «его нет»: молчание
+      // читалось бы как «есть, просто не написали», а для сертификатов до
+      // появления якорения это неправда навсегда. Разбор — в самой функции.
+      pdfAnchorField(anchorSummary(cert as unknown as Record<string, unknown>)),
       {
         // Обрезанной подписью проверить нельзя ничего. Пока печатаем не всю —
         // называем вещи своими именами, чтобы её не приняли за подпись.

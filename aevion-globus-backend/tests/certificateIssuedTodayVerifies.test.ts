@@ -364,6 +364,33 @@ describe("PDF не утверждает больше, чем проверено"
     expect(r.body.toString("latin1").slice(0, 5)).toBe("%PDF-");
   });
 
+test.each(["bitcoin-confirmed", "pending", "failed", null])(
+    "PDF рисуется при состоянии якоря %s — новая строка не роняет документ",
+    async (status) => {
+      const issued = await issue();
+      const id = issued.body.certificate.id;
+      store.IPCertificate[0].otsStatus = status;
+      store.IPCertificate[0].otsBitcoinBlockHeight = status === "bitcoin-confirmed" ? 912345 : null;
+      const r = await pdf(id);
+      expect(r.status).toBe(200);
+      expect(r.body.toString("latin1").slice(0, 5)).toBe("%PDF-");
+    },
+  );
+
+  test("строка про якорь действительно ВСТАВЛЕНА в документ", async () => {
+    // Надписи из PDFKit не извлекаются, поэтому «попала ли строка в документ»
+    // проверяется по исходнику. Проверка слабее чтения документа, но РЕАЛЬНАЯ:
+    // без неё функция pdfAnchorField была бы покрыта тестами и не вызвана
+    // ниоткуда — ровно тот класс «код обещает то, чего не делает».
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync(new URL("../src/routes/pipeline.ts", import.meta.url), "utf8"),
+    );
+    const i = src.indexOf(`label: "HMAC-SHA256 SIGNATURE"`);
+    expect(i, "не найден блок полей PDF — проверка смотрит не туда").toBeGreaterThan(0);
+    const block = src.slice(i, i + 900);
+    expect(block, "pdfAnchorField не вызывается в блоке полей PDF").toContain("pdfAnchorField(");
+  });
+
   test("PDF рисуется и когда хеш НЕ сходится — документ не падает", async () => {
     // Важно именно это: при расхождении рисуется дополнительная полоса.
     // Ошибка в её координатах уронила бы выдачу документа целиком.

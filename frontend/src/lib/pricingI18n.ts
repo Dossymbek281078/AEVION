@@ -463,6 +463,9 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "newsletter.title": "Не готовы покупать сейчас?",
     "newsletter.subtitle": "Подпишитесь на email-апдейты — раз в 2 недели: новые модули, кейсы клиентов, промо-коды.",
     "newsletter.placeholder": "your@email.com",
+    // Подпись для читалки: placeholder исчезает при вводе, и вернувшийся
+    // к форме человек уже не знает, что за поле перед ним.
+    "newsletter.emailLabel": "Электронная почта для апдейтов",
     "newsletter.submit": "Подписаться",
     "newsletter.submitting": "Подписываемся...",
     "newsletter.success": "✓ Подписка подтверждена. Спасибо!",
@@ -940,6 +943,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "newsletter.title": "Not ready to buy yet?",
     "newsletter.subtitle": "Subscribe to email updates — every 2 weeks: new modules, customer cases, promo codes.",
     "newsletter.placeholder": "your@email.com",
+    "newsletter.emailLabel": "Email address for updates",
     "newsletter.submit": "Subscribe",
     "newsletter.submitting": "Subscribing...",
     "newsletter.success": "✓ Subscription confirmed. Thanks!",

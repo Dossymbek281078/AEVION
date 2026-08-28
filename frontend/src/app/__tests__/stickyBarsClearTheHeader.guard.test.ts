@@ -45,6 +45,29 @@ const FIXED = [
 ];
 
 describe("прилипающие полосы стоят под шапкой, а не под ней", () => {
+  // Счёт вынесен в функцию, чтобы его можно было позвать на ЗАВЕДОМОМ
+  // образце. Без этого проверка однажды уже была пустой: в шаблоне ``
+  // из heredoc превратился в символ забоя (0x08), совпадений не стало
+  // вовсе, и счётчик всегда давал ноль — сторож зеленел на сломанном коде.
+  // Собственный контроль ловит это при КАЖДОМ прогоне, а не когда я
+  // вспомню про мутацию.
+  const countBare = (text: string): number => {
+    const re = /className="([^"]*sticky[^"]*top-0[^"]*)"/g;
+    let m: RegExpExecArray | null;
+    let n = 0;
+    while ((m = re.exec(text))) {
+      if (!text.slice(Math.max(0, m.index - 140), m.index).includes("aevion-header-h")) n++;
+    }
+    return n;
+  };
+
+  it("счётчик умеет находить — иначе его ноль ничего не значит", () => {
+    const плохой = `<header className="border-b sticky top-0 z-10">`;
+    const хороший = `<header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b sticky top-0 z-10">`;
+    expect(countBare(плохой), "счётчик ослеп: не видит даже заведомо плохую строку").toBe(1);
+    expect(countBare(хороший), "счётчик считает исправное плохим").toBe(0);
+  });
+
   it("в модуле smeta-trainer не осталось полос с голым top-0", () => {
     // 250 мест в 243 файлах: у всех была одна беда — sticky top-0 со слоем
     // ниже шапки. Дефект подтверждён браузером на четырёх страницах модуля
@@ -58,12 +81,7 @@ describe("прилипающие полосы стоят под шапкой, а
         const p = join(dir, n);
         if (statSync(p).isDirectory()) { walk(p); continue; }
         if (!p.endsWith(".tsx")) continue;
-        const s = readFileSync(p, "utf8");
-        const re = /className="([^"]*sticky[^"]*top-0[^"]*)"/g;
-        let m: RegExpExecArray | null;
-        while ((m = re.exec(s))) {
-          if (!s.slice(Math.max(0, m.index - 140), m.index).includes("aevion-header-h")) bad++;
-        }
+        bad += countBare(readFileSync(p, "utf8"));
       }
     };
     walk(root);

@@ -38,4 +38,17 @@ describe("происхождение брони: смок или человек"
     expect(countLiveSlots(PROD_SAMPLE)).toBe(1);
     expect(countLiveSlots([])).toBe(0);
   });
+
+  it("демо-кнопка самой страницы не считается рынком", () => {
+    // Публичная страница шлёт зашитый holder "AEVION demo" — поля имени там нет.
+    // Клик посетителя не должен публиковаться как заявка оператора.
+    expect(isSmokeSlot({ routeId: "astana-vp-112_2", holder: "AEVION demo" })).toBe(true);
+    expect(isSmokeSlot({ routeId: "astana-vp-112_2", holder: "aevion demo" })).toBe(true);
+    // Соседний контроль: похожее, но НЕ демо-имя остаётся живым.
+    expect(isSmokeSlot({ routeId: "astana-vp-112_2", holder: "AEVION Logistics" })).toBe(false);
+    expect(countLiveSlots([
+      { routeId: "astana-vp-112_2", holder: "AEVION demo" },
+      { routeId: "astana-vp-112_2", holder: "aero-taxi-kz" },
+    ])).toBe(1);
+  });
 });

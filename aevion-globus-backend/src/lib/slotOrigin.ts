@@ -25,6 +25,21 @@ const SMOKE_HOLDERS = new Set([
 ]);
 
 /**
+ * Держатель, которым публичная страница подписывает бронь ДЕМО-кнопки.
+ *
+ * 28.08.2026: нажатие «забронировать» на `/qskyway` уходит с зашитым
+ * `holder: "AEVION demo"` (frontend/src/app/qskyway/_client.tsx) — поля ввода
+ * имени там нет вовсе. То есть каждый клик любопытного посетителя попадал в
+ * «живую» глубину рынка наравне с настоящей заявкой оператора. Поймано так:
+ * два клика по демо-кнопке подняли `slotsBookedLive` с 0 до 2.
+ *
+ * Это вторая половина дефекта, ради которого написан весь файл: у смоук-прогона
+ * держателей мы исключили, а собственную демо-кнопку — нет. Признак живёт рядом
+ * со смоуковым, чтобы «не живая бронь» имела ОДНО определение, а не два.
+ */
+const DEMO_HOLDERS = new Set(["aevion demo"]);
+
+/**
  * Тестовая ли бронь.
  *
  * Маршрут — основной признак: смоки строят `smoke-route-…`. Держатель — второй,
@@ -35,10 +50,11 @@ const SMOKE_HOLDERS = new Set([
 export function isSmokeSlot(slot: SlotOriginLike): boolean {
   const route = (slot.routeId ?? "").toLowerCase();
   if (route.startsWith("smoke-") || route.includes("-smoke-")) return true;
-  return SMOKE_HOLDERS.has((slot.holder ?? "").toLowerCase());
+  const holder = (slot.holder ?? "").toLowerCase();
+  return SMOKE_HOLDERS.has(holder) || DEMO_HOLDERS.has(holder);
 }
 
-/** Сколько записей в списке оставлено не смоком. */
+/** Сколько записей в списке оставлено не смоком и не демо-кнопкой. */
 export function countLiveSlots(slots: readonly SlotOriginLike[]): number {
   return slots.reduce((n, s) => n + (isSmokeSlot(s) ? 0 : 1), 0);
 }

@@ -26,6 +26,9 @@ export interface SlotLike {
 /** Держатели, которыми представляются смоук-сценарии (см. scripts/*-smoke.js). */
 const SMOKE_HOLDERS = new Set(["smoke-holder", "verify", "op0", "op1", "op2", "op3", "late", "h0", "h1", "h2", "h3"]);
 
+/** Держатель демо-кнопки самой страницы — не рынок (см. lib/slotOrigin.ts на сервере). */
+const DEMO_HOLDERS = new Set(["aevion demo"]);
+
 /**
  * Тестовая ли это бронь.
  *
@@ -38,7 +41,8 @@ export function isSmokeSlot(slot: SlotLike): boolean {
   if (typeof slot.test === "boolean") return slot.test;
   const route = (slot.routeId ?? "").toLowerCase();
   if (route.startsWith("smoke-") || route.includes("-smoke-")) return true;
-  return SMOKE_HOLDERS.has((slot.holder ?? "").toLowerCase());
+  const holder = (slot.holder ?? "").toLowerCase();
+  return SMOKE_HOLDERS.has(holder) || DEMO_HOLDERS.has(holder);
 }
 
 /** Сколько записей из списка — тестовые. */

@@ -47,4 +47,13 @@ describe("тестовая бронь отличается от настояще
     expect(countSmokeSlots(PROD_SAMPLE)).toBe(3);
     expect(countSmokeSlots([])).toBe(0);
   });
+
+  it("демо-кнопка страницы помечается тестовой", () => {
+    expect(isSmokeSlot({ routeId: "astana-vp-112_2", holder: "AEVION demo" })).toBe(true);
+    expect(isSmokeSlot({ routeId: "astana-vp-112_2", holder: "AEVION Logistics" })).toBe(false);
+    expect(countSmokeSlots([
+      { routeId: "astana-vp-112_2", holder: "AEVION demo" },
+      { routeId: "astana-vp-112_2", holder: "aero-taxi-kz" },
+    ])).toBe(1);
+  });
 });

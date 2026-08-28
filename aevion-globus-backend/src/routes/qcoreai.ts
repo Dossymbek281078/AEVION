@@ -7009,7 +7009,11 @@ qcoreaiRouter.post("/sessions/:id/collab", async (req, res) => {
     const token = cryptoMod.randomBytes(16).toString("hex");
     const now = new Date();
     const expiresAt = new Date(now.getTime() + COLLAB_TTL_MS).toISOString();
-    if (isDbReady()) {
+    // Признак считается ДО записи и НЕ имеет значения по умолчанию: иначе
+    // «сохранили в базу» и «положили в память» отвечают одинаково, а разница
+    // между ними — переживёт ссылка выкатку или нет.
+    const durable = isDbReady();
+    if (durable) {
       // Ссылка обещает срок действия — значит обязана его пережить. Память
       // умирает при первой же выкатке, а их несколько в день.
       await collabSave(token, sessionId, auth.sub, expiresAt);
@@ -7023,7 +7027,21 @@ qcoreaiRouter.post("/sessions/:id/collab", async (req, res) => {
       });
     }
     const url = `https://aevion.app/qcoreai/collab/${token}`;
-    return res.status(201).json({ token, url, expiresAt });
+    // Без базы `expiresAt` остаётся лишь ВЕРХНЕЙ границей: на деле ссылка живёт
+    // до перезапуска сервера. Молчать об этом нельзя — владелец отправит ссылку,
+    // а получатель увидит «владелец отозвал доступ или истёк срок», хотя не
+    // случилось ни того, ни другого.
+    return res.status(201).json({
+      token,
+      url,
+      expiresAt,
+      durable,
+      ...(durable
+        ? {}
+        : {
+            note: "Сейчас ссылка временная: она перестанет работать при ближайшем перезапуске сервера. Отправляйте её только если собеседник откроет прямо сейчас.",
+          }),
+    });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "create-collab" });
     return res.status(500).json({ error: "collab create failed" });

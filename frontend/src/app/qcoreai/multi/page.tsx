@@ -532,6 +532,12 @@ export default function QCoreMultiAgentPage() {
   // copied is a false success: the user pastes stale content and blames us.
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteFailed, setInviteFailed] = useState(false);
+  // 28.08.2026 — the backend answers `durable: false` when it had to keep the
+  // link in memory. Such a link dies at the next restart, so handing it over
+  // without a word makes the recipient see "revoked or expired" when neither
+  // happened. The wording lives here, in the page's own language; the server
+  // sends a machine flag plus its own `note` for direct API callers.
+  const [inviteFragile, setInviteFragile] = useState(false);
 
   // V48 — Run timeline points.
   type TimelinePoint = { runId: string; startedAt: string; durationMs: number | null; costUsd: number | null; strategy: string | null; status: string };
@@ -3715,6 +3721,7 @@ export default function QCoreMultiAgentPage() {
                       });
                       if (!res.ok) throw new Error(`HTTP ${res.status}`);
                       const invite = await res.json();
+                      setInviteFragile(invite.durable === false);
                       const origin = typeof window !== "undefined" ? window.location.origin : "";
                       const link = invite.url || `${origin}/qcoreai/collab/${invite.token}`;
                       try {
@@ -3749,6 +3756,12 @@ export default function QCoreMultiAgentPage() {
                 </button>
               )}
             </div>
+            {inviteFragile && (
+              <div style={{ padding: "6px 10px", fontSize: 11, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, margin: "0 10px 6px" }}>
+                Temporary link: it stops working when the server restarts. Send it
+                only if the other person opens it right away.
+              </div>
+            )}
             {inviteLink && (
               // Clipboard refused; the link is real, so hand it over to copy by
               // hand rather than lose it behind a success message.

@@ -29,9 +29,23 @@ vi.mock("../src/lib/dbPool", () => ({
     connect: async () => ({ query: async () => ({ rows: [], rowCount: 0 }), release: () => {} }),
     query: async (sql?: string, params?: unknown[]) => {
       const s = String(sql ?? "");
-      if (!s.includes("QCoreSessionInvite") || !s.trimStart().toUpperCase().startsWith("SELECT")) {
-        return { rows: [], rowCount: 0 };
+      if (!s.includes("QCoreSessionInvite")) return { rows: [], rowCount: 0 };
+      const head = s.trimStart().toUpperCase();
+
+      if (head.startsWith("DELETE")) {
+        const excludes = s.includes(`"role" <> 'collab'`);
+        const i = rows.findIndex(
+          (r) =>
+            r.id === String(params?.[0] ?? "") &&
+            r.invitedBy === String(params?.[1] ?? "") &&
+            (!excludes || r.role !== "collab"),
+        );
+        if (i < 0) return { rows: [], rowCount: 0 };
+        rows.splice(i, 1);
+        return { rows: [], rowCount: 1 };
       }
+
+      if (!head.startsWith("SELECT")) return { rows: [], rowCount: 0 };
       // Фильтр по роли применяем ТОЛЬКО если он есть в запросе: стенд,
       // отсеивающий collab всегда, остался бы зелёным и после снятия фильтра.
       const excludesCollab = s.includes(`"role" <> 'collab'`);
@@ -51,7 +65,11 @@ vi.mock("../src/lib/ensureQCoreTables", () => ({
   getDbError: () => null,
 }));
 
-import { getSessionInvite, listSessionInvites } from "../src/services/qcoreai/store";
+import {
+  getSessionInvite,
+  listSessionInvites,
+  deleteSessionInvite,
+} from "../src/services/qcoreai/store";
 
 describe("токен совместного просмотра не проходит как приглашение", () => {
   test("обычное приглашение по-прежнему находится", async () => {
@@ -67,6 +85,15 @@ describe("токен совместного просмотра не проход
     // которых владелец не создавал.
     const list = await listSessionInvites("s1", "owner");
     expect(list.map((x) => x.role)).toEqual(["viewer"]);
+  });
+
+  test("ссылку просмотра нельзя удалить через API приглашений", async () => {
+    // Третье и последнее место, где механизмы делят таблицу. Путь сегодня
+    // недостижим — id ссылки через список приглашений не получить. Ровно так
+    // я рассуждал и про читателя по токену, где дыра оказалась настоящей:
+    // правило должно быть одинаковым во всех трёх местах.
+    expect(await deleteSessionInvite("c1", "owner"), "чужой механизм удалён через API приглашений").toBe(false);
+    expect(await deleteSessionInvite("i1", "owner"), "сломано удаление настоящего приглашения").toBe(true);
   });
 
   test("токен просмотра приглашением НЕ считается", async () => {

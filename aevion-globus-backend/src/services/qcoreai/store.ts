@@ -4425,8 +4425,15 @@ export async function deleteSessionInvite(id: string, userId: string): Promise<b
     }
     return false;
   }
+  // Роль 'collab' исключена и здесь — третье и последнее место, где механизмы
+  // делят таблицу. Достать id ссылки просмотра через API приглашений сегодня
+  // нельзя (список её не показывает), то есть путь недостижим. Ровно так я и
+  // рассуждал про читателя по токену — и получил там настоящую дыру. Правило
+  // должно быть одинаковым во всех трёх местах, иначе следующий добавит
+  // четвёртое и будет гадать, какое из них главное.
   const r = await pool.query(
-    `DELETE FROM "QCoreSessionInvite" WHERE "id"=$1 AND "invitedBy"=$2`,
+    `DELETE FROM "QCoreSessionInvite"
+      WHERE "id"=$1 AND "invitedBy"=$2 AND "role" <> 'collab'`,
     [id, userId]
   );
   return (r.rowCount ?? 0) > 0;

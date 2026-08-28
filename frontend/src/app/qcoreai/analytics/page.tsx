@@ -159,6 +159,7 @@ export default function QCoreAnalyticsPage() {
       try {
         const gRes = await fetch(apiUrl("/api/qcoreai/me/analytics-goal"), { headers: bearerHeader() });
         const gData = await gRes.json().catch(() => ({}));
+        if (!gRes.ok) setPartial((prev) => prev.includes("цель по расходу") ? prev : [...prev, "цель по расходу"]);
         if (gData?.goal) setGoal(gData.goal);
       } catch { /* non-critical */ }
 
@@ -170,10 +171,13 @@ export default function QCoreAnalyticsPage() {
           fetch(apiUrl("/api/qcoreai/analytics/run-quality"), { headers: bearerHeader() }),
         ]);
         const cData = await cRes.json().catch(() => ({}));
+        if (!cRes.ok) setPartial((prev) => prev.includes("когорты") ? prev : [...prev, "когорты"]);
         if (Array.isArray(cData?.cohorts)) setCohorts(cData.cohorts);
         const hData = await hRes.json().catch(() => ({}));
+        if (!hRes.ok) setPartial((prev) => prev.includes("активные часы") ? prev : [...prev, "активные часы"]);
         if (Array.isArray(hData?.hours)) setTopHours(hData.hours);
         const qData = await qRes.json().catch(() => ({}));
+        if (!qRes.ok) setPartial((prev) => prev.includes("качество прогонов") ? prev : [...prev, "качество прогонов"]);
         if (qData?.brief !== undefined) setRunQuality(qData);
       } catch { /* non-critical */ }
     } catch (e: any) {
@@ -354,7 +358,16 @@ export default function QCoreAnalyticsPage() {
                       const body = { monthlyRuns: goalRuns ? parseInt(goalRuns) : null, monthlyCostUsd: goalCost ? parseFloat(goalCost) : null };
                       const res = await fetch(apiUrl("/api/qcoreai/me/analytics-goal"), { method: "PUT", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify(body) });
                       const d = await res.json().catch(() => ({}));
-                      if (d.goal) { setGoal(d.goal); setGoalEdit(false); }
+                      // Молчание на СОХРАНЕНИИ недопустимо: раньше при отказе
+                      // редактор просто не закрывался, и человек не знал,
+                      // сохранилось ли. Молчать можно об уборке, не о действии.
+                      if (!res.ok || !d.goal) {
+                        setError(d?.error || `Не удалось сохранить цель (${res.status}). Попробуйте ещё раз.`);
+                        return;
+                      }
+                      setError(null);
+                      setGoal(d.goal);
+                      setGoalEdit(false);
                     }} style={{ alignSelf: "flex-end", padding: "5px 14px", borderRadius: 6, border: "none", background: "#0f172a", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
                   </div>
                 ) : goal ? (

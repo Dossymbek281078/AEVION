@@ -100,3 +100,51 @@ describe("месячная норма картинок действительн�
     expect(after.body.used ?? 1, "неудача провайдера списала норму").toBeLessThanOrEqual(1);
   });
 });
+
+/**
+ * Видео: три в месяц на бесплатном тарифе.
+ *
+ * Генерация тут асинхронная — ручка ставит задачу у Replicate и возвращает её
+ * идентификатор, а результат забирают опросом. Для нормы это неважно: расход
+ * списывается при ПОСТАНОВКЕ задачи, и проверка кредита стоит до вызова
+ * провайдера. Значит и проверять надо постановку, а не готовое видео.
+ */
+describe("месячная норма видео действительно останавливает трату", () => {
+  const realFetch = global.fetch;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    __resetDevHubStore();
+    process.env.REPLICATE_API_TOKEN = "fake-for-test";
+    fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: "pred_1", status: "starting" }),
+      text: async () => "",
+    });
+    global.fetch = fetchMock as never;
+  });
+
+  afterEach(() => {
+    global.fetch = realFetch;
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  test("три проходят, четвёртое отвечает 402", async () => {
+    const app = makeApp();
+    for (let i = 0; i < 3; i++) {
+      const r = await request(app)
+        .post("/api/devhub/media/video")
+        .send({ prompt: "кот на подоконнике", model: "google/veo-3-fast" });
+      // Контроль прибора: иначе дальше проверялся бы не предел, а поломка стенда.
+      expect(r.status, `видео ${i + 1}: ${JSON.stringify(r.body).slice(0, 140)}`).toBe(200);
+    }
+
+    const fourth = await request(app)
+      .post("/api/devhub/media/video")
+      .send({ prompt: "кот на подоконнике", model: "google/veo-3-fast" });
+    expect(fourth.status, "четвёртое видео прошло — норма не держит").toBe(402);
+    expect(fourth.body.limit).toBe(3);
+    expect(fourth.body.used).toBe(3);
+  });
+});

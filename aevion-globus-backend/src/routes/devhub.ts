@@ -163,7 +163,7 @@ devhubRouter.post("/ask", dhCostlyLimit("dhask"), async (req, res) => {
     return res.json({ answer, routing });
   } catch (e: any) {
     captureException(e);
-    return res.status(502).json({ error: e?.message || "ask failed" });
+    return res.status(502).json({ error: safeErrorText(e) || "ask failed" });
   }
 });
 
@@ -1944,7 +1944,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
     if (typeof e?.message === "string" && e.message.startsWith("NO_VISION_PROVIDER")) {
       return res.status(503).json({ error: e.message.replace("NO_VISION_PROVIDER: ", "") });
     }
-    res.status(500).json({ error: e?.message || "generation failed" });
+    res.status(500).json({ error: safeErrorText(e) || "generation failed" });
   }
 });
 
@@ -2874,7 +2874,7 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     noteProviderSuccess("github");
     return res.json({ ok: true, repoUrl, pushedFiles });
   } catch (e: any) {
-    return res.json({ ok: false, message: e?.message || "GitHub push failed" });
+    return res.json({ ok: false, message: safeErrorText(e) || "GitHub push failed" });
   }
 });
 
@@ -3139,7 +3139,7 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
     });
   } catch (e: any) {
     captureException(e, { route: "devhub/github:pull-request", projectId: project.id });
-    return res.json({ ok: false, message: e?.message || "GitHub pull request creation failed" });
+    return res.json({ ok: false, message: safeErrorText(e) || "GitHub pull request creation failed" });
   }
 });
 
@@ -3799,7 +3799,7 @@ devhubRouter.post("/media/tts", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.send(audioBuffer);
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "TTS generation failed" });
+    res.status(500).json({ error: safeErrorText(e) || "TTS generation failed" });
   }
 });
 
@@ -3858,7 +3858,7 @@ devhubRouter.post("/media/email", async (req, res) => {
       ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Email send failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Email send failed" });
   }
 });
 
@@ -4235,7 +4235,7 @@ devhubRouter.post("/media/music", async (req, res) => {
     const fb = await musicGenFallback(e?.message || "ElevenLabs request failed").catch(() => null);
     if (fb) { noteProviderSuccess("audio_music"); return res.json(fb); }
     noteProviderFailure("audio_music", `${e?.message || "ElevenLabs request failed"} and no MusicGen fallback available`);
-    res.status(500).json({ error: e?.message || "Music compose failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Music compose failed" });
   }
 });
 
@@ -5060,7 +5060,7 @@ devhubRouter.post("/media/sms", async (req, res) => {
       ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "SMS send failed" });
+    res.status(500).json({ error: safeErrorText(e) || "SMS send failed" });
   }
 });
 
@@ -5324,7 +5324,7 @@ devhubRouter.post("/media/translate", async (req, res) => {
       targetLang: targetLang.toUpperCase(),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Translation failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Translation failed" });
   }
 });
 
@@ -5910,7 +5910,7 @@ devhubRouter.get("/projects/:id/export", async (req, res) => {
     res.setHeader("Content-Length", zip.length);
     res.send(zip);
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "export failed" });
+    res.status(500).json({ error: safeErrorText(e) || "export failed" });
   }
 });
 
@@ -6744,7 +6744,7 @@ devhubRouter.post("/media/video", async (req, res) => {
       ...creditNote(credit),
     });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Video generation failed" });
+    return res.status(500).json({ error: safeErrorText(e) || "Video generation failed" });
   }
 });
 

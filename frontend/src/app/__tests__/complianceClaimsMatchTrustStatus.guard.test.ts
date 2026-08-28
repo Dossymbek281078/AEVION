@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -44,7 +44,18 @@ const glossaryPath = join(here, "..", "pricing", "glossary", "page.tsx");
  * словаре. Сторож, знающий один источник из двух, занижает не риск, а свой
  * собственный охват.
  */
-const i18nPath = join(here, "..", "..", "lib", "i18n-data.ts");
+// РАЗДЕЛЁННЫЕ СЛОВАРИ. До 10.08.2026 все одиннадцать языков лежали в
+// i18n-data.ts одним объектом, и сторож читал этот файл. Их разнесли по
+// i18n-lang/<язык>.ts ради веса страницы (1.3 МБ из 2.5 грузились на каждой),
+// и в i18n-data.ts переводов больше НЕТ — там осталось 2.8 КБ служебного кода.
+//
+// Сторож этого не знал и читал пустое: его собственная проверка «разбор
+// работает» краснела, что и спасло — иначе он молча считал бы, что расхождений
+// нет, при нуле разобранных строк.
+//
+// Ни одна сторона не была неправа: перенос верен, сторож верен, сломалось
+// СОЧЕТАНИЕ. Поймано при сведении веток 28.08.2026.
+const i18nDir = join(here, "..", "..", "lib", "i18n-lang");
 
 /** id -> status из TRUST_BADGES. Разбор строковый: файл — данные, не код. */
 function readTrustStatuses(src: string): Map<string, string> {
@@ -112,9 +123,13 @@ describe("витрина не называет нас сертифицирова
   const trust = readTrustStatuses(readFileSync(trustPath, "utf8"));
   const glossary = readGlossaryEntries(readFileSync(glossaryPath, "utf8"));
   // Строки переводов: ключ несёт идентификатор, значение — видимый текст.
-  const i18n = readFileSync(i18nPath, "utf8")
-    .split(String.fromCharCode(10))
-    .map((text, i) => ({ text, line: i + 1 }))
+  const i18n = readdirSync(i18nDir)
+    .filter((f) => f.endsWith(".ts"))
+    .flatMap((f) =>
+      readFileSync(join(i18nDir, f), "utf8")
+        .split(String.fromCharCode(10))
+        .map((text, i) => ({ text, line: i + 1, file: f })),
+    )
     .filter((r) => r.text.includes('"pricing.'));
 
   it("сам разбор работает — иначе проверка была бы пустой", () => {

@@ -35,6 +35,14 @@ import { allTranslations } from "../__tests__/localeSource";
 const LOCALES = ["en", "ru", "kk"] as const;
 
 const KEYS = [
+  // Добавлены 28.08.2026: чипы спорной высоты и суффикс доли по зданиям.
+  // Пятый ключ — честная замена «×undefined к застройке»: при отсутствии
+  // кратности говорим, что высота под вопросом, и не выдумываем число.
+  "qskyway.disp.vsLevels",
+  "qskyway.disp.vsPublished",
+  "qskyway.disp.vsBuilt",
+  "qskyway.disp.suspectPlain",
+  "qskyway.just.byBuildings",
   // Добавлены 28.08.2026 вместе с переводом четырёх мест, где страница
   // говорила по-русски независимо от выбранного языка: единицы ветра,
   // сообщение об ошибке сети и два чипа влияния спорной высоты.

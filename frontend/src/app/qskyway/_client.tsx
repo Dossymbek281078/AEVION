@@ -977,9 +977,13 @@ export default function QSkywayClient() {
                       {t("qskyway.height.suspect")}{" "}
                       {meta.suspect
                         .map((o) => {
-                          if (o.was !== undefined) {
+                          // Оба поля обязаны быть, а не одно: раньше здесь стояла
+                          // шаблонная строка, и при отсутствии `levels` на экран
+                          // уезжало слово «undefined». Типы это поймали только
+                          // после перевода на ключ — шаблон печатает что угодно.
+                          if (o.was !== undefined && o.levels !== undefined) {
                             // источник спорит сам с собой: тег высоты против собственного счёта этажей
-                            return `${o.h} м вместо ${o.was} м — тег спорит с ${o.levels} этажами`;
+                            return t("qskyway.disp.vsLevels", { h: o.h, was: o.was, levels: o.levels });
                           }
                           // Высота, которая в разы выше остальной застройки. Если такой
                           // случай уже разобран человеком — называем ЧИСЛО из статьи
@@ -987,8 +991,12 @@ export default function QSkywayClient() {
                           // проверить его нельзя, а «310.8 м в статье» можно.
                           const rev = meta.heightReview.find((r) => r.index === o.i);
                           return rev
-                            ? `${o.h} м — в статье объекта ${rev.publishedM} м`
-                            : `${o.h} м — ×${o.times} к застройке`;
+                            ? t("qskyway.disp.vsPublished", { h: o.h, pub: rev.publishedM })
+                            : o.times !== undefined
+                              ? t("qskyway.disp.vsBuilt", { h: o.h, times: o.times })
+                              // Кратности нет — говорим, что высота под вопросом, и не
+                              // выдумываем число. «×undefined к застройке» хуже молчания.
+                              : t("qskyway.disp.suspectPlain", { h: o.h });
                         })
                         .join(" · ")}
                       {/* Доходит ли спорная высота до маршрутов — измерено движком по
@@ -1188,7 +1196,7 @@ export default function QSkywayClient() {
                         {justification.doc.obstacleSegments != null && justification.doc.obstacleSegments > 0 && (
                           <div style={{ marginTop: 3, color: justification.doc.measuredObstacleSegments === 0 ? "#fbbf24" : "#5f7086" }}>
                             {t("qskyway.just.heights", { pct: justification.doc.heightConfidencePct })}{" "}
-                            {measuredObstaclePct(justification.doc.obstacleSegments, justification.doc.measuredObstacleSegments)}% по зданиям
+                            {measuredObstaclePct(justification.doc.obstacleSegments, justification.doc.measuredObstacleSegments)}{t("qskyway.just.byBuildings")}
                             {justification.doc.measuredObstacleSegments === 0 && t("qskyway.just.noCityMeasure")}
                           </div>
                         )}

@@ -3437,7 +3437,7 @@ export default function CyberChessPage(){
           const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";
           if(w){
             const nr=Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)));sRat(nr);svR(nr);
-            const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);showToast(`+${nr-rat} rating`,"success");
+            const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);showToast(`+${nr-rat} к рейтингу`,"success");
             // Chessy reward: scale by AI difficulty × time category × shop bonus
             const aiMul=[0.2,0.5,1,1.5,2.5,4][aiI]||1;
             const timeMul=tc.ini<=0?1:Math.max(0.5,Math.min(3,tc.ini/300));
@@ -4570,7 +4570,7 @@ export default function CyberChessPage(){
             sHist(h=>[...h,`@${pickType.toUpperCase()}${sq}`]);
             sDropPool(p=>removeFromPool(p,pickType,aiCol));
             const symAi=aiCol==="w"?pickType.toUpperCase():pickType;
-            showToast(`🤖 AI: drop ${POOL_GLYPH[symAi]} → ${sq}`,"info");
+            showToast(`🤖 ИИ ставит ${POOL_GLYPH[symAi]} → ${sq}`,"info");
             snd("move");
           }catch{}
           sThink(false);
@@ -4840,7 +4840,7 @@ export default function CyberChessPage(){
         sDropPickerOpen(false);sSelectedDropPiece(null);
         sLm(null);sSel(null);sVm(new Set());
         snd("move");
-        showToast(`⚡ Drop: ${POOL_GLYPH[pCol==="w"?selectedDropPiece.toUpperCase():selectedDropPiece]} → ${sq}`,"success");
+        showToast(`⚡ Ставим: ${POOL_GLYPH[pCol==="w"?selectedDropPiece.toUpperCase():selectedDropPiece]} → ${sq}`,"success");
       }catch{showToast("Не удалось поставить фигуру","error")}
       return;
     }
@@ -6424,7 +6424,7 @@ export default function CyberChessPage(){
                     sPzCurrent(fakePz);sPzAttempt("idle");sLm(null);sSel(null);sVm(new Set());
                     sHist([]);sFenHist([fakePz.fen]);sPCol(fakePz.side as any);sFlip(fakePz.side==="b");
                     sOn(true);
-                    showToast(`🌐 Lichess Daily · rating ${fakePz.r} · ${j?.puzzle?.themes?.slice(0,2).join(" · ")||""}`,"success");
+                    showToast(`🌐 Задача дня Lichess · рейтинг ${fakePz.r} · ${j?.puzzle?.themes?.slice(0,2).join(" · ")||""}`,"success");
                   }catch(e:any){
                     showToast(`Lichess недоступен: ${e?.message||"network"}`,"error");
                   }finally{
@@ -9736,7 +9736,7 @@ export default function CyberChessPage(){
                 <div style={{display:"flex",gap:SPACE[1],flexWrap:"wrap",alignItems:"center"}}>
                   {([[60,"1 мин"],[120,"2 мин"],[600,"10 мин"],[1200,"20 мин"],[1800,"30 мин"]] as const).map(([sec,label])=>{
                     const active=pzCustomSec===sec;
-                    return <button key={sec} onClick={()=>{sPzCustomSec(sec);startClock(sec);showToast(`Custom ${label}`,"info")}}
+                    return <button key={sec} onClick={()=>{sPzCustomSec(sec);startClock(sec);showToast(`Свой ${label}`,"info")}}
                       style={{padding:"5px 10px",borderRadius:RADIUS.sm,
                         border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
                         background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
@@ -14072,7 +14072,7 @@ ${question.trim()}`;
                 {[{d:14,lbl:"⚡ 14 (быстро)"},{d:18,lbl:"🎯 18 (баланс)"},{d:22,lbl:"📈 22 (точнее)"},{d:25,lbl:"🔬 25 (макс)"},{d:30,lbl:"🧠 30 (NNUE deep)"}].map(opt=>{
                   const selected=sfDepth===opt.d;
                   return <button key={opt.d}
-                    onClick={()=>{sSfDepth(opt.d);showToast(`Stockfish depth=${opt.d}`,"info")}}
+                    onClick={()=>{sSfDepth(opt.d);showToast(`Stockfish, глубина ${opt.d}`,"info")}}
                     style={{
                       padding:"5px 10px",borderRadius:RADIUS.full,
                       border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
@@ -15083,7 +15083,7 @@ ${question.trim()}`;
             if(!mv)throw new Error("solution invalid");
             const fakePz:Puzzle={name:`Lichess Daily · ${j?.puzzle?.id||"?"}`,r:Number(j?.puzzle?.rating)||1500,theme:(j?.puzzle?.themes?.[0]||"tactics") as any,phase:"Middlegame",side:ch.turn() as "w"|"b",goal:"Best move",mateIn:0,fen:ch.fen(),sol:[first]};
             sTab("puzzles");setGame(new Chess(fakePz.fen));sBk(k=>k+1);sPzCurrent(fakePz);sPzAttempt("idle");sLm(null);sSel(null);sVm(new Set());sHist([]);sFenHist([fakePz.fen]);sPCol(fakePz.side as any);sFlip(fakePz.side==="b");sOn(true);
-            showToast(`🌐 Lichess Daily · rating ${fakePz.r}`,"success");
+            showToast(`🌐 Задача дня Lichess · рейтинг ${fakePz.r}`,"success");
           }catch(e:any){showToast(`Lichess недоступен: ${e?.message||"network"}`,"error")}finally{sLichessLoading(false)}
         }},
 

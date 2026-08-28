@@ -14,7 +14,12 @@ import path from "node:path";
  */
 const ROOT = path.join(__dirname, "..");
 
-const ИМЕНА = ["Puzzle Rush", "Stockfish", "Lichess", "Chessy", "AEVION", "CyberChess"];
+// Собственные имена и шахматные форматы: их не переводят ни на одном сайте.
+// Форматы добавлены заранее — сейчас все подписи с ними содержат русские
+// слова и под правило не попадают, но короткое label:"FEN" дало бы ложную
+// красноту, а к вечно краснеющему сторожу перестают присматриваться.
+const ИМЕНА = ["Puzzle Rush", "Stockfish", "Lichess", "Chessy", "AEVION", "CyberChess",
+  "PGN", "FEN", "ELO", "UCI", "SAN"];
 
 function stranicy(d: string, acc: string[] = []): string[] {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {

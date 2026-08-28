@@ -1183,6 +1183,18 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/startupx", "startup-exchange"],
   ["/api/ventures", "ventures"],
   ["/api/qventure", "qventure"],
+  // Добавлено 28.08.2026 сверкой таблицы шлюзов с MODULES_PRICING. Три
+  // платных модуля были в прайсе, но их префиксов здесь не было — значит
+  // ВКЛЮЧИТЬ для них стену было нечем: переменная PAYWALL_MODULES принимала
+  // бы их имя и молча ничего не делала. Ни один из трёх сейчас не включён,
+  // поэтому проводка ничего не меняет сегодня; она делает переключатель
+  // работающим. Полноту стережёт tests/paywallGateCoversPricing.test.ts.
+  ["/api/qmelanin", "qmelanin"],
+  ["/api/revenue", "revenue-hub"],
+  // qskyway крепится манифестом ниже (строка ~1328), а шлюзы регистрируются
+  // выше (~1196) — Express идёт по порядку регистрации, поэтому шлюз успевает
+  // встать перед роутером.
+  ["/api/qskyway", "qskyway"],
   ["/api/qreal", "qreal"],
   ["/api/deepsan", "deepsan"],
   ["/api/mapreality", "mapreality"],

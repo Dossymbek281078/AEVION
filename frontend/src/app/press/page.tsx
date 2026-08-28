@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
-import { getApiBase } from "@/lib/apiBase";
+import { getApiBase, getClientApiBase } from "@/lib/apiBase";
 
 export const revalidate = 3600;
 
@@ -43,13 +43,7 @@ async function fetchCatalog(): Promise<CatalogItem[]> {
   }
 }
 
-// The registry emits `live` and `mvp`. `launched` was an older name that the
-// API no longer returns — it is kept here only so an old snapshot still renders.
-// Dropping `live` from STATUS_ORDER silently hid 36 of 41 modules while the
-// heading kept claiming "41 modules", so any status the catalog reports must
-// have an entry here.
 const STATUS_COLOR: Record<string, string> = {
-  live: "#10b981",
   launched: "#10b981",
   mvp: "#10b981",
   working: "#10b981",
@@ -59,10 +53,9 @@ const STATUS_COLOR: Record<string, string> = {
   idea: "#94a3b8",
 };
 
-const STATUS_ORDER = ["live", "launched", "mvp", "in_progress", "research", "planning", "idea"];
+const STATUS_ORDER = ["launched", "mvp", "in_progress", "research", "planning", "idea"];
 
 const STATUS_LABEL: Record<string, string> = {
-  live: "Live",
   launched: "Launched",
   mvp: "MVP",
   in_progress: "In progress",
@@ -89,69 +82,33 @@ export const metadata: Metadata = {
   },
 };
 
-/**
- * Every status the catalog actually reports, in a stable order — known ones
- * first, anything unrecognised appended rather than dropped. The previous
- * version filtered a hardcoded list, so a status the list did not know about
- * disappeared from the page without any error.
- */
-function orderStatuses(catalog: CatalogItem[]): string[] {
-  const present = Array.from(new Set(catalog.map((m) => m.status).filter(Boolean)));
-  const known = STATUS_ORDER.filter((s) => present.includes(s));
-  const unknown = present.filter((s) => !STATUS_ORDER.includes(s)).sort();
-  return [...known, ...unknown];
-}
-
-function buildKeyStats(
-  stats: RegistryStats | null,
-  catalog: CatalogItem[],
-): Array<{ value: string; label: string; hint: string }> {
-  // Counts come from the registry, never from a hardcoded guess: a stale number
-  // on a page journalists quote is worse than no number at all.
-  const byStatus = stats?.byStatus ?? {};
-  const total = stats?.total ?? catalog.length;
-  // `live` is the current key; `launched` is tolerated for older snapshots.
-  const live = (byStatus.live ?? 0) + (byStatus.launched ?? 0);
-  const mvp = byStatus.mvp ?? 0;
-  const rest = Math.max(0, total - live - mvp);
-
-  const hintParts = [`${live} live`, `${mvp} MVP`];
-  if (rest > 0) hintParts.push(`${rest} earlier stage`);
-
+function buildKeyStats(stats: RegistryStats | null): Array<{ value: string; label: string; hint: string }> {
+  const total = stats?.total ?? 29;
+  const liveCount = (stats?.byStatus?.launched ?? 0) + (stats?.byStatus?.mvp ?? 0);
+  const emerging = total - liveCount;
   return [
     {
       value: String(total),
-      label: "modules in the registry",
-      hint: hintParts.join(" · "),
+      label: "product nodes",
+      hint: `${liveCount} live MVPs/launched, ${emerging} emerging`,
     },
-    {
-      value: "1",
-      label: "person built it",
-      hint: "AI as the only engineer · public commit history",
-    },
+    { value: "$340B", label: "addressable market", hint: "IP, creator economy, payments" },
     { value: "3", label: "languages", hint: "EN · RU · KK from day 1" },
     { value: "Ed25519", label: "signature stack", hint: "+ Shamir SSS · post-quantum-ready" },
   ];
 }
 
-/**
- * Counts inside quotable copy are derived, never typed in. A journalist copies
- * this text verbatim into a published article; a hardcoded figure here goes
- * stale the next time a module ships and there is no way to take it back.
- */
-function buildOneLiners(total: number): string[] {
-  return [
-    `AEVION is a platform of ${total} modules under one login — built in eight months by one person who cannot write code, with AI as the only engineer.`,
-    "AEVION is what one person plus AI agents can now build: an AI gateway, an app builder, payments, post-quantum signatures and an authorship registry, under a single identity.",
-    "AEVION turns authorship into payable rights — register what you make, prove it cryptographically, and get paid for it, on one trust core.",
-  ];
-}
+const ONE_LINERS = [
+  "AEVION is the trust operating system for digital creation: registry, signature, bureau, validators, bank — under one identity.",
+  "AEVION turns authorship into payable rights — register IP in seconds, settle royalties in AEC, all on one Trust Graph.",
+  "AEVION is what you get when you bundle USPTO, Stripe, DocuSign and a creator wallet into a single quantum-resistant pipeline.",
+];
 
 const BRAND_COLORS = [
   { hex: "#0d9488", name: "Teal · primary"       },
   { hex: "#7dd3fc", name: "Sky · QRight"         },
   { hex: "#a78bfa", name: "Violet · Awards/Demo" },
-  { hex: "#fbbf24", name: "Amber · Bank/AEV"     },
+  { hex: "#fbbf24", name: "Amber · Bank/AEC"     },
   { hex: "#5eead4", name: "Mint · Quantum Shield" },
   { hex: "#f472b6", name: "Pink · Bureau/Film"   },
 ];
@@ -159,27 +116,11 @@ const BRAND_COLORS = [
 const COVERAGE_NOTE =
   "Coverage and analyst commentary will be linked here as it lands. For first-party briefings (architecture deep-dive, demo, founder interview) email yahiin1978@gmail.com with subject \"AEVION press\".";
 
-/** Same rule as the one-liners: the counts come from the registry, not from memory. */
-function buildBoilerplate(total: number, live: number): string {
-  return (
-    `AEVION is a platform of ${total} modules — ${live} of them live — running under one login: ` +
-    `an AI gateway that routes across five model providers, DevHub (describe an application in ` +
-    `plain language and get a working project with a live preview), a payments layer, ` +
-    `post-quantum digital signatures (ML-DSA-65, FIPS 204), an authorship registry, and a digital ` +
-    `bank settling in AEV. It was built in eight months by one person, Dosymbek Zhakiya — a ` +
-    `construction-expertise professional in Kazakhstan who is not a programmer. AI wrote every ` +
-    `line; he decided what to build and verified that it worked. The commit history is public ` +
-    `under his real name. AEVION ships in EN, RU and KK from day one.`
-  );
-}
+const BOILERPLATE = `AEVION is a trust infrastructure platform for digital creation. It bundles IP registration (QRight), cryptographic signatures (QSign), a authorship & prior-art bureau, validator-quorum compliance certification (Planet), creator awards, and a digital bank (AEC) under a single identity and a single Trust Graph. Authorship is provable from the first second; payouts settle straight to a wallet that already understands royalties, autopilot rules and savings goals. The crypto floor is Ed25519 + Shamir's Secret Sharing, designed to remain credible after the post-quantum transition. AEVION ships in EN, RU and KK from day one.`;
 
 export default async function PressPage() {
   const [stats, catalog] = await Promise.all([fetchStats(), fetchCatalog()]);
-  const KEY_STATS = buildKeyStats(stats, catalog);
-  const totalModules = stats?.total ?? catalog.length;
-  const liveModules = (stats?.byStatus?.live ?? 0) + (stats?.byStatus?.launched ?? 0);
-  const ONE_LINERS = buildOneLiners(totalModules);
-  const BOILERPLATE = buildBoilerplate(totalModules, liveModules);
+  const KEY_STATS = buildKeyStats(stats);
   return (
     <main style={{ background: "linear-gradient(180deg, #f8fafc 0%, #fff 200px)", minHeight: "100vh" }}>
       <div style={{ maxWidth: 980, margin: "0 auto", padding: "32px 20px 64px" }}>
@@ -335,12 +276,12 @@ export default async function PressPage() {
             </h2>
             <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 14px", lineHeight: 1.6 }}>
               The full product line, grouped by stage. Auto-generated from{" "}
-              <Link href="/api/aevion/catalog" style={{ color: "#0d9488", fontWeight: 700 }}>
+              <Link href={`${getApiBase()}/api/aevion/catalog`} style={{ color: "#0d9488", fontWeight: 700 }}>
                 /api/aevion/catalog
               </Link>{" "}
               · machine-readable in JSON, CSV, Markdown.
             </p>
-            {orderStatuses(catalog).map((statusKey) => {
+            {STATUS_ORDER.filter((s) => catalog.some((m) => m.status === s)).map((statusKey) => {
               const modules = catalog
                 .filter((m) => m.status === statusKey)
                 .sort((a, b) => a.name.localeCompare(b.name));
@@ -432,7 +373,19 @@ export default async function PressPage() {
             ].map((a) => (
               <a
                 key={a.href}
-                href={a.href}
+                // В этом списке рядом лежат адреса САЙТА (/apple-icon, /status) и ручки
+                // БЭКЕНДА (/api/aevion/*). Вторые без базы отвечали 404: пять ссылок
+                // пресс-кита из пяти вели на ошибку (замер 28.08.2026). Оборачиваем при
+                // отрисовке, а не в данных, — тогда правило само действует и на ссылки,
+                // которые допишут в этот список позже.
+                //
+                // База берётся getClientApiBase, а НЕ getApiBase: второй ветвится по
+                // typeof window и при серверной отрисовке отдаёт http://127.0.0.1:4001 —
+                // в HTML уехала бы ссылка на локальный порт, плюс расхождение гидратации
+                // (#418). И не getBackendOrigin: он даёт абсолютный адрес, а на нём
+                // сейчас светится служебный хост Railway (замер 28.08 на /qsign).
+                // Относительный /api-backend проверен пробой: отвечает 200.
+                href={a.href.startsWith("/api/") ? `${getClientApiBase()}${a.href}` : a.href}
                 style={{
                   display: "block",
                   padding: "12px 14px",

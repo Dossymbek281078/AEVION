@@ -1955,7 +1955,16 @@ export async function requestEmailVerification(): Promise<EmailVerifyRequestResu
 }
 
 /** Complete email verification with the token from the verification link. */
-export async function completeEmailVerification(token: string): Promise<void> {
+/**
+ * Завершить подтверждение адреса.
+ *
+ * `tokenId` — идентификатор строки токена из ссылки в письме. Он нужен для
+ * человека, который открыл письмо на ТЕЛЕФОНЕ и не выполнял вход: без него
+ * сервер вынужден искать токен по текущему пользователю, а его нет, и ответ
+ * был 401 с надписью «отсутствует bearer token» прямо на экране (замер
+ * 28.08.2026 в чистом браузере). Секрет остался прежним и одноразовым.
+ */
+export async function completeEmailVerification(token: string, tokenId?: string): Promise<void> {
   const authToken = typeof window !== "undefined"
     ? getAuthToken()
     : null;
@@ -1965,7 +1974,7 @@ export async function completeEmailVerification(token: string): Promise<void> {
       "Content-Type": "application/json",
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify(tokenId ? { token, tokenId } : { token }),
     cache: "no-store",
   });
   if (!res.ok) {

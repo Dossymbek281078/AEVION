@@ -75,6 +75,17 @@ describe("apps/access не выдаёт чужие покупки", () => {
     expect(res.status).toBe(401);
   });
 
+it("нестроковый email в токене даёт 401, а не падение сервера", () => {
+    // Подделать такой токен нельзя — он подписан нашим секретом. Но отказ
+    // обязан выглядеть отказом: .toLowerCase() на объекте дал бы 500.
+    return (async () => {
+      const bad = jwt.sign({ email: { nested: true } }, SECRET, { algorithm: "HS256" });
+      const res = await request(app).get("/api/apps/access").set("Authorization", `Bearer ${bad}`);
+      expect(res.status).toBe(401);
+      expect(res.status).not.toBe(500);
+    })();
+  });
+
   it("с токеном ручка ОТВЕЧАЕТ — то есть закрыт не весь путь, а только чужой", async () => {
     // Отрицательный контроль правки. Без него тест был бы зелёным и на
     // ручке, сломанной наглухо: 401 на всё — это не защита, а поломка.

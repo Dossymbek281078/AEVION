@@ -45,8 +45,14 @@ function emailFromToken(req: Request): string | null {
   try {
     const payload = jwt.verify(auth.slice(7), getJwtSecret(), {
       algorithms: ["HS256"],
-    }) as { email?: string };
-    return payload.email ? payload.email.toLowerCase() : null;
+    }) as { email?: unknown };
+    // Проверяем ТИП, а не только истинность. Подделать такой токен нельзя —
+    // он подписан нашим секретом, — но нестроковое поле (объект, число)
+    // уронило бы `.toLowerCase()` и дало 500 вместо честного 401. Отказ
+    // должен выглядеть отказом, а не поломкой сервера.
+    return typeof payload.email === "string" && payload.email.length > 0
+      ? payload.email.toLowerCase()
+      : null;
   } catch {
     return null;
   }

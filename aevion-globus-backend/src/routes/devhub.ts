@@ -119,6 +119,17 @@ devhubRouter.get("/health", (_req, res) => {
   const dbReady = isDevHubDbReady();
   res.json({
     status: dbReady ? "ok" : "degraded",
+    // ОБЛАСТЬ ОХВАТА рядом со статусом. Слово `status` шире того, о чём эта
+    // ручка знает: она отвечает про наше ХРАНИЛИЩЕ и ни про что больше.
+    // Провайдеры (ключи, зона Cloudflare, платные API) живут в
+    // /providers/health, и там сейчас бывает не всё зелено — а читатель,
+    // увидев "ok", решает, что с модулем полный порядок.
+    //
+    // Класс записан в правилах: имя поля шире того, что оно сообщает.
+    // Лечится не переименованием (его читают снаружи и в смоуке), а тем,
+    // что рядом сказано, о чём именно этот ответ.
+    covers: "storage",
+    providersCheckedAt: "/api/devhub/providers/health",
     module: "devhub",
     db: dbReady ? "postgres" : "in-memory",
     dbError: dbReady ? null : Boolean(getDevHubDbError()),

@@ -82,4 +82,17 @@ describe("health DevHub говорит о состоянии", () => {
       expect(body, `наружу ушло «${leak}»`).not.toContain(leak);
     }
   });
+
+  // ОБЛАСТЬ ОХВАТА. Слово `status` шире того, о чём эта ручка знает: она про
+  // наше хранилище и ни про что больше. Провайдеры (ключи, зона Cloudflare,
+  // платные API) живут в /providers/health, и там 28.08.2026 cloudflare_zone
+  // отвечал ok=false — а читатель, увидев "ok", решал, что полный порядок.
+  //
+  // Переименовать `status` нельзя: его читают снаружи и сверяет смоук.
+  // Лечится тем, что рядом сказано, о чём именно ответ.
+  test("ответ называет свою область охвата", async () => {
+    const r = await request(app()).get("/api/devhub/health");
+    expect(r.body.covers, "область охвата не названа").toBe("storage");
+    expect(r.body.providersCheckedAt).toBe("/api/devhub/providers/health");
+  });
 });

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
@@ -50,18 +51,36 @@ type PublicView = {
   client: PublicClient | null;
 };
 
-async function loadPublic(id: string): Promise<PublicView | null> {
+/**
+ * Три исхода, а не два.
+ *
+ * `if (!res.ok) return null` уравнивал «такого проекта нет» с «мы не смогли
+ * спросить», и на любой выдуманный id страница отвечала 200 с полной
+ * вёрсткой. Выдуманных id бесконечно много.
+ *
+ * 404 ставим ТОЛЬКО по коду от сервера. Ответ `success:false` при коде 200
+ * оставлен как "unknown" намеренно: признак отсутствия берём из КОДА, а не
+ * из тела — иначе временный сбой на стороне API выглядел бы как «нет
+ * такого» и выбросил бы живые проекты из выдачи.
+ */
+type Loaded =
+  | { state: "found"; data: PublicView }
+  | { state: "absent" }
+  | { state: "unknown" };
+
+async function loadPublic(id: string): Promise<Loaded> {
   try {
     const res = await fetch(
       `${getApiBase()}/api/build/projects/${encodeURIComponent(id)}/public`,
       { cache: "no-store", signal: AbortSignal.timeout(6000) },
     );
-    if (!res.ok) return null;
+    if (res.status === 404 || res.status === 410) return { state: "absent" };
+    if (!res.ok) return { state: "unknown" };
     const json = (await res.json()) as { success: boolean; data?: PublicView };
-    if (!json?.success || !json.data) return null;
-    return json.data;
+    if (!json?.success || !json.data) return { state: "unknown" };
+    return { state: "found", data: json.data };
   } catch {
-    return null;
+    return { state: "unknown" };
   }
 }
 
@@ -98,8 +117,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description: "Public project page on the AEVION QBuild marketplace.",
   };
   if (!id) return fallback;
-  const data = await loadPublic(id);
-  if (!data) return fallback;
+  const zagruzkaMeta = await loadPublic(id);
+  if (zagruzkaMeta.state !== "found") return fallback;
+  const data = zagruzkaMeta.data;
 
   const p = data.project;
   const vacOpen = data.vacancies.filter((v) => v.status === "OPEN").length;
@@ -169,7 +189,11 @@ function fmtBudget(n: number): string {
 
 export default async function PublicProjectPage({ params }: Props) {
   const { id } = await params;
-  const data = await loadPublic(id);
+  const zagruzka = await loadPublic(id);
+  // Проекта НЕТ — честный 404. При "unknown" (не смогли спросить) остаётся
+  // 200 и прежний вид: 404 при аварии выбросил бы живые проекты из выдачи.
+  if (zagruzka.state === "absent") notFound();
+  const data = zagruzka.state === "found" ? zagruzka.data : null;
   const origin = await getOrigin();
 
   if (!data) {

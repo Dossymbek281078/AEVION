@@ -243,7 +243,23 @@ async function loadOverrides(): Promise<Record<string, OverrideRecord>> {
   return readJsonFile<Record<string, OverrideRecord>>(OVERRIDES_FILE, {});
 }
 
+// Идентификатор служит КЛЮЧОМ поиска в обычном объекте (`students[deviceId]`),
+// а обычный объект знает про ключи прототипа. Все шесть имён длиннее шести
+// знаков и состоят из словарных символов, поэтому проверку ниже они проходили:
+// GET /student/__proto__ отвечал {"student":{}} — то есть ВЫДАВАЛ несуществующего
+// ученика за существующего, а /student/constructor терял поле student целиком.
+// Та же проверка охраняет и запись: синхронизация с таким идентификатором
+// присваивала прототип вместо свойства и молча терялась.
+const RESERVED_DEVICE_IDS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+  "toString",
+  "valueOf",
+  "hasOwnProperty",
+]);
 function isValidDeviceId(s: unknown): s is string {
+  if (typeof s === "string" && RESERVED_DEVICE_IDS.has(s)) return false;
   return typeof s === "string" && s.length >= 6 && s.length <= 128 && /^[\w.\-]+$/.test(s);
 }
 function isValidLevel(n: unknown): n is number {

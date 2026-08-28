@@ -880,8 +880,13 @@ smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
   // назвать http://169.254.169.254/ (метаданные облака), а соседняя ручка
   // /admin/webhooks/:id/test тут же сходила бы туда с нашего сервера.
   // Список общий с вебхуками QCoreAI — намеренно один, чтобы не разошёлся.
+  // Отдушина та же, что у вебхуков QCoreAI: в тестах и локальной разработке
+  // адрес петли законен — тест поднимает свой сервер и слушает доставку.
+  // В проде NODE_ENV не равен "test", поэтому защита остаётся включённой.
+  const allowInternal =
+    process.env.ALLOW_INTERNAL_WEBHOOKS === "1" || process.env.NODE_ENV === "test";
   try {
-    if (isInternalHost(new URL(url).hostname)) {
+    if (!allowInternal && isInternalHost(new URL(url).hostname)) {
       return res.status(400).json({ error: "bad_url", reason: "internal_target" });
     }
   } catch {

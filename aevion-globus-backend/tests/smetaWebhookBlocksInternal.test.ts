@@ -45,7 +45,7 @@ describe("вебхук тренажёра смет не указывает вн�
     // мутация это и показала (28.08, первая версия теста её не поймала).
     expect(src.includes("lib/internalHost"), "импорт общей проверки пропал").toBe(true);
     expect(
-      /if\s*\(\s*isInternalHost\s*\(/.test(src),
+      /if\s*\([^)]*isInternalHost\s*\(/.test(src),
       "в ручке нет ВЫЗОВА isInternalHost в условии — проверка обезврежена",
     ).toBe(true);
   });

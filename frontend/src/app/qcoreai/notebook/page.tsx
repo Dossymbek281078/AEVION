@@ -361,7 +361,7 @@ export default function NotebookPage() {
               >
                 📋
               </button>
-              <button onClick={async (e) => { e.stopPropagation(); await fetch(apiUrl(`/api/qcoreai/notebook/collections/${c.id}`), { method: "DELETE", headers: bearerHeader() }); setCollections((p) => p.filter((x) => x.id !== c.id)); }} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 11, color: "#fca5a5", padding: "1px 3px" }}>×</button>
+              <button onClick={async (e) => { e.stopPropagation(); const delRes = await fetch(apiUrl(`/api/qcoreai/notebook/collections/${c.id}`), { method: "DELETE", headers: bearerHeader() }); if (!delRes.ok) return; setCollections((p) => p.filter((x) => x.id !== c.id)); }} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 11, color: "#fca5a5", padding: "1px 3px" }}>×</button>
             </span>
           ))}
           <div style={{ display: "flex", gap: 4 }}>

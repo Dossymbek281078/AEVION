@@ -16,7 +16,11 @@ import path from "node:path";
 // слово «Пазлы» жило в OnboardingOverlay.tsx — на карточке ПЕРВОГО экрана
 // новичка, то есть в самом видном месте из возможных. Проверять один файл
 // там, где текст разложен по многим, — это обещать охват, которого нет.
-const FAJLY = ["page.tsx", "OnboardingOverlay.tsx", "CommandPalette.tsx"]
+// DailyMission.tsx добавлен 28.08: слово «Пазлы» пережило унификацию именно
+// там — файла не было в списке, и сторож молчал законно. Это второй раз, когда
+// список файлов отстаёт от реальности; полный обход модуля пока невозможен —
+// в daily/ и studio/ остались места, которые ведут чужие ветки.
+const FAJLY = ["page.tsx", "OnboardingOverlay.tsx", "CommandPalette.tsx", "DailyMission.tsx"]
   .map((f) => path.join(__dirname, "..", f))
   .filter((f) => fs.existsSync(f));
 const PAGE = FAJLY[0];
@@ -36,7 +40,7 @@ function vidimoe(src: string): string[] {
   // подсказки, сообщения. Брать ВСЕ строки нельзя — под шаблон попадают
   // куски кода и имена классов, и сторож краснеет на самом себе.
   const POZICII =
-    /(label:|title:|hint:|sub:|desc:|task:|placeholder=|aria-label=)\s*[`"]([^`"]{4,300})[`"]/g;
+    /([a-zA-Z]*[Ll]abel:|title:|hint:|sub:|desc:|task:|placeholder=|aria-label=)\s*[`"]([^`"]{4,300})[`"]/g;
   for (const m of bezKom.matchAll(POZICII)) out.push(m[2]);
   for (const v of bezKom.matchAll(/showToast\(([^;]{0,400}?)\)/g)) {
     for (const lit of (v[1] ?? "").matchAll(/[`"]([^`"]{4,300})[`"]/g)) out.push(lit[1]);

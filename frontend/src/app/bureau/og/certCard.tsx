@@ -7,6 +7,7 @@
  * весь вечер и чинил.
  */
 import { ImageResponse } from "next/og";
+import { getApiBase } from "@/lib/apiBase";
 
 export const CARD_SIZE = { width: 1200, height: 630 };
 
@@ -31,15 +32,10 @@ export const CARD_SIZE = { width: 1200, height: 630 };
 type Cert = { title?: string; author?: string; kind?: string; protectedAt?: string };
 type Anchor = { status?: string | null; bitcoinBlockHeight?: number | null } | null;
 
-function apiBase(): string {
-  const pub = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
-  return pub && pub.length > 0 ? pub.replace(/\/+$/, "") : "https://api.aevion.app";
-}
-
 export async function load(certId: string): Promise<{ cert: Cert | null; anchor: Anchor }> {
   try {
     const res = await fetch(
-      `${apiBase()}/api/pipeline/certificate/${encodeURIComponent(certId)}/bundle.json`,
+      `${getApiBase()}/api/pipeline/certificate/${encodeURIComponent(certId)}/bundle.json`,
       { next: { revalidate: 300 } },
     );
     if (!res.ok) return { cert: null, anchor: null };

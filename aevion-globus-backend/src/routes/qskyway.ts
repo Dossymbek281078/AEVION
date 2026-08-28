@@ -5,7 +5,7 @@ import { CITY_NYC } from "./qskyway.city.nyc";
 import { CITY_TOKYO } from "./qskyway.city.tokyo";
 import { NOFLY, WIND, NoFlyZone } from "./qskyway.zones";
 import { getMetarWind, metarStatus } from "./qskyway.metar";
-import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt, ceilingField, NO_CEILING } from "./qskyway.airspace";
+import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt, ceilingField, signablePayload, NO_CEILING } from "./qskyway.airspace";
 import { airspaceFreshness } from "./qskyway.airspace.freshness";
 import { anchorAirspace, verifyAnchoredAirspace } from "./qskyway.airspace.anchor";
 import { AIRSPACE_PROOFS } from "./qskyway.airspace.proof";
@@ -1526,6 +1526,65 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
 // rather than not: measured 0.4-0.55 s against 0.025 s for /city, and this one
 // sits on the first screen.
 const impactCache = new Map<string, unknown>();
+
+/**
+ * ТО, ЧТО ЗАХЭШИРОВАНО — целиком и байт в байт.
+ *
+ * ПОВОД (29.08.2026). Мы публиковали `contentHash` редакции и привязанное к
+ * Bitcoin доказательство на него, но НЕ публиковали содержимое, над которым
+ * хэш взят: `signablePayload` использовался только внутри. Третья сторона
+ * могла подтвердить, что какой-то 32-байтовый дайджест проштампован в таком-то
+ * блоке, и НЕ могла проверить, что этот дайджест относится к нашей редакции
+ * воздушного пространства.
+ *
+ * То есть доказательство было неопровержимым в бесполезную сторону, а весь
+ * продукт стоит на обещании «проверьте сами». Публикуем ровно ту строку,
+ * которая идёт в sha256 — не «эквивалентную», не «пересобранную»: любое
+ * расхождение в порядке ключей, пробелах или экранировании даст другой хэш, и
+ * проверяющий решит, что мы врём, хотя врал бы формат.
+ */
+qskywayRouter.get("/airspace/edition", (req: Request, res: Response) => {
+  const resolved = resolveCity(req.query.city);
+  if (!resolved) return refuseUnknownCity(res);
+  const src = AIRSPACE[resolved.id];
+  if (!src) {
+    return res.json({
+      city: resolved.id,
+      available: false,
+      payload: null,
+      contentHash: null,
+      note: "Сетки потолков для этого города регулятор не публикует — редакции, которую можно было бы захэшировать, нет.",
+      noteEn: "The regulator publishes no ceiling grid for this city — there is no edition to hash.",
+    });
+  }
+  const payload = signablePayload(src);
+  res.json({
+    city: resolved.id,
+    available: true,
+    authority: src.authority,
+    source: src.source,
+    effective: src.effective,
+    contentHash: airspaceContentHash(src),
+    payload,
+    payloadBytes: Buffer.byteLength(payload, "utf8"),
+    verifyYourself: {
+      steps: [
+        "1. возьмите поле payload КАК ЕСТЬ — это строка, которая идёт в хэш; не пересобирайте её",
+        "2. contentHash = sha256(payload в кодировке UTF-8), в hex — обязан совпасть с полем contentHash",
+        "3. доказательство времени: GET /api/qskyway/airspace/anchor/verify с этим contentHash и otsProofB64 из /airspace/anchor",
+        "4. attestation Bitcoin проверяется любым клиентом OpenTimestamps: .ots здесь — обычный detached-таймстамп НАД ЭТИМ ДАЙДЖЕСТОМ, а не над файлом",
+      ],
+      stepsEn: [
+        "1. take the payload field AS IS - it is the exact string that goes into the hash; do not re-serialise it",
+        "2. contentHash = sha256(payload as UTF-8) in hex - must equal the contentHash field",
+        "3. for the timestamp: GET /api/qskyway/airspace/anchor/verify with this contentHash and the otsProofB64 from /airspace/anchor",
+        "4. the Bitcoin attestation checks with any OpenTimestamps client: the .ots here is a plain detached timestamp OVER THIS DIGEST, not over a file",
+      ],
+      warning: "Пересборка payload из полей ответа почти наверняка даст ДРУГОЙ хэш: значение имеют порядок ключей, отсутствие пробелов и то, как сериализованы не-ASCII символы.",
+      warningEn: "Rebuilding the payload from the response fields will almost certainly yield a DIFFERENT hash: key order, absence of whitespace and non-ASCII serialisation all matter.",
+    },
+  });
+});
 
 qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);

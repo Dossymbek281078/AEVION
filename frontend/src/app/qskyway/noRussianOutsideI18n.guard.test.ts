@@ -30,6 +30,22 @@ const CYR_FROM = 0x400;
 const CYR_TO = 0x4ff;
 const NL = String.fromCharCode(10);
 
+// Кириллица бывает записана ЭКРАНИРОВАННЫМИ кодами, и тогда поиск по символам
+// её не видит. Это не выдумка: в словаре платформы 6761 такая последовательность,
+// и на них же 28.08.2026 соврал мой собственный свип — объявил ключ отсутствующим
+// в русском, хотя он был записан кодами внутри обратных кавычек.
+//
+// Мутацией проверено: без этого раскрытия сторож ЗЕЛЁНЫЙ на русской строке,
+// написанной кодами, — то есть класс возвращается молча.
+//
+// Собираем шаблон из кода символа: обратный слэш в передаваемом тексте
+// съедается на границе инструмента (за это окно — четырнадцать раз).
+const ESCAPED = new RegExp(String.fromCharCode(92) + "u([0-9a-fA-F]{4})", "g");
+
+function decodeEscapes(s: string): string {
+  return s.replace(ESCAPED, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
 function hasCyrillic(s: string): boolean {
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
@@ -89,6 +105,7 @@ const KNOWN = new Set<string>([
 describe("страница не говорит по-русски мимо выбора языка", () => {
   const file = path.join(__dirname, "_client.tsx");
   const found = stripComments(readFileSync(file, "utf8"))
+    .map((l) => decodeEscapes(l))
     .filter((l) => hasCyrillic(l))
     .filter((l) => !l.includes("t(" + String.fromCharCode(34)))
     .filter((l) => !l.includes("ru ?") && !l.includes("ru?"))

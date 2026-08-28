@@ -28,6 +28,18 @@ import path from "node:path";
 const SRC = readFileSync(path.join(__dirname, "..", "src", "routes", "qskyway.ts"), "utf8");
 const NL = String.fromCharCode(10);
 
+// Кириллица бывает записана экранированными кодами — тогда посимвольный поиск
+// её не видит. Проверено мутацией на сторожа-близнеце для страницы: без
+// раскрытия он ЗЕЛЁНЫЙ на русской строке, написанной кодами.
+//
+// Шаблон собирается из кода символа: обратный слэш в передаваемом тексте
+// съедается на границе инструмента.
+const ESCAPED = new RegExp(String.fromCharCode(92) + "u([0-9a-fA-F]{4})", "g");
+
+function decodeEscapes(s: string): string {
+  return s.replace(ESCAPED, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
 function hasCyrillic(s: string): boolean {
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
@@ -79,7 +91,7 @@ function unpaired(): string[] {
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
-    if (!hasCyrillic(l)) continue;
+    if (!hasCyrillic(decodeEscapes(l))) continue;
     if (!l.trimStart().startsWith("note:")) continue;
     const from = Math.max(0, i - WINDOW);
     const to = Math.min(lines.length, i + WINDOW);

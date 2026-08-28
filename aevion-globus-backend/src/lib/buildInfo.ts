@@ -36,7 +36,23 @@ export function readBuildInfo(): { commit: string; source: string; branch: strin
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const fsMod = require("node:fs") as typeof import("node:fs");
     const pathMod = require("node:path") as typeof import("node:path");
-    const raw = fsMod.readFileSync(pathMod.join(__dirname, "..", "build-info.json"), "utf-8");
+    // Ищем ВВЕРХ, а не на фиксированной глубине. 28.08.2026 этот читатель
+    // переехал из index.ts (dist/index.js, где ".." — корень бэкенда) сюда
+    // (dist/lib/buildInfo.js, где ".." — уже dist). Один шаг разницы, и отметка
+    // перестала находиться: /health на проде отвечал commit=unknown, то есть
+    // молча терял ответ на вопрос «какой код сейчас работает». Молчал он
+    // потому, что «файла нет» здесь законный случай — запасной путь ниже.
+    //
+    // Перебор снимает зависимость от того, где лежит ЭТОТ файл: перенесут его
+    // ещё раз — отметка продолжит находиться.
+    let raw = "";
+    for (const up of ["..", "../..", "../../.."]) {
+      try {
+        raw = fsMod.readFileSync(pathMod.join(__dirname, up, "build-info.json"), "utf-8");
+        break;
+      } catch { /* следующий уровень */ }
+    }
+    if (!raw) throw new Error("build-info.json не найден ни на одном уровне");
     const info = JSON.parse(raw) as { commit?: string; source?: string; branch?: string; builtAt?: string };
     return {
       commit: String(info.commit || "unknown").slice(0, 12),

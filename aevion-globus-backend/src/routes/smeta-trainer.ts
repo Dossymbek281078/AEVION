@@ -45,7 +45,12 @@ const WEBHOOKS_FILE = "smeta_webhooks.json";
  * адрес петли законен — тест поднимает свой сервер и слушает доставку.
  */
 function webhookTargetAllowed(rawUrl: string): boolean {
-  if (process.env.ALLOW_INTERNAL_WEBHOOKS === "1" || process.env.NODE_ENV === "test") return true;
+  // Отдушина ТОЛЬКО по своей переменной. Раньше здесь было ещё общее
+  // `NODE_ENV === "test"`, и под ним эта функция в тестах всегда отвечала
+  // «разрешено» — то есть настоящая проверка адреса не исполнялась ни в одном
+  // прогоне, а сторож рядом проверял лишь НАЛИЧИЕ вызовов в исходнике. Такой
+  // сторож ловит удаление защиты и не ловит её обезвреживание.
+  if (process.env.ALLOW_INTERNAL_WEBHOOKS === "1") return true;
   try {
     return !isInternalHost(new URL(rawUrl).hostname);
   } catch {
@@ -965,7 +970,7 @@ smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
   // Список общий с вебхуками QCoreAI — намеренно один, чтобы не разошёлся.
   // Отдушина та же, что у вебхуков QCoreAI: в тестах и локальной разработке
   // адрес петли законен — тест поднимает свой сервер и слушает доставку.
-  // В проде NODE_ENV не равен "test", поэтому защита остаётся включённой.
+  // Отдушина включается ТОЛЬКО переменной ALLOW_INTERNAL_WEBHOOKS=1.
   if (!webhookTargetAllowed(url)) {
     return res.status(400).json({ error: "bad_url", reason: "internal_target" });
   }

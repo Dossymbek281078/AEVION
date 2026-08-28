@@ -27,6 +27,10 @@ import { smetaTrainerRouter } from "../src/routes/smeta-trainer";
 // проверяет доставку, а не доступ, поэтому отдушина включается ЯВНО —
 // раньше она включалась сама при NODE_ENV=test и прятала настоящую логику.
 process.env.SMETA_ADMIN_TEST_BYPASS = "1";
+// Прогон поднимает СВОЙ сервер на петле и шлёт вебхук туда — адрес законен.
+// Включаем явно: общая отдушина по NODE_ENV убрана, потому что под ней
+// настоящая проверка адреса не исполнялась ни в одном прогоне.
+process.env.ALLOW_INTERNAL_WEBHOOKS = "1";
 
 const SECRET = "test-secret-smeta-lms-0123456789";
 const DEVICE = "lms-device-000001";

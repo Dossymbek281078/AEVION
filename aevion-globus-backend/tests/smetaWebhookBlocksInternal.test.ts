@@ -40,26 +40,51 @@ describe("вебхук тренажёра смет не указывает вн�
     expect(passed, "эти адреса ведут внутрь и НЕ распознаны:\n  " + passed.join("\n  ")).toEqual([]);
   });
 
-  it("ручка регистрации использует именно этот предикат", () => {
-    // Дешёвая, но настоящая связка: если импорт уберут, проверка исчезнет
-    // молча, а тест выше останется зелёным. Поэтому смотрим сам файл.
-    const src = require("node:fs").readFileSync(
-      require("node:path").join(__dirname, "..", "src", "routes", "smeta-trainer.ts"), "utf8");
-    // Проверяем ВЫЗОВ, а не имя: импорт остаётся в файле и после удаления
-    // вызова, поэтому `includes("isInternalHost")` был бы декоративным —
-    // мутация это и показала (28.08, первая версия теста её не поймала).
-    expect(src.includes("lib/internalHost"), "импорт общей проверки пропал").toBe(true);
-    // Помощник обязан спрашивать общий список, а не свой.
-    expect(
-      /function webhookTargetAllowed[\s\S]{0,400}isInternalHost\s*\(/.test(src),
-      "webhookTargetAllowed больше не спрашивает общий список адресов",
-    ).toBe(true);
-    // И его обязаны звать ОБА пути: регистрация и доставка. Проверка только
-    // на входе не спасает вебхуки, записанные раньше, — 28.08 так и было.
-    const calls = (src.match(/webhookTargetAllowed\s*\(/g) || []).length;
-    expect(
-      calls,
-      `ожидали вызовы при регистрации и на ДВУХ точках доставки, нашли ${calls}`,
-    ).toBeGreaterThanOrEqual(4); // объявление + 3 вызова
+  // ЗАМЕНЕНО 28.08.2026 (вечер). Раньше здесь стояла проверка ИСХОДНИКА:
+  // есть ли импорт и сколько раз зовётся помощник. Она ловила УДАЛЕНИЕ защиты
+  // и не ловила её ОБЕЗВРЕЖИВАНИЕ — а именно обезвреживанием была отдушина
+  // `NODE_ENV === "test"`, под которой помощник в тестах всегда отвечал
+  // «разрешено». Плюс она была хрупкой не по делу: покраснела от того, что я
+  // дописал комментарий и искомое ушло за окно в 400 знаков.
+  //
+  // Теперь спрашиваем РУЧКУ и смотрим ответ.
+  it("ручка регистрации отказывает внутреннему адресу", async () => {
+    const express = (await import("express")).default;
+    const request = (await import("supertest")).default;
+    process.env.SMETA_ADMIN_TEST_BYPASS = "1";
+    delete process.env.ALLOW_INTERNAL_WEBHOOKS;
+    const { smetaTrainerRouter } = await import("../src/routes/smeta-trainer");
+    const app = express();
+    app.use(express.json());
+    app.use(smetaTrainerRouter);
+
+    for (const url of [
+      "http://169.254.169.254/latest/meta-data/",
+      "http://127.0.0.1:9999/hook",
+      "http://10.0.0.5/hook",
+    ]) {
+      const res = await request(app).post("/admin/webhooks")
+        .set("Authorization", "Bearer test-token")
+        .send({ url, label: "проба", events: ["grade.passed"] });
+      expect(res.status, `принят внутренний адрес: ${url}`).toBe(400);
+      expect(res.body.reason, `не та причина отказа для ${url}`).toBe("internal_target");
+    }
+  });
+
+  it("контроль прибора: внешний адрес этой же ручкой НЕ отвергается", async () => {
+    const express = (await import("express")).default;
+    const request = (await import("supertest")).default;
+    process.env.SMETA_ADMIN_TEST_BYPASS = "1";
+    delete process.env.ALLOW_INTERNAL_WEBHOOKS;
+    const { smetaTrainerRouter } = await import("../src/routes/smeta-trainer");
+    const app = express();
+    app.use(express.json());
+    app.use(smetaTrainerRouter);
+
+    // Без контроля сторож остался бы зелёным на ручке, которая отвергает ВСЁ.
+    const res = await request(app).post("/admin/webhooks")
+      .set("Authorization", "Bearer test-token")
+      .send({ url: "https://lms.example.com/hook", label: "проба", events: ["grade.passed"] });
+    expect(res.body?.reason).not.toBe("internal_target");
   });
 });

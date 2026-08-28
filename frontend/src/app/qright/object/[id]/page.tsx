@@ -6,6 +6,7 @@ import { getApiBase } from "@/lib/apiBase";
 import { revokeReasonLabel } from "@/lib/qrightRevokeReasons";
 import { pickLang, tString } from "@/lib/qrightServerI18n";
 import { CopyHash } from "./CopyHash";
+import { anchorBadge, ANCHOR_TONE_COLORS } from "@/app/bureau/anchorBadge";
 import { fixDoubledScheme } from "@/lib/urls";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,12 @@ type BureauCertView = {
   protectedAt: string;
   viewUrl: string;
   upgradeUrl: string | null;
+  /**
+   * Состояние якоря в биткойне. Может отсутствовать: бэкенд, который его
+   * отдаёт, выкатывается отдельно. Отсутствие — «не сказали», а не «якоря
+   * нет»; разбирает это anchorBadge().
+   */
+  bitcoinAnchor?: { status?: string | null; bitcoinBlockHeight?: number | null } | null;
 };
 
 async function loadBureauCert(qrightObjectId: string): Promise<BureauCertView | null> {
@@ -518,6 +525,22 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
                 <span>🏛</span>
                 <span>AEVION IP Bureau</span>
               </div>
+              {(() => {
+                // Публичная страница защищённой работы про якорь молчала, хотя
+                // это главное, чем запись отличается от строки в чьей-то базе.
+                // Пометка та же, что в реестре бюро — общий модуль, не копия.
+                const b = anchorBadge(bureauCert?.bitcoinAnchor);
+                if (!b) return null;
+                const c = ANCHOR_TONE_COLORS[b.tone];
+                return (
+                  <div
+                    title={b.title}
+                    style={{ display: "inline-block", marginBottom: 6, padding: "3px 9px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: c.bg, color: c.fg, whiteSpace: "nowrap" }}
+                  >
+                    {b.label}
+                  </div>
+                );
+              })()}
               <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", margin: 0, marginBottom: 4 }}>
                 {bureauCert
                   ? bureauCert.verificationLevel === "verified"
@@ -528,8 +551,8 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
               <p style={{ fontSize: 12, color: "#475569", margin: 0, lineHeight: 1.55, maxWidth: 460 }}>
                 {bureauCert
                   ? bureauCert.verificationLevel === "verified"
-                    ? "This work is sealed by KYC-verified identity + notarized chain. Court-admissible in 130+ countries (Hague Convention)."
-                    : "Anonymous cert is registered. Complete KYC + payment to upgrade to a legally-binding Bureau certificate."
+                    ? "This work is sealed by a notarized chain: content hash, server timestamp and the bureau's signature, verifiable from the certificate page."
+                    : "Anonymous cert is registered. Complete identity check + payment to upgrade to a Bureau certificate."
                   : "Add KYC identity verification + Stripe-secured payment to receive a notary-grade IP certificate linked to this work."}
               </p>
             </div>

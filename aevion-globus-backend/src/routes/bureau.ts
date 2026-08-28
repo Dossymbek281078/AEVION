@@ -30,6 +30,7 @@ import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { emitEcosystemEvent } from "../lib/ecosystemEvents";
 import { safeErrorText } from "../lib/safeError";
+import { anchorSummary } from "../lib/opentimestamps/anchorSummary";
 const captureBureauError = makeServiceCapture("bureau");
 
 const bureauEmbedRateLimit = rateLimit({
@@ -2962,7 +2963,7 @@ bureauRouter.get("/cert-for-qright/:qrightObjectId", bureauEmbedRateLimit, async
       return res.status(400).json({ error: "qrightObjectId required" });
     }
     const r = await pool.query(
-      `SELECT "id","status","authorVerificationLevel","protectedAt"
+      `SELECT "id","status","authorVerificationLevel","protectedAt","otsStatus","otsBitcoinBlockHeight"
        FROM "IPCertificate"
        WHERE "objectId" = $1 AND "status" != 'revoked'
        ORDER BY "protectedAt" DESC
@@ -2981,12 +2982,18 @@ bureauRouter.get("/cert-for-qright/:qrightObjectId", bureauEmbedRateLimit, async
       status: string;
       authorVerificationLevel: string;
       protectedAt: Date;
+      otsStatus: string | null;
+      otsBitcoinBlockHeight: number | null;
     };
     res.json({
       certId: row.id,
       status: row.status,
       verificationLevel: row.authorVerificationLevel,
       protectedAt: row.protectedAt,
+      // Публичная страница защищённой работы про якорь не говорила вовсе, хотя
+      // это главное, чем запись отличается от строки в чьей-то базе. Считается
+      // тем же общим помощником, что и остальные поверхности реестра.
+      bitcoinAnchor: anchorSummary(row as unknown as Record<string, unknown>),
       viewUrl: `/bureau/cert/${row.id}`,
       upgradeUrl: row.authorVerificationLevel === "anonymous"
         ? `/bureau/upgrade/${row.id}`

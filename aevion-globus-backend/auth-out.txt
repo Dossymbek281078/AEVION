@@ -1,0 +1,125 @@
+200|aev|post|/wallet/probe1/sync|{"ok":true,"wallet":{"deviceId":"probe1"
+400|aev|post|/wallet/probe1/mint|{"error":"invalid_amount"}
+400|apiKeys|patch|/probe1|{"error":"name_required"}
+500|apiKeys|delete|/probe1|{"error":"revoke_key_failed"}
+500|auth|delete|/sessions/probe1|{"error":"revoke failed"}
+403|awards|patch|/admin/seasons/probe1|{"error":"Admin role required"}
+403|awards|post|/admin/entries/probe1/qualify|{"error":"Admin role required"}
+403|awards|post|/admin/entries/probe1/disqualify|{"error":"Admin role required"}
+500|build|post|/communities/probe1/messages|{"success":false,"error":"build_init_fai
+500|bureau|patch|/org/probe1/members/probe1|{"error":"storage unreachable"}
+500|bureau|delete|/org/probe1/members/probe1|{"error":"storage unreachable"}
+500|bureau|delete|/org/probe1/invites/probe1|{"error":"storage unreachable"}
+400|bureau|post|/upgrade/probe1|{"error":"verificationId is required"}
+500|bureau|post|/trust-edges/probe1/claim-aec|{"error":"storage unreachable"}
+404|coach|delete|/goals/probe1|{"error":"Goal not found"}
+404|coach|post|/sessions/probe1/end|{"error":"Session not found"}
+404|coach|post|/goals/probe1/complete|{"error":"Goal not found"}
+400|deepsan|patch|/tasks/probe1|{"success":false,"error":"invalid id"}
+400|deepsan|patch|/focus/probe1/done|{"success":false,"error":"invalid id"}
+400|deepsan|delete|/tasks/probe1|{"success":false,"error":"invalid id"}
+503|devhub|patch|/projects/probe1|{"error":"storage_unavailable","warning"
+503|devhub|delete|/projects/probe1|{"error":"storage_unavailable","warning"
+400|devhub|delete|/projects/probe1/file|{"error":"path required"}
+400|devhub|put|/projects/probe1/file|{"error":"file path required"}
+503|devhub|put|/projects/probe1/files/probe1|{"error":"storage_unavailable","warning"
+503|devhub|post|/projects/probe1/generate|{"error":"storage_unavailable","warning"
+503|devhub|post|/projects/probe1/generate/stream|{"error":"storage_unavailable","warning"
+404|healthai|delete|/profile/probe1|{"error":"profile-not-found"}
+400|lifebox|patch|/capsules/probe1|{"ok":false,"error":"invalid id"}
+400|lifebox|delete|/capsules/probe1|{"ok":false,"error":"invalid id"}
+400|mapReality|patch|/signals/probe1/status|{"error":"invalid id"}
+400|mapReality|post|/signals/probe1/support|{"error":"invalid id"}
+403|modules|patch|/admin/probe1|{"error":"Admin role required"}
+403|modules|delete|/admin/webhooks/probe1|{"error":"Admin role required"}
+400|multichat|patch|/conversations/probe1|{"error":"title_required"}
+404|multichat|delete|/conversations/probe1|{"error":"conversation_not_found"}
+404|multichat|delete|/conversations/probe1/share|{"error":"conversation_not_found"}
+404|multichat|post|/conversations/probe1/dispatch|{"error":"conversation not found"}
+404|multichat|post|/conversations/probe1/share|{"error":"conversation_not_found"}
+500|pipeline|post|/ots/probe1/upgrade|{"error":"storage unreachable"}
+500|pipeline|post|/ots/probe1/verify|{"ok":false,"error":"storage unreachable
+400|planetCompliance|patch|/webhooks/probe1|{"error":"url required (≤ 500 chars)"}
+500|planetCompliance|delete|/webhooks/probe1|{"error":"DB error"}
+500|planetCompliance|post|/submissions/probe1/resubmit|{}
+400|planetCompliance|post|/artifacts/probe1/vote|{"error":"score must be 1..5"}
+400|psyappDeps|post|/users/probe1/start|{"ok":false,"error":"addiction must be o
+500|psyappDeps|post|/users/probe1/relapse|{"ok":false,"error":"storage unreachable
+503|qai|delete|/sessions/probe1|{"error":"storage_unavailable","warning"
+503|qai|post|/sessions/probe1/title|{"error":"storage_unavailable","warning"
+400|qchaingov|post|/proposals/probe1/votes|{"error":"choice required"}
+403|qchaingov|post|/proposals/probe1/open|{"error":"admin_only"}
+400|qcontract|patch|/documents/probe1|{"error":"extendDays_or_addMaxViews_requ
+500|qcontract|delete|/documents/probe1|{}
+500|qcontract|post|/view/probe1|{}
+500|qcoreai|patch|/notebook/probe1/collection|{"error":"assign failed"}
+500|qcoreai|patch|/pipelines/probe1|{"error":"update pipeline failed"}
+500|qcoreai|delete|/notebook/collections/probe1|{"error":"delete collection failed"}
+500|qcoreai|delete|/pipelines/probe1|{"error":"delete pipeline failed"}
+400|qcoreai|put|/me/personas/probe1|{"error":"invalid roleId"}
+400|qcoreai|put|/me/settings/probe1|{"error":"value required"}
+500|qcoreai|post|/pipelines/probe1/use|{"error":"use pipeline failed"}
+400|qcoreai|post|/sessions/probe1/merge|{"error":"sourceSessionId required"}
+500|qevents|patch|/me/events/probe1|{"error":"internal_error"}
+500|qevents|delete|/me/events/probe1|{"error":"internal_error"}
+500|qevents|post|/events/probe1/rsvp|{"error":"internal_error"}
+500|qevents|post|/events/probe1/waitlist|{"error":"internal_error"}
+403|qgood|post|/campaigns/probe1/approve|{"error":"admin_only"}
+400|qgood|post|/campaigns/probe1/donations|{"error":"amountCents must be 100..10000
+500|qjobs|patch|/me/jobs/probe1|{"error":"internal_error"}
+400|qjobs|patch|/applications/probe1|{"error":"status must be one of pending,
+500|qjobs|delete|/me/jobs/probe1|{"error":"internal_error"}
+500|qjobs|post|/jobs/probe1/apply|{"error":"internal_error"}
+503|qjobs|post|/jobs/probe1/save|{"error":"storage_unavailable","warning"
+400|qlearn|patch|/enrollments/probe1/progress|{"error":"progress must be a number 0-10
+200|qlearn|delete|/courses/probe1/bookmark|{"bookmarked":false,"removed":false}
+400|qlearn|post|/me/courses/probe1/lessons|{"error":"title is required"}
+404|qlearn|post|/courses/probe1/enroll|{"error":"Course not found"}
+400|qmaskcard|patch|/masks/probe1/limit|{"error":"spendLimitCents must be 100..1
+500|qmaskcard|post|/masks/probe1/revoke|{"error":"revoke_failed"}
+500|qmaskcard|post|/masks/probe1/freeze|{"error":"freeze_failed"}
+404|qmedia|patch|/me/tracks/probe1|{"error":"not found"}
+404|qmedia|patch|/me/videos/probe1|{"error":"not found"}
+404|qmedia|delete|/me/tracks/probe1|{"error":"not found"}
+404|qmedia|delete|/me/playlists/probe1/tracks/probe1|{"error":"not found"}
+404|qmedia|post|/tracks/probe1/play|{"error":"not found"}
+404|qmedia|post|/me/playlists/probe1/tracks|{"error":"not found"}
+404|qnews|post|/articles/probe1/bookmark|{"error":"not_found"}
+400|qpaynet|patch|/wallets/probe1|{"error":"no_fields_to_update"}
+500|qpaynet|delete|/merchant/keys/probe1|{}
+500|qpaynet|delete|/webhook-subs/probe1|{}
+500|qpaynet|post|/wallets/probe1/close|{"error":"internal_error"}
+500|qpaynet|post|/admin/kyc/probe1/verify|{}
+500|qpersona|patch|/personas/probe1|{"ok":false,"error":"storage unreachable
+500|qpersona|post|/personas/probe1/ai-bio|{"ok":false,"error":"storage unreachable
+404|qreal|patch|/projects/probe1/characters/probe1|{"error":"not found"}
+404|qreal|post|/projects/probe1/storyboard|{"error":"not found"}
+404|qreal|post|/projects/probe1/continuity|{"error":"not found"}
+400|qright|patch|/webhooks/probe1|{"error":"url required (≤ 500 chars)"}
+500|qright|delete|/webhooks/probe1|{"error":"DB error"}
+500|qright|delete|/policies/probe1|{"error":"policies_revoke_failed"}
+403|qright|post|/admin/revoke/probe1|{"error":"Admin role required"}
+500|qright|post|/revoke/probe1|{"error":"DB error","name":"Error"}
+500|qsignV2|delete|/webhooks/probe1|{"error":"webhook_delete_failed","reques
+400|qsignV2|post|/revoke/probe1|{"error":"reason is required"}
+500|qsignV2|post|/webhooks/probe1/rotate-secret|{"error":"webhook_rotate_failed","reques
+500|qsocial|patch|/posts/probe1|{"error":"internal_error"}
+503|qsocial|patch|/me/notifications/probe1/read|{"error":"storage_unavailable","warning"
+500|qsocial|delete|/posts/probe1|{"error":"internal_error"}
+500|qsocial|post|/posts/probe1/like|{"error":"internal_error"}
+400|qsocial|post|/posts/probe1/comments|{"error":"content required"}
+404|qstore|patch|/me/products/probe1|{"error":"Product not found"}
+404|qstore|delete|/me/products/probe1|{"error":"Product not found"}
+500|qstore|post|/products/probe1/purchase|{"error":"purchase_failed"}
+400|qstore|post|/products/probe1/review|{"error":"rating must be 1-5"}
+500|quantum-shield|delete|/webhooks/probe1|{"error":"Failed to delete webhook"}
+500|quantum-shield|delete|/probe1|{"error":"Failed to delete shield record
+403|quantum-shield|post|/admin/shields/probe1/revoke|{"error":"admin_required","reason":"not-
+400|quantum-shield|post|/probe1/reconstruct|{"valid":false,"reconstructed":false,"re
+200|qventure|delete|/watchlist/probe1|{"ok":true,"data":[]}
+400|shadownet|delete|/posts/probe1|{"success":false,"error":"invalid id"}
+404|smeta-trainer|delete|/admin/webhooks/probe1|{"error":"not_found"}
+400|smeta-trainer|post|/student/probe1/sync|{"error":"bad_levels"}
+400|smeta-trainer|post|/student/probe1/lessons|{"error":"bad_lessons"}
+400|startupExchange|post|/ideas/probe1/interest|{"success":false,"error":"invalid_id"}
+404|ventures|post|/ideas/probe1/interest|{"error":"unknown-idea"}

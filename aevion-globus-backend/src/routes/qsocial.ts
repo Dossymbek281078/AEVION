@@ -323,27 +323,75 @@ qsocialRouter.post("/posts/:id/like", async (req: Request, res: Response) => {
 
   try {
     if (isQSocialDbReady()) {
-      const { rows: existing } = await pool.query(
-        `SELECT 1 FROM "QSocialLike" WHERE "userId"=$1 AND "postId"=$2`,
-        [auth.sub, postId],
-      );
-      let liked: boolean;
-      if (existing.length > 0) {
-        await pool.query(`DELETE FROM "QSocialLike" WHERE "userId"=$1 AND "postId"=$2`, [auth.sub, postId]);
-        await pool.query(`UPDATE "QSocialPost" SET "likesCount"=GREATEST(0,"likesCount"-1) WHERE "id"=$1`, [postId]);
-        liked = false;
-      } else {
-        await pool.query(`INSERT INTO "QSocialLike" ("userId","postId","createdAt") VALUES ($1,$2,NOW()) ON CONFLICT DO NOTHING`, [auth.sub, postId]);
-        await pool.query(`UPDATE "QSocialPost" SET "likesCount"="likesCount"+1 WHERE "id"=$1`, [postId]);
-        liked = true;
-        // Notify post owner (not self)
-        const { rows: ownerRows } = await pool.query(`SELECT "userId" FROM "QSocialPost" WHERE "id"=$1`, [postId]);
-        if (ownerRows[0] && ownerRows[0].userId !== auth.sub) {
-          addNotification(ownerRows[0].userId, { type: "like", fromUserId: auth.sub, resourceId: postId });
+      // Счётчик двигается ТОЛЬКО следом за строкой, которую он считает.
+      // До 28.07.2026 здесь было «прочитал, вставил через ON CONFLICT DO
+      // NOTHING, увеличил безусловно»: двойное нажатие давало два запроса,
+      // оба видели лайка нет, вторая вставка молча отбрасывалась, а
+      // likesCount вырастал на два. Гонки для этого не нужны — хватает
+      // обычного дабл-тапа по кнопке.
+      // Лайк и счётчик — в одной транзакции. Условности (RETURNING + проверка
+      // rowCount) уже было недостаточно: строка и счётчик менялись двумя
+      // отдельными запросами, и сбой между ними снова разводил их. Образец —
+      // qevents.ts.
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const { rows: postOwner } = await client.query(
+          `SELECT "userId" FROM "QSocialPost" WHERE "id"=$1`,
+          [postId],
+        );
+        // Раньше 404 стоял только в in-memory ветке: лайк несуществующего
+        // поста в проде создавал строку лайка и отвечал успехом.
+        if (!postOwner[0]) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({ error: "not_found" });
         }
+
+        const { rows: existing } = await client.query(
+          `SELECT 1 FROM "QSocialLike" WHERE "userId"=$1 AND "postId"=$2`,
+          [auth.sub, postId],
+        );
+
+        let liked: boolean;
+        // Уведомление шлём ПОСЛЕ коммита: иначе откат оставит человека с
+        // сообщением о лайке, которого в базе нет.
+        let notifyOwner = false;
+        if (existing.length > 0) {
+          const removed = await client.query(
+            `DELETE FROM "QSocialLike" WHERE "userId"=$1 AND "postId"=$2 RETURNING "postId"`,
+            [auth.sub, postId],
+          );
+          if ((removed.rowCount ?? 0) > 0) {
+            await client.query(`UPDATE "QSocialPost" SET "likesCount"=GREATEST(0,"likesCount"-1) WHERE "id"=$1`, [postId]);
+          }
+          liked = false;
+        } else {
+          const added = await client.query(
+            `INSERT INTO "QSocialLike" ("userId","postId","createdAt") VALUES ($1,$2,NOW())
+             ON CONFLICT DO NOTHING RETURNING "postId"`,
+            [auth.sub, postId],
+          );
+          if ((added.rowCount ?? 0) > 0) {
+            await client.query(`UPDATE "QSocialPost" SET "likesCount"="likesCount"+1 WHERE "id"=$1`, [postId]);
+            notifyOwner = postOwner[0].userId !== auth.sub;
+          }
+          liked = true;
+        }
+
+        const { rows: postRows } = await client.query(`SELECT "likesCount" FROM "QSocialPost" WHERE "id"=$1`, [postId]);
+        await client.query("COMMIT");
+
+        if (notifyOwner) {
+          addNotification(postOwner[0].userId, { type: "like", fromUserId: auth.sub, resourceId: postId });
+        }
+        return res.json({ liked, likesCount: postRows[0]?.likesCount ?? 0, storage: "db" });
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
       }
-      const { rows: postRows } = await pool.query(`SELECT "likesCount" FROM "QSocialPost" WHERE "id"=$1`, [postId]);
-      return res.json({ liked, likesCount: postRows[0]?.likesCount ?? 0, storage: "db" });
     }
 
     const key = likeKey(auth.sub, postId);
@@ -364,7 +412,7 @@ qsocialRouter.post("/posts/:id/like", async (req: Request, res: Response) => {
         addNotification(post.userId, { type: "like", fromUserId: auth.sub, resourceId: postId });
       }
     }
-    return res.json({ liked, likesCount: post.likesCount, storage: "memory" });
+    return res.json({ liked, likesCount: post.likesCount });
   } catch (err) {
     captureQSocialError(err, { route: "qsocial" });
     return res.status(500).json({ error: "internal_error" });
@@ -667,49 +715,104 @@ qsocialRouter.delete("/me/notifications", async (req: Request, res: Response) =>
 });
 
 // ─── GET /api/qsocial/search — search posts by content + tags ────────────────
-qsocialRouter.get("/search", (req: Request, res: Response) => {
+qsocialRouter.get("/search", async (req: Request, res: Response) => {
   const q = String(req.query.q ?? "").toLowerCase().trim();
   if (!q) return res.status(400).json({ error: "q is required" });
 
-  const posts = Array.from(memPosts.values())
-    .filter((p) => p.isPublic && (
-      p.content.toLowerCase().includes(q) ||
-      p.tags.some((t) => t.toLowerCase().includes(q))
-    ))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 50);
-  return res.json({ posts });
-});
-
-// ─── GET /api/qsocial/hashtag/:tag — posts with this tag ─────────────────────
-qsocialRouter.get("/hashtag/:tag", (req: Request, res: Response) => {
-  const tag = String(req.params.tag ?? "").toLowerCase();
-  const posts = Array.from(memPosts.values())
-    .filter((p) => p.isPublic && p.tags.some((t) => t.toLowerCase() === tag))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 50);
-  return res.json({ tag, posts });
-});
-
-// ─── GET /api/qsocial/trending-tags — top 10 tags by frequency ───────────────
-qsocialRouter.get("/trending-tags", (_req: Request, res: Response) => {
-  const tagCounts = new Map<string, number>();
-  for (const post of memPosts.values()) {
-    if (!post.isPublic) continue;
-    for (const tag of post.tags) {
-      const t = tag.toLowerCase();
-      tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+  try {
+    // Раньше поиск читал ТОЛЬКО память. Посты пишутся в базу (см. POST /posts),
+    // а память после каждой выкатки пуста — значит на проде поиск не находил
+    // ничего и никогда, отвечая при этом 200 и пустым списком. Пустой ответ
+    // человек читает как "такого нет", а не как "поиск сломан".
+    if (isQSocialDbReady()) {
+      // "!" как экранирующий символ: иначе "%" и "_" из запроса человека
+      // работают подстановочными знаками, и поиск по "%" вернул бы всё подряд.
+      const like = "%" + q.replace(/[!%_]/g, "!$&") + "%";
+      const { rows } = await pool.query(
+        `SELECT * FROM "QSocialPost"
+          WHERE "isPublic" = TRUE
+            AND ("content" ILIKE $1 ESCAPE '!'
+                 OR EXISTS (SELECT 1 FROM unnest("tags") AS t WHERE t ILIKE $1 ESCAPE '!'))
+          ORDER BY "createdAt" DESC
+          LIMIT 50`,
+        [like],
+      );
+      return res.json({ posts: rows });
     }
+    const posts = Array.from(memPosts.values())
+      .filter((p) => p.isPublic && (
+        p.content.toLowerCase().includes(q) ||
+        p.tags.some((t) => t.toLowerCase().includes(q))
+      ))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 50);
+    return res.json({ posts });
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
+    return res.status(500).json({ error: "internal_error" });
   }
-  const tags = Array.from(tagCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([tag, count]) => ({ tag, count }));
-  return res.json({ tags });
 });
+// ─── GET /api/qsocial/hashtag/:tag — posts with this tag ─────────────────────
+qsocialRouter.get("/hashtag/:tag", async (req: Request, res: Response) => {
+  const tag = String(req.params.tag ?? "").toLowerCase();
 
-// ─── DM endpoints ─────────────────────────────────────────────────────────────
-
+  try {
+    // Тот же класс, что и у поиска: посты в базе, лента тега читалась из памяти.
+    if (isQSocialDbReady()) {
+      const { rows } = await pool.query(
+        `SELECT * FROM "QSocialPost"
+          WHERE "isPublic" = TRUE
+            AND EXISTS (SELECT 1 FROM unnest("tags") AS t WHERE lower(t) = $1)
+          ORDER BY "createdAt" DESC
+          LIMIT 50`,
+        [tag],
+      );
+      return res.json({ tag, posts: rows });
+    }
+    const posts = Array.from(memPosts.values())
+      .filter((p) => p.isPublic && p.tags.some((t) => t.toLowerCase() === tag))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 50);
+    return res.json({ tag, posts });
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+// ─── GET /api/qsocial/trending-tags — top 10 tags by frequency ───────────────
+qsocialRouter.get("/trending-tags", async (_req: Request, res: Response) => {
+  try {
+    // Считать "в тренде" по памяти означало показывать тренды одного процесса
+    // с момента последней выкатки, то есть почти всегда пустой список.
+    if (isQSocialDbReady()) {
+      const { rows } = await pool.query(
+        `SELECT lower(t) AS tag, COUNT(*)::int AS count
+           FROM "QSocialPost", unnest("tags") AS t
+          WHERE "isPublic" = TRUE
+          GROUP BY lower(t)
+          ORDER BY count DESC, tag ASC
+          LIMIT 10`,
+      );
+      return res.json({ tags: rows });
+    }
+    const tagCounts = new Map<string, number>();
+    for (const post of memPosts.values()) {
+      if (!post.isPublic) continue;
+      for (const tag of post.tags) {
+        const t = tag.toLowerCase();
+        tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+      }
+    }
+    const tags = Array.from(tagCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([tag, count]) => ({ tag, count }));
+    return res.json({ tags });
+  } catch (err) {
+    captureQSocialError(err, { route: "qsocial" });
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
 // POST /api/qsocial/dm/:userId — send DM
 qsocialRouter.post("/dm/:userId", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);

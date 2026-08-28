@@ -4,6 +4,7 @@ import { probeJson, probeLive } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { LandingView } from "@/components/LandingView";
+import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная запуска Multichat.
 //
@@ -124,6 +125,11 @@ export default async function MultichatLaunchPage({
 
   return (
     <main className={paper.paper} style={{ minHeight: "100vh", padding: "32px 18px 56px" }}>
+      {/* Заходы сюда не считались до 28.08.2026: страница собирает адреса, но
+          события page_view не слала. Воронка считает переходы ОТ page_view,
+          поэтому её посетители не попадали в знаменатель — конверсия выглядела
+          лучше, чем есть. Компонент сам читает ?c= из ссылки. */}
+      <PageTracking page="multichat-launch" />
       <div style={{ maxWidth: 620, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
         <header>
           <div className={paper.kicker}>AEVION · Multichat</div>

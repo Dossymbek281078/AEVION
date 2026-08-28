@@ -516,13 +516,20 @@ export default function QSocialPage() {
 
   async function handleDelete(postId: string) {
     try {
-      await fetch(apiUrl(`/api/qsocial/posts/${postId}`), {
+      const r = await fetch(apiUrl(`/api/qsocial/posts/${postId}`), {
         method: "DELETE",
         headers: bearerHeader(),
       });
+      // Ответ спрашивается ДО правки ленты: раньше запись исчезала с экрана
+      // независимо от исхода, а catch был помечен «ignore» — следа не
+      // оставалось вообще. Человек считал запись удалённой, а она оставалась.
+      if (!r.ok) {
+        alert("Не удалось удалить запись — она осталась в ленте.");
+        return;
+      }
       setPosts((prev) => prev.filter((p) => p.id !== postId));
     } catch {
-      // ignore
+      alert("Не удалось удалить запись — проверьте связь и попробуйте снова.");
     }
   }
 

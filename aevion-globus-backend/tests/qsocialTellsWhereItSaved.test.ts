@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./helpers/sourceCode";
 
 /**
  * QSocial называет хранилище во всех десяти местах записи.
@@ -17,7 +18,7 @@ import { join } from "node:path";
  * ветки возвращают неразличимое, и это видно в тексте.
  */
 
-const SRC = readFileSync(join(__dirname, "..", "src", "routes", "qsocial.ts"), "utf8");
+const SRC = stripComments(readFileSync(join(__dirname, "..", "src", "routes", "qsocial.ts"), "utf8"));
 
 /**
  * Ответы ЗАПИСИ без признака хранилища.

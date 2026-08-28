@@ -4384,8 +4384,14 @@ export async function getSessionInvite(token: string): Promise<InviteRow | null>
     if (row.expiresAt && new Date(row.expiresAt) < new Date()) return null;
     return row;
   }
+  // Роль 'collab' — НЕ приглашение. 28.08.2026 ссылки совместного просмотра
+  // переехали из памяти в эту же таблицу, и без фильтра токен просмотра стал
+  // бы резолвиться здесь как обычное приглашение: два разных права с разным
+  // сроком жизни за одним ключом. Механизмы разные — держим их раздельно.
   const r = await pool.query(
-    `SELECT * FROM "QCoreSessionInvite" WHERE "token"=$1 AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`,
+    `SELECT * FROM "QCoreSessionInvite"
+      WHERE "token"=$1 AND "role" <> 'collab'
+        AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`,
     [token]
   );
   return (r.rows[0] as InviteRow) ?? null;
@@ -4398,8 +4404,14 @@ export async function listSessionInvites(sessionId: string, userId: string): Pro
       .filter((inv) => inv.sessionId === sessionId && inv.invitedBy === userId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
+  // Роль 'collab' сюда не входит по той же причине, что и в getSessionInvite:
+  // ссылки совместного просмотра живут в этой таблице с 28.08.2026, но
+  // приглашениями не являются. Частичное разделение хуже полного: список,
+  // который иногда показывает чужой механизм, однажды дадут на экран.
   const r = await pool.query(
-    `SELECT * FROM "QCoreSessionInvite" WHERE "sessionId"=$1 AND "invitedBy"=$2 ORDER BY "createdAt" DESC`,
+    `SELECT * FROM "QCoreSessionInvite"
+      WHERE "sessionId"=$1 AND "invitedBy"=$2 AND "role" <> 'collab'
+      ORDER BY "createdAt" DESC`,
     [sessionId, userId]
   );
   return r.rows as InviteRow[];
@@ -4413,8 +4425,15 @@ export async function deleteSessionInvite(id: string, userId: string): Promise<b
     }
     return false;
   }
+  // Роль 'collab' исключена и здесь — третье и последнее место, где механизмы
+  // делят таблицу. Достать id ссылки просмотра через API приглашений сегодня
+  // нельзя (список её не показывает), то есть путь недостижим. Ровно так я и
+  // рассуждал про читателя по токену — и получил там настоящую дыру. Правило
+  // должно быть одинаковым во всех трёх местах, иначе следующий добавит
+  // четвёртое и будет гадать, какое из них главное.
   const r = await pool.query(
-    `DELETE FROM "QCoreSessionInvite" WHERE "id"=$1 AND "invitedBy"=$2`,
+    `DELETE FROM "QCoreSessionInvite"
+      WHERE "id"=$1 AND "invitedBy"=$2 AND "role" <> 'collab'`,
     [id, userId]
   );
   return (r.rowCount ?? 0) > 0;

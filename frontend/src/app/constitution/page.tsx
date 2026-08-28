@@ -200,6 +200,25 @@ export default function ConstitutionPage() {
   const { track } = useFunnel();
   useEffect(() => { track("page_view"); }, [track]);
 
+  // Касса возвращает сюда после УСПЕШНОЙ оплаты: `?upgrade=success&tier=...`.
+  // До 29.08.2026 страница этот признак не читала, и человек, только что
+  // заплативший, попадал на обычную страницу — ни благодарности, ни
+  // подтверждения. Понять, прошла ли оплата, он не мог.
+  //
+  // Сегодня путь спит: LemonSqueezy не настроен. Он оживёт ровно в день, когда
+  // зададут ключи, — и тогда молчание встретит ПЕРВОГО настоящего покупателя.
+  const [paidTier, setPaidTier] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("upgrade") !== "success") return;
+    const tier = q.get("tier");
+    setPaidTier(tier === "team" ? "Team" : "Pro");
+    // Событие в словаре воронки БЫЛО, а слал его никто: завершение покупки
+    // не фиксировалось вовсе. Теперь фиксируется.
+    track("upgrade_complete", { tier: tier ?? "pro" });
+  }, [track]);
+
   // Auto-redirect first-time visitors to /welcome (unless they came via deep-link)
   useEffect(() => {
     try {
@@ -753,6 +772,17 @@ export default function ConstitutionPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
+      {paidTier ? (
+        <div
+          role="status"
+          className="mx-auto mt-4 mb-2 max-w-3xl rounded-xl border border-emerald-400/40 bg-emerald-500/10 p-4 text-sm text-emerald-100"
+        >
+          <strong className="block mb-1">Оплата прошла — спасибо!</strong>
+          Тариф {paidTier} активирован на этом аккаунте. Если доступ не появился
+          в течение пары минут, напишите нам: платёж уже зафиксирован, и мы
+          откроем его вручную.
+        </div>
+      ) : null}
       <div className="max-w-6xl mx-auto">
       {/* Общий замер платформы. Свою подробную воронку модуль ведёт сам
           (useFunnel → /api/constitution/funnel/track), но она отдельная: в
@@ -1058,7 +1088,7 @@ export default function ConstitutionPage() {
             {overSaveLimit && <ProPaywallBanner savedTotal={savedTotal} limit={planLimits?.savedScenarios ?? 5} />}
 
             <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
-              <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">
+              <h3 id="constitution-save-heading" className="text-lg font-semibold text-[#f5d27a] mb-3">
                 {t("constitution.save.heading")}
                 {savedTotal > 0 ? ` (${t("constitution.save.total", { count: savedTotal })})` : ""}
                 {plan === "pro" && (
@@ -1071,6 +1101,12 @@ export default function ConstitutionPage() {
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
+                  // Поле держалось на одной подсказке, а она исчезает при
+                  // вводе — читалка объявляла его безымянным ровно тогда,
+                  // когда в нём работают. Найдено сторожем AEVION-A11yNamesWatch
+                  // 28.08.2026. Связываю с заголовком блока: новых ключей
+                  // не завожу — словарь сейчас перестраивает соседняя ветка.
+                  aria-labelledby="constitution-save-heading"
                   placeholder={t("constitution.save.titlePlaceholder")}
                   className="flex-1 min-w-[180px] bg-[#050a1a] border border-[#d4af37]/30 rounded px-3 py-2 text-sm"
                   maxLength={120}

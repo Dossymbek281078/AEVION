@@ -99,6 +99,7 @@ function WaitlistForm() {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         required
+        aria-label="Email"
         placeholder="you@domain.com"
         className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-600"
       />

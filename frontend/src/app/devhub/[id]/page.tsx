@@ -2106,7 +2106,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/vercel`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        throw new Error(d.error || "Выкатка на Vercel не удалась");
+        throw new Error(devhubServerError(d.error, "Выкатка на Vercel не удалась"));
       }
       showToast(`Vercel: ${d.deployUrl}`, "success");
       setTimeout(async () => {
@@ -2434,7 +2434,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ steps: agentSteps }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Сценарий не выполнился");
+      if (!r.ok) throw new Error(devhubServerError(d.error, "Сценарий не выполнился"));
       setAgentResults(d.results || []);
       setAgentSummary({ totalSteps: d.totalSteps, successCount: d.successCount, failureCount: d.failureCount });
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });

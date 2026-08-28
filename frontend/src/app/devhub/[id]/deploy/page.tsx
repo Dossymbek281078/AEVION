@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, use } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { devhubServerError } from "@/lib/devhubServerError";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -267,7 +268,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
       });
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
-        throw new Error(body.error || "Deploy failed");
+        throw new Error(devhubServerError(body.error, "Выкатка не удалась."));
       }
       showToast("Deployment started", true);
       // Immediately refresh so the new pending deployment appears

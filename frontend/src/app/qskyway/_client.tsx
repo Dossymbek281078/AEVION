@@ -832,7 +832,17 @@ export default function QSkywayClient() {
           </div>
         )}
 
-        {err && <div style={{ ...card, padding: 16, color: "#fb7185" }}>{t("qskyway.err.cityLoad", { err: String(err) })}</div>}
+        {/* Сообщение об ошибке — для ПОСЕТИТЕЛЯ, а не для разработчика. Раньше
+            здесь стояло «Проверь, что бэкенд поднят (/api/qskyway/city)»: человек,
+            зашедший на публичную страницу, поднять бэкенд не может, и такой текст
+            только сообщает ему, что мы о нём не думали. Технический текст
+            исключения оставлен в подсказке — для диагностики он там же, а на
+            экран не лезет. */}
+        {err && (
+          <div style={{ ...card, padding: 16, color: "#fb7185" }} title={String(err)}>
+            {t("qskyway.err.cityLoad")}
+          </div>
+        )}
 
         {!err && (
           <div className="qsky-grid" style={{ display: "grid", gap: 14 }}>

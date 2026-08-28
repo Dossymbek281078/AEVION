@@ -2078,6 +2078,18 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
         "4. take the key from the service: GET /api/qskyway/health -> signing.publicKey (SPKI, base64)",
         "5. compare it with attestation.publicKey: a mismatch means this service did not sign it",
       ],
+      /**
+       * Проверено 28.08.2026 ПОСТОРОННИМ инструментом на настоящем документе
+       * с прода: openssl сказал «Signature Verified Successfully». Рецепт,
+       * проверенный только тем же языком, на котором написан сервис, проверен
+       * наполовину — этот проверен чужим.
+       */
+      openssl: [
+        "хэш в файл:      printf %s <contentHash> | xxd -r -p > hash.bin",
+        "подпись в файл:  echo <signature> | base64 -d > sig.bin",
+        "ключ в PEM:      обернуть attestation.publicKey в -----BEGIN PUBLIC KEY----- / -----END PUBLIC KEY-----",
+        "проверка:        openssl pkeyutl -verify -pubin -inkey pub.pem -rawin -in hash.bin -sigfile sig.bin",
+      ],
       limit: "Это доказывает, что документ не менялся после подписи и что подписал его владелец ключа с этого адреса. Что владелец — AEVION, доказывает TLS домена, а не сама подпись.",
       limitEn: "This proves the document was not altered after signing and that it was signed by the holder of the key served at this address. That the holder is AEVION is proven by the domain's TLS, not by the signature itself.",
     },

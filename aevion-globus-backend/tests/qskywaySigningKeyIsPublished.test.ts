@@ -90,6 +90,11 @@ describe("ключ подписи QSkyway доступен независимо 
     // получил бы «документ поддельный» на честной бумаге.
     expect(/компакт/i.test(все), "не сказано, что JSON должен быть компактным").toBe(true);
     expect(/python/i.test(все), "не сказано, как это сделать вне JavaScript").toBe(true);
+    // Путь через openssl — тот, которым воспользуется инженер ведомства.
+    // Проверен на живом прод-документе: «Signature Verified Successfully».
+    const oss = (v.openssl ?? []).join(" ");
+    expect(oss.includes("pkeyutl"), "нет готовой команды openssl").toBe(true);
+    expect(oss.includes("-rawin"), "команда openssl без -rawin не проверит Ed25519").toBe(true);
 
     // И граница обещания названа: подпись не доказывает, что владелец — мы.
     expect(String(v.limit).length, "граница обещания не названа").toBeGreaterThan(50);

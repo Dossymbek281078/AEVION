@@ -2176,7 +2176,22 @@ qskywayRouter.get("/verify", (req: Request, res: Response) => {
 
 // Bitcoin-anchor the ceiling layer: Ed25519 says who signed it, OpenTimestamps
 // says it existed by block N — the edition date stops resting on our clock.
-qskywayRouter.post("/airspace/anchor", async (req: Request, res: Response) => {
+// Сегодня этот путь наружу недостижим: у единственного города готовое
+// доказательство есть, и ветка ниже отдаёт его, не обращаясь в календари.
+// Но защита держится на СОВПАДЕНИИ хеша: поправят данные воздушного
+// пространства — хеш разойдётся, ветка перестанет срабатывать, и каждый
+// запрос пойдёт в чужую инфраструктуру. Предел стоит здесь ровно на этот
+// случай: пока путь закрыт, он не стоит ничего, а в день, когда откроется,
+// поток будет ограничен с первого запроса, а не после жалобы календарей.
+const anchorLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyPrefix: "qskyway-anchor",
+  message: "Слишком много привязок — привязка обращается во внешние календари, попробуйте через минуту."
+    + " / Too many anchor requests — anchoring calls external calendars, try again in a minute.",
+});
+
+qskywayRouter.post("/airspace/anchor", anchorLimiter, async (req: Request, res: Response) => {
   const resolved = resolveCity(req.body?.city);
   if (!resolved) return refuseUnknownCity(res);
   // A public POST that submits to the OpenTimestamps calendars is an open tap

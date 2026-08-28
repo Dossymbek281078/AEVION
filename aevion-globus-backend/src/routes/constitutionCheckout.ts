@@ -146,7 +146,10 @@ constitutionCheckoutRouter.post(
           tierName: nameOf(tier),
           priceUsd: priceOf(tier),
           provider: "stub",
-          note: "No payment provider configured. Set LEMON_SQUEEZY_API_KEY or GUMROAD_CONSTITUTION_PRO_PERMALINK.",
+          // 28.08.2026: в `note` стояли ИМЕНА переменных окружения. Заглушка
+          // честно называет себя (`provider: "stub"`) — это правильно и
+          // остаётся; имена настройки наружу не нужны, они в журнале.
+          note: "Платёжный провайдер не настроен — это ответ-заглушка, оплата не произошла.",
         });
       }
 

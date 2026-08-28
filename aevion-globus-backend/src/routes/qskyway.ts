@@ -2065,14 +2065,14 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
      */
     verifyYourself: {
       steps: [
-        "1. canonical = JSON.stringify(document) — поля уже в нужном порядке, менять их нельзя",
+        "1. canonical = документ как КОМПАКТНЫЙ JSON: без пробелов и переносов, порядок полей как пришёл. В JS это ровно JSON.stringify(document); в python — json.dumps(doc, separators=(',',':'), ensure_ascii=False), потому что по умолчанию он ставит пробелы и хэш не сойдётся",
         "2. contentHash = sha256(canonical), в hex — обязан совпасть с attestation.contentHash",
         "3. подпись Ed25519 стоит на БАЙТАХ этого хэша (Buffer.from(contentHash, 'hex')), НЕ на тексте",
         "4. ключ возьмите у службы: GET /api/qskyway/health -> signing.publicKey (SPKI, base64)",
         "5. сверьте его с attestation.publicKey: расхождение значит, что подписал не этот сервис",
       ],
       stepsEn: [
-        "1. canonical = JSON.stringify(document) - fields are already ordered, do not reorder",
+        "1. canonical = the document as COMPACT JSON: no spaces, no newlines, key order as received. In JS that is exactly JSON.stringify(document); in Python use json.dumps(doc, separators=(',',':'), ensure_ascii=False) - the default adds spaces and the hash will not match",
         "2. contentHash = sha256(canonical) in hex - must equal attestation.contentHash",
         "3. the Ed25519 signature covers the BYTES of that hash (Buffer.from(contentHash, 'hex')), not the text",
         "4. take the key from the service: GET /api/qskyway/health -> signing.publicKey (SPKI, base64)",

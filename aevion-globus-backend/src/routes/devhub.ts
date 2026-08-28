@@ -2069,23 +2069,33 @@ devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
 
   project.envVars = { ...(project.envVars || {}), DATABASE_URL: result.databaseUrl };
   project.updatedAt = now();
+  // Здесь уже создан НАСТОЯЩИЙ внешний ресурс: схема и роль на сервере баз.
+  // Если ссылка на него легла только в память процесса, после перезапуска
+  // проект её потеряет, а сама база останется висеть без владельца. Текст
+  // ниже при этом УТВЕРЖДАЛ, что DATABASE_URL сохранён.
+  let storage: "db" | "memory" = "db";
   try {
     await dbSaveProject(project);
   } catch {
     memProjects.set(project.id, project);
+    storage = "memory";
   }
 
   // The URL contains the credential — returned once so the caller can show it,
   // never logged.
+  const savedNote = storage === "memory"
+    ? " ВНИМАНИЕ: наше хранилище было недоступно, поэтому ссылка сохранена только в памяти и может пропасть при перезапуске. Скопируйте DATABASE_URL себе сейчас."
+    : "";
   res.json({
     ok: true,
     schema: result.schema,
     role: result.role,
     appliedSchemaSql: result.appliedSchemaSql,
     databaseUrl: result.databaseUrl,
-    note: result.appliedSchemaSql
+    storage,
+    note: (result.appliedSchemaSql
       ? "Database created, schema applied, DATABASE_URL saved to this project's env vars."
-      : "Database created and DATABASE_URL saved. No db/schema.sql found, so no tables were created yet.",
+      : "Database created and DATABASE_URL saved. No db/schema.sql found, so no tables were created yet.") + savedNote,
   });
 });
 

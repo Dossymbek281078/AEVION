@@ -1573,3 +1573,16 @@ Caused by: [vitest-pool-runner]: Timeout waiting for worker to respond
 **Ветки на удаление ждут разрешения** (правило 4, молча не удаляю):
 `probe/auth-check-0828`, `probe/merge-final-0828`, `probe/full-merged-0828`,
 `probe/merge-onto-launch-0829`.
+
+## 29.08, ~00:2x — пустые коммиты: класс НЕ платформенный
+
+Свипнул 826 коммитов всех веток за трое суток. Пустых — 4, и они двух видов:
+
+| коммит | shortstat | что это |
+|---|---|---|
+| `7d53ca07f` (мой) | `1 file changed, 0 insertions, 0 deletions` | авария |
+| `bbd9175d5`, `be9390981`, `6275b7c00` | строки о файлах НЕТ | намеренный `--allow-empty` |
+
+Три из четырёх — осознанная практика соседней вкладки (запись факта в историю).
+Аварийный один, мой. **Пугать этим не надо**, но проверка стоит секунд:
+`git show --stat HEAD | tail -3`, и «N files changed, 0 insertions» — тревога.

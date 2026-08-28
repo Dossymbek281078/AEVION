@@ -77,7 +77,11 @@ const STACKS: Array<{ id: Stack; label: string; desc: string }> = [
 
 function formatDate(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  // Локаль БРАУЗЕРА, а не "en-US". Здесь была зашита американская: на русской
+  // странице даты выглядели как «Aug 28, 2026». В двух других местах модуля
+  // локаль уже берётся от браузера — то есть один и тот же модуль показывал
+  // даты в двух форматах, и это заметно рядом.
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 // Price and checkout URL come from the product catalogue, which is verified

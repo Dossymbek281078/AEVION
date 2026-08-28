@@ -4255,7 +4255,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#64748b" }}>
                             <span>★ {githubStatus.stars ?? 0}</span>
                             <span>Issues: {githubStatus.openIssues ?? 0}</span>
-                            {githubStatus.lastPush && <span>Last push: {new Date(githubStatus.lastPush).toLocaleDateString()}</span>}
+                            {githubStatus.lastPush && <span>Последняя отправка: {new Date(githubStatus.lastPush).toLocaleDateString()}</span>}
                           </div>
                         )}
                       </div>

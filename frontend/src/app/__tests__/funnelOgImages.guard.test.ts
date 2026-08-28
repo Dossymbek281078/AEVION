@@ -22,7 +22,7 @@ const APP = join(HERE, "..");
 
 /** Страницы, на которые ведут ролики и внешние ссылки. Список ведётся руками:
  *  он и есть утверждение о том, что мы считаем входом в воронку. */
-const FUNNEL = ["go", "longevity", "en/go", "en/longevity", "shop"];
+const FUNNEL = ["go", "longevity", "en/go", "en/longevity", "shop", "constitution/pricing"];
 
 describe("карточки страниц воронки", () => {
   it("у каждой входной страницы есть opengraph-image", () => {

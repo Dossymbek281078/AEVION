@@ -1,3 +1,4 @@
+import { isInternalHost } from "./internalHost";
 import crypto from "crypto";
 import pg from "pg";
 
@@ -52,6 +53,30 @@ export async function deliverWebhook(
   let ok = false;
   let statusCode: number | null = null;
   let error: string | null = null;
+
+  // 28.08.2026: адрес вебхука приходит от пользователя (QRight, Planet и
+  // другие зовут эту функцию с `opts.url` из тела запроса), а внутренние
+  // адреса при регистрации не блокировались: у QRight проверялся только
+  // протокол, у Planet — только длина. Проверка стоит ЗДЕСЬ намеренно: это
+  // единственное место, где происходит само обращение, и оно общее для всех
+  // вызывающих. Гейт на входе не защищает то, что уже сохранено.
+  //
+  // Отдушина как у остальных вебхуков: в тестах и локальной разработке адрес
+  // петли законен — тест поднимает свой сервер и слушает доставку.
+  const allowInternal =
+    process.env.ALLOW_INTERNAL_WEBHOOKS === "1" || process.env.NODE_ENV === "test";
+  if (!allowInternal) {
+    let internal = true;
+    try {
+      internal = isInternalHost(new URL(opts.url).hostname);
+    } catch {
+      internal = true; // адрес не разбирается — не идём
+    }
+    if (internal) {
+      return { ok: false, statusCode: null, error: "target_not_allowed" };
+    }
+  }
+
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 5000);

@@ -108,3 +108,32 @@ describe("текст серверной ошибки — на языке чел�
     expect(devhubServerError(nonsense, FB).includes("(" + nonsense + ")")).toBe(true);
   });
 });
+
+describe("техническое сообщение не доезжает до покупателя", () => {
+  // Тексты взяты ДОСЛОВНО из src/routes/devhub.ts (замер 29.08.2026),
+  // а не придуманы: выдуманный вход проверял бы мою фантазию.
+  const REAL = [
+    "Domain provision not configured - set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID in Railway",
+    "Voice cloning unavailable - set ELEVENLABS_API_KEY",
+    "Database provisioning not configured - set DEVHUB_DB_ADMIN_URL",
+    "NO_VISION_PROVIDER: set OPENAI_API_KEY to enable screenshots",
+  ];
+
+  it("покупатель не видит ни имён ключей, ни названий панелей", () => {
+    expect(REAL.length).toBeGreaterThan(3);
+    for (const raw of REAL) {
+      const shown = devhubServerError(raw, "Не получилось.");
+      expect(shown, raw).not.toMatch(/[A-Z][A-Z0-9]{3,}_[A-Z0-9_]{2,}/);
+      expect(shown, raw).not.toContain("Railway");
+      // и это по-русски, а не английский огрызок
+      expect(shown, raw).toMatch(/[а-яА-ЯёЁ]/);
+    }
+  });
+
+  it("обычная ошибка по-прежнему показывается целиком", () => {
+    // Контроль в обратную сторону: правило не должно проглатывать всё
+    // подряд, иначе разбирать отказы станет не по чему.
+    const shown = devhubServerError("widget frobnicator stalled", "Не получилось.");
+    expect(shown).toContain("widget frobnicator stalled");
+  });
+});

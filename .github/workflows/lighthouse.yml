@@ -11,6 +11,13 @@ on:
       - "frontend/next.config.ts"
       - ".github/workflows/lighthouse.yml"
 
+# Расписание, о падении которого никто не узнаёт, работой не является.
+# issues:write нужно шагам ниже; без него gh отвечает 403, и сторож отказывает
+# невидимо — ровно это и случилось с daily-smoke.yml. 28.08.2026.
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   lhci:
     name: Lighthouse — perf / a11y / best-practices / seo
@@ -41,3 +48,19 @@ jobs:
           configPath: ./frontend/lighthouserc.json
           uploadArtifacts: true
           temporaryPublicStorage: true
+
+      - name: Report a red run
+        if: failure()
+        uses: ./.github/actions/report-red-run
+        with:
+          title: "🔴 Lighthouse CI is red"
+          outcome: failure
+          token: ${{ github.token }}
+
+      - name: Clear the issue once green again
+        if: success()
+        uses: ./.github/actions/report-red-run
+        with:
+          title: "🔴 Lighthouse CI is red"
+          outcome: success
+          token: ${{ github.token }}

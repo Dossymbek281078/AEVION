@@ -29,6 +29,7 @@ import { refererHost } from "../lib/qrightHelpers";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { emitEcosystemEvent } from "../lib/ecosystemEvents";
+import { safeErrorText } from "../lib/safeError";
 const captureBureauError = makeServiceCapture("bureau");
 
 const bureauEmbedRateLimit = rateLimit({
@@ -526,10 +527,10 @@ bureauRouter.post("/verify/start", async (req, res) => {
       status: session.status,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "verify/start failed";
+    const msg = err instanceof Error ? err.message : "verify/start failed"; // только для журнала
     console.error("[Bureau] verify/start:", msg);
     captureBureauError(err, { route: "verify/start" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -624,10 +625,10 @@ bureauRouter.get("/verify/status/:verificationId", async (req, res) => {
       completedAt: v.completedAt,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "status failed";
+    const msg = err instanceof Error ? err.message : "status failed"; // только для журнала
     console.error("[Bureau] verify/status:", msg);
     captureBureauError(err, { route: "verify/status" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -696,10 +697,10 @@ bureauRouter.post("/payment/intent", async (req, res) => {
       status: intent.status,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "payment/intent failed";
+    const msg = err instanceof Error ? err.message : "payment/intent failed"; // только для журнала
     console.error("[Bureau] payment/intent:", msg);
     captureBureauError(err, { route: "payment/intent" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -822,10 +823,10 @@ bureauRouter.post("/upgrade/:certId", async (req, res) => {
       aecRewardPlanned: trust.aecRewardPlanned,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "upgrade failed";
+    const msg = err instanceof Error ? err.message : "upgrade failed"; // только для журнала
     console.error("[Bureau] upgrade:", msg);
     captureBureauError(err, { route: "upgrade" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -848,9 +849,9 @@ bureauRouter.get("/trust-edges/cert/:certId", async (req, res) => {
     );
     res.json({ certId, edges: rows });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "trust edges read failed";
+    const msg = err instanceof Error ? err.message : "trust edges read failed"; // только для журнала
     captureBureauError(err, { route: "trust-edges-by-cert" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -877,9 +878,9 @@ bureauRouter.get("/trust-edges/me", async (req, res) => {
     );
     res.json({ userId: user.userId, edges: rows });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "trust edges read failed";
+    const msg = err instanceof Error ? err.message : "trust edges read failed"; // только для журнала
     captureBureauError(err, { route: "trust-edges-by-user" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -958,10 +959,10 @@ bureauRouter.post("/trust-edges/:edgeId/claim-aec", async (req, res) => {
       ledgerEntryId: mint.entry.id,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "claim failed";
+    const msg = err instanceof Error ? err.message : "claim failed"; // только для журнала
     console.error("[Bureau] claim-aec:", msg);
     captureBureauError(err, { route: "trust-edges-claim-aec" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -1027,10 +1028,10 @@ bureauRouter.get("/dashboard", async (req, res) => {
       },
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "dashboard failed";
+    const msg = err instanceof Error ? err.message : "dashboard failed"; // только для журнала
     console.error("[Bureau] dashboard:", msg);
     captureBureauError(err, { route: "dashboard" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -1140,13 +1141,13 @@ bureauRouter.post("/verify/webhook", async (req, res) => {
     );
     res.json({ ok: true });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "kyc webhook failed";
+    const msg = err instanceof Error ? err.message : "kyc webhook failed"; // только для журнала
     const failure = classifyWebhookFailure(msg);
     console.error("[Bureau] kyc webhook:", failure, msg);
     if (failure !== "no_signature_header") {
       captureBureauError(err, { route: `verify/webhook:${failure}` });
     }
-    res.status(400).json({ ok: false, error: msg });
+    res.status(400).json({ ok: false, error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -1203,7 +1204,7 @@ bureauRouter.post("/payment/webhook", async (req, res) => {
     if (failure !== "no_signature_header") {
       captureBureauError(err, { route: `payment/webhook:${failure}` });
     }
-    res.status(400).json({ ok: false, error: msg });
+    res.status(400).json({ ok: false, error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -1253,10 +1254,10 @@ bureauRouter.get("/notaries", async (req, res) => {
     );
     res.json({ notaries: rows });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "list notaries failed";
+    const msg = err instanceof Error ? err.message : "list notaries failed"; // только для журнала
     console.error("[Bureau] notaries list:", msg);
     captureBureauError(err, { route: "notaries list" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -1284,10 +1285,10 @@ bureauRouter.get("/notaries/:notaryId", async (req, res) => {
     }
     res.json(rows[0]);
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "notary detail failed";
+    const msg = err instanceof Error ? err.message : "notary detail failed"; // только для журнала
     console.error("[Bureau] notary detail:", msg);
     captureBureauError(err, { route: "notary detail" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -1364,10 +1365,10 @@ bureauRouter.post("/org", async (req, res) => {
       role: "owner",
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "create org failed";
+    const msg = err instanceof Error ? err.message : "create org failed"; // только для журнала
     console.error("[Bureau] org create:", msg);
     captureBureauError(err, { route: "org create" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -1392,10 +1393,10 @@ bureauRouter.get("/org/mine", async (req, res) => {
     );
     res.json({ organizations: rows });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "list orgs failed";
+    const msg = err instanceof Error ? err.message : "list orgs failed"; // только для журнала
     console.error("[Bureau] org/mine:", msg);
     captureBureauError(err, { route: "org/mine" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -1447,10 +1448,10 @@ bureauRouter.get("/org/:orgId", async (req, res) => {
       myRole: access.rows[0].role,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "get org failed";
+    const msg = err instanceof Error ? err.message : "get org failed"; // только для журнала
     console.error("[Bureau] org get:", msg);
     captureBureauError(err, { route: "org get" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -1501,10 +1502,10 @@ bureauRouter.post("/org/:orgId/invite", async (req, res) => {
       expiresAt: expiresAt.toISOString(),
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "invite failed";
+    const msg = err instanceof Error ? err.message : "invite failed"; // только для журнала
     console.error("[Bureau] org invite:", msg);
     captureBureauError(err, { route: "org invite" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -1574,10 +1575,10 @@ bureauRouter.post("/org/accept/:token", async (req, res) => {
     }
     res.json({ orgId: invite.orgId, role: invite.role });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "accept failed";
+    const msg = err instanceof Error ? err.message : "accept failed"; // только для журнала
     console.error("[Bureau] org accept:", msg);
     captureBureauError(err, { route: "org accept" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "webhook rejected", "bureau") });
   }
 });
 
@@ -2591,7 +2592,7 @@ bureauRouter.delete("/org/:orgId/members/:memberId", async (req, res) => {
     await pool.query(`DELETE FROM "BureauMember" WHERE "id" = $1`, [memberId]);
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: safeErrorText(err, "internal error", "bureau") });
   }
 });
 
@@ -2622,7 +2623,7 @@ bureauRouter.patch("/org/:orgId/members/:memberId", async (req, res) => {
     await pool.query(`UPDATE "BureauMember" SET "role" = $1 WHERE "id" = $2`, [role, memberId]);
     res.json({ ok: true, role });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: safeErrorText(err, "internal error", "bureau") });
   }
 });
 
@@ -2643,7 +2644,7 @@ bureauRouter.delete("/org/:orgId/invites/:inviteId", async (req, res) => {
     await pool.query(`DELETE FROM "BureauOrgInvite" WHERE "id" = $1 AND "orgId" = $2`, [inviteId, orgId]);
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: safeErrorText(err, "internal error", "bureau") });
   }
 });
 
@@ -2763,7 +2764,7 @@ bureauRouter.post("/cert/:certId/notarize/request", async (req, res) => {
     await pool.query(`UPDATE "IPCertificate" SET "notarySignatureId" = $1 WHERE "id" = $2`, [sigId, certId]);
     res.status(201).json({ id: sigId, status: "pending", notaryId, notaryName: notary.rows[0].fullName });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: safeErrorText(err, "internal error", "bureau") });
   }
 });
 
@@ -2804,7 +2805,7 @@ bureauRouter.get("/cert/:certId/notarize/status", async (req, res) => {
         : "Ed25519 signature. Verify it against the notary public key.",
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: safeErrorText(err, "internal error", "bureau") });
   }
 });
 
@@ -2882,7 +2883,7 @@ bureauRouter.post("/admin/cert/:certId/notarize/sign", async (req, res) => {
     });
     res.json({ ok: true, signatureId: notarySignatureId, status: "signed" });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: safeErrorText(err, "internal error", "bureau") });
   }
 });
 

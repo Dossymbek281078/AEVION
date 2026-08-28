@@ -1,4 +1,5 @@
 import { describe, test, expect, vi } from "vitest";
+import { stripComments } from "./helpers/sourceCode";
 import express from "express";
 import request from "supertest";
 
@@ -65,9 +66,13 @@ describe("ИМТ не выдумывается из нулей", () => {
     // Договор на стороне страницы: healthai/plan объявляет bmi: number | null
     // и рисует его только при !== null. Тест держит обе стороны вместе, иначе
     // «починка» бэкенда снова разойдётся с экраном.
-    const src = require("node:fs").readFileSync(
-      require("node:path").join(__dirname, "..", "..", "frontend", "src", "app", "healthai", "plan", "page.tsx"),
-      "utf8",
+    // Без stripComments сторож зеленеет на ЗАКОММЕНТИРОВАННОМ договоре:
+    // проверено мутацией 21.08.2026 — закомментировал строку, тест не заметил.
+    const src = stripComments(
+      require("node:fs").readFileSync(
+        require("node:path").join(__dirname, "..", "..", "frontend", "src", "app", "healthai", "plan", "page.tsx"),
+        "utf8",
+      ),
     );
     expect(src).toMatch(/bmi:\s*number\s*\|\s*null/);
     expect(src).toMatch(/bmi\s*!==\s*null/);

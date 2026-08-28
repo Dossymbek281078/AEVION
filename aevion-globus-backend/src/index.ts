@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { readBuildInfo } from "./lib/buildInfo";
 import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
 import { emailSenderStatus } from "./routes/provisioning";
@@ -223,66 +224,7 @@ app.use(express.urlencoded({
  * уже печатает — и до 14.08.2026 печатала «собрана ?», потому что отдавать его
  * было некому.
  */
-function readBuildInfo(): { commit: string; source: string; branch: string; builtAt: string | null } {
-  // ПОРЯДОК ВАЖЕН: сначала файл, переменные — только запасной путь.
-  //
-  // 14.08.2026 отметку ставили переменной сервиса, и она пережила чужую
-  // выкатку: образ сменился целиком, переменная осталась, а /health продолжил
-  // уверенно называть мой коммит. Проверка отвечала «сборка совпадает», пока на
-  // проде не было ни одной моей ручки.
-  //
-  // Причина в принадлежности: переменные принадлежат СЕРВИСУ, файл едет ВНУТРИ
-  // образа. Описывать артефакт может только то, что уезжает вместе с ним.
-  //
-  // Переменную из Railway тогда удалили, но код, читавший её ПЕРВОЙ, остался и
-  // 19.08 обнаружился прямо на проде. Он безвреден лишь пока переменной нет:
-  // вернут её (например, при переподключении источника сборки к GitHub) — и
-  // дефект вернётся в худшем виде, уверенным неправильным ответом вместо
-  // честного «не знаю».
-  try {
-    // Файл лежит РЯДОМ С КОДОМ, а не в dist: `railway up` уважает .gitignore, и
-    // отметка из игнорируемого каталога в образ не уезжает. Это уже проверено
-    // на реальной выкатке в ветке deploy/combined (6a30a9bd8) — там маркер
-    // сначала писали в игнорируемое место, выкатили, получили "unknown" и
-    // перенесли. Повторять тот же путь не нужно.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const fsMod = require("node:fs") as typeof import("node:fs");
-    const pathMod = require("node:path") as typeof import("node:path");
-    const raw = fsMod.readFileSync(pathMod.join(__dirname, "..", "build-info.json"), "utf-8");
-    const info = JSON.parse(raw) as { commit?: string; source?: string; branch?: string; builtAt?: string };
-    return {
-      commit: String(info.commit || "unknown").slice(0, 12),
-      source: String(info.source || "build-info"),
-      branch: String(info.branch || "unknown"),
-      builtAt: info.builtAt ? String(info.builtAt) : null,
-    };
-  } catch {
-    /* файла нет — идём к запасному пути ниже */
-  }
-
-  // Запасной путь. Railway подставляет RAILWAY_GIT_COMMIT_SHA, только когда
-  // собирает из подключённого репозитория — тогда переменная приходит ВМЕСТЕ со
-  // сборкой и честна. Источник помечается явно: увидев source: "env", человек
-  // должен проверить, не переживает ли отметка выкатку.
-  const envCommit =
-    process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || process.env.SOURCE_VERSION;
-  if (envCommit) {
-    return {
-      commit: envCommit.slice(0, 12),
-      source: "env",
-      branch: process.env.RAILWAY_GIT_BRANCH || "unknown",
-      // Метку времени даёт только файл; из переменных её взять неоткуда, и
-      // выдумывать «сейчас» нельзя — это назвало бы старт контейнера сборкой.
-      builtAt: null,
-    };
-  }
-
-  // Ни файла, ни переменных — это dev-запуск через ts-node-dev (dist не
-  // собран). Отвечаем "unknown" явно, а не выдумываем: ложный коммит хуже
-  // отсутствующего.
-  return { commit: "unknown", source: "none", branch: "unknown", builtAt: null };
-}
-
+// Читатель отметки живёт в lib/buildInfo — его использует и routes/qreal.
 const BUILD_INFO = readBuildInfo();
 const BUILD_COMMIT = BUILD_INFO.commit;
 const BOOT_TIME = new Date().toISOString();

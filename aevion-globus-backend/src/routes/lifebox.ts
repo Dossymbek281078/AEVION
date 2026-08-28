@@ -27,6 +27,7 @@ import {
 } from "../lib/ensureLifeBoxTables";
 import { rateLimit } from "../lib/rateLimit";
 import { pgIntId } from "../lib/queryNumber";
+import { safeErrorText } from "../lib/safeError";
 
 export const lifeboxRouter = Router();
 
@@ -314,7 +315,7 @@ lifeboxRouter.get("/stats", readLimit, async (_req: Request, res: Response) => {
     res.json({ ok: true, ...stats });
   } catch (e: any) {
     captureLifeBoxError(e, { route: "lifebox" });
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "lifebox") });
   }
 });
 
@@ -395,7 +396,7 @@ lifeboxRouter.post("/capsules", writeLimit, async (req: Request, res: Response) 
     });
   } catch (e: any) {
     captureLifeBoxError(e, { route: "lifebox" });
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "lifebox") });
   }
 });
 
@@ -437,7 +438,7 @@ lifeboxRouter.get("/capsules/:alias", readLimit, async (req: Request, res: Respo
     });
   } catch (e: any) {
     captureLifeBoxError(e, { route: "lifebox" });
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "lifebox") });
   }
 });
 
@@ -499,7 +500,7 @@ lifeboxRouter.get("/capsules/:id/unlock", readLimit, async (req: Request, res: R
     });
   } catch (e: any) {
     captureLifeBoxError(e, { route: "lifebox" });
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "lifebox") });
   }
 });
 
@@ -563,7 +564,7 @@ lifeboxRouter.patch("/capsules/:id", writeLimit, async (req: Request, res: Respo
     res.json({ ok: true, capsule: publicView(updated) });
   } catch (e: any) {
     captureLifeBoxError(e, { route: "lifebox" });
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "lifebox") });
   }
 });
 
@@ -595,7 +596,7 @@ lifeboxRouter.delete("/capsules/:id", writeLimit, async (req: Request, res: Resp
     res.json({ ok, deletedId: id });
   } catch (e: any) {
     captureLifeBoxError(e, { route: "lifebox" });
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "lifebox") });
   }
 });
 

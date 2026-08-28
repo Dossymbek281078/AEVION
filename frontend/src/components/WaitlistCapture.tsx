@@ -36,6 +36,17 @@ export type WaitlistCaptureProps = {
   tone?: "dark" | "light";
   /** Язык подсказки и сообщений об отказе. По умолчанию русский. */
   lang?: "ru" | "en";
+  /**
+   * Текст подтверждения после успешной подписки.
+   *
+   * Зачем настраивается. Общий текст — «напишем, когда будет что показать»:
+   * он верен для страниц без даты. Но на странице запуска, где прямо сказано
+   * «Открываем 30 августа», такое подтверждение звучит расплывчатее самого
+   * обещания, и человек уходит с меньшей уверенностью, чем пришёл. Замер
+   * 28.08.2026: страница обещает «напишем в день запуска», письмо называет
+   * дату, а подтверждение на экране — нет.
+   */
+  doneText?: string;
 };
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,24}$/;
@@ -82,6 +93,7 @@ export function WaitlistCapture({
   buttonLabel = "Получить ранний доступ",
   tone = "dark",
   lang = "ru",
+  doneText,
 }: WaitlistCaptureProps) {
   const copy = COPY[lang];
   const [email, setEmail] = useState("");
@@ -110,7 +122,7 @@ export function WaitlistCapture({
       });
       if (r.ok) {
         setStatus("done");
-        setMessage(copy.done);
+        setMessage(doneText || copy.done);
         setEmail("");
         return;
       }

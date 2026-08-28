@@ -163,8 +163,15 @@ export default async function GoPage({
   const bookFull = productById("ghvzq");
   const allAccess = SUBSCRIPTIONS.find((s) => s.id === "xpxzam");
 
+  // Язык объявляется на самом блоке: в корневом макете стоит lang="en"
+  // (большая часть сайта английская), а эта страница русская — и
+  // несоответствие браузер лечит машинным переводом НАШЕГО текста.
+  // Ближайший lang выигрывает у корневого, поэтому общий шаблон трогать
+  // не нужно. Приём взят у cyberchess/launch, чтобы способ был один.
+  // Главная посадочная для трафика с роликов: адрес /go стоит в шапках
+  // соцсетей, и первый визит почти всегда приходит сюда.
   return (
-    <main style={styles.page}>
+    <main lang="ru" style={styles.page}>
       {/* Без этого нельзя ответить даже на «приходил ли кто-нибудь» — см. components/PageTracking */}
       <PageTracking page="go" />
       <div style={styles.wrap}>

@@ -21,6 +21,7 @@ import { deliverWebhook } from "../lib/webhookDelivery";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvNeutralizeFormula } from "../lib/csv";
+import { safeErrorText } from "../lib/safeError";
 const capturePlanetError = makeServiceCapture("planet");
 
 const PLANET_WEBHOOK_DELIVERY_CFG = {
@@ -740,7 +741,7 @@ planetComplianceRouter.get("/stats", async (req, res) => {
       generatedAt: new Date().toISOString(),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "stats failed" });
+    res.status(500).json({ error: safeErrorText(e, "stats failed", "planetCompliance") });
   }
 });
 
@@ -802,7 +803,7 @@ planetComplianceRouter.post("/submissions", async (req, res) => {
       inputSetHash = canon.inputSetHash;
       mediaIndex = canon.mediaIndex;
     } catch (e: any) {
-      return res.status(400).json({ error: e?.message || "invalid movie/music input" });
+      return res.status(400).json({ error: safeErrorText(e, "invalid movie/music input", "planetCompliance") });
     }
     canonicalArtifactHash = sha256Hex(stableStringify({ artifactType, inputSetHash }));
   }
@@ -1319,7 +1320,7 @@ planetComplianceRouter.post("/submissions", async (req, res) => {
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
-    const msg = err?.message || "submission_failed";
+    const msg = safeErrorText(err, "submission_failed", "planetCompliance");
     return res.status(500).json({ error: "submission_failed" });
   }
 });
@@ -1414,7 +1415,7 @@ planetComplianceRouter.post("/submissions/:submissionId/resubmit", async (req, r
       inputSetHash = canon.inputSetHash;
       mediaIndex = canon.mediaIndex;
     } catch (e: any) {
-      return res.status(400).json({ error: e?.message || "invalid movie/music input" });
+      return res.status(400).json({ error: safeErrorText(e, "invalid movie/music input", "planetCompliance") });
     }
     if (inputSetHash === latest.inputSetHash) {
       return res.status(400).json({
@@ -2079,7 +2080,7 @@ planetComplianceRouter.get("/artifacts/recent", async (req, res) => {
       generatedAt: new Date().toISOString(),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "recent failed" });
+    res.status(500).json({ error: safeErrorText(e, "recent failed", "planetCompliance") });
   }
 });
 

@@ -203,11 +203,37 @@ const PAGES = [
   // Дописано при сведении 21.08: этих адресов не было в их списке.
   "/build/verify-email",
   "/pricing/cases",
+  // 28.08.2026 — страница по ссылке совместного просмотра QCoreAI. Токен здесь
+  // намеренно выдуманный: он и должен показать экран "ссылка не действует", а
+  // проверяем мы существование САМОГО адреса. Именно его и не было: кнопка
+  // "поделиться" отдавала ссылку сюда, а прод отвечал 404, и обнаружил бы это
+  // получатель, а не автор. Выкачено 28.08 в 12:4x — перенесено сюда из
+  // PENDING_DEPLOY по просьбе самого сторожа.
+  "/qcoreai/collab/probe-token-not-real",
 ];
+
+/**
+ * Адреса, которые ЕСТЬ в ветке, но ещё не выкачены.
+ *
+ * Красить свип красным из-за них нельзя: мержа не было, и виноват не прод.
+ * Считать зелёными — тоже нельзя: проверка не состоялась. Поэтому отдельный
+ * счётчик — видно в выводе, но код выхода не ломается. Договорённость взята
+ * из qreal-prod-smoke.js (там это функция pend), чтобы способ был один.
+ *
+ * ⚠️ Выкатили — переносите строку в PAGES. Иначе проверка останется вечно
+ * «ожидаемой» и однажды прикроет настоящую пропажу страницы.
+ */
+const PENDING_DEPLOY = {
+  // Пусто: всё, что здесь стояло, выкачено. Сторож сам просит вычеркнуть строку,
+  // когда адрес начинает отвечать, — так список не превращается в постоянное
+  // исключение, которое однажды прикроет настоящую пропажу страницы.
+};
 
 let pass = 0;
 let fail = 0;
 const failures = [];
+let pending = 0;
+const deployedNowPending = [];
 
 async function checkPage(p) {
   const url = BASE + p;
@@ -218,17 +244,27 @@ async function checkPage(p) {
     const okSize = body.length > 5000;
     const okBrand = /aevion/i.test(body);
     if (okStatus && okSize && okBrand) {
+      if (PENDING_DEPLOY[p]) deployedNowPending.push(p);
       pass++;
       console.log(`  PASS ${p} (${r.status}, ${(body.length / 1024).toFixed(0)}KB)`);
+    } else if (PENDING_DEPLOY[p]) {
+      // Не PASS и не FAIL: проверка не состоялась, потому что мержа ещё не было.
+      pending++;
+      console.log(`  ~ ${p} — ждёт выкатки (${PENDING_DEPLOY[p]}); status=${r.status}`);
     } else {
       fail++;
       failures.push(p);
       console.log(`  FAIL ${p} — status=${r.status} size=${body.length} brand=${okBrand}`);
     }
   } catch (e) {
-    fail++;
-    failures.push(p);
-    console.log(`  FAIL ${p} — ${e.message}`);
+    if (PENDING_DEPLOY[p]) {
+      pending++;
+      console.log(`  ~ ${p} — ждёт выкатки (${PENDING_DEPLOY[p]}); ${e.message}`);
+    } else {
+      fail++;
+      failures.push(p);
+      console.log(`  FAIL ${p} — ${e.message}`);
+    }
   }
 }
 
@@ -301,15 +337,27 @@ async function checkChessPromises() {
 }
 
 (async () => {
-  console.log(`pages-live-smoke against ${BASE} (${PAGES.length} pages)`);
+  // Ожидающие выкатки адреса ПРОВЕРЯЕМ тоже: иначе список станет просто
+  // исключением, и мы не узнаем, когда страница появится на проде.
+  const ALL = [...PAGES, ...Object.keys(PENDING_DEPLOY)];
+  console.log(`pages-live-smoke against ${BASE} (${ALL.length} pages)`);
   // Small batches: fast enough, and no thundering herd against prod.
-  for (let i = 0; i < PAGES.length; i += 5) {
-    await Promise.all(PAGES.slice(i, i + 5).map(checkPage));
+  for (let i = 0; i < ALL.length; i += 5) {
+    await Promise.all(ALL.slice(i, i + 5).map(checkPage));
   }
   await checkChessPromises();
   // Знаменатель — страницы плюс две проверки обещаний: иначе «46/46» при
   // сломанном обещании читалось бы как полный порядок.
-  const total = PAGES.length + 2;
-  console.log(`\npages-live-smoke: ${pass}/${total} PASS${fail ? ` — FAILING: ${failures.join(", ")}` : ""}`);
+  const total = PAGES.length + Object.keys(PENDING_DEPLOY).length + 2;
+  const pendNote = pending ? ` — ЖДУТ ВЫКАТКИ: ${pending}` : "";
+  console.log(`\npages-live-smoke: ${pass}/${total} PASS${pendNote}${fail ? ` — FAILING: ${failures.join(", ")}` : ""}`);
+  // Адрес из списка ожидания ПРОШЁЛ — значит выкатка была, и строку надо
+  // убрать. Иначе список тихо станет постоянным исключением и однажды
+  // прикроет настоящую пропажу страницы. Не падение, но сказать надо громко.
+  if (deployedNowPending.length > 0) {
+    console.log(
+      `  ! УБЕРИТЕ ИЗ PENDING_DEPLOY (уже на проде): ${deployedNowPending.join(", ")}`,
+    );
+  }
   process.exit(fail ? 1 : 0);
 })();

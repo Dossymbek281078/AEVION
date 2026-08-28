@@ -425,7 +425,7 @@ function BureauPageInner() {
             ) : (
               <div>
                 <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.6, marginBottom: 8 }}>
-                  Anonymous certificates are fully cryptographically protected. Upgrade any one of yours to <b>Verified</b> ({dashboard ? `$${(dashboard.pricing.verifiedTierCents / 100).toFixed(2)}` : "$19"}) and the bureau will attest your real-name authorship — useful evidence in court.
+                  Anonymous certificates are fully cryptographically protected. Upgrade any one of yours to <b>Verified</b> ({dashboard ? `$${(dashboard.pricing.verifiedTierCents / 100).toFixed(2)}` : "$19"}) and the bureau will record your declared name alongside the certificate, with the identity check its provider performs.
                 </div>
               </div>
             )}

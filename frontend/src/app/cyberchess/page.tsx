@@ -17,6 +17,10 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
  * рендера совпадает с серверной, то есть гидрация не ломается.
  */
 const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+// Классика вариантом не считается: на экране в семи местах написано
+// «12 вариантов», а VARIANTS.length равен 13 — вместе со standard.
+// 28.08.2026 из-за этого одна плашка обещала «13 режимов» рядом с «12».
+const NEOBYCHNYH_VARIANTOV = VARIANTS.filter((v) => v.id !== "standard").length;
 import { knownUserId } from "./tournaments/playerIdentity";
 import { readDisplayName } from "./displayName";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
@@ -12940,7 +12944,7 @@ ${question.trim()}`;
     })()}
 
     <Modal open={showVariants} onClose={()=>sShowVariants(false)} size="lg"
-      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🎲 Варианты шахмат <Badge tone="gold" size="sm">{VARIANTS.length} режимов</Badge></span>}>
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🎲 Варианты шахмат <Badge tone="gold" size="sm">{NEOBYCHNYH_VARIANTOV} режимов</Badge></span>}>
       <div>
         <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fef3c7,#fed7aa)",border:"1px solid #fb923c",marginBottom:SPACE[3],fontSize:13,color:"#9a3412",lineHeight:1.5}}>
           <b>Шахматные вариации без теории.</b><br/>

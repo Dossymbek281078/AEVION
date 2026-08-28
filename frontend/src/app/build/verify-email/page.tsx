@@ -37,16 +37,18 @@ function VerifyEmailBody() {
     const t = params.get("token");
     if (t) {
       setToken(t);
-      void verify(t);
+      void verify(t, params.get("id") ?? undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function verify(t: string) {
+  // tokenId приходит из ссылки письма и позволяет завершить подтверждение БЕЗ
+  // входа: человек чаще всего открывает письмо на телефоне, где сессии нет.
+  async function verify(t: string, tokenId?: string) {
     setStatus("verifying");
     setMsg(null);
     try {
-      await completeEmailVerification(t);
+      await completeEmailVerification(t, tokenId);
       if (user) setUser({ ...user, emailVerifiedAt: new Date().toISOString() });
       setStatus("done");
       setTimeout(() => router.push("/build/profile"), 2500);
@@ -83,7 +85,7 @@ function VerifyEmailBody() {
               />
               <button
                 disabled={!token.trim() || status === "verifying"}
-                onClick={() => verify(token.trim())}
+                onClick={() => verify(token.trim(), params.get("id") ?? undefined)}
                 className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
               >
                 {status === "verifying" ? "…" : t("build.verifyEmail.confirmButton")}

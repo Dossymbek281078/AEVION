@@ -300,7 +300,10 @@ export default function AuthPage() {
   };
 
   return (
-    <main>
+    // lang="ru" на блоке содержимого: корневой <html lang> у сайта "en", а этот
+    // экран переведён на русский целиком (замер 28.08.2026 по отдаваемому HTML:
+    // 547 русских букв). Ближайшая пометка выигрывает у корневой.
+    <main lang="ru">
       <ProductPageShell maxWidth={720}>
         <Wave1Nav />
         <PipelineSteps current="auth" />
@@ -365,9 +368,17 @@ export default function AuthPage() {
                     Выйти
                   </button>
                 </div>
+                {/* Порядок не случаен: 30 августа открываются ШАХМАТЫ, и почти
+                    весь трафик этих дней придёт за ними. Замер 28.08.2026: после
+                    входа человеку предлагались QRight, Planet Lab и настройки —
+                    шахмат в списке не было вовсе, то есть пришедший играть не
+                    видел, куда идти дальше. Порядок меняется одной строкой. */}
                 <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Link href="/qright" style={{ padding: "8px 14px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
-                    Зарегистрировать работу в QRight →
+                  <Link href="/cyberchess" style={{ padding: "8px 14px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
+                    ♟ Играть в шахматы →
+                  </Link>
+                  <Link href="/qright" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.35)", color: "#0f172a", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
+                    Зарегистрировать работу в QRight
                   </Link>
                   <Link href="/planet" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #0f766e", color: "#0f766e", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
                     🌍 Planet Lab

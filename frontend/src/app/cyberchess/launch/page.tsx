@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { channelFrom } from "@/lib/products";
+import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { LandingView } from "@/components/LandingView";
 
@@ -70,20 +71,13 @@ async function fetchTournamentCount(): Promise<number | null> {
   }
 }
 
-function daysUntilLaunch(): number {
-  const launch = Date.UTC(2026, 7, 30); // 30 августа 2026
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return Math.round((launch - today) / 86_400_000);
-}
-
 export default async function CyberChessLaunchPage({
   searchParams,
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
   const [bank, tournaments] = await Promise.all([fetchPuzzleBank(), fetchTournamentCount()]);
-  const left = daysUntilLaunch();
+  const left = daysUntilLaunch(Date.UTC(2026, 7, 30)); // 30 августа 2026
 
   // Метка канала из адреса: /cyberchess/launch?c=tt в подписи ролика TikTok,
   // ?c=ig в шапке Instagram. Без неё все адреса лягут с одинаковым
@@ -98,7 +92,14 @@ export default async function CyberChessLaunchPage({
   const bankLabel = bank ? new Intl.NumberFormat("ru-RU").format(bank) : null;
 
   return (
-    <main style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px" }}>
+    // lang="ru" на самом блоке содержимого — потому что <html lang> задаётся в
+    // общем шаблоне сайта и стоит "en" (большая часть страниц английская).
+    // Замер 28.08.2026 по отдаваемому HTML: здесь 951 русская буква против 28
+    // латинских, а страница объявлена английской. Правка в браузере это чинит,
+    // но робот, который не исполняет скрипты, видит английскую пометку.
+    // Пометка на элементе — стандартная и действует для вложенного текста:
+    // ближайший lang выигрывает у корневого.
+    <main lang="ru" style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px" }}>
       <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
         <header>
           <div style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: "0.12em", color: GOLD, textTransform: "uppercase" }}>
@@ -155,8 +156,26 @@ export default async function CyberChessLaunchPage({
               title="ИИ-коуч, который учит по-разному"
               note="Разбор партии со стороны движка: где ошибка, почему она ошибка и что делать вместо."
             />
+            {/*
+              ЧИСЛО ТУРНИРОВ УБРАНО НАМЕРЕННО (28.08.2026).
+              Здесь стояло «12 турниров с сеткой и рейтингом» — счёт из
+              `/api/cyberchess-tournaments/list`. Двенадцать записей там правда
+              есть, но это ЗАГОТОВКИ (`buildSeedFixtures`), и число участников у
+              них вписано: 87, 64, 211 из 256. Настоящих регистраций во всех
+              двенадцати — НОЛЬ (проверено запросом: `registeredUserIds` пуст
+              везде).
+              Человек читает «12 турниров», заходит и видит турнир на 211
+              участников, которых нет. Обещание сильнее продукта — это первый
+              пункт ворот запуска.
+              Сама возможность настоящая: сетка, круги, регистрация и таблица
+              работают. Поэтому убрано ЧИСЛО, а не пункт: количество здесь
+              означало бы активность, а её пока нет.
+              Числа участников в заготовках — отдельная задача, она трогает
+              семнадцать заготовок и отрисовку сетки, и делать её за два дня до
+              запуска дороже, чем убрать одно слово. Вынесено основателю.
+            */}
             {tournaments ? (
-              <Fact title={`${tournaments} турниров с сеткой и рейтингом`} note="Регистрация, круги, таблица результатов." />
+              <Fact title="Турниры с сеткой и рейтингом" note="Регистрация, круги, таблица результатов." />
             ) : null}
             <Fact
               title="Игра с людьми и с движком"

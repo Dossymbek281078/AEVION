@@ -1,3 +1,16 @@
+# Группировка у ВСЕХ пяти наборов (добавлено 27.08.2026).
+#
+# У qcore, qpaynet-client и github-actions её не было: каждая зависимость
+# приходила отдельным PR. Соседняя вкладка в тот же день зажала потолки
+# (35 -> 12) и развела наборы по дням — это ограничивает СКОЛЬКО PR может
+# накопиться, но не уменьшает их число у источника. Группировка уменьшает:
+# патчевые подъёмы схлопываются в один PR на набор.
+#
+# Почему это про блокировку. 27.07.2026 аккаунт отключили за всплеск: около
+# 165 коммитов, десятки пушей и 25 мержей за сутки. Опасны не сами PR
+# dependabot (их открывает его бот), а НАШ ответ на них: смёрзить два
+# десятка за вечер — ровно та машинная картина, за которую банят.
+#
 # Dependabot — automated security & version updates.
 #
 # Strategy:
@@ -96,6 +109,17 @@ updates:
       - "frontend-qcore"
     commit-message:
       prefix: "deps(qcore)"
+    groups:
+      qcore-patch:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      qcore-security:
+        applies-to: security-updates
+        update-types:
+          - "patch"
+          - "minor"
+          - "major"
 
   # ── SDK packages ───────────────────────────────────────────────────────
   - package-ecosystem: "npm"
@@ -111,6 +135,17 @@ updates:
       - "sdk"
     commit-message:
       prefix: "deps(sdk-qpaynet)"
+    groups:
+      qpaynet-patch:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      qpaynet-security:
+        applies-to: security-updates
+        update-types:
+          - "patch"
+          - "minor"
+          - "major"
 
   # ── GitHub Actions ─────────────────────────────────────────────────────
   - package-ecosystem: "github-actions"
@@ -127,3 +162,14 @@ updates:
     commit-message:
       prefix: "ci(deps)"
       include: "scope"
+    groups:
+      actions-patch:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      actions-security:
+        applies-to: security-updates
+        update-types:
+          - "patch"
+          - "minor"
+          - "major"

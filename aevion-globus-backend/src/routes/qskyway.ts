@@ -161,6 +161,27 @@ function edgeAltOf(g: CityData["grid"]) {
   };
 }
 
+/**
+ * Пересекает ли ПРЯМАЯ между двумя площадками хоть одну запретную зону.
+ *
+ * Это и есть честный ответ на вопрос «обход состоялся?»: если прямая свободна,
+ * коридор никого не обходил, и сообщать об обходе — вранье в приятную сторону.
+ *
+ * Геометрия без выборки точек: расстояние от центра зоны до ОТРЕЗКА (не до
+ * бесконечной прямой — иначе зона позади площадки считалась бы пересечённой).
+ */
+function directLineCrossesNoFly(a: { x: number; y: number }, b: { x: number; y: number }, zones: ZoneXY[]): boolean {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  for (const z of zones) {
+    let t = len2 === 0 ? 0 : ((z.x - a.x) * dx + (z.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const px = a.x + t * dx, py = a.y + t * dy;
+    if (Math.hypot(z.x - px, z.y - py) <= z.radiusM) return true;
+  }
+  return false;
+}
+
 // cell-in-no-fly test (metres)
 function noFlyTest(city: CityData, zones: ZoneXY[]) {
   const cell = city.grid.cell;
@@ -291,13 +312,31 @@ interface AirspaceCompliance {
   noteEn: string;
 }
 
-function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[]): AirspaceCompliance {
+function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[], cityId?: string): AirspaceCompliance {
   if (!field) {
+    // «Фида нет» ≠ «правила регулятора нет».
+    //
+    // Замер 27.08.2026: ответ маршрута по Астане говорил «регуляторный фид не
+    // подключён», и это читается как «здесь регулятор не при чём». А правило
+    // есть и ПРИМЕНЯЕТСЯ: запретная зона UAP28 из AIP Казахстана заведена как
+    // no-fly и коридор её обходит. То же у Токио — слой MLIT. Сетки ПОТОЛКОВ
+    // нет только у них, а это другой вопрос.
+    //
+    // Расхождение было наше же: страница честно говорит «правило регулятора в
+    // 3 городах из 3», здоровье прикладывает блок permission, а ответ маршрута
+    // отвечал так, будто города вне регулирования. Из двух наших ответов
+    // читатель поверит тому, что ближе к делу, — маршруту.
+    const perm = cityId ? permissionSummary(cityId) : null;
+    const hasPermission = Boolean(perm && (perm as { available?: boolean }).available);
     return {
       available: false, compliant: null, coveragePct: 0, exceedingSegments: 0,
       zeroCeilingSegments: 0, maxExceedanceM: 0, lowestCeilingM: null,
-      note: "Регуляторный фид для этого города не подключён — соответствие потолку не проверялось.",
-      noteEn: "No regulator feed is wired for this city — compliance with a ceiling was not checked.",
+      note: hasPermission
+        ? "Сетки потолков высоты у этого города нет, поэтому соответствие потолку не проверялось. Правило регулятора при этом действует и учтено: см. permission в /health — его запретные зоны коридор обходит."
+        : "Регуляторный фид для этого города не подключён — соответствие потолку не проверялось.",
+      noteEn: hasPermission
+        ? "This city publishes no ceiling grid, so ceiling compliance was not checked. A published regulator rule does apply and is honoured: see permission in /health — the corridor routes around its prohibited zones."
+        : "No regulator feed is wired for this city — compliance with a ceiling was not checked.",
     };
   }
   let covered = 0, exceeding = 0, zeroSegs = 0, maxExc = 0;
@@ -333,8 +372,18 @@ interface RouteResult {
   city: string; from: number; to: number; path: Cell[]; alts: number[]; obstacles: number[];
   distanceKm: number; cruiseAltM: number;
   etaMinStill: number; etaMinWind: number; avgWindMs: number; windFromDeg: number;
+  /** Обход РЕАЛЬНО состоялся: прямая между площадками режет зону, коридор — нет. */
   avoidsNoFly: boolean;
-  avgConfClearM: number; heightConfidencePct: number;
+  noFly: { zonesInCity: number; directLineCrosses: boolean; cellsOnPathInsideZone: number };
+  avgConfClearM: number;
+  /**
+   * Страховочный запас, усреднённый по участкам СО ЗДАНИЕМ, а не по всем.
+   * null, если здания под крылом не было ни разу. Зачем отдельно от
+   * avgConfClearM — см. комментарий у присваивания: открытая земля даёт нулевой
+   * запас и топит среднее в 20+ раз.
+   */
+  confClearOnObstaclesM: number | null;
+  heightConfidencePct: number;
   /**
    * Участков коридора, у которых под крылом ВООБЩЕ есть здание, и сколько из
    * них стоят на обмеренной высоте.
@@ -345,6 +394,21 @@ interface RouteResult {
    * чипом города «0% обмерено» это два наших же ответа, спорящих друг с другом.
    */
   obstacleSegments: number; measuredObstacleSegments: number;
+  /**
+   * Участки, где высота УГАДАНА, и на скольких из них страховочный запас за
+   * неуверенность не изменил высоту коридора (его поглотил пол FLOOR).
+   *
+   * Это единственное место, где видно, что заявленная в /health функция
+   * confidence-clearance в конкретном коридоре не сработала. Без этого поля
+   * снаружи она неотличима от работающей: features её перечисляет, а
+   * byHeightSourceM показывает 16 метров, которые в такие участки не идут.
+   */
+  blindHeight: {
+    guessedSegments: number;
+    inertPenaltySegments: number;
+    clearedUpToM: number;
+    note: string;
+  };
   respectCeiling: boolean;
   airspace: AirspaceCompliance;
 }
@@ -371,6 +435,8 @@ function buildRoute(
   const alts: number[] = [];
   const obstacles: number[] = [];
   let timeStill = 0, timeWind = 0, windSum = 0, confSum = 0, measuredEdges = 0;
+  let guessedSegments = 0, guessedInertSegments = 0;
+  let confSumOnObstacles = 0;
   let obstacleSegments = 0, measuredObstacleSegments = 0;
   for (let k = 0; k < path.length - 1; k++) {
     const alt = edgeAlt(path[k].c, path[k].r, path[k + 1].c, path[k + 1].r);
@@ -380,11 +446,31 @@ function buildRoute(
     const worstSrc = Math.max(src(path[k].c, path[k].r), src(path[k + 1].c, path[k + 1].r));
     confSum += confClear(worstSrc);
     if (worstSrc === 0) measuredEdges++;
+    // Страховочный запас за неуверенность бывает СЪЕДЕН полом коридора.
+    //
+    // Замер 27.08.2026 по твину Астаны: из 237 зданий с угаданной высотой 199
+    // сидят на слепом дефолте 12 м, и для них 12 + 15 запаса + 16 штрафа = 43,
+    // что МЕНЬШЕ пола в 50 м. Ступеней вверх ноль, коридор ложится ровно туда
+    // же, куда лёг бы вообще без штрафа. То есть функция, обещанная в
+    // /health как confidence-clearance, включается на зданиях, про которые мы
+    // кое-что знаем, и молчит на тех, про которые не знаем ничего — обратная
+    // зависимость от заявленной.
+    //
+    // Высоту здесь НЕ меняем: крейсер во всех трёх городах — продуктовое
+    // решение. Но молчать об этом нельзя, иначе снаружи неотличимо от
+    // работающей защиты. Считаем, на скольких участках так вышло.
+    if (worstSrc === 2) {
+      guessedSegments++;
+      const bandNoPenalty = Math.max(0, Math.ceil((maxObst + CLEAR - FLOOR) / BAND));
+      const bandWithPenalty = Math.max(0, Math.ceil((maxObst + CLEAR + confClear(worstSrc) - FLOOR) / BAND));
+      if (bandWithPenalty === bandNoPenalty) guessedInertSegments++;
+    }
     // Участок с настоящим препятствием — только там вопрос «а обмерена ли эта
     // высота?» вообще имеет смысл.
     if (maxObst > 0) {
       obstacleSegments++;
       if (worstSrc === 0) measuredObstacleSegments++;
+      confSumOnObstacles += confClear(worstSrc);
     }
     const segLen = Math.hypot(path[k + 1].c - path[k].c, path[k + 1].r - path[k].r) * cell;
     const tw = tailwind(cityId, path[k].c, path[k].r, path[k + 1].c, path[k + 1].r, alt);
@@ -403,12 +489,60 @@ function buildRoute(
     etaMinWind: +(timeWind / 60).toFixed(2),
     avgWindMs: +(windSum / Math.max(1, alts.length)).toFixed(2),
     windFromDeg: w0.fromDeg,
-    avoidsNoFly: zones.length > 0,
+    // ⚠ Поле называет свойство МАРШРУТА, а считалось по ГОРОДУ.
+    //
+    // Было `zones.length > 0`, то есть «в этом городе вообще есть запретные
+    // зоны». У всех трёх городов их по две, значит поле всегда отвечало true и
+    // о маршруте не сообщало ничего. А в городе без зон оно отвечало бы false —
+    // «этот коридор запретные зоны НЕ обходит», хотя обходить нечего.
+    //
+    // Разворот молчаливый: движок зоны честно обходит (noFlyTest режет ячейки),
+    // врал только отчёт. Проверено 27.08.2026, потребителей у поля не было ни
+    // во фронте, ни в тестах — поэтому чиню значение, а не завожу третье поле.
+    //
+    // Теперь true означает то, что написано: прямая между площадками проходит
+    // сквозь зону, а построенный коридор — нет, то есть обход действительно
+    // состоялся.
+    avoidsNoFly: directLineCrossesNoFly(a, b, zones),
+    noFly: {
+      zonesInCity: zones.length,
+      directLineCrosses: directLineCrossesNoFly(a, b, zones),
+      // Инвариант: A* не имеет права вести коридор сквозь зону. Считаем вслух,
+      // потому что «ноль» проверяемый, а «мы уверены» — нет.
+      cellsOnPathInsideZone: path.reduce((n, p) => n + (blocked(p.c, p.r) ? 1 : 0), 0),
+    },
     avgConfClearM: +(confSum / Math.max(1, alts.length)).toFixed(1),
+    // То же число, но по участкам, где под крылом ВООБЩЕ есть здание.
+    //
+    // Замер 27.08.2026, живой маршрут Астаны 0→3: avgConfClearM = 0.7 при
+    // страховочном запасе 16 м на каждом из 4 участков со зданием — потому что
+    // делится на все 97 участков, а 93 из них открытая земля с нулевым запасом.
+    // 4 × 16 / 97 = 0.66. Плитка «Запас на неувер-ть: 0.7 м» читается как «мы
+    // почти ничего не добавляем», тогда как там, где запас нужен, он в 23 раза
+    // больше показанного.
+    //
+    // Ровно эту разбавку уже чинили 12.08 для heightConfidencePct (см. коммент
+    // у obstacleSegments): открытая земля топила метрику. В соседнем поле она
+    // осталась. Старое поле не трогаю — на него мог кто-то опереться.
+    confClearOnObstaclesM: obstacleSegments > 0
+      ? +(confSumOnObstacles / obstacleSegments).toFixed(1)
+      : null,
     heightConfidencePct: Math.round(100 * measuredEdges / Math.max(1, alts.length)),
     obstacleSegments, measuredObstacleSegments,
+    // Где обещанный просвет держится на догадке, а страховочный штраф не сработал.
+    // clearedUpToM — настоящая высота здания, выше которой заявленный запас CLEAR
+    // над этим коридором НЕ выдержан: коридор стоит на полу, значит терпит
+    // препятствие не выше (пол − запас).
+    blindHeight: {
+      guessedSegments,
+      inertPenaltySegments: guessedInertSegments,
+      clearedUpToM: FLOOR - CLEAR,
+      note: guessedInertSegments > 0
+        ? `На ${guessedInertSegments} участк(ах) высота угадана, а страховочный запас за неуверенность съеден полом коридора: просвет ${CLEAR} м гарантирован только если здание не выше ${FLOOR - CLEAR} м.`
+        : "Все участки с угаданной высотой получили настоящий страховочный запас.",
+    },
     respectCeiling,
-    airspace: assessCeiling(field, path, alts),
+    airspace: assessCeiling(field, path, alts, cityId),
   };
 }
 
@@ -717,7 +851,7 @@ function allPairRoutes(cityId: string, city: CityData): (RouteResult | null)[] {
  * от того, работает он или сломан. Проверять сам факт молчания — значит принять
  * тихий no-op за фичу, поэтому тест подставляет сюда синтетический твин.
  */
-export const __engineForTests = { buildRoute, heightDisputeFor, suspectCellsOf, slotReceipt };
+export const __engineForTests = { buildRoute, heightDisputeFor, suspectCellsOf, slotReceipt, directLineCrossesNoFly };
 
 // ── vertiport suitability (шаг к муниципальным площадкам) ──────────────────────
 interface VertiportScore {
@@ -1024,6 +1158,30 @@ async function bookSlot(
 // ── routes ────────────────────────────────────────────────────────────────────
 qskywayRouter.get("/health", async (_req: Request, res: Response) => {
   const slotsBooked = await countSlots();
+  // `slotsBooked` — ВСЕ записи, включая брони нашего же смока. 27.08.2026 на
+  // проде их было 39 из 39: смок бронирует 5–6 слотов каждый прогон и за собой
+  // не убирает. То есть здоровье публиковало 39 как спрос, тогда как настоящих
+  // бронирований НОЛЬ — и модуль это знал: ручка /slots с 10.08 отдаёт рядом
+  // честный `liveCount`. Два наших собственных ответа спорили друг с другом, а
+  // число из здоровья короче и потому убедительнее.
+  //
+  // Правило «это смок» живёт в одном месте (lib/slotOrigin), поэтому считаем
+  // живые НЕ отдельным запросом в базу, а тем же признаком по загруженному
+  // списку: второй способ решать тот же вопрос сам стал бы источником
+  // расхождения.
+  //
+  // listSlots ограничен 500 строками, поэтому живое число может быть посчитано
+  // по части записей. Молчать об этом нельзя — говорим прямо в ответе.
+  let slotsLive: number | null = null;
+  let slotsLiveBasis: "all" | "sample-500" | "store-unavailable" = "all";
+  try {
+    const listed = await listSlots();
+    slotsLive = countLiveSlots(listed);
+    if (listed.length < slotsBooked) slotsLiveBasis = "sample-500";
+  } catch {
+    // Нечитаемое хранилище — это НЕ «живых ноль». Отдаём null и говорим почему.
+    slotsLiveBasis = "store-unavailable";
+  }
   res.json({
     status: "ok",
     module: "qskyway",
@@ -1034,10 +1192,35 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
     grid: { cols: CITY.grid.cols, rows: CITY.grid.rows, cellM: CITY.grid.cell },
     altitude: { floorM: FLOOR, bandM: BAND, clearanceM: CLEAR },
     clearanceModel: { baseM: CLEAR, byHeightSourceM: { measured: SRC_CLEARANCE[0], derived: SRC_CLEARANCE[1], guessed: SRC_CLEARANCE[2] }, note: "Страховочный просвет растёт при низкой уверенности высоты; лучше данные (LiDAR/LOD2/3D Tiles) → ниже крейсер." },
-    features: ["nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability", "height-provenance", "confidence-clearance", "regulatory-airspace-ceilings"],
+    // Плоский список читается как «умеем во всех городах». Для шести пунктов
+    // это правда, для седьмого — нет: сетку потолков публикует только FAA, и
+    // ниже в этом же ответе `airspace.astana.available` и `airspace.tokyo`
+    // честно отвечают false. Два наших же поля спорили друг с другом, и верить
+    // читатель будет короткому — списку.
+    //
+    // Границу выношу ОТДЕЛЬНЫМ полем, а не в саму строку. Первая попытка
+    // 27.08.2026 дописывала города в скобках прямо в пункт — и это ломало
+    // собственный смоук: строка 60 в scripts/qskyway-smoke.js проверяет
+    // `features.includes("regulatory-airspace-ceilings")`, то есть ТОЧНОЕ
+    // равенство, и падала бы с сообщением «сборка СТАРАЯ» — уводя читателя
+    // ровно в противоположную сторону от настоящей причины.
+    //
+    // Идентификаторы в списке машинные и стабильные; человеческая граница
+    // живёт рядом и никого не ломает.
+    features: [
+      "nofly-avoidance", "layered-wind", "ed25519-signed-twin", "vertiport-suitability",
+      "height-provenance", "confidence-clearance", "regulatory-airspace-ceilings",
+    ],
+    /** Возможности, работающие НЕ во всех городах, и где именно они есть. */
+    featureScope: {
+      "regulatory-airspace-ceilings": Object.keys(CITIES).filter((id) => AIRSPACE[id]),
+    },
     airspace: Object.fromEntries(Object.keys(CITIES).map((id) => [id, airspaceBlock(id, CITIES[id])])),
     slotsStore: slotsDbAvailable ? "postgres" : "memory",
     slotsBooked,
+    /** Брони без наших же тестовых. null означает «спросить не удалось», а не ноль. */
+    slotsBookedLive: slotsLive,
+    slotsLiveBasis,
     wind: metarStatus(),
     disclaimer: DISCLAIMER,
   });
@@ -1521,6 +1704,25 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
           cruiseDeltaM: dispute.cruiseDeltaM,
         }
       : null,
+    // Где обещанный просвет НЕ гарантирован — под той же подписью.
+    //
+    // Замер 27.08.2026: у документа уже были `substitutedHeights` (где высоту
+    // подставили по статистике типа) и обе величины про обмер. Не было главного:
+    // участков, где страховочный запас за неуверенность СЪЕДЕН полом коридора.
+    // Для слепого дефолта `12 + 15 + 16 = 43` при поле 50 — ступеней вверх ноль,
+    // и коридор ложится туда же, куда лёг бы вообще без запаса.
+    //
+    // Без этого поля бумага по такому маршруту выглядит чистой: подстановки
+    // нет (её и не было — тип ничего не сказал), обмер честно назван нулевым,
+    // а то, что над четырьмя зданиями из четырёх просвет держится лишь до 35 м,
+    // не сказано нигде. Регулятору несут именно эту бумагу.
+    //
+    // Добавление поля версию `kind` не двигает — правило записано выше.
+    blindHeight: {
+      guessedSegments: route.blindHeight.guessedSegments,
+      inertPenaltySegments: route.blindHeight.inertPenaltySegments,
+      clearedUpToM: route.blindHeight.clearedUpToM,
+    },
     // Под подписью, а не рядом с ней: см. разбор над `scopeTexts`.
     // Обе версии, потому что защищает та, которую читатель понимает.
     scope: scopeText.ru,

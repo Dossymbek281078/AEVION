@@ -1251,6 +1251,29 @@ const rowToSlot = (r: Record<string, unknown>): Slot => ({
   holder: String(r.holder), issued: String(r.issued), receipt: String(r.receipt),
 });
 
+/**
+ * Текст ошибки для КЛИЕНТА: причина названа, устройство системы — нет.
+ *
+ * Замер 28.08.2026 (тест `qskywayErrorDetailIsSafe`): при отказе хранилища в
+ * поле `detail` уходило `connect ECONNREFUSED 10.130.0.7:5432` — внутренний
+ * адрес и порт базы, прямо в браузер посетителю. Причина полезна, адрес — нет:
+ * по нему строят карту нашей сети.
+ *
+ * Не удаляем поле целиком: «рынок недоступен» без причины не отличает
+ * «база отказала» от «мы сломались», а это разные вещи для того, кто ждёт
+ * квитанцию. Убираем ровно опознавательное.
+ */
+function safeDetail(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  return raw
+    // адрес:порт и голый IPv4
+    .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?/g, "<адрес скрыт>")
+    // имя пользователя и роль базы
+    .replace(/\buser=\S+/gi, "user=<скрыт>")
+    .replace(/\brole "[^"]+"/gi, 'role "<скрыта>"')
+    .slice(0, 200);
+}
+
 async function listSlots(): Promise<Slot[]> {
   await ensureSlotTable();
   if (slotsDbAvailable) {
@@ -2247,7 +2270,7 @@ qskywayRouter.get("/slots", async (_req: Request, res: Response) => {
       error: "рынок слотов недоступен: не удалось прочитать хранилище",
       errorEn: "the slot market is unavailable: the store could not be read",
       store: "postgres",
-      detail: e instanceof Error ? e.message : String(e),
+      detail: safeDetail(e),
     });
   }
   // `count` остаётся прежним (все записи) — на него опирается прод-смок и
@@ -2288,7 +2311,7 @@ qskywayRouter.get("/slots/:id/verify", async (req: Request, res: Response) => {
     return res.status(503).json({
       error: "проверка невозможна: хранилище слотов недоступно",
       errorEn: "verification is impossible: the slot store is unavailable",
-      detail: e instanceof Error ? e.message : String(e),
+      detail: safeDetail(e),
     });
   }
   const slot = slots.find((s) => s.id === String(req.params.id));

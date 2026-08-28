@@ -221,7 +221,14 @@ function clientCalls(): Map<string, string> {
     FRONTEND,
     (n) => (n.endsWith(".ts") || n.endsWith(".tsx")) && !n.includes(".test."),
   ).filter((f) => !f.includes("__tests__"));
-  const CALLER = /(?:fetch|apiUrl|call|req|request|apiFetch|authFetch)\s*(?:<[^>]*>)?\s*\(/g;
+  // Список обёрток. Модуль со СВОЕЙ обёрткой под другим именем сторож
+  // пропускал целиком: smeta-trainer зовёт через api(...), и его вызовы были
+  // невидимы. Замер после расширения: 933 видимых адреса вместо 917 и НОЛЬ
+  // новых расхождений — слепота сужала охват, но дефектов не прятала.
+  //
+  // Граница, которая остаётся: адрес, собранный в переменную заранее
+  // (const url = ...; fetch(url)), сюда не попадёт. Это названо, а не скрыто.
+  const CALLER = /(?:fetch|apiUrl|api|call|req|request|apiFetch|authFetch|get|post|put|patch|del)\s*(?:<[^>]*>)?\s*\(/g;
   for (const f of files) {
     const s = readFileSync(f, "utf8");
     for (const m of s.matchAll(CALLER)) {

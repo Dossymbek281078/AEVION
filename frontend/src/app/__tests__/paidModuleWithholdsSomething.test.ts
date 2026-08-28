@@ -21,7 +21,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -103,10 +103,25 @@ function ownPrimitives(app: string): string[] {
  * Это ровно та ошибка, ради которой сторож и написан: мерка знала меньше
  * способов, чем система. Поэтому список путей ведётся здесь, и его пополняют.
  */
+/**
+ * Путь страницы не всегда равен appId: у бюро он `/bureau`, у QPayNet —
+ * `/qpaynet`. Без карты `frontendPaywalled` тихо отвечал бы «не закрыт» на
+ * несовпадении имени, то есть слепое пятно выглядело бы как находка. Сейчас
+ * оба эти модуля закрыты платформенным сторожем, и ошибка не проявлялась —
+ * именно так тихие пятна и доживают до того дня, когда начинают врать.
+ */
+const PAGE_PATH: Record<string, string> = {
+  "aevion-ip-bureau": "bureau",
+  "qpaynet-embedded": "qpaynet",
+};
+
+function pageFileFor(app: string): string {
+  return join(HERE, "..", PAGE_PATH[app] ?? app, "page.tsx");
+}
+
 function frontendPaywalled(app: string): boolean {
-  const page = join(HERE, "..", app, "page.tsx");
   try {
-    return readFileSync(page, "utf8").includes("fetchOrPaywall");
+    return readFileSync(pageFileFor(app), "utf8").includes("fetchOrPaywall");
   } catch {
     return false; // страницы нет — это не «закрыто», а «нечего закрывать»
   }
@@ -124,6 +139,19 @@ describe("платный модуль умеет удерживать досту
     expect(gated.size, "список закрываемых модулей пуст — разбор index.ts сломан").toBeGreaterThan(10);
     // и положительный контроль: модуль, который ТОЧНО закрыт, определяется закрытым
     expect(canWithhold("qcontract", gated), "qcontract должен определяться как закрытый").toBe(true);
+    // И положительный контроль ФРОНТЕНДОВОГО пути: Smeta закрыта только им.
+    expect(frontendPaywalled("smeta-trainer"), "Smeta закрыта на фронтенде — путь должен это видеть").toBe(true);
+  });
+
+  it("у каждого платного модуля страница НАХОДИТСЯ — иначе слепое пятно молчит", () => {
+    // Путь страницы не равен appId у бюро и QPayNet. Если завтра добавится
+    // третий такой модуль и его забудут в PAGE_PATH, фронтендовый путь тихо
+    // ответит «не закрыт» — и это будет выглядеть находкой, а не пробелом.
+    const missing = pricedModules()
+      .filter((m) => !BUNDLES.has(m.app))
+      .filter((m) => !existsSync(pageFileFor(m.app)))
+      .map((m) => `${m.app} — страницы по пути нет; добавьте его в PAGE_PATH`);
+    expect(missing, "мерка не находит страницу модуля:\n  " + missing.join("\n  ")).toEqual([]);
   });
 
   it("у каждой платной подписки есть чем удерживать доступ", () => {

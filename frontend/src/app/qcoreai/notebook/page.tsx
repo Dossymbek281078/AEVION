@@ -354,8 +354,14 @@ export default function NotebookPage() {
                       const blob = new Blob([text], { type: "text/markdown" });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement("a"); a.href = url; a.download = `${c.name.toLowerCase().replace(/\s+/g, "-")}.md`; a.click(); URL.revokeObjectURL(url);
+                    } else {
+                      // Молчание здесь читалось как «экспорт не работает»:
+                      // человек жал кнопку и не получал ни файла, ни причины.
+                      alert(`Не удалось выгрузить подборку (${r.status}). Файл не создан.`);
                     }
-                  } catch { /* ignore */ }
+                  } catch {
+                    alert("Не удалось выгрузить подборку — проверьте связь. Файл не создан.");
+                  }
                 }}
                 style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 11, color: "#64748b", padding: "1px 3px" }}
               >

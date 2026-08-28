@@ -1360,6 +1360,16 @@ export default function CyberChessPage(){
   // пачка (на вкладке «Играть» их 400), и показывать её как размер базы значит
   // занижать продукт в тысячу раз: лендинг обещает полмиллиона.
   const[pzTotal,sPzTotal]=useState<number|null>(null);
+  // Три исхода, а не два: задачи ещё грузятся / загружены / загрузить НЕ удалось.
+  // Без третьего человек видел «Решить задачу 0» рядом с «Полмиллиона задач в
+  // банке» и не мог понять, сломалось или задач правда нет (замер 28.08.2026 —
+  // сервер и запасной файл недоступны, ни одного слова об отказе на экране).
+  const[pzLoadFailed,sPzLoadFailed]=useState(false);
+  // Что писать в местах, где человек читает «сколько задач». Ноль при неудачной
+  // загрузке — ложь: задач полмиллиона, просто мы их не получили.
+  const pzCountLabel=pzLoadFailed&&PUZZLES.length===0
+    ? "—"
+    : (pzTotal??PUZZLES.length).toLocaleString("ru-RU");
   useEffect(()=>{
     let alive=true;
     (async()=>{
@@ -2688,7 +2698,15 @@ export default function CyberChessPage(){
           if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=200){sPuzzles(d.puzzles as Puzzle[]);return;}
         }
       }catch{}
-      try{const r2=await fetch("/puzzles.json");const d2=await r2.json();sPuzzles(d2 as Puzzle[]);}catch{}
+      try{
+        const r2=await fetch("/puzzles.json");const d2=await r2.json();
+        sPuzzles(d2 as Puzzle[]);sPzLoadFailed(false);
+      }catch{
+        // Оба пути не дошли. Молчать здесь нельзя: пустой список выглядит как
+        // «задач нет», а не как «не смогли загрузить».
+        sPzLoadFailed(true);
+        showToast("Задачи не загрузились — проверьте связь","error");
+      }
     })();
   },[tab]);
 
@@ -2860,9 +2878,13 @@ export default function CyberChessPage(){
           const d=await r.json();
           if(d&&d.ok&&Array.isArray(d.puzzles)&&d.puzzles.length>=50){sPuzzles(d.puzzles as Puzzle[]);return;}
         }
-      }catch{}
-      // Небольшой сбой начального слайса не критичен — полный лениво-загружаемый пул
-      // ниже подхватит bundled-фолбэк, если сервер недоступен вообще.
+        sPzLoadFailed(true);
+      }catch{
+        // Отметить, но не кричать: маленький слайс мог не дойти, а полный пул
+        // ниже ещё подхватит запасной файл и снимет отметку. Кричать здесь —
+        // значит пугать человека тревогой, которая через секунду неверна.
+        sPzLoadFailed(true);
+      }
     })();
     // Openings DB — defer в idle/setTimeout чтобы не блокировать первый рендер.
     const loadOpenings=()=>{
@@ -5715,7 +5737,7 @@ export default function CyberChessPage(){
               </span>}
             </h1>
             <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-              SF18 · {(pzTotal??PUZZLES.length).toLocaleString("ru-RU")} {ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")}{useSF&&sfOk?" · ⚡":""}
+              SF18 · {pzCountLabel} {ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")}{useSF&&sfOk?" · ⚡":""}
             </div>
           </div>
         </div>
@@ -6426,7 +6448,7 @@ export default function CyberChessPage(){
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,
                     border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
-                  ◆ Решить задачу <span style={{color:CC.textMute,fontWeight:600,fontSize:11}}>{(pzTotal??PUZZLES.length).toLocaleString("ru-RU")}</span>
+                  ◆ Решить задачу <span style={{color:CC.textMute,fontWeight:600,fontSize:11}}>{pzCountLabel}</span>
                 </button>
                 <button onClick={()=>{sTab("puzzles");sPzMode("rush" as any);if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
                   className="cc-focus-ring"
@@ -6746,7 +6768,7 @@ export default function CyberChessPage(){
           {false&&(()=>{
             const hero=[
               {sym:SYM.play,title:"Сыграть прямо сейчас",sub:"AI любого уровня · 5 секунд до старта",cta:"Начать партию",onClick:()=>{sSetup(true);sTab("play")}},
-              {sym:SYM.puzzle,title:"Решить задачу",sub:`Случайная из ${(pzTotal??PUZZLES.length).toLocaleString("ru-RU")} тактических`,cta:"Попробовать",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+              {sym:SYM.puzzle,title:"Решить задачу",sub:`Случайная из ${pzCountLabel} тактических`,cta:"Попробовать",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
               {sym:SYM.masters,title:"Изучить классику",sub:"Партии чемпионов · режим «угадай ход»",cta:"Открыть",onClick:()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}},
             ];
             return <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:SPACE[2]}}>
@@ -15091,7 +15113,7 @@ ${question.trim()}`;
         {id:"play-tournament",icon:"🏆",group:"Play",label:"Турнир",                hint:"Свисс / Round-Robin",                       run:()=>sShowTournament(true)},
 
         // ── PUZZLES ──
-        {id:"pz-random",    icon:"◆", group:"Puzzles", label:"Случайная задача",  hint:`Из ${(pzTotal??PUZZLES.length).toLocaleString("ru-RU")} тактических`, run:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-random",    icon:"◆", group:"Puzzles", label:"Случайная задача",  hint:`Из ${pzCountLabel} тактических`, run:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-rush",      icon:"⚡",group:"Puzzles", label:"Puzzle Rush",        hint:"Решай как можно больше за время",           run:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-3min",      icon:"⏱", group:"Puzzles", label:"3-минутный режим",  hint:"Реши как можно больше за 3 мин · +3с за каждый верный ответ", run:()=>{sTab("puzzles");sPzMode("timed3");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-5min",      icon:"⏱", group:"Puzzles", label:"5-минутный режим",  hint:"300 секунд на одну задачу",                 run:()=>{sTab("puzzles");sPzMode("timed5");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},

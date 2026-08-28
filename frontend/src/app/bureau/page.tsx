@@ -539,7 +539,16 @@ function BureauPageInner() {
               {
                 name: "Verified",
                 price: "$19 / cert",
-                blurb: "Author identity verified by KYC partner (passport / national ID). Bureau attests real-name authorship and stamps cert with the verification fingerprint.",
+                // Третья поверхность той же формулировки (28.08). Две другие — карточка бюро и
+// страница объекта QRight — смягчены ранее в этой же ветке; эта осталась
+// утверждать проверку паспорта как совершившийся факт, хотя ГЛУБИНА проверки
+// зависит от переменной окружения BUREAU_KYC_PROVIDER, которая по умолчанию
+// равна "stub" (aevion-globus-backend/src/lib/kyc/index.ts:18). Прочитать её
+// значение на проде я не могу, поэтому не утверждаю ни того, ни другого:
+// описываю механизм, а глубину называет сам провайдер отпечатком.
+// Вернуть сильную формулировку — в тот день, когда провайдер настроен и это
+// видно снаружи (решение основателя, красный пункт в сводке 28.08).
+blurb: "Identity check performed by our KYC provider. Bureau records the declared name alongside the certificate together with the provider's verification fingerprint.",
                 badge: "▲ available now",
                 badgeColor: "#4f46e5",
                 cta: { label: "Upgrade a cert", href: "/bureau" },
@@ -547,7 +556,12 @@ function BureauPageInner() {
               {
                 name: "Notarized",
                 price: "From $89 / cert",
-                blurb: "Licensed notary co-signs the certificate with Ed25519, producing an apostille-ready document admissible in EAEU courts.",
+                // Обещание переписано вместе со значком (28.08). Прежний текст утверждал
+// готовый результат — «apostille-ready document admissible in EAEU courts» —
+// у тарифа, исполнить который сегодня некому. Допустимость в конкретном суде
+// зависит от юрисдикции и самого спора, мы её обеспечить не можем; описываем
+// МЕХАНИЗМ и честную доступность, а вывод о суде оставляем юристу покупателя.
+blurb: "A licensed notary co-signs the certificate with Ed25519. The notary registry is still being assembled — check it for current availability.",
                 // ⚠️ 28.08.2026: значок был «▲ live» при НУЛЕ нотариусов в реестре.
                 //
                 //   GET https://api.aevion.app/api/bureau/notaries -> {"notaries":[]}
@@ -880,7 +894,7 @@ function BureauPageInner() {
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>Legal Framework</div>
           <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
-            AEVION IP Bureau operates under established international copyright and digital signature laws. Our certificates serve as cryptographic proof of prior art — admissible evidence in IP disputes worldwide.
+            AEVION IP Bureau builds on established international copyright and digital signature law. Our certificates are cryptographic proof that a work existed at a recorded time — how much weight that carries depends on the forum and on the frameworks listed below.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
             {LEGAL_FRAMEWORKS.map((l) => (

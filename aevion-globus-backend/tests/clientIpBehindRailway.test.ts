@@ -1,6 +1,6 @@
 import { describe, test, expect } from "vitest";
 
-import { clientIp } from "../src/lib/rateLimit";
+import { clientIp, bucketFingerprint } from "../src/lib/rateLimit";
 
 /**
  * Ключ ограничителя должен быть адресом ЧЕЛОВЕКА, а не внутреннего прокси.
@@ -73,5 +73,58 @@ describe("ключ ограничителя за прокси Railway", () => {
 
   test("локальный запуск: заголовок работает и без Railway", () => {
     expect(clientIp({ ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" }, headers: { "x-real-ip": "9.9.9.9" } })).toBe("9.9.9.9");
+  });
+});
+
+describe("отпечаток корзины: видно снаружи, но необратим", () => {
+  test("одинаковый ключ — одинаковый отпечаток", () => {
+    expect(bucketFingerprint("rl:1.2.3.4")).toBe(bucketFingerprint("rl:1.2.3.4"));
+  });
+
+  test("разные ключи — разные отпечатки", () => {
+    expect(bucketFingerprint("rl:1.2.3.4")).not.toBe(bucketFingerprint("rl:5.6.7.8"));
+  });
+
+  test("адрес по отпечатку не читается", () => {
+    // Ради этого он и хеш: заголовок уходит наружу каждому.
+    const fp = bucketFingerprint("rl:147.30.21.19");
+    expect(fp).not.toContain("147");
+    expect(fp).toHaveLength(8);
+    expect(/^[0-9a-f]{8}$/.test(fp)).toBe(true);
+  });
+});
+
+describe("диагностическая запись: по форме, а не по первому вызову", () => {
+  test("путь входит в форму: служебная проверка и запрос посетителя различимы", async () => {
+    // Ради этого зонд и переписан. Одноразовая версия напечатала строку про
+    // проверку живости платформы (локальная петля, без заголовков), и по ней
+    // напрашивался вывод обо ВСЕХ посетителях.
+    const { readFileSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..", "src", "lib", "rateLimit.ts"),
+      "utf8",
+    );
+    const at = src.indexOf("const shape = [");
+    expect(at, "форма корзины собирается не списком — проверь зонд").toBeGreaterThan(-1);
+    expect(src.slice(at, at + 120)).toContain("where");
+    expect(src).toContain('url.startsWith("/api")');
+  });
+
+  test("в строке нет полного адреса — только его форма", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..", "src", "lib", "rateLimit.ts"),
+      "utf8",
+    );
+    const at = src.indexOf("форма соседа по сокету");
+    expect(at).toBeGreaterThan(-1);
+    const call = src.slice(at, at + 400);
+    expect(call).toContain("firstOctet");
+    expect(/,\s*peer\s*[,)]/.test(call), "в журнал уходит полный адрес соседа").toBe(false);
+    expect(/,\s*bare\s*[,)]/.test(call), "в журнал уходит полный адрес соседа").toBe(false);
   });
 });

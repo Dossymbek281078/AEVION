@@ -41,11 +41,11 @@ type State =
   | { kind: "error"; message: string };
 
 const STATUS_LABEL: Record<string, string> = {
-  done: "готово",
-  running: "выполняется",
-  error: "ошибка",
-  pending: "в очереди",
-  stopped: "остановлено",
+  done: "done",
+  running: "running",
+  error: "error",
+  pending: "queued",
+  stopped: "stopped",
 };
 
 function when(iso: string | null): string {
@@ -73,13 +73,13 @@ export default function CollabViewerPage() {
         // Отдельный экран, а не общая ошибка: человеку надо знать, что делать.
         if (res.status === 404) { setState({ kind: "gone" }); return; }
         if (!res.ok) {
-          setState({ kind: "error", message: "Сейчас не удалось открыть просмотр. Попробуйте обновить страницу." });
+          setState({ kind: "error", message: "We could not open this view right now. Please refresh the page." });
           return;
         }
         setState({ kind: "ok", data: (await res.json()) as Snapshot });
       } catch {
         if (!cancelled) {
-          setState({ kind: "error", message: "Нет связи с сервером. Проверьте интернет и обновите страницу." });
+          setState({ kind: "error", message: "No connection to the server. Check your internet and refresh." });
         }
       }
     })();
@@ -98,25 +98,25 @@ export default function CollabViewerPage() {
         <h1 style={{ fontSize: 30, lineHeight: 1.2, margin: "0 0 8px", fontWeight: 700, color: "#0f172a" }}>
           {state.kind === "ok" && state.data.session?.title
             ? state.data.session.title
-            : "Совместный просмотр"}
+            : "Shared session"}
         </h1>
         <p style={{ margin: "0 0 32px", color: "#475569", fontSize: 15, lineHeight: 1.6 }}>
-          Вы смотрите чужую сессию по ссылке. Только чтение — изменить здесь ничего нельзя,
-          и аккаунт для этого не нужен.
+          You are viewing someone else’s session through a shared link. Read-only —
+          nothing here can be changed, and no account is needed.
         </p>
 
         {state.kind === "loading" && (
-          <p style={{ color: "#64748b", fontSize: 15 }}>Открываем…</p>
+          <p style={{ color: "#64748b", fontSize: 15 }}>Opening…</p>
         )}
 
         {state.kind === "gone" && (
           <section style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: "24px 22px", background: "#fff" }}>
-            <h2 style={{ margin: "0 0 10px", fontSize: 19, color: "#0f172a" }}>Ссылка больше не действует</h2>
+            <h2 style={{ margin: "0 0 10px", fontSize: 19, color: "#0f172a" }}>This link no longer works</h2>
             <p style={{ margin: "0 0 6px", color: "#475569", fontSize: 15, lineHeight: 1.65 }}>
-              Владелец отозвал доступ, или истёк срок — ссылки живут сутки.
+              The owner revoked access, or the link expired — shared links last 24 hours.
             </p>
             <p style={{ margin: "0 0 18px", color: "#475569", fontSize: 15, lineHeight: 1.65 }}>
-              Попросите прислать новую: она создаётся за один клик.
+              Ask them for a new one: it takes a single click to create.
             </p>
             <Link
               href="/qcoreai"
@@ -125,7 +125,7 @@ export default function CollabViewerPage() {
                 background: "#0f766e", color: "#fff", textDecoration: "none", fontSize: 15, fontWeight: 600,
               }}
             >
-              Открыть QCoreAI
+              Open QCoreAI
             </Link>
           </section>
         )}
@@ -146,11 +146,11 @@ export default function CollabViewerPage() {
             >
               {state.data.session?.createdAt && (
                 <span style={{ color: "#64748b", fontSize: 14 }}>
-                  Начата {when(state.data.session.createdAt)}
+                  Started {when(state.data.session.createdAt)}
                 </span>
               )}
               <span style={{ color: "#64748b", fontSize: 14 }}>
-                Просмотров: <strong style={{ color: "#0f172a" }}>{state.data.viewers}</strong>
+                Views: <strong style={{ color: "#0f172a" }}>{state.data.viewers}</strong>
               </span>
             </div>
 
@@ -158,7 +158,7 @@ export default function CollabViewerPage() {
               // Пустота бывает законной: сессию открыли и ещё ничего не спросили.
               // Говорим об этом прямо, чтобы её не приняли за поломку.
               <p style={{ color: "#64748b", fontSize: 15, lineHeight: 1.6 }}>
-                В этой сессии пока нет ни одного запроса. Обновите страницу позже.
+                This session has no requests yet. Check back later.
               </p>
             ) : (
               <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 14 }}>
@@ -179,7 +179,7 @@ export default function CollabViewerPage() {
                         whiteSpace: "pre-wrap", wordBreak: "break-word",
                       }}
                     >
-                      {r.userInput || "— запрос без текста —"}
+                      {r.userInput || "— request with no text —"}
                     </p>
                   </li>
                 ))}

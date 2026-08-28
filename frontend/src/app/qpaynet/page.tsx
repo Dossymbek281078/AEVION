@@ -63,6 +63,11 @@ export default function QPayNetDashboard() {
   const [activeWallet, setActiveWallet] = useState<string | null>(null);
   const [newWalletName, setNewWalletName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  // Отказ создания кошелька раньше НЕ показывался никак: ответ сервера не
+  // проверялся, и объект ошибки уходил прямо в список кошельков — он
+  // отрисовывался как кошелёк без имени и с пустым остатком. Показ ошибки
+  // сделан так же, как в админских страницах этого модуля (admin/refund).
+  const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -113,15 +118,29 @@ export default function QPayNetDashboard() {
 
   async function createWallet() {
     setCreating(true);
-    const r = await fetch(apiUrl("/api/qpaynet/wallets"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name: newWalletName || t("qpaynet.home.wallets.defaultName") }),
-    });
-    const d = await r.json();
-    setWallets(prev => [d, ...prev]);
-    setActiveWallet(d.id);
-    setNewWalletName(""); setShowCreate(false); setCreating(false);
+    try {
+      const r = await fetch(apiUrl("/api/qpaynet/wallets"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: newWalletName || t("qpaynet.home.wallets.defaultName") }),
+      });
+      const d = await r.json().catch(() => null);
+      // Проверяем И код ответа, И то, что пришёл кошелёк с идентификатором:
+      // без второго условия в список попадал бы объект ошибки.
+      if (!r.ok || !d || !d.id) {
+        setError((d && (d.error || d.message)) || `Не удалось создать кошелёк (${r.status}).`);
+        setCreating(false);
+        return;
+      }
+      setError("");
+      setWallets(prev => [d, ...prev]);
+      setActiveWallet(d.id);
+      setNewWalletName(""); setShowCreate(false);
+    } catch {
+      setError("Не удалось связаться с сервером — кошелёк не создан.");
+    } finally {
+      setCreating(false);
+    }
   }
 
   const activeW = wallets.find(w => w.id === activeWallet);
@@ -242,6 +261,11 @@ export default function QPayNetDashboard() {
                 )}
                 {showCreate && (
                   <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-2">
+                    {error && (
+                      <div className="bg-red-950/40 border border-red-800 rounded-lg p-2 text-xs text-red-300">
+                        {error}
+                      </div>
+                    )}
                     <input type="text" value={newWalletName} onChange={e => setNewWalletName(e.target.value)}
                       placeholder={t("qpaynet.home.wallets.namePlaceholder")}
                       className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500" />

@@ -40,6 +40,8 @@ const FIXED = [
   // Здесь стиль задан КЛАССАМИ Tailwind (`sticky top-0 z-30`), поэтому
   // первый свип по строчным стилям его не увидел: один смысл, две записи.
   "app/qmaskcard/page.tsx",
+  "app/qchaingov/page.tsx",
+  "app/z-tide/page.tsx",
 ];
 
 describe("прилипающие полосы стоят под шапкой, а не под ней", () => {

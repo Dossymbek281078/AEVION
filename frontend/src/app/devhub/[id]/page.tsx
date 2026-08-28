@@ -1305,7 +1305,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       }
       await reloadAfterRevert(Array.isArray(data.revertedFiles) ? data.revertedFiles : []);
       if (showHistory) loadCheckpointHistory();
-      showToast(`Отменено: ${data.label || "последняя правка ИИ"}`, "success");
+      // Сервер говорит, куда лёг откат. "memory" значит, что восстановление
+      // живёт в памяти процесса и правки ВЕРНУТСЯ при перезапуске — а зелёный
+      // тост говорил, что всё отменено насовсем.
+      if (data.storage === "memory") {
+        showToast("Отменено, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.", "error");
+      } else {
+        showToast(`Отменено: ${data.label || "последняя правка ИИ"}`, "success");
+      }
     } catch (e: any) {
       showToast(e.message || "Отменить не удалось", "error");
     } finally {
@@ -1327,7 +1334,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       }
       await reloadAfterRevert(Array.isArray(data.revertedFiles) ? data.revertedFiles : []);
       loadCheckpointHistory();
-      showToast(`Вернулись к: ${data.restoredToLabel} (шагов назад: ${data.stepsApplied})`, "success");
+      if (data.storage === "memory") {
+        showToast("Вернулись, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.", "error");
+      } else {
+        showToast(`Вернулись к: ${data.restoredToLabel} (шагов назад: ${data.stepsApplied})`, "success");
+      }
     } catch (e: any) {
       showToast(e.message || "Восстановить не удалось", "error");
     } finally {

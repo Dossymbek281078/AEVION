@@ -2236,6 +2236,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setImgError(devhubServerError(d.error, "Не удалось создать картинку"));
       } else {
         setImgResult({ url: d.url, revisedPrompt: d.revisedPrompt });
+              // Сервер помечает ответ, когда РАЗРЕШИЛ трату, не сумев
+              // прочитать расход: проверка кредита падает ОТКРЫТО, чтобы
+              // не блокировать платящего из-за икоты базы. Пометка ехала
+              // до витрины и умирала здесь — витрина её не читала вовсе
+              // (замер 29.08.2026: сервер ставит, фронт читает 0 раз).
+              if (d.creditUnverified) {
+                showToast(
+                  "Готово, но расход не удалось сверить: счётчик тарифа может отстать.",
+                  "warning",
+                );
+              }
       }
     } catch (e: any) {
       setImgError(e?.message || "Не удалось создать картинку");
@@ -4506,6 +4517,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 const sd = await sr.json();
                                 setVideoStatus(sd.status);
                                 if (sd.status === "succeeded" && sd.videoUrl) {
+                  if (d.creditUnverified) {
+                    // Та же пометка, что у картинки: трату разрешили,
+                    // не сумев прочитать расход.
+                    showToast(
+                      "Готово, но расход не удалось сверить: счётчик тарифа может отстать.",
+                      "warning",
+                    );
+                  }
                                   setVideoUrl(sd.videoUrl); setVideoLoading(false);
                                 } else if (sd.status === "failed") {
                                   setVideoError(devhubServerError(sd.error, "Генерация не удалась")); setVideoLoading(false);

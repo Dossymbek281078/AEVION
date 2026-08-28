@@ -37,6 +37,9 @@ const FIXED = [
   "app/kids-ai-content/page.tsx",
   "app/qcoreai/replay/[runId]/page.tsx",
   "components/../app/bank/_components/SectionTabs.tsx",
+  // Здесь стиль задан КЛАССАМИ Tailwind (`sticky top-0 z-30`), поэтому
+  // первый свип по строчным стилям его не увидел: один смысл, две записи.
+  "app/qmaskcard/page.tsx",
 ];
 
 describe("прилипающие полосы стоят под шапкой, а не под ней", () => {

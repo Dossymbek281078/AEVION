@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import request from "supertest";
 import express from "express";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import cyberchessPuzzlesRouter from "../src/routes/cyberchessPuzzles";
 
@@ -33,7 +36,10 @@ function app() {
   return a;
 }
 
-const ENDPOINTS = ["/themes", "/meta"];
+// Все ручки, публикующие poolSize. Список ведётся вручную осознанно: у него
+// есть контроль ниже, который сверяет его с ЧИСЛОМ мест в исходнике, чтобы
+// новая ручка не появилась мимо правила.
+const ENDPOINTS = ["/themes", "/meta", "/"];
 
 describe("размер банка задач: обрезку нельзя выдавать за измерение", () => {
   it("контроль прибора: ручки отвечают и отдают poolSize", async () => {
@@ -58,5 +64,36 @@ describe("размер банка задач: обрезку нельзя выд
     const res = await request(app()).get("/meta");
     expect(typeof res.body.bankTotal, "bankTotal должен быть числом").toBe("number");
     expect(typeof res.body.capped, "capped должен быть булевым").toBe("boolean");
+  });
+});
+
+/**
+ * Контроль ОХВАТА. Список ручек выше ведётся руками, а значит устаревает:
+ * появится новая ручка с poolSize — правило её не заметит, и сторож останется
+ * зелёным, охраняя не всё. Поэтому сверяем список с исходником напрямую.
+ *
+ * Это тот случай, когда структурная проверка уместна: свойство сквозное по
+ * файлу, поведенческим тестом каждую будущую ручку не покрыть. Но тогда она
+ * обязана проверять СЕБЯ — сколько мест нашла, — иначе ответит «нарушений
+ * нет» и на пустом множестве.
+ */
+describe("охват: ни одно место в исходнике не публикует обрезку в одиночку", () => {
+  const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "routes", "cyberchessPuzzles.ts");
+  const src = readFileSync(SRC, "utf8");
+  const NEEDLE = "poolSize: POOL.length";
+
+  const sites: number[] = [];
+  for (let at = src.indexOf(NEEDLE); at >= 0; at = src.indexOf(NEEDLE, at + 1)) sites.push(at);
+
+  it("контроль прибора: места вообще найдены", () => {
+    expect(sites.length, "не нашёл ни одного poolSize — читаю не тот файл").toBeGreaterThan(2);
+  });
+
+  it("у каждого места рядом стоит настоящий размер банка", () => {
+    const naked = sites.filter((at) => !src.slice(at, at + 200).includes("bankTotal"));
+    expect(
+      naked.length,
+      `${naked.length} из ${sites.length} мест печатают обрезку без bankTotal`,
+    ).toBe(0);
   });
 });

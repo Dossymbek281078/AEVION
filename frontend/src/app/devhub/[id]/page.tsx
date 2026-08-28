@@ -3100,7 +3100,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
-        <div style={{ color: "#94a3b8" }}>Loading project...</div>
+        <div style={{ color: "#94a3b8" }}>Загружаем проект…</div>
       </div>
     );
   }
@@ -3109,8 +3109,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     return (
       <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
         <div style={{ textAlign: "center" }}>
-          <p style={{ color: "#64748b" }}>Project not found.</p>
-          <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700 }}>Back to DevHub</Link>
+          <p style={{ color: "#64748b" }}>Проект не найден.</p>
+          <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700 }}>Вернуться в DevHub</Link>
         </div>
       </div>
     );
@@ -3139,7 +3139,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <span style={{ padding: "3px 10px", borderRadius: 6, background: statusStyle.bg, color: statusStyle.fg, fontSize: 12, fontWeight: 600 }}>
             {project.status}
           </span>
-          {saving && <span style={{ fontSize: 12, color: "#94a3b8" }}>Saving...</span>}
+          {saving && <span style={{ fontSize: 12, color: "#94a3b8" }}>Сохраняем…</span>}
           {saveError && (
             <span
               role="status"
@@ -3221,7 +3221,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           maxHeight: 160, overflow: "hidden", display: "flex", flexDirection: "column",
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>Build Log</span>
+            <span style={{ fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>Журнал сборки</span>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {buildDone && (
                 <span style={{ padding: "2px 10px", borderRadius: 6, background: "#d1fae5", color: "#065f46", fontSize: 12, fontWeight: 700 }}>
@@ -3267,7 +3267,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               gap: 6, color: "#0d9488", fontWeight: 700, fontSize: 13, textAlign: "center", padding: 14,
             }}>
               <span style={{ fontSize: 28, lineHeight: 1 }}>📦</span>
-              <span>Drop ZIP to import</span>
+              <span>Перетащите ZIP, чтобы загрузить</span>
               <span style={{ fontSize: 10, color: "#475569", fontWeight: 500 }}>
                 {zipOverwrite ? "Overwrites existing files" : "Skips existing files"}
               </span>
@@ -3325,8 +3325,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 onKeyDown={(e) => { if (e.key === "Enter") createNewFile(); if (e.key === "Escape") { setShowNewFile(false); setNewFileName(""); } }}
               />
               <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-                <button onClick={createNewFile} style={{ flex: 1, padding: "4px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Create</button>
-                <button onClick={() => { setShowNewFile(false); setNewFileName(""); }} style={{ flex: 1, padding: "4px 0", background: "#f1f5f9", border: "none", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                <button onClick={createNewFile} style={{ flex: 1, padding: "4px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Создать</button>
+                <button onClick={() => { setShowNewFile(false); setNewFileName(""); }} style={{ flex: 1, padding: "4px 0", background: "#f1f5f9", border: "none", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>Отмена</button>
               </div>
             </div>
           )}
@@ -3492,7 +3492,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
             ) : (
               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#64748b" }}>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 36, marginBottom: 12 }}>Select a file or use AI to generate code</div>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>Выберите файл или попросите ИИ написать код</div>
                 </div>
               </div>
             )}
@@ -3711,7 +3711,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             )}
                             {plan.mvpFeatures.length > 0 && (
                               <>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: "#0d9488", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>MVP first</div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#0d9488", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>Сначала самое нужное</div>
                                 <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12, color: "#334155" }}>
                                   {plan.mvpFeatures.map((f) => <li key={f}>{f}</li>)}
                                 </ul>
@@ -3727,7 +3727,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             )}
                             {plan.milestones.length > 0 && (
                               <>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: "#0f172a", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>Build order</div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#0f172a", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>Порядок работ</div>
                                 <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
                                   {plan.milestones.map((m, i) => (
                                     <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -3844,9 +3844,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {showHistory && (
                     <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px", maxHeight: 220, overflow: "auto" }}>
                       {loadingHistory ? (
-                        <div style={{ fontSize: 12, color: "#94a3b8" }}>Loading...</div>
+                        <div style={{ fontSize: 12, color: "#94a3b8" }}>Загружаем…</div>
                       ) : checkpointHistory.length === 0 ? (
-                        <div style={{ fontSize: 12, color: "#94a3b8" }}>No AI changes yet for this project.</div>
+                        <div style={{ fontSize: 12, color: "#94a3b8" }}>Правок ИИ в этом проекте пока не было.</div>
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                           {checkpointHistory.map((cp, i) => (
@@ -3933,7 +3933,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 : visualEditSelected.src.slice(0, 120) + (visualEditSelected.src.length > 120 ? "…" : "")}
                             </div>
                           ) : (
-                            <div style={{ fontSize: 12, color: "#64748b" }}>This image has no source yet.</div>
+                            <div style={{ fontSize: 12, color: "#64748b" }}>У этой картинки пока нет исходника.</div>
                           )}
                           <textarea
                             value={visualEditImgPrompt}
@@ -4214,7 +4214,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   )}
                   {deployments.length > 0 && (
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>HISTORY</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>ИСТОРИЯ</div>
                       {deployments.map((d) => {
                         const dStatusStyle = d.status === "live" ? { bg: "#d1fae5", fg: "#065f46" } : d.status === "failed" ? { bg: "#fee2e2", fg: "#991b1b" } : { bg: "#fef3c7", fg: "#92400e" };
                         return (
@@ -4260,7 +4260,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         )}
                       </div>
                     ) : (
-                      <div style={{ fontSize: 13, color: "#94a3b8" }}>No repository linked yet. Push to create one.</div>
+                      <div style={{ fontSize: 13, color: "#94a3b8" }}>Репозиторий ещё не привязан. Отправьте код, чтобы создать.</div>
                     )}
 
                     {/* The reason the repo could not be read. Without it, a
@@ -4305,7 +4305,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {/* Branches */}
                   {githubBranches.length > 0 && (
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Branches</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Ветки</div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                         {githubBranches.map((b) => (
                           <span key={b.name} style={{
@@ -4438,7 +4438,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "video" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>AI Model</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Модель ИИ</label>
                         <select
                           value={videoModel}
                           onChange={(e) => setVideoModel(e.target.value)}
@@ -4457,7 +4457,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         )}
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Prompt</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Запрос</label>
                         <textarea
                           value={videoPrompt}
                           onChange={(e) => setVideoPrompt(e.target.value)}
@@ -4523,8 +4523,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <video src={videoUrl} controls style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0", maxHeight: 360 }} />
                           <div style={{ display: "flex", gap: 8 }}>
-                            <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "center", textDecoration: "none" }}>Download</a>
-                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title="Appends a <video> tag to the file open in the editor" style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Insert into file</button>
+                            <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "center", textDecoration: "none" }}>Скачать</a>
+                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title="Appends a <video> tag to the file open in the editor" style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Вставить в файл</button>
                           </div>
                         </div>
                       )}
@@ -4707,7 +4707,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "image" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Prompt</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Запрос</label>
                         <textarea
                           value={imgPrompt}
                           onChange={(e) => setImgPrompt(e.target.value)}
@@ -4730,10 +4730,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           </select>
                         </div>
                         <div style={{ flex: 1, minWidth: 100 }}>
-                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Quality</label>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Качество</label>
                           <select value={imgQuality} onChange={(e) => setImgQuality(e.target.value as "standard" | "hd")}
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
-                            <option value="standard">Standard</option>
+                            <option value="standard">Обычное</option>
                             <option value="hd">HD</option>
                           </select>
                         </div>
@@ -4742,7 +4742,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <select value={imgStyle} onChange={(e) => setImgStyle(e.target.value as "vivid" | "natural")}
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
                             <option value="vivid">Vivid</option>
-                            <option value="natural">Natural</option>
+                            <option value="natural">Естественный</option>
                           </select>
                         </div>
                       </div>
@@ -4814,7 +4814,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "sfx" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>SFX Description</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Описание звука</label>
                         <textarea
                           value={sfxText}
                           onChange={(e) => setSfxText(e.target.value)}
@@ -4868,7 +4868,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "music" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Music Prompt</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Запрос для музыки</label>
                         <textarea
                           value={musicPrompt}
                           onChange={(e) => setMusicPrompt(e.target.value)}
@@ -4932,7 +4932,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         />
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Subject</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Тема</label>
                         <input
                           type="text"
                           value={emailSubject}
@@ -5001,7 +5001,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       {payProvider === "gumroad" ? (
                         <div>
-                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Gumroad product permalink</label>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Ссылка на товар Gumroad</label>
                           <input
                             type="text"
                             value={payPermalink}
@@ -5014,7 +5014,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       ) : (
                         <>
                           <div>
-                            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Product Name</label>
+                            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Название товара</label>
                             <input
                               type="text"
                               value={payName}
@@ -5025,7 +5025,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           </div>
                           <div style={{ display: "flex", gap: 8 }}>
                             <div style={{ flex: 2 }}>
-                              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Amount</label>
+                              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Сумма</label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -5398,7 +5398,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Subject</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Тема</label>
                         <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder="Welcome to AEVION, {{params.name}}!"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>

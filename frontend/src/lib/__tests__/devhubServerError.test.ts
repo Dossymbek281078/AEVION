@@ -53,4 +53,24 @@ describe("текст серверной ошибки — на языке чел�
       expect(s.length).toBeGreaterThan(3);
     }
   });
+
+  test("месячная квота — самое важное сообщение денежного пути", () => {
+    // Замер 28.08: сервер отвечает 402 «Monthly deploy limit reached», и до
+    // этого правила человек читал его по-английски ровно в тот момент, когда
+    // решает, платить ли.
+    const s = devhubServerError("Monthly deploy limit reached", FB);
+    expect(s).toContain("Месячная норма исчерпана");
+    expect(s, "не сказано, ЧТО исчерпалось").toContain("deploy");
+    expect(s, "не сказано, когда обновится").toContain("первого числа");
+  });
+
+  test("правило работает для всех возможностей, а не только для выкаток", () => {
+    // Перечень проверяю на СЛОМАННОМ коде мысленно: если правило привязать к
+    // слову deploy, остальные четыре пройдут мимо и останутся английскими.
+    for (const cap of ["video", "image", "music", "tts"]) {
+      const s = devhubServerError(`Monthly ${cap} limit reached`, FB);
+      expect(s, `${cap} не покрыт`).toContain("Месячная норма исчерпана");
+      expect(s).toContain(cap);
+    }
+  });
 });

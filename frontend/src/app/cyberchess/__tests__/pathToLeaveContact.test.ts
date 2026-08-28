@@ -17,11 +17,15 @@ const stranica = fs.readFileSync(path.join(__dirname, "..", "page.tsx"), "utf8")
 
 describe("со страницы шахмат есть путь оставить контакт", () => {
   test("ссылка на страницу запуска стоит в разметке", () => {
-    expect(stranica).toContain('href="/cyberchess/launch"');
+    // Ищем АДРЕС, а не точную запись атрибута: 29.08.2026 ссылка стала нести
+    // метку канала (href={kanal ? `...?c=...` : "..."}) — и сторож, знавший только
+    // буквальное href="...", покраснел на верной правке. Проверка должна держать
+    // смысл «путь на страницу запуска есть», а не форму, которой он записан.
+    expect(stranica).toMatch(/["`]\/cyberchess\/launch/);
   });
 
   test("рядом со ссылкой человеческое обещание, а не голый адрес", () => {
-    const i = stranica.indexOf('href="/cyberchess/launch"');
+    const i = stranica.search(/["`]\/cyberchess\/launch/);
     expect(i).toBeGreaterThan(-1);
     // Берём кусок разметки вокруг ссылки и требуем в нём живой русской фразы:
     // без неё блок превращается в непонятную кнопку, на которую не нажимают.
@@ -29,8 +33,23 @@ describe("со страницы шахмат есть путь оставить 
     expect(okno).toMatch(/[А-Яа-яё]{4,}[^<>]{10,}/);
   });
 
+  test("ссылка несёт метку канала, а не теряет её по дороге", () => {
+    // Человек приходит на /cyberchess?c=ig из рекламы. Если ссылка на страницу
+    // запуска метку не донесёт, подписка пометится просто «cyberchess», и на
+    // вопрос «какой ролик привёл» ответа не будет — ровно та цифра, ради
+    // которой метки заводили.
+    //
+    // Свою проверку держим здесь, потому что общий сторож платформы
+    // (channelSurvivesInternalLinks.guard) ищет буквальное href="..." и форму в
+    // фигурных скобках — href={kanal ? ... : ...} — пропускает. Мутационно
+    // проверено 29.08.2026: возврат ссылки без метки он НЕ ловит, а эта — ловит.
+    const i = stranica.search(/["`]\/cyberchess\/launch/);
+    const okno = stranica.slice(Math.max(0, i - 200), i + 200);
+    expect(okno).toContain("c=${encodeURIComponent(");
+  });
+
   test("обещание не сулит больше, чем придёт человеку", () => {
-    const i = stranica.indexOf('href="/cyberchess/launch"');
+    const i = stranica.search(/["`]\/cyberchess\/launch/);
     const okno = stranica.slice(i, i + 1200);
     // Страница запуска обещает ОДНО письмо. Всё, что обещает регулярную
     // рассылку или разборы, — обещание сверх продукта: именно это я написал
@@ -44,7 +63,7 @@ describe("со страницы шахмат есть путь оставить 
     // 30 августа обещание «напишем в день запуска» уже неуместно: запуск
     // состоялся. Проверяем, что показ ограничен датой И что дата берётся
     // ОДНИМ способом с посадочной — иначе страницы разойдутся на пять часов.
-    const i = stranica.indexOf('href="/cyberchess/launch"');
+    const i = stranica.search(/["`]\/cyberchess\/launch/);
     const okno = stranica.slice(Math.max(0, i - 900), i);
     expect(okno).toContain("daysUntilLaunch(Date.UTC(2026, 7, 30)) > 0");
     expect(stranica).toContain('import { daysUntilLaunch } from "@/lib/daysUntilLaunch";');

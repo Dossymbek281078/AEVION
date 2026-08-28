@@ -1821,6 +1821,21 @@ export default function CyberChessPage(){
   // человек решал одну задачу, а в таблице участвовала другая (28.08.2026,
   // сервер отдавал li_0m2HH из банка 502 584, телефон выбирал из 400).
   type SrvDaily={day:string;id:string;fen:string;sol:string[];rating:number;theme:string};
+  // Метка канала из адреса: человек приходит на /cyberchess?c=ig из рекламы, и
+  // ссылка на страницу запуска обязана её донести. Иначе подписка пометится
+  // просто «cyberchess», и на вопрос «какой ролик привёл» ответа не будет —
+  // ровно та цифра, ради которой метки и заводили. Поймано сторожем
+  // channelSurvivesInternalLinks.guard 29.08.2026 в моей же вчерашней ссылке.
+  const[kanal,sKanal]=useState<string|null>(null);
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    try{
+      const c=new URLSearchParams(window.location.search).get("c");
+      // Формат сверяем здесь же: в ссылку уходит только то, что похоже на метку,
+      // иначе адрес станет местом, куда можно положить что угодно.
+      if(c&&/^[a-z0-9-]{2,20}$/i.test(c))sKanal(c);
+    }catch{}
+  },[]);
   const[srvDaily,sSrvDaily]=useState<SrvDaily|null>(null);
   const[srvDailyFailed,sSrvDailyFailed]=useState(false);
   const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
@@ -6468,7 +6483,7 @@ export default function CyberChessPage(){
                   в сутки, и одна страница звала бы подписаться, когда вторая уже
                   поздравляет с открытием. */}
               {daysUntilLaunch(Date.UTC(2026, 7, 30)) > 0 && (
-              <a href="/cyberchess/launch" style={{display:"block",marginTop:SPACE[2],padding:SPACE[3],
+              <a href={kanal?`/cyberchess/launch?c=${encodeURIComponent(kanal)}`:"/cyberchess/launch"} style={{display:"block",marginTop:SPACE[2],padding:SPACE[3],
                 borderRadius:12,border:"1px dashed "+CC.border,background:CC.surface1,
                 textDecoration:"none",color:CC.text,textAlign:"center"}}>
                 <div style={{fontSize:14,fontWeight:800}}>Написать вам, когда откроются турниры?</div>

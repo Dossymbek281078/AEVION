@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 /**
@@ -120,8 +120,21 @@ const KNOWN = new Set<string>([
 ]);
 
 describe("страница не говорит по-русски мимо выбора языка", () => {
-  const file = path.join(__dirname, "_client.tsx");
-  const found = stripComments(readFileSync(file, "utf8"))
+  // ⚠️ Раньше читался ОДИН файл — `_client.tsx`. 28.08.2026 это дало пропуск:
+  // соседний `HeightDisputePanel.tsx` показывал восемь строк зашитого русского
+  // англоязычному посетителю, и сторож молчал, потому что не читал его вовсе.
+  // Слепота была не в правиле, а в ОХВАТЕ — тот же класс, что «шаблон видел
+  // одну форму записи из двух».
+  //
+  // Теперь обходим всю папку страницы. Тесты и сторожа исключены: русский в
+  // них адресован разработчику. Сборки и переводы сюда не попадают — каталог
+  // содержит только исходники самой страницы.
+  const files = readdirSync(__dirname)
+    .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"))
+    .filter((f) => !f.includes(".test.") && !f.includes(".guard."))
+    .sort();
+  const found = files
+    .flatMap((f) => stripComments(readFileSync(path.join(__dirname, f), "utf8")))
     .map((l) => decodeEscapes(l))
     .filter((l) => hasCyrillic(l))
     .filter((l) => !l.includes("t(" + String.fromCharCode(34)))
@@ -133,6 +146,15 @@ describe("страница не говорит по-русски мимо выб
     // по-английски ради зелёного цвета или не писать вовсе.
     .filter((l) => !l.includes("console."))
     .map((l) => l.split(" ").filter(Boolean).join(" "));
+
+  it("контроль охвата: читается вся папка, а не один файл", () => {
+    // Именно этого утверждения не хватало: пока сторож читал один файл, он был
+    // зелёным и слепым, и отличить «чисто» от «не смотрел» было нельзя.
+    expect(files.length).toBeGreaterThan(3);
+    expect(files).toContain("_client.tsx");
+    expect(files).toContain("HeightDisputePanel.tsx");
+    expect(files.some((f) => f.includes(".test."))).toBe(false);
+  });
 
   it("новых мест с русским текстом мимо выбора языка нет", () => {
     const fresh = found.filter((l) => !KNOWN.has(l));

@@ -780,6 +780,10 @@ export default function QSkywayClient() {
 
   // Verification runs against the backend, not in the browser: a document that
   // only ever checks itself locally proves nothing to the person receiving it.
+  // Причина отказа проверки: «изменён» и «подписан не нами» ведут к разным
+  // действиям, и объединять их в «недействителен» значит не сказать ничего.
+  const [verifyReason, setVerifyReason] = useState<"tampered" | "forged" | null>(null);
+
   const verifyJustification = useCallback(async () => {
     if (!justification) return;
     setJustState("busy");
@@ -794,7 +798,22 @@ export default function QSkywayClient() {
       // недействительно».
       const v = verifyVerdict(res.ok, j?.valid);
       setJustState(v === "valid" ? "verified" : v);
-    } catch { setJustState("unknown"); }
+      // ⚠️ КАКАЯ ИМЕННО половина не сошлась — разные вещи для человека.
+      //
+      // Бэкенд считает `hashValid` и `signatureValid` РАЗДЕЛЬНО и прямо пишет в
+      // комментарии, что один вердикт скрыл бы, что случилось. Страница до
+      // 28.08.2026 читала только сводный `valid` и показывала «✗ недействительно»
+      // — то есть ровно тот единый вердикт, которого бэкенд избегал.
+      //
+      // А действия противоположные: документ изменён после подписи — скачай
+      // заново, своя же копия устарела. Подпись не наша — кто-то выдаёт чужую
+      // бумагу за нашу, и это уже не про кнопку «скачать».
+      setVerifyReason(
+        v === "invalid"
+          ? (j?.hashValid === false ? "tampered" : "forged")
+          : null,
+      );
+    } catch { setJustState("unknown"); setVerifyReason(null); }
   }, [justification]);
 
   const downloadJustification = useCallback(() => {
@@ -1285,7 +1304,9 @@ export default function QSkywayClient() {
                           <button style={btn} onClick={verifyJustification} disabled={justState === "busy"}>
                             {justState === "verified" ? "✓ " + t("qskyway.just.verified")
                               : justState === "unknown" ? "— " + t("qskyway.just.unknown")
-                              : justState === "invalid" ? "✗ " + t("qskyway.just.invalid")
+                              : justState === "invalid"
+                                ? "✗ " + t("qskyway.just.invalid")
+                                  + (verifyReason ? ": " + t("qskyway.just." + verifyReason) : "")
                               : t("qskyway.just.verify")}
                           </button>
                         </div>

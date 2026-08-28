@@ -447,7 +447,27 @@ export default function QRealClient() {
                     </span>
                   </div>
                   {s.resultUrl && (
-                    <video controls preload="metadata" className="mt-2 w-full border border-neutral-200" src={s.resultUrl} />
+                    /*
+                      crossOrigin обязателен: результат генерации лежит на ЧУЖОМ
+                      домене, а страница отдаётся с `Cross-Origin-Embedder-Policy:
+                      require-corp` — под ним браузер грузит стороннее только в
+                      режиме CORS либо при заголовке CORP у источника.
+
+                      Замер на проде 28.08.2026: видео с fal.media падало с
+                      net::ERR_BLOCKED_BY_RESPONSE.NotSameOriginAfterDefaultedToSameOriginByCoep,
+                      при том что сам файл отдаётся нормально (200, 6.2 МБ).
+                      Заголовки: у нас `require-corp`, у fal.media есть
+                      `access-control-allow-origin: *`, но НЕТ `cross-origin-resource-policy`.
+                      Значит хватает перевести запрос в режим CORS — иначе на
+                      странице продукта ПРО ВИДЕО не играет само видео.
+                    */
+                    <video
+                      controls
+                      preload="metadata"
+                      crossOrigin="anonymous"
+                      className="mt-2 w-full border border-neutral-200"
+                      src={s.resultUrl}
+                    />
                   )}
                   <p className="mt-2 text-sm leading-relaxed text-neutral-700">{s.description}</p>
                   <p className="mt-2 text-xs text-neutral-500">

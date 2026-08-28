@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // PWA install prompt — detect beforeinstallprompt event и render компактную
 // "📲 Install" pill. Пропадает после успешной установки.
@@ -40,6 +40,30 @@ export function InstallPrompt() {
     };
   }, []);
 
+  // Баннер и кнопка AI-агента стоят в ОДНОМ углу: у обоих `bottom: 16, right:
+  // 16`, а слои соседние (9999 и 9998). Замер 28.08.2026 браузером: пока баннер
+  // виден, кнопка агента недоступна ПОЛНОСТЬЮ — 0 доступных точек из 70, и на
+  // телефоне, и на десктопе. Уберёшь баннер — 96%.
+  //
+  // Публикуем свою высоту переменной CSS, а кнопка на неё отступает. Связывать
+  // компоненты напрямую не нужно, и без баннера переменной просто нет —
+  // поведение остаётся прежним.
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const visible = Boolean(deferred) && !hidden;
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!visible) {
+      root.style.removeProperty("--aevion-install-h");
+      return;
+    }
+    const h = boxRef.current?.getBoundingClientRect().height ?? 0;
+    // 12px — зазор между баннером и кнопкой, чтобы они не слипались.
+    root.style.setProperty("--aevion-install-h", `${Math.round(h) + 12}px`);
+    return () => {
+      root.style.removeProperty("--aevion-install-h");
+    };
+  }, [visible]);
+
   if (!deferred || hidden) return null;
 
   const install = async () => {
@@ -63,6 +87,7 @@ export function InstallPrompt() {
 
   return (
     <div
+      ref={boxRef}
       role="region"
       aria-label="PWA install prompt"
       style={{

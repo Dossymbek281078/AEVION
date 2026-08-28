@@ -165,7 +165,11 @@ export function AgentDock() {
         aria-label="Open AEVION AI Agent"
         style={{
           position: "fixed",
-          bottom: 16,
+          // Отступаем на высоту баннера установки, если он показан: они стоят в
+          // одном углу, и баннер (z-index 9999) полностью накрывал эту кнопку —
+          // замер 28.08.2026: 0 доступных точек из 70. Переменную публикует
+          // InstallPrompt; нет баннера — нет переменной, отступ обычный.
+          bottom: "calc(16px + var(--aevion-install-h, 0px))",
           right: 16,
           zIndex: 9998,
           padding: "10px 16px",

@@ -76,11 +76,6 @@ const VERB_BASELINE: Record<string, string> = {
   "POST /api/build/shifts/:p/checkin": "ДЕФЕКТ: сервер ждёт PATCH — работник не может начать смену",
   "POST /api/build/shifts/:p/checkout": "ДЕФЕКТ: сервер ждёт PATCH — не может закончить смену",
   "GET /api/build/payment-calendar": "ДЕФЕКТ: сервер отдаёт GET /payment-calendar/my",
-  "POST /api/metrics":
-    "НЕ дефект: ручку обслуживает сам Next, и она экспортирует POST и GET " +
-    "(проверено чтением frontend/src/app/api/metrics/route.ts). Резолвер методы " +
-    "Next-ручек до карты не доносит — ДОЛГ ПРИБОРА, причина пока не найдена. " +
-    "Записано так, а не с выдуманным объяснением: непонятое лучше назвать непонятым.",
 };
 
 function walk(dir: string, ok: (f: string) => boolean, acc: string[] = []): string[] {
@@ -205,9 +200,14 @@ function allRoutes(): string[] {
       rel.replace(/\/route\.[tj]sx?$/, "").replace(/\[\.\.\.[^\]]+\]/g, "*").replace(/\[[^\]]+\]/g, ":p") || "/";
     routes.add(full);
     // Методы Next-ручки — её экспорты. Без них POST /api/metrics выглядел бы
-    // расхождением: сама ручка экспортирует и GET, и POST.
+    // расхождением, и я почти записал это «долгом прибора с ненайденной
+    // причиной». Причина была одна: в шаблоне ниже стояла граница слова,
+    // записанная слэшем с буквой b. На границе вызова она превратилась в
+    // ЛИТЕРАЛЬНЫЙ управляющий символ backspace: регулярка стала требовать
+    // невозможного и молча перестала находить что-либо. Границу слова убрал —
+    // перечисление глаголов и так однозначно.
     const body = readFileSync(f, "utf8");
-    for (const vm of body.matchAll(/export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)/g)) {
+    for (const vm of body.matchAll(/export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)/g)) {
       VERBS.set(full, (VERBS.get(full) ?? new Set<string>()).add(vm[1]));
     }
   }

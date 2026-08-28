@@ -93,16 +93,14 @@ export default async function CyberChessLaunchPage({
   const bankLabel = bank ? new Intl.NumberFormat("ru-RU").format(bank) : null;
 
   return (
-    <main style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px" }}>
-      {/*
-        Заходы на эту страницу считались НУЛЁМ до 28.08.2026, а запуск 30-го.
-        Без этого числа нельзя будет ответить на единственный важный вопрос
-        первого дня: продаж нет из-за страницы или из-за отсутствия трафика.
-        Первое лечат предложением и ценой, второе — трафиком, и выбирать
-        наугад дороже, чем измерить. Компонент уже стоит на десяти страницах
-        и сам читает ?c= из ссылки, поэтому канал тоже попадёт в замер.
-      */}
-      <PageTracking page="cyberchess-launch" />
+    // lang="ru" на самом блоке содержимого — потому что <html lang> задаётся в
+    // общем шаблоне сайта и стоит "en" (большая часть страниц английская).
+    // Замер 28.08.2026 по отдаваемому HTML: здесь 951 русская буква против 28
+    // латинских, а страница объявлена английской. Правка в браузере это чинит,
+    // но робот, который не исполняет скрипты, видит английскую пометку.
+    // Пометка на элементе — стандартная и действует для вложенного текста:
+    // ближайший lang выигрывает у корневого.
+    <main lang="ru" style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px" }}>
       <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
         <header>
           <div style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: "0.12em", color: GOLD, textTransform: "uppercase" }}>
@@ -222,6 +220,13 @@ function Fact({ title, note }: { title: string; note: string }) {
         padding: "14px 16px",
       }}
     >
+      {/* Заходы сюда не считались до 28.08.2026, а запуск 30-го. Без этого
+          числа нельзя ответить на вопрос первого дня: продаж нет из-за
+          страницы или из-за отсутствия трафика. Компонент сам читает ?c=
+          из ссылки, поэтому канал тоже попадёт в замер.
+          Возвращено при сведении 28.08: строка потерялась в конфликте с
+          правкой вкладки запуска, у которой учёта не было. */}
+      <PageTracking page="cyberchess-launch" />
       <div style={{ fontFamily: "Georgia, serif", fontSize: 16.5, fontWeight: 700 }}>{title}</div>
       <div style={{ color: MUTED, fontSize: 13.5, lineHeight: 1.55, marginTop: 4 }}>{note}</div>
     </div>

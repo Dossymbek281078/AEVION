@@ -4,6 +4,7 @@ import { LandingView } from "@/components/LandingView";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
 import { productById, channelFrom, withChannel } from "@/lib/products";
+import { LongevityTool } from "./_tool";
 
 // /en/longevity — англоязычный разбор протокола, бесплатно и целиком.
 //
@@ -250,6 +251,16 @@ export default async function EnLongevityPage({
             &quot;mitochondrial analysis&quot; at the start: neither changes a
             single decision you will make.
           </p>
+        </section>
+
+        <section style={styles.section}>
+          <h2 style={styles.h2}>Check your own numbers</h2>
+          <p style={styles.note}>
+            Type in whatever you already have. Nothing is sent anywhere — the
+            comparison happens in your browser, against the same target ranges
+            listed above.
+          </p>
+          <LongevityTool />
         </section>
 
         <section style={styles.section}>

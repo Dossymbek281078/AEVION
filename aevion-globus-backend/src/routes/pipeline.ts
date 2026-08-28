@@ -60,6 +60,12 @@ const protectRateLimiter = createInMemoryRateLimiter({ max: 20 });
 // 30 / мин / IP / certId — /verify increments verifiedCount on every GET,
 // so anyone could pump a cert's count and game the «Most verified» sort.
 const verifyRateLimiter = createInMemoryRateLimiter({ max: 30 });
+// 240 / мин / IP — офлайн-пакет стал ПУБЛИЧНОЙ поверхностью 29.08.2026: его
+// спрашивают карточки предпросмотра ссылки при каждом построении. Раньше его
+// дёргали редко, по нажатию «скачать», и предела не было вовсе. Число взято у
+// соседних встраиваемых ручек (qright.ts:37, bureau.ts:37), чтобы предел был
+// один на весь класс, а не свой у каждой ручки.
+const bundleRateLimiter = createInMemoryRateLimiter({ max: 240 });
 
 interface QSignPayload {
   objectId: string;
@@ -2652,6 +2658,11 @@ pipelineRouter.post("/ots/:certId/verify", async (req, res) => {
  */
 pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
   try {
+    const rl = bundleRateLimiter.check(clientIp(req));
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
+      return res.status(429).json({ error: "rate limit exceeded — try again shortly" });
+    }
     await ensureTables();
     const { certId } = req.params;
     const { rows } = await pool.query(

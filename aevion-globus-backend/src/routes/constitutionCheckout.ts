@@ -210,7 +210,8 @@ constitutionCheckoutRouter.post(
 
       // Gumroad fallback
       const intent = await gumroadPaymentProvider.createIntent({
-        reference: gumroadPermalink(tier) ?? `constitution-${tier}`,
+        reference: `constitution-${tier}`,
+        permalink: gumroadPermalink(tier) ?? undefined,
         amountCents: priceOf(tier) * 100,
         currency: "USD",
         description: nameOf(tier),
@@ -252,7 +253,8 @@ constitutionCheckoutRouter.get(
       }
       // Gumroad
       const intent = await gumroadPaymentProvider.createIntent({
-        reference: gumroadPermalink(tier) ?? `constitution-${tier}`,
+        reference: `constitution-${tier}`,
+        permalink: gumroadPermalink(tier) ?? undefined,
         amountCents: priceOf(tier) * 100,
         currency: "USD",
         description: nameOf(tier),

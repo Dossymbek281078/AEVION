@@ -3281,18 +3281,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 onClick={() => zipInputRef.current?.click()}
                 disabled={zipImporting || !project}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: zipImporting ? "wait" : "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
-                title="Import ZIP (symmetric to export)"
+                title="Загрузить ZIP — обратное действие к скачиванию"
               >{zipImporting ? "..." : "📦"}</button>
               <button
                 onClick={() => { if (project) window.open(apiUrl(`/api/devhub/projects/${project.id}/export`), "_blank"); }}
                 disabled={!project || files.length === 0}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
-                title="Download the whole project as a ZIP — the code is yours"
+                title="Скачать весь проект одним архивом ZIP"
               >⬇</button>
               <button
                 onClick={() => setShowNewFile(true)}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, width: 24, height: 24, cursor: "pointer", color: "#64748b", fontWeight: 700, fontSize: 16, lineHeight: 1 }}
-                title="New file"
+                title="Новый файл"
               >+</button>
             </div>
           </div>
@@ -3398,13 +3398,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <button
                         onClick={(e) => { e.stopPropagation(); setRenamingFile(f); setRenameValue(f.path); }}
                         style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", fontSize: 12, padding: 2, flexShrink: 0 }}
-                        title="Rename file"
+                        title="Переименовать файл"
                       >✎</button>
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); deleteFile(f.path); }}
                       style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", fontSize: 14, padding: 2, flexShrink: 0 }}
-                      title="Delete file"
+                      title="Удалить файл"
                     >x</button>
                   </div>
                 );
@@ -3425,7 +3425,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     srcDoc={reactPreviewSrcdoc}
                     sandbox="allow-scripts"
                     style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                    title="Visual Edit preview"
+                    title="Превью визуальной правки"
                   />
                 ) : isClientPreviewStack(project?.stack) && (!reactPreviewError || !project?.deployUrl) ? (
                   <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
@@ -3444,7 +3444,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     src={apiUrl(`/api/devhub/projects/${project.id}/preview-proxy`)}
                     sandbox="allow-scripts"
                     style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                    title="Visual Edit preview"
+                    title="Превью визуальной правки"
                   />
                 ) : (
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
@@ -3469,7 +3469,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   srcDoc={visualEditSrcdoc}
                   sandbox="allow-scripts"
                   style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                  title="Visual Edit preview"
+                  title="Превью визуальной правки"
                 />
               )
             ) : selectedFile ? (
@@ -3782,7 +3782,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     />
                     <button
                       onClick={() => aiImageInputRef.current?.click()}
-                      title="Attach a screenshot or design — AI will recreate it as code"
+                      title="Приложите скриншот или макет — ИИ воссоздаст его кодом"
                       style={{ padding: "6px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, cursor: "pointer", color: "#475569", fontWeight: 600 }}
                     >
                       📎 Screenshot
@@ -3821,7 +3821,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={undoLastGeneration}
                       disabled={undoing}
-                      title="Reverts the files touched by the most recent AI generation"
+                      title="Вернуть файлы, которых коснулась последняя правка ИИ"
                       style={{
                         flex: 1, padding: "8px 0", background: "#fff", border: "1px solid #e2e8f0",
                         color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12,
@@ -3832,7 +3832,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     </button>
                     <button
                       onClick={() => { const next = !showHistory; setShowHistory(next); if (next) loadCheckpointHistory(); }}
-                      title="See every past AI change and jump straight to one of them"
+                      title="Посмотреть все прошлые правки ИИ и вернуться к любой"
                       style={{
                         padding: "8px 12px", background: "#fff", border: "1px solid #e2e8f0",
                         color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12, cursor: "pointer",
@@ -3894,7 +3894,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <span key={a.vid} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <button
                               onClick={() => retargetVisualSelection(a.vid)}
-                              title="Select this parent element"
+                              title="Выбрать родительский элемент"
                               style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline dotted" }}
                             >
                               {"<" + a.tagName.toLowerCase() + ">"}
@@ -3910,7 +3910,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 key={c.vid}
                                 onClick={() => retargetVisualSelection(c.vid)}
-                                title="Select this child element"
+                                title="Выбрать дочерний элемент"
                                 style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 4, padding: "1px 5px", cursor: "pointer" }}
                               >
                                 {"<" + c.tagName.toLowerCase() + ">"}
@@ -3966,7 +3966,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="color"
                             value={cssColorToHex(visualEditStyleEdits.color ?? visualEditStyleBase.color)}
                             onChange={(e) => setVisualStyle("color", e.target.value)}
-                            title="Text color"
+                            title="Цвет текста"
                             style={{ width: 34, height: 30, padding: 2, border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer", background: "#fff" }}
                           />
                           <input
@@ -3975,7 +3975,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             max={120}
                             value={parseInt(visualEditStyleEdits.fontSize ?? visualEditStyleBase.fontSize, 10) || 16}
                             onChange={(e) => setVisualStyle("fontSize", `${e.target.value}px`)}
-                            title="Font size (px)"
+                            title="Размер шрифта, px"
                             style={{ width: 62, height: 30, padding: "0 6px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }}
                           />
                           <button
@@ -4114,7 +4114,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       type="text"
                       value={newEnvVal}
                       onChange={(e) => setNewEnvVal(e.target.value)}
-                      placeholder="value"
+                      placeholder="значение"
                       style={{ flex: 2, minWidth: 150, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
                     />
                     <button onClick={addEnvVar} style={{ padding: "7px 16px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, cursor: "pointer" }}>
@@ -4648,7 +4648,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="button"
                             onClick={() => previewVoice(mediaTtsVoice)}
                             disabled={!!previewingVoice}
-                            title="Preview voice with a short sample"
+                            title="Послушать голос на коротком примере"
                             style={{
                               padding: "7px 12px", background: previewingVoice === mediaTtsVoice ? "#a5b4fc" : "#7c3aed",
                               color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700,
@@ -4665,7 +4665,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={mediaTtsText}
                           onChange={(e) => setMediaTtsText(e.target.value)}
-                          placeholder="Enter text to convert to speech..."
+                          placeholder="Введите текст для озвучки…"
                           rows={4}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",

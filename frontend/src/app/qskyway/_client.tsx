@@ -1073,7 +1073,13 @@ export default function QSkywayClient() {
                     [t("qskyway.tel.eta"), stats.etaStill == null ? stats.eta + " " + t("qskyway.unit.min") : (
                       <>
                         {stats.eta} {t("qskyway.unit.min")}
-                        <span style={{ fontSize: 11, fontWeight: 400, color: "#5f7086", marginLeft: 5 }}>
+                        {/* Знак сам по себе не читается: «−0.38 ветер» не говорит,
+                            помог ветер или помешал. Число верное, непонятна ЗНАКОВАЯ
+                            договорённость — её и объясняем, а не переписываем цифру. */}
+                        <span
+                          title={t("qskyway.tel.windTip")}
+                          style={{ fontSize: 11, fontWeight: 400, color: "#5f7086", marginLeft: 5, cursor: "help" }}
+                        >
                           ({stats.eta - stats.etaStill >= 0 ? "+" : ""}{(stats.eta - stats.etaStill).toFixed(2)} {t("qskyway.tel.windSuffix")})
                         </span>
                       </>

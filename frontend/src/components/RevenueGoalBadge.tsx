@@ -11,7 +11,7 @@ export default function RevenueGoalBadge() {
 
   if (!goals || !summary || pct === null || days === null) return null;
 
-  const tip = `$${summary.grossUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })} raised toward $1M · ${days} days to the deadline ($20M stretch goal)`;
+  const tip = `$${summary.grossUsd.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} собрано из $1M · ${days} дн. до срока ($20M stretch goal)`;
 
   return (
     <Link

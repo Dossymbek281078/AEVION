@@ -155,7 +155,7 @@ export function ModuleOfTheDayCard({
           border: `1px solid ${border}`,
         }}
         aria-busy="true"
-        aria-label="Loading module of the day"
+        aria-label="Загружаю модуль дня"
       >
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: accent, textTransform: "uppercase", marginBottom: 12 }}>
           Module of the day

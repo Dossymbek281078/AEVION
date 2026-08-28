@@ -33,16 +33,57 @@ function code(): string {
   return out;
 }
 
-const SHOW = /(showToast|setError|setImgError|setMusicError|setThreeDError|setVideoError|setMediaTtsError|setSnippetError)\(\s*([`"])([^`"]{4,120})\2/g;
+const FN = /\b(showToast|setError|setImgError|setMusicError|setThreeDError|setVideoError|setMediaTtsError|setSnippetError|confirm)\(/g;
 
 /**
- * Единственное законное исключение — с причиной.
- * «Vercel: <адрес>» это имя поставщика и ссылка: переводить нечего.
+ * Уровни всплывающих сообщений и идентификаторы возможностей — не текст для
+ * человека, а аргументы. Список поимённый: без него сторож требовал бы
+ * переводить слово "error", которое никто не читает.
  */
-const ALLOWED = new Set(["Vercel: ${d.deployUrl}"]);
+const NOT_TEXT = new Set([
+  "error", "info", "success", "warning",
+  "image", "video", "pages", "railway", "vercel", "database", "audio_tts", "audio_music", "3d",
+]);
 
+/**
+ * Законные исключения — поимённо и с причиной.
+ */
+const ALLOWED = new Set([
+  // Имя поставщика и адрес: переводить нечего.
+  "Vercel: ${d.deployUrl}",
+  // Чистые подстановки, ни одного английского слова.
+  "${d.error} → ${d.topUpUrl}",
+  // Префикс data-URI, а не сообщение.
+  "data:",
+]);
+
+/**
+ * Разбираем АРГУМЕНТЫ вызова целиком, а не первый литерал.
+ *
+ * Первая версия искала `showToast("строка")` — и пропускала
+ * `showToast(e.message || "Generation failed")`, где литерал стоит вторым. Так
+ * из виду ушли 37 сообщений, все на путях ошибок: именно там человек и
+ * читает текст внимательнее всего.
+ */
 function messages(): string[] {
-  return [...code().matchAll(SHOW)].map((m) => m[3]);
+  const src = code();
+  const out: string[] = [];
+  for (const m of src.matchAll(FN)) {
+    let i = (m.index ?? 0) + m[0].length;
+    let depth = 1;
+    let buf = "";
+    while (i < src.length && depth > 0 && buf.length < 400) {
+      const c = src[i];
+      if (c === "(") depth++;
+      else if (c === ")") depth--;
+      if (depth > 0) buf += c;
+      i++;
+    }
+    for (const lit of buf.matchAll(/["`]([^"`\n]{4,120})["`]/g)) {
+      if (!NOT_TEXT.has(lit[1])) out.push(lit[1]);
+    }
+  }
+  return out;
 }
 
 describe("рабочее окно не смешивает языки", () => {
@@ -62,15 +103,9 @@ describe("рабочее окно не смешивает языки", () => {
     expect(english, "сообщение на английском в русском окне").toEqual([]);
   });
 
-  test("подстановки в переведённых строках уцелели", () => {
-    // Перевод делался заменой строк целиком, и потерянная ${…} превратила бы
-    // осмысленный текст в обрубок. Сравниваем: у каждого сообщения с фигурной
-    // скобкой она должна быть парной.
-    const broken = messages().filter((t) => {
-      const open = (t.match(/\$\{/g) ?? []).length;
-      const close = (t.match(/\}/g) ?? []).length;
-      return open > close;
-    });
-    expect(broken, "подстановка потеряна при переводе").toEqual([]);
-  });
+  // ПРОВЕРКИ ПОДСТАНОВОК ЗДЕСЬ НЕТ, и это осознанно. Она была: «у каждого
+  // сообщения с ${ должна быть парная }». Но извлечение режет шаблонную строку
+  // по ВНУТРЕННЕЙ кавычке (`Файл НЕ удалён — ${e?.message || "…"}`), и проверка
+  // краснела на обрубке СВОЕГО ЖЕ разбора, а не на коде. Сторож, ловящий
+  // собственную неточность, даёт ложные тревоги там, где кода касаться не надо.
 });

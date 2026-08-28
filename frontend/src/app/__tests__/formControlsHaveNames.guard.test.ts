@@ -41,6 +41,17 @@ describe("подписи у полей ввода", () => {
     expect(n, `ключ найден ${n} раз(а), а языков два — кто-то останется без подписи`).toBe(2);
   });
 
+  it("форма автора в QRight названа, а не только подсказана", () => {
+    // Замер прода 28.08.2026: пять полей формы (имя, почта, страна, город)
+    // держались на подсказках. Подписи на экране БЫЛИ — обычными div-ами,
+    // не связанными с полями. Форма лидовая: люди вводят туда своё имя.
+    const s = readFileSync(join(SRC, "app", "qright", "page.tsx"), "utf8");
+    for (const n of ["Name", "Email", "Country", "City"]) {
+      expect(s, `поле «${n}» снова без имени для читалки`)
+        .toContain(`aria-label="${n}"`);
+    }
+  });
+
   it("у поля вопроса к ИИ подпись связана с его заголовком", () => {
     const s = readFileSync(join(SRC, "components", "AskAi.tsx"), "utf8");
     expect(s, "AskAi снова опирается только на placeholder").toContain("aria-labelledby={titleId}");

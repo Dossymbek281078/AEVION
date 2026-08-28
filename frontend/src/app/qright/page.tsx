@@ -1011,19 +1011,19 @@ export default function QRightPage() {
                 <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr", marginTop: 12 }}>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Name</div>
-                    <input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="Your name" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <input aria-label="Name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="Your name" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Email</div>
-                    <input value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="your@email.com" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <input aria-label="Email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="your@email.com" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Country</div>
-                    <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="e.g. Kazakhstan" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <input aria-label="Country" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="e.g. Kazakhstan" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>City</div>
-                    <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Astana" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <input aria-label="City" value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Astana" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                 </div>
               </details>

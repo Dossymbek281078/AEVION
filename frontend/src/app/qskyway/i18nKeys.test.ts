@@ -157,4 +157,21 @@ describe("ключи перевода qskyway", () => {
       }
     });
   }
+
+  test("успех брони называет её демонстрационной на всех трёх языках", () => {
+    // Человек видит квитанцию `✓ slot-… · qright:…`. Без прямой оговорки он
+    // читает это как занятое им воздушное окно, тогда как демо-кнопка
+    // подписывается зашитым «AEVION demo» и в глубину рынка не идёт
+    // (сервер: aevion-globus-backend/src/lib/slotOrigin.ts).
+    const dicts = allTranslations() as Record<string, Record<string, string>>;
+    const marker: Record<string, string> = { en: "demo", ru: "демонстрац", kk: "демонстрац" };
+    for (const [lang, word] of Object.entries(marker)) {
+      const text = dicts[lang]?.["qskyway.book.demoOk"];
+      expect(text, `ключ отсутствует в ${lang}`).toBeTruthy();
+      expect(text.toLowerCase(), `в ${lang} бронь не названа демонстрационной`).toContain(word);
+      // Квитанция обязана остаться: оговорка не должна вытеснить сам номер.
+      expect(text, `в ${lang} потерян номер брони`).toContain("{id}");
+      expect(text, `в ${lang} потеряна квитанция`).toContain("{receipt}");
+    }
+  });
 });

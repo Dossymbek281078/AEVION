@@ -708,7 +708,13 @@ export default function QSkywayClient() {
         body: JSON.stringify({ routeId, t0, t1, holder: "AEVION demo" }),
       });
       const j = await res.json();
-      setBooking(j.ok ? `✓ ${j.slot.id} · ${j.slot.receipt}` : `✗ ${j.error}`);
+      // Квитанция настоящая, но бронь помечена тестовой (сервер: lib/slotOrigin.ts).
+      // Без этой оговорки человек читает `✓ slot-… · qright:…` как занятое им
+      // воздушное окно: демо-кнопка подписывается зашитым «AEVION demo», имени
+      // посетителя мы не спрашиваем вовсе.
+      setBooking(j.ok
+        ? t("qskyway.book.demoOk", { id: j.slot.id, receipt: j.slot.receipt })
+        : `✗ ${j.error}`);
       if (j.ok) fetchSlots();
     } catch (e) {
       // Текст исключения на экран НЕ уходит: человек видел «ошибка сети:

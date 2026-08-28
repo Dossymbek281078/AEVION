@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
 import { InfoTip } from "@/components/InfoTip";
+import { bundleContents } from "./bundleContents";
 import {
   buildIntegrityChecks,
   deriveVerdict,
@@ -398,9 +399,18 @@ export default function VerifyPage() {
                   tip: { name: "HMAC-SHA256", text: "Tamper-detection signature computed with AEVION's secret key. Anyone with the same key can re-derive it from the certificate fields and check that it has not been changed." },
                 },
                 {
-                  label: "Ed25519 Signature",
+                  // Подпись здесь ОБРЕЗАНА: ручка проверки отдаёт первые 64
+                  // символа и не отдаёт публичный ключ вовсе (замер на проде
+                  // 28.08.2026: длина 67 вместе с многоточием, поля
+                  // publicKeyEd25519 в ответе нет). Прежний текст обещал, что
+                  // «проверить может кто угодно» — возможность есть, но НЕ по
+                  // этим данным: полная подпись и ключ лежат в офлайн-пакете,
+                  // и офлайн-проверка их действительно сверяет. Подпись должна
+                  // называть то, что показано, и вести туда, где проверка
+                  // возможна.
+                  label: "Ed25519 Signature (first 64 chars)",
                   value: cert.signatureEd25519 || "N/A",
-                  tip: { name: "Ed25519", text: "An asymmetric digital signature. The matching public key is published, so anyone — not just AEVION — can verify that the signature is genuine." },
+                  tip: { name: "Ed25519", text: "An asymmetric digital signature. This page shows only the beginning of it. To check it yourself, download the verification bundle below: it carries the full signature and AEVION's public key, and the offline verifier validates them without contacting us." },
                 },
                 { label: "Algorithm", value: cert.algorithm },
                 { label: "Certificate ID", value: cert.id },
@@ -754,12 +764,26 @@ export default function VerifyPage() {
             </div>
             <InfoTip
               label="Verification bundle"
-              text="A single .json containing every proof — the canonical inputs, AEVION's Ed25519 signature, the author co-signature, the OpenTimestamps Bitcoin proof. With this bundle and a browser, anyone can verify the certificate forever without contacting AEVION."
+              text="A single .json with the proofs this certificate actually has — the canonical inputs, AEVION's Ed25519 signature where it exists, the author co-signature, the OpenTimestamps Bitcoin proof. With this bundle and a browser, anyone can check them forever without contacting AEVION."
             />
           </div>
           <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.55, marginBottom: 10 }}>
-            Most platforms&apos; certificates die when the platform dies. Ours don&apos;t. Download the bundle below — one <code style={{ fontSize: 11, padding: "1px 5px", background: "rgba(99,102,241,0.12)", borderRadius: 4 }}>.json</code> with every proof — then drop it into the offline verifier on any machine, any year. Bitcoin and Ed25519 are the trust anchors. We&apos;re replaceable; the math is not.
+            Most platforms&apos; certificates die when the platform dies. Ours don&apos;t. Download the bundle below — one <code style={{ fontSize: 11, padding: "1px 5px", background: "rgba(99,102,241,0.12)", borderRadius: 4 }}>.json</code> carrying this certificate&apos;s proofs — then drop it into the offline verifier on any machine, any year. Bitcoin and Ed25519 are the trust anchors. We&apos;re replaceable; the math is not.
           </div>
+          {(() => {
+            // Обещание выше дано безусловно, а выполняется не для всех записей:
+            // подпись AEVION попадает в пакет только при наличии отметки
+            // времени подписи. Замер на проде 28.08.2026 — 2 записи из 7.
+            // Оговорка стоит РЯДОМ с кнопкой скачивания, а не в подсказке:
+            // подсказку открывают не все, а скачивают все.
+            const b = bundleContents(integrity.signatureHmacReason);
+            if (!b.note) return null;
+            return (
+              <div style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 10, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 11, color: "#92400e", lineHeight: 1.55 }}>
+                {b.note}
+              </div>
+            );
+          })()}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <a
               href={apiUrl(`/api/pipeline/certificate/${cert.id}/bundle.json`)}

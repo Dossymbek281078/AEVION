@@ -850,7 +850,7 @@ export default function DevHubPage() {
               <button
                 onClick={() => setSnippetError(null)}
                 className="font-bold text-rose-200"
-                aria-label="закрыть"
+                aria-label={t("a11y.dismiss")}
               >
                 ×
               </button>
@@ -903,7 +903,7 @@ export default function DevHubPage() {
                       <button
                         onClick={() => starSnippet(s)}
                         className="flex items-center gap-1 text-xs font-semibold text-amber-300 hover:text-amber-200"
-                        aria-label="отметить снипет"
+                        aria-label={t("a11y.star")}
                       >
                         <span aria-hidden>★</span>
                         <span>{s.stars}</span>
@@ -948,7 +948,7 @@ export default function DevHubPage() {
                 onChange={(e) =>
                   setSnippetForm((f) => ({ ...f, title: e.target.value }))
                 }
-                placeholder="Название"
+                placeholder={t("field.title")}
                 className="px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
               />
               <input

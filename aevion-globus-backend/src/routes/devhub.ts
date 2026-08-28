@@ -1512,7 +1512,16 @@ devhubRouter.get("/projects/:id", async (req, res) => {
     const role = project.userId === userId ? "owner" : (project.collaborators.find(c => c.userId === userId)?.role ?? "viewer");
     res.json({ project, files, role });
   } catch (e: any) {
-    return res.status(500).json({ error: "internal_error" });
+    // Было 500 «internal_error», тогда как ВОСЕМНАДЦАТЬ соседних чтений в этом
+    // же файле отвечают 503 storage_unavailable. Замер 28.08 (роутер поднят с
+    // нечитаемой базой) показал этот разнобой: одна ручка из девятнадцати
+    // говорила «у нас сломалось», остальные — «хранилище недоступно, проект на
+    // месте». Для человека разница большая: первое читается как потеря.
+    //
+    // 500 к тому же поднимает тревогу как наша авария, а недоступность базы у
+    // нас уже описана отдельным кодом.
+    captureException(e, { route: "devhub/projects:get", userId });
+    return replyStorageUnavailable(res);
   }
 });
 
@@ -3424,7 +3433,20 @@ devhubRouter.get("/snippets", async (req, res) => {
       arr = arr.filter((s) => s.tags.some((tg) => tg.toLowerCase() === t));
     }
     const snippets = arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
-    res.json({ snippets: snippets.map((s) => publicSnippet(s, viewerId)), total: snippets.length });
+    // Пустая память при УПАВШЕМ чтении — это не «полка пуста», а «полку не
+    // прочитали». Замер 28.08 (роутер с нечитаемой базой) показал, что ручка
+    // отвечала 200 и `total: 0`, и отличить одно от другого было нельзя.
+    // Соседний список проектов такой случай уже различает; здесь не различал.
+    if (snippets.length === 0) {
+      replyStorageUnavailable(res);
+      return;
+    }
+    // В памяти что-то есть — отдаём, но честно называем источник.
+    res.json({
+      snippets: snippets.map((s) => publicSnippet(s, viewerId)),
+      total: snippets.length,
+      storage: "memory",
+    });
   }
 });
 

@@ -1378,10 +1378,15 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
     // починка принадлежит OSM. См. src/data/qskywayHeightReview.ts.
     heightReview: heightReviewsForCity(id),
     nofly: zones.map((z) => ({ id: z.id, name: z.name, kind: z.kind, x: Math.round(z.x), y: Math.round(z.y), radiusM: z.radiusM, until: z.until ?? null, realityNote: z.realityNote ?? null })),
+    // Один знак после запятой, а не сырое число с плавающей точкой. На экране
+    // стояло «5.14→27.35 м/с»: две цифры точности у величины, ВЕРХНЯЯ ЧАСТЬ
+    // которой — иллюстративная модель (это сказано в note ниже). Ложная
+    // точность внушает уверенность, которой в источнике нет, а модуль рядом
+    // округляет `confClearOnObstaclesM` тем же способом.
     wind: {
       fromDeg: windAt(id, FLOOR).fromDeg,
-      groundMs: windAt(id, FLOOR).speedMs,
-      topMs: windAt(id, city.grid.heights.reduce((m, v) => Math.max(m, v), 0) + CLEAR).speedMs,
+      groundMs: +windAt(id, FLOOR).speedMs.toFixed(1),
+      topMs: +windAt(id, city.grid.heights.reduce((m, v) => Math.max(m, v), 0) + CLEAR).speedMs.toFixed(1),
       source: windSourceOf(id),
       note: windSourceOf(id) === "metar"
         ? "у земли — реальный METAR ближайшего аэропорта; рост по высоте — иллюстративная модель (METAR не содержит данных о ветре на высоте)"

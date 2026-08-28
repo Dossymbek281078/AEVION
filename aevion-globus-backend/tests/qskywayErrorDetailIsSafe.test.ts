@@ -63,4 +63,27 @@ describe("detail в отказах не выдаёт устройство сис
       expect(re.test(body), what + " уехал клиенту: " + body.slice(0, 160)).toBe(false);
     }
   });
+
+  test("санитайзер держит РАЗНЫЕ формы ошибок postgres, а не одну", async () => {
+    // Проверил на ECONNREFUSED и чуть не счёл закрытым. Postgres называет себя
+    // по-разному, и каждая форма несёт своё опознавательное: имя пользователя,
+    // имя роли, хост в строке подключения.
+    const { safeDetail } = await import("../src/routes/qskyway");
+    const формы: Array<[string, RegExp[]]> = [
+      ["connect ECONNREFUSED 10.130.0.7:5432", [/10\.130/, /5432/]],
+      ['password authentication failed for user "aevion_prod"', [/aevion_prod/]],
+      ['role "aevion_prod" does not exist', [/aevion_prod/]],
+      ["getaddrinfo ENOTFOUND db-primary.internal.aevion", [/internal\.aevion/]],
+      ["connection to server at \"10.0.0.5\", port 5432 failed", [/10\.0\.0\.5/, /5432/]],
+    ];
+    for (const [raw, запрещено] of формы) {
+      const out = safeDetail(new Error(raw));
+      for (const re of запрещено) {
+        expect(re.test(out), "форма «" + raw.slice(0, 40) + "» протекла: " + out).toBe(false);
+      }
+      // И причина не должна исчезнуть целиком: пустой detail хуже сырого —
+      // он не отличает «база отказала» от «мы сломались».
+      expect(out.length, "detail опустел на форме: " + raw.slice(0, 40)).toBeGreaterThan(5);
+    }
+  });
 });

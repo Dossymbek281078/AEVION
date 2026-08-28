@@ -1263,14 +1263,22 @@ const rowToSlot = (r: Record<string, unknown>): Slot => ({
  * «база отказала» от «мы сломались», а это разные вещи для того, кто ждёт
  * квитанцию. Убираем ровно опознавательное.
  */
-function safeDetail(e: unknown): string {
+export function safeDetail(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
   return raw
     // адрес:порт и голый IPv4
     .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?/g, "<адрес скрыт>")
-    // имя пользователя и роль базы
+    // ⚠️ Имя пользователя postgres называет ТРЕМЯ способами, и первая версия
+    // знала один. Проверка на пяти настоящих формулировках (см.
+    // qskywayErrorDetailIsSafe) показала утечку на «for user "aevion_prod"» —
+    // самой частой из них. Одной формы мало.
     .replace(/\buser=\S+/gi, "user=<скрыт>")
-    .replace(/\brole "[^"]+"/gi, 'role "<скрыта>"')
+    .replace(/\b(for )?user "[^"]+"/gi, "user <скрыт>")
+    .replace(/\brole "[^"]+"/gi, "role <скрыта>")
+    // имя узла: postgres печатает его при ENOTFOUND и в строке подключения
+    .replace(/\b[a-z0-9-]+(\.[a-z0-9-]+){1,}\b/gi, "<узел скрыт>")
+    // порт отдельным словом: «connection to server at "...", port 5432 failed»
+    .replace(/\bport \d{2,5}\b/gi, "port <скрыт>")
     .slice(0, 200);
 }
 

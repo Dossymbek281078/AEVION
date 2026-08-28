@@ -91,3 +91,40 @@ describe("экран DevHub не выдаёт настройки сервера"
     expect(all, "инструкция «set … on the server» вернулась").not.toMatch(/set [A-Z0-9_]+ on the server/);
   });
 });
+
+/**
+ * Утечка бывает и ДИНАМИЧЕСКОЙ: имени ключа нет в нашем исходнике, оно
+ * приходит с сервера в момент работы. Проверка выше её увидеть не может —
+ * она ищет литералы. Замер 29.08.2026: так утекали три места, два из них
+ * выкатка, то есть ручки, которые прямо отвечают "set VERCEL_TOKEN ...".
+ *
+ * Поэтому здесь проверяется УСТРОЙСТВО, а не текст: любой текст ошибки от
+ * сервера обязан пройти через devhubServerError. Он и решает, что показать
+ * человеку, а что увести в консоль.
+ */
+describe("текст ошибки сервера не показывается в обход переводчика", () => {
+  it("каждый выброс с текстом сервера идёт через devhubServerError", () => {
+    const files = uiFiles(DIR);
+    expect(files.length, "обход не нашёл файлов — сторож ослеп").toBeGreaterThan(3);
+    const bad: string[] = [];
+    let wrapped = 0;
+    for (const f of files) {
+      const lines = fs.readFileSync(f, "utf8").split(String.fromCharCode(10));
+      lines.forEach((l, i) => {
+        if (!l.includes("new Error(")) return;
+        const fromServer =
+          l.includes(".error") || l.includes(".message") || l.includes("body.error");
+        if (!fromServer) return;
+        if (l.includes("devhubServerError")) { wrapped++; return; }
+        bad.push(`${f.split("devhub").pop()}:${i + 1}`);
+      });
+    }
+    // Контроль прибора: если бы обход ничего не разобрал, список нарушителей
+    // был бы пуст по той же причине, что и при полном порядке.
+    expect(wrapped, "ни одного обёрнутого выброса — разбор не сработал").toBeGreaterThan(3);
+    expect(
+      bad,
+      "текст сервера уходит человеку мимо переводчика: оберните в devhubServerError(x.error, «понятная фраза»)",
+    ).toEqual([]);
+  });
+});

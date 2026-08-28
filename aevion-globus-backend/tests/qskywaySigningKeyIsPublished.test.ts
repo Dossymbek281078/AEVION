@@ -89,4 +89,39 @@ describe("ключ подписи QSkyway доступен независимо 
     expect(String(v.limit).length, "граница обещания не названа").toBeGreaterThan(50);
     expect(String(v.limitEn).length, "граница не названа по-английски").toBeGreaterThan(50);
   });
+
+  test("рецепт ловит подделку: изменённый документ не проходит по шагам", async () => {
+    // Рецепт — это обещание постороннему. Пока по нему не проверили ПОДДЕЛКУ,
+    // он проверен только на честном случае, а это половина.
+    const doc = await request(app())
+      .post("/api/qskyway/route/justification")
+      .send({ from: 0, to: 1, city: "astana" });
+    const att = doc.body.attestation;
+    const health = await request(app()).get("/api/qskyway/health");
+    const key = crypto.createPublicKey({
+      key: Buffer.from(String(health.body.signing.publicKey), "base64"),
+      format: "der",
+      type: "spki",
+    });
+
+    // Подделка ровно того рода, ради которой документ и подписывают: цифра,
+    // которую человек понесёт регулятору, изменена в выгодную сторону.
+    const tampered = { ...doc.body.document, cruiseAltM: 999 };
+
+    // Шаг 2 рецепта: хэш обязан совпасть с заявленным — и не совпадает.
+    const hash = crypto.createHash("sha256").update(JSON.stringify(tampered)).digest("hex");
+    expect(hash, "подделка не изменила хэш — рецепт бесполезен").not.toBe(att.contentHash);
+
+    // Шаг 3: подпись на байтах ПОДДЕЛАННОГО хэша не проверяется ключом службы.
+    const ok = crypto.verify(null, Buffer.from(hash, "hex"), key, Buffer.from(att.signature, "base64"));
+    expect(ok, "подпись сошлась на изменённом документе").toBe(false);
+
+    // И наша собственная ручка обязана сказать то же самое — иначе рецепт и
+    // сервис расходятся, а расхождение хуже отсутствия рецепта.
+    const v = await request(app())
+      .post("/api/qskyway/route/justification/verify")
+      .send({ document: tampered, attestation: att });
+    expect(v.status).toBe(200);
+    expect(v.body.hashValid, "ручка не заметила подмену документа").toBe(false);
+  });
 });

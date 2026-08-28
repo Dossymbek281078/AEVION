@@ -139,6 +139,93 @@ function plural(n: number, one: string, few: string, many: string): string {
   return `${n} ${many}`;
 }
 
+// ── ПОДГОТОВЛЕНО, НЕ ВКЛЮЧЕНО: подстановка высоты там, где мы не знаем ничего ──
+//
+// Высоты коридоров — продуктовое решение основателя, не моё, и переключатель
+// ниже стоит в `false`. Здесь лежит готовая реализация, чтобы «да» стоило
+// одного слова, а не получаса.
+//
+// Зачем. Слепая ячейка несёт фиктивные 12 м, и 12 + CLEAR + SRC_CLEARANCE[2]
+// = 43 < FLOOR: штраф за неуверенность целиком съедается полом коридора, то
+// есть защита молчит именно там, где нужна. Замер 28.08.2026 по твинам:
+// в Астане на этом дефолте 498 ячеек, в Токио 42, в Мидтауне Манхэттена 4.
+//
+// Что даст включение (медиана известных высот в радиусе 200 м):
+//   Астана     360 из 498 ячеек поднимаются, гарантия просвета 35 -> 60 м
+//   Токио       38 из  42,                   гарантия 35 -> 60 м
+//   Нью-Йорк     4 из   4,                   гарантия 35 -> 85 м
+// Цена: коридор над неизвестными кварталами поднимается на одну ступень, 25 м.
+//
+// Медиана, а не 75-й процентиль: гарантия та же, а максимум коридора в Астане
+// 100 м вместо 125 — выигрыш достаётся дешевле.
+//
+// Твин НЕ меняется: он остаётся записью того, что мы знаем. Подстановка живёт
+// только на пути ПЛАНИРОВАНИЯ и только ВВЕРХ — записанную высоту не понижает.
+// Разбор спорных высот и скоринг площадок берут сырые числа по-прежнему.
+//
+// Честная слабость: оценка наследует высоту соседей, и сарай рядом с башней
+// получит высоту башни. Снимается не выбором процентиля, а данными — LiDAR,
+// CityGML LOD2, 3D Tiles.
+//
+// Переключатель — КОНСТАНТА, а не переменная окружения, намеренно: переменная
+// меняет поведение невидимо для git, и мы это уже проходили с отметкой сборки,
+// которая пережила образ и уверенно врала. Для высот в авиационном модуле цена
+// такой невидимости выше.
+const BLIND_NEIGHBOUR_ESTIMATE = false;
+const BLIND_RADIUS_CELLS = 10;   // 10 ячеек по 20 м = 200 м вокруг
+const BLIND_MIN_SAMPLE = 8;      // меньше известных соседей — берём по городу
+const BLIND_PERCENTILE = 0.5;
+
+const planningGrids = new WeakMap<CityData["grid"], number[]>();
+
+function percentileOf(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0;
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))];
+}
+
+// Флаг ПАРАМЕТРОМ, а не только константой: иначе выключенная ветка никем не
+// исполняется и тихо протухает — свой же класс «написано, но не вызывается».
+// Тесты гоняют оба состояния.
+export function planningHeights(
+  g: CityData["grid"],
+  enabled: boolean = BLIND_NEIGHBOUR_ESTIMATE,
+): number[] {
+  if (!enabled) return g.heights;
+  const cached = planningGrids.get(g);
+  if (cached) return cached;
+  const out = g.heights.slice();
+  const known: number[] = [];
+  for (let i = 0; i < g.heights.length; i++) {
+    if (g.heights[i] > 0 && (g.src?.[i] ?? 0) !== 2) known.push(g.heights[i]);
+  }
+  known.sort((a, b) => a - b);
+  const cityWide = percentileOf(known, BLIND_PERCENTILE);
+  for (let r = 0; r < g.rows; r++) {
+    for (let c = 0; c < g.cols; c++) {
+      const i = r * g.cols + c;
+      if (g.heights[i] <= 0 || (g.src?.[i] ?? 0) !== 2) continue;
+      const near: number[] = [];
+      for (let dr = -BLIND_RADIUS_CELLS; dr <= BLIND_RADIUS_CELLS; dr++) {
+        const rr = r + dr;
+        if (rr < 0 || rr >= g.rows) continue;
+        for (let dc = -BLIND_RADIUS_CELLS; dc <= BLIND_RADIUS_CELLS; dc++) {
+          const cc = c + dc;
+          if (cc < 0 || cc >= g.cols) continue;
+          const j = rr * g.cols + cc;
+          if (g.heights[j] > 0 && (g.src?.[j] ?? 0) !== 2) near.push(g.heights[j]);
+        }
+      }
+      near.sort((a, b) => a - b);
+      const est = near.length >= BLIND_MIN_SAMPLE
+        ? percentileOf(near, BLIND_PERCENTILE)
+        : cityWide;
+      if (est > out[i]) out[i] = est;
+    }
+  }
+  planningGrids.set(g, out);
+  return out;
+}
+
 const obstOf = (g: CityData["grid"]) => (c: number, r: number): number =>
   c < 0 || r < 0 || c >= g.cols || r >= g.rows ? 999 : g.heights[r * g.cols + c];
 

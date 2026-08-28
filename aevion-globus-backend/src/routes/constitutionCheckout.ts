@@ -64,6 +64,31 @@ function lsStoreId(): string | null { return process.env.LEMON_SQUEEZY_STORE_ID 
  * Признак живёт в ОДНОЙ функции намеренно: у него два места вызова, и стоит
  * повторить условие копией — они разъедутся, а сторож этого не заметит.
  */
+/**
+ * Ссылка товара Gumroad для тарифа — ОДИН источник и для решения «можно ли
+ * платить», и для самой ссылки.
+ *
+ * Раньше это были два РАЗНЫХ источника, и они не совпадали: готовность
+ * проверялась по `GUMROAD_CONSTITUTION_<TIER>_PERMALINK`, а адрес строил
+ * провайдер по `GUMROAD_PERMALINK_<REFERENCE>` / `GUMROAD_DEFAULT_PERMALINK`,
+ * про наше имя не знающий вовсе. Совпадали они только по счастливой случайности.
+ *
+ * Чем это кончалось: настроена наша переменная — чекаут говорит «Gumroad готов»
+ * и ведёт покупателя на `app.gumroad.com/l/constitution-pro`, то есть на
+ * ПРИДУМАННЫЙ адрес (настоящие ссылки товаров видны в gumroadWebhook.ts:
+ * `pyiaz` и `wjvquw`). Ответ при этом 200 и `provider: "gumroad"` — снаружи
+ * неотличимо от успеха, а деньги не приходят. Обратная сторона тоже неверна:
+ * настроено имя, которое читает провайдер, — а чекаут отвечает «не настроено».
+ */
+function gumroadPermalink(tier: Tier): string | null {
+  const upper = tier.toUpperCase();
+  return process.env[`GUMROAD_CONSTITUTION_${upper}_PERMALINK`]
+    ?? process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK
+    ?? process.env[`GUMROAD_PERMALINK_CONSTITUTION_${upper}`]
+    ?? process.env.GUMROAD_DEFAULT_PERMALINK
+    ?? null;
+}
+
 function lsReady(tier: Tier): boolean {
   return Boolean(lsApiKey() && lsStoreId() && lsVariantId(tier));
 }
@@ -153,9 +178,7 @@ constitutionCheckoutRouter.post(
 
       // Provider priority: LemonSqueezy (if configured) → Gumroad → stub
       const hasLs = lsReady(tier);
-      const gumroadPermalink = process.env[`GUMROAD_CONSTITUTION_${tier.toUpperCase()}_PERMALINK`]
-        ?? process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK;
-      const hasGumroad = Boolean(gumroadPermalink);
+      const hasGumroad = Boolean(gumroadPermalink(tier));
 
       if (!hasLs && !hasGumroad) {
         return res.json({
@@ -182,7 +205,7 @@ constitutionCheckoutRouter.post(
 
       // Gumroad fallback
       const intent = await gumroadPaymentProvider.createIntent({
-        reference: `constitution-${tier}`,
+        reference: gumroadPermalink(tier) ?? `constitution-${tier}`,
         amountCents: priceOf(tier) * 100,
         currency: "USD",
         description: nameOf(tier),
@@ -213,10 +236,7 @@ constitutionCheckoutRouter.get(
   async (req: Request, res: Response) => {
     const tier = (req.params.tier === "team" ? "team" : "pro") as Tier;
     const hasLs = lsReady(tier);
-    const hasGumroad = Boolean(
-      process.env[`GUMROAD_CONSTITUTION_${tier.toUpperCase()}_PERMALINK`]
-      ?? process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK
-    );
+    const hasGumroad = Boolean(gumroadPermalink(tier));
     if (!hasLs && !hasGumroad) {
       return res.redirect(`${publicBase()}/constitution/pricing`);
     }
@@ -227,7 +247,7 @@ constitutionCheckoutRouter.get(
       }
       // Gumroad
       const intent = await gumroadPaymentProvider.createIntent({
-        reference: `constitution-${tier}`,
+        reference: gumroadPermalink(tier) ?? `constitution-${tier}`,
         amountCents: priceOf(tier) * 100,
         currency: "USD",
         description: nameOf(tier),

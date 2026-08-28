@@ -33,6 +33,8 @@ const KEYS = [
   "LEMON_SQUEEZY_STORE_ID",
   "LEMON_SQUEEZY_CONSTITUTION_PRO_VARIANT_ID",
   "GUMROAD_CONSTITUTION_PRO_PERMALINK",
+  "GUMROAD_PERMALINK_CONSTITUTION_PRO",
+  "GUMROAD_DEFAULT_PERMALINK",
 ];
 let saved: Record<string, string | undefined> = {};
 
@@ -103,5 +105,34 @@ describe("чекаут: неполная настройка провайдера
 
     expect(res.status).toBe(302);
     expect(String(res.headers.location)).not.toContain("error=checkout_failed");
+  });
+});
+
+describe("Gumroad: решение о готовности и сама ссылка — из одного источника", () => {
+  test("ссылка ведёт на НАСТРОЕННЫЙ товар, а не на выдуманный адрес", async () => {
+    // pyiaz — настоящая ссылка товара, видна в таблице gumroadWebhook.ts
+    process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK = "pyiaz";
+
+    const res = await request(app)
+      .post("/api/constitution/checkout/session")
+      .send({ tier: "pro" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.provider).toBe("gumroad");
+    expect(
+      String(res.body.checkoutUrl),
+      "покупателя ведут на адрес, которого нет в Gumroad",
+    ).toContain("pyiaz");
+    expect(String(res.body.checkoutUrl)).not.toContain("constitution-pro");
+  });
+
+  test("имя, которое читает провайдер, тоже включает оплату", async () => {
+    process.env.GUMROAD_PERMALINK_CONSTITUTION_PRO = "pyiaz";
+
+    const res = await request(app)
+      .post("/api/constitution/checkout/session")
+      .send({ tier: "pro" });
+
+    expect(res.body.provider, "рабочая настройка объявлена отсутствующей").toBe("gumroad");
   });
 });

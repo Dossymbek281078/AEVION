@@ -5,13 +5,17 @@ export const alt = "AEVION Developers — REST + SDK + webhooks";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
+// ⚠️ 28.08.2026: три адреса здесь были мертвы (route_not_found), хотя на
+// САМОЙ странице developers их починили ещё 12.08. Картинку превью забыли —
+// это уже вторая забытая opengraph-поверхность за сутки. Правя адреса на
+// странице, правь и здесь: соцсеть показывает именно эту картинку.
 const ENDPOINTS = [
-  { method: "POST", path: "/api/qright/register",  color: "#7dd3fc" },
+  { method: "POST", path: "/api/qright/objects",    color: "#7dd3fc" },
   { method: "POST", path: "/api/qsign/sign",       color: "#a78bfa" },
-  { method: "POST", path: "/api/bureau/protect",   color: "#f472b6" },
-  { method: "POST", path: "/api/planet/submit",    color: "#86efac" },
+  { method: "POST", path: "/api/pipeline/protect",  color: "#f472b6" },
+  { method: "POST", path: "/api/planet/submissions",color: "#86efac" },
   { method: "GET",  path: "/api/qtrade/accounts",  color: "#fb7185" },
-  { method: "POST", path: "/api/quantum-shield/derive", color: "#5eead4" },
+  { method: "POST", path: "/api/quantum-shield/create", color: "#5eead4" },
 ];
 
 export default function DevelopersOg() {

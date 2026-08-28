@@ -1791,6 +1791,38 @@ qskywayRouter.post("/route", (req: Request, res: Response) => {
  * forbidden, not permitted subject to coordination» — именно это различие
  * модуль и защищает от размывания.
  */
+/**
+ * Оговорка о КАЧЕСТВЕ ВЫСОТ для подписанного документа.
+ *
+ * ЗАЧЕМ. 28.08.2026 прочитал готовый документ глазами того, кто понесёт его
+ * регулятору. `scope` честно объясняет воздушное ограничение — вплоть до того,
+ * что документ «служит основанием НЕ для полёта». А про высоты не говорит
+ * ничего, хотя в полях рядом лежит `heightConfidencePct: 82` и тут же
+ * `measuredObstacleSegments: 0` из `obstacleSegments: 20`.
+ *
+ * Первое число успокаивает, второе тревожит, и они об одном и том же. Разницу
+ * модуль знает: `heightConfidencePct` считается по ВСЕМ участкам, включая
+ * открытую землю, и потому разбавлен — рядом уже есть неразбавленный
+ * `confClearOnObstaclesM`, но старое поле намеренно не трогали. В документе для
+ * регулятора «82%» без пояснения читается как «данные хорошие».
+ *
+ * Поэтому оговорка, а не новое вычисление: называем вслух то, что уже посчитано.
+ * `null` — когда говорить нечего: под крылом нет зданий либо все высоты
+ * обмерены городом.
+ */
+function heightScopeNote(
+  obstacleSegments: number,
+  measuredObstacleSegments: number,
+): { ru: string; en: string } | null {
+  if (obstacleSegments <= 0) return null;
+  if (measuredObstacleSegments >= obstacleSegments) return null;
+  const pct = Math.round((100 * measuredObstacleSegments) / obstacleSegments);
+  return {
+    ru: ` Отдельно о высотах: из ${obstacleSegments} участков со зданием под крылом на обмеренной городом высоте стоят ${measuredObstacleSegments} (${pct}%). Остальные выведены из тега или счёта этажей OpenStreetMap либо подставлены — это заявления участников проекта, а не обмер службы. Общий процент уверенности в полях документа считается по ВСЕМ участкам, включая открытую землю, и потому выше этого.`,
+    en: ` On heights specifically: of ${obstacleSegments} segments with a building under the wing, ${measuredObstacleSegments} (${pct}%) stand on a city-surveyed height. The rest are derived from an OpenStreetMap tag or floor count, or substituted — these are contributor statements, not an official survey. The overall confidence percentage in the document fields counts ALL segments, open ground included, and is therefore higher than this.`,
+  };
+}
+
 function scopeTexts(hasCeilingFeed: boolean, perm: CityPermission | undefined): { ru: string; en: string } {
   if (hasCeilingFeed) {
     return {
@@ -1842,7 +1874,14 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   // Покрывает все три случая. У города может быть режим разрешений без сетки
   // потолков, и «регуляторного вердикта нет» рядом с режимом в самом документе
   // сделало бы подписанный артефакт противоречащим собственной оговорке.
-  const scopeText = scopeTexts(!!src, PERMISSION[resolved.id]);
+  const scopeBase = scopeTexts(!!src, PERMISSION[resolved.id]);
+  // Оговорка о высотах ДОПИСЫВАЕТСЯ к воздушной, а не заменяет её: это два
+  // разных ограничения, и объединять их в одно предложение значило бы, что
+  // читатель запомнит только первое.
+  const hNote = heightScopeNote(route.obstacleSegments, route.measuredObstacleSegments ?? 0);
+  const scopeText = hNote
+    ? { ru: scopeBase.ru + hNote.ru, en: scopeBase.en + hNote.en }
+    : scopeBase;
 
   // ASCII-only and explicitly ordered: this is the byte sequence the signature
   // covers, so it must not depend on locale, key order, or JSON escaping

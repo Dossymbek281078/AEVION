@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 /**
@@ -38,7 +38,19 @@ import path from "node:path";
 // Два сообщения ограничителя намеренно двуязычны ОДНОЙ строкой (общий
 // лимитер кладёт одно поле), и сторож их не видит — это не дыра, а форма.
 
-const SRC = readFileSync(path.join(__dirname, "..", "src", "routes", "qskyway.ts"), "utf8");
+const ROUTES = path.join(__dirname, "..", "src", "routes");
+
+/**
+ * ⚠️ Раньше читался ОДИН файл — `qskyway.ts`. 28.08.2026 это дало пропуск:
+ * `qskyway.airspace.anchor.ts` отдавал в ответ четыре русские строки без пары,
+ * и сторож молчал, потому что не открывал его вовсе.
+ *
+ * Модуль живёт не в одном файле, а в семье `qskyway.*` — читаем всю семью.
+ */
+const MODULE_FILES = readdirSync(ROUTES)
+  .filter((f) => f.startsWith("qskyway") && f.endsWith(".ts"))
+  .sort();
+const SRC = MODULE_FILES.map((f) => readFileSync(path.join(ROUTES, f), "utf8")).join(String.fromCharCode(10));
 const NL = String.fromCharCode(10);
 
 // Кириллица бывает записана экранированными кодами — тогда посимвольный поиск
@@ -133,6 +145,15 @@ function unpaired(): string[] {
 }
 
 describe("русские пояснения QSkyway имеют английскую пару", () => {
+  it("контроль охвата: читается вся семья файлов модуля, а не один", () => {
+    // Пока сторож читал один файл, он был зелёным и слепым: отличить «чисто»
+    // от «не смотрел» было нельзя. Оба имени названы поимённо намеренно —
+    // «файлов больше одного» прошло бы и на случайной паре.
+    expect(MODULE_FILES.length).toBeGreaterThan(5);
+    expect(MODULE_FILES).toContain("qskyway.ts");
+    expect(MODULE_FILES).toContain("qskyway.airspace.anchor.ts");
+  });
+
   it("контроль прибора: файл прочитан, кириллица в нём есть, note находится", () => {
     // Без этого «новых нет» неотличимо от «поиск не работает» — сегодня свип
     // уже соврал один раз, насчитав 90 строк вместо 23.

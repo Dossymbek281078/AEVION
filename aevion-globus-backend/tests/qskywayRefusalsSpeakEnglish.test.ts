@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 /**
@@ -27,7 +27,18 @@ import path from "node:path";
  * строки литеральные.
  */
 
-const SRC = readFileSync(path.join(__dirname, "..", "src", "routes", "qskyway.ts"), "utf8");
+const ROUTES = path.join(__dirname, "..", "src", "routes");
+
+/**
+ * Читаем всю семью `qskyway.*`, а не один файл: 28.08.2026 сосед
+ * `qskyway.airspace.anchor.ts` отдавал русские отказы через `fail("…")`, и
+ * проверка по одному файлу их не видела. Форма записи там тоже была другая —
+ * не присваивание поля, а аргумент помощника.
+ */
+const MODULE_FILES = readdirSync(ROUTES)
+  .filter((f) => f.startsWith("qskyway") && f.endsWith(".ts"))
+  .sort();
+const SRC = MODULE_FILES.map((f) => readFileSync(path.join(ROUTES, f), "utf8")).join(String.fromCharCode(10));
 
 function hasCyrillic(s: string): boolean {
   for (let i = 0; i < s.length; i++) {
@@ -70,6 +81,12 @@ describe("отказы QSkyway говорят и по-английски", () =>
     const near = LINES[i] + (LINES[i + 1] ?? "");
     refusals.push({ line: i + 1, ru, paired: near.includes("errorEn:") });
   }
+
+  it("контроль охвата: читается вся семья файлов модуля", () => {
+    expect(MODULE_FILES.length).toBeGreaterThan(5);
+    expect(MODULE_FILES).toContain("qskyway.ts");
+    expect(MODULE_FILES).toContain("qskyway.airspace.anchor.ts");
+  });
 
   it("контроль прибора: обход нашёл отказы, а не пустоту", () => {
     // Без этого «непарных ноль» неотличимо от «не умею искать» — ровно та

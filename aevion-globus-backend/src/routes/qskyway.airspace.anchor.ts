@@ -70,9 +70,15 @@ export interface AirspaceAnchorVerify {
     attestations: string[];
     otsProofB64: string | null;
     error: string | null;
+    /**
+     * Английская половина `error`. Отдельным полем, а не заменой: русский текст
+     * уже читают наши же страницы и смоки, менять его молча нельзя.
+     */
+    errorEn: string | null;
   };
   fullyProven: boolean;
   note: string;
+  noteEn: string;
 }
 
 /**
@@ -93,16 +99,19 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
   const contentHash = typeof obj.contentHash === "string" ? obj.contentHash : null;
   const otsProofB64 = typeof obj.otsProofB64 === "string" ? obj.otsProofB64 : null;
 
-  const fail = (error: string): AirspaceAnchorVerify => ({
+  // Отказ несёт обе половины. Текст приходит парой ИМЕННО СЮДА, а не строится
+  // где-то у вызывающего: три причины отказа — три места, где легко забыть одну.
+  const fail = (error: string, errorEn: string): AirspaceAnchorVerify => ({
     city,
     matchesCurrentSnapshot: false,
-    ots: { verified: false, status: "pending", upgraded: false, bitcoinBlockHeight: null, attestations: [], otsProofB64, error },
+    ots: { verified: false, status: "pending", upgraded: false, bitcoinBlockHeight: null, attestations: [], otsProofB64, error, errorEn },
     fullyProven: false,
     note: "Проверка не завершена — см. поле error.",
+    noteEn: "Verification did not complete — see the error field.",
   });
 
-  if (!contentHash) return fail("нужен contentHash");
-  if (!otsProofB64) return fail("нужен otsProofB64");
+  if (!contentHash) return fail("нужен contentHash", "contentHash is required");
+  if (!otsProofB64) return fail("нужен otsProofB64", "otsProofB64 is required");
 
   const src = city ? AIRSPACE[city] : undefined;
   const matchesCurrentSnapshot = Boolean(src) && airspaceContentHash(src!) === contentHash;
@@ -111,7 +120,7 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
   try {
     proof = Buffer.from(otsProofB64, "base64");
   } catch {
-    return fail("otsProofB64 не является корректным base64");
+    return fail("otsProofB64 не является корректным base64", "otsProofB64 is not valid base64");
   }
 
   const up = await upgradeProof(proof);
@@ -129,6 +138,11 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
       attestations: v.attestations,
       otsProofB64: currentProof.toString("base64"),
       error: v.error,
+      // Здесь обе половины совпадают НАМЕРЕННО: текст приходит из библиотеки
+      // OpenTimestamps и уже английский («no Bitcoin attestation yet…» либо
+      // message исключения). Переводить его нам нечем и незачем — свой перевод
+      // разошёлся бы с тем, что человек найдёт в документации библиотеки.
+      errorEn: v.error,
     },
     fullyProven: v.ok,
     note: !v.ok
@@ -136,5 +150,10 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
       : matchesCurrentSnapshot
         ? `Доказано: этот набор ограничений существовал не позднее блока ${v.bitcoinBlockHeight} и совпадает с тем, что отдаётся сейчас.`
         : `Доказано для прошлой редакции: хэш привязан к блоку ${v.bitcoinBlockHeight}, но текущий снимок уже другой (регулятор перевыпустил карту). Это корректная историческая запись, а не ошибка.`,
+    noteEn: !v.ok
+      ? "Bitcoin confirmation has not arrived yet (pending), or the proof does not check out — try again later."
+      : matchesCurrentSnapshot
+        ? `Proven: this set of restrictions existed no later than block ${v.bitcoinBlockHeight} and matches what is served now.`
+        : `Proven for an earlier edition: the hash is anchored to block ${v.bitcoinBlockHeight}, but the current snapshot differs (the regulator reissued the map). This is a correct historical record, not an error.`,
   };
 }

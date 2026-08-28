@@ -290,6 +290,39 @@ export function bucketFingerprint(key: string): string {
   return createHash("sha256").update(key).digest("hex").slice(0, 8);
 }
 
+/**
+ * ОДНОРАЗОВАЯ запись в журнал: какой адрес и какие заголовки видит сервер.
+ *
+ * Зачем именно так. Отпечаток корзины показал, что ключ меняется от соединения
+ * к соединению, но НЕ говорит, чем он оказывается. Следующая правка без этого
+ * знания была бы четвёртой догадкой подряд.
+ *
+ * В журнал, а НЕ в ответ: адрес внутреннего узла — устройство нашей
+ * инфраструктуры, и наружу ему незачем (тот же принцип, что у publicErrorCategory
+ * в httpErrorHandler). В журнал он попадает один раз за жизнь процесса и без
+ * адреса ПОСЕТИТЕЛЯ: печатается только форма — первый октет соседа по сокету и
+ * наличие заголовков, а не их значения.
+ *
+ * Строка одноразовая намеренно: журнал, куда каждую секунду капает диагностика,
+ * перестают читать — тот же класс, что тревога без читателя.
+ */
+let peerShapeLogged = false;
+
+function logPeerShapeOnce(peer: string, headers: Record<string, unknown> | undefined): void {
+  if (peerShapeLogged) return;
+  peerShapeLogged = true;
+  const bare = peer.replace(/^::ffff:/, "");
+  const family = bare.includes(":") ? "ipv6" : "ipv4";
+  const firstOctet = family === "ipv4" ? bare.split(".")[0] : bare.split(":")[0];
+  console.warn(
+    "[rateLimit] форма соседа по сокету: семейство=%s префикс=%s | x-real-ip=%s x-forwarded-for=%s",
+    family,
+    firstOctet || "?",
+    headers?.["x-real-ip"] ? "есть" : "нет",
+    headers?.["x-forwarded-for"] ? "есть" : "нет",
+  );
+}
+
 export function clientIp(req: {
   ip?: string;
   socket?: { remoteAddress?: string };
@@ -313,6 +346,7 @@ export function clientIp(req: {
   // чужой X-Real-IP он не может. Нет заголовка или мы не за прокси — ведём
   // себя ровно как раньше: отказ здесь не должен ломать ограничитель.
   const peer = String(req.socket?.remoteAddress || "");
+  logPeerShapeOnce(peer, req.headers);
   const realRaw = req.headers?.["x-real-ip"];
   const real = typeof realRaw === "string" ? realRaw.trim() : "";
   if (real && looksLikeAddress(real) && isRailwayInternal(peer)) {

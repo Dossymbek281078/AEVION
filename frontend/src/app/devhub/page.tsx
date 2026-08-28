@@ -84,6 +84,35 @@ function formatDate(iso: string) {
 // against the live payment dashboards — the page must not carry its own copy.
 const STUDIO_PRO = productById("devhub");
 
+/**
+ * Почему возможность отключена — словами человека.
+ *
+ * Раньше тут было `c.status === "needs_token" ? "не настроено на сервере" : c.status`,
+ * то есть для ЛЮБОГО другого состояния на экран уходил машинный токен. После
+ * того как домен aevion.build стал «not_available» (зона не делегирована),
+ * человек, наведя курсор, прочитал бы ровно `not_available`.
+ *
+ * «Нет ключа» и «не сделано» — разные вещи, и человеку полезно различать: первое
+ * мы настроим, второе ещё не существует.
+ */
+function capabilityOffReason(status: string | undefined): string {
+  switch (status) {
+    case "needs_token":
+      return "не настроено на сервере — подключим";
+    case "not_available":
+      return "пока не сделано, а не «забыли ключ»";
+    case "error":
+      return "провайдер отвечает ошибкой";
+    case undefined:
+    case "":
+      return "состояние неизвестно";
+    default:
+      // Незнакомое состояние показываем как есть — прятать хуже, чем показать
+      // непонятное: иначе ни человек, ни мы не поймём, о чём речь.
+      return `состояние: ${status}`;
+  }
+}
+
 export default function DevHubPage() {
   const t = useDevhubT();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -555,7 +584,7 @@ export default function DevHubPage() {
                       живут в /api/devhub/providers/health; подключить их сюда —
                       отдельная работа, не правка на ходу. */}
                   {off.map((c, i) => (
-                    <span key={c.id} title={c.lastError || (c.status === "needs_token" ? "не настроено на сервере" : c.status)}>
+                    <span key={c.id} title={c.lastError || capabilityOffReason(c.status)}>
                       <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{c.name}</span>
                       {i < off.length - 1 ? <span style={{ color: "#64748b" }}>, </span> : null}
                     </span>

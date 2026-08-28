@@ -32,10 +32,15 @@ vi.mock("../src/lib/dbPool", () => ({
       if (!s.includes("QCoreSessionInvite") || !s.trimStart().toUpperCase().startsWith("SELECT")) {
         return { rows: [], rowCount: 0 };
       }
-      const token = String(params?.[0] ?? "");
-      // Фильтр по роли применяем ТОЛЬКО если он есть в запросе.
+      // Фильтр по роли применяем ТОЛЬКО если он есть в запросе: стенд,
+      // отсеивающий collab всегда, остался бы зелёным и после снятия фильтра.
       const excludesCollab = s.includes(`"role" <> 'collab'`);
-      const out = rows.filter((r) => r.token === token && (!excludesCollab || r.role !== "collab"));
+      const bySession = s.includes(`"sessionId"=$1`);
+      const out = rows.filter((r) =>
+        (bySession
+          ? r.sessionId === String(params?.[0] ?? "") && r.invitedBy === String(params?.[1] ?? "")
+          : r.token === String(params?.[0] ?? "")) &&
+        (!excludesCollab || r.role !== "collab"));
       return { rows: out, rowCount: out.length };
     },
   }),
@@ -46,7 +51,7 @@ vi.mock("../src/lib/ensureQCoreTables", () => ({
   getDbError: () => null,
 }));
 
-import { getSessionInvite } from "../src/services/qcoreai/store";
+import { getSessionInvite, listSessionInvites } from "../src/services/qcoreai/store";
 
 describe("токен совместного просмотра не проходит как приглашение", () => {
   test("обычное приглашение по-прежнему находится", async () => {
@@ -54,6 +59,14 @@ describe("токен совместного просмотра не проход
     const r = await getSessionInvite("invite-token");
     expect(r, "сломан сам механизм приглашений").toBeTruthy();
     expect(r?.role).toBe("viewer");
+  });
+
+  test("список приглашений владельца не показывает ссылки просмотра", async () => {
+    // Частичное разделение хуже полного: список, иногда показывающий чужой
+    // механизм, однажды дадут на экран — и там появятся «приглашения»,
+    // которых владелец не создавал.
+    const list = await listSessionInvites("s1", "owner");
+    expect(list.map((x) => x.role)).toEqual(["viewer"]);
   });
 
   test("токен просмотра приглашением НЕ считается", async () => {

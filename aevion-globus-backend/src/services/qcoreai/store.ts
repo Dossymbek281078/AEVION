@@ -4404,8 +4404,14 @@ export async function listSessionInvites(sessionId: string, userId: string): Pro
       .filter((inv) => inv.sessionId === sessionId && inv.invitedBy === userId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
+  // Роль 'collab' сюда не входит по той же причине, что и в getSessionInvite:
+  // ссылки совместного просмотра живут в этой таблице с 28.08.2026, но
+  // приглашениями не являются. Частичное разделение хуже полного: список,
+  // который иногда показывает чужой механизм, однажды дадут на экран.
   const r = await pool.query(
-    `SELECT * FROM "QCoreSessionInvite" WHERE "sessionId"=$1 AND "invitedBy"=$2 ORDER BY "createdAt" DESC`,
+    `SELECT * FROM "QCoreSessionInvite"
+      WHERE "sessionId"=$1 AND "invitedBy"=$2 AND "role" <> 'collab'
+      ORDER BY "createdAt" DESC`,
     [sessionId, userId]
   );
   return r.rows as InviteRow[];

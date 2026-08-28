@@ -6924,26 +6924,26 @@ devhubRouter.get("/providers/health", async (_req, res) => {
 
 devhubRouter.get("/studio/capabilities", (_req, res) => {
   const caps = [
-    { id: "code", name: "Code Editor", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
-    { id: "translate", name: "Translation", description: "DeepL translation for generated copy", status: process.env.DEEPL_API_KEY ? "live" : "needs_token", token: "DEEPL_API_KEY" },
-    { id: "database", name: "Database", description: "Real Postgres per project — schema + login role, DATABASE_URL wired in", status: process.env.DEVHUB_DB_ADMIN_URL ? "live" : "needs_token", token: "DEVHUB_DB_ADMIN_URL" },
+    { id: "code", name: "Редактор кода", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
+    { id: "translate", name: "Перевод", description: "DeepL translation for generated copy", status: process.env.DEEPL_API_KEY ? "live" : "needs_token", token: "DEEPL_API_KEY" },
+    { id: "database", name: "База данных", description: "Real Postgres per project — schema + login role, DATABASE_URL wired in", status: process.env.DEVHUB_DB_ADMIN_URL ? "live" : "needs_token", token: "DEVHUB_DB_ADMIN_URL" },
     { id: "github", name: "GitHub", description: "Auto-push to GitHub repo", status: process.env.GITHUB_TOKEN ? "live" : "needs_token", token: "GITHUB_TOKEN" },
-    { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway — not available yet (per-project services not implemented)", status: process.env.DEVHUB_RAILWAY_PER_PROJECT ? "live" : "not_available", token: "RAILWAY_API_TOKEN" },
-    { id: "vercel", name: "Vercel Deploy", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
-    { id: "pages", name: "Cloudflare Pages Deploy", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
-    { id: "domain", name: "Domain (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
-    { id: "video", name: "Video Generation", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
+    { id: "railway", name: "Выкатка на Railway", description: "Deploy backends to Railway — not available yet (per-project services not implemented)", status: process.env.DEVHUB_RAILWAY_PER_PROJECT ? "live" : "not_available", token: "RAILWAY_API_TOKEN" },
+    { id: "vercel", name: "Выкатка на Vercel", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
+    { id: "pages", name: "Публикация на Cloudflare Pages", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
+    { id: "domain", name: "Домен (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
+    { id: "video", name: "Генерация видео", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
     // 3D объявлен на странице модуля среди возможностей «в одном проекте»,
     // а в этом списке его не было вовсе: панель показывала «настроено N из 16»,
     // и человек, считающий по списку, обещания не находил. Ключ тот же, что у
     // видео, поэтому состояние честно совпадает — но называться должно своим
     // именем: интерфейс до сих пор спрашивал про 3D под идентификатором video.
-    { id: "3d", name: "3D Generation", description: "Image → 3D mesh via Replicate (TRELLIS, Hunyuan3D)", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
-    { id: "image", name: "Image Generation", description: "AI images — OpenAI → Workers AI (flux) → Together fallback chain", status: (process.env.OPENAI_API_KEY || (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) || process.env.TOGETHER_API_KEY) ? "live" : "needs_token", tokens: ["OPENAI_API_KEY", "CLOUDFLARE_API_TOKEN", "TOGETHER_API_KEY"] },
-    { id: "screenshot_code", name: "Screenshot → Code", description: "Attach a design screenshot in the AI chat — a vision model recreates it as code", status: (process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) ? "live" : "needs_token", tokens: ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"] },
-    { id: "audio_tts", name: "Voice (TTS)", description: "ElevenLabs text-to-speech", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
-    { id: "audio_music", name: "Music & SFX", description: "AI music and sound effects", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
-    { id: "email", name: "Email", description: "Brevo transactional email", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
+    { id: "3d", name: "Генерация 3D", description: "Image → 3D mesh via Replicate (TRELLIS, Hunyuan3D)", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
+    { id: "image", name: "Генерация картинок", description: "AI images — OpenAI → Workers AI (flux) → Together fallback chain", status: (process.env.OPENAI_API_KEY || (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) || process.env.TOGETHER_API_KEY) ? "live" : "needs_token", tokens: ["OPENAI_API_KEY", "CLOUDFLARE_API_TOKEN", "TOGETHER_API_KEY"] },
+    { id: "screenshot_code", name: "Скриншот в код", description: "Attach a design screenshot in the AI chat — a vision model recreates it as code", status: (process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) ? "live" : "needs_token", tokens: ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"] },
+    { id: "audio_tts", name: "Озвучка", description: "ElevenLabs text-to-speech", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
+    { id: "audio_music", name: "Музыка и звуки", description: "AI music and sound effects", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
+    { id: "email", name: "Почта", description: "Brevo transactional email", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
     { id: "sms", name: "SMS", description: "Brevo SMS", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
     { id: "whatsapp", name: "WhatsApp", description: "WhatsApp Business API", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
   ];

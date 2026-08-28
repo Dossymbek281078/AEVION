@@ -1472,7 +1472,7 @@ devhubRouter.get("/projects", async (req, res) => {
     res.json({
       projects: projects.map((p, i) => ({ ...p, needsRedeploy: flags[i] })),
       total: projects.length,
-      storage: isDevHubDbReady() ? "postgres" : "memory",
+      storage: isDevHubDbReady() ? "db" : "memory",
     });
   } catch (e: any) {
     captureException(e, { route: "devhub/projects:list", userId });
@@ -3471,13 +3471,20 @@ devhubRouter.post("/snippets", async (req, res) => {
     createdAt: now(),
     updatedAt: now(),
   };
+  // Признак хранилища в КВИТАНЦИИ, как у создания проекта строкой выше.
+  // Замер 28.08 (роутер с нечитаемой базой): снипет отвечал 201 с полным
+  // объектом и ни словом не говорил, что лёг только в память процесса, —
+  // то есть исчезнет при перезапуске. Проект такой случай уже различал,
+  // снипет нет; непоследовательность внутри одного файла.
+  let storage: "db" | "memory" = "db";
   try {
     await dbSaveSnippet(snippet);
   } catch (e) {
     captureException(e, { route: "devhub/snippets:create", snippetId: snippet.id });
     memSnippets.set(snippet.id, snippet);
+    storage = "memory";
   }
-  res.status(201).json({ snippet: publicSnippet(snippet, userId) });
+  res.status(201).json({ snippet: publicSnippet(snippet, userId), storage });
 });
 
 // GET /api/devhub/snippets/:id — fetch single snippet

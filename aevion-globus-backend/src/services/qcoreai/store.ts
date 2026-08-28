@@ -4384,8 +4384,14 @@ export async function getSessionInvite(token: string): Promise<InviteRow | null>
     if (row.expiresAt && new Date(row.expiresAt) < new Date()) return null;
     return row;
   }
+  // Роль 'collab' — НЕ приглашение. 28.08.2026 ссылки совместного просмотра
+  // переехали из памяти в эту же таблицу, и без фильтра токен просмотра стал
+  // бы резолвиться здесь как обычное приглашение: два разных права с разным
+  // сроком жизни за одним ключом. Механизмы разные — держим их раздельно.
   const r = await pool.query(
-    `SELECT * FROM "QCoreSessionInvite" WHERE "token"=$1 AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`,
+    `SELECT * FROM "QCoreSessionInvite"
+      WHERE "token"=$1 AND "role" <> 'collab'
+        AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`,
     [token]
   );
   return (r.rows[0] as InviteRow) ?? null;

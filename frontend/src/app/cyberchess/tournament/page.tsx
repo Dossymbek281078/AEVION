@@ -315,7 +315,7 @@ export default function TournamentHubPage() {
               <Link href="/cyberchess" style={{ color: C.green, fontWeight: 700, textDecoration: "none" }}>
                 начать турнир →
               </Link>
-              {" "}— и твои медали появятся здесь, а сам ты встанешь в лидерборд ниже.
+              {" "}— и твои медали появятся здесь, а сам ты попадёшь в таблицу лидеров ниже.
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 240px), 1fr))", gap: 10 }}>

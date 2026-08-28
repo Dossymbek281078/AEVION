@@ -420,7 +420,7 @@ export default function PwaInstall() {
           <span style={{ color: '#bfdbfe' }}>Хочешь ежедневное напоминание?</span>
         </div>
         <p style={{ margin: 0, fontSize: 12.5, color: '#cbd5e1', lineHeight: 1.45 }}>
-          Раз в день в 19:00 — короткое уведомление о свежем пазле. Можно выключить в любой момент.
+          Раз в день в 19:00 — короткое уведомление о новой задаче. Можно выключить в любой момент.
         </p>
         <div style={actionsRow}>
           <button

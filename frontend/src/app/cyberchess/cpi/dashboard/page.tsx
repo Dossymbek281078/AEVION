@@ -422,7 +422,7 @@ export default function CPIDashboardPage() {
                 </div>
                 <div style={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
                   Твоя слабая зона: <strong style={{ color: C.yellow }}>{weakest.name}</strong> (avg {weakest.avg > 0 ? "+" : ""}{weakest.avg.toFixed(1)} / партия).
-                  {" "}Тренируй <strong style={{ color: C.text }}>пазлы {weakest.code}</strong> чтобы выправить CPI.
+                  {" "}Тренируй <strong style={{ color: C.text }}>задачи {weakest.code}</strong> чтобы выправить CPI.
                 </div>
               </section>
             )}

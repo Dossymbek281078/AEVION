@@ -438,7 +438,7 @@ export default function CyberChessMatchmakingPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {serverRating && (
                   <span
-                    title={`Рейтинг ${speedOf(timeControl)} · ${serverRating.games} партий${serverRating.provisional ? " · провизорный (мало партий)" : ""}`}
+                    title={`Рейтинг ${speedOf(timeControl)} · ${serverRating.games} партий${serverRating.provisional ? " · неточный (мало партий)" : ""}`}
                     className="planet-badge cyan"
                   >
                     {speedOf(timeControl)} {serverRating.rating}

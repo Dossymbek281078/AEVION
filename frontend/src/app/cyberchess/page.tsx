@@ -6604,7 +6604,7 @@ export default function CyberChessPage(){
                 {/* Рейтинг-платформа: лидерборд (с текущим онлайн-рейтингом) и история партий */}
                 <Link href="/cyberchess/leaderboard"
                   className="cc-focus-ring"
-                  aria-label="Рейтинг-лидерборд онлайн-матчей"
+                  aria-label="Таблица лидеров по рейтингу онлайн-матчей"
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,textDecoration:"none",
                     border:"1px solid #fcd34d",background:"linear-gradient(135deg,#fffbeb,#fef3c7)",color:"#92400e",
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
@@ -12437,9 +12437,9 @@ ${question.trim()}`;
           ]},
           {title:"Соревноваться",cat:"compete",items:[
             {e:"🏆",t:"Турниры онлайн",d:"Swiss · Round-robin · нокаут",to:"/cyberchess/tournaments",hot:true},
-            {e:"🥊",t:"Турнирный хаб",d:"Сетка · трофеи · лидерборд",to:"/cyberchess/tournament"},
+            {e:"🥊",t:"Турнирный хаб",d:"Сетка · трофеи · таблица лидеров",to:"/cyberchess/tournament"},
             {e:"📈",t:"CPI рейтинг",d:"Композитный рейтинг по 11 факторам",to:"/cyberchess/cpi/dashboard",hot:true},
-            {e:"🏅",t:"CPI лидерборд",d:"Топ по любому фактору силы",to:"/cyberchess/cpi/leaderboard"},
+            {e:"🏅",t:"Таблица лидеров CPI",d:"Топ по любому фактору силы",to:"/cyberchess/cpi/leaderboard"},
           ]},
           {title:"Смотреть",cat:"watch",items:[
             {e:"👁",t:"Спектатор",d:"Смотреть живые партии",to:"/cyberchess/spectator"},
@@ -13595,7 +13595,7 @@ ${question.trim()}`;
           const meIdx=board.findIndex(x=>x.isMe);
           return <div style={{marginTop:SPACE[3],padding:SPACE[3],borderRadius:RADIUS.md,background:CC.accentSoft,border:`1px solid ${CC.accent}`}}>
             <div style={{fontSize:12,fontWeight:900,color:CC.accent,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>
-              🏆 Глобальный лидерборд
+              🏆 Мировая таблица лидеров
               <Badge tone="accent" size="xs" style={{marginLeft:6,fontSize:9}}>демо</Badge>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:2}}>
@@ -13618,7 +13618,7 @@ ${question.trim()}`;
               })}
             </div>
             <div style={{fontSize:10,color:CC.textDim,marginTop:SPACE[2],fontStyle:"italic",lineHeight:1.4}}>
-              Топ-10 мировых гроссмейстеров — симулировано. Реальный лидерборд появится с запуском multiplayer.
+              Топ-10 мировых гроссмейстеров — симулировано. Настоящая таблица лидеров появится с запуском multiplayer.
             </div>
           </div>;
         })()}
@@ -13743,7 +13743,7 @@ ${question.trim()}`;
             </Btn>
           </div>
           {coordLB.length>0&&<Card padding={SPACE[3]} tone="surface1">
-            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>Лидерборд (TOP 10)</div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>Лучшие 10 игроков</div>
             <div style={{display:"flex",flexDirection:"column",gap:4}}>
               {coordLB.slice(0,10).map((e,i)=>{
                 const r=coordRank(e.result.score);
@@ -14149,7 +14149,7 @@ ${question.trim()}`;
               <Row label="↳ Финальный сигнал" desc="Звук при мате, просрочке, сдаче." checked={sndClock} onChange={()=>{const nv=!sndClock;sSndClock(nv);try{localStorage.setItem(SK_CLOCK,nv?"1":"0")}catch{}}}/>
               <Row label="↳ UI-события" desc="Уведомления, ачивки, toast-звуки." checked={sndUi} onChange={()=>{const nv=!sndUi;sSndUi(nv);try{localStorage.setItem(SK_UI,nv?"1":"0")}catch{}}}/>
             </div>}
-            <Row label="Голос-коуч (гроссмейстерский разбор)" desc="ИИ вслух объясняет ходы на уровне гроссмейстера. Опт-ин: в анализе и обучении, в партии — по желанию. В пазлах не звучит." checked={liveCommentary} onChange={()=>{const nv=!liveCommentary;sLiveCommentary(nv);showToast(nv?"Голос-коуч включён — разбор в анализе/обучении":"Голос-коуч выключен","info")}}/>
+            <Row label="Голос-коуч (гроссмейстерский разбор)" desc="ИИ вслух объясняет ходы на уровне гроссмейстера. Включается в анализе и обучении, в партии — по желанию. В задачах не звучит." checked={liveCommentary} onChange={()=>{const nv=!liveCommentary;sLiveCommentary(nv);showToast(nv?"Голос-коуч включён — разбор в анализе/обучении":"Голос-коуч выключен","info")}}/>
             <Row label="Голос на Master Games" desc="Чтение разбора и заметок к ходам в библиотеке мастеров." checked={masterVoice} onChange={()=>{
               if(masterVoice&&typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel();
               sMasterVoice(v=>!v);
@@ -15278,7 +15278,7 @@ ${question.trim()}`;
         {id:"nav-economy",  icon:"🪙",group:"Разделы", label:"Chessy Экономика",      hint:"Аукцион · аренда коуча · подписки", run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/economy"}},
         {id:"nav-training", icon:"🎯",group:"Разделы", label:"Тренинг-хаб",           hint:"Ежедневные упражнения",         run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/training"}},
         {id:"nav-cpi",      icon:"📈",group:"Разделы", label:"CPI рейтинг",           hint:"Композитный рейтинг по 11 факторам", run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/cpi/dashboard"}},
-        {id:"nav-cpi-lb",   icon:"🏅",group:"Разделы", label:"CPI лидерборд",         hint:"Топ по любому фактору силы",    run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/cpi/leaderboard"}},
+        {id:"nav-cpi-lb",   icon:"🏅",group:"Разделы", label:"Таблица лидеров CPI",         hint:"Топ по любому фактору силы",    run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/cpi/leaderboard"}},
         {id:"nav-replays",  icon:"🎬",group:"Разделы", label:"Реплеи",               hint:"Записи партий с разбором",       run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/replays"}},
         {id:"nav-spectate", icon:"👁",group:"Разделы", label:"Спектатор",            hint:"Смотреть живые партии",         run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/spectator"}},
         {id:"nav-studio",   icon:"🎥",group:"Разделы", label:"Студия",               hint:"Стрим-оверлеи и продакшн",      run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/studio"}},

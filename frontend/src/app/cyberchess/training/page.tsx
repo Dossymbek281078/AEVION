@@ -57,10 +57,10 @@ const FACTOR_DRILLS: Record<string, { name: string; emoji: string; drillName: st
   T:  { name: "Время",            emoji: "⏱",  drillName: "Blitz (3+0)",              href: "/cyberchess?train=blitz",     reps: "3 партии" },
   O:  { name: "Дебюты",           emoji: "📖", drillName: "Opening Trainer",          href: "/cyberchess?train=openings",  reps: "10 линий" },
   B1: { name: "Лучшая линия",     emoji: "①",  drillName: "Analysis review",          href: "/cyberchess?tab=analysis",    reps: "Последняя партия" },
-  M1: { name: "Мат-1 зрение",     emoji: "💀", drillName: "Puzzle Rush — mate-1",     href: "/cyberchess?train=mate1",     reps: "20 пазлов" },
-  M2: { name: "Мат-2 зрение",     emoji: "💀💀", drillName: "Puzzle Rush — mate-2", href: "/cyberchess?train=mate2",   reps: "15 пазлов" },
-  M3: { name: "Мат-3 зрение",     emoji: "💀💀💀", drillName: "Mate-in-3 пазлы",     href: "/cyberchess?train=mate3",     reps: "10 пазлов" },
-  H:  { name: "Зевки",            emoji: "💥", drillName: "Defensive puzzles",        href: "/cyberchess?train=defense",   reps: "15 пазлов" },
+  M1: { name: "Мат-1 зрение",     emoji: "💀", drillName: "Серия задач — мат в 1",     href: "/cyberchess?train=mate1",     reps: "20 задач" },
+  M2: { name: "Мат-2 зрение",     emoji: "💀💀", drillName: "Серия задач — мат в 2", href: "/cyberchess?train=mate2",   reps: "15 задач" },
+  M3: { name: "Мат-3 зрение",     emoji: "💀💀💀", drillName: "Задачи на мат в 3",     href: "/cyberchess?train=mate3",     reps: "10 задач" },
+  H:  { name: "Зевки",            emoji: "💥", drillName: "Задачи на защиту",        href: "/cyberchess?train=defense",   reps: "15 задач" },
   Br: { name: "Бриллианты",       emoji: "💎", drillName: "Masters tab — изучай шедевры", href: "/cyberchess?tab=masters", reps: "5 партий" },
 };
 

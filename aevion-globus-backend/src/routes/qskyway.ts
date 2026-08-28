@@ -630,7 +630,11 @@ function buildRoute(
       // русской, и я нарушил собственное соглашение модуля через несколько
       // часов после того, как его записал.
       note: guessedInertSegments > 0
-        ? `На ${guessedInertSegments} участк(ах) высота угадана, а страховочный запас за неуверенность съеден полом коридора: просвет ${CLEAR} м гарантирован только если здание не выше ${FLOOR - CLEAR} м.`
+        // Склонение, а не «участк(ах)». Рядом в этом же файле стоит правило:
+        // цифра, которую модуль честно считает, а потом рисует как
+        // «1 площадок», обесценивает всю аккуратность расчёта. Своё же
+        // правило я и нарушил, добавляя это поле ночью.
+        ? `На ${plural(guessedInertSegments, "участке", "участках", "участках")} высота угадана, а страховочный запас за неуверенность съеден полом коридора: просвет ${CLEAR} м гарантирован только если здание не выше ${FLOOR - CLEAR} м.`
         : "Все участки с угаданной высотой получили настоящий страховочный запас.",
       noteEn: guessedInertSegments > 0
         ? `On ${guessedInertSegments} segment(s) the building height is a guess and the low-confidence margin is absorbed by the corridor floor: the ${CLEAR} m clearance holds only if the building is no taller than ${FLOOR - CLEAR} m.`

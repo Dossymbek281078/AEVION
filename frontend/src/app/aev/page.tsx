@@ -926,8 +926,8 @@ export default function AEVPage() {
           fontSize: 12, color: "#475569", lineHeight: 1.6,
         }}>
           <strong style={{ color: "#0f172a" }}>Tokenomics в одной строке:</strong> один кошелёк, три параллельных движка эмиссии,
-          хард-кап 21M, балланс persist в localStorage. Продай AEV в <a href="/qtrade" style={{ color: "#2563eb", fontWeight: 700 }}>QTrade</a> по
-          симулированной паре AEV/USD (random-walk price feed). В продакшне Proof-of-Play хуки добавятся в каждый Wave1-модуль и в QCoreAI run-trace.
+          предел выпуска 21 млн, баланс сохраняется в вашем браузере. Продай AEV в <a href="/qtrade" style={{ color: "#2563eb", fontWeight: 700 }}>QTrade</a> по
+          симулированной паре AEV/USD: цена меняется случайно, это demo-режим. В продакшне Proof-of-Play хуки добавятся в каждый Wave1-модуль и в QCoreAI run-trace.
         </div>
       </ProductPageShell>
     </main>

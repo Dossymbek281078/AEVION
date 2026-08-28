@@ -1,0 +1,130 @@
+import { describe, test, expect } from "vitest";
+
+import { clientIp, bucketFingerprint } from "../src/lib/rateLimit";
+
+/**
+ * Ключ ограничителя должен быть адресом ЧЕЛОВЕКА, а не внутреннего прокси.
+ *
+ * Замер на проде 28.08.2026 с четырьмя контролями: при постоянном собственном
+ * адресе (147.30.21.19, проверен шесть раз) и принудительном IPv4 остаток
+ * лимита в ОТДЕЛЬНЫХ соединениях шёл вразнобой — 29 28 29 29 28 29 27 27 28 26,
+ * а внутри ОДНОГО соединения был идеален: 29 28 27 26 25 24.
+ *
+ * То есть один человек получал несколько лимитов, а все пришедшие через один
+ * внутренний узел делили один. Предел не «на посетителя» ни в одну сторону.
+ *
+ * Причина: `trust proxy = 1` доверяет одному узлу, а у Railway их больше, и
+ * `req.ip` останавливается на внутреннем прокси (документировано вендором:
+ * внутренние узлы всегда в 100.0.0.0/8, источник правды — заголовок X-Real-IP).
+ */
+
+const behindRailway = (realIp: string | undefined, extra: Record<string, unknown> = {}) => ({
+  ip: "100.64.3.7",                       // то, что даёт trust proxy = 1
+  socket: { remoteAddress: "100.64.3.7" }, // сокет пришёл от внутреннего узла
+  headers: { ...(realIp !== undefined ? { "x-real-ip": realIp } : {}), ...extra },
+});
+
+describe("ключ ограничителя за прокси Railway", () => {
+  test("берёт X-Real-IP, а не адрес внутреннего узла", () => {
+    expect(clientIp(behindRailway("147.30.21.19"))).toBe("147.30.21.19");
+  });
+
+  test("два запроса через РАЗНЫЕ внутренние узлы — один ключ", () => {
+    // Ровно то, что ломалось на проде: один человек, разные узлы, разные корзины.
+    const a = clientIp({ ip: "100.64.3.7", socket: { remoteAddress: "100.64.3.7" }, headers: { "x-real-ip": "147.30.21.19" } });
+    const b = clientIp({ ip: "100.64.9.1", socket: { remoteAddress: "100.64.9.1" }, headers: { "x-real-ip": "147.30.21.19" } });
+    expect(a).toBe(b);
+  });
+
+  test("два РАЗНЫХ человека через один узел — разные ключи", () => {
+    // Обратная сторона того же дефекта: они делили одну корзину.
+    const a = clientIp({ ip: "100.64.3.7", socket: { remoteAddress: "100.64.3.7" }, headers: { "x-real-ip": "1.1.1.1" } });
+    const b = clientIp({ ip: "100.64.3.7", socket: { remoteAddress: "100.64.3.7" }, headers: { "x-real-ip": "2.2.2.2" } });
+    expect(a).not.toBe(b);
+  });
+
+  test("НЕ за прокси — заголовку не верим", () => {
+    // Иначе кто угодно подставил бы себе чужой адрес. Снаружи прийти с 100.x
+    // нельзя, поэтому проверка сокета и есть вся защита.
+    const spoofed = clientIp({
+      ip: "8.8.8.8",
+      socket: { remoteAddress: "8.8.8.8" },
+      headers: { "x-real-ip": "1.1.1.1" },
+    });
+    expect(spoofed).toBe("8.8.8.8");
+  });
+
+  test("нет заголовка — ведём себя ровно как раньше", () => {
+    expect(clientIp(behindRailway(undefined))).toBe("100.64.3.7");
+  });
+
+  test("мусор вместо адреса не принимается", () => {
+    expect(clientIp(behindRailway("не адрес"))).toBe("100.64.3.7");
+    expect(clientIp(behindRailway(""))).toBe("100.64.3.7");
+  });
+
+  test("IPv6 от одного человека сводится к одному ключу", () => {
+    // Провайдер выдаёт клиенту целый префикс; без нормализации это был бы
+    // обход любого предела по адресу.
+    const a = clientIp(behindRailway("2a02:6b8:c02:900:0:f:c04:0"));
+    const b = clientIp(behindRailway("2a02:6b8:c02:900:0:f:c04:ffff"));
+    expect(a).toBe(b);
+  });
+
+  test("локальный запуск: заголовок работает и без Railway", () => {
+    expect(clientIp({ ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" }, headers: { "x-real-ip": "9.9.9.9" } })).toBe("9.9.9.9");
+  });
+});
+
+describe("отпечаток корзины: видно снаружи, но необратим", () => {
+  test("одинаковый ключ — одинаковый отпечаток", () => {
+    expect(bucketFingerprint("rl:1.2.3.4")).toBe(bucketFingerprint("rl:1.2.3.4"));
+  });
+
+  test("разные ключи — разные отпечатки", () => {
+    expect(bucketFingerprint("rl:1.2.3.4")).not.toBe(bucketFingerprint("rl:5.6.7.8"));
+  });
+
+  test("адрес по отпечатку не читается", () => {
+    // Ради этого он и хеш: заголовок уходит наружу каждому.
+    const fp = bucketFingerprint("rl:147.30.21.19");
+    expect(fp).not.toContain("147");
+    expect(fp).toHaveLength(8);
+    expect(/^[0-9a-f]{8}$/.test(fp)).toBe(true);
+  });
+});
+
+describe("диагностическая запись: по форме, а не по первому вызову", () => {
+  test("путь входит в форму: служебная проверка и запрос посетителя различимы", async () => {
+    // Ради этого зонд и переписан. Одноразовая версия напечатала строку про
+    // проверку живости платформы (локальная петля, без заголовков), и по ней
+    // напрашивался вывод обо ВСЕХ посетителях.
+    const { readFileSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..", "src", "lib", "rateLimit.ts"),
+      "utf8",
+    );
+    const at = src.indexOf("const shape = [");
+    expect(at, "форма корзины собирается не списком — проверь зонд").toBeGreaterThan(-1);
+    expect(src.slice(at, at + 120)).toContain("where");
+    expect(src).toContain('url.startsWith("/api")');
+  });
+
+  test("в строке нет полного адреса — только его форма", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..", "src", "lib", "rateLimit.ts"),
+      "utf8",
+    );
+    const at = src.indexOf("форма соседа по сокету");
+    expect(at).toBeGreaterThan(-1);
+    const call = src.slice(at, at + 400);
+    expect(call).toContain("firstOctet");
+    expect(/,\s*peer\s*[,)]/.test(call), "в журнал уходит полный адрес соседа").toBe(false);
+    expect(/,\s*bare\s*[,)]/.test(call), "в журнал уходит полный адрес соседа").toBe(false);
+  });
+});

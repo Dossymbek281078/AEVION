@@ -91,7 +91,7 @@ describe("ворота стоят на обеих платных ручках", 
 
   test("поток тоже под ограничителем частоты", () => {
     // У /chat ограничитель был, у /chat-stream — нет, при той же цене вызова.
-    expect(src).toContain('qcoreaiRouter.post("/chat-stream", chatLimiter');
+    expect(src).toContain('qcoreaiRouter.post("/chat-stream", anonChatCeiling, exposeCeilingRemaining, chatLimiter');
   });
 
   test("отказ — 413, а не 500", () => {

@@ -55,7 +55,7 @@ async function req(method, path, opts = {}) {
     const r = await fetch(`${BASE}${path}`, init);
     const ct = r.headers.get("content-type") || "";
     let json; try { json = await r.json(); } catch { json = {}; }
-    return { status: r.status, body: json, ct };
+    return { status: r.status, body: json, ct, resHeaders: r.headers };
   } catch (e) { return { status: 0, body: {}, ct: "", error: e?.message }; }
 }
 
@@ -180,6 +180,28 @@ async function run() {
   else fail("POST /multichat/rooms auth gate", `got=${r.status}`);
 
   // ── Cross-module Content-Type ───────────────────────────────────────────
+  // ── Денежная защита: потолок анонимного расхода ──
+  //
+  // 28.08.2026 замерено, что считать посетителя по адресу на этой платформе
+  // нечем: X-Real-IP заполняет она сама одним из ~7 своих внутренних адресов,
+  // и один человек получал СЕМЬ корзин вместо одной — то есть предел был не 30
+  // обращений в минуту к платной модели, а около 210. Ограничен расход: общий
+  // потолок 120/мин на всех анонимов (anonChatCeiling / anonCoachCeiling).
+  //
+  // Проверяем НАЛИЧИЕ потолка снаружи. Без этого его пропажа при следующем
+  // слиянии не проявится ничем: страница работает, ошибок нет, счёт растёт.
+  // Тело пустое — ручка ответит 400 ещё до платного вызова, денег не тратим.
+  const ceil = await req("POST", "/api/qcoreai/chat", { body: {} });
+  const ceilLeft = ceil.resHeaders ? ceil.resHeaders.get("x-anon-ceiling-remaining") : null;
+  if (ceil.status === 429) {
+    // Потолок уже исчерпан кем-то — это тоже доказательство, что он стоит.
+    ok("потолок анонимного расхода", "исчерпан (429) — значит он на месте");
+  } else if (ceilLeft !== null && Number.isFinite(Number(ceilLeft))) {
+    ok("потолок анонимного расхода", `остаток=${ceilLeft}`);
+  } else {
+    fail("потолок анонимного расхода", `нет заголовка X-Anon-Ceiling-Remaining (статус ${ceil.status}) — платный ИИ без потолка`);
+  }
+
   const healthChecks = [
     "/api/coach/health",
     "/api/qlearn/health",

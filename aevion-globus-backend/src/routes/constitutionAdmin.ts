@@ -19,6 +19,7 @@
 
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { clientIp as sharedClientIp } from "../lib/rateLimit";
 
 const ADMIN_ALLOWLIST = (process.env.CONSTITUTION_ADMIN_ALLOWLIST || "yahiin1978@gmail.com")
   .split(",")
@@ -71,11 +72,13 @@ function bucketKey(method: string, path: string): string {
 }
 
 function clientIp(req: Request): string {
-  return (
-    (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
-    req.socket.remoteAddress ||
-    "unknown"
-  );
+  // Читать X-Forwarded-For напрямую нельзя: прокси дописывает себя СПРАВА,
+  // поэтому левый элемент пишет сам клиент и его никто не проверяет. Здесь
+  // значение идёт в isBanned() — то есть подделка одного заголовка снимала
+  // бан. `req.ip` читает тот же заголовок, но только по узлам, которые
+  // приложение объявило доверенными (app.set("trust proxy", 1) в index.ts),
+  // и helper дополнительно нормализует адрес, закрывая обход по IPv6.
+  return sharedClientIp(req);
 }
 
 function rotate(): void {

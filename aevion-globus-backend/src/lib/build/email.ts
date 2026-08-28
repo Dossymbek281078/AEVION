@@ -110,7 +110,12 @@ async function send(to: string, subject: string, html: string): Promise<boolean>
   }
 }
 
-function layout(body: string): string {
+// brand — чьё имя стоит в письме. По умолчанию QBuild: этот почтовик его и
+// обслуживает. Но ПЛАТФОРМЕННОЕ подтверждение адреса зовёт ту же функцию, и
+// человек, зарегистрировавшийся играть в шахматы, получал письмо от чужого
+// модуля. Замер 28.08.2026 на живом ящике: отправитель «AEVION QPayNet»,
+// тема «Подтвердите email — AEVION QBuild». Два чужих имени в одном письме.
+function layout(body: string, brand = "AEVION QBuild"): string {
   return `
 <!DOCTYPE html>
 <html lang="ru">
@@ -126,9 +131,9 @@ function layout(body: string): string {
 </style>
 </head>
 <body><div class="card">
-  <div class="logo">AEVION QBuild</div>
+  <div class="logo">${brand}</div>
   ${body}
-  <p class="muted">Это автоматическое уведомление от AEVION QBuild. Не отвечайте на это письмо.</p>
+  <p class="muted">Это автоматическое уведомление от ${brand}. Не отвечайте на это письмо.</p>
 </div></body></html>`;
 }
 
@@ -266,11 +271,20 @@ export async function sendVerificationEmail(opts: {
   to: string;
   name: string;
   token: string;
+  /** Имя в письме. Платформенная регистрация передаёт "AEVION": человек
+   *  заводит аккаунт AEVION, а не модуля найма. */
+  brand?: string;
+  /** Идентификатор строки токена. Без него страница не сможет завершить
+   *  подтверждение у человека, который открыл письмо на телефоне и не вошёл:
+   *  секрет хранится bcrypt-хешем, найти его по значению нельзя. */
+  tokenId?: string;
 }): Promise<boolean> {
-  const link = `${BASE}/build/verify-email?token=${encodeURIComponent(opts.token)}`;
+  const brand = opts.brand || "AEVION QBuild";
+  const idPart = opts.tokenId ? `&id=${encodeURIComponent(opts.tokenId)}` : "";
+  const link = `${BASE}/build/verify-email?token=${encodeURIComponent(opts.token)}${idPart}`;
   return send(
     opts.to,
-    "Подтвердите email — AEVION QBuild",
+    `Подтвердите email — ${brand}`,
     layout(`
       <h2>Подтвердите ваш email</h2>
       <p>Привет, <strong>${opts.name}</strong>! Для активации аккаунта нажмите кнопку ниже.</p>
@@ -280,7 +294,7 @@ export async function sendVerificationEmail(opts: {
         Если кнопка не работает, скопируйте ссылку:<br>${link}
       </p>
       <p style="font-size:12px;color:#64748b">Если вы не регистрировались — проигнорируйте это письмо.</p>
-    `),
+    `, brand),
   );
 }
 

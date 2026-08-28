@@ -92,7 +92,14 @@ export default async function CyberChessLaunchPage({
   const bankLabel = bank ? new Intl.NumberFormat("ru-RU").format(bank) : null;
 
   return (
-    <main style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px" }}>
+    // lang="ru" на самом блоке содержимого — потому что <html lang> задаётся в
+    // общем шаблоне сайта и стоит "en" (большая часть страниц английская).
+    // Замер 28.08.2026 по отдаваемому HTML: здесь 951 русская буква против 28
+    // латинских, а страница объявлена английской. Правка в браузере это чинит,
+    // но робот, который не исполняет скрипты, видит английскую пометку.
+    // Пометка на элементе — стандартная и действует для вложенного текста:
+    // ближайший lang выигрывает у корневого.
+    <main lang="ru" style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px" }}>
       <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
         <header>
           <div style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: "0.12em", color: GOLD, textTransform: "uppercase" }}>

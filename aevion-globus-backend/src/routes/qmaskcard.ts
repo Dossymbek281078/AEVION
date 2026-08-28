@@ -129,9 +129,9 @@ qmaskcardRouter.get("/health", (_req, res) => {
 // ── POST /masks — issue a new virtual card
 qmaskcardRouter.post("/masks", writeLimit, async (req, res) => {
   try {
-    await ensureTables();
     const auth = verifyBearerOptional(req);
     if (!auth) return res.status(401).json({ error: "auth required" });
+    await ensureTables();
     const {
       label,
       kind = "single-use",
@@ -187,9 +187,9 @@ qmaskcardRouter.post("/masks", writeLimit, async (req, res) => {
 // ── GET /masks — list user's masks
 qmaskcardRouter.get("/masks", readLimit, async (req, res) => {
   try {
-    await ensureTables();
     const auth = verifyBearerOptional(req);
     if (!auth) return res.status(401).json({ error: "auth required" });
+    await ensureTables();
     const pool = getPool();
     const includeRevoked = req.query.includeRevoked === "1";
     const sql = `
@@ -211,9 +211,9 @@ qmaskcardRouter.get("/masks", readLimit, async (req, res) => {
 // ── POST /masks/:id/revoke
 qmaskcardRouter.post("/masks/:id/revoke", writeLimit, async (req, res) => {
   try {
-    await ensureTables();
     const auth = verifyBearerOptional(req);
     if (!auth) return res.status(401).json({ error: "auth required" });
+    await ensureTables();
     const pool = getPool();
     const r = await pool.query(
       `UPDATE "QMaskCardMask" SET "revokedAt" = NOW()
@@ -235,9 +235,9 @@ qmaskcardRouter.post("/masks/:id/revoke", writeLimit, async (req, res) => {
 // ── POST /masks/:id/freeze — reversible pause (charges decline while frozen)
 qmaskcardRouter.post("/masks/:id/freeze", writeLimit, async (req, res) => {
   try {
-    await ensureTables();
     const auth = verifyBearerOptional(req);
     if (!auth) return res.status(401).json({ error: "auth required" });
+    await ensureTables();
     const pool = getPool();
     const r = await pool.query(
       `UPDATE "QMaskCardMask" SET "frozenAt" = NOW()
@@ -259,9 +259,9 @@ qmaskcardRouter.post("/masks/:id/freeze", writeLimit, async (req, res) => {
 // ── POST /masks/:id/unfreeze — lift a freeze
 qmaskcardRouter.post("/masks/:id/unfreeze", writeLimit, async (req, res) => {
   try {
-    await ensureTables();
     const auth = verifyBearerOptional(req);
     if (!auth) return res.status(401).json({ error: "auth required" });
+    await ensureTables();
     const pool = getPool();
     const r = await pool.query(
       `UPDATE "QMaskCardMask" SET "frozenAt" = NULL
@@ -286,9 +286,9 @@ qmaskcardRouter.post("/masks/:id/unfreeze", writeLimit, async (req, res) => {
 // (claws back unspent balance) without ever letting spent exceed the new cap.
 qmaskcardRouter.patch("/masks/:id/limit", writeLimit, async (req, res) => {
   try {
-    await ensureTables();
     const auth = verifyBearerOptional(req);
     if (!auth) return res.status(401).json({ error: "auth required" });
+    await ensureTables();
     const newLimit = parseInt(String((req.body || {}).spendLimitCents), 10);
     if (!Number.isFinite(newLimit) || newLimit < 100 || newLimit > 100_000_000) {
       return res.status(400).json({ error: "spendLimitCents must be 100..100000000" });
@@ -324,9 +324,9 @@ qmaskcardRouter.patch("/masks/:id/limit", writeLimit, async (req, res) => {
 // ── POST /charges — authorize a charge against a mask
 qmaskcardRouter.post("/charges", chargeLimit, async (req, res) => {
   try {
-    await ensureTables();
     const auth = verifyBearerOptional(req);
     if (!auth) return res.status(401).json({ error: "auth required" });
+    await ensureTables();
     const { maskId, amountCents, currency = "USD", merchantName, merchantCategory, geoCountry, paymentRef } = req.body || {};
     if (!maskId) return res.status(400).json({ error: "maskId required" });
     const amount = parseInt(String(amountCents), 10);
@@ -449,9 +449,9 @@ async function decline(
 
 qmaskcardRouter.get("/charges", readLimit, async (req, res) => {
   try {
-    await ensureTables();
     const auth = verifyBearerOptional(req);
     if (!auth) return res.status(401).json({ error: "auth required" });
+    await ensureTables();
     const maskId = String(req.query.maskId ?? "").trim();
     const pool = getPool();
     const params: unknown[] = [auth.sub];

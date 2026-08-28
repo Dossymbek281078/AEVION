@@ -917,7 +917,9 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
     // показывала «письмо отправлено» независимо от факта), а поле нужно тем,
     // кто читает тело.
     const siteBase = (process.env.PUBLIC_SITE_URL || "https://aevion.app").replace(/[/]+$/, "");
-    const verifyUrl = `${siteBase}/build/verify-email?token=${encodeURIComponent(minted.plaintext)}`;
+    // Идентификатор строки едет рядом с секретом: он и позволяет завершить
+    // подтверждение человеку, который открыл письмо на телефоне без входа.
+    const verifyUrl = `${siteBase}/build/verify-email?token=${encodeURIComponent(minted.plaintext)}&id=${encodeURIComponent(id)}`;
 
     const viaQBuild = canSendEmail();
     const viaBrevo = Boolean(process.env.BREVO_API_KEY?.trim());
@@ -937,6 +939,12 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
           to: user.email,
           name: user.name || user.email,
           token: minted.plaintext,
+          // Человек заводит аккаунт ПЛАТФОРМЫ, а не модуля найма. Почтовик мы
+          // переиспользуем чужой — это нормально, но имя в письме должно быть
+          // своё. Замер 28.08.2026 на живом ящике: письмо приходило с темой
+          // «Подтвердите email — AEVION QBuild» от «AEVION QPayNet».
+          brand: "AEVION",
+          tokenId: id,
         })
       : await sendEmailVerify(user.email, verifyUrl);
 
@@ -962,40 +970,78 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
   }
 });
 
-// 🔹 POST /email/verify/complete — { token }. Auth required.
-authRouter.post("/email/verify/complete", async (req, res) => {
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+// 🔹 POST /email/verify/complete — { token, tokenId? }.
+//
+// ДВА ПУТИ, и второй появился после замера 28.08.2026.
+//
+// Раньше ручка ТРЕБОВАЛА входа и искала токен по `userId`. Проверяя её, я сам
+// подставлял bearer — и записал «работает». Потом открыл ту же ссылку из письма
+// в ЧИСТОМ браузере, как человек делает на телефоне: 401, подтверждение не
+// проходит, а на экране служебное «отсутствует bearer token». Я проверил путь
+// тем способом, которым удобно мне, а не тем, которым идёт человек.
+//
+// Искать токен по значению нельзя: он хранится bcrypt-хешем, соли у всех разные.
+// Поэтому в ссылку кладётся ещё и ИДЕНТИФИКАТОР строки: сервер берёт по нему
+// одну запись и сверяет секрет. Стойкость та же — секрет прежний, одноразовый,
+// живёт сутки; идентификатор без секрета бесполезен.
+//
+// Старый путь оставлен: ссылки, разосланные до этой правки, содержат только
+// секрет, и они обязаны продолжать работать у вошедшего человека.
+authRouter.post("/email/verify/complete", emailVerifyRateLimit, async (req, res) => {
   try {
-    const payload: any = requireAuth(req, res);
-    if (!payload) return;
     await ensureAuthTier2Tables();
 
     const token = String(req.body?.token || "").trim();
+    const tokenId = String(req.body?.tokenId || "").trim();
     if (!token) return res.status(400).json({ error: "token required" });
 
-    const candidates = await pool.query(
-      `SELECT "id", "tokenHash" FROM "EmailVerifyToken"
-       WHERE "userId" = $1 AND "usedAt" IS NULL AND "expiresAt" > NOW()
-       ORDER BY "createdAt" DESC
-       LIMIT 10`,
-      [payload.sub]
-    );
     let matchedId: string | null = null;
-    for (const row of candidates.rows as { id: string; tokenHash: string }[]) {
-      if (await tokenMatches(token, row.tokenHash)) {
+    let userId: string | null = null;
+
+    if (tokenId) {
+      // Форму идентификатора проверяем САМИ: Postgres на кривом uuid бросает
+      // исключение, и ошибка запроса превратилась бы в 500 — то есть в нашу
+      // аварию и шум в Sentry вместо честного отказа клиенту.
+      if (!UUID_RE.test(tokenId)) return res.status(400).json({ error: "invalid token" });
+      const one = await pool.query(
+        `SELECT "id", "userId", "tokenHash" FROM "EmailVerifyToken"
+         WHERE "id" = $1 AND "usedAt" IS NULL AND "expiresAt" > NOW()`,
+        [tokenId]
+      );
+      const row = one.rows[0] as { id: string; userId: string; tokenHash: string } | undefined;
+      if (row && (await tokenMatches(token, row.tokenHash))) {
         matchedId = row.id;
-        break;
+        userId = row.userId;
+      }
+    } else {
+      const payload: any = requireAuth(req, res);
+      if (!payload) return;
+      const candidates = await pool.query(
+        `SELECT "id", "tokenHash" FROM "EmailVerifyToken"
+         WHERE "userId" = $1 AND "usedAt" IS NULL AND "expiresAt" > NOW()
+         ORDER BY "createdAt" DESC
+         LIMIT 10`,
+        [payload.sub]
+      );
+      for (const row of candidates.rows as { id: string; tokenHash: string }[]) {
+        if (await tokenMatches(token, row.tokenHash)) {
+          matchedId = row.id;
+          userId = payload.sub;
+          break;
+        }
       }
     }
-    if (!matchedId) {
-      recordAuthAudit(payload.sub, "email.verify.complete.failed", req, { reason: "bad_token" });
+
+    if (!matchedId || !userId) {
+      recordAuthAudit(userId, "email.verify.complete.failed", req, { reason: "bad_token" });
       return res.status(400).json({ error: "invalid token" });
     }
 
     await pool.query(`UPDATE "EmailVerifyToken" SET "usedAt" = NOW() WHERE "id" = $1`, [matchedId]);
-    await pool.query(`UPDATE "AEVIONUser" SET "emailVerifiedAt" = NOW() WHERE "id" = $1`, [
-      payload.sub,
-    ]);
-    recordAuthAudit(payload.sub, "email.verify.complete", req, null);
+    await pool.query(`UPDATE "AEVIONUser" SET "emailVerifiedAt" = NOW() WHERE "id" = $1`, [userId]);
+    recordAuthAudit(userId, "email.verify.complete", req, null);
     res.json({ verified: true });
   } catch (err: any) {
     captureAuthError(err, { route: "email-verify-complete" });

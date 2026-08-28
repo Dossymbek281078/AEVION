@@ -45,6 +45,7 @@ import { classifyGithubResponse, githubUnreachable } from "../lib/githubFailure"
 import { buildRunInstructions } from "../lib/devhubRunInstructions";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
 import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
+import { safeErrorText } from "../lib/safeErrorText";
 
 export const devhubRouter = Router();
 
@@ -2281,7 +2282,10 @@ devhubRouter.get("/projects/:id/checkpoints", async (req, res) => {
     });
   } catch (e: any) {
     captureException(e, { route: "devhub/checkpoints:list", projectId: project.id });
-    return res.status(500).json({ error: e?.message || "failed to list checkpoints" });
+    // список точек восстановления — это ЧТЕНИЕ: недоступность базы это 503,
+    // а 500 читается как «сломались мы» и поднимает ложную тревогу.
+    captureException(e as Error);
+    return replyStorageUnavailable(res);
   }
 });
 
@@ -2351,7 +2355,7 @@ devhubRouter.post("/plan", async (req, res) => {
     return res.json(plan);
   } catch (e: any) {
     captureException(e, { route: "devhub/plan" });
-    return res.status(500).json({ error: e?.message || "planning failed" });
+    return res.status(500).json({ error: safeErrorText(e) || "planning failed" });
   }
 });
 
@@ -3645,7 +3649,10 @@ devhubRouter.delete("/snippets/:id", async (req, res) => {
     // Молчаливый успех здесь хуже отказа: человек увидел бы, что сниппет снят,
     // а он остался бы на публичной полке.
     captureException(e, { route: "devhub/snippets:delete", snippetId: snippet.id });
-    return res.status(500).json({ error: "delete failed" });
+    // удаление сниппета — отказ хранилища, не наша поломка: недоступность базы это 503,
+    // а 500 читается как «сломались мы» и поднимает ложную тревогу.
+    captureException(e as Error);
+    return replyStorageUnavailable(res);
   }
   memSnippets.delete(snippet.id);
   res.json({ ok: true, id: snippet.id });
@@ -4557,7 +4564,7 @@ devhubRouter.post("/projects/:id/drive/import", async (req, res) => {
     }
     res.json({ ok: true, path, bytes: content.length, mimeType: meta.mimeType, storage });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Drive import failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Drive import failed" });
   }
 });
 
@@ -6026,7 +6033,7 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
     deployment.buildLog = e?.message || "deploy failed";
     deployment.completedAt = now();
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
-    return res.status(500).json({ ok: false, error: e?.message || "Vercel deploy failed" });
+    return res.status(500).json({ ok: false, error: safeErrorText(e) || "Vercel deploy failed" });
   }
 });
 
@@ -6261,7 +6268,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     deployment.status = "failed"; deployment.buildLog = e?.message || "deploy failed";
     deployment.completedAt = now();
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
-    return res.status(500).json({ ok: false, error: e?.message || "Cloudflare Pages deploy failed" });
+    return res.status(500).json({ ok: false, error: safeErrorText(e) || "Cloudflare Pages deploy failed" });
   }
 });
 
@@ -6903,7 +6910,7 @@ devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
 
     return res.json({ ok: true, domain: fullDomain, url: `https://${fullDomain}`, cname: deployTarget });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Domain provision failed" });
+    return res.status(500).json({ error: safeErrorText(e) || "Domain provision failed" });
   }
 });
 

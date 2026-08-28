@@ -2257,7 +2257,7 @@ devhubRouter.post("/projects/:id/generate/undo", async (req, res) => {
     });
   } catch (e: any) {
     captureException(e, { route: "devhub/generate:undo", projectId: project.id });
-    return res.status(500).json({ error: e?.message || "undo failed" });
+    return res.status(500).json({ error: safeErrorText(e) || "undo failed" });
   }
 });
 
@@ -2322,7 +2322,7 @@ devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req,
     return res.json({ ok: true, revertedFiles: [...revertedFiles], restoredToLabel: targetLabel, storage: revertStorage, stepsApplied: toApply.length });
   } catch (e: any) {
     captureException(e, { route: "devhub/checkpoints:restore", projectId: project.id });
-    return res.status(500).json({ error: e?.message || "restore failed" });
+    return res.status(500).json({ error: safeErrorText(e) || "restore failed" });
   }
 });
 
@@ -2997,7 +2997,7 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
         : `Already in sync with ${owner}/${repo}@${branch}`) + lossNote,
     });
   } catch (e: any) {
-    res.status(502).json({ error: e?.message || "GitHub sync failed" });
+    res.status(502).json({ error: safeErrorText(e) || "GitHub sync failed" });
   }
 });
 
@@ -3190,7 +3190,7 @@ devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req,
     return res.json({ ok: true, merged: true, sha: mergeData.sha, message: mergeData.message });
   } catch (e: any) {
     captureException(e, { route: "devhub/github:merge-pull-request", projectId: project.id });
-    return res.json({ ok: false, message: e?.message || "GitHub pull request merge failed" });
+    return res.json({ ok: false, message: safeErrorText(e) || "GitHub pull request merge failed" });
   }
 });
 
@@ -3273,7 +3273,7 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
     });
   } catch (e: any) {
     // A thrown fetch says nothing about the token, so it must not read as one.
-    return res.json({ branches: [], ...githubUnreachable(e?.message) });
+    return res.json({ branches: [], ...githubUnreachable(safeErrorText(e)) });
   }
 });
 
@@ -3925,7 +3925,7 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
 
     res.json({ ok: true, provider: "lemonsqueezy", checkoutId, url: checkoutUrl });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Payment link creation failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Payment link creation failed" });
   }
 });
 
@@ -4143,7 +4143,7 @@ devhubRouter.post("/media/sfx", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.send(audioBuffer);
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "SFX generation failed" });
+    res.status(500).json({ error: safeErrorText(e) || "SFX generation failed" });
   }
 });
 
@@ -4312,7 +4312,7 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
     const created = await createResp.json() as { result: { id: string } };
     res.json({ ok: true, action: "created", domain, cname: target, recordId: created.result.id });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Domain setup failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Domain setup failed" });
   }
 });
 
@@ -4362,7 +4362,7 @@ devhubRouter.post("/media/voice-clone", async (req, res) => {
     const data = await r.json() as { voice_id: string; requires_verification?: boolean };
     res.json({ ok: true, voiceId: data.voice_id, requiresVerification: data.requires_verification ?? false });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Voice clone failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Voice clone failed" });
   }
 });
 
@@ -4429,7 +4429,7 @@ devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
     if (voiceId) {
       fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, { method: "DELETE", headers: { "xi-api-key": apiKey } }).catch(() => {});
     }
-    res.status(500).json({ error: e?.message || "Voice preview failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Voice preview failed" });
   }
 });
 
@@ -4465,7 +4465,7 @@ devhubRouter.post("/media/stt", async (req, res) => {
     const data = await r.json() as { text?: string; language_code?: string; language_probability?: number };
     res.json({ ok: true, text: data.text || "", language: data.language_code || null, confidence: data.language_probability ?? null });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "STT failed" });
+    res.status(500).json({ error: safeErrorText(e) || "STT failed" });
   }
 });
 
@@ -4497,7 +4497,7 @@ devhubRouter.post("/media/drive-search", async (req, res) => {
     const data = await r.json() as { files: Array<{ id: string; name: string; mimeType: string; modifiedTime?: string; size?: string }> };
     res.json({ ok: true, files: data.files || [] });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Drive search failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Drive search failed" });
   }
 });
 
@@ -4665,7 +4665,7 @@ devhubRouter.get("/projects/:id/preview-proxy", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.send(html);
   } catch (e: any) {
-    res.status(502).json({ error: e?.message || "failed to fetch deployed page" });
+    res.status(502).json({ error: safeErrorText(e) || "failed to fetch deployed page" });
   }
 });
 
@@ -5109,7 +5109,7 @@ devhubRouter.post("/media/whatsapp", async (req, res) => {
       ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "WhatsApp send failed" });
+    res.status(500).json({ error: safeErrorText(e) || "WhatsApp send failed" });
   }
 });
 
@@ -5196,7 +5196,7 @@ devhubRouter.post("/media/upload-image", dhCostlyLimit("dhmedia_upload"), async 
       uploaded: data.result.uploaded,
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Image upload failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Image upload failed" });
   }
 });
 
@@ -5415,7 +5415,7 @@ devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
         : {}),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "File translation failed" });
+    res.status(500).json({ error: safeErrorText(e) || "File translation failed" });
   }
 });
 
@@ -5444,7 +5444,7 @@ devhubRouter.get("/media/email-templates", async (req, res) => {
       })),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Templates fetch failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Templates fetch failed" });
   }
 });
 
@@ -5478,7 +5478,7 @@ devhubRouter.post("/media/email-template-send", async (req, res) => {
     noteEmailSent(); // тот же общий потолок 300 писем в сутки, см. выше
     res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Template send failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Template send failed" });
   }
 });
 
@@ -6390,7 +6390,7 @@ devhubRouter.post("/media/upload-audio", async (req, res) => {
     if (!result.ok) return res.status(502).json({ error: result.error });
     res.json({ ok: true, key: finalKey, url: result.url, bytes: buf.length, mimeType: ct });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Audio upload failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Audio upload failed" });
   }
 });
 
@@ -6438,7 +6438,7 @@ devhubRouter.post("/media/email-template-create", async (req, res) => {
     if (!data.id) return res.status(500).json({ error: "Brevo did not return template id" });
     res.json({ ok: true, id: data.id, name: payload.templateName, subject: payload.subject });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Template create failed" });
+    res.status(500).json({ error: safeErrorText(e) || "Template create failed" });
   }
 });
 
@@ -6793,7 +6793,7 @@ devhubRouter.post("/media/3d", async (req, res) => {
     await debitQuietly(userId, "video");
     res.json({ ok: true, predictionId: prediction.id, status: prediction.status, model: chosen.id, modelLabel: chosen.label, format: "glb" });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "3D generation failed" });
+    res.status(500).json({ error: safeErrorText(e) || "3D generation failed" });
   }
 });
 
@@ -6834,7 +6834,7 @@ devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {
       seconds: pred.metrics?.predict_time ?? null,
     });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Status check failed" });
+    return res.status(500).json({ error: safeErrorText(e) || "Status check failed" });
   }
 });
 

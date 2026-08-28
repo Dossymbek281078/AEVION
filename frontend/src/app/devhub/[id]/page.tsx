@@ -1766,22 +1766,38 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const addEnvVar = async () => {
     if (!newEnvKey.trim() || !project) return;
     try {
-      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/env`), {
+      const r = await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/env`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: newEnvKey, value: newEnvVal }),
       });
       setNewEnvKey(""); setNewEnvVal("");
       fetchEnv();
-      showToast("Переменная сохранена", "success");
+      // Сервер говорит, КУДА легла запись. "memory" значит, что база была
+      // недоступна и переменная живёт в памяти процесса: при перезапуске она
+      // исчезнет, а выкатка соберётся БЕЗ неё — и причину человек будет искать
+      // в своём коде. Безусловный зелёный тост это скрывал.
+      const saved = await r.json().catch(() => ({}));
+      if (saved?.storage === "memory") {
+        showToast("Сохранено, но база была недоступна: переменная пока в памяти и может пропасть при перезапуске. Повторите через минуту.", "error");
+      } else {
+        showToast("Переменная сохранена", "success");
+      }
     } catch (e: any) { showToast(`Переменная НЕ сохранена — ${e?.message || "нет связи"}`, "error"); }
   };
 
   const removeEnvVar = async (key: string) => {
     if (!project) return;
     try {
-      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/env/${encodeURIComponent(key)}`), { method: "DELETE" });
+      const r = await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/env/${encodeURIComponent(key)}`), { method: "DELETE" });
       fetchEnv();
+      // "memory" на удалении значит, что убрали только из памяти процесса: после
+      // перезапуска переменная ВЕРНЁТСЯ, а человек считает её удалённой. Молчание
+      // здесь читается как успех.
+      const done = await r.json().catch(() => ({}));
+      if (done?.storage === "memory") {
+        showToast("База была недоступна: переменная убрана только из памяти и может вернуться после перезапуска.", "error");
+      }
     } catch (e: any) {
       // The list is re-read either way: a variable that is still on the server
       // must reappear rather than look deleted.

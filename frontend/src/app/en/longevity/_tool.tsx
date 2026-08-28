@@ -140,6 +140,20 @@ export function LongevityTool() {
             is a reading aid for your own panel, not diagnosis. Start with the
             deficiencies block above: it is the fastest and best-evidenced part.
           </p>
+          {/* Следующий шаг — ПОСЛЕ результата, а не рядом с формой.
+              Русская воронка предлагает ступень сразу после протокола, у
+              английской такого перехода не было вовсе: человек считал свои
+              маркеры и упирался в конец страницы.
+              Обычная ссылка, а не кнопка покупки: отсюда ведём на страницу с
+              выбором, где рядом стоят и книга, и подписка, — предлагать
+              конкретный товар сразу после медицинского разбора было бы
+              продажей на чужом доверии. */}
+          <p style={styles.next}>
+            Everything AEVION sells sits on one page —{" "}
+            <a href="/en/go" style={styles.nextLink}>
+              the book behind the videos, the protocols and the subscription →
+            </a>
+          </p>
         </div>
       )}
     </div>
@@ -185,4 +199,6 @@ const styles: Record<string, React.CSSProperties> = {
   itemName: { fontSize: 14.5, fontWeight: 600, marginRight: 8 },
   itemVal: { fontSize: 14, color: WARN },
   note: { color: MUTED, fontSize: 13.5, lineHeight: 1.6, margin: "12px 0 0" },
+  next: { fontSize: 14.5, lineHeight: 1.6, margin: "14px 0 0", color: INK },
+  nextLink: { color: "#1d5f8a", textDecoration: "underline" },
 };

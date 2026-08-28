@@ -31,10 +31,14 @@ import { PageTracking } from "@/components/PageTracking";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
 import SetupBoardPreview from "./SetupBoardPreview";
-import AiCoach from "./AiCoach";
-import CoachKnowledge from "./CoachKnowledgeModal";
+const AiCoach = dynamic(() => import("./AiCoach"), { ssr: false });
+const CoachKnowledge = dynamic(() => import("./CoachKnowledgeModal"), { ssr: false });
 import { COACH_KNOWLEDGE } from "./coachKnowledge";
-import CoachLessonsModal from "./CoachLessonsModal";
+// Ленивые: код уезжает отдельным чанком и не утяжеляет первый экран.
+// Замер 28.08.2026: страница тянет 1.26 МБ, и на медленном 3G кнопка
+// «ИГРАТЬ» становится нажимаемой через 38 секунд. Эти три панели
+// открываются по действию, на первом экране их код не нужен.
+const CoachLessonsModal = dynamic(() => import("./CoachLessonsModal"), { ssr: false });
 import { LESSONS, loadLessons, isLessonComplete, type Lesson } from "./coachLessons";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
 import { detectPhase, PHASE_TIPS } from "./coachPhase";
@@ -101,7 +105,7 @@ import { useWorkspace } from "./useWorkspace";
 import WorkspaceToolbar from "./WorkspaceToolbar";
 import WorkspaceMediaPane from "./WorkspaceMediaPane";
 import WorkspaceDock from "./WorkspaceDock";
-import MusicPlayer from "./MusicPlayer";
+const MusicPlayer = dynamic(() => import("./MusicPlayer"), { ssr: false });
 import AevionMiniHub from "./AevionMiniHub";
 import LocaleSwitcher from "./LocaleSwitcher";
 import VoiceCoach from "./VoiceCoach";
@@ -111,7 +115,7 @@ import { findNewlyUnlocked, ACHIEVEMENTS } from "./chessyAchievements";
 import PlayerStatsDashboard from "./PlayerStatsDashboard";
 import AvatarPicker from "./AvatarPicker";
 import FideCalibrationPanel from "./FideCalibrationPanel";
-import ClockPressureDrill from "./ClockPressureDrill";
+const ClockPressureDrill = dynamic(() => import("./ClockPressureDrill"), { ssr: false });
 import { calibrateFromGames, estimateFideFromCPI, saveEstimateToStorage, loadEstimateFromStorage, type SavedGameForCPI } from "./ratingCalibration";
 import AntiCheatPanel from "./AntiCheatPanel";
 import { analyzeGameForCheating, buildReport, updateSessionBaseline, type AntiCheatResult } from "./anticheat";
@@ -143,6 +147,7 @@ import { useP2P, genRoomId, type P2PMessage } from "./P2P";
 import { generateShareSVG, downloadFile } from "./gameShare";
 import CoachPredictions from "./CoachPredictions";
 import OpeningExplorerPanel from "./OpeningExplorerPanel";
+import dynamic from "next/dynamic";
 import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
 import { наградаЗаВозврат } from "./dailyReward";
 import { новыйРейтинг } from "./rating";

@@ -165,3 +165,39 @@ describe("тариф Team не уводится на товар Pro", () => {
     expect(String(res.body.checkoutUrl)).toContain("wjvquw");
   });
 });
+
+describe("общая запасная ссылка не должна перебивать товар тарифа", () => {
+  // ПОКА ОТКЛЮЧЁН: тест описывает НУЖНОЕ поведение, а сегодня оно другое.
+  // Дефект настоящий и найден вычиткой дифа, а не прогоном. Чинить его надо
+  // в общих платёжных файлах: у `PaymentIntentInput` нет поля для явной ссылки
+  // товара, поэтому её приходится передавать через `reference`, а провайдер
+  // ставит `GUMROAD_DEFAULT_PERMALINK` ВЫШЕ переданного значения.
+  //
+  // Просто поменять порядок у провайдера нельзя: на нём держатся модули,
+  // которые передают смысловой reference («qstore») и намеренно опираются на
+  // общую запасную ссылку. Правильная починка — необязательное поле
+  // `permalink` в `PaymentIntentInput`, которое провайдер предпочитает всему
+  // остальному. Это правка двух общих файлов, её надо делать не второпях.
+  //
+  // Снять skip, когда поле появится. Тест уже проверен: сегодня он краснеет
+  // ровно на этом (покупателя Team уводит на общий товар).
+  test.skip("при заданной GUMROAD_DEFAULT_PERMALINK покупатель Team идёт на СВОЙ товар", async () => {
+    // Найдено вычиткой дифа, а не тестом: reference уходит провайдеру, а тот
+    // разрешает ссылку в порядке
+    //   GUMROAD_PERMALINK_<REFERENCE> -> GUMROAD_DEFAULT_PERMALINK -> сам reference
+    // То есть общая запасная ссылка имеет приоритет НАД именем товара, которое
+    // мы передали. Если она задана, все тарифы уедут на один товар.
+    process.env.GUMROAD_CONSTITUTION_TEAM_PERMALINK = "wjvquw"; // товар Team
+    process.env.GUMROAD_DEFAULT_PERMALINK = "xpxzam";           // All-Access $59
+
+    const res = await request(app)
+      .post("/api/constitution/checkout/session")
+      .send({ tier: "team" });
+
+    expect(res.body.provider).toBe("gumroad");
+    expect(
+      String(res.body.checkoutUrl),
+      "покупателя Team уводит на общий товар вместо его собственного",
+    ).toContain("wjvquw");
+  });
+});

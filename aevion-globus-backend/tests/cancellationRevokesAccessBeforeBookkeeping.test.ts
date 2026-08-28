@@ -19,7 +19,7 @@
  * Проверяется фактический порядок запросов к базе, а не текст исходника.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from "vitest";
 
 const queries: string[] = [];
 
@@ -97,6 +97,14 @@ async function send(eventName: string) {
     .set("x-signature", sig)
     .send(raw);
 }
+
+// прогрев модуля: первый динамический import большого роутера стоит секунд, и
+// внутри бюджета первого теста под нагрузкой он однажды не уложился в 30 с
+// (сосед по набору дал ложную красную на ровном месте). Дальше импорт берётся
+// из кеша, поэтому достаточно оплатить его один раз в хуке.
+beforeAll(async () => {
+  await build();
+});
 
 describe("отмена снимает доступ раньше, чем правит учёт", () => {
   it("контроль прибора: событие вообще доходит до базы", async () => {

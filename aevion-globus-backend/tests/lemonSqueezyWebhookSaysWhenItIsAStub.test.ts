@@ -14,7 +14,7 @@
  * Проверяется поведение при разных переменных, а не текст исходника.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -39,6 +39,14 @@ async function makeApp() {
   app.use("/api/lemonsqueezy", lemonSqueezyWebhookRouter);
   return app;
 }
+
+// прогрев модуля: первый динамический import большого роутера стоит секунд, и
+// внутри бюджета первого теста под нагрузкой он однажды не уложился в 30 с
+// (сосед по набору дал ложную красную на ровном месте). Дальше импорт берётся
+// из кеша, поэтому достаточно оплатить его один раз в хуке.
+beforeAll(async () => {
+  await makeApp();
+});
 
 describe("вебхук Lemon Squeezy честно называет своё состояние", () => {
   it("без секрета состояние — заглушка, провижининга нет", async () => {

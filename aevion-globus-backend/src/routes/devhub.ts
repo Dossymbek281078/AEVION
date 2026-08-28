@@ -3341,17 +3341,24 @@ devhubRouter.post("/projects/:id/domain", async (req, res) => {
   }
   project.customDomain = domain.trim();
   project.updatedAt = now();
+  // Человек получает инструкцию по DNS и считает домен привязанным. Если
+  // запись легла только в память процесса, привязка исчезнет при
+  // перезапуске, а он будет ждать, пока заработает CNAME, которого у нас
+  // больше нет. Форма та же, что у соседей после сведения 28.08.
+  let storageFallback = false;
   try {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/domain:post", projectId: project.id });
     memProjects.set(project.id, project);
+    storageFallback = true;
   }
   res.json({
     ok: true,
     domain: project.customDomain,
     cname: "devhub.aevion.app",
     message: "Point your CNAME to devhub.aevion.app",
+    ...(storageFallback ? MEMORY_NOTE : {}),
   });
 });
 

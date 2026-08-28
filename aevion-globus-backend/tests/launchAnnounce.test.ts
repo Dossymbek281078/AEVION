@@ -336,4 +336,48 @@ describe("дата запуска обязана называть свой ис�
     expect(plan.recipients.filter((e) => e === "oba@primer.ru")).toHaveLength(1);
     expect(plan.recipients).toHaveLength(2);
   });
+
+  // 28.08.2026: в шапке скрипта сухого прогона и в инструкции основателю на
+  // день запуска стояло `npx tsx scripts/launch-announce-dry.ts`, а tsx в
+  // проекте не установлен — npx полез бы за ним в сеть в утро запуска.
+  // Рабочая команда всё это время лежала в package.json. Сторож держит простое
+  // правило: инструкция не зовёт инструмент, которого у нас нет.
+  test("команды в шапке скрипта запуска существуют на самом деле", () => {
+    const root = join(__dirname, "..");
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    const scripts: Record<string, string> = pkg.scripts || {};
+    const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+
+    const file = join(root, "scripts", "launch-announce-dry.ts");
+    expect(existsSync(file), "скрипта сухого прогона нет — инструкция ссылается в пустоту").toBe(true);
+    // Смотрим ТОЛЬКО на строки-примеры (звёздочка и отступ), а не на всю
+    // шапку: в пояснении рядом написано, какая команда стояла раньше и почему
+    // её убрали, и первая версия сторожа поймала эту прозу как настоящий
+    // вызов. Свой же текст, прочитанный как содержимое (28.08).
+    const header = readFileSync(file, "utf8")
+      .split("*/")[0]
+      .split(String.fromCharCode(10))
+      .filter((line) => {
+        const t = line.trimStart();
+        if (!t.startsWith("*")) return false;
+        const after = t.slice(1);
+        return after.startsWith("   ") && after.trim().length > 0;
+      })
+      .join(String.fromCharCode(10));
+
+    for (const m of header.matchAll(/npm run ([a-z0-9:-]+)/g)) {
+      expect(
+        scripts[m[1]],
+        `шапка зовёт «npm run ${m[1]}», а такой команды в package.json нет`,
+      ).toBeDefined();
+    }
+    for (const m of header.matchAll(/npx (?:--[a-z-]+ )*([a-z0-9@/-]+)/g)) {
+      const tool = m[1].replace(/^@[^/]+\//, "");
+      expect(
+        Object.keys(deps).some((d) => d === m[1] || d.endsWith("/" + tool) || d === tool),
+        `шапка зовёт «npx ${m[1]}», а такой зависимости у проекта нет — ` +
+          `npx пойдёт за ней в сеть, и в утро запуска это лишний риск`,
+      ).toBe(true);
+    }
+  });
 });

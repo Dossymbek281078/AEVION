@@ -616,7 +616,7 @@ export default function DevHubPage() {
                   Замер 23.08.2026: среди «работающих» числился домен aevion.build,
                   которого не существует — реестр отвечает «Non-existent domain».
                   Слово «работает» превращало ответ одного вопроса в ответ другого. */}
-              <span style={{ fontWeight: 700, color: "#0f172a" }}>{t("caps.configured")}: {live} из {caps.length}</span>
+              <span style={{ fontWeight: 700, color: "#0f172a" }}>{t("caps.configured")}: {live} {t("caps.of")} {caps.length}</span>
               {off.length > 0 ? (
                 <>
                   <span style={{ color: "#64748b" }}>{t("caps.off")}</span>
@@ -637,7 +637,7 @@ export default function DevHubPage() {
                   </div>
                 </>
               ) : (
-                <span style={{ color: "#64748b" }}> · все интеграции отвечают</span>
+                <span style={{ color: "#64748b" }}>{t("caps.allRespond")}</span>
               )}
               {/* The comparison belongs next to the live state, not on a
                   marketing page: both answer the same question — what is real
@@ -646,7 +646,7 @@ export default function DevHubPage() {
                 <Link href="/compare" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "none" }}>
                   Как мы выглядим рядом с Bolt, Lovable, v0 и Replit →
                 </Link>
-                <span style={{ color: "#94a3b8" }}> — с пометкой, откуда взята каждая строка</span>
+                <span style={{ color: "#94a3b8" }}>{t("store.withSourceNote")}</span>
               </div>
             </div>
           );
@@ -686,7 +686,7 @@ export default function DevHubPage() {
                 ))}
                 <tr>
                   <td style={{ padding: "6px 14px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0" }}>{t("store.total")}</td>
-                  <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>7 подписок, 7 логинов</td>
+                  <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>{t("store.subsLogins")}</td>
                   <td style={{ padding: "6px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0", fontVariantNumeric: "tabular-nums" }}>≈ $162</td>
                 </tr>
               </tbody>

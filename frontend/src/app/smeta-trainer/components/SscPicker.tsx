@@ -172,7 +172,7 @@ export function SscPicker({ seedName, seedUnit, onPick, onClose, onSkip }: Props
           )}
           {results.length > 0 && (
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 sticky top-0">
+              <thead style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-slate-50 sticky top-0">
                 <tr className="text-left text-slate-600 uppercase text-[10px]">
                   <th className="px-2 py-1.5 w-28">Код</th>
                   <th className="px-2 py-1.5">Наименование</th>

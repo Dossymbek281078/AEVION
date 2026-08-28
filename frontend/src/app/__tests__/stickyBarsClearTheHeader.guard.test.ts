@@ -45,6 +45,31 @@ const FIXED = [
 ];
 
 describe("прилипающие полосы стоят под шапкой, а не под ней", () => {
+  it("в модуле smeta-trainer не осталось полос с голым top-0", () => {
+    // 250 мест в 243 файлах: у всех была одна беда — sticky top-0 со слоем
+    // ниже шапки. Дефект подтверждён браузером на четырёх страницах модуля
+    // (навигация «← К разделам», «Развернуть всё» уходила под шапку).
+    // Считаем ОСТАТОК: правка механическая, и пропуск здесь незаметен.
+    const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
+    const root = join(SRC, "app", "smeta-trainer");
+    let bad = 0;
+    const walk = (dir: string) => {
+      for (const n of readdirSync(dir)) {
+        const p = join(dir, n);
+        if (statSync(p).isDirectory()) { walk(p); continue; }
+        if (!p.endsWith(".tsx")) continue;
+        const s = readFileSync(p, "utf8");
+        const re = /className="([^"]*sticky[^"]*top-0[^"]*)"/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(s))) {
+          if (!s.slice(Math.max(0, m.index - 140), m.index).includes("aevion-header-h")) bad++;
+        }
+      }
+    };
+    walk(root);
+    expect(bad, `${bad} полос снова прилипают к нулю — уедут под шапку`).toBe(0);
+  });
+
   it("шапка публикует свою высоту — без этого отступать не на что", () => {
     const h = readFileSync(join(SRC, "components", "SiteHeader.tsx"), "utf8");
     expect(h, "SiteHeader перестал публиковать --aevion-header-h").toContain("--aevion-header-h");

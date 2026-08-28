@@ -74,7 +74,7 @@ export default function CaseCottagePage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      <header className="border-b border-amber-900/40 bg-slate-900/70 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-amber-900/40 bg-slate-900/70 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice/hub" className="text-amber-400 hover:text-amber-300 text-sm">
             ← К разделам

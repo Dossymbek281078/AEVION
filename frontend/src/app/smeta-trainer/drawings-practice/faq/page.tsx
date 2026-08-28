@@ -512,7 +512,7 @@ export default function FaqPage() {
   return (
     <div className="min-h-screen bg-indigo-50/30 dark:bg-slate-950 text-slate-900 dark:text-indigo-100">
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-10 border-b border-indigo-200 dark:border-indigo-900 bg-indigo-100/80 dark:bg-slate-900/80 backdrop-blur">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="sticky top-0 z-10 border-b border-indigo-200 dark:border-indigo-900 bg-indigo-100/80 dark:bg-slate-900/80 backdrop-blur">
         <div className="max-w-screen-xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
           <Link
             href="/smeta-trainer/drawings-practice/hub"

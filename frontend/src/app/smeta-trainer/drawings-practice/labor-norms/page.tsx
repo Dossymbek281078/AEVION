@@ -236,7 +236,7 @@ export default function LaborNormsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
       {/* Header */}
-      <div className="border-b border-blue-200 dark:border-blue-900/40 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-10">
+      <div style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-blue-200 dark:border-blue-900/40 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
           <Link
             href="/smeta-trainer/drawings-practice/hub"
@@ -383,7 +383,7 @@ export default function LaborNormsPage() {
           ) : (
             <div className="overflow-x-auto rounded-lg border border-blue-200 dark:border-blue-900/40 bg-white dark:bg-slate-900 shadow-sm">
               <table className="min-w-full text-sm">
-                <thead className="bg-blue-100 dark:bg-blue-900/40 text-blue-900 dark:text-blue-200 sticky top-0">
+                <thead style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-blue-100 dark:bg-blue-900/40 text-blue-900 dark:text-blue-200 sticky top-0">
                   <tr>
                     <th className="px-3 py-2 text-left font-semibold">Вид работы</th>
                     <th className="px-3 py-2 text-left font-semibold">Ед. изм.</th>

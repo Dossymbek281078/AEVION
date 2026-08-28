@@ -304,7 +304,7 @@ export default function RealBuildPage() {
             ) : (
               <div className="max-h-[22rem] overflow-auto">
                 <table className="w-full text-[11px]">
-                  <thead className="text-slate-500 text-left sticky top-0 bg-white">
+                  <thead style={{ top: "var(--aevion-header-h, 0px)" }} className="text-slate-500 text-left sticky top-0 bg-white">
                     <tr>
                       <th className="py-1">Статус</th>
                       <th className="py-1">Код / наименование</th>

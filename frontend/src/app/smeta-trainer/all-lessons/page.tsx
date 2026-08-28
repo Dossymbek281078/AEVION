@@ -27,7 +27,7 @@ export default function AllLessonsPage() {
   return (
     <div className="min-h-screen bg-slate-100 print:bg-white">
       {/* Toolbar (скрыт при печати) */}
-      <header className="bg-white border-b sticky top-0 z-10 print:hidden">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-white border-b sticky top-0 z-10 print:hidden">
         <div className="max-w-3xl mx-auto px-6 py-3 flex items-center gap-4">
           <Link href="/smeta-trainer" className="text-xs text-slate-500 hover:text-slate-900">
             ← К курсу

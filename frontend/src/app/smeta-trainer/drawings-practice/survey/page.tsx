@@ -166,7 +166,7 @@ export default function SurveyPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="bg-indigo-700 text-white sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-indigo-700 text-white sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-3">
           <Link href="/smeta-trainer/drawings-practice/hub" className="text-xs text-indigo-200 hover:text-white">← К разделам</Link>
           <div className="flex-1">

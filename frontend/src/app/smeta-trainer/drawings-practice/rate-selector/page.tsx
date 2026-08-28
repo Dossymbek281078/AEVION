@@ -263,7 +263,7 @@ export default function RateSelectorPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="bg-slate-800 text-white sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-slate-800 text-white sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-2.5 flex items-center gap-3">
           <Link href="/smeta-trainer/drawings-practice/hub" className="text-xs text-slate-400 hover:text-white">← Все разделы</Link>
           <div className="flex-1">

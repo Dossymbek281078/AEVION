@@ -457,7 +457,7 @@ export default function RiskRegisterPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Header */}
-      <div className="border-b border-orange-900/40 bg-slate-900/70 backdrop-blur sticky top-0 z-10">
+      <div style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-orange-900/40 bg-slate-900/70 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice/hub"

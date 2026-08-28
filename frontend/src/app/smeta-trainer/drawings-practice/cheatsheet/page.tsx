@@ -353,7 +353,7 @@ export default function CheatsheetPage() {
   return (
     <div className="min-h-screen bg-amber-50/40 dark:bg-stone-950 text-stone-900 dark:text-amber-100">
       {/* ── Header (скрывается при печати) ───────────────────────────────── */}
-      <header className="no-print sticky top-0 z-10 border-b border-amber-300 dark:border-amber-800 bg-amber-100/80 dark:bg-stone-900/80 backdrop-blur">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="no-print sticky top-0 z-10 border-b border-amber-300 dark:border-amber-800 bg-amber-100/80 dark:bg-stone-900/80 backdrop-blur">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
           <Link
             href="/smeta-trainer/drawings-practice/hub"

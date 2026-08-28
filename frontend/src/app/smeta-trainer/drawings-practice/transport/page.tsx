@@ -197,7 +197,7 @@ export default function TransportPage() {
   return (
     <div className="min-h-screen bg-amber-50 dark:bg-slate-950">
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-amber-300 bg-amber-100/95 backdrop-blur dark:border-amber-800 dark:bg-slate-900/95">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="sticky top-0 z-10 border-b border-amber-300 bg-amber-100/95 backdrop-blur dark:border-amber-800 dark:bg-slate-900/95">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
           <Link
             href="/smeta-trainer/drawings-practice/hub"

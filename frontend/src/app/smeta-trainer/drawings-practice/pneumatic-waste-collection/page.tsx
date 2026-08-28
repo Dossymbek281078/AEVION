@@ -14,7 +14,7 @@ export default function PneumaticWasteCollectionPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Pneumatic Waste Collection</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Pneumatic Waste Collection</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🚮 Pneumatic Waste Collection — Подземная пневмосистема</h1>
           <p className="mt-3 text-slate-400 leading-relaxed max-w-3xl">Модуль #305. Astana EXPO 2017 city + новый Astana Hub Almaty pilot — pneumatic waste collection AVAC Envac Sweden. Underground pneumatic tubes Ø500-700 мм vacuum 0.6 бар transport waste from street inlets к central collection station 2-5 км, no garbage trucks streets. Reference: Hammarby Sjöstad Stockholm 12 000 households 1992, Songdo South Korea, Disney World USA, Barcelona OlympicVillage 1992, Roosevelt Island NYC. Capacity 1-3 tonnes/hr collection, separation organic/recyclables/general waste. ISWA Sustainable Waste Management + СН РК 4.04-23 (городское ЖКХ).</p>

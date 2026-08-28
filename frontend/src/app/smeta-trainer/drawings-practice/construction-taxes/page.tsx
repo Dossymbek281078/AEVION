@@ -34,7 +34,7 @@ export default function ConstructionTaxesPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Header */}
-      <header className="border-b border-emerald-900/40 bg-slate-950/80 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-emerald-900/40 bg-slate-950/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice"

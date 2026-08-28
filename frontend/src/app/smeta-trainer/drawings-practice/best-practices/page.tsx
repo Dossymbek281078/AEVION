@@ -537,7 +537,7 @@ export default function BestPracticesPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-red-50 via-orange-50 to-white dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 text-zinc-900 dark:text-zinc-100">
       {/* Header */}
-      <header className="sticky top-0 z-10 backdrop-blur bg-red-100/80 dark:bg-zinc-900/80 border-b border-red-300 dark:border-red-900/40">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="sticky top-0 z-10 backdrop-blur bg-red-100/80 dark:bg-zinc-900/80 border-b border-red-300 dark:border-red-900/40">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice/hub"

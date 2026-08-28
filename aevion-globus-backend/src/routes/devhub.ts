@@ -2634,6 +2634,8 @@ devhubRouter.get("/projects/:id/collaborators", async (req, res) => {
 
 // POST /api/devhub/projects/:id/collaborators
 devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
+  // Приглашение в память = соучастник потеряет доступ после перезапуска.
+  let storageFallback = false;
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
@@ -2682,9 +2684,9 @@ devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/collaborators:post", projectId: project.id });
-    memProjects.set(project.id, project);
+    memProjects.set(project.id, project); storageFallback = true;
   }
-  res.status(201).json({ collaborators: project.collaborators, resolved: displayEmail || collabUserId });
+  res.status(201).json({ collaborators: project.collaborators, resolved: displayEmail || collabUserId , ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // DELETE /api/devhub/projects/:id/collaborators/:userId
@@ -3261,6 +3263,8 @@ devhubRouter.get("/templates", (_req, res) => {
 
 // POST /api/devhub/projects/:id/apply-template
 devhubRouter.post("/projects/:id/apply-template", async (req, res) => {
+  // Шаблон разворачивает файлы проекта; в памяти они не переживут перезапуск.
+  let storageFallback = false;
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
@@ -3288,12 +3292,12 @@ devhubRouter.post("/projects/:id/apply-template", async (req, res) => {
         existing.language = file.language;
         existing.updatedAt = file.updatedAt;
       } else {
-        memFiles.set(file.id, file);
+        memFiles.set(file.id, file); storageFallback = true;
       }
     }
     savedFiles.push(file);
   }
-  res.json({ ok: true, files: savedFiles, template: template.id });
+  res.json({ ok: true, files: savedFiles, template: template.id , ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -5504,6 +5508,8 @@ devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
+  // Массовый перевод — ПЛАТНЫЙ. Файлы в памяти исчезнут при перезапуске.
+  let storageFallback = false;
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
@@ -5567,7 +5573,7 @@ devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
         catch {
           const existing = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === newPath);
           if (existing) { existing.content = out.content; existing.updatedAt = out.updatedAt; }
-          else memFiles.set(out.id, out);
+          else memFiles.set(out.id, out); storageFallback = true;
         }
         results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: true, outputPath: newPath, bytes: translated.length });
       } catch (e: any) {
@@ -5578,6 +5584,7 @@ devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
 
   const okCount = results.filter((r) => r.ok).length;
   res.json({
+    ...(storageFallback ? MEMORY_NOTE : {}),
     ok: okCount === results.length,
     total: results.length,
     successCount: okCount,
@@ -6481,6 +6488,9 @@ const TTS_MODEL_FALLBACKS = ["eleven_turbo_v2_5", "eleven_flash_v2_5"];
 const BINARY_EXTENSIONS = /\.(mp3|wav|ogg|png|jpg|jpeg|webp|gif|pdf|zip|woff2?|ttf|otf)$/i;
 
 devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
+  // Человек загрузил СВОЙ код. Если файлы легли только в память процесса, при
+  // перезапуске он их потеряет, а ответ говорил, сколько импортировано.
+  let storageFallback = false;
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
@@ -6568,12 +6578,13 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
     catch {
       const ex = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === f.path);
       if (ex) { ex.content = f.content; ex.language = f.language; ex.updatedAt = f.updatedAt; }
-      else memFiles.set(f.id, f);
+      else memFiles.set(f.id, f); storageFallback = true;
     }
     imported.push({ path: f.path, bytes, binary });
   }
 
   res.json({
+    ...(storageFallback ? MEMORY_NOTE : {}),
     ok: imported.length > 0,
     importedCount: imported.length,
     skippedCount: skipped.length,

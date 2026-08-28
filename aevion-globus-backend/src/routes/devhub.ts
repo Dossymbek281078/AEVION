@@ -832,14 +832,18 @@ async function createCheckpoint(
  * the latest checkpoint) and /checkpoints/:id/restore (applies a whole run
  * of consecutive checkpoints, newest first, so per-path writes converge on
  * the target checkpoint's own priorContent — the correct layered result). */
-async function applyCheckpointRevert(projectId: string, checkpoint: DevHubCheckpoint): Promise<string[]> {
+async function applyCheckpointRevert(projectId: string, checkpoint: DevHubCheckpoint): Promise<{ paths: string[]; storage: "db" | "memory" }> {
   const revertedFiles: string[] = [];
+  // Откат тоже может лечь в память: тогда файлы «восстановлены» до ближайшего
+  // перезапуска, а человеку сказано «восстановлено N файлов». Признак нужен
+  // здесь по той же причине, что у генерации и контрольной точки.
+  let storage: "db" | "memory" = "db";
   for (const f of checkpoint.files) {
     if (f.priorContent === null) {
       try { await dbDeleteFile(projectId, f.path); }
       catch {
         for (const [fid, mf] of memFiles) {
-          if (mf.projectId === projectId && mf.path === f.path) { memFiles.delete(fid); break; }
+          if (mf.projectId === projectId && mf.path === f.path) { memFiles.delete(fid); storage = "memory"; break; }
         }
       }
     } else {
@@ -857,7 +861,7 @@ async function applyCheckpointRevert(projectId: string, checkpoint: DevHubCheckp
     revertedFiles.push(f.path);
   }
   try { await dbDeleteCheckpoint(checkpoint.id); } catch { memCheckpoints.delete(checkpoint.id); }
-  return revertedFiles;
+  return { paths: revertedFiles, storage };
 }
 
 // ── Built-in templates ────────────────────────────────────────────────────────
@@ -2206,8 +2210,16 @@ devhubRouter.post("/projects/:id/generate/undo", async (req, res) => {
     if (!checkpoint) {
       return res.json({ ok: false, message: "No AI change to undo for this project" });
     }
-    const revertedFiles = await applyCheckpointRevert(project.id, checkpoint);
-    return res.json({ ok: true, revertedFiles, label: checkpoint.label });
+    // tsc здесь МОЛЧИТ: результат уходил прямо в res.json, а тело ответа не
+    // типизировано. Ровно тот случай, из-за которого клиент получил бы объект
+    // вместо списка путей и «отменить» перестало бы работать молча.
+    const revert = await applyCheckpointRevert(project.id, checkpoint);
+    return res.json({
+      ok: true,
+      revertedFiles: revert.paths,
+      label: checkpoint.label,
+      storage: revert.storage,
+    });
   } catch (e: any) {
     captureException(e, { route: "devhub/generate:undo", projectId: project.id });
     return res.status(500).json({ error: e?.message || "undo failed" });
@@ -2263,11 +2275,13 @@ devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req,
     const toApply = history.slice(0, targetIndex + 1);
     const targetLabel = history[targetIndex].label;
     const revertedFiles = new Set<string>();
+    let revertStorage: "db" | "memory" = "db";
     for (const checkpoint of toApply) {
-      const paths = await applyCheckpointRevert(project.id, checkpoint);
-      paths.forEach((p) => revertedFiles.add(p));
+      const step = await applyCheckpointRevert(project.id, checkpoint);
+      step.paths.forEach((p) => revertedFiles.add(p));
+      if (step.storage === "memory") revertStorage = "memory";
     }
-    return res.json({ ok: true, revertedFiles: [...revertedFiles], restoredToLabel: targetLabel, stepsApplied: toApply.length });
+    return res.json({ ok: true, revertedFiles: [...revertedFiles], restoredToLabel: targetLabel, storage: revertStorage, stepsApplied: toApply.length });
   } catch (e: any) {
     captureException(e, { route: "devhub/checkpoints:restore", projectId: project.id });
     return res.status(500).json({ error: e?.message || "restore failed" });

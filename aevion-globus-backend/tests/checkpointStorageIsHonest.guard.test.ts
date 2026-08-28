@@ -57,4 +57,20 @@ describe("контрольная точка честна о своём хран�
     // не должен говорить «сохранено в базу».
     expect(SRC).toContain('if (cpRes?.storage === "memory") storage = "memory";');
   });
+
+  test("откат тоже сообщает, куда лёг", () => {
+    // Файлы «восстановлены» в памяти исчезнут при перезапуске, а человеку
+    // сказано «восстановлено N файлов». Третья часть того же обещания.
+    expect(SRC).toContain('return { paths: revertedFiles, storage };');
+    expect(SRC).toContain('storage: revert.storage');
+    expect(SRC).toContain('if (step.storage === "memory") revertStorage = "memory";');
+  });
+
+  test("результат отката не уходит в ответ целиком", () => {
+    // Тот же капкан, что у контрольной точки: tsc молчит, потому что тело
+    // ответа не типизировано. Здесь он молчал ВТОРОЙ раз за один заход.
+    const calls = SRC.split("await applyCheckpointRevert(").length - 1;
+    const unpacked = SRC.split(".paths").length - 1;
+    expect(unpacked, `вызовов ${calls}, разборов .paths ${unpacked}`).toBeGreaterThanOrEqual(calls);
+  });
 });

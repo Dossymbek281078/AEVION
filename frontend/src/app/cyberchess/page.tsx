@@ -6504,14 +6504,18 @@ export default function CyberChessPage(){
                 </Btn>
               </div>
               {/* Ворота 6 окна запуска: человеку, который не готов платить, негде было
-                  оставить контакт — на странице не было ни поля почты, ни ссылки на /go.
-                  Параметр c=chess обязателен: без него не ответить, какой канал привёл. */}
-              <a href="/go?c=chess" style={{display:"block",marginTop:SPACE[2],padding:SPACE[3],
+                  оставить контакт — из игры не вело ни одной ссылки на страницу запуска.
+                  Ведём на /cyberchess/launch, а НЕ на общий /go, по двум причинам.
+                  Первая: там форма обещает ровно то, что придёт («одно письмо на
+                  запуск»), и оттуда есть путь обратно в игру. Вторая: метка ?c= на /go
+                  прошла бы через белый список channelFrom() и стала null — «chess» в нём
+                  нет, то есть канал потерялся бы молча. */}
+              <a href="/cyberchess/launch" style={{display:"block",marginTop:SPACE[2],padding:SPACE[3],
                 borderRadius:12,border:"1px dashed "+CC.border,background:CC.surface1,
                 textDecoration:"none",color:CC.text,textAlign:"center"}}>
                 <div style={{fontSize:14,fontWeight:800}}>Написать вам, когда откроются турниры?</div>
                 <div style={{fontSize:12,color:CC.textDim,marginTop:2,fontWeight:600}}>
-                  Оставьте адрес — пришлём приглашение и разбор партий. Без спама.</div>
+                  Одно письмо в день запуска — и условия раннего доступа. Больше ничего.</div>
               </a>
 
               {/* Tertiary: задача / классика / база партий — small inline pills, не доминируют */}

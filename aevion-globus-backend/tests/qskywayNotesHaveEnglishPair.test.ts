@@ -99,13 +99,31 @@ const KNOWN_WITHOUT_PAIR = new Set<string>([
 
 const WINDOW = 12;
 
+/**
+ * Держит ли строка пояснение `note: "…"`.
+ *
+ * ⚠️ Раньше признак был вписан в тело обхода как
+ * `l.trimStart().startsWith("note:")` — и это была дыра, а не мелочь: у объекта
+ * в JS две формы записи, и однострочная `{ attested: false, note: "…" }` под
+ * условие не подпадала. Тот же промах в свипе по ОТКАЗАМ дал 5 найденных из 29
+ * (28.08.2026).
+ *
+ * Вынесен в отдельную функцию НАМЕРЕННО: контроль ниже проверяет именно её.
+ * Пока признак жил внутри обхода, контроль повторял правило своей копией — и
+ * мутация «вернуть startsWith» проходила молча. Проверять надо тот самый код,
+ * которым пользуется детектор, а не одноимённое условие рядом.
+ */
+function holdsNote(l: string): boolean {
+  return l.includes("note: " + String.fromCharCode(34));
+}
+
 function unpaired(): string[] {
   const lines = codeLines(SRC);
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     if (!hasCyrillic(decodeEscapes(l))) continue;
-    if (!l.trimStart().startsWith("note:")) continue;
+    if (!holdsNote(l)) continue;
     const from = Math.max(0, i - WINDOW);
     const to = Math.min(lines.length, i + WINDOW);
     if (lines.slice(from, to).some((x) => x.includes("noteEn"))) continue;
@@ -122,6 +140,13 @@ describe("русские пояснения QSkyway имеют английск�
     expect(hasCyrillic(SRC)).toBe(true);
     expect(SRC.includes("noteEn:")).toBe(true);
     expect(unpaired().length + 1).toBeGreaterThan(0);
+    // Детектор обязан ВИДЕТЬ однострочную форму. Образец берём из живого
+    // исходника: выдуманная строка проверяла бы мою фантазию, а не файл.
+    const oneLiners = codeLines(SRC).filter((x) => !x.trimStart().startsWith("note:") && x.includes("note: " + String.fromCharCode(34)));
+    expect(oneLiners.length, "в файле не осталось однострочных note — образец брать не из чего").toBeGreaterThan(0);
+    for (const sample of oneLiners) {
+      expect(holdsNote(sample), "детектор слеп к однострочной форме: " + sample.trim().slice(0, 60)).toBe(true);
+    }
   });
 
   it("новых пояснений без английской пары нет", () => {

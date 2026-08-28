@@ -1320,7 +1320,7 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
     vertiports: CITY.vertiports.length,
     grid: { cols: CITY.grid.cols, rows: CITY.grid.rows, cellM: CITY.grid.cell },
     altitude: { floorM: FLOOR, bandM: BAND, clearanceM: CLEAR },
-    clearanceModel: { baseM: CLEAR, byHeightSourceM: { measured: SRC_CLEARANCE[0], derived: SRC_CLEARANCE[1], guessed: SRC_CLEARANCE[2] }, note: "Страховочный просвет растёт при низкой уверенности высоты; лучше данные (LiDAR/LOD2/3D Tiles) → ниже крейсер." },
+    clearanceModel: { baseM: CLEAR, byHeightSourceM: { measured: SRC_CLEARANCE[0], derived: SRC_CLEARANCE[1], guessed: SRC_CLEARANCE[2] }, note: "Страховочный просвет растёт при низкой уверенности высоты; лучше данные (LiDAR/LOD2/3D Tiles) → ниже крейсер.", noteEn: "Safety clearance grows when height confidence is low; better data (LiDAR/LOD2/3D Tiles) → a lower cruise." },
     // Плоский список читается как «умеем во всех городах». Для шести пунктов
     // это правда, для седьмого — нет: сетку потолков публикует только FAA, и
     // ниже в этом же ответе `airspace.astana.available` и `airspace.tokyo`
@@ -1957,7 +1957,7 @@ qskywayRouter.get("/verify", (req: Request, res: Response) => {
   const asSig = signAirspace(resolved.id);
   const airspace = asSig
     ? { attested: true as const, valid: verifyAirspace(resolved.id, asSig), contentHash: asSig.contentHash, effective: AIRSPACE[resolved.id].effective, authority: AIRSPACE[resolved.id].authority }
-    : { attested: false as const, valid: null, note: "Для этого города нет подключённого фида регулятора — подписывать нечего." };
+    : { attested: false as const, valid: null, note: "Для этого города нет подключённого фида регулятора — подписывать нечего.", noteEn: "No regulator feed is connected for this city — there is nothing to sign." };
   res.json({
     city: resolved.id,
     // `valid` stays the twin verdict so existing callers (the UI badge) don't shift meaning.

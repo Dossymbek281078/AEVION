@@ -133,7 +133,7 @@ const VP_CLASS_COLOR: Record<string, string> = Object.assign(Object.create(null)
  * и английский посетитель читал русскую оговорку — а у Токио наоборот, русский
  * читал английскую, потому что поле `regime` там было заполнено по-английски.
  */
-function airspaceRegSource(a: AirspaceSummary | undefined, ru: boolean): RegulatorySource {
+function airspaceRegSource(a: AirspaceSummary | undefined, ru: boolean, noGridNote?: string): RegulatorySource {
   if (!a?.available) {
     // No ceiling grid does not mean no regulator. Tokyo publishes no altitudes
     // but governs every flight over the twin, and calling that "no source"
@@ -147,9 +147,21 @@ function airspaceRegSource(a: AirspaceSummary | undefined, ru: boolean): Regulat
         // across the toolbar. The chip line answers "whose rule", the hover
         // answers "which rule".
         effective: perm.effective,
+        // ⚠️ Сюда же — почему у этого города НЕТ чисел по потолкам.
+        //
+        // Замер 28.08.2026 на живой странице: у Токио ноль подсказок и ни
+        // одной строки про потолки, тогда как у NYC есть «6 из 42 маршрутов
+        // укладывается в потолок». Читается как «Токио не считали», хотя
+        // правда обратная: считали, просто его регулятор публикует правило
+        // ДРУГОГО ВИДА. Сервер это объясняет полем `note`, но оно оставалось
+        // в другой ветке этой же функции и до экрана не доходило.
+        //
+        // Серверную формулировку не берём дословно: в ней «см. блок
+        // permission рядом» — слово из нашей схемы данных, а не из речи
+        // человека. Отдельный ключ говорит то же на языке посетителя.
         scopeNote: (ru
-          ? [perm.regime, perm.note, perm.provenanceNote]
-          : [perm.regimeEn ?? perm.regime, perm.noteEn ?? perm.note, perm.provenanceNoteEn ?? perm.provenanceNote]
+          ? [perm.regime, perm.note, perm.provenanceNote, noGridNote]
+          : [perm.regimeEn ?? perm.regime, perm.noteEn ?? perm.note, perm.provenanceNoteEn ?? perm.provenanceNote, noGridNote]
         ).filter(Boolean).join(" "),
         upToDate: null,
         // Астана и Токио стоят не на фиде, а на документе: eAIP цикла AIRAC и
@@ -945,7 +957,7 @@ export default function QSkywayClient() {
                             ? "qskyway.reg.subject.prohibition"
                             : "qskyway.reg.subject.permission")
                         : t("qskyway.reg.subject.ceilings")}
-                    source={airspaceRegSource(meta.airspace, lang === "ru")}
+                    source={airspaceRegSource(meta.airspace, lang === "ru", t("qskyway.reg.noCeilingGrid"))}
                     labels={{ none: t("qskyway.reg.nofeed") }}
                   />
                   <RegulatorySourceChip

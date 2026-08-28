@@ -46,8 +46,8 @@ describe("вебхук Lemon Squeezy честно называет своё со
     const res = await request(app).get("/api/lemonsqueezy/webhook");
     expect(res.status).toBe(200);
     expect(res.body.signed).toBe(false);
-    // Главное поле: по нему видно, что покупки НЕ доходят.
-    expect(res.body.provisioningLive).toBe(false);
+    // Главное поле названо отрицанием: true = покупки НЕ доходят.
+    expect(res.body.purchasesDropped).toBe(true);
     expect(res.body.mode).toBe("stub");
   });
 
@@ -56,7 +56,7 @@ describe("вебхук Lemon Squeezy честно называет своё со
     const app = await makeApp();
     const res = await request(app).get("/api/lemonsqueezy/webhook");
     expect(res.body.signed).toBe(true);
-    expect(res.body.provisioningLive).toBe(true);
+    expect(res.body.purchasesDropped).toBe(false);
     expect(res.body.mode).toBe("live");
   });
 

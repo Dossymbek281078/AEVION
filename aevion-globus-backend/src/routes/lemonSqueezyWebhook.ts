@@ -181,8 +181,18 @@ lemonSqueezyWebhookRouter.get("/webhook", (_req, res) => {
     endpoint: "lemon squeezy webhook",
     accepts: "POST application/json with x-signature",
     signed: configured,
-    // false означает: покупки НЕ провижинятся, и магазин об этом не узнает.
-    provisioningLive: configured,
+    // Поле названо ОТРИЦАНИЕМ и означает ровно то, что измеряет.
+    //
+    // Сперва здесь стояло `provisioningLive: configured`, и это обещало
+    // больше, чем проверено: секрет задан — ещё не значит, что провижининг
+    // работает (нужны и база, и разбор варианта, и живой Postgres). Поле с
+    // именем шире собственного замера — тот самый класс, из-за которого
+    // `/health.qsign` однажды прочитали как состояние всей подписи.
+    //
+    // `true` здесь утверждает узкое и проверенное: секрета нет, POST ниже
+    // отвечает магазину «доставлено» и НЕ провижинит. Обратное не обещает,
+    // что всё хорошо, — только что этой конкретной поломки нет.
+    purchasesDropped: !configured,
     mode: configured ? "live" : "stub",
     info: "GET is a status check. Without LEMON_SQUEEZY_WEBHOOK_SECRET the POST route is a no-op stub.",
   });

@@ -3148,7 +3148,7 @@ export default function QCoreMultiAgentPage() {
                         onClick={async () => {
                           try {
                             const tok = typeof window !== "undefined" ? (getAuthToken() || "") : "";
-                            await fetch(`/api/qcoreai/me/memories/extract`, { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify({ runId: lastDoneRun.id }) });
+                            await fetch(apiUrl(`/api/qcoreai/me/memories/extract`), { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify({ runId: lastDoneRun.id }) });
                           } catch { /* ignore */ }
                         }}
                         style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(124,58,237,0.3)", background: "rgba(124,58,237,0.07)", color: "#6d28d9", fontSize: 11, fontWeight: 700, cursor: "pointer" }}

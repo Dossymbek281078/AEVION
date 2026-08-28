@@ -712,10 +712,10 @@ export default function AEVPage() {
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
               <label style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>Agent</label>
-              <input value={computeAgent} onChange={(e) => setComputeAgent(e.target.value)} disabled={computeRunning}
+              <input aria-label="Agent" value={computeAgent} onChange={(e) => setComputeAgent(e.target.value)} disabled={computeRunning}
                 style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 13, fontFamily: "ui-monospace, monospace", width: 200 }} />
               <label style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>Units</label>
-              <input type="number" min={RATE_CARD.compute.minBatch} max={RATE_CARD.compute.maxBatch}
+              <input aria-label="Units" type="number" min={RATE_CARD.compute.minBatch} max={RATE_CARD.compute.maxBatch}
                 value={computeSize} onChange={(e) => setComputeSize(Number(e.target.value))} disabled={computeRunning}
                 style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 13, width: 90, fontFamily: "ui-monospace, monospace" }} />
               <button onClick={startCompute} disabled={computeRunning}

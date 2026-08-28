@@ -1755,7 +1755,14 @@ qskywayRouter.get("/vertiports", (req: Request, res: Response) => {
 
 qskywayRouter.post("/route", (req: Request, res: Response) => {
   const { from, to, city, respectCeiling } = req.body ?? {};
-  if (typeof from !== "number" || typeof to !== "number") return refuseNonNumericPair(res);
+  // ⚠️ ЦЕЛОЕ, а не просто число. `1.5` проходило `typeof === "number"`, дальше
+  // им индексировали список вертипортов, и ручка отвечала 500 с ПУСТЫМ телом.
+  //
+  // Замер 28.08.2026 перебором граничных входов: из пяти пар четыре дают
+  // честный 422, а `from: 1.5, to: 2.5` — пятисотку. По правилам платформы
+  // неверные данные это 4xx: 500 значит «сломались мы», поднимает людей и
+  // топит Sentry шумом, среди которого не видно настоящих аварий.
+  if (!Number.isInteger(from) || !Number.isInteger(to)) return refuseNonNumericPair(res);
   const resolved = resolveCity(city);
   if (!resolved) return refuseUnknownCity(res);
   const strict = respectCeiling === true;
@@ -1879,7 +1886,14 @@ function scopeTexts(hasCeilingFeed: boolean, perm: CityPermission | undefined): 
 
 qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   const { from, to, city, respectCeiling } = req.body ?? {};
-  if (typeof from !== "number" || typeof to !== "number") return refuseNonNumericPair(res);
+  // ⚠️ ЦЕЛОЕ, а не просто число. `1.5` проходило `typeof === "number"`, дальше
+  // им индексировали список вертипортов, и ручка отвечала 500 с ПУСТЫМ телом.
+  //
+  // Замер 28.08.2026 перебором граничных входов: из пяти пар четыре дают
+  // честный 422, а `from: 1.5, to: 2.5` — пятисотку. По правилам платформы
+  // неверные данные это 4xx: 500 значит «сломались мы», поднимает людей и
+  // топит Sentry шумом, среди которого не видно настоящих аварий.
+  if (!Number.isInteger(from) || !Number.isInteger(to)) return refuseNonNumericPair(res);
   const resolved = resolveCity(city);
   if (!resolved) return refuseUnknownCity(res);
   const route = buildRoute(resolved.id, resolved.city, from, to, respectCeiling === true);

@@ -46,6 +46,8 @@ import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, 
 import { COLOR as CC_LIGHT, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { PV, ev, mm, best } from "./chessEngine";
 import { classifyDrop } from "./moveQuality";
+import { RANKS, gRank } from "./rating";
+import { pickDailyIdx } from "./dailyPick";
 
 // Dark theme palette — mirrors the keys of COLOR (./theme.ts) so the
 // component can swap CC=CC_LIGHT vs CC=CC_DARK at runtime via theme toggle.
@@ -218,7 +220,6 @@ const ALS: AL[] = [
 // Реальная глубина поиска Stockfish по индексу уровня (useSF=aiI>=3).
 // Master=16, Stockfish(max)=20 — настоящий максимум силы движка.
 const SFD: Record<number,number> = {3:8,4:12,5:16,6:20};
-const RANKS = [{min:0,t:"Начинающий",i:"●"},{min:600,t:"Новичок",i:"◆"},{min:900,t:"Любитель",i:"■"},{min:1200,t:"Клубный",i:"▲"},{min:1500,t:"Турнирный",i:"★"},{min:1800,t:"CM",i:"✦"},{min:2000,t:"FM",i:"✧"},{min:2200,t:"IM",i:"✪"},{min:2400,t:"GM",i:"♛"}];
 
 // Семантический цвет-код категорий фич: одна категория = один оттенок, консистентно
 // на всех навигационных поверхностях (хаб «Все разделы», стрип на setup-экране, палитра).
@@ -421,7 +422,6 @@ function ldR(){try{return parseInt(localStorage.getItem(RK)||"800")}catch{return
 function svR(v:number){try{localStorage.setItem(RK,String(Math.round(v)))}catch{}}
 function ldS(){try{return JSON.parse(localStorage.getItem(SK)||'{"w":0,"l":0,"d":0}')}catch{return{w:0,l:0,d:0}}}
 function svS(v:{w:number;l:number;d:number}){try{localStorage.setItem(SK,JSON.stringify(v))}catch{}}
-function gRank(e:number){return[...RANKS].reverse().find(r=>e>=r.min)||RANKS[0]}
 
 /* ═══ Game History ═══ */
 type SavedGame = {id:string;date:string;moves:string[];result:string;playerColor:"w"|"b";aiLevel:string;rating:number;tc:string;category:"Bullet"|"Blitz"|"Rapid"|"Classical";opening?:string;analysis?:Array<{ply:number;quality:string;cpLoss?:number}>};
@@ -441,11 +441,9 @@ const CLK="aevion_chessy_log_v1";
 function ldChessyLog():ChessyLogEntry[]{try{const s=localStorage.getItem(CLK);if(!s)return [];const r=JSON.parse(s);return Array.isArray(r)?r.slice(0,50):[]}catch{return []}}
 function svChessyLog(log:ChessyLogEntry[]){try{localStorage.setItem(CLK,JSON.stringify(log.slice(0,50)))}catch{}}
 function todayKey(){const d=new Date();return`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`}
-function daysSinceEpoch(){return Math.floor(Date.now()/86400000)}
 
 
 // Deterministic daily-puzzle index — same for all users on the same day
-function pickDailyIdx(total:number){if(total<=0)return 0;const n=daysSinceEpoch();let h=n*2654435761;h=(h^(h>>>16))>>>0;return h%total}
 type DailyState={v:1;date:string;idx:number;solved:boolean};
 const DK="aevion_daily_puzzle_v1";
 function ldDaily():DailyState|null{try{const s=localStorage.getItem(DK);if(!s)return null;const r=JSON.parse(s);return r?.v===1?r:null}catch{return null}}

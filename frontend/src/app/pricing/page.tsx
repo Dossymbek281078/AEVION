@@ -1485,6 +1485,7 @@ export default function PricingPage() {
             </div>
             <div>
               <label
+                htmlFor="calc-seats"
                 style={{
                   fontSize: 11,
                   fontWeight: 800,
@@ -1497,6 +1498,7 @@ export default function PricingPage() {
                 {tp("calc.seats")}
               </label>
               <input
+                id="calc-seats"
                 type="number"
                 min={1}
                 max={1000}
@@ -1516,6 +1518,7 @@ export default function PricingPage() {
             </div>
             <div>
               <label
+                htmlFor="calc-promo"
                 style={{
                   fontSize: 11,
                   fontWeight: 800,
@@ -1530,6 +1533,7 @@ export default function PricingPage() {
               <input
                 value={calcPromo}
                 onChange={(e) => setCalcPromo(e.target.value.toUpperCase())}
+                id="calc-promo"
                 placeholder="AEVION20 / STARTUP50"
                 style={{
                   width: 200,
@@ -2123,6 +2127,11 @@ export default function PricingPage() {
             <input
               type="email"
               required
+              // Подпись для читалки. Placeholder «your@email.com» исчезает
+              // при вводе, и поле становится безымянным ровно тогда, когда
+              // человек в нём работает. Замер 28.08.2026 зондом
+              // aevion-a11y-names на живом проде.
+              aria-label={tp("newsletter.emailLabel")}
               placeholder={tp("newsletter.placeholder")}
               value={newsletterEmail}
               onChange={(e) => setNewsletterEmail(e.target.value)}

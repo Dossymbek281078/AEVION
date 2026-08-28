@@ -437,3 +437,27 @@ export function withChannel(href: string, channel: string | null, landing = "sit
   });
   return `${href}${sep}${q.toString()}`;
 }
+
+/** Короткий ключ `?c=` по нормализованному каналу — обратное к channelFrom.
+ *
+ *  ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ. В CHANNELS ключи короткие (yt), а значения длинные
+ *  (youtube). Страница получает от channelFrom уже длинное значение, и подстановка
+ *  его в ссылку выглядит правильной, но channelFrom("youtube") вернёт null:
+ *  метка исчезает МОЛЧА, ровно на внутреннем переходе. Замер 28.08.2026 — две
+ *  такие потери: /en/go → /en/longevity и /longevity → /shop, обе на пути, по
+ *  которому человек идёт к покупке после бесплатного материала. */
+export function channelParam(channel: string | null): string | null {
+  if (!channel) return null;
+  const hit = Object.entries(CHANNELS).find(([, value]) => value === channel);
+  return hit ? hit[0] : null;
+}
+
+/** Внутренний переход, сохраняющий метку канала в том виде, в каком её примет
+ *  следующая страница. Для ВНЕШНИХ кассовых ссылок — withChannel: там нужна
+ *  UTM-тройка, здесь она только мусорила бы адрес. */
+export function keepChannel(path: string, channel: string | null): string {
+  const c = channelParam(channel);
+  if (!c) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}c=${encodeURIComponent(c)}`;
+}

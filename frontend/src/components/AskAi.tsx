@@ -5,7 +5,7 @@
 // the answer, and surfaces a tiny badge of how the router resolved it (single
 // vs light/deep council) so the cost-aware routing is visible in-product. Every
 // ask feeds the shared savings tally under `module`.
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { askSmart, type AskRouting } from "@/lib/askSmart";
 
 export default function AskAi({
@@ -17,6 +17,10 @@ export default function AskAi({
   title?: string;
   placeholder?: string;
 }) {
+  // Подпись у поля на экране ЕСТЬ, но читалке она не была видна: связи не
+  // было, и поле объявлялось безымянным. Placeholder именем не считается —
+  // он исчезает при вводе. Найдено зондом aevion-a11y-names 28.08.2026.
+  const titleId = useId();
   const [q, setQ] = useState("");
   const [answer, setAnswer] = useState("");
   const [routing, setRouting] = useState<AskRouting | null>(null);
@@ -75,11 +79,12 @@ export default function AskAi({
     <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 14, background: "#fff", maxWidth: 640 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <span aria-hidden>⚡</span>
-        <strong style={{ fontSize: 14 }}>{title}</strong>
+        <strong id={titleId} style={{ fontSize: 14 }}>{title}</strong>
         <span style={{ fontSize: 11, color: "#94a3b8" }}>routed by cost — facts stay cheap</span>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         <input
+          aria-labelledby={titleId}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") submit(); }}

@@ -1058,7 +1058,7 @@ export default function ConstitutionPage() {
             {overSaveLimit && <ProPaywallBanner savedTotal={savedTotal} limit={planLimits?.savedScenarios ?? 5} />}
 
             <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
-              <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">
+              <h3 id="constitution-save-heading" className="text-lg font-semibold text-[#f5d27a] mb-3">
                 {t("constitution.save.heading")}
                 {savedTotal > 0 ? ` (${t("constitution.save.total", { count: savedTotal })})` : ""}
                 {plan === "pro" && (
@@ -1071,6 +1071,12 @@ export default function ConstitutionPage() {
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
+                  // Поле держалось на одной подсказке, а она исчезает при
+                  // вводе — читалка объявляла его безымянным ровно тогда,
+                  // когда в нём работают. Найдено сторожем AEVION-A11yNamesWatch
+                  // 28.08.2026. Связываю с заголовком блока: новых ключей
+                  // не завожу — словарь сейчас перестраивает соседняя ветка.
+                  aria-labelledby="constitution-save-heading"
                   placeholder={t("constitution.save.titlePlaceholder")}
                   className="flex-1 min-w-[180px] bg-[#050a1a] border border-[#d4af37]/30 rounded px-3 py-2 text-sm"
                   maxLength={120}

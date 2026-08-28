@@ -1986,10 +1986,30 @@ qcoreaiRouter.get("/runs/:id/cost-breakdown", async (req, res) => {
  * Performance scores per agent role based on runs rated ≥1.
  * Score = avg rating weighted by call count.
  */
+/**
+ * Ответ, когда ХРАНИЛИЩЕ недоступно.
+ *
+ * Пустой список с кодом 200 неотличим от честного «у вас пока нет данных»:
+ * заплативший видит пустую аналитику и решает, что продукт пуст. Ни ошибки,
+ * ни тревоги, ни следа — снаружи этот случай не отличить в принципе.
+ *
+ * Поэтому признак живёт В САМИХ ДАННЫХ, а не только в журнале. Код остаётся
+ * 200 намеренно: 5xx поднял бы тревогу у всех потребителей, включая тех, кому
+ * пустой список сейчас безвреден, а 4xx соврал бы про причину — виноват не
+ * запрос.
+ *
+ * ⚠️ Это половина починки: поле обязан ЧИТАТЬ интерфейс, иначе на экране всё
+ * та же пустота.
+ */
+const storageDegraded = { items: [], degraded: true, reason: "storage_unavailable" as const };
+
 qcoreaiRouter.get("/analytics/agent-performance", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    if (!isDbReady() || !auth?.sub) return res.json({ items: [] });
+    // Два РАЗНЫХ случая, и раньше они давали один ответ: у анонима данных
+    // честно нет, а недоступное хранилище — наша поломка.
+    if (!isDbReady()) return res.json(storageDegraded);
+    if (!auth?.sub) return res.json({ items: [] });
     const r = await pool.query(
       `SELECT m."role",
               COUNT(DISTINCT m."runId")::int AS "runs",
@@ -2022,7 +2042,8 @@ qcoreaiRouter.get("/analytics/agent-performance", async (req, res) => {
 qcoreaiRouter.get("/analytics/provider-latency", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    if (!isDbReady() || !auth?.sub) {
+    if (!isDbReady()) return res.json(storageDegraded);
+    if (!auth?.sub) {
       return res.json({ items: [] });
     }
     const limit = Math.min(20, Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1));
@@ -2059,8 +2080,9 @@ qcoreaiRouter.get("/analytics/by-tag", async (req, res) => {
     const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1));
 
     if (!isDbReady()) {
-      // In-memory: approximate using tags from runs
-      return res.json({ items: [] });
+      // Приближения по тегам здесь нет и не было — комментарий обещал то,
+      // чего код не делает. Отдаём честный признак недоступного хранилища.
+      return res.json(storageDegraded);
     }
 
     const r = await pool.query(
@@ -2135,7 +2157,7 @@ qcoreaiRouter.get("/analytics/agent-length", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    if (!isDbReady()) return res.json({ items: [] });
+    if (!isDbReady()) return res.json(storageDegraded);
     const r = await pool.query(
       `SELECT m."role", COUNT(*) AS calls,
               AVG(LENGTH(m."content")) AS avgLength,
@@ -2170,7 +2192,7 @@ qcoreaiRouter.get("/analytics/provider-compare", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    if (!isDbReady()) return res.json({ items: [] });
+    if (!isDbReady()) return res.json(storageDegraded);
     const r = await pool.query(
       `SELECT m."provider",
               COUNT(*) AS calls,

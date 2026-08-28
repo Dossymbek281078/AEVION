@@ -538,6 +538,14 @@ export default function QCoreMultiAgentPage() {
   // happened. The wording lives here, in the page's own language; the server
   // sends a machine flag plus its own `note` for direct API callers.
   const [inviteFragile, setInviteFragile] = useState(false);
+  // 28.08.2026 — 11 читающих ручек модуля при недоступной базе отвечают
+  // ПУСТЫМ списком, то есть «у вас ничего нет» вместо «не могу спросить».
+  // Признак уже приходит в /health, который эта страница и так зовёт;
+  // второй механизм заводить незачем — не хватало только показа.
+  // `isDbReady` ложно не только при упавшей базе, но и когда её забыли
+  // настроить при выкатке: тогда модуль молча пуст целиком, а прод
+  // выглядит здоровым. Образец поведения — страница lifebox.
+  const [storageDown, setStorageDown] = useState<string | null>(null);
 
   // V48 — Run timeline points.
   type TimelinePoint = { runId: string; startedAt: string; durationMs: number | null; costUsd: number | null; strategy: string | null; status: string };
@@ -643,6 +651,11 @@ export default function QCoreMultiAgentPage() {
         if (typeof healthData?.webhookConfigured === "boolean") {
           setWebhookConfigured(healthData.webhookConfigured);
         }
+        setStorageDown(
+          healthData?.storage === "in-memory"
+            ? String(healthData?.storageError || "Storage is unavailable right now.")
+            : null,
+        );
 
         if (provData?.providers) setProviders(provData.providers);
         if (Array.isArray(agData?.strategies)) setStrategies(agData.strategies);
@@ -1954,6 +1967,22 @@ export default function QCoreMultiAgentPage() {
     <main>
       <ProductPageShell maxWidth={1200}>
         <Wave1Nav />
+
+        {storageDown && (
+          <div
+            role="status"
+            style={{
+              margin: "0 0 12px", padding: "10px 14px", borderRadius: 12,
+              background: "#fffbeb", border: "1px solid #fde68a",
+              color: "#92400e", fontSize: 13, lineHeight: 1.5,
+            }}
+          >
+            <strong>Storage is unavailable.</strong> Sessions, personas and
+            analytics show up empty because we cannot reach them — not because
+            they are gone. Anything you change now lasts only until the server
+            restarts.
+          </div>
+        )}
 
         {/* ── Header ── */}
         <div style={{ borderRadius: 20, overflow: "hidden", marginBottom: 16 }}>

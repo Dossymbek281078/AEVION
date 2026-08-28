@@ -274,9 +274,14 @@ export async function sendVerificationEmail(opts: {
   /** Имя в письме. Платформенная регистрация передаёт "AEVION": человек
    *  заводит аккаунт AEVION, а не модуля найма. */
   brand?: string;
+  /** Идентификатор строки токена. Без него страница не сможет завершить
+   *  подтверждение у человека, который открыл письмо на телефоне и не вошёл:
+   *  секрет хранится bcrypt-хешем, найти его по значению нельзя. */
+  tokenId?: string;
 }): Promise<boolean> {
   const brand = opts.brand || "AEVION QBuild";
-  const link = `${BASE}/build/verify-email?token=${encodeURIComponent(opts.token)}`;
+  const idPart = opts.tokenId ? `&id=${encodeURIComponent(opts.tokenId)}` : "";
+  const link = `${BASE}/build/verify-email?token=${encodeURIComponent(opts.token)}${idPart}`;
   return send(
     opts.to,
     `Подтвердите email — ${brand}`,

@@ -115,6 +115,12 @@ export default function DevHubPage() {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || t("err.create"));
+      // Сервер честно говорит, КУДА лёг проект, и до сегодня это поле никто не
+      // читал: правда доезжала до ответа и останавливалась на границе API.
+      // «memory» значит, что база была недоступна и запись живёт в памяти
+      // процесса — исчезнет при перезапуске. Человек должен узнать это сейчас,
+      // а не обнаружить пропажу завтра.
+      if (data.storage === "memory") setError(t("proj.savedToMemory"));
       try { localStorage.setItem(`devhub_autoprompt_${data.project.id}`, idea); } catch { /* quota */ }
       router.push(`/devhub/${data.project.id}`);
     } catch (e: any) {

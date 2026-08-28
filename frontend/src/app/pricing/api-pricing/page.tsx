@@ -31,7 +31,7 @@ const ENDPOINTS: Endpoint[] = [
   { id: "qrightBadge", group: "qright", method: "GET", path: "/api/qright/badge/:id.svg", name: "SVG-бейдж", freeQuota: "Unlimited", pricePer1k: "Free" },
   { id: "bureauProtect", group: "bureau", method: "POST", path: "/api/pipeline/protect", name: "Защитить артефакт", freeQuota: "5/мес", pricePer1k: "$25.00" },
   { id: "bureauProtectBatch", group: "bureau", method: "POST", path: "/api/pipeline/protect-batch", name: "Batch-защита (до 50)", freeQuota: "1/мес", pricePer1k: "$200.00" },
-  { id: "bureauCertificate", group: "bureau", method: "GET", path: "/api/bureau/certificate/:id.pdf", name: "PDF-сертификат", freeQuota: "10/мес", pricePer1k: "$5.00" },
+  { id: "bureauCertificate", group: "bureau", method: "GET", path: "/api/pipeline/certificate/:certId/pdf", name: "PDF-сертификат", freeQuota: "10/мес", pricePer1k: "$5.00" },
   { id: "qcoreChat", group: "qcore", method: "POST", path: "/api/qcoreai/chat", name: "LLM chat completion", freeQuota: "100k токенов", pricePer1k: "$0.50/1k tok" },
   { id: "qcoreAgent", group: "qcore", method: "POST", path: "/api/qcoreai/multi-agent", name: "Agent-вызов с tool-use", freeQuota: "1k вызовов", pricePer1k: "$5.00" },
   { id: "qcoreEmbed", group: "qcore", method: "POST", path: "/api/qcore/embed", name: "Embeddings", freeQuota: "1M токенов", pricePer1k: "$0.05/1k tok" },

@@ -296,7 +296,10 @@ export default function AuthPage() {
   };
 
   return (
-    <main>
+    // lang="ru" на блоке содержимого: корневой <html lang> у сайта "en", а этот
+    // экран переведён на русский целиком (замер 28.08.2026 по отдаваемому HTML:
+    // 547 русских букв). Ближайшая пометка выигрывает у корневой.
+    <main lang="ru">
       <ProductPageShell maxWidth={720}>
         <Wave1Nav />
         <PipelineSteps current="auth" />

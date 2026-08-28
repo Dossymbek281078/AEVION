@@ -1967,7 +1967,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // An empty list is only meaningful together with WHY it is empty. The
       // reason is also returned, so a caller can refuse to report success.
       if (d.error) {
-        const issue = { errorKind: d.errorKind as string | undefined, error: d.error as string };
+        // Значение сервера входит в нашу структуру ЗДЕСЬ, и отсюда попадает на
+        // экран в двух местах (сообщение о ветках и карточка недоступного
+        // репозитория). Перевод ставим в точке входа, а не у каждого показа:
+        // иначе третий показ снова окажется сырым.
+        const issue = {
+          errorKind: d.errorKind as string | undefined,
+          error: devhubServerError(d.error, "Не удалось загрузить список веток"),
+        };
         setGithubIssue(issue);
         return issue;
       }
@@ -2681,7 +2688,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         showToast(devhubServerError(d.error, "Пакетный перевод не удался"), "error");
         return;
       }
-      setBulkResults(d.results || []);
+      // У каждой строки результата свой текст ошибки от сервера, и он
+        // выводится в список как есть. Переводим на входе, а не в разметке:
+        // в разметке легко забыть, а сюда всё приходит одним местом.
+      setBulkResults(
+        (d.results || []).map((row: { error?: string }) =>
+          row?.error ? { ...row, error: devhubServerError(row.error, "Не удалось перевести") } : row,
+        ),
+      );
       setBulkSummary({ total: d.total, successCount: d.successCount, failureCount: d.failureCount });
       if (d.successCount > 0) {
         // Перевод платный: результат в памяти исчезнет при перезапуске, а деньги

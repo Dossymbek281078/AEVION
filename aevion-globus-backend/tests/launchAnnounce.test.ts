@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
@@ -263,5 +263,62 @@ describe("дата запуска обязана называть свой ис�
     expect(matchesModule("gogo", "cyberchess")).toBe(false);
     const plan = planLaunchAnnounce("cyberchess", [{ email: "chuzhoy@primer.ru", source: "gogol" }]);
     expect(plan.recipients).toHaveLength(0);
+  });
+
+  // 28.08.2026: рассылка отбирала получателей по метке, которую пишет форма
+  // страницы запуска, и совпадение этих двух мест никто не проверял. У шахмат
+  // оно сошлось случайно, а стоило бы разойтись — письмо ушло бы в пустоту, и
+  // узнали бы мы об этом в день запуска. Проверка держит связь фронта и
+  // бэкенда, которую иначе не держит ничто.
+  test("метка формы на странице запуска совпадает с ключом рассылки", () => {
+    const appDir = join(__dirname, "..", "..", "frontend", "src", "app");
+    expect(existsSync(appDir), `каталога страниц нет: ${appDir}`).toBe(true);
+
+    // Берём страницы запуска, которые ЕСТЬ, и спрашиваем каждую: какую метку
+    // она пишет и признаёт ли её хоть один модуль реестра.
+    const launchPages = readdirSync(appDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && existsSync(join(appDir, d.name, "launch", "page.tsx")))
+      .map((d) => ({ dir: d.name, file: join(appDir, d.name, "launch", "page.tsx") }));
+    expect(launchPages.length, "страниц запуска не найдено вовсе — проверка стала бы пустой").toBeGreaterThan(0);
+
+    for (const p of launchPages) {
+      const src = readFileSync(p.file, "utf8");
+      // Метка задаётся двумя способами, и оба надо уметь читать: прямо
+      // (`source="bureau"`) и тернаром с каналом
+      // (`source = channel ? \`bureau-${channel}\` : "bureau"`). Первая версия
+      // проверки знала только первый способ и упала на странице бюро — прибор
+      // сам себя и поймал (28.08).
+      const labels: string[] = [];
+      // Перевод строки собираем кодом: обратный слэш в литерале не переживает
+      // передачу правки и превращается в настоящий разрыв строки (28.08).
+      for (const line of src.split(String.fromCharCode(10))) {
+        if (!line.includes("source")) continue;
+        for (const m of line.matchAll(/"([a-z0-9-]+)"/g)) labels.push(m[1]);
+        for (const m of line.matchAll(/`([a-z0-9-]+)-\$\{channel\}`/g)) labels.push(m[1]);
+      }
+      expect(labels.length, `${p.dir}: на странице запуска не нашёл метки источника`).toBeGreaterThan(0);
+      for (const label of new Set(labels)) {
+        const owner = Object.keys(LAUNCH_MODULES).find((slug) => matchesModule(label, slug));
+        expect(
+          owner,
+          `${p.dir}: форма пишет метку «${label}», но её не признаёт ни один модуль рассылки ` +
+            `(${Object.keys(LAUNCH_MODULES).join(", ")}) — письмо запуска ушло бы в пустоту`,
+        ).toBeDefined();
+      }
+    }
+  });
+
+  // У модуля с назначенной датой страница запуска обязана существовать: именно
+  // на ней собирают адреса, которым потом уходит письмо.
+  test("у модуля с датой есть страница запуска", () => {
+    const appDir = join(__dirname, "..", "..", "frontend", "src", "app");
+    for (const [slug, m] of Object.entries(LAUNCH_MODULES)) {
+      if (!m.date) continue;
+      const dir = m.page.replace(/^\//, "");
+      expect(
+        existsSync(join(appDir, dir, "launch", "page.tsx")),
+        `${slug}: дата ${m.date} назначена, а страницы ${m.page}/launch нет — собирать адреса негде`,
+      ).toBe(true);
+    }
   });
 });

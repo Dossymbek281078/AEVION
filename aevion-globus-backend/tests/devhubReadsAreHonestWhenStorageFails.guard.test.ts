@@ -89,6 +89,11 @@ describe("чтения DevHub честны при упавшем хранили�
       `/api/devhub/projects/${ID}/checkpoints`,
       `/api/devhub/projects/${ID}/collaborators`,
       `/api/devhub/projects/${ID}/database`,
+      // Добавлено 29.08: чтение ОДНОГО файла. Имя теста обещало «ни одно
+      // чтение», а список знал семь путей из большего числа — те два, что
+      // читают файл, отвечали 500 и в список не входили.
+      `/api/devhub/projects/${ID}/files/app.js`,
+      `/api/devhub/projects/${ID}/file?path=app.js`,
     ];
     const bad: string[] = [];
     for (const p of paths) {

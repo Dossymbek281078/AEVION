@@ -1713,7 +1713,15 @@ devhubRouter.get("/projects/:id/files/:filepath", async (req, res) => {
     if (!file) return res.status(404).json({ error: "file not found" });
     res.json({ file });
   } catch {
-    return res.status(500).json({ error: "internal_error" });
+    // Недоступность хранилища — это НЕ «сломались мы». 500 поднимает
+    // тревогу в Sentry и тонет в шуме, среди которого потом не видно
+    // настоящих аварий; 503 с отдельным кодом называет причину.
+    //
+    // Остаток свипа 28.08 (тогда закрыли 25 мест): эти два читающих
+    // обработчика файлов в список не попали — сторож знал семь путей,
+    // а имя обещало «ни одно чтение».
+    captureException(new Error("devhub file read failed"));
+    return replyStorageUnavailable(res);
   }
 });
 
@@ -1734,7 +1742,15 @@ devhubRouter.get("/projects/:id/file", async (req, res) => {
     if (!file) return res.status(404).json({ error: "file not found" });
     res.json({ file });
   } catch {
-    return res.status(500).json({ error: "internal_error" });
+    // Недоступность хранилища — это НЕ «сломались мы». 500 поднимает
+    // тревогу в Sentry и тонет в шуме, среди которого потом не видно
+    // настоящих аварий; 503 с отдельным кодом называет причину.
+    //
+    // Остаток свипа 28.08 (тогда закрыли 25 мест): эти два читающих
+    // обработчика файлов в список не попали — сторож знал семь путей,
+    // а имя обещало «ни одно чтение».
+    captureException(new Error("devhub file read failed"));
+    return replyStorageUnavailable(res);
   }
 });
 

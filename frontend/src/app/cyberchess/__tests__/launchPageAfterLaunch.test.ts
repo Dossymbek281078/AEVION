@@ -29,6 +29,18 @@ describe("страница запуска в день открытия", () => {
     expect(STRANICA).toContain("Уже открыто");
   });
 
+  test("картинка превью тоже не остаётся в будущем времени", () => {
+    // Её видит человек, которому ПЕРЕСЛАЛИ ссылку. 29.08.2026 она говорила
+    // «Открываем 30 августа» и от даты не зависела: после запуска превью
+    // обещало бы будущее, хотя всё уже случилось.
+    const kartinka = fs.readFileSync(
+      path.join(__dirname, "..", "launch", "opengraph-image.tsx"),
+      "utf-8",
+    );
+    expect(kartinka).toContain("daysUntilLaunch(");
+    expect(kartinka).toContain("Уже открыт");
+  });
+
   test("дата берётся общим расчётом, а не своим", () => {
     // Свой расчёт разошёлся бы с остальными страницами на часовой пояс запуска.
     expect(STRANICA).toContain("daysUntilLaunch(");

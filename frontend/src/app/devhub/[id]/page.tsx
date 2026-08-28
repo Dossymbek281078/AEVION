@@ -1403,7 +1403,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       REACT_PREVIEW_OVERLAY_SCRIPT
     ).then((r) => {
       if (cancelled) return;
-      if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(r.error); }
+      if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(devhubServerError(r.error, "Превью не собралось")); }
       else { setReactPreviewSrcdoc(r.srcdoc); }
       setVisualEditSelected(null);
     });
@@ -2413,7 +2413,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 const step = agentSteps[evt.index];
                 accumulated.push({
                   step: evt.index, type: step?.type || "unknown",
-                  ok: !!evt.ok, output: evt.output, error: evt.error, savedAs: evt.savedAs,
+                  ok: !!evt.ok, output: evt.output, error: evt.error ? devhubServerError(evt.error, "Шаг не выполнен") : evt.error, savedAs: evt.savedAs,
                 });
                 setAgentResults([...accumulated]);
               } else if (evt.type === "complete") {
@@ -2794,7 +2794,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok) {
-        setZipResult({ ok: false, text: d.error || "Импорт не удался" });
+        setZipResult({ ok: false, text: devhubServerError(d.error, "Импорт не удался") });
         return;
       }
       setZipResult({
@@ -2962,7 +2962,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        setVoiceCloneMsg({ ok: false, text: d.error || "Превью не открылось" });
+        setVoiceCloneMsg({ ok: false, text: devhubServerError(d.error, "Превью не открылось") });
         return;
       }
       const blob = await r.blob();

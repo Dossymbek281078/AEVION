@@ -219,7 +219,7 @@ export default function InvestorPage() {
               if (entries.length === 0) {
                 return (
                   <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
-                    Waiting for the registry endpoint. Each module reports its lifecycle stage:
+                    Loading the module registry. Each module reports its lifecycle stage:
                     <span style={{ color: "#10b981" }}> MVP/working</span>,
                     <span style={{ color: "#3b82f6" }}> in progress</span>,
                     <span style={{ color: "#a78bfa" }}> planning</span>,

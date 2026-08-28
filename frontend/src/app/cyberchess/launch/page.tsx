@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
-import { channelFrom } from "@/lib/products";
+import { channelFrom, keepChannel } from "@/lib/products";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { LandingView } from "@/components/LandingView";
@@ -88,6 +88,10 @@ export default async function CyberChessLaunchPage({
   // Через channelFrom, а не напрямую: неизвестное значение превращается в null
   // и метки не будет. Иначе первый же чужой параметр в ссылке заведёт в
   // выгрузке подписчиков мусорный канал, который потом не отличить от нашего.
+  // Внутренние переходы — только через keepChannel. Подставлять сюда `channel`
+  // нельзя: он уже НОРМАЛИЗОВАН (youtube), а страница ждёт короткий ключ (yt),
+  // и channelFrom("youtube") вернёт null. Ссылка выглядела бы несущей метку и
+  // молча её теряла — так и было здесь до 29.08.2026.
   const channel = channelFrom((await searchParams).c);
   const source = channel ? `cyberchess-${channel}` : "cyberchess";
   const bankLabel = bank ? new Intl.NumberFormat("ru-RU").format(bank) : null;
@@ -145,7 +149,7 @@ export default async function CyberChessLaunchPage({
             Человек, готовый попробовать прямо сейчас, до неё не доходил. */}
         <p style={{ color: MUTED, fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>
           Не хотите ждать?{" "}
-          <a href={channel ? `/cyberchess?c=${channel}` : "/cyberchess"} style={{ color: GOLD, fontWeight: 600 }}>
+          <a href={keepChannel("/cyberchess", channel)} style={{ color: GOLD, fontWeight: 600 }}>
             приложение уже открыто — попробовать сейчас
           </a>
           .
@@ -213,7 +217,7 @@ export default async function CyberChessLaunchPage({
             {/* Метку канала несём ДАЛЬШЕ: без неё цепочка измерения рвётся на
                 последнем шаге — мы знаем, какой ролик привёл человека на
                 посадочную, но не знаем, кто из них дошёл до самой игры. */}
-            <a href={channel ? `/cyberchess?c=${channel}` : "/cyberchess"} style={{ color: GOLD, fontWeight: 600 }}>
+            <a href={keepChannel("/cyberchess", channel)} style={{ color: GOLD, fontWeight: 600 }}>
               зайти и попробовать
             </a>
             .

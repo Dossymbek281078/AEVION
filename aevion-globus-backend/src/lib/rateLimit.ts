@@ -321,6 +321,17 @@ export function bucketFingerprint(key: string): string {
 const peerShapesLogged = new Set<string>();
 const PEER_SHAPE_LOG_LIMIT = 3;
 
+/** Огрублённая форма значения X-Real-IP. Само значение НИКУДА не уходит. */
+export function realIpShape(raw: unknown): string {
+  if (typeof raw !== "string") return raw === undefined ? "нет" : "не-строка";
+  const v = raw.trim();
+  if (!v) return "пусто";
+  if (v.includes(",")) return "список";
+  if (/^[0-9.]+:[0-9]+$/.test(v)) return "с-портом";
+  if (looksLikeAddress(v)) return "адрес";
+  return "иное";
+}
+
 function logPeerShapeOnce(
   peer: string,
   headers: Record<string, unknown> | undefined,
@@ -332,16 +343,26 @@ function logPeerShapeOnce(
   const firstOctet = family === "ipv4" ? bare.split(".")[0] : bare.split(":")[0];
   const real = headers?.["x-real-ip"] ? "есть" : "нет";
   const xff = headers?.["x-forwarded-for"] ? "есть" : "нет";
-  const shape = [family, firstOctet || "?", real, xff, where].join("|");
+  // ГЛАВНОЕ: печатаем не догадку, а исход КАЖДОГО условия ветки X-Real-IP.
+  // Отпечаток ключа показал, что ветка не срабатывает даже когда сосед из
+  // 100.x и заголовок на месте, — а какое из трёх условий падает, снаружи
+  // не видно. Три предыдущих объяснения были подбором и все оказались мимо.
+  const internal = isRailwayInternal(peer) ? "да" : "нет";
+  const realShape = realIpShape(headers?.["x-real-ip"]);
+  const branch = internal === "да" && realShape === "адрес" ? "x-real-ip" : "req.ip";
+  const shape = [family, firstOctet || "?", real, xff, where, internal, realShape, branch].join("|");
   if (peerShapesLogged.has(shape)) return;
   peerShapesLogged.add(shape);
   console.warn(
-    "[rateLimit] форма соседа по сокету: семейство=%s префикс=%s | x-real-ip=%s x-forwarded-for=%s | путь=%s",
+    "[rateLimit] форма соседа по сокету: семейство=%s префикс=%s | x-real-ip=%s x-forwarded-for=%s | путь=%s | внутренний=%s форма-real=%s ветка=%s",
     family,
     firstOctet || "?",
     real,
     xff,
     where,
+    internal,
+    realShape,
+    branch,
   );
 }
 

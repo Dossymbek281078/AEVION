@@ -3247,13 +3247,20 @@ devhubRouter.put("/projects/:id/env", async (req, res) => {
   if (!key || typeof key !== "string") return res.status(400).json({ error: "key is required" });
   project.envVars[String(key)] = String(value ?? "");
   project.updatedAt = now();
+  // Переменные окружения ПРИЛОЖЕНИЯ ПОЛЬЗОВАТЕЛЯ: сюда кладут ключи
+  // провайдеров, строки подключения, токены. Если запись легла только в память
+  // процесса, при перезапуске она исчезнет — а выкатка соберётся без неё, и
+  // человек будет искать причину в своём коде. Признак хранилища здесь тот же,
+  // что у создания проекта и снипета.
+  let storage: "db" | "memory" = "db";
   try {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/env:put", projectId: project.id });
     memProjects.set(project.id, project);
+    storage = "memory";
   }
-  res.json({ ok: true, key });
+  res.json({ ok: true, key, storage });
 });
 
 // DELETE /api/devhub/projects/:id/env/:key
@@ -3265,13 +3272,17 @@ devhubRouter.delete("/projects/:id/env/:key", async (req, res) => {
   const key = req.params.key;
   delete project.envVars[key];
   project.updatedAt = now();
+  // То же и на удалении: «убрал» в памяти означает, что после перезапуска
+  // переменная вернётся, а человек считает её удалённой.
+  let storage: "db" | "memory" = "db";
   try {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/env:delete", projectId: project.id });
     memProjects.set(project.id, project);
+    storage = "memory";
   }
-  res.json({ ok: true, key });
+  res.json({ ok: true, key, storage });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

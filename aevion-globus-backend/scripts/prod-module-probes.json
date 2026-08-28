@@ -75,6 +75,11 @@
   "expect": 200
  },
  {
+  "base": "/api/constitution/checkout",
+  "url": "/api/constitution/checkout/go/probe",
+  "expect": 200
+ },
+ {
   "base": "/api/constitution/public",
   "url": "/api/constitution/public/regimes",
   "expect": 200

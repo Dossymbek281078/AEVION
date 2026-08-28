@@ -122,6 +122,43 @@ const refuseNonNumericPair = (res: Response) =>
   });
 
 // ── engine constants ─────────────────────────────────────────────────────────
+/**
+ * Считать ли `clearedUpToM` по ФАКТИЧЕСКОЙ высоте коридора вместо константы.
+ *
+ * Сейчас поле отдаёт `FLOOR - CLEAR` = 35 м: «этот коридор терпит препятствие
+ * не выше 35 м». Это верно только там, где коридор лежит НА ПОЛУ. Участок со
+ * съеденным штрафом может стоять и выше (условие `bandWithPenalty ===
+ * bandNoPenalty` выполняется на любой ступени, не только на нулевой), и тогда
+ * настоящий выдержанный просвет больше обещанного.
+ *
+ * То есть константа ЗАНИЖАЕТ — врёт в безопасную сторону. Поэтому включение
+ * выключателя это не починка опечатки, а СМЕНА ЗАЯВЛЕНИЯ О БЕЗОПАСНОСТИ: мы
+ * начинаем публиковать бо́льшую терпимую высоту. Такое решение принимает
+ * основатель, а не я, — код готов и ждёт одного слова.
+ *
+ * Обещать надо МИНИМУМ по участкам со съеденным штрафом: заявление держится
+ * самым слабым местом маршрута, а не средним.
+ */
+const CLEARED_UP_TO_FROM_CORRIDOR = false;
+
+/**
+ * Высота препятствия, до которой обещанный запас над коридором ВЫДЕРЖАН.
+ *
+ * Флаг — параметр, а не только модульная константа: иначе выключенное
+ * состояние проверяется, а включённое живёт непроверенным до самого дня, когда
+ * его включат.
+ *
+ * `inertMinAltM === null` значит «участков со съеденным штрафом нет вовсе» —
+ * тогда и уточнять нечего, отдаём прежнее значение.
+ */
+export function clearedUpToMFor(
+  inertMinAltM: number | null,
+  enabled: boolean = CLEARED_UP_TO_FROM_CORRIDOR,
+): number {
+  if (!enabled || inertMinAltM === null) return FLOOR - CLEAR;
+  return inertMinAltM - CLEAR;
+}
+
 const FLOOR = 50;
 const CLEAR = 15;
 const BAND = 25;
@@ -554,6 +591,9 @@ function buildRoute(
   const obstacles: number[] = [];
   let timeStill = 0, timeWind = 0, windSum = 0, confSum = 0, measuredEdges = 0;
   let guessedSegments = 0, guessedInertSegments = 0;
+  // null, а не 0: «таких участков не было» и «участок на нулевой высоте» —
+  // разные вещи, и ноль здесь читался бы как второе.
+  let inertMinAlt: number | null = null;
   let confSumOnObstacles = 0;
   let obstacleSegments = 0, measuredObstacleSegments = 0;
   for (let k = 0; k < path.length - 1; k++) {
@@ -581,7 +621,11 @@ function buildRoute(
       guessedSegments++;
       const bandNoPenalty = Math.max(0, Math.ceil((maxObst + CLEAR - FLOOR) / BAND));
       const bandWithPenalty = Math.max(0, Math.ceil((maxObst + CLEAR + confClear(worstSrc) - FLOOR) / BAND));
-      if (bandWithPenalty === bandNoPenalty) guessedInertSegments++;
+      if (bandWithPenalty === bandNoPenalty) {
+        guessedInertSegments++;
+        // Заявление держится самым низким таким участком, поэтому минимум.
+        if (inertMinAlt === null || alt < inertMinAlt) inertMinAlt = alt;
+      }
     }
     // Участок с настоящим препятствием — только там вопрос «а обмерена ли эта
     // высота?» вообще имеет смысл.
@@ -654,7 +698,7 @@ function buildRoute(
     blindHeight: {
       guessedSegments,
       inertPenaltySegments: guessedInertSegments,
-      clearedUpToM: FLOOR - CLEAR,
+      clearedUpToM: clearedUpToMFor(inertMinAlt),
       // Обе версии — то же правило, что у `scope`/`scopeEn` ниже: защищает та,
       // которую читатель понимает. Первая версия этого поля была только
       // русской, и я нарушил собственное соглашение модуля через несколько

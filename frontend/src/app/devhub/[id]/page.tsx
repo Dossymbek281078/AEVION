@@ -1165,7 +1165,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               const evt = JSON.parse(e.slice(6));
               if (evt.type === "status") setGenStage(evt.stage);
               else if (evt.type === "result") data = evt;
-              else if (evt.type === "error") throw new Error(evt.error);
+              else if (evt.type === "error") throw new Error(devhubServerError(evt.error, "Генерация прервалась"));
             }
           }
         }
@@ -1823,7 +1823,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ templateId }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error);
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось выполнить действие"));
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
@@ -2019,7 +2019,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/pages`), { method: "POST" });
       const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(d.error || "Pages deploy failed");
+      if (!r.ok || !d.ok) throw new Error(devhubServerError(d.error, "Не удалось опубликовать на Cloudflare Pages"));
       setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl, domainReady: !!d.domainReady });
       // The server decides which address is live and hands it over as liveUrl —
       // it falls back to pages.dev when the custom domain does not resolve.
@@ -2093,7 +2093,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setEmailMsg({ ok: false, text: d.error || "Send failed" });
+        setEmailMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setEmailMsg({ ok: true, degraded: true, text: `Sent to ${emailTo}, but Brevo didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setEmailTo(""); setEmailSubject(""); setEmailBody("");
@@ -2133,7 +2133,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setPayError(d.error || "Failed to create payment link");
+        setPayError(devhubServerError(d.error, "Не удалось создать ссылку на оплату"));
       } else {
         setPayResult({ url: d.url });
       }
@@ -2160,7 +2160,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setPayError(d.error || "Failed to create Gumroad checkout");
+        setPayError(devhubServerError(d.error, "Не удалось создать оплату Gumroad"));
       } else {
         setPayResult({ url: d.url });
       }
@@ -2276,7 +2276,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/domain/setup`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setDomainSetupMsg({ ok: false, text: d.error || "Setup failed" });
+        setDomainSetupMsg({ ok: false, text: devhubServerError(d.error, "Не удалось настроить") });
       } else {
         setDomainSetupMsg({ ok: true, text: `✓ ${d.domain} → ${d.url}` });
         setProject((p) => p ? { ...p, customDomain: d.domain } : p);
@@ -2424,7 +2424,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setSmsMsg({ ok: false, text: d.error || "Send failed" });
+        setSmsMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setSmsMsg({ ok: true, degraded: true, text: `Brevo accepted the SMS, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setSmsRecipient(""); setSmsContent("");
@@ -2465,7 +2465,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setWaMsg({ ok: false, text: d.error || "Send failed" });
+        setWaMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setWaMsg({ ok: true, degraded: true, text: `Brevo accepted the WhatsApp message, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setWaContact(""); setWaTemplateId(""); setWaParams("");
@@ -2499,7 +2499,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTrError(d.error || "Translation failed");
+        setTrError(devhubServerError(d.error, "Не удалось перевести"));
       } else {
         setTrResult({ text: d.text, detectedSource: d.detectedSource });
       }
@@ -2522,7 +2522,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTrFileMsg({ ok: false, text: d.error || "Translation failed" });
+        setTrFileMsg({ ok: false, text: devhubServerError(d.error, "Не удалось перевести") });
       } else {
         setTrFileMsg({ ok: true, text: `Translated to ${d.path} (${d.bytes} bytes)` });
         // Reload file tree
@@ -2546,7 +2546,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl("/api/devhub/media/email-templates?limit=50"), { cache: "no-store" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setEmailTemplatesError(d.error || "Failed to load templates");
+        setEmailTemplatesError(devhubServerError(d.error, "Не удалось загрузить шаблоны"));
         setEmailTemplates([]);
       } else {
         setEmailTemplates(d.templates || []);
@@ -2587,7 +2587,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTplSendMsg({ ok: false, text: d.error || "Send failed" });
+        setTplSendMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
       } else {
         setTplSendMsg({ ok: true, text: `Sent template #${templateId} (msg ${d.messageId})` });
       }
@@ -2681,7 +2681,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTplBuilderMsg({ ok: false, text: d.error || "Template create failed" });
+        setTplBuilderMsg({ ok: false, text: devhubServerError(d.error, "Не удалось создать шаблон") });
         return;
       }
       setTplBuilderMsg({ ok: true, text: `Created template #${d.id} — "${d.name}"` });
@@ -2923,7 +2923,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setVoiceCloneMsg({ ok: false, text: d.error || "Clone failed" });
+        setVoiceCloneMsg({ ok: false, text: devhubServerError(d.error, "Не удалось клонировать голос") });
       } else {
         setVoiceCloneMsg({ ok: true, text: `Voice cloned: ${d.voiceId}${d.requiresVerification ? " (verification required)" : ""}` });
         setVoiceCloneName(""); setVoiceCloneDesc(""); setVoiceCloneFile(null);
@@ -2958,7 +2958,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setSttError(d.error || "STT failed");
+        setSttError(devhubServerError(d.error, "Не удалось расшифровать запись"));
       } else {
         setSttResult({ text: d.text, language: d.language, confidence: d.confidence });
       }
@@ -2982,7 +2982,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setDriveError(d.error || "Drive search failed");
+        setDriveError(devhubServerError(d.error, "Не удалось найти в Google Drive"));
         setDriveFiles([]);
       } else {
         setDriveFiles(d.files || []);

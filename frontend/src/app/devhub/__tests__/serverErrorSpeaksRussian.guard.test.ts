@@ -37,6 +37,34 @@ describe("серверная ошибка доходит до человека �
     expect(uses).toBeGreaterThanOrEqual(9);
   });
 
+  test("ни один запасной текст не остался английским", () => {
+    // Замер 28.08: пятнадцать запасных текстов были по-английски («Send failed»,
+    // «Pages deploy failed»), а два места не имели запасного вовсе — там человек
+    // увидел бы «undefined». Запасной текст показывается, когда сервер молчит,
+    // то есть в самый растерянный момент.
+    const CYR = /[а-яА-ЯёЁ]/;
+    const bad: string[] = [];
+    // Слэши в этом файле не пишем: на границе вызова они съедаются, и
+    // регулярка обрывается прямо в исходнике (поймано 28.08 на этой строке).
+    const LF = String.fromCharCode(10), CR = String.fromCharCode(13);
+    WORKSPACE.split(LF).forEach((rawLine, i) => {
+      const line = rawLine.split(CR).join("");
+      for (const key of ["data.error", "d.error", "d?.error", "evt.error"]) {
+        const k = line.indexOf(key);
+        if (k < 0) continue;
+        const tail = line.slice(k + key.length);
+        const m = tail.indexOf('|| "');
+        if (m < 0) break;
+        const q1 = tail.indexOf('"', m);
+        const q2 = tail.indexOf('"', q1 + 1);
+        const lit = q2 > 0 ? tail.slice(q1 + 1, q2) : "";
+        if (lit && !CYR.test(lit)) bad.push(`строка ${i + 1}: ${lit}`);
+        break;
+      }
+    });
+    expect(bad, "запасной текст на английском в русском окне").toEqual([]);
+  });
+
   test("переводчик импортирован, а не забыт", () => {
     // Без импорта TypeScript упал бы, но проверка стоит копейки и называет
     // причину прямо — быстрее, чем разбирать ошибку сборки.

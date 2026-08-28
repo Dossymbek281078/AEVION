@@ -13,6 +13,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { verifyBearerOptional } from "./authJwt";
 import { getActivePlan } from "../routes/provisioning";
+import { clientIp } from "../lib/rateLimit";
 
 const ALLOWLIST = (process.env.CONSTITUTION_PRO_ALLOWLIST || "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -79,9 +80,10 @@ const AI_FREE_DAILY_LIMIT = Number(process.env.CONSTITUTION_AI_FREE_DAILY || "10
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function clientKey(req: Request): string {
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
-    ?? req.socket.remoteAddress ?? "unknown";
-  return ip;
+  // Левый элемент X-Forwarded-For пишет сам клиент: по такому ключу дневной
+  // предел ИИ снимался сменой одного заголовка. req.ip учитывает доверенные
+  // узлы (trust proxy), helper нормализует адрес — иначе обход по IPv6.
+  return clientIp(req);
 }
 
 /** Returns true when the free user is within daily AI limit and increments. */

@@ -37,13 +37,18 @@ function statusMeta(s: string) {
   return STATUS_META[s] ?? { label: s, dot: "#94a3b8", text: "#f1f5f9" };
 }
 
+/**
+ * «5 мин назад» — единственный текст этой страницы, который человек читает
+ * словами, а не цифрами, и он был английским («5m ago») посреди русского
+ * интерфейса. Остальное здесь — числа и единицы, они одинаковы в любом языке.
+ */
 function relativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-  return `${Math.floor(diffSec / 86400)}d ago`;
+  if (diffSec < 60) return `${diffSec} с назад`;
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} мин назад`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} ч назад`;
+  return `${Math.floor(diffSec / 86400)} дн. назад`;
 }
 
 function durationStr(start: string, end: string | null): string {

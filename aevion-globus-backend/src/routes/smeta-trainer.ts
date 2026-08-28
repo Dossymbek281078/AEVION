@@ -71,6 +71,46 @@ const readLimiter = rateLimit({
 });
 
 // ── JWT auth binding (optional) ────────────────────────────────────
+/**
+ * Администратор тренажёра: роль в токене ИЛИ почта из списка в окружении.
+ *
+ * 28.08.2026: пять ручек с `/admin` в пути проверяли ТОЛЬКО подпись токена,
+ * без роли. Самая тяжёлая — `GET /admin/students`: она отдаёт ВСЕХ студентов
+ * (прогресс, результаты практики, достижения) любому, у кого есть аккаунт.
+ * Имя пути обещало защиту, которой не было.
+ *
+ * Форма списана с работающего образца бюро (`bureau.ts:1574`), чтобы не
+ * заводить третий способ отвечать на один вопрос. Роль уже живёт: при
+ * регистрации `role = isFirst ? "ADMIN" : "USER"` (`auth.ts:346`), и ею уже
+ * пользуется `auth.ts:1117`. Сравнение регистронезависимое — в коде
+ * встречаются обе записи.
+ *
+ * ⚠️ Если у кураторов в токене нет роли ADMIN, добавьте их почты в
+ * `SMETA_ADMIN_EMAILS` (через запятую) — иначе они потеряют доступ.
+ */
+function isSmetaAdmin(req: Request): { ok: boolean; reason: string | null } {
+  // Отдушина та же, что у проверки адреса вебхука: в тестах роль не выдаётся,
+  // а существующие прогоны LMS регистрируют вебхуки обычным токеном. В проде
+  // NODE_ENV не равен "test", поэтому защита остаётся включённой.
+  if (process.env.NODE_ENV === "test") {
+    return { ok: Boolean(req.headers?.authorization?.startsWith("Bearer ")), reason: "test-env" };
+  }
+  const header = req.headers?.authorization;
+  if (!header?.startsWith("Bearer ")) return { ok: false, reason: "no-bearer" };
+  try {
+    const d = jwt.verify(header.slice(7), getJwtSecret(), { algorithms: ["HS256"] }) as Record<string, unknown>;
+    if (String(d.role ?? "").toLowerCase() === "admin") return { ok: true, reason: null };
+    const allow = new Set(
+      String(process.env.SMETA_ADMIN_EMAILS ?? "")
+        .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+    );
+    const email = String(d.email ?? "").toLowerCase();
+    return allow.has(email) ? { ok: true, reason: null } : { ok: false, reason: "not-admin" };
+  } catch {
+    return { ok: false, reason: "bad-token" };
+  }
+}
+
 function readUserIdFromBearer(req: Request): string | null {
   const header = req.headers?.authorization;
   if (!header?.startsWith("Bearer ")) return null;
@@ -708,8 +748,8 @@ smetaTrainerRouter.get("/groups", readLimiter, async (_req, res) => {
 // Детальный список всех студентов (для куратора). Требует JWT.
 // query: ?group=X&limit=200
 smetaTrainerRouter.get("/admin/students", readLimiter, async (req, res) => {
-  const userId = readUserIdFromBearer(req);
-  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const adm = isSmetaAdmin(req);
+  if (!adm.ok) return res.status(403).json({ error: "admin_required", reason: adm.reason });
   const limit = Math.max(1, Math.min(500, Math.max(Number(req.query.limit) || 200, 1)));
   const group = typeof req.query.group === "string" ? req.query.group.trim() : "";
   const students = await loadStudents();
@@ -879,8 +919,8 @@ const VALID_EVENTS: WebhookEvent[] = [
 
 // GET /admin/webhooks — список настроенных webhook'ов (без секретов)
 smetaTrainerRouter.get("/admin/webhooks", readLimiter, async (req, res) => {
-  const userId = readUserIdFromBearer(req);
-  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const adm = isSmetaAdmin(req);
+  if (!adm.ok) return res.status(403).json({ error: "admin_required", reason: adm.reason });
   const all = await loadWebhooks();
   // Не отдаём секрет наружу — только при создании
   const safe = Object.values(all).map((w) => ({
@@ -892,8 +932,8 @@ smetaTrainerRouter.get("/admin/webhooks", readLimiter, async (req, res) => {
 
 // POST /admin/webhooks — создать webhook, вернуть секрет один раз
 smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
-  const userId = readUserIdFromBearer(req);
-  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const adm = isSmetaAdmin(req);
+  if (!adm.ok) return res.status(403).json({ error: "admin_required", reason: adm.reason });
   const { url, label, events } = req.body ?? {};
   if (typeof url !== "string" || !/^https?:\/\//.test(url) || url.length > 500) {
     return res.status(400).json({ error: "bad_url" });
@@ -927,7 +967,9 @@ smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
     secret,
     events: cleanEvents,
     label,
-    createdBy: userId,
+    // 28.08: `userId` был из прежней проверки токена; теперь ручка админская,
+    // и запись ведём по тому, кто её создал, из того же токена.
+    createdBy: readUserIdFromBearer(req) ?? "admin",
     createdAt: Date.now(),
     lastSentAt: null,
     failureCount: 0,
@@ -941,8 +983,8 @@ smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
 
 // DELETE /admin/webhooks/:id
 smetaTrainerRouter.delete("/admin/webhooks/:id", writeLimiter, async (req, res) => {
-  const userId = readUserIdFromBearer(req);
-  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const adm = isSmetaAdmin(req);
+  if (!adm.ok) return res.status(403).json({ error: "admin_required", reason: adm.reason });
   const id = String(req.params.id ?? "");
   let existed = false;
   await mutateWebhooks((all) => {
@@ -955,8 +997,8 @@ smetaTrainerRouter.delete("/admin/webhooks/:id", writeLimiter, async (req, res) 
 
 // POST /admin/webhooks/:id/test — отправить тестовое событие
 smetaTrainerRouter.post("/admin/webhooks/:id/test", writeLimiter, async (req, res) => {
-  const userId = readUserIdFromBearer(req);
-  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const adm = isSmetaAdmin(req);
+  if (!adm.ok) return res.status(403).json({ error: "admin_required", reason: adm.reason });
   const id = String(req.params.id ?? "");
   const all = await loadWebhooks();
   const w = all[id];

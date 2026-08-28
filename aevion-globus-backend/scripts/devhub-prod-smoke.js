@@ -144,6 +144,43 @@ async function run() {
   if (h.body?.covers === "storage") ok("health называет область охвата", "covers=storage");
   else if (h.status === 200) skip("health называет область охвата", "поля covers нет — ветка не выкачена");
 
+  // ── 1б. Проектные ручки живы (без создания проекта) ──────────────
+  //
+  // Замер 28.08.2026: смоук упоминал 43 ручки из 92, то есть меньше половины.
+  // Большинство непокрытых требуют существующего проекта, а создавать его в
+  // расписании нельзя — это запись в боевую базу каждый день.
+  //
+  // Выход: отсутствующий МАРШРУТ и отсутствующий ПРОЕКТ различаются ТЕЛОМ
+  // ответа, а не кодом. Оба дают 404, но:
+  //
+  //   живой маршрут, нет проекта  ->  {"error":"project not found"}
+  //   маршрута нет вовсе          ->  {"error":"route_not_found"}
+  //
+  // Значит «project not found» доказывает, что маршрут смонтирован И его
+  // обработчик отработал. Ничего не создаётся, денег не тратится.
+  console.log(String.fromCharCode(10) + "1б. Проектные ручки живы");
+  {
+    const NOBODY = "00000000-0000-0000-0000-000000000000";
+    const SCOPED = [
+      "/checkpoints", "/collaborators", "/database", "/files",
+      "/deployments", "/github/status", "/github/branches",
+      "/domain/status", "/export", "/sdk",
+    ];
+    for (const tail of SCOPED) {
+      const r = await req("GET", `/api/devhub/projects/${NOBODY}${tail}`);
+      const body = JSON.stringify(r.body ?? {});
+      if (r.status === 404 && body.includes("project not found")) {
+        ok(`маршрут жив: ${tail}`);
+      } else if (body.includes("route_not_found")) {
+        fail(`маршрут ${tail}`, "маршрута НЕТ на проде");
+      } else if (r.status === 503 || r.status === 401) {
+        skip(`маршрут ${tail}`, `ответ ${r.status} — проверить не удалось`);
+      } else {
+        fail(`маршрут ${tail}`, `${r.status} ${body.slice(0, 40)}`);
+      }
+    }
+  }
+
   // ── 2. Project CRUD ───────────────────────────────────────────────────
   console.log("\n2. Project CRUD");
   // ЖИВОСТЬ ЗАПИСИ БЕЗ ЗАПИСИ. Полный цикл создания пропускается в

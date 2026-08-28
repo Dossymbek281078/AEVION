@@ -24,7 +24,14 @@ import { devhubServerError } from "@/lib/devhubServerError";
  */
 async function writeOrThrow(input: string, init?: RequestInit): Promise<Response> {
   const r = await fetch(input, init);
-  if (!r.ok) throw new Error(`сервер ответил ${r.status}`);
+  if (!r.ok) {
+    // Голый код ответа человеку ничего не говорит. Тело ошибки обычно есть —
+    // берём его и переводим тем же помощником, что и остальные показы.
+    const body = await r.json().catch(() => null);
+    throw new Error(
+      devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+    );
+  }
   return r;
 }
 
@@ -1740,7 +1747,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deployments`), { cache: "no-store" });
-      if (!r.ok) throw new Error(`сервер ответил ${r.status}`);
+      if (!r.ok) {
+        // Голый код ответа человеку ничего не говорит. Тело ошибки обычно есть —
+        // берём его и переводим тем же помощником, что и остальные показы.
+        const body = await r.json().catch(() => null);
+        throw new Error(
+          devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+        );
+      }
       const data = await r.json();
       setDeployments(data.deployments || []);
       setDeploymentsLoadError(null);
@@ -1757,7 +1771,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/env`), { cache: "no-store" });
-      if (!r.ok) throw new Error(`сервер ответил ${r.status}`);
+      if (!r.ok) {
+        // Голый код ответа человеку ничего не говорит. Тело ошибки обычно есть —
+        // берём его и переводим тем же помощником, что и остальные показы.
+        const body = await r.json().catch(() => null);
+        throw new Error(
+          devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+        );
+      }
       const data = await r.json();
       setEnvList(data.env || []);
       setEnvLoadError(null);

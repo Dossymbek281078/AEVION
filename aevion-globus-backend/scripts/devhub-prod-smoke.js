@@ -339,7 +339,7 @@ async function run() {
     ["каталог видеомоделей", "/api/devhub/media/video/models", "models"],
     ["каталог 3D-моделей", "/api/devhub/media/3d/models", "models"],
     ["панель возможностей", "/api/devhub/studio/capabilities", "capabilities"],
-    ["здоровье провайдеров", "/api/devhub/providers/health", null],
+    ["здоровье провайдеров", "/api/devhub/providers/health", "checks"],
     ["остаток кредитов", "/api/devhub/studio/credits", null],
   ]) {
     const r = await req("GET", path);

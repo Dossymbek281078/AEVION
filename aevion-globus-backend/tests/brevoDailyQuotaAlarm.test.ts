@@ -165,3 +165,35 @@ describe("тревога называет себя предупреждение�
     warn.mockRestore();
   });
 });
+
+describe("само исчерпание квоты тоже слышно", () => {
+  test("на 100% потолка приходит отдельный сигнал со словом ИСЧЕРПАНО", async () => {
+    // Раньше последний сигнал был на 9/10, и исчерпание проходило молча:
+    // письма переставали доходить, а снаружи это выглядит как «почта
+    // задерживается», то есть как ничто.
+    const { vi } = await import("vitest");
+    const { noteEmailSent, __resetEmailCounter } = await import("../src/lib/brevoQuota");
+    __resetEmailCounter();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cap = Number(process.env.BREVO_DAILY_SOFT_CAP) || 300;
+    for (let i = 0; i < cap; i++) noteEmailSent();
+    const said = warn.mock.calls.map((c) => String(c[0])).join(" | ");
+    expect(said, "исчерпание прошло молча").toContain("ИСЧЕРПАНО");
+    warn.mockRestore();
+    __resetEmailCounter();
+  });
+
+  test("доставка НЕ меняется: счётчик по-прежнему только считает", async () => {
+    // Потолок мягкий и переопределяется переменной. Жёсткий стоп мог бы
+    // оборвать письма раньше настоящего лимита провайдера.
+    const { readFileSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..", "src", "lib", "brevoQuota.ts"),
+      "utf8",
+    );
+    expect(src).not.toContain("throw new Error(\"quota");
+    expect(src).toContain("Доставку здесь НЕ меняем");
+  });
+});

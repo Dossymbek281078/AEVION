@@ -109,6 +109,63 @@ function scanFrontendCheckouts() {
   return [...found].map(([url, id]) => ({ id, price: null, url }));
 }
 
+/**
+ * Как каталог строит адрес кассы. Держать в согласии с `products.ts`.
+ *
+ * ⚠️ 28.08.2026, найдено вычиткой собственного кода. Здесь стояло `(LS|GR)`,
+ * а каталог использует `GUM(` — то есть девять товаров Gumroad из девяти
+ * парсер не видел ВООБЩЕ, и сторож бодро печатал «13 из 13». Второй раз за
+ * сутки один и тот же дефект: знаменатель, придуманный самим инструментом.
+ *
+ * Поэтому рядом заведён учёт НЕРАЗОБРАННЫХ товаров: молчать о том, чего не
+ * понял, инструмент больше не может.
+ */
+const URL_BUILDERS = {
+  LS: (id) => `https://aevion.lemonsqueezy.com/checkout/buy/${id}`,
+  // БЕЗ `?wanted=true`, хотя каталог его добавляет. Замер: с этим параметром
+  // Gumroad отдаёт страницу оверлея, у которой og:title — просто «Gumroad», а
+  // описания нет вовсе. Девять товаров из девяти пришли пустыми и выглядели
+  // как «нечего проверять». Нам нужна карточка товара, а не витрина покупки;
+  // товар за ссылкой тот же самый.
+  GUM: (permalink) => `https://aevion.gumroad.com/l/${permalink}`,
+};
+
+/**
+ * Ключ товара — провайдер плюс идентификатор, а НЕ строка адреса.
+ *
+ * Один и тот же товар приезжает двумя путями: из каталога (`GUM("pyiaz")`) и
+ * сплошным поиском по фронтенду (там адрес записан целиком, иногда с
+ * `?wanted=true` или `?channel=tt`). По строке они разные, по сути одно и то
+ * же — и в первом прогоне четыре товара посчитались дважды, а «22 кассы»
+ * означало 18 настоящих.
+ */
+/**
+ * Сколько живых модулей в реестре. 0 означает «спросить не удалось» — тогда
+ * сверка чисел просто не проводится, а не считается пройденной.
+ *
+ * Читаем тот же файл, что и бэкенд (`data/projects.ts`), а не отдельный
+ * список: второй источник истины про количество модулей — ровно то, из-за
+ * чего письмо четыре месяца обещало «27».
+ */
+function countLiveModules() {
+  try {
+    const p = path.join(ROOT, "aevion-globus-backend", "src", "data", "projects.ts");
+    if (!fs.existsSync(p)) return 0;
+    const src = fs.readFileSync(p, "utf8");
+    return (src.match(/status:\s*"live"/g) ?? []).length;
+  } catch {
+    return 0;
+  }
+}
+
+function checkoutKey(url) {
+  const gum = url.match(/gumroad\.com\/l\/([a-z0-9]+)/i);
+  if (gum) return `gumroad:${gum[1].toLowerCase()}`;
+  const ls = url.match(/checkout\/buy\/([0-9a-f-]{36})/i);
+  if (ls) return `ls:${ls[1].toLowerCase()}`;
+  return `url:${url}`;
+}
+
 /** Достаёт из каталога пары id -> ссылка кассы. Бросает, если разбор не удался. */
 function readCatalog() {
   const src = fs.readFileSync(CATALOG, "utf8");
@@ -119,6 +176,7 @@ function readCatalog() {
   if (marks.length === 0) throw new Error("в каталоге не найдено ни одного id");
 
   const out = [];
+  const unparsed = [];
   for (let i = 0; i < marks.length; i++) {
     const [id, start] = marks[i];
     // Границей служит СЛЕДУЮЩИЙ id, а не окно фиксированной длины: у карточек
@@ -126,16 +184,23 @@ function readCatalog() {
     // от меня цену и ссылку, а выглядело это как «у товара их нет».
     const end = i + 1 < marks.length ? marks[i + 1][1] : src.length;
     const chunk = src.slice(start, end);
-    const href = chunk.match(/href:\s*(LS|GR)\("([^"]+)"\)/);
-    if (!href) continue;
+    const href = chunk.match(/href:\s*([A-Za-z_]+)\("([^"]+)"\)/);
+    if (!href) {
+      // У товара есть href, но не в виде помощника — форму парсер не знает.
+      // Молчать нельзя: именно так сторож и начинает проверять половину.
+      if (/href:/.test(chunk)) unparsed.push(id);
+      continue;
+    }
     const price = (chunk.match(/priceUsd:\s*([0-9]+)/) || [])[1] ?? null;
-    const url =
-      href[1] === "LS"
-        ? `https://aevion.lemonsqueezy.com/checkout/buy/${href[2]}`
-        : `https://gumroad.com/l/${href[2]}`;
+    const url = URL_BUILDERS[href[1]]?.(href[2]);
+    if (!url) {
+      // Помощник есть, но парсеру неизвестен. Это НЕ «у товара нет кассы».
+      unparsed.push(`${id} (href: ${href[1]})`);
+      continue;
+    }
     out.push({ id, price, url });
   }
-  return out;
+  return { products: out, unparsed };
 }
 
 const decode = (s) =>
@@ -204,12 +269,20 @@ function loadBaseline() {
 
 async function main() {
   let products;
+  let unparsedProducts = [];
   try {
-    products = readCatalog();
-    // Дополняем кассами вне каталога, не задваивая уже известные адреса.
-    const seen = new Set(products.map((p) => p.url));
+    const parsed = readCatalog();
+    products = parsed.products;
+    unparsedProducts = parsed.unparsed;
+    // Дополняем кассами вне каталога. Сверяем по ТОВАРУ, а не по строке
+    // адреса: тот же продукт приезжает и из каталога, и из сплошного поиска,
+    // и по строке они разные (`?wanted=true`, `?channel=tt`).
+    const seen = new Set(products.map((p) => checkoutKey(p.url)));
     for (const extra of scanFrontendCheckouts()) {
-      if (!seen.has(extra.url)) products.push(extra);
+      const key = checkoutKey(extra.url);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      products.push(extra);
     }
   } catch (e) {
     console.log(`СВЕРКА НЕ ВЫПОЛНЕНА: каталог не разобран — ${e.message}`);
@@ -279,6 +352,42 @@ async function main() {
     return;
   }
 
+  // Число модулей, названное в кассе, сверяется с реестром.
+  //
+  // 28.08.2026 карточка AEVION All-Access обещала «all 15+ modules», когда в
+  // `projects.ts` было 36 живых. Формально это не ложь — 36 больше 15, — но
+  // покупателю верхнего тарифа продукт представлен вдвое меньшим, чем он
+  // есть. Занижение никто не ловит: на завышенное обещание приходит жалоба,
+  // на заниженное — тишина. Тот же дефект был в письме после оплаты («все 27
+  // модулей») и в карточке CyberChess (молчала о турнирах).
+  //
+  // Сравниваем не «точно ли равно», а порядок: занижение более чем вдвое или
+  // любое завышение — находка. Иначе сторож краснел бы от каждой округлённой
+  // формулировки.
+  const liveModules = countLiveModules();
+  if (liveModules > 0) {
+    for (const [id, v] of Object.entries(now)) {
+      const text = `${v.title ?? ""} ${v.description ?? ""}`;
+      const m = text.match(/(\d{1,3})\s*\+?\s*(?:modules|модул)/i);
+      if (!m) continue;
+      const claimed = Number(m[1]);
+      if (!Number.isFinite(claimed) || claimed <= 0) continue;
+      if (claimed > liveModules) {
+        findings.push(
+          `[${id}] в кассе обещано модулей БОЛЬШЕ, чем есть\n` +
+            `      названо ${claimed}, в реестре живых ${liveModules}\n` +
+            `      текст: ${text.trim().slice(0, 140)}`,
+        );
+      } else if (claimed * 2 < liveModules) {
+        findings.push(
+          `[${id}] в кассе продукт занижен более чем вдвое\n` +
+            `      названо ${claimed}, в реестре живых ${liveModules}\n` +
+            `      текст: ${text.trim().slice(0, 140)}`,
+        );
+      }
+    }
+  }
+
   // Два РАЗНЫХ товара с дословно одинаковым описанием — почти всегда недосмотр,
   // и он бьёт по деньгам: 28.08.2026 так нашлись Constitution Pro и
   // Constitution Team с одним и тем же текстом «unlimited saves, AI advisor,
@@ -321,6 +430,14 @@ async function main() {
   }
 
   console.log(`проверено касс: ${Object.keys(now).length} из ${products.length}`);
+  if (unparsedProducts.length) {
+    // Знаменатель, о котором инструмент знает, что не знает. Печатается ВСЕГДА
+    // и делает результат неполным: «проверено N из N» при непонятых товарах —
+    // ровно то враньё, ради которого этот учёт и заведён.
+    console.log(
+      `НЕ РАЗОБРАНЫ (форма href незнакома, касса НЕ проверялась): ${unparsedProducts.join(", ")}`,
+    );
+  }
   if (base.missing) {
     console.log("базовой линии нет — первый запуск. Принять: --update");
   }

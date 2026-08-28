@@ -13,7 +13,7 @@
  */
 
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { rateLimit } from "../lib/rateLimit";
+import { rateLimit, clientIp } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { validate, WaitlistSubscribeSchema } from "../lib/constitutionSchemas";
@@ -113,11 +113,47 @@ export const constitutionWaitlistAdminRouter = Router();
 // полчаса, после чего подтверждения не приходили НИКОМУ — и выглядело это как
 // «письма задерживаются». Три в минуту человеку хватает с запасом (он подписывается
 // один раз), а квоту так с одного адреса не выбрать.
-const writeLimit = rateLimit({ windowMs: 60_000, max: 3, keyPrefix: "constitution-waitlist" });
+// ⚠️ КЛЮЧ — ПОЧТА, а не адрес. Замер 28.08.2026 на живом проде: пять быстрых
+// подписок дали 201, 201, 201, 429, 429 — предел работал. Но адрес посетителя до
+// нас НЕ ДОХОДИТ: платформа подставляет один из ~7 своих внутренних, и «три в
+// минуту» оказывалось три на ВСЕХ, кто пришёл через один узел. В день запуска,
+// когда люди приходят пачкой по письму, большинство увидело бы «слишком много
+// попыток» вместо подтверждения — то есть предел, задуманный против одного
+// спамера, отказывал бы толпе, ровно в тот момент, ради которого всё делалось.
+//
+// Теперь по человеку: три в минуту на АДРЕС ПОЧТЫ (он в теле запроса). Один
+// человек подписывается один раз, ему трёх хватает с запасом.
+const writeLimit = rateLimit({
+  windowMs: 60_000,
+  max: 3,
+  keyPrefix: "constitution-waitlist",
+  keyFn: (req) => {
+    const raw = (req as { body?: { email?: unknown } }).body?.email;
+    const email = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+    // Нет почты — считаем по адресу: тело ещё не проверено схемой, и пустой
+    // ключ включил бы предупреждение лимитера о сломанном keyFn.
+    return email ? `mail:${email}` : `ip:${clientIp(req)}`;
+  },
+});
+
+// ОБЩИЙ потолок на всех сразу — чтобы суммарный расход писем не вырос.
+// Сегодняшняя защита фактически даёт 3/мин на каждый из ~7 внутренних адресов,
+// то есть до ~21 подписки в минуту на платформу. Ставим 20: суммарный предел
+// остаётся прежним, но раздаётся по людям, а не по узлам. Суточную квоту писем
+// это НЕ трогает — её считает brevoQuota, и трогать её здесь нельзя: она пока
+// только предупреждает, а не останавливает.
+const writeCeiling = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  keyPrefix: "constitution-waitlist-ceiling",
+  keyFn: () => "all",
+  message: "Слишком много подписок за минуту. Подождите немного и повторите.",
+});
 const readLimit  = rateLimit({ windowMs: 60_000, max: 30, keyPrefix: "constitution-waitlist-read" });
 
 constitutionWaitlistRouter.post(
   "/subscribe",
+  writeCeiling as unknown as (req: Request, res: Response, next: NextFunction) => void,
   writeLimit as unknown as (req: Request, res: Response, next: NextFunction) => void,
   validate(WaitlistSubscribeSchema),
   async (req: Request, res: Response) => {

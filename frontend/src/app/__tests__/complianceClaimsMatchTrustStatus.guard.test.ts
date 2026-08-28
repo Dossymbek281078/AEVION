@@ -91,6 +91,23 @@ const CLAIMS_CERTIFIED = ["certified", "сертифицирован"];
  */
 const KNOWN_PENDING_DECISION = new Set(["soc2", "iso27001"]);
 
+/**
+ * Значки со страницы безопасности, у которых В РЕЕСТРЕ ДОВЕРИЯ нет записи —
+ * ни в каком статусе. Найдено 28.08.2026, тоже ждёт решения основателя.
+ *
+ * Это отдельный и более тихий случай, чем расхождение статусов: там два
+ * источника спорят, и спор заметен. Здесь второго источника НЕТ вовсе, то есть
+ * заявление не подкреплено ничем и никем не отслеживается.
+ *
+ *   "pricing.security.cert.pcidss.status": "Level 1"      trust.ts: записи нет
+ *   "pricing.security.cert.fz152.status":  "Compliant"    trust.ts: записи нет
+ *
+ * PCI DSS Level 1 — формальный уровень, подтверждаемый ежегодным аудитом QSA.
+ * `fz152` — российский 152-ФЗ; в реестре есть `kz-152` (локализация в
+ * Казахстане), это ДРУГАЯ юрисдикция, а не она же под другим именем.
+ */
+const KNOWN_UNTRACKED_BADGES = new Set(["pcidss", "fz152"]);
+
 describe("витрина не называет нас сертифицированными раньше времени", () => {
   const trust = readTrustStatuses(readFileSync(trustPath, "utf8"));
   const glossary = readGlossaryEntries(readFileSync(glossaryPath, "utf8"));
@@ -128,6 +145,35 @@ describe("витрина не называет нас сертифицирова
       }
     }
     expect(bad, bad.join("; ")).toEqual([]);
+  });
+
+  it("у каждого значка безопасности есть запись в реестре доверия", () => {
+    // Пропуск `if (!status) continue` в проверке выше делает такие заявления
+    // невидимыми: спорить не с чем, потому что второго мнения нет.
+    const badges = new Set<string>();
+    for (const { text } of i18n) {
+      const id = between(text, '"pricing.security.cert.', ".status");
+      if (id) badges.add(id);
+    }
+    expect(badges.size, "не нашёл ни одного значка — разбор ключей сломан").toBeGreaterThan(2);
+    const untracked = [...badges]
+      .filter((id) => !trust.has(id) && !KNOWN_UNTRACKED_BADGES.has(id))
+      .map((id) => `значок ${id} обещан на странице безопасности, а в trust.ts записи нет`);
+    expect(untracked, untracked.join("; ")).toEqual([]);
+  });
+
+  it("известные неотслеживаемые значки не исчезли из виду", () => {
+    const badges = new Set<string>();
+    for (const { text } of i18n) {
+      const id = between(text, '"pricing.security.cert.', ".status");
+      if (id) badges.add(id);
+    }
+    for (const id of KNOWN_UNTRACKED_BADGES) {
+      // Убрали значок со страницы или завели ему запись — строку отсюда надо
+      // убрать, иначе базовая линия начнёт прятать уже несуществующее.
+      const stillOpen = badges.has(id) && !trust.has(id);
+      expect(stillOpen, `значок ${id} больше не в этом состоянии — убрать из KNOWN_UNTRACKED_BADGES`).toBe(true);
+    }
   });
 
   it("в переводах тоже не объявлено полученным то, что в процессе", () => {

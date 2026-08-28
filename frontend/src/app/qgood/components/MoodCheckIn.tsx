@@ -47,6 +47,11 @@ export default function MoodCheckIn({ userId = 'anonymous', onLogged }: Props) {
         body: JSON.stringify({ score, emotion: emotion || undefined, context: context || undefined, userId }),
       });
       if (!res.ok) throw new Error('Ошибка сохранения');
+      // Запасной путь тоже отвечает 2xx, помечая себя storage:"memory": запись
+      // живёт в памяти процесса. Зелёное «сохранено» в этом случае — неправда.
+      const saved = await res.json().catch(() => ({})) as { storage?: string };
+      const persisted = (saved.storage ?? "db") === "db" || (saved.storage ?? "db") === "postgres";
+      if (!persisted) throw new Error('Не удалось сохранить насовсем — повторите через минуту');
       setSuccess(true);
       setContext('');
       setTimeout(() => { setSuccess(false); onLogged?.(); }, 1500);

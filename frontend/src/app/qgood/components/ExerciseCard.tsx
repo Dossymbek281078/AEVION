@@ -31,6 +31,7 @@ export default function ExerciseCard({ exercise, userId = 'anonymous' }: Props) 
   const [timeLeft, setTimeLeft] = useState(exercise.durationSec);
   const [streak, setStreak] = useState<number | null>(null);
   const [totalDone, setTotalDone] = useState<number | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const color = CATEGORY_COLORS[exercise.category] || '#7c3aed';
@@ -69,13 +70,23 @@ export default function ExerciseCard({ exercise, userId = 'anonymous' }: Props) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
       });
-      if (res.ok) {
-        const data = await res.json() as { streak?: number; total_done?: number };
+      const data = await res.json().catch(() => ({})) as {
+        streak?: number; total_done?: number; storage?: string;
+      };
+      // Ручка отвечает 201 и на запасном пути (storage:"memory"): серия живёт
+      // в памяти процесса и обнулится при перезапуске. Показывать выросшую
+      // серию в этом случае — обещать прогресс, которого не будет.
+      const persisted = (data.storage ?? "db") === "db" || (data.storage ?? "db") === "postgres";
+      if (res.ok && persisted) {
         setStreak(data.streak ?? null);
         setTotalDone(data.total_done ?? null);
+        setNote(null);
+      } else {
+        setNote("Засчитали, но сохранить не удалось — повторите через минуту.");
       }
     } catch {
-      // silent
+      // Раньше здесь было пусто, и сетевой отказ не показывался ВООБЩЕ.
+      setNote("Не дозвонились до сервера — упражнение не засчитано.");
     } finally {
       setCompleting(false);
       setState('idle');
@@ -190,6 +201,20 @@ export default function ExerciseCard({ exercise, userId = 'anonymous' }: Props) 
           </button>
         )}
       </div>
+
+      {/* Без этой строки починка не доходит до человека: сообщение о том, что
+          засчитать не удалось, существовало бы только в состоянии компонента. */}
+      {note && (
+        <div
+          role="status"
+          style={{
+            marginTop: 10, padding: '8px 10px', borderRadius: 8,
+            background: '#fef2f2', color: '#991b1b', fontSize: 13,
+          }}
+        >
+          {note}
+        </div>
+      )}
     </div>
   );
 }

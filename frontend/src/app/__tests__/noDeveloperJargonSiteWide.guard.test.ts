@@ -62,7 +62,6 @@ const OZHIDAYUT = new Set([
   "app/api-explorer/sdk/page.tsx",
   "app/api-explorer/version/page.tsx",
   "app/bank/api/page.tsx",
-  "app/bank/audit-log/page.tsx",
   "app/bank/diagnostics/page.tsx",
   "app/bank/smoke/page.tsx",
   "app/build/developers/page.tsx",

@@ -480,8 +480,7 @@ export default function AuditLogPage() {
           <p style={{ color: "#475569", margin: 0, lineHeight: 1.55, fontSize: 14 }}>
             Unified ledger: every operation paired with its QSign signature (when present). Filter by
             kind and date range, export the slice as CSV/JSON, or print for a paper trail. Source of
-            truth: <code style={{ background: "rgba(15,23,42,0.05)", padding: "1px 6px", borderRadius: 4 }}>/api/qtrade/operations</code> +
-            local <code style={{ background: "rgba(15,23,42,0.05)", padding: "1px 6px", borderRadius: 4 }}>aevion_bank_signatures_v1</code>.
+            truth: operations come from the server, signatures from this device.
           </p>
         </header>
 
@@ -786,9 +785,9 @@ export default function AuditLogPage() {
         </section>
 
         <p style={{ marginTop: 14, fontSize: 12, color: "#64748b", lineHeight: 1.55 }}>
-          Operations are fetched live from the backend; signatures live in
-          <code style={{ background: "rgba(15,23,42,0.05)", padding: "1px 6px", borderRadius: 4, margin: "0 4px" }}>aevion_bank_signatures_v1</code>
-          on this device. Click a counterparty / signature row to open the printable receipt for that operation.
+          Operations are loaded from the server. Your signatures stay on this
+          device, in this browser — they are not sent anywhere. Click a
+          counterparty or signature row to open the printable receipt.
         </p>
 
         <style>{`

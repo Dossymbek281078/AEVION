@@ -252,7 +252,20 @@ router.get("/themes", async (_req: Request, res: Response): Promise<void> => {
   const themes = [...THEME_INDEX.entries()]
     .map(([key, idxs]) => ({ theme: POOL[idxs[0]]?.theme ?? key, count: idxs.length }))
     .sort((a, b) => b.count - a.count);
-  res.json({ ok: true, poolSize: POOL.length, themes });
+  // poolSize здесь — сколько задач ОБСЛУЖИВАЕТСЯ, и он упирается в cap.
+  // Отдавать одно это число нельзя: при cap = 500 000 ответ «poolSize: 500000»
+  // выглядит измерением банка, а на деле это обрезка — ровно то, о чём
+  // предупреждает разбор в шапке файла. Замер 28.08.2026: /themes отвечал
+  // 500000, а /cyberchess-daily/puzzle про тот же банк — 502584, и по двум
+  // нашим ответам нельзя было понять, какой из них про что.
+  // Соседняя ручка /meta уже отдаёт обе величины; здесь их не хватало.
+  res.json({
+    ok: true,
+    poolSize: POOL.length,
+    bankTotal: POOL_TOTAL,
+    capped: POOL_CAPPED,
+    themes,
+  });
 });
 
 // GET /meta — pool health/size (cheap smoke).

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { activatable } from "@/lib/activatable";
 import { useToast } from "@/components/ToastProvider";
 import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
@@ -4184,7 +4185,7 @@ export default function QCoreMultiAgentPage() {
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>AI Suggestions</div>
                     {templateSuggestions.map((s, i) => (
                       <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, padding: "6px 10px", borderRadius: 8, background: "rgba(124,58,237,0.04)", border: "1px solid rgba(124,58,237,0.15)", cursor: "pointer" }}
-                        onClick={() => { setInput(s.input); setStrategy(s.strategy as any); setTemplatePanelOpen(false); setTemplateSuggestions([]); }}>
+                        {...activatable(() => { setInput(s.input); setStrategy(s.strategy as any); setTemplatePanelOpen(false); setTemplateSuggestions([]); })}>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{s.name}</div>
                           {s.description && <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>{s.description}</div>}
@@ -4211,7 +4212,7 @@ export default function QCoreMultiAgentPage() {
                             padding: "6px 10px", borderRadius: 8, background: "#fff",
                             border: "1px solid rgba(15,23,42,0.08)", cursor: "pointer",
                           }}
-                          onClick={() => applyTemplate(t)}
+                          {...activatable(() => applyTemplate(t))}
                         >
                           <span style={{ fontSize: 13, flex: 1, fontWeight: 600 }}>{t.name}</span>
                           <span style={{ fontSize: 10, color: "#94a3b8", borderRadius: 6, padding: "2px 6px", background: "#f1f5f9" }}>{t.strategy}</span>
@@ -4239,7 +4240,7 @@ export default function QCoreMultiAgentPage() {
                             padding: "6px 10px", borderRadius: 8, background: "#fff",
                             border: "1px solid rgba(124,58,237,0.12)", cursor: "pointer",
                           }}
-                          onClick={() => applyTemplate(t)}
+                          {...activatable(() => applyTemplate(t))}
                         >
                           <span style={{ fontSize: 13, flex: 1, fontWeight: 600 }}>{t.name}</span>
                           <span style={{ fontSize: 10, color: "#6d28d9", borderRadius: 6, padding: "2px 6px", background: "rgba(124,58,237,0.07)" }}>{t.useCount} uses</span>
@@ -4377,7 +4378,7 @@ export default function QCoreMultiAgentPage() {
                             <button onClick={() => { setPromptHistory([]); localStorage.removeItem("qcore_prompt_history"); setHistoryOpen(false); }} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#fca5a5" }}>Clear</button>
                           </div>
                           {promptHistory.map((h, i) => (
-                            <div key={i} onClick={() => { setInput(h); setHistoryOpen(false); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                            <div key={i} {...activatable(() => { setInput(h); setHistoryOpen(false); setTimeout(() => textareaRef.current?.focus(), 50); })}
                               style={{ padding: "7px 12px", cursor: "pointer", fontSize: 12, color: "#0f172a", borderTop: "1px solid #f8fafc", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
                               onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                               onMouseLeave={(e) => (e.currentTarget.style.background = "")}>
@@ -4492,11 +4493,11 @@ export default function QCoreMultiAgentPage() {
                     {matchedSessions.map((s) => (
                       <div
                         key={s.id}
-                        onClick={() => {
+                        {...activatable(() => {
                           setPaletteOpen(false);
                           setActiveSessionId(s.id);
                           loadSession(s.id);
-                        }}
+                        })}
                         style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center" }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "")}
@@ -4517,10 +4518,10 @@ export default function QCoreMultiAgentPage() {
                     {paletteRunResults.map((r) => (
                       <div
                         key={r.id}
-                        onClick={() => {
+                        {...activatable(() => {
                           setPaletteOpen(false);
                           if (r.sessionId) { setActiveSessionId(r.sessionId); loadSession(r.sessionId); }
-                        }}
+                        })}
                         style={{ padding: "8px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "flex-start" }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "")}
@@ -4561,7 +4562,7 @@ export default function QCoreMultiAgentPage() {
                     ].map((a) => (
                       <div
                         key={a.label}
-                        onClick={a.action}
+                        {...activatable(a.action)}
                         style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center" }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "")}

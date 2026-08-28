@@ -34,9 +34,60 @@ export type WaitlistCaptureProps = {
   buttonLabel?: string;
   /** Тёмная плашка для светлых страниц, светлая — для тёмных секций. */
   tone?: "dark" | "light";
+  /** Язык подсказки и сообщений об отказе. По умолчанию русский. */
+  lang?: "ru" | "en";
+  /**
+   * Текст подтверждения после успешной подписки.
+   *
+   * Зачем настраивается. Общий текст — «напишем, когда будет что показать»:
+   * он верен для страниц без даты. Но на странице запуска, где прямо сказано
+   * «Открываем 30 августа», такое подтверждение звучит расплывчатее самого
+   * обещания, и человек уходит с меньшей уверенностью, чем пришёл. Замер
+   * 28.08.2026: страница обещает «напишем в день запуска», письмо называет
+   * дату, а подтверждение на экране — нет.
+   */
+  doneText?: string;
 };
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,24}$/;
+
+/**
+ * Тексты, которые НЕЛЬЗЯ передать пропом: подсказка в поле, сообщения об
+ * отказах и надпись во время отправки. Заголовок и кнопка уже настраиваются
+ * снаружи, а эти строки были зашиты по-русски — и на английских страницах
+ * (/en/go, /en/longevity, заведены 28.08.2026) человек видел кириллицу ровно в
+ * той точке, где оставляет контакт.
+ *
+ * По умолчанию русский: ни одна существующая страница не меняет поведения.
+ */
+const COPY = {
+  ru: {
+    placeholder: "вы@почта.рф",
+    sending: "Отправляем…",
+    emailLabel: "Адрес электронной почты",
+    typo: "Похоже, в адресе опечатка. Проверьте — и отправьте ещё раз.",
+    done: "Готово — адрес записан. Напишем, когда будет что показать.",
+    tooMany: "Слишком много попыток подряд. Подождите минуту и повторите.",
+    rejected: "Сервер не принял адрес. Проверьте написание.",
+    ourFault: "Не смогли сохранить адрес — это на нашей стороне. Попробуйте ещё раз через минуту.",
+    notStored:
+      "Приняли адрес, но сохранить его насовсем сейчас не вышло — это на нашей стороне. Отправьте ещё раз через минуту, чтобы точно не потерять вас к запуску.",
+    offline: "Не дозвонились до сервера. Проверьте связь и повторите.",
+  },
+  en: {
+    placeholder: "you@example.com",
+    sending: "Sending…",
+    emailLabel: "Email address",
+    typo: "That address looks like a typo. Check it and send again.",
+    done: "Done — the address is saved. We write when there is something to show.",
+    tooMany: "Too many attempts in a row. Wait a minute and try again.",
+    rejected: "The server did not accept the address. Check the spelling.",
+    ourFault: "We could not save the address — that is on our side. Try again in a minute.",
+    notStored:
+      "We took your address but could not store it permanently just now — that is on us. Please send it again in a minute so we do not lose you before launch.",
+    offline: "Could not reach the server. Check the connection and try again.",
+  },
+} as const;
 
 export function WaitlistCapture({
   source,
@@ -45,7 +96,10 @@ export function WaitlistCapture({
   promise = "Письмо приходит на запуск модуля. Отписка — одной ссылкой в каждом письме.",
   buttonLabel = "Получить ранний доступ",
   tone = "dark",
+  lang = "ru",
+  doneText,
 }: WaitlistCaptureProps) {
+  const copy = COPY[lang];
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
@@ -59,7 +113,7 @@ export function WaitlistCapture({
     const value = email.trim().toLowerCase();
     if (!EMAIL_RE.test(value)) {
       setStatus("error");
-      setMessage("Похоже, в адресе опечатка. Проверьте — и отправьте ещё раз.");
+      setMessage(copy.typo);
       return;
     }
     setStatus("sending");
@@ -71,8 +125,30 @@ export function WaitlistCapture({
         body: JSON.stringify({ email: value, source: source.slice(0, 60) }),
       });
       if (r.ok) {
+        // Ручка честно называет, КУДА легла подписка: "postgres" — сохранена,
+        // всё остальное значит запасное хранилище в памяти процесса, которое
+        // не переживёт перезапуск. Раньше мы читали только r.ok и говорили
+        // «адрес записан» в обоих случаях — то есть теряли подписчика молча,
+        // а человек уходил уверенным, что он в списке. Для канала запуска это
+        // дороже всего: письмо в день старта такому адресу не уйдёт.
+        //
+        // Поэтому непостоянное сохранение показываем как ОТКАЗ: это правда, и
+        // повтор через минуту может лечь уже в базу.
+        let storage: unknown = "postgres";
+        try {
+          storage = (await r.json())?.storage ?? "postgres";
+        } catch {
+          // тело не разобралось — считаем, что сохранено: ручка вернула 2xx,
+          // и пугать человека из-за нашей неспособности прочитать ответ нельзя
+          storage = "postgres";
+        }
+        if (storage !== "postgres") {
+          setStatus("error");
+          setMessage(copy.notStored);
+          return;
+        }
         setStatus("done");
-        setMessage("Готово — адрес записан. Напишем, когда будет что показать.");
+        setMessage(doneText || copy.done);
         setEmail("");
         return;
       }
@@ -80,17 +156,17 @@ export function WaitlistCapture({
       // человеку, повторять ему попытку или исправлять адрес.
       if (r.status === 429) {
         setStatus("error");
-        setMessage("Слишком много попыток подряд. Подождите минуту и повторите.");
+        setMessage(copy.tooMany);
       } else if (r.status === 400) {
         setStatus("error");
-        setMessage("Сервер не принял адрес. Проверьте написание.");
+        setMessage(copy.rejected);
       } else {
         setStatus("error");
-        setMessage("Не смогли сохранить адрес — это на нашей стороне. Попробуйте ещё раз через минуту.");
+        setMessage(copy.ourFault);
       }
     } catch {
       setStatus("error");
-      setMessage("Не дозвонились до сервера. Проверьте связь и повторите.");
+      setMessage(copy.offline);
     }
   }
 
@@ -114,7 +190,7 @@ export function WaitlistCapture({
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
         <label htmlFor={`waitlist-email-${source}`} style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
-          Адрес электронной почты
+          {copy.emailLabel}
         </label>
         <input
           id={`waitlist-email-${source}`}
@@ -122,7 +198,7 @@ export function WaitlistCapture({
           name="email"
           autoComplete="email"
           inputMode="email"
-          placeholder="вы@почта.рф"
+          placeholder={copy.placeholder}
           value={email}
           onChange={(e) => {
             setEmail(e.target.value);
@@ -163,7 +239,7 @@ export function WaitlistCapture({
             whiteSpace: "nowrap",
           }}
         >
-          {status === "sending" ? "Отправляем…" : buttonLabel}
+          {status === "sending" ? copy.sending : buttonLabel}
         </button>
       </div>
 
@@ -184,7 +260,12 @@ export function WaitlistCapture({
       ) : null}
 
       {promise ? (
-        <p style={{ margin: "12px 0 0", fontSize: 12.5, lineHeight: 1.5, color: muted }}>{promise}</p>
+        // 13.5px, а не 12.5: замер в браузере при ширине 390 (iPhone) показал, что
+        // это САМЫЙ мелкий содержательный текст на странице — и при этом он объясняет,
+        // на что человек подписывается («письмо на запуск», «отписка одной ссылкой»).
+        // Мельче только надзаголовки в 11px, но те — три слова заглавными, их читают
+        // взглядом, а не построчно. Мелкое условие подписки — плохая мелочь.
+        <p style={{ margin: "12px 0 0", fontSize: 13.5, lineHeight: 1.55, color: muted }}>{promise}</p>
       ) : null}
     </form>
   );

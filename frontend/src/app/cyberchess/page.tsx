@@ -144,6 +144,7 @@ import { generateShareSVG, downloadFile } from "./gameShare";
 import CoachPredictions from "./CoachPredictions";
 import OpeningExplorerPanel from "./OpeningExplorerPanel";
 import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
+import { наградаЗаВозврат } from "./dailyReward";
 import { tournamentUserId, tournamentDisplayName } from "./tournaments/playerIdentity";
 import { getDueReminders, dismissReminder } from "./coachKnowledge";
 import WorkspacePiP, { useWorkspacePiP } from "./WorkspacePiP";
@@ -484,6 +485,8 @@ function ldChessyLog():ChessyLogEntry[]{try{const s=localStorage.getItem(CLK);if
 function svChessyLog(log:ChessyLogEntry[]){try{localStorage.setItem(CLK,JSON.stringify(log.slice(0,50)))}catch{}}
 function todayKey(){const d=new Date();return`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`}
 function daysSinceEpoch(){return Math.floor(Date.now()/86400000)}
+
+
 // Deterministic daily-puzzle index — same for all users on the same day
 function pickDailyIdx(total:number){if(total<=0)return 0;const n=daysSinceEpoch();let h=n*2654435761;h=(h^(h>>>16))>>>0;return h%total}
 type DailyState={v:1;date:string;idx:number;solved:boolean};
@@ -2910,8 +2913,9 @@ export default function CyberChessPage(){
     }else if(c.lastDaily!==tk){
       // Compute streak: consecutive days? Simple check — yesterday continues, else reset to 1
       const y=new Date();y.setDate(y.getDate()-1);const yk=`${y.getFullYear()}-${y.getMonth()+1}-${y.getDate()}`;
-      const newStreak=c.lastDaily===yk?c.streak+1:1;
-      const bonus=newStreak>=14?200:newStreak>=7?100:newStreak>=3?30:5;
+      const награда=наградаЗаВозврат(c.lastDaily,c.streak,tk,yk);
+      const newStreak=награда?награда.streak:1;
+      const bonus=награда?награда.bonus:5;
       sChessy(x=>({...x,balance:x.balance+bonus,lifetime:x.lifetime+bonus,lastDaily:tk,streak:newStreak}));
       setTimeout(()=>sDailyReward({bonus,streak:newStreak,isWelcome:false}),800);
     }

@@ -1750,3 +1750,15 @@ npx vitest run $(grep -rln "qskyway|trustAnchor|opentimestamps|airspace|slotOrig
 | фронт, весь набор | 170 файлов, **1511** тестов, 0 упавших |
 | мутаций за окно | **7 из 7 пойманы** |
 | конфликтов с `launch` | 0 |
+
+## 29.08, 02:0x — у `deliver` появился конфликт за час
+
+`launch` подвинули в 02:04. Перемер трёх веток листа решений:
+`merge/devhub-backlog` 241 коммит / 0 конфликтов, `fix/qevents-calendar-400`
+29 / 0, **`deliver/all-work-2026-08-20` 15 / 1**.
+
+Конфликт один, назван: `frontend/src/app/cyberchess/launch/page.tsx`.
+Час назад его не было. Не повод не мержить — повод мержить `deliver`
+последней. Лист решений обновлён.
+
+Моя ветка со свежим `launch`: 98 коммитов, конфликтов 0.

@@ -37,8 +37,8 @@ describe("общий потолок анонимного расхода", () => 
   test("потолок стоит ПЕРЕД обеими платными ручками", () => {
     // Проверяем точную форму монтирования, а не упоминание имени: имя
     // встречается и в комментарии выше, и на этом ловился прежний сторож.
-    expect(SRC).toContain('post("/chat", anonChatCeiling, chatLimiter');
-    expect(SRC).toContain('post("/chat-stream", anonChatCeiling, chatLimiter');
+    expect(SRC).toContain('post("/chat", anonChatCeiling, exposeCeilingRemaining, chatLimiter');
+    expect(SRC).toContain('post("/chat-stream", anonChatCeiling, exposeCeilingRemaining, chatLimiter');
   });
 
   test("авторизованный считается по своему id, а не общей корзиной", () => {

@@ -191,7 +191,9 @@ export default function DevHubPage() {
       }
       setProjects((ps) => ps.filter((p) => p.id !== id));
     } catch {
-      setError("Delete failed");
+      // Было английское «Delete failed» посреди русской страницы, и оно не
+      // говорило главного: проект НЕ удалён, повторить безопасно.
+      setError("Не удалось связаться с сервером. Проект не удалён — попробуйте ещё раз.");
     }
   };
 

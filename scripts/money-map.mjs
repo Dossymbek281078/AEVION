@@ -106,6 +106,55 @@ function gumroadFromSite() {
 }
 
 /**
+ * Сколько КАССА возьмёт на самом деле.
+ *
+ * ЗАЧЕМ отдельно от цен витрины. Всё, что карта знала о ценах, бралось из
+ * НАШИХ же файлов: `products.ts`, `/api/pricing`. Это отвечает на вопрос
+ * «согласованы ли наши источники между собой», но не на вопрос «спишет ли
+ * касса ту сумму, которую мы обещали». Между ними целый Gumroad: там цену
+ * правят руками в панели, и наш репозиторий об этом не узнаёт.
+ *
+ * Как узнаём. Ссылка `gumroad.com/l/<permalink>?wanted=true` перенаправляет на
+ * оплату, и НАСТОЯЩАЯ цена лежит прямо в адресе перенаправления:
+ * `...&price=5900&recurrence=monthly...`. Значит достаточно одного запроса на
+ * товар, без единой копейки и без входа в аккаунт.
+ *
+ * Замер 28.08.2026: девять товаров из девяти сошлись — витрина обещает ровно
+ * то, что спишет касса.
+ *
+ * Отказ считается ОТКАЗОМ, а не совпадением: `price: null` и в отчёте
+ * «спросить не удалось». Молчаливое «сошлось» здесь было бы худшим из
+ * возможных ответов.
+ */
+async function gumroadRealPrices(rows) {
+  const out = [];
+  for (const r of rows) {
+    try {
+      const res = await fetch(`https://aevion.gumroad.com/l/${encodeURIComponent(r.id)}?wanted=true`, {
+        headers: { "User-Agent": UA },
+        redirect: "follow",
+        signal: AbortSignal.timeout(25_000),
+      });
+      const u = new URL(res.url);
+      const cents = u.searchParams.get("price");
+      const rec = u.searchParams.get("recurrence");
+      out.push({
+        id: r.id,
+        title: r.title,
+        siteUsd: r.usd,
+        realUsd: cents === null ? null : Number(cents) / 100,
+        recurrence: rec,
+        billing: r.billing,
+        http: res.status,
+      });
+    } catch (e) {
+      out.push({ id: r.id, title: r.title, siteUsd: r.usd, realUsd: null, recurrence: null, billing: r.billing, why: String(e?.message ?? e).slice(0, 60) });
+    }
+  }
+  return out;
+}
+
+/**
  * Какие кассы РЕАЛЬНО включены на проде.
  *
  * Карта отвечала «сколько стоит», но не отвечала «можно ли за это заплатить».
@@ -308,7 +357,7 @@ function row(cells) {
 }
 
 function main(data) {
-  const { pricing, shop, gum, nameToModule, measuredAt, desks, claims, regressions, pending } = data;
+  const { pricing, shop, gum, real, nameToModule, measuredAt, desks, claims, regressions, pending } = data;
 
   const tierPrice = new Map(pricing.tiers.map((t) => [t.id, t.priceMonthly]));
 
@@ -519,10 +568,24 @@ function main(data) {
   console.log(`Карта собрана: ${OUT}`);
   console.log(`  товаров ${totalProducts} · модулей с ценой ${modRows.length} · расхождений цены ${mismatches}`);
   console.log(`  заработано ${soldTotal.toFixed(2)} за ${soldCount} продаж (замер ${SALES_SNAPSHOT.measuredAt})`);
+  // Отдельная строка про КАССУ. Три исхода, а не два: сошлось / разошлось /
+  // спросить не удалось. Третий не сливаем с первым — молчаливое «сошлось»
+  // про деньги хуже отсутствия проверки.
+  if (Array.isArray(real) && real.length) {
+    const asked = real.filter((r) => r.realUsd !== null);
+    const bad = asked.filter((r) => Math.abs(r.realUsd - r.siteUsd) > 0.005);
+    const mute = real.length - asked.length;
+    console.log(`  касса берёт как обещано: ${asked.length - bad.length} из ${asked.length}` +
+      (bad.length ? ` · РАСХОЖДЕНИЕ: ${bad.map((r) => `${r.id} витрина $${r.siteUsd} касса $${r.realUsd}`).join(", ")}` : "") +
+      (mute ? ` · спросить не удалось: ${mute}` : ""));
+  } else {
+    console.log("  касса: НЕ СПРАШИВАЛИ — это не «сошлось»");
+  }
 }
 
 try {
   const [pricing, shop] = await Promise.all([getJson(`${API}/api/pricing`), storefront()]);
+  const gumRows = gumroadFromSite();
   let commit = null;
   try { commit = (await getJson(`${API}/api/health`)).commit; } catch { /* необязательно */ }
   if (!pricing.tiers?.length) throw new Error("прод не отдал тарифы — карта была бы пустой");
@@ -531,7 +594,8 @@ try {
   main({
     pricing: { ...pricing, commit },
     shop,
-    gum: gumroadFromSite(),
+    gum: gumRows,
+    real: await gumroadRealPrices(gumRows),
     nameToModule: storeNameToModule(),
     desks: await cashDesks(),
     claims: await scaleClaims(),

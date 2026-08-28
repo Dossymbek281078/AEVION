@@ -55,19 +55,19 @@ describe("страница совместного просмотра показ�
       ok: false, status: 404, json: async () => ({}),
     });
     render(<CollabViewerPage />);
-    await waitFor(() => expect(screen.getByText(/больше не действует/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/no longer works/i)).toBeTruthy());
     // Следующий шаг обязателен: без него человек знает, что сломано, и не
     // знает, что делать. Ссылка на модуль — минимальный честный выход.
     // Именно кнопка-выход, а не ссылка «назад» в шапке: их две, и «есть хоть
     // какая-то ссылка на QCoreAI» проходило бы и без следующего шага.
-    expect(screen.getByRole("link", { name: /Открыть QCoreAI/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Open QCoreAI/i })).toBeTruthy();
   });
 
   test("нет связи: отказ показан отказом, а не вечным «открываем…»", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("network down"));
     render(<CollabViewerPage />);
-    await waitFor(() => expect(screen.getByText(/Нет связи с сервером/i)).toBeTruthy());
-    expect(screen.queryByText(/Открываем/i)).toBeNull();
+    await waitFor(() => expect(screen.getByText(/No connection to the server/i)).toBeTruthy());
+    expect(screen.queryByText(/Opening/i)).toBeNull();
   });
 
   test("сессия без запросов: сказано прямо, что их нет", async () => {
@@ -77,7 +77,7 @@ describe("страница совместного просмотра показ�
       ok: true, status: 200, json: async () => ({ ...snapshot, runs: [] }),
     });
     render(<CollabViewerPage />);
-    await waitFor(() => expect(screen.getByText(/пока нет ни одного запроса/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/no requests yet/i)).toBeTruthy());
   });
 
   test("токен уходит в адрес запроса", async () => {

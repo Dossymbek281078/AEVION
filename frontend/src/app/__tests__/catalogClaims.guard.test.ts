@@ -129,6 +129,29 @@ const DISPROVEN_CLAIMS: Array<{ text: string; why: string }> = [
   },
 ];
 
+/**
+ * Убирает комментарии перед проверкой запретов.
+ *
+ * ⚠️ 28.08.2026: я сам это сломал и сам нашёл вычиткой. Прежний код вырезал
+ * ОБА вида комментариев, а моя «упрощённая» версия — только строки,
+ * начинающиеся с двойного слэша. Из-за этого блочный комментарий,
+ * ОБЪЯСНЯЮЩИЙ, почему обещание убрано, делал сторожа красным: проверено
+ * опытом — вставка блочного пояснения со словами «QPayNet virtual cards»
+ * роняла прогон.
+ *
+ * Это ровно тот дефект, от которого защищался прежний автор: «запрет на само
+ * слово сделал бы объяснение невозможным». Сторож, краснеющий на разборе
+ * собственной находки, отключают в первый же день.
+ *
+ * Хвостовые комментарии вырезаются с оглядкой на `https://` — отсюда
+ * проверка символа перед парой слэшей.
+ */
+function stripComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
 describe("витрина /apps не обещает несуществующего", () => {
   const src = readFileSync(APPS, "utf8");
 
@@ -146,11 +169,7 @@ describe("витрина /apps не обещает несуществующег�
       // Ищем в тексте карточек, а не в комментариях: разбор 19.08 ссылается на
       // эти же слова, и запрет на упоминание сделал бы невозможным объяснить,
       // почему их убрали.
-      const withoutComments = src
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .split("\n")
-        .filter((l) => !l.trim().startsWith("//"))
-        .join("\n");
+      const withoutComments = stripComments(src);
       expect(withoutComments).not.toContain(text);
     });
   }
@@ -174,11 +193,7 @@ describe("каталог товаров не обещает несуществу
   // пустой сторож опаснее отсутствующего, потому что его считают защитой.
   for (const { text, why } of DISPROVEN_CLAIMS) {
     it(`не продаёт «${text}» — ${why}`, () => {
-      const withoutComments = src
-        .split(String.fromCharCode(10))
-        .filter((l) => !l.trim().startsWith("//"))
-        .join(String.fromCharCode(10));
-      expect(withoutComments).not.toContain(text);
+      expect(stripComments(src)).not.toContain(text);
     });
   }
 });

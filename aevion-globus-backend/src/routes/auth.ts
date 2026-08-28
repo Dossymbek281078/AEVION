@@ -937,6 +937,11 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
           to: user.email,
           name: user.name || user.email,
           token: minted.plaintext,
+          // Человек заводит аккаунт ПЛАТФОРМЫ, а не модуля найма. Почтовик мы
+          // переиспользуем чужой — это нормально, но имя в письме должно быть
+          // своё. Замер 28.08.2026 на живом ящике: письмо приходило с темой
+          // «Подтвердите email — AEVION QBuild» от «AEVION QPayNet».
+          brand: "AEVION",
         })
       : await sendEmailVerify(user.email, verifyUrl);
 

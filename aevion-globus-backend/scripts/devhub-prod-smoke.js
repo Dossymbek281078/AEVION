@@ -165,6 +165,9 @@ async function run() {
       "/checkpoints", "/collaborators", "/database", "/files",
       "/deployments", "/github/status", "/github/branches",
       "/domain/status", "/export", "/sdk",
+      // Добавлено следом: ручки с ДОПОЛНИТЕЛЬНЫМ параметром отвечают так же —
+      // «project not found» до разбора параметра, значит маршрут жив.
+      "/env/validate", "/preview-proxy", "/file-binary?path=x",
     ];
     for (const tail of SCOPED) {
       const r = await req("GET", `/api/devhub/projects/${NOBODY}${tail}`);
@@ -202,6 +205,17 @@ async function run() {
     else if (emptySnip.status === 404) fail("POST /snippets", "маршрута нет (404)");
     else fail("POST /snippets — проверка входа", `got ${emptySnip.status}`);
   }
+
+    // ПЛАТНЫЕ ручки — та же проба пустым телом. Дорогая половина не
+    // выполняется: обработчик отвергает запрос до вызова модели, значит ни
+    // денег, ни записей. Замер 28.08 на проде: /ask -> 400 "question
+    // required", /plan -> 400 "idea is required".
+    for (const [route, label] of [["/ask", "вопрос к ИИ"], ["/plan", "план проекта"]]) {
+      const r = await req("POST", "/api/devhub" + route, {});
+      if (r.status === 400) ok(`POST ${route} жив (${label})`);
+      else if (r.status === 404) fail(`POST ${route}`, "маршрута нет (404)");
+      else fail(`POST ${route} — проверка входа`, `got ${r.status}`);
+    }
 
   // Create
   const created = ALLOW_WRITE

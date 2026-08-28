@@ -137,6 +137,26 @@ async function run() {
 
   // ── 2. Project CRUD ───────────────────────────────────────────────────
   console.log("\n2. Project CRUD");
+  // ЖИВОСТЬ ЗАПИСИ БЕЗ ЗАПИСИ. Полный цикл создания пропускается в
+  // расписании (пишет в боевую базу), и до 28.08 это значило, что ежедневный
+  // сторож НИ РАЗУ не проверял ядро продукта — создание проекта. Пустое тело
+  // закрывает главное даром: маршрут существует, дошёл до проверки входных
+  // данных и отверг мусор. Не создаётся ничего.
+  //
+  // Контроль обязателен: выдуманный адрес того же префикса отвечает 404, то
+  // есть 400 здесь — свойство ЭТОЙ ручки, а не общий ответ платформы.
+  {
+    const empty = await req("POST", "/api/devhub/projects", {});
+    if (empty.status === 400) ok("POST /projects жив (пустое тело → 400)");
+    else if (empty.status === 404) fail("POST /projects", "маршрута нет (404)");
+    else fail("POST /projects — проверка входа", `got ${empty.status}`);
+
+    const emptySnip = await req("POST", "/api/devhub/snippets", {});
+    if (emptySnip.status === 400) ok("POST /snippets жив (пустое тело → 400)");
+    else if (emptySnip.status === 404) fail("POST /snippets", "маршрута нет (404)");
+    else fail("POST /snippets — проверка входа", `got ${emptySnip.status}`);
+  }
+
   // Create
   const created = ALLOW_WRITE
     ? await req("POST", "/api/devhub/projects", { name: `Smoke-${Date.now()}`, stack: "next" })

@@ -834,7 +834,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setEditorContent(first.content);
       }
     } catch {
-      showToast("Failed to load project", "error");
+      showToast("Не удалось загрузить проект", "error");
     } finally {
       setLoading(false);
     }
@@ -999,7 +999,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setShowNewFile(false);
       setNewFileName("");
     } catch {
-      showToast("Failed to create file", "error");
+      showToast("Не удалось создать файл", "error");
     }
   };
 
@@ -1076,9 +1076,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (selectedFile?.path === oldPath) {
         setSelectedFile((sf) => sf ? { ...sf, path: target } : null);
       }
-      showToast("File renamed", "success");
+      showToast("Файл переименован", "success");
     } catch {
-      showToast("Rename failed", "error");
+      showToast("Переименовать не удалось", "error");
     } finally {
       setRenamingFile(null);
     }
@@ -1176,7 +1176,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         const r = await fetchWithRedeployRetry(
           apiUrl(`/api/devhub/projects/${project.id}/generate`),
           { method: "POST", headers: { "Content-Type": "application/json" }, body: generateBody },
-          { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
+          { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
         );
         data = await r.json();
         if (!r.ok) throw new Error(data.error || "Generation failed");
@@ -1196,13 +1196,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       }
       if (data.aiGenerated === false) {
         note = "No AI provider configured — placeholder inserted instead of real code";
-        showToast("No AI provider configured — inserted a placeholder file instead of real code", "error");
+        showToast("Провайдер ИИ не подключён — вместо настоящего кода вставлена заготовка", "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
         const paths = data.syntaxErrors.map((s: { path: string }) => s.path).join(", ");
         note = `Syntax check failed: ${paths}`;
-        showToast(`Generated ${newGenerated.length} file(s), but ${paths} failed a syntax check — review before deploying`, "warning");
+        showToast(`Создано файлов: ${newGenerated.length}, но ${paths} не прошли проверку синтаксиса — просмотрите перед выкаткой`, "warning");
       } else {
-        showToast(`Generated ${newGenerated.length} file(s)`, "success");
+        showToast(`Создано файлов: ${newGenerated.length}`, "success");
       }
       setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note }]);
       // Data-shaped idea + no schema yet → offer to design the database with
@@ -1335,7 +1335,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (!r.ok || data.ok === false) throw new Error(data.error || "Planning failed");
       setPlan(data);
       if (data.aiGenerated === false) {
-        showToast("No AI provider configured — showing a generic outline instead of a tailored plan", "warning");
+        showToast("Провайдер ИИ не подключён — показан общий план вместо составленного под задачу", "warning");
       }
     } catch (e: any) {
       showToast(e.message || "Planning failed", "error");
@@ -1436,7 +1436,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
-      showToast(`Saved — updated ${visualEditHtmlPath}`, "success");
+      showToast(`Сохранено — обновлён ${visualEditHtmlPath}`, "success");
     } catch (e: any) {
       showToast(e.message || "Save failed", "error");
     } finally {
@@ -1502,7 +1502,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetchWithRedeployRetry(
         apiUrl(`/api/devhub/projects/${project.id}/database/design`),
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description }) },
-        { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
+        { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
       );
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Database design failed");
@@ -1518,7 +1518,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
-      showToast("Database designed — db/schema.sql + client are in the file tree", "success");
+      showToast("База спроектирована — db/schema.sql и клиент лежат в дереве файлов", "success");
       // Schema on disk is only half the job; offer to create the real database
       // right here when the server can (capability "database" is live).
       if (data.canProvision) {
@@ -1569,7 +1569,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetchWithRedeployRetry(
         apiUrl(`/api/devhub/projects/${project.id}/database/provision`),
         { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
-        { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
+        { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
       );
       const data = await r.json();
       if (!r.ok || !data.ok) throw new Error(data.error || "Provisioning failed");
@@ -1623,9 +1623,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "AI edit failed");
       if (data.aiGenerated === false) {
-        showToast("No AI provider configured — the page was not changed with real AI output", "error");
+        showToast("Провайдер ИИ не подключён — страница настоящей правкой ИИ не менялась", "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
-        showToast("AI edit applied, but the result failed a syntax check — review before deploying", "warning");
+        showToast("Правка ИИ применена, но результат не прошёл проверку синтаксиса — просмотрите перед выкаткой", "warning");
       } else {
         showToast(
           visualEditHtmlPath
@@ -1707,7 +1707,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       return;
     }
     setDeploying(true);
-    showToast("Building...", "info");
+    showToast("Собираю…", "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy`), { method: "POST" });
       const data = await r.json();
@@ -1773,7 +1773,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       setNewEnvKey(""); setNewEnvVal("");
       fetchEnv();
-      showToast("Env var saved", "success");
+      showToast("Переменная сохранена", "success");
     } catch (e: any) { showToast(`Переменная НЕ сохранена — ${e?.message || "нет связи"}`, "error"); }
   };
 
@@ -1804,7 +1804,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
-      showToast(`Template applied — ${(data.files || []).length} files`, "success");
+      showToast(`Шаблон применён — файлов: ${(data.files || []).length}`, "success");
     } catch (e: any) {
       showToast(e.message || "Failed", "error");
     } finally {
@@ -1826,7 +1826,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         }),
       });
       setProject((p) => p ? { ...p, name: settingsName, description: settingsDesc || null, customDomain: settingsDomain || null } : p);
-      showToast("Settings saved", "success");
+      showToast("Настройки сохранены", "success");
     } catch (e: any) {
       showToast(`Настройки НЕ сохранены — ${e?.message || "нет связи"}`, "error");
     } finally {
@@ -1843,7 +1843,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ userId: settingsCollab.trim(), role: collabRole }),
       });
       if (resp.status === 403) {
-        showToast("Studio Pro required — upgrade to add collaborators", "error");
+        showToast("Соавторы доступны в Studio Pro — оформите, чтобы добавлять", "error");
         return;
       }
       const data = await resp.json().catch(() => null);
@@ -1856,9 +1856,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       }
       setProject((p) => p ? { ...p, collaborators: data.collaborators } : p);
       setSettingsCollab("");
-      showToast(`Collaborator added (${collabRole})`, "success");
+      showToast(`Соавтор добавлен (${collabRole})`, "success");
     } catch {
-      showToast("Failed to add collaborator", "error");
+      showToast("Не удалось добавить соавтора", "error");
     }
   };
 
@@ -1992,7 +1992,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
     setPagesDeploying(true);
     setPagesResult(null);
-    showToast("Deploying to Cloudflare Pages...", "info");
+    showToast("Публикую на Cloudflare Pages…", "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/pages`), { method: "POST" });
       const d = await r.json();
@@ -2036,7 +2036,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       return;
     }
     setVercelDeploying(true);
-    showToast("Deploying to Vercel...", "info");
+    showToast("Выкатываю на Vercel…", "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/vercel`), { method: "POST" });
       const d = await r.json();
@@ -2338,7 +2338,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 setAgentSummary({
                   totalSteps: evt.totalSteps, successCount: evt.successCount, failureCount: evt.failureCount,
                 });
-                showToast(`Agent: ${evt.successCount}/${evt.totalSteps} steps ok`, evt.failureCount === 0 ? "success" : "error");
+                showToast(`Агент: удалось шагов ${evt.successCount} из ${evt.totalSteps}`, evt.failureCount === 0 ? "success" : "error");
               }
             } catch { /* tolerate bad events */ }
           }
@@ -2375,7 +2375,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
-      showToast(`Agent: ${d.successCount}/${d.totalSteps} steps ok`, d.successCount === d.totalSteps ? "success" : "error");
+      showToast(`Агент: удалось шагов ${d.successCount} из ${d.totalSteps}`, d.successCount === d.totalSteps ? "success" : "error");
     } catch (e: any) {
       showToast(e?.message || "Workflow failed", "error");
     } finally {
@@ -2580,15 +2580,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const runBulkTranslate = async () => {
     if (!project) return;
     if (bulkPaths.length === 0) {
-      showToast("Select at least one file", "error");
+      showToast("Выберите хотя бы один файл", "error");
       return;
     }
     if (bulkLangs.length === 0) {
-      showToast("Select at least one target language", "error");
+      showToast("Выберите хотя бы один язык перевода", "error");
       return;
     }
     if (bulkPaths.length * bulkLangs.length > 50) {
-      showToast("Max 50 translations per batch (files × langs)", "error");
+      showToast("За раз не больше 50 переводов (файлы × языки)", "error");
       return;
     }
     setBulkLoading(true);
@@ -2608,10 +2608,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setBulkResults(d.results || []);
       setBulkSummary({ total: d.total, successCount: d.successCount, failureCount: d.failureCount });
       if (d.successCount > 0) {
-        showToast(`Translated ${d.successCount} / ${d.total}`, "success");
+        showToast(`Переведено ${d.successCount} из ${d.total}`, "success");
         await fetchProject();
       } else {
-        showToast(`All ${d.total} translations failed`, "error");
+        showToast(`Ни один из ${d.total} переводов не удался`, "error");
       }
     } catch (e: any) {
       showToast(e?.message || "Bulk translate failed", "error");
@@ -2705,7 +2705,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         ok: true,
         text: `Imported ${d.importedCount} file(s), skipped ${d.skippedCount}`,
       });
-      showToast(`Imported ${d.importedCount} file(s) from ${file.name}`, "success");
+      showToast(`Из ${file.name} импортировано файлов: ${d.importedCount}`, "success");
       await fetchProject();
     } catch (e: any) {
       setZipResult({ ok: false, text: e?.message || "Import failed" });
@@ -2802,7 +2802,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         showToast(d.error || "Cloudflare upload failed", "error");
       } else {
         setCfImgPermanentUrl(d.url);
-        showToast("Image uploaded to permanent CDN", "success");
+        showToast("Картинка загружена на постоянный адрес", "success");
       }
     } catch (e: any) {
       showToast(e?.message || "Upload failed", "error");
@@ -2984,7 +2984,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (!r.ok || !d.ok) {
         showToast(d.error || "Import failed", "error");
       } else {
-        showToast(`Imported ${d.path} (${d.bytes} bytes)`, "success");
+        showToast(`Импортирован ${d.path} (${d.bytes} байт)`, "success");
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json();
         applyFileList(listData);
@@ -3699,7 +3699,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (!f) return;
-                        if (f.size > 5 * 1024 * 1024) { showToast("Image too large (max 5MB)", "error"); return; }
+                        if (f.size > 5 * 1024 * 1024) { showToast("Картинка слишком большая (не больше 5 МБ)", "error"); return; }
                         const reader = new FileReader();
                         reader.onload = () => {
                           const url = String(reader.result || "");
@@ -4408,7 +4408,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                         <button
                           onClick={async () => {
-                            if (!videoPrompt.trim()) { setVideoError("Enter a prompt first"); return; }
+                            if (!videoPrompt.trim()) { setVideoError("Сначала опишите, что нужно"); return; }
                             if (isCapabilityBlocked(caps, "video")) {
                               setVideoError(capabilityHint(caps, "video", "Генерация видео"));
                               return;
@@ -4426,7 +4426,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               setVideoStatus("generating...");
                               // Poll for completion
                               const pollFn = async (id: string, attempts = 0) => {
-                                if (attempts > 120) { setVideoError("Timeout after 2 min"); setVideoLoading(false); return; }
+                                if (attempts > 120) { setVideoError("Не дождались ответа за 2 минуты"); setVideoLoading(false); return; }
                                 const sr = await fetch(apiUrl(`/api/devhub/media/video/status/${id}`));
                                 const sd = await sr.json();
                                 setVideoStatus(sd.status);

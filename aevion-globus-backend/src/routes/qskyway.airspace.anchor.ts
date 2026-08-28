@@ -17,7 +17,7 @@
 // still-pending proof on the fly. No table, no cron.
 
 import { AIRSPACE, airspaceContentHash } from "./qskyway.airspace";
-import { stampHash, upgradeProof, verifyProof, type AnchorStatus } from "../lib/opentimestamps/anchor";
+import { stampHash, upgradeProof, verifyProof, type AnchorStatus, ANCHOR_STATUS_MEANING, type AnchorStatusMeaning } from "../lib/opentimestamps/anchor";
 
 export interface AirspaceAnchor {
   status: AnchorStatus;
@@ -65,6 +65,8 @@ export interface AirspaceAnchorVerify {
   ots: {
     verified: boolean;
     status: AnchorStatus;
+    /** Что это значит и что делать — рядом со словом, а не в документации. */
+    statusMeaning: AnchorStatusMeaning;
     upgraded: boolean;
     bitcoinBlockHeight: number | null;
     attestations: string[];
@@ -104,7 +106,7 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
   const fail = (error: string, errorEn: string): AirspaceAnchorVerify => ({
     city,
     matchesCurrentSnapshot: false,
-    ots: { verified: false, status: "not-submitted", upgraded: false, bitcoinBlockHeight: null, attestations: [], otsProofB64, error, errorEn },
+    ots: { verified: false, status: "not-submitted", statusMeaning: ANCHOR_STATUS_MEANING["not-submitted"], upgraded: false, bitcoinBlockHeight: null, attestations: [], otsProofB64, error, errorEn },
     fullyProven: false,
     note: "Проверка не завершена — см. поле error.",
     noteEn: "Verification did not complete — see the error field.",
@@ -132,6 +134,15 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
   const currentProof = up.otsProof ?? proof;
   const v = await verifyProof(contentHash, currentProof);
 
+  // Статус и его пояснение считаются из ОДНОГО значения: разойтись они
+  // не могут по устройству, а не по внимательности.
+  const otsStatus: AnchorStatus =
+    v.reason === "proof-error"
+      ? "invalid"
+      : v.bitcoinBlockHeight !== null
+        ? "bitcoin-confirmed"
+        : "pending";
+
   return {
     city,
     matchesCurrentSnapshot,
@@ -145,12 +156,8 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
       // привязки к блоку ещё нет (честное ожидание), и когда доказательство
       // не сходится вовсе. Первое — «повторите позже», второе — «ждать
       // бессмысленно», и звать оба "pending" значит советовать ждать зря.
-      status:
-        v.reason === "proof-error"
-          ? "invalid"
-          : v.bitcoinBlockHeight !== null
-            ? "bitcoin-confirmed"
-            : "pending",
+      status: otsStatus,
+      statusMeaning: ANCHOR_STATUS_MEANING[otsStatus],
       upgraded: up.upgraded,
       bitcoinBlockHeight: v.bitcoinBlockHeight,
       attestations: v.attestations,

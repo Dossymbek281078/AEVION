@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { verifyAnchoredTrustScore } from "../src/lib/trustAnchor";
 import { verifyAnchoredAirspace } from "../src/routes/qskyway.airspace.anchor";
+import { ANCHOR_STATUS_MEANING } from "../src/lib/opentimestamps/anchor";
 
 /**
  * Отказ не имеет права выглядеть ожиданием.
@@ -62,6 +63,10 @@ describe("проверка якоря: отказ называет себя от
     expect(r.ots.status, "провал проверки доложен как ожидание подтверждения").not.toBe("pending");
     expect(r.ots.status).toBe("invalid");
     expect(r.fullyProven).toBe(false);
+    // Пояснение проверяем ИМЕННО здесь: пустое тело уходит в помощник отказа,
+    // где оно зашито строкой, и мутацию «одно пояснение на всех» не ловит.
+    expect(r.ots.statusMeaning).toEqual(ANCHOR_STATUS_MEANING.invalid);
+    expect(r.ots.statusMeaning).not.toEqual(ANCHOR_STATUS_MEANING.pending);
   });
 
   test("ни один негодный вход не даёт bitcoin-confirmed", async () => {
@@ -99,4 +104,62 @@ describe("воздушный якорь: отказ называет себя о
       expect(String(r.noteEn).toLowerCase().includes("proven"), "refusal called proven").toBe(false);
     });
   }
+});
+
+/**
+ * Слово, которое получает третья сторона, обязано себя объяснять.
+ *
+ * ПОВОД. Мы завели `invalid` и `not-submitted`, потому что отказ прежде
+ * докладывался как ожидание. Но продукт обещает «проверьте сами», а объяснить
+ * новые слова было негде: ни в ответе, ни в рецепте. Различие «подождите»
+ * против «ждать бессмысленно» — как раз то, ради чего всё правилось.
+ *
+ * Полноту карты держит ТИП (`Record<AnchorStatus, …>`): забыть новый статус
+ * нельзя, сборка не пройдёт. Здесь проверяется другое — что пояснение в ответе
+ * СООТВЕТСТВУЕТ статусу, а не приклеено одно на все случаи.
+ */
+describe("статус объясняет сам себя", () => {
+  test("у каждого значения есть обе половины и совет", () => {
+    for (const [status, m] of Object.entries(ANCHOR_STATUS_MEANING)) {
+      for (const [field, value] of Object.entries(m)) {
+        expect(typeof value, status + "." + field + " не строка").toBe("string");
+        expect(String(value).length, status + "." + field + " пустое").toBeGreaterThan(10);
+      }
+    }
+  });
+
+  test("советы у ожидания и у негодного доказательства РАЗНЫЕ", () => {
+    // Ровно то различие, ради которого заводились новые значения. Если советы
+    // совпали — значит карта заполнена формально и пользы от неё нет.
+    expect(ANCHOR_STATUS_MEANING.pending.nextRu)
+      .not.toBe(ANCHOR_STATUS_MEANING.invalid.nextRu);
+    expect(ANCHOR_STATUS_MEANING.pending.nextEn)
+      .not.toBe(ANCHOR_STATUS_MEANING.invalid.nextEn);
+  });
+
+  test("в ответе пояснение СООТВЕТСТВУЕТ статусу, а не приклеено одно на всех", async () => {
+    const r = await verifyAnchoredAirspace({});
+    expect(r.ots.status).toBe("not-submitted");
+    expect(r.ots.statusMeaning).toEqual(ANCHOR_STATUS_MEANING["not-submitted"]);
+
+    const r2 = await verifyAnchoredTrustScore({});
+    expect(r2.ots.statusMeaning).toEqual(ANCHOR_STATUS_MEANING[r2.ots.status]);
+  });
+
+  test("и на ГЛАВНОМ пути возврата тоже, а не только в помощнике отказа", async () => {
+    // ⚠️ Первая версия этого файла проверяла только пустое тело — а оно уходит
+    // в помощник отказа, где пояснение зашито строкой. Мутация «приклеить одно
+    // пояснение на все случаи» её пережила: главный возврат не проверялся
+    // вовсе. Нужен вход, который проходит ВСЕ ранние проверки и падает уже на
+    // сверке: base64 настоящий, байты есть, но это не .ots-доказательство.
+    const notAProof = Buffer.from("это не .ots, но base64 честный").toString("base64");
+    const r = await verifyAnchoredAirspace({
+      city: "nyc",
+      contentHash: "ab".repeat(32),
+      otsProofB64: notAProof,
+    });
+    expect(r.ots.status, "не дошли до главного возврата — вход отсекся раньше").toBe("invalid");
+    expect(r.ots.statusMeaning).toEqual(ANCHOR_STATUS_MEANING.invalid);
+    expect(r.ots.statusMeaning).not.toEqual(ANCHOR_STATUS_MEANING.pending);
+  });
 });

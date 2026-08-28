@@ -26,8 +26,7 @@ import {
   stampHash,
   upgradeProof,
   verifyProof,
-  type AnchorStatus,
-} from "./opentimestamps/anchor";
+  type AnchorStatus, ANCHOR_STATUS_MEANING, type AnchorStatusMeaning } from "./opentimestamps/anchor";
 
 export interface TrustAnchor {
   status: AnchorStatus;
@@ -84,6 +83,8 @@ export interface AnchorVerifyResult {
     /** true = proof is Bitcoin-confirmed AND verifies against the block header for the signed hash */
     verified: boolean;
     status: AnchorStatus;
+    /** Что это значит и что делать — рядом со словом, а не в документации. */
+    statusMeaning: AnchorStatusMeaning;
     /** true if this call promoted the proof from pending → Bitcoin-confirmed */
     upgraded: boolean;
     bitcoinBlockHeight: number | null;
@@ -114,7 +115,7 @@ export async function verifyAnchoredTrustScore(body: unknown): Promise<AnchorVer
 
   const otsFail = (error: string, status: AnchorStatus = "not-submitted"): AnchorVerifyResult => ({
     ed25519,
-    ots: { verified: false, status, upgraded: false, bitcoinBlockHeight: null, attestations: [], otsProofB64, error },
+    ots: { verified: false, status, statusMeaning: ANCHOR_STATUS_MEANING[status], upgraded: false, bitcoinBlockHeight: null, attestations: [], otsProofB64, error },
     fullyProven: false,
     note: "Not yet fully proven — see ed25519 and ots for what is missing.",
   });
@@ -142,6 +143,15 @@ export async function verifyAnchoredTrustScore(body: unknown): Promise<AnchorVer
   const v = await verifyProof(hash, currentProof);
 
   const verified = v.ok && ed25519.valid;
+  // Статус и его пояснение считаются из ОДНОГО значения: разойтись они
+  // не могут по устройству, а не по внимательности.
+  const otsStatus: AnchorStatus =
+    v.reason === "proof-error"
+      ? "invalid"
+      : v.bitcoinBlockHeight !== null
+        ? "bitcoin-confirmed"
+        : "pending";
+
   return {
     ed25519,
     ots: {
@@ -153,12 +163,8 @@ export async function verifyAnchoredTrustScore(body: unknown): Promise<AnchorVer
       // привязки к блоку ещё нет (честное ожидание), и когда доказательство
       // не сходится вовсе. Первое — «повторите позже», второе — «ждать
       // бессмысленно», и звать оба "pending" значит советовать ждать зря.
-      status:
-        v.reason === "proof-error"
-          ? "invalid"
-          : v.bitcoinBlockHeight !== null
-            ? "bitcoin-confirmed"
-            : "pending",
+      status: otsStatus,
+      statusMeaning: ANCHOR_STATUS_MEANING[otsStatus],
       upgraded: up.upgraded,
       bitcoinBlockHeight: v.bitcoinBlockHeight,
       attestations: v.attestations,

@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { isSmokeSlot, countSmokeSlots } from "./slotSource";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 // Живой aevion.app 10.08.2026: «Рынок 4D-слотов (QRight) · 34», и 33 из них —
 // вывод смоук-набора (`smoke-route-…`, держатели op0..op3 / late / verify /
@@ -55,5 +57,33 @@ describe("тестовая бронь отличается от настояще
       { routeId: "astana-vp-112_2", holder: "AEVION demo" },
       { routeId: "astana-vp-112_2", holder: "aero-taxi-kz" },
     ])).toBe(1);
+  });
+});
+
+/**
+ * Литерал берётся ИЗ СТРАНИЦЫ, а не из копии в тесте.
+ *
+ * ПОВОД. Проверка выше закрепляет строку "AEVION demo", которую я вписал в
+ * тест руками. Это КОПИЯ значения, а не связь с ним: поменяют подпись в
+ * `_client.tsx` на «AEVION Demo Flight» — тест останется зелёным, а демо-брони
+ * снова начнут считаться живым спросом. Ровно тот дефект, ради которого
+ * классификация и заводилась.
+ *
+ * Поэтому читаем то, что страница РЕАЛЬНО отправляет.
+ */
+describe("демо-держатель связан со страницей, а не скопирован", () => {
+  const SRC = readFileSync(
+    path.join(__dirname, "_client.tsx"),
+    "utf8",
+  );
+
+  it("страница шлёт holder, и он классифицируется как не живой спрос", () => {
+    const m = SRC.match(/holder:\s*"([^"]+)"/);
+    expect(m, "страница больше не шлёт holder литералом — проверку надо переписать").toBeTruthy();
+    const sent = String(m![1]);
+    expect(
+      isSmokeSlot({ routeId: "astana-vp-112_2", holder: sent }),
+      "страница шлёт holder=" + JSON.stringify(sent) + ", а классификация считает это живой бронью",
+    ).toBe(true);
   });
 });

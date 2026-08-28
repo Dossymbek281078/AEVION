@@ -36,6 +36,15 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", "..", "..", "..");
 const trustPath = join(repoRoot, "aevion-globus-backend", "src", "data", "trust.ts");
 const glossaryPath = join(here, "..", "pricing", "glossary", "page.tsx");
+/**
+ * Второй источник тех же утверждений — файл переводов. Найден 28.08.2026 уже
+ * ПОСЛЕ первой версии сторожа: он читал только страницу глоссария и пропускал
+ * `"pricing.security.cert.soc2.status": "Certified"` — подпись-значок на
+ * странице безопасности, то есть форму более заметную, чем определение в
+ * словаре. Сторож, знающий один источник из двух, занижает не риск, а свой
+ * собственный охват.
+ */
+const i18nPath = join(here, "..", "..", "lib", "i18n-data.ts");
 
 /** id -> status из TRUST_BADGES. Разбор строковый: файл — данные, не код. */
 function readTrustStatuses(src: string): Map<string, string> {
@@ -85,12 +94,18 @@ const KNOWN_PENDING_DECISION = new Set(["soc2", "iso27001"]);
 describe("витрина не называет нас сертифицированными раньше времени", () => {
   const trust = readTrustStatuses(readFileSync(trustPath, "utf8"));
   const glossary = readGlossaryEntries(readFileSync(glossaryPath, "utf8"));
+  // Строки переводов: ключ несёт идентификатор, значение — видимый текст.
+  const i18n = readFileSync(i18nPath, "utf8")
+    .split(String.fromCharCode(10))
+    .map((text, i) => ({ text, line: i + 1 }))
+    .filter((r) => r.text.includes('"pricing.'));
 
   it("сам разбор работает — иначе проверка была бы пустой", () => {
     // Без этого утверждения пустая карта дала бы зелёный прогон при любом тексте.
     expect(trust.size, "не разобрал ни одного статуса из trust.ts").toBeGreaterThan(3);
     expect(glossary.length, "не разобрал ни одной записи глоссария").toBeGreaterThan(3);
     expect(trust.has("iso27001"), "нет опорного идентификатора iso27001").toBe(true);
+    expect(i18n.length, "не разобрал ни одной строки переводов").toBeGreaterThan(10);
   });
 
   it("известные расхождения не исчезли из виду", () => {
@@ -110,6 +125,23 @@ describe("витрина не называет нас сертифицирова
       const lower = text.toLowerCase();
       if (CLAIMS_CERTIFIED.some((w) => lower.includes(w))) {
         bad.push(`${id}: trust.ts говорит "${status}", а глоссарий пишет «сертифицирован»`);
+      }
+    }
+    expect(bad, bad.join("; ")).toEqual([]);
+  });
+
+  it("в переводах тоже не объявлено полученным то, что в процессе", () => {
+    const bad: string[] = [];
+    for (const { text, line } of i18n) {
+      for (const [id, status] of trust) {
+        if (status === "live" || KNOWN_PENDING_DECISION.has(id)) continue;
+        // Идентификатор должен стоять в КЛЮЧЕ, а не где-нибудь в тексте:
+        // иначе поймаем упоминание стандарта в честном описании.
+        if (!text.includes(`.${id}.`) && !text.includes(`.${id}"`)) continue;
+        const lower = text.toLowerCase();
+        if (CLAIMS_CERTIFIED.some((w) => lower.includes(w))) {
+          bad.push(`i18n-data.ts:${line} — ${id} в статусе "${status}", а текст говорит «сертифицирован»`);
+        }
       }
     }
     expect(bad, bad.join("; ")).toEqual([]);

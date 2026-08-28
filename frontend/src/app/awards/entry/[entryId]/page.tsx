@@ -165,7 +165,7 @@ export default async function AwardsEntryPage({ params }: Props) {
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           <div style={{ ...card, color: "#b91c1c", borderColor: "rgba(185,28,28,0.2)" }}>
             <div style={{ fontWeight: 800, marginBottom: 4 }}>Could not load entry</div>
-            <div style={{ fontSize: 13 }}>The Awards backend is temporarily unreachable.</div>
+            <div style={{ fontSize: 13 }}>The Awards service is temporarily unavailable. Please try again in a minute.</div>
           </div>
         </div>
       </main>

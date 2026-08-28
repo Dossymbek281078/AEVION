@@ -106,7 +106,7 @@ export default function TrustClient() {
         with zero trust in AEVION.
       </p>
 
-      {loadErr && <p style={{ color: "#fb7185" }}>Trust Score endpoint is not reachable right now.</p>}
+      {loadErr && <p style={{ color: "#fb7185" }}>Trust Score is unavailable right now. Please try again in a minute.</p>}
 
       {ts && (
         <>

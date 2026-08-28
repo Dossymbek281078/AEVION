@@ -77,6 +77,20 @@ describe("баннер установки не накрывает кнопку �
     const css = readFileSync(join(here, "..", "..", "app", "globals.css"), "utf8");
     const body = css.slice(css.indexOf("body {"), css.indexOf("body {") + 900);
     expect(body, "у body убрали отступ под баннер — подвал снова будет закрыт")
-      .toContain("padding-bottom: var(--aevion-install-h");
+      .toContain("padding-bottom: calc(var(--aevion-install-h");
+  });
+
+  it("кнопка агента тоже резервирует место — она закрывала «Помощь»", () => {
+    // Замер ЖИВОГО прода 28.08.2026 зондом aevion-overlay-probe, десктоп
+    // 1280px: ссылка «Помощь» (/help) в подвале недостижима, накрыта
+    // закреплённой кнопкой «Открыть AEVION AI Agent». Прокрутка не спасает —
+    // внизу страницы уехать некуда. Проверено отдельно: элемент остаётся
+    // недостижим и когда его выводят в середину экрана.
+    const dock = readFileSync(join(here, "..", "AgentDock.tsx"), "utf8");
+    expect(dock, "кнопка перестала публиковать свой след — подвал снова закроется")
+      .toContain("--aevion-dock-h");
+    const css = readFileSync(join(here, "..", "..", "app", "globals.css"), "utf8");
+    expect(css, "страница не учитывает след кнопки агента")
+      .toContain("var(--aevion-dock-h");
   });
 });

@@ -117,6 +117,7 @@ export function AgentDock() {
 
   // Keep a live ref to send so the (empty-deps) global listener never fires a
   // stale closure over busy/input.
+  const launcherRef = useRef<HTMLButtonElement | null>(null);
   const sendRef = useRef(send);
   sendRef.current = send;
 
@@ -157,11 +158,30 @@ export function AgentDock() {
     }
   };
 
+  // Кнопка стоит в правом нижнем углу и НАВСЕГДА закрывала ссылку
+  // «Помощь» в подвале: внизу страницы уехать из-под неё некуда.
+  // Замер живого прода 28.08.2026 зондом aevion-overlay-probe, десктоп
+  // 1280px. Поэтому кнопка публикует свой след, а страница на него
+  // отступает — так же, как под баннер установки.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (open) {
+      root.style.removeProperty("--aevion-dock-h");
+      return;
+    }
+    const h = launcherRef.current?.getBoundingClientRect().height ?? 0;
+    root.style.setProperty("--aevion-dock-h", `${Math.round(h) + 12}px`);
+    return () => {
+      root.style.removeProperty("--aevion-dock-h");
+    };
+  }, [open]);
+
   // ── Launcher button (collapsed) ────────────────────────────────────
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
+        ref={launcherRef}
         aria-label="Open AEVION AI Agent"
         style={{
           position: "fixed",

@@ -70,6 +70,18 @@ export async function generateMetadata({
   return {
     title,
     description: desc,
+    // Пустой результат НЕ индексируем.
+    //
+    // Эта страница — ПОИСК, а не реестр: ручка `/api/build/vacancies?skill=X`
+    // принимает любую строку и отвечает 200 с `{items: [], total: 0}`. Значит
+    // `notFound()` здесь был бы НЕВЕРНОЙ правкой — пустой результат поиска
+    // это законный ответ, а не отсутствие страницы.
+    //
+    // Но мусор для поисковика остаётся тем же: обходчик умеет придумать
+    // бесконечно много навыков, и каждый отвечал 200 с полной страницей.
+    // Правильный ответ здесь — noindex на пустоте, а не ложный 404.
+    // Замер 28.08.2026: `?skill=qqq-no-such-987` -> 200 {"items":[],"total":0}.
+    robots: vacancies.length > 0 ? undefined : { index: false, follow: true },
     openGraph: { title, description: desc },
     alternates: {
       types: {

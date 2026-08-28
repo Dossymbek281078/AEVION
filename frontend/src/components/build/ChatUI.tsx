@@ -198,7 +198,7 @@ function ScheduleInterviewButton({ onInsert }: { onInsert: (text: string) => voi
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${d.title.replace(/[^a-z0-9]/gi, "-").toLowerCase().slice(0, 40)}.ics`;
+    a.download = `${d.title.replace(/[^a-z0-9а-яё]+/giu, "-").replace(/^-+|-+$/g, "").toLowerCase().slice(0, 40)}.ics`;
     document.body.appendChild(a);
     a.click();
     a.remove();

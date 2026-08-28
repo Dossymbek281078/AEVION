@@ -270,7 +270,7 @@ export default function PipelinePage() {
                       <button onClick={() => {
                         const blob = new Blob([JSON.stringify({ name: p.name, description: p.description, steps: p.steps }, null, 2)], { type: "application/json" });
                         const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-                        a.download = `pipeline-${p.name.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.json`; a.click();
+                        a.download = `pipeline-${p.name.replace(/[^a-z0-9а-яё]+/giu, "-").replace(/^-+|-+$/g, "").toLowerCase()}.json`; a.click();
                       }} title="Export as JSON" style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: 10, cursor: "pointer" }}>⬇</button>
                       <button onClick={() => del(p.id)} style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #fecaca", background: "#fff", color: "#991b1b", fontSize: 10, cursor: "pointer" }}>×</button>
                     </div>

@@ -78,4 +78,18 @@ describe("отказы QSkyway несут английскую половину 
       expect(hasCyrillic(String(body.error)), "русская половина исчезла").toBe(true);
     });
   }
+
+  test("свод отказов в общий ответ не потерял поле available", () => {
+    // 28.08.2026 одиннадцать копий отказа «неизвестный город» свели в один
+    // refuseUnknownCity. Вместе с текстом там ехало `available` — список
+    // городов, по которому клиент понимает, что предложить человеку. Пропажа
+    // такого поля не роняет ничего и не видна ни в одном тесте про текст.
+    return request(app())
+      .get("/api/qskyway/city")
+      .query({ city: "щщщ-нет-такого" })
+      .then((res) => {
+        expect(Array.isArray(res.body?.available), "поле available исчезло").toBe(true);
+        expect(res.body.available.length, "список городов пуст").toBeGreaterThan(0);
+      });
+  });
 });

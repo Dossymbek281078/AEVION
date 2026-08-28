@@ -12,6 +12,7 @@ import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
 import { productById } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
+import { devhubServerError } from "@/lib/devhubServerError";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -114,7 +115,7 @@ export default function DevHubPage() {
         body: JSON.stringify({ name, description: idea, stack: "react" }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || t("err.create"));
+      if (!r.ok) throw new Error(devhubServerError(data.error, t("err.create")));
       // Сервер честно говорит, КУДА лёг проект, и до сегодня это поле никто не
       // читал: правда доезжала до ответа и останавливалась на границе API.
       // «memory» значит, что база была недоступна и запись живёт в памяти
@@ -171,7 +172,7 @@ export default function DevHubPage() {
         body: JSON.stringify({ name: form.name, description: form.description, stack: form.stack }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Failed to create");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось создать проект"));
       setProjects((ps) => [data.project, ...ps]);
       setShowModal(false);
       setForm({ name: "", description: "", stack: "next" });
@@ -192,7 +193,7 @@ export default function DevHubPage() {
         // would hide a schema, a login role and a billable container that are
         // all still live, with nothing left pointing at them.
         const d = await r.json().catch(() => null);
-        setError(d?.error || `Проект не удалён — сервер ответил ${r.status}`);
+        setError(devhubServerError(d?.error, `Проект не удалён — сервер ответил ${r.status}`));
         return;
       }
       setProjects((ps) => ps.filter((p) => p.id !== id));

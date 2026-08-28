@@ -2242,7 +2242,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(d?.error || `SFX error ${r.status}`);
+        throw new Error(devhubServerError(d?.error, `Не удалось создать звук — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       setSfxUrl(URL.createObjectURL(blob));
@@ -2276,7 +2276,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(d?.error || `Music error ${r.status}`);
+        throw new Error(devhubServerError(d?.error, `Не удалось создать музыку — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       setMusicUrl(URL.createObjectURL(blob));
@@ -2816,7 +2816,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(d?.error || `Preview error ${r.status}`);
+        throw new Error(devhubServerError(d?.error, `Не удалось получить пример — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -3059,7 +3059,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(d?.error || `TTS error ${r.status}`);
+        throw new Error(devhubServerError(d?.error, `Не удалось озвучить — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);

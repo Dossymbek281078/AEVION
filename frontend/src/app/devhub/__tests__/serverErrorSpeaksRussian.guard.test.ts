@@ -15,6 +15,8 @@ import path from "node:path";
 
 const DIR = path.resolve(__dirname, "..");
 const WORKSPACE = fs.readFileSync(path.join(DIR, "[id]", "page.tsx"), "utf8");
+const STOREFRONT = fs.readFileSync(path.join(DIR, "page.tsx"), "utf8");
+const BT = String.fromCharCode(96);
 
 describe("серверная ошибка доходит до человека по-русски", () => {
   test("прибор исправен: файл прочитан и не пуст", () => {
@@ -69,5 +71,28 @@ describe("серверная ошибка доходит до человека �
     // Без импорта TypeScript упал бы, но проверка стоит копейки и называет
     // причину прямо — быстрее, чем разбирать ошибку сборки.
     expect(WORKSPACE).toContain('from "@/lib/devhubServerError"');
+  });
+
+  test("витрина модуля тоже переводит серверный текст", () => {
+    // Прежний замер смотрел только рабочее окно. Витрина — первая страница,
+    // которую видит человек, и там было «Failed to create».
+    expect(STOREFRONT).toContain("devhubServerError");
+    expect(STOREFRONT, "английский запасной на витрине").not.toContain('"Failed to create"');
+  });
+
+  test("запасной текст в ОБРАТНЫХ кавычках тоже не английский", () => {
+    // Прежняя проверка искала только двойные кавычки и пропустила два места:
+    // `SFX error ${r.status}` и `TTS error ${r.status}`. Детектор, у которого
+    // уже нашлась слепая зона, обязан её закрыть — иначе его ноль обманчив.
+    const CYR = /[а-яА-ЯёЁ]/;
+    const bad: string[] = [];
+    for (const src of [WORKSPACE, STOREFRONT]) {
+      const parts = src.split("|| " + BT);
+      parts.slice(1).forEach((tail) => {
+        const lit = tail.split(BT)[0];
+        if (lit && !CYR.test(lit)) bad.push(lit.slice(0, 40));
+      });
+    }
+    expect(bad, "запасной текст в обратных кавычках по-английски").toEqual([]);
   });
 });

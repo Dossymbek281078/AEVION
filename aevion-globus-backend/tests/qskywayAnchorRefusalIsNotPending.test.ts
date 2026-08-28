@@ -163,3 +163,51 @@ describe("статус объясняет сам себя", () => {
     expect(r.ots.statusMeaning).not.toEqual(ANCHOR_STATUS_MEANING.pending);
   });
 });
+
+/**
+ * URL-safe base64 принимается так же, как стандартный.
+ *
+ * ПОВОД — регрессия, которую я внёс сам в этом же окне. Заменяя мёртвый
+ * try/catch на строгий шаблон, я не спросил, что принимал слой НИЖЕ:
+ * `Buffer.from(x, "base64")` в Node принимает `-` и `_` и декодирует
+ * идентично стандартному (проверено опытом). До шаблона такие доказательства
+ * проверялись успешно, после — стали получать «не является корректным
+ * base64»: ответ формально верный и бесполезный для третьей стороны, которую
+ * мы сами зовём проверять нас.
+ *
+ * Проверяем не «не отвергнуто», а РАВЕНСТВО результатов: иначе тест пройдёт и
+ * тогда, когда обе кодировки одинаково сломаны.
+ */
+describe("две кодировки одного доказательства дают один ответ", () => {
+  // ⚠️ Байты подобраны так, чтобы в base64 БЫЛИ и `+`, и `/` — иначе подмены
+  // не происходит и сравнение ниже становится сравнением строки с собой.
+  // Первая версия брала осмысленный текст, у которого этих символов не
+  // оказалось, и контрольная проверка это поймала. Она за тем и стоит.
+  const raw = Buffer.from([0xfb, 0xff, 0xbe, 0xfa, 0xef, 0xbf, 0x3e, 0xd2, 0x7c]);
+  const std = raw.toString("base64");
+  const urlSafe = std.replace(/\+/g, "-").replace(/\//g, "_");
+
+  test("контроль: кодировки РАЗНЫЕ (иначе тест ничего не проверяет)", () => {
+    // Если у этой строки не окажется символов + и /, подмены не произойдёт и
+    // сравнение ниже станет сравнением строки с самой собой.
+    expect(urlSafe).not.toBe(std);
+  });
+
+  test("воздушный якорь: ответ одинаков", async () => {
+    const body = { city: "nyc", contentHash: "ab".repeat(32) };
+    const a = await verifyAnchoredAirspace({ ...body, otsProofB64: std });
+    const b = await verifyAnchoredAirspace({ ...body, otsProofB64: urlSafe });
+    expect(b.ots.status, "URL-safe отвергнут как негодный формат").not.toBe("not-submitted");
+    expect(b.ots.status).toBe(a.ots.status);
+    expect(b.ots.verified).toBe(a.ots.verified);
+    expect(b.fullyProven).toBe(a.fullyProven);
+  });
+
+  test("якорь доверия: ответ одинаков", async () => {
+    const snapshot = { attestation: { contentHash: "ab".repeat(32) } };
+    const a = await verifyAnchoredTrustScore({ snapshot, otsProofB64: std });
+    const b = await verifyAnchoredTrustScore({ snapshot, otsProofB64: urlSafe });
+    expect(b.ots.status, "URL-safe отвергнут как негодный формат").not.toBe("not-submitted");
+    expect(b.ots.status).toBe(a.ots.status);
+  });
+});

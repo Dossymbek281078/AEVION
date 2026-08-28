@@ -121,11 +121,24 @@ export async function verifyAnchoredAirspace(body: unknown): Promise<AirspaceAnc
   // ⚠️ `Buffer.from(x, "base64")` НЕ БРОСАЕТ: недопустимые символы молча
   // отбрасываются, поэтому прежний try/catch не мог сработать ни разу — защита
   // была на вид, а мусор уезжал вглубь и падал уже в сверке доказательства.
-  const looksBase64 = /^[A-Za-z0-9+/]*={0,2}$/.test(otsProofB64.replace(/\s+/g, ""));
+  // ⚠️ Нормализуем ДО проверки, и это не удобство, а исправление регрессии,
+  // которую я же и внёс. `Buffer.from(x, "base64")` в Node принимает URL-safe
+  // (`-` и `_`) и декодирует ИДЕНТИЧНО стандартному — проверено опытом. Значит
+  // до появления строгого шаблона такие доказательства проверялись успешно, а
+  // после стали получать «не является корректным base64»: формально верный и
+  // бесполезный ответ для третьей стороны, которую мы сами зовём проверять нас.
+  //
+  // Урок общий: ужесточение поверх ТЕРПИМОГО декодера отсекает входы, которые
+  // раньше работали. Прежде чем сузить приём, спроси, что принимал слой ниже.
+  const b64 = otsProofB64
+    .replace(/\s+/g, "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const looksBase64 = /^[A-Za-z0-9+/]*={0,2}$/.test(b64);
   if (!looksBase64) {
     return fail("otsProofB64 не является корректным base64", "otsProofB64 is not valid base64");
   }
-  const proof = Buffer.from(otsProofB64, "base64");
+  const proof = Buffer.from(b64, "base64");
   if (proof.length === 0) {
     return fail("otsProofB64 декодируется в пустоту", "otsProofB64 decodes to nothing");
   }

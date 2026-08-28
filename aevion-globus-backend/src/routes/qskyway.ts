@@ -1522,6 +1522,7 @@ qskywayRouter.post("/route", (req: Request, res: Response) => {
       if (relaxed) {
         return res.status(422).json({
           error: "нет коридора в пределах опубликованного потолка регулятора",
+          errorEn: "no corridor within the regulator's published ceiling",
           reason: "airspace-ceiling",
           respectCeiling: true,
           airspaceIfUnrestricted: relaxed.airspace,
@@ -1889,7 +1890,11 @@ const anchorVerifyLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
   keyPrefix: "qskyway-anchor-verify",
-  message: "Слишком много проверок якоря — проверка обращается к внешним календарям, попробуйте через минуту.",
+  // Двуязычно ОДНОЙ строкой: общий лимитер кладёт в ответ ровно одно поле
+  // (`error: message`), пары он не умеет, а менять его ради двух сообщений
+  // значит трогать код, которым пользуются все модули.
+  message: "Слишком много проверок якоря — проверка обращается к внешним календарям, попробуйте через минуту."
+    + " / Too many anchor checks — verification calls external calendars, try again in a minute.",
 });
 
 // A serialized .ots proof for one hash is well under a kilobyte (ours is 3.7 KB
@@ -1902,6 +1907,7 @@ qskywayRouter.post("/airspace/anchor/verify", anchorVerifyLimiter, async (req: R
   if (typeof proofB64 === "string" && proofB64.length > MAX_OTS_PROOF_B64) {
     return res.status(413).json({
       error: "пруф слишком большой",
+      errorEn: "proof too large",
       maxBytesB64: MAX_OTS_PROOF_B64,
       note: "Сериализованный .ots-пруф на один хэш — единицы килобайт; всё, что заметно больше, проверить всё равно не удастся.",
     });
@@ -1965,7 +1971,8 @@ const registerLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
   keyPrefix: "qskyway-airspace-register",
-  message: "Слишком много обращений к реестру — попробуйте через минуту.",
+  message: "Слишком много обращений к реестру — попробуйте через минуту."
+    + " / Too many registry requests — try again in a minute.",
 });
 const registeredCache = new Map<string, { qrightObjectId: string; contentHash: string }>();
 
@@ -2035,6 +2042,7 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
     console.warn("[qskyway] airspace register failed:", err instanceof Error ? err.message : err);
     res.status(503).json({
       error: "реестр QRight недоступен — регистрация не выполнена",
+      errorEn: "QRight registry unavailable — registration was not performed",
       contentHash,
       note: "Подпись и якорь слоя не затронуты; повторите регистрацию, когда база доступна.",
     });

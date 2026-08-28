@@ -622,6 +622,28 @@ export default function DevHubPage() {
           </div>
         )}
 
+        {/* Проекты гостя привязаны к ЭТОМУ БРАУЗЕРУ: личность лежит в
+            localStorage (lib/devhubGuest.ts). Очистил хранилище, открыл другой
+            браузер — проекты остались на сервере, но человек их больше не
+            видит, и вернуть их нечем.
+
+            Витрина при этом зовёт работать без аккаунта («No GitHub or cloud
+            accounts needed») и об этой цене не говорила НИГДЕ. Пригласить и
+            умолчать — то же самое, что обещать лишнее, только наоборот.
+
+            Строка показывается всем: страница о входе не знает вовсе, а
+            заводить здесь состояние авторизации ради одной подсказки — правка
+            крупнее самой пользы. Для вошедшего она просто не про него. */}
+        <p
+          style={{
+            fontSize: 12.5, color: "#64748b", margin: "0 0 14px",
+            display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+          }}
+        >
+          <span aria-hidden="true">💾</span>
+          {t("proj.browserBound")}
+        </p>
+
         {/* Loading */}
         {/* Each branch carries its own key. Without them React reconciles these
             by position, and when a late fetch flips the branch it remounts the

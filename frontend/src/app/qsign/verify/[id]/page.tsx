@@ -173,7 +173,7 @@ export default async function QSignVerifyPage({ params }: Props) {
             {id}
           </h1>
           <p style={{ color: "#64748b", fontSize: 14, margin: "0 0 20px" }}>
-            This QSign signature id does not exist, or the backend is unavailable.
+            This QSign signature was not found. Either the link is wrong, or the service is temporarily unavailable — try again in a minute.
           </p>
           <Link
             href="/qsign"

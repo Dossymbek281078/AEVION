@@ -7,6 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { titleForAppSlug } from "@/lib/appSlugTitle";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 
@@ -706,7 +707,7 @@ export default function AccountPage() {
                             border: "1px solid #a7f3d0", borderRadius: 999, fontSize: 13, fontWeight: 700,
                           }}
                         >
-                          {slug}
+                          {titleForAppSlug(slug)}
                         </span>
                       ))}
                     </div>

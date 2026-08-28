@@ -1130,7 +1130,7 @@ export default function QSkywayClient() {
                         </span>
                         {(stats.blindInert ?? 0) > 0 && (
                           <span
-                            title={`На ${stats.blindInert} участк(ах) высота под крылом угадана, а страховочный запас съеден полом коридора: коридор лёг туда же, куда лёг бы без запаса. Обещанный просвет выдержан, только если здание не выше ${stats.blindClearedUpToM} м.`}
+                            title={`На ${plural(stats.blindInert ?? 0, "участке", "участках", "участках")} высота под крылом угадана, а страховочный запас съеден полом коридора: коридор лёг туда же, куда лёг бы без запаса. Обещанный просвет выдержан, только если здание не выше ${stats.blindClearedUpToM} м.`}
                             style={{ fontSize: 11, fontWeight: 400, color: "#fbbf24", marginLeft: 5, cursor: "help" }}
                           >
                             {t("qskyway.tel.blindInert", { n: stats.blindInert ?? 0 })}

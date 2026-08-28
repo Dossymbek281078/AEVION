@@ -59,7 +59,10 @@ export async function generateMetadata({
       siteName: "AEVION",
     },
     twitter: {
-      card: "summary",
+      // Крупная карточка: картинка у сегмента теперь есть (opengraph-image.tsx).
+      // Без картинки крупный тип показывал бы пустоту — ровно то, что чинилось
+      // у страницы сертификата.
+      card: "summary_large_image",
       title: preview.title,
       description: preview.description,
     },

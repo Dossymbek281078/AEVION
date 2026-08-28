@@ -1806,10 +1806,18 @@ devhubRouter.delete("/projects/:id/files/:filepath", async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 // POST /api/devhub/projects/:id/generate
-devhubRouter.post("/projects/:id/generate", async (req, res) => {
+// Генерация кода — самое дорогое действие модуля, и ограничителя у неё НЕ БЫЛО,
+// хотя у соседних дорогих ручек он есть: `/ask` и `/media/upload-image` его
+// получили, эту пропустили. Проект можно завести без входа (гостевая
+// личность), поэтому аноним мог жечь платную генерацию без предела.
+// Ключ отдельный: общий на все генерации означал бы, что один модуль
+// расходует предел другого.
+devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  // String(): добавление ограничителя меняет вывод типов Express — параметр
+  // становится `string | string[]`. Приводим явно, а не через as.
+  const project = await loadOwnedProjectOrReply(String(req.params.id), userId, res);
   if (!project) return;
   const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
   if (!prompt || typeof prompt !== "string") {

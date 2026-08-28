@@ -348,6 +348,17 @@ export const chatLimiter = rateLimit({
 // единицы), для перебора — жёсткий потолок. Авторизованные считаются по своему
 // id и сюда не попадают: у них ключ точный, а строгий предел им ставит
 // chatLimiter выше.
+// Потолок стоит ПЕРЕД chatLimiter, а оба пишут одни и те же заголовки —
+// значит снаружи видно только второй, и «сработал ли потолок» превращается в
+// спор вместо наблюдения. Именно на этом я потерял час: четыре гипотезы, ни
+// одного числа. Эта мидлвара переносит остаток потолка в отдельный заголовок
+// ДО того, как его затрёт следующий лимитер.
+export function exposeCeilingRemaining(_req: unknown, res: { getHeader: (n: string) => unknown; setHeader: (n: string, v: string) => void }, next: () => void): void {
+  const v = res.getHeader("X-RateLimit-Remaining");
+  if (v !== undefined && v !== null) res.setHeader("X-Anon-Ceiling-Remaining", String(v));
+  next();
+}
+
 export const anonChatCeiling = rateLimit({
   windowMs: 60_000,
   max: 120,
@@ -408,7 +419,7 @@ function usageToTokens(u: unknown): { tokensIn: number; tokensOut: number } {
   return { tokensIn, tokensOut };
 }
 
-qcoreaiRouter.post("/chat", anonChatCeiling, chatLimiter, async (req, res) => {
+qcoreaiRouter.post("/chat", anonChatCeiling, exposeCeilingRemaining, chatLimiter, async (req, res) => {
   try {
     if (await enforceFreeTokenQuota(req, res)) return;
     const auth = verifyBearerOptional(req);
@@ -480,7 +491,7 @@ export { clampTemperature, publicErrorCategory };
                                               data: { kind: "error", message }
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/chat-stream", anonChatCeiling, chatLimiter, async (req, res) => {
+qcoreaiRouter.post("/chat-stream", anonChatCeiling, exposeCeilingRemaining, chatLimiter, async (req, res) => {
   if (await enforceFreeTokenQuota(req, res)) return;
   const auth = verifyBearerOptional(req);
   const messages = sanitizeMessages(req.body?.messages);

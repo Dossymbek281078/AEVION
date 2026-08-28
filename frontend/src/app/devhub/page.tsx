@@ -459,7 +459,7 @@ export default function DevHubPage() {
               (plain UI, a real database, media), so the first thing a person
               builds shows what the tool can do rather than the least of it. */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
-            <span style={{ fontSize: 12.5, color: "#99f6e4" }}>Или начните с примера:</span>
+            <span style={{ fontSize: 12.5, color: "#99f6e4" }}>{t("store.orExample")}</span>
             {[
               "лендинг кофейни с меню и формой брони",
               "трекер задач с базой данных и статусами",
@@ -685,7 +685,7 @@ export default function DevHubPage() {
                   </tr>
                 ))}
                 <tr>
-                  <td style={{ padding: "6px 14px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0" }}>Итого</td>
+                  <td style={{ padding: "6px 14px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0" }}>{t("store.total")}</td>
                   <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>7 подписок, 7 логинов</td>
                   <td style={{ padding: "6px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0", fontVariantNumeric: "tabular-nums" }}>≈ $162</td>
                 </tr>

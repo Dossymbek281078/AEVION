@@ -64,7 +64,16 @@ export function OnboardingModal() {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+      {/* Окно не было размечено как диалог: ни role, ни aria-modal. Для
+          экранного диктора это была обычная часть страницы — он продолжал
+          читать содержимое ПОД окном, хотя нажать там ничего нельзя.
+          Замер прода 28.08.2026. */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="smeta-onboarding-title"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+      >
         {/* Прогресс */}
         <div className="flex">
           {STEPS.map((_, i) => (
@@ -75,7 +84,7 @@ export function OnboardingModal() {
         {/* Контент */}
         <div className="px-8 py-8 text-center">
           <div className="text-5xl mb-4">{s.icon}</div>
-          <h2 className="text-lg font-bold text-slate-900 mb-3">{s.title}</h2>
+          <h2 id="smeta-onboarding-title" className="text-lg font-bold text-slate-900 mb-3">{s.title}</h2>
           <p className="text-sm text-slate-600 leading-relaxed">{s.text}</p>
         </div>
 
@@ -89,7 +98,13 @@ export function OnboardingModal() {
           </button>
           <div className="flex gap-1.5">
             {STEPS.map((_, i) => (
-              <button key={i} onClick={() => setStep(i)} className={`w-2 h-2 rounded-full transition-colors ${i === step ? "bg-emerald-500" : "bg-slate-200"}`} />
+              <button
+                key={i}
+                onClick={() => setStep(i)}
+                aria-label={`Шаг ${i + 1}`}
+                aria-current={i === step ? "step" : undefined}
+                className={`w-2 h-2 rounded-full transition-colors ${i === step ? "bg-emerald-500" : "bg-slate-200"}`}
+              />
             ))}
           </div>
           <button

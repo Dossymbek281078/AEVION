@@ -548,7 +548,19 @@ function BureauPageInner() {
                 name: "Notarized",
                 price: "From $89 / cert",
                 blurb: "Licensed notary co-signs the certificate with Ed25519, producing an apostille-ready document admissible in EAEU courts.",
-                badge: "▲ live",
+                // ⚠️ 28.08.2026: значок был «▲ live» при НУЛЕ нотариусов в реестре.
+                //
+                //   GET https://api.aevion.app/api/bureau/notaries -> {"notaries":[]}
+                //   (ручка отдаёт только активных; неактивный подписать не может)
+                //
+                // Тариф за $89 обещает подпись лицензированного нотариуса, а исполнить
+                // это сегодня физически некому. Цена и состав пакета — решение владельца
+                // продукта, их не трогаю; но «live» — утверждение о ДОСТУПНОСТИ, то есть
+                // факт, и он был неверен.
+                //
+                // Вернуть «▲ live» следует в тот день, когда в реестре появится первый
+                // активный нотариус, — не раньше.
+                badge: "▲ в плане",
                 badgeColor: "#7c3aed",
                 cta: { label: "View Notary Registry", href: "/bureau/notaries" },
               },

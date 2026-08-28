@@ -408,6 +408,7 @@ interface RouteResult {
     inertPenaltySegments: number;
     clearedUpToM: number;
     note: string;
+    noteEn: string;
   };
   respectCeiling: boolean;
   airspace: AirspaceCompliance;
@@ -537,9 +538,16 @@ function buildRoute(
       guessedSegments,
       inertPenaltySegments: guessedInertSegments,
       clearedUpToM: FLOOR - CLEAR,
+      // Обе версии — то же правило, что у `scope`/`scopeEn` ниже: защищает та,
+      // которую читатель понимает. Первая версия этого поля была только
+      // русской, и я нарушил собственное соглашение модуля через несколько
+      // часов после того, как его записал.
       note: guessedInertSegments > 0
         ? `На ${guessedInertSegments} участк(ах) высота угадана, а страховочный запас за неуверенность съеден полом коридора: просвет ${CLEAR} м гарантирован только если здание не выше ${FLOOR - CLEAR} м.`
         : "Все участки с угаданной высотой получили настоящий страховочный запас.",
+      noteEn: guessedInertSegments > 0
+        ? `On ${guessedInertSegments} segment(s) the building height is a guess and the low-confidence margin is absorbed by the corridor floor: the ${CLEAR} m clearance holds only if the building is no taller than ${FLOOR - CLEAR} m.`
+        : "Every segment with a guessed height received the full low-confidence margin.",
     },
     respectCeiling,
     airspace: assessCeiling(field, path, alts, cityId),

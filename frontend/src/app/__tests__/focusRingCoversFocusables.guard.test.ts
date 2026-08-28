@@ -53,6 +53,19 @@ describe("контур фокуса покрывает всё фокусируе
     });
   }
 
+  it("осознанное исключение .cc-focus-ring сохранено", () => {
+    // Этот класс намеренно снимает контур и рисует СВОЁ кольцо тенью
+    // (~84 применения в шахматах). Общий !important навязал бы им контур
+    // поверх кольца. Признак видимого фокуса у них есть — нижняя граница
+    // соблюдена, значит их решение уважаем.
+    const last = css.lastIndexOf(".cc-focus-ring:focus-visible");
+    expect(last, "исключение пропало — шахматам навяжется чужой контур")
+      .toBeGreaterThan(start);
+    const rule = css.slice(last, css.indexOf("}", last));
+    expect(rule, "исключение перестало перебивать общий !important")
+      .toContain("outline: none !important");
+  });
+
   it("контур действительно рисуется, а не объявлен пустым", () => {
     const rule = css.slice(css.indexOf("{", start), css.indexOf("}", start));
     expect(rule, "у правила пропала толщина контура").toMatch(/outline:\s*[1-9]/);

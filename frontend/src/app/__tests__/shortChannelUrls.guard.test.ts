@@ -27,6 +27,7 @@ const ROUTES: Array<[string, string]> = [
   ["yt", "/go?c=yt"],
   ["en/tt", "/en/go?c=tt"],
   ["en/ig", "/en/go?c=ig"],
+  ["en/yt", "/en/go?c=yt"],
 ];
 
 describe("короткие адреса каналов", () => {

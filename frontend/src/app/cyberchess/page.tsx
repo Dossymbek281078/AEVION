@@ -5625,7 +5625,7 @@ export default function CyberChessPage(){
     backgroundImage:BG_PRESETS.find(p=>p.id===bgPreset)!.css!,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed",
   } : {};
   const hasBg=bgPreset!=="none"&&!!bgPreset;
-  return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":tabBg,transition:`background ${MOTION.base} ${MOTION.ease}`,height:"100dvh",overflow:"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
+  return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":tabBg,transition:`background ${MOTION.base} ${MOTION.ease}`,height:isMobileLayout?"auto":"100dvh",minHeight:"100dvh",overflow:isMobileLayout?"visible":"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
     {hasBg&&<div style={{position:"fixed",inset:0,background:themeMode==="dark"?"rgba(15,13,10,0.72)":"rgba(255,255,255,0.55)",zIndex:0,pointerEvents:"none"}}/>}
     <ProductPageShell fullWidth>
       {/* Просмотры главной страницы продукта не считались ВООБЩЕ: на вопрос

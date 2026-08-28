@@ -55,6 +55,51 @@ function englishBetweenTags(): string[] {
   return out;
 }
 
+/**
+ * Второй проход: фраза, РАЗОРВАННАЯ выражениями JSX.
+ *
+ * Проверка выше ищет целое `>текст<` на одной строке. Карточка публикации
+ * была написана иначе:
+ *
+ *   Ready to go live? One click deploys this to Cloudflare{works
+ *     ? <> with your own <span>*.aevion.build</span> URL</>
+ *     : <> — you get a public <span>*.pages.dev</span> address</>}
+ *
+ * Целого `>текст<` тут нет ни на одной строке — и месяцами самая заметная
+ * карточка модуля была английской при зелёном стороже.
+ *
+ * Здесь ищем иначе: подряд идущие английские слова в позиции ТЕКСТА, то есть
+ * вне фигурных скобок и вне кавычек. Три слова подряд — уже фраза.
+ */
+function englishRunsInJsxText(): string[] {
+  // Ищем ТОЛЬКО внутри фрагментов <> ... </>. Именно так пишут фразу,
+  // разорванную условием, и именно там она невидима для проверки выше.
+  //
+  // Первая версия вырезала фигурные скобки и смотрела всё подряд — и
+  // ловила КОД: скобки в JSX многострочные, на строке-продолжении разбор
+  // считает код текстом. Двенадцать ложных находок из двенадцати.
+  const out: string[] = [];
+  const LF = String.fromCharCode(10);
+  for (const raw of SRC.split(LF)) {
+    const line = raw.trim();
+    if (line.startsWith("//") || line.startsWith("*")) continue;
+    let from = 0;
+    for (;;) {
+      const open = raw.indexOf("<>", from);
+      if (open < 0) break;
+      const close = raw.indexOf("</>", open);
+      const seg = close < 0 ? raw.slice(open + 2) : raw.slice(open + 2, close);
+      from = close < 0 ? raw.length : close + 3;
+      // Внутри фрагмента берём только текст вне тегов.
+      const text = seg.replace(/<[^>]*>/g, " ");
+      if (/[а-яА-ЯёЁ]/.test(text)) continue;
+      const words = text.split(/[^A-Za-z]+/).filter((w) => w.length > 2);
+      if (words.length >= 3) out.push(text.trim().slice(0, 60));
+    }
+  }
+  return out;
+}
+
 describe("рабочее окно говорит по-русски", () => {
   test("прибор исправен: разбор находит хоть что-то", () => {
     // Если бы разбор возвращал пусто, проверка ниже была бы зелёной ни на чём.
@@ -72,5 +117,15 @@ describe("рабочее окно говорит по-русски", () => {
     for (const [k, why] of Object.entries(KEEP)) {
       expect(why.length, `исключение «${k}» без причины`).toBeGreaterThan(8);
     }
+  });
+
+  test("нет английских фраз, разорванных выражениями JSX", () => {
+    const runs = englishRunsInJsxText();
+    // Разрешено с причинами — как и в списке выше.
+    const OK = [
+      "aevion.app",
+    ];
+    const bad = runs.filter((r) => !OK.some((k) => r.includes(k)));
+    expect(bad, "английская фраза в интерфейсе, собранная из кусков").toEqual([]);
   });
 });

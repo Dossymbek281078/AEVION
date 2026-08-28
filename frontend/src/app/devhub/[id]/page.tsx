@@ -3630,15 +3630,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                     server says that domain actually works. The
                                     zone was never delegated, so for months this
                                     card promised an address that failed DNS. */}
-                                🚀 Ready to go live? One click deploys this to Cloudflare{domainCapabilityWorks
-                                  ? <> with your own <span style={{ fontFamily: "monospace" }}>*.aevion.build</span> URL</>
-                                  : <> — you get a public <span style={{ fontFamily: "monospace" }}>*.pages.dev</span> address</>} — marked live only after the page actually serves.
+                                🚀 Готовы показать людям? Одна кнопка — и проект публикуется на Cloudflare{domainCapabilityWorks
+                                  ? <> по вашему адресу <span style={{ fontFamily: "monospace" }}>*.aevion.build</span></>
+                                  : <> — вы получите общедоступный адрес <span style={{ fontFamily: "monospace" }}>*.pages.dev</span></>} — marked live only after the page actually serves.
                               </div>
                               <button
                                 onClick={() => { setChatHistory((h) => h.filter((m) => !(m.role === "hint" && m.kind === "deploy"))); deployToPages(); setActiveTab("deployments"); }}
                                 style={{ padding: "7px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}
                               >
-                                Задеплоить
+                                Опубликовать
                               </button>
                             </div>
                           ) : (
@@ -5137,8 +5137,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       })()}
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
                         {payProvider === "gumroad"
-                          ? <>Gumroad is the only live processor (Stripe/Paddle blocked by KYC). Link is a public product page — no server key needed. Sales arrive via <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>/api/gumroad/webhook</code>.</>
-                          : <>⚠️ Stripe is KYC-blocked — links won't collect real payments. </>}
+                          ? <>Приём оплаты сейчас работает через Gumroad. Ссылка ведёт на общедоступную страницу товара — ключ на сервере не нужен. О продажах нам сообщает <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>/api/gumroad/webhook</code>.</>
+                          : <>⚠️ Через Stripe оплата сейчас не проходит: ссылка не примет настоящий платёж. </>}
                       </div>
                     </div>
                   )}

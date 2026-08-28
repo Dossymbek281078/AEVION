@@ -1268,6 +1268,7 @@ qskywayRouter.get("/cities", (_req: Request, res: Response) => {
       total: Object.keys(CITIES).length,
       missing: Object.keys(CITIES).filter((id) => !AIRSPACE[id] && !PERMISSION[id]),
       note: "Регуляторный слой есть там, где регулятор вообще публикует ограничения — сеткой потолков, режимом разрешений или запретной зоной в AIP. Форма публикации разная: фид, растровый слой, нормативный документ. «Нет API» не равно «нет правила» — правило читается из того, в чём оно опубликовано.",
+      noteEn: "A regulatory layer exists wherever the regulator publishes restrictions at all — as a ceiling grid, a permission regime, or a no-fly zone in the AIP. The form of publication varies: a feed, a raster layer, a normative document. \"No API\" does not mean \"no rule\" — the rule is read from whatever it was published in.",
     },
   });
 });
@@ -1331,6 +1332,7 @@ qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
     const none = {
       city: id, available: false,
       note: "Сетки потолков для этого города регулятор не публикует — измерять нечего.",
+      noteEn: "The regulator does not publish ceiling grids for this city — there is nothing to measure.",
     };
     impactCache.set(id, none);
     return res.json(none);
@@ -1368,6 +1370,11 @@ qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
     zeroCeilingCells: field.zeroCeilingCells,
     gridCells: field.cols * field.rows,
     note: `${compliant} из ${pairs} маршрутов между площадками укладываются в опубликованный потолок; ${plural(padsNeedingAtc, "площадка стоит", "площадки стоят", "площадок стоят")} там, где автоматического допуска нет вовсе.`,
+    // Английская пара НЕ повторяет конструкцию русской: `plural` склоняет
+    // числительное по русским правилам, а английскому здесь достаточно
+    // единственного и множественного. Копировать вызов было бы дословным
+    // переводом формы, а не смысла.
+    noteEn: `${compliant} of ${pairs} routes between pads fit within the published ceiling; ${padsNeedingAtc} ${padsNeedingAtc === 1 ? "pad stands" : "pads stand"} where there is no automatic authorisation at all.`,
   };
   impactCache.set(id, payload);
   res.json(payload);
@@ -1411,6 +1418,7 @@ qskywayRouter.get("/height-substitution", (req: Request, res: Response) => {
     const none = {
       city: id, available: false, buildings: 0, pairs: 0, routable: 0, affectedPairs: 0, maxSegments: 0,
       note: "Высот, подставленных по типу застройки, в этом городе нет: у всех зданий высота либо измерена, либо выведена из этажности самого дома.",
+      noteEn: "There are no heights substituted by building type in this city: every building height is either measured or derived from that building own floor count.",
     };
     substitutionImpactCache.set(id, none);
     return res.json(none);
@@ -1454,6 +1462,7 @@ qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
     const none = {
       city: id, available: false, pairs: 0, affectedPairs: 0,
       note: "Высот, которые твин считает спорными и не переопределяет сам, в этом городе нет.",
+      noteEn: "There are no heights that the twin considers disputed and does not override itself in this city.",
     };
     disputeImpactCache.set(id, none);
     return res.json(none);
@@ -1503,6 +1512,7 @@ qskywayRouter.get("/vertiports", (req: Request, res: Response) => {
   res.json({
     city: resolved.id, count: scored.length, vertiports: scored,
     note: "Скоринг пригодности площадок (открытый радиус, просвет, удалённость от запретных зон). Реальные вертипорты требуют муниципального размещения и наземной инфраструктуры — это алгоритмические кандидаты, не утверждённые площадки.",
+    noteEn: "Pad suitability scoring (open radius, clearance, distance from no-fly zones). Real vertiports require municipal siting and ground infrastructure — these are algorithmic candidates, not approved pads.",
   });
 });
 

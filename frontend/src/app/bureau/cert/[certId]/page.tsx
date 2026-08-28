@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
@@ -179,33 +180,18 @@ export default async function BureauCertPage({ params }: Props) {
     );
   }
 
-  if (data.status === "not_found") {
-    return (
-      <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "48px 16px" }}>
-        <div style={{ maxWidth: 720, margin: "0 auto" }}>
-          <div
-            style={{
-              ...card,
-              borderColor: "rgba(234,179,8,0.4)",
-              background: "rgba(254,252,232,0.6)",
-              color: "#854d0e",
-            }}
-          >
-            <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 16 }}>Certificate not found</div>
-            <div style={{ fontSize: 13, marginBottom: 12 }}>
-              No certificate matches <code style={{ fontFamily: "ui-monospace, monospace" }}>{certId}</code> on the AEVION Bureau registry.
-            </div>
-            <Link
-              href="/bureau"
-              style={{ color: "#0d9488", fontWeight: 800, textDecoration: "none", fontSize: 13 }}
-            >
-              Browse the Bureau →
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  // Сертификата НЕТ — честный 404 вместо 200 с той же вёрсткой.
+  // Раньше выдуманный адрес сертификата отвечал «страница существует», а
+  // таких адресов бесконечно много: бесконечный индексируемый мусор на
+  // доверительной поверхности.
+  //
+  // Текст ответа не потерян — он переехал в СВОЮ not-found.tsx рядом:
+  // здесь проверяют сертификат, и «нет такого в реестре» это ОТВЕТ, а не
+  // ошибка навигации; общая страница сайта его не даёт.
+  //
+  // Ветка срабатывает только по коду 404 от сервера (см. loadEmbed):
+  // при недоступности бэкенда data === null, и страница отвечает как прежде.
+  if (data.status === "not_found") notFound();
 
   const theme = levelTheme(data.verificationLevel, data.status);
   const isRevoked = data.status === "revoked";

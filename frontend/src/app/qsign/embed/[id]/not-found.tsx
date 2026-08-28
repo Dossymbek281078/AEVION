@@ -32,11 +32,11 @@ export default function EmbedNotFound() {
         }}
       >
         <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>
-          Подпись не найдена
+          Signature not found
         </div>
         <div style={{ fontSize: 13, lineHeight: 1.5, color: "#475569" }}>
-          Такой подписи нет в реестре AEVION. Проверьте ссылку — возможно,
-          идентификатор скопирован не целиком.
+          This signature id is not in the AEVION registry. Check the link — the
+          id may have been copied incompletely.
         </div>
       </div>
     </main>

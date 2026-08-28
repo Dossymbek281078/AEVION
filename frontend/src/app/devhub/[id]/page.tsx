@@ -1178,7 +1178,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         }
       } catch (streamErr) {
         if (streamErr instanceof Error && data === null && streamErr.message && !/fetch|network/i.test(streamErr.message)) throw streamErr;
-        data = null; // network-level stream failure — fall through to plain POST
+        // Поток оборвался — уходим на обычный запрос. Человеку это НАДО сказать:
+        // иначе он видит замерший индикатор и ждёт вдвое дольше, не понимая,
+        // сломалось что-то или так задумано. Денег это не стоит: генерация кода
+        // ограничена по темпу, а не по квоте, — но время его стоит.
+        showToast("Связь оборвалась на середине — повторяем запрос. Это займёт ещё столько же.", "error");
+        data = null;
       }
       if (data === null) {
         const r = await fetchWithRedeployRetry(

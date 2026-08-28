@@ -2791,16 +2791,20 @@ pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
                 note: "Verify by signing the contentHash hex string (utf8 bytes) with this public key.",
               }
             : null,
-        openTimestamps: cert.otsStatus
-          ? {
-              status: cert.otsStatus,
-              bitcoinBlockHeight: cert.otsBitcoinBlockHeight ?? null,
-              stampedAt: cert.otsStampedAt ?? null,
-              upgradedAt: cert.otsUpgradedAt ?? null,
-              proofBase64: otsProof ? otsProof.toString("base64") : null,
-              note: "Verify with any OpenTimestamps client against the Bitcoin blockchain. The proof targets the contentHash exactly.",
-            }
-          : null,
+        // Раньше при отсутствии штампа сюда клался `null`, и он значил сразу
+        // две вещи: «не якорили» и «мы это поле не положили». Пакет —
+        // единственное, что остаётся у человека без нас; в нём различие
+        // должно быть написано словами. Состояние считается тем же общим
+        // помощником, что и на остальных поверхностях.
+        openTimestamps: {
+          ...anchorSummary(cert as unknown as Record<string, unknown>),
+          stampedAt: cert.otsStampedAt ?? null,
+          upgradedAt: cert.otsUpgradedAt ?? null,
+          proofBase64: otsProof ? otsProof.toString("base64") : null,
+          note: cert.otsStatus
+            ? "Verify with any OpenTimestamps client against the Bitcoin blockchain. The proof targets the contentHash exactly."
+            : "This certificate predates Bitcoin anchoring: no OpenTimestamps proof exists and none will appear. The other proof layers below are unaffected.",
+        },
       },
       shamirWitness: witness,
       verification: {

@@ -159,6 +159,27 @@ describe("все три поверхности реестра показываю
     }
   });
 
+test("офлайн-пакет называет состояние якоря словами, а не пустотой", async () => {
+    row.otsStatus = null;
+    row.otsBitcoinBlockHeight = null;
+    const r = await request(app()).get(`/api/pipeline/certificate/${String(row.id)}/bundle.json`);
+    expect(r.status).toBe(200);
+    const ots = r.body?.proofs?.openTimestamps;
+    expect(ots, "поле openTimestamps отсутствует или null — «не знаю» и «нет якоря» снова слиты").not.toBeNull();
+    expect(ots.status).toBe("not_stamped");
+    expect(String(ots.note)).toMatch(/none will appear/i);
+    expect(ots.proofBase64).toBeNull();
+  });
+
+  test("офлайн-пакет: подтверждённый якорь приходит с высотой блока", async () => {
+    row.otsStatus = "bitcoin-confirmed";
+    row.otsBitcoinBlockHeight = "912345";
+    const r = await request(app()).get(`/api/pipeline/certificate/${String(row.id)}/bundle.json`);
+    expect(r.status).toBe(200);
+    expect(r.body.proofs.openTimestamps.status).toBe("bitcoin-confirmed");
+    expect(r.body.proofs.openTimestamps.bitcoinBlockHeight).toBe(912345);
+  });
+
   test("не якорённый сертификат не выдаётся за ожидающий", async () => {
     row.otsStatus = null;
     row.otsBitcoinBlockHeight = null;

@@ -318,15 +318,30 @@ export async function verifyAevionBundle(
       status: "skip",
       detail: "Bundle has no OpenTimestamps proof",
     };
-  } else if (ots.status === "bitcoin-confirmed" && ots.bitcoinBlockHeight) {
+  } else if (ots.status === "bitcoin-confirmed") {
+    // Высота блока раньше входила в условие, и подтверждённый якорь БЕЗ неё
+    // проваливался в последнюю ветку — то есть отмечался как «проверка не
+    // прошла». Отсутствие номера блока в пакете не отменяет подтверждения:
+    // это пробел записи, а не провал доказательства.
     result.bitcoinAnchor = {
       status: "pass",
-      detail: `Anchored at Bitcoin block #${ots.bitcoinBlockHeight}. Verify the .ots proof bytes with any OpenTimestamps client to mathematically prove inclusion.`,
+      detail: ots.bitcoinBlockHeight
+        ? `Anchored at Bitcoin block #${ots.bitcoinBlockHeight}. Verify the .ots proof bytes with any OpenTimestamps client to mathematically prove inclusion.`
+        : "Anchored to Bitcoin; this bundle does not record the block height. Verify the .ots proof bytes with any OpenTimestamps client to obtain it.",
     };
   } else if (ots.status === "pending") {
     result.bitcoinAnchor = {
       status: "skip",
       detail: "OpenTimestamps proof is pending — submitted to OT calendar, awaiting Bitcoin block inclusion (1–6h after stamping).",
+    };
+  } else if (ots.status === "not_stamped") {
+    // «Не якорили» — это НЕ провал проверки. Такие сертификаты выданы до
+    // появления якорения; красная плитка здесь обвиняла бы запись в дефекте,
+    // которого нет, и обесценивала бы настоящие красные плитки рядом.
+    result.bitcoinAnchor = {
+      status: "skip",
+      detail:
+        "This certificate predates Bitcoin anchoring: no OpenTimestamps proof exists and none will appear. The other proof layers are unaffected.",
     };
   } else {
     result.bitcoinAnchor = {

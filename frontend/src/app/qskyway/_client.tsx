@@ -710,7 +710,14 @@ export default function QSkywayClient() {
       const j = await res.json();
       setBooking(j.ok ? `✓ ${j.slot.id} · ${j.slot.receipt}` : `✗ ${j.error}`);
       if (j.ok) fetchSlots();
-    } catch (e) { setBooking(t("qskyway.err.network") + String(e)); }
+    } catch (e) {
+      // Текст исключения на экран НЕ уходит: человек видел «ошибка сети:
+      // TypeError: Failed to fetch» — то же, что и в загрузке города, только
+      // приклеенное в месте вызова, а не записанное в словаре. Поэтому
+      // сторож словаря его и не поймал.
+      console.warn("[qskyway] бронь не прошла:", e);
+      setBooking(t("qskyway.err.network"));
+    }
   }, [cityId, fetchSlots]);
 
   // ── filing document ────────────────────────────────────────────────────────

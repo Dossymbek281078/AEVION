@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { allTranslations } from "../__tests__/localeSource";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 /**
  * Сообщение об ошибке QSkyway говорило посетителю: «Проверь, что бэкенд поднят
@@ -50,4 +52,33 @@ describe("тексты отказов QSkyway обращены к посетит
       ).toEqual([]);
     });
   }
+
+  it("текст исключения не приклеивается к сообщению на экране", () => {
+    // Дыра, которую этот сторож сперва не видел. Словарь был чист, а в месте
+    // вызова стояло `setBooking(t("qskyway.err.network") + String(e))` — и
+    // человек получал «Ошибка сети: TypeError: Failed to fetch».
+    //
+    // Проверять надо ОБА места: текст в словаре и то, что к нему приклеили.
+    const src = readFileSync(path.join(__dirname, "_client.tsx"), "utf8");
+    const bad: string[] = [];
+    for (const line of src.split(String.fromCharCode(10))) {
+      const t = line.trim();
+      if (t.startsWith("//") || t.startsWith("*")) continue;
+      // сеттер состояния, показываемого человеку, склеенный со String(e)
+      // Ищем именно СКЛЕЙКУ перевода с текстом исключения — это и есть форма
+      // дефекта. Просто сохранить исключение в состояние законно: у загрузки
+      // города оно лежит в `err` и показывается ТОЛЬКО в подсказке, а на экран
+      // идёт переведённая фраза. Сторож, запрещающий и это, гонит автора к
+      // худшему решению — вообще не сохранять диагностику.
+      if (!t.includes("String(e)") && !t.includes("String(err)")) continue;
+      if (!t.includes('t("')) continue;
+      if (t.includes("console.")) continue;
+      bad.push(t.slice(0, 90));
+    }
+    expect(
+      bad,
+      "текст исключения уходит на экран. Человеку он ничего не говорит: положите "
+        + "его в console.warn или в подсказку, а на экран — что делать ЕМУ.",
+    ).toEqual([]);
+  });
 });

@@ -80,6 +80,11 @@ async function mediaTest(label, path, badBody, goodBody) {
   // 1. Missing field → 400
   const bad = await req("POST", path, badBody);
   if (bad.status === 400) ok(`${label} validation gate → 400`);
+  // 429 от НАШЕГО ограничителя темпа — это неотвеченный вопрос, а не находка:
+  // ручка не отказалась принять мусор, её просто не спросили. Сторож, который
+  // краснеет от собственной частоты, приучает себя не читать. Замер 28.08:
+  // пять прогонов подряд дали три ложные находки ровно так.
+  else if (bad.status === 429) skip(`${label} validation gate`, "ограничитель темпа — проверить не удалось");
   else fail(`${label} validation gate`, `got ${bad.status}`);
 
   // 2. Valid input:

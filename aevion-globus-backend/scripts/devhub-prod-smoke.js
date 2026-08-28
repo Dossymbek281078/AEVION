@@ -217,6 +217,30 @@ async function run() {
       else fail(`POST ${route} — проверка входа`, `got ${r.status}`);
     }
 
+    // ПРОЕКТНЫЕ POST — проба выдуманным проектом. Прежде чем это добавлять,
+    // проверено ПО КОДУ, что каждый обработчик спрашивает проект в первых
+    // строках, до всякой работы: у публикации это строка 6037, до неё только
+    // чтение проекта. Иначе проба выкатила бы что-нибудь по-настоящему.
+    //
+    // Замер на проде подтвердил: все три отвечают 404 «project not found».
+    for (const tail of ["/apply-template", "/deploy/pages", "/database/provision"]) {
+      const r = await req("POST", `/api/devhub/projects/${"00000000-0000-0000-0000-000000000000"}${tail}`, {});
+      const body = JSON.stringify(r.body ?? {});
+      if (r.status === 404 && body.includes("project not found")) ok(`POST жив: ${tail}`);
+      else if (body.includes("route_not_found")) fail(`POST ${tail}`, "маршрута НЕТ на проде");
+      else if (r.status === 503) skip(`POST ${tail}`, "хранилище недоступно");
+      else fail(`POST ${tail}`, `${r.status} ${body.slice(0, 36)}`);
+    }
+
+    // Медийные ручки, отвергающие пустое тело до вызова провайдера.
+    for (const route of ["/media/upload-image", "/media/email-template-create", "/media/voice-clone/preview"]) {
+      const r = await req("POST", "/api/devhub" + route, {});
+      if (r.status === 400) ok(`POST ${route} жив`);
+      else if (r.status === 404) fail(`POST ${route}`, "маршрута нет (404)");
+      else if (r.status === 503) skip(`POST ${route}`, "провайдер не настроен");
+      else fail(`POST ${route} — проверка входа`, `got ${r.status}`);
+    }
+
   // Create
   const created = ALLOW_WRITE
     ? await req("POST", "/api/devhub/projects", { name: `Smoke-${Date.now()}`, stack: "next" })

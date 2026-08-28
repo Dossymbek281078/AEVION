@@ -200,10 +200,10 @@ export default function ChangelogPage() {
       <p className="mt-10 text-xs text-slate-500">
         Suggestions or issues? Open one at{" "}
         <a
-          href="mailto:hello@aevion.io"
+          href="mailto:hello@aevion.tech"
           className="text-emerald-300 underline hover:text-emerald-200"
         >
-          hello@aevion.io
+          hello@aevion.tech
         </a>
         .
       </p>

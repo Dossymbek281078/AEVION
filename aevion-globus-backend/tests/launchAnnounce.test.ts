@@ -196,4 +196,35 @@ describe("дата запуска обязана называть свой ис�
     const src = readFileSync(join(__dirname, "..", "src", "lib", "launchAnnounce.ts"), "utf8");
     expect(src).not.toMatch(/launch-readiness/);
   });
+
+  // Единственное нажатие всего запуска — «Открыть модуль», и большинство
+  // сделает его пальцем: письмо открывают с телефона. 28.08.2026 замер на
+  // 390x844 показал у прежней текстовой ссылки цель 165x17px; палец уверенно
+  // попадает в 44. Тест держит именно ЦЕЛЬ КАСАНИЯ, а не оформление: важно,
+  // что у ссылки есть блочная модель и вертикальный отступ, из которых
+  // высота и складывается.
+  test("главная ссылка письма — кнопка, в которую попадёт палец", () => {
+    for (const slug of Object.keys(LAUNCH_MODULES)) {
+      const mail = buildLaunchEmail(slug, "kto-to@primer.ru");
+      const url = `https://aevion.app${LAUNCH_MODULES[slug].page}`;
+      // Берём именно тот <a>, что ведёт на страницу модуля, а не любой в письме.
+      const anchors = (mail.htmlContent.match(/<a\b[^>]*>/g) || []).filter((a) => a.includes(url));
+      expect(anchors.length, `${slug}: ссылки на ${url} нет вовсе`).toBeGreaterThan(0);
+      const cta = anchors[0];
+      expect(cta, `${slug}: у кнопки нет блочной модели`).toMatch(/display\s*:\s*inline-block/);
+      const pad = cta.match(/padding\s*:\s*(\d+(?:\.\d+)?)px/);
+      expect(pad, `${slug}: у кнопки нет вертикального отступа`).not.toBeNull();
+      // 14px сверху и снизу плюс строка ~19px дают ~47px — палец попадает.
+      expect(Number(pad![1]), `${slug}: вертикальный отступ ${pad![1]}px мал для пальца`).toBeGreaterThanOrEqual(12);
+    }
+  });
+
+  // Кнопка держится на фоновом цвете, а часть почтовых клиентов его срезает:
+  // тогда белый текст оказался бы на белом. Запасная строка с полным адресом
+  // обязана быть, иначе письмо запуска молча теряет единственное действие.
+  test("если кнопка не отрисовалась, адрес виден строкой", () => {
+    const mail = buildLaunchEmail("cyberchess", "kto-to@primer.ru");
+    expect(mail.htmlContent).toMatch(/Кнопка не нажимается/);
+    expect(mail.htmlContent).toContain(">https://aevion.app/cyberchess<");
+  });
 });

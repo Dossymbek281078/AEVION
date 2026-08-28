@@ -144,6 +144,7 @@ import { generateShareSVG, downloadFile } from "./gameShare";
 import CoachPredictions from "./CoachPredictions";
 import OpeningExplorerPanel from "./OpeningExplorerPanel";
 import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
+import { tournamentUserId, tournamentDisplayName } from "./tournaments/playerIdentity";
 import { getDueReminders, dismissReminder } from "./coachKnowledge";
 import WorkspacePiP, { useWorkspacePiP } from "./WorkspacePiP";
 import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type GhostDuelConfig, type GhostSourceGame } from "./ghostDuel";
@@ -1856,6 +1857,13 @@ export default function CyberChessPage(){
   const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
   const[dailyState,sDailyState]=useState<DailyState|null>(null);
+  // Задача дня приходит С СЕРВЕРА — она общая для всех и только её знает
+  // таблица лидеров. Раньше модуль считал свою, из загруженного набора:
+  // человек решал одну задачу, а в таблице участвовала другая (28.08.2026,
+  // сервер отдавал li_0m2HH из банка 502 584, телефон выбирал из 400).
+  type SrvDaily={day:string;id:string;fen:string;sol:string[];rating:number;theme:string};
+  const[srvDaily,sSrvDaily]=useState<SrvDaily|null>(null);
+  const[srvDailyFailed,sSrvDailyFailed]=useState(false);
   const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
   const[showOnboarding,sShowOnboarding]=useState<boolean>(false);
   // Первый визит: онбординг → приветствие(+50) → тур показываем ПО ОЧЕРЕДИ, не стопкой.
@@ -2717,6 +2725,50 @@ export default function CyberChessPage(){
     let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
   },[pzCategory]);
 
+  // Задача дня с сервера — один раз при заходе. Ответ уже проверен на
+  // странице /cyberchess/daily, формат тот же.
+  useEffect(()=>{
+    let zhiv=true;
+    (async()=>{
+      try{
+        const r=await fetch("/api-backend/api/cyberchess-daily/puzzle");
+        if(!r.ok)throw new Error(String(r.status));
+        const d=await r.json();
+        const p=d?.puzzle;
+        if(!zhiv)return;
+        if(p&&typeof p.fen==="string"&&Array.isArray(p.sol)){
+          sSrvDaily({day:String(d.day||""),id:String(p.id||""),fen:p.fen,sol:p.sol as string[],
+                     rating:Number(p.rating)||0,theme:String(p.theme||"")});
+          sSrvDailyFailed(false);
+        }else{sSrvDailyFailed(true)}
+      }catch{
+        // Не молчим: без задачи дня кнопка обязана сказать об этом, а не
+        // подсунуть другую — иначе человек решает не то, что в таблице.
+        if(zhiv)sSrvDailyFailed(true);
+      }
+    })();
+    return()=>{zhiv=false};
+  },[]);
+
+  // Отправить решение задачи дня на сервер. Без userId сервер считает игрока
+  // анонимом и в таблицу НЕ заносит — проверено на странице /cyberchess/daily,
+  // берём оттуда же личность, а не заводим четвёртую.
+  const otpravitDaily=useCallback((srv:{day:string;sol:string[]})=>{
+    (async()=>{
+      try{
+        await fetch("/api-backend/api/cyberchess-daily/solve",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({day:srv.day,moves:srv.sol,timeMs:0,hintsUsed:0,
+            userId:tournamentUserId(),name:tournamentDisplayName()||undefined}),
+        });
+      }catch{
+        // Награду человек уже получил; молчать про недоставленное решение
+        // нельзя — иначе он не поймёт, почему его нет в таблице.
+        showToast("Решение не дошло до таблицы лидеров — проверьте связь","error");
+      }
+    })();
+  },[showToast]);
+
   // Recompute daily puzzle whenever puzzles are loaded (once we know total count)
   useEffect(()=>{
     if(PUZZLES.length===0)return;
@@ -3311,8 +3363,9 @@ export default function CyberChessPage(){
                 {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
                 bumpDaily("puzzle");
                 if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
-                if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
+                if(dailyState&&!dailyState.solved&&srvDaily?.fen===pzCurrent.fen){
                   const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
+                  if(srvDaily)otpravitDaily(srvDaily);
                   bumpDaily("daily-puzzle");
                   setTimeout(()=>addChessy(50,"☀ задача дня"),800);
                 }
@@ -3351,8 +3404,9 @@ export default function CyberChessPage(){
           bumpDaily("puzzle");
           if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
           // Daily puzzle bonus — first solve today
-          if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
+          if(dailyState&&!dailyState.solved&&srvDaily?.fen===pzCurrent.fen){
             const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
+            if(srvDaily)otpravitDaily(srvDaily);
             bumpDaily("daily-puzzle");
             setTimeout(()=>addChessy(50,"☀ задача дня"),800);
           }
@@ -10448,8 +10502,10 @@ export default function CyberChessPage(){
 
                 {/* Daily puzzle */}
                 <button onClick={()=>{
-                  if(!dailyState||!PUZZLES[dailyState.idx]){showToast("Задача дня не готова","error");return}
-                  const pz=PUZZLES[dailyState.idx];
+                  // Только серверная задача: она общая и её знает таблица лидеров.
+                  if(srvDailyFailed){showToast("Задача дня не загрузилась — проверьте связь","error");return}
+                  if(!srvDaily){showToast("Задача дня ещё грузится…","info");return}
+                  const pz={fen:srvDaily.fen,r:srvDaily.rating,name:srvDaily.theme} as Puzzle;
                   const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
                   showToast(`☀ Задача дня · ${pz.r}`,"info");
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>☀ Задача дня</button>

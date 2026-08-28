@@ -2233,7 +2233,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setImgError(d.error || "Не удалось создать картинку");
+        setImgError(devhubServerError(d.error, "Не удалось создать картинку"));
       } else {
         setImgResult({ url: d.url, revisedPrompt: d.revisedPrompt });
       }
@@ -2667,7 +2667,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(d.error || "Пакетный перевод не удался", "error");
+        showToast(devhubServerError(d.error, "Пакетный перевод не удался"), "error");
         return;
       }
       setBulkResults(d.results || []);
@@ -2874,7 +2874,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        showToast(d.error || "Загрузка в Cloudflare не удалась", "error");
+        showToast(devhubServerError(d.error, "Загрузка в Cloudflare не удалась"), "error");
       } else {
         setCfImgPermanentUrl(d.url);
         showToast("Картинка загружена на постоянный адрес", "success");
@@ -3057,7 +3057,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        showToast(d.error || "Импорт не удался", "error");
+        showToast(devhubServerError(d.error, "Импорт не удался"), "error");
       } else {
         showToast(`Импортирован ${d.path} (${d.bytes} байт)`, "success");
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
@@ -4496,7 +4496,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 body: JSON.stringify({ prompt: videoPrompt, model: videoModel, duration: Number(videoDuration) }),
                               });
                               const d = await r.json();
-                              if (!d.ok) { setVideoError(d.error || "Не удалось создать видео"); setVideoLoading(false); return; }
+                              if (!d.ok) { setVideoError(devhubServerError(d.error, "Не удалось создать видео")); setVideoLoading(false); return; }
                               setVideoPredictionId(d.predictionId);
                               setVideoStatus("generating...");
                               // Poll for completion
@@ -4508,7 +4508,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 if (sd.status === "succeeded" && sd.videoUrl) {
                                   setVideoUrl(sd.videoUrl); setVideoLoading(false);
                                 } else if (sd.status === "failed") {
-                                  setVideoError(sd.error || "Генерация не удалась"); setVideoLoading(false);
+                                  setVideoError(devhubServerError(sd.error, "Генерация не удалась")); setVideoLoading(false);
                                 } else {
                                   setTimeout(() => pollFn(id, attempts + 1), 3000);
                                 }
@@ -4587,7 +4587,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             const d = await r.json();
                             if (!r.ok || !d.ok) {
                               // 402 means the provider has no balance — say that, not "failed".
-                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (d.error || "Не удалось сгенерировать 3D"));
+                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (devhubServerError(d.error, "Не удалось сгенерировать 3D")));
                               setThreeDLoading(false);
                               return;
                             }
@@ -4602,7 +4602,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 if (typeof url === "string") { setThreeDUrl(url); } else { setThreeDError("Модель готова, но ссылка не распознана"); }
                                 setThreeDLoading(false);
                               } else if (sd.status === "failed") {
-                                setThreeDError(sd.error || "Генерация не удалась"); setThreeDLoading(false);
+                                setThreeDError(devhubServerError(sd.error, "Генерация не удалась")); setThreeDLoading(false);
                               } else {
                                 setTimeout(() => poll(id, attempts + 1), 3000);
                               }

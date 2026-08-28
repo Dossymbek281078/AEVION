@@ -111,9 +111,23 @@ describe("текст ошибки сервера не показывается �
     for (const f of files) {
       const lines = fs.readFileSync(f, "utf8").split(String.fromCharCode(10));
       lines.forEach((l, i) => {
-        if (!l.includes("new Error(")) return;
-        const fromServer =
-          l.includes(".error") || l.includes(".message") || l.includes("body.error");
+        // 29.08, второй заход: сперва шаблон знал только выброс исключения,
+        // и восемь мест той же природы прошли мимо — текст сервера уходил
+        // в setVideoError и showToast напрямую. Класс шире одной формы.
+        const shows =
+          l.includes("new Error(") ||
+          l.includes("setError(") ||
+          l.includes("setVideoError(") ||
+          l.includes("showToast(");
+        if (!shows) return;
+        // Только то, что взято ПРЯМО из разобранного ответа сервера.
+        // `e.message` сюда не входит намеренно: к моменту показа это уже
+        // наш переведённый текст (перевод стоит в месте выброса), и
+        // ловить его значило бы краснеть на исправном коде — а сторожа,
+        // который всегда красный, перестают читать в первый же день.
+        const fromServer = ["data.error", "d.error", "sd.error", "body.error", "json.error"].some(
+          (k) => l.includes(k),
+        );
         if (!fromServer) return;
         if (l.includes("devhubServerError")) { wrapped++; return; }
         bad.push(`${f.split("devhub").pop()}:${i + 1}`);

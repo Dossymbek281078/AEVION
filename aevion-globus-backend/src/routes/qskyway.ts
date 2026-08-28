@@ -1873,6 +1873,7 @@ qskywayRouter.post("/airspace/anchor", async (req: Request, res: Response) => {
       error: null,
       reused: true,
       note: "Эта редакция уже привязана и подтверждена Bitcoin — возвращён существующий пруф, повторный штамп не создавался: над тем же хэшем он не доказал бы ничего нового.",
+      noteEn: "This edition is already anchored and confirmed in Bitcoin — the existing proof was returned; no second stamp was created, because over the same hash it would prove nothing new.",
     });
   }
   const anchor = await anchorAirspace(resolved.id);
@@ -1910,6 +1911,7 @@ qskywayRouter.post("/airspace/anchor/verify", anchorVerifyLimiter, async (req: R
       errorEn: "proof too large",
       maxBytesB64: MAX_OTS_PROOF_B64,
       note: "Сериализованный .ots-пруф на один хэш — единицы килобайт; всё, что заметно больше, проверить всё равно не удастся.",
+      noteEn: "A serialised .ots proof for a single hash is a few kilobytes; anything noticeably larger cannot be verified anyway.",
     });
   }
   res.json(await verifyAnchoredAirspace(req.body));
@@ -1987,6 +1989,7 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
       ok: true, alreadyRegistered: true, qrightObjectId: known.qrightObjectId,
       contentHash: known.contentHash, link: "/qright",
       note: "Эта редакция уже зарегистрирована — ответ из памяти процесса, база не запрашивалась.",
+      noteEn: "This edition is already registered — the answer came from process memory, the database was not queried.",
     });
   }
 
@@ -2016,6 +2019,7 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
         ok: true, alreadyRegistered: true, qrightObjectId: row.id, contentHash,
         registeredAt: row.createdAt, link: "/qright",
         note: "Эта редакция уже зарегистрирована — хэш совпадает, дубликат не создан.",
+      noteEn: "This edition is already registered — the hash matches, no duplicate was created.",
       });
     }
     const objectId = "qs-" + crypto.randomUUID().slice(0, 12);
@@ -2029,6 +2033,7 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
       ok: true, alreadyRegistered: false, qrightObjectId: objectId, contentHash,
       authority: src.authority, effective: src.effective, link: "/qright",
       note: "Редакция ограничений внесена в реестр QRight как датированный объект.",
+      noteEn: "The restrictions edition has been entered into the QRight registry as a dated object.",
     });
   } catch (err) {
     // Реестр QRight — не опциональная база: сказать «не выполнено» честнее, чем
@@ -2045,6 +2050,7 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
       errorEn: "QRight registry unavailable — registration was not performed",
       contentHash,
       note: "Подпись и якорь слоя не затронуты; повторите регистрацию, когда база доступна.",
+      noteEn: "The layer signature and anchor are untouched; retry registration when the database is available.",
     });
   }
 });
@@ -2111,6 +2117,7 @@ qskywayRouter.get("/slots/:id/verify", async (req: Request, res: Response) => {
       errorEn: "slot not found",
       // «Не найден» и «подделан» — разные ответы; сливать их нельзя.
       note: "Это не признак подделки: слота с таким идентификатором в хранилище нет.",
+      noteEn: "This is not a sign of forgery: no slot with this identifier exists in storage.",
     });
   }
   const expected = slotReceipt(slot);
@@ -2144,6 +2151,7 @@ qskywayRouter.post("/slots", async (req: Request, res: Response) => {
       error: "право не зафиксировано: хранилище слотов недоступно",
       errorEn: "the right was not recorded: the slot store is unavailable",
       note: "Квитанция не выдана намеренно. Записать бронь в память было бы хуже отказа: она не попала бы ни в список, ни в проверку лимита, а квитанция утверждала бы обратное.",
+      noteEn: "No receipt was issued, deliberately. Recording the booking in memory would be worse than refusing: it would appear in neither the list nor the quota check, while a receipt would claim otherwise.",
     });
   }
   if (!result.ok) return res.status(409).json({ error: "слот занят", routeId, capacity: SLOT_CAPACITY, concurrent: result.concurrent });

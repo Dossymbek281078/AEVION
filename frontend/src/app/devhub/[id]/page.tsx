@@ -1005,7 +1005,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const deleteFile = async (path: string) => {
     if (!project) return;
-    if (!confirm(`Delete ${path}?`)) return;
+    // Было английское `Delete ${path}?` посреди русского окна. Словаря в этом
+    // файле нет вовсе, поэтому строка русская — как и соседние сообщения.
+    //
+    // Формулировка выверена по коду, а не по ощущению. Сначала я написал
+    // «восстановить будет нельзя» — и это преувеличение: контрольные точки
+    // создаёт ТОЛЬКО генерация ИИ, и если по этому пути она раньше проходила,
+    // старая точка файл вернёт. Чего точно не произойдёт — ручное удаление не
+    // создаёт точки, поэтому кнопка отмены правок его не отменит. Об этом и
+    // говорим: обещание невозможности в диалоге — такая же неправда, как
+    // умолчание о потере.
+    if (!confirm(`Удалить файл ${path}? Кнопка отмены правок ИИ его не вернёт.`)) return;
     try {
       await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), { method: "DELETE" });
       const remaining = files.filter((f) => f.path !== path);

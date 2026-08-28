@@ -321,4 +321,19 @@ describe("дата запуска обязана называть свой ис�
       ).toBe(true);
     }
   });
+
+  // Расширив охват на общую очередь, легко прислать человеку ДВА письма: он
+  // мог подписаться и на /go, и на самой странице запуска — это две строки в
+  // базе с одним адресом. Дедупликация в planLaunchAnnounce была и раньше,
+  // но до 28.08 пересечься эти два списка не могли, и никто это не проверял.
+  test("подписавшийся дважды получает одно письмо", () => {
+    const plan = planLaunchAnnounce("cyberchess", [
+      { email: "oba@primer.ru", source: "go" },
+      { email: "OBA@primer.ru", source: "cyberchess" },
+      { email: " oba@primer.ru ", source: "cyberchess-ig" },
+      { email: "odin@primer.ru", source: "go-tt" },
+    ]);
+    expect(plan.recipients.filter((e) => e === "oba@primer.ru")).toHaveLength(1);
+    expect(plan.recipients).toHaveLength(2);
+  });
 });

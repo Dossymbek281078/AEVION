@@ -7,6 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { formatDate, formatDateTime } from "@/lib/formatDate";
 import { titleForAppSlug } from "@/lib/appSlugTitle";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
@@ -533,7 +534,7 @@ export default function AccountPage() {
                   </div>
                   <div>
                     <div style={labelStyle}>Member since</div>
-                    <span>{new Date(me.createdAt).toUTCString()}</span>
+                    <span>{formatDate(me.createdAt)}</span>
                   </div>
                 </div>
               </div>
@@ -637,12 +638,12 @@ export default function AccountPage() {
                     {sub.validUntil && (
                       <div>
                         <div style={labelStyle}>Valid until</div>
-                        <span>{new Date(sub.validUntil).toLocaleDateString("ru-RU")}</span>
+                        <span>{formatDate(sub.validUntil)}</span>
                       </div>
                     )}
                     <div>
                       <div style={labelStyle}>Since</div>
-                      <span>{new Date(sub.createdAt).toLocaleDateString("ru-RU")}</span>
+                      <span>{formatDate(sub.createdAt)}</span>
                     </div>
                   </div>
                   {(sub.tierId === "lite" || sub.tierId === "free") && (
@@ -759,7 +760,7 @@ export default function AccountPage() {
                               </span>
                             )}
                             <span style={{ marginLeft: "auto", color: "#64748b" }}>
-                              {new Date(s.lastActiveAt).toLocaleString()}
+                              {formatDateTime(s.lastActiveAt)}
                             </span>
                             {!revoked && !s.isCurrent && (
                               <button onClick={() => revokeSession(s.id)} style={btnDanger}>
@@ -818,7 +819,7 @@ export default function AccountPage() {
                             {a.ip || "—"}
                           </span>
                           <span style={{ marginLeft: "auto", color: "#94a3b8", fontSize: 10 }}>
-                            {new Date(a.at).toLocaleString()}
+                            {formatDateTime(a.at)}
                           </span>
                         </div>
                       );

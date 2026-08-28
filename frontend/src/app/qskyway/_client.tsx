@@ -819,8 +819,23 @@ export default function QSkywayClient() {
           {t("qskyway.hero.disclaimer")}
         </p>
 
+        {/*
+          На телефоне три кнопки города вставали столбиком: названия длинные
+          («Астана — центр (бульвар Нуржол)»), и каждая занимала строку.
+          Замер 28.08.2026 на 390×844: сама 3D-сцена начиналась на 862px —
+          то есть ниже сгиба, и человек с телефона видел навигацию, описание и
+          выбор города, но НЕ видел продукта.
+
+          Сокращать названия нельзя: район в скобках отличает Мидтаун от
+          остального Нью-Йорка. Поэтому строка прокручивается вбок — приём
+          обычный для телефона, третья кнопка видна краем и сама показывает,
+          что список продолжается. На широком экране всё как было.
+        */}
         {cities.length > 1 && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "0 0 16px" }}>
+          <style>{`@media (max-width: 640px) { .qsky-cities { flex-wrap: nowrap !important; overflow-x: auto; -webkit-overflow-scrolling: touch; } .qsky-cities > button { flex: 0 0 auto; } }`}</style>
+        )}
+        {cities.length > 1 && (
+          <div className="qsky-cities" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "0 0 16px" }}>
             <span style={{ fontFamily: "monospace", fontSize: 11, letterSpacing: 1, color: "#5f7086" }}>{t("qskyway.city.label")}</span>
             {cities.map((c) => (
               <button key={c.id} onClick={() => { setCityId(c.id); loadCity(c.id); }}

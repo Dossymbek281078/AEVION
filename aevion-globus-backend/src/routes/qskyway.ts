@@ -2522,10 +2522,37 @@ qskywayRouter.get("/slots/:id/verify", async (req: Request, res: Response) => {
   }
   const expected = slotReceipt(slot);
   const matches = expected === slot.receipt;
+  // ⚠️ Отдаём ТЕ САМЫЕ байты, а не «эквивалентные».
+  //
+  // 29.08.2026: ручка сообщала только `matches`. То есть проверяющий узнавал,
+  // что МЫ говорим, будто сходится, — и не мог убедиться сам. Для страницы,
+  // которая обещает «по квитанции видно, что запись не изменялась», это
+  // обещание, выполняемое нашим же честным словом.
+  //
+  // Тот же класс, что и с редакцией воздушного пространства: публиковали
+  // доказательство и не публиковали доказываемое. Здесь дешевле — секрета в
+  // квитанции нет по устройству (это контрольная сумма публичных полей),
+  // поэтому отдать входные байты можно без каких-либо последствий.
+  const payload = JSON.stringify({ ...slot, receipt: "" });
   res.json({
     id: slot.id,
     receipt: slot.receipt,
     matches,
+    payload,
+    verifyYourself: {
+      steps: [
+        "1. возьмите payload КАК ЕСТЬ — это строка, которая идёт в хэш; не пересобирайте её",
+        "2. посчитайте sha256(payload в UTF-8), возьмите hex",
+        "3. квитанция = \"qright:\" + первые 32 символа этого hex — обязана совпасть с полем receipt",
+      ],
+      stepsEn: [
+        "1. take payload AS IS - it is the exact string that goes into the hash; do not re-serialise it",
+        "2. compute sha256(payload as UTF-8), take the hex digest",
+        "3. the receipt is \"qright:\" + the first 32 characters of that hex - it must equal the receipt field",
+      ],
+      warning: "Секрета в квитанции НЕТ: это контрольная сумма публичных полей. Она показывает, что запись не менялась, и НЕ доказывает, что выдали её мы.",
+      warningEn: "The receipt holds NO secret: it is a checksum over public fields. It shows the record is unaltered; it does NOT prove we issued it.",
+    },
     note: matches
       ? "Запись не изменялась с момента выдачи квитанции."
       : "Содержимое записи не сходится с квитанцией — запись изменена после выдачи.",

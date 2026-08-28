@@ -203,6 +203,15 @@ export function isQuotaError(e: unknown): boolean {
   return m.toLowerCase().includes("quota exceeded") || /(^|[^0-9])456([^0-9]|$)/.test(m);
 }
 
+export interface BatchResult {
+  /** Строки в том же порядке. При отказе — исходные, НЕ переведённые. */
+  texts: string[];
+  /** true — перевода не случилось, вернули исходное. Наружу выходит полем
+   *  `degraded`, чтобы «не перевели» нельзя было спутать с «перевели». */
+  degraded: boolean;
+  reason?: string;
+}
+
 async function translateBatch(target: string, texts: string[]): Promise<string[]> {
   const deeplReady = !!process.env.DEEPL_API_KEY?.trim();
   const deeplTarget = DEEPL_TARGET[target];
@@ -229,6 +238,36 @@ async function translateBatch(target: string, texts: string[]): Promise<string[]
   return claudeBatch(texts, LANG_NAME[target] || target);
 }
 
+/**
+ * То же самое, но отказ модели НЕ роняет запрос.
+ *
+ * ПОВОД (замер на проде 28.08.2026). Страница `/cyberchess/tournament` шлёт
+ * 23 строки и получает **500** с `Claude translation parse/length mismatch` —
+ * воспроизведено одним curl, 2 попытки из 2. Те же строки, разбитые на четыре
+ * группы, переводятся успешно. Причина сцеплена: квота DeepL исчерпана (см.
+ * передышку выше), поэтому всё идёт в Claude, а модель на этой пачке возвращает
+ * массив другой длины.
+ *
+ * Файл строкой выше сам формулирует принцип: «сломанный DeepL не должен ронять
+ * перевод по всему сайту». К последнему шагу он применён не был.
+ *
+ * Дефект самомаскирующийся: кэш переводов живёт в памяти процесса, поэтому
+ * после прогрева пачка уменьшается и отказ исчезает. Значит он возвращается
+ * после КАЖДОГО перезапуска бэкенда — первому посетителю страницы.
+ *
+ * Почему НЕ молча: возврат исходных строк неотличим от удачного перевода, если
+ * об этом не сказать. Поэтому наружу уходит `degraded: true` и причина.
+ */
+async function translateBatchSafe(target: string, texts: string[]): Promise<BatchResult> {
+  try {
+    return { texts: await translateBatch(target, texts), degraded: false };
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    console.warn(`[i18n] перевод не удался для "${target}" (${reason}); отдаю исходные строки`);
+    return { texts, degraded: true, reason };
+  }
+}
+
 i18nRouter.post("/translate", generationLimit("i_n_translate"), async (req, res) => {
   try {
     const target = String(req.body?.target || "").toLowerCase().trim();
@@ -245,6 +284,8 @@ i18nRouter.post("/translate", generationLimit("i_n_translate"), async (req, res)
       return res.status(400).json({ error: `unsupported target language: ${target}` });
     }
 
+    let degraded = false;
+    let degradedReason: string | undefined;
     const out: string[] = new Array(texts.length);
     const missIdx: number[] = [];
     const missTexts: string[] = [];
@@ -260,16 +301,27 @@ i18nRouter.post("/translate", generationLimit("i_n_translate"), async (req, res)
       // AND when a DeepL call FAILS at runtime (quota 456, bad key, network).
       // Without this, site-wide language switching 500s whenever DeepL is missing
       // or over quota — which is exactly what broke it in production for years.
-      const translated = await translateBatch(target, missTexts);
+      const batch = await translateBatchSafe(target, missTexts);
+      degraded = batch.degraded;
+      degradedReason = batch.reason;
       for (let j = 0; j < missIdx.length; j++) {
-        const tr = translated[j] ?? missTexts[j];
+        const tr = batch.texts[j] ?? missTexts[j];
         out[missIdx[j]] = tr;
-        if (cache.size < MAX_CACHE) cache.set(ckey(target, missTexts[j]), tr);
+        // Неудачный перевод в кэш НЕ кладём: иначе исходные строки залипли бы
+        // на сутки (Cache-Control 86400) и следующая попытка их бы не повторила.
+        if (!batch.degraded && cache.size < MAX_CACHE) cache.set(ckey(target, missTexts[j]), tr);
       }
     }
 
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    res.json({ translations: out, target, cached: texts.length - missTexts.length });
+    // Неудачный перевод не кэшируем и на границе: сутки держать английский
+    // текст вместо русского — это починка, отложенная на сутки.
+    res.setHeader("Cache-Control", degraded ? "no-store" : "public, max-age=86400");
+    res.json({
+      translations: out,
+      target,
+      cached: texts.length - missTexts.length,
+      ...(degraded ? { degraded: true, reason: degradedReason } : {}),
+    });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "translate failed" });
   }

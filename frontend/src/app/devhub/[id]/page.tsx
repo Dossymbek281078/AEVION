@@ -1201,6 +1201,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         const paths = data.syntaxErrors.map((s: { path: string }) => s.path).join(", ");
         note = `Syntax check failed: ${paths}`;
         showToast(`Создано файлов: ${newGenerated.length}, но ${paths} не прошли проверку синтаксиса — просмотрите перед выкаткой`, "warning");
+      } else if (data.storage === "memory") {
+        // Генерация — платный шаг. Сервер говорит, куда легли файлы; "memory"
+        // значит, что база была недоступна и результат живёт в памяти
+        // процесса: при перезапуске он исчезнет, а человек уже заплатил.
+        // Зелёный тост «Создано файлов: N» это скрывал.
+        showToast(`Создано файлов: ${newGenerated.length}, но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.`, "error");
       } else {
         showToast(`Создано файлов: ${newGenerated.length}`, "success");
       }

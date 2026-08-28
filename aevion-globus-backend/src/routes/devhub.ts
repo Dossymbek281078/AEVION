@@ -1402,6 +1402,18 @@ async function computeNeedsRedeploy(project: DevHubProject): Promise<boolean> {
  * Память ниже осмысленна, когда база не настроена вовсе: тогда она И ЕСТЬ
  * хранилище, и «не найдено» честно.
  */
+/**
+ * Признак того, что запись легла ТОЛЬКО в память процесса.
+ *
+ * Форма та же, что уже принята в модуле (поле `storage` в теле), а не
+ * заголовок: второй способ говорить то же самое разошёлся бы с первым при
+ * следующей правке. Я успел написать заголовок и откатил.
+ */
+const MEMORY_NOTE = {
+  storage: "memory" as const,
+  warning: "Хранилище недоступно: изменение сохранено только до перезапуска сервиса.",
+};
+
 /** Ответ на отказ хранилища — один текст на весь модуль. */
 function replyStorageUnavailable(res: {
   status: (code: number) => { json: (body: unknown) => unknown };
@@ -1656,8 +1668,12 @@ devhubRouter.get("/projects/:id/files", async (req, res) => {
     const files = await dbListFiles(req.params.id);
     res.json({ files });
   } catch {
+    // Пустая память в проде превращала отказ в «проект без файлов» — человек
+    // видит свою работу исчезнувшей после операции, которая всего лишь не
+    // смогла прочитать список.
     const files = [...memFiles.values()].filter((f) => f.projectId === req.params.id);
-    res.json({ files });
+    if (files.length === 0) return replyStorageUnavailable(res);
+    res.json({ files, storage: "memory" });
   }
 });
 
@@ -1793,13 +1809,18 @@ devhubRouter.delete("/projects/:id/file", async (req, res) => {
   if (!filePath) return res.status(400).json({ error: "path required" });
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  let removedFromDb = true;
   try {
     await dbDeleteFile(req.params.id, filePath);
   } catch {
+    // Удаление из памяти НЕ равно удалению из базы. Раньше отсюда уходило
+    // ok: true, и файл, оставшийся в хранилище, считался удалённым.
+    removedFromDb = false;
     for (const [fid, f] of memFiles) {
       if (f.projectId === req.params.id && f.path === filePath) { memFiles.delete(fid); break; }
     }
   }
+  if (!removedFromDb) return replyStorageUnavailable(res);
   res.json({ ok: true });
 });
 
@@ -1810,13 +1831,18 @@ devhubRouter.delete("/projects/:id/files/:filepath", async (req, res) => {
   const filePath = req.params.filepath || "";
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  let removedFromDb = true;
   try {
     await dbDeleteFile(req.params.id, filePath);
   } catch {
+    // Удаление из памяти НЕ равно удалению из базы. Раньше отсюда уходило
+    // ok: true, и файл, оставшийся в хранилище, считался удалённым.
+    removedFromDb = false;
     for (const [fid, f] of memFiles) {
       if (f.projectId === req.params.id && f.path === filePath) { memFiles.delete(fid); break; }
     }
   }
+  if (!removedFromDb) return replyStorageUnavailable(res);
   res.json({ ok: true });
 });
 
@@ -2639,13 +2665,15 @@ devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res
   const { collabUserId } = req.params;
   project.collaborators = project.collaborators.filter((c) => c.userId !== collabUserId);
   project.updatedAt = now();
+  let storageFallback = false;
   try {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/collaborators:delete", projectId: project.id });
     memProjects.set(project.id, project);
+    storageFallback = true;
   }
-  res.json({ ok: true, collaborators: project.collaborators });
+  res.json({ ok: true, collaborators: project.collaborators, ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -3263,20 +3291,15 @@ devhubRouter.put("/projects/:id/env", async (req, res) => {
   if (!key || typeof key !== "string") return res.status(400).json({ error: "key is required" });
   project.envVars[String(key)] = String(value ?? "");
   project.updatedAt = now();
-  // Переменные окружения ПРИЛОЖЕНИЯ ПОЛЬЗОВАТЕЛЯ: сюда кладут ключи
-  // провайдеров, строки подключения, токены. Если запись легла только в память
-  // процесса, при перезапуске она исчезнет — а выкатка соберётся без неё, и
-  // человек будет искать причину в своём коде. Признак хранилища здесь тот же,
-  // что у создания проекта и снипета.
-  let storage: "db" | "memory" = "db";
+  let storageFallback = false;
   try {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/env:put", projectId: project.id });
     memProjects.set(project.id, project);
-    storage = "memory";
+    storageFallback = true;
   }
-  res.json({ ok: true, key, storage });
+  res.json({ ok: true, key, ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // DELETE /api/devhub/projects/:id/env/:key
@@ -3288,17 +3311,15 @@ devhubRouter.delete("/projects/:id/env/:key", async (req, res) => {
   const key = req.params.key;
   delete project.envVars[key];
   project.updatedAt = now();
-  // То же и на удалении: «убрал» в памяти означает, что после перезапуска
-  // переменная вернётся, а человек считает её удалённой.
-  let storage: "db" | "memory" = "db";
+  let storageFallback = false;
   try {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/env:delete", projectId: project.id });
     memProjects.set(project.id, project);
-    storage = "memory";
+    storageFallback = true;
   }
-  res.json({ ok: true, key, storage });
+  res.json({ ok: true, key, ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -3498,20 +3519,18 @@ devhubRouter.post("/snippets", async (req, res) => {
     createdAt: now(),
     updatedAt: now(),
   };
-  // Признак хранилища в КВИТАНЦИИ, как у создания проекта строкой выше.
-  // Замер 28.08 (роутер с нечитаемой базой): снипет отвечал 201 с полным
-  // объектом и ни словом не говорил, что лёг только в память процесса, —
-  // то есть исчезнет при перезапуске. Проект такой случай уже различал,
-  // снипет нет; непоследовательность внутри одного файла.
-  let storage: "db" | "memory" = "db";
+  let storageFallback = false;
   try {
     await dbSaveSnippet(snippet);
   } catch (e) {
     captureException(e, { route: "devhub/snippets:create", snippetId: snippet.id });
     memSnippets.set(snippet.id, snippet);
-    storage = "memory";
+    storageFallback = true;
   }
-  res.status(201).json({ snippet: publicSnippet(snippet, userId), storage });
+  res.status(201).json({
+    snippet: publicSnippet(snippet, userId),
+    ...(storageFallback ? MEMORY_NOTE : {}),
+  });
 });
 
 // GET /api/devhub/snippets/:id — fetch single snippet
@@ -5246,8 +5265,14 @@ devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
   if (!apiKey) return res.status(503).json({ error: "DeepL not configured — set DEEPL_API_KEY" });
 
   let file: DevHubFile | null;
+  let readFailed = false;
   try { file = await dbGetFile(project.id, path); }
-  catch { file = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === path) ?? null; }
+  catch {
+    readFailed = true;
+    file = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === path) ?? null;
+  }
+  // «Файла нет в проекте» на упавшей базе — ложь о существующем файле.
+  if (!file && readFailed) return replyStorageUnavailable(res);
   if (!file) return res.status(404).json({ error: "file not found in project" });
 
   const endpoint = apiKey.endsWith(":fx") ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
@@ -5289,13 +5314,26 @@ devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
       language: file.language,
       updatedAt: now(),
     };
+    let storage: "db" | "memory" = "db";
     try { await dbUpsertFile(out); }
     catch {
+      // Перевод сохранён только в памяти процесса и не переживёт перезапуск.
+      // Раньше ответ был неотличим от настоящего сохранения.
+      storage = "memory";
       const existing = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === newPath);
       if (existing) { existing.content = out.content; existing.updatedAt = out.updatedAt; }
       else memFiles.set(out.id, out);
     }
-    res.json({ ok: true, path: newPath, bytes: translated.length, targetLang: targetLang.toUpperCase() });
+    res.json({
+      ok: true,
+      path: newPath,
+      bytes: translated.length,
+      targetLang: targetLang.toUpperCase(),
+      storage,
+      ...(storage === "memory"
+        ? { warning: "Хранилище недоступно: перевод сохранён только до перезапуска сервиса." }
+        : {}),
+    });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "File translation failed" });
   }
@@ -5397,8 +5435,14 @@ devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
 
   let file: DevHubFile | null;
+  let readFailed = false;
   try { file = await dbGetFile(project.id, filePath); }
-  catch { file = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === filePath) ?? null; }
+  catch {
+    readFailed = true;
+    file = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === filePath) ?? null;
+  }
+  // «Файл не найден» на упавшей базе — ложь о существующем файле.
+  if (!file && readFailed) return replyStorageUnavailable(res);
   if (!file) return res.status(404).json({ error: "file not found" });
 
   const mime = detectB64Mime(filePath) || "application/octet-stream";

@@ -29,6 +29,7 @@ import {
 import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders, resolveProvider } from "../services/qcoreai/providers";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { safeErrorText } from "../lib/safeError";
 
 export const psyappDepsRouter = Router();
 
@@ -392,7 +393,7 @@ psyappDepsRouter.post("/users/:alias/start", writeLimit, async (req: Request, re
       storage: isPsyAppDbReady() ? "db" : "memory",
     });
   } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    return res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "psyappDeps") });
   }
 });
 
@@ -411,7 +412,7 @@ psyappDepsRouter.get("/users/:alias", readLimit, async (req: Request, res: Respo
     }
     return res.json({ ok: true, user, streak_days: streakDays(user.streak_start_at) });
   } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    return res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "psyappDeps") });
   }
 });
 
@@ -448,7 +449,7 @@ psyappDepsRouter.post("/users/:alias/relapse", writeLimit, async (req: Request, 
       storage: isPsyAppDbReady() ? "db" : "memory",
     });
   } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    return res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "psyappDeps") });
   }
 });
 
@@ -493,7 +494,7 @@ psyappDepsRouter.post("/triggers", writeLimit, async (req: Request, res: Respons
     const trigger = isPsyAppDbReady() ? await dbInsertTrigger(fields) : memInsertTrigger(fields);
     return res.status(201).json({ ok: true, trigger });
   } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    return res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "psyappDeps") });
   }
 });
 
@@ -518,7 +519,7 @@ psyappDepsRouter.get("/triggers/:alias", readLimit, async (req: Request, res: Re
 
     return res.json({ ok: true, triggers, count: triggers.length, limit, offset });
   } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    return res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "psyappDeps") });
   }
 });
 
@@ -571,7 +572,7 @@ psyappDepsRouter.post("/support", aiLimit, async (req: Request, res: Response) =
       });
     }
   } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    return res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "psyappDeps") });
   }
 });
 
@@ -586,7 +587,7 @@ psyappDepsRouter.get("/stats", readLimit, async (_req: Request, res: Response) =
     const stats = isPsyAppDbReady() ? await dbStats() : memStats();
     res.json({ ok: true, ...stats });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || "internal error" });
+    res.status(500).json({ ok: false, error: safeErrorText(e, "internal error", "psyappDeps") });
   }
 });
 

@@ -4,6 +4,7 @@ import { channelFrom } from "@/lib/products";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { LandingView } from "@/components/LandingView";
+import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная страница запуска CyberChess — 30 августа 2026.
 //
@@ -219,6 +220,13 @@ function Fact({ title, note }: { title: string; note: string }) {
         padding: "14px 16px",
       }}
     >
+      {/* Заходы сюда не считались до 28.08.2026, а запуск 30-го. Без этого
+          числа нельзя ответить на вопрос первого дня: продаж нет из-за
+          страницы или из-за отсутствия трафика. Компонент сам читает ?c=
+          из ссылки, поэтому канал тоже попадёт в замер.
+          Возвращено при сведении 28.08: строка потерялась в конфликте с
+          правкой вкладки запуска, у которой учёта не было. */}
+      <PageTracking page="cyberchess-launch" />
       <div style={{ fontFamily: "Georgia, serif", fontSize: 16.5, fontWeight: 700 }}>{title}</div>
       <div style={{ color: MUTED, fontSize: 13.5, lineHeight: 1.55, marginTop: 4 }}>{note}</div>
     </div>

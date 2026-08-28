@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { getQSignSecret } from "../lib/qsignSecret";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { safeErrorText } from "../lib/safeError";
 
 const captureQsignError = makeServiceCapture("qsign");
 
@@ -87,9 +88,10 @@ qsignRouter.post(
       });
     } catch (e: unknown) {
       captureQsignError(e, { route: "sign" });
-      const msg = e instanceof Error ? e.message : "sign_failed";
+      const msg = e instanceof Error ? e.message : "sign_failed"; // только для журнала
+      const msgPublic = safeErrorText(e, "sign_failed", "qsign");
       const code = msg.startsWith("QSIGN_SECRET") ? 500 : 400;
-      res.status(code).json({ error: msg });
+      res.status(code).json({ error: msgPublic });
     }
   },
 );
@@ -110,9 +112,10 @@ qsignRouter.post(
       res.json({ valid, algo: "HMAC-SHA256" });
     } catch (e: unknown) {
       captureQsignError(e, { route: "verify" });
-      const msg = e instanceof Error ? e.message : "verify_failed";
+      const msg = e instanceof Error ? e.message : "verify_failed"; // только для журнала
+      const msgPublic = safeErrorText(e, "verify_failed", "qsign");
       const code = msg.startsWith("QSIGN_SECRET") ? 500 : 400;
-      res.status(code).json({ error: msg });
+      res.status(code).json({ error: msgPublic });
     }
   },
 );

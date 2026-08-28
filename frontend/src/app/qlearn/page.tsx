@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getAuthToken } from "@/lib/auth";
+import CourseDetail from "./components/CourseDetail";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
@@ -76,11 +77,13 @@ function LevelBadge({ level }: { level: string }) {
 function CourseCard({
   course,
   onEnroll,
+  onOpen,
   bookmarked,
   onToggleBookmark,
 }: {
   course: Course;
   onEnroll: (id: string) => void;
+  onOpen: (id: string) => void;
   bookmarked: boolean;
   onToggleBookmark: (id: string) => void;
 }) {
@@ -145,21 +148,38 @@ function CourseCard({
         >
           {course.price === 0 ? "Free" : `$${(course.price / 100).toFixed(0)}`}
         </span>
-        <button
-          onClick={() => onEnroll(course.id)}
-          style={{
-            padding: "7px 16px",
-            borderRadius: 8,
-            border: "none",
-            background: "linear-gradient(135deg, #0d9488 0%, #7c3aed 100%)",
-            color: "#fff",
-            fontWeight: 700,
-            fontSize: 13,
-            cursor: "pointer",
-          }}
-        >
-          Enroll
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => onOpen(course.id)}
+            style={{
+              padding: "7px 14px",
+              borderRadius: 8,
+              border: "1px solid #e2e8f0",
+              background: "#fff",
+              color: "#0f172a",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            Open
+          </button>
+          <button
+            onClick={() => onEnroll(course.id)}
+            style={{
+              padding: "7px 16px",
+              borderRadius: 8,
+              border: "none",
+              background: "linear-gradient(135deg, #0d9488 0%, #7c3aed 100%)",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            Enroll
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -340,6 +360,7 @@ export default function QLearnPage() {
   const [progress, setProgress] = useState<ProgressOverview | null>(null);
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [showBookmarks, setShowBookmarks] = useState(false);
+  const [openCourseId, setOpenCourseId] = useState<string | null>(null);
 
   const fetchCourses = useCallback(async () => {
     setLoading(true);
@@ -433,10 +454,11 @@ export default function QLearnPage() {
   };
 
   const handleResume = (courseId: string) => {
-    // Anchor / scroll to course in main grid; no dedicated detail page yet.
-    const el = document.getElementById(`course-${courseId}`);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-    else setNotice("Course not in current view — clear filters to find it.");
+    // Раньше здесь была прокрутка к карточке: экрана курса не существовало, и
+    // рядом стоял комментарий «no dedicated detail page yet». Теперь кнопка
+    // «продолжить» действительно продолжает — открывает уроки.
+    setOpenCourseId(courseId);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleEnroll = async (courseId: string) => {
@@ -506,6 +528,19 @@ export default function QLearnPage() {
               <ModulePricingChip moduleId="qlearn" />
             </div>
           </div>
+          {openCourseId && (
+            <CourseDetail
+              courseId={openCourseId}
+              token={getToken()}
+              onBack={() => {
+                setOpenCourseId(null);
+                // Обзор обучения мог измениться, пока человек проходил уроки:
+                // прогресс, серия дней, появившийся сертификат.
+                void fetchPersonal();
+              }}
+            />
+          )}
+
           {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
             <div>
@@ -882,6 +917,7 @@ export default function QLearnPage() {
               {courses.map((c) => (
                 <div key={c.id} id={`course-${c.id}`}>
                   <CourseCard
+                    onOpen={setOpenCourseId}
                     course={c}
                     onEnroll={handleEnroll}
                     bookmarked={bookmarkedIds.has(c.id)}

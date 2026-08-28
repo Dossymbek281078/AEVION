@@ -130,7 +130,19 @@ function aevionApiRoutes(): Set<string> {
  */
 function citedPaths(source: string): { p: string; line: number }[] {
   const out: { p: string; line: number }[] = [];
-  source.split("\n").forEach((text, i) => {
+  // Строки-комментарии пропускаем. 28.08.2026 сторож покраснел на JSDoc новой
+  // страницы, где адрес /qcoreai/collab/<токен> назван в объяснении, — то есть
+  // обвинил в мёртвой ссылке текст, который человек никогда не увидит и по
+  // которому невозможно кликнуть. Настоящую ссылку это не прячет: чтобы
+  // отрисоваться, адрес обязан быть и в коде, а не только в комментарии.
+  let inBlock = false;
+  source.split("\n").forEach((rawText, i) => {
+    const trimmed = rawText.trimStart();
+    const wasInBlock = inBlock;
+    if (inBlock && rawText.includes("*/")) inBlock = false;
+    else if (!inBlock && /^\/\*/.test(trimmed) && !rawText.includes("*/")) inBlock = true;
+    if (wasInBlock || trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return;
+    const text = rawText;
     for (const m of text.matchAll(/(?:href=|sub=)"(\/[^"#?]*)"/g)) {
       out.push({ p: m[1], line: i + 1 });
     }

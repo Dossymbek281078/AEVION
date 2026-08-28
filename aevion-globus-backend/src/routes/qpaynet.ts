@@ -49,8 +49,8 @@ import { emitVeilNetXEntry, emitEcosystemEvent } from "../lib/ecosystemEvents";
 import { validateOr400 } from "../lib/qpaynetValidate";
 import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } from "../lib/qpaynetCrypto";
 import { csvNeutralizeFormula } from "../lib/csv";
-import { queryNumber } from "../lib/queryNumber";
-import { queryDate } from "../lib/queryDate";
+import { queryNumber, queryIsoTimestamp } from "../lib/queryNumber";
+import { safeErrorText } from "../lib/safeError";
 
 export const qpaynetRouter = Router();
 
@@ -701,20 +701,7 @@ async function saveIdempotency(
      VALUES ($1,$2,$3,$4,$5::jsonb)
      ON CONFLICT (owner_id, key) DO NOTHING`,
     [ownerId, key, bodyHash, status, JSON.stringify(response)],
-  ).catch((e: unknown) => {
-    // Ронять ответ здесь НЕЛЬЗЯ: запрос уже выполнен, и отказ заставил бы
-    // клиента повторить его — а без этой записи повтор обработается ЗАНОВО,
-    // то есть создаст дубль платёжного запроса. Ровно от этого ключ
-    // идемпотентности и защищает.
-    //
-    // Но и молчать нельзя. `readIdempotency` при отсутствии строки возвращает
-    // «ничего», и вызывающий считает повтор новым запросом. То есть провал
-    // ЭТОЙ записи снимает защиту от дубля, и снаружи это неотличимо от
-    // штатной работы.
-    const why = e instanceof Error ? e.message : String(e);
-    console.error(`[QPayNet] ЗАПИСЬ ИДЕМПОТЕНТНОСТИ НЕ ПРОШЛА: ключ ${key} владельца ${ownerId}: ${why}`);
-    captureException(e, { route: "qpaynet/saveIdempotency", ownerId, key, status });
-  });
+  ).catch(() => {});
 }
 
 // Periodic GC of idempotency keys older than 24h (keeps table small).
@@ -1819,14 +1806,7 @@ async function ensureRequestsTable(): Promise<void> {
     -- column-level encryption via pgcrypto when available; fallback unchanged.
     CREATE INDEX IF NOT EXISTS idx_qpr_notify_due ON qpaynet_payment_requests (notify_next_retry_at)
       WHERE notify_url IS NOT NULL AND notified_at IS NULL;
-  `).catch((e: unknown) => {
-    // Молчаливый провал ЭТОЙ миграции опаснее, чем кажется: колонок не станет,
-    // а запросы к ним прикрыты мягкими catch выше по стеку и отвечают 200. То
-    // есть уведомления мерчанту перестанут отправляться, и никто не узнает.
-    const why = e instanceof Error ? e.message : String(e);
-    console.error(`[QPayNet] МИГРАЦИЯ КОЛОНОК УВЕДОМЛЕНИЙ НЕ ПРОШЛА: ${why}`);
-    captureException(e, { route: "qpaynet/ensureNotifyColumns" });
-  });
+  `).catch(() => {});
 }
 
 // Exponential backoff: 30s, 2m, 10m, 30m, 2h, then give up at 5 attempts.
@@ -1876,7 +1856,7 @@ async function fireRequestWebhook(
     clearTimeout(t);
     return { ok: r.ok, status: r.status, error: r.ok ? undefined : `HTTP ${r.status}` };
   } catch (err) {
-    return { ok: false, status: 0, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, status: 0, error: safeErrorText(err, "internal error", "qpaynet") };
   }
 }
 
@@ -2185,16 +2165,7 @@ qpaynetRouter.post("/requests/:token/pay", moneyLimiter, async (req, res) => {
           [result.error?.slice(0, 500) ?? "unknown", next, pr.id],
         );
       }
-    }).catch((e: unknown) => {
-      // Здесь ведётся УЧЁТ отправки: notified_at, число попыток и время
-      // следующей. Провал молча означает одно из двух, и оба плохи: либо
-      // уведомление уйдёт мерчанту повторно (notified_at не записан), либо
-      // повторы будут идти вечно (счётчик не вырос). Снаружи и то и другое
-      // выглядит как штатная работа.
-      const why = e instanceof Error ? e.message : String(e);
-      console.error(`[QPayNet] УЧЁТ УВЕДОМЛЕНИЯ НЕ ЗАПИСАН: заявка ${pr.id}: ${why}`);
-      captureException(e, { route: "qpaynet/notifyBookkeeping", requestId: pr.id });
-    });
+    }).catch(() => {});
   }
 
   const responseBody = { ok: true, txId: txOutId, txInId, amount: fromTiin(tiin), fee: fromTiin(fee), newBalance };
@@ -2390,7 +2361,7 @@ qpaynetRouter.post("/deposit/webhook", async (req, res) => {
     // Sentry: signature failure = either misconfiguration OR active spoof attempt.
     // Either way we want to know about it.
     captureException(err, { source: "qpaynet/stripe-webhook", phase: "verifySignature" });
-    return res.status(400).json({ error: "signature_verification_failed", detail: err instanceof Error ? err.message : String(err) });
+    return res.status(400).json({ error: "signature_verification_failed", detail: safeErrorText(err, "internal error", "qpaynet") });
   }
 
   // Event-level dedup. INSERT first; if a row already exists, this is a
@@ -2719,7 +2690,7 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
     }
   } catch (err) {
     captureException(err, { source: "qpaynet/reconcile", phase: "query" });
-    res.status(500).json({ error: "reconcile_failed", detail: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "reconcile_failed", detail: safeErrorText(err, "internal error", "qpaynet") });
   }
 });
 
@@ -2916,10 +2887,16 @@ qpaynetRouter.get("/admin/refunds", async (req, res) => {
   if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
 
   const limit = Math.max(1, Math.min(200, queryNumber(req.query.limit, 50)));
-  // Значение уходит в сравнение с колонкой времени; без проверки формы
-  // `?before=zzz` даёт 500 вместо 400 (см. lib/queryDate).
-  const before = queryDate(req.query.before);
-  if (before === undefined) return res.status(400).json({ error: "invalid_before" });
+  // Курсор уходит в SQL как сравнение со временем. Без проверки формата
+  // Postgres отвечает ошибкой на «zzz», и клиентская ошибка становится 500.
+  const beforeRaw = (req.query.before as string | undefined)?.trim();
+  const before = beforeRaw ? queryIsoTimestamp(beforeRaw) : null;
+  if (beforeRaw && before === null) {
+    return res.status(400).json({
+      error: "invalid_before",
+      message: "Параметр before должен быть датой вида 2026-08-21 или 2026-08-21T10:00:00Z.",
+    });
+  }
   const params: unknown[] = [limit];
   let where = "type = 'refund'";
   if (before) {
@@ -2963,10 +2940,16 @@ qpaynetRouter.get("/admin/refunds.csv", async (req, res) => {
   if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
 
   const limit = Math.max(1, Math.min(5000, queryNumber(req.query.limit, 1000)));
-  // Значение уходит в сравнение с колонкой времени; без проверки формы
-  // `?before=zzz` даёт 500 вместо 400 (см. lib/queryDate).
-  const before = queryDate(req.query.before);
-  if (before === undefined) return res.status(400).json({ error: "invalid_before" });
+  // Курсор уходит в SQL как сравнение со временем. Без проверки формата
+  // Postgres отвечает ошибкой на «zzz», и клиентская ошибка становится 500.
+  const beforeRaw = (req.query.before as string | undefined)?.trim();
+  const before = beforeRaw ? queryIsoTimestamp(beforeRaw) : null;
+  if (beforeRaw && before === null) {
+    return res.status(400).json({
+      error: "invalid_before",
+      message: "Параметр before должен быть датой вида 2026-08-21 или 2026-08-21T10:00:00Z.",
+    });
+  }
   const params: unknown[] = [limit];
   let where = "type = 'refund'";
   if (before) {
@@ -3175,10 +3158,16 @@ qpaynetRouter.get("/admin/audit", async (req, res) => {
 
   const action = (req.query.action as string | undefined)?.trim();
   const owner = (req.query.owner as string | undefined)?.trim();
-  // Значение уходит в сравнение с колонкой времени; без проверки формы
-  // `?before=zzz` даёт 500 вместо 400 (см. lib/queryDate).
-  const before = queryDate(req.query.before);
-  if (before === undefined) return res.status(400).json({ error: "invalid_before" });
+  // Курсор уходит в SQL как сравнение со временем. Без проверки формата
+  // Postgres отвечает ошибкой на «zzz», и клиентская ошибка становится 500.
+  const beforeRaw = (req.query.before as string | undefined)?.trim();
+  const before = beforeRaw ? queryIsoTimestamp(beforeRaw) : null;
+  if (beforeRaw && before === null) {
+    return res.status(400).json({
+      error: "invalid_before",
+      message: "Параметр before должен быть датой вида 2026-08-21 или 2026-08-21T10:00:00Z.",
+    });
+  }
   const limit = Math.max(1, Math.min(500, queryNumber(req.query.limit, 100)));
 
   const where: string[] = [];
@@ -4025,7 +4014,7 @@ qpaynetRouter.get("/health", async (_req, res) => {
       stuckWebhookDeliveries: stuckDeliveries,
     });
   } catch (err) {
-    res.status(503).json({ status: "error", service: "qpaynet", error: err instanceof Error ? err.message : String(err) });
+    res.status(503).json({ status: "error", service: "qpaynet", error: safeErrorText(err, "internal error", "qpaynet") });
   }
 });
 

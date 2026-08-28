@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
+import { stripComments } from "./helpers/sourceCode";
 
 /**
  * Сбор адресов не закрывается платным доступом.
@@ -52,7 +53,7 @@ describe("платный доступ не закрывает сбор адре�
       // Если внутренняя функция не вынесена наружу — проверяем через поведение
       // сборки: путь обязан быть перечислен в исходнике рядом с health.
       const src = await import("node:fs").then((fs) =>
-        fs.readFileSync(new URL("../src/lib/planGate.ts", import.meta.url), "utf8"));
+        stripComments(fs.readFileSync(new URL("../src/lib/planGate.ts", import.meta.url), "utf8")));
       if (exempt) expect(exempt(req(p))).toBe(true);
       else expect(src, `${p} не в списке открытых — человек не сможет оставить адрес`)
         .toContain(`p.endsWith("${p}")`);
@@ -63,7 +64,7 @@ describe("платный доступ не закрывает сбор адре�
     // Обратная сторона: открыв подписку на будущее, легко случайно открыть
     // выдачу продукта. Эти пути в списке открытых быть НЕ должны.
     const src = await import("node:fs").then((fs) =>
-      fs.readFileSync(new URL("../src/lib/planGate.ts", import.meta.url), "utf8"));
+      stripComments(fs.readFileSync(new URL("../src/lib/planGate.ts", import.meta.url), "utf8")));
     for (const p of ["/fusions", "/chat", "/generate", "/render", "/export"]) {
       expect(src, `${p} попал в список открытых — продукт раздаётся бесплатно`)
         .not.toContain(`p.endsWith("${p}")`);
@@ -72,7 +73,7 @@ describe("платный доступ не закрывает сбор адре�
 
   test("контроль: список открытых не пуст и содержит служебные", async () => {
     const src = await import("node:fs").then((fs) =>
-      fs.readFileSync(new URL("../src/lib/planGate.ts", import.meta.url), "utf8"));
+      stripComments(fs.readFileSync(new URL("../src/lib/planGate.ts", import.meta.url), "utf8")));
     expect(src).toContain('p.endsWith("/health")');
     expect(src).toContain('p.endsWith("/status")');
   });

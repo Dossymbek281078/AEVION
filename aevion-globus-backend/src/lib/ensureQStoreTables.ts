@@ -48,6 +48,10 @@ export async function ensureQStoreTables(pool: PgPoolInstance): Promise<void> {
     // Back-fill columns on pre-existing tables (selected in /products and /featured)
     await pool.query(`ALTER TABLE "QStoreProduct" ADD COLUMN IF NOT EXISTS "avgRating" DOUBLE PRECISION NOT NULL DEFAULT 0`);
     await pool.query(`ALTER TABLE "QStoreProduct" ADD COLUMN IF NOT EXISTS "reviewCount" INTEGER NOT NULL DEFAULT 0`);
+    // Признак «избранное». Ручка переключения читала и писала его в ПАМЯТИ,
+    // а колонки не существовало: на проде товар в памяти отсутствует, и
+    // переключение отвечало «товар не найден» СВОЕМУ ЖЕ продавцу.
+    await pool.query(`ALTER TABLE "QStoreProduct" ADD COLUMN IF NOT EXISTS "featured" BOOLEAN NOT NULL DEFAULT FALSE;`);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS "QStoreProduct_cat_idx"
         ON "QStoreProduct" ("category", "salesCount" DESC);

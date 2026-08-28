@@ -338,8 +338,19 @@ qstoreRouter.patch("/me/products/:id", async (req: Request, res: Response) => {
       );
       res.json({ product: updated.rows[0] });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // Раньше управление уходило ниже, в память (в проде пустую), и продавцу
+      // отвечали «Product not found» про ЕГО ЖЕ товар. Проверено контролем
+      // 21.08.2026: с живой базой та же ручка доходит до проверки владельца и
+      // отвечает 403, с упавшей — 404. Значит база на пути.
+      console.error("[QStore] /me/products/:id DB error", e);
+      res.status(503).json({
+        error: "storage_unavailable",
+        warning:
+          "Хранилище временно недоступно. Это НЕ значит, что товара нет — " +
+          "изменение не применено. Повторите позже.",
+      });
+      return;
     }
   }
   const product = memProducts.get(id);
@@ -364,8 +375,19 @@ qstoreRouter.delete("/me/products/:id", async (req: Request, res: Response) => {
       await pool.query(`DELETE FROM "QStoreProduct" WHERE "id" = $1`, [id]);
       res.json({ ok: true });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // Раньше управление уходило ниже, в память (в проде пустую), и продавцу
+      // отвечали «Product not found» про ЕГО ЖЕ товар. Проверено контролем
+      // 21.08.2026: с живой базой та же ручка доходит до проверки владельца и
+      // отвечает 403, с упавшей — 404. Значит база на пути.
+      console.error("[QStore] /me/products/:id DB error", e);
+      res.status(503).json({
+        error: "storage_unavailable",
+        warning:
+          "Хранилище временно недоступно. Это НЕ значит, что товара нет — " +
+          "изменение не применено. Повторите позже.",
+      });
+      return;
     }
   }
   const product = memProducts.get(id);
@@ -652,31 +674,33 @@ qstoreRouter.get("/featured", async (req: Request, res: Response) => {
 });
 
 // GET /api/qstore/me/sales — products I own that have been purchased
-qstoreRouter.get("/me/sales", (req: Request, res: Response) => {
+qstoreRouter.get("/me/sales", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
 
-  const myProductIds = new Set(
-    Array.from(memProducts.values())
-      .filter((p) => p.sellerId === auth.sub)
-      .map((p) => p.id),
-  );
-  const sales = Array.from(memPurchases.values())
-    .filter((pu) => myProductIds.has(pu.productId))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Раньше и товары, и покупки брались из карт ПАМЯТИ. Покупки при этом
+  // пишутся в базу — то есть продавец с настоящими продажами видел ноль.
+  const mine = await sellerProducts(auth.sub);
+  if (mine.failed) { replyQStoreStorageDown(res); return; }
+  const bought = await purchasesForProducts(mine.rows.map((p) => p.id));
+  if (bought.failed) { replyQStoreStorageDown(res); return; }
 
+  const sales = bought.rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const totalRevenue = sales.reduce((sum, s) => sum + s.amount, 0);
   res.json({ sales, total: sales.length, totalRevenue });
 });
 
 // GET /api/qstore/me/dashboard — seller analytics dashboard
-qstoreRouter.get("/me/dashboard", (req: Request, res: Response) => {
+qstoreRouter.get("/me/dashboard", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
 
-  const myProducts = Array.from(memProducts.values()).filter((p) => p.sellerId === auth.sub);
-  const myProductIds = new Set(myProducts.map((p) => p.id));
-  const allSales = Array.from(memPurchases.values()).filter((pu) => myProductIds.has(pu.productId));
+  const mine = await sellerProducts(auth.sub);
+  if (mine.failed) { replyQStoreStorageDown(res); return; }
+  const myProducts = mine.rows;
+  const bought = await purchasesForProducts(myProducts.map((p) => p.id));
+  if (bought.failed) { replyQStoreStorageDown(res); return; }
+  const allSales = bought.rows;
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -693,7 +717,7 @@ qstoreRouter.get("/me/dashboard", (req: Request, res: Response) => {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 5)
     .map((s) => {
-      const product = memProducts.get(s.productId);
+      const product = myProducts.find((p) => p.id === s.productId);
       return {
         purchaseId: s.id,
         productTitle: product?.title ?? "Unknown",
@@ -724,16 +748,23 @@ qstoreRouter.get("/me/dashboard", (req: Request, res: Response) => {
 });
 
 // GET /api/qstore/sellers/:userId — public seller profile
-qstoreRouter.get("/sellers/:userId", (req: Request, res: Response) => {
-  const userId = req.params.userId;
-  const products = Array.from(memProducts.values())
-    .filter((p) => p.sellerId === userId && p.isPublic)
+qstoreRouter.get("/sellers/:userId", async (req: Request, res: Response) => {
+  // param() приводит к строке: req.params при повторе ключа даёт массив, и
+  // тогда запрос ушёл бы в базу с массивом вместо идентификатора.
+  const userId = param(req, "userId");
+  // Публичная витрина продавца: пустой профиль у человека с товарами — это
+  // потерянный покупатель, а не косметика.
+  const all = await sellerProducts(userId);
+  if (all.failed) { replyQStoreStorageDown(res); return; }
+  const products = all.rows
+    .filter((p) => p.isPublic)
     .map(({ id, title, category, price, salesCount }) => ({ id, title, category, price, salesCount }));
 
   const totalSales = products.reduce((sum, p) => sum + p.salesCount, 0);
 
-  const productIds = new Set(Array.from(memProducts.values()).filter((p) => p.sellerId === userId).map((p) => p.id));
-  const reviews = Array.from(memReviews.values()).filter((r) => productIds.has(r.productId));
+  const rev = await reviewsForProducts(all.rows.map((p) => p.id));
+  if (rev.failed) { replyQStoreStorageDown(res); return; }
+  const reviews = rev.rows;
   const avgRating = reviews.length > 0
     ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
     : 0;
@@ -742,14 +773,16 @@ qstoreRouter.get("/sellers/:userId", (req: Request, res: Response) => {
 });
 
 // GET /api/qstore/me/dashboard/chart — daily sales & revenue for last N days (default 7)
-qstoreRouter.get("/me/dashboard/chart", (req: Request, res: Response) => {
+qstoreRouter.get("/me/dashboard/chart", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
 
   const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 90);
-  const myProducts = Array.from(memProducts.values()).filter((p) => p.sellerId === auth.sub);
-  const myProductIds = new Set(myProducts.map((p) => p.id));
-  const allSales = Array.from(memPurchases.values()).filter((pu) => myProductIds.has(pu.productId));
+  const mine = await sellerProducts(auth.sub);
+  if (mine.failed) { replyQStoreStorageDown(res); return; }
+  const bought = await purchasesForProducts(mine.rows.map((p) => p.id));
+  if (bought.failed) { replyQStoreStorageDown(res); return; }
+  const allSales = bought.rows;
 
   const now = new Date();
   const buckets: { date: string; sales: number; revenue: number }[] = [];
@@ -775,10 +808,31 @@ qstoreRouter.get("/me/dashboard/chart", (req: Request, res: Response) => {
 });
 
 // POST /api/qstore/products/:id/feature — mark product as featured (owner only)
-qstoreRouter.post("/products/:id/feature", (req: Request, res: Response) => {
+qstoreRouter.post("/products/:id/feature", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
   const id = param(req, "id");
+
+  if (isQStoreDbReady()) {
+    try {
+      // Переключаем В БАЗЕ одним запросом, владельца проверяем в WHERE:
+      // чтение с последующей записью разошлось бы при двух вкладках продавца.
+      const r = await pool.query(
+        `UPDATE "QStoreProduct" SET "featured" = NOT COALESCE("featured", FALSE)
+          WHERE "id" = $1 AND "sellerId" = $2 RETURNING "featured"`,
+        [id, auth.sub],
+      );
+      // Товара нет ИЛИ он чужой — ответ один: иначе он подтверждал бы
+      // существование чужого товара тому, кто им не владеет.
+      if (r.rows.length === 0) { res.status(404).json({ error: "Product not found" }); return; }
+      res.json({ featured: Boolean(r.rows[0].featured) });
+      return;
+    } catch (e) {
+      console.error("[QStore] избранное не переключено", e);
+      replyQStoreStorageDown(res);
+      return;
+    }
+  }
 
   const product = memProducts.get(id);
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
@@ -790,6 +844,77 @@ qstoreRouter.post("/products/:id/feature", (req: Request, res: Response) => {
 });
 
 // ─── OG image helpers (SVG, no external deps) ────────────────────────────────
+
+/**
+ * Панель продавца: товары, продажи и отзывы — ИЗ ХРАНИЛИЩА.
+ *
+ * Замер 28.08.2026: покупки пишутся в "QStorePurchase" (две вставки), товары в
+ * "QStoreProduct", а пять ручек продавца считали всё это по картам ПАМЯТИ. На
+ * проде память пуста, значит продавец с настоящими продажами видел
+ * «0 продаж, выручка 0». Это худшая из возможных неправд на витрине: она
+ * говорит человеку, что его денег не существует.
+ *
+ * `failed` отличает «продаж нет» от «спросить не удалось»: первое — законный
+ * ноль, второе обязано быть отказом, иначе отказ базы снова покажется нулём.
+ */
+async function sellerProducts(
+  sellerId: string,
+): Promise<{ rows: Product[]; failed: boolean }> {
+  if (isQStoreDbReady()) {
+    try {
+      const r = await pool.query(`SELECT * FROM "QStoreProduct" WHERE "sellerId" = $1`, [sellerId]);
+      return { rows: r.rows as Product[], failed: false };
+    } catch (e) {
+      console.error("[QStore] товары продавца не прочитаны", e);
+      return { rows: [], failed: true };
+    }
+  }
+  return { rows: [...memProducts.values()].filter((x) => x.sellerId === sellerId), failed: false };
+}
+
+async function purchasesForProducts(
+  productIds: string[],
+): Promise<{ rows: Purchase[]; failed: boolean }> {
+  if (productIds.length === 0) return { rows: [], failed: false };
+  if (isQStoreDbReady()) {
+    try {
+      const r = await pool.query(
+        `SELECT * FROM "QStorePurchase" WHERE "productId" = ANY($1::text[])`, [productIds]);
+      return { rows: r.rows as Purchase[], failed: false };
+    } catch (e) {
+      console.error("[QStore] продажи не прочитаны", e);
+      return { rows: [], failed: true };
+    }
+  }
+  const set = new Set(productIds);
+  return { rows: [...memPurchases.values()].filter((x) => set.has(x.productId)), failed: false };
+}
+
+async function reviewsForProducts(
+  productIds: string[],
+): Promise<{ rows: Review[]; failed: boolean }> {
+  if (productIds.length === 0) return { rows: [], failed: false };
+  if (isQStoreDbReady()) {
+    try {
+      const r = await pool.query(
+        `SELECT * FROM "QStoreReview" WHERE "productId" = ANY($1::text[])`, [productIds]);
+      return { rows: r.rows as Review[], failed: false };
+    } catch (e) {
+      console.error("[QStore] отзывы не прочитаны", e);
+      return { rows: [], failed: true };
+    }
+  }
+  const set = new Set(productIds);
+  return { rows: [...memReviews.values()].filter((x) => set.has(x.productId)), failed: false };
+}
+
+/** Отказ хранилища на панели продавца — отказ, а не «продаж нет». */
+function replyQStoreStorageDown(res: Response) {
+  res.status(503).json({
+    error: "storage_unavailable",
+    warning: "Хранилище временно недоступно. Показать продажи сейчас нельзя — это НЕ значит, что их нет.",
+  });
+}
 
 function qstoreEsc(s: string): string {
   return String(s)

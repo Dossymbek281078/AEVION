@@ -91,6 +91,36 @@ const resolveCity = (id: unknown): { id: string; city: CityData } | null => {
   return key ? { id: key, city: CITIES[key] } : null;
 };
 
+/**
+ * Отказ, которым отвечают ОДИННАДЦАТЬ ручек, когда `resolveCity` вернул null.
+ *
+ * Держим одним ответом, а не одиннадцатью копиями, по цене расхождения.
+ * 28.08.2026 все одиннадцать были без английской половины — то есть добавлять
+ * её пришлось бы в одиннадцати местах, и это одиннадцать шансов пропустить
+ * одно. Свип, который их искал, к тому же видел только многострочную форму
+ * записи и не заметил ни одной: однострочный `res.status(404).json({ … })`
+ * прошёл мимо шаблона.
+ */
+const refuseUnknownCity = (res: Response) =>
+  res.status(404).json({
+    error: "неизвестный город",
+    errorEn: "unknown city",
+    available: Object.keys(CITIES),
+  });
+
+/**
+ * Второй отказ-близнец: две ручки маршрута разбирают одно и то же тело запроса.
+ *
+ * Свёл сюда не из любви к порядку, а потому что сторож отказов поймал: час
+ * назад я добавил английскую половину в обе копии ОТДЕЛЬНО, то есть развёл два
+ * места, где текст обязан совпадать. Разойдутся они молча.
+ */
+const refuseNonNumericPair = (res: Response) =>
+  res.status(400).json({
+    error: "нужны числовые from, to (индексы вертипортов)",
+    errorEn: "numeric from, to are required (vertiport indices)",
+  });
+
 // ── engine constants ─────────────────────────────────────────────────────────
 const FLOOR = 50;
 const CLEAR = 15;
@@ -1366,7 +1396,7 @@ qskywayRouter.get("/cities", (_req: Request, res: Response) => {
 
 qskywayRouter.get("/city", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const { id, city } = resolved;
   const zones = zonesMeters(id, city);
   res.json({
@@ -1419,7 +1449,7 @@ const impactCache = new Map<string, unknown>();
 
 qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const cached = impactCache.get(resolved.id);
   if (cached) return res.json(cached);
   const { id, city } = resolved;
@@ -1505,7 +1535,7 @@ const disputeImpactCache = new Map<string, unknown>();
 const substitutionImpactCache = new Map<string, unknown>();
 qskywayRouter.get("/height-substitution", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const cached = substitutionImpactCache.get(resolved.id);
   if (cached) return res.json(cached);
   const { id, city } = resolved;
@@ -1549,7 +1579,7 @@ qskywayRouter.get("/height-substitution", (req: Request, res: Response) => {
 
 qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const cached = disputeImpactCache.get(resolved.id);
   if (cached) return res.json(cached);
   const { id, city } = resolved;
@@ -1603,7 +1633,7 @@ qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
 
 qskywayRouter.get("/vertiports", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const scored = suitability(resolved.id, resolved.city);
   res.json({
     city: resolved.id, count: scored.length, vertiports: scored,
@@ -1614,10 +1644,9 @@ qskywayRouter.get("/vertiports", (req: Request, res: Response) => {
 
 qskywayRouter.post("/route", (req: Request, res: Response) => {
   const { from, to, city, respectCeiling } = req.body ?? {};
-  if (typeof from !== "number" || typeof to !== "number")
-    return res.status(400).json({ error: "нужны числовые from, to (индексы вертипортов)" });
+  if (typeof from !== "number" || typeof to !== "number") return refuseNonNumericPair(res);
   const resolved = resolveCity(city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const strict = respectCeiling === true;
   const route = buildRoute(resolved.id, resolved.city, from, to, strict);
   if (!route) {
@@ -1638,7 +1667,7 @@ qskywayRouter.post("/route", (req: Request, res: Response) => {
         });
       }
     }
-    return res.status(422).json({ error: "маршрут не найден / некорректные вертипорты / отрезан запретными зонами" });
+    return res.status(422).json({ error: "маршрут не найден / некорректные вертипорты / отрезан запретными зонами", errorEn: "route not found / invalid vertiports / cut off by no-fly zones" });
   }
   // Считается ТОЛЬКО здесь, а не внутри buildRoute: расчёт сам строит теневой
   // маршрут по разобранным высотам, и вложенный вызов ушёл бы в рекурсию.
@@ -1707,12 +1736,11 @@ function scopeTexts(hasCeilingFeed: boolean, perm: CityPermission | undefined): 
 
 qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   const { from, to, city, respectCeiling } = req.body ?? {};
-  if (typeof from !== "number" || typeof to !== "number")
-    return res.status(400).json({ error: "нужны числовые from, to (индексы вертипортов)" });
+  if (typeof from !== "number" || typeof to !== "number") return refuseNonNumericPair(res);
   const resolved = resolveCity(city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const route = buildRoute(resolved.id, resolved.city, from, to, respectCeiling === true);
-  if (!route) return res.status(422).json({ error: "маршрут не найден — обосновывать нечего" });
+  if (!route) return res.status(422).json({ error: "маршрут не найден — обосновывать нечего", errorEn: "route not found — there is nothing to justify" });
 
   const src = AIRSPACE[resolved.id];
   const twinSig = signCity(resolved.id, resolved.city);
@@ -1862,7 +1890,10 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
 qskywayRouter.post("/route/justification/verify", (req: Request, res: Response) => {
   const { document, attestation } = req.body ?? {};
   if (!document || !attestation?.signature || !attestation?.contentHash)
-    return res.status(400).json({ error: "нужны document и attestation {contentHash, signature}" });
+    return res.status(400).json({
+      error: "нужны document и attestation {contentHash, signature}",
+      errorEn: "document and attestation {contentHash, signature} are required",
+    });
   const contentHash = crypto.createHash("sha256").update(JSON.stringify(document)).digest("hex");
   const hashValid = contentHash === attestation.contentHash;
   let signatureValid = false;
@@ -1920,7 +1951,7 @@ qskywayRouter.post("/route/justification/verify", (req: Request, res: Response) 
 
 qskywayRouter.get("/verify", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const sig = signCity(resolved.id, resolved.city);
   const twinValid = verifyCity(resolved.city, sig);
   const asSig = signAirspace(resolved.id);
@@ -1958,7 +1989,7 @@ qskywayRouter.get("/verify", (req: Request, res: Response) => {
 // says it existed by block N — the edition date stops resting on our clock.
 qskywayRouter.post("/airspace/anchor", async (req: Request, res: Response) => {
   const resolved = resolveCity(req.body?.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   // A public POST that submits to the OpenTimestamps calendars is an open tap
   // into someone else's infrastructure: spam it and we flood them. It is also
   // pointless work — a second timestamp over an identical hash proves nothing
@@ -1983,7 +2014,7 @@ qskywayRouter.post("/airspace/anchor", async (req: Request, res: Response) => {
     });
   }
   const anchor = await anchorAirspace(resolved.id);
-  if (!anchor) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — привязывать нечего", city: resolved.id });
+  if (!anchor) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — привязывать нечего", errorEn: "no regulator feed is connected for this city — there is nothing to anchor", city: resolved.id });
   res.json(anchor);
 });
 
@@ -2037,9 +2068,9 @@ const proofVerdictCache = new Map<string, unknown>();
 
 qskywayRouter.get("/airspace/proof", async (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const proof = AIRSPACE_PROOFS[resolved.id];
-  if (!proof) return res.status(404).json({ error: "для этого города вшитого пруфа нет", city: resolved.id });
+  if (!proof) return res.status(404).json({ error: "для этого города вшитого пруфа нет", errorEn: "no built-in proof exists for this city", city: resolved.id });
   const settled = proofVerdictCache.get(resolved.id);
   if (settled) return res.json(settled);
   const current = AIRSPACE[resolved.id] ? airspaceContentHash(AIRSPACE[resolved.id]) : null;
@@ -2086,9 +2117,9 @@ const registeredCache = new Map<string, { qrightObjectId: string; contentHash: s
 
 qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, res: Response) => {
   const resolved = resolveCity(req.body?.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const src = AIRSPACE[resolved.id];
-  if (!src) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — регистрировать нечего", city: resolved.id });
+  if (!src) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — регистрировать нечего", errorEn: "no regulator feed is connected for this city — there is nothing to register", city: resolved.id });
   const known = registeredCache.get(resolved.id);
   if (known && known.contentHash === airspaceContentHash(src)) {
     return res.json({
@@ -2245,9 +2276,14 @@ qskywayRouter.get("/slots/:id/verify", async (req: Request, res: Response) => {
 
 qskywayRouter.post("/slots", async (req: Request, res: Response) => {
   const { routeId, t0, t1, holder } = req.body ?? {};
-  if (!routeId || !t0 || !t1 || !holder) return res.status(400).json({ error: "нужны routeId, t0, t1, holder" });
+  if (!routeId || !t0 || !t1 || !holder) {
+    return res.status(400).json({
+      error: "нужны routeId, t0, t1, holder",
+      errorEn: "routeId, t0, t1, holder are required",
+    });
+  }
   const a0 = Date.parse(t0), a1 = Date.parse(t1);
-  if (isNaN(a0) || isNaN(a1) || a1 <= a0) return res.status(400).json({ error: "некорректное окно времени (ISO-8601, t1>t0)" });
+  if (isNaN(a0) || isNaN(a1) || a1 <= a0) return res.status(400).json({ error: "некорректное окно времени (ISO-8601, t1>t0)", errorEn: "invalid time window (ISO-8601, t1>t0)" });
   const result = await bookSlot(String(routeId), String(t0), String(t1), String(holder));
   // Две причины отказа — два разных ответа. «Слот занят» (409) говорит о рынке,
   // «хранилище недоступно» (503) — о нас, и путать их нельзя: первое читается
@@ -2260,7 +2296,7 @@ qskywayRouter.post("/slots", async (req: Request, res: Response) => {
       noteEn: "No receipt was issued, deliberately. Recording the booking in memory would be worse than refusing: it would appear in neither the list nor the quota check, while a receipt would claim otherwise.",
     });
   }
-  if (!result.ok) return res.status(409).json({ error: "слот занят", routeId, capacity: SLOT_CAPACITY, concurrent: result.concurrent });
+  if (!result.ok) return res.status(409).json({ error: "слот занят", errorEn: "slot is taken", routeId, capacity: SLOT_CAPACITY, concurrent: result.concurrent });
   res.status(201).json({
     ok: true,
     slot: result.slot,

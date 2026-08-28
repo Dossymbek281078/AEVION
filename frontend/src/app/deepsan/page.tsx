@@ -233,7 +233,7 @@ export default function DeepSanPage() {
       <header
         style={{
           position: "sticky",
-          top: 0,
+          top: 'var(--aevion-header-h, 0px)',
           zIndex: 20,
           borderBottom: "1px solid rgba(249,115,22,0.12)",
           background: "rgba(10,15,30,0.85)",

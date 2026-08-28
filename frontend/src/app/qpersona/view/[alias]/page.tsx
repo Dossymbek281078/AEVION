@@ -56,7 +56,7 @@ export default function PersonaViewPage({ params }: { params: Promise<{ alias: s
         background: "rgba(5,5,16,0.85)",
         backdropFilter: "blur(8px)",
         position: "sticky",
-        top: 0,
+        top: 'var(--aevion-header-h, 0px)',
         zIndex: 10,
       }}>
         <div style={{ maxWidth: "960px", margin: "0 auto", padding: "12px 20px", display: "flex", alignItems: "center", gap: "12px", fontSize: "14px" }}>

@@ -1,0 +1,57 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+/**
+ * Прилипающая полоса не должна уезжать ПОД шапку сайта.
+ *
+ * Шапка тоже sticky, top: 0, слой 50. Любая полоса с `top: 0` и меньшим слоем
+ * прилипает в то же место и пропадает — ровно тогда, когда она нужна: при
+ * прокрученной странице. Смысл прилипающей полосы в том и состоит, чтобы
+ * оставаться под рукой.
+ *
+ * ЗАМЕР ЖИВОГО ПРОДА 28.08.2026 (зонд aevion-overlay-probe, 7 адресов):
+ * 26 недостижимых элементов. Среди них не только вкладки: на четырёх модулях
+ * под шапку уезжала кнопка «Купить» и строка цены — то есть денежный шаг
+ * исчезал у человека, который долистал страницу и решил платить.
+ *
+ * Доказано с обеих сторон на одном сервере (1280x900, домотано до низа):
+ *   с отступом  -> вкладки 16/16, top = высота шапки
+ *   с `top: 0`  -> вкладки  0/16, top = 0, закрыты шапкой
+ *
+ * Высоту публикует SiteHeader через ResizeObserver: она зависит от ширины
+ * (89px на десктопе, 185px на телефоне), поэтому число здесь не годится.
+ */
+
+const SRC = join(__dirname, "..", "..");
+
+// Файлы, где прилипающая полоса уже отодвинута. Список — храповик: он не
+// обязан покрыть всё, но однажды исправленное не должно вернуться.
+const FIXED = [
+  "app/qgood/page.tsx",
+  "app/pricing/compare/page.tsx",
+  "app/qpersona/page.tsx",
+  "app/shadownet/page.tsx",
+  "app/voice-of-earth/page.tsx",
+  "app/deepsan/page.tsx",
+  "app/kids-ai-content/page.tsx",
+  "app/qcoreai/replay/[runId]/page.tsx",
+  "components/../app/bank/_components/SectionTabs.tsx",
+];
+
+describe("прилипающие полосы стоят под шапкой, а не под ней", () => {
+  it("шапка публикует свою высоту — без этого отступать не на что", () => {
+    const h = readFileSync(join(SRC, "components", "SiteHeader.tsx"), "utf8");
+    expect(h, "SiteHeader перестал публиковать --aevion-header-h").toContain("--aevion-header-h");
+    expect(h, "публикация без ResizeObserver сломается при переносе меню")
+      .toContain("ResizeObserver");
+  });
+
+  for (const rel of FIXED) {
+    it(`${rel}: полоса отодвинута на высоту шапки`, () => {
+      const s = readFileSync(join(SRC, rel), "utf8");
+      expect(s, `в ${rel} вернулся top: 0 — полоса снова уедет под шапку`)
+        .toContain("var(--aevion-header-h");
+    });
+  }
+});

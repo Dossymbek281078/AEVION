@@ -63,7 +63,7 @@ export function SectionTabs({
       aria-label="Bank sections"
       style={{
         position: "sticky",
-        top: 0,
+        top: 'var(--aevion-header-h, 0px)',
         zIndex: 30,
         background: "rgba(248,250,252,0.92)",
         backdropFilter: "blur(10px)",

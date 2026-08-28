@@ -47,7 +47,7 @@ export default function ShadowNetPage() {
           background: "rgba(0,0,0,0.85)",
           backdropFilter: "blur(8px)",
           position: "sticky",
-          top: 0,
+          top: 'var(--aevion-header-h, 0px)',
           zIndex: 10,
         }}
       >

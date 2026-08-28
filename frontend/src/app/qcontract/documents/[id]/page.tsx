@@ -53,11 +53,24 @@ export default function DocumentDetailPage() {
     setRevoking(true);
     const token = readToken();
     try {
-      await fetch(apiUrl(`/api/qcontract/documents/${id}`), {
+      // Ответ сервера ОБЯЗАТЕЛЬНО проверяем перед тем, как показать отзыв.
+      // Без этого документ помечался отозванным на экране даже когда сервер
+      // отказал: человек считал отзыв состоявшимся и мог на это положиться,
+      // а документ оставался действующим.
+      const res = await fetch(apiUrl(`/api/qcontract/documents/${id}`), {
         method: "PATCH",
         headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ revoke: true }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        setError(
+          (d && (d.error || d.message)) ||
+            `Отозвать не удалось — сервер ответил ${res.status}. Документ действует.`,
+        );
+        return;
+      }
+      setError("");
       setDoc((d) => d ? { ...d, revokedAt: new Date().toISOString() } : d);
     } catch (e) {
       setError((e as Error).message);

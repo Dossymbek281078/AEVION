@@ -421,7 +421,29 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   // BureauVerification row (KYC approved but payment not yet confirmed).
   if (reference === "bureau-verified") {
     if (refunded || failed) {
-      console.log(`[gumroad/webhook] bureau ${result.status} for ${email} — ignored (one-time, no downgrade)`);
+      // ПОЛИТИКУ НЕ МЕНЯЮ, МЕНЯЮ ВИДИМОСТЬ.
+      //
+      // Verified — разовая покупка, и отдавать её обратно автоматически
+      // нельзя: возврат бывает спорным (chargeback), а автоотзыв наказал бы
+      // честного покупателя посреди разбирательства. Решение оставить статус
+      // осознанное, и оно остаётся.
+      //
+      // Но след был `console.log` — строка среди тысяч. Значит человек,
+      // оплативший «Verified», вернувший деньги и сохранивший значок на
+      // сертификате, не появлялся НИГДЕ. Механизм отзыва существует
+      // (POST /api/bureau/admin/cert/:certId/revoke-verification), просто
+      // никто не узнавал, что пора им воспользоваться.
+      //
+      // Теперь это ошибка в журнале и в Sentry: решение принимает человек,
+      // но узнаёт о поводе — сразу.
+      console.error(
+        `[gumroad/webhook] bureau ${result.status} for ${email}: статус Verified СОХРАНЁН (разовая покупка). ` +
+          "Отозвать вручную: POST /api/bureau/admin/cert/:certId/revoke-verification",
+      );
+      capture(
+        new Error("bureau Verified refunded — badge kept, manual review needed"),
+        { route: "gumroad/webhook", reference: "bureau-verified", status: result.status },
+      );
       return res.json({ ok: true, ignored: `bureau_${result.status}` });
     }
     if (result.status === "paid") {

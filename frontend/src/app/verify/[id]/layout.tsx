@@ -17,7 +17,13 @@ async function fetchCert(id: string) {
   try {
     const res = await fetch(
       `${getApiBase()}/api/pipeline/certificate/${encodeURIComponent(id)}/bundle.json`,
-      { next: { revalidate: 300 } },
+      {
+        // Таймаут обязателен: без него зависший API подвешивает ВЫДАЧУ
+        // страницы — метаданные считаются до отправки ответа. Взято у
+        // работающего образца (страница сертификата).
+        next: { revalidate: 300 },
+        signal: AbortSignal.timeout(6000),
+      },
     );
     if (!res.ok) return null;
     const j = (await res.json()) as {

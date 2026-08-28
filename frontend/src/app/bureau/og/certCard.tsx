@@ -36,7 +36,13 @@ export async function load(certId: string): Promise<{ cert: Cert | null; anchor:
   try {
     const res = await fetch(
       `${getApiBase()}/api/pipeline/certificate/${encodeURIComponent(certId)}/bundle.json`,
-      { next: { revalidate: 300 } },
+      {
+        // Таймаут обязателен: без него зависший API подвешивает ВЫДАЧУ
+        // страницы — метаданные считаются до отправки ответа. Взято у
+        // работающего образца (страница сертификата).
+        next: { revalidate: 300 },
+        signal: AbortSignal.timeout(6000),
+      },
     );
     if (!res.ok) return { cert: null, anchor: null };
     const j = (await res.json()) as {

@@ -48,6 +48,7 @@ import { PV, ev, mm, best } from "./chessEngine";
 import { classifyDrop } from "./moveQuality";
 import { RANKS, gRank } from "./rating";
 import { pickDailyIdx } from "./dailyPick";
+import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 
 // Dark theme palette — mirrors the keys of COLOR (./theme.ts) so the
 // component can swap CC=CC_LIGHT vs CC=CC_DARK at runtime via theme toggle.
@@ -6459,6 +6460,14 @@ export default function CyberChessPage(){
                   запуск»), и оттуда есть путь обратно в игру. Вторая: метка ?c= на /go
                   прошла бы через белый список channelFrom() и стала null — «chess» в нём
                   нет, то есть канал потерялся бы молча. */}
+              {/* После дня запуска блок скрывается. Обещание «напишем в день запуска»
+                  30 августа уже неуместно: запуск состоялся, и человек, читающий
+                  его в этот день, видит расхождение между словами и реальностью.
+                  Дату берём ОДНИМ способом с посадочной — daysUntilLaunch учитывает
+                  часовой пояс запуска; свой расчёт разошёлся бы с ней на пять часов
+                  в сутки, и одна страница звала бы подписаться, когда вторая уже
+                  поздравляет с открытием. */}
+              {daysUntilLaunch(Date.UTC(2026, 7, 30)) > 0 && (
               <a href="/cyberchess/launch" style={{display:"block",marginTop:SPACE[2],padding:SPACE[3],
                 borderRadius:12,border:"1px dashed "+CC.border,background:CC.surface1,
                 textDecoration:"none",color:CC.text,textAlign:"center"}}>
@@ -6466,6 +6475,7 @@ export default function CyberChessPage(){
                 <div style={{fontSize:12,color:CC.textDim,marginTop:2,fontWeight:600}}>
                   Одно письмо в день запуска — и условия раннего доступа. Больше ничего.</div>
               </a>
+              )}
 
               {/* Tertiary: задача / классика / база партий — small inline pills, не доминируют */}
               <div style={{marginTop:SPACE[2],display:"flex",gap:SPACE[2],flexWrap:"wrap",alignItems:"center"}}>

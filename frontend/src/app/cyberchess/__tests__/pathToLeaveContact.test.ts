@@ -39,4 +39,14 @@ describe("со страницы шахмат есть путь оставить 
       expect(okno.toLowerCase()).not.toContain(lishnee);
     }
   });
+
+  test("после дня запуска блок скрывается, а не обещает прошедшее", () => {
+    // 30 августа обещание «напишем в день запуска» уже неуместно: запуск
+    // состоялся. Проверяем, что показ ограничен датой И что дата берётся
+    // ОДНИМ способом с посадочной — иначе страницы разойдутся на пять часов.
+    const i = stranica.indexOf('href="/cyberchess/launch"');
+    const okno = stranica.slice(Math.max(0, i - 900), i);
+    expect(okno).toContain("daysUntilLaunch(Date.UTC(2026, 7, 30)) > 0");
+    expect(stranica).toContain('import { daysUntilLaunch } from "@/lib/daysUntilLaunch";');
+  });
 });

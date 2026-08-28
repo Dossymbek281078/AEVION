@@ -604,7 +604,15 @@ summary:focus-visible,
 [role="option"]:focus-visible,
 [role="link"]:focus-visible,
 [tabindex]:not([tabindex="-1"]):focus-visible {
-  outline: 2px solid #14b8a6;
+  /* !important здесь ОСОЗНАННО, и вот замер, который его требует.
+     У части элементов контур снят СТРОЧНЫМ стилем (`style="outline: none"`),
+     а строчный сильнее любого правила из таблицы — общий контур не мог
+     победить в принципе. Проверено на /pricing: у `<summary>` в строке
+     стоит `outline: none`, и до этой правки фокус не был виден вовсе.
+     Видимый фокус — нижняя граница доступности, а не оформление, поэтому
+     он перебивает частные решения. Убирать строчные `outline: none` по
+     одному — 167 мест; это отдельная уборка, а защита нужна сейчас. */
+  outline: 2px solid #14b8a6 !important;
   outline-offset: 2px;
   border-radius: 6px;
 }

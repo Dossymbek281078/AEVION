@@ -18,14 +18,10 @@ const SRC = fs.readFileSync(path.resolve(__dirname, "..", "[id]", "page.tsx"), "
 
 /** Осознанно НЕ переводится, с причиной у каждой строки. */
 const KEEP: Record<string, string> = {
-  "Welcome to AEVION.": "содержимое HTML-шаблона внутри редактора, не подпись",
   "Cloudflare Pages": "название сервиса",
-  "Brevo SMTP templates": "название сервиса",
   "Studio Pro": "название продукта",
-  "Thanks for signing up.": "образец текста письма, его правит пользователь",
   "README.ru.md": "имя файла",
   "HTML body": "термин разметки: body — имя тега",
-  "HTML preview": "термин разметки, как и строка выше",
 };
 
 function englishBetweenTags(): string[] {
@@ -47,7 +43,11 @@ function englishBetweenTags(): string[] {
       from = b;
       if (t.length < 6 || t.length > 46) continue;
       if (!/^[A-Z]/.test(t)) continue;
-      if (!/^[A-Za-z][A-Za-z ,.'\-]+$/.test(t)) continue;
+      // Цифры добавлены 29.08.2026. Без них шаблон не видел НИ ОДНОЙ
+      // подписи с числом: «Download MP3» жила в интерфейсе, а сторож
+      // был зелёным — не потому, что разрешил её, а потому что не мог
+      // разглядеть. В списке разрешений её поэтому и нет.
+      if (!/^[A-Za-z][A-Za-z0-9 ,.'\-]+$/.test(t)) continue;
       if (CYR.test(t)) continue;
       out.push(t);
     }

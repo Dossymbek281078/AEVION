@@ -607,7 +607,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Email template builder state
   const [tplBuilderName, setTplBuilderName] = useState("");
   const [tplBuilderSubject, setTplBuilderSubject] = useState("");
-  const [tplBuilderHtml, setTplBuilderHtml] = useState("<h1>Hello {{params.name}}</h1>\n<p>Welcome to AEVION.</p>");
+  const [tplBuilderHtml, setTplBuilderHtml] = useState("<h1>Здравствуйте, {{params.name}}!</h1>\n<p>Добро пожаловать в AEVION.</p>");
   const [tplBuilderSender, setTplBuilderSender] = useState("");
   const [tplBuilderLoading, setTplBuilderLoading] = useState(false);
   const [tplBuilderMsg, setTplBuilderMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -4882,7 +4882,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       {sfxUrl && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <audio controls src={sfxUrl} style={{ width: "100%" }} />
-                          <a href={sfxUrl} download="sfx.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>Download MP3</a>
+                          <a href={sfxUrl} download="sfx.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>Скачать MP3</a>
                         </div>
                       )}
                       <button
@@ -4936,7 +4936,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       {musicUrl && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <audio controls src={musicUrl} style={{ width: "100%" }} />
-                          <a href={musicUrl} download="music.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>Download MP3</a>
+                          <a href={musicUrl} download="music.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>Скачать MP3</a>
                         </div>
                       )}
                       <button
@@ -4984,7 +4984,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={emailBody}
                           onChange={(e) => setEmailBody(e.target.value)}
-                          placeholder="<h1>Hi!</h1><p>Thanks for signing up.</p>"
+                          placeholder="<h1>Здравствуйте!</h1><p>Спасибо, что подписались.</p>"
                           rows={6}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -5361,7 +5361,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "templates" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Brevo SMTP templates</div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Шаблоны писем Brevo</div>
                         <button onClick={loadEmailTemplates}
                           style={{ padding: "4px 10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           Refresh
@@ -5455,7 +5455,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       {tplBuilderHtml.trim() && (
                         <details style={{ border: "1px solid #e2e8f0", borderRadius: 7, padding: "6px 10px" }}>
-                          <summary style={{ fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer" }}>HTML preview</summary>
+                          <summary style={{ fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer" }}>Предпросмотр HTML</summary>
                           <div style={{ marginTop: 8, padding: 10, background: "#fff", border: "1px solid #f1f5f9", borderRadius: 6, fontSize: 13 }}
                             dangerouslySetInnerHTML={{ __html: tplBuilderHtml }} />
                         </details>

@@ -1253,7 +1253,15 @@ export default function QSkywayClient() {
                         </div>
                         {v.openRadiusM != null && (
                           <div style={{ color: "#5f7086", fontSize: 10, marginTop: 2 }}>
-                            {t("qskyway.pad.rowDetails", { r: v.openRadiusM ?? "—", c: v.clearanceM ?? "—", d: v.distNoFlyM! >= 9999 ? "—" : v.distNoFlyM + "м" })}
+                            {/* Единица «м» уехала в КЛЮЧ, как у соседних двух величин.
+                                Раньше она приклеивалась здесь по-русски, и на английской
+                                странице выходило «to no-fly zone 1426м» — три единицы `m`
+                                и четвёртая `м` в одной строке. Словари были полными и в
+                                паритете: текст собирался в коде МИМО словаря, и проверка
+                                ключей такого не видит по устройству. */}
+                            {v.distNoFlyM == null || v.distNoFlyM >= 9999
+                              ? t("qskyway.pad.rowDetailsFar", { r: v.openRadiusM ?? "—", c: v.clearanceM ?? "—" })
+                              : t("qskyway.pad.rowDetails", { r: v.openRadiusM ?? "—", c: v.clearanceM ?? "—", d: v.distNoFlyM })}
                             {v.ceilingM != null && <>{t("qskyway.pad.ceiling", { m: v.ceilingM })}</>}
                           </div>
                         )}

@@ -50,7 +50,7 @@ describe("текст исключения от базы и внешних выз
     expect(LINES.length, "файл не прочитался").toBeGreaterThan(1000);
   });
 
-  test("ни одного места с сырым e?.message рядом с базой или сетью", () => {
+  test("ни одного места с сырым e?.message в ответе — без исключений", () => {
     expect(
       risky(),
       "сырой текст исключения уходит клиенту: оберните в safeErrorText(e) из lib/safeErrorText",

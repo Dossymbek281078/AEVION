@@ -82,7 +82,7 @@ describe("чтения DevHub честны при упавшем хранили�
     expect(r.body.error).toBe("storage_unavailable");
   });
 
-  test("ни одно чтение не отвечает 500", async () => {
+  test("девять отобранных руками чтений не отвечают 500", async () => {
     const paths = [
       "/api/devhub/projects",
       "/api/devhub/snippets",

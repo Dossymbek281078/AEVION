@@ -41,10 +41,32 @@ const SIGNALS = [
 ];
 
 /**
- * Известные исключения. Пусто намеренно: сегодня класс закрыт целиком, и
- * непустой список тут означал бы, что мы согласились с молчанием где-то ещё.
+ * Известные случаи в ЧУЖИХ модулях, зафиксированные 28.08.2026.
+ *
+ * Появились не потому, что кто-то их завёл, а потому что расширился прибор:
+ * первая версия знала одно имя проверки — `isDbReady`, — тогда как у каждого
+ * модуля оно своё (`isQSocialDbReady`, `isQLearnDbReady` и ещё восемнадцать).
+ * То есть «класс закрыт по всему бэкенду» описывал один модуль из двадцати.
+ *
+ * По существу они НЕ разобраны и разбираться должны владельцами: у части
+ * модулей память — это полноценное зеркало хранилища, и тогда ответ честен.
+ * Проверено на одном: `qsocial` удаляет запись, которая в памяти же и
+ * создавалась, — там `ok: true` правда, и это ложное срабатывание.
+ *
+ * Список закрытый и служит одному: не мешать чужой работе, но ловить НОВОЕ.
+ * Сторож, краснеющий на давно живущем чужом коде, будет отключён в первый день,
+ * и защиты не станет вовсе.
  */
-const BASELINE: string[] = [];
+const BASELINE: string[] = [
+  'devhub.ts devhubRouter.post("/ask", dhCostlyLimit("dhask"), async (req',
+  'qevents.ts qeventsRouter.delete("/me/events/:id", async (req: Request, ',
+  'qjobs.ts qjobsRouter.post("/me/jobs", postLimiter, async (req: Reques',
+  'qjobs.ts qjobsRouter.delete("/me/jobs/:id", async (req: Request, res:',
+  'qlearn.ts qlearnRouter.patch("/enrollments/:id/progress", async (req: ',
+  'qpersona.ts qpersonaRouter.post("/personas", writeLimit, async (req: Req',
+  'qsocial.ts qsocialRouter.delete("/posts/:id", async (req: Request, res:',
+  "startupExchange.ts startupExchangeRouter.post(",
+];
 
 function offenders(file: string, src: string): string[] {
   const lines = src.split("\n");
@@ -63,13 +85,21 @@ function offenders(file: string, src: string): string[] {
     if (!MUTATING.some((v) => head.includes(v))) continue;
 
     const text = lines.slice(starts[k], starts[k + 1]).join("\n");
-    if (!text.includes("isDbReady")) continue;
+    if (!/is[A-Za-z]*DbReady/.test(text)) continue;
 
     // Запасная ветка бывает двух форм. Прибор, знавший одну, молча пропустил
     // тот самый дефект, ради которого написан, — поэтому обе.
-    let i = text.indexOf("!isDbReady()");
+    //
+    // И ИМЯ проверки у каждого модуля своё: isDbReady, isQSocialDbReady,
+    // isQLearnDbReady и ещё девятнадцать. Первая версия знала одно имя и потому
+    // отвечала «класс закрыт по всему бэкенду», осмотрев один модуль из двадцати.
+    // Литеральная регулярка здесь намеренно: собранная ИЗ СТРОКИ теряет слэши
+    // на этой машине и молча перестаёт находить что-либо.
+    const neg = text.match(/!\s*is[A-Za-z]*DbReady\(\)/);
+    let i = neg && neg.index !== undefined ? neg.index : -1;
     if (i < 0) {
-      const j = text.indexOf("if (isDbReady())");
+      const pos = text.match(/if\s*\(\s*is[A-Za-z]*DbReady\(\)\s*\)/);
+      const j = pos && pos.index !== undefined ? pos.index : -1;
       i = j >= 0 ? text.indexOf("} else {", j) : -1;
     }
     if (i < 0) continue;
@@ -79,7 +109,9 @@ function offenders(file: string, src: string): string[] {
     if (!answersOk) continue;
     if (SIGNALS.some((sig) => tail.includes(sig))) continue;
 
-    found.push(`${file} :${starts[k] + 1} ${head.slice(0, 60)}`);
+    // Ключ БЕЗ номера строки: он меняется от любой чужой правки выше по файлу,
+    // и базовая линия по номерам протухала бы каждый день.
+    found.push(`${file} ${head.slice(0, 60)}`);
   }
   return found;
 }
@@ -92,7 +124,7 @@ describe("запасной путь без базы не выдаёт себя �
       "  await pool.query(`UPDATE x`);",
     ].join("\n");
     expect(offenders("x.ts", silent), "молчащий запасной путь не найден").toEqual([
-      'x.ts :1 xRouter.put("/x", async (req, res) => {',
+      'x.ts xRouter.put("/x", async (req, res) => {',
     ]);
 
     const honest = silent.replace("{ ok: true }", "{ ok: true, persisted: false }");

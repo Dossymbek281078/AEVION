@@ -223,9 +223,9 @@ gumroadWebhookRouter.get("/webhook", (_req: Request, res: Response) => {
   // защищённое состояние от беззащитного было нельзя.
   //
   // Ни секрет, ни токен наружу не отдаются — только признак наличия.
-  const signed = Boolean(process.env.GUMROAD_WEBHOOK_SECRET);
+  const signed = Boolean(process.env.GUMROAD_WEBHOOK_SECRET?.trim());
   const saleCheckEnabled = process.env.GUMROAD_VERIFY_SALES !== "0";
-  const canVerifySales = Boolean(process.env.GUMROAD_ACCESS_TOKEN);
+  const canVerifySales = Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim());
   res.json({
     ok: true,
     endpoint: "gumroad webhook",
@@ -236,9 +236,19 @@ gumroadWebhookRouter.get("/webhook", (_req: Request, res: Response) => {
       : canVerifySales
         ? "api"
         : "unavailable",
-    // Одно поле, по которому видно главное. false означает: пинг никем не
-    // удостоверяется, и провижининг произойдёт по любому запросу.
-    pingAuthenticated: signed || (saleCheckEnabled && canVerifySales),
+    // Поле названо ОТРИЦАНИЕМ, как у Lemon Squeezy, и по той же причине.
+    //
+    // Сперва здесь стояло `pingAuthenticated`, и это обещало больше, чем
+    // проверено: наличие механизма — не то же самое, что проверенность
+    // каждого пинга. Подтверждение продажи «падает открыто»: если запрос к
+    // Gumroad не удался (сеть, 5xx, нет токена), обработчик провижинит, и
+    // это ОСОЗНАННО — настоящий покупатель не должен терять доступ из-за
+    // чужого сбоя.
+    //
+    // `true` здесь утверждает узкое и проверенное: удостоверять пинг нечем
+    // вовсе, значит платный тариф выдаст ЛЮБОЙ POST на публично известный
+    // адрес.
+    anyPingProvisions: !signed && !(saleCheckEnabled && canVerifySales),
     info: "Gumroad sends sale/refund pings here as POST form-encoded. GET is for liveness check only.",
   });
 });

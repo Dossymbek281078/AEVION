@@ -48,7 +48,7 @@ async function status() {
   return res.body as {
     signed: boolean;
     saleVerification: string;
-    pingAuthenticated: boolean;
+    anyPingProvisions: boolean;
   };
 }
 
@@ -58,21 +58,21 @@ describe("состояние вебхука Gumroad честно называе�
     expect(b.signed).toBe(false);
     expect(b.saleVerification).toBe("unavailable");
     // Главное поле: именно это состояние было на проде и выглядело нормально.
-    expect(b.pingAuthenticated).toBe(false);
+    expect(b.anyPingProvisions).toBe(true);
   });
 
   it("есть токен — пинг удостоверяется подтверждением продажи", async () => {
     process.env.GUMROAD_ACCESS_TOKEN = "test-token";
     const b = await status();
     expect(b.saleVerification).toBe("api");
-    expect(b.pingAuthenticated).toBe(true);
+    expect(b.anyPingProvisions).toBe(false);
   });
 
   it("есть секрет подписи — этого достаточно и без токена", async () => {
     process.env.GUMROAD_WEBHOOK_SECRET = "test-secret";
     const b = await status();
     expect(b.signed).toBe(true);
-    expect(b.pingAuthenticated).toBe(true);
+    expect(b.anyPingProvisions).toBe(false);
   });
 
   it("аварийный выключатель проверки продаж виден в ответе", async () => {
@@ -82,7 +82,18 @@ describe("состояние вебхука Gumroad честно называе�
     // Токен есть, но проверка выключена — значит защиты снова нет, и поле
     // обязано это показать, а не считать наличие токена достаточным.
     expect(b.saleVerification).toBe("disabled");
-    expect(b.pingAuthenticated).toBe(false);
+    expect(b.anyPingProvisions).toBe(true);
+  });
+
+it("пробел в переменной — это НЕ настроенный токен", async () => {
+    // Boolean(" ") истинно, и без trim ручка отвечала бы «защищено», когда
+    // защиты нет. Переменные, забытые пустыми, выглядят именно так.
+    process.env.GUMROAD_ACCESS_TOKEN = "   ";
+    process.env.GUMROAD_WEBHOOK_SECRET = "  ";
+    const b = await status();
+    expect(b.signed).toBe(false);
+    expect(b.saleVerification).toBe("unavailable");
+    expect(b.anyPingProvisions).toBe(true);
   });
 
   it("секретов в ответе нет", async () => {

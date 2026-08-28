@@ -40,6 +40,12 @@ function nanPaths(v: unknown, path = ""): string[] {
 const МУСОР = ["zzz", "", "-1", "1e999", "3.7", "null", "undefined", "constructor"];
 
 describe("мусор во входе не даёт NaN в ответе", () => {
+  test("набор мусорных значений не сократился", () => {
+    // Тот же довод: перебор по списку, значит сокращение списка = тихая
+    // потеря покрытия при зелёном цвете.
+    expect(МУСОР.length, "набор мусора сократился — покрытие упало молча").toBeGreaterThanOrEqual(8);
+  });
+
   test("GET /city с мусором в city", async () => {
     for (const bad of МУСОР) {
       const res = await request(app()).get("/api/qskyway/city").query({ city: bad });

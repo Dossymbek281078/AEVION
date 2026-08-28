@@ -63,8 +63,8 @@ export default function BiomarkerForm({ onLogged }: Props) {
       <h3 style={styles.title}>Quick Log</h3>
 
       <div style={styles.row}>
-        <label style={styles.label}>Type</label>
-        <select
+        <label htmlFor="qlife-bio-1" style={{ ...styles.label }}>Type</label>
+        <select id="qlife-bio-1"
           value={type}
           onChange={(e) => setType(e.target.value)}
           style={styles.select}
@@ -76,8 +76,8 @@ export default function BiomarkerForm({ onLogged }: Props) {
       </div>
 
       <div style={styles.row}>
-        <label style={styles.label}>Value ({selected.unit})</label>
-        <input
+        <label htmlFor="qlife-bio-2" style={{ ...styles.label }}>Value ({selected.unit})</label>
+        <input id="qlife-bio-2"
           type="text"
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -87,8 +87,8 @@ export default function BiomarkerForm({ onLogged }: Props) {
       </div>
 
       <div style={styles.row}>
-        <label style={styles.label}>Notes (optional)</label>
-        <input
+        <label htmlFor="qlife-bio-3" style={{ ...styles.label }}>Notes (optional)</label>
+        <input id="qlife-bio-3"
           type="text"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}

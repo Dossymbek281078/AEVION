@@ -52,6 +52,19 @@ describe("подписи у полей ввода", () => {
     }
   });
 
+  it("форма биомаркеров QLife: подписи связаны с полями", () => {
+    // Замер прода 29.08.2026: шесть полей держались на подсказках. Подписи
+    // на экране БЫЛИ (`<label style={styles.label}>Value (unit)</label>`),
+    // но без пары id/htmlFor — глазами видно, читалке нет.
+    const s = readFileSync(join(SRC, "app", "qlife", "components", "BiomarkerForm.tsx"), "utf8");
+    const pairs = (s.match(/htmlFor="qlife-bio-/g) ?? []).length;
+    expect(pairs, `связанных подписей ${pairs}, было 3 — связь разорвана`)
+      .toBeGreaterThanOrEqual(3);
+    for (let i = 1; i <= pairs; i++) {
+      expect(s, `у поля qlife-bio-${i} пропал id`).toContain(`id="qlife-bio-${i}"`);
+    }
+  });
+
   it("у поля вопроса к ИИ подпись связана с его заголовком", () => {
     const s = readFileSync(join(SRC, "components", "AskAi.tsx"), "utf8");
     expect(s, "AskAi снова опирается только на placeholder").toContain("aria-labelledby={titleId}");

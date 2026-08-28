@@ -1149,7 +1149,11 @@ qcoreaiRouter.put("/me/personas/:roleId", async (req, res) => {
   if (!name?.trim()) return res.status(400).json({ error: "name required" });
   try {
     await ensureQCoreTables(pool);
-    if (!isDbReady()) return res.json({ persona: { userId: auth.sub, roleId, name, emoji: emoji || null, color: color || null, defaultProvider: defaultProvider || null, defaultModel: defaultModel || null, bio: bio || null, systemPromptHint: systemPromptHint || null } });
+    // Соседняя ручка /me/webhook при отсутствии базы честно отвечает 503.
+    // Ронять тут нечего — правка живёт в этом процессе, — но ответ обязан
+    // отличаться от настоящего сохранения, иначе человек увидит «готово»,
+    // а после перезагрузки пусто.
+    if (!isDbReady()) return res.json({ persona: { userId: auth.sub, roleId, name, emoji: emoji || null, color: color || null, defaultProvider: defaultProvider || null, defaultModel: defaultModel || null, bio: bio || null, systemPromptHint: systemPromptHint || null }, persisted: false, note: "Сейчас база недоступна: изменение действует только до перезапуска сервера и не сохранится." });
     const r = await pool.query(
       `INSERT INTO "QCoreAgentPersona" ("userId","roleId","name","emoji","color","defaultProvider","defaultModel","bio","systemPromptHint")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -1169,7 +1173,8 @@ qcoreaiRouter.delete("/me/personas/:roleId", async (req, res) => {
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     await ensureQCoreTables(pool);
-    if (!isDbReady()) return res.json({ ok: true });
+    // «Удалено» без базы — неправда: удалять нечего и негде.
+    if (!isDbReady()) return res.json({ ok: true, persisted: false, note: "Сейчас база недоступна: изменение действует только до перезапуска сервера и не сохранится." });
     await pool.query(`DELETE FROM "QCoreAgentPersona" WHERE "userId"=$1 AND "roleId"=$2`, [auth.sub, req.params.roleId]);
     res.json({ ok: true });
   } catch (err: any) { captureQCoreAIError(err, { route: "delete-persona" }); res.status(500).json({ error: "delete persona failed" }); }
@@ -1201,7 +1206,7 @@ qcoreaiRouter.put("/me/analytics-goal", async (req, res) => {
   const { monthlyRuns, monthlyCostUsd } = req.body || {};
   try {
     await ensureQCoreTables(pool);
-    if (!isDbReady()) return res.json({ goal: { userId: auth.sub, monthlyRuns, monthlyCostUsd } });
+    if (!isDbReady()) return res.json({ goal: { userId: auth.sub, monthlyRuns, monthlyCostUsd }, persisted: false, note: "Сейчас база недоступна: изменение действует только до перезапуска сервера и не сохранится." });
     const r = await pool.query(
       `INSERT INTO "QCoreAnalyticsGoal" ("userId","monthlyRuns","monthlyCostUsd")
        VALUES ($1,$2,$3)
@@ -1441,7 +1446,7 @@ qcoreaiRouter.patch("/sessions/:id/tags", async (req, res) => {
   try {
     const { tags } = req.body || {};
     const normalized = Array.isArray(tags) ? tags.slice(0, 10).map((t: unknown) => String(t).trim().toLowerCase().slice(0, 32)).filter(Boolean) : [];
-    if (!isDbReady()) return res.json({ ok: true });
+    if (!isDbReady()) return res.json({ ok: true, persisted: false, note: "Сейчас база недоступна: изменение действует только до перезапуска сервера и не сохранится." });
     await pool.query(`UPDATE "QCoreSession" SET "tags"=$1,"updatedAt"=NOW() WHERE "id"=$2 AND ("userId"=$3 OR "userId" IS NULL)`, [normalized, req.params.id, auth?.sub ?? null]);
     res.json({ ok: true, tags: normalized });
   } catch (err: any) { captureQCoreAIError(err, { route: "sessions-tags" }); res.status(500).json({ error: "set session tags failed" }); }
@@ -7031,7 +7036,11 @@ qcoreaiRouter.post("/sessions/:id/collab", async (req, res) => {
     const token = cryptoMod.randomBytes(16).toString("hex");
     const now = new Date();
     const expiresAt = new Date(now.getTime() + COLLAB_TTL_MS).toISOString();
-    if (isDbReady()) {
+    // Признак считается ДО записи и НЕ имеет значения по умолчанию: иначе
+    // «сохранили в базу» и «положили в память» отвечают одинаково, а разница
+    // между ними — переживёт ссылка выкатку или нет.
+    const durable = isDbReady();
+    if (durable) {
       // Ссылка обещает срок действия — значит обязана его пережить. Память
       // умирает при первой же выкатке, а их несколько в день.
       await collabSave(token, sessionId, auth.sub, expiresAt);
@@ -7045,7 +7054,21 @@ qcoreaiRouter.post("/sessions/:id/collab", async (req, res) => {
       });
     }
     const url = `https://aevion.app/qcoreai/collab/${token}`;
-    return res.status(201).json({ token, url, expiresAt });
+    // Без базы `expiresAt` остаётся лишь ВЕРХНЕЙ границей: на деле ссылка живёт
+    // до перезапуска сервера. Молчать об этом нельзя — владелец отправит ссылку,
+    // а получатель увидит «владелец отозвал доступ или истёк срок», хотя не
+    // случилось ни того, ни другого.
+    return res.status(201).json({
+      token,
+      url,
+      expiresAt,
+      durable,
+      ...(durable
+        ? {}
+        : {
+            note: "Сейчас ссылка временная: она перестанет работать при ближайшем перезапуске сервера. Отправляйте её только если собеседник откроет прямо сейчас.",
+          }),
+    });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "create-collab" });
     return res.status(500).json({ error: "collab create failed" });

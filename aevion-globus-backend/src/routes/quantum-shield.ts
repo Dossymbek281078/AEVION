@@ -253,7 +253,26 @@ quantumShieldRouter.get("/health", async (_req, res) => {
       "[QuantumShield] health error:",
       err instanceof Error ? err.message : String(err),
     );
-    res.status(500).json({ status: "error", service: "quantum-shield" });
+    // Ручка состояния существует, чтобы СООБЩАТЬ об аварии, а не падать вместе
+    // с ней. Замер 28.08.2026: при недоступном хранилище она отвечала 500 и
+    // телом {status:"error"} — по такому ответу нельзя отличить «модуль мёртв»
+    // от «база мертва», а 500 вдобавок означает «сломались МЫ» и топит Sentry
+    // шумом ровно во время аварии, когда сигнал нужен чистым.
+    //
+    // Теперь: 503 (зависимость недоступна) и всё, что модуль знает БЕЗ базы —
+    // алгоритм, порог, число долей, версия ключа. Текст ошибки наружу не
+    // выносим: он выдаёт устройство системы, для разбора есть журнал выше.
+    res.status(503).json({
+      status: "degraded",
+      service: "quantum-shield",
+      storage: "unavailable",
+      reason: "storage_unavailable",
+      algorithm: "Shamir's Secret Sharing + Ed25519",
+      threshold: SHAMIR_THRESHOLD,
+      totalShards: SHAMIR_SHARDS,
+      hmacKeyVersion: HMAC_KEY_VERSION,
+      timestamp: new Date().toISOString(),
+    });
   }
 });
 

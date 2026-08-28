@@ -60,6 +60,10 @@ const BASELINE: Record<string, string> = {
   "/api/build/bookmarks:p": "предел прибора: строка склеена",
   "/api/bureau/admin/verifications:p": "предел прибора: строка склеена",
   "/api/help/contact": "проверить отдельно: POST-ручка, GET-пробой её не различает",
+  "/api/constitution/scenarios":
+    "НЕ дефект и НЕ вызов: строка из таблицы документации на странице /constitution/api. " +
+    "Ручка существует — прод отвечает 200 (контроль: выдуманный сосед даёт 404), но резолвер " +
+    "её объявления не находит. Оставлено с причиной, а не выдано за находку.",
   "/api/multichat/conversations/:p/export.:p": "предел прибора: расширение подставляется",
   "/api/qcoreai": "предел прибора: базовый префикс, дописывается дальше",
   "/api/qcoreai/runs/:p/messages": "проверить отдельно: возможна разница в методе",
@@ -163,7 +167,7 @@ function allRoutes(): string[] {
     const own = new Set(
       [...s.matchAll(/^(?:export )?const ([A-Za-z_]\w*)\s*(?::[^=]+)?=\s*(?:express\.)?Router\(/gm)].map((m) => m[1]),
     );
-    for (const m of s.matchAll(/^([a-zA-Z_]\w*)\.(?:get|post|put|patch|delete)\(\s*[`"]([^`"]*)[`"]/gm)) {
+    for (const m of s.matchAll(/^([a-zA-Z_]\w*)\.(?:get|post|put|patch|delete)\(\s*[`"']([^`"']*)[`"']/gm)) {
       if (!own.has(m[1])) continue;
       for (const pre of prefixes.get(`${f}::${m[1]}`) ?? []) {
         routes.add((pre.replace(/\/$/, "") + "/" + m[2].replace(/^\//, "")).replace(/\/$/, "") || "/");
@@ -172,7 +176,7 @@ function allRoutes(): string[] {
   }
   // Маршруты, объявленные прямо на app — их легко забыть, и один такой
   // (/api/globus/projects) уже попадал в «мёртвые», отвечая на проде 200.
-  for (const m of src.get(idx)!.matchAll(/^app\.(?:get|post|put|patch|delete)\(\s*[`"](\/[^`"]*)[`"]/gm)) {
+  for (const m of src.get(idx)!.matchAll(/^app\.(?:get|post|put|patch|delete)\(\s*[`"']([/][^`"']*)[`"']/gm)) {
     routes.add(m[1].replace(/\/$/, "") || "/");
   }
   // Собственные ручки Next: часть /api/* обслуживает сам сайт.
@@ -197,7 +201,7 @@ function clientCalls(): Map<string, string> {
     const s = readFileSync(f, "utf8");
     for (const m of s.matchAll(CALLER)) {
       const win = s.slice(m.index! + m[0].length, m.index! + m[0].length + 200);
-      const sm = /["`](\/api\/[^"`\s]*)["`]/.exec(win);
+      const sm = /["`'](?:\/api-backend)?(\/api\/[^"`'\s]*)["`']/.exec(win);
       if (!sm) continue;
       const p = (sm[1].split("?")[0].replace(/\$\{[^}]*\}/g, ":p").replace(/\/$/, "") || "/");
       if (p.includes("${")) continue;

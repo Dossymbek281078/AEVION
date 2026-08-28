@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./helpers/sourceCode";
 
 /**
  * PsyApp называет, где сохранены отметка о срыве и профиль.
@@ -14,7 +15,7 @@ import { join } from "node:path";
  * воздержания — не строка в базе, а обесцененный месяц работы над собой.
  */
 
-const SRC = readFileSync(join(__dirname, "..", "src", "routes", "psyappDeps.ts"), "utf8");
+const SRC = stripComments(readFileSync(join(__dirname, "..", "src", "routes", "psyappDeps.ts"), "utf8"));
 
 describe("PsyApp не выдаёт временное хранилище за постоянное", () => {
   test("контроль: обе ветки записи на месте", () => {

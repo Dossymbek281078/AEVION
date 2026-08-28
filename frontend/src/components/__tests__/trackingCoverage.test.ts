@@ -25,6 +25,20 @@ const APP = join(__dirname, "..", "..", "app");
 /** Ссылка в кассу или на чекаут — то есть страница ведёт к оплате. */
 const BUY_MARKERS = [/gumroad\.com\/l\//, /lemonsqueezy\.com/, /\bGUM\(/, /\bLS\(/];
 
+/**
+ * Сбор адресов - это тоже деньги, только на шаг раньше.
+ *
+ * Замер 28.08.2026: правило "страница ведёт к ОПЛАТЕ" пропускало посадочные,
+ * где кассы нет, а есть форма подписки. Молчали пять, включая ГЛАВНУЮ и
+ * посадочные модулей 2, 3 и 4 очереди запуска.
+ *
+ * Цена пропуска не абстрактная: воронка считает переходы ОТ page_view, значит
+ * посетители таких страниц не попадали в знаменатель - конверсия выглядела
+ * лучше, чем есть. А для запуска это вопрос "продаж нет из-за страницы или
+ * из-за отсутствия трафика", и без числа заходов на него не ответить.
+ */
+const LEAD_MARKERS = [/<WaitlistCapture\b/, /<EmailCapture\b/];
+
 /** Умеет ли страница считать посещение хоть каким-то способом. */
 const VIEW_MARKERS = [/<PageTracking\b/, /track\(\s*"page_view"/, /type:\s*"page_view"/];
 
@@ -36,6 +50,7 @@ const NOT_A_SALES_PAGE: Record<string, string> = {
   "legal/privacy/page.tsx": "юридический текст, ссылка упомянута как обработчик платежей",
   "revenue/page.tsx": "внутренний дашборд выручки, не для покупателя",
   "qmelanin/_client.tsx": "часть страницы qmelanin — замер стоит в её page.tsx, второй считал бы то же посещение дважды",
+  "longevity/_client.tsx": "часть страницы longevity — замер стоит в её page.tsx, второй считал бы то же посещение дважды",
   "devhub/[id]/page.tsx": "рабочее место внутри DevHub: касса там нужна пользователю, чтобы продать СВОЙ материал, а не нам — свой",
 };
 
@@ -43,7 +58,9 @@ function walk(dir: string, acc: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) walk(p, acc);
-    else if (name.endsWith(".tsx")) acc.push(p);
+    // Тесты не страницы: render-проверка посадочной содержит <WaitlistCapture>
+    // и попадала под правило про сбор адресов. Исключаем классом, а не поимённо.
+    else if (name.endsWith(".tsx") && !name.includes(".test.") && !p.includes("__tests__")) acc.push(p);
   }
   return acc;
 }
@@ -69,12 +86,21 @@ describe("страницы с покупкой умеют считать пос�
     expect(withBuy.length, "ни одной страницы с кнопкой покупки — сторож ослеп").toBeGreaterThan(3);
   });
 
+  test("контроль: признак сбора адресов тоже находит страницы", () => {
+    // Второму признаку нужен свой контроль: переименуют компонент формы - и
+    // правило про адреса тихо перестанет что-либо проверять, оставаясь зелёным.
+    const withLead = files.filter((f) => LEAD_MARKERS.some((re) => re.test(readFileSync(f, "utf8"))));
+    expect(withLead.length, "ни одной страницы со сбором адресов — сторож ослеп").toBeGreaterThan(3);
+  });
+
   test("у каждой такой страницы есть замер посещения", () => {
     const silent: string[] = [];
 
     for (const f of files) {
       const src = readFileSync(f, "utf8");
-      if (!BUY_MARKERS.some((re) => re.test(src))) continue;
+      const sells = BUY_MARKERS.some((re) => re.test(src));
+      const collects = LEAD_MARKERS.some((re) => re.test(src));
+      if (!sells && !collects) continue;
       if (NOT_A_SALES_PAGE[rel(f)]) continue;
       if (VIEW_MARKERS.some((re) => re.test(src))) continue;
       silent.push(rel(f));
@@ -82,7 +108,8 @@ describe("страницы с покупкой умеют считать пос�
 
     expect(
       silent,
-      `страницы ведут к оплате, но не считают посещение: ${silent.join(", ")}. ` +
+      `страницы ведут к оплате или собирают адреса, но не считают посещение: ` +
+        `${silent.join(", ")}. ` +
         `Поставьте <PageTracking page="…" /> или внесите в NOT_A_SALES_PAGE с причиной.`,
     ).toEqual([]);
   });

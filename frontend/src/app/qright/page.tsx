@@ -13,6 +13,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { Sparkline } from "@/components/Sparkline";
+import { PageTracking } from "@/components/PageTracking";
 import { useI18n } from "@/lib/i18n";
 import {
   OWNER_REVOKE_REASON_CODES,
@@ -665,6 +666,11 @@ export default function QRightPage() {
 
   return (
     <main>
+      {/* Заходы сюда не считались до 28.08.2026: страница собирает адреса, но
+          события page_view не слала. Воронка считает переходы ОТ page_view,
+          поэтому её посетители не попадали в знаменатель — конверсия выглядела
+          лучше, чем есть. Компонент сам читает ?c= из ссылки. */}
+      <PageTracking page="qright" />
       <ProductPageShell maxWidth={860}>
         <Wave1Nav />
 

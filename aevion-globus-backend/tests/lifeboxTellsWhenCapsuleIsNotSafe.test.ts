@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./helpers/sourceCode";
 
 /**
  * LifeBox обязан сказать, что капсула НЕ сохранена всерьёз.
@@ -25,7 +26,7 @@ import { join } from "node:path";
  * ветки возвращают неразличимое.
  */
 
-const SRC = readFileSync(join(__dirname, "..", "src", "routes", "lifebox.ts"), "utf8");
+const SRC = stripComments(readFileSync(join(__dirname, "..", "src", "routes", "lifebox.ts"), "utf8"));
 
 describe("LifeBox не выдаёт временное хранилище за сейф", () => {
   test("контроль: исходник прочитан и содержит обе ветки", () => {

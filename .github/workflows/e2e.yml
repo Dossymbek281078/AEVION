@@ -12,6 +12,13 @@ on:
       - "frontend/src/**"
       - ".github/workflows/e2e.yml"
 
+# Расписание, о падении которого никто не узнаёт, работой не является.
+# issues:write нужно шагам ниже; без него gh отвечает 403, и сторож отказывает
+# невидимо — ровно это и случилось с daily-smoke.yml. 28.08.2026.
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   e2e:
     name: Playwright Chromium
@@ -38,3 +45,19 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+
+      - name: Report a red run
+        if: failure()
+        uses: ./.github/actions/report-red-run
+        with:
+          title: "🔴 E2E (Playwright) is red"
+          outcome: failure
+          token: ${{ github.token }}
+
+      - name: Clear the issue once green again
+        if: success()
+        uses: ./.github/actions/report-red-run
+        with:
+          title: "🔴 E2E (Playwright) is red"
+          outcome: success
+          token: ${{ github.token }}

@@ -39,6 +39,7 @@ import {
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvNeutralizeFormula } from "../lib/csv";
+import { safeErrorText } from "../lib/safeError";
 const capturePipelineError = makeServiceCapture("pipeline");
 
 export const pipelineRouter = Router();
@@ -692,7 +693,7 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
     } catch (err) {
       console.error(
         `[OT] cert=${certId} unexpected:`,
-        err instanceof Error ? err.message : String(err),
+        safeErrorText(err, "internal error", "pipeline"),
       );
     }
   })();
@@ -816,7 +817,7 @@ pipelineRouter.post("/protect", async (req, res) => {
     res.status(201).json({ success: true, ...result });
   } catch (err: unknown) {
     if (err instanceof ProtectInputError) {
-      return res.status(err.status).json({ error: err.message });
+      return res.status(err.status).json({ error: safeErrorText(err, "internal error", "pipeline") });
     }
     if (err instanceof CosignError) {
       return res.status(400).json({
@@ -832,9 +833,10 @@ pipelineRouter.post("/protect", async (req, res) => {
         .status(err.httpStatus)
         .json({ error: err.message, code: err.code });
     }
-    const msg = err instanceof Error ? err.message : "pipeline failed";
+    const msg = err instanceof Error ? err.message : "pipeline failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "pipeline failed", "pipeline");
     console.error("[Pipeline] protect error:", msg);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -919,9 +921,10 @@ pipelineRouter.post("/protect-batch", async (req, res) => {
       results,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "batch protect failed";
+    const msg = err instanceof Error ? err.message : "batch protect failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "batch protect failed", "pipeline");
     console.error("[Pipeline] protect-batch error:", msg);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -1145,9 +1148,10 @@ pipelineRouter.post("/demo-generate", (req, res) => {
       note: "This shield is NOT persisted. Reconstruction against /api/pipeline/reconstruct will return SHIELD_NOT_FOUND because the record does not exist in the DB. The shards below are, however, cryptographically valid — HMAC verifies, and combining 2 of 3 reconstructs the Ed25519 private key.",
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "demo generation failed";
+    const msg = err instanceof Error ? err.message : "demo generation failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "demo generation failed", "pipeline");
     console.error("[Demo] generate error:", msg);
-    return res.status(500).json({ error: msg });
+    return res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -1526,9 +1530,10 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       },
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "verify failed";
+    const msg = err instanceof Error ? err.message : "verify failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "verify failed", "pipeline");
     console.error("[Pipeline] verify error:", msg);
-    res.status(500).json({ valid: false, error: msg });
+    res.status(500).json({ valid: false, error: msgPublic });
   }
 });
 
@@ -1585,9 +1590,10 @@ pipelineRouter.get("/verify/:certId/log", async (req, res) => {
       events,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "verify log failed";
+    const msg = err instanceof Error ? err.message : "verify log failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "verify log failed", "pipeline");
     console.error("[Pipeline] verify log error:", msg);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -1623,9 +1629,10 @@ pipelineRouter.get("/certificates", async (_req, res) => {
       total: rows.length,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "list failed";
+    const msg = err instanceof Error ? err.message : "list failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "list failed", "pipeline");
     console.error("[Pipeline] certificates error:", msg);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -1722,9 +1729,10 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=30");
     res.send(lines.join("\r\n") + "\r\n");
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "csv export failed";
+    const msg = err instanceof Error ? err.message : "csv export failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "csv export failed", "pipeline");
     console.error("[Pipeline] certificates.csv error:", msg);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -1774,9 +1782,10 @@ pipelineRouter.get("/lookup/:hash", async (req, res) => {
       },
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "lookup failed";
+    const msg = err instanceof Error ? err.message : "lookup failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "lookup failed", "pipeline");
     console.error("[Pipeline] lookup error:", msg);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -2072,10 +2081,11 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
 
     doc.end();
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "PDF generation failed";
+    const msg = err instanceof Error ? err.message : "PDF generation failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "PDF generation failed", "pipeline");
     console.error("[Pipeline] PDF error:", msg);
     if (!res.headersSent) {
-      res.status(500).json({ error: msg });
+      res.status(500).json({ error: msgPublic });
     }
   }
 });
@@ -2108,7 +2118,7 @@ pipelineRouter.get("/health", async (_req, res) => {
     storageOk = false;
     console.error(
       "[Pipeline] health storage probe failed:",
-      err instanceof Error ? err.message : String(err),
+      safeErrorText(err, "internal error", "pipeline"),
     );
   }
 
@@ -2198,9 +2208,10 @@ pipelineRouter.get("/ots/:certId/proof", async (req, res) => {
     );
     return res.send(proof);
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "proof fetch failed";
+    const msg = err instanceof Error ? err.message : "proof fetch failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "proof fetch failed", "pipeline");
     console.error("[OT] proof fetch error:", msg);
-    return res.status(500).json({ error: msg });
+    return res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -2269,9 +2280,10 @@ pipelineRouter.post("/ots/:certId/upgrade", async (req, res) => {
       error: r.error,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "upgrade failed";
+    const msg = err instanceof Error ? err.message : "upgrade failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "upgrade failed", "pipeline");
     console.error("[OT] upgrade error:", msg);
-    return res.status(500).json({ error: msg });
+    return res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -2318,9 +2330,10 @@ pipelineRouter.get("/hmac-versions", async (_req, res) => {
         "To rotate: add SHARD_HMAC_SECRET_V{N+1} and QSIGN_SECRET_V{N+1} env vars, then set HMAC_KEY_VERSION={N+1} and restart. Old records keep their version and stay verifiable against the old secrets.",
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "hmac-versions failed";
+    const msg = err instanceof Error ? err.message : "hmac-versions failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "hmac-versions failed", "pipeline");
     console.error("[HMAC] versions error:", msg);
-    return res.status(500).json({ error: msg });
+    return res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -2387,9 +2400,10 @@ pipelineRouter.get("/shield/:shieldId/witness", async (req, res) => {
       createdAt: w.createdAt,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "witness fetch failed";
+    const msg = err instanceof Error ? err.message : "witness fetch failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "witness fetch failed", "pipeline");
     console.error("[Witness] fetch error:", msg);
-    return res.status(500).json({ error: msg });
+    return res.status(500).json({ error: msgPublic });
   }
 });
 
@@ -2428,9 +2442,10 @@ pipelineRouter.post("/ots/:certId/verify", async (req, res) => {
       error: v.error,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "verify failed";
+    const msg = err instanceof Error ? err.message : "verify failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "verify failed", "pipeline");
     console.error("[OT] verify error:", msg);
-    return res.status(500).json({ ok: false, error: msg });
+    return res.status(500).json({ ok: false, error: msgPublic });
   }
 });
 
@@ -2636,10 +2651,11 @@ pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
     );
     res.send(JSON.stringify(bundle, null, 2));
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "bundle export failed";
+    const msg = err instanceof Error ? err.message : "bundle export failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "bundle export failed", "pipeline");
     console.error("[Pipeline] bundle error:", msg);
     if (!res.headersSent) {
-      res.status(500).json({ error: msg });
+      res.status(500).json({ error: msgPublic });
     }
   }
 });

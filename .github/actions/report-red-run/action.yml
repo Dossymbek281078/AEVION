@@ -1,0 +1,91 @@
+name: Report a red scheduled run
+description: >
+  Заводит одну issue, когда расписание покраснело, комментирует её при
+  повторных падениях и закрывает, когда прогон снова зелёный.
+
+# Зачем это отдельным действием, а не пятью копиями шага.
+#
+# Замер 28.08.2026: из workflow с расписанием ПЯТЬ падали молча — e2e,
+# lighthouse, qcore-benchmark, revenue-snapshot-cron, update-ksm. Расписание,
+# о падении которого никто не узнаёт, работой не является: оно жжёт минуты и
+# создаёт ощущение проверки, которой нет.
+#
+# Логика у всех пятерых одна, и скопировать её пять раз означало бы пять мест,
+# которые разойдутся. Одно действие — одно поведение.
+#
+# ⚠️ Вызывающий workflow ОБЯЗАН объявить `permissions: issues: write`. Без этого
+# gh отвечает 403, и сторож, поставленный ради видимости отказа, отказывает
+# невидимо. Ровно это и случилось с daily-smoke.yml: шаги написали, прав не
+# дали. Поэтому действие проверяет права ПЕРВЫМ делом и говорит прямо.
+
+inputs:
+  title:
+    description: Заголовок issue. Он же ключ поиска — держите его постоянным.
+    required: true
+  log-file:
+    description: Файл, хвост которого приложить к сообщению (необязательно).
+    required: false
+    default: ""
+  outcome:
+    description: >
+      "failure" — покраснело, "success" — снова зелёное. Передавайте job.status
+      или используйте два вызова с if: failure() и if: success().
+    required: true
+  token:
+    description: GITHUB_TOKEN.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Report or clear
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        TITLE: ${{ inputs.title }}
+        LOG_FILE: ${{ inputs.log-file }}
+        OUTCOME: ${{ inputs.outcome }}
+      run: |
+        set -u
+        # Права проверяем ДО работы: 403 в середине выглядит как «issue не
+        # понадобилась», а это противоположность правды.
+        if ! gh api "repos/$GITHUB_REPOSITORY" --jq .name >/dev/null 2>&1; then
+          echo "::error::нет доступа к repo API — объявите permissions: issues: write"
+          exit 1
+        fi
+
+        find_open() {
+          gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "$TITLE in:title" --json number,title \
+            -q "[.[] | select(.title == \"$TITLE\")][0].number"
+        }
+
+        if [ "$OUTCOME" = "success" ]; then
+          n=$(find_open)
+          if [ -n "$n" ]; then
+            gh issue close "$n" --repo "$GITHUB_REPOSITORY" \
+              --comment "Снова зелёное: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          fi
+          exit 0
+        fi
+
+        RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+        BODY="Расписание упало.
+
+        Прогон: $RUN_URL"
+        if [ -n "$LOG_FILE" ] && [ -f "$LOG_FILE" ]; then
+          BODY="$BODY
+
+        Хвост лога:
+
+        $(tail -30 "$LOG_FILE")"
+        fi
+
+        n=$(find_open)
+        if [ -n "$n" ]; then
+          # Комментарий, а не новая issue: расписание, падающее каждый день,
+          # иначе за неделю заводит семь одинаковых, и их перестают читать.
+          gh issue comment "$n" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+        else
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+        fi

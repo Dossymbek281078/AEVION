@@ -46,6 +46,7 @@ const pool = getPool();
 import { rateLimit } from "../lib/rateLimit";
 import { clientIp } from "../lib/rateLimit/inMemoryWindow";
 import { isWebhookConfigured, listWebhookLogs, notifyEvent, notifyRunCompleted } from "../lib/qcoreWebhook";
+import { safeErrorText } from "../lib/safeError";
 import {
   fetchQRightAttachments,
   normalizeAttachmentIds,
@@ -270,6 +271,83 @@ const memCollabSessions = new Map<string, {
 }>();
 
 /** Remove collab entries that have passed their TTL. Called on every read. */
+/**
+ * Ссылки совместного просмотра — в базе, а не в памяти процесса.
+ *
+ * До 28.08.2026 токен жил ТОЛЬКО в memCollabSessions. Ответ при этом обещал
+ * срок действия в 24 часа, а прод пересоздаётся при каждой выкатке — их
+ * несколько в день. То есть человек отправлял коллеге ссылку, та отвечала
+ * «not found or expired» через час-другой, и виноватым выглядел получатель.
+ *
+ * Таблица "QCoreSessionInvite" под это уже существовала и не использовалась:
+ * token, sessionId, invitedBy, expiresAt, usedCount — ровно те поля, что нужны.
+ * usedCount и есть счётчик просмотров, поэтому он тоже переживает выкатку.
+ *
+ * Память остаётся запасным путём на случай, когда базы нет вовсе (локальный
+ * запуск без DATABASE_URL). Она НЕ подменяет базу: при живой базе туда не
+ * пишут и оттуда не читают.
+ */
+type CollabRow = { sessionId: string; ownerId: string; viewers: number; createdAt: string; expiresAt: string };
+
+async function collabSave(token: string, sessionId: string, ownerId: string, expiresAt: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO "QCoreSessionInvite" ("id","sessionId","invitedBy","token","role","expiresAt")
+     VALUES ($1,$2,$3,$4,'collab',$5)`,
+    [`ci_${token.slice(0, 24)}`, sessionId, ownerId, token, expiresAt],
+  );
+}
+
+/** Просмотр засчитывается ОДНИМ запросом вместе с чтением: отдельные «прочитал,
+ *  потом увеличил» разводят счётчик с фактом при сбое между ними. */
+async function collabTakeAndCount(token: string): Promise<CollabRow | null> {
+  const { rows } = await pool.query(
+    `UPDATE "QCoreSessionInvite"
+        SET "usedCount" = "usedCount" + 1
+      WHERE "token" = $1 AND "role" = 'collab'
+        AND ("expiresAt" IS NULL OR "expiresAt" > NOW())
+      RETURNING "sessionId","invitedBy","usedCount","createdAt","expiresAt"`,
+    [token],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    sessionId: String(r.sessionId),
+    ownerId: String(r.invitedBy),
+    viewers: Number(r.usedCount),
+    createdAt: new Date(r.createdAt).toISOString(),
+    expiresAt: r.expiresAt ? new Date(r.expiresAt).toISOString() : "",
+  };
+}
+
+async function collabStats(sessionId: string): Promise<{ totalViews: number; activeViewers: number; tokenCreatedAt: string | null }> {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM("usedCount"),0)::int AS total,
+            COALESCE(MAX("usedCount"),0)::int AS last,
+            MAX("createdAt") AS created
+       FROM "QCoreSessionInvite"
+      WHERE "sessionId" = $1 AND "role" = 'collab'
+        AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`,
+    [sessionId],
+  );
+  const r = rows[0] ?? {};
+  return {
+    totalViews: Number(r.total ?? 0),
+    activeViewers: Number(r.last ?? 0),
+    tokenCreatedAt: r.created ? new Date(r.created).toISOString() : null,
+  };
+}
+
+/** Отзыв ссылок владельцем. Условие по владельцу — в самом запросе, чтобы
+ *  чужую ссылку нельзя было отозвать даже при подмене sessionId. */
+async function collabRevoke(sessionId: string, ownerId: string): Promise<number> {
+  const r = await pool.query(
+    `DELETE FROM "QCoreSessionInvite"
+      WHERE "sessionId" = $1 AND "invitedBy" = $2 AND "role" = 'collab'`,
+    [sessionId, ownerId],
+  );
+  return r.rowCount ?? 0;
+}
+
 function pruneExpiredCollabs(): void {
   const now = Date.now();
   for (const [token, c] of memCollabSessions) {
@@ -469,7 +547,7 @@ qcoreaiRouter.post("/chat", anonChatCeiling, exposeCeilingRemaining, chatLimiter
       usage: result.usage,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "chat failed";
+    const msg = err instanceof Error ? err.message : "chat failed"; // только для журнала
     // Keep the full message in our own logs / Sentry — strip it from the
     // wire response so we never echo a leaked provider key, internal URL,
     // or stack frame back to anonymous callers.
@@ -566,7 +644,7 @@ qcoreaiRouter.post("/chat-stream", anonChatCeiling, exposeCeilingRemaining, chat
       send({ kind: "error", message: "empty stream" });
     }
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "stream failed";
+    const msg = err instanceof Error ? err.message : "stream failed"; // только для журнала
     console.error("[QCoreAI stream]", msg);
     captureQCoreAIError(err, { route: "chat-stream" });
     if (!aborted) send({ kind: "error", message: msg });
@@ -1693,7 +1771,7 @@ qcoreaiRouter.post("/runs/:id/refine", refineLimiter, async (req, res) => {
     const msg = err?.message || "refine failed";
     console.error("[QCoreAI] refine error:", msg);
     captureQCoreAIError(err, { route: "refine" });
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: safeErrorText(err, "refine failed", "qcoreai") });
   }
 });
 
@@ -6931,13 +7009,19 @@ qcoreaiRouter.post("/sessions/:id/collab", async (req, res) => {
     const token = cryptoMod.randomBytes(16).toString("hex");
     const now = new Date();
     const expiresAt = new Date(now.getTime() + COLLAB_TTL_MS).toISOString();
-    memCollabSessions.set(token, {
-      sessionId,
-      ownerId: auth.sub,
-      createdAt: now.toISOString(),
-      viewers: 0,
-      expiresAt,
-    });
+    if (isDbReady()) {
+      // Ссылка обещает срок действия — значит обязана его пережить. Память
+      // умирает при первой же выкатке, а их несколько в день.
+      await collabSave(token, sessionId, auth.sub, expiresAt);
+    } else {
+      memCollabSessions.set(token, {
+        sessionId,
+        ownerId: auth.sub,
+        createdAt: now.toISOString(),
+        viewers: 0,
+        expiresAt,
+      });
+    }
     const url = `https://aevion.app/qcoreai/collab/${token}`;
     return res.status(201).json({ token, url, expiresAt });
   } catch (err: any) {
@@ -6949,11 +7033,19 @@ qcoreaiRouter.post("/sessions/:id/collab", async (req, res) => {
 // GET /api/qcoreai/collab/:token — public snapshot viewer
 qcoreaiRouter.get("/collab/:token", async (req, res) => {
   const token = req.params.token;
-  pruneExpiredCollabs();
-  const collab = memCollabSessions.get(token);
-  if (!collab) return res.status(404).json({ error: "collab link not found or expired" });
   try {
-    collab.viewers += 1;
+    let collab: CollabRow | null;
+    if (isDbReady()) {
+      collab = await collabTakeAndCount(token);
+    } else {
+      // Базы нет вовсе (локальный запуск): считаем просмотр в памяти и отдаём
+      // КОПИЮ, чтобы ответ нельзя было изменить через ссылку на хранимый объект.
+      pruneExpiredCollabs();
+      const c = memCollabSessions.get(token);
+      if (c) c.viewers += 1;
+      collab = c ? { ...c } : null;
+    }
+    if (!collab) return res.status(404).json({ error: "collab link not found or expired" });
     const session = await getSession(collab.sessionId, null);
     const runs = await listRuns(collab.sessionId);
     return res.json({
@@ -6981,6 +7073,9 @@ qcoreaiRouter.get("/sessions/:id/collab/stats", async (req, res) => {
     const session = await getSession(sessionId, auth.sub);
     if (!session) return res.status(404).json({ error: "session not found" });
     if (session.userId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+    if (isDbReady()) {
+      return res.json(await collabStats(sessionId));
+    }
     let totalViews = 0;
     let activeViewers = 0;
     let tokenCreatedAt: string | null = null;
@@ -7004,6 +7099,9 @@ qcoreaiRouter.delete("/sessions/:id/collab", async (req, res) => {
   if (!auth) return res.status(401).json({ error: "auth required" });
   const sessionId = req.params.id;
   try {
+    if (isDbReady()) {
+      return res.json({ revoked: await collabRevoke(sessionId, auth.sub), sessionId });
+    }
     pruneExpiredCollabs();
     let revoked = 0;
     for (const [token, c] of memCollabSessions) {

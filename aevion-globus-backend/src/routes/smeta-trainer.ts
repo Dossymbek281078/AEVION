@@ -36,6 +36,23 @@ const ATTEMPTS_FILE = "smeta_attempts.json";
 const OVERRIDES_FILE = "smeta_material_overrides.json";
 const WEBHOOKS_FILE = "smeta_webhooks.json";
 
+/**
+ * Можно ли слать на этот адрес? Одна точка правды для РЕГИСТРАЦИИ и для
+ * ДОСТАВКИ: проверка только на входе не спасала бы вебхуки, записанные
+ * раньше, а доставка и есть действие, ради которого проверка нужна.
+ *
+ * Отдушина та же, что у вебхуков QCoreAI: в тестах и локальной разработке
+ * адрес петли законен — тест поднимает свой сервер и слушает доставку.
+ */
+function webhookTargetAllowed(rawUrl: string): boolean {
+  if (process.env.ALLOW_INTERNAL_WEBHOOKS === "1" || process.env.NODE_ENV === "test") return true;
+  try {
+    return !isInternalHost(new URL(rawUrl).hostname);
+  } catch {
+    return false;
+  }
+}
+
 // ── Rate limits ────────────────────────────────────────────────────
 const writeLimiter = rateLimit({
   windowMs: 60_000,
@@ -270,6 +287,13 @@ async function emitWebhookEvent(event: WebhookPayload): Promise<void> {
 
   const body = JSON.stringify(event);
   await Promise.all(subscribers.map(async (w) => {
+    // 28.08.2026: проверка адреса стояла ТОЛЬКО при регистрации. Вебхук,
+    // записанный раньше (или другим путём), доставлялся без неё — а доставка
+    // и есть действие, ради которого проверка нужна. Проверяем здесь тоже.
+    if (!webhookTargetAllowed(w.url)) {
+      console.error("[smeta] доставка отменена: адрес ведёт внутрь сети", w.id);
+      return;
+    }
     try {
       const sig = crypto.createHmac("sha256", w.secret).update(body).digest("hex");
       const ctrl = new AbortController();
@@ -883,14 +907,8 @@ smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
   // Отдушина та же, что у вебхуков QCoreAI: в тестах и локальной разработке
   // адрес петли законен — тест поднимает свой сервер и слушает доставку.
   // В проде NODE_ENV не равен "test", поэтому защита остаётся включённой.
-  const allowInternal =
-    process.env.ALLOW_INTERNAL_WEBHOOKS === "1" || process.env.NODE_ENV === "test";
-  try {
-    if (!allowInternal && isInternalHost(new URL(url).hostname)) {
-      return res.status(400).json({ error: "bad_url", reason: "internal_target" });
-    }
-  } catch {
-    return res.status(400).json({ error: "bad_url" });
+  if (!webhookTargetAllowed(url)) {
+    return res.status(400).json({ error: "bad_url", reason: "internal_target" });
   }
   if (typeof label !== "string" || label.length < 1 || label.length > 60) {
     return res.status(400).json({ error: "bad_label" });
@@ -953,6 +971,9 @@ smetaTrainerRouter.post("/admin/webhooks/:id/test", writeLimiter, async (req, re
     score: 95,
     ts: Date.now(),
   });
+  if (!webhookTargetAllowed(w.url)) {
+    return res.status(400).json({ error: "bad_url", reason: "internal_target" });
+  }
   try {
     const sig = crypto.createHmac("sha256", w.secret).update(body).digest("hex");
     const ctrl = new AbortController();

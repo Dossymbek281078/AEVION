@@ -44,9 +44,17 @@ describe("вебхук тренажёра смет не указывает вн�
     // вызова, поэтому `includes("isInternalHost")` был бы декоративным —
     // мутация это и показала (28.08, первая версия теста её не поймала).
     expect(src.includes("lib/internalHost"), "импорт общей проверки пропал").toBe(true);
+    // Помощник обязан спрашивать общий список, а не свой.
     expect(
-      /if\s*\([^)]*isInternalHost\s*\(/.test(src),
-      "в ручке нет ВЫЗОВА isInternalHost в условии — проверка обезврежена",
+      /function webhookTargetAllowed[\s\S]{0,400}isInternalHost\s*\(/.test(src),
+      "webhookTargetAllowed больше не спрашивает общий список адресов",
     ).toBe(true);
+    // И его обязаны звать ОБА пути: регистрация и доставка. Проверка только
+    // на входе не спасает вебхуки, записанные раньше, — 28.08 так и было.
+    const calls = (src.match(/webhookTargetAllowed\s*\(/g) || []).length;
+    expect(
+      calls,
+      `ожидали вызовы при регистрации и на ДВУХ точках доставки, нашли ${calls}`,
+    ).toBeGreaterThanOrEqual(4); // объявление + 3 вызова
   });
 });

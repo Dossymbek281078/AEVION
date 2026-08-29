@@ -468,6 +468,11 @@ interface AirspaceCompliance {
   zeroCeilingSegments: number;
   maxExceedanceM: number;
   lowestCeilingM: number | null;
+  /**
+   * Правило регулятора, действующее вместо потолка (город без сетки).
+   * `null`, когда сетка есть или регулятор для города не подключён вовсе.
+   */
+  permission?: unknown;
   note: string;
   /** тот же вердикт по-английски: страница показывает его как есть */
   noteEn: string;
@@ -492,6 +497,14 @@ function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[],
     return {
       available: false, compliant: null, coveragePct: 0, exceedingSegments: 0,
       zeroCeilingSegments: 0, maxExceedanceM: 0, lowestCeilingM: null,
+      // Правило, которое ДЕЙСТВУЕТ вместо потолка — прямо здесь, а не отсылкой.
+      //
+      // 29.08.2026: примечание говорило «см. permission в /health», и это было
+      // честно, но требовало второго запроса. Ответ маршрута — то, по чему
+      // действуют; правило, которому маршрут подчиняется, должно ехать вместе
+      // с ним. Иначе «сетки потолков нет» читается как «ничто не регулирует»,
+      // а у Астаны там ЗАПРЕТ.
+      permission: hasPermission ? perm : null,
       note: hasPermission
         ? "Сетки потолков высоты у этого города нет, поэтому соответствие потолку не проверялось. Правило регулятора при этом действует и учтено: см. permission в /health — его запретные зоны коридор обходит."
         : "Регуляторный фид для этого города не подключён — соответствие потолку не проверялось.",

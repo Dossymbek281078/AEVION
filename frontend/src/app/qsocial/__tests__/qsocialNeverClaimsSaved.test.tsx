@@ -25,6 +25,16 @@ function stubFetch(postStorage: string) {
     if (init?.method === "POST" && u.includes("/api/qsocial/posts")) {
       return json({ post: { id: "p1", content: "x", tags: [] }, storage: postStorage });
     }
+    if (init?.method === "POST" && u.includes("/qsocial/dm/")) {
+      return json({ message: { id: "m1" }, storage: postStorage }, true, 201);
+    }
+    if (u.includes("/me/dms")) {
+      return json({
+        conversations: [
+          { userId: "PEER-X", lastMessage: { fromId: "u2", content: "hi", createdAt: "z" }, unreadCount: 0 },
+        ],
+      });
+    }
     // всё остальное на монтировании — пустые ответы
     return json({ posts: [], stories: [], conversations: [], notifications: [], stats: {} });
   });
@@ -74,5 +84,40 @@ describe("qsocial: успех только при постоянном сохр�
         .toContain("отправьте ещё раз");
     });
     expect(box.value, "текст поста стёрт, хотя сохранить не удалось").toBe("Мой пост");
+  });
+
+  it("личное сообщение в память: отказ показан, текст не стёрт", async () => {
+    vi.stubGlobal("fetch", stubFetch("memory"));
+    renderPage();
+
+    // Ищем по СОДЕРЖИМОМУ и по ПРИЗНАКУ, а не по порядку элементов:
+    // getByText требует совпадения текста элемента целиком (имя собеседника
+    // стоит рядом с превью сообщения), а getAllByRole("textbox").pop() отдавал
+    // поле ленты, а не беседы — из-за чего sendDm выходил по своей охране.
+    const dmTab = await waitFor(() => screen.getByTitle(/Messages|Сообщения/i));
+    fireEvent.click(dmTab);
+    await waitFor(() => {
+      expect(document.body.textContent ?? "", "список бесед не отрисовался").toContain("PEER-X");
+    });
+
+    const peer = [...document.querySelectorAll("div")]
+      .reverse()
+      .find((d) => (d.textContent ?? "").includes("PEER-X"));
+    fireEvent.click(peer!);
+
+    const box = (await waitFor(() =>
+      screen.getByPlaceholderText(/Напишите сообщение/),
+    )) as HTMLInputElement;
+    fireEvent.change(box, { target: { value: "Привет" } });
+
+    const send = screen.getAllByRole("button").find((b) => (b.textContent ?? "").trim() === "→");
+    expect(send, "не нашёл кнопку отправки").toBeTruthy();
+    fireEvent.click(send!);
+
+    await waitFor(() => {
+      expect(document.body.textContent ?? "", "человеку не сказали повторить")
+        .toContain("отправьте ещё раз");
+    });
+    expect(box.value, "текст сообщения стёрт, хотя сохранить не удалось").toBe("Привет");
   });
 });

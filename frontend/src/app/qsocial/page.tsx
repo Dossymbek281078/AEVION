@@ -750,6 +750,18 @@ export default function QSocialPage() {
                         {dmMessages.length === 0 && <div style={{ color: "#94a3b8", fontSize: 13, textAlign: "center", marginTop: 40 }}>Напишите первое сообщение</div>}
                       </div>
                       <div style={{ padding: "10px 14px", borderTop: "1px solid #f1f5f9", display: "flex", gap: 8 }}>
+                        {/* Общий баннер ошибки рисуется только при tab !== "dm", поэтому
+                            отказ отправки сообщения был НЕВИДИМ: setError писал правду в
+                            состояние, а до человека она не доходила. Это тот же дефект,
+                            который правится в этом файле, — здесь он был у самой правки. */}
+                        {error && (
+                          <p
+                            role="status"
+                            style={{ color: "#ef4444", fontSize: 12, margin: "0 0 6px", width: "100%" }}
+                          >
+                            {error}
+                          </p>
+                        )}
                         <input
                           value={dmInput}
                           onChange={(e) => setDmInput(e.target.value)}

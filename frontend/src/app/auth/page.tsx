@@ -535,12 +535,12 @@ export default function AuthPage() {
               {mode === "register" ? (
                 <div>
                   <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Имя</div>
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Как к вам обращаться" style={inputStyle} disabled={busy} />
+                  <input aria-label="Имя" value={name} onChange={(e) => setName(e.target.value)} placeholder="Как к вам обращаться" style={inputStyle} disabled={busy} />
                 </div>
               ) : null}
               <div>
                 <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Почта</div>
-                <input
+                <input aria-label="Почта"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="user@example.com"
@@ -569,7 +569,7 @@ export default function AuthPage() {
               </div>
               <div>
                 <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Пароль</div>
-                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Не короче 6 знаков" style={inputStyle} disabled={busy} />
+                <input aria-label="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Не короче 6 знаков" style={inputStyle} disabled={busy} />
                 {password ? (
                   <div style={{ marginTop: 8 }}>
                     {/* Strength bar — 4 segments, fills left→right by score. */}

@@ -106,7 +106,7 @@ function ResetPasswordBody() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="you@example.com"
+              aria-label={t("build.resetPassword.emailPlaceholder")} placeholder="you@example.com"
               className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-slate-500"
             />
             {err && <p className="text-sm text-rose-300">{err}</p>}

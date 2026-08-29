@@ -269,7 +269,7 @@ export default function AgentPage() {
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="e.g. «нарисуй логотип для кофейни» · «выставь счёт на $25» · «объясни как работает RSA»"
+          aria-label="Опишите задачу" placeholder="e.g. «нарисуй логотип для кофейни» · «выставь счёт на $25» · «объясни как работает RSA»"
           rows={3}
           style={{
             width: "100%",

@@ -1012,6 +1012,33 @@ export default function QSkywayClient() {
                     source={airspaceRegSource(meta.airspace, lang === "ru", t("qskyway.reg.noCeilingGrid"))}
                     labels={{ none: t("qskyway.reg.nofeed") }}
                   />
+                  {/* ССЫЛКА НА ПРОВЕРКУ — потому что самое сильное наше
+                      доказательство было невидимым.
+
+                      29.08.2026: привязка слоя воздушного пространства к
+                      Bitcoin на странице не показывалась ВООБЩЕ, а более
+                      слабое доказательство — наша собственная подпись
+                      обоснования — стоит на видном месте с кнопкой и
+                      вердиктом. Посетитель не узнавал ни что слой
+                      проштампован во внешнем реестре, ни что это проверяемо.
+
+                      ⚠️ Хотел показать рядом хэш редакции и номер блока — и НЕ
+                      стал: этих данных у страницы нет (в сводке `airspace`
+                      поля contentHash не оказалось, компилятор это и сказал).
+                      Выдумать их в вёрстке значило бы повторить ту же ошибку
+                      в другую сторону. Хэш показывает сама ручка. */}
+                  {meta.airspace?.available && (
+                    <div style={{ fontSize: 11, color: "#5f7086", lineHeight: 1.6, marginTop: 2 }}>
+                      <a
+                        href={apiUrl(`/api/qskyway/airspace/edition?city=${encodeURIComponent(cityId)}`)}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: "#c8a24a" }}
+                      >
+                        {t("qskyway.reg.editionVerify")}
+                      </a>
+                    </div>
+                  )}
                   <RegulatorySourceChip
                     subject={`${t("qskyway.reg.subject.zones")} (${meta.nofly})`}
                     source={{

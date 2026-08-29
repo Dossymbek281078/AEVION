@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { fetchAiSavings } from "@/lib/aiSavings";
 
 type ModuleAgg = {
   module: string;
@@ -45,13 +46,15 @@ export default function AiSpendPage() {
 
   const load = useCallback(async () => {
     try {
-      const [sR, dR] = await Promise.all([
-        fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" }),
+      // Сводка — через общий счётчик (issue #1016): та же ручка звучит в
+      // виджете шапки, дважды спрашивать одно число незачем. Разбивка по дням —
+      // отдельная ручка, у неё своего дедупа нет и не нужно.
+      const [j, dR] = await Promise.all([
+        fetchAiSavings(),
         fetch(apiUrl("/api/qcoreai/smart/savings/daily?days=7"), { cache: "no-store" }),
       ]);
-      if (!sR.ok) throw new Error(`HTTP ${sR.status}`);
-      const j = (await sR.json()) as Savings;
-      setData(j);
+      if (!j) throw new Error("savings unavailable");
+      setData(j as Savings);
       if (dR.ok) {
         const dj = (await dR.json()) as { series?: Day[] };
         setDaily(Array.isArray(dj.series) ? dj.series : []);

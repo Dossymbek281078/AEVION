@@ -5,6 +5,7 @@ import { MODULE_NODES, REGISTRY_ENTRIES } from "@/data/pitchFacts";
 import { useEffect, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { fetchAiSavings } from "@/lib/aiSavings";
 import { track } from "@/lib/track";
 
 const KNOWN_REFS: Record<string, string> = {
@@ -183,13 +184,20 @@ export default function AcquirePage() {
     Promise.allSettled([
       fetch(apiUrl("/api/aevion/stats")).then(r => r.json()),
       fetch(apiUrl("/api/planet/stats")).then(r => r.json()),
-      fetch(apiUrl("/api/qcoreai/smart/savings")).then(r => r.json()),
+      // Через общий счётчик, а не прямым fetch: тот же показатель рисует виджет
+      // в шапке, и два независимых запроса за одним числом давали дубль в сети
+      // (issue #1016). fetchAiSavings разделяет in-flight запрос между всеми
+      // потребителями страницы.
+      fetchAiSavings(),
     ]).then(([reg, planet, savings]) => {
       if (reg.status === "fulfilled" && reg.value) setRegistry(reg.value as RegistryStats);
       if (planet.status === "fulfilled" && planet.value?.submissions != null) {
         setPlanetCount(planet.value.submissions as number);
       }
-      if (savings.status === "fulfilled" && typeof savings.value?.savedPct === "number" && savings.value.runs > 0) {
+      // fetchAiSavings отдаёт null, когда получить не удалось — тогда счётчик
+      // просто не рисуется. Ноль вместо отсутствия данных на продающей странице
+      // читался бы как «экономии нет».
+      if (savings.status === "fulfilled" && savings.value && savings.value.runs > 0) {
         setAiSavedPct(Math.round(savings.value.savedPct));
       }
     });

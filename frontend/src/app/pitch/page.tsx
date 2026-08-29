@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { fetchAiSavings } from "@/lib/aiSavings";
 import { MODULE_NODES } from "@/data/pitchFacts";
 import {
   ask,
@@ -108,10 +109,11 @@ export default function PitchPage() {
   const [aiSavings, setAiSavings] = useState<{ savedPct: number; savedUsd: number; runs: number } | null>(null);
 
   useEffect(() => {
-    fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" })
-      .then((r) => r.json())
+    // Общий счётчик, а не прямой fetch: то же число рисует виджет в шапке
+    // (issue #1016). fetchAiSavings разделяет один запрос между потребителями.
+    fetchAiSavings()
       .then((d) => {
-        if (d && typeof d.savedPct === "number" && d.runs > 0) {
+        if (d && d.runs > 0) {
           setAiSavings({ savedPct: d.savedPct, savedUsd: d.savedUsd, runs: d.runs });
         }
       })

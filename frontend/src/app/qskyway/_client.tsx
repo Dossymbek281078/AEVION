@@ -238,7 +238,7 @@ export default function QSkywayClient() {
   const [coverage, setCoverage] = useState<{ withFeed: number; withRegulatoryLayer?: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
   const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
   const [cityId, setCityId] = useState<string>("astana");
-  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number | null; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; substituted: { i: number; type: string; from: number; n: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
+  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number | null; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; substituted: { i: number; type: string; from: number; n: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
   // Strict mode asks the backend to treat the published ceiling as a hard
   // constraint instead of an advisory verdict. Off by default: the honest
   // default is "fly the corridor and tell me what it would require".
@@ -465,8 +465,12 @@ export default function QSkywayClient() {
         // срабатывает лишь если ответ пришёл без списка, но направление
         // отказа выбирается по цене ошибки, а не по её вероятности.
         nofly: city.nofly?.length ?? null,
-        heightPct: city.dataQuality?.measuredPct ?? 0,
-        realPct: city.dataQuality?.realPct ?? 0,
+        // `heightPct` и `realPct` отсюда убраны 29.08: они клались в
+        // состояние и НЕ читались никем (проценты на экране приходят
+        // другим путём). Мёртвое поле само по себе безвредно, но внутри
+        // у них было `?? 0` — «измерено 0 %» при отсутствии сведений о
+        // качестве. Ловушка для того, кто однажды начнёт их читать и
+        // унаследует фальшивый ноль вместе с полем.
         dq: city.dataQuality,
         suspect: city.dataQuality?.suspect ?? [],
         substituted: city.dataQuality?.substituted ?? [],

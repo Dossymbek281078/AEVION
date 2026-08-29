@@ -6383,7 +6383,7 @@ export default function CyberChessPage(){
                       <span>{name}</span>
                     </button>;
                   })}
-                  <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title="Random цвет"
+                  <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title="Случайный цвет"
                     className="cc-focus-ring"
                     style={{display:"inline-flex",alignItems:"center",
                       padding:"4px 10px",borderRadius:RADIUS.full,border:"none",

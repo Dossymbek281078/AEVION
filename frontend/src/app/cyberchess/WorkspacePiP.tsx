@@ -256,7 +256,7 @@ export default function WorkspacePiP({ initialSource, defaultPosition, onClose, 
           boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
           display: "flex", alignItems: "center", gap: 6,
         }}
-        title="Развернуть PiP"
+        title="Развернуть окно в углу"
       >
         <span>📺</span>
         <span>{source ? (source.title || source.kind.toUpperCase()) : "PiP"}</span>

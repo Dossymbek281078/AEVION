@@ -119,7 +119,7 @@ export default function CPIPreviewPage() {
           </h1>
           <p style={{ fontSize: 15, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 680 }}>
             Новая система рейтинга для CyberChess. Принципиально отличается от FIDE Elo, Lichess Glicko-2 и chess.com Glicko:{" "}
-            <strong style={{ color: C.text }}>даёт баллы за каждую партию независимо от результата</strong>, на основе композитной оценки качества игры.
+            <strong style={{ color: C.text }}>даёт баллы за каждую партию независимо от результата</strong>, на основе составной оценки качества игры.
           </p>
         </div>
 

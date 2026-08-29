@@ -6972,7 +6972,7 @@ export default function CyberChessPage(){
           {!streamerMode&&(()=>{
             const killer:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
               {emoji:"🏆",title:"Турниры онлайн",desc:"Swiss · Round-robin · нокаут. Призовой фонд в Chessy.",cta:"К турнирам",accent:"#d97706",onClick:()=>{try{window.location.href="/cyberchess/tournaments"}catch{}}},
-              {emoji:"📈",title:"CPI рейтинг",desc:"Композитный рейтинг по 11 факторам — такого нет ни у lichess, ни у chess.com.",cta:"Открыть",accent:"#0891b2",onClick:()=>{try{window.location.href="/cyberchess/cpi/dashboard"}catch{}}},
+              {emoji:"📈",title:"CPI рейтинг",desc:"Составной рейтинг по 11 факторам — такого нет ни у lichess, ни у chess.com.",cta:"Открыть",accent:"#0891b2",onClick:()=>{try{window.location.href="/cyberchess/cpi/dashboard"}catch{}}},
               {emoji:"🪙",title:"Chessy Экономика",desc:"Аукцион, аренда коуча, подписки на стримеров — на нашей валюте.",cta:"Войти",accent:"#ca8a04",onClick:()=>{try{window.location.href="/cyberchess/economy"}catch{}}},
               {emoji:"🎲",title:"12 вариантов",desc:"Atomic · Fischer960 · KotH · Crazyhouse · Knight Riders и др.",cta:"Выбрать",accent:"#7c3aed",onClick:()=>sShowVariants(true)},
             ];
@@ -12421,7 +12421,7 @@ ${question.trim()}`;
           {title:"Соревноваться",cat:"compete",items:[
             {e:"🏆",t:"Турниры онлайн",d:"Swiss · Round-robin · нокаут",to:"/cyberchess/tournaments",hot:true},
             {e:"🥊",t:"Турнирный хаб",d:"Сетка · трофеи · таблица лидеров",to:"/cyberchess/tournament"},
-            {e:"📈",t:"CPI рейтинг",d:"Композитный рейтинг по 11 факторам",to:"/cyberchess/cpi/dashboard",hot:true},
+            {e:"📈",t:"CPI рейтинг",d:"Составной рейтинг по 11 факторам",to:"/cyberchess/cpi/dashboard",hot:true},
             {e:"🏅",t:"Таблица лидеров CPI",d:"Топ по любому фактору силы",to:"/cyberchess/cpi/leaderboard"},
           ]},
           {title:"Смотреть",cat:"watch",items:[
@@ -15260,7 +15260,7 @@ ${question.trim()}`;
         {id:"nav-tourn",    icon:"🏆",group:"Разделы", label:"Турниры онлайн",        hint:"Swiss · Round-robin · нокаут",  run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/tournaments"}},
         {id:"nav-economy",  icon:"🪙",group:"Разделы", label:"Chessy Экономика",      hint:"Аукцион · аренда коуча · подписки", run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/economy"}},
         {id:"nav-training", icon:"🎯",group:"Разделы", label:"Тренинг-хаб",           hint:"Ежедневные упражнения",         run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/training"}},
-        {id:"nav-cpi",      icon:"📈",group:"Разделы", label:"CPI рейтинг",           hint:"Композитный рейтинг по 11 факторам", run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/cpi/dashboard"}},
+        {id:"nav-cpi",      icon:"📈",group:"Разделы", label:"CPI рейтинг",           hint:"Составной рейтинг по 11 факторам", run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/cpi/dashboard"}},
         {id:"nav-cpi-lb",   icon:"🏅",group:"Разделы", label:"Таблица лидеров CPI",         hint:"Топ по любому фактору силы",    run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/cpi/leaderboard"}},
         {id:"nav-replays",  icon:"🎬",group:"Разделы", label:"Реплеи",               hint:"Записи партий с разбором",       run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/replays"}},
         {id:"nav-spectate", icon:"👁",group:"Разделы", label:"Спектатор",            hint:"Смотреть живые партии",         run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/spectator"}},

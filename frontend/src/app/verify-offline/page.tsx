@@ -220,11 +220,31 @@ function ResultView({
           {result.overall === "pass" ? "✅" : "⚠️"}
         </div>
         <div style={{ fontSize: 22, fontWeight: 900, color: headerColor, marginBottom: 4 }}>
-          {result.overall === "pass" ? "Bundle verified offline" : "Verification failed"}
+          {result.overall === "pass" ? "Bundle is internally consistent" : "Verification failed"}
         </div>
         <div style={{ fontSize: 12, color: "#475569" }}>
           {state.fileName}
         </div>
+        {/*
+          Заголовок раньше говорил «Bundle verified offline», и это обещало
+          больше, чем проверка делает: ключ подписи приезжает в самом пакете, а
+          у якоря сверяется поле status, не байты доказательства. То есть все
+          проверки подтверждают ВНУТРЕННЮЮ СОГЛАСОВАННОСТЬ, и пакет, собранный
+          посторонним, проходил бы их тоже.
+          Отсюда и один независимый шаг, названный прямо: байты якоря лежат в
+          пакете, их проверяет любой клиент OpenTimestamps — обращаясь к сети
+          биткойна, но НЕ к нам, так что обещание «без AEVION» сохраняется.
+        */}
+        {result.overall === "pass" && (
+          <div style={{ fontSize: 12, color: "#475569", marginTop: 10, lineHeight: 1.6 }}>
+            Every layer inside this file agrees with every other. To make the check
+            independent of whoever produced the file, verify{" "}
+            <code style={{ fontSize: 11, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>
+              proofs.openTimestamps.proofBase64
+            </code>{" "}
+            with any OpenTimestamps client: that talks to the Bitcoin network, not to AEVION.
+          </div>
+        )}
       </div>
 
       {/* Certificate summary */}

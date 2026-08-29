@@ -96,7 +96,7 @@ interface JustDoc {
 interface JustAttestation { alg: string; contentHash: string; signature: string; publicKey: string; ephemeral: boolean }
 interface Cell { c: number; r: number; }
 interface Taxi { path: Cell[]; alts: number[]; seg: number; u: number; speed: number; hero: boolean; slow: number; }
-interface VertiportRow { id: string; suitability: number; cls: string; openRadiusM: number | null; clearanceM: number | null; distNoFlyM: number | null; ceilingM: number | null; needsAtc: boolean; }
+interface VertiportRow { id: string; suitability: number; cls: string; openRadiusM: number | null; clearanceM: number | null; distNoFlyM: number | null; ceilingM: number | null; needsAtc: boolean | null; }
 interface Slot { id: string; routeId: string; t0: string; t1: string; holder: string; issued: string; receipt: string; }
 
 // Без прототипа: класс приходит строкой из ответа бэкенда, и у обычного объекта
@@ -485,7 +485,7 @@ export default function QSkywayClient() {
         return {
           id: `H-${i + 1}`, suitability: s?.suitability ?? 0, cls: s?.class ?? "unscored",
           openRadiusM: s?.openRadiusM ?? null, clearanceM: s?.clearanceM ?? null, distNoFlyM: s?.distNoFlyM ?? null,
-          ceilingM: s?.ceilingM ?? null, needsAtc: s?.needsAtcCoordination === true,
+          ceilingM: s?.ceilingM ?? null, needsAtc: s ? s.needsAtcCoordination === true : null,
         };
       }).sort((a, b) => b.suitability - a.suitability));
       setLoaded(true);
@@ -1427,7 +1427,21 @@ export default function QSkywayClient() {
                             {v.ceilingM != null && <>{t("qskyway.pad.ceiling", { m: v.ceilingM })}</>}
                           </div>
                         )}
-                        {v.needsAtc && (
+                        {/*
+                          Три случая, а не два. Раньше `needsAtc` был
+                          `boolean`, и отсутствие данных о площадке давало
+                          `false` — предупреждение о согласовании с
+                          диспетчером просто ИСЧЕЗАЛО, что читается как
+                          «согласование не нужно». Соседнее поле
+                          `ceilingM` уже было `?? null` — снова разное
+                          обращение с двумя полями в одной строке.
+                        */}
+                        {v.needsAtc === null && (
+                          <div style={{ color: "#94a3b8", fontSize: 10, marginTop: 2 }}>
+                            {t("qskyway.pad.atcUnknown")}
+                          </div>
+                        )}
+                        {v.needsAtc === true && (
                           <div style={{ color: "#fda4af", fontSize: 10, marginTop: 2 }} title={t("qskyway.tip.noAutoClearance")}>
                             {t("qskyway.pad.needsAtc")}
                           </div>

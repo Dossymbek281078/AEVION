@@ -15203,7 +15203,7 @@ ${question.trim()}`;
         // ── COACH / TRAINING ──
         {id:"coach",        icon:"🎓",group:"Coach",   label:"Открыть Coach",      hint:"AI-наставник + база знаний 90+ тем",         run:()=>sTab("coach")},
         {id:"coach-knowledge",icon:"📚",group:"Coach", label:"База знаний тренера",   hint:"9 категорий · дебюты / тактика / эндшпиль / время / память / roadmap",  run:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
-        {id:"coach-lessons",  icon:"📖",group:"Coach", label:"Coach Lessons (Курс)", hint:`${LESSONS.length} уроков beginner→advanced с теорией+позициями+упражнениями`, run:()=>{sTab("coach");setTimeout(()=>sShowLessons(true),50)}},
+        {id:"coach-lessons",  icon:"📖",group:"Тренер", label:"Уроки тренера (курс)", hint:`${LESSONS.length} уроков beginner→advanced с теорией+позициями+упражнениями`, run:()=>{sTab("coach");setTimeout(()=>sShowLessons(true),50)}},
         {id:"coord-trainer",icon:"🎯",group:"Coach",   label:"Координаты",         hint:"Тренировка чтения доски (30 сек)",          run:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},
         {id:"opening",      icon:"📖",group:"Coach",   label:"Тренажёр дебютов",   hint:"Дрилл дебютов до автоматизма",              run:()=>sShowOpeningTrainer(true)},
         {id:"editor",       icon:"♟",group:"Coach",   label:"Редактор позиции",   hint:"FEN · ручная расстановка",                  run:()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}},

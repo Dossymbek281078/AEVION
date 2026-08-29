@@ -264,7 +264,7 @@ export default function TrainingHubPage() {
                   {reminders.length} тем{reminders.length === 1 ? "а" : "ы"} ждут повторения
                 </div>
                 <div style={{ fontSize: 12, color: C.dim, marginBottom: 10, lineHeight: 1.5 }}>
-                  По системе spaced-repetition (1/3/7 дней). Повтори чтобы закрепить.
+                  С интервалами 1, 3 и 7 дней — так материал остаётся в памяти. Повтори чтобы закрепить.
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
                   {[1, 3, 7].map((ms) => {

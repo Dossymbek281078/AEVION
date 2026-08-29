@@ -281,7 +281,7 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
               <li><strong style={{ color: C.text }}>F2</strong> — Stockfish multiPV integration в game loop</li>
               <li><strong style={{ color: C.text }}>F3</strong> — <code style={{ color: C.cyan }}>cpi.ts</code> функция <code>computeGameCPI()</code> + unit tests</li>
               <li><strong style={{ color: C.text }}>F4</strong> — <code style={{ color: C.cyan }}>/cyberchess/cpi/dashboard</code> с SVG-графиками</li>
-              <li><strong style={{ color: C.text }}>F5</strong> — Coach by CPI — автоподборка упражнений по слабому фактору</li>
+              <li><strong style={{ color: C.text }}>F5</strong> — Подбор от тренера по CPI — автоподборка упражнений по слабому фактору</li>
             </ol>
           </div>
         </section>

@@ -35,6 +35,8 @@ type VerifyData = {
     fileHash?: string | null;
     signatureHmac: string;
     signatureEd25519?: string | null;
+    /** Заверение ключа сертификата постоянным ключом платформы; null — его нет. */
+    platformAttestation?: { kid: string; signature: string } | null;
     algorithm: string;
     protectedAt: string;
     status: string;
@@ -414,6 +416,25 @@ export default function VerifyPage() {
                   // схемы подписанный текст утрачен вместе с временной меткой,
                   // и звать за проверкой в пакет означало бы обещать невозможное.
                   tip: { name: "Ed25519", text: ed25519FieldNote(integrity.signatureHmacReason) },
+                },
+                {
+                  label: "Platform attestation",
+                  // Единственный слой, чей открытый ключ берётся НЕ из пакета:
+                  // по kid его получают на /api/qsign/v2/keys. Без него подпись
+                  // выше самосогласована — проверяется ключом, приехавшим рядом
+                  // с ней, — и пакет, собранный посторонним, выглядел бы так же.
+                  value: cert.platformAttestation
+                    ? `${cert.platformAttestation.kid}: ${cert.platformAttestation.signature.slice(0, 32)}…`
+                    : "N/A",
+                  // Именно `tip`, а не `note`: отрисовщик ниже читает только
+                  // `tip`, и поле с другим именем стало бы текстом, которого
+                  // никто не увидит.
+                  tip: {
+                    name: "Platform attestation",
+                    text: cert.platformAttestation
+                      ? "AEVION's long-lived key signs this certificate's key. Fetch the public half from /api/qsign/v2/keys to check it independently of this page — that is what makes this layer independent of the certificate itself."
+                      : "This certificate has no platform attestation: it was issued before the layer existed, or the platform key was unavailable at issue time. The signatures above still verify, but only against a key that travels with the certificate.",
+                  },
                 },
                 { label: "Algorithm", value: cert.algorithm },
                 { label: "Certificate ID", value: cert.id },

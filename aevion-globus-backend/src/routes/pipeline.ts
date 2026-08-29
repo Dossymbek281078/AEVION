@@ -1549,6 +1549,25 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
           ? cert.signatureEd25519.slice(0, 64) + "..."
           : null,
         algorithm: cert.algorithm,
+        /**
+         * Заверение эфемерного ключа постоянным ключом платформы.
+         *
+         * Пакет его уже везёт, но третья сторона — суд, площадка, работодатель —
+         * открывает СНАЧАЛА эту страницу, а не офлайн-верификатор. Слой, который
+         * единственный отличает наш сертификат от собранного посторонним, обязан
+         * быть виден там, где смотрят первым.
+         *
+         * Подпись не сокращается, в отличие от соседней: её проверяют, а не
+         * разглядывают. kid нужен, чтобы взять открытый ключ НЕЗАВИСИМО, на
+         * /api/qsign/v2/keys.
+         */
+        platformAttestation:
+          cert.platformAttestationKid && cert.platformAttestationSig
+            ? {
+                kid: cert.platformAttestationKid,
+                signature: cert.platformAttestationSig,
+              }
+            : null,
         protectedAt: cert.protectedAt,
         status: cert.status,
         verificationLevel: cert.authorVerificationLevel || "anonymous",

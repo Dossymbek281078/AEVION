@@ -266,7 +266,8 @@ export default function TournamentsHubPage() {
         )}
         {errorMsg && (
           <div style={{ color: T.orange, marginTop: 8, fontSize: 12 }}>
-            Бэкенд недоступен ({errorMsg}). Показываем sample data.
+            Турниры сейчас не загрузились — ниже показан ПРИМЕР того, как
+            выглядит список. Обновите страницу через минуту.
           </div>
         )}
       </header>

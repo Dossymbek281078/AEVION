@@ -233,7 +233,8 @@ export default function ReplayHubPage() {
         {/* List */}
         {error && (
           <div className="planet-card" style={{ padding: 16, fontSize: 13.5, color: "var(--pl-danger)" }}>
-            Не удалось загрузить архив: {error}
+            Не удалось загрузить архив трансляций. Проверьте связь и обновите
+            страницу — записи никуда не делись.
           </div>
         )}
 

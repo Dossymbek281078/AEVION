@@ -15,6 +15,8 @@
  */
 
 import { Router } from "express";
+import { isPayboxConfigured } from "../lib/payment/payboxProvider";
+import { isPaypalConfigured } from "../lib/payment/paypalProvider";
 import { degraded } from "../lib/degradedResponse";
 import crypto from "node:crypto";
 import rateLimit from "express-rate-limit";
@@ -617,8 +619,11 @@ revenueRouter.get("/health", (_req, res) => {
         sandbox: PADDLE_SANDBOX(),
         note: "KYC не пройдена — не используется; /api/paddle/* routes удалены (PR #779)",
       },
-      paybox: { configured: Boolean(process.env.PAYBOX_MERCHANT_ID?.trim() && process.env.PAYBOX_SECRET?.trim()), note: "KZT — карты КЗ + Kaspi (12 приложений). Каскад checkout: currency=KZT → PayBox." },
-      paypal: { configured: Boolean(process.env.PAYPAL_CLIENT_ID?.trim() && process.env.PAYPAL_SECRET?.trim()), sandbox: process.env.PAYPAL_SANDBOX !== "0", note: "Глобальный карт/PayPal-канал. Каскад checkout: method=paypal → PayPal Orders v2." },
+      // Готовность спрашиваем у модулей провайдеров, а не пересобираем здесь
+      // третьей копией: 29.08 такая копия в /api/payments уже разошлась с
+      // истиной (считала PayBox готовым по одному продавцу).
+      paybox: { configured: isPayboxConfigured(), note: "KZT — карты КЗ + Kaspi (12 приложений). Каскад checkout: currency=KZT → PayBox." },
+      paypal: { configured: isPaypalConfigured(), sandbox: process.env.PAYPAL_SANDBOX !== "0", note: "Глобальный карт/PayPal-канал. Каскад checkout: method=paypal → PayPal Orders v2." },
       youtube: { configured: Boolean(YT_API_KEY()) },
       twitch: { configured: Boolean(TWITCH_CLIENT_ID() && TWITCH_CLIENT_SECRET()) },
     },

@@ -70,6 +70,7 @@ export default function MoodCheckIn({ userId = 'anonymous', onLogged }: Props) {
             <span>{t('qgood.mood.great')}</span>
           </div>
           <input
+            aria-label={t('qgood.mood.title')}
             type="range"
             min={1}
             max={10}
@@ -107,6 +108,7 @@ export default function MoodCheckIn({ userId = 'anonymous', onLogged }: Props) {
 
         <div style={{ marginBottom: 20 }}>
           <textarea
+            aria-label={t('qgood.mood.contextPh')}
             value={context}
             onChange={e => setContext(e.target.value)}
             placeholder={t('qgood.mood.contextPh')}

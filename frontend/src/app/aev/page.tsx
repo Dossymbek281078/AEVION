@@ -2116,7 +2116,7 @@ function InsightPanel({ wallet, setWallet, insight, setInsight }: {
           </div>
           <textarea value={draftQ} onChange={(e) => setDraftQ(e.target.value.slice(0, 240))}
             rows={3}
-            placeholder="Задай содержательный вопрос — например: «Почему в Каро-Канн c..d4 даёт чёрным более активную игру против системы Фантази?»"
+            aria-label="Вопрос к AEV" placeholder="Задай содержательный вопрос — например: «Почему в Каро-Канн c..d4 даёт чёрным более активную игру против системы Фантази?»"
             style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, resize: "vertical" as const, fontFamily: "inherit", lineHeight: 1.4 }} />
           <div style={{ display: "flex", gap: 10, alignItems: "center" as const, flexWrap: "wrap" as const }}>
             <div style={{ flex: "1 1 200px", minWidth: 200 }}>

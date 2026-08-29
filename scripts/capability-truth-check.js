@@ -84,6 +84,10 @@ const PROBES = {
   console.log(`capabilities declared: ${declared.length}\n`);
 
   const mismatches = [];
+  // Обратный случай: возможность объявлена НЕ рабочей, а проба успешна.
+  // Блок вывода для него был добавлен без этого вычисления, и скрипт падал
+  // на `staleReds is not defined` — печатал таблицу и не доходил до вердикта.
+  const staleReds = [];
   for (const cap of declared) {
     const probe = PROBES[cap.id];
     if (!probe) {
@@ -101,6 +105,7 @@ const PROBES = {
     const mismatch = claimsWorking && !result.ok;
     console.log(`  ${cap.id.padEnd(16)} ${String(cap.status).padEnd(13)} real: ${result.ok ? "ok" : "FAILS"}  ${result.detail}`);
     if (mismatch) mismatches.push({ id: cap.id, declared: cap.status, detail: result.detail });
+    if (!claimsWorking && result.ok) staleReds.push({ id: cap.id, detail: `объявлено ${cap.status}` });
   }
 
   if (staleReds.length > 0) {

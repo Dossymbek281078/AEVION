@@ -118,6 +118,7 @@ export default function FocusTimer({ activeFocusId, onStart, onComplete, taskId 
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <label style={{ fontSize: "11px", color: "#94a3b8" }}>min:</label>
             <input
+              aria-label="Focus duration, minutes"
               type="number"
               value={durationMin}
               onChange={handleDurationChange}

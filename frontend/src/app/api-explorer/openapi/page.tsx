@@ -814,7 +814,7 @@ export default function OpenApiExplorerPage() {
             </h3>
             <input
               type="text"
-              placeholder="Filter by path substring…"
+              aria-label="Filter by path" placeholder="Filter by path substring…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{

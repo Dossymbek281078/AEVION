@@ -576,7 +576,7 @@ export default function DrawingsHub() {
           </div>
           <input
             type="search"
-            placeholder="Поиск..."
+            aria-label="Поиск..." placeholder="Поиск..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="text-xs px-3 py-1.5 border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 rounded-lg w-40"

@@ -277,7 +277,7 @@ export default function LogisticsTerminalsPage() {
                 value={ex3}
                 onChange={(e) => setEx3(e.target.value)}
                 disabled={ex3Submitted}
-                placeholder="например 33000000"
+                aria-label="например 33000000" placeholder="например 33000000"
                 className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 w-64 disabled:opacity-60"
               />
               <button

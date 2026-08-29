@@ -462,7 +462,7 @@ export default function HeatingInternalPage() {
                   inputMode="decimal"
                   value={answers.ex4.value}
                   onChange={(e) => updateValue("ex4", e.target.value)}
-                  placeholder="дн."
+                  aria-label="дн." placeholder="дн."
                   className="w-32 rounded-md border border-orange-800/50 bg-zinc-900 px-3 py-2 text-orange-100 focus:border-orange-500 focus:outline-none"
                 />
                 <button

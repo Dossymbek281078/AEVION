@@ -107,7 +107,7 @@ export default function VelodromeTrackPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="α, градусов"
+            aria-label="α, градусов" placeholder="α, градусов"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: tan(α) = 20.83² / (9.81 × 23) = 434 / 226 = 1.92; α = arctan(1.92) = 62.5°. Это идеальный угол для V=75 км/ч. Реальный угол UCI 42-45° — компромисс между комфортом гонщика, безопасностью при низких скоростях и удобством разминки. Для V=75 км/ч на 42° есть некоторая остаточная центроб. сила, гасящаяся трением.</p>

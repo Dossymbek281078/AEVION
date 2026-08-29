@@ -262,7 +262,7 @@ export default function CaseCarwashPage() {
                 type="text"
                 value={w1}
                 onChange={(e) => setW1(e.target.value)}
-                placeholder="л/сутки"
+                aria-label="л/сутки" placeholder="л/сутки"
                 className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-cyan-200 font-mono w-40 focus:outline-none focus:border-cyan-500"
               />
               <button
@@ -394,7 +394,7 @@ export default function CaseCarwashPage() {
                 type="text"
                 value={w3}
                 onChange={(e) => setW3(e.target.value)}
-                placeholder="м²"
+                aria-label="м²" placeholder="м²"
                 className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-cyan-200 font-mono w-40 focus:outline-none focus:border-cyan-500"
               />
               <button
@@ -469,7 +469,7 @@ export default function CaseCarwashPage() {
                 type="text"
                 value={w4}
                 onChange={(e) => setW4(e.target.value)}
-                placeholder="мес."
+                aria-label="мес." placeholder="мес."
                 className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-cyan-200 font-mono w-40 focus:outline-none focus:border-cyan-500"
               />
               <button

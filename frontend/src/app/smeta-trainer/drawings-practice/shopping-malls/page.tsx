@@ -100,7 +100,7 @@ export default function ShoppingMallsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во эскалаторов/траволаторов (всего ед. вертик. транспорта)"
+            aria-label="Кол-во эскалаторов/траволаторов (всего ед. вертик. транспорта)" placeholder="Кол-во эскалаторов/траволаторов (всего ед. вертик. транспорта)"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 3 межэтажных перехода × 2 (вверх+вниз) × 4 узла (атриум, юг, север, фудкорт) = 24 эскалатора + 6 траволаторов + 6 панорамных лифтов + 8 грузовых + 12 пассажирских = ~165 единиц вертикального транспорта (зависит от точной планировки).</p>

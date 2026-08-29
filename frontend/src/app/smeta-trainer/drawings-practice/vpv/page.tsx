@@ -274,7 +274,7 @@ export default function VpvPage() {
                       inputMode="decimal"
                       value={state.value}
                       onChange={(e) => setValue(ex.key, e.target.value)}
-                      placeholder="Ваш ответ"
+                      aria-label="Ваш ответ" placeholder="Ваш ответ"
                       className="w-40 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none transition focus:border-orange-500"
                     />
                     <span className="text-sm text-zinc-400">{ex.unit}</span>

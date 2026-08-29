@@ -102,7 +102,7 @@ export default function BanksBranchesPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V, м³"
+            aria-label="V, м³" placeholder="V, м³"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V_нар = 5.56×5.56×3.56 ≈ 110 м³; V_бетон = 110−75 = 35 м³ × повышенная плотность армирования и доп. слои защиты (плёнки, теплозвукоизол.) → объём ниши и проёмов добавит ~30%, итого по смете ~320 м³ включая фундамент + дверной короб.</p>

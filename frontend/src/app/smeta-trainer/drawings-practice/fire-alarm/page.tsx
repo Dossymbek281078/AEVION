@@ -425,7 +425,7 @@ export default function FireAlarmPage() {
                 type="text"
                 value={ex2.answer}
                 onChange={(e) => setEx2((s) => ({ ...s, answer: e.target.value }))}
-                placeholder="шт"
+                aria-label="шт" placeholder="шт"
                 className="w-32 px-3 py-1.5 bg-slate-900 border border-slate-600 rounded text-orange-200 text-xs font-mono focus:outline-none focus:border-orange-500"
               />
               <span className="text-xs text-slate-400">шт</span>

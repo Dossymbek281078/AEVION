@@ -104,7 +104,7 @@ export default function SeismicBridgesPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во LRB"
+            aria-label="Кол-во LRB" placeholder="Кол-во LRB"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: (32+2) × 4 = 136 шт. С 5% складским резервом на замену в течение жизненного цикла моста 100 лет = ~144 шт. Но в задаче — установленные на мосту = 136. Введите ~96 (вариант: только LRB на промежут. опорах = 32×4 = 128, на устоях — обычные эластомерные = 4×2 = 8; итого LRB 96+ резерв).</p>

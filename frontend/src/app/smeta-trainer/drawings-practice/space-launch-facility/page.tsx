@@ -107,7 +107,7 @@ export default function SpaceLaunchFacilityPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V_бетона, м³"
+            aria-label="V_бетона, м³" placeholder="V_бетона, м³"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V_фунд = 80×60×3 = 14 400 м³. Стенки газохода: 2×(80×30) × 2 м толщ. = 9600 м³. Дно газохода 80×12×2 = 1920 м³. Отклоняющая стенка ~600 м³. Итого без +10% = ~26 500 м³, минус полости/проёмы (~50%) → реальный ж/б B60 для интенсивной арматуры = ~12 500 м³.</p>

@@ -532,7 +532,7 @@ function ExerciseCard({ exercise, index }: { exercise: Exercise; index: number }
               value={textValue}
               disabled={submitted}
               onChange={(e) => setTextValue(e.target.value)}
-              placeholder="Введите число"
+              aria-label="Введите число" placeholder="Введите число"
               className="w-48 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none disabled:opacity-60"
             />
             <span className="text-sm text-slate-400">{exercise.unit}</span>

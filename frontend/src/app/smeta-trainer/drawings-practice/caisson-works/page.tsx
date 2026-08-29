@@ -278,7 +278,7 @@ export default function CaissonWorksPage() {
                   setEx3(e.target.value);
                   setEx3Submitted(false);
                 }}
-                placeholder="введите сумму в тенге"
+                aria-label="введите сумму в тенге" placeholder="введите сумму в тенге"
                 className="flex-1 min-w-[220px] px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
               />
               <button

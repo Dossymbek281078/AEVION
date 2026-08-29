@@ -296,7 +296,7 @@ export default function MineShaftsUndergroundPage() {
               inputMode="decimal"
               value={ex3}
               onChange={(e) => setEx3(e.target.value)}
-              placeholder="например 9600000000"
+              aria-label="например 9600000000" placeholder="например 9600000000"
               className="mt-3 w-64 px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-700 text-slate-100 focus:outline-none focus:border-blue-500"
             />
             <button onClick={() => setEx3Done(true)} className="ml-2 px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 transition text-white">Проверить</button>

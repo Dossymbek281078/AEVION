@@ -318,7 +318,7 @@ export default function SprinklersPage() {
                 type="text"
                 value={ex2}
                 onChange={(e) => setEx2(e.target.value)}
-                placeholder="штук"
+                aria-label="штук" placeholder="штук"
                 className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm w-32"
               />
               <button
@@ -386,7 +386,7 @@ export default function SprinklersPage() {
                 type="text"
                 value={ex3}
                 onChange={(e) => setEx3(e.target.value)}
-                placeholder="л/с"
+                aria-label="л/с" placeholder="л/с"
                 className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm w-32"
               />
               <button

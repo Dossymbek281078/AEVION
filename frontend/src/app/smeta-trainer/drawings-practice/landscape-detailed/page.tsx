@@ -324,7 +324,7 @@ export default function LandscapeDetailedPage() {
                 type="text"
                 value={lawnAnswer}
                 onChange={(e) => setLawnAnswer(e.target.value)}
-                placeholder="кг"
+                aria-label="кг" placeholder="кг"
                 className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 w-32 focus:border-emerald-500 focus:outline-none"
               />
               <button
@@ -442,7 +442,7 @@ export default function LandscapeDetailedPage() {
                 type="text"
                 value={sprAnswer}
                 onChange={(e) => setSprAnswer(e.target.value)}
-                placeholder="штук"
+                aria-label="штук" placeholder="штук"
                 className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 w-32 focus:border-emerald-500 focus:outline-none"
               />
               <button
@@ -508,7 +508,7 @@ export default function LandscapeDetailedPage() {
                 type="text"
                 value={costAnswer}
                 onChange={(e) => setCostAnswer(e.target.value)}
-                placeholder="тенге"
+                aria-label="тенге" placeholder="тенге"
                 className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 w-44 focus:border-emerald-500 focus:outline-none"
               />
               <button

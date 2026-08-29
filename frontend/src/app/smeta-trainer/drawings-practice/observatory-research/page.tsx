@@ -103,7 +103,7 @@ export default function ObservatoryResearchPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь, м²"
+            aria-label="Площадь, м²" placeholder="Площадь, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: S_полусф = 2π × 7.5² = 353 м²; S_цил = π × 15 × 1.5 = 70 м². Полусфера + цилиндр = 423 м². Минус секторы под щель ≈70 м² = 353 м². Алюминиевая обшивка двухслойная (внешн.+внутр.) = 2 × 353 = ~706 м². Но в задаче речь о ВНУТРЕННЕЙ обшивке с теплоизоляцией = ~176 м² (без сферической полусферы — только цилиндр + усиления).</p>

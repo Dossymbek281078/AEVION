@@ -109,7 +109,7 @@ export default function StockExchangeFintechPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во Bloomberg Terminals"
+            aria-label="Кол-во Bloomberg Terminals" placeholder="Кол-во Bloomberg Terminals"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 220 + 10% = 242 для основной площадки. С DR-сайтом ещё 20% дублирование = +44 шт. Но в задаче только основная площадка = ~240 терминалов. Стоимость подписки: 240 × $24 000 × 12 мес = $69 млн/год = 32 млрд тг/год (огромная операционная статья).</p>

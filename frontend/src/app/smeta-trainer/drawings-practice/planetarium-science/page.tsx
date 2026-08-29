@@ -105,7 +105,7 @@ export default function PlanetariumSciencePage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="S, м²"
+            aria-label="S, м²" placeholder="S, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: S = 2π × 11² = 2π × 121 = 760 м² полная полусфера. При наклоне 30° (tilt dome) видимая зрителем зона ~55% = 418 м² → 6 проекторов Carl Zeiss VELVET ×40 000 лм × 0.92 (overlap loss) = 220 800 лм для 380 м² рабочей пов. = ~580 лк = высокая яркость 4K HDR.</p>

@@ -47,7 +47,7 @@ export default function ClimateArcticResearchStationPage() {
           ].map((o) => (<label key={o.v} className={`block px-4 py-3 rounded-lg border cursor-pointer transition ${oc(ex1, o.v, ok.ex1)}`}><input type="radio" name="ex1" value={o.v} checked={ex1 === o.v} onChange={() => setEx1(o.v)} className="mr-3" />{o.t}</label>))}</div>
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — kWh/year power</h2>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="МВт·ч/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="МВт·ч/год" placeholder="МВт·ч/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>Solar 5 kWp × 1500 kWh/kWp/year (high-altitude DNI) = 7500 kWh + Wind 2 kW × 1000 hr × 0.3 capacity = 600 kWh + DG backup = ~8-10 MWh ≈ <strong>30 MWh/year off-grid station</strong>.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс climate station</h2>

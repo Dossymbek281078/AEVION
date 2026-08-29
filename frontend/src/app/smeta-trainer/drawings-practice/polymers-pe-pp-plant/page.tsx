@@ -77,7 +77,7 @@ export default function PolymersPePpPlantPage() {
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">
           <h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Ethylene conversion</h2>
           <p className="text-slate-300">HDPE plant 400 кт/год @ ethylene conversion 95% per pass + 99% overall (recycle). Расход ethylene (кт/год)?</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="кт/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="кт/год" placeholder="кт/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>400 / 0.99 + ~5% comonomer + losses = <strong>~420 кт PE</strong> → ~395 кт ethylene + 25 кт comonomer. На 100 кт PE отвечает 95 кт ethylene at typical HDPE process.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">

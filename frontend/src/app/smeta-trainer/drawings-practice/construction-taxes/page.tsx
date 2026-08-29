@@ -182,7 +182,7 @@ export default function ConstructionTaxesPage() {
                 type="text"
                 value={ex1}
                 onChange={(e) => setEx1(e.target.value)}
-                placeholder="введите сумму в тг"
+                aria-label="введите сумму в тг" placeholder="введите сумму в тг"
                 className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-48"
               />
               <button
@@ -231,7 +231,7 @@ export default function ConstructionTaxesPage() {
                 type="text"
                 value={ex2}
                 onChange={(e) => setEx2(e.target.value)}
-                placeholder="полная сумма в тг"
+                aria-label="полная сумма в тг" placeholder="полная сумма в тг"
                 className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-48"
               />
               <button
@@ -353,7 +353,7 @@ export default function ConstructionTaxesPage() {
                 type="text"
                 value={ex4}
                 onChange={(e) => setEx4(e.target.value)}
-                placeholder="сумма НДС в тг"
+                aria-label="сумма НДС в тг" placeholder="сумма НДС в тг"
                 className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-48"
               />
               <button

@@ -371,7 +371,7 @@ export default function GasMediumPressurePage() {
                 type="text"
                 value={ex2Input}
                 onChange={(e) => setEx2Input(e.target.value)}
-                placeholder="нм³/ч"
+                aria-label="нм³/ч" placeholder="нм³/ч"
                 className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:border-yellow-500"
               />
               <span className="text-slate-400 text-sm">нм³/ч</span>
@@ -526,7 +526,7 @@ export default function GasMediumPressurePage() {
                 type="text"
                 value={ex4Input}
                 onChange={(e) => setEx4Input(e.target.value)}
-                placeholder="тенге"
+                aria-label="тенге" placeholder="тенге"
                 className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm w-40 focus:outline-none focus:border-yellow-500"
               />
               <span className="text-slate-400 text-sm">тг</span>

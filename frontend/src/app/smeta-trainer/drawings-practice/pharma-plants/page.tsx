@@ -107,7 +107,7 @@ export default function PharmaPlantsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кратность × 10 для удобства (для 2.8 → 28)"
+            aria-label="Кратность × 10 для удобства (для 2.8 → 28)" placeholder="Кратность × 10 для удобства (для 2.8 → 28)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: L = 200 × 0.45 × 3600 = 324 000 м³/час. n = 324 000 / 600 = 540 1/ч. Для класса A ламинарный поток это 240-600 1/ч (зависит от геометрии). Для упрощения принимаем расчётно 280 1/ч = 28 (×10). Для C/D кратности 20-30 1/ч, для B 60-80 1/ч.</p>

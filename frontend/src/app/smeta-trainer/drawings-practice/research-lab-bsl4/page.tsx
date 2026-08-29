@@ -110,7 +110,7 @@ export default function ResearchLabBsl4Page() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кратность, 1/час"
+            aria-label="Кратность, 1/час" placeholder="Кратность, 1/час"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: ВОЗ требует ≥15 крат/час для BSL-4. На практике строят с запасом 18-20 1/час. Для нашего объёма 300 м³ × 18 = 5400 м³/час свежего воздуха через тройную HEPA H14. Скорость воздуха в воздуховодах не должна превышать 5 м/с (для предотвращения вторичного аэрозолирования).</p>

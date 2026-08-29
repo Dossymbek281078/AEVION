@@ -48,7 +48,7 @@ export default function PneumaticWasteCollectionPage() {
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Airflow velocity</h2>
           <p className="text-slate-300">Транспорт waste pneumatic vacuum 0.6 бар. Pipe Ø600 мм. Какая velocity (м/с)?</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="м/с" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="м/с" placeholder="м/с" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>Pneumatic waste transport velocity = <strong>~50 м/с</strong> minimum для suspended-flow transport (100-150 м/с peak slug-flow). Below 25 м/с — material drops out. Energy ~80-120 кВт·ч/т.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс 5000 households</h2>

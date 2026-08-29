@@ -333,7 +333,7 @@ export default function BudgetManagementPage() {
                           [ex.id]: { value: e.target.value, status: "idle" },
                         }))
                       }
-                      placeholder="Ваш ответ"
+                      aria-label="Ваш ответ" placeholder="Ваш ответ"
                       className="w-40 rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
                     />
                     <span className="text-xs text-slate-500">{ex.unit}</span>

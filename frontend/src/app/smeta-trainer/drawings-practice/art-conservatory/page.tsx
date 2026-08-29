@@ -108,7 +108,7 @@ export default function ArtConservatoryPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во классов (×10 для 215 → 18)"
+            aria-label="Кол-во классов (×10 для 215 → 18)" placeholder="Кол-во классов (×10 для 215 → 18)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 2400 / 11.2 = 214 классов — слишком много для одной консерватории. На практике: студент делит время между разными помещениями (общая практика + ансамблевые + библиотечная самостоятельная работа). Реально: ~180-200 индивидуальных классов в крупной консерватории + 30-40 ансамблевых. Введите 18 (×10 = 180 классов). Курмангазы Алматы — ~150 практик-классов.</p>

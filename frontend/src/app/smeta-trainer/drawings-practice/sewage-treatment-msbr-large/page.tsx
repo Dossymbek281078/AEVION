@@ -91,7 +91,7 @@ export default function SewageTreatmentMsbrLargePage() {
             HRT (Hydraulic Retention Time) = 12-18 ч. Используется 6 параллельных tanks
             (3 в active cycle, 3 в other phases). Какой объём ОДНОГО tank (тыс. м³)?
           </p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="тыс. м³" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-blue-500 focus:outline-none" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="тыс. м³" placeholder="тыс. м³" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-blue-500 focus:outline-none" />
           {showResults && (
             <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}>
               <p className="text-slate-200">

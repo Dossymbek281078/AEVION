@@ -324,7 +324,7 @@ export default function IndustrialFloorsPage() {
                 type="text"
                 value={ex3}
                 onChange={(e) => setEx3(e.target.value)}
-                placeholder="введите сумму в тенге"
+                aria-label="введите сумму в тенге" placeholder="введите сумму в тенге"
                 className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500"
               />
               <span className="text-slate-500 text-sm">тг</span>

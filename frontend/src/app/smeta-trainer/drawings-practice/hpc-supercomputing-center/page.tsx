@@ -48,7 +48,7 @@ export default function HpcSupercomputingCenterPage() {
           ].map((o) => (<label key={o.v} className={`block px-4 py-3 rounded-lg border cursor-pointer transition ${oc(ex1, o.v, ok.ex1)}`}><input type="radio" name="ex1" value={o.v} checked={ex1 === o.v} onChange={() => setEx1(o.v)} className="mr-3" />{o.t}</label>))}</div>
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — FP16 peak (PFlops)</h2>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="PFlops" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="PFlops" placeholder="PFlops" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>NVIDIA H100 6 PFlops FP16 × 10 000 GPUs ÷ duty cycle 60% = <strong>~100 PFlops sustained</strong>. Top500 list position ~25-30 2024.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс 100 PFlops HPC</h2>

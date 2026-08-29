@@ -105,7 +105,7 @@ export default function DesertObjectsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь водосбора, м²"
+            aria-label="Площадь водосбора, м²" placeholder="Площадь водосбора, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V = 40×150×365 = 2 190 000 л = 2190 м³. Эффективный сбор: S × 0.08 × 0.7 (коэф. стока площадки) = 0.056 × S. S = 2190/0.056 ≈ 39 100 м². С учётом 30% испарения и фильтрации S_расчётная ≈ 8500 м² при многоуровневой системе крыш+площадок+«русла-катушки» в каменистых ложбинах вокруг посёлка.</p>

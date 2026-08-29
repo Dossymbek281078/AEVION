@@ -108,7 +108,7 @@ export default function IncineratorPlantsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Мощность, кВт"
+            aria-label="Мощность, кВт" placeholder="Мощность, кВт"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 58 000 × 0.8 × 0.25 × 0.8 = 9 280 кВт. Для увеличения КПД до 30% (выше параметры пара 50 бар × 450°C) и снижения соб. нужд до 15% → ~12 500 кВт. Это соответствует турбине Siemens SST-400 12 МВт.</p>

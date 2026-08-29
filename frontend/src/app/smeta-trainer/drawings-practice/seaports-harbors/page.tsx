@@ -352,7 +352,7 @@ export default function SeaportsHarborsPage() {
               type="text"
               value={ex3}
               onChange={(e) => setEx3(e.target.value)}
-              placeholder="например: 36000000000"
+              aria-label="например: 36000000000" placeholder="например: 36000000000"
               className="w-full md:w-80 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-cyan-500"
             />
             {ex3 && (

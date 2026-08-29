@@ -107,7 +107,7 @@ export default function CanalsIrrigationPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V_бетона, ×100 м³ (1280 = 128 000)"
+            aria-label="V_бетона, ×100 м³ (1280 = 128 000)" placeholder="V_бетона, ×100 м³ (1280 = 128 000)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: P = 8 + 2×4×√(1+4) = 8 + 8×2.24 = 8 + 17.9 = 25.9 м (включая 0.5 м бермы → ~27 м); V = 27 × 0.22 × 80 000 = 475 200 м³ + 20% потерь = ~570 000 м³ для облицовки и плит = ~1 280 × 100 м³ с учётом мостов, шлюзов, узлов сопряжения (общие монолитные части ~1 280 × 100 м³).</p>

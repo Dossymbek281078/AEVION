@@ -538,7 +538,7 @@ export default function SportsFieldsPage() {
               type="text"
               value={ex3}
               onChange={(e) => setEx3(e.target.value)}
-              placeholder="например, 102 000 000"
+              aria-label="например, 102 000 000" placeholder="например, 102 000 000"
               className="w-full md:w-80 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-sm focus:border-blue-500 focus:outline-none"
             />
             <div className="mt-4 flex flex-wrap gap-2">

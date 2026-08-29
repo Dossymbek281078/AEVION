@@ -143,7 +143,7 @@ export default function ItpPage() {
               <input
                 value={a1}
                 onChange={(e) => setA1(e.target.value)}
-                placeholder="например, 4500000"
+                aria-label="например, 4500000" placeholder="например, 4500000"
                 className="px-3 py-2 bg-zinc-950 border border-zinc-700 rounded text-zinc-100 focus:border-orange-400 outline-none w-56"
               />
               <button
@@ -184,7 +184,7 @@ export default function ItpPage() {
               <input
                 value={a2}
                 onChange={(e) => setA2(e.target.value)}
-                placeholder="например, 75"
+                aria-label="например, 75" placeholder="например, 75"
                 className="px-3 py-2 bg-zinc-950 border border-zinc-700 rounded text-zinc-100 focus:border-orange-400 outline-none w-56"
               />
               <button
@@ -222,7 +222,7 @@ export default function ItpPage() {
               <input
                 value={a3}
                 onChange={(e) => setA3(e.target.value)}
-                placeholder="например, 21"
+                aria-label="например, 21" placeholder="например, 21"
                 className="px-3 py-2 bg-zinc-950 border border-zinc-700 rounded text-zinc-100 focus:border-orange-400 outline-none w-56"
               />
               <button

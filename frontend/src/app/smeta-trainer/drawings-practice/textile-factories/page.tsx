@@ -258,7 +258,7 @@ export default function TextileFactoriesPage() {
               type="text"
               value={ex3}
               onChange={(e) => setEx3(e.target.value)}
-              placeholder="например, 50000000000"
+              aria-label="например, 50000000000" placeholder="например, 50000000000"
               className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-100 w-72"
             />
             {showResults && (

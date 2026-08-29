@@ -107,7 +107,7 @@ export default function IsotopeMedicalPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V_бетона, м³"
+            aria-label="V_бетона, м³" placeholder="V_бетона, м³"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V_нар = 12 × 12 × 10 = 1440 м³; V_внутр = 384 м³; V_общ_конст = 1056 м³ из них BPE ~12 м³ (тонкий слой), бетон heavy concrete ~280 м³ (со слоем 2 м на стены + перекрытие + пол). Точный расчёт зависит от детальной геометрии лабиринта, проёмов под trolley, hot-cell-connector.</p>

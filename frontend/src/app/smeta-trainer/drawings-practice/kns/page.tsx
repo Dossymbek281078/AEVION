@@ -174,7 +174,7 @@ export default function KnsPage() {
                 inputMode="decimal"
                 value={ex1.value}
                 onChange={(e) => setEx1({ ...ex1, value: e.target.value })}
-                placeholder="например, 3"
+                aria-label="например, 3" placeholder="например, 3"
                 className={inputCls}
               />
               <button onClick={checkEx1} className={btnCls}>Проверить</button>
@@ -206,7 +206,7 @@ export default function KnsPage() {
                 inputMode="decimal"
                 value={ex2.value}
                 onChange={(e) => setEx2({ ...ex2, value: e.target.value })}
-                placeholder="например, 6"
+                aria-label="например, 6" placeholder="например, 6"
                 className={inputCls}
               />
               <button onClick={checkEx2} className={btnCls}>Проверить</button>
@@ -237,7 +237,7 @@ export default function KnsPage() {
                 inputMode="decimal"
                 value={ex3.value}
                 onChange={(e) => setEx3({ ...ex3, value: e.target.value })}
-                placeholder="например, 2.5"
+                aria-label="например, 2.5" placeholder="например, 2.5"
                 className={inputCls}
               />
               <button onClick={checkEx3} className={btnCls}>Проверить</button>

@@ -384,7 +384,7 @@ export default function AgroGreenhousesPage() {
                   setEx3(e.target.value);
                   setEx3Checked(false);
                 }}
-                placeholder="введите сумму в тенге"
+                aria-label="введите сумму в тенге" placeholder="введите сумму в тенге"
                 className="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-600"
               />
               <button

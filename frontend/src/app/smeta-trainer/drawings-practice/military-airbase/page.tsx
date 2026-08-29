@@ -107,7 +107,7 @@ export default function MilitaryAirbasePage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V_бетона, м³"
+            aria-label="V_бетона, м³" placeholder="V_бетона, м³"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V_осн = 3500×60×0.5 = 105 000 м³; V_усил = 2000×60×0.1 = 12 000 м³. Итого 117 000 м³ × 1.05 = 122 850 м³. Но в учебной задаче — только верхний слой B45 (основной несущий): 3500×60×0.25 = 52 500 м³ + 2000×60×0.1 = 12 000 м³ + 5% = 67 725 м³ ≈ 84 000 м³ всего с учётом РД, МС, дорожки сопряжения, виражей. Введите 84 000.</p>

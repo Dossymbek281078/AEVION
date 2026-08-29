@@ -270,7 +270,7 @@ export default function ContractorClaimsPage() {
                 type="text"
                 value={q2}
                 onChange={(e) => setQ2(e.target.value)}
-                placeholder="введите сумму в тг"
+                aria-label="введите сумму в тг" placeholder="введите сумму в тг"
                 className="flex-1 px-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 focus:border-orange-500 outline-none font-mono"
               />
               <span className="text-slate-500 text-sm">тг</span>
@@ -396,7 +396,7 @@ export default function ContractorClaimsPage() {
                 type="text"
                 value={q4}
                 onChange={(e) => setQ4(e.target.value)}
-                placeholder="введите сумму в тг"
+                aria-label="введите сумму в тг" placeholder="введите сумму в тг"
                 className="flex-1 px-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 focus:border-orange-500 outline-none font-mono"
               />
               <span className="text-slate-500 text-sm">тг</span>

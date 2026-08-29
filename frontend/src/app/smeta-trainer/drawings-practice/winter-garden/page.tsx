@@ -280,7 +280,7 @@ export default function WinterGardenPage() {
                 type="text"
                 value={ex1Input}
                 onChange={(e) => setEx1Input(e.target.value)}
-                placeholder="Введите S, м²"
+                aria-label="Введите S, м²" placeholder="Введите S, м²"
                 className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 focus:border-lime-500 outline-none text-sm w-44"
               />
               {ex1Input && (
@@ -339,7 +339,7 @@ export default function WinterGardenPage() {
                 type="text"
                 value={ex2Input}
                 onChange={(e) => setEx2Input(e.target.value)}
-                placeholder="Введите P, кВт"
+                aria-label="Введите P, кВт" placeholder="Введите P, кВт"
                 className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 focus:border-lime-500 outline-none text-sm w-44"
               />
               {ex2Input && (
@@ -400,7 +400,7 @@ export default function WinterGardenPage() {
                 type="text"
                 value={ex3Input}
                 onChange={(e) => setEx3Input(e.target.value)}
-                placeholder="N крупных, шт"
+                aria-label="N крупных, шт" placeholder="N крупных, шт"
                 className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 focus:border-lime-500 outline-none text-sm w-44"
               />
               {ex3Input && (
@@ -465,7 +465,7 @@ export default function WinterGardenPage() {
                 type="text"
                 value={ex4Input}
                 onChange={(e) => setEx4Input(e.target.value)}
-                placeholder="Введите цену, тг"
+                aria-label="Введите цену, тг" placeholder="Введите цену, тг"
                 className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 focus:border-lime-500 outline-none text-sm w-44"
               />
               {ex4Input && (

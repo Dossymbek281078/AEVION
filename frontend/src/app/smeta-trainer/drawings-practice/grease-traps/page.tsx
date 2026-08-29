@@ -209,7 +209,7 @@ export default function GreaseTrapsPage() {
                 type="text"
                 value={ex1}
                 onChange={(e) => setEx1(e.target.value)}
-                placeholder="например 4"
+                aria-label="например 4" placeholder="например 4"
                 className="flex-1 rounded-lg border border-amber-900/50 bg-stone-950/70 px-3 py-2 text-stone-100 placeholder-stone-500 focus:border-amber-500 focus:outline-none"
               />
               <button
@@ -247,7 +247,7 @@ export default function GreaseTrapsPage() {
                 type="text"
                 value={ex2}
                 onChange={(e) => setEx2(e.target.value)}
-                placeholder="например 3525000"
+                aria-label="например 3525000" placeholder="например 3525000"
                 className="flex-1 rounded-lg border border-amber-900/50 bg-stone-950/70 px-3 py-2 text-stone-100 placeholder-stone-500 focus:border-amber-500 focus:outline-none"
               />
               <button
@@ -285,7 +285,7 @@ export default function GreaseTrapsPage() {
                 type="text"
                 value={ex3}
                 onChange={(e) => setEx3(e.target.value)}
-                placeholder="например 240"
+                aria-label="например 240" placeholder="например 240"
                 className="flex-1 rounded-lg border border-amber-900/50 bg-stone-950/70 px-3 py-2 text-stone-100 placeholder-stone-500 focus:border-amber-500 focus:outline-none"
               />
               <button

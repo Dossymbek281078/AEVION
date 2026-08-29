@@ -106,7 +106,7 @@ export default function KindergartenDetsadPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь, м²"
+            aria-label="Площадь, м²" placeholder="Площадь, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 150 × 12.5 = 1875 м² ≈ 1850 м². Типовой ДДУ 150 мест занимает 1800-2000 м² застройки + 1000-1500 м² прогулочные площадки и спорт-зона = земельный участок ~3000-3500 м² (0.3-0.35 га). Реально: типовой проект Минпросвещ. РК ПДОП-150 — 1900 м² + 1100 м² двор = 0.3 га.</p>

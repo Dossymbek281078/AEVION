@@ -99,7 +99,7 @@ export default function DairyPlantsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Объём, м³"
+            aria-label="Объём, м³" placeholder="Объём, м³"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 200000÷1030 ≈ 194 м³ суточн. + 194×0.67×1.25 ≈ 162 м³ резерв ≈ 356 м³ ≈ 8 танков по 30 м³ + 2 по 50 м³. Включая UHT/пастер. танки + сливок ≈ 600 м³ → запас 4×. Для всех видов продукции (молоко+кефир+йогурт+сыр) с резервированием итого ≈ 2 400 м³.</p>

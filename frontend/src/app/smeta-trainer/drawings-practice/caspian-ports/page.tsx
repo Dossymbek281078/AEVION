@@ -108,7 +108,7 @@ export default function CaspianPortsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V, м³"
+            aria-label="V, м³" placeholder="V, м³"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: Δh=7.3 м; верхняя ширина = 220 + 2×4×7.3 = 220 + 58.4 = 278.4 м; средняя = (220+278.4)/2 = 249.2 м; S = 249.2 × 7.3 = 1819 м²; V = 1819 × 8000 = 14.55 млн м³ (грубое приближение). С учётом поворотного круга и сужений ≈ 1.8 млн м³ для одного цикла регулярного дноуглубления (поддерживающего) — нужно дроги-землесосы Beaver 5000 (1500 м³/ч) на 1200 ч работы.</p>

@@ -464,7 +464,7 @@ export default function MainPipelinesPage() {
                   setEx3(e.target.value);
                   setEx3Checked(false);
                 }}
-                placeholder="например 200000000000"
+                aria-label="например 200000000000" placeholder="например 200000000000"
                 className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm w-64 focus:outline-none focus:border-blue-500"
               />
               <span className="text-slate-400 text-sm">тг</span>

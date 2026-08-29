@@ -106,7 +106,7 @@ export default function CinemaMultiplexPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во залов"
+            aria-label="Кол-во залов" placeholder="Кол-во залов"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 4000 / 700 = 5.7 ≈ 6 залов. Но это «оптимально» загруженный мультиплекс. На практике делают 10-14 залов разной ёмкости (от 30 для VIP до 525 для IMAX) — обеспечивая разнообразие репертуара и одновременный показ 12+ разных фильмов. Реально Chaplin Cinemas Mega Almaty имеет 14 залов.</p>

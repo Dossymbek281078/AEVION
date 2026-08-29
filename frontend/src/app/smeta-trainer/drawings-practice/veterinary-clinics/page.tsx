@@ -109,7 +109,7 @@ export default function VeterinaryClinicsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Защита стены, ×10 мм Pb (для 1.2 → 12)"
+            aria-label="Защита стены, ×10 мм Pb (для 1.2 → 12)" placeholder="Защита стены, ×10 мм Pb (для 1.2 → 12)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: ветеринарный рентген ниже мощностью (макс. 90 кВ, 10 мА) и реже экспозиции — обычно достаточно 1.0-1.5 мм Pb для прямых стен и 0.5-1.0 мм для вторичного облучения. С запасом и комфортом для соседних кабинетов: 1.2 мм Pb-эквивалент или эквивалент 80 мм бетона. Для двери — Pb-стекло 1.5 мм. Введите 12 (×10).</p>

@@ -108,7 +108,7 @@ export default function FruitColdStoragePage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Холод. мощность, кВт"
+            aria-label="Холод. мощность, кВт" placeholder="Холод. мощность, кВт"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: P_рабочая = 12+125+5+10 = 152 кВт. С запасом +20% на пики = 182 кВт. Но первые 7-10 дней после поступления — pre-cooling режим: тепло дыхания удваивается до 50 Вт/т = 250 кВт, P_total = 12+250+5+10 = 277 кВт пиковая. С учётом этого расчётная мощность ~1850 кВт (с учётом всех камер парка 5-8 шт × ~250 кВт каждая на пик-фазе).</p>

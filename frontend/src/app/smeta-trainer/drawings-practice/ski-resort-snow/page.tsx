@@ -107,7 +107,7 @@ export default function SkiResortSnowPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="P, кВт"
+            aria-label="P, кВт" placeholder="P, кВт"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: P = 112 × 800 = 89 600 Вт ≈ 90 кВт минимально. +20% запас на пики (солнечный летний день +30°C) = ~108 кВт. С учётом дополнительного приземляющего склона (для летних тренировок, ~400 м²) и резерва N+1 = ~400 кВт. Но в задаче только Inrun (без сезонной обработки склона) = 35 кВт реальная средняя.</p>

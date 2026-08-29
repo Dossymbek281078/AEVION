@@ -108,7 +108,7 @@ export default function NationalLibraryPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="S_хранилище, м²"
+            aria-label="S_хранилище, м²" placeholder="S_хранилище, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 5250 + 5625 = 10 875 м² полезного, + 50% проходы и сервис = 16 312 м² + 20% технические зоны (вентиляция, серверы) = 19 575 м² хранилищ. С учётом необходимых читальных залов (5000 м²), реставрационн. (500 м²), оцифровки (300 м²), офисов (1500 м²), общих зон + лобби (3000 м²) — общая площадь нац. библиотеки на 1.5 млн томов ~30 000 м².</p>

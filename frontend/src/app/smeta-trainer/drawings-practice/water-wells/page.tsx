@@ -530,7 +530,7 @@ export default function WaterWellsPage() {
                     value={inp}
                     onChange={(e) => setInputs((s) => ({ ...s, [ex.id]: e.target.value }))}
                     disabled={rev}
-                    placeholder="Введите число"
+                    aria-label="Введите число" placeholder="Введите число"
                     className="flex-1 px-3 py-2 text-sm rounded border bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 font-mono disabled:opacity-60"
                   />
                   <span className="text-xs text-slate-600 dark:text-slate-400 font-mono">{ex.unit}</span>

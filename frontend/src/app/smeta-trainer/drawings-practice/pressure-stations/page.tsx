@@ -351,7 +351,7 @@ export default function PressureStationsPage() {
                 type="text"
                 value={answer2}
                 onChange={(e) => setAnswer2(e.target.value)}
-                placeholder="Например: 1.0"
+                aria-label="Например: 1.0" placeholder="Например: 1.0"
                 className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded text-slate-100 focus:border-cyan-500 outline-none"
               />
               <span className="px-3 py-2 text-slate-400">кВт</span>
@@ -405,7 +405,7 @@ export default function PressureStationsPage() {
                 type="text"
                 value={answer3}
                 onChange={(e) => setAnswer3(e.target.value)}
-                placeholder="Например: 750"
+                aria-label="Например: 750" placeholder="Например: 750"
                 className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded text-slate-100 focus:border-cyan-500 outline-none"
               />
               <span className="px-3 py-2 text-slate-400">литров</span>
@@ -463,7 +463,7 @@ export default function PressureStationsPage() {
                 type="text"
                 value={answer4}
                 onChange={(e) => setAnswer4(e.target.value)}
-                placeholder="Например: 2800000"
+                aria-label="Например: 2800000" placeholder="Например: 2800000"
                 className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded text-slate-100 focus:border-cyan-500 outline-none"
               />
               <span className="px-3 py-2 text-slate-400">тенге</span>

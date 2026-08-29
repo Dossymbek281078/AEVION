@@ -109,7 +109,7 @@ export default function TvRadioStudioPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="P, кВт"
+            aria-label="P, кВт" placeholder="P, кВт"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: N = E × S / (Φ × η) = 2000 × 150 / (25 000 × 0.45) = 300 000 / 11 250 = 27 шт; P = 27 × 0.28 = 7.6 кВт. Но с учётом резерва, дополнительной заливочной + back-light + key-light + fill-light с интерактивной коррекцией DMX = ~18 прожекторов Arri S60-C × 0.28 = 5 кВт основного + резерв + контурные = ~5 кВт. (Большие шоу-студии используют до 100 кВт освещ. с диммерами).</p>

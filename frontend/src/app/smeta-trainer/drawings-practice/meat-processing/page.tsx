@@ -99,7 +99,7 @@ export default function MeatProcessingPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Расход холода, кВт·ч/сутки"
+            aria-label="Расход холода, кВт·ч/сутки" placeholder="Расход холода, кВт·ч/сутки"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: Q = 5000×1.7×22 + 5000×230 = 187 000 + 1 150 000 = 1 337 000 кДж ≈ 371 кВт·ч. С учётом ограждений + воздухообмен + COP=0.3 ≈ 1250 кВт·ч.</p>

@@ -103,7 +103,7 @@ export default function ArenaFootballPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь трибун, м²"
+            aria-label="Площадь трибун, м²" placeholder="Площадь трибун, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 30_000 × 0.5 = 15_000 м² зрительские; ×1.25 = 18_750 м² с обслуж. Но это горизонтальная проекция — фактическая поверхность ступеней трибуны с углом наклона 32-38° (UEFA C-value): площадь ~7140 м² на каждый ярус (3 яруса = 21 420 м²). Уровень введите для верхнего яруса × число секций (общая трибуна разделена на сектора).</p>

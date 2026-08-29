@@ -376,7 +376,7 @@ export default function PowerSupplyInternalPage() {
                     inputMode="decimal"
                     value={numeric[ex.id] ?? ""}
                     onChange={(e) => setNumeric({ ...numeric, [ex.id]: e.target.value })}
-                    placeholder="Ваш ответ"
+                    aria-label="Ваш ответ" placeholder="Ваш ответ"
                     className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:border-violet-500 focus:outline-none"
                   />
                   <span className="text-slate-400 text-sm">{ex.unit}</span>

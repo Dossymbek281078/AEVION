@@ -106,7 +106,7 @@ export default function AquacultureFarmsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V_общ, м³"
+            aria-label="V_общ, м³" placeholder="V_общ, м³"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V_товарн = 1667 м³, +50%+15%+5% = +70% = 2833 м³. С учётом фактич. одновременного содержания (срез по времени) на ~50% — реально работающий объём ~850 м³. Если все возрастные группы единомоментно — 1700-2000 м³.</p>

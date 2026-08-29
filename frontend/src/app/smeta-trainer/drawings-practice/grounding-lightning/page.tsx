@@ -331,7 +331,7 @@ export default function GroundingLightningPage() {
               type="text"
               value={answers.q2}
               onChange={(e) => setA("q2", e.target.value)}
-              placeholder="Введите высоту в метрах"
+              aria-label="Введите высоту в метрах" placeholder="Введите высоту в метрах"
               className="w-full md:w-1/2 px-3 py-2 rounded-lg bg-slate-950 border border-amber-900/40 text-slate-100 focus:outline-none focus:border-amber-500"
             />
             {answers.q2 && (
@@ -389,7 +389,7 @@ export default function GroundingLightningPage() {
               type="text"
               value={answers.q3}
               onChange={(e) => setA("q3", e.target.value)}
-              placeholder="Введите длину в метрах"
+              aria-label="Введите длину в метрах" placeholder="Введите длину в метрах"
               className="w-full md:w-1/2 px-3 py-2 rounded-lg bg-slate-950 border border-amber-900/40 text-slate-100 focus:outline-none focus:border-amber-500"
             />
             {answers.q3 && (
@@ -441,7 +441,7 @@ export default function GroundingLightningPage() {
               type="text"
               value={answers.q4}
               onChange={(e) => setA("q4", e.target.value)}
-              placeholder="Введите стоимость в тенге"
+              aria-label="Введите стоимость в тенге" placeholder="Введите стоимость в тенге"
               className="w-full md:w-1/2 px-3 py-2 rounded-lg bg-slate-950 border border-amber-900/40 text-slate-100 focus:outline-none focus:border-amber-500"
             />
             {answers.q4 && (

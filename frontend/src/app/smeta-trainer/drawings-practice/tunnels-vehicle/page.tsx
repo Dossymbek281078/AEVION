@@ -103,7 +103,7 @@ export default function TunnelsVehiclePage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во Jet-fan, шт"
+            aria-label="Кол-во Jet-fan, шт" placeholder="Кол-во Jet-fan, шт"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: для 6 км тоннеля типично 12-15 jet-fan на трубу. С учётом резерва (N+1 при отказе и режима пожара с реверсом) — 24-28 единиц на обе трубы. Производительность одного Jet-fan AVK-1000 ≈ 35 м³/с при ΔP=300 Па.</p>

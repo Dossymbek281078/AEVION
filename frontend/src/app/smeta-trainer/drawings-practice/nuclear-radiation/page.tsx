@@ -450,7 +450,7 @@ export default function NuclearRadiationPage() {
                 value={ex3Input}
                 onChange={(e) => setEx3Input(e.target.value)}
                 disabled={ex3Checked}
-                placeholder="м³"
+                aria-label="м³" placeholder="м³"
                 className="px-4 py-3 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 focus:outline-none focus:border-blue-500 w-48"
               />
               <button

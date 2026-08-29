@@ -267,7 +267,7 @@ export default function EvmsEarnedValuePage() {
                 type="text"
                 value={cvAnswer}
                 onChange={(e) => setCvAnswer(e.target.value)}
-                placeholder="например: -5"
+                aria-label="например: -5" placeholder="например: -5"
                 className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm w-40 focus:outline-none focus:border-blue-500"
               />
               <span className="text-slate-400 text-sm">млн тг</span>
@@ -321,7 +321,7 @@ export default function EvmsEarnedValuePage() {
                 type="text"
                 value={spiAnswer}
                 onChange={(e) => setSpiAnswer(e.target.value)}
-                placeholder="например: 0.75"
+                aria-label="например: 0.75" placeholder="например: 0.75"
                 className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm w-40 focus:outline-none focus:border-blue-500"
               />
               <button
@@ -377,7 +377,7 @@ export default function EvmsEarnedValuePage() {
                 type="text"
                 value={eacAnswer}
                 onChange={(e) => setEacAnswer(e.target.value)}
-                placeholder="например: 117.6"
+                aria-label="например: 117.6" placeholder="например: 117.6"
                 className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm w-40 focus:outline-none focus:border-blue-500"
               />
               <span className="text-slate-400 text-sm">млн тг</span>

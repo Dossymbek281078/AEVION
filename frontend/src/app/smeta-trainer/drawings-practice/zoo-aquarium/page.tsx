@@ -390,7 +390,7 @@ export default function ZooAquariumPage() {
                   setEx3(e.target.value);
                   setEx3Checked(false);
                 }}
-                placeholder="введите сумму в тг"
+                aria-label="введите сумму в тг" placeholder="введите сумму в тг"
                 className="bg-slate-950/60 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-blue-500"
               />
               <button

@@ -100,7 +100,7 @@ export default function SeismicIsolationPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во LRB, шт"
+            aria-label="Кол-во LRB, шт" placeholder="Кол-во LRB, шт"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: N_min = 8000×9.81/5000×1.3 = 20.4 → но это по нагрузке. Конструктивно на каждой из 36 колонн нужна минимум 1 LRB → 36 шт, +12 дополнит. (резерв на торцевые/угловые, удвоенные на критич. осях) = 48 шт.</p>

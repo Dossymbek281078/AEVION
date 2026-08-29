@@ -207,6 +207,19 @@ function ResultView({
       s: result.authorCosignature,
     },
     {
+      label: "Platform attestation",
+      tip: {
+        name: "Platform attestation",
+        text:
+          "AEVION's long-lived key signs the per-certificate key. This is the only row " +
+          "whose public key did NOT come from the bundle — it is pinned inside this page, " +
+          "so a bundle assembled by someone else fails here. You can compare the pinned " +
+          "key with the list AEVION publishes at /api/qsign/v2/keys; that comparison is " +
+          "optional, since the check itself needs no network.",
+      },
+      s: result.platformAttestation,
+    },
+    {
       label: "Bitcoin anchor (OpenTimestamps)",
       tip: { name: "Bitcoin anchor", text: "Presence check: does the bundle carry a Bitcoin-confirmed timestamp? For full mathematical proof, run the .ots bytes through any OpenTimestamps client against a Bitcoin node." },
       s: result.bitcoinAnchor,

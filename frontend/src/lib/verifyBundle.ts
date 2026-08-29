@@ -68,6 +68,7 @@ export interface BundleVerificationResult {
   contentHash: { status: CheckStatus; detail: string };
   aevionSignature: { status: CheckStatus; detail: string };
   authorCosignature: { status: CheckStatus; detail: string };
+  platformAttestation: { status: CheckStatus; detail: string };
   bitcoinAnchor: { status: CheckStatus; detail: string };
   overall: CheckStatus;
 }
@@ -105,6 +106,27 @@ function nfc(v: string | null | undefined): string | null {
   if (v === null || v === undefined) return null;
   return String(v).normalize("NFC");
 }
+
+/**
+ * Открытые ключи платформы, ЗАКРЕПЛЁННЫЕ в самом верификаторе.
+ *
+ * Смысл именно в закреплении. Всё остальное в пакете самосогласовано: подпись
+ * проверяется ключом, который приехал в том же файле. Ключ ниже приехал НЕ с
+ * пакетом — он часть этой страницы, и потому способен отличить наш сертификат
+ * от собранного посторонним.
+ *
+ * Сверить можно самому: тот же ключ публикуется на
+ * https://api.aevion.app/api/qsign/v2/keys (kid + publicKey). Сверка — шаг
+ * добровольный: она обращается к нам, а обещание страницы в том, что БЕЗ НАС
+ * проверка тоже работает.
+ *
+ * При смене ключа сюда добавляется НОВАЯ строка, старая остаётся: сертификаты,
+ * выпущенные прежним ключом, обязаны проверяться и после ротации.
+ */
+const PLATFORM_PUBLIC_KEYS: Record<string, string> = {
+  "qsign-ed25519-v1":
+    "63fd4f60e1839498443a99cd69710fe3c7089606fb2188b75246f9903c0b36b8",
+};
 
 async function recomputeContentHash(inputs: {
   title: string;
@@ -195,6 +217,7 @@ export async function verifyAevionBundle(
     contentHash: { status: "skip", detail: "" },
     aevionSignature: { status: "skip", detail: "" },
     authorCosignature: { status: "skip", detail: "" },
+    platformAttestation: { status: "skip", detail: "" },
     bitcoinAnchor: { status: "skip", detail: "" },
     overall: "pass",
   };
@@ -317,6 +340,66 @@ export async function verifyAevionBundle(
     }
   }
 
+  /* ── 3.5) Заверение эфемерного ключа постоянным ключом платформы ── */
+  const pa = (bundle.proofs as Record<string, unknown>).platformAttestation as
+    | { kid?: string; signature?: string }
+    | null
+    | undefined;
+  const aevionRawHex = bundle.proofs.aevionEd25519?.publicKeyRawHex;
+  if (!pa || !pa.kid || !pa.signature) {
+    result.platformAttestation = {
+      status: "skip",
+      detail:
+        "This bundle carries no platform attestation. Without it, the signatures above " +
+        "only show internal consistency: the key that verifies them travels inside this " +
+        "same file. Certificates issued before this layer existed have none.",
+    };
+  } else if (!aevionRawHex) {
+    result.platformAttestation = {
+      status: "skip",
+      detail: "No per-certificate public key to attest.",
+    };
+  } else {
+    const pinned = PLATFORM_PUBLIC_KEYS[pa.kid];
+    if (!pinned) {
+      // Неизвестный kid — НЕ «пропустим»: подпись, которую нечем сверить,
+      // ничем не лучше её отсутствия, а выглядела бы убедительнее.
+      result.platformAttestation = {
+        status: "fail",
+        detail:
+          `Attestation references key '${pa.kid}', which this verifier does not know. ` +
+          "Either the bundle is not ours, or this page predates a key rotation — " +
+          "compare with the key list published by AEVION before trusting it.",
+      };
+    } else {
+      try {
+        const pubKey = await importEd25519Spki(wrapRawAsSpki(hexToBytes(pinned)));
+        const ok = await crypto.subtle.verify(
+          { name: "Ed25519" },
+          pubKey,
+          hexToBytes(pa.signature) as BufferSource,
+          new TextEncoder().encode(aevionRawHex) as BufferSource,
+        );
+        result.platformAttestation = ok
+          ? {
+              status: "pass",
+              detail:
+                `AEVION's long-lived key '${pa.kid}' signs this certificate's key. This is ` +
+                "the one layer whose key did NOT come from the bundle — it is pinned in " +
+                "this verifier, so a bundle assembled by someone else fails here.",
+            }
+          : {
+              status: "fail",
+              detail:
+                "The platform attestation does not validate against AEVION's known key: " +
+                "this certificate's key was not attested by AEVION.",
+            };
+      } catch (e) {
+        result.platformAttestation = { status: "fail", detail: (e as Error).message };
+      }
+    }
+  }
+
   /* ── 4) OpenTimestamps Bitcoin anchor (presence check only) ── */
   const ots = bundle.proofs.openTimestamps;
   if (!ots) {
@@ -362,6 +445,7 @@ export async function verifyAevionBundle(
     result.contentHash,
     result.aevionSignature,
     result.authorCosignature,
+    result.platformAttestation,
     result.bitcoinAnchor,
   ];
   /*
@@ -381,6 +465,7 @@ export async function verifyAevionBundle(
   const attestations = [
     result.aevionSignature,
     result.authorCosignature,
+    result.platformAttestation,
     result.bitcoinAnchor,
   ];
   if (allChecks.some((c) => c.status === "fail")) result.overall = "fail";

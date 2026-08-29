@@ -59,7 +59,7 @@ export default function GlossaryPage() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Поиск термина (например: индекс, НР, КС-2, дефектная)..."
+              aria-label="Поиск по глоссарию" placeholder="Поиск термина (например: индекс, НР, КС-2, дефектная)..."
               className="w-full border border-slate-300 rounded-lg px-4 py-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               autoFocus
             />

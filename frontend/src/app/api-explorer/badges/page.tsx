@@ -121,7 +121,7 @@ export default function BadgesExplorerPage() {
             <div style={{ marginBottom: 12 }}>
               <input
                 type="text"
-                placeholder="Search modules…"
+                aria-label="Search modules" placeholder="Search modules…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 style={{
@@ -149,6 +149,7 @@ export default function BadgesExplorerPage() {
                   <button
                     key={m.id}
                     type="button"
+                    aria-pressed={isPicked}
                     onClick={() => togglePicked(m.id)}
                     style={{
                       width: "100%",
@@ -165,10 +166,18 @@ export default function BadgesExplorerPage() {
                       color: "#0f172a",
                     }}
                   >
+                    {/* Флажок здесь ЧИСТО РИСОВАННЫЙ: нажимает сама строка
+                        (она `<button>` с названием модуля), у флажка
+                        `pointerEvents: none`. Для читалки он был сорок одной
+                        безымянной галочкой подряд — прячем его от неё, а
+                        состояние сообщает кнопка через `aria-pressed`.
+                        Замер прода 29.08.2026. */}
                     <input
                       type="checkbox"
                       checked={isPicked}
                       onChange={() => {}}
+                      aria-hidden="true"
+                      tabIndex={-1}
                       style={{ pointerEvents: "none", flexShrink: 0 }}
                     />
                     <div style={{ width: 6, height: 6, borderRadius: 999, background: c }} aria-hidden />

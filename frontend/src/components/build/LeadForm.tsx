@@ -98,13 +98,13 @@ export function LeadForm({ lang }: { lang: "ru" | "en" }) {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder={t.emailPh}
+              aria-label={t.emailPh} placeholder={t.emailPh}
               className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
             />
             <input
               value={city}
               onChange={(e) => setCity(e.target.value)}
-              placeholder={t.cityPh}
+              aria-label={t.cityPh} placeholder={t.cityPh}
               className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
             />
             <button

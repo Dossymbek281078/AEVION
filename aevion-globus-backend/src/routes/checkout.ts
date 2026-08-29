@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { gumroadSellable } from "../lib/payment/gumroadProvider";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
 import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/payboxProvider";
@@ -277,6 +278,7 @@ checkoutRouter.get("/subscriptions/count", (_req, res) => {
 
 // ── GET /healthz ──────────────────────────────────────────────────────────────
 checkoutRouter.get("/healthz", (_req, res) => {
+  const лс = lemonSqueezySellable();
   // Тот же смысл, что и у маршрутизации выше: готовность включает СЕКРЕТ
   // ВЕБХУКА, иначе отчёт называл бы основным того, кто возьмёт деньги и не
   // выдаст купленное. Вариант тарифа здесь не проверяется намеренно — он
@@ -320,6 +322,11 @@ checkoutRouter.get("/healthz", (_req, res) => {
       },
       gumroad: {
         configured: Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim()),
+        // Какие тарифы Gumroad реально может продать. Токен отвечает «провайдер
+        // настроен», а продажа тарифа требует ссылки на товар — разные вопросы.
+        // Список тарифов берём тот же, что у LemonSqueezy: вселенная тарифов
+        // одна, и два её написания разъехались бы молча.
+        sellable: gumroadSellable([...лс.configured, ...лс.missing]),
         webhook: "/api/gumroad/webhook",
         webhookConfigured: Boolean(process.env.GUMROAD_WEBHOOK_SECRET?.trim()),
       },

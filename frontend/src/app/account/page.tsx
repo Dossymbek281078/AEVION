@@ -467,22 +467,47 @@ export default function AccountPage() {
       <Wave1Nav />
       <ProductPageShell>
         <div style={{ maxWidth: 800, margin: "0 auto", padding: "32px 16px" }}>
-          {justPurchased && (
-            <div
-              role="status"
-              style={{
-                marginBottom: 20, padding: "14px 16px", borderRadius: 12,
-                background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46",
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 15 }}>Спасибо за покупку</div>
-              <div style={{ fontSize: 13, marginTop: 4 }}>
-                Оплата принята. Купленное — в списке ниже; если его там ещё нет,
-                обновите страницу через минуту: подтверждение от кассы иногда идёт
-                с задержкой.
+          {/*
+            Подтверждение возврата из кассы. Текст зависит от того, ПОДТВЕРДИЛИ
+            ли мы покупку у себя, а не от того, что написано в адресе.
+
+            Первая версия говорила «Оплата принята» всякому, у кого в адресе
+            стоит ?purchased=<что угодно>. Это ровно тот класс, который мы
+            вычищаем по всей платформе: утверждение об успехе, ничем не
+            проверенное. Метку в адрес кладёт касса, но переписать её может
+            кто угодно, а страница отвечала за кассу.
+
+            Теперь: право нашлось — говорим уверенно; ещё не пришло — говорим,
+            что ждём подтверждения, и это правда в обоих случаях (вебхук
+            приходит с задержкой). Про «оплата принята» молчим, пока не знаем.
+          */}
+          {justPurchased && (() => {
+            const confirmed = ownedApps.some(
+              (slug) => slug.toLowerCase() === justPurchased.toLowerCase(),
+            );
+            return (
+              <div
+                role="status"
+                style={{
+                  marginBottom: 20, padding: "14px 16px", borderRadius: 12,
+                  background: confirmed ? "#ecfdf5" : "#f8fafc",
+                  border: `1px solid ${confirmed ? "#a7f3d0" : "#cbd5e1"}`,
+                  color: confirmed ? "#065f46" : "#334155",
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 15 }}>
+                  {confirmed ? "Спасибо за покупку" : "Возвращаемся из кассы"}
+                </div>
+                <div style={{ fontSize: 13, marginTop: 4 }}>
+                  {confirmed
+                    ? "Доступ открыт — купленное в списке ниже."
+                    : ownedUnknown
+                      ? "Подтверждение пока не удалось проверить: список покупок не загрузился. Обновите страницу через минуту."
+                      : "Ждём подтверждения от кассы — оно приходит в течение минуты. Обновите страницу, и покупка появится в списке ниже."}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
           <h1 style={{ fontSize: 28, fontWeight: 900, color: "#0f172a", margin: 0 }}>
             Account
           </h1>

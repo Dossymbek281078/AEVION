@@ -52,31 +52,23 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 import { safeErrorText } from "../lib/safeError";
+import { upsertAppSubscription } from "../lib/appEntitlements";
 
-async function upsertAppSubscription(
-  email: string,
-  appSlug: string,
-  status: "active" | "cancelled",
-  lsSubId?: string,
-): Promise<void> {
-  const pool = getPool();
-  try {
-    await pool.query(
-      `INSERT INTO "AppSubscription" ("id","email","appSlug","lsSubId","status","createdAt","updatedAt")
-       VALUES (gen_random_uuid(),$1,$2,$3,$4,NOW(),NOW())
-       ON CONFLICT ("email","appSlug") DO UPDATE
-         SET "status"=$4, "lsSubId"=COALESCE($3,"AppSubscription"."lsSubId"), "updatedAt"=NOW()`,
-      [email, appSlug, lsSubId ?? null, status],
-    );
-  } catch (err) {
-    console.error("[ls/app-sub] upsertAppSubscription error:", err instanceof Error ? err.message : err);
-    // Ошибку НЕ глотаем: раньше сбой записи давал ответ 200 с action
-    // "app_activated". Магазин считал доставку успешной и не повторял её —
-    // человек заплатил, доступа не получил, следов нет. Пробрасываем наверх,
-    // там ответ 500 и повторная доставка.
-    throw err;
-  }
-}
+/**
+ * Запись прав живёт в lib/appEntitlements и НЕ дублируется здесь.
+ *
+ * Копия была, и она разошлась с оригиналом ровно так, как предсказывал
+ * комментарий в самой библиотеке: молча и в трёх местах сразу.
+ *   • не создавала таблицу прав — первая же покупка на базе без миграции
+ *     падала в 500 и повторялась вечно;
+ *   • не приводила адрес к нижнему регистру, а ЧТЕНИЕ прав приводит —
+ *     покупка с адресом Ivan@Mail.ru не находилась никогда;
+ *   • не сбрасывала кэш прав, и только что заплативший до минуты упирался
+ *     в отказ.
+ *
+ * Через Gumroad те же покупки шли через библиотеку и работали. Один и тот
+ * же товар выдавался по-разному в зависимости от кассы.
+ */
 
 async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
   const pool = getPool();
@@ -296,8 +288,13 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       const appSlug = appSlugForReference(ref)!;
       if (ACTIVATE_EVENTS.has(event)) {
         await upsertAppSubscription(email, appSlug, "active", lsSubId);
-        // У DevHub доступ открывает не строка AppSubscription (её пока никто не
-        // читает), а тариф в DevHubTier/DevHubEmailTier — его и ставим.
+        // У DevHub доступ открывает НЕ ТОЛЬКО строка AppSubscription: у него есть
+        // свой тариф в DevHubTier/DevHubEmailTier, его и ставим отдельно.
+        //
+        // Формулировка «строку прав пока никто не читает» здесь была и устарела:
+        // её читает planGate (hasActiveAppSubscription) и маршрут /api/apps/access.
+        // Комментарий, объявляющий живой механизм мёртвым, опаснее отсутствия
+        // комментария: по нему следующий заведёт второй такой же.
         if (appSlug === "devhub") await upgradeDevHubByEmail(email, "pro");
         console.log(`[ls/webhook] ${event} → app_sub activated: ${appSlug} for ${email}`);
         return res.json({ ok: true, action: "app_activated", appSlug, email });
@@ -306,8 +303,8 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         // ПОРЯДОК ЗДЕСЬ ЗНАЧИМ, и он обратный порядку активации.
         //
         // Записей две: строка прав (AppSubscription) и тариф, который РЕАЛЬНО
-        // открывает доступ (DevHubTier/DevHubEmailTier — строку прав пока
-        // никто не читает). Между ними возможен сбой, и тогда важно, в какую
+        // открывает доступ (DevHubTier/DevHubEmailTier). Строку прав читает
+        // planGate. Между ними возможен сбой, и тогда важно, в какую
         // сторону мы промахнёмся.
         //
         // Было: сперва «отменено» в правах, потом снятие тарифа. Упади второе

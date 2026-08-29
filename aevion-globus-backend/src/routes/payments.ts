@@ -262,8 +262,22 @@ paymentsRouter.get("/kaspi/config", (_req, res) => {
 /* ═══ General ═══ */
 
 paymentsRouter.get("/health", (_req, res) => {
+  const lsReady =
+    Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
+    Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim());
   res.json({
-    gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: true },
+    // `primary` раньше стояло у Gumroad КОНСТАНТОЙ true. Поле выглядело
+    // замером, а было литералом — и после перехода на LemonSqueezy оно
+    // начало лгать: /api/pricing/checkout/healthz отвечал
+    // primaryProvider "lemonsqueezy", а эта ручка в тот же миг —
+    // gumroad primary true. Две наши собственные ручки спорили о том,
+    // кто принимает деньги, и верили бы более короткой.
+    //
+    // Выражение взято ОДИН В ОДИН из checkout.ts (/healthz), а не
+    // придумано заново: второй способ отвечать на тот же вопрос и есть
+    // причина расхождения.
+    lemonsqueezy: { configured: lsReady, primary: lsReady },
+    gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: !lsReady },
     paybox: { configured: Boolean(PAYBOX_MERCHANT()) },
     kaspi: { configured: false },
     paddle: { configured: false, migrated: true },

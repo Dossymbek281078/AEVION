@@ -392,13 +392,30 @@ describe("дата запуска обязана называть свой ис�
       const hidden = html.indexOf("display:none");
       expect(hidden, `${slug}: скрытого прехедера нет вовсе`).toBeGreaterThan(-1);
       // Он обязан стоять ДО видимого содержимого, иначе клиент возьмёт не его.
-      expect(hidden, `${slug}: прехедер стоит после видимого текста`).toBeLessThan(html.indexOf("AEVION</div>"));
+      // Якорь — ЗАГОЛОВОК, а не строка бренда: у модулей, чьё имя уже
+      // начинается с «AEVION», строки бренда нет вовсе, и прежний якорь давал
+      // indexOf = -1, то есть падение на исправном письме (поймано 29.08).
+      expect(hidden, `${slug}: прехедер стоит после видимого текста`).toBeLessThan(html.indexOf("<h1"));
       // И нести то же обещание, что тело письма, — из ОДНОГО источника.
       const opens = LAUNCH_MODULES[slug].opens;
       const head = opens.charAt(0).toUpperCase() + opens.slice(1);
       expect(html.slice(hidden, hidden + 400), `${slug}: прехедер не из поля opens`).toContain(head);
       // И не быть пересказом темы.
       expect(html.slice(hidden, hidden + 400)).not.toContain(mail.subject);
+    }
+  });
+
+  // 29.08.2026: у трёх модулей имя уже начинается с «AEVION», и над заголовком
+  // стояла ещё одна строка «AEVION» — в письме выходило «AEVION AEVION IP
+  // Bureau открыт». У шахмат этого не видно (имя другое), поэтому дефект и
+  // дожил до проверки писем ВСЕЙ очереди, а не только ближайшего запуска.
+  test("бренд не удваивается у модулей с AEVION в имени", () => {
+    for (const slug of Object.keys(LAUNCH_MODULES)) {
+      const mail = buildLaunchEmail(slug, "kto-to@primer.ru");
+      const text = mail.htmlContent.replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/g, " ").replace(/\s+/g, " ");
+      expect(text, `${slug}: «AEVION AEVION» в письме`).not.toContain("AEVION AEVION");
+      // И при этом имя платформы в письме остаётся — письмо без неё безымянное.
+      expect(text, `${slug}: слова AEVION в письме нет вовсе`).toContain("AEVION");
     }
   });
 });

@@ -179,7 +179,7 @@ export function buildLaunchEmail(moduleSlug: string, email: string): Constitutio
         ${m.opens.charAt(0).toUpperCase()}${m.opens.slice(1)}. Начать можно за минуту.
         &#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;
       </div>
-      <div style="font-family:monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#a9781a">AEVION</div>
+      ${m.name.startsWith("AEVION") ? "" : `<div style="font-family:monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#a9781a">AEVION</div>`}
       <h1 style="font-size:26px;line-height:1.2;margin:10px 0 14px">${m.name} открыт</h1>
       <p style="margin:0 0 14px;font-size:15px;line-height:1.6">
         Вы оставляли адрес, чтобы узнать о запуске — он состоялся${m.date ? ` ${m.date}` : ""}.

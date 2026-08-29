@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { PurchaseReturnTracker } from "@/components/PurchaseReturnTracker";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
@@ -89,6 +90,9 @@ type SortMode = "newest" | "oldest" | "verified";
 export default function BureauPage() {
   return (
     <Suspense fallback={<div style={{ minHeight: "60vh", padding: 24, color: "#64748b", fontSize: 14 }}>Загрузка…</div>}>
+      {/* Stripe возвращает сюда с ?paid=1 — без этой отметки оплата не
+          связывается с каналом, из которого пришёл человек. */}
+      <PurchaseReturnTracker source="bureau" provider="stripe" successParam="paid" />
       <BureauPageInner />
     </Suspense>
   );

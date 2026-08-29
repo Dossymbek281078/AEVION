@@ -17,17 +17,33 @@ export const eventsRouter = Router();
  * чтобы можно было сгруппировать действия одной сессии. Никаких PII не пишем.
  */
 
-const EVENTS_FILE = process.env.EVENTS_FILE
-  ? process.env.EVENTS_FILE
-  : join(process.cwd(), "data", "events.jsonl");
-
-// Фиксируем РЯДОМ с путём и в тот же момент. Если читать env при вызове, поле
-// могло бы сказать "persisted", пока путь остаётся дефолтным — статус, который
-// врёт, хуже отсутствующего статуса.
-const EVENTS_FILE_FROM_ENV = Boolean(process.env.EVENTS_FILE);
+/**
+ * Путь к журналу событий и признак «задан через окружение» — ОДНИМ чтением env
+ * и ПРИ ВЫЗОВЕ, а не при импорте модуля.
+ *
+ * Почему при вызове: константа, вычисленная на импорте, даёт гонку «env против
+ * импорта». Тест выставляет EVENTS_FILE во временную папку, но модуль к тому
+ * моменту уже импортирован (пусть и транзитивно) и запомнил дефолтный путь —
+ * события уезжают в РЕАЛЬНЫЙ data/events.jsonl и переживают прогон. Ровно это
+ * доказано на provisioning.ts 26.07.2026 и числится среди причин
+ * order-dependent падений набора (issue #982).
+ *
+ * Почему одним чтением: признак обязан описывать ТОТ ЖЕ путь, который вернули.
+ * Разнесённые чтения позволяли бы полю сказать "persisted", пока путь остаётся
+ * дефолтным — статус, который врёт, хуже отсутствующего статуса.
+ *
+ * В проде поведение не меняется: переменные там выставлены до старта процесса.
+ */
+function eventsStore(): { file: string; fromEnv: boolean } {
+  const fromEnv = process.env.EVENTS_FILE;
+  return {
+    file: fromEnv ? fromEnv : join(process.cwd(), "data", "events.jsonl"),
+    fromEnv: Boolean(fromEnv),
+  };
+}
 
 function ensureDir() {
-  const dir = dirname(EVENTS_FILE);
+  const dir = dirname(eventsStore().file);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 /**
@@ -72,12 +88,12 @@ function readEventsStoreStatus(): EventsStoreStatus {
   // Путь наружу не отдаём — он раскрывает раскладку файловой системы сервера.
   // Для ответа на вопрос «переживают ли события деплой» достаточно флага и
   // метки самого старого события.
-  const persistedByEnv = EVENTS_FILE_FROM_ENV;
-  if (!existsSync(EVENTS_FILE)) {
+  const persistedByEnv = eventsStore().fromEnv;
+  if (!existsSync(eventsStore().file)) {
     return { persistedByEnv, exists: false, count: 0, oldest: null };
   }
   try {
-    const lines = readFileSync(EVENTS_FILE, "utf8").split("\n").filter(Boolean);
+    const lines = readFileSync(eventsStore().file, "utf8").split("\n").filter(Boolean);
     let oldest: string | null = null;
     for (const line of lines) {
       try {
@@ -208,7 +224,7 @@ eventsRouter.post("/", (req, res) => {
 
   try {
     ensureDir();
-    appendFileSync(EVENTS_FILE, JSON.stringify(event) + "\n", "utf8");
+    appendFileSync(eventsStore().file, JSON.stringify(event) + "\n", "utf8");
   } catch (e) {
     console.error("[events] write failed", e);
     captureEventsError(e, { route: "events/POST" });
@@ -232,7 +248,7 @@ eventsRouter.get("/summary", (req, res) => {
     }
   }
 
-  if (!existsSync(EVENTS_FILE)) {
+  if (!existsSync(eventsStore().file)) {
     return res.json({
       total: 0,
       byType: {},
@@ -250,7 +266,7 @@ eventsRouter.get("/summary", (req, res) => {
 
   let content = "";
   try {
-    content = readFileSync(EVENTS_FILE, "utf8");
+    content = readFileSync(eventsStore().file, "utf8");
   } catch (e) {
     console.error("[events/summary] read failed", e);
     captureEventsError(e, { route: "events/GET/summary" });
@@ -320,13 +336,13 @@ eventsRouter.get("/aggregate", (req, res) => {
   const sinceHours = Math.min(Math.max(parseInt(String(req.query.hours ?? "168"), 10) || 168, 1), 720);
   const sinceMs = Date.now() - sinceHours * 60 * 60 * 1000;
 
-  if (!existsSync(EVENTS_FILE)) {
+  if (!existsSync(eventsStore().file)) {
     return res.json({ period, groupBy, windowHours: sinceHours, buckets: [] });
   }
 
   let content = "";
   try {
-    content = readFileSync(EVENTS_FILE, "utf8");
+    content = readFileSync(eventsStore().file, "utf8");
   } catch (e) {
     console.error("[events/aggregate] read failed", e);
     captureEventsError(e, { route: "events/GET/aggregate" });
@@ -381,7 +397,7 @@ eventsRouter.get("/recent", (req, res) => {
     }
   }
 
-  if (!existsSync(EVENTS_FILE)) {
+  if (!existsSync(eventsStore().file)) {
     return res.json({ items: [], total: 0 });
   }
 
@@ -389,7 +405,7 @@ eventsRouter.get("/recent", (req, res) => {
 
   let content = "";
   try {
-    content = readFileSync(EVENTS_FILE, "utf8");
+    content = readFileSync(eventsStore().file, "utf8");
   } catch (e) {
     console.error("[events/recent] read failed", e);
     captureEventsError(e, { route: "events/GET/recent" });
@@ -460,13 +476,13 @@ eventsRouter.get("/by-variant", (req, res) => {
   const result: Record<string, Record<string, FunnelCounts>> = {};
   for (const k of keys) result[k] = {};
 
-  if (!existsSync(EVENTS_FILE)) {
+  if (!existsSync(eventsStore().file)) {
     return res.json({ keys, windowHours: sinceHours, variants: result });
   }
 
   let content = "";
   try {
-    content = readFileSync(EVENTS_FILE, "utf8");
+    content = readFileSync(eventsStore().file, "utf8");
   } catch (e) {
     console.error("[events/by-variant] read failed", e);
     captureEventsError(e, { route: "events/GET/by-variant" });

@@ -26,6 +26,8 @@ import { useI18n } from "@/lib/i18n";
 type Key = keyof typeof EN;
 
 const EN = {
+  "value.title": "One window instead of seven subscriptions",
+  "value.body": "App, database, texts, images, voice-over, music, video and 3D — in one project, with no moving files between services and no seven separate logins.",
   "hero.orStart": "Or start with an example:",
   "hero.ex1": "coffee shop landing page with a menu and a booking form",
   "hero.ex2": "task tracker with a database and statuses",
@@ -77,6 +79,8 @@ const EN = {
 } as const;
 
 const RU: Record<Key, string> = {
+  "value.title": "Одно окно вместо семи подписок",
+  "value.body": "Приложение, база данных, тексты, картинки, озвучка, музыка, видео и 3D — в одном проекте, без переноса файлов между сервисами и без семи отдельных логинов.",
   "hero.orStart": "Или начните с примера:",
   "hero.ex1": "лендинг кофейни с меню и формой брони",
   "hero.ex2": "трекер задач с базой данных и статусами",
@@ -128,6 +132,8 @@ const RU: Record<Key, string> = {
 };
 
 const KK: Record<Key, string> = {
+  "value.title": "Жеті жазылымның орнына бір терезе",
+  "value.body": "Қосымша, дерекқор, мәтіндер, суреттер, дыбыстау, музыка, бейне және 3D — бір жобада, файлдарды сервистер арасында тасымалдамай және жеті бөлек логинсіз.",
   "hero.orStart": "Немесе мысалдан бастаңыз:",
   "hero.ex1": "мәзірі және брондау формасы бар кофехана лендингі",
   "hero.ex2": "дерекқоры және мәртебелері бар тапсырмалар трекері",

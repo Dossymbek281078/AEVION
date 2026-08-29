@@ -507,11 +507,11 @@ export default function DevHubPage() {
           padding: "18px 20px", marginBottom: 20,
         }}>
           <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
-            Одно окно вместо семи подписок
+            {t("value.title")}
           </p>
           <p style={{ fontSize: 13, color: "#475569", margin: "6px 0 12px", lineHeight: 1.55 }}>
-            Приложение, база данных, тексты, картинки, озвучка, музыка, видео и 3D — в одном проекте,
-            без переноса файлов между сервисами и без семи отдельных логинов.
+            {t("value.body")}
+
           </p>
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 420 }}>

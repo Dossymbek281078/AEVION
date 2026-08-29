@@ -223,10 +223,20 @@ export function airspaceSummary(cityId: string, city: CityData) {
     effective: src.effective,
     fetched: src.fetched,
     cells: src.cells.length,
-    coveragePct: Math.round(100 * (field?.coverage ?? 0)),
+    // Три соседних поля, и у ДВУХ из них умолчание уже было честным
+    // (`?? null`), а у третьего — нет. Разное обращение с соседями в
+    // одном литерале почти всегда недосмотр.
+    //
+    // Обратите внимание на асимметрию одного и того же нуля:
+    //   `coveragePct ?? 0`      -> «покрытия нет»       — сторона осторожная;
+    //   `zeroCeilingCells ?? 0` -> «пустых ячеек нет»   — то есть «данные
+    //                              полны», сторона ЛЬСТИВАЯ и опасная.
+    // Одинаковая цифра, противоположный смысл: направление отказа
+    // определяется не значением, а тем, что оно утверждает.
+    coveragePct: field ? Math.round(100 * field.coverage) : null,
     minCeilingM: field?.minCeilingM ?? null,
     maxCeilingM: field?.maxCeilingM ?? null,
-    zeroCeilingCells: field?.zeroCeilingCells ?? 0,
+    zeroCeilingCells: field?.zeroCeilingCells ?? null,
     // Хэш ИМЕННО ЭТОЙ редакции — чтобы сводку можно было связать с привязкой к
     // Bitcoin, не делая второго запроса и не веря нам на слово.
     //

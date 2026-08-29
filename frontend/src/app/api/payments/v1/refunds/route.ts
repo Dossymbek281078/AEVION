@@ -11,7 +11,7 @@ import {
   withCors,
   type ApiLink,
 } from "../_lib";
-import { kvList, kvPush } from "../_persist";
+import { kvList, kvListChecked, kvPush } from "../_persist";
 import { logAudit } from "../_audit";
 import { enqueueAttempt } from "../_webhook_queue";
 
@@ -95,7 +95,31 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const prior = await kvList<ApiRefund>(REFUNDS_KEY);
+  // ⚠️ 29.08.2026: здесь стояло обычное kvList, и это был путь к ДВОЙНОМУ
+  // возврату.
+  //
+  // Ниже из этого списка считается refundedSoFar, а из него remaining. Если
+  // хранилище недоступно и чтение молча отдаёт пустой список, прошлых
+  // возвратов «не существует»: refundedSoFar = 0, remaining = вся сумма, и
+  // защита «уже возвращено полностью» не срабатывает. Деньги уходят второй
+  // раз, а ответ выглядит обычным.
+  //
+  // Направление отказа выбираем по цене: отказ в возврате восстановим —
+  // продавец повторит через минуту; двойной возврат не восстановим.
+  // Поэтому НЕ ЗНАЕМ значит НЕ ДЕЛАЕМ.
+  const priorRead = await kvListChecked<ApiRefund>(REFUNDS_KEY);
+  if (!priorRead.ok) {
+    return attachRateHeaders(
+      withCors(
+        badRequest(
+          "Cannot read prior refunds right now; refund not issued. Please retry.",
+          503
+        )
+      ),
+      gate.rateHeaders
+    );
+  }
+  const prior = priorRead.value;
   const refundedSoFar = prior
     .filter((r) => r.link_id === link.id)
     .reduce((acc, r) => acc + r.amount, 0);

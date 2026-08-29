@@ -230,7 +230,7 @@ export default function QSkywayClient() {
 
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", heightConfidencePct: null as number | null, avgConfClearM: null as number | null, etaStill: null as number | null, obstacleSegments: null as number | null, measuredObstacleSegments: null as number | null, blindInert: null as number | null, blindClearedUpToM: null as number | null, confClearOnObstaclesM: null as number | null });
+  const [stats, setStats] = useState({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: "", local: false, heightConfidencePct: null as number | null, avgConfClearM: null as number | null, etaStill: null as number | null, obstacleSegments: null as number | null, measuredObstacleSegments: null as number | null, blindInert: null as number | null, blindClearedUpToM: null as number | null, confClearOnObstaclesM: null as number | null });
   const [booking, setBooking] = useState<string>("");
   const [playing, setPlaying] = useState(true);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
@@ -357,7 +357,7 @@ export default function QSkywayClient() {
     const city = cityRef.current!;
     const distKm = t.alts.length * city.grid.cell / 1000;
     const cruise = t.alts.reduce((m, v) => Math.max(m, v), 0);
-    setStats((s) => ({ ...s, distKm: +distKm.toFixed(2), cruiseAlt: Math.round(cruise), eta: +((distKm / 90) * 60).toFixed(1), heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null, confClearOnObstaclesM: null }));
+    setStats((s) => ({ ...s, local: true, distKm: +distKm.toFixed(2), cruiseAlt: Math.round(cruise), eta: +((distKm / 90) * 60).toFixed(1), heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null, confClearOnObstaclesM: null }));
   }, [makeTaxi]);
 
   // ── hero route: real backend A* (obeys no-fly + wind ETA), falls back to
@@ -395,7 +395,7 @@ export default function QSkywayClient() {
           setJustState("idle");
           // There is no flight — leaving the previous route's telemetry on screen
           // next to a "refused" banner would read as if those numbers described it.
-          setStats((s) => ({ ...s, distKm: 0, cruiseAlt: 0, eta: 0, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null, confClearOnObstaclesM: null }));
+          setStats((s) => ({ ...s, local: false, distKm: 0, cruiseAlt: 0, eta: 0, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null, confClearOnObstaclesM: null }));
           return;
         }
       }
@@ -410,7 +410,7 @@ export default function QSkywayClient() {
       setJustification(null);
       setJustState("idle");
       heroRef.current = { path: r.path, alts: r.alts, seg: 0, u: 0, speed: 1.1 + Math.random() * 0.5, hero: true, slow: 0 };
-      setStats((s) => ({ ...s, distKm: r.distanceKm, cruiseAlt: Math.round(r.cruiseAltM), eta: r.etaMinWind, heightConfidencePct: r.heightConfidencePct ?? null, avgConfClearM: r.avgConfClearM ?? null, etaStill: r.etaMinStill ?? null, obstacleSegments: r.obstacleSegments ?? null, measuredObstacleSegments: r.measuredObstacleSegments ?? null, blindInert: r.blindHeight?.inertPenaltySegments ?? null, blindClearedUpToM: r.blindHeight?.clearedUpToM ?? null, confClearOnObstaclesM: r.confClearOnObstaclesM ?? null }));
+      setStats((s) => ({ ...s, local: false, distKm: r.distanceKm, cruiseAlt: Math.round(r.cruiseAltM), eta: r.etaMinWind, heightConfidencePct: r.heightConfidencePct ?? null, avgConfClearM: r.avgConfClearM ?? null, etaStill: r.etaMinStill ?? null, obstacleSegments: r.obstacleSegments ?? null, measuredObstacleSegments: r.measuredObstacleSegments ?? null, blindInert: r.blindHeight?.inertPenaltySegments ?? null, blindClearedUpToM: r.blindHeight?.clearedUpToM ?? null, confClearOnObstaclesM: r.confClearOnObstaclesM ?? null }));
     } catch {
       setCeilingBlocked(null);
       setAirspaceRoute(null);
@@ -453,7 +453,7 @@ export default function QSkywayClient() {
       taxisRef.current = []; heroRef.current = null; conflictsRef.current = 0;
       let mh = 0; for (const h of city.grid.heights) if (h > mh) mh = h;
       altMaxRef.current = FLOOR + Math.ceil((mh + CLEAR - FLOOR) / BAND) * BAND + BAND;
-      setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null, confClearOnObstaclesM: null });
+      setStats({ distKm: 0, cruiseAlt: 0, eta: 0, conflicts: 0, city: city.city, local: false, heightConfidencePct: null, avgConfClearM: null, etaStill: null, obstacleSegments: null, measuredObstacleSegments: null, blindInert: null, blindClearedUpToM: null, confClearOnObstaclesM: null });
       setMeta({
         wind: city.wind ? t("qskyway.meta.wind", { g: city.wind.groundMs, top: city.wind.topMs, deg: city.wind.fromDeg }) : "—",
         windSource: city.wind?.source ?? "illustrative",
@@ -1199,6 +1199,25 @@ export default function QSkywayClient() {
               </section>
               <section style={card}>
                 <div style={cardH}>{t("qskyway.panel.telemetry")}</div>
+                {/*
+                  Когда бэкенд не ответил, страница всё равно рисует полёт —
+                  маршрут считается тут же, в браузере. Числа при этом
+                  выглядели РОВНО как серверные: те же поля, тот же вид.
+                  Уверенность по высотам и обмеренные участки при таком
+                  падении честно гасятся в null, но расстояние, высота и
+                  время оставались без единого признака своего
+                  происхождения — а по ним и судят о модуле.
+
+                  Признак живёт В САМИХ данных телеметрии (`stats.local`),
+                  а не отдельной переменной рядом: иначе он разъедется с
+                  числами при следующей же правке, и подпись будет
+                  описывать не тот полёт.
+                */}
+                {stats.local && (
+                  <div style={{ padding: "8px 12px", fontSize: 12, color: "#fbbf24" }}>
+                    {t("qskyway.tel.localRoute")}
+                  </div>
+                )}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: "#1e2836" }}>
                   {([
                     [t("qskyway.tel.distance"), stats.distKm + " " + t("qskyway.unit.km")],

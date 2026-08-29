@@ -60,12 +60,29 @@ async function ктоОсновной() {
 }
 
 describe("две ручки состояния согласны о том, кто принимает деньги", () => {
-  test("LemonSqueezy настроен — обе называют его", async () => {
+  test("LemonSqueezy настроен И умеет выдавать — обе называют его", async () => {
     process.env.LEMON_SQUEEZY_API_KEY = "тест-ключ";
     process.env.LEMON_SQUEEZY_STORE_ID = "1234";
+    // Секрет вебхука здесь обязателен: «основной» отвечает на вопрос, кто
+    // ДОВЕДЁТ покупку, а не кто возьмёт деньги. Без него основным обязан
+    // стать Gumroad — это проверяет соседний тест ниже.
+    process.env.LEMON_SQUEEZY_WEBHOOK_SECRET = "тест-секрет";
     const { поCheckout, поPayments } = await ктоОсновной();
     expect(поCheckout).toBe("lemonsqueezy");
     expect(поPayments).toEqual(["lemonsqueezy"]);
+  });
+
+  test("ключ есть, а секрета вебхука нет — основным обязан стать Gumroad", async () => {
+    // Ровно тот случай, ради которого правка. Раньше основным оставался
+    // LemonSqueezy: деньги брались, вебхук отвечал 200 и молча игнорировал
+    // событие, выдачи не происходило. У Gumroad секрет необязателен, и
+    // выдача работает — значит покупателя надо вести туда.
+    process.env.LEMON_SQUEEZY_API_KEY = "тест-ключ";
+    process.env.LEMON_SQUEEZY_STORE_ID = "1234";
+    delete process.env.LEMON_SQUEEZY_WEBHOOK_SECRET;
+    const { поCheckout, поPayments } = await ктоОсновной();
+    expect(поCheckout).toBe("gumroad");
+    expect(поPayments).toEqual(["gumroad"]);
   });
 
   test("LemonSqueezy НЕ настроен — обе называют Gumroad", async () => {

@@ -181,9 +181,24 @@ checkoutRouter.post("/session", async (req, res) => {
 
     // 1) LemonSqueezy — основной живой процессинг подписок (аккаунт активирован).
     //    Используется, когда задан LS API + variant для этого tier:period.
+    // ⚠️ 29.08.2026: сюда добавлен СЕКРЕТ ВЕБХУКА, и это не косметика.
+    //
+    // Раньше готовность считалась по ключу, магазину и варианту — то есть
+    // отвечала на вопрос «сможем ли ВЗЯТЬ деньги» и молчала о том, сможем ли
+    // их ОТРАБОТАТЬ. Без LEMON_SQUEEZY_WEBHOOK_SECRET маршрут вебхука — это
+    // заглушка, отвечающая 200 OK и игнорирующая событие (см. его шапку).
+    // LemonSqueezy считает доставку успешной, покупатель платит, и не
+    // происходит НИЧЕГО: provisionSubscription зовут только два вебхука и
+    // путь бесплатного заказа, опроса заказов у нас нет вовсе.
+    //
+    // Хуже всего, что запасной провайдер при этом ЕСТЬ и работает: у Gumroad
+    // секрет вебхука необязателен, и выбор идёт как `lsReady ? ls : gumroad`.
+    // То есть неполная проверка не просто молчала — она уводила покупателя
+    // от единственного пути, который довёл бы товар.
     const lsReady =
       Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
       Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim()) &&
+      Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim()) &&
       Boolean(resolveLemonSqueezyVariant(reference));
     if (lsReady) {
       try {
@@ -262,12 +277,26 @@ checkoutRouter.get("/subscriptions/count", (_req, res) => {
 
 // ── GET /healthz ──────────────────────────────────────────────────────────────
 checkoutRouter.get("/healthz", (_req, res) => {
+  // Тот же смысл, что и у маршрутизации выше: готовность включает СЕКРЕТ
+  // ВЕБХУКА, иначе отчёт называл бы основным того, кто возьмёт деньги и не
+  // выдаст купленное. Вариант тарифа здесь не проверяется намеренно — он
+  // свой у каждого тарифа и сообщается отдельным полем `sellable`.
+  // Два РАЗНЫХ вопроса, и путать их нельзя:
+  //   lsReady      — можно ли ВЗЯТЬ деньги (ключ + магазин);
+  //   lsCanDeliver — дойдёт ли покупка до выдачи (нужен секрет вебхука).
+  // Поле `configured` отвечает на первый — таким его читают снаружи, и
+  // отдельное `webhookConfigured` существует ровно чтобы разница была видна.
+  // А вот ВЫБОР провайдера обязан идти по второму: иначе кассу назначаем
+  // тому, кто возьмёт деньги и не выдаст купленное, тогда как у Gumroad
+  // секрет вебхука необязателен и выдача работает.
   const lsReady =
     Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
     Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim());
+  const lsCanDeliver =
+    lsReady && Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim());
   res.json({
     ok: true,
-    primaryProvider: lsReady ? "lemonsqueezy" : "gumroad",
+    primaryProvider: lsCanDeliver ? "lemonsqueezy" : "gumroad",
     providers: {
       // `webhookConfigured` — отдельно от `configured`, и это не мелочь.
       //

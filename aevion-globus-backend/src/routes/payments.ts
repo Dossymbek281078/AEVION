@@ -262,9 +262,17 @@ paymentsRouter.get("/kaspi/config", (_req, res) => {
 /* ═══ General ═══ */
 
 paymentsRouter.get("/health", (_req, res) => {
+  // Выражение ДОСЛОВНО то же, что в checkout.ts, включая секрет вебхука:
+  // это одно утверждение о мире, и два его написания разъезжаются молча.
+  // Без секрета вебхук LemonSqueezy — заглушка на 200 OK, то есть деньги
+  // возьмутся, а купленное не выдастся; выдача есть у Gumroad, и выбор
+  // идёт как `lsReady ? ls : gumroad`.
   const lsReady =
     Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
     Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim());
+  // Кто ОСНОВНОЙ — решает способность выдать купленное, а не взять деньги.
+  const lsCanDeliver =
+    lsReady && Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim());
   res.json({
     // `primary` раньше стояло у Gumroad КОНСТАНТОЙ true. Поле выглядело
     // замером, а было литералом — и после перехода на LemonSqueezy оно
@@ -276,8 +284,8 @@ paymentsRouter.get("/health", (_req, res) => {
     // Выражение взято ОДИН В ОДИН из checkout.ts (/healthz), а не
     // придумано заново: второй способ отвечать на тот же вопрос и есть
     // причина расхождения.
-    lemonsqueezy: { configured: lsReady, primary: lsReady },
-    gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: !lsReady },
+    lemonsqueezy: { configured: lsReady, primary: lsCanDeliver },
+    gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: !lsCanDeliver },
     paybox: { configured: Boolean(PAYBOX_MERCHANT()) },
     kaspi: { configured: false },
     paddle: { configured: false, migrated: true },

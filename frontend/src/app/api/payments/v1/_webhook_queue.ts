@@ -176,8 +176,20 @@ export async function queueStats(): Promise<{
   delivered: number;
   failed: number;
   next_due_in_sec: number | null;
+  /**
+   * Чтение очереди не удалось. Без этого признака оператор, спросивший
+   * «есть ли застрявшие доставки», видел бы «ожидающих 0» при недоступном
+   * хранилище и решил бы, что всё спокойно, — тогда как доставки просто не
+   * видны. Признак назван так же, как у processDue выше: в одном файле один
+   * образец.
+   */
+  unread?: boolean;
 }> {
-  const all = await readQueue();
+  const read = await kvListChecked<QueuedAttempt>(QUEUE_KEY);
+  if (!read.ok) {
+    return { total: 0, pending: 0, delivered: 0, failed: 0, next_due_in_sec: null, unread: true };
+  }
+  const all = read.value;
   const now = Date.now();
   const pending = all.filter((a) => a.status === "pending");
   const upcoming = pending

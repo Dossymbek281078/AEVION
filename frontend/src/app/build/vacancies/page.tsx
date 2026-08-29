@@ -238,7 +238,7 @@ function VacanciesFeedInner() {
       </div>
 
       <div className="mb-3 flex items-center gap-2">
-        <input
+        <input aria-label="Describe what you are looking for"
           value={nlQuery}
           onChange={(e) => setNlQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -264,7 +264,7 @@ function VacanciesFeedInner() {
       <div className="mb-5 flex flex-col gap-3">
         {/* Search + filter toggle row (always visible) */}
         <div className="flex gap-2">
-          <input
+          <input aria-label="Search title or description"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search title or description…"
@@ -282,20 +282,20 @@ function VacanciesFeedInner() {
         </div>
         {/* Secondary filters — always visible sm+, collapsible on mobile */}
         <div className={`flex flex-col gap-3 sm:flex sm:flex-row sm:items-center ${filtersOpen ? "flex" : "hidden sm:flex"}`}>
-        <input
+        <input aria-label="City"
           value={city}
           onChange={(e) => setCity(e.target.value)}
           placeholder="City"
           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-32"
         />
-        <input
+        <input aria-label="Minimum pay"
           value={minSalary}
           onChange={(e) => setMinSalary(e.target.value.replace(/[^\d]/g, ""))}
           placeholder="Min"
           inputMode="numeric"
           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-24"
         />
-        <input
+        <input aria-label="Maximum pay"
           value={maxSalary}
           onChange={(e) => setMaxSalary(e.target.value.replace(/[^\d]/g, ""))}
           placeholder="Max"
@@ -314,7 +314,7 @@ function VacanciesFeedInner() {
           <option value="KZT">KZT</option>
           <option value="EUR">EUR</option>
         </select>
-        <input
+        <input aria-label="Skill"
           value={skill}
           onChange={(e) => setSkill(e.target.value)}
           placeholder="Skill (e.g. AutoCAD)"
@@ -350,7 +350,7 @@ function VacanciesFeedInner() {
             <option key={lvl} value={lvl}>{EDUCATION_LEVEL_LABELS[lvl]}</option>
           ))}
         </select>
-        <input
+        <input aria-label="My years exp"
           value={maxExperience}
           onChange={(e) => setMaxExperience(e.target.value.replace(/[^\d]/g, ""))}
           placeholder="My years exp."

@@ -65,6 +65,19 @@ describe("подписи у полей ввода", () => {
     }
   });
 
+  it("QVenture: поля с подсказкой-ПРИМЕРОМ названы отдельно", () => {
+    // Подсказки там — примеры значений: «3», «15», «Y0: 2,000,000». Взять их
+    // как имя нельзя: читалка объявила бы поле «три». Имена выведены из
+    // подписей, а одна подпись стояла сразу над ТРЕМЯ полями (прогноз выручки
+    // на три года) — каждому дано своё.
+    const s = readFileSync(join(SRC, "app", "qventure", "page.tsx"), "utf8");
+    for (const n of ["Projected revenue this year", "Projected revenue +1yr",
+                     "Projected revenue +2yr", "Churn (%)", "Growth (%)",
+                     "What does it do?", "Traction / metrics"]) {
+      expect(s, `поле «${n}» снова без имени`).toContain(`aria-label="${n}"`);
+    }
+  });
+
   it("у поля вопроса к ИИ подпись связана с его заголовком", () => {
     const s = readFileSync(join(SRC, "components", "AskAi.tsx"), "utf8");
     expect(s, "AskAi снова опирается только на placeholder").toContain("aria-labelledby={titleId}");

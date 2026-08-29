@@ -44,6 +44,13 @@ function stubNotaries(reply: "empty" | "two" | "network-error" | "http-500" | "g
           }),
         };
       }
+      if (u.includes("/api/bureau/health")) {
+        // Подпись нужна значку наравне с реестром: без ключа нотаризация
+        // подписывается HMAC на ПУБЛИЧНОМ ключе нотариуса, и обещать
+        // доступность тарифа в таком состоянии нельзя. Здесь отдаём настоящую,
+        // чтобы этот файл проверял СВОЁ условие — реестр.
+        return { ok: true, status: 200, json: async () => ({ notarySignature: "ed25519" }) };
+      }
       return { ok: true, status: 200, json: async () => ({}) };
     }) as unknown as typeof fetch,
   );
@@ -83,12 +90,35 @@ describe("Бюро: пометка тарифа Notarized идёт от реес
     expect(await badgeText()).not.toMatch(/live/i);
   });
 
-  test("в реестре есть нотариусы — тариф называется live", async () => {
+  test("в реестре есть нотариусы И подпись настоящая — тариф называется live", async () => {
     stubNotaries("two");
     renderPage();
     await waitFor(async () => {
       expect(await badgeText()).toMatch(/live/i);
     });
+  });
+
+  // Условий с 29.08.2026 ДВА, и это продолжение той же мысли, ради которой
+  // писался файл: пометка идёт от настоящего состояния, а не от строки в коде.
+  // Нотариус в реестре отвечает на вопрос «есть кому подписать»; вопрос «чем
+  // подписано» — отдельный, и раньше его не задавали вовсе.
+  test("нотариусы есть, но подпись демонстрационная — не live", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const u = String(url);
+        if (u.includes("/api/bureau/notaries"))
+          return { ok: true, status: 200, json: async () => ({ notaries: [{ id: "n1", name: "Нотариус А" }] }) };
+        if (u.includes("/api/bureau/health"))
+          return { ok: true, status: 200, json: async () => ({ notarySignature: "demo" }) };
+        return { ok: true, status: 200, json: async () => ({}) };
+      }) as unknown as typeof fetch,
+    );
+    renderPage();
+    await waitFor(async () => {
+      expect(await badgeText()).toMatch(/by request/i);
+    });
+    expect(await badgeText()).not.toMatch(/live/i);
   });
 
   // ⚠️ Направление этой проверки ИЗМЕНЕНО 28.08.2026, и это осознанно.

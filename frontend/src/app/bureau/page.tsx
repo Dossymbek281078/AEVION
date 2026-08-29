@@ -119,6 +119,13 @@ function BureauPageInner() {
   // обещает и не пугает. Пока бэкенд с ручкой не выкачен, так и будет.
   const [notaryCount, setNotaryCount] = useState<number | null>(null);
   const [kycMode, setKycMode] = useState<"live" | "stub" | null>(null);
+  // Чем НА САМОМ ДЕЛЕ подписывает нотариус. Без ключа подпись — HMAC на
+  // ПУБЛИЧНОМ ключе нотариуса, то есть пересчитать её может кто угодно; код
+  // честно зовёт это "demo-hmac-sha256". Значок тарифа шёл только от
+  // непустого реестра и про подпись не спрашивал вовсе — то есть в день, когда
+  // появится первый нотариус, карточка пообещала бы Ed25519 независимо от того,
+  // настроен ли ключ. Состояние бюро это уже отдаёт, оставалось прочитать.
+  const [notarySig, setNotarySig] = useState<"ed25519" | "demo" | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -141,6 +148,8 @@ function BureauPageInner() {
         if (!alive || !d) return;
         const v = d?.kyc;
         setKycMode(v === "live" || v === "stub" ? v : null);
+        const sig = d?.notarySignature;
+        setNotarySig(sig === "ed25519" || sig === "demo" ? sig : null);
       })
       .catch(() => { /* оставляем null: своя неудача — не «настроено» */ });
     return () => { alive = false; };
@@ -658,7 +667,15 @@ function BureauPageInner() {
 // у тарифа, исполнить который сегодня некому. Допустимость в конкретном суде
 // зависит от юрисдикции и самого спора, мы её обеспечить не можем; описываем
 // МЕХАНИЗМ и честную доступность, а вывод о суде оставляем юристу покупателя.
-blurb: "A licensed notary co-signs the certificate with Ed25519. The notary registry is still being assembled — check it for current availability.",
+// Обещание Ed25519 даётся, только когда бюро подтверждает, что подпись
+                // действительно Ed25519. Без ключа подписывается HMAC на ПУБЛИЧНОМ
+                // ключе нотариуса — такую подпись может пересчитать кто угодно, и
+                // называть её криптографической нотаризацией нельзя. «Не знаю»
+                // (старая сборка прода полей состояния не отдаёт) обещания не даёт.
+                blurb:
+                  notarySig === "ed25519"
+                    ? "A licensed notary co-signs the certificate with Ed25519. The notary registry is still being assembled — check it for current availability."
+                    : "A licensed notary co-signs the certificate. Cryptographic co-signing is being finalised — ask us to confirm the current signing mode before buying this tier.",
                 // ⚠️ 28.08.2026: значок был «▲ live» при НУЛЕ нотариусов в реестре.
                 //
                 //   GET https://api.aevion.app/api/bureau/notaries -> {"notaries":[]}
@@ -678,7 +695,14 @@ blurb: "A licensed notary co-signs the certificate with Ed25519. The notary regi
                 // и «спросить не удалось» одинаково дают «by request», и только
                 // непустой реестр даёт «live». (Заодно карточка снова целиком
                 // по-английски — русское «в плане» стояло среди английских.)
-                badge: notaryCount && notaryCount > 0 ? "▲ live" : "▲ by request",
+                // «live» требует ОБОИХ условий: есть кому подписать И подпись
+                // настоящая. Прежде значок смотрел только на реестр, то есть
+                // обещал бы доступность в день появления первого нотариуса, даже
+                // если ключа нет и подпись демонстрационная.
+                badge:
+                  notaryCount && notaryCount > 0 && notarySig === "ed25519"
+                    ? "▲ live"
+                    : "▲ by request",
                 badgeColor: "#7c3aed",
                 cta: { label: "View Notary Registry", href: "/bureau/notaries" },
               },

@@ -474,13 +474,26 @@ export default function ConstitutionPage() {
     if (tourStep === null || tourStep === 0) return new Set();
     return changedKeys(TOUR[tourStep - 1].sliders, TOUR[tourStep].sliders);
   }, [tourStep]);
+  // Событие `tour_completed` было в словаре воронки и не отправлялось ниоткуда:
+  // мы знали, сколько человек НАЧАЛО знакомство с продуктом, и никогда —
+  // сколько дошло до конца. Начало без завершения — это половина воронки.
+  //
+  // Флаг нужен, чтобы событие ушло ОДИН раз за тур: на последний шаг можно
+  // вернуться кнопкой «назад-вперёд», и без него мы считали бы одно
+  // прохождение несколько раз, то есть завысили бы собственную метрику.
+  const tourFinishedRef = useRef(false);
   const goToTourStep = useCallback((idx: number) => {
     const clamped = Math.max(0, Math.min(TOUR.length - 1, idx));
     setTourStep(clamped);
     setSliders(TOUR[clamped].sliders);
-  }, []);
+    if (clamped === TOUR.length - 1 && !tourFinishedRef.current) {
+      tourFinishedRef.current = true;
+      track("tour_completed", { steps: TOUR.length });
+    }
+  }, [track]);
   const startTour = useCallback(() => {
     track("tour_started");
+    tourFinishedRef.current = false; // новый тур считается заново
     goToTourStep(0);
   }, [goToTourStep, track]);
   const exitTour = useCallback(() => setTourStep(null), []);

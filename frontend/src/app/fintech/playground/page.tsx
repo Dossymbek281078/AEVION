@@ -124,7 +124,7 @@ export default function FintechPlaygroundPage() {
               style={{ color: method === "GET" ? "#34d399" : "#fbbf24", minWidth: 80 }}>
               {["GET","POST","PATCH","DELETE"].map(m => <option key={m} value={m}>{m}</option>)}
             </select>
-            <input value={path} onChange={e => setPath(e.target.value)}
+            <input aria-label="Путь запроса" value={path} onChange={e => setPath(e.target.value)}
               placeholder="/api/qpaynet/stats"
               className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm font-mono text-teal-300 focus:outline-none focus:border-indigo-500" />
             <button onClick={send} disabled={loading}
@@ -157,7 +157,7 @@ export default function FintechPlaygroundPage() {
                 </div>
               </div>
             )}
-            <input value={token} onChange={e => setToken(e.target.value)}
+            <input aria-label="Токен доступа" value={token} onChange={e => setToken(e.target.value)}
               type="password" placeholder="aevion_auth_token_v1 from localStorage"
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-mono text-slate-400 focus:outline-none focus:border-indigo-500" />
           </div>

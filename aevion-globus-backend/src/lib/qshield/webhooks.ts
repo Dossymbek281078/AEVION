@@ -1,3 +1,4 @@
+import { checkPublicUrl } from "../publicUrlOnly";
 import crypto from "crypto";
 import pg from "pg";
 
@@ -114,6 +115,20 @@ async function deliverAll(
       let succeeded = false;
       let statusCode: number | null = null;
       let errorMessage: string | null = null;
+        // Адрес вебхука приходит от пользователя и хранится в базе. Без проверки
+        // у самой отправки наш сервер сходит по любому адресу, который ему
+        // назвали, — включая петлю, внутреннюю сеть и службу метаданных облака.
+        // Проверка стоит ЗДЕСЬ, а не только при регистрации: гейт на входе не
+        // защищает то, что уже сохранено.
+        //
+        // checkPublicUrl разрешает имя и смотрит АДРЕСА, в которые оно ведёт:
+        // сверка по строке пропустила бы имя, указывающее на 127.0.0.1.
+        const allowInternal =
+          process.env.ALLOW_INTERNAL_WEBHOOKS === "1" || process.env.NODE_ENV === "test";
+        if (!allowInternal && !(await checkPublicUrl(row.url)).ok) {
+          console.warn(`[webhook] НЕ отправлен: адрес ведёт внутрь — ${row.url}`);
+          return;
+        }
       try {
         const res = await fetch(row.url, {
           method: "POST",

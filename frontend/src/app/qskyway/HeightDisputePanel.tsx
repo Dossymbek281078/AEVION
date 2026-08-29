@@ -19,7 +19,8 @@ export interface HeightDispute {
   building: number;
   /** элемент OSM; null — твин не знает, по чему проверять */
   osm: string | null;
-  taggedM: number;
+  /** null, если тега OSM нет: ноль означал бы «здание нулевой высоты». */
+  taggedM: number | null;
   /**
    * Что публикует статья объекта. `null` — разбора человеком ещё нет, и это
    * НЕ ноль: «против 0 м в статье» — правдоподобная цифра вместо «не знаем»,
@@ -54,9 +55,17 @@ export function HeightDisputePanel({ dispute }: { dispute: HeightDispute | null 
       {cruiseDeltaM != null && cruiseDeltaM > 0 && <>{t("qskyway.disp.higherThan", { d: cruiseDeltaM })}</>}
       <span style={{ color: "#5f7086" }}>{t("qskyway.disp.segments", { n: segments })}</span>
       <div style={{ color: "#9fb0c4", fontSize: 10.5, marginTop: 3, whiteSpace: "normal" }}>
-        {publishedM != null
-          ? t("qskyway.disp.taggedVsPublished", { tagged: taggedM, published: publishedM })
-          : t("qskyway.disp.taggedNoReview", { tagged: taggedM })}
+        {/*
+          Три случая, а не два. Третий добавлен 29.08: у высоты по тегу
+          теперь бывает `null` — тега нет. Печатать в этом месте ноль
+          значило бы утверждать, что здание нулевой высоты, а спор идёт
+          как раз о высоте.
+        */}
+        {taggedM == null
+          ? t("qskyway.disp.noTag")
+          : publishedM != null
+            ? t("qskyway.disp.taggedVsPublished", { tagged: taggedM, published: publishedM })
+            : t("qskyway.disp.taggedNoReview", { tagged: taggedM })}
         {cruiseAltMIfPublished != null && (
           <>{t("qskyway.disp.cruiseWouldBe", { alt: cruiseAltMIfPublished, was: cruiseAltM })}</>
         )}

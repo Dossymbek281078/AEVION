@@ -918,7 +918,17 @@ interface HeightDispute {
   building: number;
   /** элемент OSM: из разбора, иначе из твина, иначе неизвестен */
   osm: string | null;
-  taggedM: number;
+  /**
+   * Высота по тегу OSM — или `null`, если тега нет. Раньше подставлялся
+   * НОЛЬ, а он читается как измерение: страница печатала бы «0 м в теге
+   * OSM», то есть утверждала бы, что здание нулевой высоты.
+   *
+   * Соседнее поле `publishedM` уже было приведено к `null` ровно с этим
+   * рассуждением — комментарий про это лежит строкой ниже. Одно место,
+   * один автор, разное обращение с двумя соседними полями: почти всегда
+   * недосмотр, а не решение.
+   */
+  taggedM: number | null;
   /** что публикует статья объекта; null — разбора человеком ещё нет */
   publishedM: number | null;
   publishedSource: string | null;
@@ -984,7 +994,7 @@ function heightDisputeFor(
     // Элемент, если он известен твину, — даже когда разбора ещё нет: по нему
     // высоту можно проверить и завести замечание.
     osm: rev?.osm ?? suspectEntry?.osm ?? null,
-    taggedM: rev?.taggedM ?? city.buildings[building]?.h ?? 0,
+    taggedM: rev?.taggedM ?? city.buildings[building]?.h ?? null,
     // null, а не 0. Ноль здесь означал бы «в статье объекта опубликовано 0 м»,
     // и интерфейс так и печатал: «382 м в теге OSM против 0 м в статье».
     // Сегодня не выстреливало — единственная спорная высота разобрана и до
@@ -1818,7 +1828,8 @@ qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
     const cellCount = [...cells.values()].filter((v) => v === bi).length;
     return {
       building: bi,
-      taggedM: city.buildings[bi]?.h ?? 0,
+      // null, а не 0: ноль здесь означал бы «здание нулевой высоты».
+      taggedM: city.buildings[bi]?.h ?? null,
       cells: cellCount,
       // Элемент источника называем даже без разбора: по нему можно проверить
       // высоту и завести замечание, а разбор появится потом.

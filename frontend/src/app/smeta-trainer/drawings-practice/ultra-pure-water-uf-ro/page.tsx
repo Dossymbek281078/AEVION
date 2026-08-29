@@ -93,7 +93,7 @@ export default function UltraPureWaterUfRoPage() {
             Фарм. завод нуждается 50 м³/час UPW. UPW тенк storage 4-часовой
             buffer + 50% safety reserve. Какой объём storage tank (литров)?
           </p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="л" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-blue-500 focus:outline-none" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="Ответ, л" placeholder="л" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-blue-500 focus:outline-none" />
           {showResults && (
             <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}>
               <p className="text-slate-200">

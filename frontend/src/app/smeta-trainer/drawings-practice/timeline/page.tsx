@@ -487,7 +487,7 @@ export default function TimelinePage() {
                             .filter(x => !isNaN(x) && x !== s.id);
                           updateStage(s.id, { dependsOn: ids });
                         }}
-                        placeholder="—"
+                        aria-label="Ответ, —" placeholder="—"
                         className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-zinc-100"
                       />
                     </td>

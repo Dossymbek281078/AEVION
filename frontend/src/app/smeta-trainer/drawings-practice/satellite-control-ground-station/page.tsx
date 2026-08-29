@@ -113,7 +113,7 @@ export default function SatelliteControlGroundStationPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="м"
+            aria-label="Ответ, м" placeholder="м"
             className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-blue-500 focus:outline-none"
           />
           {showResults && (

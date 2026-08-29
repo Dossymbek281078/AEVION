@@ -48,7 +48,7 @@ export default function SuspensionBridgeLongSpanPage() {
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Main span length</h2>
           <p className="text-slate-300">Для прохода судов Ø1000 m clearance + safety margin. Spam length (м)?</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="м" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="Ответ, м" placeholder="м" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>1000 + 2×100 м clearance + 50 м margin ≈ <strong>1200 м main span</strong>. World-class long-span.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс 1200 m bridge</h2>

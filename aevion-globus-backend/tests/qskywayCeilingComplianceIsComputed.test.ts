@@ -56,6 +56,35 @@ describe("доля соответствия потолку выводится и
     expect(compliant).toBeGreaterThanOrEqual(0);
   });
 
+  test("🔴 строгий режим НЕ пропускает все пары, пока есть превышения", async () => {
+    // Мутация «strictRoutable: pairs, worstExceedanceM: 0» проходила
+    // незамеченной, хотя настоящие значения — 20 из 42 и 166 м. Вместе они
+    // говорят одно: включи строгое соблюдение потолка, и треть маршрутов
+    // перестанет существовать. Объявить обратное — сказать, что регулятор
+    // ничему не мешает.
+    const res = await request(app()).get("/api/qskyway/airspace/impact?city=nyc");
+    const { strictRoutable, pairs, worstExceedanceM, compliant } = res.body;
+    expect(typeof strictRoutable).toBe("number");
+    expect(typeof worstExceedanceM).toBe("number");
+    // Пары, не уложившиеся в потолок, ЕСТЬ — иначе проверка ниже слепа.
+    expect(compliant, "все пары соответствуют — проверка не различает").toBeLessThan(pairs);
+    expect(
+      strictRoutable,
+      "в строгом режиме летают все пары, хотя часть не укладывается в потолок",
+    ).toBeLessThan(pairs);
+    expect(
+      worstExceedanceM,
+      "превышений нет, хотя часть пар не соответствует потолку",
+    ).toBeGreaterThan(0);
+  });
+
+  test("строгий режим не строже, чем соответствие", async () => {
+    // Пара, уложившаяся в потолок, обязана оставаться летабельной строго:
+    // иначе одно из двух чисел считается не тем, чем названо.
+    const res = await request(app()).get("/api/qskyway/airspace/impact?city=nyc");
+    expect(res.body.strictRoutable).toBeGreaterThanOrEqual(res.body.compliant);
+  });
+
   test("город без сетки не выдаёт долю соответствия", async () => {
     // Нечему соответствовать — значит и процента быть не должно, иначе он
     // читается как «всё в порядке».

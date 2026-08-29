@@ -517,10 +517,10 @@ export default function DevHubPage() {
             <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 420 }}>
               <tbody>
                 {[
-                  ["Приложение по описанию", "Lovable Pro", "$25"],
-                  ["Видео", "Runway Pro", "$35"],
-                  ["Картинки", "Midjourney Standard", "$30"],
-                  ["Озвучка", "ElevenLabs Creator", "$22"],
+                  [t("cmp.app"), "Lovable Pro", "$25"],
+                  [t("cmp.video"), "Runway Pro", "$35"],
+                  [t("cmp.images"), "Midjourney Standard", "$30"],
+                  [t("cmp.voice"), "ElevenLabs Creator", "$22"],
                   ["Музыка", "Suno", "$10"],
                   ["3D-модели", "Meshy Pro", "$20"],
                   ["Хостинг", "Vercel Pro", "$20"],

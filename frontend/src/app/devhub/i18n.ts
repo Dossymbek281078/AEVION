@@ -26,6 +26,10 @@ import { useI18n } from "@/lib/i18n";
 type Key = keyof typeof EN;
 
 const EN = {
+  "cmp.app": "App from a description",
+  "cmp.video": "Video",
+  "cmp.images": "Images",
+  "cmp.voice": "Voice-over",
   "value.title": "One window instead of seven subscriptions",
   "value.body": "App, database, texts, images, voice-over, music, video and 3D — in one project, with no moving files between services and no seven separate logins.",
   "hero.orStart": "Or start with an example:",
@@ -79,6 +83,10 @@ const EN = {
 } as const;
 
 const RU: Record<Key, string> = {
+  "cmp.app": "Приложение по описанию",
+  "cmp.video": "Видео",
+  "cmp.images": "Картинки",
+  "cmp.voice": "Озвучка",
   "value.title": "Одно окно вместо семи подписок",
   "value.body": "Приложение, база данных, тексты, картинки, озвучка, музыка, видео и 3D — в одном проекте, без переноса файлов между сервисами и без семи отдельных логинов.",
   "hero.orStart": "Или начните с примера:",
@@ -132,6 +140,10 @@ const RU: Record<Key, string> = {
 };
 
 const KK: Record<Key, string> = {
+  "cmp.app": "Сипаттама бойынша қосымша",
+  "cmp.video": "Бейне",
+  "cmp.images": "Суреттер",
+  "cmp.voice": "Дыбыстау",
   "value.title": "Жеті жазылымның орнына бір терезе",
   "value.body": "Қосымша, дерекқор, мәтіндер, суреттер, дыбыстау, музыка, бейне және 3D — бір жобада, файлдарды сервистер арасында тасымалдамай және жеті бөлек логинсіз.",
   "hero.orStart": "Немесе мысалдан бастаңыз:",

@@ -12226,13 +12226,13 @@ ${question.trim()}`;
     {tourStep>=0&&(()=>{
       const slides=[
         {icon:"♞",title:"Добро пожаловать в AEVION CyberChess",body:<>
-          <p style={{margin:"0 0 10px",lineHeight:1.6}}>Полноценный шахматный тренажёр: AI-движок Stockfish, живой тренер, 5000+ задач, 12 вариантов игры и своя валюта.</p>
+          <p style={{margin:"0 0 10px",lineHeight:1.6}}>Полноценный шахматный тренажёр: AI-движок Stockfish, живой тренер, 500 000+ задач, 12 вариантов игры и своя валюта.</p>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:8}}>
             {["⚡ Puzzle Rush","🎓 Coach AI","🎲 12 вариантов","📊 Analysis","🏆 Турниры"].map(f=><span key={f} style={{fontSize:11,padding:"3px 9px",borderRadius:999,background:"rgba(5,150,105,0.12)",color:CC.brand,fontWeight:700}}>{f}</span>)}
           </div>
           <p style={{margin:"12px 0 0",color:CC.textDim,fontSize:13}}>+50 Chessy уже на счёте. Начнём?</p>
         </>},
-        {icon:"🎯",title:"5000+ задач и режимы на время",body:<>
+        {icon:"🎯",title:`${pzTotal?pzTotal.toLocaleString("ru-RU"):"500 000+"} ${ccPlural(pzTotal??0,"задача","задачи","задач")} и режимы на время`,body:<>
           <p style={{margin:"0 0 10px",lineHeight:1.6}}><b>Puzzle Rush</b> — реши как можно больше за 3 минуты. Streak 🔥 увеличивает Chessy-бонус.</p>
           <p style={{margin:"0 0 10px",lineHeight:1.6}}><b>Тайм-режимы</b> — 3мин / 5мин / свой: авто-переход после каждого решения, итоговый экран с WR%.</p>
           <p style={{margin:0,color:CC.textDim,fontSize:13}}>Нажми <b>Задачи</b> в верхней навигации → Выбери режим → Вперёд!</p>

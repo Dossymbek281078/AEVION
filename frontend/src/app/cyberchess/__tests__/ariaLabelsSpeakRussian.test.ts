@@ -20,7 +20,10 @@ const RAZRESHENO = new Set([
   "QR", "ID", "AI", "YouTube", "Twitch", "FIDE", "Lichess", "Stockfish",
   "Change", "language", "Ctrl", "Puzzle", "Rush", "Random", "PiP",
 ]);
-const ZAPRESHENO = ["Voice Coach", "Сменить layout", "Развернуть PiP", "Coach объяснит"];
+const ZAPRESHENO = [
+  "Voice Coach", "Сменить layout", "Развернуть PiP", "Coach объяснит",
+  "Mirror Mode", "Heatmap", "Custom (", "запретил iframe",
+];
 
 function fajly(dir: string, acc: string[] = []): string[] {
   for (const e of readdirSync(dir)) {

@@ -8044,7 +8044,7 @@ export default function CyberChessPage(){
           <div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
             <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
             <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
-            {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Mirror Mode — AI копирует твой стиль">🪞</Btn>}
+            {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}
             {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю (нажми для паузы)":"🎤 Голос",()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
               if(!SR){showToast("Браузер не поддерживает голосовой ввод (нужен Chrome)","error");return}
@@ -8423,11 +8423,11 @@ export default function CyberChessPage(){
             padding:"6px 8px",borderRadius:RADIUS.md,
             background:CC.surface1,border:`1px solid ${CC.border}`,
           }}>
-            <button onClick={()=>sShowThreatMap(v=>!v)} title="Heatmap контроля доски"
+            <button onClick={()=>sShowThreatMap(v=>!v)} title="Карта контроля доски"
               style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
                 background:showThreatMap?CC.brandSoft:CC.surface2,
                 color:showThreatMap?CC.brand:CC.textDim}}>
-              🌡 Heatmap
+              🌡 Карта угроз
             </button>
             <button onClick={async()=>{try{const t=await whisperAndSpeak(game.fen(),evalCp,evalMate);showToast(`🔊 ${t}`,"info")}catch{showToast("Голос недоступен","error")}}}
               title="Голосовой анализ позиции"
@@ -9923,7 +9923,7 @@ export default function CyberChessPage(){
                     value={[90,180,300,600].includes(rushDuration)?"":rushDuration}
                     onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=1800)sRushDuration(v)}}
                     placeholder="свой"
-                    title="Custom (30-1800 сек)"
+                    title="Своё время (30-1800 сек)"
                     style={{padding:"6px 4px",borderRadius:RADIUS.sm,
                       border:![90,180,300,600].includes(rushDuration)?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
                       background:CC.surface1,color:CC.text,fontSize:11,fontWeight:800,textAlign:"center",
@@ -14176,7 +14176,7 @@ ${question.trim()}`;
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎮 Игра</div>
             <Row label="Auto-queen (превращение в ферзя)" desc="Пешка на 8-й сразу становится ферзём — без модалки. Для bullet/blitz и премувов. Выключи если нужны underpromotions (конь, ладья, слон)." checked={autoQueen} onChange={()=>sAutoQueen(v=>!v)}/>
             <Row label="Подсказка дебюта (стрелка)" desc="Фиолетовая пунктирная стрелка показывает книжный ход в дебюте (первые 8 ходов, на твоём ходу). Помогает изучать теорию." checked={showBookArrow} onChange={()=>sShowBookArrow(v=>!v)}/>
-            <Row label="Threat Heatmap" desc="Подсветка контроля доски: зелёный — белые, красный — чёрные, янтарный — спорно." checked={showThreatMap} onChange={()=>sShowThreatMap(v=>!v)}/>
+            <Row label="Карта угроз" desc="Подсветка контроля доски: зелёный — белые, красный — чёрные, янтарный — спорно." checked={showThreatMap} onChange={()=>sShowThreatMap(v=>!v)}/>
             <Row label="Streamer Mode" desc="Скрывает рейтинг и историю — для стримов и публичных демо." checked={streamerMode} onChange={()=>sStreamerMode(v=>!v)}/>
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
               <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>Глубина анализа Stockfish (F2-3)</div>

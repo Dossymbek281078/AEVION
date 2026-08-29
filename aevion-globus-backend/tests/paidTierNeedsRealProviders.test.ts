@@ -19,9 +19,13 @@ import express from "express";
 import request from "supertest";
 import { stubBarriersBlockingUpgrade, bureauRouter } from "../src/routes/bureau";
 
+// «Настоящие поставщики» — это имя ПЛЮС ключи. Без ключей stripe падает при
+// первом обращении, и сторож обязан это блокировать (см. случаи ниже).
 const LIVE = {
   BUREAU_KYC_PROVIDER: "sumsub",
   BUREAU_PAYMENT_PROVIDER: "stripe",
+  STRIPE_SECRET_KEY: "sk_test_x",
+  STRIPE_WEBHOOK_SECRET: "whsec_x",
 } as NodeJS.ProcessEnv;
 
 describe("платный тариф не выдаётся, пока барьеры демонстрационные", () => {
@@ -55,6 +59,39 @@ describe("платный тариф не выдаётся, пока барьер
         BUREAU_PAYMENT_PROVIDER: "paybox",
       } as NodeJS.ProcessEnv),
     ).toEqual(["payment"]);
+  });
+
+  // Частично настроенный поставщик ХУЖЕ ненастроенного: имя включает ветку,
+  // ветка заслоняет рабочий путь и падает на первом обращении. Соседняя
+  // вкладка измерила это 29.08 на кассе «Конституции» — там завели один ключ
+  // из трёх. У бюро та же щель была в этом же стороже: он смотрел на ИМЯ.
+  it.each([
+    ["нет обоих ключей", {}],
+    ["нет секрета вебхука", { STRIPE_SECRET_KEY: "sk_test_x" }],
+    ["нет ключа API", { STRIPE_WEBHOOK_SECRET: "whsec_x" }],
+    ["ключ из пробелов — это не ключ", { STRIPE_SECRET_KEY: "   ", STRIPE_WEBHOOK_SECRET: "whsec_x" }],
+  ] as Array<[string, Record<string, string>]>)(
+    "stripe без ключей (%s) — блокирует",
+    (_n, extra) => {
+      expect(
+        stubBarriersBlockingUpgrade({
+          BUREAU_KYC_PROVIDER: "sumsub",
+          BUREAU_PAYMENT_PROVIDER: "stripe",
+          ...extra,
+        } as NodeJS.ProcessEnv),
+      ).toEqual(["payment"]);
+    },
+  );
+
+  it("stripe со ВСЕМИ ключами — не блокирует", () => {
+    expect(
+      stubBarriersBlockingUpgrade({
+        BUREAU_KYC_PROVIDER: "sumsub",
+        BUREAU_PAYMENT_PROVIDER: "stripe",
+        STRIPE_SECRET_KEY: "sk_test_x",
+        STRIPE_WEBHOOK_SECRET: "whsec_x",
+      } as NodeJS.ProcessEnv),
+    ).toEqual([]);
   });
 
   it("разработка включает поток ЯВНО, и это единственный способ", () => {

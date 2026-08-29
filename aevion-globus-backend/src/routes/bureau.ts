@@ -773,13 +773,39 @@ bureauRouter.post("/payment/intent", async (req, res) => {
  * Умолчание обязано быть безопасным, потому что прод — это ровно то место, где
  * ничего не настроено.
  */
+/**
+ * Ключи, без которых поставщик оплаты падает при первом же обращении.
+ *
+ * Зачем это здесь. Имя поставщика и его РАБОТОСПОСОБНОСТЬ — разные вещи:
+ * `BUREAU_PAYMENT_PROVIDER=stripe` без `STRIPE_SECRET_KEY` проходил проверку
+ * как «настоящий», а падал уже на выписке счёта. Соседняя вкладка измерила
+ * этот класс 29.08 на кассе «Конституции»: там завели ОДИН ключ из трёх, ветка
+ * включилась, заслонила собой рабочую кассу и упала. Частично настроенный
+ * поставщик хуже ненастроенного — тот хотя бы честно уступает.
+ *
+ * Перечислены только те ключи, которых провайдер требует через `need()`,
+ * то есть проверено по коду, а не по документации.
+ */
+const PAYMENT_REQUIRED_ENV: Record<string, readonly string[]> = {
+  stripe: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+};
+
 export function stubBarriersBlockingUpgrade(
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
   if (env.BUREAU_ALLOW_STUB_COMMERCE === "1") return [];
   const blocking: string[] = [];
   if (kycProviderMode(env) !== "live") blocking.push("identity");
-  if (paymentProviderMode(env) !== "live") blocking.push("payment");
+  if (paymentProviderMode(env) !== "live") {
+    blocking.push("payment");
+  } else {
+    // Поставщик настоящий — но хватает ли ему ключей, чтобы работать.
+    const id = (env.BUREAU_PAYMENT_PROVIDER || "").toLowerCase();
+    const missing = (PAYMENT_REQUIRED_ENV[id] || []).filter(
+      (k) => !env[k]?.trim(),
+    );
+    if (missing.length > 0) blocking.push("payment");
+  }
   return blocking;
 }
 

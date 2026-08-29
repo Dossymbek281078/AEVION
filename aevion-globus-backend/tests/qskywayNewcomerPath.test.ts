@@ -37,18 +37,35 @@ describe("новичок доходит до результата", () => {
     expect(cities.status).toBe(200);
     const list = cities.body.cities as { id: string }[];
     expect(list.length, "список городов пуст — новичку не с чего начать").toBeGreaterThan(0);
-    const cityId = list[0].id;
+
+    // По ВСЕМ городам, а не по первому. Новичок открывает страницу и
+    // переключает город первым же движением; путь, проверенный на одном,
+    // ничего не говорит про остальные — это «проверка покрывает одну
+    // страницу из двадцати одной», только в миниатюре.
+    const walked: string[] = [];
+    for (const entry of list) {
+      walked.push(await walkCity(entry.id));
+    }
+    // Считаем ПРОЙДЕННЫЕ города, а не длину списка. Пустой цикл и цикл по
+    // трём городам одинаково «зелёные», если не спросить, сколько шагов
+    // он на самом деле сделал.
+    expect(walked, "пройдено не столько городов, сколько отдал список").toEqual(list.map((c) => c.id));
+    expect(walked.length, "городов меньше двух — переключать нечего").toBeGreaterThan(1);
+  }, 180000);
+});
+
+async function walkCity(cityId: string): Promise<string> {
 
     // 2. Город грузится и отдаёт площадки, между которыми можно лететь.
     const city = await request(app).get("/api/qskyway/city?city=" + cityId);
     expect(city.status).toBe(200);
     const pads = city.body.vertiports as unknown[];
-    expect(pads.length, "у города нет площадок — маршрут не построить").toBeGreaterThan(1);
+    expect(pads.length, cityId + ": нет площадок — маршрут не построить").toBeGreaterThan(1);
 
     // 3. Первый результат: маршрут.
     const route = await request(app).post("/api/qskyway/route").send({ from: 0, to: 1, city: cityId });
     expect(route.status).toBe(200);
-    expect(route.body.path?.length, "маршрут без точек").toBeGreaterThan(1);
+    expect(route.body.path?.length, cityId + ": маршрут без точек").toBeGreaterThan(1);
     expect(typeof route.body.distanceKm, "маршрут без расстояния").toBe("number");
 
     // 4. Документ, ради которого модуль и нужен.
@@ -56,7 +73,7 @@ describe("новичок доходит до результата", () => {
       .send({ from: 0, to: 1, city: cityId });
     expect(just.status).toBe(200);
     expect(just.body.document, "обоснование без документа").toBeTruthy();
-    expect(just.body.attestation?.signature, "обоснование без подписи").toBeTruthy();
+    expect(just.body.attestation?.signature, cityId + ": обоснование без подписи").toBeTruthy();
 
     // 5. И он проверяется — иначе подпись ничего не стоит.
     const check = await request(app).post("/api/qskyway/route/justification/verify")
@@ -66,7 +83,7 @@ describe("новичок доходит до результата", () => {
 
     // 6. Бронь слота — первое действие, оставляющее след.
     const slot = await request(app).post("/api/qskyway/slots").send({
-      routeId: "newcomer-path", t0: "2033-04-04T00:00:00.000Z",
+      routeId: "newcomer-path-" + cityId, t0: "2033-04-04T00:00:00.000Z",
       t1: "2033-04-04T00:10:00.000Z", holder: "Aero Taxi KZ",
     });
     expect(slot.status).toBeLessThan(300);
@@ -82,5 +99,5 @@ describe("новичок доходит до результата", () => {
     // здесь спросили у самой ручки, а не вспомнили.
     expect(receipt.body.matches, "свежая квитанция не сошлась с записью").toBe(true);
     expect(receipt.body.payload, "квитанция без байтов, по которым её проверяют").toBeTruthy();
-  }, 90000);
-});
+  return cityId;
+}

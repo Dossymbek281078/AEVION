@@ -742,7 +742,7 @@ function Pane({ src, area, onChangeSource, onMute, onClose, onMaximize, onPicker
         {isOnlyChessApp && (
           <Tooltip label="Это единственная панель CyberChess — нельзя убрать">
             <span style={{ background: "rgba(124,58,237,0.3)", color: "#a78bfa", borderRadius: 4, padding: "3px 7px", fontSize: 10, fontWeight: 800, letterSpacing: 0.4 }}>
-              🔒 LOCK
+              🔒 Закрепить
             </span>
           </Tooltip>
         )}
@@ -932,7 +932,7 @@ function PipChess({ pip, onChange, onClose }: {
           display: "flex", alignItems: "center", gap: 6, cursor: "move",
           borderBottom: "1px solid #2a2d34", userSelect: "none",
         }}>
-        <span>♞ PiP CyberChess</span>
+        <span>♞ Мини-доска CyberChess</span>
         <span style={{ flex: 1 }} />
         <a href="/cyberchess" target="_blank" rel="noopener"
           title="Открыть полный CyberChess (Stockfish, AI Coach)"
@@ -1173,10 +1173,10 @@ export default function StudioPage() {
             🔊 со звуком
           </button>
         </Tooltip>
-        <Tooltip label={pip.open ? "Скрыть PiP мини-шахматы" : "Показать плавающую мини-шахматную доску — играй пока смотришь стрим"}>
+        <Tooltip label={pip.open ? "Скрыть мини-доску" : "Показать плавающую мини-шахматную доску — играй пока смотришь стрим"}>
           <button onClick={() => setPip(p => ({ ...p, open: !p.open }))} className="cc-focus-ring"
             style={{ padding: "5px 10px", borderRadius: RADIUS.md, border: `1px solid ${pip.open ? "#7c3aed" : "#2a2d34"}`, background: pip.open ? "#3b1d6a" : "#1f2229", color: pip.open ? "#a78bfa" : "#e5e7eb", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>
-            ♞ PiP
+            ♞ Мини-доска
           </button>
         </Tooltip>
         <Tooltip label={topBarPinned ? "Скрыть верхнюю панель — появится при наведении на верх экрана" : "Закрепить верхнюю панель"}>

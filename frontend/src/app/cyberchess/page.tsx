@@ -14169,7 +14169,7 @@ ${question.trim()}`;
                   </div>
                 </div>;
               })}
-              <div style={{fontSize:11,color:CC.textMute,marginTop:4}}>Клик по пресету — мгновенный preview хода.</div>
+              <div style={{fontSize:11,color:CC.textMute,marginTop:4}}>Нажми на готовый вариант — ход сразу показывается на доске.</div>
             </div>
           </div>
           <div>

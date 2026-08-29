@@ -264,7 +264,7 @@ export default function TournamentHubPage() {
         "@type": "WebPage",
         "@id": "https://aevion.app/cyberchess/tournament",
         name: "AEVION CyberChess Tournament Hub",
-        description: "Bracket visualization, badges и cross-tournament leaderboard. Single-elimination + round-robin форматы.",
+        description: "Наглядная сетка турнира, значки за достижения и сквозная таблица лидеров. Форматы: на выбывание и круговой.",
         isPartOf: { "@type": "WebSite", url: "https://aevion.app", name: "AEVION" },
         about: { "@type": "SportsEvent", name: "Chess tournaments" },
       }) }} />

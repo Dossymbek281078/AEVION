@@ -647,7 +647,7 @@ function AddBranchPanel({
       }}
     >
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: COLORS.accentBright }}>
-        Выбери дебют из пресетов
+        Выбери дебют из готовых
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <div>

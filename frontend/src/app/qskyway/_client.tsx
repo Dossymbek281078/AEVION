@@ -253,7 +253,7 @@ export default function QSkywayClient() {
   const [substImpact, setSubstImpact] = useState<{ available: boolean; routable: number; affectedPairs: number; buildings: number; buildingsUnderRoutes: number; note: string } | null>(null);
   const [heroPair, setHeroPair] = useState<{ from: number; to: number } | null>(null);
   const [justification, setJustification] = useState<{ doc: JustDoc; attestation: JustAttestation; scope: string; scopeEn?: string; verify?: unknown } | null>(null);
-  const [justState, setJustState] = useState<"idle" | "busy" | "verified" | "invalid" | "unknown">("idle");
+  const [justState, setJustState] = useState<"idle" | "busy" | "verified" | "invalid" | "unknown" | "failed">("idle");
   const [vpRows, setVpRows] = useState<VertiportRow[]>([]);
   const [slots, setSlots] = useState<{ list: Slot[]; count: number; liveCount: number | null; capacityPerRoute: number; store: string }>({ list: [], count: 0, liveCount: null, capacityPerRoute: 0, store: "" });
   // Считаем по загруженному списку, а не по `count` с сервера: сервер отдаёт
@@ -776,7 +776,16 @@ export default function QSkywayClient() {
       const j = await res.json();
       setJustification({ doc: j.document, attestation: j.attestation, scope: j.scope, scopeEn: j.scopeEn, verify: j.verifyYourself });
       setJustState("idle");
-    } catch { setJustState("idle"); setJustification(null); }
+    } catch {
+      // Раньше здесь стояло `setJustState("idle")`: кнопка уходила в «…»
+      // и возвращалась к исходной подписи, не сказав ни слова. Для
+      // человека это неотличимо от «я не нажимал» — он жмёт ещё раз и
+      // получает ту же тишину. Отказ ПРОВЕРКИ рядом показывался честно
+      // («неизвестно»), а отказ ПОСТРОЕНИЯ молчал: та же панель, два
+      // разных поведения у одного автора — почти всегда недосмотр.
+      setJustState("failed");
+      setJustification(null);
+    }
   }, [heroPair]);
 
   // Verification runs against the backend, not in the browser: a document that
@@ -1329,11 +1338,17 @@ export default function QSkywayClient() {
                       which is the same as not existing for the person who has to
                       justify a flight. */}
                   <div style={{ marginTop: 12, borderTop: "1px solid #1e2836", paddingTop: 12 }}>
-                    {!justification ? (
+                    {!justification && (
                       <button style={btn} onClick={requestJustification} disabled={!heroPair || justState === "busy"}>
                         {justState === "busy" ? "…" : t("qskyway.just.build")}
                       </button>
-                    ) : (
+                    )}
+                    {justState === "failed" && (
+                      <div style={{ marginTop: 8, fontSize: 11.5, color: "#fb7185" }}>
+                        {t("qskyway.just.failed")}
+                      </div>
+                    )}
+                    {!justification ? null : (
                       <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9fb0c4" }}>
                         <div style={{ color: "#2dd4bf" }}>
                           📄 {t("qskyway.just.ready")} · H-{justification.doc.from + 1} → H-{justification.doc.to + 1}

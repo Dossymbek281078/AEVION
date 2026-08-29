@@ -256,7 +256,13 @@ export async function verifyAevionBundle(
       result.aevionSignature = ok
         ? {
             status: "pass",
-            detail: "AEVION's Ed25519 signature validates against the signed payload",
+            detail:
+              "The Ed25519 signature validates against the signed payload, using the " +
+              "public key carried in this bundle. Note what that does and does not show: " +
+              "the payload has not been altered since it was signed. It does not prove the " +
+              "key was AEVION's — the signing key is generated per certificate and its " +
+              "public half travels inside the bundle. Independent proof of time comes from " +
+              "the Bitcoin anchor below.",
           }
         : {
             status: "fail",

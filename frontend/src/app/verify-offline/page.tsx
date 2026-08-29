@@ -66,7 +66,7 @@ export default function VerifyOfflinePage() {
           Verify without AEVION
           <InfoTip
             label="Offline verification"
-            text="Drop an AEVION bundle JSON. All checks run in your browser using SHA-256 and Ed25519 — no network call to AEVION. A bundle passes only when at least one attestation verifies: AEVION's signature, the author co-signature, or the Bitcoin anchor. A matching content hash alone is not enough — anyone can hash their own text."
+            text="Drop an AEVION bundle JSON. All checks run in your browser using SHA-256 and Ed25519 — no network call to AEVION. A bundle passes only when at least one signature or the Bitcoin anchor verifies — a matching content hash alone is not enough, since anyone can hash their own text. Read the signature rows for what they do and do not prove: the signing key is generated per certificate and travels inside the bundle, so only the Bitcoin anchor is independent of AEVION."
           />
         </h1>
         <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.6, marginBottom: 24 }}>

@@ -21,12 +21,12 @@ import { payboxPaymentProvider } from "../lib/payment/payboxProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 
 const capture = makeServiceCapture("payboxWebhook");
 
 export const payboxWebhookRouter = Router();
 
-const SEEN = new Set<string>();
 
 /** "tier_lite_monthly_1699999999" → "tier_lite_monthly" (отрезаем хвост-таймстамп). */
 function referenceFromOrderId(orderId: string): string {
@@ -87,8 +87,8 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   }
 
   const dedupKey = `${paymentId}:${result.status}`;
-  if (SEEN.has(dedupKey)) return res.json({ ok: true, deduped: true });
-  SEEN.add(dedupKey);
+  if (hasSeenWebhook("paybox", dedupKey)) return res.json({ ok: true, deduped: true });
+  markWebhookSeen("paybox", dedupKey);
 
   const reference = referenceFromOrderId(orderId);
   const module = raw.pg_param_module || undefined;
@@ -127,7 +127,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
     return res.json({ ok: true, ignored: result.status });
   } catch (err) {
-    SEEN.delete(dedupKey);
+    releaseWebhookKey("paybox", dedupKey);
     capture(err);
     console.error("[paybox/webhook] handler error:", err instanceof Error ? err.message : err);
     return res.status(500).json({ ok: false, error: "handler_failed" });

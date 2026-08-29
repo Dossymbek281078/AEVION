@@ -41,6 +41,7 @@ import {
 import { MEDIUM_BUNDLE } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
+import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 
 async function upsertAppSubscription(
   email: string,
@@ -115,12 +116,14 @@ const DEACTIVATE_EVENTS = new Set([
   "subscription_paused",
 ]);
 
-// Process-lifetime dedup: LS delivers at-least-once. Key on subscription id +
-// event + the renews/ends timestamp so a redelivery is a no-op but a genuine
-// later state change (new renews_at) still provisions. Cleared on restart;
-// jsonl is append-only so a missed dedup just appends a duplicate that
-// /subscription/me (latest-wins) tolerates.
-const SEEN = new Set<string>();
+// Dedup survives restarts (see lib/webhookDedup): LS delivers at-least-once.
+// Key on subscription id + event + the renews/ends timestamp so a redelivery is
+// a no-op but a genuine later state change (new renews_at) still provisions.
+//
+// This used to be a process-lifetime Set, and the comment here said a missed
+// dedup was tolerable because /subscription/me is latest-wins. That reasoning
+// only covered the subscription record — a second provisioning run also sends
+// the customer a second welcome email, which no reader tolerates.
 
 function modulesForReference(ref: LemonSqueezyReference | null): string[] {
   if (!ref) return [];
@@ -191,10 +194,10 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
 
   // Dedup
   const dedupKey = `${payload.data?.id ?? "?"}:${event}:${attrs.renews_at ?? attrs.ends_at ?? ""}`;
-  if (SEEN.has(dedupKey)) {
+  if (hasSeenWebhook("lemonsqueezy", dedupKey)) {
     return res.json({ ok: true, deduped: true });
   }
-  SEEN.add(dedupKey);
+  markWebhookSeen("lemonsqueezy", dedupKey);
 
   try {
     const ref = referenceForVariantId(attrs.variant_id);
@@ -257,7 +260,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     capture(err);
     console.error("[ls/webhook] handler error:", msg);
     // 500 so LS retries — provisioning is idempotent enough (latest-wins).
-    SEEN.delete(dedupKey);
+    releaseWebhookKey("lemonsqueezy", dedupKey);
     return res.status(500).json({ ok: false, error: msg });
   }
 });

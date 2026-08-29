@@ -66,13 +66,17 @@ export default function VerifyOfflinePage() {
           Verify without AEVION
           <InfoTip
             label="Offline verification"
-            text="Drop an AEVION bundle JSON. All checks run in your browser using SHA-256 and Ed25519 — no network call to AEVION. If the math passes, the certificate is authentic regardless of whether AEVION still exists."
+            text="Drop an AEVION bundle JSON. All checks run in your browser using SHA-256 and Ed25519 — no network call to AEVION. A bundle passes only when at least one attestation verifies: AEVION's signature, the author co-signature, or the Bitcoin anchor. A matching content hash alone is not enough — anyone can hash their own text."
           />
         </h1>
         <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.6, marginBottom: 24 }}>
           Drop a verification bundle (<code style={{ fontSize: 12, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>.json</code>) and your browser will replay every cryptographic check locally — SHA-256, AEVION&apos;s Ed25519 signature, the author co-signature, and the OpenTimestamps Bitcoin proof.
           {' '}
-          <b>Zero network calls to AEVION.</b> If the math passes, the certificate is authentic — even if these servers were taken offline a decade ago.
+          <b>Zero network calls to AEVION.</b> The verdict passes only when at least one
+          attestation verifies — a signature or the Bitcoin anchor — and it keeps working
+          even if these servers were taken offline a decade ago. A matching content hash on
+          its own proves the text has not changed since it was hashed, not that AEVION
+          attested it: anyone can hash their own file.
         </p>
 
         {state.stage === "idle" && (

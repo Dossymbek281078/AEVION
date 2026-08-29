@@ -358,8 +358,27 @@ export async function verifyAevionBundle(
     result.authorCosignature,
     result.bitcoinAnchor,
   ];
+  /*
+   * Вердикт требует хотя бы одного ЗАВЕРЕНИЯ, а не просто «что-то прошло».
+   *
+   * Прежнее правило («ни одна проверка не пропущена — значит pass») давало
+   * ложное «подлинно» на пакете, который может собрать кто угодно: своё
+   * содержимое и честно посчитанный от него SHA-256, подписей нет вовсе.
+   * Хеш содержимого самосогласован — он доказывает, что содержимое не менялось
+   * после подсчёта, но НЕ доказывает, что его заверял AEVION. В подсчёт при
+   * этом входил и `bundleShape` («узнали формат»), который проходит всегда, —
+   * то есть условие `every(skip)` не выполнялось никогда.
+   *
+   * Заверение дают только эти три слоя: подпись AEVION, соподпись автора и
+   * якорь в биткойне. Ни одного из них не прошло — сказать «подлинно» нельзя.
+   */
+  const attestations = [
+    result.aevionSignature,
+    result.authorCosignature,
+    result.bitcoinAnchor,
+  ];
   if (allChecks.some((c) => c.status === "fail")) result.overall = "fail";
-  else if (allChecks.every((c) => c.status === "skip")) result.overall = "fail";
+  else if (!attestations.some((c) => c.status === "pass")) result.overall = "fail";
   else result.overall = "pass";
 
   return result;

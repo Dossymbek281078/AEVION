@@ -713,6 +713,7 @@ export default function QAIPage() {
 
                 <textarea
                   ref={textareaRef}
+                  aria-label={`Message ${activePersonaObj?.name ?? "QAI"}`}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}

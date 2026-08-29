@@ -320,6 +320,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       </p>
 
       <textarea
+        aria-label="Вопрос совету"
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         rows={3}

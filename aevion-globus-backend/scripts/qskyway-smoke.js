@@ -729,6 +729,29 @@ async function main() {
   assert(after.json?.count === before.json.count + okCount + 1, "GET /slots count reflects new bookings", `${before.json.count} → ${after.json?.count}`);
   assert(after.json.slots.some((s) => s.id === late.json.slot.id), "GET /slots list includes the just-booked slot");
 
+  // ── Phase 9: байты, которыми проверяющий проверяет нас ──────────
+  //
+  // Обе ручки заведены 29.08 и до сих пор жили только в тестах. Их смысл
+  // в том, чтобы человек СО СТОРОНЫ мог пересчитать наш хэш: без байтов
+  // подпись доказывает лишь, что мы что-то подписали. Молчаливая поломка
+  // здесь неотличима от работы — 200 отдаётся в обоих случаях, поэтому
+  // проверяем не код ответа, а воспроизводимость.
+  const ed = await jget("/api/qskyway/airspace/edition?city=nyc");
+  assert(ed.status === 200, "GET /airspace/edition отвечает", `status=${ed.status}`);
+  assert(typeof ed.json?.payload === "string" && ed.json.payload.length > 0,
+    "редакция публикует сами байты, а не только хэш");
+  assert(ed.json?.payloadBytes === Buffer.byteLength(ed.json?.payload ?? "", "utf8"),
+    "заявленная длина байтов совпадает с настоящей");
+  assert(Array.isArray(ed.json?.verifyYourself) && ed.json.verifyYourself.length > 0,
+    "к байтам приложен рецепт проверки");
+
+  const sp = await jget("/api/qskyway/city/signed-payload?city=nyc");
+  assert(sp.status === 200, "GET /city/signed-payload отвечает", `status=${sp.status}`);
+  assert(typeof sp.json?.payload === "string" && sp.json.payload.length > 0,
+    "подпись твина публикует байты, которые она покрывает");
+  assert(sp.json?.payloadBytes === Buffer.byteLength(sp.json?.payload ?? "", "utf8"),
+    "длина байтов твина совпадает с настоящей");
+
   console.log(`\n${summary()}`);
   process.exit(failed === 0 ? 0 : 1);
 }

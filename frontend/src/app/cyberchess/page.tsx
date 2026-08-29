@@ -3419,7 +3419,7 @@ export default function CyberChessPage(){
               setTimeout(()=>{loadNextPuzzleRef.current();},700);
             }
           }else{
-            showToast(`✗ −5с · streak сброшен`,"error");
+            showToast(`✗ −5с · серия сброшена`,"error");
             setTimeout(()=>{loadNextPuzzleRef.current();},700);
           }
         }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
@@ -8044,7 +8044,7 @@ export default function CyberChessPage(){
           <div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
             <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
             <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
-            {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Mirror Mode выключен","info");}else{sMirrorActive(true);showToast("🪞 Mirror Mode — AI играет как ты","info");}}} title="Mirror Mode — AI копирует твой стиль">🪞</Btn>}
+            {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Mirror Mode — AI копирует твой стиль">🪞</Btn>}
             {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю (нажми для паузы)":"🎤 Голос",()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
               if(!SR){showToast("Браузер не поддерживает голосовой ввод (нужен Chrome)","error");return}
@@ -8213,7 +8213,7 @@ export default function CyberChessPage(){
             {over&&<Btn size="md" variant="gold" onClick={()=>newG()}>🔁 Ещё партию</Btn>}
             {over&&<Btn size="md" variant="secondary" title="Скопировать итог партии" onClick={()=>{
               const summary=`AEVION CyberChess · ${ruResult(over)} · ${hist.length} ходов · ${currentOpening?.name||"Стандарт"} · ELO ${rat}\nhttps://aevion.app/cyberchess`;
-              try{navigator.clipboard.writeText(summary).then(()=>showToast("📤 Итог скопирован в буфер","success")).catch(()=>showToast("Не удалось скопировать","error"))}catch{showToast("Clipboard недоступен","error")}
+              try{navigator.clipboard.writeText(summary).then(()=>showToast("📤 Итог скопирован в буфер","success")).catch(()=>showToast("Не удалось скопировать","error"))}catch{showToast("Буфер обмена недоступен","error")}
             }}>📤 Поделиться</Btn>}
             {over&&!hotseat&&<Btn size="md" variant="secondary" title="Новая партия с теми же настройками против другого AI-уровня" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>⚙ Настройки</Btn>}
             {/* Premove Undo / Clear — moved to the top strip above the board (premoves row).
@@ -8448,7 +8448,7 @@ export default function CyberChessPage(){
                   const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
                   const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
                   const share=`${pgn}\n\n🔗 Смотреть: ${url}`;
-                  try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Clipboard API недоступно","error")}
+                  try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Буфер обмена недоступен","error")}
                 }} style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Скачать PGN</Btn>
                 <Btn size="sm" variant="secondary" onClick={()=>{
                   const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
@@ -13434,7 +13434,7 @@ ${question.trim()}`;
                 <Btn variant="secondary" size="sm" onClick={()=>{
                   const code=profileToShareCode(cl);
                   const url=`${window.location.origin}${window.location.pathname}?clone=${code}`;
-                  try{navigator.clipboard.writeText(url).then(()=>showToast("✓ Ссылка на клон скопирована","success")).catch(()=>showToast("Clipboard недоступен","error"))}catch{showToast("Clipboard недоступен","error")}
+                  try{navigator.clipboard.writeText(url).then(()=>showToast("✓ Ссылка на клон скопирована","success")).catch(()=>showToast("Буфер обмена недоступен","error"))}catch{showToast("Буфер обмена недоступен","error")}
                 }}>🔗 Ссылка</Btn>
                 <Btn variant="ghost" size="sm" onClick={()=>{
                   if(confirm(`Удалить клон ${cl.username}?`)){
@@ -14126,7 +14126,7 @@ ${question.trim()}`;
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🔊 Звук</div>
-            <Row label="Звук в игре" desc="Мастер-переключатель всех звуков. M для быстрого toggle." checked={!muted} onChange={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Mute","info")}}/>
+            <Row label="Звук в игре" desc="Мастер-переключатель всех звуков. M — быстро включить и выключить." checked={!muted} onChange={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Mute","info")}}/>
             {!muted&&<div style={{paddingLeft:16,display:"flex",flexDirection:"column",gap:2}}>
               <Row label="↳ Звуки ходов" desc="Ход, взятие, рокировка, шах, премув." checked={sndMoves} onChange={()=>{const nv=!sndMoves;sSndMoves(nv);try{localStorage.setItem(SK_MOVES,nv?"1":"0")}catch{}}}/>
               <Row label="↳ Финальный сигнал" desc="Звук при мате, просрочке, сдаче." checked={sndClock} onChange={()=>{const nv=!sndClock;sSndClock(nv);try{localStorage.setItem(SK_CLOCK,nv?"1":"0")}catch{}}}/>
@@ -15069,8 +15069,8 @@ ${question.trim()}`;
         <MirrorModePanel
           profile={mirrorProfile}
           active={mirrorActive}
-          onActivate={()=>{sMirrorActive(true);showToast("🪞 Mirror Mode — AI играет как ты","info");}}
-          onDeactivate={()=>{sMirrorActive(false);showToast("🪞 Mirror Mode выключен","info");}}
+          onActivate={()=>{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}
+          onDeactivate={()=>{sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}}
           surface={CC.surface1} border={CC.border} text={CC.text} textDim={CC.textDim} accent={CC.brand}
         />
       </div>

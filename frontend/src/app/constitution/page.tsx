@@ -790,10 +790,8 @@ export default function ConstitutionPage() {
           role="status"
           className="mx-auto mt-4 mb-2 max-w-3xl rounded-xl border border-emerald-400/40 bg-emerald-500/10 p-4 text-sm text-emerald-100"
         >
-          <strong className="block mb-1">Оплата прошла — спасибо!</strong>
-          Тариф {paidTier} активирован на этом аккаунте. Если доступ не появился
-          в течение пары минут, напишите нам: платёж уже зафиксирован, и мы
-          откроем его вручную.
+          <strong className="block mb-1">{t("constitution.pay.thanksTitle")}</strong>
+          {t("constitution.pay.thanksBody", { tier: paidTier })}
         </div>
       ) : null}
       <div className="max-w-6xl mx-auto">

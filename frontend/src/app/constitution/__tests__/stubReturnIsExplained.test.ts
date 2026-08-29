@@ -33,13 +33,19 @@ describe("страница цен объясняет возврат без оп�
 
   test("и он что-то показывает человеку", () => {
     expect(src.includes("payUnavailable ?")).toBe(true);
+    // Текст живёт в словаре: страница переведена, и русский литерал в разметке
+    // означал бы, что англоязычный посетитель увидит русское. Поэтому сторож
+    // проверяет КЛЮЧ, а не фразу.
     expect(
-      src.includes("Оплата пока недоступна"),
+      src.includes('t("constitution.pay.unavailableTitle")'),
       "признак читается, но человеку ничего не сказано",
     ).toBe(true);
   });
 
   test("сказано, что деньги не списаны — это первый вопрос человека", () => {
-    expect(src.includes("деньги не списаны")).toBe(true);
+    const dict = readFileSync(join(__dirname, "..", "..", "..", "lib", "i18n-data.ts"), "utf8");
+    expect(src.includes('t("constitution.pay.unavailableBody")')).toBe(true);
+    expect(dict.includes("деньги не списаны")).toBe(true);
+    expect(dict.includes("nothing was charged")).toBe(true);
   });
 });

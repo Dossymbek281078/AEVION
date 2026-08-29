@@ -179,10 +179,8 @@ export default function ConstitutionPricingPage() {
           role="status"
           className="mx-auto mb-6 max-w-3xl rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-100"
         >
-          <strong className="block mb-1">Оплата пока недоступна</strong>
-          Приём платежей за «Конституцию» сейчас не подключён, поэтому кнопка
-          вернула вас сюда. Это не ошибка на вашей стороне и деньги не списаны.
-          Оставьте адрес ниже — напишем, как только оплата заработает.
+          <strong className="block mb-1">{t("constitution.pay.unavailableTitle")}</strong>
+          {t("constitution.pay.unavailableBody")}
         </div>
       ) : null}
       <div className="max-w-6xl mx-auto">

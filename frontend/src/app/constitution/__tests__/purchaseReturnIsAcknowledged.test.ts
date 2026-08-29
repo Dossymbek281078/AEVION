@@ -37,13 +37,16 @@ describe("возврат после оплаты подтверждается", 
   test("человеку сказано, что оплата прошла", () => {
     expect(src.includes("paidTier ?")).toBe(true);
     expect(
-      src.includes("Оплата прошла"),
+      src.includes('t("constitution.pay.thanksTitle")'),
       "признак читается, но подтверждения человек не видит",
     ).toBe(true);
   });
 
   test("названа и подсказка на случай, если доступ не появился", () => {
-    expect(src.includes("откроем его вручную")).toBe(true);
+    const dict = readFileSync(join(__dirname, "..", "..", "..", "lib", "i18n-data.ts"), "utf8");
+    expect(src.includes('t("constitution.pay.thanksBody"')).toBe(true);
+    expect(dict.includes("откроем его вручную")).toBe(true);
+    expect(dict.includes("open it manually")).toBe(true);
   });
 
   test("завершение покупки попадает в воронку", () => {

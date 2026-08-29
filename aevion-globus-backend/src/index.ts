@@ -3,6 +3,7 @@ import { readBuildInfo } from "./lib/buildInfo";
 import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
 import { emailSenderStatus } from "./routes/provisioning";
+import { providerStatus } from "./lib/providerGuard";
 import { lemonSqueezyVariantStatus } from "./data/lemonSqueezyVariants";
 dotenv.config();
 
@@ -264,6 +265,14 @@ function healthPayload() {
     // здесь — это будущий отказ на живом покупателе. Только признаки, без
     // самих идентификаторов вариантов.
     lsVariants: safeLsVariantStatus(),
+    // Кем на самом деле делается проверка личности и платёж в бюро.
+    // Переменные в проде НЕ заданы, и код молча берёт заглушку: проверка
+    // паспорта отвечает «успех», не посмотрев паспорт, а платёжная заглушка
+    // сама помечает платёж оплаченным. Сам сторож это уже ловит и пишет в
+    // лог, но лог никто не читает снаружи — значит состояние надо отдавать
+    // тем же способом, что режимы подписи, почты и вариантов кассы.
+    // Имя поля узкое намеренно: это провайдеры БЮРО, а не всей платформы.
+    bureauProviders: safeBureauProviders(),
   };
 }
 
@@ -282,6 +291,23 @@ function safeLsVariantStatus() {
     return lemonSqueezyVariantStatus();
   } catch {
     return null;
+  }
+}
+
+/**
+ * health не должен падать из-за диагностики.
+ *
+ * При отказе отдаём null, а не «заглушки нет»: неотвеченный вопрос не равен
+ * благополучию, и читатель обязан отличить «не знаю» от «всё настроено».
+ */
+function safeBureauProviders() {
+  try {
+    return {
+      kyc: providerStatus("BUREAU_KYC_PROVIDER"),
+      payment: providerStatus("BUREAU_PAYMENT_PROVIDER"),
+    };
+  } catch {
+    return { kyc: null, payment: null };
   }
 }
 

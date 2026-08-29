@@ -1,3 +1,4 @@
+import { checkPublicUrl } from "./publicUrlOnly";
 import { isInternalHost } from "./internalHost";
 import crypto from "crypto";
 import pg from "pg";
@@ -66,13 +67,27 @@ export async function deliverWebhook(
   const allowInternal =
     process.env.ALLOW_INTERNAL_WEBHOOKS === "1" || process.env.NODE_ENV === "test";
   if (!allowInternal) {
-    let internal = true;
+    // ДВА слоя, и второй сильнее первого.
+    //
+    // Первый — быстрый и без сети: адрес, записанный внутренним ЯВНО
+    // (127.0.0.1, 10.x, 169.254.169.254). Он отсекает очевидное мгновенно.
+    //
+    // Второй — checkPublicUrl: разрешает имя и смотрит АДРЕСА, в которые оно
+    // ведёт. Без него `evil.example.com`, указывающий на 127.0.0.1, проходил
+    // бы насквозь: проверка по строке имени этого не видит. Слабость моей
+    // первой версии нашла соседняя вкладка на своей ручке, здесь тот же изъян
+    // был ровно такой же.
+    let internalByName = true;
     try {
-      internal = isInternalHost(new URL(opts.url).hostname);
+      internalByName = isInternalHost(new URL(opts.url).hostname);
     } catch {
-      internal = true; // адрес не разбирается — не идём
+      internalByName = true; // адрес не разбирается — не идём
     }
-    if (internal) {
+    if (internalByName) {
+      return { ok: false, statusCode: null, error: "target_not_allowed" };
+    }
+    const verdict = await checkPublicUrl(opts.url);
+    if (!verdict.ok) {
       return { ok: false, statusCode: null, error: "target_not_allowed" };
     }
   }

@@ -369,7 +369,7 @@ function SourcePicker({ open, onClose, onPick }: {
           <div style={{ display: "flex", gap: SPACE[2], marginBottom: SPACE[2], alignItems: "center" }}>
             <input aria-label="Поиск"
               value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="🔍 По имени, языку или title (GM/IM)…"
+              placeholder="🔍 По имени, языку или званию (GM/IM)…"
               style={{ flex: 1, padding: "8px 12px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 13 }}
             />
             <button onClick={() => sLiveLastFetch(0)} className="cc-focus-ring"
@@ -472,7 +472,7 @@ function SourcePicker({ open, onClose, onPick }: {
             <a href={tab === "twitch-presets" ? "https://www.twitch.tv/directory/category/chess" : "https://www.youtube.com/results?search_query=chess+live"}
               target="_blank" rel="noopener"
               style={{ fontSize: 11, color: CC.accent, textDecoration: "none", fontWeight: 700, padding: "4px 8px" }}>
-              {tab === "twitch-presets" ? "Все live на Twitch ↗" : "Поиск на YouTube ↗"}
+              {tab === "twitch-presets" ? "Все эфиры на Twitch ↗" : "Поиск на YouTube ↗"}
             </a>
           </div>
           <div style={{ fontSize: 11, color: CC.textDim, marginBottom: SPACE[2] }}>
@@ -561,7 +561,7 @@ function SourcePicker({ open, onClose, onPick }: {
       {tab === "youtube" && (
         <div style={{ display: "flex", flexDirection: "column", gap: SPACE[4] }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: CC.text, marginBottom: SPACE[2] }}>📡 Live-стрим канала</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: CC.text, marginBottom: SPACE[2] }}>📡 Прямой эфир канала</div>
             <div style={{ fontSize: 11, color: CC.textDim, marginBottom: SPACE[2] }}>
               Channel ID (например, <code>UCQHX6ViZmPsWiYSFAyS0a3Q</code>) — найдёшь в URL канала на youtube.com
             </div>

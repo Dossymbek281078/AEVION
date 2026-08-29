@@ -345,7 +345,7 @@ export default function ApiPage() {
         <aside
           style={{
             position: "sticky",
-            top: 16,
+            top: "calc(var(--aevion-header-h, 0px) + 16px)",
             display: "grid",
             gap: 4,
           }}

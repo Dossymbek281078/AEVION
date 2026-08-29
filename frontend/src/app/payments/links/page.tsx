@@ -395,7 +395,7 @@ export default function PaymentLinksPage() {
             display: "grid",
             gap: 14,
             position: "sticky",
-            top: 16,
+            top: "calc(var(--aevion-header-h, 0px) + 16px)",
           }}
         >
           <div

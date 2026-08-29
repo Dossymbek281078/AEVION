@@ -382,7 +382,7 @@ export default function SubscriptionsPage() {
             display: "grid",
             gap: 12,
             position: "sticky",
-            top: 16,
+            top: "calc(var(--aevion-header-h, 0px) + 16px)",
           }}
         >
           <div

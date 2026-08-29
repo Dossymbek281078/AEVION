@@ -1017,7 +1017,7 @@ export default function HomePage() {
               minWidth: 280,
               order: 2,
               position: "sticky",
-              top: 72,
+              top: "calc(var(--aevion-header-h, 0px) + 72px)",
               alignSelf: "flex-start",
             }}
           >

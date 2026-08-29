@@ -144,7 +144,7 @@ export default function FintechExamplesPage() {
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 1.5rem 4rem", display: "grid", gridTemplateColumns: "220px 1fr", gap: 24 }}>
         {/* Sidebar */}
-        <nav style={{ position: "sticky", top: 24, height: "fit-content" }}>
+        <nav style={{ position: "sticky", top: "calc(var(--aevion-header-h, 0px) + 24px)", height: "fit-content" }}>
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
             {EXAMPLES.map(e => (
               <button

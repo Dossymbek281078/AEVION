@@ -541,7 +541,11 @@ const { nodes, edges } = await cat.graph({
             border: "1px solid rgba(15,23,42,0.08)",
             marginBottom: 14,
             position: "sticky",
-            top: 14,
+            // Шапка сайта прилипает к top: 0 и слоем выше. Полоса с top: 14
+            // уезжала под неё целиком: шесть органов управления недостижимы.
+            // Высоту шапки публикует SiteHeader (89px десктоп, 185px телефон),
+            // запасной ноль означает «переменной нет — поведение прежнее».
+            top: "calc(var(--aevion-header-h, 0px) + 14px)",
             zIndex: 5,
             display: "grid",
             gap: 14,

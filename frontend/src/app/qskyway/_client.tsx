@@ -238,7 +238,7 @@ export default function QSkywayClient() {
   const [coverage, setCoverage] = useState<{ withFeed: number; withRegulatoryLayer?: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
   const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
   const [cityId, setCityId] = useState<string>("astana");
-  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; substituted: { i: number; type: string; from: number; n: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
+  const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number | null; heightPct: number; realPct: number; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; substituted: { i: number; type: string; from: number; n: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
   // Strict mode asks the backend to treat the published ceiling as a hard
   // constraint instead of an advisory verdict. Off by default: the honest
   // default is "fly the corridor and tell me what it would require".
@@ -459,7 +459,12 @@ export default function QSkywayClient() {
         wind: city.wind ? t("qskyway.meta.wind", { g: city.wind.groundMs, top: city.wind.topMs, deg: city.wind.fromDeg }) : "—",
         windSource: city.wind?.source ?? "illustrative",
         signed: city._signature ? city._signature.contentHash.slice(0, 12) : "—",
-        nofly: city.nofly?.length ?? 0,
+        // null, а не 0. Ноль здесь читается как «запретных зон нет», то
+        // есть «летайте где хотите» — самое опасное, что можно сказать
+        // о воздушном пространстве, не имея данных. Подстановка
+        // срабатывает лишь если ответ пришёл без списка, но направление
+        // отказа выбирается по цене ошибки, а не по её вероятности.
+        nofly: city.nofly?.length ?? null,
         heightPct: city.dataQuality?.measuredPct ?? 0,
         realPct: city.dataQuality?.realPct ?? 0,
         dq: city.dataQuality,
@@ -1056,7 +1061,7 @@ export default function QSkywayClient() {
                     </div>
                   )}
                   <RegulatorySourceChip
-                    subject={`${t("qskyway.reg.subject.zones")} (${meta.nofly})`}
+                    subject={`${t("qskyway.reg.subject.zones")} (${meta.nofly ?? "—"})`}
                     source={{
                       tier: "illustrative",
                       scopeNote: t("qskyway.reg.zones.scope"),

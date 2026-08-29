@@ -44,6 +44,68 @@ async function jpost(p, b) { const r = await fetch(`${BASE}${p}`, { method: "POS
  * went to exactly that on 2026-07-27. A liveness check is not enough: something
  * answers, it is just the wrong something.
  */
+/**
+ * Личность сервера, а не его способность.
+ *
+ * 29.08.2026: смоук прошёл 153/153, НЕ имея запущенного бэкенда этой
+ * ветки — на порту 4001 сидел сервер соседней сессии. Проверки ниже
+ * его пропустили, и это не недосмотр автора: он ЗНАЛ про общий порт
+ * (см. комментарий выше про потерянный час 27.07) и построил защиту.
+ * Она проверяла СПОСОБНОСТЬ — «это QSkyway? есть ли фича?» — а
+ * способность у всех 18 worktree одинаковая: это один репозиторий.
+ * Поэтому проверка пропускала ровно тот случай, против которого
+ * написана.
+ *
+ * Цена не в ложном зелёном: смоук БРОНИРУЕТ слоты, то есть пишет в
+ * чужой процесс. Соседняя сессия увидит брони, которых не делала.
+ *
+ * Ответ здесь чистый (без сети и без git), чтобы его можно было
+ * проверить таблицей случаев — включая те, что руками не повторить.
+ */
+function identityVerdict(health, opts) {
+  const branch = health && typeof health.branch === "string" ? health.branch : "";
+  const known = branch !== "" && branch !== "unknown";
+  const explicit = Boolean(opts && opts.baseIsExplicit);
+  const local = opts && opts.localBranch ? opts.localBranch : "";
+
+  if (!known) {
+    if (explicit) {
+      return { ok: true, note: "ветка не названа; BASE задан явно — доверяю оператору" };
+    }
+    return {
+      ok: false,
+      reason: "unidentified",
+      message:
+        "сервер на порту по умолчанию не называет свою ветку. На этой машине порт делят 18+ worktree, " +
+        "а смоук БРОНИРУЕТ слоты: прогон против чужого процесса испортит чужие данные и ничего не скажет " +
+        "о вашем коде. Поднимите бэкенд этой ветки или задайте BASE явно.",
+    };
+  }
+  if (local && branch !== local) {
+    if (explicit) {
+      return { ok: true, note: "ветка сервера " + branch + " против локальной " + local + "; BASE задан явно" };
+    }
+    return {
+      ok: false,
+      reason: "other-branch",
+      message: "сервер собран из ветки " + branch + ", а вы работаете в " + local + " — это чужая сессия.",
+    };
+  }
+  return { ok: true, note: "ветка сервера: " + branch };
+}
+
+function localBranchOrEmpty() {
+  try {
+    return require("node:child_process")
+      .execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+      .trim();
+  } catch {
+    // Не смогли спросить git — это «не знаю», а не «совпадает».
+    // Пустая строка отключает сравнение веток, но НЕ отключает отказ
+    // неопознанному серверу: слабее становится одна проверка из двух.
+    return "";
+  }
+}
 async function assertRightBackend() {
   let h;
   try {
@@ -62,6 +124,17 @@ async function assertRightBackend() {
     console.error("Restart it from this worktree, or point BASE at the right port.");
     process.exit(1);
   }
+
+  const verdict = identityVerdict(h.json, {
+    baseIsExplicit: Boolean(process.env.BASE),
+    localBranch: localBranchOrEmpty(),
+  });
+  if (!verdict.ok) {
+    console.error("");
+    console.error("Не тот сервер: " + verdict.message);
+    process.exit(1);
+  }
+  console.log("сервер опознан — " + verdict.note);
 }
 
 async function main() {
@@ -659,4 +732,13 @@ async function main() {
   console.log(`\n${summary()}`);
   process.exit(failed === 0 ? 0 : 1);
 }
-main().catch((e) => { console.error("smoke crashed:", e); process.exit(1); });
+// Запуск только когда файл вызван напрямую. Без этого условия ЛЮБОЙ
+// импорт (в том числе из теста) поднимал бы боевой смоук: сеть, брони
+// в чужом процессе и process.exit посреди чужого прогона.
+if (require.main === module) {
+  main().catch((e) => { console.error("smoke crashed:", e); process.exit(1); });
+}
+
+// Открыто ради проверки таблицей случаев: часть из них (чужая ветка на
+// нашем порту) руками не воспроизвести, не подняв вторую сессию.
+module.exports = { identityVerdict };

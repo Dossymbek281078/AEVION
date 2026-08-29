@@ -44,6 +44,7 @@ import { degraded } from "../lib/degradedResponse";
 import { classifyGithubResponse, githubUnreachable } from "../lib/githubFailure";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
 import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
+import { checkPublicUrl } from "../lib/publicUrlOnly";
 
 export const devhubRouter = Router();
 
@@ -5876,7 +5877,13 @@ devhubRouter.post("/media/upload-audio", async (req, res) => {
   try {
     let buf: Buffer;
     if (sourceUrl) {
-      const sr = await fetch(String(sourceUrl));
+      // Без этой проверки посторонний заставлял НАШ сервер сходить по любому
+      // адресу, включая внутренние (метаданные облака, соседние службы,
+      // админки), и получал результат кодом статуса. Ручка была закрыта
+      // только тем, что не настроено хранилище, — то есть случайно.
+      const verdict = await checkPublicUrl(sourceUrl);
+      if (!verdict.ok) return res.status(400).json({ error: verdict.reason });
+      const sr = await fetch(verdict.url.toString());
       if (!sr.ok) return res.status(sr.status).json({ error: `source fetch failed: ${sr.status}` });
       buf = Buffer.from(await sr.arrayBuffer());
     } else {

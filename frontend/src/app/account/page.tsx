@@ -124,6 +124,20 @@ export default function AccountPage() {
   // QVenture: тариф у него действительно free, а покупка живёт в другой
   // таблице, и кабинет её не читал.
   const [ownedApps, setOwnedApps] = useState<string[]>([]);
+  // Метка возврата из кассы. Замер 29.08.2026: после оплаты человек НИКУДА не
+  // возвращался — в ссылках кассы нет адреса возврата, а страниц «спасибо» нет
+  // вовсе (/thanks, /thank-you, /success дают 404). Договор простой: касса
+  // возвращает на /account?purchased=<id модуля>, и здесь это подтверждается
+  // явно. Без метки страница ведёт себя как раньше.
+  const [justPurchased, setJustPurchased] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get("purchased");
+      setJustPurchased(v && v.length <= 64 ? v : null);
+    } catch {
+      setJustPurchased(null);
+    }
+  }, []);
   // «Список пуст» и «узнать не удалось» — РАЗНЫЕ вещи, и на денежном пути
   // разница дороже всего (21.08.2026).
   const [ownedUnknown, setOwnedUnknown] = useState(false);
@@ -453,6 +467,22 @@ export default function AccountPage() {
       <Wave1Nav />
       <ProductPageShell>
         <div style={{ maxWidth: 800, margin: "0 auto", padding: "32px 16px" }}>
+          {justPurchased && (
+            <div
+              role="status"
+              style={{
+                marginBottom: 20, padding: "14px 16px", borderRadius: 12,
+                background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46",
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 15 }}>Спасибо за покупку</div>
+              <div style={{ fontSize: 13, marginTop: 4 }}>
+                Оплата принята. Купленное — в списке ниже; если его там ещё нет,
+                обновите страницу через минуту: подтверждение от кассы иногда идёт
+                с задержкой.
+              </div>
+            </div>
+          )}
           <h1 style={{ fontSize: 28, fontWeight: 900, color: "#0f172a", margin: 0 }}>
             Account
           </h1>

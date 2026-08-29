@@ -1422,9 +1422,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           role: "assistant",
           at: new Date().toISOString(),
           files: [],
-          note: data.appliedSchemaSql
+          // Приписка про бэкапы — не мелкий шрифт, а честность в момент, когда
+          // человек начинает складывать туда данные. У инстанса проектных баз
+          // резервного копирования нет вообще (issue #957), и промолчать об
+          // этом означало бы дать пользователю поверить в сохранность, которой
+          // мы не обеспечиваем. Убрать эту строку можно ровно в тот день, когда
+          // бэкап заработает и восстановление будет отрепетировано.
+          note: (data.appliedSchemaSql
             ? `Database ready — schema ${data.schema} created, tables from db/schema.sql applied, DATABASE_URL saved to Env Vars.`
-            : `Database ready — schema ${data.schema} created. No db/schema.sql yet, so no tables were made.`,
+            : `Database ready — schema ${data.schema} created. No db/schema.sql yet, so no tables were made.`) +
+            ` Note: project databases are not backed up yet — keep anything you cannot afford to lose somewhere else too.`,
         },
       ]);
       // Refresh the project so the Env Vars tab shows DATABASE_URL.

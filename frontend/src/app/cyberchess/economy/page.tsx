@@ -61,7 +61,7 @@ const MOCK_AUCTIONS: Auction[] = [
     player: "EndgameKnight",
     elo: 2180,
     title: "Эндшпиль ладья+пешка против ладьи — позиция Лусены",
-    desc: "Mini-разбор 18 ходов с альтернативами и теорией Лусены/Филидора",
+    desc: "Краткий разбор 18 ходов с альтернативами и теорией Лусены/Филидора",
     startPrice: 120,
     bids: 7,
   },
@@ -620,7 +620,7 @@ export default function EconomyHubPage() {
           <span style={{ color: C.faint }}>·</span>
           <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>📊 Рейтинг CPI</Link>
           <span style={{ color: C.faint }}>·</span>
-          <Link href="/bank" style={{ color: C.purple, textDecoration: "none" }}>🏦 AEVION Bank — тиры Pro/Ultimate</Link>
+          <Link href="/bank" style={{ color: C.purple, textDecoration: "none" }}>🏦 AEVION Bank — тарифы Pro/Ultimate</Link>
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>

@@ -172,7 +172,7 @@ function BracketView({ bracket }: { bracket: BracketRound[] }) {
 
 function BadgeShowcase({ playerId, badges }: { playerId: string; badges: TournamentBadge[] }) {
   if (badges.length === 0) return (
-    <div style={{ fontSize: 12, color: C.faint, fontStyle: "italic" }}>{playerId}: пока без бейджей</div>
+    <div style={{ fontSize: 12, color: C.faint, fontStyle: "italic" }}>{playerId}: пока без наград</div>
   );
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -477,7 +477,7 @@ export default function TournamentHubPage() {
           {/* Badge legend */}
           <div style={{ marginTop: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: C.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
-              Все возможные бейджи
+              Все возможные награды
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))", gap: 8 }}>
               {(Object.entries(BADGE_META) as Array<[TournamentBadge, typeof BADGE_META[TournamentBadge]]>).map(([key, m]) => (

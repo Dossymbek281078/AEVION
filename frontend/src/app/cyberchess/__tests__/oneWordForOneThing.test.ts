@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { bezKommentariev } from "./bezKommentariev";
 
 /**
  * Одно понятие — одно слово. Модуль переводил blunder как «Зевок»
@@ -31,6 +32,20 @@ describe("одно понятие названо одним словом", () =>
   it("обход действительно нашёл файлы модуля", () => {
     expect(spisok.length).toBeGreaterThan(50);
     expect(spisok.some((p) => p.endsWith("page.tsx"))).toBe(true);
+  });
+
+  it("кальки «бейдж» нет — модуль говорит «награды» и «трофеи»", () => {
+    // то же, что с «блундером»: рядом уже есть русское слово, и два слова
+    // для одного понятия заставляют человека гадать, разные ли это вещи
+    const nahodki: string[] = [];
+    for (const p of spisok) {
+      bezKommentariev(readFileSync(p, "utf8"))
+        .split(String.fromCharCode(10))
+        .forEach((l, i) => {
+          if (/[бБ]ейдж/.test(l)) nahodki.push(`${p}:${i + 1}`);
+        });
+    }
+    expect(nahodki).toEqual([]);
   });
 
   it("кальки «блундер» нет в русских текстах — есть «зевок»", () => {

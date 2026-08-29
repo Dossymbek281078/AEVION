@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { bezKommentariev } from "./bezKommentariev";
 
 /**
  * Подпись для экранного диктора — единственный текст, который слышит
@@ -49,18 +50,7 @@ describe("подписи для экранного диктора говорят
       // комментарии разработчику вырезаем: они не звучат для человека,
       // а «AI Voice Coach» в пояснении к коду — название, а не подпись
       const syroe = readFileSync(p, "utf8");
-      // комментарии вырезаем без регулярок: и строчные, и блочные, и JSX.
-      // «AI Voice Coach» в пояснении к коду — название, а не подпись, и
-      // экранный диктор его не читает. Маркеры собираем из кусков, иначе
-      // они закрыли бы комментарий этого файла.
-      const bez_blochnyh = syroe
-        .split('/' + '*')
-        .map((k, i) => (i === 0 ? k : k.slice(k.indexOf('*' + '/') + 2)))
-        .join(" ");
-      const kod = bez_blochnyh
-        .split(String.fromCharCode(10))
-        .filter((l) => !l.trim().startsWith("//"))
-        .join(String.fromCharCode(10));
+      const kod = bezKommentariev(readFileSync(p, "utf8"));
       for (const zapret of ZAPRESHENO) {
         if (kod.includes(zapret)) vernulis.push(`${p}: «${zapret}»`);
       }

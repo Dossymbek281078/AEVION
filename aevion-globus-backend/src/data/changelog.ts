@@ -70,7 +70,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-04-29",
     kind: "added",
     title: "Sitemap — динамические /pricing/cases/[id]",
-    body: "sitemap.ts тянет список case-id с GET /api/pricing/cases и публикует страницы кейсов в XML. Добавлены /pricing/calculator/embed, /affiliate-dashboard, /partners-portal.",
+    body: "sitemap.ts тянет список case-id с GET /api/pricing/cases и публикует страницы кейсов в XML. Добавлены /pricing/calculator/embed, /pricing/affiliate-dashboard, /pricing/partners-portal.",
     scope: "seo",
   },
   {

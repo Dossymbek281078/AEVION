@@ -149,7 +149,7 @@ export default function TournamentsHubPage() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const r = await fetch("/api-backend/api/cyberchess-tournaments/list", { cache: "no-store" });
+      const r = await fetch("/api-backend/api/cyberchess-tournaments/list", { cache: "no-store", signal: AbortSignal.timeout(10_000) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       /* Ветка «пришло, но не то» раньше молчала: при 200 с телом без списка
@@ -527,7 +527,7 @@ function TournamentCard({ t }: { t: Tournament }) {
     if (!hovered || standings) return;
     let cancelled = false;
     setStandingsLoading(true);
-    fetch(`/api-backend/api/cyberchess-tournaments/${t.id}/standings`, { cache: "no-store" })
+    fetch(`/api-backend/api/cyberchess-tournaments/${t.id}/standings`, { cache: "no-store", signal: AbortSignal.timeout(10_000) })
       .then((r) => r.json())
       .then((data) => {
         if (!cancelled && data?.ok && Array.isArray(data.standings)) {

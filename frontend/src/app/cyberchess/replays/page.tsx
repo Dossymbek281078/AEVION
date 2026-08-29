@@ -88,7 +88,7 @@ const API_BASE = "/api-backend/api/cyberchess-spectator";
 
 async function fetchReplays(limit = 50): Promise<ReplayItem[]> {
   const res = await fetch(`${API_BASE}/replays?limit=${limit}`, {
-    cache: "no-store",
+    cache: "no-store", signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = (await res.json()) as { ok: boolean; replays: ReplayItem[] };

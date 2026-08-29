@@ -86,7 +86,7 @@ export default function CyberChessLeaderboardPage() {
     try {
       const r = await fetch(
         `/api-backend/api/cyberchess/matchmaking/leaderboard?speed=${sp}&limit=100`,
-        { cache: "no-store" },
+        { cache: "no-store", signal: AbortSignal.timeout(10_000) },
       );
       const data = await r.json();
       if (!data?.ok) throw new Error("bad response");
@@ -109,7 +109,7 @@ export default function CyberChessLeaderboardPage() {
     try {
       const r = await fetch(
         `/api-backend/api/cyberchess/matchmaking/wallet/leaderboard?limit=100`,
-        { cache: "no-store" },
+        { cache: "no-store", signal: AbortSignal.timeout(10_000) },
       );
       const data = await r.json();
       if (!data?.ok) throw new Error("bad response");

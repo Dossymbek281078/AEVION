@@ -9,7 +9,7 @@
  * есть все три поля UTM, без которых Gumroad ссылку в отчёт не заводит.
  */
 import { describe, it, expect } from "vitest";
-import { withChannel, channelFrom, CHANNELS } from "@/lib/products";
+import { withChannel, channelFrom, keepChannel, CHANNELS } from "@/lib/products";
 
 const GUM = "https://aevion.gumroad.com/l/tmuyxw?wanted=true";
 const LS = "https://aevion.lemonsqueezy.com/checkout/buy/abc";
@@ -74,5 +74,40 @@ describe("withChannel — метка канала в ссылке оплаты",
   it("чужая метка из адресной строки в ссылку оплаты не попадает", () => {
     expect(channelFrom("../../evil")).toBeNull();
     expect(withChannel(GUM, channelFrom("нет-такого"), "go")).toBe(GUM);
+  });
+});
+
+describe("keepChannel — метка канала на ВНУТРЕННИХ переходах", () => {
+  // Замер 28.08.2026: воронка теряла источник дважды, и оба раза молча —
+  // /en/go → /en/longevity и /longevity → /shop. Целевая страница канал читает,
+  // ссылка на неё метки не несла, покупка после бесплатного материала приходила
+  // в отчёт как «источник неизвестен».
+  it("каждая метка переживает переход туда и обратно", () => {
+    for (const short of Object.keys(CHANNELS)) {
+      const normalized = channelFrom(short);
+      const href = keepChannel("/shop", normalized);
+      const param = new URL(href, "https://aevion.app").searchParams.get("c");
+      expect(channelFrom(param ?? undefined)).toBe(normalized);
+    }
+  });
+
+  // ЭТОТ ТЕСТ — доказательство, что ловушка настоящая, а не выдуманная. Пока он
+  // зелёный, «упростить» keepChannel до подстановки channel нельзя: страница
+  // получит длинное значение, channelFrom вернёт null, и метка исчезнет молча.
+  it("нормализованное значение НЕ принимается как ?c= — ради этого и функция", () => {
+    expect(channelFrom("yt")).toBe("youtube");
+    expect(channelFrom("youtube")).toBeNull();
+  });
+
+  it("без канала адрес не трогает — лишний ?c= в ссылке не нужен", () => {
+    expect(keepChannel("/shop", null)).toBe("/shop");
+  });
+
+  it("не затирает уже имеющиеся параметры адреса", () => {
+    expect(keepChannel("/shop?tab=books", "youtube")).toBe("/shop?tab=books&c=yt");
+  });
+
+  it("неизвестный канал метки не порождает", () => {
+    expect(keepChannel("/shop", "myspace")).toBe("/shop");
   });
 });

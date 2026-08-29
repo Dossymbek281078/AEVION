@@ -260,7 +260,7 @@ export default async function EnLongevityPage({
             comparison happens in your browser, against the same target ranges
             listed above.
           </p>
-          <LongevityTool />
+          <LongevityTool channel={channel} />
         </section>
 
         <section style={styles.section}>

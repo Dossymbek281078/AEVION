@@ -1,3 +1,4 @@
+import { warnIfStubInProduction } from "../providerGuard";
 import { KycProvider } from "./provider";
 import { stubKycProvider } from "./stubProvider";
 import { sumsubKycProvider } from "./sumsubProvider";
@@ -16,6 +17,8 @@ export { sumsubKycProvider } from "./sumsubProvider";
  */
 export function getKycProvider(): KycProvider {
   const id = (process.env.BUREAU_KYC_PROVIDER || "stub").toLowerCase();
+  // Заглушка в проде больше не молчит — см. lib/providerGuard.ts.
+  warnIfStubInProduction("BUREAU_KYC_PROVIDER", id);
   switch (id) {
     case "sumsub":
       return sumsubKycProvider;

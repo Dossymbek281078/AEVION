@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
-import { productById, withChannel } from "@/lib/products";
+import { keepChannel, productById, withChannel } from "@/lib/products";
 import { BuyLink } from "@/components/BuyLink";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 
@@ -420,7 +420,7 @@ export default function LongevityClient({ channel = null }: { channel?: string |
           buttonLabel="Присылать обновления"
         />
         <p style={styles.foot}>
-          Связанные модули: <a href="/qrenew" style={styles.link}>QRenew</a> (биовозраст) · <a href="/qmelanin" style={styles.link}>QMelanin</a> (пигмент, Zn:Cu) · <a href="/shop" style={styles.link}>магазин</a>.
+          Связанные модули: <a href="/qrenew" style={styles.link}>QRenew</a> (биовозраст) · <a href="/qmelanin" style={styles.link}>QMelanin</a> (пигмент, Zn:Cu) · <a href={keepChannel("/shop", channel)} style={styles.link}>магазин</a>.
         </p>
       </div>
     </main>

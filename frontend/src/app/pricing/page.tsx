@@ -12,6 +12,7 @@ import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
 import { useABVariant, getAllVariants } from "@/lib/abVariant";
 import AskAi from "@/components/AskAi";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
@@ -2319,6 +2320,21 @@ export default function PricingPage() {
           </code>
           .
         </div>
+      </section>
+
+      {/*
+        Захват адреса на странице цен.
+
+        Замер 29.08.2026: `WaitlistCapture` стоит на главной и на /go, а на
+        странице цен его не было — при том что именно здесь намерение купить
+        максимально. Человек посмотрел цены, не готов платить сегодня и
+        уходит, не оставив следа.
+
+        Поле `source` отличает этот поток от остальных: без него нельзя
+        сказать, откуда пришёл подписчик, и мерить нечего.
+      */}
+      <section style={{ margin: "28px auto 0", maxWidth: 760 }}>
+        <WaitlistCapture source="pricing" />
       </section>
 
       <section style={{ margin: "28px auto 0", maxWidth: 760, textAlign: "left" }}>

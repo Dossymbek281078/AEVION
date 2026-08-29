@@ -182,7 +182,7 @@ export default function DailyPuzzlePage() {
   // а это разные вещи для человека, который решает, стоит ли играть.
   useEffect(() => {
     let alive = true;
-    fetch('/api-backend/api/cyberchess-daily/leaderboard?limit=100')
+    fetch('/api-backend/api/cyberchess-daily/leaderboard?limit=100', { signal: AbortSignal.timeout(10_000) })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j) => {
         if (!alive) return;
@@ -210,7 +210,7 @@ export default function DailyPuzzlePage() {
   // честно скажет, что задача резервная.
   useEffect(() => {
     let alive = true;
-    fetch('/api-backend/api/cyberchess-daily/puzzle')
+    fetch('/api-backend/api/cyberchess-daily/puzzle', { signal: AbortSignal.timeout(10_000) })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!alive) return;

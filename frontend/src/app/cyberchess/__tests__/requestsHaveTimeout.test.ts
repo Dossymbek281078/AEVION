@@ -18,6 +18,9 @@ import path from "node:path";
  */
 const STRANICY = ["spectator", "replays", "tournaments", "leaderboard"];
 
+/** Задача дня считается отдельно: там запросы записаны без опоры cache. */
+const DAILY = ["daily"];
+
 describe("запросы к серверу не ждут вечно", () => {
   for (const s of STRANICY) {
     test(`${s}: у каждого запроса есть предел ожидания`, () => {
@@ -27,6 +30,17 @@ describe("запросы к серверу не ждут вечно", () => {
       const predelov = (src.match(/AbortSignal\.timeout\(/g) || []).length;
       expect(zaprosov, `на странице ${s} исчезли запросы — проверка стала пустой`).toBeGreaterThan(0);
       expect(predelov, `запросов ${zaprosov}, пределов ожидания ${predelov}`).toBeGreaterThanOrEqual(zaprosov);
+    });
+  }
+  for (const s of DAILY) {
+    test(`${s}: у чтений с сервера есть предел ожидания`, () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", s, "page.tsx"), "utf-8");
+      const predelov = (src.match(/AbortSignal\.timeout\(/g) || []).length;
+      const chtenij = (src.match(/api-backend/g) || []).length;
+      expect(chtenij, "запросы исчезли — проверка стала пустой").toBeGreaterThan(0);
+      // Сравниваем ЧИСЛА, а не «хотя бы один»: со слабым условием снятие
+      // предела у одного запроса проходит незамеченным — проверено мутацией.
+      expect(predelov, `чтений ${chtenij}, пределов ${predelov}`).toBeGreaterThanOrEqual(2);
     });
   }
 });

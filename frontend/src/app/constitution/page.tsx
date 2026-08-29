@@ -1984,6 +1984,8 @@ function AiAdvisorModal({
   onApply: (sliders: Sliders, explanation: string) => void;
 }) {
   const { t } = useI18n();
+  // Свой счётчик модуля, как у остального: useFunnel -> /api/constitution/funnel/track.
+  const { track } = useFunnel();
   const [description, setDescription] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -2005,6 +2007,10 @@ function AiAdvisorModal({
     setError(null);
     setProvider(null);
     setStreamText("");
+    // Расход платного совета виден в воронке. Событие ai_suggest было в
+    // словаре, а слал его ноль мест: суточный лимит aiSuggestPerDay тратился
+    // невидимо. Шлём в точке РАСХОДА, а не успеха, и без текста запроса.
+    track("ai_suggest", { length: description.trim().length });
     let finalSliders: Sliders | null = null;
     let finalExplanation = "";
     let finalProvider = "unknown";

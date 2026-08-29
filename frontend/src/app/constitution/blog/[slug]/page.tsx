@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { findPost, listPosts, type BlogBlock } from "@/lib/constitution-blog";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { getServerT } from "@/lib/i18n-server";
+import { ConstitutionFunnelPing } from "@/components/ConstitutionFunnelPing";
 import {
   classify,
   countryByCode,
@@ -134,6 +135,7 @@ export default async function BlogPostPage({ params }: PageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonld) }}
       />
+      <ConstitutionFunnelPing event="blog_view" props={{ kind: "post", slug }} />
       <div className="max-w-3xl mx-auto">
         <header className="mb-6">
           <Link href="/constitution/blog" className="text-[#d4af37] hover:underline text-sm">

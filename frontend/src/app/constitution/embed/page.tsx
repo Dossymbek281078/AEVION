@@ -12,6 +12,7 @@ import {
   SLIDER_SHORT_LABELS,
   type Sliders,
 } from "@/lib/constitution";
+import { useFunnel } from "@/lib/useFunnel";
 
 /**
  * Embed widget — designed to be loaded in an <iframe> on any external site.
@@ -62,6 +63,23 @@ function countryByCodeLocal(code: string): Sliders | null {
 
 export default function ConstitutionEmbedPage() {
   const [sliders, setSliders] = useState<Sliders>(DEFAULT_SLIDERS);
+  // Охват виджета на чужих сайтах. Событие embed_view было в словаре, а слал
+  // его НОЛЬ мест: сколько внешних площадок нас показывают, мы не знали.
+  // Считаем один раз на загрузку и БЕЗ адреса площадки — только вид вставки.
+  const { track } = useFunnel();
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const kind = sp.get("artifact")
+      ? "artifact"
+      : sp.get("sliders")
+        ? "sliders"
+        : sp.get("preset")
+          ? "preset"
+          : sp.get("country")
+            ? "country"
+            : "default";
+    track("embed_view", { kind });
+  }, [track]);
   const [label, setLabel] = useState<string>("Default scenario");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [compact, setCompact] = useState<boolean>(false);

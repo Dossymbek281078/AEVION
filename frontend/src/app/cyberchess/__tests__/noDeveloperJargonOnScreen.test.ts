@@ -21,7 +21,7 @@ const ROOT = path.join(__dirname, "..");
 // тоста: «Hotseat выкл» и «P2P соединение закрыто». Имена движка и форматов
 // (Stockfish, Lichess, PGN, ELO, FEN) остаются как есть — это термины игры.
 const ZHARGON =
-  /\b(bracket|Coach |spaced.repetition|fallback|mock|polling|SSE|endpoint|payload|localStorage|cache|weak factor|SR reminders|backend|deprecated|TODO|FIXME|daily-variant|Coach Knowledge|training hub|hotseat|P2P|quick start|match me)\b/i;
+  /\b(bracket|Coach |PiP|spaced.repetition|fallback|mock|polling|SSE|endpoint|payload|localStorage|cache|weak factor|SR reminders|backend|deprecated|TODO|FIXME|daily-variant|Coach Knowledge|training hub|hotseat|P2P|quick start|match me)\b/i;
 
 // У кириллицы граница слова работает не так, как ждёшь, поэтому задаём её
 // перечислением. 27.08.2026 сторож пропустил фразу «Очередь и матчи живут в

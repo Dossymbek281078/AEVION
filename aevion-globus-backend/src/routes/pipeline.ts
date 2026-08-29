@@ -36,6 +36,8 @@ import {
 } from "../lib/opentimestamps/anchor";
 import { computeWitnessCid } from "../lib/shamir/witnessCid";
 import { anchorSummary, pdfAnchorField } from "../lib/opentimestamps/anchorSummary";
+import { resolveEd25519 } from "../lib/qsignV2/keyRegistry";
+import { DEFAULT_ED25519_KID } from "../lib/qsignV2/ensureTables";
 import {
   CosignError,
   reverifyAuthorCosign,
@@ -138,6 +140,10 @@ async function ensureTables(): Promise<void> {
     );
   `);
   await pool.query(
+    // Заверение эфемерного ключа постоянным ключом платформы: без него офлайн
+    // нельзя отличить нашу подпись от чужой (ключ подписи приезжает в самом
+    // пакете). NULL — законное значение: у сертификатов, выпущенных до этой
+    // правки, и у выпусков, где постоянный ключ был недоступен.
     `ALTER TABLE "QuantumShield" ADD COLUMN IF NOT EXISTS "legacy" BOOLEAN NOT NULL DEFAULT false;`,
   );
   await pool.query(
@@ -192,6 +198,12 @@ async function ensureTables(): Promise<void> {
   // v2: signedAt хранит момент, вошедший в HMAC-пейлоад; без него
   // GET /verify/:certId не может пересчитать signatureHmac.
   await pool.query(
+    // Заверение эфемерного ключа постоянным ключом платформы. Колонки живут
+    // на IPCertificate, потому что пакет собирается из НЕЁ (SELECT * FROM
+    // "IPCertificate"): положить их на QuantumShield значило бы записать
+    // значение, которое никто не прочитает.
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "platformAttestationKid" TEXT;`,
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "platformAttestationSig" TEXT;`,
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "signedAt" TIMESTAMPTZ;`,
   );
   // v3 (Phase 3 — HMAC rotation): the QSign HMAC version that signed this
@@ -551,6 +563,42 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
     .toString("hex");
   wipeBuffer(pkcs8Signing);
 
+  /*
+   * Заверение эфемерного ключа ПОСТОЯННЫМ ключом платформы.
+   *
+   * Зачем. Подпись выше сделана ключом, который рождается на этот сертификат и
+   * уезжает к проверяющему В ТОМ ЖЕ пакете. Офлайн такая подпись доказывает,
+   * что payload не менялся, но НЕ то, чья она: посторонний сгенерирует свою
+   * пару и подпишет что угодно. Постоянный ключ платформы публикуется на
+   * /api/qsign/v2/keys, и его проверяющий может взять НЕЗАВИСИМО от пакета —
+   * тогда цепочка «платформа заверила этот эфемерный ключ» замыкается.
+   *
+   * Почему МЯГКО. Если семя постоянного ключа не задано, resolveEd25519 в
+   * боевом режиме бросает исключение. Ставить такой вызов на путь ВЫПУСКА
+   * жёстко нельзя: отсутствие настройки сломало бы выдачу сертификатов
+   * целиком. Не смогли заверить — сертификат всё равно выпускается, поле
+   * просто отсутствует, а проверяющий увидит «заверения нет» вместо ложного
+   * «всё в порядке».
+   */
+  let platformAttestation: { kid: string; signature: string } | null = null;
+  try {
+    const platform = await resolveEd25519(DEFAULT_ED25519_KID);
+    platformAttestation = {
+      kid: platform.kid,
+      signature: crypto
+        .sign(null, Buffer.from(publicKeyRawHex, "utf8"), platform.privateKey)
+        .toString("hex"),
+    };
+  } catch (e) {
+    // Молчать нельзя: отсутствие заверения — это состояние, которое должно
+    // быть видно в журнале, иначе «у всех сертификатов его нет» откроется
+    // случайно и через месяц.
+    console.warn(
+      "[pipeline] платформенное заверение эфемерного ключа не сделано:",
+      (e as Error).message,
+    );
+  }
+
   let shards: AuthenticatedShard[];
   try {
     shards = splitAndAuthenticate(privateKeyRaw, shieldId);
@@ -628,8 +676,8 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
     );
 
     await client.query(
-      `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","fileHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'active',$20,$21,$22,$23,$24,$25)`,
+      `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","fileHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo","platformAttestationKid","platformAttestationSig")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'active',$20,$21,$22,$23,$24,$25,$26,$27)`,
       [
         certId,
         objectId,
@@ -656,6 +704,10 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
         cosign?.authorPublicKey ?? null,
         cosign?.authorSignature ?? null,
         cosign?.authorKeyAlgo ?? null,
+        // NULL — законное значение: постоянный ключ платформы мог быть
+        // недоступен, и выпуск сертификата от этого не останавливается.
+        platformAttestation?.kid ?? null,
+        platformAttestation?.signature ?? null,
       ],
     );
 
@@ -2780,6 +2832,31 @@ pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
               signature: cert.signatureEd25519,
             }
           : null,
+        /*
+         * Заверение эфемерного ключа ПОСТОЯННЫМ ключом платформы.
+         *
+         * Без него подпись выше самосогласована: и подпись, и ключ к ней
+         * приезжают в этом же файле, так что посторонний соберёт такой пакет
+         * своей парой ключей. Здесь же лежит kid — по нему открытый ключ
+         * берётся НЕЗАВИСИМО, с /api/qsign/v2/keys, и цепочка замыкается.
+         *
+         * null — законное значение: сертификаты до этой правки и выпуски, где
+         * постоянный ключ был недоступен. Проверяющий обязан читать null как
+         * «заверения нет», а не как «всё в порядке».
+         */
+        platformAttestation:
+          cert.platformAttestationKid && cert.platformAttestationSig
+            ? {
+                algo: "Ed25519",
+                kid: cert.platformAttestationKid,
+                signedValue: "proofs.aevionEd25519.publicKeyRawHex",
+                signature: cert.platformAttestationSig,
+                note:
+                  "AEVION's long-lived key signs the per-certificate key. Fetch the " +
+                  "public half independently from /api/qsign/v2/keys — that is what " +
+                  "makes this layer independent of the bundle.",
+              }
+            : null,
         qsignHmac: signedAtIso
           ? {
               algo: "HMAC-SHA256",

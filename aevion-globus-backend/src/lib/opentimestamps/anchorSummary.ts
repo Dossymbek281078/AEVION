@@ -68,12 +68,20 @@ export const ANCHOR_COLUMNS = `"otsStatus","otsBitcoinBlockHeight"`;
  */
 export function pdfAnchorField(a: AnchorSummary): { label: string; value: string } {
   if (a.status === "bitcoin-confirmed") {
+    // Ярлык обещает проверяемость без нас — значит документ обязан сказать,
+    // ЧЕМ проверять. Прежнее значение сообщало только наш собственный вывод
+    // («confirmed»), то есть предлагало поверить нам на слово ровно там, где
+    // обещало обратное. Путь к байтам доказательства короткий и помещается.
+    // Слово «confirmed» остаётся, когда высоты нет: иначе документ теряет сам
+    // факт подтверждения, а выдумывать номер блока нельзя. Это закреплено
+    // тестом, и он справедливо покраснел, когда я слово потерял.
+    const where =
+      a.bitcoinBlockHeight === null
+        ? "OpenTimestamps -> Bitcoin, confirmed"
+        : `OpenTimestamps -> Bitcoin, block ${a.bitcoinBlockHeight}`;
     return {
       label: "BITCOIN ANCHOR (verifiable without AEVION)",
-      value:
-        a.bitcoinBlockHeight === null
-          ? "OpenTimestamps -> Bitcoin, confirmed"
-          : `OpenTimestamps -> Bitcoin, block ${a.bitcoinBlockHeight}`,
+      value: `${where}; check the .ots proof at /api/pipeline/ots/<certId>/proof with any OpenTimestamps client`,
     };
   }
   if (a.status === "pending") {

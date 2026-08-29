@@ -54,6 +54,16 @@ describe("строка про якорь в PDF-сертификате", () => {
     expect(f.label).toMatch(/without AEVION/i);
   });
 
+  test("ярлык обещает проверяемость — значение говорит, ЧЕМ проверять", () => {
+    // Обещание без способа его исполнить хуже отсутствия обещания: документ
+    // говорил «verifiable without AEVION» и предлагал поверить нашему же
+    // выводу «confirmed». Теперь рядом стоит путь к байтам доказательства.
+    const f = pdfAnchorField({ status: "bitcoin-confirmed", bitcoinBlockHeight: 912345 });
+    expect(f.label).toMatch(/without AEVION/i);
+    expect(f.value, "сказано «проверяемо», но не сказано чем").toMatch(/\.ots/i);
+    expect(f.value).toMatch(/OpenTimestamps client/i);
+  });
+
   test("подтверждено без высоты — номер не выдумывается", () => {
     const f = pdfAnchorField({ status: "bitcoin-confirmed", bitcoinBlockHeight: null });
     expect(f.value).not.toMatch(/[0-9]/);

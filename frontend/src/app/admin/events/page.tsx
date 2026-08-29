@@ -315,7 +315,7 @@ export default function AdminEventsPage() {
             </div>
             <div>
               <span style={labelStyle}>Recent limit</span>
-              <input
+              <input aria-label="Recent limit"
                 style={inputStyle}
                 type="number"
                 min={1}
@@ -326,7 +326,7 @@ export default function AdminEventsPage() {
             </div>
             <div>
               <span style={labelStyle}>Window (hours)</span>
-              <input
+              <input aria-label="Window (hours)"
                 style={inputStyle}
                 type="number"
                 min={1}

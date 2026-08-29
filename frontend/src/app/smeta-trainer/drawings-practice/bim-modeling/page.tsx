@@ -411,7 +411,7 @@ export default function BimModelingPage() {
                       }
                       disabled={rev[ex.id]}
                       className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-cyan-300 font-mono focus:outline-none focus:border-indigo-500 disabled:opacity-60"
-                      placeholder="Введите число..."
+                      aria-label="Введите число" placeholder="Введите число..."
                     />
                   </div>
                   <div className="flex gap-2">

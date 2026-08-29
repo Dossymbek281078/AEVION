@@ -594,6 +594,7 @@ export default function ReconstructDemoPage() {
                   Slot {slot}
                 </div>
                 <textarea
+                  aria-label={`Slot ${slot}`}
                   value={value}
                   onChange={(e) => setter(e.target.value)}
                   placeholder="Paste shard JSON here…"

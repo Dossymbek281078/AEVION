@@ -615,10 +615,24 @@ function BureauPageInner() {
 // описываю механизм, а глубину называет сам провайдер отпечатком.
 // Вернуть сильную формулировку — в тот день, когда провайдер настроен и это
 // видно снаружи (решение основателя, красный пункт в сводке 28.08).
-blurb:
+// Ветвей здесь ТРИ, как и у значка ниже, и это не симметрия ради
+                // красоты. Раньше их было две, и «не знаю» попадало в ветку
+                // «настроено»: на проде /api/bureau/health полей состояния НЕ
+                // отдаёт вовсе (замер 29.08: ответ — только status/service/
+                // timestamp), поэтому kycMode там всегда null — и платный тариф
+                // утверждал «проверку выполняет наш KYC-провайдер», хотя
+                // проверяет заглушка.
+                //
+                // Направление умолчания у текста и у значка ПРОТИВОПОЛОЖНОЕ, и
+                // так и надо: значок при незнании говорит нейтральное «by
+                // request», а текст при незнании обязан НЕ обещать. Один и тот
+                // же предикат отвечает на два разных вопроса.
+                blurb:
                   kycMode === "stub"
                     ? "Identity check is in demo mode right now: the flow runs end to end, but no document is actually verified yet. Ask us before buying this tier."
-                    : "Identity check performed by our KYC provider. Bureau records the declared name alongside the certificate together with the provider's verification fingerprint.",
+                    : kycMode === "live"
+                      ? "Identity check performed by our KYC provider. Bureau records the declared name alongside the certificate together with the provider's verification fingerprint."
+                      : "Identity verification is arranged on request — ask us to confirm it is available before buying this tier. Bureau records the declared name alongside the certificate.",
                 // Значок — из живого состояния бюро, три исхода вместо двух.
                 // «available now» говорится только когда поставщик действительно
                 // настроен; заглушка называется заглушкой ДО покупки, а своя

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { identityVerdict } = require("../scripts/qskyway-smoke.js");
+const { identityVerdict, rateLimitHint } = require("../scripts/qskyway-smoke.js");
 
 /**
  * Смоук обязан отличить СВОЙ сервер от соседского.
@@ -65,5 +65,22 @@ describe("смоук отличает свой сервер от чужого", 
     const v = identityVerdict({ branch: "unknown" }, { baseIsExplicit: false, localBranch: "feat/mine" });
     // Отказ без причины читается как придирка сторожа, и его обходят.
     expect(v.message).toContain("БРОНИРУЕТ");
+  });
+});
+
+describe("смоук называет предел частоты своим именем", () => {
+  test("429 объясняется, а не выглядит поломкой ветки", () => {
+    const h = rateLimitHint(429);
+    // Человек читает первую строку и решает, куда копать. Если там
+    // «books up to capacity», он пойдёт искать регрессию у себя —
+    // я сам перебрал два неверных диагноза именно так.
+    expect(h).toContain("429");
+    expect(h).toContain("не поломка ветки");
+  });
+
+  test("у настоящих отказов подсказки нет — иначе она обесценится", () => {
+    for (const code of [200, 201, 400, 409, 500]) {
+      expect(rateLimitHint(code), "подсказка про предел прилипла к коду " + code).toBe("");
+    }
   });
 });

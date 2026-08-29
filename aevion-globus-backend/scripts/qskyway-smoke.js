@@ -711,7 +711,7 @@ async function main() {
     const s = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T09:00:00Z", t1: "2026-07-11T09:03:00Z", holder: "op" + i });
     if (s.status === 201) okCount++; else if (s.status === 409) conflict = true;
   }
-  assert(okCount === 4, "slot market books up to capacity", `booked=${okCount}`);
+  assert(okCount === 4, "slot market books up to capacity" + rateLimitHint(s.status), `booked=${okCount}`);
   assert(conflict, "slot market rejects over-capacity (409)");
   const late = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T10:00:00Z", t1: "2026-07-11T10:03:00Z", holder: "late" });
   assert(late.status === 201, "non-overlapping window bookable", `status=${late.status}`);
@@ -767,4 +767,18 @@ if (require.main === module) {
 
 // Открыто ради проверки таблицей случаев: часть из них (чужая ветка на
 // нашем порту) руками не воспроизвести, не подняв вторую сессию.
-module.exports = { identityVerdict };
+/**
+ * Отличить «предел частоты исчерпан» от настоящего отказа.
+ *
+ * 29.08.2026: второй прогон подряд падал с booked=0 и status=429, а
+ * сообщения шли по делу («slot market books up to capacity»). Читается
+ * как поломка ветки — я сам перебрал два неверных диагноза, прежде чем
+ * посмотрел код ответа. Подсказка стоит одной строки и экономит час.
+ */
+function rateLimitHint(status) {
+  if (status !== 429) return "";
+  return " — ПРЕДЕЛ ЧАСТОТЫ (429), а не поломка ветки: смоук выжег свою же квоту. " +
+    "Перезапустите сервер или подождите окно предела.";
+}
+
+module.exports = { identityVerdict, rateLimitHint };

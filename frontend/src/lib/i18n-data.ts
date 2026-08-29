@@ -2198,6 +2198,7 @@ export const translations = {
     /* QPayNet — notifications */
     "qpaynet.notif.title": "Notifications",
     "qpaynet.notif.markAll": "Mark all read",
+    "qpaynet.notif.markFailed": "Could not mark as read ({status}). Nothing changed.",
     "qpaynet.notif.settings": "⚙ Settings",
     "qpaynet.notif.filter.all": "All",
     "qpaynet.notif.filter.unread": "Unread ({count})",
@@ -6254,6 +6255,7 @@ export const translations = {
     /* QPayNet — notifications */
     "qpaynet.notif.title": "Уведомления",
     "qpaynet.notif.markAll": "Прочитать все",
+    "qpaynet.notif.markFailed": "Не удалось отметить прочитанным ({status}). Ничего не изменилось.",
     "qpaynet.notif.settings": "⚙ Настройки",
     "qpaynet.notif.filter.all": "Все",
     "qpaynet.notif.filter.unread": "Непрочитанные ({count})",
@@ -10302,6 +10304,7 @@ export const translations = {
     /* QPayNet \u2014 notifications */
     "qpaynet.notif.title": "\u0425\u0430\u0431\u0430\u0440\u043b\u0430\u043c\u0430\u043b\u0430\u0440",
     "qpaynet.notif.markAll": "\u0411\u0430\u0440\u043b\u044b\u0493\u044b\u043d \u043e\u049b\u044b\u043b\u0434\u044b \u0434\u0435\u0443",
+    "qpaynet.notif.markFailed": "Оқылды деп белгілеу мүмкін болмады ({status}). Ештеңе өзгерген жоқ.",
     "qpaynet.notif.settings": "\u2699 \u0411\u0430\u043f\u0442\u0430\u0443\u043b\u0430\u0440",
     "qpaynet.notif.filter.all": "\u0411\u0430\u0440\u043b\u044b\u0493\u044b",
     "qpaynet.notif.filter.unread": "\u041e\u049b\u044b\u043b\u043c\u0430\u0493\u0430\u043d ({count})",

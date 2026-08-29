@@ -40,6 +40,7 @@ export default function NotificationsPage() {
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = getAuthToken() ?? "";
@@ -51,19 +52,28 @@ export default function NotificationsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Ответ обеих ручек выбрасывался, а список правился безусловно.
+  // fetch не бросает исключение на 401 и 500 — он возвращает ответ. Значит
+  // отказ помечал уведомление прочитанным ТОЛЬКО на экране: человек считал,
+  // что разобрал оповещение о платеже, а после перезагрузки оно возвращалось
+  // непрочитанным. Отказ выглядел успехом.
   async function markRead(id: string) {
-    await fetch(`/api/qpaynet/notifications/${id}/read`, {
+    const r = await fetch(`/api/qpaynet/notifications/${id}/read`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (!r.ok) { setError(t("qpaynet.notif.markFailed", { status: r.status })); return; }
+    setError(null);
     setItems(prev => prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n));
   }
 
   async function markAll() {
-    await fetch(apiUrl("/api/qpaynet/notifications/read-all"), {
+    const r = await fetch(apiUrl("/api/qpaynet/notifications/read-all"), {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (!r.ok) { setError(t("qpaynet.notif.markFailed", { status: r.status })); return; }
+    setError(null);
     setItems(prev => prev.map(n => n.read_at ? n : { ...n, read_at: new Date().toISOString() }));
   }
 
@@ -92,6 +102,11 @@ export default function NotificationsPage() {
         </div>
       </header>
 
+        {error && (
+          <div role="alert" className="px-3 py-2 rounded-lg bg-rose-950 text-rose-200 text-xs">
+            {error}
+          </div>
+        )}
       <div className="max-w-xl mx-auto px-6 py-6 space-y-3">
         <div className="flex gap-2">
           {[["all", t("qpaynet.notif.filter.all")], ["unread", t("qpaynet.notif.filter.unread", { count: unreadCount })]].map(([v, l]) => (

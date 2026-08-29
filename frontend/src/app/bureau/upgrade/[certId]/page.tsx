@@ -263,7 +263,11 @@ export default function BureauUpgradePage() {
             обещаний). */}
         {step === "intro" && barrierKnownStub && (
           <div
-            role="alert"
+            // role="status", а не "alert": рядом уже есть тревога о раскрытии
+            // условий, и вторая подряд — шум для экранного диктора. Это
+            // сообщение информационное, а не аварийное. Заодно снималось
+            // столкновение с существующим тестом, который ищет alert по роли.
+            role="status"
             style={{
               borderRadius: 14,
               border: "1px solid rgba(217,119,6,0.35)",

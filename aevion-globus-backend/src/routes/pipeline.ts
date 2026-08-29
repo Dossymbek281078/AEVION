@@ -585,6 +585,11 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
     const platform = await resolveEd25519(DEFAULT_ED25519_KID);
     platformAttestation = {
       kid: platform.kid,
+      // Подписываются UTF-8 байты hex-СТРОКИ ключа, а не сами 32 байта.
+      // Проверяющий берёт ровно это поле: `proofs.aevionEd25519.publicKeyRawHex`,
+      // и кодирует его так же. Обе стороны получают hex через .toString("hex"),
+      // то есть НИЖНИЙ регистр — расхождение регистра сделало бы все заверения
+      // ложно-красными, и заметить это на синтетике теста нельзя.
       signature: crypto
         .sign(null, Buffer.from(publicKeyRawHex, "utf8"), platform.privateKey)
         .toString("hex"),

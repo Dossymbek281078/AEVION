@@ -11687,7 +11687,7 @@ ${question.trim()}`;
     {showShop&&(()=>{
       type ShopItem={id:string;name:string;desc:string;cost:number;kind:"unlock"|"action";onBuy?:()=>void;disabled?:boolean};
       const items:ShopItem[]=[
-        {id:"master_ai",name:"Master AI (2400 ELO)",desc:"Разблокирует самого сильного соперника",cost:30,kind:"unlock"},
+        {id:"master_ai",name:"Мастер и Stockfish (2400 и 3500 ELO)",desc:"Открывает два верхних уровня — Мастера и полную силу движка",cost:30,kind:"unlock"},
         {id:"theme_neon",name:"Тема Neon ⚡",desc:"Киберпанк-доска, неоновый градиент",cost:50,kind:"unlock"},
         {id:"theme_obsidian",name:"Тема Obsidian 🖤",desc:"Чёрное с золотом",cost:50,kind:"unlock"},
         {id:"theme_sakura",name:"Тема Sakura 🌸",desc:"Пастель + розовый",cost:50,kind:"unlock"},
@@ -11774,7 +11774,7 @@ ${question.trim()}`;
                 features:["Игра против ИИ до 2000 ELO","Все 12 вариантов шахмат",`${pzTotal?pzTotal.toLocaleString("ru-RU"):"500 000+"} ${ccPlural(pzTotal??0,"задача","задачи","задач")} с фильтрами`,"База знаний тренера","Партии с другом напрямую","Библиотека партий и выгрузка PGN"],
                 cta:"Текущий тариф",disabled:true},
               {id:"pro",name:"Pro",price:"500",sub:"AEV / месяц",accent:true,
-                features:["Всё из Free","Соперник-мастер до 2800 ELO","Безлимитные подсказки","Глубокий разбор каждой партии","Дебютная теория из мастер-партий","Разбор до 5 вариантов сразу","🎬 Ролики из партий без водяного знака"],
+                features:["Всё из Free","Соперник до 3500 ELO — полная сила движка","Безлимитные подсказки","Глубокий разбор каждой партии","Дебютная теория из мастер-партий","Разбор до 5 вариантов сразу","🎬 Ролики из партий без водяного знака"],
                 cta:"Купить за Chessy"},
               {id:"ultimate",name:"Ultimate",price:"5000",sub:"AEV / lifetime",
                 features:["Всё из Pro","Свои характеры соперников (Магнус, Хикару…)","Личный ИИ-тренер, который помнит твои партии","Турниры с призами в AEV","Раннее тестирование новых вариантов","API-доступ к engine","Приоритетная поддержка"],

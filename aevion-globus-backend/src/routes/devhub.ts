@@ -6501,7 +6501,46 @@ devhubRouter.get("/providers/health", async (_req, res) => {
   res.json({ checks, healthy: failing.length === 0, failing: failing.map((c) => c.name) });
 });
 
-devhubRouter.get("/studio/capabilities", (_req, res) => {
+// Зона aevion.build: делегирована ли она на самом деле.
+//
+// 29.08.2026: список возможностей объявлял домен "live" по ОДНОМУ признаку —
+// заданы ли ключи Cloudflare. А наша же проба cloudflare_health (тридцатью
+// строками выше) знала правду и прямо писала: пока регистратор не указал на
+// Cloudflare, каждый выданный адрес *.aevion.build не разрешается. Два наших
+// ответа об одном и том же спорили в одном файле, и ежедневный смоук это ловил.
+//
+// Ответ кэшируем: список возможностей открывают часто, а зона меняется раз в
+// жизнь. Отказ пробы НЕ считаем отрицанием — возвращаем null («не знаю»), иначе
+// сетевая икота выключала бы работающую возможность.
+let zoneCache: { at: number; active: boolean | null } = { at: 0, active: null };
+const ZONE_TTL_MS = 5 * 60_000;
+
+/** Сброс кэша зоны — для тестов: иначе первый случай отравляет второй. */
+export function __resetAevionBuildZoneCache(): void {
+  zoneCache = { at: 0, active: null };
+}
+
+async function aevionBuildZoneActive(): Promise<boolean | null> {
+  if (!process.env.CLOUDFLARE_ZONE_ID || !process.env.CLOUDFLARE_API_TOKEN) return null;
+  const now = Date.now();
+  if (now - zoneCache.at < ZONE_TTL_MS) return zoneCache.active;
+  try {
+    const r = await fetch(
+      `https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE_ID}`,
+      { headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } },
+    );
+    const b: any = await r.json().catch(() => ({}));
+    const active = b?.result?.status === "active";
+    zoneCache = { at: now, active };
+    return active;
+  } catch {
+    zoneCache = { at: now, active: null };
+    return null;
+  }
+}
+
+devhubRouter.get("/studio/capabilities", async (_req, res) => {
+  const zoneActive = await aevionBuildZoneActive();
   const caps = [
     { id: "code", name: "Code Editor", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
     { id: "translate", name: "Translation", description: "DeepL translation for generated copy", status: process.env.DEEPL_API_KEY ? "live" : "needs_token", token: "DEEPL_API_KEY" },
@@ -6510,7 +6549,16 @@ devhubRouter.get("/studio/capabilities", (_req, res) => {
     { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway — not available yet (per-project services not implemented)", status: process.env.DEVHUB_RAILWAY_PER_PROJECT ? "live" : "not_available", token: "RAILWAY_API_TOKEN" },
     { id: "vercel", name: "Vercel Deploy", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
     { id: "pages", name: "Cloudflare Pages Deploy", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
-    { id: "domain", name: "Domain (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
+    { id: "domain", name: "Domain (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", 
+      // «live» тут раньше означало «ключи заданы», а не «домен работает».
+      // Пока зона не делегирована, каждый выданный адрес не разрешается —
+      // объявлять такое рабочим значит обещать сильнее продукта.
+      // Причину кладём в lastError: интерфейс показывает её человеку подсказкой.
+      status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID && zoneActive === true) ? "live" : "needs_token",
+      lastError: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && zoneActive === false)
+        ? "ключи заданы, но зона aevion.build не делегирована — выданные адреса не разрешаются"
+        : undefined,
+      tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
     { id: "video", name: "Video Generation", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
     { id: "image", name: "Image Generation", description: "AI images — OpenAI → Workers AI (flux) → Together fallback chain", status: (process.env.OPENAI_API_KEY || (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) || process.env.TOGETHER_API_KEY) ? "live" : "needs_token", tokens: ["OPENAI_API_KEY", "CLOUDFLARE_API_TOKEN", "TOGETHER_API_KEY"] },
     { id: "screenshot_code", name: "Screenshot → Code", description: "Attach a design screenshot in the AI chat — a vision model recreates it as code", status: (process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) ? "live" : "needs_token", tokens: ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"] },

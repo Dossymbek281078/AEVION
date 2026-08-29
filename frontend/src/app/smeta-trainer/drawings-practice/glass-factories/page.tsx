@@ -139,7 +139,7 @@ export default function GlassFactoriesPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~65 млрд тг (допуск ±10%). 14+18+12+5+3.6+4.2+0.6+2.8+1.2+3.8+1.8+1.4+2.4+4.6+3.8+1.6+0.2 = 81 млрд тг (но с учётом скидок CAPEX и оптимизации = 65 млрд). Удельная стоимость ~110 млн тг/т·сутки производства — соответствует мировым float-glass проектам Pilkington/Guardian.</p>

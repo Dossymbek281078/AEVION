@@ -138,7 +138,7 @@ export default function NationalLibraryPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~38 млрд тг (допуск ±10%). 8.4+4.2+6.8+3.2+0.4+0.6+1.4+3.6+1.8+1.4+0.8+0.6+1.6+1.4+1.8 = 38 млрд тг. Удельная стоимость ~1.27 млн тг/м² — премиум-культурный объект. НАБ РК Астана (50 000 м², 2004, Foster) — оценочно ~$100 млн = 46 млрд тг (с учётом инфляции 2026).</p>

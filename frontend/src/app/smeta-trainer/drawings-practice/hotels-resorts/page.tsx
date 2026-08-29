@@ -123,7 +123,7 @@ export default function HotelsResortsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~38 млрд тг (допуск ±10%). 11200+4600+5800+2400+3800+1600+1800+1400+2600+1800 = 37 000 млн → с НР+СП и инфляц. ~38 млрд.</p>

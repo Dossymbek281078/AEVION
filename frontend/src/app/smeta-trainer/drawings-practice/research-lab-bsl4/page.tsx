@@ -146,7 +146,7 @@ export default function ResearchLabBsl4Page() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~56 млрд тг (допуск ±10%). 4.2+5.4+1.4+1.2+1.6+11+1.4+0.96+0.85+2.4+0.5+0.6+0.5+1.8+5+1.6+1.8+4.8+2.5+6.5 = 55.5 млрд тг. Удельная стоимость BSL-4 — $1500-3000/м² (в РК с учётом импорта оборудования = ~12 млн тг/м² = 56 млрд тг для 4500 м²). Сравнение: NIH Galveston BSL-4 (Texas) ~$174 млн = 81 млрд тг.</p>

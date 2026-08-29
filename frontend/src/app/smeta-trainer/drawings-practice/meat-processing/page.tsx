@@ -118,7 +118,7 @@ export default function MeatProcessingPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~12.5 млрд тг (допуск ±10%). 7200+1400+1600+980+520+380+420 = 12 500 млн тг.</p>

@@ -141,7 +141,7 @@ export default function TvRadioStudioPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~14.5 млрд тг (допуск ±10%). 1.4+0.3+0.4+0.2+0.8+0.4+0.6+1.4+0.6+1.2+0.8+0.4+1.2+1.8+0.4+1.4+1.0 = 14.3 млрд тг ≈ 14.5 млрд тг. Хабар Astana Studio Complex полностью (с 12 студиями + AVK + спутник.) — оценочно $100 млн ≈ 46 млрд тг.</p>

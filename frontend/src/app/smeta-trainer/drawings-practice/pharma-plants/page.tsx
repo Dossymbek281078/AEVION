@@ -136,7 +136,7 @@ export default function PharmaPlantsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~18 млрд тг (допуск ±10%). 3.6+2.4+1.8+2.4+1.2+0.9+2.6+0.8+0.6+0.8+0.9+0.6+0.4 = 19 млрд тг. С оптимизацией оборудования и реюз площадей ≈ 18 млрд тг. Сравнение: «Химфарм» Шымкент (модернизация 2020-2024) — ~$50 млн ≈ 24 млрд тг.</p>

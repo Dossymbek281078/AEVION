@@ -137,7 +137,7 @@ export default function LogisticsWarehousePage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~48 млрд тг (допуск ±10%). 14+4.2+6.4+4.8+2.8+1.4+0.6+3.2+2.4+1.8+1.6+2.2+1.4+1.2 = 48 млрд тг. Удельная стоимость ~480 тыс. тг/м² ≈ $1050/м² — соответствует мировым проектам класса А+ (Prologis, GLP, Goodman).</p>

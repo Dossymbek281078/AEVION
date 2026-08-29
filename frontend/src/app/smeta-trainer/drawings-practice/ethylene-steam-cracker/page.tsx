@@ -94,7 +94,7 @@ export default function EthyleneSteamCrackerPage() {
             <li>Steam ТЭЦ 200 МВт + cooling water + utilities = 90 млрд</li>
             <li>Flare 100 м + ground flare + EU IED BAT + проект 4% + PNR = 120 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~1.4 трлн тг (~$3B USD)</strong> на 600 кт ethylene + 350 кт propylene + 100 кт butadiene. Удельная — $5000/т ethylene.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">

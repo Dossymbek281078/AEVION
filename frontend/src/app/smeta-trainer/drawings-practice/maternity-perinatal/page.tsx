@@ -137,7 +137,7 @@ export default function MaternityPerinatalPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~24 млрд тг (допуск ±10%). 7.2+2.4+3.6+0.9+1.4+2.8+0.6+0.4+1.6+0.45+0.32+0.4+0.6+0.85+0.48 = 24 млрд тг. Удельная стоимость ~68 млн тг/койка — соответствует мировым перинатальным центрам уровня III. РНЦМД Астана (350 коек, открыт 2008, модернизация 2020) — ~$100 млн = 47 млрд тг с инфляцией 2026.</p>

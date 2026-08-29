@@ -62,7 +62,7 @@ export default function HyperbaricOxygenChamberPage() {
             <li>Outside operator + ICU monitoring penetrators = 0.3 млрд</li>
             <li>Building + adjacent treatment room + проект 5% + UHMS audit + insurance = 1.1 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~4.5 млрд тг (~$10M USD)</strong> на 12-person multiplace HBO. Окупаемость 5-7 лет при $200-400 per session.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Fire safety</h2>

@@ -142,7 +142,7 @@ export default function VeterinaryClinicsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~380 млн тг (допуск ±10%). 78+28+16+22+95+14+12+36+18+12+28+12+14+8+16+18+8+12 = 447 млн тг ≈ 380 млн тг (с оптимизацией). Удельная стоимость ~125 тыс. тг/м² — премиум-ветеринарка. Vetlife Алматы (3000 м², открыт 2019) — оценочно $1 млн ≈ 460 млн тг.</p>

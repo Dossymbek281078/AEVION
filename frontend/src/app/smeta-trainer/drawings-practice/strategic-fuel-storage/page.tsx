@@ -137,7 +137,7 @@ export default function StrategicFuelStoragePage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~165 млрд тг (допуск ±10%). 24+9+4+8+18+22+32+14+4+8+6+5+4+3.5+3.5 = 165 млрд тг. Удельная стоимость ~330 тыс. тг/т хранилищной мощности. Стратегический резерв США (SPR) обходится ~$3.5 за баррель ёмкости.</p>

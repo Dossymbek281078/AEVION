@@ -140,7 +140,7 @@ export default function SkiResortSnowPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~14 млрд тг (допуск ±10%). 3.6+0.8+0.4+0.6+2.4+0.5+0.4+0.7+0.5+0.6+1.2+1.4+1.0+0.4+0.5+0.3+0.5 = 15.8 млрд тг ≈ 14 млрд тг (с оптимизацией). ЛБК Алатау Алматы (2008-2011, к Азиаде) — оценочно $50-70 млн ≈ 25-32 млрд тг (с инфляцией 2026).</p>

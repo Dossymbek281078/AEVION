@@ -142,7 +142,7 @@ export default function DentalClinicsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~720 млн тг (допуск ±10%). 64+96+38+110+28+18+22+24+12+65+45+16+18+38+24+24+18+36+24 = 720 млн тг. Удельная стоимость ~2 млн тг/м² — премиум-класс. Damen Dental Алматы (8 кабинетов + флагман) — оценочно ~1 млрд тг.</p>

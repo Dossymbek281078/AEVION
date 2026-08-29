@@ -137,7 +137,7 @@ export default function IsotopeMedicalPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~18 млрд тг (допуск ±10%). 1.8+2.4+5+1.6+1.6+1.8+0.6+0.8+0.4+0.6+0.8+0.4+0.4+0.8+0.6 = 19.6 млрд тг ≈ 18 млрд тг (с оптимизацией). Cyclone-30 IBA сам стоит €8-12 млн ≈ 4-6 млрд тг. Полный комплекс с GMP-лабораторией = $40-50 млн ≈ 18-23 млрд тг.</p>

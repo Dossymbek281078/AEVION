@@ -138,7 +138,7 @@ export default function TechParkIncubatorPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~28 млрд тг (допуск ±10%). 5.4+1.8+1.2+2.4+0.8+0.6+1.6+1.4+0.8+0.4+1.2+0.2+0.4+0.6+0.8+0.3+0.6+0.5 = 21 млрд тг + резерв и фит-аут = 28 млрд тг (с оптимизацией). Удельная стоимость ~1.56 млн тг/м² — премиум-класс. Astana Hub (26 000 м², 2018) — оценочно $30 млн = 14 млрд тг (по ценам 2018), сейчас (с инфляцией+апгрейд WELL) = ~30 млрд тг.</p>

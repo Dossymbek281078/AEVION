@@ -122,7 +122,7 @@ export default function SeismicIsolationPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~2.4 млрд тг (допуск ±10%). 720+480+240+380+280+95+65+140 = 2.4 млрд тг. Удорожание ~10-15% от стоимости каркаса, но снижение сейсм. ущерба в 5-10× при землетрясении 8-9 баллов окупается за 1-2 события.</p>

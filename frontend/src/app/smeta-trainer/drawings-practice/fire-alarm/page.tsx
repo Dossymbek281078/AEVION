@@ -581,7 +581,7 @@ export default function FireAlarmPage() {
                 type="text"
                 value={ex4.answer}
                 onChange={(e) => setEx4((s) => ({ ...s, answer: e.target.value }))}
-                placeholder="тг"
+                aria-label="Сумма, тенге" placeholder="тг"
                 className="w-40 px-3 py-1.5 bg-slate-900 border border-slate-600 rounded text-orange-200 text-xs font-mono focus:outline-none focus:border-orange-500"
               />
               <span className="text-xs text-slate-400">тг</span>

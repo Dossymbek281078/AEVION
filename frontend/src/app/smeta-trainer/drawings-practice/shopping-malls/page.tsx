@@ -121,7 +121,7 @@ export default function ShoppingMallsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~42 млрд тг (допуск ±10%). 12500+4800+1800+6400+5400+4200+3200+1600+1800 = 41 700 млн тг.</p>

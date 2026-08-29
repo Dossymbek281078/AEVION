@@ -150,7 +150,7 @@ export default function VerticalFarmHydroponicPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="тг"
+            aria-label="Сумма, тенге" placeholder="тг"
             className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-blue-500 focus:outline-none"
           />
           {showResults && (

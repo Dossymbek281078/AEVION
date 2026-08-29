@@ -127,7 +127,7 @@ export default function PermafrostObjectsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~6.8 млрд тг (допуск ±10%). 0.58+0.18+0.24+0.165+2.4+0.98+0.38+0.42+0.28+0.72+0.435 = 6.78 млрд тг. Удельная стоимость ~1.5 млн тг/м² — в 2 раза выше юга РК из-за термостабилизации и сезонности.</p>

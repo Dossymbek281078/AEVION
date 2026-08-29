@@ -60,7 +60,7 @@ export default function EcoResortGlampingPage() {
             <li>Heating ground-source heat pump + wood stove + radiant floor = 0.25 млрд</li>
             <li>Roads + landscaping + observatory deck + LEED audit + GSTC + проект 5% + insurance = 0.5 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~4.2 млрд тг (~$9M USD)</strong> на 50 tents glamping. Окупаемость 5-7 лет at $300-500/night premium pricing.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Wildlife protection</h2>

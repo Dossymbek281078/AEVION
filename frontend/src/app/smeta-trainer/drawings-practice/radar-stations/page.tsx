@@ -142,7 +142,7 @@ export default function RadarStationsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~38 млрд тг (допуск ±10%). 1.4+1.2+4.2+0.6+6.4+3.8+2.4+2.8+0.8+1.4+2.4+1.4+1.8+1.6+2.4+0.8+2.6 = 38 млрд тг. РЛС «Дарьял-У» Сары-Шаган (модернизация Россией 2010-х) обошлась в $300+ млн ≈ 140 млрд тг — более мощная фазиров. решётка.</p>

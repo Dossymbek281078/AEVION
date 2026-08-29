@@ -92,7 +92,7 @@ export default function AromaticsBtxPlantPage() {
             <li>Storage 12× 1000 м³ spheres + 8× tanks PX/B/T = 50 млрд</li>
             <li>Flare 80 м + DCS + safety + EU IED BAT compliance + проект 4% + ПИР + СП + PNR = 80 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~950 млрд тг (~$2B USD)</strong>. Удельная — $4000/т PX/год.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">

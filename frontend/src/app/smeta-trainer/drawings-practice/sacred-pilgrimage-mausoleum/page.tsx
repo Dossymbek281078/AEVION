@@ -62,7 +62,7 @@ export default function SacredPilgrimageMausoleumPage() {
             <li>Microclimate control + foundation monitoring + structural retrofit = 2.5 млрд</li>
             <li>UNESCO compliance + проект 5% + ICOMOS audit + ICCROM training + endowment = 6 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~25 млрд тг (~$53M USD)</strong> на full modernisation + conservation cycle. UNESCO contribution + government Almaty/Туркестан + Saudi/Turkish donations Sufi networks.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Site protection + Buffer zone</h2>

@@ -136,7 +136,7 @@ export default function RecyclingPlantsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~18 млрд тг (допуск ±10%). 4.2+0.8+2.4+1.6+0.6+2.8+0.4+1.2+1.8+0.3+0.6+0.8+0.6+0.2+0.7 = 19 млрд тг ≈ 18 млрд тг. Удельная стоимость MRF — $250-400/т·год мощности (для 180 000 т/год = $45-72 млн = 20-32 млрд тг).</p>

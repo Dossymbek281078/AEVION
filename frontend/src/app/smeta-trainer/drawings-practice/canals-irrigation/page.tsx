@@ -133,7 +133,7 @@ export default function CanalsIrrigationPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~165 млрд тг (допуск ±10%). 26+38+4.2+14+32+18+12+8.4+3.6+2.8+4.6+1.4 = 165 млрд тг. Удельная стоимость ~2 млрд тг/км — соответствует мировым magistral. каналам с насосными станциями. БАК (168 км) — ~280 млрд тг в ценах 2026.</p>

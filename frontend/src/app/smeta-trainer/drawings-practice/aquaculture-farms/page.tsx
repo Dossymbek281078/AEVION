@@ -133,7 +133,7 @@ export default function AquacultureFarmsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~8.4 млрд тг (допуск ±10%). 1.6+0.98+0.32+1.4+0.24+0.38+0.58+0.42+0.24+0.32+0.28+1.6+0.04 = 8.42 млрд тг. Удельный CAPEX осетровой RAS-фермы — $80-120/кг производ. мощности (200 000 кг × $90 = $18 млн ≈ 8.4 млрд тг).</p>

@@ -134,7 +134,7 @@ export default function CinemaMultiplexPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~6.8 млрд тг (допуск ±10%). 1.8+0.7+0.4+0.18+1.4+0.6+0.3+0.4+0.18+0.3+0.18+0.18+0.12+0.08 = 6.82 млрд тг. Удельная стоимость ~570 тыс. тг/м² (для встроенного варианта в ТРЦ). Реально Chaplin Cinemas Mega Almaty (14 залов, открыт 2017) — оценочно $20 млн ≈ 9 млрд тг (с учётом аренды места в ТРЦ).</p>

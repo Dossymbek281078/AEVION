@@ -137,7 +137,7 @@ export default function CircusAmphitheaterPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~8.4 млрд тг (допуск ±10%). 1.8+0.8+0.4+0.6+0.7+0.6+0.4+1.4+0.6+0.4+0.3+0.5+0.4 = 8.9 млрд тг ≈ 8.4 млрд тг (с оптимизацией). Алматинский Гос. Цирк (1972 г.) обошёлся в советские 7 млн руб (по ценам 2026 ≈ 5 млрд тг). Современная реконструкция + новый цирк = 8-10 млрд тг.</p>

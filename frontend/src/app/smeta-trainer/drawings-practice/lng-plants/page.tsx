@@ -122,7 +122,7 @@ export default function LngPlantsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~520 млрд тг (допуск ±10%). 165+95+78+42+38+28+32+42 = 520 млрд тг. Глобально удельная капёмкость СПГ ~$1500-3000/т, для 2 млн т/год = $3-6 млрд (1.4-2.8 трлн тг).</p>

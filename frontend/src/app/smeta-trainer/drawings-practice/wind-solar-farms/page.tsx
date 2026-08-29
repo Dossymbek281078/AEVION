@@ -127,7 +127,7 @@ export default function WindSolarFarmsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~78 млрд тг (допуск ±10%). 38+5.4+4.2+3.8+6.8+4.5+2.4+3.6+1.8 = 70.5 млрд → + НР+СП ≈ 78 млрд тг (~780 млн тг/МВт = $1.7 млн/МВт — типично для onshore wind 2024-2026).</p>

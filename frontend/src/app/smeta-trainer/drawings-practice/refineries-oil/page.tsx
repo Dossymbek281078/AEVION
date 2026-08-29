@@ -125,7 +125,7 @@ export default function RefineriesOilPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~850 млрд тг (допуск ±10%). 165+195+145+78+62+48+56+35+72 = 856 млрд тг. Для сравнения: модернизация АНПЗ + ШНПЗ + ПНПЗ (2010-2018) обошлась РК в ~$6 млрд ≈ 2.8 трлн тг.</p>

@@ -137,7 +137,7 @@ export default function HighwayConstructionPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~880 млрд тг (допуск ±10%). 38+145+285+145+28+18+22+18+8+18+38+15+102 = 880 млрд тг. Реальный БАКАД (2017-2024) обошёлся ~$1.6 млрд ≈ 745 млрд тг (без учёта инфляции) → 2026 цены 880 млрд. Удельная стоимость ~13.3 млрд тг/км.</p>

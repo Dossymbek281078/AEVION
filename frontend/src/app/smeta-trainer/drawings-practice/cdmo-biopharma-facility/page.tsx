@@ -61,7 +61,7 @@ export default function CdmoBiopharmaFacilityPage() {
             <li>Stability + cold storage ULT + LN2 = 2.5 млрд</li>
             <li>Validation + IT 21 CFR Part 11 + проект 5% + insurance + PNR = 8.5 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~60 млрд тг (~$130M USD)</strong> на 2000 L CDMO pilot. Wuxi Biologics 20K L plant $500-700M.</p></div>
           }
         </section>

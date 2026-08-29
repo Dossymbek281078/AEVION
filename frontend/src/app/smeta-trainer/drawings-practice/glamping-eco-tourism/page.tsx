@@ -140,7 +140,7 @@ export default function GlampingEcoTourismPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~850 млн тг (допуск ±10%). 120+36+80+95+18+56+38+95+55+28+6+18+75+32+38+60 = 850 млн тг. Удельная стоимость ~42 млн тг/юнит — премиум-эко. С аналогом: Eco-Lodge класс «Six Senses» (Шри-Ланка, Бутан) — ~$200-300 тыс./юнит = 92-138 млн тг (выше за счёт международного бренда).</p>

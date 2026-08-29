@@ -143,7 +143,7 @@ export default function CoworkingFlexOfficePage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~1.8 млрд тг (допуск ±10%). 240+220+65+95+120+28+75+95+55+65+35+12+28+45+85+100+95+320 = 1.78 млрд тг ≈ 1.8 млрд тг. Удельная стоимость ~900 тыс. тг/м² (с арендой). Multispace Алматы (4500 м²) — оценочно $5-7 млн = 2.3-3.3 млрд тг.</p>

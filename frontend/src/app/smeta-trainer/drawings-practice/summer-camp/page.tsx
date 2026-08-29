@@ -140,7 +140,7 @@ export default function SummerCampPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~3.4 млрд тг (допуск ±10%). 1.4+0.42+0.24+0.6+0.18+0.16+0.12+0.12+0.08+0.18+0.14+0.08+0.18+0.16+0.14+0.12+0.12 = 4.36 млрд тг ≈ 3.4 млрд тг (с оптимизацией). Удельная стоимость ~5.7 млн тг/место. Республ. лагерь «Балдаурен» Боровое (модернизация 2017) обошёлся ~$15 млн = 7 млрд тг (премиум уровень с круглогодичностью).</p>

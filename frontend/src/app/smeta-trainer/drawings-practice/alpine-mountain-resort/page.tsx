@@ -60,7 +60,7 @@ export default function AlpineMountainResortPage() {
             <li>Slope construction earthworks + drainage 50 km = 4.5 млрд</li>
             <li>Bike trails summer + ice rink + helipad + EHS + проектирование 5% + страхование = 4 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~65 млрд тг (~$140M USD)</strong>. Whistler $1B+, Niseko $500M for similar scale.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Avalanche control</h2>

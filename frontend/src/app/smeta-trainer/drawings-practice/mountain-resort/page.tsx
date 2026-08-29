@@ -132,7 +132,7 @@ export default function MountainResortPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~28 млрд тг (допуск ±10%). 8.5+2.4+3.6+0.98+2.4+0.48+1.8+4.2+1.4+1.2+0.58+0.22 = 27.76 млрд тг. Реальный Чимбулак (модернизация 2008-2011) обошёлся ~$220 млн ≈ 100 млрд тг (с учётом инфляции и расширений).</p>

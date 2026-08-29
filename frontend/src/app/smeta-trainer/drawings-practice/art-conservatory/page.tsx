@@ -140,7 +140,7 @@ export default function ArtConservatoryPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~14 млрд тг (допуск ±10%). 5.4+2.8+1.8+0.6+1.4+0.42+0.18+0.32+0.18+0.24+0.32+0.32+0.36+0.32+0.18+0.12+0.06 = 15 млрд тг ≈ 14 млрд тг (с оптимизацией). Удельная стоимость ~780 тыс. тг/м² — премиум-культурный. Курмангазы Алматы (1944, модерниз. 2018) — оценочно $25 млн ≈ 11-12 млрд тг.</p>

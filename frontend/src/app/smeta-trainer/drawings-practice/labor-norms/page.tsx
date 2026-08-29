@@ -455,7 +455,7 @@ export default function LaborNormsPage() {
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400 mb-1.5">
                   Объём работ
                 </label>
-                <input
+                <input aria-label="Объём работ"
                   type="number"
                   inputMode="decimal"
                   min="0"
@@ -470,7 +470,7 @@ export default function LaborNormsPage() {
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400 mb-1.5">
                   Норма времени
                 </label>
-                <input
+                <input aria-label="Норма времени"
                   type="number"
                   inputMode="decimal"
                   min="0"
@@ -578,7 +578,7 @@ export default function LaborNormsPage() {
                         if (e.key === "Enter" && !isRevealed) submitAnswer(ex.id);
                       }}
                       disabled={isRevealed}
-                      placeholder="Ваш ответ..."
+                      aria-label="Ваш ответ" placeholder="Ваш ответ..."
                       className="flex-1 px-3 py-2 rounded-lg border-2 border-blue-300 dark:border-blue-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500 disabled:opacity-70"
                     />
                     <span className="text-sm text-slate-500 dark:text-slate-400">{ex.unit}</span>

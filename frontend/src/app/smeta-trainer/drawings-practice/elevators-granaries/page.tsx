@@ -118,7 +118,7 @@ export default function ElevatorsGranariesPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~8.5 млрд тг (допуск ±10%). 79×75 + 1200 + 380 + 650 + 480 + 320 + 220 = 8 175 млн тг ≈ 8.5 с НР+СП.</p>

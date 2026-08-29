@@ -142,7 +142,7 @@ export default function EdutechSchoolModernPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~12 млрд тг (допуск ±10%). 3.6+1.4+1.8+0.18+0.42+0.32+0.42+0.6+1.8+0.6+0.85+0.32+0.42+0.36+0.18+0.42+0.32 = 14 млрд тг ≈ 12 млрд тг (с оптимизацией). Удельная стоимость ~750 тыс. тг/м² или ~15 млн тг/учащ. Quantum International Алматы (модернизация 2020) — оценочно $20 млн ≈ 9 млрд тг, более премиум-уровень Haileybury Almaty (1500 учащ. boarding) — $50 млн = 23 млрд тг.</p>

@@ -62,7 +62,7 @@ export default function RadioTelescopeVlbiPage() {
             <li>Fiber-optic link 50 км до Almaty + maintenance crane + RFI shielding = 4 млрд</li>
             <li>Подъезд + ЛЭП + projecting 5% + PNR + insurance = 7 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~42 млрд тг (~$90M USD)</strong>. Effelsberg 100 m = ~$300M (1972), Green Bank 100 m = $75M USD.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — RFI protection</h2>

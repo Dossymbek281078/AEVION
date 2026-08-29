@@ -141,7 +141,7 @@ export default function StockExchangeFintechPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~38 млрд тг (допуск ±10%). 3.6+1.8+14+1.4+5.4+1.8+0.6+4.2+2.8+0.6+0.45+0.6+0.45+0.02+0.45+0.2+0.43 = 38 млрд тг. AIX (открыта 2018, $1 млрд проект МФЦА) — суммарная инвестиция $80-100 млн = 37-46 млрд тг.</p>

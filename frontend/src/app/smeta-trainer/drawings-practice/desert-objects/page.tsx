@@ -131,7 +131,7 @@ export default function DesertObjectsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~4.2 млрд тг (допуск ±10%). 0.28+0.72+0.28+0.145+0.165+0.58+0.38+0.48+0.32+0.24+0.24+0.372 = 4.2 млрд тг. Удельная стоимость ~2.8 млн тг/м² — в 4 раза выше городского строительства из-за логистики и автономии.</p>

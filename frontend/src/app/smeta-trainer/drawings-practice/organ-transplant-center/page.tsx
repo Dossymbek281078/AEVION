@@ -62,7 +62,7 @@ export default function OrganTransplantCenterPage() {
             <li>Pharmacy + outpatient + dialysis 20 chairs + genetic lab = 3.5 млрд</li>
             <li>Building 8000 м² + MEP + fire ESFR + ESIA + проект 5% + insurance = 6.5 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~28 млрд тг (~$60M USD)</strong>. Cleveland Clinic transplant centre ~$300M scale.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Tissue matching</h2>

@@ -135,7 +135,7 @@ export default function CaspianPortsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~220 млрд тг (допуск ±10%). 28+38+24+32+12+18+8+4+18+12+8+18 = 220 млрд тг. Удельная стоимость ~44 млрд тг/млн т/год — соответствует мировым проектам Каспия (Бечуньджи, Дюбенди, Туркменбаши).</p>

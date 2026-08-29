@@ -139,7 +139,7 @@ export default function PoultryFarmsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~8.4 млрд тг (допуск ±10%). 1.8+2.4+0.8+0.4+0.6+1.4+0.5+0.4+0.18+0.32+0.3+0.15+0.18+0.15+0.2+0.92 = 10.7 млрд тг (но с оптимизацией CAPEX и упрощением кормозавода = 8.4 млрд тг). Удельная стоимость ~16-20 тыс. тг/голову мощности. Шымкент-Кус оценочно стоила $30-40 млн ≈ 14-18 млрд тг.</p>

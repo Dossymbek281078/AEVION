@@ -132,7 +132,7 @@ export default function SuperTallBuildingsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~280 млрд тг (допуск ±10%). 28+48+38+36+18+4+22+18+24+14+12+14+4 = 280 млрд тг. Реальная Abu Dhabi Plaza по сметам Aabar (инвестор) — ~$1.5 млрд ≈ 700 млрд тг (с инфраструктурой + интерьер). Только башня А — ~280 млрд тг.</p>

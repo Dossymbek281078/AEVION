@@ -134,7 +134,7 @@ export default function PlanetariumSciencePage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~4.8 млрд тг (допуск ±10%). 1.4+0.5+0.35+0.95+0.18+0.18+0.35+0.18+0.16+0.18+0.14+0.18+0.18+0.18 = 5.1 млрд тг ≈ 4.8 млрд тг (с оптимизацией). Алматинский Планетарий (модернизация 2021 с проектором Carl Zeiss) — ~$8 млн = 3.7 млрд тг (на цены 2026 ~4.5 млрд тг). Современный Astana Planetarium премиум-уровень = 4.8 млрд тг.</p>

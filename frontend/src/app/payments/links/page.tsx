@@ -438,6 +438,7 @@ export default function PaymentLinksPage() {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              aria-label="Title"
               placeholder="What is the payer paying for?"
               style={inputStyle}
               required
@@ -448,6 +449,7 @@ export default function PaymentLinksPage() {
             <div>
               <label style={labelStyle}>Amount</label>
               <input
+                aria-label="Amount"
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}

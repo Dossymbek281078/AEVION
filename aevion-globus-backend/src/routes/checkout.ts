@@ -3,7 +3,7 @@ import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
 import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/payboxProvider";
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
-import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
+import { resolveLemonSqueezyVariant, lemonSqueezySellable } from "../data/lemonSqueezyVariants";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
   type TierId, type BillingPeriod, type CurrencyCode,
@@ -282,6 +282,11 @@ checkoutRouter.get("/healthz", (_req, res) => {
       lemonsqueezy: {
         configured: lsReady,
         webhook: "/api/lemonsqueezy/webhook",
+        // ЧТО РЕАЛЬНО МОЖНО КУПИТЬ. `configured` отвечает «есть ключ и
+        // магазин», но начать покупку нельзя без ВАРИАНТА товара — а он
+        // задаётся отдельной переменной на каждый тариф и модуль.
+        // Два разных вопроса под одним словом; второй снаружи виден не был.
+        sellable: lemonSqueezySellable(),
         webhookConfigured: Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim()),
       },
       gumroad: {

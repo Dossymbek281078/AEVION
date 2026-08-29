@@ -256,3 +256,30 @@ export function appSlugForModuleId(moduleId: string): string | null {
   }
   return isReference(`app_${moduleId}`) ? moduleId : null;
 }
+
+/**
+ * Что реально можно купить прямо сейчас.
+ *
+ * ЗАЧЕМ. `/api/pricing/checkout/healthz` отвечал `lemonsqueezy.configured:
+ * true`, глядя только на ключ API и магазин. Но начать покупку нельзя без
+ * ВАРИАНТА товара, а варианты задаются отдельными переменными. То есть
+ * «настроен» и «покупку можно начать» — разные вопросы под одним словом,
+ * и второй снаружи был не виден вовсе.
+ *
+ * Замечено 29.08.2026 накануне запуска модуля: проверка готовности
+ * говорила «цена $19», а можно ли эту цену заплатить — не отвечал никто.
+ *
+ * Возвращаем ИМЕНА переменных, не значения: имя не секрет, значение —
+ * идентификатор товара в чужой панели, ему в ответе не место.
+ */
+export function lemonSqueezySellable(): {
+  configured: string[];
+  missing: string[];
+} {
+  const configured: string[] = [];
+  const missing: string[] = [];
+  for (const [ref, env] of Object.entries(TIER_VARIANT_ENV)) {
+    (process.env[env]?.trim() ? configured : missing).push(ref);
+  }
+  return { configured: configured.sort(), missing: missing.sort() };
+}

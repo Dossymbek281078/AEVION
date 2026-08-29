@@ -32,7 +32,7 @@ function app() {
   return a;
 }
 
-const КЛЮЧИ = ["LEMON_SQUEEZY_API_KEY", "LEMON_SQUEEZY_STORE_ID", "LEMON_SQUEEZY_WEBHOOK_SECRET"] as const;
+const КЛЮЧИ = ["LEMON_SQUEEZY_API_KEY", "LEMON_SQUEEZY_STORE_ID", "LEMON_SQUEEZY_WEBHOOK_SECRET", "LEMON_SQUEEZY_VARIANT_LITE_MONTHLY"] as const;
 let было: Record<string, string | undefined> = {};
 
 beforeEach(() => {
@@ -94,6 +94,33 @@ describe("две ручки состояния согласны о том, кт�
     process.env.LEMON_SQUEEZY_WEBHOOK_SECRET = "тест-секрет";
     const с = await request(app()).get("/api/pricing/checkout/healthz");
     expect(с.body.providers.lemonsqueezy.webhookConfigured).toBe(true);
+  });
+
+  test("healthz говорит, что реально МОЖНО КУПИТЬ, а не только «настроен»", async () => {
+    // `configured` отвечает «есть ключ и магазин». Начать покупку нельзя
+    // без ВАРИАНТА товара — отдельная переменная на каждый тариф. Два
+    // разных вопроса под одним словом; проверяем именно РАЗНИЦУ.
+    process.env.LEMON_SQUEEZY_API_KEY = "тест-ключ";
+    process.env.LEMON_SQUEEZY_STORE_ID = "1234";
+    delete process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY;
+
+    const без = await request(app()).get("/api/pricing/checkout/healthz");
+    const s1 = без.body.providers.lemonsqueezy.sellable;
+    expect(s1).toBeTruthy();
+    expect(s1.missing).toContain("tier_lite_monthly");
+    // и при этом «настроен» остаётся true — без отдельного поля разница
+    // была бы невидима
+    expect(без.body.providers.lemonsqueezy.configured).toBe(true);
+
+    process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY = "12345";
+    const с = await request(app()).get("/api/pricing/checkout/healthz");
+    const s2 = с.body.providers.lemonsqueezy.sellable;
+    expect(s2.configured).toContain("tier_lite_monthly");
+    expect(s2.missing).not.toContain("tier_lite_monthly");
+
+    // Значения переменных — идентификаторы товара в чужой панели, их в
+    // ответе быть не должно: возвращаем только имена ссылок.
+    expect(JSON.stringify(s2)).not.toContain("12345");
   });
 
   test("основной ровно один — не ноль и не два", async () => {

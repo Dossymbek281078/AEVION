@@ -380,4 +380,25 @@ describe("дата запуска обязана называть свой ис�
       ).toBe(true);
     }
   });
+
+  // Прехедер — вторая строка, которую человек видит в СПИСКЕ писем. До
+  // 29.08.2026 его не было, и туда попадало начало письма, повторявшее тему:
+  // «CyberChess открыт — 30 августа» и следом «CyberChess открыт». Решение об
+  // открытии принимается по двум строкам, и вторая обязана нести новое.
+  test("в списке писем вторая строка не повторяет тему", () => {
+    for (const slug of Object.keys(LAUNCH_MODULES)) {
+      const mail = buildLaunchEmail(slug, "kto-to@primer.ru");
+      const html = mail.htmlContent;
+      const hidden = html.indexOf("display:none");
+      expect(hidden, `${slug}: скрытого прехедера нет вовсе`).toBeGreaterThan(-1);
+      // Он обязан стоять ДО видимого содержимого, иначе клиент возьмёт не его.
+      expect(hidden, `${slug}: прехедер стоит после видимого текста`).toBeLessThan(html.indexOf("AEVION</div>"));
+      // И нести то же обещание, что тело письма, — из ОДНОГО источника.
+      const opens = LAUNCH_MODULES[slug].opens;
+      const head = opens.charAt(0).toUpperCase() + opens.slice(1);
+      expect(html.slice(hidden, hidden + 400), `${slug}: прехедер не из поля opens`).toContain(head);
+      // И не быть пересказом темы.
+      expect(html.slice(hidden, hidden + 400)).not.toContain(mail.subject);
+    }
+  });
 });

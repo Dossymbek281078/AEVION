@@ -333,9 +333,25 @@ async function debitCredit(userId: string, capability: CapabilityKey, amount = 1
       ON CONFLICT ("userId","month","capability")
       DO UPDATE SET "used"="DevHubUsage"."used"+$5, "tier"=$6, "updatedAt"=NOW()
     `, [id, userId, month, capability, amount, tier]);
-  } catch {
+  } catch (e) {
+    // Симметрично чтению: поведение прежнее, молчание убрано.
+    //
+    // Запись расхода не удалась, и трата уходит в память процесса. Память
+    // живёт до перезапуска, а перезапуск у нас случается при каждой выкатке —
+    // значит месячный счёт обнуляется и начинается заново. Это ТИШЕ отказа
+    // чтения и потому опаснее: отказ виден в момент отказа, а обнуление
+    // выглядит нормальной работой, и не узнает никто.
+    //
+    // Ронять операцию из-за учёта нельзя: человек уже получил услугу, и
+    // отказ здесь отнял бы её задним числом. Поэтому запасной путь остаётся,
+    // но перестаёт быть невидимым.
     const key = `${userId}:${month}:${capability}`;
     memUsage.set(key, (memUsage.get(key) ?? 0) + amount);
+    console.warn(
+      `[devhub/debit] расход не записан в базу, учтён только в памяти процесса ` +
+      `(обнулится при выкатке): user=${userId} month=${month} capability=${capability} ` +
+      `amount=${amount} :: ${(e as Error)?.message ?? e}`,
+    );
   }
 }
 

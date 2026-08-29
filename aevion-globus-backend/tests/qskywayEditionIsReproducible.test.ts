@@ -95,3 +95,25 @@ describe("опубликованная редакция позволяет по�
     expect(String(v?.warningEn).toLowerCase()).toContain("rebuild");
   });
 });
+
+/**
+ * Хэш в сводке и хэш редакции — одно и то же число.
+ *
+ * ПОВОД. `airspaceSummary` не несла contentHash вовсе: потребитель знал, ЧТО
+ * за источник, и не знал, КАКАЯ редакция перед ним. Добавив поле, надо сразу
+ * запретить ему разойтись со вторым ответом — иначе через месяц два места
+ * будут называть разные числа, и оба уверенно.
+ */
+describe("сводка и редакция называют один хэш", () => {
+  test("contentHash из /cities совпадает с contentHash из /airspace/edition", async () => {
+    // ⚠️ Параметр называется `city`, а не `id`. Первая версия послала `?id=nyc`,
+    // получила ГОРОД ПО УМОЛЧАНИЮ (без сетки потолков) и выглядела как находка
+    // «два наших ответа противоречат друг другу». Спросил не тем именем.
+    const city = await request(app()).get("/api/qskyway/city?city=nyc");
+    const edition = await request(app()).get("/api/qskyway/airspace/edition?city=nyc");
+    expect(edition.body.contentHash, "у редакции нет хэша").toBeTruthy();
+    const summaryHash = city.body?.airspace?.contentHash;
+    expect(summaryHash, "в сводке нет contentHash — поле потеряно").toBeTruthy();
+    expect(summaryHash, "сводка и редакция называют РАЗНЫЕ хэши").toBe(edition.body.contentHash);
+  });
+});

@@ -227,6 +227,14 @@ export function airspaceSummary(cityId: string, city: CityData) {
     minCeilingM: field?.minCeilingM ?? null,
     maxCeilingM: field?.maxCeilingM ?? null,
     zeroCeilingCells: field?.zeroCeilingCells ?? 0,
+    // Хэш ИМЕННО ЭТОЙ редакции — чтобы сводку можно было связать с привязкой к
+    // Bitcoin, не делая второго запроса и не веря нам на слово.
+    //
+    // 29.08.2026: без этого поля потребитель сводки (в том числе наша же
+    // страница) знал, ЧТО за источник, и не знал, КАКАЯ именно редакция перед
+    // ним. Байты, над которыми хэш взят, отдаёт /airspace/edition — вместе они
+    // и дают проверяемость.
+    contentHash: airspaceContentHash(src),
     note: "Реальные потолки регулятора (FAA UASFM, LAANC для малых БВС Part 107) — НЕ сертификация аэротакси. Используется как опубликованное ограничение высоты над твином; по умолчанию рекомендательно, строгий режим — POST /route {respectCeiling:true}.",
     noteEn: "Real regulator ceilings (FAA UASFM, LAANC for Part 107 small UAS) — NOT an air-taxi certification. Used as the published altitude limit over the twin; advisory by default, strict mode is POST /route {respectCeiling:true}.",
   };

@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import { DataProvenanceChip } from "@/components/DataProvenanceChip";
 import { RegulatorySourceChip } from "@/components/RegulatorySourceChip";
 import { CompetitorMatrix } from "@/components/CompetitorMatrix";
+import WaitlistCapture from "@/components/WaitlistCapture";
 import { competitorsFor } from "@/lib/competitors";
 import type { DataQuality } from "@/lib/dataQuality";
 import type { RegulatorySource } from "@/lib/regulatorySource";
@@ -1506,6 +1507,29 @@ export default function QSkywayClient() {
             <CompetitorMatrix set={competitorsFor("qskyway")!} />
           </div>
         )}
+
+        {/*
+          Ворота запуска 6: у страницы модуля не было НИ ОДНОГО поля для
+          адреса — человек досматривал демо и уходил, не оставив следа.
+          Берём готовый компонент платформы, а не пишем свой: он уже
+          пишет в работающую ручку, дедуплицирует по адресу и — главное —
+          показывает отказ отказом (форма бюро до 11.08 печатала зелёное
+          «вы подписаны», ничего не отправив).
+
+          `source` помечает страницу-источник: без него нельзя ответить,
+          какой модуль привёл человека, и весь приём сливается в один
+          список. Тексты через `t()`, а не литералами, как на
+          одноязычных страницах запуска: здесь три языка и свой сторож
+          против русского вне словаря.
+        */}
+        <div style={{ marginTop: 18 }}>
+          <WaitlistCapture
+            source="qskyway"
+            tone="light"
+            title={t("qskyway.wait.title")}
+            description={t("qskyway.wait.desc")}
+          />
+        </div>
       </div>
     </div>
   );

@@ -7,7 +7,7 @@ import { NOFLY, WIND, NoFlyZone } from "./qskyway.zones";
 import { getMetarWind, metarStatus } from "./qskyway.metar";
 import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt, ceilingField, signablePayload, NO_CEILING } from "./qskyway.airspace";
 import { airspaceFreshness } from "./qskyway.airspace.freshness";
-import { anchorAirspace, verifyAnchoredAirspace } from "./qskyway.airspace.anchor";
+import { anchorAirspace, verifyAnchoredAirspace, anchorRecipe } from "./qskyway.airspace.anchor";
 import { AIRSPACE_PROOFS } from "./qskyway.airspace.proof";
 import { PERMISSION, permissionSummary, type CityPermission } from "./qskyway.permission";
 import { getPool } from "../lib/dbPool";
@@ -2272,6 +2272,10 @@ qskywayRouter.post("/airspace/anchor", anchorLimiter, async (req: Request, res: 
       calendars: [],
       error: null,
       reused: true,
+      // ⚠️ Тот же рецепт, что и у свежей привязки. Иначе два наших ответа об
+      // ОДНОМ доказательстве отличались бы: у свежего инструкция есть, у
+      // готового — нет, и это зависело бы от того, когда спросили.
+      verifyYourself: anchorRecipe(resolved.id),
       note: "Эта редакция уже привязана и подтверждена Bitcoin — возвращён существующий пруф, повторный штамп не создавался: над тем же хэшем он не доказал бы ничего нового.",
       noteEn: "This edition is already anchored and confirmed in Bitcoin — the existing proof was returned; no second stamp was created, because over the same hash it would prove nothing new.",
     });

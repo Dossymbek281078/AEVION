@@ -19,6 +19,14 @@
 import { AIRSPACE, airspaceContentHash } from "./qskyway.airspace";
 import { stampHash, upgradeProof, verifyProof, type AnchorStatus, ANCHOR_STATUS_MEANING, type AnchorStatusMeaning } from "../lib/opentimestamps/anchor";
 
+export interface AnchorRecipe {
+  steps: string[];
+  stepsEn: string[];
+  /** Честная граница: что штамп доказывает, а что НЕТ. */
+  limit: string;
+  limitEn: string;
+}
+
 export interface AirspaceAnchor {
   status: AnchorStatus;
   city: string;
@@ -32,6 +40,36 @@ export interface AirspaceAnchor {
   calendars: string[];
   error: string | null;
   note: string;
+  /**
+   * Как проверить это доказательство БЕЗ нас — вместе с ним самим.
+   *
+   * 29.08.2026: ответ нёс доказательство и хэш и ни слова о том, что с ними
+   * делать. Биткоин-штамп существует ради ТРЕТЬЕЙ стороны; отдать его без
+   * инструкции — то же, что отдать подпись без ключа.
+   */
+  verifyYourself: AnchorRecipe;
+}
+
+/** Рецепт один на оба ответа: свежая привязка и уже готовое доказательство.
+ *  Разные инструкции для одного и того же артефакта — это два наших ответа
+ *  об одном, отличающиеся тем, когда спросили. */
+export function anchorRecipe(cityId: string): AnchorRecipe {
+  return {
+      steps: [
+        "1. otsProofB64 — это обычный detached-таймстамп OpenTimestamps НАД ДАЙДЖЕСТОМ contentHash, а не над файлом",
+        "2. раскодируйте base64 в файл .ots и проверьте любым клиентом OpenTimestamps по этому дайджесту",
+        "3. байты, из которых взят contentHash, отдаёт GET /api/qskyway/airspace/edition?city=" + cityId,
+        "4. сверьте: sha256(payload из шага 3) обязан совпасть с contentHash здесь",
+      ],
+      stepsEn: [
+        "1. otsProofB64 is a plain detached OpenTimestamps proof OVER THE DIGEST contentHash, not over a file",
+        "2. decode the base64 into a .ots file and verify it with any OpenTimestamps client against that digest",
+        "3. the bytes the contentHash is taken over: GET /api/qskyway/airspace/edition?city=" + cityId,
+        "4. check that sha256(payload from step 3) equals the contentHash here",
+      ],
+      limit: "Штамп доказывает, что редакция СУЩЕСТВОВАЛА к этому времени, и НИЧЕГО не говорит о её правильности: что потолки списаны у регулятора верно — отдельный вопрос, см. поля authority и effective.",
+      limitEn: "The timestamp proves the edition EXISTED by that time and says NOTHING about its correctness: whether the ceilings match the regulator is a separate question - see the authority and effective fields.",
+    };
 }
 
 export async function anchorAirspace(cityId: string): Promise<AirspaceAnchor | null> {
@@ -49,6 +87,7 @@ export async function anchorAirspace(cityId: string): Promise<AirspaceAnchor | n
     bitcoinBlockHeight: r.bitcoinBlockHeight,
     calendars: r.calendars,
     error: r.error,
+    verifyYourself: anchorRecipe(cityId),
     note:
       r.status === "pending"
         ? "Отправлено в календари OpenTimestamps. Подтверждение Bitcoin приходит через ~1-6ч — сохраните otsProofB64 и вернитесь на /airspace/anchor/verify."

@@ -38,20 +38,52 @@ function idsOf(src: string, name: string): string[] {
   return [...body.matchAll(/id:\s*"([a-z0-9-]+)"/g)].map((m) => m[1]);
 }
 
+/**
+ * Имена списков, из которых собран каталог — прочитанные из самого каталога.
+ *
+ * Раньше три имени были зашиты здесь. Это давало ЛОЖНУЮ КРАСНОТУ на честном
+ * изменении: заведи кто-нибудь четвёртую группу и добавь её в ALL_PRODUCTS —
+ * её товары попали бы в «есть в каталоге», но не в «показаны на витрине», и
+ * сторож обвинил бы правильную работу. Аудит, который краснеет на исправном
+ * коде, перестают читать быстрее, чем чинят.
+ *
+ * Читая группы из ALL_PRODUCTS, закрываем оба направления сразу: новая группа
+ * ВНУТРИ него засчитывается молча, новая группа СНАРУЖИ — настоящий дефект,
+ * товар есть, а на витрину не попадает — по-прежнему краснеет.
+ */
+function storefrontGroups(src: string): string[] {
+  const at = src.indexOf("ALL_PRODUCTS");
+  if (at < 0) return [];
+  const end = src.indexOf(";", at);
+  const decl = src.slice(at, end < 0 ? src.length : end);
+  return [...decl.matchAll(/\.\.\.([A-Z_][A-Z0-9_]*)/g)].map((m) => m[1]);
+}
+
 describe("каждый товар каталога есть на витрине", () => {
   const src = source();
   const all = [...src.matchAll(/id:\s*"([a-z0-9-]+)"/g)].map((m) => m[1]);
-  const shown = new Set([
-    ...idsOf(src, "SUBSCRIPTIONS"),
-    ...idsOf(src, "GUIDES"),
-    ...idsOf(src, "MODULES"),
-  ]);
+  const groups = storefrontGroups(src);
+  const shown = new Set(groups.flatMap((g) => idsOf(src, g)));
 
   // Контроль охвата: без него сломанный разбор дал бы пустые множества, и
   // сторож ответил бы «нарушений нет», не посмотрев ни на один товар.
   it("контроль прибора: каталог и списки разобраны", () => {
     expect(all.length, "каталог не разобран").toBeGreaterThanOrEqual(10);
     expect(shown.size, "списки витрины не разобраны").toBeGreaterThanOrEqual(10);
+  });
+
+  it("контроль охвата ПОИМЁННО: группы каталога прочитаны", () => {
+    // Числа тут не годятся: если разбор потеряет одну группу и подберёт другую,
+    // размер совпадёт, а состав — нет. Отвечать надо на вопрос, ЧЬИ товары
+    // считаются показанными.
+    expect(groups.length, `группы: ${groups.join(", ")}`).toBeGreaterThanOrEqual(3);
+    for (const known of ["SUBSCRIPTIONS", "GUIDES", "MODULES"]) {
+      expect(groups, `группа выпала из разбора: ${known}`).toContain(known);
+    }
+    // И каждая названная группа обязана дать хотя бы один товар: имя, по
+    // которому ничего не нашлось, — это молчаливая потеря целой группы.
+    const empty = groups.filter((g) => idsOf(src, g).length === 0);
+    expect(empty, `группа названа, но товаров в ней не найдено: ${empty.join(", ")}`).toEqual([]);
   });
 
   it("ни один товар не остался вне списков витрины", () => {

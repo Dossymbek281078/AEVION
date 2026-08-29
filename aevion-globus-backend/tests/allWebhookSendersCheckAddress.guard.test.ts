@@ -31,24 +31,82 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const CALLS = ["checkPublicUrl(row.url)", "checkPublicUrl(target.url)", "checkPublicUrl(opts.url)"];
-
 const strip = (s: string) =>
   s.split(NL).filter((l) => {
     const t = l.trim();
     return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
   }).join(NL);
 
-/** Отправители: файл шлёт вебхук по адресу из данных. */
-function senders(): { rel: string; src: string }[] {
-  const out: { rel: string; src: string }[] = [];
+/**
+ * Отправители, ИЗВЕСТНЫЕ на момент написания сторожа. Список нужен не для
+ * поиска — поиск ниже идёт по признаку, — а как поимённый контроль: если обход
+ * перестанет их находить, сторож обязан сказать об этом, а не позеленеть.
+ */
+const KNOWN_SENDERS = [
+  "lib/modules/webhooks.ts",
+  "lib/qshield/webhooks.ts",
+  "lib/qsignV2/webhooks.ts",
+  "lib/webhookDelivery.ts",
+];
+
+/**
+ * Отправители: файл шлёт вебхук по адресу ИЗ ДАННЫХ.
+ *
+ * ⚠️ Первая версия искала три конкретных имени переменной — row, target, opts.
+ * Это тот же дефект, который в тот же день нашёлся у сторожа воронки: свип,
+ * перечисляющий известные случаи, НЕ ВИДИТ новый и молчит об этом. Отправитель,
+ * написавший `fetch(sub.url)`, прошёл бы без проверки адреса, а контроль
+ * «найдено не меньше четырёх» остался бы зелёным — четыре старых на месте.
+ *
+ * Теперь имя переменной любое, а требование привязано К НЕЙ ЖЕ: тот, чей `.url`
+ * уходит в fetch, должен быть проверен `checkPublicUrl(<он же>.url)`.
+ */
+function senders(): { rel: string; src: string; vars: string[] }[] {
+  const out: { rel: string; src: string; vars: string[] }[] = [];
   for (const f of walk(SRC)) {
     const s = strip(readFileSync(f, "utf8"));
-    // адрес из данных: fetch(row.url / target.url / opts.url)
-    if (!/fetch\((?:row|target|opts)\.url/.test(s)) continue;
-    out.push({ rel: relative(SRC, f).split(sep).join("/"), src: s });
+    const vars = new Set<string>();
+    const re = /fetch\(\s*([A-Za-z_][A-Za-z0-9_]*)\.url/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s))) vars.add(m[1]);
+    if (vars.size === 0) continue;
+    out.push({ rel: relative(SRC, f).split(sep).join("/"), src: s, vars: [...vars] });
   }
   return out;
+}
+
+/** Тело функции по имени — от объявления до следующего объявления. */
+function bodyOf(src: string, name: string): string | null {
+  const at = src.indexOf(`function ${name}(`);
+  if (at < 0) return null;
+  const rest = src.slice(at + 10);
+  const next = rest.search(/\n(export )?(async )?function |\nconst [A-Z]/);
+  return next < 0 ? rest : rest.slice(0, next);
+}
+
+/**
+ * Проверен ли адрес, лежащий в `<v>.url`, ПЕРЕД отправкой.
+ *
+ * Прямой вызов — не единственная законная форма. `routes/smeta-trainer.ts`
+ * зовёт свою обёртку `webhookTargetAllowed(w.url)`, и внутри неё стоит
+ * `checkPublicUrl`. Первая версия расширенного сторожа записала этот файл в
+ * нарушители — то есть, расширив охват, я тут же завёл ложную тревогу.
+ *
+ * Ложная тревога на сторожe хуже пропуска: к красному, которое «всегда так»,
+ * привыкают за день и перестают читать. Поэтому обёртка засчитывается — но
+ * только та, внутри которой действительно есть проверка.
+ */
+function isChecked(src: string, v: string): boolean {
+  if (src.includes(`checkPublicUrl(${v}.url)`)) return true;
+  const re = new RegExp(`([A-Za-z_][A-Za-z0-9_]*)\\(\\s*${v}\\.url`, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src))) {
+    const fn = m[1];
+    if (fn === "fetch") continue;
+    const body = bodyOf(src, fn);
+    if (body && body.includes("checkPublicUrl")) return true;
+  }
+  return false;
 }
 
 describe("отправители вебхуков проверяют адрес перед обращением", () => {
@@ -61,12 +119,21 @@ describe("отправители вебхуков проверяют адрес 
       .toBeGreaterThanOrEqual(4);
   });
 
+  it("контроль охвата ПОИМЁННО: все известные отправители в списке", () => {
+    // Числа тут не годятся: «найдено не меньше четырёх» проходит и тогда, когда
+    // обход потерял одного старого и подобрал одного нового. Число совпадает,
+    // состав — нет, а отвечать надо на вопрос ЧЬИХ.
+    const seen = new Set(list.map((f) => f.rel));
+    const lost = KNOWN_SENDERS.filter((k) => !seen.has(k));
+    expect(lost, `обход перестал видеть отправителя: ${lost.join(", ")}`).toEqual([]);
+  });
+
   it("каждый зовёт проверку адреса", () => {
     // Ищем ВЫЗОВ на том же значении, которое уходит в fetch, а не имя:
     // строка "checkPublicUrl" остаётся в импорте даже после удаления вызова,
     // и сторож на имени переживал бы обезвреживание. Мутация это и показала.
     const naked = list
-      .filter((f) => !CALLS.some((c) => f.src.includes(c)))
+      .filter((f) => f.vars.some((v) => !isChecked(f.src, v)))
       .map((f) => f.rel);
     expect(
       naked,
@@ -76,14 +143,13 @@ describe("отправители вебхуков проверяют адрес 
 
   it("проверка стоит ДО обращения, а не после", () => {
     const late = list
-      .filter((f) => {
-        const found = CALLS.map((c) => f.src.indexOf(c)).filter((i) => i >= 0);
-        const check = found.length ? Math.min(...found) : -1;
-        const send = ["fetch(row.url", "fetch(target.url", "fetch(opts.url"]
-          .map((c) => f.src.indexOf(c)).filter((i) => i >= 0);
-        const sendAt = send.length ? Math.min(...send) : -1;
-        return check > 0 && sendAt > 0 && check > sendAt;
-      })
+      .filter((f) =>
+        f.vars.some((v) => {
+          const check = f.src.indexOf(`checkPublicUrl(${v}.url)`);
+          const sendAt = f.src.indexOf(`fetch(${v}.url`);
+          return check > 0 && sendAt > 0 && check > sendAt;
+        }),
+      )
       .map((f) => f.rel);
     expect(late, `проверка стоит ПОСЛЕ обращения — она бесполезна: ${late.join(", ")}`).toEqual([]);
   });

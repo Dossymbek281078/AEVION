@@ -1543,6 +1543,49 @@ const impactCache = new Map<string, unknown>();
  * расхождение в порядке ключей, пробелах или экранировании даст другой хэш, и
  * проверяющий решит, что мы врём, хотя врал бы формат.
  */
+/**
+ * Байты, которые подписаны у двойника города, — целиком и байт в байт.
+ *
+ * ПОВОД (29.08.2026). `/city` отдаёт `_signature`, страница показывает знак
+ * «подписано», а пересчитать этот хэш из ответа НЕЛЬЗЯ: подписывается объект
+ * `CityData` ДО того, как в ответ добавляются `heightReview`, `nofly`,
+ * `vertiportScores` и прочее. Замер (nyc): опубликован d6147d9b…, из тела
+ * ответа 17272fde… — не сходится.
+ *
+ * То есть знак обещал проверяемость, которой не было. Тот же класс, что у
+ * редакции воздушного пространства, и лечится тем же: публикуем ровно ту
+ * строку, которая идёт в sha256. Путь выбран аддитивный — значение хэша не
+ * меняется, знак на витрине остаётся прежним, ломать нечего.
+ */
+qskywayRouter.get("/city/signed-payload", (req: Request, res: Response) => {
+  const resolved = resolveCity(req.query.city);
+  if (!resolved) return refuseUnknownCity(res);
+  const { id, city } = resolved;
+  const payload = JSON.stringify(city);
+  res.json({
+    city: id,
+    contentHash: signCity(id, city).contentHash,
+    payload,
+    payloadBytes: Buffer.byteLength(payload, "utf8"),
+    verifyYourself: {
+      steps: [
+        "1. возьмите payload КАК ЕСТЬ — это строка, которая идёт в хэш; не пересобирайте её",
+        "2. contentHash = sha256(payload в UTF-8), в hex — обязан совпасть с полем contentHash",
+        "3. он же лежит в _signature.contentHash ответа GET /api/qskyway/city?city=" + id,
+        "4. подпись Ed25519 стоит на БАЙТАХ этого хэша; ключ — GET /api/qskyway/health -> signing.publicKey",
+      ],
+      stepsEn: [
+        "1. take the payload AS IS - it is the exact string that goes into the hash; do not re-serialise it",
+        "2. contentHash = sha256(payload as UTF-8) in hex - must equal the contentHash field",
+        "3. the same value is in _signature.contentHash of GET /api/qskyway/city?city=" + id,
+        "4. the Ed25519 signature covers the BYTES of that hash; the key is at GET /api/qskyway/health -> signing.publicKey",
+      ],
+      warning: "Подписан ИМЕННО этот объект, а не ответ /city целиком: там к нему добавлены heightReview, nofly и другие поля. Пересборка payload из ответа /city даст ДРУГОЙ хэш.",
+      warningEn: "This exact object is signed, not the whole /city response: that one has heightReview, nofly and other fields appended. Rebuilding the payload from /city will yield a DIFFERENT hash.",
+    },
+  });
+});
+
 qskywayRouter.get("/airspace/edition", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
   if (!resolved) return refuseUnknownCity(res);

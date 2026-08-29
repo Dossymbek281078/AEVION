@@ -12209,9 +12209,9 @@ ${question.trim()}`;
       padding:"12px 16px",borderRadius:12,boxShadow:"0 6px 24px rgba(124,58,237,0.4)",
       maxWidth:340,fontSize:13,lineHeight:1.5,
     }}>
-      <div style={{fontWeight:900,marginBottom:4}}>🎓 Напоминание коуча</div>
+      <div style={{fontWeight:900,marginBottom:4}}>🎓 Напоминание тренера</div>
       <div style={{fontSize:12,opacity:0.92,marginBottom:8}}>
-        У тебя {dueReminders.length} тема{dueReminders.length===1?"":dueReminders.length<5?"ы":""} для повторения с интервалами 1, 3 и 7 дней — так материал остаётся в памяти. Открой «Знания тренера».
+        У тебя {dueReminders.length} {ccPlural(dueReminders.length,"тема","темы","тем")} для повторения с интервалами 1, 3 и 7 дней — так материал остаётся в памяти. Открой «Знания тренера».
       </div>
       <div style={{display:"flex",gap:6}}>
         <button onClick={()=>{

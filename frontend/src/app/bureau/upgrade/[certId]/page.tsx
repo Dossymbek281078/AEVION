@@ -51,6 +51,16 @@ export default function BureauUpgradePage() {
    * Разбор направления осторожности — в kycDisclosure.ts.
    */
   const [kycMode, setKycMode] = useState<KycMode>(null);
+  /**
+   * ЗНАЕМ ли мы, что хотя бы один барьер демонстрационный.
+   *
+   * Умолчание `false` — и это не небрежность, а то же правило противоположных
+   * направлений, что в kycDisclosure.ts. Здесь вопрос «останавливать ли
+   * человека», и на незнании останавливать нельзя: прод сегодня полей
+   * состояния не отдаёт вовсе, и блокировка по незнанию закрыла бы тариф всем.
+   * Вопрос «обещать ли паспорт» — другой, и там незнание запрещает обещать.
+   */
+  const [barrierKnownStub, setBarrierKnownStub] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -60,6 +70,13 @@ export default function BureauUpgradePage() {
         if (!alive || !d) return;
         const v = d?.kyc;
         setKycMode(v === "live" || v === "stub" ? v : null);
+        // Барьеров два, и второй так же обязателен: бэкенд отказывает в выдаче
+        // тарифа, пока хоть один демонстрационный. Знать об этом надо ЗДЕСЬ, на
+        // входе, а не после пройденной проверки личности и оплаты.
+        const p = d?.payment;
+        setBarrierKnownStub(
+          (v !== undefined && v !== "live") || (p !== undefined && p !== "live"),
+        );
       })
       .catch(() => { /* оставляем null */ });
     return () => { alive = false; };
@@ -237,6 +254,34 @@ export default function BureauUpgradePage() {
             );
           })}
         </div>
+
+        {/* Отказ на ВХОДЕ, а не в конце. Бэкенд не выдаст тариф, пока хоть один
+            барьер демонстрационный, — и узнать об этом после пройденной проверки
+            личности и оплаты значит потратить чужое время впустую. Показываем
+            только когда ЗНАЕМ: незнание здесь не останавливает (см. комментарий
+            у barrierKnownStub — направление умолчания обратное тому, что у
+            обещаний). */}
+        {step === "intro" && barrierKnownStub && (
+          <div
+            role="alert"
+            style={{
+              borderRadius: 14,
+              border: "1px solid rgba(217,119,6,0.35)",
+              background: "rgba(254,243,199,0.55)",
+              padding: 14,
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 900, color: "#92400e", marginBottom: 6 }}>
+              This tier cannot be completed yet
+            </div>
+            <div style={{ fontSize: 12, color: "#78350f", lineHeight: 1.6 }}>
+              Our identity or payment provider is not configured, so the upgrade
+              would not go through. Nothing will be charged. Ask us and we will
+              tell you when the Verified tier opens.
+            </div>
+          </div>
+        )}
 
         {step === "intro" && (
           <div style={{ borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", padding: "20px 22px" }}>

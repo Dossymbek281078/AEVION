@@ -6649,7 +6649,7 @@ export default function CyberChessPage(){
             const dashes:{id:DashId;icon:string;title:string;hint:string;tint:string;ring:string;active:number}[]=[
               {id:"play", icon:"🎮",title:"Игра",         hint:"12 вариантов · вдвоём · по сети · Ghost Duel", tint:"linear-gradient(135deg,#dbeafe,#bfdbfe)",ring:"#3b82f6",active:(variant!=="standard"?1:0)+(hotseat?1:0)+(p2pMode?1:0)+(ghostDuelMode?1:0)},
               {id:"learn",icon:"🎓",title:"Тренировка",   hint:"Координаты · Эндшпиль · Личность · Editor",tint:"linear-gradient(135deg,#fef3c7,#fde68a)",ring:"#d97706",active:0},
-              {id:"meta", icon:"📊",title:"Анализ & Стрим",hint:"Game DNA · Insights · OBS · Live-озвучка", tint:"linear-gradient(135deg,#ede9fe,#ddd6fe)",ring:"#7c3aed",active:(streamerMode?1:0)+(liveCommentary?1:0)},
+              {id:"meta", icon:"📊",title:"Анализ & Стрим",hint:"Почерк игры · выводы · сцены OBS · озвучка", tint:"linear-gradient(135deg,#ede9fe,#ddd6fe)",ring:"#7c3aed",active:(streamerMode?1:0)+(liveCommentary?1:0)},
             ];
             const isOpen=(id:DashId)=>activeDash===(id as any);
             const toggle=(id:DashId)=>sActiveDash(v=>v===id?null:(id as any));
@@ -12610,7 +12610,7 @@ ${question.trim()}`;
 
     {/* Game DNA */}
     <Modal open={showGameDna} onClose={()=>sShowGameDna(false)} size="lg"
-      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🧬 Твой Game DNA <Badge tone="info" size="sm">{gameDna.total} партий</Badge></span>}>
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🧬 Твой шахматный почерк <Badge tone="info" size="sm">{gameDna.total} партий</Badge></span>}>
       {savedGames.length===0?<div style={{padding:SPACE[6],textAlign:"center",color:CC.textDim,fontSize:14}}>
         <div style={{fontSize:40,marginBottom:SPACE[3]}}>🧬</div>
         <div style={{fontWeight:800,marginBottom:SPACE[2]}}>Пока пусто</div>

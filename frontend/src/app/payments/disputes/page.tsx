@@ -403,7 +403,7 @@ export default function DisputesPage() {
 
             <div style={{ marginBottom: 18 }}>
               <label style={labelStyle}>Cardholder evidence (optional)</label>
-              <textarea
+              <textarea aria-label="Cardholder evidence"
                 value={evidence}
                 onChange={(e) => setEvidence(e.target.value)}
                 rows={4}

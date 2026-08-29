@@ -595,7 +595,7 @@ export default function WebhooksPage() {
 
           <div>
             <label style={labelStyle}>Endpoint URL</label>
-            <input
+            <input aria-label="Endpoint URL"
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
@@ -607,7 +607,7 @@ export default function WebhooksPage() {
 
           <div>
             <label style={labelStyle}>Description</label>
-            <input
+            <input aria-label="Description"
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}

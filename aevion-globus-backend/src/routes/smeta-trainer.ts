@@ -1,3 +1,4 @@
+import { checkPublicUrl } from "../lib/publicUrlOnly";
 import { isInternalHost } from "../lib/internalHost";
 import { Router, type Request, type Response } from "express";
 import { queryNumber } from "../lib/queryNumber";
@@ -44,7 +45,7 @@ const WEBHOOKS_FILE = "smeta_webhooks.json";
  * Отдушина та же, что у вебхуков QCoreAI: в тестах и локальной разработке
  * адрес петли законен — тест поднимает свой сервер и слушает доставку.
  */
-function webhookTargetAllowed(rawUrl: string): boolean {
+async function webhookTargetAllowed(rawUrl: string): Promise<boolean> {
   // Отдушина ТОЛЬКО по своей переменной. Раньше здесь было ещё общее
   // `NODE_ENV === "test"`, и под ним эта функция в тестах всегда отвечала
   // «разрешено» — то есть настоящая проверка адреса не исполнялась ни в одном
@@ -52,7 +53,13 @@ function webhookTargetAllowed(rawUrl: string): boolean {
   // сторож ловит удаление защиты и не ловит её обезвреживание.
   if (process.env.ALLOW_INTERNAL_WEBHOOKS === "1") return true;
   try {
-    return !isInternalHost(new URL(rawUrl).hostname);
+    // ДВА слоя. Первый — по строке имени, быстрый и без сети. Второй
+    // разрешает имя и смотрит АДРЕСА, в которые оно ведёт: без него
+    // `evil.example.com`, указывающий на 127.0.0.1, прошёл бы насквозь.
+    // Слабость первой версии (только имя) нашла соседняя вкладка на своей
+    // ручке; здесь был тот же изъян.
+    if (isInternalHost(new URL(rawUrl).hostname)) return false;
+    return (await checkPublicUrl(rawUrl)).ok;
   } catch {
     return false;
   }
@@ -354,7 +361,7 @@ async function emitWebhookEvent(event: WebhookPayload): Promise<void> {
     // 28.08.2026: проверка адреса стояла ТОЛЬКО при регистрации. Вебхук,
     // записанный раньше (или другим путём), доставлялся без неё — а доставка
     // и есть действие, ради которого проверка нужна. Проверяем здесь тоже.
-    if (!webhookTargetAllowed(w.url)) {
+    if (!(await webhookTargetAllowed(w.url))) {
       console.error("[smeta] доставка отменена: адрес ведёт внутрь сети", w.id);
       return;
     }
@@ -971,7 +978,7 @@ smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
   // Отдушина та же, что у вебхуков QCoreAI: в тестах и локальной разработке
   // адрес петли законен — тест поднимает свой сервер и слушает доставку.
   // Отдушина включается ТОЛЬКО переменной ALLOW_INTERNAL_WEBHOOKS=1.
-  if (!webhookTargetAllowed(url)) {
+  if (!(await webhookTargetAllowed(url))) {
     return res.status(400).json({ error: "bad_url", reason: "internal_target" });
   }
   if (typeof label !== "string" || label.length < 1 || label.length > 60) {
@@ -1037,7 +1044,7 @@ smetaTrainerRouter.post("/admin/webhooks/:id/test", writeLimiter, async (req, re
     score: 95,
     ts: Date.now(),
   });
-  if (!webhookTargetAllowed(w.url)) {
+  if (!(await webhookTargetAllowed(w.url))) {
     return res.status(400).json({ error: "bad_url", reason: "internal_target" });
   }
   try {

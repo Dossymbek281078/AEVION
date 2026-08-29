@@ -82,9 +82,13 @@ describe("вебхук тренажёра смет не указывает вн�
     app.use(smetaTrainerRouter);
 
     // Без контроля сторож остался бы зелёным на ручке, которая отвергает ВСЁ.
+    //
+    // Адрес ЛИТЕРАЛЬНЫЙ, а не имя: проверка теперь разрешает имя в адреса, и
+    // с именем набор зависел бы от сети — то зелёный, то красный от чужой
+    // доступности. У литерала разрешение возвращает его сам, без запроса.
     const res = await request(app).post("/admin/webhooks")
       .set("Authorization", "Bearer test-token")
-      .send({ url: "https://lms.example.com/hook", label: "проба", events: ["grade.passed"] });
+      .send({ url: "https://8.8.8.8/hook", label: "проба", events: ["grade.passed"] });
     expect(res.body?.reason).not.toBe("internal_target");
   });
 });

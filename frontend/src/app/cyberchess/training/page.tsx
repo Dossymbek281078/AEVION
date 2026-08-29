@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { ccPlural } from "../ccPlural";
 
 const C = {
   bg: "#0f172a",
@@ -261,7 +262,7 @@ export default function TrainingHubPage() {
             {reminders.length > 0 ? (
               <>
                 <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 4 }}>
-                  {reminders.length} тем{reminders.length === 1 ? "а" : "ы"} ждут повторения
+                  {reminders.length} {ccPlural(reminders.length, "тема", "темы", "тем")} ждут повторения
                 </div>
                 <div style={{ fontSize: 12, color: C.dim, marginBottom: 10, lineHeight: 1.5 }}>
                   С интервалами 1, 3 и 7 дней — так материал остаётся в памяти. Повтори чтобы закрепить.

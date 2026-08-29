@@ -275,14 +275,36 @@ async function setUserTier(userId: string, tier: StudioTier): Promise<void> {
   } catch { memTiers.set(userId, tier); }
 }
 
-async function getMonthUsage(userId: string, month: string, capability: CapabilityKey): Promise<number> {
-  if (!isDevHubDbReady()) return memUsage.get(`${userId}:${month}:${capability}`) ?? 0;
+/**
+ * Расход за месяц. `known: false` означает «прочитать НЕ УДАЛОСЬ» — это не то
+ * же самое, что израсходовано ноль, и путать их дорого: ноль уходит в
+ * проверку предела и делает её истинной почти всегда.
+ *
+ * Значение при неудаче остаётся нулём НАМЕРЕННО: направление отказа на
+ * денежном пути — продуктовое решение, и менять его молча нельзя. Здесь
+ * добавляется только ЗНАНИЕ о том, что число ненадёжно, чтобы каждый
+ * потребитель мог решить сам.
+ */
+async function getMonthUsage(
+  userId: string,
+  month: string,
+  capability: CapabilityKey,
+): Promise<{ used: number; known: boolean }> {
+  // Базы нет по конфигурации — это НЕ сбой чтения: счёт ведётся в памяти и
+  // достоверен в пределах жизни процесса. Признак означает строго «прочитать
+  // не удалось», и раздувать его до «число может быть неполным» нельзя:
+  // поднятый всегда признак перестают читать, и он не сработает тогда,
+  // когда понадобится. Недолговечность памяти — отдельная беда, и о ней
+  // говорит запись в журнал у debitCredit, а не это поле.
+  if (!isDevHubDbReady()) {
+    return { used: memUsage.get(`${userId}:${month}:${capability}`) ?? 0, known: true };
+  }
   try {
     const r = await pool.query(
       `SELECT "used" FROM "DevHubUsage" WHERE "userId"=$1 AND "month"=$2 AND "capability"=$3`,
       [userId, month, capability]
     );
-    return r.rows[0]?.used ?? 0;
+    return { used: r.rows[0]?.used ?? 0, known: true };
   } catch (e) {
     // ПОВЕДЕНИЕ НЕ МЕНЯЕТСЯ, меняется только видимость отказа.
     //
@@ -304,17 +326,27 @@ async function getMonthUsage(userId: string, month: string, capability: Capabili
       `[devhub/credit] расход за месяц не прочитан — предел не применяется: ` +
       `user=${userId} month=${month} capability=${capability} :: ${(e as Error)?.message ?? e}`,
     );
-    return 0;
+    return { used: 0, known: false };
   }
 }
 
-async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<{ allowed: boolean; used: number; limit: number; tier: StudioTier }> {
+async function checkCredit(
+  userId: string,
+  capability: CapabilityKey,
+  amount = 1,
+): Promise<{ allowed: boolean; used: number; limit: number; tier: StudioTier; usedUnknown: boolean }> {
   const tier = await getUserTier(userId);
   const limit = TIER_LIMITS[tier][capability];
-  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier };
+  // Безлимитный тариф: расход не читается вовсе, поэтому ноль здесь —
+  // заглушка, а не измерение. Признак это признаёт честно: соврать
+  // «знаем, израсходовано 0» было бы ровно тем, против чего вся правка.
+  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier, usedUnknown: true };
   const month = creditMonth();
-  const used = await getMonthUsage(userId, month, capability);
-  return { allowed: used + amount <= limit, used, limit, tier };
+  const { used, known } = await getMonthUsage(userId, month, capability);
+  // Поведение прежнее: при непрочитанном расходе предел по-прежнему
+  // пропускает. Признак отдаётся вызывающему, чтобы решение «закрывать ли
+  // необратимое» можно было принять в одном месте, когда его примут.
+  return { allowed: used + amount <= limit, used, limit, tier, usedUnknown: !known };
 }
 
 async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
@@ -355,16 +387,36 @@ async function debitCredit(userId: string, capability: CapabilityKey, amount = 1
   }
 }
 
-async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; month: string; usage: Record<CapabilityKey, { used: number; limit: number }> }> {
+async function getAllMonthUsage(userId: string): Promise<{
+  tier: StudioTier;
+  month: string;
+  usage: Record<CapabilityKey, { used: number; limit: number; usedUnknown?: true }>;
+}> {
   const tier = await getUserTier(userId);
   const month = creditMonth();
   const caps: CapabilityKey[] = ["video", "image", "tts", "music", "deploy"];
-  const usage: Record<string, { used: number; limit: number }> = {};
+  const usage: Record<string, { used: number; limit: number; usedUnknown?: true }> = {};
   for (const cap of caps) {
-    const used = await getMonthUsage(userId, month, cap);
-    usage[cap] = { used, limit: TIER_LIMITS[tier][cap] };
+    const { used, known } = await getMonthUsage(userId, month, cap);
+    // Витрина показывает это число человеку. «0 из 50» при непрочитанном
+    // расходе — утверждение, что квота нетронута; признак рядом позволяет
+    // показать «—» вместо числа.
+    //
+    // Признак ставится ТОЛЬКО когда он поднят, и это осознанно. Соседняя
+    // вкладка сегодня же предупредила про обратный класс: поле, которого
+    // нет в одной ветке ответа, читается как «требований нет». Здесь
+    // наоборот — отсутствие означает «число надёжно», а ОПАСНОЕ состояние
+    // всегда явное. Делать поле всегда присутствующим значило бы сломать
+    // прежних потребителей ради симметрии, которая тут ничего не спасает.
+    usage[cap] = known
+      ? { used, limit: TIER_LIMITS[tier][cap] }
+      : { used, limit: TIER_LIMITS[tier][cap], usedUnknown: true };
   }
-  return { tier, month, usage: usage as Record<CapabilityKey, { used: number; limit: number }> };
+  return {
+    tier,
+    month,
+    usage: usage as Record<CapabilityKey, { used: number; limit: number; usedUnknown?: true }>,
+  };
 }
 
 // ── Deferred post-deploy work ────────────────────────────────────────────────

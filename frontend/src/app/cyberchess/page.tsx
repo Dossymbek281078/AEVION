@@ -6268,7 +6268,7 @@ export default function CyberChessPage(){
               {([
                 {icon:"♟",label:`Сыграй ${dailyGoals.gamesGoal}`,cur:g1,max:dailyGoals.gamesGoal,done:g1done,onClick:()=>{}},
                 {icon:"◆",label:`Реши ${dailyGoals.puzzleGoal} задач`,cur:g2,max:dailyGoals.puzzleGoal,done:g2done,onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-                {icon:"🎓",label:"Открой Coach",cur:g3done?1:0,max:1,done:g3done,onClick:()=>{sTab("coach");sSetup(false)}},
+                {icon:"🎓",label:"Открой тренера",cur:g3done?1:0,max:1,done:g3done,onClick:()=>{sTab("coach");sSetup(false)}},
               ]).map(g=><button key={g.label} onClick={g.onClick} style={{
                 display:"inline-flex",alignItems:"center",gap:5,
                 padding:"4px 10px",borderRadius:RADIUS.full,
@@ -11723,7 +11723,7 @@ ${question.trim()}`;
             setTimeout(()=>sArrows(a=>a.filter(x=>!(x.from===f&&x.to===t))),3000);
           });
         }},
-        {id:"deep_review",name:isPro?"Глубокий разбор ✨":"Глубокий разбор партии",desc:isPro?"Pro: бесплатно. Coach пройдёт по всем ходам и выдаст план на будущее.":"Coach пройдёт по всем ходам и выдаст план на будущее",cost:isPro?0:20,kind:"action",disabled:hist.length<4,onBuy:()=>{sTab("coach");sShowShop(false);showToast("Открой Coach — разбор готов","info")}},
+        {id:"deep_review",name:isPro?"Глубокий разбор ✨":"Глубокий разбор партии",desc:isPro?"В подписке бесплатно. Тренер пройдёт по всем ходам и выдаст план на будущее.":"Тренер пройдёт по всем ходам и выдаст план на будущее",cost:isPro?0:20,kind:"action",disabled:hist.length<4,onBuy:()=>{sTab("coach");sShowShop(false);showToast("Открой Coach — разбор готов","info")}},
         // New shop items
         {id:"theme_wood",name:"Тема Wood 🪵",desc:"Тёплая деревянная доска",cost:40,kind:"unlock"},
         {id:"theme_ice",name:"Тема Ice ❄️",desc:"Холодный ледяной стиль",cost:40,kind:"unlock"},
@@ -12211,7 +12211,7 @@ ${question.trim()}`;
     }}>
       <div style={{fontWeight:900,marginBottom:4}}>🎓 Напоминание коуча</div>
       <div style={{fontSize:12,opacity:0.92,marginBottom:8}}>
-        У тебя {dueReminders.length} тема{dueReminders.length===1?"":dueReminders.length<5?"ы":""} для повторения по spaced-repetition (1/3/7 дней). Открой Coach Knowledge.
+        У тебя {dueReminders.length} тема{dueReminders.length===1?"":dueReminders.length<5?"ы":""} для повторения с интервалами 1, 3 и 7 дней — так материал остаётся в памяти. Открой «Знания тренера».
       </div>
       <div style={{display:"flex",gap:6}}>
         <button onClick={()=>{

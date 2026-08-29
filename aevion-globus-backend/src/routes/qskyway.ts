@@ -1049,7 +1049,16 @@ export const __engineForTests = { buildRoute, heightDisputeFor, suspectCellsOf, 
 // ── vertiport suitability (шаг к муниципальным площадкам) ──────────────────────
 interface VertiportScore {
   id: string; c: number; r: number; x: number; y: number;
-  openRadiusM: number; clearanceM: number; distNoFlyM: number;
+  openRadiusM: number; clearanceM: number;
+  /**
+   * Расстояние до ближайшей запретной зоны — или `null`, если зон в
+   * городе НЕТ ВОВСЕ. Раньше здесь уезжало 9999: расчёту оно нужно как
+   * «бесконечно далеко», но в ответе читается как измерение — «до
+   * запрета 9999 метров». Страница это знала и показывала «далеко», а
+   * любой другой читатель ответа (смоук, регулятор, чужой клиент) принял
+   * бы за факт. Отсутствие данных обязано выглядеть отсутствием.
+   */
+  distNoFlyM: number | null;
   /** published regulatory ceiling over the pad, metres AGL; null where no feed */
   ceilingM: number | null;
   /** pad sits where the regulator authorizes nothing automatically (0 ft ceiling) */
@@ -1089,7 +1098,11 @@ function suitability(cityId: string, city: CityData): VertiportScore[] {
     const ceilingM = ceil === NO_CEILING ? null : ceil;
     return {
       id: `vp${i}`, c: v.c, r: v.r, x: v.x, y: v.y,
-      openRadiusM: openR, clearanceM: clearance, distNoFlyM: Math.round(distNoFly),
+      openRadiusM: openR, clearanceM: clearance,
+      // Сторожевое значение остаётся ВНУТРИ расчёта (`noflyScore` выше),
+      // наружу уходит null: публиковать «9999 м» там, где зон нет,
+      // значит выдавать умолчание за измерение.
+      distNoFlyM: zones.length ? Math.round(distNoFly) : null,
       ceilingM, needsAtcCoordination: ceilingM === 0,
       suitability: score, class: cls,
     };

@@ -9,6 +9,7 @@ import { smartComplete } from "../services/qcoreai/smartComplete";
 import { applyHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
+import { buildRunInstructions } from "../lib/devhubRunInstructions";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
 import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
 
@@ -236,6 +237,32 @@ async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; mon
     usage[cap] = { used, limit: TIER_LIMITS[tier][cap] };
   }
   return { tier, month, usage: usage as Record<CapabilityKey, { used: number; limit: number }> };
+}
+
+// ── Deferred post-deploy work ────────────────────────────────────────────────
+// Deploy routes answer immediately and then verify, seconds later, that the
+// deployed URL actually serves (backend CLAUDE.md §10). Those timers outlive
+// the request — and in tests they outlive the test that started them, firing
+// during a later one and consuming its mocked fetch. That is what made the
+// backend suite fail on a different test each run (issue #982): a real
+// timing dependency, not a mystery.
+//
+// Prod behaviour is unchanged; the timers are merely tracked so a test can
+// drop the ones still pending.
+const deferredTimers = new Set<ReturnType<typeof setTimeout>>();
+
+function deferred(fn: () => void | Promise<void>, ms: number): void {
+  const t = setTimeout(() => {
+    deferredTimers.delete(t);
+    void fn();
+  }, ms);
+  deferredTimers.add(t);
+}
+
+/** Drop post-deploy verification still waiting to run. Tests only. */
+export function __clearDeferredDevHubWork() {
+  for (const t of deferredTimers) clearTimeout(t);
+  deferredTimers.clear();
 }
 
 // ── Exported reset helpers for tests ─────────────────────────────────────────
@@ -2039,7 +2066,7 @@ Built, but ${url} did not answer 2xx in time`;
 
         // Verify the page actually serves before calling it live — same
         // honesty rule as the CF Pages / Vercel paths.
-        setTimeout(async () => {
+        deferred(async () => {
           const d = memDeployments.get(deployment.id) ?? deployment;
           const serves = await verifyDeploymentServes(railwayDeployUrl);
           if (serves) {
@@ -2081,7 +2108,7 @@ Built, but ${url} did not answer 2xx in time`;
     })();
   } else {
     // Simulate build asynchronously — no Railway token
-    setTimeout(async () => {
+    deferred(async () => {
       deployment.status = "live";
       deployment.deployUrl = deployUrl;
       deployment.buildLog = `Build started at ${deployment.triggeredAt}\nInstalling dependencies...\nBuilding...\nDeployment complete!\nLive at: ${deployUrl}`;
@@ -2327,6 +2354,10 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     // 3. Push each project file
     const files = await dbListFiles(project.id);
     let pushedFiles = 0;
+    // Files GitHub refused. Counting only the successes and still answering
+    // ok:true meant a repo missing half the project read as a clean push —
+    // and it is the repo a per-project deploy then builds from.
+    const failedFiles: Array<{ path: string; reason: string }> = [];
     for (const file of files) {
       try {
         const fileResp = await fetch(
@@ -2345,8 +2376,18 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
           },
         );
         if (fileResp.ok) pushedFiles += 1;
-      } catch {
-        // continue with other files
+        else {
+          const body = await fileResp.text().catch(() => "");
+          let reason = `HTTP ${fileResp.status}`;
+          try {
+            const parsed = JSON.parse(body);
+            if (parsed?.message) reason = `${reason}: ${parsed.message}`;
+          } catch { /* body was not JSON — the status alone is the reason */ }
+          failedFiles.push({ path: file.path, reason });
+        }
+      } catch (e) {
+        // Keep pushing the rest, but never lose the fact that this one didn't.
+        failedFiles.push({ path: file.path, reason: e instanceof Error ? e.message : String(e) });
       }
     }
 
@@ -2360,6 +2401,20 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
       memProjects.set(project.id, project);
     }
 
+    if (failedFiles.length > 0) {
+      return res.json({
+        ok: pushedFiles > 0,
+        repoUrl,
+        pushedFiles,
+        failedFiles,
+        ...degraded(
+          `${failedFiles.length} of ${files.length} file(s) were not pushed: ${failedFiles
+            .slice(0, 3)
+            .map((f) => `${f.path} (${f.reason})`)
+            .join("; ")}${failedFiles.length > 3 ? "; …" : ""}`,
+        ),
+      });
+    }
     return res.json({ ok: true, repoUrl, pushedFiles });
   } catch (e: any) {
     return res.json({ ok: false, message: e?.message || "GitHub push failed" });
@@ -5247,6 +5302,21 @@ devhubRouter.get("/projects/:id/export", async (req, res) => {
     };
     entries.push({ path: "aevion-export.json", content: Buffer.from(JSON.stringify(meta, null, 2), "utf8") });
 
+    // ...and a note saying how to actually run what we just handed over. The
+    // export was a folder with no instructions: whether it could be started,
+    // and with which command, was left to whoever downloaded it.
+    entries.push({
+      path: "HOW-TO-RUN.md",
+      content: Buffer.from(
+        buildRunInstructions({
+          projectName: project.name,
+          stack: project.stack,
+          files: files.map((f) => ({ path: f.path, content: f.content })),
+        }),
+        "utf8",
+      ),
+    });
+
     const zip = buildZipStored(entries);
     const filename = `${slugify(project.name)}-${project.id.slice(0, 8)}.zip`;
     res.setHeader("Content-Type", "application/zip");
@@ -5351,7 +5421,7 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 
     // Verify the page actually serves before calling it live — same honesty
     // rule as the CF Pages path (a deploy that never serves is a failure).
-    setTimeout(async () => {
+    deferred(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(liveUrl);
       if (serves) {
@@ -5536,7 +5606,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // then 500s forever while our records said "live" (found live 2026-07-21:
     // every CF Pages deploy ever made had this). Degraded-convention: a
     // deploy that doesn't serve is FAILED, not live.
-    setTimeout(async () => {
+    deferred(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(pagesUrl);
       if (serves) {
@@ -5866,7 +5936,12 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
 
   for (const entry of parsed) {
     // Skip metadata + directory entries
-    if (entry.path === "aevion-export.json") { skipped.push({ path: entry.path, reason: "metadata" }); continue; }
+    // Both files the export adds itself. Without this, a project that is
+    // exported and re-imported gains a file each round.
+    if (entry.path === "aevion-export.json" || entry.path === "HOW-TO-RUN.md") {
+      skipped.push({ path: entry.path, reason: "metadata" });
+      continue;
+    }
     if (entry.path.endsWith("/")) { skipped.push({ path: entry.path, reason: "directory" }); continue; }
     if (entry.path.includes("..")) { skipped.push({ path: entry.path, reason: "path traversal" }); continue; }
     if (entry.path.length > 240) { skipped.push({ path: entry.path, reason: "path too long" }); continue; }

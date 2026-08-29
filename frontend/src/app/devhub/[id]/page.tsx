@@ -13,6 +13,20 @@ import { indexCapabilities, isCapabilityBlocked, capabilityHint, type Capability
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
 
+/**
+ * A write whose result the UI is about to act on.
+ *
+ * Several handlers here did `await fetch(...)` and then updated the screen
+ * whatever came back — the same defect as the editor's autosave. On the
+ * collaborator path it meant an owner who pressed × saw the person disappear
+ * from the list while their edit access was still live on the server.
+ */
+async function writeOrThrow(input: string, init?: RequestInit): Promise<Response> {
+  const r = await fetch(input, init);
+  if (!r.ok) throw new Error(`сервер ответил ${r.status}`);
+  return r;
+}
+
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 function timeAgo(iso: string): string {
@@ -343,18 +357,27 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
 function FileContextMenu({
   x, y, onRename, onDelete, onClose,
 }: { x: number; y: number; onRename: () => void; onDelete: () => void; onClose: () => void }) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The close-on-outside-click listener used to fire for clicks INSIDE the
+  // menu too: mousedown closed it, the menu unmounted, and the click never
+  // reached the button — so Rename and Delete did nothing at all. The React
+  // onMouseDown/stopPropagation that was meant to prevent this does not run
+  // before a native listener on document. Ask the DOM directly instead.
   useEffect(() => {
-    const handler = () => onClose();
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      onClose();
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [onClose]);
   return (
     <div
+      ref={menuRef}
       style={{
         position: "fixed", left: x, top: y, background: "#fff", border: "1px solid #e2e8f0",
         borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 300, minWidth: 140, overflow: "hidden",
       }}
-      onMouseDown={(e) => e.stopPropagation()}
     >
       <button
         onClick={() => { onRename(); onClose(); }}
@@ -466,6 +489,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   // Env vars
   const [envList, setEnvList] = useState<Array<{ key: string; value: string; set: boolean }>>([]);
+  // "Could not load" is not the same fact as "there are none". Both lists used
+  // to swallow their error and render empty, so a failed read looked like an
+  // empty project — someone could conclude DATABASE_URL was never set.
+  const [envLoadError, setEnvLoadError] = useState<string | null>(null);
+  const [deploymentsLoadError, setDeploymentsLoadError] = useState<string | null>(null);
   const [newEnvKey, setNewEnvKey] = useState("");
   const [newEnvVal, setNewEnvVal] = useState("");
 
@@ -819,6 +847,22 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
   }, [project]);
 
+  /** Save the editor's current text to the user's disk. The escape hatch for a
+   *  refused save: at that point the only copy of their work is this tab. */
+  const downloadEditorBuffer = () => {
+    if (!selectedFile) return;
+    const blob = new Blob([editorContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = selectedFile.path.split("/").pop() || "file.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    showToast(`Копия ${a.download} скачана`, "success");
+  };
+
   const handleEditorChange = (value: string) => {
     setEditorContent(value);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -875,7 +919,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     if (!confirm(`Delete ${path}?`)) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), { method: "DELETE" });
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), { method: "DELETE" });
       const remaining = files.filter((f) => f.path !== path);
       setFiles(remaining);
       if (selectedFile?.path === path) {
@@ -883,8 +927,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setSelectedFile(next);
         setEditorContent(next?.content ?? "");
       }
-    } catch {
-      showToast("Delete failed", "error");
+    } catch (e: any) {
+      // The file is still there; the tree must keep showing it.
+      showToast(`Файл НЕ удалён — ${e?.message || "нет связи"}`, "error");
     }
   };
 
@@ -916,7 +961,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         showToast(`Переименование отменено — копия не создалась (${putR.status}); файл на месте`, "error");
         return;
       }
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(oldPath)}`), { method: "DELETE" });
+      const delR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(oldPath)}`), { method: "DELETE" });
+      if (!delR.ok) {
+        // The copy exists, the original does too. Showing only the new path
+        // would hide a duplicate that then gets exported, pushed and deployed.
+        const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+        const listData = await listR.json().catch(() => null);
+        if (listData?.files) setFiles(listData.files);
+        showToast(`Копия создана как ${target}, но старый файл не удалился (${delR.status}) — оба на месте`, "warning");
+        return;
+      }
       setFiles((fs) => {
         const updated = fs.map((f) => f.path === oldPath ? { ...f, path: target } : f);
         return updated.sort((a, b) => a.path.localeCompare(b.path));
@@ -1570,9 +1624,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deployments`), { cache: "no-store" });
+      if (!r.ok) throw new Error(`сервер ответил ${r.status}`);
       const data = await r.json();
       setDeployments(data.deployments || []);
-    } catch {}
+      setDeploymentsLoadError(null);
+    } catch (e: any) {
+      setDeploymentsLoadError(e?.message || "нет связи с сервером");
+    }
   }, [project]);
 
   useEffect(() => {
@@ -1583,9 +1641,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/env`), { cache: "no-store" });
+      if (!r.ok) throw new Error(`сервер ответил ${r.status}`);
       const data = await r.json();
       setEnvList(data.env || []);
-    } catch {}
+      setEnvLoadError(null);
+    } catch (e: any) {
+      setEnvLoadError(e?.message || "нет связи с сервером");
+    }
   }, [project]);
 
   useEffect(() => {
@@ -1595,7 +1657,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const addEnvVar = async () => {
     if (!newEnvKey.trim() || !project) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/env`), {
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/env`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: newEnvKey, value: newEnvVal }),
@@ -1603,15 +1665,20 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setNewEnvKey(""); setNewEnvVal("");
       fetchEnv();
       showToast("Env var saved", "success");
-    } catch { showToast("Failed to save", "error"); }
+    } catch (e: any) { showToast(`Переменная НЕ сохранена — ${e?.message || "нет связи"}`, "error"); }
   };
 
   const removeEnvVar = async (key: string) => {
     if (!project) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/env/${encodeURIComponent(key)}`), { method: "DELETE" });
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/env/${encodeURIComponent(key)}`), { method: "DELETE" });
       fetchEnv();
-    } catch {}
+    } catch (e: any) {
+      // The list is re-read either way: a variable that is still on the server
+      // must reappear rather than look deleted.
+      fetchEnv();
+      showToast(`Переменная НЕ удалена — ${e?.message || "нет связи"}`, "error");
+    }
   };
 
   const applyTemplate = async (templateId: string) => {
@@ -1640,7 +1707,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     setSavingSettings(true);
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}`), {
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1651,8 +1718,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       setProject((p) => p ? { ...p, name: settingsName, description: settingsDesc || null, customDomain: settingsDomain || null } : p);
       showToast("Settings saved", "success");
-    } catch {
-      showToast("Failed to save settings", "error");
+    } catch (e: any) {
+      showToast(`Настройки НЕ сохранены — ${e?.message || "нет связи"}`, "error");
     } finally {
       setSavingSettings(false);
     }
@@ -1670,8 +1737,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         showToast("Studio Pro required — upgrade to add collaborators", "error");
         return;
       }
-      const data = await resp.json();
-      setProject((p) => p ? { ...p, collaborators: data.collaborators || [] } : p);
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !Array.isArray(data?.collaborators)) {
+        // Two lies in one line before this: a green "added" toast, and
+        // `data.collaborators || []` wiping everyone already on the project
+        // off the screen because a failed response carries no list.
+        showToast(`Соавтор НЕ добавлен — сервер ответил ${resp.status}`, "error");
+        return;
+      }
+      setProject((p) => p ? { ...p, collaborators: data.collaborators } : p);
       setSettingsCollab("");
       showToast(`Collaborator added (${collabRole})`, "success");
     } catch {
@@ -1682,10 +1756,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const removeCollaborator = async (collabUserId: string) => {
     if (!project) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators/${encodeURIComponent(collabUserId)}`), { method: "DELETE" });
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/collaborators/${encodeURIComponent(collabUserId)}`), { method: "DELETE" });
       setProject((p) => p ? { ...p, collaborators: p.collaborators.filter((c) => c.userId !== collabUserId) } : p);
-    } catch {
-      showToast("Failed to remove collaborator", "error");
+      showToast("Доступ отозван", "success");
+    } catch (e: any) {
+      // Leave them in the list. Access is still live, and a list that hides
+      // that is worse than the error.
+      showToast(`Доступ НЕ отозван — ${e?.message || "нет связи"}`, "error");
     }
   };
 
@@ -1723,7 +1800,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/push`), { method: "POST" });
       const d = await r.json();
-      if (d.ok) {
+      if (d.ok && d.degraded) {
+        // Some files never reached the repo. Saying "pushed" here is how an
+        // incomplete repo passed for a complete one — and it is the repo a
+        // deploy would build from.
+        setGithubMsg(`⚠ Отправлено ${d.pushedFiles} из ${d.pushedFiles + (d.failedFiles?.length ?? 0)} файлов. ${d.degradedReason}`);
+        showToast("Часть файлов не попала в репозиторий", "warning");
+        setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
+        await fetchGithubStatus();
+        await fetchGithubBranches();
+      } else if (d.ok) {
         setGithubMsg(`Pushed ${d.pushedFiles} files to GitHub: ${d.repoUrl}`);
         setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
         await fetchGithubStatus();
@@ -2824,9 +2910,19 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           {saveError && (
             <span
               title={saveError}
-              style={{ fontSize: 12, fontWeight: 700, color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 6, padding: "3px 10px", maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              style={{ fontSize: 12, fontWeight: 700, color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 6, padding: "3px 10px", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: 480 }}
             >
-              ⚠ {saveError}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⚠ {saveError}</span>
+              {/* The text only exists in this browser tab now. Telling someone
+                  their work is unsaved without a way to keep it just makes the
+                  loss visible — this gets it onto their disk in one click. */}
+              <button
+                onClick={downloadEditorBuffer}
+                title="Скачать то, что сейчас в редакторе — до того, как вкладка закроется"
+                style={{ background: "#991b1b", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, padding: "3px 8px", cursor: "pointer", flexShrink: 0 }}
+              >
+                ⬇ Скачать копию
+              </button>
             </span>
           )}
           {project.deployUrl && (
@@ -3694,6 +3790,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               {/* Env Vars Tab */}
               {activeTab === "env" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {envLoadError && (
+                    <div style={{ background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", borderRadius: 7, padding: "8px 12px", fontSize: 12.5, marginBottom: 8 }}>
+                      ⚠ Список переменных не загрузился ({envLoadError}) — пусто здесь значит «неизвестно», а не «переменных нет».
+                    </div>
+                  )}
                   {envList.map((e) => (
                     <div key={e.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#f8fafc", borderRadius: 8 }}>
                       <span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: "#0f172a", flex: 1 }}>{e.key}</span>
@@ -3805,6 +3906,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   </div>
 
                   {/* Deploy history */}
+                  {deploymentsLoadError && (
+                    <div style={{ background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", borderRadius: 7, padding: "8px 12px", fontSize: 12.5, marginBottom: 8 }}>
+                      ⚠ История деплоев не загрузилась ({deploymentsLoadError}) — пусто здесь значит «неизвестно», а не «деплоев не было».
+                    </div>
+                  )}
                   {deployments.length > 0 && (
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>HISTORY</div>

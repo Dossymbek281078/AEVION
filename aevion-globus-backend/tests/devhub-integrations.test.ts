@@ -27,7 +27,7 @@ vi.mock("../src/lib/wranglerPagesDeploy", () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
+import { devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork } from "../src/routes/devhub";
 // eslint-disable-next-line import/first
 import { getProviders, callProvider } from "../src/services/qcoreai/providers";
 
@@ -51,6 +51,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Post-deploy verification scheduled by a test in this file used to fire
+  // during a LATER test and eat its mocked fetch — the suite then failed on a
+  // different test each run (issue #982). Drop what is still pending.
+  __clearDeferredDevHubWork();
   globalThis.fetch = originalFetch;
   vi.mocked(getProviders).mockReturnValue([]);
   vi.mocked(callProvider).mockReset();
@@ -4363,5 +4367,113 @@ describe("Deleting a project takes its Railway service with it", () => {
     // exactly the orphan this is meant to prevent.
     const still = await request(app).get(`/api/devhub/projects/${id}`);
     expect(still.status).toBe(200);
+  });
+});
+
+
+describe("A GitHub push that lost files does not report a clean push", () => {
+  test("files GitHub refused are named, and the answer is degraded, not success", async () => {
+    process.env.GITHUB_TOKEN = "gh-fake";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "PushHalf" });
+    const id = cr.body.project.id as string;
+    await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>ok</h1>" });
+    await request(app).put(`/api/devhub/projects/${id}/file?path=big.bin.b64`).send({ content: "AAAA" });
+
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.endsWith("/user")) return jsonResp(200, { login: "octo" });
+      if (u.endsWith("/user/repos")) return jsonResp(201, { html_url: "https://github.com/octo/pushhalf" });
+      if (u.includes("/contents/index.html")) return jsonResp(201, { content: {} });
+      // What actually happens in the wild: one file is rejected while the
+      // rest go through — too large, bad path, a stale sha, a rate limit.
+      if (u.includes("/contents/big.bin.b64")) return jsonResp(422, { message: "size too large" });
+      throw new Error(`unexpected ${u}`);
+    });
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/push`).send({});
+    expect(r.status).toBe(200);
+    expect(r.body.pushedFiles).toBe(1);
+    expect(r.body.degraded).toBe(true);
+    expect(r.body.failedFiles).toHaveLength(1);
+    expect(r.body.failedFiles[0].path).toBe("big.bin.b64");
+    expect(r.body.failedFiles[0].reason).toMatch(/422|size too large/);
+    expect(r.body.degradedReason).toMatch(/big\.bin\.b64/);
+    delete process.env.GITHUB_TOKEN;
+  });
+
+  test("a push where nothing landed is not ok at all", async () => {
+    process.env.GITHUB_TOKEN = "gh-fake";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "PushNone" });
+    const id = cr.body.project.id as string;
+    await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>ok</h1>" });
+
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.endsWith("/user")) return jsonResp(200, { login: "octo" });
+      if (u.endsWith("/user/repos")) return jsonResp(201, { html_url: "https://github.com/octo/pushnone" });
+      return jsonResp(403, { message: "API rate limit exceeded" });
+    });
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/push`).send({});
+    expect(r.body.ok).toBe(false);
+    expect(r.body.pushedFiles).toBe(0);
+    expect(r.body.degradedReason).toMatch(/rate limit/i);
+    delete process.env.GITHUB_TOKEN;
+  });
+});
+
+
+describe("An exported project says how to run it", () => {
+  test("the ZIP carries HOW-TO-RUN.md built from the project's real files", async () => {
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "RunNote", stack: "react" });
+    const id = cr.body.project.id as string;
+    await request(app).put(`/api/devhub/projects/${id}/file?path=src/App.jsx`).send({ content: "export default () => null;" });
+    await request(app)
+      .put(`/api/devhub/projects/${id}/file?path=package.json`)
+      .send({ content: JSON.stringify({ scripts: { dev: "vite" }, dependencies: { react: "^18.0.0" } }) });
+
+    const r = await request(app).get(`/api/devhub/projects/${id}/export`).buffer().parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+    expect(r.status).toBe(200);
+
+    const zipText = (r.body as Buffer).toString("utf8");
+    expect(zipText).toContain("HOW-TO-RUN.md");
+    // The command comes from the project's own manifest, not a template.
+    expect(zipText).toContain("npm run dev");
+  });
+});
+
+
+describe("Export metadata does not come back as project content", () => {
+  test("a re-imported export does not gain HOW-TO-RUN.md as a file", async () => {
+    // Каждый round-trip иначе добавлял бы файл: экспорт кладёт заметку,
+    // импорт принимал бы её за исходник проекта.
+    const app = makeApp();
+    const src = (await request(app).post("/api/devhub/projects").send({ name: "RoundNote", stack: "react" })).body.project.id;
+    await request(app).put(`/api/devhub/projects/${src}/file?path=index.html`).send({ content: "<h1>hi</h1>" });
+
+    const exp = await request(app).get(`/api/devhub/projects/${src}/export`).buffer().parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+    expect(exp.status).toBe(200);
+
+    const dst = (await request(app).post("/api/devhub/projects").send({ name: "RoundNoteTarget", stack: "react" })).body.project.id;
+    const imp = await request(app)
+      .post(`/api/devhub/projects/${dst}/import-zip`)
+      .send({ base64Zip: (exp.body as Buffer).toString("base64") });
+    expect(imp.status).toBe(200);
+
+    const paths = (await request(app).get(`/api/devhub/projects/${dst}/files`)).body.files.map((f: any) => f.path);
+    expect(paths).toContain("index.html");
+    expect(paths).not.toContain("HOW-TO-RUN.md");
+    expect(paths).not.toContain("aevion-export.json");
   });
 });

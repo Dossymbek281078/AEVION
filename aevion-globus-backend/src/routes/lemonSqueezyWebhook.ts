@@ -41,6 +41,7 @@ import {
 import { MEDIUM_BUNDLE } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
+import { normalizeTrafficChannel } from "../lib/trafficChannel";
 
 async function upsertAppSubscription(
   email: string,
@@ -88,7 +89,7 @@ export const lemonSqueezyWebhookRouter = Router();
 interface LsSubscriptionPayload {
   meta?: {
     event_name?: string;
-    custom_data?: { reference?: string; email?: string; module?: string };
+    custom_data?: { reference?: string; email?: string; module?: string; channel?: string };
   };
   data?: {
     id?: string;
@@ -222,12 +223,20 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // Lite = 1 продукт на выбор: берём его из custom_data (передан на чекауте).
       const customModule = payload.meta?.custom_data?.module;
       const modules = tierId === "lite" && customModule ? [customModule] : modulesForReference(ref);
+      // Источник трафика приходит из checkout[custom][channel], который
+      // подставляет страница /go. До этого он молча терялся: у Gumroad метка
+      // доезжает до дашборда сама (url_params заказа), а у LemonSqueezy такого
+      // пути нет — вебхук был единственным местом, где её видно, и он её не
+      // читал. В результате модули-подписки, то есть самые дорогие позиции
+      // каталога, не атрибутировались вовсе.
+      const channel = normalizeTrafficChannel(payload.meta?.custom_data?.channel);
       const result = await provisionSubscription({
         email,
         tierId,
         period: "monthly",
         modules,
         source: "lemonsqueezy",
+        channel: channel ?? undefined,
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);
       return res.json({ ok: true, action: "activated", tierId, subscriptionId: result.subscription.id });

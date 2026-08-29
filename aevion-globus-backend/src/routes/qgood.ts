@@ -820,9 +820,12 @@ qgoodRouter.post("/chat", chatLimit, async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg === "not-configured") {
+      // 28.08.2026: в ответе стоял `hint` с ИМЕНАМИ переменных окружения —
+      // карта настройки для любого вызывающего. Человеку отвечает `reply`
+      // ниже, подсказка для нас — в журнал.
+      console.error("[qgood] ИИ не настроен: задайте ключ провайдера на сервере");
       return res.status(503).json({
         error: "llm-not-configured",
-        hint: "Set ANTHROPIC_API_KEY or OPENAI_API_KEY in environment.",
         reply: "Я сейчас недоступен. Попробуйте позже или обратитесь к специалисту напрямую.",
       });
     }

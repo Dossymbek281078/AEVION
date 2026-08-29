@@ -701,7 +701,17 @@ async function saveIdempotency(
      VALUES ($1,$2,$3,$4,$5::jsonb)
      ON CONFLICT (owner_id, key) DO NOTHING`,
     [ownerId, key, bodyHash, status, JSON.stringify(response)],
-  ).catch(() => {});
+  ).catch((e: unknown) => {
+    // Молчать здесь нельзя. Эта запись И ЕСТЬ гарантия идемпотентности: если
+    // ключ не записан, повтор того же запроса пройдёт как новый — в платёжном
+    // модуле это двойная обработка. Провал был невидим полностью: ни журнала,
+    // ни ответа, ни счётчика. Роняться при этом тоже нельзя — операция уже
+    // выполнена, и её результат человеку нужнее, чем наша неудача с учётом.
+    console.warn(
+      "[qpaynet idempotency] ключ НЕ записан, повтор пройдёт как новый:",
+      e instanceof Error ? e.message : e,
+    );
+  });
 }
 
 // Periodic GC of idempotency keys older than 24h (keeps table small).

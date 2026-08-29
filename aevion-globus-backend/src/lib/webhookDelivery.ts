@@ -1,3 +1,5 @@
+import { checkPublicUrl } from "./publicUrlOnly";
+import { isInternalHost } from "./internalHost";
 import crypto from "crypto";
 import pg from "pg";
 
@@ -52,6 +54,44 @@ export async function deliverWebhook(
   let ok = false;
   let statusCode: number | null = null;
   let error: string | null = null;
+
+  // 28.08.2026: адрес вебхука приходит от пользователя (QRight, Planet и
+  // другие зовут эту функцию с `opts.url` из тела запроса), а внутренние
+  // адреса при регистрации не блокировались: у QRight проверялся только
+  // протокол, у Planet — только длина. Проверка стоит ЗДЕСЬ намеренно: это
+  // единственное место, где происходит само обращение, и оно общее для всех
+  // вызывающих. Гейт на входе не защищает то, что уже сохранено.
+  //
+  // Отдушина как у остальных вебхуков: в тестах и локальной разработке адрес
+  // петли законен — тест поднимает свой сервер и слушает доставку.
+  const allowInternal =
+    process.env.ALLOW_INTERNAL_WEBHOOKS === "1" || process.env.NODE_ENV === "test";
+  if (!allowInternal) {
+    // ДВА слоя, и второй сильнее первого.
+    //
+    // Первый — быстрый и без сети: адрес, записанный внутренним ЯВНО
+    // (127.0.0.1, 10.x, 169.254.169.254). Он отсекает очевидное мгновенно.
+    //
+    // Второй — checkPublicUrl: разрешает имя и смотрит АДРЕСА, в которые оно
+    // ведёт. Без него `evil.example.com`, указывающий на 127.0.0.1, проходил
+    // бы насквозь: проверка по строке имени этого не видит. Слабость моей
+    // первой версии нашла соседняя вкладка на своей ручке, здесь тот же изъян
+    // был ровно такой же.
+    let internalByName = true;
+    try {
+      internalByName = isInternalHost(new URL(opts.url).hostname);
+    } catch {
+      internalByName = true; // адрес не разбирается — не идём
+    }
+    if (internalByName) {
+      return { ok: false, statusCode: null, error: "target_not_allowed" };
+    }
+    const verdict = await checkPublicUrl(opts.url);
+    if (!verdict.ok) {
+      return { ok: false, statusCode: null, error: "target_not_allowed" };
+    }
+  }
+
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 5000);

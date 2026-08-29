@@ -58,7 +58,7 @@ const investorFaqs: FAQ[] = [
   },
   {
     q: "Can I see live product, not just slides?",
-    a: "Yes — the core modules on /pitch are working MVPs (each module shows its stage). /qright registers IP in seconds. /bureau issues admissible-evidence certificates. /bank is a 5-tab multilingual dashboard with 18 features. /pitch itself shows live API metrics in the hero (green pill = backend up). To book a guided walkthrough: yahiin1978@gmail.com.",
+    a: "Yes — the core modules on /pitch are working MVPs (each module shows its stage). /qright registers IP in seconds. /bureau issues signed, timestamped certificates citing 6 international frameworks. /bank is a 5-tab multilingual dashboard with 18 features. /pitch itself shows live API metrics in the hero (green pill = backend up). To book a guided walkthrough: yahiin1978@gmail.com.",
     updated: "2026-05-08",
   },
   {

@@ -1,3 +1,5 @@
+import { checkPublicUrl } from "../lib/publicUrlOnly";
+import { isInternalHost } from "../lib/internalHost";
 import { Router, type Request, type Response } from "express";
 import { queryNumber } from "../lib/queryNumber";
 import crypto from "node:crypto";
@@ -35,6 +37,34 @@ const ATTEMPTS_FILE = "smeta_attempts.json";
 const OVERRIDES_FILE = "smeta_material_overrides.json";
 const WEBHOOKS_FILE = "smeta_webhooks.json";
 
+/**
+ * Можно ли слать на этот адрес? Одна точка правды для РЕГИСТРАЦИИ и для
+ * ДОСТАВКИ: проверка только на входе не спасала бы вебхуки, записанные
+ * раньше, а доставка и есть действие, ради которого проверка нужна.
+ *
+ * Отдушина та же, что у вебхуков QCoreAI: в тестах и локальной разработке
+ * адрес петли законен — тест поднимает свой сервер и слушает доставку.
+ */
+async function webhookTargetAllowed(rawUrl: string): Promise<boolean> {
+  // Отдушина ТОЛЬКО по своей переменной. Раньше здесь было ещё общее
+  // `NODE_ENV === "test"`, и под ним эта функция в тестах всегда отвечала
+  // «разрешено» — то есть настоящая проверка адреса не исполнялась ни в одном
+  // прогоне, а сторож рядом проверял лишь НАЛИЧИЕ вызовов в исходнике. Такой
+  // сторож ловит удаление защиты и не ловит её обезвреживание.
+  if (process.env.ALLOW_INTERNAL_WEBHOOKS === "1") return true;
+  try {
+    // ДВА слоя. Первый — по строке имени, быстрый и без сети. Второй
+    // разрешает имя и смотрит АДРЕСА, в которые оно ведёт: без него
+    // `evil.example.com`, указывающий на 127.0.0.1, прошёл бы насквозь.
+    // Слабость первой версии (только имя) нашла соседняя вкладка на своей
+    // ручке; здесь был тот же изъян.
+    if (isInternalHost(new URL(rawUrl).hostname)) return false;
+    return (await checkPublicUrl(rawUrl)).ok;
+  } catch {
+    return false;
+  }
+}
+
 // ── Rate limits ────────────────────────────────────────────────────
 const writeLimiter = rateLimit({
   windowMs: 60_000,
@@ -53,6 +83,49 @@ const readLimiter = rateLimit({
 });
 
 // ── JWT auth binding (optional) ────────────────────────────────────
+/**
+ * Администратор тренажёра: роль в токене ИЛИ почта из списка в окружении.
+ *
+ * 28.08.2026: пять ручек с `/admin` в пути проверяли ТОЛЬКО подпись токена,
+ * без роли. Самая тяжёлая — `GET /admin/students`: она отдаёт ВСЕХ студентов
+ * (прогресс, результаты практики, достижения) любому, у кого есть аккаунт.
+ * Имя пути обещало защиту, которой не было.
+ *
+ * Форма списана с работающего образца бюро (`bureau.ts:1574`), чтобы не
+ * заводить третий способ отвечать на один вопрос. Роль уже живёт: при
+ * регистрации `role = isFirst ? "ADMIN" : "USER"` (`auth.ts:346`), и ею уже
+ * пользуется `auth.ts:1117`. Сравнение регистронезависимое — в коде
+ * встречаются обе записи.
+ *
+ * ⚠️ Если у кураторов в токене нет роли ADMIN, добавьте их почты в
+ * `SMETA_ADMIN_EMAILS` (через запятую) — иначе они потеряют доступ.
+ */
+function isSmetaAdmin(req: Request): { ok: boolean; reason: string | null } {
+  // Отдушина для прогонов — ЯВНАЯ и по своей переменной. Раньше она стояла на
+  // общем `NODE_ENV === "test"`, и цена оказалась выше пользы: под ней настоящая
+  // логика ролей ниже не исполнялась в тестах ВООБЩЕ, то есть защиту нельзя было
+  // ни проверить, ни удержать от отката — сломай её кто-нибудь, все прогоны
+  // остались бы зелёными. Теперь её включают два прогона доставки, которым нужен
+  // доступ к ручке, а сторож smetaAdminGate проверяет настоящую логику.
+  if (process.env.SMETA_ADMIN_TEST_BYPASS === "1") {
+    return { ok: Boolean(req.headers?.authorization?.startsWith("Bearer ")), reason: "test-bypass" };
+  }
+  const header = req.headers?.authorization;
+  if (!header?.startsWith("Bearer ")) return { ok: false, reason: "no-bearer" };
+  try {
+    const d = jwt.verify(header.slice(7), getJwtSecret(), { algorithms: ["HS256"] }) as Record<string, unknown>;
+    if (String(d.role ?? "").toLowerCase() === "admin") return { ok: true, reason: null };
+    const allow = new Set(
+      String(process.env.SMETA_ADMIN_EMAILS ?? "")
+        .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+    );
+    const email = String(d.email ?? "").toLowerCase();
+    return allow.has(email) ? { ok: true, reason: null } : { ok: false, reason: "not-admin" };
+  } catch {
+    return { ok: false, reason: "bad-token" };
+  }
+}
+
 function readUserIdFromBearer(req: Request): string | null {
   const header = req.headers?.authorization;
   if (!header?.startsWith("Bearer ")) return null;
@@ -185,7 +258,23 @@ async function loadOverrides(): Promise<Record<string, OverrideRecord>> {
   return readJsonFile<Record<string, OverrideRecord>>(OVERRIDES_FILE, {});
 }
 
+// Идентификатор служит КЛЮЧОМ поиска в обычном объекте (`students[deviceId]`),
+// а обычный объект знает про ключи прототипа. Все шесть имён длиннее шести
+// знаков и состоят из словарных символов, поэтому проверку ниже они проходили:
+// GET /student/__proto__ отвечал {"student":{}} — то есть ВЫДАВАЛ несуществующего
+// ученика за существующего, а /student/constructor терял поле student целиком.
+// Та же проверка охраняет и запись: синхронизация с таким идентификатором
+// присваивала прототип вместо свойства и молча терялась.
+const RESERVED_DEVICE_IDS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+  "toString",
+  "valueOf",
+  "hasOwnProperty",
+]);
 function isValidDeviceId(s: unknown): s is string {
+  if (typeof s === "string" && RESERVED_DEVICE_IDS.has(s)) return false;
   return typeof s === "string" && s.length >= 6 && s.length <= 128 && /^[\w.\-]+$/.test(s);
 }
 function isValidLevel(n: unknown): n is number {
@@ -269,6 +358,13 @@ async function emitWebhookEvent(event: WebhookPayload): Promise<void> {
 
   const body = JSON.stringify(event);
   await Promise.all(subscribers.map(async (w) => {
+    // 28.08.2026: проверка адреса стояла ТОЛЬКО при регистрации. Вебхук,
+    // записанный раньше (или другим путём), доставлялся без неё — а доставка
+    // и есть действие, ради которого проверка нужна. Проверяем здесь тоже.
+    if (!(await webhookTargetAllowed(w.url))) {
+      console.error("[smeta] доставка отменена: адрес ведёт внутрь сети", w.id);
+      return;
+    }
     try {
       const sig = crypto.createHmac("sha256", w.secret).update(body).digest("hex");
       const ctrl = new AbortController();
@@ -683,8 +779,8 @@ smetaTrainerRouter.get("/groups", readLimiter, async (_req, res) => {
 // Детальный список всех студентов (для куратора). Требует JWT.
 // query: ?group=X&limit=200
 smetaTrainerRouter.get("/admin/students", readLimiter, async (req, res) => {
-  const userId = readUserIdFromBearer(req);
-  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const adm = isSmetaAdmin(req);
+  if (!adm.ok) return res.status(403).json({ error: "admin_required", reason: adm.reason });
   const limit = Math.max(1, Math.min(500, Math.max(Number(req.query.limit) || 200, 1)));
   const group = typeof req.query.group === "string" ? req.query.group.trim() : "";
   const students = await loadStudents();
@@ -854,8 +950,8 @@ const VALID_EVENTS: WebhookEvent[] = [
 
 // GET /admin/webhooks — список настроенных webhook'ов (без секретов)
 smetaTrainerRouter.get("/admin/webhooks", readLimiter, async (req, res) => {
-  const userId = readUserIdFromBearer(req);
-  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const adm = isSmetaAdmin(req);
+  if (!adm.ok) return res.status(403).json({ error: "admin_required", reason: adm.reason });
   const all = await loadWebhooks();
   // Не отдаём секрет наружу — только при создании
   const safe = Object.values(all).map((w) => ({
@@ -867,11 +963,23 @@ smetaTrainerRouter.get("/admin/webhooks", readLimiter, async (req, res) => {
 
 // POST /admin/webhooks — создать webhook, вернуть секрет один раз
 smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
-  const userId = readUserIdFromBearer(req);
-  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const adm = isSmetaAdmin(req);
+  if (!adm.ok) return res.status(403).json({ error: "admin_required", reason: adm.reason });
   const { url, label, events } = req.body ?? {};
   if (typeof url !== "string" || !/^https?:\/\//.test(url) || url.length > 500) {
     return res.status(400).json({ error: "bad_url" });
+  }
+  // 28.08.2026: адрес не проверялся на «указывает внутрь нашей сети». Путь
+  // называется /admin/, но администратором быть НЕ требуется — проверяется
+  // только подпись токена. То есть любой зарегистрированный пользователь мог
+  // назвать http://169.254.169.254/ (метаданные облака), а соседняя ручка
+  // /admin/webhooks/:id/test тут же сходила бы туда с нашего сервера.
+  // Список общий с вебхуками QCoreAI — намеренно один, чтобы не разошёлся.
+  // Отдушина та же, что у вебхуков QCoreAI: в тестах и локальной разработке
+  // адрес петли законен — тест поднимает свой сервер и слушает доставку.
+  // Отдушина включается ТОЛЬКО переменной ALLOW_INTERNAL_WEBHOOKS=1.
+  if (!(await webhookTargetAllowed(url))) {
+    return res.status(400).json({ error: "bad_url", reason: "internal_target" });
   }
   if (typeof label !== "string" || label.length < 1 || label.length > 60) {
     return res.status(400).json({ error: "bad_label" });
@@ -890,7 +998,9 @@ smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
     secret,
     events: cleanEvents,
     label,
-    createdBy: userId,
+    // 28.08: `userId` был из прежней проверки токена; теперь ручка админская,
+    // и запись ведём по тому, кто её создал, из того же токена.
+    createdBy: readUserIdFromBearer(req) ?? "admin",
     createdAt: Date.now(),
     lastSentAt: null,
     failureCount: 0,
@@ -904,8 +1014,8 @@ smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
 
 // DELETE /admin/webhooks/:id
 smetaTrainerRouter.delete("/admin/webhooks/:id", writeLimiter, async (req, res) => {
-  const userId = readUserIdFromBearer(req);
-  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const adm = isSmetaAdmin(req);
+  if (!adm.ok) return res.status(403).json({ error: "admin_required", reason: adm.reason });
   const id = String(req.params.id ?? "");
   let existed = false;
   await mutateWebhooks((all) => {
@@ -918,8 +1028,8 @@ smetaTrainerRouter.delete("/admin/webhooks/:id", writeLimiter, async (req, res) 
 
 // POST /admin/webhooks/:id/test — отправить тестовое событие
 smetaTrainerRouter.post("/admin/webhooks/:id/test", writeLimiter, async (req, res) => {
-  const userId = readUserIdFromBearer(req);
-  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const adm = isSmetaAdmin(req);
+  if (!adm.ok) return res.status(403).json({ error: "admin_required", reason: adm.reason });
   const id = String(req.params.id ?? "");
   const all = await loadWebhooks();
   const w = all[id];
@@ -934,6 +1044,9 @@ smetaTrainerRouter.post("/admin/webhooks/:id/test", writeLimiter, async (req, re
     score: 95,
     ts: Date.now(),
   });
+  if (!(await webhookTargetAllowed(w.url))) {
+    return res.status(400).json({ error: "bad_url", reason: "internal_target" });
+  }
   try {
     const sig = crypto.createHmac("sha256", w.secret).update(body).digest("hex");
     const ctrl = new AbortController();

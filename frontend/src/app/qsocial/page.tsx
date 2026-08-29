@@ -33,6 +33,23 @@ interface Story {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Ручки qsocial отвечают 2xx и на ЗАПАСНОМ пути, помечая его `storage:"memory"`:
+ * запись живёт в памяти процесса и не переживает перезапуск. Экран об этом не
+ * предупреждает — в отличие, например, от формы сигналов mapReality, где прямо
+ * написано «in-memory if DB unavailable». Поэтому показывать успех нельзя:
+ * человек видит свой пост в ленте, а отправленное сообщение — в треде, и
+ * уверен, что они сохранены.
+ */
+const NOT_PERSISTED =
+  "Не удалось сохранить насовсем — это на нашей стороне. Текст оставили: отправьте ещё раз через минуту.";
+
+/** true, если ответ говорит о ПОСТОЯННОМ хранении. */
+function persisted(d: { storage?: string } | null | undefined): boolean {
+  const v = d?.storage ?? "db";
+  return v === "db" || v === "postgres";
+}
+
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
   const token =
@@ -226,8 +243,12 @@ function CreatePostForm({ onCreated }: { onCreated: (post: Post) => void }) {
         setError(j.error ?? "Failed to post");
         return;
       }
-      const { post } = await resp.json() as { post: Post };
-      onCreated(post);
+      const data = await resp.json() as { post: Post; storage?: string };
+      if (!persisted(data)) {
+        setError(NOT_PERSISTED);
+        return;
+      }
+      onCreated(data.post);
       setContent("");
       setTags("");
     } catch {
@@ -421,7 +442,20 @@ export default function QSocialPage() {
         method: "POST", headers: { ...bearerHeader(), "Content-Type": "application/json" },
         body: JSON.stringify({ content: dmInput.trim() }),
       });
-      if (r.ok) { setDmInput(""); await fetchDmThread(activeDmUserId); await fetchConversations(); }
+      // Отказ раньше не показывался ВООБЩЕ: при !r.ok просто гас индикатор, и
+      // человек не мог отличить отправленное сообщение от несохранённого.
+      const d = (await r.json().catch(() => ({}))) as { storage?: string };
+      if (!r.ok) {
+        setError("Не удалось отправить сообщение. Попробуйте ещё раз.");
+        return;
+      }
+      if (!persisted(d)) {
+        setError(NOT_PERSISTED);
+        return;
+      }
+      setDmInput("");
+      await fetchDmThread(activeDmUserId);
+      await fetchConversations();
     } finally { setDmSending(false); }
   }
 
@@ -716,6 +750,18 @@ export default function QSocialPage() {
                         {dmMessages.length === 0 && <div style={{ color: "#94a3b8", fontSize: 13, textAlign: "center", marginTop: 40 }}>Напишите первое сообщение</div>}
                       </div>
                       <div style={{ padding: "10px 14px", borderTop: "1px solid #f1f5f9", display: "flex", gap: 8 }}>
+                        {/* Общий баннер ошибки рисуется только при tab !== "dm", поэтому
+                            отказ отправки сообщения был НЕВИДИМ: setError писал правду в
+                            состояние, а до человека она не доходила. Это тот же дефект,
+                            который правится в этом файле, — здесь он был у самой правки. */}
+                        {error && (
+                          <p
+                            role="status"
+                            style={{ color: "#ef4444", fontSize: 12, margin: "0 0 6px", width: "100%" }}
+                          >
+                            {error}
+                          </p>
+                        )}
                         <input
                           value={dmInput}
                           onChange={(e) => setDmInput(e.target.value)}

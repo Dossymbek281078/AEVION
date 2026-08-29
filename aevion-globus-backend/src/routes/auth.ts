@@ -42,10 +42,26 @@ authRouter.get("/email/healthz", (_req, res) => {
       process.env.SMTP_PASS?.trim(),
   );
   const resend = Boolean(process.env.RESEND_API_KEY?.trim() || process.env.RESEND_KEY?.trim());
+  // Brevo — ТРЕТИЙ транспорт, и им уходит письмо подписчику списка раннего
+  // доступа (sendWaitlistConfirm -> sendBrevoEmail, ключ BREVO_API_KEY).
+  // Замер 28.08.2026: ручка отвечала canSend: true, проверив только SMTP и
+  // Resend, — то есть говорила «почта настроена» про транспорты, которыми
+  // запускное письмо НЕ отправляется. Если ключа Brevo нет, каждое такое
+  // письмо молча не уходит (отказ честный, но виден только в журнале и
+  // Sentry), а снаружи платформа отвечает, что с почтой всё хорошо.
+  const brevo = Boolean(process.env.BREVO_API_KEY?.trim());
   res.json({
     ok: true,
-    transports: { smtp: { configured: smtp }, resend: { configured: resend } },
+    transports: {
+      smtp: { configured: smtp },
+      resend: { configured: resend },
+      brevo: { configured: brevo },
+    },
+    // canSend отвечает на СВОЙ вопрос — «может ли новый человек подтвердить
+    // адрес при регистрации»; менять его смысл нельзя, его уже читают.
     canSend: smtp || resend,
+    // Отдельный ответ про канал запуска: письмо списку раннего доступа.
+    waitlistCanSend: brevo,
       // Это факт КОДА, а не настройки: ручка подтверждения зовёт отправщик.
       // Держится не на слове — тест authEmailSends.test.ts краснеет, если
       // вызов убрать, поэтому флаг не может тихо разойтись с поведением.

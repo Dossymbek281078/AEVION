@@ -146,7 +146,10 @@ constitutionCheckoutRouter.post(
           tierName: nameOf(tier),
           priceUsd: priceOf(tier),
           provider: "stub",
-          note: "No payment provider configured. Set LEMON_SQUEEZY_API_KEY or GUMROAD_CONSTITUTION_PRO_PERMALINK.",
+          // 28.08.2026: в `note` стояли ИМЕНА переменных окружения. Заглушка
+          // честно называет себя (`provider: "stub"`) — это правильно и
+          // остаётся; имена настройки наружу не нужны, они в журнале.
+          note: "Платёжный провайдер не настроен — это ответ-заглушка, оплата не произошла.",
         });
       }
 
@@ -179,10 +182,20 @@ constitutionCheckoutRouter.post(
       });
     } catch (err) {
       capture(err);
+      // 28.08.2026: раньше в ответе уходили `detail` с текстом исключения и
+      // `hint` с ИМЕНАМИ переменных окружения. Проверено пробой снаружи, без
+      // авторизации: любой вызывающий получал
+      //   "Required: LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID,
+      //    LEMON_SQUEEZY_CONSTITUTION_PRO_VARIANT_ID"
+      // то есть карту нашей настройки. Подсказка полезна НАМ, а читает её кто
+      // угодно. Диагностика уходит в журнал и в Sentry (capture выше), наружу —
+      // причина без внутренностей.
+      const why = err instanceof Error ? err.message : "unknown";
+      console.error("[constitution/checkout] отказ:", why);
       res.status(500).json({
         error: "checkout_failed",
-        detail: err instanceof Error ? err.message : "unknown",
-        hint: "Configure LEMON_SQUEEZY_API_KEY or GUMROAD_CONSTITUTION_PRO_PERMALINK in Railway env",
+        message_ru: "Касса сейчас недоступна. Мы уже знаем о сбое — попробуйте позже.",
+        message_en: "Checkout is unavailable right now. We are on it — please try again later.",
       });
     }
   },

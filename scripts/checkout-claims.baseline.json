@@ -1,0 +1,100 @@
+{
+  "items": {
+    "xpxzam": {
+      "title": "AEVION All-Access",
+      "description": "Complete access to the entire AEVION platform — all 15+ modules including QRight (IP registration), QSign (e-signatures), QCoreAI, QFusionAI, QPayNet, QTradeOffline, Constitution, and more. One subscription, zero limits. Built for founders, innovators, and builders.",
+      "price": "59"
+    },
+    "wjvquw": {
+      "title": "Constitution Team",
+      "description": "Political economy simulator — unlimited saves, AI advisor, clean PDF, embed widget",
+      "price": "49"
+    },
+    "pyiaz": {
+      "title": "Constitution Pro",
+      "description": "Political economy simulator — unlimited saves, AI advisor, clean PDF, embed widget",
+      "price": "9"
+    },
+    "oijxmq": {
+      "title": "Протокол долголетия AEVION — 12 недель: измерь, воздействуй, перемерь",
+      "description": "Протокол на 12 недель, устроенный иначе, чем большинство материалов о долголетии.Здесь нет ни одной рекомендации без пометки, насколько она доказана: A — сильные доказательства (RCT и крупные когорты), B — умеренные, C — слабые, E — влияние на долголетие у людей не показано.Внутри: панель из 26 маркеров крови и функциональных тестов с целевыми коридорами; 20 вмешательств в четырёх направлениях (пи",
+      "price": "19"
+    },
+    "tmuyxw": {
+      "title": "Протокол «Анти-седина» — наука о седине и что реально её замедляет",
+      "description": "Почти весь контент про «убрать седину» — ложь в обёртке быстрого решения. Этот гайд наоборот.Внутри (PDF, ~10 страниц): Почему волос реально седеет: настоящая биология (истощение стволовых клеток, окислительный стресс, механизм каталаза/H2O2) - Седина как биомаркер: что она говорит про B12, железо, щитовидку - Рычаги, которые выдерживают проверку, vs хайп: баланс медь/цинк, витамины B, спермидин, ",
+      "price": "9"
+    },
+    "kkiavh": {
+      "title": "The Anti-Grey Protocol — the science of pigment aging & what actually slows it",
+      "description": "Most \"reverse grey hair\" content online is a lie dressed as a shortcut. This guide does the opposite.Inside (PDF, ~10 pages): Why hair actually goes grey - the real biology (stem-cell depletion, oxidative stress, the catalase/H2O2 mechanism) - Grey hair as a biomarker - what it quietly tells you about B12, iron, thyroid and oxidative load - The levers that hold up vs the hype - copper/zi",
+      "price": "19"
+    },
+    "ghvzq": {
+      "title": "Gratitude ∞ Forever Young — Complete Pack",
+      "description": "The complete 90-day transformation kit. Everything in Book + Audio, plus the printable 90-day journal, and 30 days of access to your personal AI coach — trained on the book. Everything inside - Full book in PDF + EPUB (RU & EN), 11 chapters, ~75 pages - Full audiobook RU 14 tracks + EN 15 tracks, ~80 min each language - 90-day printable journal (PDF, A5, 92 pages) — one page per day, grati",
+      "price": "29"
+    },
+    "lelzw": {
+      "title": "Gratitude ∞ Forever Young — Book + Audiobook",
+      "description": "You are already practicing self-hypnosis — every day, 24 hours a day. Most likely, your self-hypnosis is working against you. This is the full multimedia bundle — the book plus the 75-minute audiobook (Brian voice, ElevenLabs Multilingual v2), so you can read, listen, or alternate. The audiobook follows the exact text of the book — same 11 chapters, same 90-day protocol, same final affirmation. ##",
+      "price": "14"
+    },
+    "orcfbo": {
+      "title": "Gratitude ∞ Forever Young — Book (PDF + EPUB)",
+      "description": "You are already practicing self-hypnosis — every day, 24 hours a day. Most likely, your self-hypnosis is working against you. This is not a positive-thinking book. It&#39;s a book about mechanics — how the nervous system processes words, why Émile Coué&#39;s patients recovered without medication, and what 30 years of neuroscience say about Hebb&#39;s principle, the RAS filter, and the default mode",
+      "price": "9"
+    },
+    "devhub": {
+      "title": "AEVION DevHub Studio Pro",
+      "description": "Unlock AEVION DevHub Studio Pro: unlimited deployments, 50 AI videos/month, 200 AI images, priority support, and Cloudflare Pages hosting.",
+      "price": "149"
+    },
+    "smeta": {
+      "title": "AEVION Smeta Trainer",
+      "description": "AI construction estimating Kazakhstan. ССЦ/ЭСН corpus RK 2026, AI error detection.",
+      "price": "49"
+    },
+    "qventure": {
+      "title": "AEVION QVenture",
+      "description": "AI investment analyst. Score 0–100, 4-role advice panel, market sizing & risk matrix.",
+      "price": "39"
+    },
+    "bureau": {
+      "title": "AEVION IP Bureau",
+      "description": "Proof-of-creation & authorship. Ed25519 signature, SHA-256 hash, OpenTimestamps.",
+      "price": "29"
+    },
+    "qpaynet": {
+      "title": "AEVION QPayNet",
+      "description": "Embedded payment infrastructure. KZT · USD multi-currency, virtual cards, API + webhooks.",
+      "price": "29"
+    },
+    "cyberchess": {
+      "title": "AEVION CyberChess Pro",
+      "description": "AI chess coaching & tournament platform. Grandmaster opening theory, real-time AI coaching.",
+      "price": "19"
+    },
+    "qcontract": {
+      "title": "AEVION QContract",
+      "description": "Self-destructing secure documents. View-count & expiry limits, password & e-signature gates.",
+      "price": "19"
+    },
+    "ls:a6a35e07": {
+      "title": "AEVION Planet — Annual",
+      "description": "All AEVION apps — annual commitment at $200/month. Every module, cross-app workflows, 3 team seats, priority support.",
+      "price": null
+    },
+    "ls:23fa912b": {
+      "title": "AEVION Planet — Monthly",
+      "description": "All AEVION apps — now and future — in one subscription. Every module, cross-app workflows, 3 team seats, priority support.",
+      "price": null
+    }
+  },
+  "known": [
+    "[bureau] касса обещает «OpenTimestamps»",
+    "[qpaynet] касса обещает «virtual card»",
+    "[xpxzam] в кассе продукт занижен более чем вдвое",
+    "[wjvquw = pyiaz] разные товары, ОДНО описание"
+  ]
+}

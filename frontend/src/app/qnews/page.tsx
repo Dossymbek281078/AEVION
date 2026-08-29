@@ -420,6 +420,17 @@ export default function QNewsPage() {
         body: JSON.stringify(submitForm),
       });
       if (resp.status === 401) { setSubmitMsg("Войдите чтобы публиковать статьи"); return; }
+      // Ручка отвечает 201 и на ЗАПАСНОМ пути, помечая его storage:"memory":
+      // статья живёт в памяти процесса и не переживает перезапуск. Экран об этом
+      // не предупреждает, а слово «опубликована» — про публичность, поэтому
+      // показывать его нельзя: человек закрывал форму, терял набранное и считал
+      // статью вышедшей.
+      const data = await resp.json().catch(() => ({})) as { storage?: string };
+      const persisted = (data.storage ?? "db") === "db" || (data.storage ?? "db") === "postgres";
+      if (resp.ok && !persisted) {
+        setSubmitMsg("Приняли, но сохранить насовсем сейчас не вышло — отправьте ещё раз через минуту.");
+        return;
+      }
       if (resp.ok) {
         setSubmitMsg("Статья опубликована!"); setShowSubmit(false);
         setSubmitForm({ title: "", summary: "", url: "", source: "", category: "tech" });

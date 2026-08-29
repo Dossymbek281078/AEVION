@@ -1254,7 +1254,7 @@ export default function QRightPage() {
                   </div>
                 </li>
                 <li>
-                  <b>Print the PDF</b> for paper records — court-ready, with a QR code back to the live verify page.
+                  <b>Print the PDF</b> for paper records — printable, with a QR code back to the live verify page.
                 </li>
                 {result.witness && (
                   <li>

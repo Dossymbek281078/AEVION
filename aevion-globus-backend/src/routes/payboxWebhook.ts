@@ -48,7 +48,8 @@ function referenceFromOrderId(orderId: string): string {
  * Sentry, то есть расхождение обнаружится ДО того, как о нём напишет
  * покупатель.
  */
-function tierForReference(ref: string): TierId {
+/** Экспортируется ради теста: молчаливый дефолт стоит проверять отдельно. */
+export function tierForReference(ref: string): TierId {
   const r = ref.toLowerCase();
   if (r.includes("medium")) return "medium";
   if (r.includes("full") || r.includes("all-access") || r.includes("business") || r.includes("team")) return "full";

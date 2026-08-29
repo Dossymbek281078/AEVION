@@ -384,7 +384,7 @@ export default function VerifyPage() {
               Cryptographic Proof
               <InfoTip
                 label="Cryptographic Proof"
-                text="Three derived proofs (SHA-256 content hash, HMAC signature, Ed25519 signature) plus the algorithm and certificate ID for context. Tamper with any registered field and at least one of the three derived values stops matching."
+                text="Derived proofs — the SHA-256 content hash, the HMAC and Ed25519 signatures, and AEVION's platform attestation of this certificate's key — plus the algorithm and certificate ID for context. Tampering with a field that the hash covers breaks at least one of them. Note the limit honestly: certificates issued under the earlier v1 rule hashed only title, description and work type, so country and city are recorded on the certificate but not covered by that hash — the row above says which rule applies."
               />
             </div>
             <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>

@@ -142,14 +142,22 @@ export function purgeSubscriptions(email: string): { removed: number; remaining:
   return { removed, remaining: kept.length };
 }
 
-export function countSubscriptions(): number {
+export function countSubscriptions(): { ok: boolean; total: number } {
   try {
     const file = subsFile();
-    if (!existsSync(file)) return 0;
+    // Файла нет — это ЧЕСТНЫЙ ноль: подписок ещё не было.
+    if (!existsSync(file)) return { ok: true, total: 0 };
     const content = readFileSync(file, "utf8");
-    return content.split("\n").filter((l) => l.trim().length > 0).length;
+    const n = content.split(String.fromCharCode(10)).filter((l) => l.trim().length > 0).length;
+    return { ok: true, total: n };
   } catch {
-    return 0;
+    // А СБОЙ ЧТЕНИЯ нулём быть не должен: это «не знаю».
+    //
+    // Число уходит в ответ ручки и дальше в ежедневный отчёт основателю.
+    // Ноль при нечитаемом файле выглядит как «никто не купил» или «мы
+    // потеряли всех подписчиков» — ложная тревога, отличить которую от
+    // правды было нечем.
+    return { ok: false, total: 0 };
   }
 }
 

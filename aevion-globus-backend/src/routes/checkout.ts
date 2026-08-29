@@ -273,7 +273,14 @@ checkoutRouter.post("/webhook", (_req, res) => {
 
 // ── GET /subscriptions/count ──────────────────────────────────────────────────
 checkoutRouter.get("/subscriptions/count", (_req, res) => {
-  res.json({ total: countSubscriptions() });
+  // Смена типа сюда НЕ дошла бы типами: тело ответа не типизировано, и
+  // объект вместо числа уехал бы молча (feedback_return_type_change_tsc_...).
+  const подписки = countSubscriptions();
+  res.json({
+    total: подписки.ok ? подписки.total : null,
+    // Ноль и «не знаю» — разные ответы: ноль читается как «никто не купил».
+    unread: подписки.ok ? undefined : true,
+  });
 });
 
 // ── GET /healthz ──────────────────────────────────────────────────────────────

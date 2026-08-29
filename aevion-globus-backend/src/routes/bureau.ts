@@ -58,14 +58,41 @@ const pool = getPool();
  *
  * Поэтому состояние отдаётся наружу, и витрина обязана его спрашивать.
  */
+/**
+ * Имена, которые РЕАЛЬНО поддерживает фабрика `getKycProvider()`.
+ * Список продублирован сознательно (фабрику правит соседняя ветка, лезть туда
+ * нельзя), но он не может тихо разойтись: тест `kycModeIsHonest` спрашивает
+ * саму фабрику по каждому имени и краснеет, если она решает иначе.
+ */
+const KYC_LIVE_IDS = new Set(["sumsub"]);
+
+/**
+ * Общее правило для обоих барьеров.
+ *
+ * Нормализация ОБЯЗАНА совпадать с фабрикой посимвольно: она делает
+ * `(v || "stub").toLowerCase()` и НЕ обрезает пробелы. Прежняя версия здесь
+ * обрезала — и из-за этого `" sumsub"` (лишний пробел из панели окружения)
+ * читалось как «настоящий поставщик», тогда как фабрика на нём БРОСАЕТ
+ * исключение и поток не работает вовсе.
+ *
+ * Исходов три, а не два. Незнакомое имя — это не «живой» и не «заглушка», это
+ * «настроено неверно»: фабрика на нём падает. Отвечать в таком случае "live"
+ * значит обещать работающий приём денег и проверку паспорта там, где ни того,
+ * ни другого нет.
+ */
+function providerMode(
+  raw: string | undefined,
+  liveIds: ReadonlySet<string>,
+): "live" | "stub" | "misconfigured" {
+  const id = (raw || "stub").toLowerCase();
+  if (id === "stub") return "stub";
+  return liveIds.has(id) ? "live" : "misconfigured";
+}
+
 export function kycProviderMode(
   env: NodeJS.ProcessEnv = process.env,
-): "live" | "stub" {
-  const v = String(env.BUREAU_KYC_PROVIDER || "").trim();
-  // Пусто ИЛИ явное "stub" — демонстрационный путь. Любое другое имя
-  // означает настоящего поставщика: так же решает и сам обработчик заглушки,
-  // и расходиться эти два места не должны.
-  return v && v !== "stub" ? "live" : "stub";
+): "live" | "stub" | "misconfigured" {
+  return providerMode(env.BUREAU_KYC_PROVIDER, KYC_LIVE_IDS);
 }
 
 /**
@@ -82,13 +109,23 @@ export function kycProviderMode(
  * ВИДНО. Пока её не видно, утверждать нельзя ни «держит», ни «не держит».
  * Поэтому состояние отдаётся наружу: вопрос должен иметь ответ.
  */
+/**
+ * Имена, которые РЕАЛЬНО поддерживает фабрика `getPaymentProvider()`,
+ * включая все три написания LemonSqueezy, которые она принимает.
+ * Проверяется тестом против самой фабрики — см. KYC_LIVE_IDS выше.
+ */
+const PAYMENT_LIVE_IDS = new Set([
+  "stripe",
+  "gumroad",
+  "lemonsqueezy",
+  "lemon-squeezy",
+  "lemon_squeezy",
+]);
+
 export function paymentProviderMode(
   env: NodeJS.ProcessEnv = process.env,
-): "live" | "stub" {
-  const v = String(env.BUREAU_PAYMENT_PROVIDER || "").trim().toLowerCase();
-  // Пусто — это «stub»: ровно так решает и getPayProvider(). Совпадение с ним
-  // важнее краткости, иначе состояние будет описывать не тот код, что работает.
-  return v && v !== "stub" ? "live" : "stub";
+): "live" | "stub" | "misconfigured" {
+  return providerMode(env.BUREAU_PAYMENT_PROVIDER, PAYMENT_LIVE_IDS);
 }
 
 /**
@@ -1586,7 +1623,12 @@ bureauRouter.post("/org/accept/:token", async (req, res) => {
 /* ─────────────────── Stub-only helper for demo flow ─────────────────── */
 
 bureauRouter.get("/kyc-stub/:sessionId", (req: Request, res: Response) => {
-  if (process.env.BUREAU_KYC_PROVIDER && process.env.BUREAU_KYC_PROVIDER !== "stub") {
+  // Спрашиваем ту же функцию, что отдаёт состояние наружу, а не своё третье
+  // прочтение переменной. Раньше здесь было сравнение БЕЗ приведения регистра:
+  // при BUREAU_KYC_PROVIDER=STUB фабрика запускала демо-заглушку, а этот
+  // обработчик считал поставщика настоящим и отдавал 404 — три места читали
+  // одну переменную тремя разными способами.
+  if (kycProviderMode() !== "stub") {
     return res.status(404).json({ error: "stub flow disabled in this environment" });
   }
   const { sessionId } = req.params;

@@ -97,7 +97,6 @@ export default function RootLayout({
 
           Ставить глобально безопасно: подмена проверяет адрес и трогает
           только запросы к /api/devhub/, остальные проходят нетронутыми. */}
-      <DevHubGuestIdentity />
       <body
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
@@ -141,6 +140,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
         <ClientProviders>
+          <DevHubGuestIdentity />
           {children}
         </ClientProviders>
         {/*

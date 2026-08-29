@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { kvList, kvPush } from "./_persist";
+import { kvListChecked, kvPush } from "./_persist";
 
 export type AuditEntry = {
   id: string;
@@ -72,12 +72,19 @@ export async function readAudit(filter?: {
   action?: string;
   target_id?: string;
   limit?: number;
-}): Promise<AuditEntry[]> {
-  const all = await kvList<AuditEntry>(AUDIT_KEY);
+}): Promise<{ ok: boolean; entries: AuditEntry[] }> {
+  // Возвращаем ПРИЗНАК ЧТЕНИЯ, а не голый список. Пустой список при
+  // недоступном хранилище неотличим от «записей нет», и следователь по
+  // денежному спору сделал бы вывод «следа не существует» — тогда как след
+  // может быть цел, а недоступно хранилище. Тот же довод, что у споров и
+  // возвратов в этом же каталоге; контракт приведён к их образцу.
+  const read = await kvListChecked<AuditEntry>(AUDIT_KEY);
+  if (!read.ok) return { ok: false, entries: [] };
+  const all = read.value;
   const limit = Math.min(500, filter?.limit ?? 100);
   let out = all;
   if (filter?.action) out = out.filter((e) => e.action === filter.action);
   if (filter?.target_id)
     out = out.filter((e) => e.target_id === filter.target_id);
-  return out.slice(0, limit);
+  return { ok: true, entries: out.slice(0, limit) };
 }

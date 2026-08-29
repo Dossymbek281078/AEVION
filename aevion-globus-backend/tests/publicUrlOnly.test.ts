@@ -58,7 +58,12 @@ describe("наружу можно, внутрь нельзя", () => {
     const src = readFileSync(join(__dirname, "..", "src", "routes", "devhub.ts"), "utf8");
     const i = src.indexOf('"/media/upload-audio"');
     expect(i, "ручка не найдена — тест смотрит не туда").toBeGreaterThan(0);
-    const block = src.slice(i, i + 1200);
+    // Граница по следующему объявлению маршрута, а не по длине: иначе
+    // окно либо не достанет до предмета, либо захватит соседний обработчик
+    // и покажет чужую проверку как нашу.
+    const end = src.indexOf("devhubRouter.", i + 10);
+    expect(end, "граница обработчика не найдена").toBeGreaterThan(i);
+    const block = src.slice(i, end);
     expect(block.includes("checkPublicUrl"), "проверка не вызывается в обработчике").toBe(true);
     expect(
       block.includes("fetch(verdict.url"),

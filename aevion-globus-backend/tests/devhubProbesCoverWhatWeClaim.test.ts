@@ -28,7 +28,11 @@ const NO_PROBE_BY_DESIGN: Record<string, string> = {
 function capabilityEnvs(): Map<string, string[]> {
   const i = SRC.indexOf('devhubRouter.get("/studio/capabilities"');
   expect(i, "ручка возможностей не найдена — сторож смотрит не туда").toBeGreaterThan(0);
-  const block = SRC.slice(i, i + 9000);
+  // Граница по ЯКОРЮ, не по длине: длина — догадка о том, где кончается
+  // предмет, и она устаревает при первой вставке соседнего кода.
+  const end = SRC.indexOf("devhubRouter.", i + 10);
+  expect(end, "граница списка возможностей не найдена").toBeGreaterThan(i);
+  const block = SRC.slice(i, end);
   const out = new Map<string, string[]>();
   const re = /\{\s*id:\s*"([a-z_]+)"([\s\S]*?)\},\s*(?=\{\s*id:|\];)/g;
   let m: RegExpExecArray | null;

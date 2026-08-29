@@ -617,7 +617,7 @@ export default function QCoreAIPage() {
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send())}
             // Подсказка исчезает при вводе — поле остаётся безымянным ровно
             // тогда, когда в нём работают. Замер прода 29.08.2026.
-            aria-label="Вопрос к QCoreAI"
+            aria-label="Ask QCoreAI"
             placeholder="Ask QCoreAI anything..."
             disabled={busy}
             style={{

@@ -80,7 +80,7 @@ function VerifyEmailBody() {
               <input
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                placeholder={t("build.verifyEmail.codePlaceholder")}
+                aria-label={t("build.verifyEmail.codePlaceholder")} placeholder={t("build.verifyEmail.codePlaceholder")}
                 className="flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-slate-500"
               />
               <button

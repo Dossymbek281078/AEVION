@@ -34,6 +34,16 @@ vi.mock("../_lib", async (orig) => {
 });
 
 describe("возврат не выдаётся, если прошлые возвраты не прочитаны", () => {
+  it("выдача списка тоже отвечает отказом, а не пустотой", async () => {
+    // Пустой список при отказе неотличим от «возвратов нет», и продавец
+    // оформит возврат второй раз руками — довод тот же, что у споров.
+    const { GET } = await import("../refunds/route");
+    const res = await GET(
+      new Request("https://aevion.app/api/payments/v1/refunds") as never,
+    );
+    expect(res.status, "выдача притворилась пустой при отказе хранилища").toBe(503);
+  });
+
   it("отвечает отказом, а не новым возвратом", async () => {
     const { store } = await import("../_lib");
     const { POST } = await import("../refunds/route");

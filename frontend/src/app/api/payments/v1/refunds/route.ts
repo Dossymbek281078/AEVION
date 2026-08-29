@@ -11,7 +11,7 @@ import {
   withCors,
   type ApiLink,
 } from "../_lib";
-import { kvList, kvListChecked, kvPush } from "../_persist";
+import { kvListChecked, kvPush } from "../_persist";
 import { logAudit } from "../_audit";
 import { enqueueAttempt } from "../_webhook_queue";
 
@@ -35,7 +35,22 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const linkId = url.searchParams.get("link_id");
 
-  const items = await kvList<ApiRefund>(REFUNDS_KEY);
+  // Отказ хранилища — это 503, а не пустой список. Довод тот же, что записан
+  // у споров: продавец, увидев «возвратов нет», оформит возврат ВТОРОЙ РАЗ.
+  // Пустая выдача при отказе неотличима от «их действительно нет».
+  const read = await kvListChecked<ApiRefund>(REFUNDS_KEY);
+  if (!read.ok) {
+    return attachRateHeaders(
+      withCors(
+        badRequest(
+          "Refund storage is temporarily unreachable. Please retry.",
+          503
+        )
+      ),
+      gate.rateHeaders
+    );
+  }
+  const items = read.value;
   const filtered = linkId ? items.filter((r) => r.link_id === linkId) : items;
 
   return attachRateHeaders(

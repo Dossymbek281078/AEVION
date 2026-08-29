@@ -418,7 +418,56 @@ async function run() {
   // держатся ОБЕЩАНИЯ посадочной («видео», «3D»): она читает `configured` и
   // показывает раздел только когда провайдер настроен. Отвалится ключ — витрина
   // тихо перестанет обещать, и узнать об этом было неоткуда.
-  // 17в. Обещание домена сверяется с ИМЕНЕМ, а не с нашей же переменной.
+  // 17г. Обещание не спорит с НАШЕЙ ЖЕ пробой.
+//
+// Замер 29.08.2026, и он неприятнее отдельного случая с доменом: на проде
+// ручка providers/health уже отвечала `cloudflare_zone: ok=false, "zone
+// status: unknown"`, а панель возможностей рядом объявляла домен живым.
+// Проверка БЫЛА — её просто никто не сверял с обещанием.
+//
+// Поэтому сверка общая: если возможность обещана как live, а её проба
+// красная, это расхождение, как бы возможность ни называлась.
+try {
+  const cr = await req("GET", "/api/devhub/studio/capabilities");
+  const pr = await req("GET", "/api/devhub/providers/health");
+  const caps = cr.body?.capabilities || [];
+  const checks = pr.body?.checks || [];
+  const probe = new Map(checks.map((c) => [c.name, c]));
+  // Пара «возможность → проба». Только те, где проба действительно есть:
+  // выдуманная пара давала бы вечно зелёный результат.
+  const PAIRS = [
+    ["domain", "cloudflare_zone"],
+    ["video", "replicate"],
+    ["3d", "replicate"],
+    ["email", "brevo"],
+    ["sms", "brevo"],
+    ["whatsapp", "brevo"],
+    ["translate", "deepl"],
+    ["github", "github"],
+  ];
+  let compared = 0;
+  const clash = [];
+  for (const [capId, probeName] of PAIRS) {
+    const cap = caps.find((c) => c && c.id === capId);
+    const chk = probe.get(probeName);
+    if (!cap || !chk) continue;
+    compared += 1;
+    if (cap.status === "live" && chk.ok === false) {
+      clash.push(`${capId} обещан live, а проба ${probeName}: ${chk.detail || "не прошла"}`);
+    }
+  }
+  if (compared === 0) {
+    skip("обещания против проб", "ни одной пары не сошлось — сверять нечего");
+  } else if (clash.length === 0) {
+    ok(`обещания не спорят с пробами (сверено пар: ${compared})`);
+  } else {
+    for (const c of clash) fail("обещание спорит с пробой", c);
+  }
+} catch (e) {
+  skip("обещания против проб", `проверить не удалось: ${String(e).slice(0, 60)}`);
+}
+
+// 17в. Обещание домена сверяется с ИМЕНЕМ, а не с нашей же переменной.
 //
 // Состояние возможности "domain" берётся из DEVHUB_AEVION_BUILD_ZONE_ACTIVE —
 // осознанного флага, который человек ставит, «когда зона заработает». Замер

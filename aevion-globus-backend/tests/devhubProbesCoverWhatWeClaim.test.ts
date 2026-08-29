@@ -1,0 +1,79 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+/**
+ * Панель DevHub объявляла 14 возможностей рабочими, а настоящих проб к
+ * поставщикам было ПЯТЬ. Основанием для «работает» служило наличие переменной
+ * окружения — тот же класс, что проявился у домена: ключи заданы, зона не
+ * делегирована, и каждый выданный адрес не разрешался.
+ *
+ * Этот сторож требует не «все возможности проверены» (у части поставщика нет
+ * вовсе), а проверяемого минимума: у возможности, ЗАВИСЯЩЕЙ от внешнего
+ * поставщика, должна быть проба, спрашивающая этого поставщика.
+ *
+ * Храповик: сегодняшние исключения перечислены и объяснены. Новая возможность
+ * с внешним ключом и без пробы уронит проверку.
+ */
+
+const SRC = readFileSync(join(__dirname, "..", "src", "routes", "devhub.ts"), "utf8");
+
+/** Объяснённые исключения — не «забыли», а решено. */
+const NO_PROBE_BY_DESIGN: Record<string, string> = {
+  code: "редактор в браузере, внешнего поставщика нет",
+  railway: "в описании прямо сказано «пока недоступно»",
+  github: "обращения считает общий ограничитель темпа; цена пробы выше пользы",
+};
+
+function capabilityEnvs(): Map<string, string[]> {
+  const i = SRC.indexOf('devhubRouter.get("/studio/capabilities"');
+  expect(i, "ручка возможностей не найдена — сторож смотрит не туда").toBeGreaterThan(0);
+  const block = SRC.slice(i, i + 9000);
+  const out = new Map<string, string[]>();
+  const re = /\{\s*id:\s*"([a-z_]+)"([\s\S]*?)\},\s*(?=\{\s*id:|\];)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block))) {
+    out.set(m[1], [...m[2].matchAll(/process\.env\.([A-Z0-9_]+)/g)].map((x) => x[1]));
+  }
+  return out;
+}
+
+function probedEnvs(): string[] {
+  const i = SRC.indexOf('devhubRouter.get("/providers/health"');
+  expect(i, "ручка проб не найдена").toBeGreaterThan(0);
+  // ГРАНИЦА ОБЯЗАТЕЛЬНА: ручка возможностей идёт СРАЗУ следом, и окно
+  // «плюс N символов» захватывало её целиком — тогда любая переменная
+  // выглядела «пробуемой», и сторож не мог покраснеть никогда.
+  // Поймано мутацией: удаление пробы deepl проверку не роняло.
+  const end = SRC.indexOf('devhubRouter.get("/studio/capabilities"', i);
+  expect(end, "граница блока проб не найдена").toBeGreaterThan(i);
+  const block = SRC.slice(i, end);
+  return [...block.matchAll(/process\.env\.([A-Z0-9_]+)/g)].map((x) => x[1]);
+}
+
+describe("что объявлено рабочим, то и проверяется", () => {
+  it("контроль: обе ручки разобраны и непусты", () => {
+    expect(capabilityEnvs().size, "возможности не разобраны").toBeGreaterThan(10);
+    expect(probedEnvs().length, "пробы не разобраны").toBeGreaterThan(5);
+  });
+
+  it("у каждой возможности с внешним ключом есть проба этого поставщика", () => {
+    const probed = new Set(probedEnvs());
+    const missing: string[] = [];
+    for (const [id, envs] of capabilityEnvs()) {
+      if (id in NO_PROBE_BY_DESIGN) continue;
+      if (!envs.length) continue; // без внешнего ключа проверять нечего
+      if (!envs.some((e) => probed.has(e))) missing.push(`${id} (${envs.join(", ")})`);
+    }
+    expect(
+      missing,
+      "объявлены рабочими, но ни одна проба не спрашивает их поставщика:\n  ",
+    ).toEqual([]);
+  });
+
+  it("исключения объяснены, а не просто перечислены", () => {
+    for (const [id, why] of Object.entries(NO_PROBE_BY_DESIGN)) {
+      expect(why.length, `${id}: причина не названа`).toBeGreaterThan(20);
+    }
+  });
+});

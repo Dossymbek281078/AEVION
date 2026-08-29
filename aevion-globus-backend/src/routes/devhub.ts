@@ -6488,6 +6488,40 @@ devhubRouter.get("/providers/health", async (_req, res) => {
       // *.aevion.build address we hand out fails DNS.
       return { ok: status === "active", detail: `zone status: ${status ?? "unknown"}` };
     }),
+    // 29.08.2026: панель объявляла 14 возможностей рабочими, а проб было пять.
+    // Основанием для «работает» служило наличие переменной — тот же класс, что
+    // проявился у домена: ключи заданы, зона не делегирована, каждый выданный
+    // адрес не разрешается. Ниже закрыты пять из шести обещаний без основания.
+    //
+    // GitHub намеренно НЕ пробуем: обращения к нему считает общий на все вкладки
+    // ограничитель темпа (нас отключали 27.07 за сумму), а эта ручка вызывается
+    // и панелью, и ежедневным смоуком. Цена проверки выше её пользы.
+    probe("deepl", async () => {
+      if (!process.env.DEEPL_API_KEY) return { ok: false, detail: "DEEPL_API_KEY not set" };
+      const r = await fetch("https://api-free.deepl.com/v2/usage", {
+        headers: { Authorization: `DeepL-Auth-Key ${process.env.DEEPL_API_KEY}` },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("vercel", async () => {
+      if (!process.env.VERCEL_API_TOKEN) return { ok: false, detail: "VERCEL_API_TOKEN not set" };
+      const r = await fetch("https://api.vercel.com/v2/user", {
+        headers: { Authorization: `Bearer ${process.env.VERCEL_API_TOKEN}` },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("elevenlabs", async () => {
+      if (!process.env.ELEVENLABS_API_KEY) return { ok: false, detail: "ELEVENLABS_API_KEY not set" };
+      const r = await fetch("https://api.elevenlabs.io/v1/user", {
+        headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("devhub_db", async () => {
+      if (!process.env.DEVHUB_DB_ADMIN_URL) return { ok: false, detail: "DEVHUB_DB_ADMIN_URL not set" };
+      const r = await getPool().query("select 1 as ok");
+      return { ok: r.rows?.[0]?.ok === 1, detail: "select 1" };
+    }),
     probe("openai", async () => {
       if (!process.env.OPENAI_API_KEY) return { ok: false, detail: "OPENAI_API_KEY not set" };
       const r = await fetch("https://api.openai.com/v1/models", {

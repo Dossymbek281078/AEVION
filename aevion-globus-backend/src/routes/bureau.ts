@@ -750,8 +750,54 @@ bureauRouter.post("/payment/intent", async (req, res) => {
  * intent. Idempotent: re-calling on an already-verified cert is a no-op
  * that returns the current state.
  */
+/**
+ * Можно ли ВЫДАВАТЬ платный тариф прямо сейчас.
+ *
+ * Обе демонстрационные заглушки самозавершаются — так и задумано, чтобы поток
+ * работал в разработке без внешних действий:
+ *   kyc/stubProvider     getSession() ВСЕГДА отвечает "approved" с заявленным именем
+ *   payment/stubProvider getIntent()  сам помечает счёт оплаченным при первом чтении
+ *
+ * Значит без настоящих поставщиков проверки `kycStatus === "approved"` и
+ * `paymentStatus === "paid"` ниже проходят сами собой, и сертификат получает
+ * уровень «verified» без денег и без единого взгляда на документ. Для продукта,
+ * который продаёт ДОКАЗУЕМОСТЬ, это ложь в самих данных: на неё потом сошлётся
+ * третья сторона.
+ *
+ * Опираемся на ФАКТ («поставщик — заглушка»), а НЕ на NODE_ENV: в index.ts
+ * стоит `process.env.NODE_ENV || "development"`, а ни скрипт выкатки, ни
+ * nixpacks.toml эту переменную не задают — сторож по среде на нашем проде молча
+ * не сработал бы, а молчащий сторож хуже отсутствующего.
+ *
+ * Отказ закрытый: разработка и CI включают поток явным BUREAU_ALLOW_STUB_COMMERCE=1.
+ * Умолчание обязано быть безопасным, потому что прод — это ровно то место, где
+ * ничего не настроено.
+ */
+export function stubBarriersBlockingUpgrade(
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  if (env.BUREAU_ALLOW_STUB_COMMERCE === "1") return [];
+  const blocking: string[] = [];
+  if (kycProviderMode(env) !== "live") blocking.push("identity");
+  if (paymentProviderMode(env) !== "live") blocking.push("payment");
+  return blocking;
+}
+
 bureauRouter.post("/upgrade/:certId", async (req, res) => {
   try {
+    // ДО обращения к базе — намеренно. Отказ «тариф не продаётся, пока
+    // поставщики не настроены» не зависит ни от базы, ни от сертификата, и
+    // ставить его после `ensureBureauTables()` значило бы возвращать 500 при
+    // недоступной базе вместо честного 503. Проверено тестом, который бьёт
+    // ручку заведомо несуществующими идентификаторами.
+    const blocking = stubBarriersBlockingUpgrade();
+    if (blocking.length > 0) {
+      return res.status(503).json({
+        error:
+          "Paid verification is not available: the identity and payment providers are not configured yet.",
+        stubBarriers: blocking,
+      });
+    }
     await ensureBureauTables();
     const { certId } = req.params;
     const { verificationId } = req.body || {};

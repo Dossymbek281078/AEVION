@@ -405,6 +405,7 @@ export default function RefundsPage() {
             <div style={{ marginBottom: 14 }}>
               <label style={labelStyle}>Amount (blank = full remaining)</label>
               <input
+                    aria-label="Amount"
                 type="number"
                 step="0.01"
                 value={amount}

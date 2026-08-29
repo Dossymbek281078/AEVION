@@ -163,6 +163,7 @@ export default function CreateDocument() {
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            aria-label={t("qcontract.create.field.title_label")}
             placeholder={t("qcontract.create.field.title_ph")}
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors"
           />
@@ -195,7 +196,7 @@ export default function CreateDocument() {
               placeholder="https://docs.google.com/..."
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors" />
           ) : (
-            <textarea rows={9} value={content} onChange={(e) => setContent(e.target.value)}
+            <textarea aria-label={t("qcontract.create.field.content_label")} rows={9} value={content} onChange={(e) => setContent(e.target.value)}
               placeholder={contentType === "html" ? t("qcontract.create.field.content_ph.html") : t("qcontract.create.field.content_ph.text")}
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors resize-none font-mono text-sm" />
           )}

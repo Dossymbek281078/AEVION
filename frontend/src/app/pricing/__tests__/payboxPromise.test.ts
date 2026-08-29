@@ -35,6 +35,23 @@ describe("обещание про Kaspi следует за фактом", () =>
     expect(i18n).toContain("pricing.home.heroModule.kztNote");
   });
 
+  test("«не смогли спросить» не выдаётся за «Kaspi не подключён»", () => {
+    // Прежде состояние было двоичным: null (не спросили) — ложное
+    // значение, и оно уходило в ветку «Kaspi не подключён». Код бережно
+    // хранил незнание, а экран его терял и утверждал покупателю то,
+    // чего мы не проверяли.
+    expect(page).toContain("payboxLive === null");
+    expect(i18n).toContain("pricing.home.heroModule.kztUnknownNote");
+
+    // И проверка незнания обязана стоять РАНЬШЕ проверки истинности:
+    // иначе ветка недостижима, а тест выше был бы зелёным всё равно.
+    const незнание = page.indexOf("payboxLive === null");
+    const истинность = page.indexOf("? t(\"pricing.home.heroModule.kztNote\")");
+    expect(незнание).toBeGreaterThan(-1);
+    expect(истинность).toBeGreaterThan(-1);
+    expect(незнание).toBeLessThan(истинность);
+  });
+
   test("страница спрашивает сервер, включён ли PayBox", () => {
     expect(page).toContain("/api/pricing/checkout/healthz");
     expect(page).toMatch(/providers\??\.\s*paybox/);

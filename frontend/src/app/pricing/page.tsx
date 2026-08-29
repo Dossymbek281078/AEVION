@@ -512,7 +512,18 @@ export default function PricingPage() {
               <div style={{ fontSize: 12, color: "#64748b" }}>
                 {t("pricing.home.heroModule.paymentCard")}{" "}
                 {currency === "KZT"
-                  ? (payboxLive ? t("pricing.home.heroModule.kztNote") : t("pricing.home.heroModule.kztFallbackNote"))
+                  ? (payboxLive === null
+                      // Не спросили — не знаем. Прежде null был ложным и
+                      // уходил в ветку «Kaspi не подключён»: код бережно
+                      // хранил незнание, а экран его терял и утверждал
+                      // покупателю то, чего мы не проверяли. Сегодня это
+                      // совпадает с правдой (PayBox не настроен), но при
+                      // настроенном PayBox один сетевой сбой отпугивал бы
+                      // покупателя в тенге ложным «Kaspi не подключён».
+                      ? t("pricing.home.heroModule.kztUnknownNote")
+                      : payboxLive
+                        ? t("pricing.home.heroModule.kztNote")
+                        : t("pricing.home.heroModule.kztFallbackNote"))
                   : t("pricing.home.heroModule.usdNote")}
               </div>
             </div>

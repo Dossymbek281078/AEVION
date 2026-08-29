@@ -65,7 +65,7 @@ export default function QMediaCreativePage() {
               <select value={lyricsForm.mood} onChange={e => setLyricsForm(p => ({ ...p, mood: e.target.value }))} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
                 {["upbeat", "melancholy", "romantic", "energetic", "calm", "dark", "hopeful"].map(m => <option key={m} value={m}>{m}</option>)}
               </select>
-              <input value={lyricsForm.theme} onChange={e => setLyricsForm(p => ({ ...p, theme: e.target.value }))} placeholder="Theme (love, city, dreams…)" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
+              <input aria-label="Тема" value={lyricsForm.theme} onChange={e => setLyricsForm(p => ({ ...p, theme: e.target.value }))} placeholder="Theme (love, city, dreams…)" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
               <button onClick={genLyrics} disabled={lyricsLoading} style={{ padding: "8px 16px", borderRadius: 8, background: "#0d9488", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: lyricsLoading ? "default" : "pointer" }}>
                 {lyricsLoading ? "…" : "Generate"}
               </button>

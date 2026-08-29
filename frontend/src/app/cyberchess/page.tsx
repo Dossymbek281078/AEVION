@@ -11771,14 +11771,14 @@ ${question.trim()}`;
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:SPACE[2]}}>
             {[
               {id:"free",name:"Free",price:"0",sub:"навсегда",
-                features:["Игра против AI до 2000 ELO","Все 12 вариантов шахмат",`${pzTotal?pzTotal.toLocaleString("ru-RU"):"500 000+"} ${ccPlural(pzTotal??0,"задача","задачи","задач")} с фильтрами`,"Coach knowledge база","P2P партии с другом","Library + PGN-экспорт"],
+                features:["Игра против ИИ до 2000 ELO","Все 12 вариантов шахмат",`${pzTotal?pzTotal.toLocaleString("ru-RU"):"500 000+"} ${ccPlural(pzTotal??0,"задача","задачи","задач")} с фильтрами`,"База знаний тренера","Партии с другом напрямую","Библиотека партий и выгрузка PGN"],
                 cta:"Текущий тариф",disabled:true},
               {id:"pro",name:"Pro",price:"500",sub:"AEV / месяц",accent:true,
-                features:["Всё из Free","Master AI до 2800 ELO","Безлимитные подсказки","Глубокий разбор каждой партии","Дебютная теория из мастер-партий","Multi-PV анализ до 5 линий","🎬 Auto-Reels без водяного знака"],
-                cta:"Купить через AEV"},
+                features:["Всё из Free","Соперник-мастер до 2800 ELO","Безлимитные подсказки","Глубокий разбор каждой партии","Дебютная теория из мастер-партий","Разбор до 5 вариантов сразу","🎬 Ролики из партий без водяного знака"],
+                cta:"Купить за Chessy"},
               {id:"ultimate",name:"Ultimate",price:"5000",sub:"AEV / lifetime",
-                features:["Всё из Pro","Кастомные AI-личности (Magnus, Hikaru…)","Персональный AI-коуч с памятью","Турниры с призами в AEV","Раннее тестирование новых вариантов","API-доступ к engine","Приоритетная поддержка"],
-                cta:"Купить через AEV"}
+                features:["Всё из Pro","Свои характеры соперников (Магнус, Хикару…)","Личный ИИ-тренер, который помнит твои партии","Турниры с призами в AEV","Раннее тестирование новых вариантов","API-доступ к engine","Приоритетная поддержка"],
+                cta:"Купить за Chessy"}
             ].map(t=>{
               const isPro=t.id==="pro";const isUlt=t.id==="ultimate";
               const owned=t.id!=="free"&&!!chessy.owned[t.id];

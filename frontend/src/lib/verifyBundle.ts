@@ -419,6 +419,38 @@ export async function verifyAevionBundle(
  * Возвращает null, если разобрать не удалось: неизвестный формат — это «не
  * знаю», и выдавать его за провал нельзя, иначе честные пакеты покраснеют.
  */
+/**
+ * Есть ли в доказательстве метка подтверждения БИТКОЙНОМ.
+ *
+ * OpenTimestamps помечает каждое подтверждение восьмибайтовой меткой. Пока
+ * доказательство только у календаря, стоит метка календаря; после включения в
+ * блок появляется биткойновая. Проверено на живом доказательстве прода со
+ * статусом `pending`: метка календаря есть, биткойновой нет.
+ *
+ * Зачем: пакет может ЗАЯВЛЯТЬ `bitcoin-confirmed`, а везти доказательство,
+ * которое до блока ещё не дошло. Тогда наши же два ответа об одном спорят, и
+ * верить надо байтам, а не полю.
+ */
+function otsHasBitcoinAttestation(bytes: Uint8Array): boolean {
+  const TAG = [0x05, 0x88, 0x96, 0x0d, 0x73, 0xd7, 0x19, 0x01];
+  outer: for (let i = 0; i + TAG.length <= bytes.length; i++) {
+    for (let k = 0; k < TAG.length; k++) if (bytes[i + k] !== TAG[k]) continue outer;
+    return true;
+  }
+  return false;
+}
+
+function otsBytes(proofB64: string): Uint8Array | null {
+  try {
+    const bin = atob(proofB64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 function otsCommitsTo(proofB64: string, contentHash: string): boolean | null {
   try {
     const bin = atob(proofB64);
@@ -463,6 +495,26 @@ function otsCommitsTo(proofB64: string, contentHash: string): boolean | null {
         detail:
           "The attached OpenTimestamps proof commits to a different document. " +
           "It does not timestamp this certificate, whatever the bundle claims.",
+      };
+    } else if (
+      ots.proofBase64 &&
+      committed === true &&
+      !otsHasBitcoinAttestation(otsBytes(ots.proofBase64) ?? new Uint8Array())
+    ) {
+      // Пакет ЗАЯВЛЯЕТ подтверждение биткойном, а приложенное доказательство
+      // до блока ещё не дошло: в нём метка календаря, а не биткойна. Два наших
+      // собственных ответа об одном и том же спорят — верить надо байтам.
+      //
+      // Не "fail": сертификат может быть заякорен по-настоящему, а в пакет
+      // просто не доехало обновлённое доказательство. Но и не "pass": здесь
+      // нечего засчитывать в заверения, и вердикт не должен на это опираться.
+      result.bitcoinAnchor = {
+        status: "skip",
+        detail:
+          "The bundle says the timestamp is Bitcoin-confirmed, but the attached .ots " +
+          "proof carries only a calendar attestation — it has not reached a block yet, " +
+          "or the bundle was built before the proof was upgraded. Ask for a fresh bundle, " +
+          "or run this proof through an OpenTimestamps client to see its current state.",
       };
     } else {
       // Высота блока раньше входила в условие, и подтверждённый якорь без неё

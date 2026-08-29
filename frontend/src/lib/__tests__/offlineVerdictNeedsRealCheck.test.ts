@@ -195,6 +195,23 @@ describe("граница проверки якоря названа честно
     expect(String(r.bitcoinAnchor.detail)).toMatch(/OpenTimestamps client/i);
   });
 
+  it("доказательство дошло только до календаря — не засчитываем", async () => {
+    // Пакет заявляет подтверждение биткойном, байты говорят иначе. Верить
+    // надо байтам: поле пишем мы, а метку ставит календарь OpenTimestamps.
+    const b = await selfMadeBundle();
+    b.proofs.openTimestamps = {
+      status: "bitcoin-confirmed",
+      bitcoinBlockHeight: 912345,
+      proofBase64: otsProofFor(b.proofs.contentHash.value, false),
+    };
+    const r = await verifyAevionBundle(b);
+    expect(
+      r.bitcoinAnchor.status,
+      "заявление о блоке засчитано, хотя доказательство до блока не дошло",
+    ).toBe("skip");
+    expect(String(r.bitcoinAnchor.detail)).toMatch(/only a calendar attestation/i);
+  });
+
   it("байтов нет вовсе — плитка зелёная, но говорит об этом", async () => {
     const b = await selfMadeBundle();
     b.proofs.openTimestamps = { status: "bitcoin-confirmed", bitcoinBlockHeight: 1 };
@@ -204,10 +221,15 @@ describe("граница проверки якоря названа честно
   });
 });
 
-/** Собирает доказательство OpenTimestamps, фиксирующее заданный дайджест. */
-function otsProofFor(hexDigest: string): string {
+/**
+ * Собирает доказательство OpenTimestamps, фиксирующее заданный дайджест.
+ * `withBitcoin` дописывает метку подтверждения биткойном — без неё
+ * доказательство считается дошедшим только до календаря.
+ */
+function otsProofFor(hexDigest: string, withBitcoin = true): string {
   const magic = "004f70656e54696d657374616d7073000050726f6f6600bf89e2e884e89294";
-  const hex = magic + "01" + "08" + hexDigest;
+  const BITCOIN_TAG = "0588960d73d71901";
+  const hex = magic + "01" + "08" + hexDigest + (withBitcoin ? BITCOIN_TAG : "");
   const bytes = hex.match(/.{2}/g)!.map((h) => parseInt(h, 16));
   let bin = "";
   for (const b of bytes) bin += String.fromCharCode(b);

@@ -22,8 +22,13 @@ describe("разбор доказательства сходится с живы
         },
       },
     } as never);
-    expect(r.bitcoinAnchor.status).toBe("pass");
-    expect(String(r.bitcoinAnchor.detail)).toMatch(/commits to this document/i);
+    // Настоящее доказательство этого сертификата ещё НЕ дошло до блока: в нём
+    // метка календаря, биткойновой нет (проверено на байтах). Пакет при этом
+    // заявлял `bitcoin-confirmed` — и проверка обязана верить байтам, а не
+    // полю. Это и есть спор двух наших собственных ответов, пойманный на
+    // живых данных, а не на моей сборке.
+    expect(r.bitcoinAnchor.status).toBe("skip");
+    expect(String(r.bitcoinAnchor.detail)).toMatch(/only a calendar attestation/i);
   });
 
   it("то же доказательство при ДРУГОМ хеше отвергается", async () => {

@@ -16,6 +16,12 @@ export interface JustificationFileInput {
   document: unknown;
   attestation: unknown;
   scope?: string;
+  /**
+   * Английская половина оговорки. Файл уходит один, и читатель у него может
+   * быть любой: 29.08.2026 страница брала только русскую, хотя служба отдаёт
+   * обе. Оговорка о применимости — как раз то, что регулятор читает первым.
+   */
+  scopeEn?: string;
   /** Рецепт из ответа ручки. Может отсутствовать у старого бэкенда. */
   verifyYourself?: unknown;
 }
@@ -26,6 +32,7 @@ export function buildJustificationFile(input: JustificationFileInput): string {
     attestation: input.attestation,
   };
   if (input.scope) body.scope = input.scope;
+  if (input.scopeEn) body.scopeEn = input.scopeEn;
   // ⚠️ Рецепт кладём, только если он ПРИШЁЛ. Выдумать его здесь значило бы
   // повторить ошибку в другую сторону: файл обещал бы проверку по шагам,
   // которых служба не подтверждала.

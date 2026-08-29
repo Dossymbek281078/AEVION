@@ -252,7 +252,7 @@ export default function QSkywayClient() {
   // общий флаг «с высотами что-то не так».
   const [substImpact, setSubstImpact] = useState<{ available: boolean; routable: number; affectedPairs: number; buildings: number; buildingsUnderRoutes: number; note: string } | null>(null);
   const [heroPair, setHeroPair] = useState<{ from: number; to: number } | null>(null);
-  const [justification, setJustification] = useState<{ doc: JustDoc; attestation: JustAttestation; scope: string; verify?: unknown } | null>(null);
+  const [justification, setJustification] = useState<{ doc: JustDoc; attestation: JustAttestation; scope: string; scopeEn?: string; verify?: unknown } | null>(null);
   const [justState, setJustState] = useState<"idle" | "busy" | "verified" | "invalid" | "unknown">("idle");
   const [vpRows, setVpRows] = useState<VertiportRow[]>([]);
   const [slots, setSlots] = useState<{ list: Slot[]; count: number; liveCount: number | null; capacityPerRoute: number; store: string }>({ list: [], count: 0, liveCount: null, capacityPerRoute: 0, store: "" });
@@ -774,7 +774,7 @@ export default function QSkywayClient() {
       });
       if (!res.ok) throw new Error("justification " + res.status);
       const j = await res.json();
-      setJustification({ doc: j.document, attestation: j.attestation, scope: j.scope, verify: j.verifyYourself });
+      setJustification({ doc: j.document, attestation: j.attestation, scope: j.scope, scopeEn: j.scopeEn, verify: j.verifyYourself });
       setJustState("idle");
     } catch { setJustState("idle"); setJustification(null); }
   }, [heroPair]);
@@ -832,6 +832,7 @@ export default function QSkywayClient() {
       document: justification.doc,
       attestation: justification.attestation,
       scope: justification.scope,
+      scopeEn: justification.scopeEn,
       verifyYourself: justification.verify,
     });
     const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));

@@ -50,6 +50,7 @@ export const DISALLOWED_PATHS = [
   "/tg",
   "/en/tt",
   "/en/ig",
+  "/en/yt",
 ] as const;
 
 export default function robots(): MetadataRoute.Robots {

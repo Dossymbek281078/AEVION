@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,13 +27,36 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP = join(HERE, "..");
 
-const RU_PAGES: Array<[string, string]> = [
-  ["/go", join(APP, "go", "page.tsx")],
-  ["/longevity", join(APP, "longevity", "_client.tsx")],
-  ["/shop", join(APP, "shop", "page.tsx")],
-];
+// Список ищется ОБХОДОМ, а не ведётся руками.
+//
+// Утром 29.08.2026 здесь был литеральный массив из трёх страниц. К вечеру
+// пометку lang="ru" несли ПЯТЬ файлов (добавились /auth и /cyberchess/launch),
+// и две из них сторож не проверял вовсе. Список, который ведут руками,
+// охраняет не класс, а перечень — и молчит ровно о том, что забыли дописать.
+const RU_PAGES: Array<[string, string]> = (() => {
+  const out: Array<[string, string]> = [];
+  const walk = (dir: string, segs: string[]) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) {
+        if (e.name.startsWith("_") || e.name.startsWith("(") || e.name.startsWith("[")) continue;
+        if (segs.length === 0 && (e.name === "api" || e.name === "__tests__")) continue;
+        walk(join(dir, e.name), [...segs, e.name]);
+      } else if (e.name === "page.tsx" || e.name === "_client.tsx") {
+        const src = readFileSync(join(dir, e.name), "utf8");
+        if (src.includes('lang="ru"')) out.push(["/" + segs.join("/"), join(dir, e.name)]);
+      }
+    }
+  };
+  walk(APP, []);
+  return out;
+})();
 
 describe("русские страницы объявляют свой язык", () => {
+  it("обход находит русские страницы — иначе проверки ниже пусты", () => {
+    // Без этого поломка обхода делает сторожа зелёным и бессмысленным.
+    expect(RU_PAGES.length).toBeGreaterThanOrEqual(5);
+  });
+
   it("на блоке содержимого стоит lang=ru", () => {
     for (const [route, file] of RU_PAGES) {
       const src = readFileSync(file, "utf8");

@@ -468,7 +468,7 @@ export function explainMove(
   if (Math.abs(delta) < 20) evalComment = "Нейтральный ход.";
   else if (delta > 150) evalComment = `⭐ Отличный ход! Позиция улучшилась на ${(delta/100).toFixed(1)} пешки.`;
   else if (delta > 50) evalComment = "Хороший ход.";
-  else if (delta < -150) evalComment = `?? Блундер! Потеряно ${(-delta/100).toFixed(1)} пешки.`;
+  else if (delta < -150) evalComment = `?? Зевок! Потеряно ${(-delta/100).toFixed(1)} пешки.`;
   else if (delta < -50) evalComment = "? Неточность — есть лучший ход.";
 
   let moveComment = "";

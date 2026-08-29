@@ -3050,7 +3050,7 @@ export default function CyberChessPage(){
     const cpFromMePerspective=pCol==="w"?curCp:-curCp;
     const prevFromMe=pCol==="w"?prevCp:-prevCp;
     const drop=prevFromMe-cpFromMePerspective;
-    if(drop>=300)showToast(`?? Блундер! Потеряно ${(drop/100).toFixed(1)} (${pCol==="w"?"―"+Math.round(curCp/100):"+"+(Math.round(-curCp/100))})`, "error");
+    if(drop>=300)showToast(`?? Зевок! Потеряно ${(drop/100).toFixed(1)} (${pCol==="w"?"―"+Math.round(curCp/100):"+"+(Math.round(-curCp/100))})`, "error");
     else if(drop>=150)showToast(`? Неточность — позиция ухудшилась`, "error");
     else if(cpFromMePerspective-prevFromMe>=200)showToast("!! Блестящий ход", "success");
   },[evalCp]);// eslint-disable-line react-hooks/exhaustive-deps
@@ -4000,7 +4000,7 @@ export default function CyberChessPage(){
       else if(m.type==="user_mistake")lines.push(`Неточность на ${num}${dot}-м ходу слегка осложнила твою позицию.`);
       else if(m.type==="user_great")lines.push(`На ${num}-м ходу ты нашёл сильный ход — позиция получила импульс.`);
       else if(m.type==="ai_brilliant")lines.push(`${ai} сыграл блестяще на ${num}-м — будь внимательнее к жертвам!`);
-      else if(m.type==="ai_blunder")lines.push(`${ai} допустил блундер на ${num}-м — это был твой шанс.`);
+      else if(m.type==="ai_blunder")lines.push(`${ai} допустил зевок на ${num}-м — это был твой шанс.`);
       else if(m.type==="ai_great")lines.push(`${ai} ответил сильным ходом на ${num}-м.`);
       else if(m.type==="mate_threat")lines.push(`К ${num}-му ходу на доске возникла матовая угроза.`);
     }
@@ -5176,7 +5176,7 @@ export default function CyberChessPage(){
     return()=>window.removeEventListener("keydown",h);
   },[tab,analysis,browseIdx,hist.length,fenHist]);
 
-  /* ── Blunder Rewind — превращает блундер игрока в персональный пазл.
+  /* ── Blunder Rewind — превращает зевок игрока в персональный пазл.
      Берёт позицию ДО ошибки, запрашивает у Stockfish лучший ход,
      загружает как обычный puzzle (reusing pzCurrent infra). ── */
   const rewindBlunder=useCallback((idx:number)=>{
@@ -8673,7 +8673,7 @@ export default function CyberChessPage(){
                 const isMate=lastSan.includes("#"),isCheck=lastSan.includes("+"),isCap=lastSan.includes("x"),isCastle=lastSan.startsWith("O-"),isProm=lastSan.includes("=");
                 const nature=isMate?"⚔ мат":isCastle?"рокировка":isProm?"превращение":isCap&&isCheck?"взятие с шахом":isCheck?"шах":isCap?"взятие":"тихий ход";
                 const q=analysis[lastIdx]?.quality;
-                const qLabel=q==="brilliant"?"💎 Блестящий":q==="great"?"🌟 Отличный":q==="good"?"✅ Хороший":q==="inacc"?"⚠ Неточность":q==="mistake"?"❌ Ошибка":q==="blunder"?"💀 Блундер":"";
+                const qLabel=q==="brilliant"?"💎 Блестящий":q==="great"?"🌟 Отличный":q==="good"?"✅ Хороший":q==="inacc"?"⚠ Неточность":q==="mistake"?"❌ Ошибка":q==="blunder"?"💀 Зевок":"";
                 const bestSan=analysis[lastIdx]?.best;
                 const buildBody=(cp:number|null,mate:number)=>{
                   const evalStr=mate!==0?`мат в ${Math.abs(mate)} (${mate>0?"за белых":"за чёрных"})`:cp!==null?`${cp>0?"+":""}${(cp/100).toFixed(2)}`:"запусти полный анализ для оценки";
@@ -9050,12 +9050,12 @@ export default function CyberChessPage(){
             const moveCount=hist.length;
             // Generate a short coach-style insight
             const insights:string[]=[];
-            if(isWin&&blunders===0)insights.push("Чистая победа без блундеров — отличное исполнение!");
-            else if(isWin&&blunders>0)insights.push(`Победа, но ${blunders} блундер${blunders>1?"а":""} — стоит разобрать.`);
-            else if(isLoss&&blunders>=2)insights.push(`${blunders} блундера привели к поражению — разбери в Analysis.`);
+            if(isWin&&blunders===0)insights.push("Чистая победа без зевков — отличное исполнение!");
+            else if(isWin&&blunders>0)insights.push(`Победа, но ${blunders} зевок${blunders>1?"а":""} — стоит разобрать.`);
+            else if(isLoss&&blunders>=2)insights.push(`${blunders} ${ccPlural(blunders,"зевок","зевка","зевков")} ${ccPlural(blunders,"привёл","привели","привели")} к поражению — разбери в разделе «Анализ».`);
             else if(isLoss&&mistakes>=3)insights.push(`${mistakes} ошибки сыграли роль — работай над точностью расчёта.`);
-            else if(isDraw)insights.push("Ничья — хорошая борьба. Попробуй найти упущенный шанс в Analysis.");
-            else insights.push("Неплохая партия — проверь ключевые моменты в Analysis.");
+            else if(isDraw)insights.push("Ничья — хорошая борьба. Попробуй найти упущенный шанс в разделе «Анализ».");
+            else insights.push("Неплохая партия — проверь ключевые моменты в разделе «Анализ».");
             if(great>=2)insights.push(`${great} отличных хода 🌟 — ты видел хорошие возможности!`);
             if(opening)insights.push(`Дебют: ${opening}.`);
             if(moveCount<20)insights.push("Короткая партия — анализ поможет понять где пошло не так.");
@@ -9072,7 +9072,7 @@ export default function CyberChessPage(){
                 {insights.slice(0,3).map((ins,i)=><div key={i} style={{fontSize:12,color:isWin?"#166534":isLoss?"#991b1b":"#1e3a8a",lineHeight:1.5}}>{ins}</div>)}
               </div>
               <button onClick={()=>{
-                const q=`Партия завершена: ${ruResult(over)}. Было ${blunders} блундеров и ${mistakes} ошибок. Дебют: ${opening||"нет данных"}. Дай мне 3 конкретных совета что улучшить.`;
+                const q=`Партия завершена: ${ruResult(over)}. Было ${blunders} зевков и ${mistakes} ошибок. Дебют: ${opening||"нет данных"}. Дай мне 3 конкретных совета что улучшить.`;
                 sCoachPrefillQ(q);sTab("coach");
               }} style={{marginTop:8,padding:"5px 10px",borderRadius:6,border:"none",background:"rgba(0,0,0,0.08)",color:"inherit",fontSize:11,fontWeight:800,cursor:"pointer"}}>
                 🎓 Подробный разбор с Coach →
@@ -9099,7 +9099,7 @@ export default function CyberChessPage(){
                 const a=analysis[ply];
                 if(!a)continue;
                 if(t<2000&&(a.quality==="blunder"||a.quality==="mistake")){
-                  flags.push(`Ход ${Math.floor(ply/2)+1}: ${(t/1000).toFixed(1)}с — спешка → ${a.quality==="blunder"?"блундер":"ошибка"}`);
+                  flags.push(`Ход ${Math.floor(ply/2)+1}: ${(t/1000).toFixed(1)}с — спешка → ${a.quality==="blunder"?"зевок":"ошибка"}`);
                 }
                 if(t>30000&&Math.abs(a.cp)>500){
                   flags.push(`Ход ${Math.floor(ply/2)+1}: ${(t/1000).toFixed(0)}с в ${a.cp>0?"выигранной":"проигранной"} → потеря времени`);
@@ -9129,7 +9129,7 @@ export default function CyberChessPage(){
                 {flags.slice(0,3).map((f,i)=><div key={i}>· {f}</div>)}
                 {flags.length>3&&<div style={{fontStyle:"italic",marginTop:2}}>+ ещё {flags.length-3}</div>}
               </div>:<div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:"rgba(132,204,22,0.10)",border:"1px solid rgba(132,204,22,0.3)",fontSize:11,color:"#3f6212",fontWeight:700}}>
-                ✓ Время распределено хорошо — никаких спешащих блундеров или потерь времени в выигранных позициях
+                ✓ Время распределено хорошо — никаких спешащих зевков или потерь времени в выигранных позициях
               </div>}
               <div style={{marginTop:6,fontSize:10,color:"#854d0e",lineHeight:1.5}}>
                 Зелёный — нормально (10-30с) · Жёлтый — быстро (3-10с) · Оранжевый — спешка (&lt;3с) · Красный — флаг тренера
@@ -9156,14 +9156,14 @@ export default function CyberChessPage(){
                 <Badge tone="gold" size="xs">+3 Chessy за каждую</Badge>
               </div>
               <div style={{fontSize:11,color:"#b45309",marginBottom:SPACE[2],lineHeight:1.5}}>
-                Кликни на блундер — откроется позиция до ошибки, найди правильный ход.
+                Кликни на зевок — откроется позиция до ошибки, найди правильный ход.
               </div>
               <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
                 {myErrors.map(({a,i})=>{
                   const isBlunder=a.quality==="blunder";
                   return <button key={i} onClick={()=>rewindBlunder(i)}
                     className="cc-focus-ring"
-                    title={`Ход ${Math.floor(i/2)+1}${userIsWhite?"":"..."}  · ${isBlunder?"Блундер":"Ошибка"} · eval ${a.cp>=0?"+":""}${(a.cp/100).toFixed(1)}${a.best?` · лучше было: ${a.best}`:""}`}
+                    title={`Ход ${Math.floor(i/2)+1}${userIsWhite?"":"..."}  · ${isBlunder?"Зевок":"Ошибка"} · eval ${a.cp>=0?"+":""}${(a.cp/100).toFixed(1)}${a.best?` · лучше было: ${a.best}`:""}`}
                     style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",
                       borderRadius:RADIUS.full,border:`1px solid ${isBlunder?"#fca5a5":"#fdba74"}`,
                       background:isBlunder?"#fef2f2":"#fff7ed",
@@ -11041,7 +11041,7 @@ ${question.trim()}`;
             {blunderBook.length>0&&<div style={{borderRadius:10,background:"linear-gradient(135deg,#fef2f2,#fff1f2)",border:"1px solid #fca5a5",padding:"10px 12px"}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
                 <span style={{fontSize:14}}>📕</span>
-                <span style={{fontSize:11,fontWeight:900,color:"#991b1b",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Блундер-бук · {blunderBook.length} позиций</span>
+                <span style={{fontSize:11,fontWeight:900,color:"#991b1b",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Зевок-бук · {blunderBook.length} позиций</span>
                 <button onClick={()=>sBlunderBook([])} title="Очистить" style={{fontSize:10,fontWeight:700,color:"#6b7280",border:"1px solid #fca5a5",borderRadius:4,padding:"2px 6px",background:"#fff",cursor:"pointer"}}>× очистить</button>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
@@ -11106,7 +11106,7 @@ ${question.trim()}`;
               // Thursday: analysis of last game
               if(savedGames.length>0)plan.push({day:"Чт",task:"Разбери последнюю партию",icon:"🔍",action:()=>{sTab("analysis");const last=savedGames[0];const g=new Chess();const fh=[g.fen()];const mh:string[]=[];for(const s of last.moves){try{const mv=g.move(s);if(mv){mh.push(mv.san);fh.push(g.fen())}}catch{break}}setGame(g);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(last.result);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(last.playerColor);sFlip(last.playerColor==="b")}});
               // Friday: blunder book practice
-              if(blunderBook.length>0)plan.push({day:"Пт",task:"Тренируй позиции из блундер-бука",icon:"📕",action:()=>{const b=blunderBook[0];try{const g=new Chess(b.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([b.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");sOn(true);sSetup(false);}catch{}}});
+              if(blunderBook.length>0)plan.push({day:"Пт",task:"Тренируй позиции из зевок-бука",icon:"📕",action:()=>{const b=blunderBook[0];try{const g=new Chess(b.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([b.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");sOn(true);sSetup(false);}catch{}}});
               else plan.push({day:"Пт",task:"Puzzle Rush 3 мин",icon:"⚡",action:()=>{sTab("puzzles");sPzMode("rush" as any)}});
               // Saturday: variant game
               plan.push({day:"Сб",task:"Играй вариант",icon:"🎲",action:()=>{sTab("play");sShowVariants(true)}});
@@ -12362,13 +12362,13 @@ ${question.trim()}`;
           ["Click на ход","🟢 Прыгнуть в эту позицию навсегда (browse mode)"],
           ["ПКМ на ход","✍ Открыть меню аннотаций (!! ! !? ?! ? ??)"],
         ]},
-        {title:"Аннотации (в режиме Analysis)",rows:[
+        {title:"Аннотации (в режиме «Анализ»)",rows:[
           ["1","!! Блестящий ход"],
           ["2","! Хороший ход"],
           ["3","!? Интересный ход"],
           ["4","?! Сомнительный ход"],
           ["5","? Ошибка"],
-          ["6","?? Блундер"],
+          ["6","?? Зевок"],
           ["(повтор клавиши)","Снять аннотацию с хода"],
           ["J","◆ Прыгнуть на пред. ключевой момент (зевок/ошибка/блеск)"],
           ["K","◆ Прыгнуть на след. ключевой момент"],
@@ -14203,7 +14203,7 @@ ${question.trim()}`;
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>📚 Анализ</div>
-            <Row label="Opening Explorer" desc="Автозагрузка статистики мастеров для текущей позиции в Analysis." checked={showOpeningExp} onChange={()=>sShowOpeningExp(v=>!v)}/>
+            <Row label="Обзор дебютов" desc="Автозагрузка статистики мастеров для текущей позиции в разделе «Анализ»." checked={showOpeningExp} onChange={()=>sShowOpeningExp(v=>!v)}/>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎨 Тема доски</div>

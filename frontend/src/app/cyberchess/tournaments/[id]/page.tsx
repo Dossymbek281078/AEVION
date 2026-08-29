@@ -1154,7 +1154,7 @@ function StandingsView({
       }}
     >
       {standings.length === 0 ? (
-        <EmptyBox label="Standings пока пустые." />
+        <EmptyBox label="Таблица пока пустая." />
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>

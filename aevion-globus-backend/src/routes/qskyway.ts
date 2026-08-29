@@ -528,6 +528,15 @@ function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[],
   return {
     available: true,
     compliant,
+    // Поле есть ВСЕГДА, даже когда данных нет. Раньше в этой ветке его
+    // не было вовсе: у города с сеткой потолков `permission` просто не
+    // отдавалось, и читатель ответа получал `undefined`.
+    //
+    // Отсутствие поля читается как «требований к разрешению нет» — вывод,
+    // которого мы не делали. `null` говорит ровно то, что есть: данных о
+    // разрешительном режиме у нас нет. Это та же форма класса, что и
+    // подстановка нуля, только вместо ложного значения — ложная тишина.
+    permission: cityId ? PERMISSION[cityId] ?? null : null,
     coveragePct: Math.round((100 * covered) / Math.max(1, alts.length)),
     exceedingSegments: exceeding,
     zeroCeilingSegments: zeroSegs,

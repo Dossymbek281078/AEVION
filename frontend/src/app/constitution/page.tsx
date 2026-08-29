@@ -2382,16 +2382,27 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
   const [authorName, setAuthorName] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  // Отказ загрузки не должен выглядеть как «никто не голосовал». Счётчики
+  // подставляли 0 при data === null, а null здесь наступает и когда сервер
+  // недоступен: ниже отказ проглатывался молча. Ноль тут ЛОЖЬ — мы не
+  // измерили, а не измерили ноль.
+  const [votesUnknown, setVotesUnknown] = useState<boolean>(false);
 
   const load = useCallback(async () => {
     try {
       const r = await fetch(
         `/api-backend/api/planet/constitution-artifacts/${artifactId}/social`,
       );
-      if (!r.ok) return;
+      if (!r.ok) {
+        setVotesUnknown(true);
+        return;
+      }
       setData((await r.json()) as SocialData);
+      setVotesUnknown(false);
     } catch {
-      /* ignore */
+      // Не роняем страницу из-за счётчика, но и не молчим: показ ниже скажет
+      // человеку, что чисел нет, вместо того чтобы назвать их нулями.
+      setVotesUnknown(true);
     }
   }, [artifactId]);
 
@@ -2472,7 +2483,7 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
               : "border border-[#d4af37]/30 hover:bg-emerald-500/10"
           }`}
         >
-          👍 {data?.votes.up ?? 0}
+          👍 {data ? data.votes.up : votesUnknown ? "—" : "…"}
         </button>
         <button
           type="button"
@@ -2483,21 +2494,20 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
               : "border border-[#d4af37]/30 hover:bg-rose-500/10"
           }`}
         >
-          👎 {data?.votes.down ?? 0}
+          👎 {data ? data.votes.down : votesUnknown ? "—" : "…"}
         </button>
         <div className="px-3 py-1.5 text-sm text-[#9aa3c0]">
           {t("constitution.social.totalLabel")}{" "}
           <span
             className={`font-semibold ${
-              (data?.votes.total ?? 0) > 0
+              data && data.votes.total > 0
                 ? "text-emerald-300"
-                : (data?.votes.total ?? 0) < 0
+                : data && data.votes.total < 0
                   ? "text-rose-300"
                   : "text-[#9aa3c0]"
             }`}
           >
-            {(data?.votes.total ?? 0) > 0 ? "+" : ""}
-            {data?.votes.total ?? 0}
+            {data ? ((data.votes.total > 0 ? "+" : "") + String(data.votes.total)) : votesUnknown ? "—" : "…"}
           </span>
         </div>
       </div>

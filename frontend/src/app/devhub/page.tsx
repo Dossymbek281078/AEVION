@@ -360,11 +360,11 @@ export default function DevHubPage() {
               (plain UI, a real database, media), so the first thing a person
               builds shows what the tool can do rather than the least of it. */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
-            <span style={{ fontSize: 12.5, color: "#99f6e4" }}>Или начните с примера:</span>
+            <span style={{ fontSize: 12.5, color: "#99f6e4" }}>{t("hero.orStart")}</span>
             {[
-              "лендинг кофейни с меню и формой брони",
-              "трекер задач с базой данных и статусами",
-              "портфолио фотографа с галереей и тёмной темой",
+              t("hero.ex1"),
+              t("hero.ex2"),
+              t("hero.ex3"),
             ].map((example) => (
               <button
                 key={example}

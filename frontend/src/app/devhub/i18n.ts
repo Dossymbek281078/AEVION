@@ -26,6 +26,10 @@ import { useI18n } from "@/lib/i18n";
 type Key = keyof typeof EN;
 
 const EN = {
+  "hero.orStart": "Or start with an example:",
+  "hero.ex1": "coffee shop landing page with a menu and a booking form",
+  "hero.ex2": "task tracker with a database and statuses",
+  "hero.ex3": "photographer portfolio with a gallery and a dark theme",
   "hero.title": "Describe it — and get a working app",
   "hero.subtitle": "AI will create the project, write the code and show a live preview with diffs. Then edit by clicking (Visual Edit), ask for changes in chat, generate images and sound, deploy in one click.",
   "hero.placeholder": "For example: a habit tracker with a calendar and weekly stats",
@@ -73,6 +77,10 @@ const EN = {
 } as const;
 
 const RU: Record<Key, string> = {
+  "hero.orStart": "Или начните с примера:",
+  "hero.ex1": "лендинг кофейни с меню и формой брони",
+  "hero.ex2": "трекер задач с базой данных и статусами",
+  "hero.ex3": "портфолио фотографа с галереей и тёмной темой",
   "hero.title": "Опиши — и получи работающее приложение",
   "hero.subtitle": "ИИ создаст проект, напишет код, покажет живое превью и диффы. Дальше — правь кликами (Visual Edit), проси изменения в чате, генерируй картинки и звук, деплой в один клик.",
   "hero.placeholder": "Например: 'трекер привычек с календарём и статистикой по неделям'",
@@ -120,6 +128,10 @@ const RU: Record<Key, string> = {
 };
 
 const KK: Record<Key, string> = {
+  "hero.orStart": "Немесе мысалдан бастаңыз:",
+  "hero.ex1": "мәзірі және брондау формасы бар кофехана лендингі",
+  "hero.ex2": "дерекқоры және мәртебелері бар тапсырмалар трекері",
+  "hero.ex3": "галереясы және қараңғы тақырыбы бар фотограф портфолиосы",
   "hero.title": "Сипаттаңыз — жұмыс істейтін қосымша алыңыз",
   "hero.subtitle": "ЖИ жобаны жасайды, кодты жазады, тірі алдын ала қарауды және өзгерістерді көрсетеді. Әрі қарай тінтуірмен түзетіңіз (Visual Edit), чатта өзгерістер сұраңыз, сурет пен дыбыс жасаңыз, бір басумен орналастырыңыз.",
   "hero.placeholder": "Мысалы: күнтізбесі және апталық статистикасы бар әдеттер трекері",

@@ -166,7 +166,7 @@ export default function BadgeConfiguratorPage() {
         </div>
 
         <Field label={t("badge.field.name")} hint={t("badge.field.nameHint")}>
-          <input
+          <input aria-label={t("badge.field.name")}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value.slice(0, 28))}
@@ -176,7 +176,7 @@ export default function BadgeConfiguratorPage() {
         </Field>
 
         <Field label={t("badge.field.score")} hint={t("badge.field.scoreHint", { live: ((liveScore?.score ?? 0) * 100).toFixed(0) })}>
-          <input
+          <input aria-label={t("badge.field.score")}
             type="range"
             min={0}
             max={1}

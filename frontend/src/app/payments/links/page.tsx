@@ -396,12 +396,6 @@ export default function PaymentLinksPage() {
             gap: 14,
             position: "sticky",
             top: "calc(var(--aevion-header-h, 0px) + 16px)",
-            // Панель прилипшая и БЫВАЕТ ВЫШЕ ОКНА: без своей прокрутки её низ
-            // уходит за край и не достаётся ничем — прокрутка страницы её не
-            // двигает, она же прилипшая. Замер 29.08.2026: так пропадали девять
-            // фильтров каталога и поля форм на платежах.
-            maxHeight: "calc(100vh - var(--aevion-header-h, 0px) - 36px)",
-            overflowY: "auto",
           }}
         >
           <div

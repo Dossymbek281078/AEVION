@@ -49,7 +49,8 @@ import { emitVeilNetXEntry, emitEcosystemEvent } from "../lib/ecosystemEvents";
 import { validateOr400 } from "../lib/qpaynetValidate";
 import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } from "../lib/qpaynetCrypto";
 import { csvNeutralizeFormula } from "../lib/csv";
-import { queryNumber } from "../lib/queryNumber";
+import { queryNumber, queryIsoTimestamp } from "../lib/queryNumber";
+import { safeErrorText } from "../lib/safeError";
 
 export const qpaynetRouter = Router();
 
@@ -700,7 +701,17 @@ async function saveIdempotency(
      VALUES ($1,$2,$3,$4,$5::jsonb)
      ON CONFLICT (owner_id, key) DO NOTHING`,
     [ownerId, key, bodyHash, status, JSON.stringify(response)],
-  ).catch(() => {});
+  ).catch((e: unknown) => {
+    // Молчать здесь нельзя. Эта запись И ЕСТЬ гарантия идемпотентности: если
+    // ключ не записан, повтор того же запроса пройдёт как новый — в платёжном
+    // модуле это двойная обработка. Провал был невидим полностью: ни журнала,
+    // ни ответа, ни счётчика. Роняться при этом тоже нельзя — операция уже
+    // выполнена, и её результат человеку нужнее, чем наша неудача с учётом.
+    console.warn(
+      "[qpaynet idempotency] ключ НЕ записан, повтор пройдёт как новый:",
+      e instanceof Error ? e.message : e,
+    );
+  });
 }
 
 // Periodic GC of idempotency keys older than 24h (keeps table small).
@@ -1855,7 +1866,7 @@ async function fireRequestWebhook(
     clearTimeout(t);
     return { ok: r.ok, status: r.status, error: r.ok ? undefined : `HTTP ${r.status}` };
   } catch (err) {
-    return { ok: false, status: 0, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, status: 0, error: safeErrorText(err, "internal error", "qpaynet") };
   }
 }
 
@@ -2360,7 +2371,7 @@ qpaynetRouter.post("/deposit/webhook", async (req, res) => {
     // Sentry: signature failure = either misconfiguration OR active spoof attempt.
     // Either way we want to know about it.
     captureException(err, { source: "qpaynet/stripe-webhook", phase: "verifySignature" });
-    return res.status(400).json({ error: "signature_verification_failed", detail: err instanceof Error ? err.message : String(err) });
+    return res.status(400).json({ error: "signature_verification_failed", detail: safeErrorText(err, "internal error", "qpaynet") });
   }
 
   // Event-level dedup. INSERT first; if a row already exists, this is a
@@ -2689,7 +2700,7 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
     }
   } catch (err) {
     captureException(err, { source: "qpaynet/reconcile", phase: "query" });
-    res.status(500).json({ error: "reconcile_failed", detail: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "reconcile_failed", detail: safeErrorText(err, "internal error", "qpaynet") });
   }
 });
 
@@ -2886,7 +2897,16 @@ qpaynetRouter.get("/admin/refunds", async (req, res) => {
   if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
 
   const limit = Math.max(1, Math.min(200, queryNumber(req.query.limit, 50)));
-  const before = (req.query.before as string | undefined)?.trim();
+  // Курсор уходит в SQL как сравнение со временем. Без проверки формата
+  // Postgres отвечает ошибкой на «zzz», и клиентская ошибка становится 500.
+  const beforeRaw = (req.query.before as string | undefined)?.trim();
+  const before = beforeRaw ? queryIsoTimestamp(beforeRaw) : null;
+  if (beforeRaw && before === null) {
+    return res.status(400).json({
+      error: "invalid_before",
+      message: "Параметр before должен быть датой вида 2026-08-21 или 2026-08-21T10:00:00Z.",
+    });
+  }
   const params: unknown[] = [limit];
   let where = "type = 'refund'";
   if (before) {
@@ -2930,7 +2950,16 @@ qpaynetRouter.get("/admin/refunds.csv", async (req, res) => {
   if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
 
   const limit = Math.max(1, Math.min(5000, queryNumber(req.query.limit, 1000)));
-  const before = (req.query.before as string | undefined)?.trim();
+  // Курсор уходит в SQL как сравнение со временем. Без проверки формата
+  // Postgres отвечает ошибкой на «zzz», и клиентская ошибка становится 500.
+  const beforeRaw = (req.query.before as string | undefined)?.trim();
+  const before = beforeRaw ? queryIsoTimestamp(beforeRaw) : null;
+  if (beforeRaw && before === null) {
+    return res.status(400).json({
+      error: "invalid_before",
+      message: "Параметр before должен быть датой вида 2026-08-21 или 2026-08-21T10:00:00Z.",
+    });
+  }
   const params: unknown[] = [limit];
   let where = "type = 'refund'";
   if (before) {
@@ -3139,7 +3168,16 @@ qpaynetRouter.get("/admin/audit", async (req, res) => {
 
   const action = (req.query.action as string | undefined)?.trim();
   const owner = (req.query.owner as string | undefined)?.trim();
-  const before = (req.query.before as string | undefined)?.trim();
+  // Курсор уходит в SQL как сравнение со временем. Без проверки формата
+  // Postgres отвечает ошибкой на «zzz», и клиентская ошибка становится 500.
+  const beforeRaw = (req.query.before as string | undefined)?.trim();
+  const before = beforeRaw ? queryIsoTimestamp(beforeRaw) : null;
+  if (beforeRaw && before === null) {
+    return res.status(400).json({
+      error: "invalid_before",
+      message: "Параметр before должен быть датой вида 2026-08-21 или 2026-08-21T10:00:00Z.",
+    });
+  }
   const limit = Math.max(1, Math.min(500, queryNumber(req.query.limit, 100)));
 
   const where: string[] = [];
@@ -3986,7 +4024,7 @@ qpaynetRouter.get("/health", async (_req, res) => {
       stuckWebhookDeliveries: stuckDeliveries,
     });
   } catch (err) {
-    res.status(503).json({ status: "error", service: "qpaynet", error: err instanceof Error ? err.message : String(err) });
+    res.status(503).json({ status: "error", service: "qpaynet", error: safeErrorText(err, "internal error", "qpaynet") });
   }
 });
 

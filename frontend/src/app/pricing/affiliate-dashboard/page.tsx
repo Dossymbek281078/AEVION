@@ -217,7 +217,7 @@ function Inner() {
           <label style={{ fontSize: 12, fontWeight: 800, color: "#475569", letterSpacing: "0.04em", display: "block", marginBottom: 8 }}>
             EMAIL
           </label>
-          <input
+          <input aria-label="Email"
             type="email"
             placeholder="you@company.com"
             value={emailInput}

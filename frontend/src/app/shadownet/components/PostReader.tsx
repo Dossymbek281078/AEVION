@@ -146,7 +146,7 @@ export default function PostReader({ refreshKey }: Props) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
         <div>
           <label style={labelStyle}>alias</label>
-          <input
+          <input aria-label="Ваш псевдоним"
             type="text"
             value={alias}
             onChange={(e) => setAlias(e.target.value)}
@@ -156,7 +156,7 @@ export default function PostReader({ refreshKey }: Props) {
         </div>
         <div>
           <label style={labelStyle}>password</label>
-          <input
+          <input aria-label="Пароль для расшифровки"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

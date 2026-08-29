@@ -71,6 +71,7 @@ export default function RoutingSimulator() {
             hops: {hops}
           </label>
           <input
+            aria-label="hops"
             type="range"
             min={3}
             max={7}

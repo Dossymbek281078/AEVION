@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { isPayboxConfigured } from "../lib/payment/payboxProvider";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -286,7 +287,14 @@ paymentsRouter.get("/health", (_req, res) => {
     // причина расхождения.
     lemonsqueezy: { configured: lsReady, primary: lsCanDeliver },
     gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: !lsCanDeliver },
-    paybox: { configured: Boolean(PAYBOX_MERCHANT()) },
+    // Готовность PayBox спрашиваем у ЕГО ЖЕ модуля, а не пересобираем здесь:
+    // ему нужны И идентификатор продавца, И PAYBOX_SECRET (без секрета нельзя
+    // ни подписать запрос, ни проверить ответ). Своя проверка по одному
+    // продавцу расходилась бы с checkout/healthz, который зовёт эту функцию.
+    // Сегодня обе отвечают «нет», и разница невидима — она проявится в день,
+    // когда данные PayBox заданы наполовину: эта ручка объявит кассу для
+    // тенге готовой, а платить будет нельзя.
+    paybox: { configured: isPayboxConfigured() },
     kaspi: { configured: false },
     paddle: { configured: false, migrated: true },
     stripe: { configured: false, migrated: true },

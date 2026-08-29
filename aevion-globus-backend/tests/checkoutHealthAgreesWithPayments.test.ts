@@ -85,6 +85,24 @@ describe("две ручки состояния согласны о том, кт�
     expect(поPayments).toEqual(["gumroad"]);
   });
 
+  test("PayBox: задан только продавец — обе ручки говорят «не настроен»", async () => {
+    // PayBox нужны И продавец, И PAYBOX_SECRET: без секрета нельзя ни
+    // подписать запрос, ни проверить ответ, и модуль это знает
+    // (isPayboxConfigured требует оба). checkout/healthz звал эту функцию, а
+    // /api/payments/health пересобирал готовность по одному продавцу.
+    //
+    // Сегодня обе отвечают «нет», и разница невидима. Она проявилась бы
+    // ровно в день, когда данные PayBox заданы наполовину, — то есть когда
+    // основатель начнёт настраивать кассу для тенге.
+    process.env.PAYBOX_MERCHANT_ID = "merchant-1";
+    delete process.env.PAYBOX_SECRET;
+    const a = app();
+    const c = await request(a).get("/api/pricing/checkout/healthz");
+    const pmt = await request(a).get("/api/payments/health");
+    expect(c.body.providers.paybox.configured).toBe(false);
+    expect(pmt.body.paybox.configured).toBe(false);
+  });
+
   test("LemonSqueezy НЕ настроен — обе называют Gumroad", async () => {
     delete process.env.LEMON_SQUEEZY_API_KEY;
     delete process.env.LEMON_SQUEEZY_STORE_ID;

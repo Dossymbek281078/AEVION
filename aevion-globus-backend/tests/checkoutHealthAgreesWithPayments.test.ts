@@ -32,7 +32,7 @@ function app() {
   return a;
 }
 
-const КЛЮЧИ = ["LEMON_SQUEEZY_API_KEY", "LEMON_SQUEEZY_STORE_ID"] as const;
+const КЛЮЧИ = ["LEMON_SQUEEZY_API_KEY", "LEMON_SQUEEZY_STORE_ID", "LEMON_SQUEEZY_WEBHOOK_SECRET"] as const;
 let было: Record<string, string | undefined> = {};
 
 beforeEach(() => {
@@ -74,6 +74,26 @@ describe("две ручки состояния согласны о том, кт�
     const { поCheckout, поPayments } = await ктоОсновной();
     expect(поCheckout).toBe("gumroad");
     expect(поPayments).toEqual(["gumroad"]);
+  });
+
+  test("healthz говорит не только «можно взять деньги», но и «дойдёт ли выдача»", async () => {
+    // Секрет вебхука решает, дойдёт ли покупка до выдачи: без него
+    // обработчик отвечает провайдеру ok и молча игнорирует событие,
+    // провайдер считает доставку успешной и НЕ повторяет. Деньги
+    // списаны, купленное не выдано, снаружи всё зелено.
+    process.env.LEMON_SQUEEZY_API_KEY = "тест-ключ";
+    process.env.LEMON_SQUEEZY_STORE_ID = "1234";
+
+    delete process.env.LEMON_SQUEEZY_WEBHOOK_SECRET;
+    const без = await request(app()).get("/api/pricing/checkout/healthz");
+    expect(без.body.providers.lemonsqueezy.webhookConfigured).toBe(false);
+    // и при этом «можно взять деньги» остаётся правдой — то есть без
+    // отдельного поля разница была бы невидима
+    expect(без.body.providers.lemonsqueezy.configured).toBe(true);
+
+    process.env.LEMON_SQUEEZY_WEBHOOK_SECRET = "тест-секрет";
+    const с = await request(app()).get("/api/pricing/checkout/healthz");
+    expect(с.body.providers.lemonsqueezy.webhookConfigured).toBe(true);
   });
 
   test("основной ровно один — не ноль и не два", async () => {

@@ -269,8 +269,26 @@ checkoutRouter.get("/healthz", (_req, res) => {
     ok: true,
     primaryProvider: lsReady ? "lemonsqueezy" : "gumroad",
     providers: {
-      lemonsqueezy: { configured: lsReady, webhook: "/api/lemonsqueezy/webhook" },
-      gumroad: { configured: Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim()), webhook: "/api/gumroad/webhook" },
+      // `webhookConfigured` — отдельно от `configured`, и это не мелочь.
+      //
+      // `configured` отвечает «можно ли ВЗЯТЬ деньги» (есть ключ и магазин).
+      // Секрет вебхука отвечает «дойдёт ли покупка до выдачи»: без него
+      // обработчик отвечает провайдеру ok и молча игнорирует событие —
+      // провайдер считает доставку успешной и НЕ повторяет. То есть
+      // деньги списаны, а купленное не выдано, и снаружи всё зелено.
+      //
+      // Раньше healthz про секрет вебхука не спрашивал вовсе, и мог
+      // рапортовать «lemonsqueezy настроен» при мёртвой выдаче.
+      lemonsqueezy: {
+        configured: lsReady,
+        webhook: "/api/lemonsqueezy/webhook",
+        webhookConfigured: Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim()),
+      },
+      gumroad: {
+        configured: Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim()),
+        webhook: "/api/gumroad/webhook",
+        webhookConfigured: Boolean(process.env.GUMROAD_WEBHOOK_SECRET?.trim()),
+      },
       paybox: { configured: isPayboxConfigured(), trigger: "currency=KZT", webhook: "/api/paybox/webhook" },
       paypal: { configured: isPaypalConfigured(), trigger: "method=paypal", webhook: "/api/paypal/webhook" },
     },

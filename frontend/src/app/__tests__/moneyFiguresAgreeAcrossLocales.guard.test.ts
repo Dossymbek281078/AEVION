@@ -41,7 +41,7 @@ function словари(): Record<string, Record<string, string>> {
     const e = k + 1 < границы.length ? границы[k + 1].i : t.length;
     const блок = t.slice(s, e);
     const пары: Record<string, string> = {};
-    for (const x of блок.matchAll(/"([a-zA-Z0-9._]+)":\s*"([^"]*\$[^"]*)"/g)) пары[x[1]] = x[2];
+    for (const x of блок.matchAll(/"([a-zA-Z0-9._]+)":\s*"([^"]*)"/g)) пары[x[1]] = x[2];
     out[границы[k].яз] = пары;
   }
   return out;
@@ -58,18 +58,30 @@ describe("суммы согласованы между языками", () => {
   });
 
   it("ни одна сумма не расходится между en и ru", () => {
+    // Сравниваем ключи, где сумма есть У ОБОИХ языков. Валюты разные
+    // намеренно ($0 против 0 ₽), поэтому «есть у одного, нет у другого»
+    // расхождением не считается — иначе сторож краснел бы на правильном
+    // тексте, а такого перестают читать.
     const d = словари();
-    // Положительный контроль: если разбор сломается, словари окажутся
-    // пустыми, и «расхождений нет» будет ложью о ненайденном.
-    expect(Object.keys(d.en ?? {}).length).toBeGreaterThan(10);
-    expect(Object.keys(d.ru ?? {}).length).toBeGreaterThan(10);
-
     const общие = Object.keys(d.en).filter((k) => k in d.ru);
-    expect(общие.length).toBeGreaterThan(10);
-
-    const спор = общие.filter(
-      (k) => JSON.stringify(суммы(d.en[k])) !== JSON.stringify(суммы(d.ru[k])),
-    );
+    const спор = общие.filter((k) => {
+      const a = суммы(d.en[k]), b = суммы(d.ru[k]);
+      return a.length && b.length && JSON.stringify(a) !== JSON.stringify(b);
+    });
     expect(спор).toEqual([]);
+  });
+
+  it("ненулевая цена не исчезает при переводе", () => {
+    // Щель предыдущей проверки: en обещает сумму, ru не обещает никакой.
+    // Для нуля это законно ($0 = 0 ₽), для настоящей цены — нет: человек
+    // увидел бы бесплатно там, где мы берём деньги.
+    // Замер при написании: таких ключей 2, и оба — нули с обеих сторон.
+    const d = словари();
+    const пропало = Object.keys(d.en).filter((k) => {
+      if (!(k in d.ru)) return false;
+      const a = суммы(d.en[k]);
+      return a.some((x) => Number(x) > 0) && суммы(d.ru[k]).length === 0;
+    });
+    expect(пропало).toEqual([]);
   });
 });

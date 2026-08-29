@@ -280,6 +280,12 @@ export default function PricingPage() {
   // LemonSqueezy. Покупатель из Казахстана читал про Kaspi и попадал на оплату
   // в долларах. Обещание теперь следует за фактом, а не наоборот.
   const [payboxLive, setPayboxLive] = useState<boolean | null>(null);
+  // null = не спрашивали или поля ещё нет; массив = список ссылок, купить
+  // которые нельзя (у провайдера не задан вариант товара).
+  const [notSellable, setNotSellable] = useState<string[] | null>(null);
+  /** Можно ли купить этот тариф прямо сейчас. Незнание = НЕ запрещаем. */
+  const продаётся = (tierId: string) =>
+    notSellable === null ? true : !notSellable.includes(`tier_${tierId}_${period}`);
 
   useEffect(() => {
     let cancelled = false;
@@ -289,6 +295,16 @@ export default function PricingPage() {
         if (!r.ok) return;
         const j = await r.json();
         if (!cancelled) setPayboxLive(Boolean(j?.providers?.paybox?.configured));
+        // Что реально можно купить. `configured` у провайдера означает
+        // «есть ключ и магазин», но покупка не начнётся без варианта
+        // товара — он задаётся отдельной переменной на каждый тариф.
+        //
+        // Поле добавлено в healthz 29.08.2026. ПОКА ЕГО НЕТ (бэкенд не
+        // выкачен) остаётся null — «не знаем», и ничего не меняется.
+        // Путать «поля нет» с «нельзя купить» нельзя: первое про нашу
+        // осведомлённость, второе про товар.
+        const missing = j?.providers?.lemonsqueezy?.sellable?.missing;
+        if (!cancelled && Array.isArray(missing)) setNotSellable(missing as string[]);
       } catch {
         // Не спросили - значит не знаем. Оставляем null: обещать нельзя,
         // но и пугать «не работает» на основании сетевого сбоя тоже нельзя.
@@ -529,7 +545,7 @@ export default function PricingPage() {
             </div>
             <button
               type="button"
-              disabled={checkingOut === "lite"}
+              disabled={checkingOut === "lite" || !продаётся("lite")}
               onClick={() => startCheckout({ tierId: "lite", period, seats: 1, modules: [heroModule] })}
               style={{
                 padding: "12px 28px",
@@ -979,7 +995,7 @@ export default function PricingPage() {
                   </select>
                 )}
                 <button
-                  disabled={checkingOut === tier.id}
+                  disabled={checkingOut === tier.id || !продаётся(tier.id)}
                   style={{
                     width: "100%",
                     padding: "10px 16px",

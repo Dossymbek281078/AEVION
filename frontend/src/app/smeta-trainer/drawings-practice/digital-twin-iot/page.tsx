@@ -288,7 +288,7 @@ export default function DigitalTwinIotPage() {
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">Чистая выгода, тг</span>
-              <input value={ex2} onChange={(e) => setEx2(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="35000000" placeholder="35000000" />
+              <input value={ex2} onChange={(e) => setEx2(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="35000000" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx2} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded transition text-sm">Проверить</button>
@@ -395,7 +395,7 @@ Highvill) BIM стал стандартом — окупаемость 1-2 го�
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">Полная стоимость, тг</span>
-              <input value={ex4} onChange={(e) => setEx4(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="2000000" placeholder="2000000" />
+              <input value={ex4} onChange={(e) => setEx4(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="2000000" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx4} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded transition text-sm">Проверить</button>

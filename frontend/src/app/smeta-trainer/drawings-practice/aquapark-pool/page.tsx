@@ -404,7 +404,7 @@ export default function AquaparkPoolPage() {
                 onChange={(e) => setEx3(e.target.value)}
                 type="number"
                 className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100"
-                aria-label="2500" placeholder="2500"
+                aria-label="Ответ" placeholder="2500"
               />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">

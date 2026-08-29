@@ -304,7 +304,7 @@ export default function CadastreCommissioningPage() {
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">Стоимость обмера, тг</span>
-              <input value={ex3S} onChange={(e) => setEx3S(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="400000" placeholder="400000" />
+              <input value={ex3S} onChange={(e) => setEx3S(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="400000" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx3} className="px-4 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded transition text-sm">Проверить</button>

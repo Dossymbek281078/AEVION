@@ -296,7 +296,7 @@ export default function SmetaAnalyticsPage() {
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">Себестоимость, тг/м²</span>
-              <input value={ex1} onChange={(e) => setEx1(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="300000" placeholder="300000" />
+              <input value={ex1} onChange={(e) => setEx1(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="300000" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx1} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded transition text-sm">Проверить</button>
@@ -390,7 +390,7 @@ export default function SmetaAnalyticsPage() {
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">CPI</span>
-              <input value={ex3} onChange={(e) => setEx3(e.target.value)} type="number" step="0.01" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="0.90" placeholder="0.90" />
+              <input value={ex3} onChange={(e) => setEx3(e.target.value)} type="number" step="0.01" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="0.90" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx3} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded transition text-sm">Проверить</button>

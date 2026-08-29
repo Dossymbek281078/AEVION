@@ -430,7 +430,7 @@ export default function PostDisasterReconPage() {
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">Бюджет, млн тг</span>
-              <input value={ex3} onChange={(e) => setEx3(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="3450" placeholder="3450" />
+              <input value={ex3} onChange={(e) => setEx3(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="3450" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx3} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded transition text-sm">Проверить</button>

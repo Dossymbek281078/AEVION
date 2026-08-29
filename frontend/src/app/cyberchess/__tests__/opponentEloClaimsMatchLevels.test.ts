@@ -30,6 +30,30 @@ describe("обещания про соперника сверены со спи�
     expect(urovni).toContain(3500);
   });
 
+  it("диапазон уровней без слова ELO — тоже обещание", () => {
+    // «От 800 до 2400» в подсказке новичка сторож не ловил: он требовал
+    // слова ELO. А обещание от этого обещанием быть не перестаёт — именно
+    // так неверный потолок пережил правку тарифа и магазина.
+    const chuzhie: string[] = [];
+    for (const [imya, tekst] of [
+      ["модуль", stranica],
+      ["тарифы", tarify],
+    ] as const) {
+      for (const m of tekst.matchAll(/[Оо]т (\d{3,4}) до (\d{3,4})/g)) {
+        // обещанный ДИАПАЗОН должен доходить до краёв: «от 800 до 2400»
+        // состоит из настоящих уровней, но обрезает и снизу (400), и
+        // сверху (3500) — то есть занижает продукт, оставаясь «правдой»
+        const [niz, verh] = [Number(m[1]), Number(m[2])];
+        const min = Math.min(...urovni);
+        const max = Math.max(...urovni);
+        if (niz !== min || verh !== max) {
+          chuzhie.push(`${imya}: «${m[0]}» при уровнях ${min}..${max}`);
+        }
+      }
+    }
+    expect(chuzhie).toEqual([]);
+  });
+
   it("каждое обещанное ELO существует как уровень", () => {
     const chuzhie: string[] = [];
     for (const [imya, tekst] of [

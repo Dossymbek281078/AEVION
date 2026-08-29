@@ -6010,7 +6010,7 @@ export default function CyberChessPage(){
           <button
             onClick={()=>sShowChessyInfo(true)}
             title="Что такое Chessy?"
-            aria-label="Chessy info"
+            aria-label="Что такое Chessy"
             className="cc-focus-ring cc-touch"
             style={{
               display:"inline-flex",alignItems:"center",justifyContent:"center",
@@ -6938,7 +6938,7 @@ export default function CyberChessPage(){
           {/* ─── Onboarding tiles — заполняют hub пока у пользователя <3 партий ─── */}
           {savedGames.length<3&&(()=>{
             const tiles:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
-              {emoji:"♟",title:"Сыграй первую партию",desc:"AI любого уровня. От 800 до 2400. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
+              {emoji:"♟",title:"Сыграй первую партию",desc:"Соперник любого уровня — от Новичка до полной силы движка. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
               {emoji:"◆",title:"Реши задачу",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:pzTotal?`${pzTotal.toLocaleString("ru-RU")} ${ccPlural(pzTotal,"задача","задачи","задач")} в банке.`:"Полмиллиона задач в банке."}`,cta:"К задачам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
               {emoji:"🎓",title:"Спроси тренера",desc:"AI-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
               {emoji:"📅",title:"Задача дня",desc:"Одна задача каждый день. Серия, таблица лидеров, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},

@@ -70,4 +70,21 @@ describe("создание проектов не бесконечно", () => {
     const r = await request(quiet).post("/api/devhub/projects").send({ name: "тихий" });
     expect(r.status, "сосед наказан за чужой перебор").toBeLessThan(400);
   });
+
+  test("сниппеты ограничены тем же пределом", async () => {
+    // Тот же класс, что и проекты: запись в базу без входа и без платы.
+    // Здесь даже хуже — содержимое до ста килобайт на запись.
+    const app = appFromOneClient("10.55.0.4");
+    let ok = 0;
+    let blocked = 0;
+    for (let i = 0; i < 14; i++) {
+      const r = await request(app)
+        .post("/api/devhub/snippets")
+        .send({ title: `кусок ${i}`, content: "console.log(1)" });
+      if (r.status === 429) blocked += 1;
+      else if (r.status < 400) ok += 1;
+    }
+    expect(ok, "не прошёл ни один сниппет — проверяется не предел").toBeGreaterThan(5);
+    expect(blocked, "перебор сниппетов не отбивается").toBeGreaterThan(0);
+  });
 });

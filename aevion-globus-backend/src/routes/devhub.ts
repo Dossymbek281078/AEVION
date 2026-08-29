@@ -96,7 +96,7 @@ function dhSendLimit() {
 }
 
 /**
- * Создание проекта — единственная запись в базу, доступная БЕЗ входа и без
+ * Создание проекта и сниппета — записи в базу, доступные БЕЗ входа и без
  * какой-либо платы. Замер 29.08.2026: ни ограничителя темпа, ни потолка на
  * пользователя, ни общего ограничителя на приложении — то есть любой скрипт
  * мог заполнять таблицу проектов сколько угодно.
@@ -117,7 +117,7 @@ function dhCreateLimit() {
     windowMs: 60_000,
     max,
     keyPrefix: "dhcreate",
-    message: "Слишком много проектов подряд. Подождите минуту.",
+    message: "Слишком много записей подряд. Подождите минуту.",
   });
 }
 
@@ -3601,7 +3601,7 @@ devhubRouter.get("/snippets", async (req, res) => {
 });
 
 // POST /api/devhub/snippets — create a snippet
-devhubRouter.post("/snippets", async (req, res) => {
+devhubRouter.post("/snippets", dhCreateLimit(), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const { title, content, language, tags } = req.body || {};

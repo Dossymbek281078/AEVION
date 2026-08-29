@@ -81,6 +81,48 @@ describe("карточки страниц воронки", () => {
     return found;
   })();
 
+  // Известный долг: страницы без своего openGraph.
+  //
+  // Замер 29.08.2026 — 15 из 22. Сперва я думал, что забыл у двух (/go и /shop),
+  // и записал так основателю; пересчёт показал, что класс платформенный.
+  // Поэтому база, а не пустой список: сторож, красный с первого дня, перестают
+  // читать, и он не поймает НОВЫЙ пропуск — тот утонет среди пятнадцати старых.
+  //
+  // Сокращать список можно только вниз. Строку убирают вместе с добавлением
+  // openGraph на страницу — образец рядом, в /longevity и /en/go.
+  const OG_TITLE_DEBT = new Set([
+    "go", "shop", "constitution/pricing", "qsign", "partner", "qventure",
+    "qlearn", "bank", "qnews", "qai", "studio", "explore",
+    "build", "build/pricing", "build/vacancies",
+  ]);
+
+  it("новая входная страница обязана иметь СВОЙ заголовок предпросмотра", () => {
+    // Карточка-картинка и заголовок — разные вещи, и я это перепутал. На живом
+    // сайте картинки были у всех, а свой openGraph.title — у меньшинства: при
+    // шеринге /go показывал общий заголовок макета «AEVION — Trust
+    // infrastructure & AI», то есть безликую вывеску вместо страницы.
+    const fresh: string[] = [];
+    for (const route of FUNNEL) {
+      if (OG_TITLE_DEBT.has(route)) continue;
+      const file = join(APP, ...route.split("/"), "page.tsx");
+      if (!existsSync(file)) continue;
+      if (!readFileSync(file, "utf8").includes("openGraph")) fresh.push(route);
+    }
+    expect(fresh).toEqual([]);
+  });
+
+  it("долг не растёт молча: список сверен с действительностью", () => {
+    // Если страницу починили, а строку из долга убрать забыли — список начнёт
+    // покрывать исправное и однажды скроет настоящий пропуск.
+    const stale: string[] = [];
+    for (const route of OG_TITLE_DEBT) {
+      const file = join(APP, ...route.split("/"), "page.tsx");
+      if (!existsSync(file)) continue;
+      if (readFileSync(file, "utf8").includes("openGraph")) stale.push(route);
+    }
+    expect(stale, "починено, но осталось в списке долга — уберите строку").toEqual([]);
+  });
+
   it("обход вообще находит короткие входы — иначе две проверки ниже пусты", () => {
     // Без этого утверждения любая поломка обхода делает сторожа зелёным и
     // бессмысленным: он проверит пустой список и промолчит.

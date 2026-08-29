@@ -272,7 +272,7 @@ const TIER_DISPLAY: Record<TierId, string> = {
   full: "Full",
   enterprise: "Enterprise",
   // `pro` is NOT a legacy alias — it is the live Universe tier ($149/mo in
-  // data/pricing.ts; было $249.99 до переоценки 13.08.2026), and
+  // data/pricing.ts; $249.99 → $149 при переоценке 13.08.2026), and
   // lib/planGate.ts normalizes it to `full` access.
   // This map still called it "Lite", so someone who had just paid for Universe
   // got a welcome email headlined "Добро пожаловать в AEVION Lite". Same

@@ -32,6 +32,18 @@ import path from "node:path";
 
 const SRC_ROOT = path.resolve(__dirname, "../..");
 const REGISTRY = path.resolve(SRC_ROOT, "../../aevion-globus-backend/src/data/pricing.ts");
+/**
+ * Вторая половина платформы. Сторож год сканировал только фронтенд, и
+ * 29.08.2026 это дало три находки подряд в бэкенде: инструкция по настройке
+ * кассы велела завести $24/$39/$89 при витрине $19/$29/$49; provisioning.ts
+ * называл живой ценой Universe $249.99 (в реестре $149); а публичная запись
+ * журнала на странице цен сообщала покупателю подорожание, которого нет.
+ *
+ * Цена живёт в ОБЕИХ половинах: реестр, чекаут, письма, журнал изменений —
+ * всё это бэкенд. Охват в одной половине не объявлен слепым, он просто не
+ * упомянут, и зелёный цвет читается как «по всей платформе».
+ */
+const BACKEND_ROOT = path.resolve(SRC_ROOT, "../../aevion-globus-backend/src");
 
 const SKIP_DIRS = new Set([
   "node_modules",
@@ -127,6 +139,20 @@ function commentMask(lines: string[]): boolean[] {
 const EXPLANATORY =
   /repriced|moved \$|was\s*≈?\$|used to|long-dead|still quoted|does not exist|→ \$|version of this model|устарев|отставн/i;
 
+/**
+ * Переход цены в записи журнала: `$24→$19`, без пробелов. EXPLANATORY ждёт
+ * «стрелка пробел доллар» и такую форму не берёт, а переписывать общий
+ * шаблон ради одного файла — значит ослабить его везде.
+ */
+/**
+ * Плейсхолдеры SQL: `VALUES ($1,$2,...,$24,$25)`. Это номера параметров, а не
+ * деньги, и в бэкенде такие списки длинные — счёт идёт за два десятка.
+ * Признак надёжный: подряд идущие `$N,$N`. Живая цена так не пишется.
+ */
+const SQL_PLACEHOLDERS = /\$\d+,\s*\$\d+/;
+
+const TRANSITION = /→\s*\$/;
+
 /** Суммы сделок и рынков: $29B, $49M. Это не цены. */
 const MAGNITUDE_SUFFIX = /^[BMKbmk]/;
 
@@ -139,10 +165,15 @@ let corpusCache: Array<{ rel: string; lines: string[] }> | null = null;
 
 function corpus(): Array<{ rel: string; lines: string[] }> {
   if (!corpusCache) {
-    corpusCache = walk(SRC_ROOT).map((file) => ({
-      rel: path.relative(SRC_ROOT, file).replace(/\\/g, "/"),
-      lines: readFileSync(file, "utf8").split("\n"),
-    }));
+    corpusCache = [
+      { root: SRC_ROOT, label: "frontend" },
+      { root: BACKEND_ROOT, label: "backend" },
+    ].flatMap(({ root, label }) =>
+      walk(root).map((file) => ({
+        rel: label + "/" + path.relative(root, file).replace(/\\/g, "/"),
+        lines: readFileSync(file, "utf8").split(String.fromCharCode(10)),
+      })),
+    );
   }
   return corpusCache;
 }
@@ -178,7 +209,7 @@ function registryPrice(tierId: string): string {
 const SWEEP_TIMEOUT_MS = 30_000;
 
 describe("отставные цены тарифов не возвращаются ни на одну поверхность", () => {
-  it("сплошной обход фронтенда не находит ни одной", () => {
+  it("сплошной обход обеих половин не находит ни одной", () => {
     const amounts = RETIRED.map((r) => r.amount.replace(".", "\\.")).join("|");
     // $19 — но не $199, не $19.99, не $19B.
     const re = new RegExp(`\\$(${amounts})(?![\\d.,]*[\\dBMKbmk])`, "g");
@@ -186,12 +217,24 @@ describe("отставные цены тарифов не возвращаютс
     const violations: string[] = [];
     for (const { rel, lines } of corpus()) {
       const isComment = commentMask(lines);
+      // Журнал изменений — единственное место, где переход «было → стало»
+      // живёт в ДАННЫХ, а не в комментарии: он для того и написан. Исключение
+      // намеренно привязано к ОДНОМУ файлу по имени, а не к признаку «в строке
+      // есть стрелка»: иначе откроется ровно та лазейка, о которой
+      // предупреждает EXPLANATORY — «repriced» в обычной строке интерфейса, и
+      // живая неверная цена проходит мимо.
+      //
+      // Сама запись журнала при этом не бесконтрольна: соседний тест
+      // changelogPricesMatchRegistry сверяет её свежайшую запись с реестром.
+      const isChangelog = rel === "backend/data/changelog.ts";
       lines.forEach((line, idx) => {
           re.lastIndex = 0;
           let m: RegExpExecArray | null;
           while ((m = re.exec(line)) !== null) {
             if (MAGNITUDE_SUFFIX.test(line.slice(m.index + m[0].length))) continue;
             if (isComment[idx] && EXPLANATORY.test(line)) continue;
+            if (isChangelog && TRANSITION.test(line)) continue;
+            if (SQL_PLACEHOLDERS.test(line)) continue;
             if (ALLOWED.some((a) => line.includes(a.fragment))) continue;
             const retired = RETIRED.find((r) => r.amount === m![1])!;
             violations.push(`${rel}:${idx + 1}  «${line.trim().slice(0, 100)}»  ← $${retired.amount} = ${retired.was}`);

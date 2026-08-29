@@ -88,25 +88,6 @@ describe("вердикт офлайн-проверки требует НАСТО
 // однажды байты начнут проверять по-настоящему, он покраснеет и заставит
 // переписать формулировки на странице — а они сегодня обещают ровно столько,
 // сколько проверка даёт.
-describe("граница проверки якоря названа честно", () => {
-  it("заявленный якорь принимается по полю, а не по байтам", async () => {
-    const b = await selfMadeBundle();
-    b.proofs.openTimestamps = { status: "bitcoin-confirmed", bitcoinBlockHeight: 999999 };
-    const r = await verifyAevionBundle(b);
-    expect(
-      r.bitcoinAnchor.status,
-      "если это перестало проходить — байты стали проверять; обновите текст страницы",
-    ).toBe("pass");
-    expect(
-      r.bitcoinAnchor.detail,
-      "плитка обязана сама сказать, что доказательство надо проверить клиентом OpenTimestamps",
-    ).toMatch(/OpenTimestamps/i);
-  });
-});
-
-// Заверение платформы — ЕДИНСТВЕННЫЙ слой, чей ключ НЕ приехал в пакете: он
-// закреплён в самом верификаторе. Поэтому только он способен отличить наш
-// сертификат от собранного посторонним, и проверять его надо строго.
 describe("заверение платформы — единственный ключ не из пакета", () => {
   it("подпись чужим ключом не проходит", async () => {
     const b = await selfMadeBundle();
@@ -182,3 +163,53 @@ describe("заверение платформы — единственный к�
     expect(String(r.platformAttestation.detail)).toMatch(/internal consistency/i);
   });
 });
+describe("граница проверки якоря названа честно", () => {
+  it("чужое доказательство НЕ принимается", async () => {
+    // Раньше плитка зеленела по одному полю `status`, и к пакету можно было
+    // приложить любое доказательство. Теперь сверяется дайджест внутри байтов.
+    const b = await selfMadeBundle();
+    b.proofs.openTimestamps = {
+      status: "bitcoin-confirmed",
+      bitcoinBlockHeight: 999999,
+      proofBase64: otsProofFor("ff".repeat(32)), // доказательство о ДРУГОМ документе
+    };
+    const r = await verifyAevionBundle(b);
+    expect(
+      r.bitcoinAnchor.status,
+      "чужое доказательство выдано за якорь этого сертификата",
+    ).toBe("fail");
+  });
+
+  it("своё доказательство принимается и текст называет, что осталось непроверенным", async () => {
+    const b = await selfMadeBundle();
+    b.proofs.openTimestamps = {
+      status: "bitcoin-confirmed",
+      bitcoinBlockHeight: 912345,
+      proofBase64: otsProofFor(b.proofs.contentHash.value),
+    };
+    const r = await verifyAevionBundle(b);
+    expect(r.bitcoinAnchor.status).toBe("pass");
+    expect(String(r.bitcoinAnchor.detail)).toMatch(/commits to this document/i);
+    // Честность важнее похвалы: включение в блок мы НЕ проверяем, и это должно
+    // быть сказано прямо, иначе зелёная плитка обещает больше, чем даёт.
+    expect(String(r.bitcoinAnchor.detail)).toMatch(/OpenTimestamps client/i);
+  });
+
+  it("байтов нет вовсе — плитка зелёная, но говорит об этом", async () => {
+    const b = await selfMadeBundle();
+    b.proofs.openTimestamps = { status: "bitcoin-confirmed", bitcoinBlockHeight: 1 };
+    const r = await verifyAevionBundle(b);
+    expect(r.bitcoinAnchor.status).toBe("pass");
+    expect(String(r.bitcoinAnchor.detail)).toMatch(/No \.ots proof bytes/i);
+  });
+});
+
+/** Собирает доказательство OpenTimestamps, фиксирующее заданный дайджест. */
+function otsProofFor(hexDigest: string): string {
+  const magic = "004f70656e54696d657374616d7073000050726f6f6600bf89e2e884e89294";
+  const hex = magic + "01" + "08" + hexDigest;
+  const bytes = hex.match(/.{2}/g)!.map((h) => parseInt(h, 16));
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}

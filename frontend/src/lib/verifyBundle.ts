@@ -400,7 +400,48 @@ export async function verifyAevionBundle(
     }
   }
 
-  /* ── 4) OpenTimestamps Bitcoin anchor (presence check only) ── */
+/**
+ * Проверяет, что доказательство OpenTimestamps относится ИМЕННО к этому
+ * документу: в его начале лежит зафиксированный дайджест.
+ *
+ * Формат (проверено на живом доказательстве с прода, 665 байт):
+ *   31 байт магии ` OpenTimestamps  Proof ...`
+ *    1 байт версии (1)
+ *    1 байт алгоритма (0x08 = SHA-256)
+ *   32 байта дайджеста
+ *
+ * Чего эта проверка НЕ делает: не доказывает, что дайджест попал в блок
+ * биткойна. Для этого нужны данные сети биткойна — их у страницы нет и по
+ * замыслу быть не должно. Но она ловит подмену, которую прежняя проверка
+ * пропускала: приложить ЧУЖОЕ доказательство (или любое) и объявить пакет
+ * заякоренным.
+ *
+ * Возвращает null, если разобрать не удалось: неизвестный формат — это «не
+ * знаю», и выдавать его за провал нельзя, иначе честные пакеты покраснеют.
+ */
+function otsCommitsTo(proofB64: string, contentHash: string): boolean | null {
+  try {
+    const bin = atob(proofB64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const MAGIC = "004f70656e54696d657374616d7073000050726f6f6600bf89e2e884e89294";
+    const head = Array.from(bytes.subarray(0, 31))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    if (head !== MAGIC) return null;
+    if (bytes[31] !== 1) return null; // версия, которую мы знаем
+    if (bytes[32] !== 0x08) return null; // SHA-256
+    const digest = Array.from(bytes.subarray(33, 65))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    if (digest.length !== 64) return null;
+    return digest.toLowerCase() === String(contentHash).toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+  /* ── 4) OpenTimestamps Bitcoin anchor ── */
   const ots = bundle.proofs.openTimestamps;
   if (!ots) {
     result.bitcoinAnchor = {
@@ -408,16 +449,41 @@ export async function verifyAevionBundle(
       detail: "Bundle has no OpenTimestamps proof",
     };
   } else if (ots.status === "bitcoin-confirmed") {
-    // Высота блока раньше входила в условие, и подтверждённый якорь БЕЗ неё
-    // проваливался в последнюю ветку — то есть отмечался как «проверка не
-    // прошла». Отсутствие номера блока в пакете не отменяет подтверждения:
-    // это пробел записи, а не провал доказательства.
-    result.bitcoinAnchor = {
-      status: "pass",
-      detail: ots.bitcoinBlockHeight
-        ? `Anchored at Bitcoin block #${ots.bitcoinBlockHeight}. Verify the .ots proof bytes with any OpenTimestamps client to mathematically prove inclusion.`
-        : "Anchored to Bitcoin; this bundle does not record the block height. Verify the .ots proof bytes with any OpenTimestamps client to obtain it.",
-    };
+    // Байты доказательства ЛЕЖАТ В ПАКЕТЕ, и раньше мы на них не смотрели:
+    // плитка зеленела по одному лишь полю `status`. Значит к пакету можно было
+    // приложить чужое доказательство — или никакого — и объявить его
+    // заякоренным. Теперь сверяем, что доказательство относится к ЭТОМУ
+    // документу.
+    const committed = ots.proofBase64
+      ? otsCommitsTo(ots.proofBase64, bundle.proofs.contentHash?.value ?? "")
+      : null;
+    if (committed === false) {
+      result.bitcoinAnchor = {
+        status: "fail",
+        detail:
+          "The attached OpenTimestamps proof commits to a different document. " +
+          "It does not timestamp this certificate, whatever the bundle claims.",
+      };
+    } else {
+      // Высота блока раньше входила в условие, и подтверждённый якорь без неё
+      // проваливался в последнюю ветку — то есть отмечался как «проверка не
+      // прошла». Отсутствие номера блока в пакете не отменяет якоря: это
+      // пробел записи, а не провал доказательства.
+      //
+      // Текст РАЗНЫЙ для трёх случаев, и это не украшение: «байты сошлись»,
+      // «байты не разобрать» и «байтов нет» — разные степени уверенности, и
+      // читающий должен видеть, какая у него.
+      const where = ots.bitcoinBlockHeight
+        ? `Anchored at Bitcoin block #${ots.bitcoinBlockHeight}.`
+        : "Anchored to Bitcoin; this bundle does not record the block height.";
+      const bytes =
+        committed === true
+          ? " The attached .ots proof commits to this document's content hash — so the proof is about THIS certificate, not another one. What remains unchecked here is Bitcoin inclusion itself: run the proof through any OpenTimestamps client, which talks to the Bitcoin network, not to AEVION."
+          : committed === null && ots.proofBase64
+            ? " The .ots proof bytes are present but this page could not parse them, so it cannot confirm they belong to this document. Check them with an OpenTimestamps client."
+            : " No .ots proof bytes travel with this bundle, so nothing here ties the claim to a timestamp. Ask for the proof file before relying on this row.";
+      result.bitcoinAnchor = { status: "pass", detail: where + bytes };
+    }
   } else if (ots.status === "pending") {
     result.bitcoinAnchor = {
       status: "skip",

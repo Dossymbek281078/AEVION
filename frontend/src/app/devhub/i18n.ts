@@ -26,6 +26,11 @@ import { useI18n } from "@/lib/i18n";
 type Key = keyof typeof EN;
 
 const EN = {
+  "hero.title": "Describe it — and get a working app",
+  "hero.subtitle": "AI will create the project, write the code and show a live preview with diffs. Then edit by clicking (Visual Edit), ask for changes in chat, generate images and sound, deploy in one click.",
+  "hero.placeholder": "For example: a habit tracker with a calendar and weekly stats",
+  "hero.building": "Building…",
+  "hero.build": "⚡ Build",
   "pro.perks": "50 AI videos · 200 images · unlimited deploys · public *.pages.dev URL · team collaborators",
   "ve.body": "Open any Static project, click an element in the live preview, and edit its text, color, size and alignment in place — or describe a change and let AI apply it. Every AI change is checkpointed with one-click undo. Click an image to generate a replacement from a prompt.",
   "dep.title": "🌐 Deploy → a live public address in one click",
@@ -68,6 +73,11 @@ const EN = {
 } as const;
 
 const RU: Record<Key, string> = {
+  "hero.title": "Опиши — и получи работающее приложение",
+  "hero.subtitle": "ИИ создаст проект, напишет код, покажет живое превью и диффы. Дальше — правь кликами (Visual Edit), проси изменения в чате, генерируй картинки и звук, деплой в один клик.",
+  "hero.placeholder": "Например: 'трекер привычек с календарём и статистикой по неделям'",
+  "hero.building": "Создаю…",
+  "hero.build": "⚡ Построить",
   "pro.perks": "50 видео с ИИ · 200 картинок · выкатки без ограничений · публичный адрес *.pages.dev · соавторы",
   "ve.body": "Откройте любой статический проект, щёлкните элемент в живом превью и меняйте текст, цвет, размер и выравнивание прямо там — или опишите правку словами, и ИИ применит её. Каждая правка ИИ сохраняется точкой возврата в один клик. Щёлкните картинку, чтобы сгенерировать замену по описанию.",
   "dep.title": "🌐 Выкатка → живой публичный адрес за один клик",
@@ -110,6 +120,11 @@ const RU: Record<Key, string> = {
 };
 
 const KK: Record<Key, string> = {
+  "hero.title": "Опиши — и получи работающее приложение",
+  "hero.subtitle": "ИИ создаст проект, напишет код, покажет живое превью и диффы. Дальше — правь кликами (Visual Edit), проси изменения в чате, генерируй картинки и звук, деплой в один клик.",
+  "hero.placeholder": "Например: 'трекер привычек с календарём и статистикой по неделям'",
+  "hero.building": "Создаю…",
+  "hero.build": "⚡ Построить",
   "pro.perks": "50 ЖИ бейне · 200 сурет · шексіз жарияланым · жалпыға ортақ *.pages.dev мекенжайы · бірлескен авторлар",
   "ve.body": "Кез келген статикалық жобаны ашып, тікелей алдын ала қараудағы элементті басыңыз да, оның мәтінін, түсін, өлшемін және туралауын сол жерде өзгертіңіз — немесе өзгерісті сөзбен сипаттаңыз, ЖИ оны қолданады. ЖИ енгізген әрбір өзгеріс бір басумен қайтарылады. Суретті басып, сипаттама бойынша ауыстырма жасаңыз.",
   "dep.title": "🌐 Жариялау → бір басумен тірі жалпы мекенжай",

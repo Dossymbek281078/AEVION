@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { describe, it, expect, beforeAll } from "vitest";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -82,5 +82,64 @@ describe("подписи у полей ввода", () => {
     const s = readFileSync(join(SRC, "components", "AskAi.tsx"), "utf8");
     expect(s, "AskAi снова опирается только на placeholder").toContain("aria-labelledby={titleId}");
     expect(s, "заголовок AskAi потерял id — связывать не с чем").toContain("id={titleId}");
+  });
+});
+
+/* ------------------------------------------------------------------
+   29.08.2026. Широкий обход прода по НАСТОЯЩЕМУ списку адресов нашёл
+   два общих источника безымянных полей вместо россыпи одиночных.
+   Проверки ниже сторожат именно их.
+
+   У обхода каталога есть свой знаменатель: если образец перестанет
+   находиться вовсе, проверка обязана покраснеть, а не тихо опустеть.
+   Пустая проверка выглядит как пройденная — это ровно тот случай,
+   ради которого знаменатель и нужен.
+------------------------------------------------------------------ */
+describe("поля, найденные широким обходом 29.08.2026", () => {
+  const практика = join(process.cwd(), "src/app/smeta-trainer/drawings-practice");
+  const страницы = new Map<string, string>();
+
+  beforeAll(() => {
+    // Обход каталога — ОДИН раз: 308 страниц внутри it() дают таймаут
+    // под нагрузкой, а зелёный в одиночном прогоне ничего не значит.
+    for (const d of readdirSync(практика, { withFileTypes: true })) {
+      if (!d.isDirectory()) continue;
+      const f = join(практика, d.name, "page.tsx");
+      if (existsSync(f)) страницы.set(d.name, readFileSync(f, "utf8"));
+    }
+  }, 120_000);
+
+  it.each([
+    ['placeholder="Итого, тенге"', 'aria-label="Итого, тенге"'],
+    ['placeholder="тг"', 'aria-label="Сумма, тенге"'],
+    ['placeholder="Ваш ответ..."', 'aria-label="Ваш ответ"'],
+  ])("поле-подсказка %s не осталось единственным именем", (образец, имя) => {
+    const сОбразцом = [...страницы].filter(([, s]) => s.includes(образец));
+    // Знаменатель: без него проверка молча пустеет при переименовании.
+    expect(сОбразцом.length,
+      `образец ${образец} не найден ни на одной странице — проверка стала пустой`)
+      .toBeGreaterThan(0);
+    const безымянные = сОбразцом.filter(([, s]) => !s.includes(имя)).map(([n]) => n);
+    expect(безымянные,
+      `страниц с полем ${образец} без имени для читалки: ${безымянные.length}`)
+      .toEqual([]);
+  });
+
+  it("подписи-соседи в labor-norms остались связанными с полями", () => {
+    const s = страницы.get("labor-norms");
+    expect(s, "страница labor-norms исчезла — проверка стала пустой").toBeTruthy();
+    for (const имя of ["Объём работ", "Норма времени"])
+      expect(s, `поле «${имя}» снова без имени: подпись рядом, но не связана`)
+        .toContain(`aria-label="${имя}"`);
+  });
+
+  it("вход в /build называет почту и пароль", () => {
+    const s = readFileSync(
+      join(process.cwd(), "src/components/build/BuildShell.tsx"), "utf8");
+    // Placeholder исчезает при вводе — форма становится безымянной ровно
+    // тогда, когда в ней работают.
+    for (const имя of ["Email", "Password"])
+      expect(s, `поле «${имя}» формы входа снова опирается только на placeholder`)
+        .toContain(`aria-label="${имя}"`);
   });
 });

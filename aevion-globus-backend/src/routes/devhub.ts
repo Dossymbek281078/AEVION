@@ -95,6 +95,32 @@ function dhSendLimit() {
   });
 }
 
+/**
+ * Создание проекта — единственная запись в базу, доступная БЕЗ входа и без
+ * какой-либо платы. Замер 29.08.2026: ни ограничителя темпа, ни потолка на
+ * пользователя, ни общего ограничителя на приложении — то есть любой скрипт
+ * мог заполнять таблицу проектов сколько угодно.
+ *
+ * Дорогие ручки защищены иначе (месячная норма), и это верно: там тратятся
+ * деньги. Здесь тратится место и время базы, а значит и работа всех
+ * остальных.
+ *
+ * Число выбрано так, чтобы человек его не заметил: десять проектов в минуту —
+ * это больше, чем создают руками за целый вечер. Настраивается переменной, но
+ * умолчание СТРОГОЕ: защита, включающаяся только при настройке, — это защита,
+ * которой нет.
+ */
+function dhCreateLimit() {
+  const raw = Number(process.env.DEVHUB_CREATE_RATE_LIMIT);
+  const max = Number.isFinite(raw) && raw > 0 ? raw : 10;
+  return rateLimit({
+    windowMs: 60_000,
+    max,
+    keyPrefix: "dhcreate",
+    message: "Слишком много проектов подряд. Подождите минуту.",
+  });
+}
+
 devhubRouter.use(
   ["/media/email", "/media/email-template-send", "/media/sms", "/media/whatsapp"],
   dhSendLimit(),
@@ -1339,7 +1365,7 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
 // ═════════════════════════════════════════════════════════════════════════════
 
 // POST /api/devhub/projects
-devhubRouter.post("/projects", async (req, res) => {
+devhubRouter.post("/projects", dhCreateLimit(), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const { name, description, stack = "next" } = req.body || {};

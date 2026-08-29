@@ -49,22 +49,77 @@ function providerFiles(): string[] {
   return out;
 }
 
+const RETURN_FIELD = /success_url|successUrl|return_url|returnUrl|redirect_url|redirectUrl/;
+
+/** Путь после подстановки базового адреса: ${base}/… или ${FRONTEND}/… */
+function pathIn(text: string): string | null {
+  const m = /\$\{[A-Za-z_]+\}(\/[A-Za-z0-9/_-]+)/.exec(text);
+  return m ? m[1] : null;
+}
+
+/**
+ * Тело функции по имени — грубо, от объявления до следующего объявления
+ * верхнего уровня. Точный разбор тут не нужен: путь стоит в `return`.
+ */
+function functionBody(text: string, name: string): string | null {
+  const at = text.indexOf(`function ${name}(`);
+  if (at < 0) return null;
+  const rest = text.slice(at + 10);
+  const next = rest.search(/\nexport (async )?function |\nfunction |\nconst [A-Z]/);
+  return next < 0 ? rest : rest.slice(0, next);
+}
+
 /**
  * Пути возврата, вытащенные из кода. Берём только то, что стоит в поле адреса
  * успеха: просто «строка, похожая на путь» притащила бы половину маршрутов.
+ *
+ * ⚠️ Адрес не всегда стоит в самой строке поля. У LemonSqueezy — главного
+ * провайдера подписок — он собирается функцией:
+ *
+ *     redirect_url: successRedirectUrl(base, intentId, input)
+ *
+ * Косой черты в этой строке нет вовсе, и первая версия этого разбора пропускала
+ * её МОЛЧА: список выглядел полным, а самой дорогой кассы в нём не было.
+ * Нашлось не глазами, а знаменателем — независимый разбор соседней вкладки дал
+ * больше адресов, чем мой. Поэтому: если в строке поля пути нет, но есть вызов
+ * функции — идём в её тело.
  */
 function returnPaths(): Array<{ path: string; file: string }> {
-  const found = new Map<string, string>();
+  // Ключ — ПАРА «путь + провайдер», а не путь.
+  //
+  // Сперва ключом был один путь, и это съело ровно ту кассу, ради которой
+  // разбор и расширяли: PayBox и LemonSqueezy возвращают на один и тот же
+  // /pricing/checkout/success, обход идёт по алфавиту, и paybox затирал
+  // lemonsqueezy. Проверка «каждая страница считает» при этом оставалась
+  // зелёной — терялась не строка, а ЗНАНИЕ О ТОМ, ЧЬЯ она.
+  const found = new Map<string, { path: string; file: string }>();
   for (const file of providerFiles()) {
     const text = readFileSync(file, "utf8");
+    const short = file.split(/[\\/]/).pop()!;
+    const add = (path: string) => found.set(`${path}::${short}`, { path, file: short });
     for (const line of text.split("\n")) {
-      if (!/success_url|successUrl|return_url|returnUrl/.test(line)) continue;
-      // Путь начинается после подстановки базового адреса: ${base}/... или ${FRONTEND}/...
-      const m = /\$\{[A-Za-z_]+\}(\/[A-Za-z0-9/_-]+)/.exec(line);
-      if (m) found.set(m[1], file.split(/[\\/]/).pop()!);
+      if (!RETURN_FIELD.test(line)) continue;
+      const direct = pathIn(line);
+      if (direct) {
+        add(direct);
+        continue;
+      }
+      // Значение — вызов функции: путь внутри неё.
+      const call = /:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(line);
+      if (!call) continue;
+      const body = functionBody(text, call[1]);
+      const viaFn = body ? pathIn(body) : null;
+      if (viaFn) add(viaFn);
     }
   }
-  return [...found.entries()].map(([path, file]) => ({ path, file }));
+  return [...found.values()];
+}
+
+/** Файлы провайдеров, в которых вообще задаётся адрес возврата. */
+function filesDeclaringReturn(): string[] {
+  return providerFiles()
+    .filter((f) => readFileSync(f, "utf8").split("\n").some((l) => RETURN_FIELD.test(l)))
+    .map((f) => f.split(/[\\/]/).pop()!);
 }
 
 /** Файл страницы, отвечающей за путь приложения (Next App Router). */
@@ -90,6 +145,24 @@ describe("возврат после оплаты отмечается на ка�
     // Пустой список сделал бы проверку ниже зелёной при любом состоянии кода —
     // и именно так выглядел бы отказ разбора после переименования полей.
     expect(paths.length, `найдено: ${paths.map((p) => p.path).join(", ")}`).toBeGreaterThanOrEqual(3);
+  });
+
+  test("контроль охвата: ни один провайдер не выпал из разбора", () => {
+    // Именно этой проверки не хватало: LemonSqueezy собирает адрес функцией, в
+    // строке поля нет косой черты, и он пропадал из списка молча. Список
+    // выглядел полным — а самой дорогой кассы в нём не было. Поимённо, а не
+    // числом: «адресов стало больше» не отвечает на вопрос, ЧЬИХ.
+    const declared = filesDeclaringReturn();
+    const parsed = new Set(paths.map((p) => p.file));
+    const lost = declared.filter((f) => !parsed.has(f));
+    expect(
+      lost,
+      `провайдер задаёт адрес возврата, а разбор его не увидел: ${lost.join(", ")}`,
+    ).toEqual([]);
+    expect(
+      declared,
+      "главный провайдер подписок обязан быть среди разбираемых",
+    ).toContain("lemonSqueezyProvider.ts");
   });
 
   test("контроль: страницы для этих адресов существуют", () => {

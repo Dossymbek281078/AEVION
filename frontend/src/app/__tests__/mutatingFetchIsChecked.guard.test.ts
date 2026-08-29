@@ -61,7 +61,22 @@ function собратьФайлы(dir: string): string[] {
 export function нарушения(source: string): string[] {
   const L = source.split(/\r?\n/);
   const плохие: string[] = [];
+  // Пример кода в шаблонной строке — не исполняемый код.
+  //
+  // Замер 29.08.2026: на /developers семь «нарушений» лежали внутри
+  // примера, который показывают разработчику (const QUICKSTART = ...).
+  // По всему сайту таких 15 из 64 — то есть четверть «класса» была
+  // документацией. Считаем чётность обратных кавычек до строки:
+  // нечётно — мы внутри шаблонной строки.
+  //
+  // На список qcoreai это не влияет: 12 и с правилом, и без. Проверено
+  // отрицательным контролем — модуль developers исчезает из списка целиком.
+  const ОБРАТНАЯ = String.fromCharCode(96);
+  let кавычек = 0;
   L.forEach((ln, i) => {
+    const доСтроки = кавычек;
+    for (const ch of ln) if (ch === ОБРАТНАЯ) кавычек++;
+    if (доСтроки % 2 === 1) return;
     if (!/await fetch\(/.test(ln)) return;
     if (!МЕТОД.test(L.slice(i, i + 8).join("\n"))) return;
     const m = ln.match(/(?:const|let|var)\s+(\w+)\s*=\s*await fetch\(/);
@@ -101,6 +116,26 @@ describe("изменяющий запрос обязан спросить отв
       "if (!r.ok) { setError(`нет (${r.status})`); return; }",
     ].join("\n");
     expect(нарушения(образец)).toEqual([]);
+  });
+
+  it("правило НЕ трогает пример кода в шаблонной строке", () => {
+    const б = String.fromCharCode(96);
+    const образец = [
+      "const QUICKSTART = " + б + "// как позвать ручку:",
+      "await fetch('https://aevion.app/api/x', {",
+      "  method: 'POST',",
+      "});" + б + ";",
+    ].join("\n");
+    expect(нарушения(образец)).toEqual([]);
+  });
+
+  it("но тот же код ВНЕ шаблонной строки правило ловит", () => {
+    const образец = [
+      "await fetch('https://aevion.app/api/x', {",
+      '  method: "POST",',
+      "});",
+    ].join("\n");
+    expect(нарушения(образец)).toHaveLength(1);
   });
 
   it("правило НЕ трогает чтение (GET без method)", () => {

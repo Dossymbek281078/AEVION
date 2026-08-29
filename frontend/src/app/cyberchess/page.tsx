@@ -5496,7 +5496,7 @@ export default function CyberChessPage(){
   // captured yet / the conversion fails. Single source of truth for every
   // LLM coach touchpoint that needs to ground a "best move" recommendation
   // in something actually legal (see evalBestUciRef above) — used by both
-  // the "Спроси Coach" chat and the "GM-разбор" button so neither can drift
+  // the "Спроси тренера" chat and the "GM-разбор" button so neither can drift
   // out of sync with the other or reintroduce the hallucinated-move bug.
   const getEngineBestSan=(fen:string):string|undefined=>{
     const uci=evalBestUciRef.current;
@@ -6940,7 +6940,7 @@ export default function CyberChessPage(){
             const tiles:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
               {emoji:"♟",title:"Сыграй первую партию",desc:"AI любого уровня. От 800 до 2400. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
               {emoji:"◆",title:"Реши задачу",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:pzTotal?`${pzTotal.toLocaleString("ru-RU")} ${ccPlural(pzTotal,"задача","задачи","задач")} в банке.`:"Полмиллиона задач в банке."}`,cta:"К задачам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
-              {emoji:"🎓",title:"Спроси Coach",desc:"AI-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
+              {emoji:"🎓",title:"Спроси тренера",desc:"AI-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
               {emoji:"📅",title:"Задача дня",desc:"Одна задача каждый день. Серия, таблица лидеров, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
             ];
             return <Card padding={SPACE[3]} elevation="sm">
@@ -8512,7 +8512,7 @@ export default function CyberChessPage(){
                       userSide:pCol,
                       eval:typeof evalCp==="number"?{cp:evalCp,mate:evalMate||0}:null,
                       // Ground the LLM in moves that are actually legal — same fix as the
-                      // "Спроси Coach" chat (see getEngineBestSan above): без этого модель
+                      // "Спроси тренера" chat (see getEngineBestSan above): без этого модель
                       // называла ходы, которых нет в позиции.
                       legalMoves:game.moves(),
                       bestMove:getEngineBestSan(game.fen()),
@@ -8577,7 +8577,7 @@ export default function CyberChessPage(){
                   sCoachRemark({kind:"position",title:"🔍 Полный анализ позиции",body:buildBody(evalCp,evalMate)});
                   return;
                 }
-                sCoachRemark({kind:"position",title:"⏳ Coach анализирует позицию…",body:"Считаю движком…"});
+                sCoachRemark({kind:"position",title:"⏳ Тренер разбирает позицию…",body:"Считаю движком…"});
                 const sign=fen.split(" ")[1]==="w"?1:-1;let lc=0,lmt=0;
                 sfR.current.eval(fen,14,(cc:number,mm:number)=>{lc=cc*sign;lmt=mm*sign;},()=>{
                   sCoachRemark({kind:"position",title:"🔍 Полный анализ позиции",body:buildBody(lc,lmt)});
@@ -8586,7 +8586,7 @@ export default function CyberChessPage(){
               <Btn size="sm" variant="secondary" onClick={()=>{
                 // Найди план — top-3 моих лучших ходов + комментарий
                 if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
-                sCoachRemark({kind:"plan",title:"⏳ Coach думает над планом…",body:"Считаю топ-3 хода…"});
+                sCoachRemark({kind:"plan",title:"⏳ Тренер думает над планом…",body:"Считаю топ-3 хода…"});
                 sfR.current.multiPV(game.fen(),12,3,(lines)=>{
                   if(!lines||lines.length===0){sCoachRemark({kind:"plan",title:"Не нашёл плана",body:"Попробуй ещё раз через секунду"});return}
                   const ms=lines.slice(0,3).map((l,i)=>{
@@ -10894,7 +10894,7 @@ ${question.trim()}`;
                     const uci=await localBest();
                     if(uci){const c=new Chess(fen);const m=c.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:(uci[4] as any)||undefined});if(m)bestSan=m.san;}
                   }catch{}
-                  const base=e?.name==="AbortError"?"⏱ Coach AI думал слишком долго.":"⚠ Coach AI недоступен (бэкенд).";
+                  const base=e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.";
                   const tip=bestSan
                     ?`\n\n♟ Пока отвечаю движком (Stockfish d14): лучший ход — ${bestSan}, оценка ${evalCpStr} (с точки зрения белых). Спроси ещё раз через минуту для развёрнутого разбора.`
                     :" Попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.";
@@ -10906,7 +10906,7 @@ ${question.trim()}`;
               return <div style={{borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",border:"1px solid #93c5fd",padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <span style={{fontSize:14}}>💬</span>
-                  <span style={{fontSize:11,fontWeight:900,color:T.blue,letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Спроси Coach — разговор с ИИ-тренером</span>
+                  <span style={{fontSize:11,fontWeight:900,color:T.blue,letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Спроси тренера — разговор с ИИ-тренером</span>
                   {coachChat.length>0&&<span style={{fontSize:9,color:T.dim,fontWeight:600}}>{coachChat.length} сообщ.</span>}
                   {coachChat.length>0&&<button onClick={()=>sCoachChat([])} title="Очистить историю" style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,fontWeight:700,color:T.dim,cursor:"pointer"}}>× очистить</button>}
                 </div>
@@ -10944,7 +10944,7 @@ ${question.trim()}`;
                     value={coachChatInput}
                     onChange={e=>sCoachChatInput(e.target.value)}
                     onKeyDown={e=>{if(e.key==="Enter"&&coachChatInput.trim()&&!coachChatLoading){sendChat(coachChatInput)}}}
-                    placeholder={coachChatLoading?"Coach думает…":"Спроси что-нибудь о позиции…"}
+                    placeholder={coachChatLoading?"Тренер думает…":"Спроси что-нибудь о позиции…"}
                     disabled={coachChatLoading}
                     style={{flex:1,padding:"7px 10px",borderRadius:RADIUS.md,border:`1px solid ${T.border}`,fontSize:12,background:"#fff",color:T.text,outline:"none"}}
                   />
@@ -11155,7 +11155,7 @@ ${question.trim()}`;
                 <div style={{borderRadius:10,background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",border:"1px solid #a7f3d0",padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:800,color:T.accent,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>🎓 Как учимся</div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:6}}>
-                    {modeBtn("🤖","Против AI","играй с ботом, Coach комментирует",()=>{
+                    {modeBtn("🤖","Против AI","играй с ботом, тренер комментирует",()=>{
                       sCoachAIEnabled(true);sEditorMode(false);
                       const cl=pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();
                       showToast("Новая игра против AI","success");
@@ -11647,7 +11647,7 @@ ${question.trim()}`;
                 for(const san of g.moves){try{const mv=ch.move(san);if(mv){mh.push(mv.san);fh.push(ch.fen())}}catch{break}}
                 setGame(ch);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(g.result);sOn(false);sSetup(false);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.playerColor);sFlip(g.playerColor==="b");
                 if(destTab==="coach"){sCoachAIEnabled(false);sEditorMode(false);}
-                showToast(`Партия открыта · ${mh.length} ходов${destTab==="coach"?" · Coach готов к разбору":""}`,"success");
+                showToast(`Партия открыта · ${mh.length} ходов${destTab==="coach"?" · тренер готов к разбору":""}`,"success");
               }} style={{flex:1,padding:`${SPACE[3]}px ${SPACE[4]}px`,border:"none",background:"transparent",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",borderLeft:`3px solid ${resCol}`}}>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[3],minWidth:0,flex:1}}>
                   <div style={{width:32,height:32,borderRadius:"50%",background:resCol+"18",color:resCol,
@@ -12341,7 +12341,7 @@ ${question.trim()}`;
         {title:"Действия с доской",rows:[
           ["F","Перевернуть доску"],
           ["Esc","Очистить буфер ввода / сбросить премувы"],
-          ["ПКМ-drag","Нарисовать стрелку (Analysis / Coach / после партии)"],
+          ["ПКМ-drag","Нарисовать стрелку (в анализе, у тренера, после партии)"],
           ["ПКМ клик","Подсветить клетку · Shift=красный, Ctrl=синий"],
         ]},
         {title:"Глобально",rows:[

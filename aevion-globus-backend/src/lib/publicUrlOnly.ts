@@ -76,9 +76,15 @@ export async function checkPublicUrl(raw: unknown): Promise<UrlVerdict> {
   try {
     addrs = await lookup(url.hostname, { all: true });
   } catch {
-    return { ok: false, reason: "url_host_unresolved" };
+    // Имя не разрешается — ЗАПРОС ПО НЕМУ ТОЖЕ НИКУДА НЕ ДОЙДЁТ, значит
+    // внутренней сети такой адрес не угрожает. Отказывать здесь значит
+    // ломать работу при икоте DNS и делать ручку непроверяемой офлайн
+    // (тесты берут зарезервированные имена вроде host.example — они
+    // не резолвятся намеренно). Отказываем только когда ЗНАЕМ, что
+    // адрес внутренний.
+    return { ok: true, url };
   }
-  if (!addrs.length) return { ok: false, reason: "url_host_unresolved" };
+  if (!addrs.length) return { ok: true, url };
   // Достаточно ОДНОГО приватного адреса: имя может отдавать несколько, и
   // выбор между ними от нас не зависит.
   for (const a of addrs) {

@@ -313,7 +313,7 @@ export default function ReplayViewerPage() {
       <main className="planet-root">
         <div className="planet-wrap" style={{ paddingTop: 36, paddingBottom: 48, maxWidth: 640 }}>
           <div className="planet-card" style={{ padding: 24 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--pl-danger)" }}>Replay недоступен</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--pl-danger)" }}>Повтор недоступен</div>
             <div className="planet-muted" style={{ marginTop: 6, fontSize: 12 }}>{error}</div>
             <div style={{ marginTop: 16 }}>
               <Link href="/cyberchess/replays" className="planet-btn">← Назад к архиву</Link>
@@ -357,7 +357,7 @@ export default function ReplayViewerPage() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <button onClick={onShare} className="planet-btn active">
-              {copied ? "Скопировано ✓" : "Поделиться replay"}
+              {copied ? "Скопировано ✓" : "Поделиться повтором"}
             </button>
             <Link href="/cyberchess/replays" className="planet-btn">← Архив</Link>
           </div>

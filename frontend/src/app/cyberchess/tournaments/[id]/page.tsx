@@ -1045,7 +1045,7 @@ function StandingsView({
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   if (loading && standings.length === 0) {
-    return <SkeletonBox label="Считаем standings..." />;
+    return <SkeletonBox label="Считаем таблицу..." />;
   }
 
   if (format === "single_elimination") {
@@ -1180,7 +1180,7 @@ function StandingsView({
               <th
                 onClick={() => handleSort("buchholz")}
                 style={thStyle({ active: sortKey === "buchholz", sortable: true, align: "center" })}
-                title="Сортировать по Buchholz"
+                title="Сортировать по коэффициенту Бухгольца"
               >
                 Buchholz <SortArrow active={sortKey === "buchholz"} />
               </th>

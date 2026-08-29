@@ -742,7 +742,10 @@ async function main() {
     "редакция публикует сами байты, а не только хэш");
   assert(ed.json?.payloadBytes === Buffer.byteLength(ed.json?.payload ?? "", "utf8"),
     "заявленная длина байтов совпадает с настоящей");
-  assert(Array.isArray(ed.json?.verifyYourself) && ed.json.verifyYourself.length > 0,
+  // `verifyYourself` — ОБЪЕКТ со `steps`, а не массив. Первая версия
+  // спрашивала массив и падала на исправном коде; форму спросил у живой
+  // ручки, а не вспомнил.
+  assert(Array.isArray(ed.json?.verifyYourself?.steps) && ed.json.verifyYourself.steps.length > 0,
     "к байтам приложен рецепт проверки");
 
   const sp = await jget("/api/qskyway/city/signed-payload?city=nyc");

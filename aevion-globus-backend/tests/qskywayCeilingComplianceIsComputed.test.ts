@@ -85,6 +85,26 @@ describe("доля соответствия потолку выводится и
     expect(res.body.strictRoutable).toBeGreaterThanOrEqual(res.body.compliant);
   });
 
+  test("🔴 ограничения регулятора не обнуляются", async () => {
+    // Шестая дыра аудита. Подмена «padsNeedingAtc: 0, zeroCeilingCells: 0»
+    // проходила незамеченной, хотя настоящие значения — 1 и 2520.
+    //
+    // Оба числа говорят о том, чего регулятор НЕ разрешает: площадка, откуда
+    // без согласования с диспетчером не взлететь, и ячейки с нулевым потолком.
+    // Обнулить их — сказать, что над городом нет ни одного ограничения.
+    const res = await request(app()).get("/api/qskyway/airspace/impact?city=nyc");
+    expect(typeof res.body.padsNeedingAtc).toBe("number");
+    expect(typeof res.body.zeroCeilingCells).toBe("number");
+    expect(
+      res.body.zeroCeilingCells,
+      "ни одной ячейки с нулевым потолком — регулятор ничего не запрещает?",
+    ).toBeGreaterThan(0);
+    expect(
+      res.body.padsNeedingAtc,
+      "ни одной площадки с согласованием — проверка не различает ноль и правду",
+    ).toBeGreaterThan(0);
+  });
+
   test("город без сетки не выдаёт долю соответствия", async () => {
     // Нечему соответствовать — значит и процента быть не должно, иначе он
     // читается как «всё в порядке».

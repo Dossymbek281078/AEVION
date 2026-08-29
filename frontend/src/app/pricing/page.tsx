@@ -2334,7 +2334,9 @@ export default function PricingPage() {
         сказать, откуда пришёл подписчик, и мерить нечего.
       */}
       <section style={{ margin: "28px auto 0", maxWidth: 760 }}>
-        <WaitlistCapture source="pricing" />
+        {/* Страница цен светлая (#fff, #f1f5f9), а умолчание компонента — тёмное:
+            без tone="light" форма встала бы чужеродным чёрным блоком. */}
+        <WaitlistCapture source="pricing" tone="light" />
       </section>
 
       <section style={{ margin: "28px auto 0", maxWidth: 760, textAlign: "left" }}>

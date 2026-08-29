@@ -3,36 +3,47 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Переключатель языка обещает перевод, а «Задача дня» словарь не использует
- * (0 обращений против 269 на главной). Человек с английским браузером видел
- * кнопку EN и русский текст, не понимая, сломалось ли что-то.
+ * Переключатель языка обещает перевод, а словарь покрывает практически
+ * только главную: замер 29.08.2026 — 269 обращений на ней и 0 на остальных
+ * 21 странице модуля при сотнях русских слов. Человек с английским браузером
+ * видел кнопку EN и русский текст, не понимая, сломалось ли что-то.
  *
- * Страница теперь говорит об этом прямо — тем же приёмом, что уже применён
- * к запасной задаче («банк задач не ответил»).
+ * Полоса живёт в МАКЕТЕ, а не в каждой странице: так одна правка покрывает
+ * весь модуль, и — важнее — нельзя получить два предупреждения на одной
+ * странице, если кто-то добавит своё.
  */
-const STR = join(__dirname, "..", "daily", "page.tsx");
-const kod = readFileSync(STR, "utf8");
+const KOREN = join(__dirname, "..");
+const komponent = readFileSync(join(KOREN, "RussianOnlyNotice.tsx"), "utf8");
+const maket = readFileSync(join(KOREN, "layout.tsx"), "utf8");
+const stranica = readFileSync(join(KOREN, "daily", "page.tsx"), "utf8");
 
-describe("непереведённая страница честно об этом говорит", () => {
-  it("предупреждение показывается только при не-русском языке", () => {
-    expect(kod).toMatch(/ne_russkiy\s*&&/);
-    expect(kod).toContain("Russian only");
+describe("непереведённые страницы честно об этом говорят", () => {
+  it("полоса подключена в макете модуля", () => {
+    expect(maket).toContain("RussianOnlyNotice");
+    expect(maket).toMatch(/<RussianOnlyNotice\s*\/>/);
+  });
+
+  it("показывается только при не-русском языке и не на переведённой", () => {
+    expect(komponent).toMatch(/ne_ru\s*&&\s*!perevedena/);
+    expect(komponent).toContain("Russian only");
   });
 
   it("язык читается в эффекте, а не при отрисовке", () => {
-    // чтение браузера в теле компонента ломает гидратацию — ровно тот класс,
-    // который на этой странице уже разбирался
-    const vyzov = kod.indexOf("loadLocale()");
+    const vyzov = komponent.indexOf("loadLocale()");
     expect(vyzov).toBeGreaterThan(0);
-    const do_vyzova = kod.slice(0, vyzov);
-    const posledniy_effekt = do_vyzova.lastIndexOf("useEffect");
-    const posledniy_return = do_vyzova.lastIndexOf("return (");
-    expect(posledniy_effekt).toBeGreaterThan(posledniy_return);
+    const do_vyzova = komponent.slice(0, vyzov);
+    expect(do_vyzova.lastIndexOf("useEffect")).toBeGreaterThan(
+      do_vyzova.lastIndexOf("return"),
+    );
   });
 
-  it("текст предупреждения на языке того, кто его прочтёт", () => {
-    // русскому читателю оно не показывается, поэтому и написано по-английски
-    const m = kod.match(/This page is available[^<]*/);
+  it("предупреждение существует в ОДНОМ экземпляре", () => {
+    // дубль хуже отсутствия: отсутствие видно как пустота, дубль — как норма
+    expect(stranica).not.toContain("Russian only");
+  });
+
+  it("текст на языке того, кто его прочтёт", () => {
+    const m = komponent.match(/This page is available[^<]*/);
     expect(m).toBeTruthy();
     expect(m![0]).not.toMatch(/[а-яА-Я]/);
   });

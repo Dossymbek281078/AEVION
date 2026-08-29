@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import SwRegister from "./SwRegister";
 import PwaInstall from "./PwaInstall";
+import RussianOnlyNotice from "./RussianOnlyNotice";
 export const metadata: Metadata = {
   title: "CyberChess — шахматы с ИИ-тренером и полумиллионом задач",
   description:
@@ -50,6 +51,7 @@ export default function CyberChessLayout({ children }: { children: React.ReactNo
   return (
     <>
       <SwRegister />
+      <RussianOnlyNotice />
       {children}
       <PwaInstall />
     </>

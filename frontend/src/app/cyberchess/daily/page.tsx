@@ -3,7 +3,6 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { themeRu } from './themes';
-import { loadLocale } from '../i18n';
 import { tournamentUserId, tournamentDisplayName } from '../tournaments/playerIdentity';
 import { Chess, Square } from 'chess.js';
 
@@ -144,14 +143,6 @@ export default function DailyPuzzlePage() {
    * заменяет её. Обратный порядок дал бы пустую доску на секунду и белый экран
    * при недоступной сети.
    */
-
-  // Язык читаем ТОЛЬКО в эффекте: чтение браузера при отрисовке даёт
-  // расхождение между сервером и клиентом — тот самый класс ошибок,
-  // который мы сегодня разбирали на этой же странице.
-  const [ne_russkiy, setNeRusskiy] = useState(false);
-  useEffect(() => {
-    try { setNeRusskiy(loadLocale() !== "ru"); } catch {}
-  }, []);
   const [puzzle, setPuzzle] = useState<Puzzle>(() => POOL[dayIndex() % POOL.length]);
   const [fromBank, setFromBank] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
@@ -688,22 +679,6 @@ export default function DailyPuzzlePage() {
         <p style={{ color: '#9aa0b4', margin: '0 0 24px 0', fontSize: 14 }}>
           Одна задача в день. Решай каждый день — держи серию. Многоходовые задачи: бот отвечает за противника.
         </p>
-
-        {/* Страница пока не переведена (словарь её не покрывает), а
-            переключатель языка обещает перевод — и человек с английским
-            браузером упирается в русский текст, не понимая, сломалось ли
-            что-то. Честнее сказать прямо, как это уже сделано для запасной
-            задачи. Снять, когда страница будет переведена. */}
-        {ne_russkiy && (
-          <p style={{
-            color: '#f0b429', margin: '-12px 0 20px 0', fontSize: 13,
-            border: '1px solid #f0b42933', background: '#f0b4290f',
-            borderRadius: 8, padding: '8px 12px',
-          }}>
-            This page is available in Russian only for now — the rest of the
-            module is translated.
-          </p>
-        )}
 
         {/* Перенос вместо сетки: жёсткие 360px боковой колонки плюс отступ 24 не
             помещались в телефон (замер: документ 408 при экране 375). При переносе

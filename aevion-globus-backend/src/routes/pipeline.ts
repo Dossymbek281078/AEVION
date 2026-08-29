@@ -2951,10 +2951,11 @@ pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
       verification: {
         howTo: [
           "1. Recompute SHA-256 of stableStringify({city, country, description, kind, title}) where each value is NFC-normalized; missing kind defaults to 'other'. Compare with proofs.contentHash.value.",
-          "2. Verify proofs.aevionEd25519.signature using publicKeyRawHex over the UTF-8 bytes of proofs.aevionEd25519.signedPayload (a JSON string).",
-          "3. If proofs.authorCosign is present, verify its signature using publicKeyBase64 over the UTF-8 bytes of proofs.contentHash.value (the hex string itself).",
-          "4. If proofs.openTimestamps.proofBase64 is present, decode and run any OT client (https://opentimestamps.org) against it; the protected file is the raw bytes of proofs.contentHash.value as a hex string. A bitcoinBlockHeight >= 1 means the timestamp is locked to a real Bitcoin block.",
-          "5. If proofs.openTimestamps shows status: bitcoin-confirmed, the certificate's existence is mathematically anchored to that block — independent of AEVION, IPFS, or any other party.",
+          "2. Verify proofs.aevionEd25519.signature using publicKeyRawHex over the UTF-8 bytes of proofs.aevionEd25519.signedPayload (a JSON string). Note what this does and does not show: it proves the payload was not altered after signing, NOT who signed it — that key travels inside this file and is generated per certificate. Step 3 is what ties it to AEVION.",
+          "3. If proofs.platformAttestation is present, verify its signature using AEVION's long-lived public key over the UTF-8 bytes of proofs.aevionEd25519.publicKeyRawHex. Fetch that key INDEPENDENTLY of this file — https://api.aevion.app/api/qsign/v2/keys, matching the kid — because a key that travels with the thing it signs proves nothing. This is the only step that distinguishes a certificate issued by AEVION from a bundle assembled by anyone else. If the field is absent, the certificate predates this layer.",
+          "4. If proofs.authorCosign is present, verify its signature using publicKeyBase64 over the UTF-8 bytes of proofs.contentHash.value (the hex string itself).",
+          "5. If proofs.openTimestamps.proofBase64 is present, decode and run any OT client (https://opentimestamps.org) against it; the protected file is the raw bytes of proofs.contentHash.value as a hex string. A bitcoinBlockHeight >= 1 means the timestamp is locked to a real Bitcoin block.",
+          "6. Do not rely on the status field for the anchor: we write it. What proves the timestamp is the .ots proof itself — it must commit to this contentHash and carry a Bitcoin attestation, which any OpenTimestamps client will tell you. When it does, the certificate's existence at that block is anchored independently of AEVION, IPFS, or any other party.",
         ],
         independence: [
           "AEVION's Ed25519 signature can be verified with any Ed25519 library — we are not in the trust path.",

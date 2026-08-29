@@ -196,7 +196,7 @@ export default function PricingGlossaryPage() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder={tp("glossary.searchPlaceholder")}
+          aria-label={tp("glossary.searchPlaceholder")} placeholder={tp("glossary.searchPlaceholder")}
           style={{
             width: "100%",
             padding: "10px 14px",

@@ -85,7 +85,18 @@ export async function POST(
           : link.currency === "EUR"
             ? `€${link.amount.toFixed(2)}`
             : `$${link.amount.toFixed(2)}`;
-    void sendReceiptEmail({
+    // ⚠️ 29.08.2026: было `void sendReceiptEmail(...)` и следом БЕЗУСЛОВНОЕ
+    // emailQueued = true. То есть результат отправки выбрасывался, а клиенту
+    // в ответе уходило `email_queued: true` даже когда письмо не отправлялось
+    // вовсе: при незаданном RESEND_API_KEY функция честно возвращает
+    // { ok: false, skipped: true }, и этот ответ никто не читал.
+    //
+    // Отказ выглядел успехом ровно там, где человек только что заплатил.
+    //
+    // Ждать здесь безопасно: платёж уже записан выше, и неудача с письмом его
+    // не отменяет — меняется только честность поля и появляется след в журнале.
+    // Адрес в журнал не пишем, достаточно ссылки: журналы читают не только мы.
+    const чек = await sendReceiptEmail({
       to: email,
       origin: getOrigin(req),
       link_id: link.id,
@@ -94,7 +105,13 @@ export async function POST(
       method,
       last4: last4 ?? null,
     });
-    emailQueued = true;
+    emailQueued = чек.ok;
+    if (!чек.ok) {
+      console.warn(
+        `[pay/${link.id}] чек не отправлен: ` +
+          (чек.skipped ? "не задан RESEND_API_KEY" : чек.error ?? "причина не названа"),
+      );
+    }
   }
 
   return withCors(

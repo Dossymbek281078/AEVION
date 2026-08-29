@@ -418,7 +418,40 @@ async function run() {
   // держатся ОБЕЩАНИЯ посадочной («видео», «3D»): она читает `configured` и
   // показывает раздел только когда провайдер настроен. Отвалится ключ — витрина
   // тихо перестанет обещать, и узнать об этом было неоткуда.
-  console.log("\n17б. Каталоги и состояние студии");
+  // 17в. Обещание домена сверяется с ИМЕНЕМ, а не с нашей же переменной.
+//
+// Состояние возможности "domain" берётся из DEVHUB_AEVION_BUILD_ZONE_ACTIVE —
+// осознанного флага, который человек ставит, «когда зона заработает». Замер
+// 29.08.2026: на проде флаг стоял, а у aevion.build НОЛЬ NS-записей. Панель
+// говорила «Домен — работает», человек получил бы адрес, который не
+// открывается.
+//
+// Ни один тест кода этого не увидит: код верен, неверна настройка прода.
+// Поэтому проверка живёт здесь и спрашивает не нас, а систему имён.
+try {
+  const capsRes = await req("GET", "/api/devhub/studio/capabilities");
+  const caps = capsRes.body?.capabilities || [];
+  const dom = caps.find((c) => c && c.id === "domain");
+  if (!dom) {
+    skip("домен: состояние", "возможности не отдались — сверять нечего");
+  } else if (dom.status !== "live") {
+    ok(`домен честно не обещан (${dom.status})`);
+  } else {
+    const dns = await import("node:dns");
+    let ns = [];
+    try {
+      ns = await dns.promises.resolveNs("aevion.build");
+    } catch {
+      ns = [];
+    }
+    if (ns.length > 0) ok(`домен обещан и зона делегирована (NS: ${ns.length})`);
+    else fail("домен обещан, а зона НЕ делегирована", "у aevion.build ноль NS-записей — снимите DEVHUB_AEVION_BUILD_ZONE_ACTIVE");
+  }
+} catch (e) {
+  skip("домен: состояние", `проверить не удалось: ${String(e).slice(0, 60)}`);
+}
+
+console.log("\n17б. Каталоги и состояние студии");
   for (const [label, path, key] of [
     ["каталог видеомоделей", "/api/devhub/media/video/models", "models"],
     ["каталог 3D-моделей", "/api/devhub/media/3d/models", "models"],

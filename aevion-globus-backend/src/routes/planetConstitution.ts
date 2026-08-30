@@ -128,8 +128,15 @@ async function countOwnerArtifacts(email: string): Promise<number> {
         [email],
       );
       return Number(r.rows[0]?.n ?? 0);
-    } catch {
-      // fall through to memory counter
+    } catch (e) {
+      // Поведение прежнее — падаем на счётчик в памяти, иначе сбой базы
+      // закрыл бы публикацию всем. Но молчать нельзя: память после выкатки
+      // пуста, а значит предел бесплатного тарифа тихо СНИМАЕТСЯ — снаружи
+      // это неотличимо от человека, который ещё ничего не публиковал.
+      console.warn(
+        `[planet/constitution] счёт публикаций не прочитан из базы, считаем в ` +
+        `памяти (предел бесплатного тарифа мог сняться): ${(e as Error)?.message ?? e}`,
+      );
     }
   }
   return memOwnerCounts.get(email) ?? 0;

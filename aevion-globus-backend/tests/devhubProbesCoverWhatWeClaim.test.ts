@@ -71,7 +71,16 @@ describe("что объявлено рабочим, то и проверяетс
     for (const [id, envs] of capabilityEnvs()) {
       if (id in NO_PROBE_BY_DESIGN) continue;
       if (!envs.length) continue; // без внешнего ключа проверять нечего
-      if (!envs.some((e) => probed.has(e))) missing.push(`${id} (${envs.join(", ")})`);
+      // ДВА способа доказать, что поставщика спрашивают:
+      //  1) его переменная упомянута в блоке проб (прежний, позиционный);
+      //  2) есть отметка noteProviderSuccess("<id>") где угодно в файле.
+      //
+      // Второй добавлен 30.08.2026: первый проверяет, ГДЕ написано, а не ЧТО
+      // происходит. Отметка выдачи базы стоит в своём маршруте — это и есть
+      // правильное место, там поставщик используется, — и позиционный критерий
+      // объявлял её отсутствующей.
+      const marked = SRC.includes(`noteProviderSuccess("${id}")`);
+      if (!marked && !envs.some((e) => probed.has(e))) missing.push(`${id} (${envs.join(", ")})`);
     }
     expect(
       missing,

@@ -161,12 +161,43 @@ export function countSubscriptions(): number {
  * the LS subscription webhook on cancel/expire) correctly supersedes an
  * earlier paid record. Returns null if the email has no records.
  */
+/**
+ * Не удалось ПРОЧИТАТЬ хранилище подписок — в отличие от «записей нет».
+ *
+ * Разные вещи, а отвечали одинаково: и то и другое давало `null`, а выше по
+ * стеку превращалось в «tierId: free». То есть при пропаже или порче файла
+ * каждый заплативший тихо становился бесплатным, и снаружи это неотличимо от
+ * «человек не платил»: ни строки в журнале, ни признака в ответе.
+ *
+ * Три исхода вместо двух (правило из разбора сторожей 18.08):
+ *   файла нет вовсе      — честный ноль, до первой покупки он законно отсутствует;
+ *   файл прочитан        — настоящее значение;
+ *   файл есть, но не читается — НЕ ЗНАЮ, и об этом должно быть слышно.
+ *
+ * Поведение намеренно НЕ меняется: отказ чтения по-прежнему не роняет запрос и
+ * даёт «free». Меняется одно — он перестаёт быть невидимым.
+ */
+let warnedUnreadableStore = false;
+
+/** Видел ли процесс нечитаемое хранилище подписок. Для ручек состояния. */
+export function subscriptionStoreUnreadable(): boolean {
+  return warnedUnreadableStore;
+}
+
+/** Только для тестов: вернуть признак в исходное состояние. */
+export function resetSubscriptionStoreWarning(): void {
+  warnedUnreadableStore = false;
+}
+
 export function readLatestSubscription(email: string): Subscription | null {
   const target = email.trim().toLowerCase();
   if (!target) return null;
+  const file = subsFile();
+  // Отсутствие файла — законный ноль: до первой покупки его нет. Шуметь тут
+  // нельзя, иначе журнал забьётся на пустой системе и предупреждение ниже
+  // потеряется среди него.
+  if (!existsSync(file)) return null;
   try {
-    const file = subsFile();
-    if (!existsSync(file)) return null;
     const lines = readFileSync(file, "utf8").split("\n").filter((l) => l.trim().length > 0);
     let latest: Subscription | null = null;
     for (const line of lines) {
@@ -178,7 +209,18 @@ export function readLatestSubscription(email: string): Subscription | null {
       }
     }
     return latest;
-  } catch {
+  } catch (err) {
+    // Файл ЕСТЬ, а прочитать не вышло: права, порча, диск. Один раз на процесс —
+    // на каждый вызов кричать незачем, а один громкий след обязателен: без него
+    // «все стали бесплатными» выглядит как обычный день.
+    if (!warnedUnreadableStore) {
+      warnedUnreadableStore = true;
+      console.error(
+        `[provisioning] хранилище подписок НЕ ЧИТАЕТСЯ (${file}): ${
+          err instanceof Error ? err.message : String(err)
+        }. Пока так, каждый заплативший отвечает как бесплатный.`,
+      );
+    }
     return null;
   }
 }

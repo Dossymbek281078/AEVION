@@ -88,6 +88,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
   const [contact, setContact] = useState("");
 
   const [assessment, setAssessment] = useState<Assessment | null>(null);
+  const [fragile, setFragile] = useState(false);
   const [published, setPublished] = useState<Published | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -157,6 +158,11 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
       setAssessment(r.assessment);
       // The token is returned exactly once. Show it before anything else can
       // navigate away — losing it means losing access to the offers.
+      // ЧЕСТНОСТЬ СОХРАНЕНИЯ. Сервер отвечает storage: "memory", когда база
+      // недоступна и сработал запасной путь — заявка не переживёт перезапуск.
+      // До 30.08.2026 мастер это поле игнорировал и говорил «опубликовано»
+      // одинаково в обоих случаях: человек уходил уверенным, а заявки нет.
+      setFragile(r.storage !== undefined && r.storage !== "db");
       setPublished({ id: r.id, manageToken: r.manageToken, title: r.listing.title });
       setPhase("published");
       onPublished(r.listing);
@@ -182,6 +188,21 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
   if (phase === "published" && published) {
     return (
       <div style={{ display: "grid", gap: 16 }}>
+        {/* Запасной путь называет себя. Молчаливый отказ выглядит успехом:
+            заявка легла в память, не переживёт перезапуск, а экран сообщает
+            то же самое, что при настоящем сохранении. */}
+        {fragile && (
+          <div style={{ ...card, borderColor: "#fed7aa", background: "#fff7ed" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#9a3412", marginBottom: 6 }}>
+              Сохранено во временное хранилище
+            </div>
+            <p style={{ margin: 0, fontSize: 13.5, color: "#7c2d12", lineHeight: 1.6 }}>
+              База сейчас недоступна, и заявка записана в память сервера — она
+              может пропасть при перезапуске. Сохраните ссылку управления ниже и
+              подайте заявку ещё раз позже: так вы точно её не потеряете.
+            </p>
+          </div>
+        )}
         <div style={{ ...card, borderColor: "#bbf7d0", background: "#f0fdf4" }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: "#166534", marginBottom: 6 }}>
             Заявка №{published.id} опубликована

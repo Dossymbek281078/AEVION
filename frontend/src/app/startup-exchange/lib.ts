@@ -260,6 +260,13 @@ export const startupxApi = {
       manageToken: string;
       listing: Listing;
       assessment: Assessment;
+      /**
+       * Куда легла заявка. Сервер отвечает "memory", когда база недоступна и
+       * сработал запасной путь: заявка не переживёт перезапуск. Поле надо
+       * ЧИТАТЬ — 30.08.2026 мастер публикации его игнорировал и говорил
+       * «опубликовано» одинаково в обоих случаях.
+       */
+      storage?: "db" | "memory";
     }>("/ideas", {
       method: "POST",
       body: JSON.stringify(draft),

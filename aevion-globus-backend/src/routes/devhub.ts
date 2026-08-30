@@ -376,6 +376,15 @@ async function getMonthUsage(userId: string, month: string, capability: Capabili
     // никто не узнает, ЧТО перестало меряться: предел на платных ручках
     // перестаёт применяться, а снаружи это выглядит обычной работой.
     // Не роняем: отказ УЧЁТА не должен ломать оплаченное действие.
+      // В сборщик ошибок, а не только в журнал: предупреждение в потоке
+      // Railway никто не читает проактивно — проверено, у Sentry.init нет
+      // captureConsole, значит console.warn туда не попадает. След годится
+      // для разбирательства, но отказ, снимающий ПРЕДЕЛ РАСХОДА, должен
+      // приводить человека, а не ждать, пока он придёт сам.
+      //
+      // Путь СПИСАНИЯ это уже делает (devhub/debitCredit) — путь ЧТЕНИЯ был
+      // единственным несимметричным местом.
+      captureException(e, { route: "devhub/getMonthUsage", userId, month, capability });
     console.warn(
       `[devhub/credit] расход за месяц не прочитан — предел не применяется: ` +
         `user=${userId} month=${month} capability=${capability}: ${safeErrorText(e)}`,

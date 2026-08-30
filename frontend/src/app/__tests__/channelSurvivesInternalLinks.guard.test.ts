@@ -67,7 +67,13 @@ describe("метка канала переживает внутренние пе
       if (KNOWN_EXCEPTIONS.has(rel)) continue;
       const src = fs.readFileSync(file, "utf8");
       for (const t of targets) {
-        if (src.includes(`href="${t}"`)) lost.push(`${rel} → ${t}`);
+        // ТРИ формы записи одной и той же ссылки. Сторож знал только первую,
+        // и мутация 30.08.2026 прошла незамеченной: замена keepChannel(...) на
+        // литерал даёт href={"/путь"} — в фигурных скобках, мимо шаблона.
+        // У слепоты сторожа два измерения: какие файлы он читает и какие ФОРМЫ
+        // видит. Охват был верным, форма — нет.
+        const forms = [`href="${t}"`, `href={"${t}"}`, `href={'${t}'}`];
+        if (forms.some((f) => src.includes(f))) lost.push(`${rel} → ${t}`);
       }
     }
     expect(lost).toEqual([]);

@@ -56,8 +56,8 @@ export const LANG_COOKIE = "aevion_lang_v1";
  * them with scripts/splitI18n.mjs when a language grows.
  */
 export const LANG_KEY_COUNT: Record<Lang, number> = {
-  ru: 7347,
-  en: 7347,
+  ru: 7351,
+  en: 7351,
   kk: 7310,
   de: 134,
   fr: 134,

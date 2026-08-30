@@ -1,0 +1,30 @@
+import type { Metadata } from "next";
+
+/* Заголовок предпросмотра для клиентской страницы.
+ * Страница объявляет "use client" и потому не может экспортировать metadata
+ * сама — Next это запрещает. Без этого файла ссылка, посланная в мессенджер,
+ * приходила с общим заголовком сайта.
+ * Замер 30.08.2026: из 149 страниц с картинкой предпросмотра семнадцать не
+ * имели своего заголовка. */
+export const metadata: Metadata = {
+  title: "AEVION Payments — Refunds",
+  description:
+    "Issue partial or full refunds against paid links and follow each one to settlement.",
+  openGraph: {
+    title: "AEVION Payments — Refunds",
+    description:
+      "Issue partial or full refunds against paid links and follow each one to settlement.",
+    type: "website",
+    siteName: "AEVION",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AEVION Payments — Refunds",
+    description:
+      "Issue partial or full refunds against paid links and follow each one to settlement.",
+  },
+};
+
+export default function PaymentsRefundsLayout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}

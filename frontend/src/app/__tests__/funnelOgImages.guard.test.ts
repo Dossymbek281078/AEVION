@@ -90,11 +90,15 @@ describe("карточки страниц воронки", () => {
   //
   // Сокращать список можно только вниз. Строку убирают вместе с добавлением
   // openGraph на страницу — образец рядом, в /longevity и /en/go.
-  const OG_TITLE_DEBT = new Set([
-    "go", "shop", "constitution/pricing", "qsign", "partner", "qventure",
-    "qlearn", "bank", "qnews", "qai", "studio", "explore",
-    "build", "build/pricing", "build/vacancies",
-  ]);
+  // Долг пересчитан 30.08.2026 после того, как сторож научился смотреть и в
+  // layout.tsx: из пятнадцати «должников» настоящих оказалось ДВА. Остальные
+  // тринадцать заголовок имеют — просто в layout, потому что их page.tsx
+  // клиентский и metadata объявлять не может.
+  // Сокращение списка делает сторожа СТРОЖЕ: те тринадцать теперь под охраной,
+  // и если у кого-то заголовок пропадёт, набор покраснеет.
+  // У /go и /shop layout.tsx нет вовсе — им нужен либо он, либо перенос
+  // разметки в серверный компонент. Это работа, а не строчка, поэтому долг.
+  const OG_TITLE_DEBT = new Set(["go", "shop"]);
 
   it("новая входная страница обязана иметь СВОЙ заголовок предпросмотра", () => {
     // Карточка-картинка и заголовок — разные вещи, и я это перепутал. На живом
@@ -106,7 +110,16 @@ describe("карточки страниц воронки", () => {
       if (OG_TITLE_DEBT.has(route)) continue;
       const file = join(APP, ...route.split("/"), "page.tsx");
       if (!existsSync(file)) continue;
-      if (!readFileSync(file, "utf8").includes("openGraph")) fresh.push(route);
+      // ДВА МЕСТА, а не одно. Страница с "use client" не может объявлять
+      // metadata вовсе — Next это запрещает, и заголовок тогда живёт в
+      // layout.tsx рядом. Замер 30.08.2026: сторож смотрел только page.tsx
+      // и записал в долг ВОСЕМЬ страниц, у которых заголовок есть в layout
+      // (qsign, partner, qlearn, studio, explore, qventure, qnews, qai).
+      // Настоящий долг был у двух — /go и /shop, где layout нет вовсе.
+      const layout = join(APP, ...route.split("/"), "layout.tsx");
+      const hasOg = readFileSync(file, "utf8").includes("openGraph")
+        || (existsSync(layout) && readFileSync(layout, "utf8").includes("openGraph"));
+      if (!hasOg) fresh.push(route);
     }
     expect(fresh).toEqual([]);
   });

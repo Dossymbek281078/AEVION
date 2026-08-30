@@ -46,6 +46,7 @@ import { buildRunInstructions } from "../lib/devhubRunInstructions";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
 import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
 import { safeErrorText } from "../lib/safeErrorText";
+import { checkPublicUrl } from "../lib/publicUrlOnly";
 
 export const devhubRouter = Router();
 
@@ -6432,7 +6433,16 @@ devhubRouter.post("/media/upload-audio", async (req, res) => {
   try {
     let buf: Buffer;
     if (sourceUrl) {
-      const sr = await fetch(String(sourceUrl));
+      // Без этой проверки посторонний заставлял НАШ сервер сходить по любому
+      // адресу, включая внутренние: метаданные облака, соседние службы, админки.
+      // Результат возвращался ему кодом статуса. Ручка была закрыта только тем,
+      // что не настроено хранилище, — то есть случайно.
+      //
+      // Потеряно при мерже 30.08.2026 (взята чужая сторона файла) и возвращено:
+      // сторож publicUrlOnly требует именно ВЫЗОВА, а не импорта, и поймал.
+      const verdict = await checkPublicUrl(String(sourceUrl));
+      if (!verdict.ok) return res.status(400).json({ error: verdict.reason });
+      const sr = await fetch(verdict.url.toString());
       if (!sr.ok) return res.status(sr.status).json({ error: `source fetch failed: ${sr.status}` });
       buf = Buffer.from(await sr.arrayBuffer());
     } else {

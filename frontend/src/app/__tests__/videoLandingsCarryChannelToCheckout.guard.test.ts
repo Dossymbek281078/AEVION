@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 
 /*
  * Посадочные под ролики доводят метку канала до КАССЫ.
@@ -62,6 +62,82 @@ describe("посадочные под ролики не теряют метку 
       // channelFrom сверяет метку со списком известных каналов: без него в
       // отчёт уехало бы любое ?c= из чужой ссылки.
       expect(s, `${rel} не сверяет метку со списком каналов`).toContain("channelFrom(");
+    }
+  });
+});
+
+/* ВЕСЬ КЛАСС, а не только две посадочные.
+ *
+ * Свип 30.08.2026 по всей разметке: прямых ссылок в кассу четыре. Две — на
+ * посадочных выше, обе починены. Одна — сама реализация withChannel, не ссылка.
+ * Остаётся одна, и она в долге ниже.
+ *
+ * Ссылки, которые строятся из каталога товаров, проверяет соседний сторож
+ * канала на внутренних переходах. Здесь именно ПРЯМЫЕ адреса касс: их легко
+ * написать заново, не вспомнив про метку, — так и появились обе починенные.
+ *
+ * Строки сравниваются по вхождению, без регулярок: собранная из строки
+ * регулярка на этой машине теряет обратные слэши и молча перестаёт совпадать —
+ * сторож остался бы зелёным, ничего не проверяя.
+ */
+const RAW_CHECKOUT_DEBT = new Map([
+  [
+    "constitution/page.tsx",
+    "Моя копия файла от 18.08, а четыре чужие ветки новее — одна сегодняшняя. " +
+      "Правка поверх отстающей копии переносит к себе чужие уже исправленные " +
+      "дефекты (правило 7в). Чинить должен тот, у кого файл свежий: обернуть " +
+      "адрес в withChannel, как сделано в qmelanin.",
+  ],
+]);
+
+function isCheckoutLink(line: string): boolean {
+  if (!line.includes("href")) return false;
+  return line.includes("gumroad.com/l/") || line.includes("lemonsqueezy.com");
+}
+
+function everyFileUnderApp(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === "__tests__" || e.name === "node_modules") continue;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith(".tsx") || e.name.endsWith(".ts")) out.push(full);
+    }
+  };
+  walk(APP);
+  return out;
+}
+
+describe("прямые ссылки в кассу несут метку канала", () => {
+  const files = everyFileUnderApp();
+
+  it("обход видит весь сайт — иначе пустой список читается как чистота", () => {
+    expect(files.length).toBeGreaterThanOrEqual(300);
+  });
+
+  it("ни одной новой ссылки без метки", () => {
+    const bare: string[] = [];
+    for (const f of files) {
+      const rel = relative(APP, f).split(sep).join("/");
+      if (RAW_CHECKOUT_DEBT.has(rel)) continue;
+      for (const line of readFileSync(f, "utf8").split("\n")) {
+        if (isCheckoutLink(line) && !line.includes("withChannel")) {
+          bare.push(rel + ": " + line.trim().slice(0, 60));
+        }
+      }
+    }
+    expect(bare, "ссылка ведёт в кассу без метки — покупка придёт в отчёт ниоткуда").toEqual([]);
+  });
+
+  it("долг не протух: перечисленное всё ещё без метки", () => {
+    // Без этой проверки строка долга становится вечным прощением: файл починят,
+    // а следующая сырая ссылка в нём пройдёт молча.
+    for (const [rel] of RAW_CHECKOUT_DEBT) {
+      const stillBare = readFileSync(join(APP, rel), "utf8")
+        .split("\n")
+        .some((l) => isCheckoutLink(l) && !l.includes("withChannel"));
+      expect(stillBare, rel + " уже несёт метку — вычеркните строку из долга").toBe(true);
     }
   });
 });

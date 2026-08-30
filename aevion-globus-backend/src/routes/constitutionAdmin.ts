@@ -18,7 +18,6 @@
  */
 
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { verifyBearerOptional } from "../lib/authJwt";
 import { checkAdmin, type AdminVerdict } from "../lib/adminAuth";
 import { clientIp as sharedClientIp } from "../lib/rateLimit";
 

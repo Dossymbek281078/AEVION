@@ -32,13 +32,20 @@ export function ConstitutionFunnelPing({
   props?: Record<string, string | number | boolean>;
 }) {
   const { track } = useFunnel();
+  // Подпись значений, а не сам объект: у литерала новая ссылка на каждом
+  // рендере, и он гнал бы событие бесконечно. Но и БЕЗ него был недосчёт:
+  // при переходе между постами React может переиспользовать этот же
+  // экземпляр, зависимости [track, event] не меняются, и заход на второй
+  // пост не считался бы вовсе — недосчёт ровно там, где он и чинится.
+  // Найдено вычиткой дифа, не тестом.
+  const signature = JSON.stringify(props ?? {});
 
   useEffect(() => {
     track(event, props);
     // props намеренно вне зависимостей: объектный литерал у вызывающего меняет
     // ссылку на каждом рендере и слал бы событие снова и снова.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track, event]);
+  }, [track, event, signature]);
 
   return null;
 }

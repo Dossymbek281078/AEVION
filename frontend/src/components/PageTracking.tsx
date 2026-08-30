@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { track } from "@/lib/track";
+import { channelFrom } from "@/lib/products";
 
 /**
  * Замер посещения и ухода к оплате — один компонент на все посадочные.
@@ -23,7 +24,23 @@ export function PageTracking({ page }: { page: string }) {
   const sent = useRef(false);
 
   useEffect(() => {
-    const channel = new URLSearchParams(window.location.search).get("c") || "direct";
+    // Метка приводится к тому же словарю, каким пользуются события оплаты.
+    //
+    // Найдено 30.08.2026: здесь метка клалась СЫРОЙ («tg»), а checkout_start —
+    // сверенной по списку каналов («telegram»). В панели это две плитки, где
+    // один и тот же канал назван двумя словами, и сопоставить заходы с
+    // покупками нельзя. Сверка живёт в channelFrom, второй словарь заводить
+    // здесь незачем.
+    //
+    // Три исхода различаются намеренно:
+    //   метки нет      -> "direct"
+    //   метка знакомая -> имя канала из списка
+    //   метка чужая    -> "unknown", и это НЕ то же самое, что direct: именно
+    //                     по росту этой доли 21.08 заметили, что для Дзена и
+    //                     VK не заведены метки и продажи с них терялись.
+    //                     Какая именно метка пришла, видно в поле path рядом.
+    const raw = new URLSearchParams(window.location.search).get("c");
+    const channel = raw ? (channelFrom(raw) ?? "unknown") : "direct";
 
     // В dev React вызывает эффект дважды. Без защёлки сводка показывала бы
     // вдвое больше посещений на пустом месте.

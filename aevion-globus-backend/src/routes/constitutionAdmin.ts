@@ -19,26 +19,16 @@
 
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { checkAdmin, type AdminVerdict } from "../lib/adminAuth";
 import { clientIp as sharedClientIp } from "../lib/rateLimit";
-
-const ADMIN_ALLOWLIST = (process.env.CONSTITUTION_ADMIN_ALLOWLIST || "yahiin1978@gmail.com")
-  .split(",")
-  .map((s) => s.trim().toLowerCase())
-  .filter(Boolean);
 
 const SUSPICIOUS_SCENARIOS_PER_DAY = Number(process.env.SUSPICIOUS_SCENARIOS || "50");
 const SUSPICIOUS_VOTES_PER_DAY = Number(process.env.SUSPICIOUS_VOTES || "100");
 
-function isAdmin(req: Request): { ok: boolean; reason: string; email: string | null } {
-  const payload = verifyBearerOptional(req);
-  if (!payload) return { ok: false, reason: "no-token", email: null };
-  const p = payload as Record<string, unknown>;
-  const email = typeof p.email === "string" ? p.email.toLowerCase() : null;
-  if (p.role === "admin") return { ok: true, reason: "jwt-role", email };
-  if (email && ADMIN_ALLOWLIST.includes(email)) {
-    return { ok: true, reason: "allowlist", email };
-  }
-  return { ok: false, reason: "denied", email };
+// Реализация вынесена в lib/adminAuth: копий было две, с разными типами
+// возврата. Форма сохранена богатая — здесь используются reason и email.
+function isAdmin(req: Request): AdminVerdict {
+  return checkAdmin(req);
 }
 
 /* ─── In-process rolling 24h telemetry ─────────────────────────────── */

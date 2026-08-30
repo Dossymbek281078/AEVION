@@ -4,35 +4,51 @@ import { verifyBearerOptional } from "./authJwt";
 /**
  * «Этот запрос от администратора?» — ОДНА реализация на платформу.
  *
- * Вынесено 30.08.2026 из `routes/constitutionFunnel.ts`, где проверка жила
- * локально. Понадобилась вторая — в сводке расхода QReal, — и копировать
- * решение об авторизации во второй файл нельзя: две копии одного действия
- * расходятся молча, и разойдутся они в ту сторону, где кто-то ослабил
- * условие ради своего случая.
+ * Сведено 30.08.2026 из ДВУХ самостоятельных копий:
  *
- * Правило допуска не менялось при переносе: роль `admin` в токене ЛИБО адрес
- * в списке `CONSTITUTION_ADMIN_ALLOWLIST`. Список читается при каждом вызове, а
- * не при загрузке модуля: иначе переменная, заданная после старта, не
- * подействовала бы до перезапуска.
+ *   routes/constitutionFunnel.ts   isAdmin(req): boolean
+ *   routes/constitutionAdmin.ts    isAdmin(req): { ok, reason, email }
+ *
+ * Копировать решение об авторизации нельзя: копии расходятся молча, и
+ * разойдутся в ту сторону, где кто-то ослабил условие ради своего случая.
+ *
+ * ФОРМА ВЗЯТА БОГАТАЯ, и это не вкусовщина. Верни общая функция `boolean` —
+ * поля `reason` и `email` исчезли бы у второго потребителя, а `tsc` поймал бы
+ * НЕ ВСЁ: `reason` уходит в `res.json`, а тело ответа не типизировано.
+ * Расширение переживается молча, сужение нет.
+ *
+ * Имя переменной и УМОЛЧАНИЕ перенесены дословно из обеих копий (они совпадали).
+ * При первом выносе я написал имя по памяти, и оно было другим. Ошибка здесь
+ * тише, чем кажется: доступ у основателя остался бы по умолчанию, а у всех,
+ * кого он добавил переменной, пропал бы молча — и проверка «я вхожу» прошла бы
+ * успешно.
+ *
+ * Список читается при КАЖДОМ вызове, а не при загрузке модуля: иначе
+ * переменная, заданная после старта, не подействовала бы до перезапуска.
  */
-export function adminEmails(): string[] {
-  // Имя переменной и УМОЛЧАНИЕ перенесены дословно из прежнего места. При
-  // выносе я сперва придумал правдоподобное имя по памяти — с ним список стал
-  // бы пустым, и основатель потерял бы собственный доступ. Ровно тот дрейф,
-  // ради предотвращения которого проверка и выносится в одно место.
+
+export type AdminVerdict = { ok: boolean; reason: string; email: string | null };
+
+export function adminAllowlist(): string[] {
   return (process.env.CONSTITUTION_ADMIN_ALLOWLIST || "yahiin1978@gmail.com")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 }
 
-export function isAdminRequest(req: Request): boolean {
+export function checkAdmin(req: Request): AdminVerdict {
   const payload = verifyBearerOptional(req);
-  if (!payload) return false;
+  if (!payload) return { ok: false, reason: "no-token", email: null };
   const p = payload as Record<string, unknown>;
-  if (p.role === "admin") return true;
-  if (typeof p.email === "string" && adminEmails().includes(p.email.toLowerCase())) {
-    return true;
+  const email = typeof p.email === "string" ? p.email.toLowerCase() : null;
+  if (p.role === "admin") return { ok: true, reason: "jwt-role", email };
+  if (email && adminAllowlist().includes(email)) {
+    return { ok: true, reason: "allowlist", email };
   }
-  return false;
+  return { ok: false, reason: "denied", email };
+}
+
+/** Короткая форма для тех, кому нужен только ответ «да/нет». */
+export function isAdminRequest(req: Request): boolean {
+  return checkAdmin(req).ok;
 }

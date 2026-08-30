@@ -45,7 +45,20 @@ const capture = makeServiceCapture("provisioning");
  */
 const PACKAGE_ROOT = join(__dirname, "..", "..");
 
-function subsFile(): string {
+/**
+ * Единственное место, где вычисляется путь к хранилищу подписок.
+ *
+ * Экспортируется намеренно: 30.08.2026 нашлась ВТОРАЯ реализация — ручка
+ * «моя подписка» в routes/pricing.ts считала путь сама и брала за основу
+ * `process.cwd()`, тогда как записи платежей идут от каталога ПАКЕТА. Совпадут
+ * они или нет, зависит от того, откуда запущен процесс: запусти сервис из
+ * корня репозитория — и человек, только что заплативший, спросит свою
+ * подписку и получит «нет».
+ *
+ * Тот же класс, что копия записи прав в вебхуке: две реализации одного,
+ * расходятся молча, и разницу видно только при сравнении.
+ */
+export function subsFile(): string {
   const fromEnv = process.env.SUBSCRIPTIONS_FILE?.trim();
   if (fromEnv) return fromEnv;
   return join(PACKAGE_ROOT, "data", "subscriptions.jsonl");

@@ -38,7 +38,7 @@ const KEY = "canonical:";
 // РАЗБОР СПИСКА на 30.08.2026, чтобы следующий не считал заново:
 //   29 динамических (идентификатор в пути) — в поиске не нужны, это записи;
 //    5 служебных (вход, ящик, настройки, админка, экраны после действия);
-//    6 публичных — вот их и стоит разбирать.
+//    5 публичных — вот их и стоит разбирать.
 // Из семи публичных сразу отпадает `pricing/paddle`: это страница-
 // перенаправление, ей собственный canonical не нужен по устройству.
 // Четыре банковских (`bank/api`, `bank/badge`, `bank/explore`,
@@ -58,7 +58,6 @@ const INHERITING_TODAY = new Set([
     "bureau/badge/[certId]",
     "bureau/cert/[certId]",
     "bureau/cert/[certId]/notarize",
-    "bureau/launch",
     "bureau/notaries/[notaryId]",
     "bureau/org/[orgId]",
     "bureau/org/accept/[token]",

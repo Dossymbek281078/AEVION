@@ -51,7 +51,21 @@ describe("даты запуска не расходятся между пись�
   });
 
   it("реестр анонсов согласен с планом там, где дата у него задана", () => {
-    const dated = [...announce.matchAll(/(\w+): \{\s*name: "[^"]*",\s*date: "([^"]+)"/g)];
+    // Между name и date может стоять ПОЯСНЕНИЕ — так и вышло при сведении с
+    // продом 30.08. Прежний шаблон требовал их подряд и объявил, что дат нет
+    // ни у одного модуля. Сторож не должен ломаться от комментария.
+    // БЕЗ регулярки: между name и date может стоять пояснение (так и вышло при
+    // сведении с продом 30.08), а шаблон, собранный из строки, дважды терял
+    // экранирование и молча давал ноль. Разбираем по блокам вхождением.
+    const dated: Array<[string, string, string]> = [];
+    for (const chunk of announce.split(/^  ([a-z_]+): \{$/m)) {
+      const d = chunk.indexOf('date: "');
+      if (d < 0) continue;
+      const v = chunk.slice(d + 7, chunk.indexOf('"', d + 7));
+      const n = chunk.indexOf('name: "');
+      const nm = n < 0 ? "" : chunk.slice(n + 7, chunk.indexOf('"', n + 7));
+      dated.push(["", nm, v]);
+    }
     expect(dated.length, "хотя бы у одного модуля дата должна быть задана").toBeGreaterThan(0);
     for (const m of dated) {
       const [, slug, date] = m;

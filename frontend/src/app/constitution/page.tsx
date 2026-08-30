@@ -2376,6 +2376,8 @@ type SocialData = {
 };
 
 function SocialPanel({ artifactId }: { artifactId: string }) {
+  // Своя воронка модуля, как у остального: useFunnel -> /api/constitution/funnel/track.
+  const { track } = useFunnel();
   const { t } = useI18n();
   const [data, setData] = useState<SocialData | null>(null);
   const [text, setText] = useState<string>("");
@@ -2412,6 +2414,9 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
 
   const castVote = async (vote: 1 | -1) => {
     const toggleOff = data?.votes.my === vote;
+    // Событие воронки. Снятие голоса тоже считаем — это действие человека, и
+    // не отличать его значило бы завышать долю «за». Направление в свойстве.
+    track("vote_cast", { vote: toggleOff ? 0 : vote });
     try {
       if (toggleOff) {
         await fetch(

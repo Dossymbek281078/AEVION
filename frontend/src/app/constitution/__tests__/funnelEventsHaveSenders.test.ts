@@ -47,9 +47,7 @@ const NO_FEATURE: Record<string, string> = {
  * видеть как работу. Один список на оба смысла превращает долг в норму.
  */
 const SENDER_OWED: Record<string, string> = {
-  academy_lesson_done: "уроки есть в /constitution/learn, complete() вызывается — замера нет",
-  academy_cert: "сертификат выдаётся там же по прохождении всех уроков — замера нет",
-  vote_cast: "голосование работает на странице конституции (castVote) — замера нет",
+  // Пусто: долг закрыт 30.08 в том же окне, где был назван.
 };
 
 function declaredEvents(): string[] {

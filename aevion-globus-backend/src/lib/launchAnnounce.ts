@@ -56,8 +56,8 @@ export const LAUNCH_MODULES: Record<
 > = {
   cyberchess: {
     name: "CyberChess",
-    date: "30 августа",
-    dateSource: "ветка launch/2026-08-30 + сводка вкладки CyberChess от 19.08.2026",
+    date: "30 сентября",
+    dateSource: "план основателя 30.08.2026 (00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md)",
     page: "/cyberchess",
     opens: "задача дня, рейтинг и турниры",
   },

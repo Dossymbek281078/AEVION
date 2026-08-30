@@ -780,7 +780,14 @@ export default function ApiPage() {
           >
             <FactCard label="Base URL" value={base.replace(/^https?:\/\//, "")} />
             <FactCard label="Auth" value="Bearer token" />
-            <FactCard label="Rate limit" value="100 req/sec" />
+            {/* ⚠️ 29.08.2026: здесь стояло "100 req/sec" — завышение В СТО РАЗ.
+                Код кассы: DEFAULT_RATE_LIMIT = 60 при окне 60 * 1000 мс
+                (_lib.ts), то есть 60 запросов в МИНУТУ, один в секунду.
+                Клиент, рассчитавший интеграцию по витрине, упёрся бы в
+                отказы сразу же. Число здесь обязано совпадать с кодом:
+                менять предел — решение продуктовое, а врать о нём —
+                просто дефект. */}
+            <FactCard label="Rate limit" value="60 req/min" />
             <FactCard label="Idempotency" value="Idempotency-Key header" />
             <FactCard
               label="OpenAPI 3.1"

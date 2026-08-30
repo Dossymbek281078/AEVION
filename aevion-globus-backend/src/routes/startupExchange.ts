@@ -684,8 +684,12 @@ ${items}
 
 // ─── GET /api/startupx/ideas/:id ─────────────────────────────────────────────
 startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  // pgIntId, а не Number: 1e20 — целое по меркам JS, проверку
+  // `Number.isInteger` оно проходит и уезжает в SQL, где Postgres отвечает
+  // выходом за диапазон. Снаружи это 404 вместо 400 — «не найдено» вместо
+  // «плохой запрос», и настоящая причина теряется.
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid_id", 400);
 
   try {
     if (isStartupExchangeDbReady()) {
@@ -854,8 +858,12 @@ startupExchangeRouter.post("/ideas", publishGate, postLimiter, async (req: Reque
 // to the rules that produced it: when ASSESSMENT_VERSION moves, old listings are
 // stale rather than wrong, and the feed must not silently rank the two together.
 startupExchangeRouter.post("/ideas/:id/reassess", assessLimiter, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  // pgIntId, а не Number: 1e20 — целое по меркам JS, проверку
+  // `Number.isInteger` оно проходит и уезжает в SQL, где Postgres отвечает
+  // выходом за диапазон. Снаружи это 404 вместо 400 — «не найдено» вместо
+  // «плохой запрос», и настоящая причина теряется.
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid_id", 400);
 
   let row: ListingRow | undefined;
   if (isStartupExchangeDbReady()) {
@@ -917,8 +925,12 @@ startupExchangeRouter.post("/ideas/:id/reassess", assessLimiter, async (req: Req
 
 // ─── POST /api/startupx/ideas/:id/interest ──────────────────────────────────
 startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  // pgIntId, а не Number: 1e20 — целое по меркам JS, проверку
+  // `Number.isInteger` оно проходит и уезжает в SQL, где Postgres отвечает
+  // выходом за диапазон. Снаружи это 404 вместо 400 — «не найдено» вместо
+  // «плохой запрос», и настоящая причина теряется.
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid_id", 400);
 
   const investorEmail = clampStr(req.body?.investorEmail, MAX_EMAIL);
   const message = clampStr(req.body?.message, MAX_MESSAGE);
@@ -992,8 +1004,12 @@ startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Reque
 // rows sat in a table nobody could read and the whole flow dead-ended at
 // "заявка отправлена".
 startupExchangeRouter.get("/ideas/:id/offers", offersLimiter, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  // pgIntId, а не Number: 1e20 — целое по меркам JS, проверку
+  // `Number.isInteger` оно проходит и уезжает в SQL, где Postgres отвечает
+  // выходом за диапазон. Снаружи это 404 вместо 400 — «не найдено» вместо
+  // «плохой запрос», и настоящая причина теряется.
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid_id", 400);
 
   let row: ListingRow | undefined;
   if (isStartupExchangeDbReady()) {
@@ -1062,8 +1078,12 @@ startupExchangeRouter.get("/ideas/:id/offers", offersLimiter, async (req: Reques
 // that date, and an authorship stamp that silently follows edits is worth
 // nothing. Changing the pitch itself means publishing a new listing.
 startupExchangeRouter.patch("/ideas/:id", offersLimiter, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  // pgIntId, а не Number: 1e20 — целое по меркам JS, проверку
+  // `Number.isInteger` оно проходит и уезжает в SQL, где Postgres отвечает
+  // выходом за диапазон. Снаружи это 404 вместо 400 — «не найдено» вместо
+  // «плохой запрос», и настоящая причина теряется.
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid_id", 400);
   const body = (req.body ?? {}) as Record<string, unknown>;
   const token = req.query.token ?? body.token;
 
@@ -1168,8 +1188,12 @@ startupExchangeRouter.patch("/ideas/:id", offersLimiter, async (req: Request, re
 // received belong to the founder, and the SHA-256 authorship stamp is worth
 // nothing if the record behind it can vanish.
 startupExchangeRouter.delete("/ideas/:id", offersLimiter, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  // pgIntId, а не Number: 1e20 — целое по меркам JS, проверку
+  // `Number.isInteger` оно проходит и уезжает в SQL, где Postgres отвечает
+  // выходом за диапазон. Снаружи это 404 вместо 400 — «не найдено» вместо
+  // «плохой запрос», и настоящая причина теряется.
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid_id", 400);
   const token = req.query.token ?? (req.body as Record<string, unknown> | undefined)?.token;
 
   let row: ListingRow | undefined;
@@ -1209,8 +1233,12 @@ startupExchangeRouter.delete("/ideas/:id", offersLimiter, async (req: Request, r
 const REPORT_REASONS = ["spam", "scam", "stolen", "illegal", "other"] as const;
 
 startupExchangeRouter.post("/ideas/:id/report", reportLimiter, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  // pgIntId, а не Number: 1e20 — целое по меркам JS, проверку
+  // `Number.isInteger` оно проходит и уезжает в SQL, где Postgres отвечает
+  // выходом за диапазон. Снаружи это 404 вместо 400 — «не найдено» вместо
+  // «плохой запрос», и настоящая причина теряется.
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid_id", 400);
   const reasonRaw = req.body?.reason;
   const reason = typeof reasonRaw === "string" && (REPORT_REASONS as readonly string[]).includes(reasonRaw)
     ? reasonRaw
@@ -1305,8 +1333,12 @@ startupExchangeRouter.post("/ideas/:id/takedown", postLimiter, async (req: Reque
   const auth = verifyBearer(req);
   if (!isStartupXAdmin(auth)) return fail(res, "forbidden", 403);
 
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+  // pgIntId, а не Number: 1e20 — целое по меркам JS, проверку
+  // `Number.isInteger` оно проходит и уезжает в SQL, где Postgres отвечает
+  // выходом за диапазон. Снаружи это 404 вместо 400 — «не найдено» вместо
+  // «плохой запрос», и настоящая причина теряется.
+  const id = pgIntId(req.params.id);
+  if (id === null) return fail(res, "invalid_id", 400);
   const reason = clampStr(req.body?.reason, 500);
   if (!reason) {
     return fail(res, "reason_required", 400, {

@@ -7181,7 +7181,7 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
     // делегирована, честный ответ — not_available, как у Railway. Флаг
     // DEVHUB_AEVION_BUILD_ZONE_ACTIVE включает возможность обратно, когда зона
     // заработает: возвращать её должен человек, который это проверил.
-    { id: "domain", name: "Домен (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID && zoneActive === true) ? "live" : "not_available",
+    { id: "domain", name: "Домен (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: zoneActive === true ? "live" : "not_available",
       // Причина в lastError: интерфейс показывает её подсказкой. Без неё
       // человек видит выключенную возможность и не знает, чего ждать —
       // «не работает» без причины читается как поломка у нас.

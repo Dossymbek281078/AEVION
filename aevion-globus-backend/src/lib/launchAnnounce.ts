@@ -168,7 +168,18 @@ export function buildLaunchEmail(moduleSlug: string, email: string): Constitutio
   const url = `https://aevion.app${m.page}`;
   const html = `
     <div style="font-family:Georgia,'Times New Roman',serif;max-width:560px;margin:0 auto;padding:28px;background:#f7f6f2;color:#16161a">
-      <div style="font-family:monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#a9781a">AEVION</div>
+      <!-- Прехедер: строка, которую почтовый клиент показывает в СПИСКЕ писем
+           рядом с темой. Без него туда попадает начало письма, а оно повторяло
+           тему («CyberChess открыт») — вторая строка в ящике не добавляла
+           ничего. Здесь она говорит, ЧТО внутри: человек решает открывать по
+           двум строкам, и вторая должна нести новое.
+           Приём стандартный: скрытый блок плюс неразрывные пробелы, чтобы
+           клиент не подтянул в предпросмотр следующий текст. -->
+      <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;font-size:1px;line-height:1px">
+        ${m.opens.charAt(0).toUpperCase()}${m.opens.slice(1)}. Начать можно за минуту.
+        &#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;
+      </div>
+      ${m.name.startsWith("AEVION") ? "" : `<div style="font-family:monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#a9781a">AEVION</div>`}
       <h1 style="font-size:26px;line-height:1.2;margin:10px 0 14px">${m.name} открыт</h1>
       <p style="margin:0 0 14px;font-size:15px;line-height:1.6">
         Вы оставляли адрес, чтобы узнать о запуске — он состоялся${m.date ? ` ${m.date}` : ""}.

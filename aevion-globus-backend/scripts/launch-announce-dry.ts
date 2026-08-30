@@ -5,9 +5,14 @@
  * выгрузку подписчиков и печатает план. Отправку выполняет владелец, потому что
  * разослать письма живым людям нельзя повторить «уже правильно».
  *
- * Использование:
- *   AEVION_ADMIN_TOKEN=<токен> npx tsx scripts/launch-announce-dry.ts devhub
- *   AEVION_ADMIN_TOKEN=<токен> BASE=https://api.aevion.app npx tsx scripts/launch-announce-dry.ts cyberchess
+ * Использование (запускать ИЗ каталога aevion-globus-backend):
+ *   AEVION_ADMIN_TOKEN=<токен> npm run launch:dry -- cyberchess
+ *   AEVION_ADMIN_TOKEN=<токен> BASE=https://api.aevion.app npm run launch:dry -- devhub
+ *
+ * Раньше здесь стояло `npx tsx`, а tsx в проекте НЕ установлен: npx полез бы
+ * за ним в сеть прямо в утро запуска. Рабочий запуск лежит в package.json
+ * (`launch:dry` на ts-node), и сторож в tests/launchAnnounce.test.ts следит,
+ * чтобы эта строка снова не разошлась с действительностью.
  *
  * Токен берётся ТОЛЬКО из переменной окружения и нигде не сохраняется: выгрузка
  * подписчиков — персональные данные, и путь к ним не должен оставаться в файлах

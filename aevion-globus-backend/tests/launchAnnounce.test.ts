@@ -336,4 +336,86 @@ describe("дата запуска обязана называть свой ис�
     expect(plan.recipients.filter((e) => e === "oba@primer.ru")).toHaveLength(1);
     expect(plan.recipients).toHaveLength(2);
   });
+
+  // 28.08.2026: в шапке скрипта сухого прогона и в инструкции основателю на
+  // день запуска стояло `npx tsx scripts/launch-announce-dry.ts`, а tsx в
+  // проекте не установлен — npx полез бы за ним в сеть в утро запуска.
+  // Рабочая команда всё это время лежала в package.json. Сторож держит простое
+  // правило: инструкция не зовёт инструмент, которого у нас нет.
+  test("команды в шапке скрипта запуска существуют на самом деле", () => {
+    const root = join(__dirname, "..");
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    const scripts: Record<string, string> = pkg.scripts || {};
+    const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+
+    const file = join(root, "scripts", "launch-announce-dry.ts");
+    expect(existsSync(file), "скрипта сухого прогона нет — инструкция ссылается в пустоту").toBe(true);
+    // Смотрим ТОЛЬКО на строки-примеры (звёздочка и отступ), а не на всю
+    // шапку: в пояснении рядом написано, какая команда стояла раньше и почему
+    // её убрали, и первая версия сторожа поймала эту прозу как настоящий
+    // вызов. Свой же текст, прочитанный как содержимое (28.08).
+    const header = readFileSync(file, "utf8")
+      .split("*/")[0]
+      .split(String.fromCharCode(10))
+      .filter((line) => {
+        const t = line.trimStart();
+        if (!t.startsWith("*")) return false;
+        const after = t.slice(1);
+        return after.startsWith("   ") && after.trim().length > 0;
+      })
+      .join(String.fromCharCode(10));
+
+    for (const m of header.matchAll(/npm run ([a-z0-9:-]+)/g)) {
+      expect(
+        scripts[m[1]],
+        `шапка зовёт «npm run ${m[1]}», а такой команды в package.json нет`,
+      ).toBeDefined();
+    }
+    for (const m of header.matchAll(/npx (?:--[a-z-]+ )*([a-z0-9@/-]+)/g)) {
+      const tool = m[1].replace(/^@[^/]+\//, "");
+      expect(
+        Object.keys(deps).some((d) => d === m[1] || d.endsWith("/" + tool) || d === tool),
+        `шапка зовёт «npx ${m[1]}», а такой зависимости у проекта нет — ` +
+          `npx пойдёт за ней в сеть, и в утро запуска это лишний риск`,
+      ).toBe(true);
+    }
+  });
+
+  // Прехедер — вторая строка, которую человек видит в СПИСКЕ писем. До
+  // 29.08.2026 его не было, и туда попадало начало письма, повторявшее тему:
+  // «CyberChess открыт — 30 августа» и следом «CyberChess открыт». Решение об
+  // открытии принимается по двум строкам, и вторая обязана нести новое.
+  test("в списке писем вторая строка не повторяет тему", () => {
+    for (const slug of Object.keys(LAUNCH_MODULES)) {
+      const mail = buildLaunchEmail(slug, "kto-to@primer.ru");
+      const html = mail.htmlContent;
+      const hidden = html.indexOf("display:none");
+      expect(hidden, `${slug}: скрытого прехедера нет вовсе`).toBeGreaterThan(-1);
+      // Он обязан стоять ДО видимого содержимого, иначе клиент возьмёт не его.
+      // Якорь — ЗАГОЛОВОК, а не строка бренда: у модулей, чьё имя уже
+      // начинается с «AEVION», строки бренда нет вовсе, и прежний якорь давал
+      // indexOf = -1, то есть падение на исправном письме (поймано 29.08).
+      expect(hidden, `${slug}: прехедер стоит после видимого текста`).toBeLessThan(html.indexOf("<h1"));
+      // И нести то же обещание, что тело письма, — из ОДНОГО источника.
+      const opens = LAUNCH_MODULES[slug].opens;
+      const head = opens.charAt(0).toUpperCase() + opens.slice(1);
+      expect(html.slice(hidden, hidden + 400), `${slug}: прехедер не из поля opens`).toContain(head);
+      // И не быть пересказом темы.
+      expect(html.slice(hidden, hidden + 400)).not.toContain(mail.subject);
+    }
+  });
+
+  // 29.08.2026: у трёх модулей имя уже начинается с «AEVION», и над заголовком
+  // стояла ещё одна строка «AEVION» — в письме выходило «AEVION AEVION IP
+  // Bureau открыт». У шахмат этого не видно (имя другое), поэтому дефект и
+  // дожил до проверки писем ВСЕЙ очереди, а не только ближайшего запуска.
+  test("бренд не удваивается у модулей с AEVION в имени", () => {
+    for (const slug of Object.keys(LAUNCH_MODULES)) {
+      const mail = buildLaunchEmail(slug, "kto-to@primer.ru");
+      const text = mail.htmlContent.replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/g, " ").replace(/\s+/g, " ");
+      expect(text, `${slug}: «AEVION AEVION» в письме`).not.toContain("AEVION AEVION");
+      // И при этом имя платформы в письме остаётся — письмо без неё безымянное.
+      expect(text, `${slug}: слова AEVION в письме нет вовсе`).toContain("AEVION");
+    }
+  });
 });

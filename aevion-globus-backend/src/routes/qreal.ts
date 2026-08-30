@@ -38,6 +38,7 @@ import { CONTINUITY_CRITERIA, CONTINUITY_ANCHORS, continuityThreshold, buildCont
 import { ensureQRealTables } from "../lib/ensureQRealTables";
 import { getPool } from "../lib/dbPool";
 import { clientIp } from "../lib/rateLimit";
+import { isAdminRequest } from "../lib/adminAuth";
 
 const captureQRealError = makeServiceCapture("qreal");
 
@@ -626,6 +627,74 @@ qrealRouter.get("/health", (_req, res) => {
 
 qrealRouter.get("/engines", (_req, res) => {
   res.json({ engines: renderEngines() });
+});
+
+/**
+ * Сколько рендеров и судейств было по дням. Только СВОДНЫЕ числа.
+ *
+ * Зачем. Расход у поставщика виден в его выписке одной суммой, а вопрос
+ * «сколько рендеров и в какие дни» до сих пор нельзя было задать ниоткуда:
+ * данные лежат в `QRealQuota`, наружу их не отдавала ни одна ручка. Для
+ * разговора о счёте это ровно недостающее число.
+ *
+ * 🔒 Приватность. В таблице лежит СЫРОЙ адрес клиента, поэтому читаются только
+ * строки итогов `__global__` и `__global_judge__` — данных о людях этот
+ * запрос не касается вовсе. Столбец `ip` не выбирается и наружу не уходит.
+ *
+ * Только для администратора: число рендеров платформы — деловая метрика.
+ */
+qrealRouter.get("/usage", async (req, res) => {
+  if (!isAdminRequest(req)) return res.status(403).json({ error: "admin_required" });
+  const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 90);
+  try {
+    const r = await pool.query(
+      `SELECT "day","ip","count" FROM "QRealQuota"
+        WHERE "ip" IN ('__global__', '__global_judge__')
+        ORDER BY "day" DESC LIMIT $1`,
+      [days * 2],
+    );
+    // Сколько РАЗЛИЧНЫХ адресов — подсказал сосед, и довод верный: 20 рендеров
+    // с одного адреса и с двадцати — разные истории, и первая означает
+    // злоупотребление. Считаем COUNT(DISTINCT), сами адреса не выбираются.
+    const ips = await pool.query(
+      `SELECT "day", COUNT(DISTINCT "ip")::int AS "ips" FROM "QRealQuota"
+        WHERE "ip" NOT IN ('__global__', '__global_judge__')
+        GROUP BY "day" ORDER BY "day" DESC LIMIT $1`,
+      [days],
+    );
+    const ipsByDay = new Map<string, number>(
+      (ips.rows as Array<{ day: string; ips: number }>).map((x) => [x.day, x.ips]),
+    );
+    const byDay = new Map<string, { day: string; renders: number; judgements: number }>();
+    for (const row of r.rows as Array<{ day: string; ip: string; count: number }>) {
+      const e = byDay.get(row.day) ?? { day: row.day, renders: 0, judgements: 0 };
+      // Только ДВА известных ключа итогов. Прежняя редакция принимала за
+      // рендеры любую строку, кроме судейской, — и адресная строка попала бы
+      // в сводку, если бы запрос когда-нибудь перестал их отсекать.
+      // Приватность не должна держаться на одном слое: SQL фильтрует, и
+      // разбор тоже. Поймано тестом с подложенной адресной строкой.
+      if (row.ip === "__global_judge__") e.judgements = row.count;
+      else if (row.ip === "__global__") e.renders = row.count;
+      else continue;
+      byDay.set(row.day, e);
+    }
+    return res.json({
+      available: true,
+      days: [...byDay.values()]
+        .map((d) => ({ ...d, distinctAddresses: ipsByDay.get(d.day) ?? 0 }))
+        .sort((x, y) => (x.day < y.day ? 1 : -1)),
+      caps: { renderGlobalDaily: RENDER_GLOBAL_DAILY_CAP, judgeGlobalDaily: JUDGE_GLOBAL_DAILY_CAP },
+      note: "Числа — количество вызовов, НЕ стоимость: длительность рендера не хранится.",
+    });
+  } catch (e) {
+    // Пустой список при недоступной базе читался бы как «рендеров не было» —
+    // то есть ответ выглядел бы благополучно и был бы ложью. Говорим прямо.
+    return res.status(503).json({
+      available: false,
+      error: "quota_store_unavailable",
+      note: "Хранилище квот недоступно: сколько рендеров было — НЕИЗВЕСТНО, а не ноль.",
+    });
+  }
 });
 
 qrealRouter.get("/realism-criteria", (_req, res) => {

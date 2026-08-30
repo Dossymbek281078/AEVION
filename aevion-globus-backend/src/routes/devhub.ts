@@ -7103,7 +7103,56 @@ devhubRouter.get("/providers/health", async (_req, res) => {
   res.json({ checks, healthy: failing.length === 0, failing: failing.map((c) => c.name) });
 });
 
-devhubRouter.get("/studio/capabilities", (_req, res) => {
+// Зона aevion.build: делегирована ли она на самом деле.
+//
+// 29.08.2026: список возможностей объявлял домен "live" по ОДНОМУ признаку —
+// заданы ли ключи Cloudflare. А наша же проба cloudflare_health (тридцатью
+// строками выше) знала правду и прямо писала: пока регистратор не указал на
+// Cloudflare, каждый выданный адрес *.aevion.build не разрешается. Два наших
+// ответа об одном и том же спорили в одном файле, и ежедневный смоук это ловил.
+//
+// Ответ кэшируем: список возможностей открывают часто, а зона меняется раз в
+// жизнь. Отказ пробы НЕ считаем отрицанием — возвращаем null («не знаю»), иначе
+// сетевая икота выключала бы работающую возможность.
+let zoneCache: { at: number; active: boolean | null } = { at: 0, active: null };
+const ZONE_TTL_MS = 5 * 60_000;
+// Отказ живёт в кэше НАМНОГО меньше успеха, и это не мелочь: при равном сроке
+// секундный сбой сети запирал на пять минут ответ «needs_token» — то есть мы
+// просили человека настроить то, что у него уже настроено. Незнание не должно
+// залипать наравне со знанием: успех — состояние, отказ — событие.
+const ZONE_FAIL_TTL_MS = 30_000;
+
+/** Сброс кэша зоны — для тестов: иначе первый случай отравляет второй. */
+export function __resetAevionBuildZoneCache(): void {
+  zoneCache = { at: 0, active: null };
+}
+
+async function aevionBuildZoneActive(): Promise<boolean | null> {
+  if (!process.env.CLOUDFLARE_ZONE_ID || !process.env.CLOUDFLARE_API_TOKEN) return null;
+  const now = Date.now();
+  const ttl = zoneCache.active === null ? ZONE_FAIL_TTL_MS : ZONE_TTL_MS;
+  if (zoneCache.at !== 0 && now - zoneCache.at < ttl) return zoneCache.active;
+  try {
+    const r = await fetch(
+      `https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE_ID}`,
+      { headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } },
+    );
+    const b: any = await r.json().catch(() => ({}));
+    const active = b?.result?.status === "active";
+    zoneCache = { at: now, active };
+    return active;
+  } catch {
+    zoneCache = { at: now, active: null };
+    return null;
+  }
+}
+
+devhubRouter.get("/studio/capabilities", async (_req, res) => {
+  // Живая проба вместо переменной: переменную ставит человек, проверив зону,
+  // и она протухает молча в тот день, когда зона перестанет отвечать.
+  // Проба берётся из кэша (5 мин при успехе, 30 с при отказе), так что на
+  // каждый запрос сети нет.
+  const zoneActive = await aevionBuildZoneActive();
   const caps = [
     { id: "code", name: "Редактор кода", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
     { id: "translate", name: "Перевод", description: "DeepL translation for generated copy", status: process.env.DEEPL_API_KEY ? "live" : "needs_token", token: "DEEPL_API_KEY" },
@@ -7122,7 +7171,14 @@ devhubRouter.get("/studio/capabilities", (_req, res) => {
     // делегирована, честный ответ — not_available, как у Railway. Флаг
     // DEVHUB_AEVION_BUILD_ZONE_ACTIVE включает возможность обратно, когда зона
     // заработает: возвращать её должен человек, который это проверил.
-    { id: "domain", name: "Домен (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: process.env.DEVHUB_AEVION_BUILD_ZONE_ACTIVE ? "live" : "not_available", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
+    { id: "domain", name: "Домен (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID && zoneActive === true) ? "live" : "not_available",
+      // Причина в lastError: интерфейс показывает её подсказкой. Без неё
+      // человек видит выключенную возможность и не знает, чего ждать —
+      // «не работает» без причины читается как поломка у нас.
+      lastError: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && zoneActive === false)
+        ? "ключи заданы, но зона aevion.build не делегирована — выданные адреса не разрешаются"
+        : undefined,
+      tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
     { id: "video", name: "Генерация видео", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
     // 3D объявлен на странице модуля среди возможностей «в одном проекте»,
     // а в этом списке его не было вовсе: панель показывала «настроено N из 16»,

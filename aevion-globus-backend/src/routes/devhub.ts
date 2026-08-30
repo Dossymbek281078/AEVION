@@ -6595,7 +6595,13 @@ devhubRouter.get("/providers/health", async (_req, res) => {
     // и панелью, и ежедневным смоуком. Цена проверки выше её пользы.
     probe("deepl", async () => {
       if (!process.env.DEEPL_API_KEY) return { ok: false, detail: "DEEPL_API_KEY not set" };
-      const r = await fetch("https://api-free.deepl.com/v2/usage", {
+      // Хост выбирается по ключу: у бесплатных он оканчивается на ":fx".
+      // С платным ключом бесплатный хост отвечает отказом, и панель показала
+      // бы «не работает» у работающего ключа — ложная тревога на пустом месте.
+      const deeplHost = process.env.DEEPL_API_KEY.endsWith(":fx")
+        ? "https://api-free.deepl.com"
+        : "https://api.deepl.com";
+      const r = await fetch(`${deeplHost}/v2/usage`, {
         headers: { Authorization: `DeepL-Auth-Key ${process.env.DEEPL_API_KEY}` },
       });
       return { ok: r.ok, detail: `HTTP ${r.status}` };
@@ -6616,8 +6622,23 @@ devhubRouter.get("/providers/health", async (_req, res) => {
     }),
     probe("devhub_db", async () => {
       if (!process.env.DEVHUB_DB_ADMIN_URL) return { ok: false, detail: "DEVHUB_DB_ADMIN_URL not set" };
+      // ГРАНИЦА, названная честно. getPool() — это ПЛАТФОРМЕННАЯ база
+      // (DATABASE_URL), а базы пользовательских проектов создаются на ОТДЕЛЬНОМ
+      // экземпляре: devhubDbProvision прямо отказывается работать на нашей
+      // собственной. Значит этот запрос НЕ проверяет то, чем строка панели
+      // называется: он говорит «переменная задана и платформенная база
+      // отвечает», а не «выделенный экземпляр готов выдавать базы».
+      //
+      // Открывать соединение к выделенному экземпляру из ручки состояния я не
+      // стал: это новый пул на каждый опрос панели. Правильная проба живёт
+      // рядом с provisioning, где пул уже есть. Пока её нет — говорим прямо,
+      // что проверено, а что нет. Строка, обещающая больше проверенного,
+      // опаснее отсутствующей: на неё полагаются.
       const r = await getPool().query("select 1 as ok");
-      return { ok: r.rows?.[0]?.ok === 1, detail: "select 1" };
+      return {
+        ok: r.rows?.[0]?.ok === 1,
+        detail: "переменная задана, платформенная БД отвечает; выделенный экземпляр НЕ проверялся",
+      };
     }),
     probe("openai", async () => {
       if (!process.env.OPENAI_API_KEY) return { ok: false, detail: "OPENAI_API_KEY not set" };

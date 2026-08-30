@@ -40,24 +40,10 @@ const INHERITING_TODAY = new Set([
     "awards/entry/[entryId]",
     "awards/results",
     "bank/api",
-    "bank/audit-log",
     "bank/badge",
-    "bank/contacts",
-    "bank/diagnostics",
     "bank/explore",
-    "bank/gift/[id]",
-    "bank/inbox",
-    "bank/income",
     "bank/leaderboard",
-    "bank/notifications",
-    "bank/pay",
-    "bank/qr-scan",
-    "bank/r/[code]",
-    "bank/receipt/[id]",
-    "bank/settings",
     "bank/share/[handle]",
-    "bank/smoke",
-    "bank/statement",
     "bureau/author/[slug]",
     "bureau/badge/[certId]",
     "bureau/cert/[certId]",
@@ -69,7 +55,6 @@ const INHERITING_TODAY = new Set([
     "bureau/org/accept/[token]",
     "bureau/upgrade/[certId]",
     "constitution/admin",
-    "constitution/demo",
     "multichat-engine/launch",
     "multichat-engine/shared/[token]",
     "planet/artifact/[id]",
@@ -85,9 +70,7 @@ const INHERITING_TODAY = new Set([
     "qchaingov/proposals/[id]",
     "qcontract/documents/[id]",
     "qcontract/documents/[id]/log",
-    "qcontract/v/[token]",
     "qmaskcard/charges/[id]",
-    "qmaskcard/dashboard",
     "qpersona/view/[alias]",
     "qright/badge/[id]",
     "qright/object/[id]",
@@ -96,9 +79,22 @@ const INHERITING_TODAY = new Set([
     "qright/webhooks/[id]",
     "qsign/embed/[id]",
     "qsign/verify/[id]",
-    "quantum-shield/[id]",
-    "qventure/a/[id]"
+    "quantum-shield/[id]"
 ]);
+
+/** Страница, которой ЗАПРЕЩЕНА индексация, в поиске не участвует — наследование
+ *  чужого canonical ей ничем не вредит, и чинить там нечего. Уточнение соседней
+ *  вкладки 30.08.2026: из её восьми кандидатов четыре оказались именно такими.
+ *  Без этого условия список замороженных держал бы страницы, которые никто
+ *  никогда не починит, никогда не дошёл бы до нуля и перестал бы читаться. */
+function isNoIndex(dir: string): boolean {
+  return ["page.tsx", "layout.tsx"].some((f) => {
+    const file = join(dir, f);
+    if (!existsSync(file)) return false;
+    const src = readFileSync(file, "utf8");
+    return src.includes("index: false") || src.includes("index:false");
+  });
+}
 
 function hasOwnCanonical(dir: string): boolean {
   return ["page.tsx", "layout.tsx"].some((f) => {
@@ -123,7 +119,8 @@ function scan(): { parents: string[]; inheriting: string[] } {
   };
   walk(APP, "");
   const inheriting = pages.filter(
-    (r) => !parents.includes(r) && parents.some((p) => r.startsWith(p + "/")) && !hasOwnCanonical(join(APP, ...r.split("/"))),
+    (r) => !parents.includes(r) && parents.some((p) => r.startsWith(p + "/")) && !hasOwnCanonical(join(APP, ...r.split("/")))
+      && !isNoIndex(join(APP, ...r.split("/"))),
   );
   return { parents, inheriting };
 }

@@ -35,7 +35,6 @@ const KEY = "canonical:";
  *  страницам с идентификатором в пути место в поиске не нужно. Вычёркивать
  *  отсюда можно, только починив или назвав причину. */
 const INHERITING_TODAY = new Set([
-    "aev/tokenomics",
     "auth/success",
     "awards/badge/[entryId]",
     "awards/entry/[entryId]",
@@ -85,14 +84,12 @@ const INHERITING_TODAY = new Set([
     "pricing/checkout/success",
     "pricing/for/[industry]",
     "pricing/paddle",
-    "qchaingov/new",
     "qchaingov/proposals/[id]",
     "qcontract/documents/[id]",
     "qcontract/documents/[id]/log",
     "qcontract/v/[token]",
     "qmaskcard/charges/[id]",
     "qmaskcard/dashboard",
-    "qmaskcard/new",
     "qpersona/view/[alias]",
     "qright/badge/[id]",
     "qright/object/[id]",
@@ -102,9 +99,7 @@ const INHERITING_TODAY = new Set([
     "qsign/embed/[id]",
     "qsign/verify/[id]",
     "quantum-shield/[id]",
-    "qventure/a/[id]",
-    "qventure/batch",
-    "qventure/watchlist"
+    "qventure/a/[id]"
 ]);
 
 function hasOwnCanonical(dir: string): boolean {

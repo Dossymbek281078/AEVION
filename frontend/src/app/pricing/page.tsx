@@ -7,6 +7,7 @@ import { CustomerLogosRow } from "@/components/CustomerLogosRow";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings } from "@/lib/aiSavings";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
+import { channelFrom, withChannel } from "@/lib/products";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
@@ -186,6 +187,10 @@ export default function PricingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<BillingPeriod>("annual");
+  // Метка канала для ссылок в кассу. Держится в состоянии, а не читается прямо
+  // при отрисовке: на сервере адреса ещё нет, и чтение из window разошлось бы с
+  // серверной разметкой. Заполняется в том же эффекте, что module и period.
+  const [channel, setChannel] = useState<string | null>(null);
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
 
   // Калькулятор сметы
@@ -385,6 +390,9 @@ export default function PricingPage() {
     if (params.get("period") === "annual") {
       setPeriod("annual");
     }
+    // Без метки покупка приходит в отчёт как пришедшая ниоткуда: обработчик
+    // оплаты читает url_params[channel], но эта ссылка его не передавала.
+    setChannel(channelFrom(params.get("c") ?? undefined));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
@@ -1187,7 +1195,7 @@ export default function PricingPage() {
                 <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}> {t("pricing.home.bundles.perMonth")}</span>
               </div>
               <a
-                href={gumroadCheckoutUrl({ key: b.id })}
+                href={withChannel(gumroadCheckoutUrl({ key: b.id }), channel, "pricing")}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
-import { productById } from "@/lib/products";
+import { channelFrom, productById, withChannel } from "@/lib/products";
 import { track } from "@/lib/track";
 
 // Единственный живой процессинг — Gumroad (Paddle/Stripe/LemonSqueezy не в
@@ -53,7 +53,21 @@ export function UpgradeButton({
       meta: { variant, processor: "gumroad" },
     });
     // Gumroad hosted checkout — единственный живой рельс.
-    window.location.href = gumroadCheckoutUrl({ key: appId, tier: tierId });
+    //
+    // Метка канала доводится до САМОЙ ОПЛАТЫ, а не только до нашего события.
+    // Обработчик оплаты уже умеет её принимать — читает url_params[channel] и
+    // url_params[utm_source]. Не хватало отправителя: эта кнопка стоит на
+    // девяти страницах модулей и уводила на кассу без метки, то есть про
+    // начатую оплату канал был известен, а про оплаченную — нет.
+    //
+    // Через withChannel, а не своей строкой: у Gumroad отчёт заводится по
+    // полной тройке utm, и неполный набор в него не попадает.
+    const channel = channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined);
+    window.location.href = withChannel(
+      gumroadCheckoutUrl({ key: appId, tier: tierId }),
+      channel,
+      "upsell",
+    );
   }
 
   const defaultLabel = "Разблокировать всё";

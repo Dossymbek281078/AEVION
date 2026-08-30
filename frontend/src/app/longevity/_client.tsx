@@ -185,7 +185,7 @@ export default function LongevityClient({ channel = null }: { channel?: string |
             {ASSESS_FIELDS.map((f) => (
               <label key={f.key} style={styles.field}>
                 <span style={styles.fieldLabel}>{f.label} {f.unit && <span style={styles.unit}>{f.unit}</span>}</span>
-                <input type="number" inputMode="decimal" placeholder={f.placeholder}
+                <input aria-label={f.label} type="number" inputMode="decimal" placeholder={f.placeholder}
                   value={vals[f.key] ?? ""} onChange={(e) => setVals((p) => ({ ...p, [f.key]: e.target.value }))}
                   style={styles.input} />
               </label>
@@ -194,7 +194,7 @@ export default function LongevityClient({ channel = null }: { channel?: string |
           <div style={styles.flags}>
             {FLAGS.map((f) => (
               <label key={f.key} style={styles.flagChip}>
-                <input type="checkbox" checked={!!flags[f.key]} onChange={(e) => setFlags((p) => ({ ...p, [f.key]: e.target.checked }))} />
+                <input aria-label={f.label} type="checkbox" checked={!!flags[f.key]} onChange={(e) => setFlags((p) => ({ ...p, [f.key]: e.target.checked }))} />
                 {f.label}
               </label>
             ))}
@@ -288,9 +288,9 @@ export default function LongevityClient({ channel = null }: { channel?: string |
             {PROGRESS_FIELDS.map((f) => (
               <Fragment key={f.key}>
                 <div style={styles.progLabel}>{f.label} {f.unit && <span style={styles.unit}>{f.unit}</span>}</div>
-                <input type="number" inputMode="decimal" value={base[f.key] ?? ""}
+                <input aria-label={f.label} type="number" inputMode="decimal" value={base[f.key] ?? ""}
                   onChange={(e) => setBase((p) => ({ ...p, [f.key]: e.target.value }))} style={styles.input} />
-                <input type="number" inputMode="decimal" value={late[f.key] ?? ""}
+                <input aria-label={f.label} type="number" inputMode="decimal" value={late[f.key] ?? ""}
                   onChange={(e) => setLate((p) => ({ ...p, [f.key]: e.target.value }))} style={styles.input} />
               </Fragment>
             ))}

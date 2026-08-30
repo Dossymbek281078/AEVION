@@ -178,7 +178,7 @@ export function buildWaitlistConfirmEmail(email: string, source?: string): Const
  * нас: написать в день запуска.
  */
 const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: string }> = [
-  { prefix: "cyberchess", name: "CyberChess", plan: "30 августа", page: "https://aevion.app/cyberchess/launch" },
+  { prefix: "cyberchess", name: "CyberChess", plan: "30 сентября", page: "https://aevion.app/cyberchess/launch" },
   { prefix: "bureau", name: "AEVION IP Bureau", plan: "6 сентября", page: "https://aevion.app/bureau/launch" },
   { prefix: "qright", name: "AEVION IP Bureau", plan: "6 сентября", page: "https://aevion.app/bureau/launch" },
   { prefix: "devhub", name: "DevHub Studio", plan: "13 сентября", page: "https://aevion.app/devhub/launch" },

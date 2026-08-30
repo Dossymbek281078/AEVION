@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, use } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { devhubServerError } from "@/lib/devhubServerError";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,13 +38,18 @@ function statusMeta(s: string) {
   return STATUS_META[s] ?? { label: s, dot: "#94a3b8", text: "#f1f5f9" };
 }
 
+/**
+ * «5 мин назад» — единственный текст этой страницы, который человек читает
+ * словами, а не цифрами, и он был английским («5m ago») посреди русского
+ * интерфейса. Остальное здесь — числа и единицы, они одинаковы в любом языке.
+ */
 function relativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-  return `${Math.floor(diffSec / 86400)}d ago`;
+  if (diffSec < 60) return `${diffSec} с назад`;
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} мин назад`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} ч назад`;
+  return `${Math.floor(diffSec / 86400)} дн. назад`;
 }
 
 function durationStr(start: string, end: string | null): string {
@@ -262,7 +268,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
       });
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
-        throw new Error(body.error || "Deploy failed");
+        throw new Error(devhubServerError(body.error, "Выкатка не удалась."));
       }
       showToast("Deployment started", true);
       // Immediately refresh so the new pending deployment appears
@@ -327,7 +333,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
               {project.name}
             </Link>
             <span>/</span>
-            <span style={{ color: "#94a3b8" }}>Deploy</span>
+            <span style={{ color: "#94a3b8" }}>Публикация</span>
           </div>
 
           {/* ── Header row ── */}
@@ -410,7 +416,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
             }}>
               <span style={{ color: "#22c55e", fontSize: 16 }}>&#10003;</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: "#86efac", fontWeight: 600 }}>Deployed</div>
+                <div style={{ fontSize: 12, color: "#86efac", fontWeight: 600 }}>Опубликовано</div>
                 <a
                   href={liveUrl}
                   target="_blank"

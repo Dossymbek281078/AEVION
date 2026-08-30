@@ -90,6 +90,35 @@ const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
   app_devhub:      "LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO",
 };
 
+/**
+ * Сопоставлены ли ссылки товаров с идентификаторами вариантов магазина.
+ *
+ * Повод (28.08.2026). `/api/health/channels` отвечал `canPay: true`, потому что
+ * у Lemon Squeezy заданы ключ и магазин. Но выдача доступа висит НЕ на этом, а
+ * на переменной КОНКРЕТНОГО варианта: в вебхуке ветка товара берётся по
+ * `process.env[...VARIANT_X]`, и при незаданной переменной сравнение не
+ * совпадает, обработчик доходит до `return res.json({ ok: true, ignored })` —
+ * заплативший получает успешный ответ и НИ ОДНОГО права. Магазин при этом
+ * деньги принял.
+ *
+ * То есть имя поля `canPay` шире того, о чём оно отчитывалось: «провайдер
+ * настроен» и «покупка превращается в доступ» — разные вопросы, и второй
+ * снаружи спросить было нечем.
+ *
+ * СЕКРЕТОВ НЕ ОТДАЁМ: наружу идут только ссылки товаров (`app_devhub`) — это
+ * наши внутренние имена, а не значения. Идентификаторы вариантов и длины
+ * переменных здесь не появляются, как и во всей ручке состояния каналов.
+ */
+export function variantMappingStatus(): {
+  total: number;
+  mapped: number;
+  unmapped: LemonSqueezyReference[];
+} {
+  const refs = Object.keys(TIER_VARIANT_ENV) as LemonSqueezyReference[];
+  const unmapped = refs.filter((r) => !process.env[TIER_VARIANT_ENV[r]]?.trim());
+  return { total: refs.length, mapped: refs.length - unmapped.length, unmapped };
+}
+
 function isReference(s: string): s is LemonSqueezyReference {
   // hasOwnProperty.call, а не `in`: `in` идёт по цепочке прототипов, и
   // isReference("constructor") возвращал true.

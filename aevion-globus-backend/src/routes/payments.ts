@@ -186,6 +186,32 @@ paymentsRouter.post("/paybox/init", async (req, res) => {
 // кода, а неверный адрес в кабинете), и ответ прежний, чтобы PayBox не начал
 // повторять в пустоту. Ничего не теряется, и это видно.
 paymentsRouter.post("/paybox/callback", (req, res) => {
+  // ПРОБА ИЛИ НАСТОЯЩАЯ ОПЛАТА — тревогу поднимаем только на вторую.
+  //
+  // Замер 28.08.2026: единственное срабатывание за неделю пришло с
+  // `browser = curl 8.21.0` — то есть это была ручная проба (наш смоук либо
+  // чужой сканер), а не касса. Денежная тревога, которая звонит на пробы,
+  // приучает себя не читать; в тот единственный раз, когда на старый адрес
+  // придёт настоящая оплата, её отмахнут вместе с шумом.
+  //
+  // Различаем по телу: PayBox шлёт application/x-www-form-urlencoded, и такой
+  // разборщик у нас смонтирован (index.ts, express.urlencoded) — значит у
+  // настоящего уведомления поля `pg_*` в теле ЕСТЬ, а у пробы тело пустое.
+  //
+  // Направление отказа выбрано в сторону тревоги: пробой считается ТОЛЬКО
+  // полностью пустое тело. Есть хоть одно поле, пусть и незнакомое, — звоним.
+  // Ошибиться молчанием здесь дороже, чем лишним письмом.
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const isProbe = Object.keys(body).length === 0;
+  if (isProbe) {
+    console.warn(
+      "[payments] проба на устаревший путь /api/payments/paybox/callback:" +
+        " тело пустое, это не уведомление PayBox. Тревога не поднимается.",
+    );
+    res.setHeader("Content-Type", "text/xml");
+    res.send(`<?xml version="1.0" encoding="utf-8"?><response><pg_status>ok</pg_status></response>`);
+    return;
+  }
   capturePaymentsError(
     new Error("paybox_callback_on_legacy_path"),
     {

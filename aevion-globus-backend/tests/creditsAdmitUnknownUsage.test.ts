@@ -70,7 +70,7 @@ async function credits(sub?: string) {
   const req0 = request(makeApp()).get("/api/devhub/studio/credits");
   const r = sub ? await req0.set("Authorization", `Bearer ${tokenFor(sub)}`) : await req0;
   expect(r.status, `ручка не ответила 200: ${r.text.slice(0, 200)}`).toBe(200);
-  return r.body as { usage: Record<string, { used: number; limit: number; usedUnknown: boolean }> };
+  return r.body as { usage: Record<string, { used: number; limit: number; usedKnown?: false }> };
 }
 
 describe("расход, который не удалось прочитать, не выдаётся за ноль", () => {
@@ -80,14 +80,14 @@ describe("расход, который не удалось прочитать, �
     expect(body.usage.video.used, "не доехало число из базы").toBe(7);
     // Признак ставится ТОЛЬКО когда поднят — на исправной базе поля нет
     // вовсе, и это осознанно (см. комментарий в getAllMonthUsage).
-    expect(body.usage.video.usedUnknown, "признак поднят на исправной базе").toBeFalsy();
+    expect(body.usage.video.usedKnown, "признак поднят на исправной базе").toBeUndefined();
   });
 
   test("при отказе чтения ответ ПРИЗНАЁТСЯ, что число ненадёжно", async () => {
     state.usageFails = true;
     const body = await credits();
     expect(
-      body.usage.video.usedUnknown,
+      body.usage.video.usedKnown === false,
       "витрина покажет «0 из 50» как факт: человек решит, что квота нетронута",
     ).toBe(true);
   });
@@ -127,7 +127,7 @@ describe("расход, который не удалось прочитать, �
     const body = await credits();
     for (const cap of ["video", "image", "tts", "music", "deploy"]) {
       expect(
-        Object.prototype.hasOwnProperty.call(body.usage[cap] ?? {}, "usedUnknown"),
+        Object.prototype.hasOwnProperty.call(body.usage[cap] ?? {}, "usedKnown"),
         `у возможности ${cap} признака нет — ветка забыта`,
       ).toBe(true);
     }

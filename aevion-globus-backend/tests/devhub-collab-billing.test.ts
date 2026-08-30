@@ -23,8 +23,25 @@ vi.mock("../src/services/qcoreai/providers", () => ({
 // eslint-disable-next-line import/first
 import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
 
+// Каждому запросу свой адрес клиента, как у разных людей.
+//
+// Зачем (29.08.2026): создание проекта получило предел частоты по адресу —
+// это единственная запись в базу без входа и без платы, и без предела её
+// мог заполнять любой скрипт. Этот файл делает десятки запросов из одного
+// процесса, то есть с одного адреса, и упирался бы в предел вместо того,
+// что проверяет.
+//
+// Ослаблять предел ради тестов нельзя: тогда проверялась бы не та защита.
+// Настоящие пользователи приходят с разных адресов — так и здесь.
+let testClientIp = 0;
 function makeApp() {
   const app = express();
+  app.set("trust proxy", true);
+  app.use((req, _res, next) => {
+    testClientIp += 1;
+    req.headers["x-forwarded-for"] = `10.7.${Math.floor(testClientIp / 250) % 250}.${(testClientIp % 250) + 1}`;
+    next();
+  });
   app.use(express.json({ limit: "10mb" }));
   app.use("/api/devhub", devhubRouter);
   return app;

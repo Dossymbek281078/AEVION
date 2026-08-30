@@ -17,6 +17,7 @@ import jwt from "jsonwebtoken";
 import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
 import { internalMintForDevice } from "./aev";
 import { getPool } from "../lib/dbPool";
+import { captureException } from "../lib/sentry";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getKycProvider } from "../lib/kyc";
 import {
@@ -1612,7 +1613,25 @@ async function logBureauAudit(opts: {
         opts.payload ? JSON.stringify(opts.payload) : null,
       ]
     )
-    .catch(() => {});
+    .catch((e: unknown) => {
+      // Это журнал действий над сертификатами: кто выдал, кто проверил, кто
+      // отозвал. Для модуля, чей продукт — ДОКАЗУЕМОЕ авторство, молча
+      // пропавшая запись означает, что доказать потом будет нечем.
+      //
+      // Ронять действие нельзя: отказ журнала не должен отменять уже
+      // совершённую выдачу или отзыв. Но и молчать нельзя — пропажа записи
+      // снаружи неотличима от того, что действия не было.
+      const why = e instanceof Error ? e.message : String(e);
+      console.error(
+        `[Bureau] ЗАПИСЬ В ЖУРНАЛ НЕ ПРОШЛА: ${opts.action} по сертификату ${opts.certId ?? "—"} от ${opts.actor ?? "—"}: ${why}`,
+      );
+      captureException(e, {
+        route: "bureau/logBureauAudit",
+        action: opts.action,
+        certId: opts.certId,
+        actor: opts.actor,
+      });
+    });
 }
 
 // 🔹 GET /cert/:certId/embed — sanitized JSON for third-party pages.

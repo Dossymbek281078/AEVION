@@ -104,6 +104,13 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Место под баннер установки PWA.
+     Замер 28.08.2026 браузером на 390px: внизу главной баннер НАВСЕГДА
+     накрывал 4 ссылки подвала (/terms, /privacy, /help, /qnews) и кнопку
+     AI-агента — прокручивать там уже некуда, значит уйти из-под него
+     нельзя. Контроль: убрать баннер — недостижимых становится на 5 меньше.
+     Высоту публикует сам баннер; нет баннера — переменной нет и отступа нет. */
+  padding-bottom: calc(var(--aevion-install-h, 0px) + var(--aevion-dock-h, 0px));
 }
 
 code {

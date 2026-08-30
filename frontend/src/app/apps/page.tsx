@@ -62,11 +62,14 @@ const APP_DEFS: AppDef[] = [
     highlights: [
       "Monaco IDE (VS Code engine)",
       "AI code generation",
-      "Deploy: Railway · Vercel · Cloudflare Pages",
-      // 19.08.2026: домен наш, но зона ещё не делегирована на Cloudflare —
-      // /studio честно пишет «waiting on domain delegation». Пока это так,
-      // обещать поддомен без оговорки нельзя: человек выберет тариф ради него.
-      "Free *.aevion.build subdomain (coming soon)",
+      // Two claims that were not true when written down: Railway deploys of a
+      // user's project answer 501 (per-project services are behind an
+      // unreleased flag) and Vercel has no token in production, so Cloudflare
+      // Pages is the path that actually deploys. And the aevion.build zone was
+      // never delegated, so those subdomains do not resolve — the address that
+      // works is *.pages.dev.
+      "Deploy to Cloudflare Pages, verified live before it says live",
+      "Free *.pages.dev address",
       "50 AI videos · 200 images/mo",
       "Team collaborators",
     ],

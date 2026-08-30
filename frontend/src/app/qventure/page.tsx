@@ -526,7 +526,7 @@ function FormFields({ form, set, sectors, full = false }: {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 14 }}>
         <div>
           <label style={LABEL}>Company / product name *</label>
-          <input style={INPUT} value={form.name} onChange={set("name")} placeholder="e.g. NeuroDx" />
+          <input aria-label="Company / product name" style={INPUT} value={form.name} onChange={set("name")} placeholder="e.g. NeuroDx" />
         </div>
         <div>
           <label style={LABEL}>Sector</label>
@@ -545,11 +545,11 @@ function FormFields({ form, set, sectors, full = false }: {
           <>
             <div>
               <label style={LABEL}>Target market</label>
-              <input style={INPUT} value={form.geography} onChange={set("geography")} placeholder="US" />
+              <input aria-label="Target market" style={INPUT} value={form.geography} onChange={set("geography")} placeholder="US" />
             </div>
             <div>
               <label style={LABEL}>Raising (USD, optional)</label>
-              <input style={INPUT} value={form.askUsd} onChange={set("askUsd")} placeholder="5,000,000" inputMode="numeric" />
+              <input aria-label="Raising (USD, optional)" style={INPUT} value={form.askUsd} onChange={set("askUsd")} placeholder="5,000,000" inputMode="numeric" />
             </div>
           </>
         )}
@@ -585,9 +585,9 @@ function FormFields({ form, set, sectors, full = false }: {
             Exact financials & projections (optional — precise numbers beat parsing the text)
           </summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
-            <div><label style={LABEL}>ARR (USD)</label><input style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
-            <div><label style={LABEL}>Gross margin (%)</label><input style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
-            <div><label style={LABEL}>LTV / CAC ratio</label><input style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
+            <div><label style={LABEL}>ARR (USD)</label><input aria-label="ARR (USD)" style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Gross margin (%)</label><input aria-label="Gross margin (%)" style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
+            <div><label style={LABEL}>LTV / CAC ratio</label><input aria-label="LTV / CAC ratio" style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
             <div>
               <label style={LABEL}>Churn (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
@@ -600,7 +600,7 @@ function FormFields({ form, set, sectors, full = false }: {
                 </select>
               </div>
             </div>
-            <div><label style={LABEL}>Customers</label><input style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Customers</label><input aria-label="Customers" style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
             <div>
               <label style={LABEL}>Growth (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
@@ -612,7 +612,7 @@ function FormFields({ form, set, sectors, full = false }: {
                 </select>
               </div>
             </div>
-            <div><label style={LABEL}>Bottom-up TAM (USD)</label><input style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Bottom-up TAM (USD)</label><input aria-label="Bottom-up TAM (USD)" style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
           </div>
           <div style={{ marginTop: 14 }}>
             <label style={LABEL}>Projected revenue (USD) — this year / +1yr / +2yr (for the hockey-stick check)</label>

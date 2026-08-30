@@ -4,6 +4,7 @@ import { ClientProviders } from "@/components/ClientProviders";
 import { getSiteUrl } from "@/lib/siteUrl";
 import { MODULE_NODES } from "@/data/pitchFacts";
 import "./globals.css";
+import { DevHubGuestIdentity } from "@/components/DevHubGuestIdentity";
 
 const SITE = getSiteUrl();
 
@@ -87,6 +88,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      {/* Личность посетителя DevHub ставится ГЛОБАЛЬНО, а не в макете
+          модуля. Замер 29.08.2026: /studio, /acquire и /compare зовут API
+          модуля из браузера, а подмена запросов жила только под /devhub —
+          значит заголовок гостя оттуда не уходил, и человек видел тариф и
+          расход общей «анонимной» личности вместо своих. На странице,
+          которая продаёт Studio Pro, это худшее место для такой ошибки.
+
+          Ставить глобально безопасно: подмена проверяет адрес и трогает
+          только запросы к /api/devhub/, остальные проходят нетронутыми. */}
       <body
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
@@ -130,6 +140,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
         <ClientProviders>
+          <DevHubGuestIdentity />
           {children}
         </ClientProviders>
         {/*

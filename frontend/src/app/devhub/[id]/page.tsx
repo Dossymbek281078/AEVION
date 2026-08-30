@@ -9,9 +9,31 @@ import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
 import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } from "@/lib/devhubHints";
 import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
-import { indexCapabilities, isCapabilityBlocked, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
+import { indexCapabilities, isCapabilityBlocked, isCapabilityConfirmed, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
+import { devhubServerError } from "@/lib/devhubServerError";
+
+/**
+ * A write whose result the UI is about to act on.
+ *
+ * Several handlers here did `await fetch(...)` and then updated the screen
+ * whatever came back — the same defect as the editor's autosave. On the
+ * collaborator path it meant an owner who pressed × saw the person disappear
+ * from the list while their edit access was still live on the server.
+ */
+async function writeOrThrow(input: string, init?: RequestInit): Promise<Response> {
+  const r = await fetch(input, init);
+  if (!r.ok) {
+    // Голый код ответа человеку ничего не говорит. Тело ошибки обычно есть —
+    // берём его и переводим тем же помощником, что и остальные показы.
+    const body = await r.json().catch(() => null);
+    throw new Error(
+      devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+    );
+  }
+  return r;
+}
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -327,14 +349,23 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
   const bg = type === "success" ? "#d1fae5" : type === "error" ? "#fee2e2" : type === "warning" ? "#fef3c7" : "#dbeafe";
   const fg = type === "success" ? "#065f46" : type === "error" ? "#991b1b" : type === "warning" ? "#92400e" : "#1e40af";
   return (
-    <div style={{
-      position: "fixed", bottom: 24, right: 24, background: bg, color: fg,
-      padding: "12px 18px", borderRadius: 10, fontWeight: 600, fontSize: 14,
-      boxShadow: "0 4px 20px rgba(0,0,0,0.12)", zIndex: 200, maxWidth: 380,
-      display: "flex", alignItems: "center", gap: 10,
-    }}>
+    // Announced, not just drawn. Every honest failure message added to this
+    // page today — the file that was not saved, the collaborator whose access
+    // was not revoked — was silent to a screen reader: this component, unlike
+    // the platform's shared ToastProvider, carried no live region. Errors
+    // interrupt (assertive); the rest waits its turn (polite).
+    <div
+      role="status"
+      aria-live={type === "error" ? "assertive" : "polite"}
+      style={{
+        position: "fixed", bottom: 24, right: 24, background: bg, color: fg,
+        padding: "12px 18px", borderRadius: 10, fontWeight: 600, fontSize: 14,
+        boxShadow: "0 4px 20px rgba(0,0,0,0.12)", zIndex: 200, maxWidth: 380,
+        display: "flex", alignItems: "center", gap: 10,
+      }}
+    >
       <span>{message}</span>
-      <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: fg, fontWeight: 800 }}>x</button>
+      <button onClick={onClose} aria-label="Закрыть уведомление" style={{ background: "none", border: "none", cursor: "pointer", color: fg, fontWeight: 800 }}>x</button>
     </div>
   );
 }
@@ -343,18 +374,27 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
 function FileContextMenu({
   x, y, onRename, onDelete, onClose,
 }: { x: number; y: number; onRename: () => void; onDelete: () => void; onClose: () => void }) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The close-on-outside-click listener used to fire for clicks INSIDE the
+  // menu too: mousedown closed it, the menu unmounted, and the click never
+  // reached the button — so Rename and Delete did nothing at all. The React
+  // onMouseDown/stopPropagation that was meant to prevent this does not run
+  // before a native listener on document. Ask the DOM directly instead.
   useEffect(() => {
-    const handler = () => onClose();
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      onClose();
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [onClose]);
   return (
     <div
+      ref={menuRef}
       style={{
         position: "fixed", left: x, top: y, background: "#fff", border: "1px solid #e2e8f0",
         borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 300, minWidth: 140, overflow: "hidden",
       }}
-      onMouseDown={(e) => e.stopPropagation()}
     >
       <button
         onClick={() => { onRename(); onClose(); }}
@@ -468,6 +508,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   // Env vars
   const [envList, setEnvList] = useState<Array<{ key: string; value: string; set: boolean }>>([]);
+  // "Could not load" is not the same fact as "there are none". Both lists used
+  // to swallow their error and render empty, so a failed read looked like an
+  // empty project — someone could conclude DATABASE_URL was never set.
+  const [envLoadError, setEnvLoadError] = useState<string | null>(null);
+  const [deploymentsLoadError, setDeploymentsLoadError] = useState<string | null>(null);
   const [newEnvKey, setNewEnvKey] = useState("");
   const [newEnvVal, setNewEnvVal] = useState("");
 
@@ -494,6 +539,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // GitHub state
   const [githubStatus, setGithubStatus] = useState<{ exists: boolean; stars?: number; openIssues?: number; lastPush?: string } | null>(null);
   const [githubBranches, setGithubBranches] = useState<Array<{ name: string; sha: string }>>([]);
+  // Why this is state and not a swallowed field: both GitHub reads used to
+  // discard the failure, so a revoked token drew the same screen as a repo with
+  // no branches — a link that reads "connected" while nothing behind it works.
+  const [githubIssue, setGithubIssue] = useState<{ errorKind?: string; error?: string } | null>(null);
+  // The banner used to pick its colour by looking for "failed"/"error" inside
+  // the text, so the Russian degraded-push warning and every non-English
+  // failure rendered green — a refusal shown as a success. The caller says
+  // which it is instead of the styling guessing.
+  const [githubMsgTone, setGithubMsgTone] = useState<"success" | "warning" | "error">("success");
   const [githubPushing, setGithubPushing] = useState(false);
   const [githubSyncing, setGithubSyncing] = useState(false);
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
@@ -553,7 +607,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Email template builder state
   const [tplBuilderName, setTplBuilderName] = useState("");
   const [tplBuilderSubject, setTplBuilderSubject] = useState("");
-  const [tplBuilderHtml, setTplBuilderHtml] = useState("<h1>Hello {{params.name}}</h1>\n<p>Welcome to AEVION.</p>");
+  const [tplBuilderHtml, setTplBuilderHtml] = useState("<h1>Здравствуйте, {{params.name}}!</h1>\n<p>Добро пожаловать в AEVION.</p>");
   const [tplBuilderSender, setTplBuilderSender] = useState("");
   const [tplBuilderLoading, setTplBuilderLoading] = useState(false);
   const [tplBuilderMsg, setTplBuilderMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -701,9 +755,77 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * Replace the visible file tree with a refreshed listing — but only when the
+   * server actually sent one.
+   *
+   * `setFiles(listData.files || [])` reads as harmless and is not: this backend
+   * answers a failure with a JSON body that carries `error` and no `files`, so
+   * `.json()` succeeds, `files` is undefined, and the tree is emptied. The
+   * project then looks wiped after an operation that merely failed to refresh —
+   * the same "a failed read shows an empty project" defect this file already
+   * fixed for env vars.
+   *
+   * An empty array from a healthy answer is a different thing and still
+   * applies: a project with no files should show none.
+   */
+  const applyFileList = (listData: unknown) => {
+    const next = (listData as { files?: FileItem[] } | null | undefined)?.files;
+    if (!Array.isArray(next)) {
+      showToast("Не удалось обновить список файлов — показан прежний", "warning");
+      return;
+    }
+    setFiles(next);
+  };
+
+  /**
+   * Show a message — one at a time, but never at the cost of an earlier one.
+   *
+   * There is a single toast slot, and this used to overwrite it: every call
+   * replaced whatever was on screen and reset the timer. Any warning followed
+   * closely by a success vanished before it could be read, which is how the IDE
+   * managed to say "Saved" while quietly swallowing "the file list could not be
+   * refreshed" — the exact "it says fine while something failed" shape this
+   * file spends its time removing. Found 11.08.2026 while trying to write a
+   * test for that warning and discovering nothing could ever see it.
+   *
+   * Messages now queue and are shown in order. The queue is capped: a burst of
+   * a dozen results should not hold the screen for a minute, and the ones worth
+   * keeping in that case are the failures.
+   */
+  const toastQueue = useRef<{ message: string; type: "success" | "error" | "info" | "warning" }[]>([]);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const drainToasts = useCallback(() => {
+    const next = toastQueue.current.shift();
+    if (!next) {
+      toastTimer.current = null;
+      setToast(null);
+      return;
+    }
+    setToast(next);
+    // Shorter when more are waiting, so a queue never feels stuck.
+    toastTimer.current = setTimeout(drainToasts, toastQueue.current.length > 0 ? 2200 : 4000);
+  }, []);
+
+  // Leaving the page mid-queue must not leave a timer running against a screen
+  // that is gone.
+  useEffect(() => () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+  }, []);
+
   const showToast = (message: string, type: "success" | "error" | "info" | "warning" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    const queue = toastQueue.current;
+    // Saying the same thing twice in a row is noise, not information.
+    if (queue.length > 0 && queue[queue.length - 1].message === message) return;
+    if (queue.length >= 5) {
+      // Drop a success to make room; a failure never loses its place to one.
+      const victim = queue.findIndex((t) => t.type === "success" || t.type === "info");
+      if (victim === -1) return;
+      queue.splice(victim, 1);
+    }
+    queue.push({ message, type });
+    if (!toastTimer.current) drainToasts();
   };
 
   const fetchProject = useCallback(async () => {
@@ -720,7 +842,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setEditorContent(first.content);
       }
     } catch {
-      showToast("Failed to load project", "error");
+      showToast("Не удалось загрузить проект", "error");
     } finally {
       setLoading(false);
     }
@@ -821,6 +943,22 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
   }, [project]);
 
+  /** Save the editor's current text to the user's disk. The escape hatch for a
+   *  refused save: at that point the only copy of their work is this tab. */
+  const downloadEditorBuffer = () => {
+    if (!selectedFile) return;
+    const blob = new Blob([editorContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = selectedFile.path.split("/").pop() || "file.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    showToast(`Копия ${a.download} скачана`, "success");
+  };
+
   const handleEditorChange = (value: string) => {
     setEditorContent(value);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -869,15 +1007,25 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setShowNewFile(false);
       setNewFileName("");
     } catch {
-      showToast("Failed to create file", "error");
+      showToast("Не удалось создать файл", "error");
     }
   };
 
   const deleteFile = async (path: string) => {
     if (!project) return;
-    if (!confirm(`Delete ${path}?`)) return;
+    // Было английское `Delete ${path}?` посреди русского окна. Словаря в этом
+    // файле нет вовсе, поэтому строка русская — как и соседние сообщения.
+    //
+    // Формулировка выверена по коду, а не по ощущению. Сначала я написал
+    // «восстановить будет нельзя» — и это преувеличение: контрольные точки
+    // создаёт ТОЛЬКО генерация ИИ, и если по этому пути она раньше проходила,
+    // старая точка файл вернёт. Чего точно не произойдёт — ручное удаление не
+    // создаёт точки, поэтому кнопка отмены правок его не отменит. Об этом и
+    // говорим: обещание невозможности в диалоге — такая же неправда, как
+    // умолчание о потере.
+    if (!confirm(`Удалить файл ${path}? Кнопка отмены правок ИИ его не вернёт.`)) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), { method: "DELETE" });
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), { method: "DELETE" });
       const remaining = files.filter((f) => f.path !== path);
       setFiles(remaining);
       if (selectedFile?.path === path) {
@@ -885,8 +1033,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setSelectedFile(next);
         setEditorContent(next?.content ?? "");
       }
-    } catch {
-      showToast("Delete failed", "error");
+    } catch (e: any) {
+      // The file is still there; the tree must keep showing it.
+      showToast(`Файл НЕ удалён — ${e?.message || "нет связи"}`, "error");
     }
   };
 
@@ -918,7 +1067,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         showToast(`Переименование отменено — копия не создалась (${putR.status}); файл на месте`, "error");
         return;
       }
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(oldPath)}`), { method: "DELETE" });
+      const delR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(oldPath)}`), { method: "DELETE" });
+      if (!delR.ok) {
+        // The copy exists, the original does too. Showing only the new path
+        // would hide a duplicate that then gets exported, pushed and deployed.
+        const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+        const listData = await listR.json().catch(() => null);
+        if (listData?.files) setFiles(listData.files);
+        showToast(`Копия создана как ${target}, но старый файл не удалился (${delR.status}) — оба на месте`, "warning");
+        return;
+      }
       setFiles((fs) => {
         const updated = fs.map((f) => f.path === oldPath ? { ...f, path: target } : f);
         return updated.sort((a, b) => a.path.localeCompare(b.path));
@@ -926,9 +1084,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (selectedFile?.path === oldPath) {
         setSelectedFile((sf) => sf ? { ...sf, path: target } : null);
       }
-      showToast("File renamed", "success");
+      showToast("Файл переименован", "success");
     } catch {
-      showToast("Rename failed", "error");
+      showToast("Переименовать не удалось", "error");
     } finally {
       setRenamingFile(null);
     }
@@ -985,7 +1143,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           .map((m) =>
             m.role === "user"
               ? { role: "user", text: m.text }
-              : { role: "assistant", text: m.files.length ? `Changed files: ${m.files.map((fc) => fc.path).join(", ")}` : (m.note || "No changes") }
+              : { role: "assistant", text: m.files.length ? `Изменённые файлы: ${m.files.map((fc) => fc.path).join(", ")}` : (m.note || "No changes") }
           ),
         ...(sentImage ? { imageBase64: sentImage.dataBase64, imageMediaType: sentImage.mediaType } : {}),
       });
@@ -1014,22 +1172,27 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               const evt = JSON.parse(e.slice(6));
               if (evt.type === "status") setGenStage(evt.stage);
               else if (evt.type === "result") data = evt;
-              else if (evt.type === "error") throw new Error(evt.error);
+              else if (evt.type === "error") throw new Error(devhubServerError(evt.error, "Генерация прервалась"));
             }
           }
         }
       } catch (streamErr) {
         if (streamErr instanceof Error && data === null && streamErr.message && !/fetch|network/i.test(streamErr.message)) throw streamErr;
-        data = null; // network-level stream failure — fall through to plain POST
+        // Поток оборвался — уходим на обычный запрос. Человеку это НАДО сказать:
+        // иначе он видит замерший индикатор и ждёт вдвое дольше, не понимая,
+        // сломалось что-то или так задумано. Денег это не стоит: генерация кода
+        // ограничена по темпу, а не по квоте, — но время его стоит.
+        showToast("Связь оборвалась на середине — повторяем запрос. Это займёт ещё столько же.", "error");
+        data = null;
       }
       if (data === null) {
         const r = await fetchWithRedeployRetry(
           apiUrl(`/api/devhub/projects/${project.id}/generate`),
           { method: "POST", headers: { "Content-Type": "application/json" }, body: generateBody },
-          { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
+          { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
         );
         data = await r.json();
-        if (!r.ok) throw new Error(data.error || "Generation failed");
+        if (!r.ok) throw new Error(devhubServerError(data.error, "Генерация не удалась"));
       }
       const newGenerated = data.files || [];
       setGeneratedFiles(newGenerated.map((f: any) => ({ path: f.path, language: f.language })));
@@ -1046,13 +1209,19 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       }
       if (data.aiGenerated === false) {
         note = "No AI provider configured — placeholder inserted instead of real code";
-        showToast("No AI provider configured — inserted a placeholder file instead of real code", "error");
+        showToast("Провайдер ИИ не подключён — вместо настоящего кода вставлена заготовка", "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
         const paths = data.syntaxErrors.map((s: { path: string }) => s.path).join(", ");
         note = `Syntax check failed: ${paths}`;
-        showToast(`Generated ${newGenerated.length} file(s), but ${paths} failed a syntax check — review before deploying`, "warning");
+        showToast(`Создано файлов: ${newGenerated.length}, но ${paths} не прошли проверку синтаксиса — просмотрите перед выкаткой`, "warning");
+      } else if (data.storage === "memory") {
+        // Генерация — платный шаг. Сервер говорит, куда легли файлы; "memory"
+        // значит, что база была недоступна и результат живёт в памяти
+        // процесса: при перезапуске он исчезнет, а человек уже заплатил.
+        // Зелёный тост «Создано файлов: N» это скрывал.
+        showToast(`Создано файлов: ${newGenerated.length}, но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.`, "error");
       } else {
-        showToast(`Generated ${newGenerated.length} file(s)`, "success");
+        showToast(`Создано файлов: ${newGenerated.length}`, "success");
       }
       setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note }]);
       // Data-shaped idea + no schema yet → offer to design the database with
@@ -1082,11 +1251,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // Reload files list
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
       setAiPrompt("");
     } catch (e: any) {
-      setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), files: [], note: e.message || "Generation failed" }]);
-      showToast(e.message || "Generation failed", "error");
+      setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), files: [], note: e.message || "Генерация не удалась" }]);
+      showToast(e.message || "Генерация не удалась", "error");
     } finally {
       setGenerating(false);
       setGenStage(null);
@@ -1100,7 +1269,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
     const listData = await listR.json();
-    setFiles(listData.files || []);
+    applyFileList(listData);
     if (selectedFile && revertedFiles.includes(selectedFile.path)) {
       const stillExists = (listData.files || []).some((f: FileItem) => f.path === selectedFile.path);
       if (stillExists) {
@@ -1134,16 +1303,23 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate/undo`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Undo failed");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Отменить не удалось"));
       if (data.ok === false) {
-        showToast(data.message || "No AI change to undo", "info");
+        showToast("Отменять нечего — правок ИИ не было", "info");
         return;
       }
       await reloadAfterRevert(Array.isArray(data.revertedFiles) ? data.revertedFiles : []);
       if (showHistory) loadCheckpointHistory();
-      showToast(`Reverted: ${data.label || "last AI change"}`, "success");
+      // Сервер говорит, куда лёг откат. "memory" значит, что восстановление
+      // живёт в памяти процесса и правки ВЕРНУТСЯ при перезапуске — а зелёный
+      // тост говорил, что всё отменено насовсем.
+      if (data.storage === "memory") {
+        showToast("Отменено, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.", "error");
+      } else {
+        showToast(`Отменено: ${data.label || "последняя правка ИИ"}`, "success");
+      }
     } catch (e: any) {
-      showToast(e.message || "Undo failed", "error");
+      showToast(e.message || "Отменить не удалось", "error");
     } finally {
       setUndoing(false);
     }
@@ -1155,17 +1331,21 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/checkpoints/${checkpointId}/restore`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Restore failed");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Восстановить не удалось"));
       if (data.ok === false) {
-        showToast(data.message || "That checkpoint is no longer available", "info");
+        showToast("Эта контрольная точка больше недоступна", "info");
         loadCheckpointHistory();
         return;
       }
       await reloadAfterRevert(Array.isArray(data.revertedFiles) ? data.revertedFiles : []);
       loadCheckpointHistory();
-      showToast(`Restored to: ${data.restoredToLabel} (${data.stepsApplied} step${data.stepsApplied === 1 ? "" : "s"} back)`, "success");
+      if (data.storage === "memory") {
+        showToast("Вернулись, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.", "error");
+      } else {
+        showToast(`Вернулись к: ${data.restoredToLabel} (шагов назад: ${data.stepsApplied})`, "success");
+      }
     } catch (e: any) {
-      showToast(e.message || "Restore failed", "error");
+      showToast(e.message || "Восстановить не удалось", "error");
     } finally {
       setRestoringId(null);
     }
@@ -1182,13 +1362,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ idea: planIdea, ...(project ? { projectId: project.id } : {}) }),
       });
       const data = await r.json();
-      if (!r.ok || data.ok === false) throw new Error(data.error || "Planning failed");
+      if (!r.ok || data.ok === false) throw new Error(devhubServerError(data.error, "Не удалось составить план"));
       setPlan(data);
       if (data.aiGenerated === false) {
-        showToast("No AI provider configured — showing a generic outline instead of a tailored plan", "warning");
+        showToast("Провайдер ИИ не подключён — показан общий план вместо составленного под задачу", "warning");
       }
     } catch (e: any) {
-      showToast(e.message || "Planning failed", "error");
+      showToast(e.message || "Не удалось составить план", "error");
     } finally {
       setPlanning(false);
     }
@@ -1223,7 +1403,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       REACT_PREVIEW_OVERLAY_SCRIPT
     ).then((r) => {
       if (cancelled) return;
-      if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(r.error); }
+      if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(devhubServerError(r.error, "Превью не собралось")); }
       else { setReactPreviewSrcdoc(r.srcdoc); }
       setVisualEditSelected(null);
     });
@@ -1282,13 +1462,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: finalHtml }),
       });
-      if (!r.ok) throw new Error("Save failed");
+      if (!r.ok) throw new Error("Сохранить не удалось");
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
-      showToast(`Saved — updated ${visualEditHtmlPath}`, "success");
+      applyFileList(listData);
+      showToast(`Сохранено — обновлён ${visualEditHtmlPath}`, "success");
     } catch (e: any) {
-      showToast(e.message || "Save failed", "error");
+      showToast(e.message || "Сохранить не удалось", "error");
     } finally {
       setVisualEditSaving(false);
     }
@@ -1307,7 +1487,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ prompt: visualEditImgPrompt.trim() }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Image generation failed");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось создать картинку"));
       const doc = visualEditSourceDocRef.current;
       const el = doc.querySelector(`[data-vid="${visualEditSelected.vid}"]`);
       if (!el) throw new Error("Element no longer in the preview — it was rebuilt, click it again");
@@ -1325,15 +1505,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setVisualEditImgPrompt("");
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
       showToast(
         String(data.url).startsWith("data:")
-          ? "Image generated and saved (embedded inline — the page carries the image data itself)"
-          : "Image generated and saved",
+          ? "Картинка создана и сохранена (встроена прямо в страницу)"
+          : "Картинка создана и сохранена",
         "success"
       );
     } catch (e: any) {
-      showToast(e.message || "Image generation failed", "error");
+      showToast(e.message || "Не удалось создать картинку", "error");
     } finally {
       setVisualEditImgBusy(false);
     }
@@ -1352,10 +1532,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetchWithRedeployRetry(
         apiUrl(`/api/devhub/projects/${project.id}/database/design`),
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description }) },
-        { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
+        { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
       );
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Database design failed");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось спроектировать базу"));
       const changes = (data.files || []).map((gf: { path: string; language?: string; content: string }) => {
         const before = files.find((ff) => ff.path === gf.path)?.content ?? "";
         const d = diffLines(before, gf.content ?? "");
@@ -1367,15 +1547,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       ]);
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
-      showToast("Database designed — db/schema.sql + client are in the file tree", "success");
+      applyFileList(listData);
+      showToast("База спроектирована — db/schema.sql и клиент лежат в дереве файлов", "success");
       // Schema on disk is only half the job; offer to create the real database
       // right here when the server can (capability "database" is live).
       if (data.canProvision) {
         setChatHistory((h) => [...h, { role: "hint", kind: "provision_db", description, at: new Date().toISOString() }]);
       }
     } catch (e: any) {
-      showToast(e.message || "Database design failed", "error");
+      showToast(e.message || "Не удалось спроектировать базу", "error");
     } finally {
       setDesigningDb(false);
     }
@@ -1403,10 +1583,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     showToast(`Добавлено в ${selectedFile.path}`, "success");
   };
 
+  // Say "aevion.build" only when the server reports that capability working.
+  // It reports `degraded` as soon as a deploy observes the domain not
+  // resolving, which is the state it has been in since the zone was created.
+  // Это ОБЕЩАНИЕ, а не блокировка кнопки: на незнании молчим (см. помощник).
+  const domainCapabilityWorks = isCapabilityConfirmed(caps, "domain");
+
   const provisionDatabase = async () => {
     if (!project || provisioningDb) return;
     if (isCapabilityBlocked(caps, "database")) {
-      showToast(capabilityHint(caps, "database", "Database provisioning"), "warning");
+      showToast(capabilityHint(caps, "database", "База данных"), "warning");
       return;
     }
     setProvisioningDb(true);
@@ -1414,10 +1600,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetchWithRedeployRetry(
         apiUrl(`/api/devhub/projects/${project.id}/database/provision`),
         { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
-        { onRetry: () => showToast("Backend is redeploying — retrying in 20s…", "info") }
+        { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
       );
       const data = await r.json();
-      if (!r.ok || !data.ok) throw new Error(data.error || "Provisioning failed");
+      if (!r.ok || !data.ok) throw new Error(devhubServerError(data.error, "Не удалось выделить ресурсы"));
       setChatHistory((h) => [
         ...h.filter((m) => !(m.role === "hint" && m.kind === "provision_db")),
         {
@@ -1425,17 +1611,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           at: new Date().toISOString(),
           files: [],
           note: data.appliedSchemaSql
-            ? `Database ready — schema ${data.schema} created, tables from db/schema.sql applied, DATABASE_URL saved to Env Vars.`
-            : `Database ready — schema ${data.schema} created. No db/schema.sql yet, so no tables were made.`,
+            ? `База готова — схема ${data.schema} created, tables from db/schema.sql applied, DATABASE_URL saved to Env Vars.`
+            : `База готова — схема ${data.schema} created. No db/schema.sql yet, so no tables were made.`,
         },
       ]);
       // Refresh the project so the Env Vars tab shows DATABASE_URL.
       const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
       const pd = await pr.json();
       setProject(pd.project);
-      showToast(data.appliedSchemaSql ? "Database created and schema applied" : "Database created", "success");
+      showToast(data.appliedSchemaSql ? "База создана, схема применена" : "База создана", "success");
     } catch (e: any) {
-      showToast(e.message || "Provisioning failed", "error");
+      showToast(e.message || "Не удалось выделить ресурсы", "error");
     } finally {
       setProvisioningDb(false);
     }
@@ -1466,16 +1652,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ prompt, stack: project.stack, ...(visualEditHtmlPath ? { targetFiles: [visualEditHtmlPath] } : {}) }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "AI edit failed");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Правка ИИ не удалась"));
       if (data.aiGenerated === false) {
-        showToast("No AI provider configured — the page was not changed with real AI output", "error");
+        showToast("Провайдер ИИ не подключён — страница настоящей правкой ИИ не менялась", "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
-        showToast("AI edit applied, but the result failed a syntax check — review before deploying", "warning");
+        showToast("Правка ИИ применена, но результат не прошёл проверку синтаксиса — просмотрите перед выкаткой", "warning");
       } else {
         showToast(
           visualEditHtmlPath
-            ? "AI edit applied — preview refreshed (↩ Undo below if it's wrong)"
-            : "AI edit applied to the source files — redeploy to see it in this preview (↩ Undo below if it's wrong)",
+            ? "Правка ИИ применена — превью обновлено (↩ Отменить ниже, если получилось не то)"
+            : "Правка ИИ внесена в исходники — выкатите заново, чтобы увидеть её здесь (↩ Отменить ниже, если получилось не то)",
           "success"
         );
       }
@@ -1483,9 +1669,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // Refreshing the file list retriggers the preview rebuild effect.
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
     } catch (e: any) {
-      showToast(e.message || "AI edit failed", "error");
+      showToast(e.message || "Правка ИИ не удалась", "error");
     } finally {
       setVisualEditAiBusy(false);
     }
@@ -1499,13 +1685,19 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/sync`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok || data.ok === false) throw new Error(data.error || data.message || "Sync failed");
-      showToast(data.message || "Synced", (data.updated?.length || data.created?.length) ? "success" : "info");
+      if (!r.ok || data.ok === false) throw new Error(devhubServerError(data.error, "Синхронизация не удалась"));
+      // A sync that could not read some files leaves the project part-new and
+      // part-stale — and that mixture is what a later push or deploy builds
+      // from. A green toast over that reads as "all of it arrived".
+      showToast(
+        "Синхронизировано",
+        data.degraded ? "warning" : (data.updated?.length || data.created?.length) ? "success" : "info",
+      );
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
+      applyFileList(listData);
     } catch (e: any) {
-      showToast(e.message || "Sync failed", "error");
+      showToast(e.message || "Синхронизация не удалась", "error");
     } finally {
       setRepoPulling(false);
     }
@@ -1542,15 +1734,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const deploy = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "railway")) {
-      showToast(capabilityHint(caps, "railway", "Railway deploy"), "warning");
+      showToast(capabilityHint(caps, "railway", "Выкатка на Railway"), "warning");
       return;
     }
     setDeploying(true);
-    showToast("Building...", "info");
+    showToast("Собираю…", "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Deploy failed");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Выкатка не удалась"));
       const deploymentId: string = data.deploymentId;
       // Start streaming build log
       streamBuildLog(project.id, deploymentId);
@@ -1563,7 +1755,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         if (activeTab === "deployments") fetchDeployments();
       }, 4000);
     } catch (e: any) {
-      showToast(e.message || "Deploy failed", "error");
+      showToast(e.message || "Выкатка не удалась", "error");
       setDeploying(false);
     }
   };
@@ -1572,9 +1764,20 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deployments`), { cache: "no-store" });
+      if (!r.ok) {
+        // Голый код ответа человеку ничего не говорит. Тело ошибки обычно есть —
+        // берём его и переводим тем же помощником, что и остальные показы.
+        const body = await r.json().catch(() => null);
+        throw new Error(
+          devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+        );
+      }
       const data = await r.json();
       setDeployments(data.deployments || []);
-    } catch {}
+      setDeploymentsLoadError(null);
+    } catch (e: any) {
+      setDeploymentsLoadError(e?.message || "нет связи с сервером");
+    }
   }, [project]);
 
   useEffect(() => {
@@ -1585,9 +1788,20 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/env`), { cache: "no-store" });
+      if (!r.ok) {
+        // Голый код ответа человеку ничего не говорит. Тело ошибки обычно есть —
+        // берём его и переводим тем же помощником, что и остальные показы.
+        const body = await r.json().catch(() => null);
+        throw new Error(
+          devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+        );
+      }
       const data = await r.json();
       setEnvList(data.env || []);
-    } catch {}
+      setEnvLoadError(null);
+    } catch (e: any) {
+      setEnvLoadError(e?.message || "нет связи с сервером");
+    }
   }, [project]);
 
   useEffect(() => {
@@ -1597,23 +1811,44 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const addEnvVar = async () => {
     if (!newEnvKey.trim() || !project) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/env`), {
+      const r = await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/env`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: newEnvKey, value: newEnvVal }),
       });
       setNewEnvKey(""); setNewEnvVal("");
       fetchEnv();
-      showToast("Env var saved", "success");
-    } catch { showToast("Failed to save", "error"); }
+      // Сервер говорит, КУДА легла запись. "memory" значит, что база была
+      // недоступна и переменная живёт в памяти процесса: при перезапуске она
+      // исчезнет, а выкатка соберётся БЕЗ неё — и причину человек будет искать
+      // в своём коде. Безусловный зелёный тост это скрывал.
+      const saved = await r.json().catch(() => ({}));
+      if (saved?.storage === "memory") {
+        showToast("Сохранено, но база была недоступна: переменная пока в памяти и может пропасть при перезапуске. Повторите через минуту.", "error");
+      } else {
+        showToast("Переменная сохранена", "success");
+      }
+    } catch (e: any) { showToast(`Переменная НЕ сохранена — ${e?.message || "нет связи"}`, "error"); }
   };
 
   const removeEnvVar = async (key: string) => {
     if (!project) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/env/${encodeURIComponent(key)}`), { method: "DELETE" });
+      const r = await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/env/${encodeURIComponent(key)}`), { method: "DELETE" });
       fetchEnv();
-    } catch {}
+      // "memory" на удалении значит, что убрали только из памяти процесса: после
+      // перезапуска переменная ВЕРНЁТСЯ, а человек считает её удалённой. Молчание
+      // здесь читается как успех.
+      const done = await r.json().catch(() => ({}));
+      if (done?.storage === "memory") {
+        showToast("База была недоступна: переменная убрана только из памяти и может вернуться после перезапуска.", "error");
+      }
+    } catch (e: any) {
+      // The list is re-read either way: a variable that is still on the server
+      // must reappear rather than look deleted.
+      fetchEnv();
+      showToast(`Переменная НЕ удалена — ${e?.message || "нет связи"}`, "error");
+    }
   };
 
   const applyTemplate = async (templateId: string) => {
@@ -1626,13 +1861,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ templateId }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error);
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось выполнить действие"));
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
-      showToast(`Template applied — ${(data.files || []).length} files`, "success");
+      applyFileList(listData);
+      if (data.storage === "memory") {
+        showToast("Шаблон применён, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.", "error");
+      } else {
+        showToast(`Шаблон применён — файлов: ${(data.files || []).length}`, "success");
+      }
     } catch (e: any) {
-      showToast(e.message || "Failed", "error");
+      showToast(e.message || "Не удалось", "error");
     } finally {
       setApplyingTemplate(null);
     }
@@ -1642,7 +1881,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!project) return;
     setSavingSettings(true);
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}`), {
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1652,9 +1891,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         }),
       });
       setProject((p) => p ? { ...p, name: settingsName, description: settingsDesc || null, customDomain: settingsDomain || null } : p);
-      showToast("Settings saved", "success");
-    } catch {
-      showToast("Failed to save settings", "error");
+      showToast("Настройки сохранены", "success");
+    } catch (e: any) {
+      showToast(`Настройки НЕ сохранены — ${e?.message || "нет связи"}`, "error");
     } finally {
       setSavingSettings(false);
     }
@@ -1669,25 +1908,35 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ userId: settingsCollab.trim(), role: collabRole }),
       });
       if (resp.status === 403) {
-        showToast("Studio Pro required — upgrade to add collaborators", "error");
+        showToast("Соавторы доступны в Studio Pro — оформите, чтобы добавлять", "error");
         return;
       }
-      const data = await resp.json();
-      setProject((p) => p ? { ...p, collaborators: data.collaborators || [] } : p);
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !Array.isArray(data?.collaborators)) {
+        // Two lies in one line before this: a green "added" toast, and
+        // `data.collaborators || []` wiping everyone already on the project
+        // off the screen because a failed response carries no list.
+        showToast(`Соавтор НЕ добавлен — сервер ответил ${resp.status}`, "error");
+        return;
+      }
+      setProject((p) => p ? { ...p, collaborators: data.collaborators } : p);
       setSettingsCollab("");
-      showToast(`Collaborator added (${collabRole})`, "success");
+      showToast(`Соавтор добавлен (${collabRole})`, "success");
     } catch {
-      showToast("Failed to add collaborator", "error");
+      showToast("Не удалось добавить соавтора", "error");
     }
   };
 
   const removeCollaborator = async (collabUserId: string) => {
     if (!project) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators/${encodeURIComponent(collabUserId)}`), { method: "DELETE" });
+      await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/collaborators/${encodeURIComponent(collabUserId)}`), { method: "DELETE" });
       setProject((p) => p ? { ...p, collaborators: p.collaborators.filter((c) => c.userId !== collabUserId) } : p);
-    } catch {
-      showToast("Failed to remove collaborator", "error");
+      showToast("Доступ отозван", "success");
+    } catch (e: any) {
+      // Leave them in the list. Access is still live, and a list that hides
+      // that is worse than the error.
+      showToast(`Доступ НЕ отозван — ${e?.message || "нет связи"}`, "error");
     }
   };
 
@@ -1699,7 +1948,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/status`), { cache: "no-store" });
       const d = await r.json();
       setGithubStatus(d);
-    } catch { setGithubStatus(null); }
+      // Deliberately does NOT write githubIssue. Both reads fire together and
+      // unordered, so two writers meant a successful status could erase the
+      // branch read's failure. They ask the same API about the same repo with
+      // the same token, so one owner loses nothing — and it is the branch list,
+      // whose emptiness is the thing that needs explaining.
+    } catch {
+      setGithubStatus(null);
+    }
   }, [project]);
 
   const fetchGithubBranches = useCallback(async () => {
@@ -1708,7 +1964,28 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/branches`), { cache: "no-store" });
       const d = await r.json();
       setGithubBranches(d.branches || []);
-    } catch { setGithubBranches([]); }
+      // An empty list is only meaningful together with WHY it is empty. The
+      // reason is also returned, so a caller can refuse to report success.
+      if (d.error) {
+        // Значение сервера входит в нашу структуру ЗДЕСЬ, и отсюда попадает на
+        // экран в двух местах (сообщение о ветках и карточка недоступного
+        // репозитория). Перевод ставим в точке входа, а не у каждого показа:
+        // иначе третий показ снова окажется сырым.
+        const issue = {
+          errorKind: d.errorKind as string | undefined,
+          error: devhubServerError(d.error, "Не удалось загрузить список веток"),
+        };
+        setGithubIssue(issue);
+        return issue;
+      }
+      setGithubIssue(null);
+      return null;
+    } catch {
+      setGithubBranches([]);
+      const issue = { errorKind: "unavailable", error: "Не удалось загрузить список веток" };
+      setGithubIssue(issue);
+      return issue;
+    }
   }, [project]);
 
   useEffect(() => {
@@ -1725,37 +2002,51 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/push`), { method: "POST" });
       const d = await r.json();
-      if (d.ok) {
+      if (d.ok && d.degraded) {
+        // Some files never reached the repo. Saying "pushed" here is how an
+        // incomplete repo passed for a complete one — and it is the repo a
+        // deploy would build from.
+        setGithubMsg(`⚠ Отправлено ${d.pushedFiles} из ${d.pushedFiles + (d.failedFiles?.length ?? 0)} файлов. ${d.degradedReason}`);
+        setGithubMsgTone("warning");
+        showToast("Часть файлов не попала в репозиторий", "warning");
+        setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
+        await fetchGithubStatus();
+        await fetchGithubBranches();
+      } else if (d.ok) {
         setGithubMsg(`Pushed ${d.pushedFiles} files to GitHub: ${d.repoUrl}`);
+        setGithubMsgTone("success");
         setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
         await fetchGithubStatus();
         await fetchGithubBranches();
       } else {
         setGithubMsg(d.message || "Push failed");
+        setGithubMsgTone("error");
       }
     } catch (e: any) {
       setGithubMsg(e?.message || "Push failed");
+      setGithubMsgTone("error");
     } finally {
       setGithubPushing(false);
     }
   };
 
+  // "Sync branches" used to POST /github/sync — the SAME endpoint as "Pull from
+  // repo", which overwrites the project's files from the repository. A button
+  // promising a branch refresh was quietly replacing the user's work, and then
+  // printed "Default branch: undefined" because it read a response shape that
+  // handler never returned (it was written for a duplicate route that Express
+  // never reached; that dead route is now gone). It re-reads the lists, which
+  // is what its label says and all it ever needed to do.
   const syncGithub = async () => {
     if (!project) return;
     setGithubSyncing(true);
     setGithubMsg(null);
     try {
-      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/sync`), { method: "POST" });
-      const d = await r.json();
-      if (d.ok) {
-        setGithubMsg(`Synced. Default branch: ${d.defaultBranch} · Last push: ${d.lastPush ? new Date(d.lastPush).toLocaleDateString() : "—"}`);
-        await fetchGithubStatus();
-        await fetchGithubBranches();
-      } else {
-        setGithubMsg(d.message || "Sync failed");
-      }
-    } catch (e: any) {
-      setGithubMsg(e?.message || "Sync failed");
+      await fetchGithubStatus();
+      const issue = await fetchGithubBranches();
+      // Reporting "updated" after a refusal is the same lie one layer up.
+      setGithubMsg(issue ? issue.error : "Список веток обновлён");
+      setGithubMsgTone(issue ? (issue.errorKind === "unavailable" || issue.errorKind === "rate_limit" ? "warning" : "error") : "success");
     } finally {
       setGithubSyncing(false);
     }
@@ -1763,23 +2054,38 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   // ── Cloudflare Pages deploy ──────────────────────────────────────────────────
   const [pagesDeploying, setPagesDeploying] = useState(false);
-  const [pagesResult, setPagesResult] = useState<{ liveUrl: string; domain: string | null; pagesUrl: string } | null>(null);
+  const [pagesResult, setPagesResult] = useState<{ liveUrl: string; domain: string | null; pagesUrl: string; domainReady?: boolean } | null>(null);
 
   const deployToPages = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "pages")) {
-      showToast(capabilityHint(caps, "pages", "Cloudflare Pages deploy"), "warning");
+      showToast(capabilityHint(caps, "pages", "Публикация на Cloudflare Pages"), "warning");
       return;
     }
     setPagesDeploying(true);
     setPagesResult(null);
-    showToast("Deploying to Cloudflare Pages...", "info");
+    showToast("Публикую на Cloudflare Pages…", "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/pages`), { method: "POST" });
       const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(d.error || "Pages deploy failed");
-      setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl });
-      showToast(d.domain ? `Live: https://${d.domain}` : `Live: ${d.pagesUrl}`, "success");
+      if (!r.ok || !d.ok) throw new Error(devhubServerError(d.error, "Не удалось опубликовать на Cloudflare Pages"));
+      setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl, domainReady: !!d.domainReady });
+      // The server decides which address is live and hands it over as liveUrl —
+      // it falls back to pages.dev when the custom domain does not resolve.
+      // Announcing d.domain the moment it merely *exists* told people their
+      // page was live at an address that fails DNS, which is the exact lie the
+      // server-side check was added to stop.
+      // One message, not two: this Toast shows a single notice at a time, so a
+      // second call would silently replace the first — the user would see the
+      // caveat and never the address.
+      showToast(
+        d.domainReady && d.domain
+          ? `Live: https://${d.domain}`
+          : d.domain
+            ? `Адрес: ${d.liveUrl ?? d.pagesUrl} — ${d.domain} пока не отвечает (зона не делегирована)`
+            : `Адрес: ${d.liveUrl ?? d.pagesUrl}`,
+        d.domain && !d.domainReady ? "warning" : "success",
+      );
       setTimeout(async () => {
         const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
         const pd = await pr.json();
@@ -1787,7 +2093,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         fetchDeployments();
       }, 5000);
     } catch (e: any) {
-      showToast(e?.message || "Cloudflare Pages deploy failed", "error");
+      showToast(e?.message || "Публикация на Cloudflare Pages не удалась", "error");
     } finally {
       setPagesDeploying(false);
     }
@@ -1798,16 +2104,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const deployToVercel = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "vercel")) {
-      showToast(capabilityHint(caps, "vercel", "Vercel deploy"), "warning");
+      showToast(capabilityHint(caps, "vercel", "Выкатка на Vercel"), "warning");
       return;
     }
     setVercelDeploying(true);
-    showToast("Deploying to Vercel...", "info");
+    showToast("Выкатываю на Vercel…", "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/vercel`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        throw new Error(d.error || "Vercel deploy failed");
+        throw new Error(devhubServerError(d.error, "Выкатка на Vercel не удалась"));
       }
       showToast(`Vercel: ${d.deployUrl}`, "success");
       setTimeout(async () => {
@@ -1816,7 +2122,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setProject(pd.project);
       }, 6000);
     } catch (e: any) {
-      showToast(e?.message || "Vercel deploy failed", "error");
+      showToast(e?.message || "Выкатка на Vercel не удалась", "error");
     } finally {
       setVercelDeploying(false);
     }
@@ -1836,12 +2142,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setEmailMsg({ ok: false, text: d.error || "Send failed" });
+        setEmailMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setEmailMsg({ ok: true, degraded: true, text: `Sent to ${emailTo}, but Brevo didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setEmailTo(""); setEmailSubject(""); setEmailBody("");
       } else {
-        setEmailMsg({ ok: true, text: `Email sent to ${emailTo}` });
+        setEmailMsg({ ok: true, text: `Письмо отправлено на ${emailTo}` });
         setEmailTo(""); setEmailSubject(""); setEmailBody("");
       }
     } catch (e: any) {
@@ -1876,7 +2182,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setPayError(d.error || "Failed to create payment link");
+        setPayError(devhubServerError(d.error, "Не удалось создать ссылку на оплату"));
       } else {
         setPayResult({ url: d.url });
       }
@@ -1903,7 +2209,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setPayError(d.error || "Failed to create Gumroad checkout");
+        setPayError(devhubServerError(d.error, "Не удалось создать оплату Gumroad"));
       } else {
         setPayResult({ url: d.url });
       }
@@ -1919,7 +2225,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateImage = async () => {
     if (!imgPrompt.trim()) return;
     if (isCapabilityBlocked(caps, "image")) {
-      setImgError(capabilityHint(caps, "image", "Image generation"));
+      setImgError(capabilityHint(caps, "image", "Генерация картинок"));
       return;
     }
     setImgLoading(true);
@@ -1934,12 +2240,23 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setImgError(d.error || "Image generation failed");
+        setImgError(devhubServerError(d.error, "Не удалось создать картинку"));
       } else {
         setImgResult({ url: d.url, revisedPrompt: d.revisedPrompt });
+              // Сервер помечает ответ, когда РАЗРЕШИЛ трату, не сумев
+              // прочитать расход: проверка кредита падает ОТКРЫТО, чтобы
+              // не блокировать платящего из-за икоты базы. Пометка ехала
+              // до витрины и умирала здесь — витрина её не читала вовсе
+              // (замер 29.08.2026: сервер ставит, фронт читает 0 раз).
+              if (d.creditUnverified) {
+                showToast(
+                  "Готово, но расход не удалось сверить: счётчик тарифа может отстать.",
+                  "warning",
+                );
+              }
       }
     } catch (e: any) {
-      setImgError(e?.message || "Image generation failed");
+      setImgError(e?.message || "Не удалось создать картинку");
     } finally {
       setImgLoading(false);
     }
@@ -1964,7 +2281,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(d?.error || `SFX error ${r.status}`);
+        throw new Error(devhubServerError(d?.error, `Не удалось создать звук — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       setSfxUrl(URL.createObjectURL(blob));
@@ -1980,7 +2297,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateMusic = async () => {
     if (!musicPrompt.trim()) return;
     if (isCapabilityBlocked(caps, "audio_music")) {
-      setMusicError(capabilityHint(caps, "audio_music", "Music generation"));
+      setMusicError(capabilityHint(caps, "audio_music", "Генерация музыки"));
       return;
     }
     setMusicLoading(true);
@@ -1998,12 +2315,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(d?.error || `Music error ${r.status}`);
+        throw new Error(devhubServerError(d?.error, `Не удалось создать музыку — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       setMusicUrl(URL.createObjectURL(blob));
     } catch (e: any) {
-      setMusicError(e?.message || "Music compose failed");
+      setMusicError(e?.message || "Не удалось сочинить музыку");
     } finally {
       setMusicLoading(false);
     }
@@ -2019,7 +2336,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/domain/setup`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setDomainSetupMsg({ ok: false, text: d.error || "Setup failed" });
+        setDomainSetupMsg({ ok: false, text: devhubServerError(d.error, "Не удалось настроить домен") });
       } else {
         setDomainSetupMsg({ ok: true, text: `✓ ${d.domain} → ${d.url}` });
         setProject((p) => p ? { ...p, customDomain: d.domain } : p);
@@ -2074,6 +2391,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         const decoder = new TextDecoder();
         let buffer = "";
         const accumulated: typeof agentResults = [];
+        // The server ends a finished run with a "complete" event. Without this
+        // flag, a stream that simply stopped — the process died, the connection
+        // dropped, a proxy timed out — ended the run in silence: no summary, no
+        // error, the button just went back to normal. Steps that never reported
+        // look exactly like steps that were never run.
+        let completed = false;
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
@@ -2090,23 +2413,30 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 const step = agentSteps[evt.index];
                 accumulated.push({
                   step: evt.index, type: step?.type || "unknown",
-                  ok: !!evt.ok, output: evt.output, error: evt.error, savedAs: evt.savedAs,
+                  ok: !!evt.ok, output: evt.output, error: evt.error ? devhubServerError(evt.error, "Шаг не выполнен") : evt.error, savedAs: evt.savedAs,
                 });
                 setAgentResults([...accumulated]);
               } else if (evt.type === "complete") {
+                completed = true;
                 setAgentSummary({
                   totalSteps: evt.totalSteps, successCount: evt.successCount, failureCount: evt.failureCount,
                 });
-                showToast(`Agent: ${evt.successCount}/${evt.totalSteps} steps ok`, evt.failureCount === 0 ? "success" : "error");
+                showToast(`Агент: удалось шагов ${evt.successCount} из ${evt.totalSteps}`, evt.failureCount === 0 ? "success" : "error");
               }
             } catch { /* tolerate bad events */ }
           }
         }
+        if (!completed) {
+          showToast(
+            `Прогон оборвался: отчитались ${accumulated.length} из ${agentSteps.length} шагов. Остальные могли не выполниться.`,
+            "error",
+          );
+        }
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json();
-        setFiles(listData.files || []);
+        applyFileList(listData);
       } catch (e: any) {
-        showToast(e?.message || "Stream failed", "error");
+        showToast(e?.message || "Поток оборвался", "error");
       } finally {
         setAgentRunning(false);
         setAgentLiveStep(null);
@@ -2122,15 +2452,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ steps: agentSteps }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Workflow failed");
+      if (!r.ok) throw new Error(devhubServerError(d.error, "Сценарий не выполнился"));
       setAgentResults(d.results || []);
       setAgentSummary({ totalSteps: d.totalSteps, successCount: d.successCount, failureCount: d.failureCount });
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
-      setFiles(listData.files || []);
-      showToast(`Agent: ${d.successCount}/${d.totalSteps} steps ok`, d.successCount === d.totalSteps ? "success" : "error");
+      applyFileList(listData);
+      showToast(`Агент: удалось шагов ${d.successCount} из ${d.totalSteps}`, d.successCount === d.totalSteps ? "success" : "error");
     } catch (e: any) {
-      showToast(e?.message || "Workflow failed", "error");
+      showToast(e?.message || "Сценарий не выполнился", "error");
     } finally {
       setAgentRunning(false);
     }
@@ -2154,12 +2484,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setSmsMsg({ ok: false, text: d.error || "Send failed" });
+        setSmsMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setSmsMsg({ ok: true, degraded: true, text: `Brevo accepted the SMS, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setSmsRecipient(""); setSmsContent("");
       } else {
-        setSmsMsg({ ok: true, text: `SMS sent (${d.smsCount} segment${d.smsCount === 1 ? "" : "s"}, ref ${d.reference})` });
+        setSmsMsg({ ok: true, text: `SMS отправлено (${d.smsCount} segment${d.smsCount === 1 ? "" : "s"}, ref ${d.reference})` });
         setSmsRecipient(""); setSmsContent("");
       }
     } catch (e: any) {
@@ -2195,12 +2525,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setWaMsg({ ok: false, text: d.error || "Send failed" });
+        setWaMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setWaMsg({ ok: true, degraded: true, text: `Brevo accepted the WhatsApp message, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setWaContact(""); setWaTemplateId(""); setWaParams("");
       } else {
-        setWaMsg({ ok: true, text: `WhatsApp sent (msg ${d.messageId})` });
+        setWaMsg({ ok: true, text: `WhatsApp отправлен (сообщение ${d.messageId})` });
         setWaContact(""); setWaTemplateId(""); setWaParams("");
       }
     } catch (e: any) {
@@ -2229,7 +2559,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTrError(d.error || "Translation failed");
+        setTrError(devhubServerError(d.error, "Не удалось перевести"));
       } else {
         setTrResult({ text: d.text, detectedSource: d.detectedSource });
       }
@@ -2252,13 +2582,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTrFileMsg({ ok: false, text: d.error || "Translation failed" });
+        setTrFileMsg({ ok: false, text: devhubServerError(d.error, "Не удалось перевести") });
       } else {
-        setTrFileMsg({ ok: true, text: `Translated to ${d.path} (${d.bytes} bytes)` });
+        setTrFileMsg({ ok: true, text: `Переведено в ${d.path} (${d.bytes} bytes)` });
         // Reload file tree
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json();
-        setFiles(listData.files || []);
+        applyFileList(listData);
       }
     } catch (e: any) {
       setTrFileMsg({ ok: false, text: e?.message || "Translation failed" });
@@ -2276,7 +2606,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl("/api/devhub/media/email-templates?limit=50"), { cache: "no-store" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setEmailTemplatesError(d.error || "Failed to load templates");
+        setEmailTemplatesError(devhubServerError(d.error, "Не удалось загрузить шаблоны"));
         setEmailTemplates([]);
       } else {
         setEmailTemplates(d.templates || []);
@@ -2317,9 +2647,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTplSendMsg({ ok: false, text: d.error || "Send failed" });
+        setTplSendMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
       } else {
-        setTplSendMsg({ ok: true, text: `Sent template #${templateId} (msg ${d.messageId})` });
+        setTplSendMsg({ ok: true, text: `Отправлен шаблон №${templateId} (msg ${d.messageId})` });
       }
     } catch (e: any) {
       setTplSendMsg({ ok: false, text: e?.message || "Send failed" });
@@ -2333,15 +2663,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const runBulkTranslate = async () => {
     if (!project) return;
     if (bulkPaths.length === 0) {
-      showToast("Select at least one file", "error");
+      showToast("Выберите хотя бы один файл", "error");
       return;
     }
     if (bulkLangs.length === 0) {
-      showToast("Select at least one target language", "error");
+      showToast("Выберите хотя бы один язык перевода", "error");
       return;
     }
     if (bulkPaths.length * bulkLangs.length > 50) {
-      showToast("Max 50 translations per batch (files × langs)", "error");
+      showToast("За раз не больше 50 переводов (файлы × языки)", "error");
       return;
     }
     setBulkLoading(true);
@@ -2355,19 +2685,32 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(d.error || "Bulk translate failed", "error");
+        showToast(devhubServerError(d.error, "Пакетный перевод не удался"), "error");
         return;
       }
-      setBulkResults(d.results || []);
+      // У каждой строки результата свой текст ошибки от сервера, и он
+        // выводится в список как есть. Переводим на входе, а не в разметке:
+        // в разметке легко забыть, а сюда всё приходит одним местом.
+      setBulkResults(
+        (d.results || []).map((row: { error?: string }) =>
+          row?.error ? { ...row, error: devhubServerError(row.error, "Не удалось перевести") } : row,
+        ),
+      );
       setBulkSummary({ total: d.total, successCount: d.successCount, failureCount: d.failureCount });
       if (d.successCount > 0) {
-        showToast(`Translated ${d.successCount} / ${d.total}`, "success");
+        // Перевод платный: результат в памяти исчезнет при перезапуске, а деньги
+        // уже потрачены. Молчать тут дороже всего.
+        if (d.storage === "memory") {
+          showToast(`Переведено ${d.successCount} из ${d.total}, но база была недоступна: результат пока в памяти и может пропасть при перезапуске. Сохраните копию.`, "error");
+        } else {
+          showToast(`Переведено ${d.successCount} из ${d.total}`, "success");
+        }
         await fetchProject();
       } else {
-        showToast(`All ${d.total} translations failed`, "error");
+        showToast(`Ни один из ${d.total} переводов не удался`, "error");
       }
     } catch (e: any) {
-      showToast(e?.message || "Bulk translate failed", "error");
+      showToast(e?.message || "Пакетный перевод не удался", "error");
     } finally {
       setBulkLoading(false);
     }
@@ -2411,10 +2754,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTplBuilderMsg({ ok: false, text: d.error || "Template create failed" });
+        setTplBuilderMsg({ ok: false, text: devhubServerError(d.error, "Не удалось создать шаблон") });
         return;
       }
-      setTplBuilderMsg({ ok: true, text: `Created template #${d.id} — "${d.name}"` });
+      setTplBuilderMsg({ ok: true, text: `Создан шаблон №${d.id} — "${d.name}"` });
       // Refresh templates list if user already opened it
       if (emailTemplates.length > 0) await loadEmailTemplates();
     } catch (e: any) {
@@ -2451,17 +2794,21 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok) {
-        setZipResult({ ok: false, text: d.error || "Import failed" });
+        setZipResult({ ok: false, text: devhubServerError(d.error, "Импорт не удался") });
         return;
       }
       setZipResult({
         ok: true,
         text: `Imported ${d.importedCount} file(s), skipped ${d.skippedCount}`,
       });
-      showToast(`Imported ${d.importedCount} file(s) from ${file.name}`, "success");
+      if (d.storage === "memory") {
+        showToast("Файлы импортированы, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.", "error");
+      } else {
+        showToast(`Из ${file.name} импортировано файлов: ${d.importedCount}`, "success");
+      }
       await fetchProject();
     } catch (e: any) {
-      setZipResult({ ok: false, text: e?.message || "Import failed" });
+      setZipResult({ ok: false, text: e?.message || "Импорт не удался" });
     } finally {
       setZipImporting(false);
       if (zipInputRef.current) zipInputRef.current.value = "";
@@ -2525,7 +2872,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(d?.error || `Preview error ${r.status}`);
+        throw new Error(devhubServerError(d?.error, `Не удалось получить пример — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -2533,7 +2880,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       audio.onended = () => URL.revokeObjectURL(url);
       await audio.play();
     } catch (e: any) {
-      showToast(e?.message || "Preview failed", "error");
+      showToast(e?.message || "Превью не открылось", "error");
     } finally {
       setTimeout(() => setPreviewingVoice(null), 2500);
     }
@@ -2552,13 +2899,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        showToast(d.error || "Cloudflare upload failed", "error");
+        showToast(devhubServerError(d.error, "Загрузка в Cloudflare не удалась"), "error");
       } else {
         setCfImgPermanentUrl(d.url);
-        showToast("Image uploaded to permanent CDN", "success");
+        showToast("Картинка загружена на постоянный адрес", "success");
       }
     } catch (e: any) {
-      showToast(e?.message || "Upload failed", "error");
+      showToast(e?.message || "Загрузка не удалась", "error");
     } finally {
       setCfImgUploading(false);
     }
@@ -2615,7 +2962,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        setVoiceCloneMsg({ ok: false, text: d.error || "Preview failed" });
+        setVoiceCloneMsg({ ok: false, text: devhubServerError(d.error, "Превью не открылось") });
         return;
       }
       const blob = await r.blob();
@@ -2624,7 +2971,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setVoicePreviewOk(true);
       setVoiceCloneMsg({ ok: true, text: "Preview ready — listen below, then Save if you like it" });
     } catch (e: any) {
-      setVoiceCloneMsg({ ok: false, text: e?.message || "Preview failed" });
+      setVoiceCloneMsg({ ok: false, text: e?.message || "Превью не открылось" });
     } finally {
       setVoicePreviewLoading(false);
     }
@@ -2653,7 +3000,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setVoiceCloneMsg({ ok: false, text: d.error || "Clone failed" });
+        setVoiceCloneMsg({ ok: false, text: devhubServerError(d.error, "Не удалось клонировать голос") });
       } else {
         setVoiceCloneMsg({ ok: true, text: `Voice cloned: ${d.voiceId}${d.requiresVerification ? " (verification required)" : ""}` });
         setVoiceCloneName(""); setVoiceCloneDesc(""); setVoiceCloneFile(null);
@@ -2688,7 +3035,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setSttError(d.error || "STT failed");
+        setSttError(devhubServerError(d.error, "Не удалось расшифровать запись"));
       } else {
         setSttResult({ text: d.text, language: d.language, confidence: d.confidence });
       }
@@ -2712,7 +3059,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setDriveError(d.error || "Drive search failed");
+        setDriveError(devhubServerError(d.error, "Не удалось найти в Google Drive"));
         setDriveFiles([]);
       } else {
         setDriveFiles(d.files || []);
@@ -2735,15 +3082,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        showToast(d.error || "Import failed", "error");
+        showToast(devhubServerError(d.error, "Импорт не удался"), "error");
       } else {
-        showToast(`Imported ${d.path} (${d.bytes} bytes)`, "success");
+        showToast(`Импортирован ${d.path} (${d.bytes} байт)`, "success");
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json();
-        setFiles(listData.files || []);
+        applyFileList(listData);
       }
     } catch (e: any) {
-      showToast(e?.message || "Import failed", "error");
+      showToast(e?.message || "Импорт не удался", "error");
     } finally {
       setDriveImporting(null);
     }
@@ -2754,7 +3101,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateTts = async () => {
     if (!mediaTtsText.trim()) return;
     if (isCapabilityBlocked(caps, "audio_tts")) {
-      setMediaTtsError(capabilityHint(caps, "audio_tts", "Voice (TTS)"));
+      setMediaTtsError(capabilityHint(caps, "audio_tts", "Озвучка"));
       return;
     }
     setMediaTtsLoading(true);
@@ -2768,13 +3115,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(d?.error || `TTS error ${r.status}`);
+        throw new Error(devhubServerError(d?.error, `Не удалось озвучить — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       setMediaTtsUrl(url);
     } catch (e: any) {
-      setMediaTtsError(e?.message || "TTS failed");
+      setMediaTtsError(e?.message || "Озвучка не удалась");
     } finally {
       setMediaTtsLoading(false);
     }
@@ -2783,7 +3130,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
-        <div style={{ color: "#94a3b8" }}>Loading project...</div>
+        <div style={{ color: "#94a3b8" }}>Загружаем проект…</div>
       </div>
     );
   }
@@ -2792,8 +3139,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     return (
       <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
         <div style={{ textAlign: "center" }}>
-          <p style={{ color: "#64748b" }}>Project not found.</p>
-          <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700 }}>Back to DevHub</Link>
+          <p style={{ color: "#64748b" }}>Проект не найден.</p>
+          <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700 }}>Вернуться в DevHub</Link>
         </div>
       </div>
     );
@@ -2822,13 +3169,25 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <span style={{ padding: "3px 10px", borderRadius: 6, background: statusStyle.bg, color: statusStyle.fg, fontSize: 12, fontWeight: 600 }}>
             {project.status}
           </span>
-          {saving && <span style={{ fontSize: 12, color: "#94a3b8" }}>Saving...</span>}
+          {saving && <span style={{ fontSize: 12, color: "#94a3b8" }}>Сохраняем…</span>}
           {saveError && (
             <span
+              role="status"
+              aria-live="assertive"
               title={saveError}
-              style={{ fontSize: 12, fontWeight: 700, color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 6, padding: "3px 10px", maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              style={{ fontSize: 12, fontWeight: 700, color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 6, padding: "3px 10px", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: 480 }}
             >
-              ⚠ {saveError}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⚠ {saveError}</span>
+              {/* The text only exists in this browser tab now. Telling someone
+                  their work is unsaved without a way to keep it just makes the
+                  loss visible — this gets it onto their disk in one click. */}
+              <button
+                onClick={downloadEditorBuffer}
+                title="Скачать то, что сейчас в редакторе — до того, как вкладка закроется"
+                style={{ background: "#991b1b", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, padding: "3px 8px", cursor: "pointer", flexShrink: 0 }}
+              >
+                ⬇ Скачать копию
+              </button>
             </span>
           )}
           {project.deployUrl && (
@@ -2855,7 +3214,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deploy}
             disabled={deploying}
-            title={capabilityHint(caps, "railway", "Deploy to Railway")}
+            title={capabilityHint(caps, "railway", "Выкатка на Railway")}
             style={{
               padding: "8px 18px", background: deploying ? "#99f6e4" : "#0d9488",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -2868,7 +3227,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deployToVercel}
             disabled={vercelDeploying}
-            title={capabilityHint(caps, "vercel", "Deploy to Vercel")}
+            title={capabilityHint(caps, "vercel", "Выкатка на Vercel")}
             style={{
               padding: "8px 14px", background: vercelDeploying ? "#e2e8f0" : "#000",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -2892,7 +3251,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           maxHeight: 160, overflow: "hidden", display: "flex", flexDirection: "column",
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>Build Log</span>
+            <span style={{ fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>Журнал сборки</span>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {buildDone && (
                 <span style={{ padding: "2px 10px", borderRadius: 6, background: "#d1fae5", color: "#065f46", fontSize: 12, fontWeight: 700 }}>
@@ -2938,7 +3297,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               gap: 6, color: "#0d9488", fontWeight: 700, fontSize: 13, textAlign: "center", padding: 14,
             }}>
               <span style={{ fontSize: 28, lineHeight: 1 }}>📦</span>
-              <span>Drop ZIP to import</span>
+              <span>Перетащите ZIP, чтобы загрузить</span>
               <span style={{ fontSize: 10, color: "#475569", fontWeight: 500 }}>
                 {zipOverwrite ? "Overwrites existing files" : "Skips existing files"}
               </span>
@@ -2952,18 +3311,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 onClick={() => zipInputRef.current?.click()}
                 disabled={zipImporting || !project}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: zipImporting ? "wait" : "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
-                title="Import ZIP (symmetric to export)"
+                title="Загрузить ZIP — обратное действие к скачиванию"
               >{zipImporting ? "..." : "📦"}</button>
               <button
                 onClick={() => { if (project) window.open(apiUrl(`/api/devhub/projects/${project.id}/export`), "_blank"); }}
                 disabled={!project || files.length === 0}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
-                title="Download the whole project as a ZIP — the code is yours"
+                title="Скачать весь проект одним архивом ZIP"
               >⬇</button>
               <button
                 onClick={() => setShowNewFile(true)}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, width: 24, height: 24, cursor: "pointer", color: "#64748b", fontWeight: 700, fontSize: 16, lineHeight: 1 }}
-                title="New file"
+                title="Новый файл"
               >+</button>
             </div>
           </div>
@@ -2996,8 +3355,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 onKeyDown={(e) => { if (e.key === "Enter") createNewFile(); if (e.key === "Escape") { setShowNewFile(false); setNewFileName(""); } }}
               />
               <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-                <button onClick={createNewFile} style={{ flex: 1, padding: "4px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Create</button>
-                <button onClick={() => { setShowNewFile(false); setNewFileName(""); }} style={{ flex: 1, padding: "4px 0", background: "#f1f5f9", border: "none", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                <button onClick={createNewFile} style={{ flex: 1, padding: "4px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Создать</button>
+                <button onClick={() => { setShowNewFile(false); setNewFileName(""); }} style={{ flex: 1, padding: "4px 0", background: "#f1f5f9", border: "none", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>Отмена</button>
               </div>
             </div>
           )}
@@ -3015,7 +3374,21 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 return (
                   <div
                     key={f.path}
+                    // A file row was a plain div: no keyboard could focus it,
+                    // so opening a file — the first thing anyone does here —
+                    // was mouse-only. It behaves like a button, so it says so.
+                    role="button"
+                    tabIndex={isRenaming ? -1 : 0}
+                    aria-pressed={isSelected}
+                    aria-label={`Открыть ${f.path}`}
                     onClick={() => !isRenaming && loadFile(f)}
+                    onKeyDown={(e) => {
+                      if (isRenaming) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault(); // Space would scroll the tree
+                        loadFile(f);
+                      }
+                    }}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setContextMenu({ x: e.clientX, y: e.clientY, file: f });
@@ -3047,10 +3420,21 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {f.path}
                       </span>
                     )}
+                    {/* Rename lived only in the right-click menu — which most
+                        people never try in a web app, and which no keyboard can
+                        reach. Delete already had a button here; rename gets one
+                        too. Same handler as the menu entry. */}
+                    {!isRenaming && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setRenamingFile(f); setRenameValue(f.path); }}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", fontSize: 12, padding: 2, flexShrink: 0 }}
+                        title="Переименовать файл"
+                      >✎</button>
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); deleteFile(f.path); }}
                       style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", fontSize: 14, padding: 2, flexShrink: 0 }}
-                      title="Delete file"
+                      title="Удалить файл"
                     >x</button>
                   </div>
                 );
@@ -3071,14 +3455,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     srcDoc={reactPreviewSrcdoc}
                     sandbox="allow-scripts"
                     style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                    title="Visual Edit preview"
+                    title="Превью визуальной правки"
                   />
                 ) : isClientPreviewStack(project?.stack) && (!reactPreviewError || !project?.deployUrl) ? (
                   <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
                     <div style={{ maxWidth: 460 }}>
                       <div style={{ fontSize: 32, marginBottom: 12 }}>⚛️</div>
                       <div style={{ fontSize: 14, lineHeight: 1.5 }}>
-                        {reactPreviewError ?? "Building the live preview…"}
+                        {reactPreviewError ?? "Собираем живое превью…"}
                       </div>
                     </div>
                   </div>
@@ -3090,24 +3474,24 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     src={apiUrl(`/api/devhub/projects/${project.id}/preview-proxy`)}
                     sandbox="allow-scripts"
                     style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                    title="Visual Edit preview"
+                    title="Превью визуальной правки"
                   />
                 ) : (
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
                   <div style={{ maxWidth: 420 }}>
                     <div style={{ fontSize: 32, marginBottom: 12 }}>🖱️</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: "#e2e8f0" }}>Deploy this project to use Visual Edit</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: "#e2e8f0" }}>Сначала разверните проект — тогда заработает правка кликами</div>
                     <div style={{ fontSize: 13, lineHeight: 1.5 }}>
-                      This project uses <b>{project?.stack}</b>, which needs a built page to render. Deploy it once —
-                      the deployed page then loads here and you can click elements and describe changes for AI to apply
-                      to the source.
+                      Проект собран на <b>{project?.stack}</b>, а такой странице нужна сборка, чтобы отрисоваться.
+                      Разверните её один раз — развёрнутая страница откроется прямо здесь, и вы сможете щёлкать по
+                      элементам и словами описывать изменения, а ИИ внесёт их в исходный код.
                     </div>
                   </div>
                 </div>
                 )
               ) : !visualEditSrcdoc ? (
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8" }}>
-                  <div style={{ fontSize: 15 }}>No index.html found — create one to use Visual Edit.</div>
+                  <div style={{ fontSize: 15 }}>Не найден index.html — создайте его, чтобы править кликами.</div>
                 </div>
               ) : (
                 <iframe
@@ -3115,7 +3499,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   srcDoc={visualEditSrcdoc}
                   sandbox="allow-scripts"
                   style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                  title="Visual Edit preview"
+                  title="Превью визуальной правки"
                 />
               )
             ) : selectedFile ? (
@@ -3138,7 +3522,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
             ) : (
               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#64748b" }}>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 36, marginBottom: 12 }}>Select a file or use AI to generate code</div>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>Выберите файл или попросите ИИ написать код</div>
                 </div>
               </div>
             )}
@@ -3147,10 +3531,31 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           {/* AI Panel — bottom 40% */}
           <div style={{ flex: "0 0 40%", display: "flex", flexDirection: "column", background: "#fff" }}>
             {/* Tabs */}
-            <div style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
-              {(["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab) => (
+            {/* A real tab strip: these were plain buttons, so a screen reader
+                announced nine unrelated controls instead of a set of tabs, and
+                arrow keys did nothing. */}
+            <div role="tablist" aria-label="Панели DevHub" style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
+              {(["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab, idx, all) => (
                 <button
                   key={tab}
+                  role="tab"
+                  id={`devhub-tab-${tab}`}
+                  aria-selected={activeTab === tab}
+                  aria-controls="devhub-tabpanel"
+                  tabIndex={activeTab === tab ? 0 : -1}
+                  onKeyDown={(e) => {
+                    // Arrow keys move between tabs; Home/End jump to the ends.
+                    const next =
+                      e.key === "ArrowRight" ? all[(idx + 1) % all.length]
+                      : e.key === "ArrowLeft" ? all[(idx - 1 + all.length) % all.length]
+                      : e.key === "Home" ? all[0]
+                      : e.key === "End" ? all[all.length - 1]
+                      : null;
+                    if (!next) return;
+                    e.preventDefault();
+                    setActiveTab(next);
+                    document.getElementById(`devhub-tab-${next}`)?.focus();
+                  }}
                   onClick={() => setActiveTab(tab)}
                   style={{
                     padding: "10px 14px", border: "none", background: "none", cursor: "pointer",
@@ -3170,7 +3575,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               ))}
             </div>
 
-            <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
+            <div
+              id="devhub-tabpanel"
+              role="tabpanel"
+              aria-labelledby={`devhub-tab-${activeTab}`}
+              style={{ flex: 1, overflow: "auto", padding: 16 }}
+            >
               {/* AI Chat Tab */}
               {activeTab === "chat" && (
                 <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 12 }}>
@@ -3190,7 +3600,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 onClick={provisionDatabase}
                                 disabled={provisioningDb}
-                                title={capabilityHint(caps, "database", "Create the database")}
+                                title={capabilityHint(caps, "database", "Создание базы данных")}
                                 style={{ padding: "7px 14px", background: provisioningDb ? "#a5b4fc" : "#4f46e5", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: provisioningDb ? "not-allowed" : "pointer", opacity: isCapabilityBlocked(caps, "database") ? 0.45 : 1 }}
                               >
                                 {provisioningDb ? "Создаю базу…" : "Создать базу данных"}
@@ -3216,13 +3626,19 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           ) : msg.kind === "deploy" ? (
                             <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
                               <div style={{ color: "#0f766e", marginBottom: 8, lineHeight: 1.45 }}>
-                                🚀 Ready to go live? One click deploys this to Cloudflare with your own <span style={{ fontFamily: "monospace" }}>*.aevion.build</span> URL — marked live only after the page actually serves.
+                                {/* The aevion.build promise is only made when the
+                                    server says that domain actually works. The
+                                    zone was never delegated, so for months this
+                                    card promised an address that failed DNS. */}
+                                🚀 Готовы показать людям? Одна кнопка — и проект публикуется на Cloudflare{domainCapabilityWorks
+                                  ? <> по вашему адресу <span style={{ fontFamily: "monospace" }}>*.aevion.build</span></>
+                                  : <> — вы получите общедоступный адрес <span style={{ fontFamily: "monospace" }}>*.pages.dev</span></>} — marked live only after the page actually serves.
                               </div>
                               <button
                                 onClick={() => { setChatHistory((h) => h.filter((m) => !(m.role === "hint" && m.kind === "deploy"))); deployToPages(); setActiveTab("deployments"); }}
                                 style={{ padding: "7px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}
                               >
-                                Задеплоить
+                                Опубликовать
                               </button>
                             </div>
                           ) : (
@@ -3325,7 +3741,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             )}
                             {plan.mvpFeatures.length > 0 && (
                               <>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: "#0d9488", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>MVP first</div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#0d9488", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>Сначала самое нужное</div>
                                 <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12, color: "#334155" }}>
                                   {plan.mvpFeatures.map((f) => <li key={f}>{f}</li>)}
                                 </ul>
@@ -3341,7 +3757,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             )}
                             {plan.milestones.length > 0 && (
                               <>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: "#0f172a", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>Build order</div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#0f172a", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>Порядок работ</div>
                                 <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
                                   {plan.milestones.map((m, i) => (
                                     <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -3383,7 +3799,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (!f) return;
-                        if (f.size > 5 * 1024 * 1024) { showToast("Image too large (max 5MB)", "error"); return; }
+                        if (f.size > 5 * 1024 * 1024) { showToast("Картинка слишком большая (не больше 5 МБ)", "error"); return; }
                         const reader = new FileReader();
                         reader.onload = () => {
                           const url = String(reader.result || "");
@@ -3396,7 +3812,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     />
                     <button
                       onClick={() => aiImageInputRef.current?.click()}
-                      title="Attach a screenshot or design — AI will recreate it as code"
+                      title="Приложите скриншот или макет — ИИ воссоздаст его кодом"
                       style={{ padding: "6px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, cursor: "pointer", color: "#475569", fontWeight: 600 }}
                     >
                       📎 Screenshot
@@ -3435,7 +3851,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={undoLastGeneration}
                       disabled={undoing}
-                      title="Reverts the files touched by the most recent AI generation"
+                      title="Вернуть файлы, которых коснулась последняя правка ИИ"
                       style={{
                         flex: 1, padding: "8px 0", background: "#fff", border: "1px solid #e2e8f0",
                         color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12,
@@ -3446,7 +3862,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     </button>
                     <button
                       onClick={() => { const next = !showHistory; setShowHistory(next); if (next) loadCheckpointHistory(); }}
-                      title="See every past AI change and jump straight to one of them"
+                      title="Посмотреть все прошлые правки ИИ и вернуться к любой"
                       style={{
                         padding: "8px 12px", background: "#fff", border: "1px solid #e2e8f0",
                         color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12, cursor: "pointer",
@@ -3458,9 +3874,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {showHistory && (
                     <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px", maxHeight: 220, overflow: "auto" }}>
                       {loadingHistory ? (
-                        <div style={{ fontSize: 12, color: "#94a3b8" }}>Loading...</div>
+                        <div style={{ fontSize: 12, color: "#94a3b8" }}>Загружаем…</div>
                       ) : checkpointHistory.length === 0 ? (
-                        <div style={{ fontSize: 12, color: "#94a3b8" }}>No AI changes yet for this project.</div>
+                        <div style={{ fontSize: 12, color: "#94a3b8" }}>Правок ИИ в этом проекте пока не было.</div>
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                           {checkpointHistory.map((cp, i) => (
@@ -3508,7 +3924,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <span key={a.vid} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <button
                               onClick={() => retargetVisualSelection(a.vid)}
-                              title="Select this parent element"
+                              title="Выбрать родительский элемент"
                               style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline dotted" }}
                             >
                               {"<" + a.tagName.toLowerCase() + ">"}
@@ -3524,7 +3940,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 key={c.vid}
                                 onClick={() => retargetVisualSelection(c.vid)}
-                                title="Select this child element"
+                                title="Выбрать дочерний элемент"
                                 style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 4, padding: "1px 5px", cursor: "pointer" }}
                               >
                                 {"<" + c.tagName.toLowerCase() + ">"}
@@ -3547,7 +3963,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 : visualEditSelected.src.slice(0, 120) + (visualEditSelected.src.length > 120 ? "…" : "")}
                             </div>
                           ) : (
-                            <div style={{ fontSize: 12, color: "#64748b" }}>This image has no source yet.</div>
+                            <div style={{ fontSize: 12, color: "#64748b" }}>У этой картинки пока нет исходника.</div>
                           )}
                           <textarea
                             value={visualEditImgPrompt}
@@ -3580,7 +3996,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="color"
                             value={cssColorToHex(visualEditStyleEdits.color ?? visualEditStyleBase.color)}
                             onChange={(e) => setVisualStyle("color", e.target.value)}
-                            title="Text color"
+                            title="Цвет текста"
                             style={{ width: 34, height: 30, padding: 2, border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer", background: "#fff" }}
                           />
                           <input
@@ -3589,7 +4005,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             max={120}
                             value={parseInt(visualEditStyleEdits.fontSize ?? visualEditStyleBase.fontSize, 10) || 16}
                             onChange={(e) => setVisualStyle("fontSize", `${e.target.value}px`)}
-                            title="Font size (px)"
+                            title="Размер шрифта, px"
                             style={{ width: 62, height: 30, padding: "0 6px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }}
                           />
                           <button
@@ -3686,7 +4102,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         disabled={applyingTemplate === t.id}
                         style={{ padding: "6px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 600, fontSize: 12, cursor: "pointer", flexShrink: 0 }}
                       >
-                        {applyingTemplate === t.id ? "Applying..." : "Apply"}
+                        {/* "Apply template", not "Apply": AutoTranslate seeds its
+                            instant map from en→ru pairs across the whole
+                            dictionary and matches by string, so the bare word
+                            inherited the sense some other module chose for it —
+                            build.teamRequestDetail.applyButton renders "Apply"
+                            as "Откликнуться", the word for answering a job ad.
+                            A Russian visitor was offered "Откликнуться" on a
+                            project template. */}
+                        {applyingTemplate === t.id ? "Applying..." : "Apply template"}
                       </button>
                     </div>
                   ))}
@@ -3696,6 +4120,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               {/* Env Vars Tab */}
               {activeTab === "env" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {envLoadError && (
+                    <div style={{ background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", borderRadius: 7, padding: "8px 12px", fontSize: 12.5, marginBottom: 8 }}>
+                      ⚠ Список переменных не загрузился ({envLoadError}) — пусто здесь значит «неизвестно», а не «переменных нет».
+                    </div>
+                  )}
                   {envList.map((e) => (
                     <div key={e.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#f8fafc", borderRadius: 8 }}>
                       <span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: "#0f172a", flex: 1 }}>{e.key}</span>
@@ -3715,7 +4144,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       type="text"
                       value={newEnvVal}
                       onChange={(e) => setNewEnvVal(e.target.value)}
-                      placeholder="value"
+                      placeholder="значение"
                       style={{ flex: 2, minWidth: 150, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
                     />
                     <button onClick={addEnvVar} style={{ padding: "7px 16px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, cursor: "pointer" }}>
@@ -3735,7 +4164,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <span style={{ fontSize: 18 }}>☁️</span>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 800, color: "#9a3412" }}>Cloudflare Pages</div>
-                        <div style={{ fontSize: 11, color: "#c2410c" }}>Free · Auto-SSL · Global CDN · aevion.build domain included</div>
+                        <div style={{ fontSize: 11, color: "#c2410c" }}>Free · Auto-SSL · Global CDN{domainCapabilityWorks ? " · aevion.build domain included" : " · публичный адрес *.pages.dev"}</div>
                       </div>
                     </div>
 
@@ -3773,11 +4202,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: pagesDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {pagesDeploying ? "⏳ Deploying..." : project?.deployUrl?.includes("pages.dev") ? "🔄 Redeploy to Cloudflare Pages" : "🚀 Deploy to Cloudflare Pages + get aevion.build domain"}
+                      {pagesDeploying ? "⏳ Deploying..." : project?.deployUrl?.includes("pages.dev") ? "🔄 Redeploy to Cloudflare Pages" : "🚀 Опубликовать на Cloudflare Pages"}
                     </button>
                     <div style={{ fontSize: 10, color: "#9a3412", marginTop: 6 }}>
-                      Requires <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_ACCOUNT_ID</code> + <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_API_TOKEN</code> in Railway.
-                      Add <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>CLOUDFLARE_ZONE_ID</code> for aevion.build domain.
+                      {domainCapabilityWorks
+                        ? <>Свой поддомен выдаётся, только если Cloudflare его подтвердит; иначе адрес будет на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>
+                        : <>Домен <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>aevion.build</code> пока не отвечает — зона не делегирована на Cloudflare, поэтому адрес выдаётся на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>}
                     </div>
                   </div>
 
@@ -3807,9 +4237,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   </div>
 
                   {/* Deploy history */}
+                  {deploymentsLoadError && (
+                    <div style={{ background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", borderRadius: 7, padding: "8px 12px", fontSize: 12.5, marginBottom: 8 }}>
+                      ⚠ История деплоев не загрузилась ({deploymentsLoadError}) — пусто здесь значит «неизвестно», а не «деплоев не было».
+                    </div>
+                  )}
                   {deployments.length > 0 && (
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>HISTORY</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>ИСТОРИЯ</div>
                       {deployments.map((d) => {
                         const dStatusStyle = d.status === "live" ? { bg: "#d1fae5", fg: "#065f46" } : d.status === "failed" ? { bg: "#fee2e2", fg: "#991b1b" } : { bg: "#fef3c7", fg: "#92400e" };
                         return (
@@ -3850,13 +4285,37 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#64748b" }}>
                             <span>★ {githubStatus.stars ?? 0}</span>
                             <span>Issues: {githubStatus.openIssues ?? 0}</span>
-                            {githubStatus.lastPush && <span>Last push: {new Date(githubStatus.lastPush).toLocaleDateString()}</span>}
+                            {githubStatus.lastPush && <span>Последняя отправка: {new Date(githubStatus.lastPush).toLocaleDateString()}</span>}
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div style={{ fontSize: 13, color: "#94a3b8" }}>No repository linked yet. Push to create one.</div>
+                      <div style={{ fontSize: 13, color: "#94a3b8" }}>Репозиторий ещё не привязан. Отправьте код, чтобы создать.</div>
                     )}
+
+                    {/* The reason the repo could not be read. Without it, a
+                        revoked token looked exactly like an empty repository:
+                        a link, no stars, no branches, nothing said. Red is the
+                        reader's to fix, amber passes on its own. */}
+                    {project?.repoUrl && githubIssue?.error && (() => {
+                      const passes = githubIssue.errorKind === "unavailable" || githubIssue.errorKind === "rate_limit";
+                      return (
+                        <div
+                          data-testid="github-connection-issue"
+                          style={{
+                            marginTop: 10, padding: "9px 12px", borderRadius: 8, fontSize: 12.5, lineHeight: 1.45,
+                            background: passes ? "#fffbeb" : "#fef2f2",
+                            border: `1px solid ${passes ? "#fde68a" : "#fecaca"}`,
+                            color: passes ? "#92400e" : "#991b1b",
+                          }}
+                        >
+                          <strong style={{ fontWeight: 700 }}>
+                            {passes ? "Не удалось проверить связь. " : "Репозиторий недоступен. "}
+                          </strong>
+                          {githubIssue.error}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {project?.repoUrl && (
@@ -3876,7 +4335,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {/* Branches */}
                   {githubBranches.length > 0 && (
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Branches</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Ветки</div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                         {githubBranches.map((b) => (
                           <span key={b.name} style={{
@@ -3892,12 +4351,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
                   {/* Message */}
                   {githubMsg && (
-                    <div style={{
-                      padding: "10px 14px", borderRadius: 8, fontSize: 13,
-                      background: githubMsg.includes("failed") || githubMsg.includes("error") ? "#fee2e2" : "#d1fae5",
-                      color: githubMsg.includes("failed") || githubMsg.includes("error") ? "#991b1b" : "#065f46",
-                      wordBreak: "break-all",
-                    }}>
+                    <div
+                      data-testid="github-message"
+                      data-tone={githubMsgTone}
+                      style={{
+                        padding: "10px 14px", borderRadius: 8, fontSize: 13,
+                        background: githubMsgTone === "error" ? "#fee2e2" : githubMsgTone === "warning" ? "#fffbeb" : "#d1fae5",
+                        color: githubMsgTone === "error" ? "#991b1b" : githubMsgTone === "warning" ? "#92400e" : "#065f46",
+                        wordBreak: "break-all",
+                      }}
+                    >
                       {githubMsg}
                     </div>
                   )}
@@ -3931,7 +4394,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   </div>
 
                   <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                    Set <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>GITHUB_TOKEN</code> env var on the server to enable GitHub integration.
+                    Связь с GitHub пока не подключена на нашей стороне.
                     Token needs <em>repo</em> scope.
                   </div>
                 </div>
@@ -3940,11 +4403,34 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               {/* ElevenLabs / Media Tab */}
               {activeTab === "media" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {/* Sub-tabs */}
-                  <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
-                    {(["video", "3d", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
+                  {/* Sub-tabs — same treatment as the main panel strip: these
+                      were seventeen plain buttons in a row, so a screen reader
+                      announced seventeen unrelated controls, arrow keys did
+                      nothing, and Tab stopped on every single one of them. */}
+                  <div role="tablist" aria-label="Медиа-инструменты" style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
+                    {(["video", "3d", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub, subIdx, allSubs) => (
                       <button
                         key={sub}
+                        role="tab"
+                        id={`devhub-mediatab-${sub}`}
+                        aria-selected={mediaTab === sub}
+                        // No aria-controls: each sub-panel renders as its own
+                        // sibling, so there is no single element to point at.
+                        // An id that resolves to nothing is worse than the
+                        // attribute being absent.
+                        tabIndex={mediaTab === sub ? 0 : -1}
+                        onKeyDown={(e) => {
+                          const next =
+                            e.key === "ArrowRight" ? allSubs[(subIdx + 1) % allSubs.length]
+                            : e.key === "ArrowLeft" ? allSubs[(subIdx - 1 + allSubs.length) % allSubs.length]
+                            : e.key === "Home" ? allSubs[0]
+                            : e.key === "End" ? allSubs[allSubs.length - 1]
+                            : null;
+                          if (!next) return;
+                          e.preventDefault();
+                          setMediaTab(next);
+                          document.getElementById(`devhub-mediatab-${next}`)?.focus();
+                        }}
                         onClick={() => setMediaTab(sub)}
                         style={{
                           flex: "1 1 auto", padding: "6px 8px", border: "none",
@@ -3956,6 +4442,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         }}
                       >
                         {sub === "video" ? "Video AI"
+                        // "3d" had no branch of its own, so it fell through to
+                        // the final default and the 3D tab was labelled "Pay".
+                        : sub === "3d" ? "3D"
                         : sub === "tts" ? "TTS"
                         : sub === "image" ? "DALL-E"
                         : sub === "sfx" ? "SFX"
@@ -3979,7 +4468,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "video" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>AI Model</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Модель ИИ</label>
                         <select
                           value={videoModel}
                           onChange={(e) => setVideoModel(e.target.value)}
@@ -3998,7 +4487,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         )}
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Prompt</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Запрос</label>
                         <textarea
                           value={videoPrompt}
                           onChange={(e) => setVideoPrompt(e.target.value)}
@@ -4019,9 +4508,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                         <button
                           onClick={async () => {
-                            if (!videoPrompt.trim()) { setVideoError("Enter a prompt first"); return; }
+                            if (!videoPrompt.trim()) { setVideoError("Сначала опишите, что нужно"); return; }
                             if (isCapabilityBlocked(caps, "video")) {
-                              setVideoError(capabilityHint(caps, "video", "Video generation"));
+                              setVideoError(capabilityHint(caps, "video", "Генерация видео"));
                               return;
                             }
                             setVideoLoading(true); setVideoError(null); setVideoUrl(null); setVideoPredictionId(null); setVideoStatus("starting");
@@ -4032,28 +4521,36 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 body: JSON.stringify({ prompt: videoPrompt, model: videoModel, duration: Number(videoDuration) }),
                               });
                               const d = await r.json();
-                              if (!d.ok) { setVideoError(d.error || "Video generation failed"); setVideoLoading(false); return; }
+                              if (!d.ok) { setVideoError(devhubServerError(d.error, "Не удалось создать видео")); setVideoLoading(false); return; }
                               setVideoPredictionId(d.predictionId);
                               setVideoStatus("generating...");
                               // Poll for completion
                               const pollFn = async (id: string, attempts = 0) => {
-                                if (attempts > 120) { setVideoError("Timeout after 2 min"); setVideoLoading(false); return; }
+                                if (attempts > 120) { setVideoError("Не дождались ответа за 2 минуты"); setVideoLoading(false); return; }
                                 const sr = await fetch(apiUrl(`/api/devhub/media/video/status/${id}`));
                                 const sd = await sr.json();
                                 setVideoStatus(sd.status);
                                 if (sd.status === "succeeded" && sd.videoUrl) {
+                  if (d.creditUnverified) {
+                    // Та же пометка, что у картинки: трату разрешили,
+                    // не сумев прочитать расход.
+                    showToast(
+                      "Готово, но расход не удалось сверить: счётчик тарифа может отстать.",
+                      "warning",
+                    );
+                  }
                                   setVideoUrl(sd.videoUrl); setVideoLoading(false);
                                 } else if (sd.status === "failed") {
-                                  setVideoError(sd.error || "Generation failed"); setVideoLoading(false);
+                                  setVideoError(devhubServerError(sd.error, "Генерация не удалась")); setVideoLoading(false);
                                 } else {
                                   setTimeout(() => pollFn(id, attempts + 1), 3000);
                                 }
                               };
                               setTimeout(() => pollFn(d.predictionId), 4000);
-                            } catch (e: any) { setVideoError(e.message || "Failed"); setVideoLoading(false); }
+                            } catch (e: any) { setVideoError(e.message || "Не удалось"); setVideoLoading(false); }
                           }}
                           disabled={videoLoading || !videoPrompt.trim()}
-                          title={capabilityHint(caps, "video", "Generate video")}
+                          title={capabilityHint(caps, "video", "Генерация видео")}
                           style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
                         >
                           {videoLoading ? `${videoStatus || "generating..."}` : "Generate Video"}
@@ -4064,13 +4561,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <video src={videoUrl} controls style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0", maxHeight: 360 }} />
                           <div style={{ display: "flex", gap: 8 }}>
-                            <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "center", textDecoration: "none" }}>Download</a>
-                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title="Appends a <video> tag to the file open in the editor" style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Insert into file</button>
+                            <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "center", textDecoration: "none" }}>Скачать</a>
+                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title="Добавит тег видео в открытый файл" style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Вставить в файл</button>
                           </div>
                         </div>
                       )}
                       <div style={{ fontSize: 11, color: "#94a3b8", padding: "6px 10px", background: "#f8fafc", borderRadius: 6 }}>
-                        Powered by Replicate API. Requires REPLICATE_API_TOKEN in Railway. Generation takes 30–120s.
+                        Работает на Replicate. Генерация занимает 30–120 секунд.
                       </div>
                     </div>
                   )}
@@ -4112,7 +4609,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <button
                         onClick={async () => {
                           if (!threeDImageUrl.trim()) { setThreeDError("Вставьте ссылку на картинку"); return; }
-                          if (isCapabilityBlocked(caps, "video")) { setThreeDError(capabilityHint(caps, "video", "3D-генерация")); return; }
+                          if (isCapabilityBlocked(caps, "3d")) { setThreeDError(capabilityHint(caps, "3d", "3D-генерация")); return; }
                           setThreeDLoading(true); setThreeDError(null); setThreeDUrl(null); setThreeDStatus("starting");
                           try {
                             const r = await fetch(apiUrl("/api/devhub/media/3d"), {
@@ -4123,7 +4620,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             const d = await r.json();
                             if (!r.ok || !d.ok) {
                               // 402 means the provider has no balance — say that, not "failed".
-                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (d.error || "3D generation failed"));
+                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (devhubServerError(d.error, "Не удалось сгенерировать 3D")));
                               setThreeDLoading(false);
                               return;
                             }
@@ -4138,7 +4635,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 if (typeof url === "string") { setThreeDUrl(url); } else { setThreeDError("Модель готова, но ссылка не распознана"); }
                                 setThreeDLoading(false);
                               } else if (sd.status === "failed") {
-                                setThreeDError(sd.error || "Генерация не удалась"); setThreeDLoading(false);
+                                setThreeDError(devhubServerError(sd.error, "Генерация не удалась")); setThreeDLoading(false);
                               } else {
                                 setTimeout(() => poll(id, attempts + 1), 3000);
                               }
@@ -4147,7 +4644,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           } catch (e: any) { setThreeDError(e.message || "Не удалось"); setThreeDLoading(false); }
                         }}
                         disabled={threeDLoading || !threeDImageUrl.trim()}
-                        title={capabilityHint(caps, "video", "Сгенерировать 3D")}
+                        title={capabilityHint(caps, "3d", "Сгенерировать 3D")}
                         style={{ padding: "8px 20px", background: threeDLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: threeDLoading ? "default" : "pointer", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
                       >
                         {threeDLoading ? (threeDStatus || "generating…") : "Сделать 3D-модель"}
@@ -4189,7 +4686,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="button"
                             onClick={() => previewVoice(mediaTtsVoice)}
                             disabled={!!previewingVoice}
-                            title="Preview voice with a short sample"
+                            title="Послушать голос на коротком примере"
                             style={{
                               padding: "7px 12px", background: previewingVoice === mediaTtsVoice ? "#a5b4fc" : "#7c3aed",
                               color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700,
@@ -4206,7 +4703,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={mediaTtsText}
                           onChange={(e) => setMediaTtsText(e.target.value)}
-                          placeholder="Enter text to convert to speech..."
+                          placeholder="Введите текст для озвучки…"
                           rows={4}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -4239,7 +4736,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {mediaTtsLoading ? "Generating..." : "Generate Speech"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>
+                        
                       </div>
                     </div>
                   )}
@@ -4248,7 +4745,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "image" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Prompt</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Запрос</label>
                         <textarea
                           value={imgPrompt}
                           onChange={(e) => setImgPrompt(e.target.value)}
@@ -4271,10 +4768,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           </select>
                         </div>
                         <div style={{ flex: 1, minWidth: 100 }}>
-                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Quality</label>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Качество</label>
                           <select value={imgQuality} onChange={(e) => setImgQuality(e.target.value as "standard" | "hd")}
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
-                            <option value="standard">Standard</option>
+                            <option value="standard">Обычное</option>
                             <option value="hd">HD</option>
                           </select>
                         </div>
@@ -4283,7 +4780,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <select value={imgStyle} onChange={(e) => setImgStyle(e.target.value as "vivid" | "natural")}
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
                             <option value="vivid">Vivid</option>
-                            <option value="natural">Natural</option>
+                            <option value="natural">Естественный</option>
                           </select>
                         </div>
                       </div>
@@ -4295,7 +4792,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       {imgResult && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={cfImgPermanentUrl || imgResult.url} alt="generated" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                          <img src={cfImgPermanentUrl || imgResult.url} alt="сгенерированная картинка" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
                           {imgResult.revisedPrompt && (
                             <div style={{ fontSize: 11, color: "#64748b", fontStyle: "italic" }}>
                               Revised prompt: {imgResult.revisedPrompt}
@@ -4321,7 +4818,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             )}
                             <button
                               onClick={() => appendAssetToFile(cfImgPermanentUrl || imgResult.url, "image")}
-                              title="Appends an <img> tag to the file open in the editor"
+                              title="Добавит тег картинки в открытый файл"
                               style={{ padding: "4px 10px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
                             >
                               Insert into file
@@ -4346,7 +4843,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {imgLoading ? "Generating..." : "Generate Image"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>OPENAI_API_KEY</code>. Powered by DALL-E 3.
+                         Powered by DALL-E 3.
                       </div>
                     </div>
                   )}
@@ -4355,7 +4852,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "sfx" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>SFX Description</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Описание звука</label>
                         <textarea
                           value={sfxText}
                           onChange={(e) => setSfxText(e.target.value)}
@@ -4385,7 +4882,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       {sfxUrl && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <audio controls src={sfxUrl} style={{ width: "100%" }} />
-                          <a href={sfxUrl} download="sfx.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>Download MP3</a>
+                          <a href={sfxUrl} download="sfx.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>Скачать MP3</a>
                         </div>
                       )}
                       <button
@@ -4400,7 +4897,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {sfxLoading ? "Generating..." : "Generate SFX"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>
+                        
                       </div>
                     </div>
                   )}
@@ -4409,7 +4906,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "music" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Music Prompt</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Запрос для музыки</label>
                         <textarea
                           value={musicPrompt}
                           onChange={(e) => setMusicPrompt(e.target.value)}
@@ -4439,7 +4936,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       {musicUrl && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <audio controls src={musicUrl} style={{ width: "100%" }} />
-                          <a href={musicUrl} download="music.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>Download MP3</a>
+                          <a href={musicUrl} download="music.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>Скачать MP3</a>
                         </div>
                       )}
                       <button
@@ -4454,7 +4951,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {musicLoading ? "Composing..." : "Compose Music"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>. Max 5 min.
+                         Max 5 min.
                       </div>
                     </div>
                   )}
@@ -4473,7 +4970,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         />
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Subject</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Тема</label>
                         <input
                           type="text"
                           value={emailSubject}
@@ -4487,7 +4984,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={emailBody}
                           onChange={(e) => setEmailBody(e.target.value)}
-                          placeholder="<h1>Hi!</h1><p>Thanks for signing up.</p>"
+                          placeholder="<h1>Здравствуйте!</h1><p>Спасибо, что подписались.</p>"
                           rows={6}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -4516,7 +5013,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {emailLoading ? "Sending..." : "Send Email"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code> + <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_DEFAULT_SENDER</code>
+                        
                       </div>
                     </div>
                   )}
@@ -4542,7 +5039,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       {payProvider === "gumroad" ? (
                         <div>
-                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Gumroad product permalink</label>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Ссылка на товар Gumroad</label>
                           <input
                             type="text"
                             value={payPermalink}
@@ -4555,7 +5052,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       ) : (
                         <>
                           <div>
-                            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Product Name</label>
+                            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Название товара</label>
                             <input
                               type="text"
                               value={payName}
@@ -4566,7 +5063,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           </div>
                           <div style={{ display: "flex", gap: 8 }}>
                             <div style={{ flex: 2 }}>
-                              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Amount</label>
+                              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Сумма</label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -4577,7 +5074,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               />
                             </div>
                             <div style={{ flex: 1 }}>
-                              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Currency</label>
+                              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Валюта</label>
                               <select
                                 value={payCurrency}
                                 onChange={(e) => setPayCurrency(e.target.value)}
@@ -4606,7 +5103,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       )}
                       {payResult && (
                         <div style={{ padding: "10px 12px", background: "#d1fae5", borderRadius: 7, display: "flex", flexDirection: "column", gap: 6 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#065f46" }}>Payment link created</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#065f46" }}>Ссылка на оплату создана</div>
                           <a href={payResult.url} target="_blank" rel="noopener noreferrer"
                             style={{ fontSize: 12, color: "#0d9488", wordBreak: "break-all" }}>
                             {payResult.url}
@@ -4640,8 +5137,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       })()}
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
                         {payProvider === "gumroad"
-                          ? <>Gumroad is the only live processor (Stripe/Paddle blocked by KYC). Link is a public product page — no server key needed. Sales arrive via <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>/api/gumroad/webhook</code>.</>
-                          : <>⚠️ Stripe is KYC-blocked — links won't collect real payments. Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>STRIPE_SECRET_KEY</code>.</>}
+                          ? <>Приём оплаты сейчас работает через Gumroad. Ссылка ведёт на общедоступную страницу товара — ключ на сервере не нужен. О продажах нам сообщает <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>/api/gumroad/webhook</code>.</>
+                          : <>⚠️ Через Stripe оплата сейчас не проходит: ссылка не примет настоящий платёж. </>}
                       </div>
                     </div>
                   )}
@@ -4649,7 +5146,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {/* DeepL Translate */}
                   {mediaTab === "translate" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Translate text</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Перевести текст</div>
                       <div>
                         <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder="Text to translate..."
                           rows={4}
@@ -4660,12 +5157,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Source (auto if empty)</label>
                           <select value={trSource} onChange={(e) => setTrSource(e.target.value)}
                             style={{ width: "100%", padding: "6px 8px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12 }}>
-                            <option value="">Auto-detect</option>
+                            <option value="">Определить язык</option>
                             {["EN", "RU", "DE", "FR", "ES", "IT", "JA", "KO", "ZH", "PT", "TR", "UK"].map((c) => <option key={c} value={c}>{c}</option>)}
                           </select>
                         </div>
                         <div style={{ flex: 1 }}>
-                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Target</label>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Язык перевода</label>
                           <select value={trTarget} onChange={(e) => setTrTarget(e.target.value)}
                             style={{ width: "100%", padding: "6px 8px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12 }}>
                             {["EN", "RU", "DE", "FR", "ES", "IT", "JA", "KO", "ZH", "PT", "TR", "UK"].map((c) => <option key={c} value={c}>{c}</option>)}
@@ -4702,7 +5199,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
                       {/* File translate */}
                       <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9" }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Translate project file</div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Перевести файл проекта</div>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <select value={trFilePath} onChange={(e) => setTrFilePath(e.target.value)}
                             style={{ flex: 2, minWidth: 160, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontFamily: "monospace" }}>
@@ -4732,7 +5229,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
 
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>DEEPL_API_KEY</code> (use :fx suffix for Free tier)
+                        (use :fx suffix for Free tier)
                       </div>
                     </div>
                   )}
@@ -4760,7 +5257,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                         <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 7, padding: "6px 0", background: "#fff" }}>
                           {files.length === 0 ? (
-                            <div style={{ padding: 12, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>No files in project</div>
+                            <div style={{ padding: 12, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>В проекте нет файлов</div>
                           ) : (
                             files.map((f) => (
                               <label key={f.path} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontFamily: "monospace" }}>
@@ -4855,7 +5352,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       )}
 
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>DEEPL_API_KEY</code>
+                        
                       </div>
                     </div>
                   )}
@@ -4864,7 +5361,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "templates" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Brevo SMTP templates</div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Шаблоны писем Brevo</div>
                         <button onClick={loadEmailTemplates}
                           style={{ padding: "4px 10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           Refresh
@@ -4876,9 +5373,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                       )}
                       {emailTemplatesLoading ? (
-                        <div style={{ color: "#94a3b8", fontSize: 12 }}>Loading templates...</div>
+                        <div style={{ color: "#94a3b8", fontSize: 12 }}>Загружаем шаблоны…</div>
                       ) : emailTemplates.length === 0 && !emailTemplatesError ? (
-                        <div style={{ color: "#94a3b8", fontSize: 12 }}>No templates found</div>
+                        <div style={{ color: "#94a3b8", fontSize: 12 }}>Шаблонов не найдено</div>
                       ) : (
                         <>
                           {/* Send config */}
@@ -4934,17 +5431,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         Create new email template
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Template name</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Название шаблона</label>
                         <input value={tplBuilderName} onChange={(e) => setTplBuilderName(e.target.value)} placeholder="welcome-v1"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Subject</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Тема</label>
                         <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder="Welcome to AEVION, {{params.name}}!"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Sender email (optional — falls back to BREVO_SENDER_EMAIL env)</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Адрес отправителя (необязательно — иначе письмо уйдёт с нашего адреса)</label>
                         <input value={tplBuilderSender} onChange={(e) => setTplBuilderSender(e.target.value)} placeholder="noreply@aevion.app"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
@@ -4958,7 +5455,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       {tplBuilderHtml.trim() && (
                         <details style={{ border: "1px solid #e2e8f0", borderRadius: 7, padding: "6px 10px" }}>
-                          <summary style={{ fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer" }}>HTML preview</summary>
+                          <summary style={{ fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer" }}>Предпросмотр HTML</summary>
                           <div style={{ marginTop: 8, padding: 10, background: "#fff", border: "1px solid #f1f5f9", borderRadius: 6, fontSize: 13 }}
                             dangerouslySetInnerHTML={{ __html: tplBuilderHtml }} />
                         </details>
@@ -4982,7 +5479,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {tplBuilderLoading ? "Creating..." : "Create template"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code>, <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_SENDER_EMAIL</code>
+                        
                       </div>
                     </div>
                   )}
@@ -5028,7 +5525,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {smsLoading ? "Sending..." : "Send SMS"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code> + <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_SMS_SENDER</code>
+                        
                       </div>
                     </div>
                   )}
@@ -5073,7 +5570,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {waLoading ? "Sending..." : "Send WhatsApp"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code> + <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_WHATSAPP_SENDER_ID</code>. Template must be pre-approved by WhatsApp.
+                         Template must be pre-approved by WhatsApp.
                       </div>
                     </div>
                   )}
@@ -5082,7 +5579,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "clone" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Voice Name</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Название голоса</label>
                         <input value={voiceCloneName} onChange={(e) => setVoiceCloneName(e.target.value)} placeholder="My Custom Voice"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
@@ -5098,7 +5595,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         {voiceCloneFile && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{voiceCloneFile.name} ({Math.round(voiceCloneFile.size / 1024)} KB)</div>}
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Preview text</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Текст для примера</label>
                         <input value={voicePreviewText} onChange={(e) => setVoicePreviewText(e.target.value)}
                           placeholder="AEVION voice preview — your custom voice is ready"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
@@ -5143,7 +5640,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
                         Preview clones temporarily, renders TTS sample, then deletes the temp voice — no slot is consumed.
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>. Premium tier required.
+                         Premium tier required.
                       </div>
                     </div>
                   )}
@@ -5152,7 +5649,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "stt" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Audio file</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Звуковой файл</label>
                         <input type="file" accept="audio/*" onChange={(e) => setSttFile(e.target.files?.[0] || null)}
                           style={{ width: "100%", fontSize: 12 }} />
                         {sttFile && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{sttFile.name} ({Math.round(sttFile.size / 1024)} KB)</div>}
@@ -5175,7 +5672,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{sttResult.text}</div>
                           <button onClick={() => navigator.clipboard.writeText(sttResult.text)}
                             style={{ alignSelf: "flex-start", padding: "4px 10px", background: "#0d9488", color: "#fff",
-                              border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy text</button>
+                              border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Скопировать текст</button>
                         </div>
                       )}
                       <button
@@ -5230,7 +5727,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                       )}
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>GOOGLE_DRIVE_ACCESS_TOKEN</code> (OAuth Bearer)
+                        (OAuth Bearer)
                       </div>
                     </div>
                   )}
@@ -5250,7 +5747,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {/* Templates picker */}
                   {agentTemplates.length > 0 && (
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Quick start templates</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Шаблоны для быстрого старта</div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         {agentTemplates.map((tpl) => (
                           <button
@@ -5337,12 +5834,23 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             <span style={{ fontSize: 10, color: "#94a3b8" }}>10–300</span>
                           </div>
                         )}
-                        {/* Step result indicator */}
-                        {agentResults[i] && (
-                          <div style={{ marginTop: 6, fontSize: 11, color: agentResults[i].ok ? "#065f46" : "#991b1b", fontWeight: 600 }}>
-                            {agentResults[i].ok ? "✓" : "✗"} {agentResults[i].ok ? (agentResults[i].savedAs || "ok") : agentResults[i].error}
-                          </div>
-                        )}
+                        {/* Step result indicator.
+                            Looked up by the step number the result carries, not
+                            by its position in the array. Results arrive as they
+                            complete and the stream reader deliberately tolerates
+                            an unparseable event — so one swallowed event shifted
+                            every later result up a row, and each step then
+                            displayed its neighbour's verdict. A failure shown
+                            under the wrong step is worse than no verdict. */}
+                        {(() => {
+                          const res = agentResults.find((r) => r.step === i);
+                          if (!res) return null;
+                          return (
+                            <div style={{ marginTop: 6, fontSize: 11, color: res.ok ? "#065f46" : "#991b1b", fontWeight: 600 }}>
+                              {res.ok ? "✓" : "✗"} {res.ok ? (res.savedAs || "ok") : res.error}
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -5410,7 +5918,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     </div>
                   )}
                   <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Project Name</label>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Название проекта</label>
                     <input
                       type="text"
                       value={settingsName}
@@ -5419,7 +5927,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Description</label>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Описание</label>
                     <input
                       type="text"
                       value={settingsDesc}
@@ -5429,7 +5937,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Custom Domain</label>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Свой домен</label>
                     <input
                       type="text"
                       value={settingsDomain}
@@ -5477,11 +5985,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {/* Collaborators — Studio Pro */}
                   <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 16 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Collaborators</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Соучастники</span>
                       <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: "#fef3c7", color: "#92400e", fontWeight: 700 }}>Studio Pro</span>
                     </div>
                     {(project.collaborators || []).length === 0 && (
-                      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>No collaborators yet. Add by email or user ID.</div>
+                      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Соучастников пока нет. Добавьте по адресу почты или идентификатору.</div>
                     )}
                     {(project.collaborators || []).map((c) => (
                       <div key={c.userId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f8fafc" }}>
@@ -5511,8 +6019,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         onChange={(e) => setCollabRole(e.target.value as "editor" | "viewer")}
                         style={{ padding: "7px 8px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, background: "#fff", cursor: "pointer", flexShrink: 0 }}
                       >
-                        <option value="editor">Editor</option>
-                        <option value="viewer">Viewer</option>
+                        <option value="editor">Редактор</option>
+                        <option value="viewer">Чтение</option>
                       </select>
                       <button
                         onClick={addCollaborator}

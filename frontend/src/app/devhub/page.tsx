@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useAdoptPreHydrationValues } from "@/lib/useAdoptPreHydrationValues";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -11,6 +12,7 @@ import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
 import { productById } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
+import { devhubServerError } from "@/lib/devhubServerError";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -75,18 +77,66 @@ const STACKS: Array<{ id: Stack; label: string; desc: string }> = [
 
 function formatDate(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  // Локаль БРАУЗЕРА, а не "en-US". Здесь была зашита американская: на русской
+  // странице даты выглядели как «Aug 28, 2026». В двух других местах модуля
+  // локаль уже берётся от браузера — то есть один и тот же модуль показывал
+  // даты в двух форматах, и это заметно рядом.
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 // Price and checkout URL come from the product catalogue, which is verified
 // against the live payment dashboards — the page must not carry its own copy.
 const STUDIO_PRO = productById("devhub");
 
+/**
+ * Почему возможность отключена — словами человека.
+ *
+ * Раньше тут было `c.status === "needs_token" ? "не настроено на сервере" : c.status`,
+ * то есть для ЛЮБОГО другого состояния на экран уходил машинный токен. После
+ * того как домен aevion.build стал «not_available» (зона не делегирована),
+ * человек, наведя курсор, прочитал бы ровно `not_available`.
+ *
+ * «Нет ключа» и «не сделано» — разные вещи, и человеку полезно различать: первое
+ * мы настроим, второе ещё не существует.
+ */
+/** Названия возможностей для строки остатка. Отдельной картой, а не через
+ *  словарь: ключи приходят от сервера, а `t()` типизирован фиксированным
+ *  набором — динамический ключ там не проходит проверку типов, и это верно. */
+const USAGE_LABEL: Record<string, string> = {
+  video: "видео",
+  image: "картинки",
+  tts: "знаков озвучки",
+  music: "музыка",
+  deploy: "выкаток",
+};
+
+function capabilityOffReason(status: string | undefined): string {
+  switch (status) {
+    case "needs_token":
+      return "не настроено на сервере — подключим";
+    case "not_available":
+      return "пока не сделано, а не «забыли ключ»";
+    case "error":
+      return "провайдер отвечает ошибкой";
+    case undefined:
+    case "":
+      return "состояние неизвестно";
+    default:
+      // Незнакомое состояние показываем как есть — прятать хуже, чем показать
+      // непонятное: иначе ни человек, ни мы не поймём, о чём речь.
+      return `состояние: ${status}`;
+  }
+}
+
 export default function DevHubPage() {
   const t = useDevhubT();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [userTier, setUserTier] = useState<"free" | "pro" | "enterprise" | null>(null);
+  // Ручка остатка отдаёт и ЧИСЛА (`usage: {video:{used,limit}, ...}`), а витрина
+  // брала из ответа только тариф. То есть модуль знал, сколько у человека
+  // осталось, и не говорил — предел человек узнавал, упершись в него.
+  const [usage, setUsage] = useState<Record<string, { used: number; limit: number }> | null>(null);
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [ideaPrompt, setIdeaPrompt] = useState("");
@@ -113,7 +163,13 @@ export default function DevHubPage() {
         body: JSON.stringify({ name, description: idea, stack: "react" }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || t("err.create"));
+      if (!r.ok) throw new Error(devhubServerError(data.error, t("err.create")));
+      // Сервер честно говорит, КУДА лёг проект, и до сегодня это поле никто не
+      // читал: правда доезжала до ответа и останавливалась на границе API.
+      // «memory» значит, что база была недоступна и запись живёт в памяти
+      // процесса — исчезнет при перезапуске. Человек должен узнать это сейчас,
+      // а не обнаружить пропажу завтра.
+      if (data.storage === "memory") setError(t("proj.savedToMemory"));
       try { localStorage.setItem(`devhub_autoprompt_${data.project.id}`, idea); } catch { /* quota */ }
       router.push(`/devhub/${data.project.id}`);
     } catch (e: any) {
@@ -150,7 +206,7 @@ export default function DevHubPage() {
   useEffect(() => {
     fetch(apiUrl("/api/devhub/studio/credits"), { cache: "no-store" })
       .then((r) => r.json())
-      .then((d) => { if (d.tier) setUserTier(d.tier); })
+      .then((d) => { if (d.tier) setUserTier(d.tier); if (d.usage) setUsage(d.usage); })
       .catch(() => {});
   }, []);
 
@@ -164,7 +220,7 @@ export default function DevHubPage() {
         body: JSON.stringify({ name: form.name, description: form.description, stack: form.stack }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Failed to create");
+      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось создать проект"));
       setProjects((ps) => [data.project, ...ps]);
       setShowModal(false);
       setForm({ name: "", description: "", stack: "next" });
@@ -178,10 +234,21 @@ export default function DevHubPage() {
   const deleteProject = async (id: string) => {
     if (!confirm(t("proj.confirmDelete"))) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${id}`), { method: "DELETE" });
+      const r = await fetch(apiUrl(`/api/devhub/projects/${id}`), { method: "DELETE" });
+      if (!r.ok) {
+        // The server refuses this on purpose when the project's database or
+        // its Railway service could not be removed — dropping the card here
+        // would hide a schema, a login role and a billable container that are
+        // all still live, with nothing left pointing at them.
+        const d = await r.json().catch(() => null);
+        setError(devhubServerError(d?.error, `Проект не удалён — сервер ответил ${r.status}`));
+        return;
+      }
       setProjects((ps) => ps.filter((p) => p.id !== id));
     } catch {
-      setError("Delete failed");
+      // Было английское «Delete failed» посреди русской страницы, и оно не
+      // говорило главного: проект НЕ удалён, повторить безопасно.
+      setError("Не удалось связаться с сервером. Проект не удалён — попробуйте ещё раз.");
     }
   };
 
@@ -195,6 +262,30 @@ export default function DevHubPage() {
     tags: "",
   });
   const [snippetSubmitting, setSnippetSubmitting] = useState(false);
+
+  // Painted is not the same as working: measured 28.07 on a mid-range phone
+  // (CPU x6, 1.6 Mbps), the live shelf paints at 6.9s and only answers a tap
+  // at 18.7s. For those ~12 seconds every control here looked ready and did
+  // nothing. Say so instead.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+
+  // Anything typed into either form before hydration lives only in the DOM;
+  // adopt it on mount so the first data-driven re-render does not wipe it.
+  const ideaFieldRef = useRef<HTMLDivElement>(null);
+  const snippetFormRef = useRef<HTMLDivElement>(null);
+  useAdoptPreHydrationValues(
+    ideaFieldRef,
+    useCallback((typed: Record<string, string>) => {
+      if (typed.ideaPrompt) setIdeaPrompt(typed.ideaPrompt);
+    }, []),
+  );
+  useAdoptPreHydrationValues(
+    snippetFormRef,
+    useCallback((typed: Record<string, string>) => {
+      setSnippetForm((f) => ({ ...f, ...typed }));
+    }, []),
+  );
   const [snippetError, setSnippetError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -329,11 +420,16 @@ export default function DevHubPage() {
             {t("hero.title")}
           </div>
           <div style={{ fontSize: 13.5, color: "#99f6e4", marginBottom: 14, lineHeight: 1.5 }}>
-            {t("hero.subtitle")}
-
+                {/* Порядок здесь — обещание, а не украшение: Visual Edit у стека
+                    по умолчанию включается ПОСЛЕ деплоя, и обещать правку кликами
+                    первой строкой значит отправить человека искать кнопку, которой
+                    ещё нет. Текст исправлен в словаре (hero.subtitle), а не зашит
+                    сюда: строка показывается на трёх языках. */}
+                {t("hero.subtitle")}
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div ref={ideaFieldRef} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <textarea
+              data-prehydration-field="ideaPrompt"
               value={ideaPrompt}
               onChange={(e) => setIdeaPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) startFromIdea(); }}
@@ -345,14 +441,14 @@ export default function DevHubPage() {
             />
             <button
               onClick={startFromIdea}
-              disabled={ideaStarting || !ideaPrompt.trim()}
+              disabled={!hydrated || ideaStarting || !ideaPrompt.trim()}
               style={{
-                padding: "0 26px", minHeight: 56, background: ideaStarting || !ideaPrompt.trim() ? "#134e4a" : "#0d9488",
+                padding: "0 26px", minHeight: 56, background: !hydrated || ideaStarting || !ideaPrompt.trim() ? "#134e4a" : "#0d9488",
                 color: "#fff", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 15,
-                cursor: ideaStarting || !ideaPrompt.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+                cursor: !hydrated || ideaStarting || !ideaPrompt.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap",
               }}
             >
-              {ideaStarting ? t("hero.building") : t("hero.build")}
+                  {!hydrated ? t("hero.loading") : ideaStarting ? t("hero.building") : t("hero.build")}
             </button>
           </div>
           {/* An empty box is the hardest thing to answer. These are not
@@ -360,7 +456,7 @@ export default function DevHubPage() {
               (plain UI, a real database, media), so the first thing a person
               builds shows what the tool can do rather than the least of it. */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
-            <span style={{ fontSize: 12.5, color: "#99f6e4" }}>{t("hero.orStart")}</span>
+                <span style={{ fontSize: 12.5, color: "#99f6e4" }}>{t("store.orExample")}</span>
             {[
               t("hero.ex1"),
               t("hero.ex2"),
@@ -369,6 +465,7 @@ export default function DevHubPage() {
               <button
                 key={example}
                 onClick={() => setIdeaPrompt(example)}
+                disabled={!hydrated}
                 style={{
                   padding: "5px 11px", background: "rgba(255,255,255,0.12)", color: "#ccfbf1",
                   border: "1px solid rgba(255,255,255,0.22)", borderRadius: 999,
@@ -380,6 +477,30 @@ export default function DevHubPage() {
             ))}
           </div>
         </div>
+
+        {/* ОСТАТОК ЗА МЕСЯЦ. Модуль знал числа и молчал: человек упирался в предел,
+            не подозревая о нём. Показываем только то, у чего предел ЕСТЬ (-1 значит
+            без предела — про такое говорить нечего) и только когда данные пришли:
+            выдумывать «0 из 0» при неответившей ручке хуже, чем не показать ничего. */}
+        {usage && (
+          <div style={{
+            border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 14px",
+            marginBottom: 16, fontSize: 13, color: "#334155", background: "#f8fafc",
+          }}>
+            <span style={{ fontWeight: 600 }}>{t("usage.title")}</span>{" "}
+            {Object.entries(usage)
+              .filter(([, v]) => v && v.limit > 0)
+              .map(([k, v]) => {
+                const left = Math.max(0, v.limit - v.used);
+                const tight = left <= Math.max(1, Math.floor(v.limit * 0.2));
+                return (
+                  <span key={k} style={{ marginRight: 12, color: tight ? "#b45309" : "#334155" }}>
+                    {USAGE_LABEL[k] ?? k}: <b>{left}</b> из {v.limit}
+                  </span>
+                );
+              })}
+          </div>
+        )}
 
         {/* Studio Pro upgrade banner */}
         {userTier === "free" && (
@@ -398,8 +519,17 @@ export default function DevHubPage() {
               </p>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+              {/* Кнопки НЕТ, если товара нет в каталоге.
+                  Раньше стояло `href={STUDIO_PRO?.href ?? "#"}`: при пропаже записи
+                  человек видел бы «Upgrade — $149/mo», нажимал и не попадал никуда.
+                  Хуже мёртвой кнопки было второе: событие «начал оплату» уходило
+                  ВСЁ РАВНО, и в воронке появлялись начатые оплаты, которых не было —
+                  то есть отчёт о деньгах врал бы правдоподобно.
+                  Цена берётся только из каталога: зашитая рядом «149» — второй
+                  источник, который однажды разойдётся с настоящей ценой. */}
+              {STUDIO_PRO ? (
               <a
-                href={STUDIO_PRO?.href ?? "#"}
+                href={STUDIO_PRO.href}
                 target="_blank"
                 rel="noopener noreferrer"
                 // Studio Pro sells through its own Lemon Squeezy variant, so the
@@ -412,8 +542,13 @@ export default function DevHubPage() {
                   whiteSpace: "nowrap",
                 }}
               >
-                Upgrade — {`$${STUDIO_PRO?.priceUsd ?? 149}`}/mo
+                {t("pro.upgrade")} — {`$${STUDIO_PRO.priceUsd}`}{t("pro.perMonth")}
               </a>
+              ) : (
+                <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: 600 }}>
+                  {t("pro.unavailable")}
+                </span>
+              )}
               <a
                 href="/apps"
                 style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", textDecoration: "underline", whiteSpace: "nowrap" }}
@@ -478,12 +613,18 @@ export default function DevHubPage() {
                   Замер 23.08.2026: среди «работающих» числился домен aevion.build,
                   которого не существует — реестр отвечает «Non-existent domain».
                   Слово «работает» превращало ответ одного вопроса в ответ другого. */}
-              <span style={{ fontWeight: 700, color: "#0f172a" }}>{t("caps.configured")}: {live} из {caps.length}</span>
+              <span style={{ fontWeight: 700, color: "#0f172a" }}>{t("caps.configured")}: {live} {t("caps.of")} {caps.length}</span>
               {off.length > 0 ? (
                 <>
                   <span style={{ color: "#64748b" }}>{t("caps.off")}</span>
+                  {/* c.lastError ручка /studio/capabilities НЕ отдаёт: она отвечает
+                      на вопрос «ключ задан» и ошибок не собирает. Значит подсказка
+                      ВСЕГДА идёт по запасной ветке — читатель обязан это знать,
+                      иначе будет искать в ней причину. Настоящие ошибки провайдеров
+                      живут в /api/devhub/providers/health; подключить их сюда —
+                      отдельная работа, не правка на ходу. */}
                   {off.map((c, i) => (
-                    <span key={c.id} title={c.lastError || (c.status === "needs_token" ? "не настроено на сервере" : c.status)}>
+                    <span key={c.id} title={c.lastError || capabilityOffReason(c.status)}>
                       <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{c.name}</span>
                       {i < off.length - 1 ? <span style={{ color: "#64748b" }}>, </span> : null}
                     </span>
@@ -493,8 +634,17 @@ export default function DevHubPage() {
                   </div>
                 </>
               ) : (
-                <span style={{ color: "#64748b" }}> · все интеграции отвечают</span>
+                <span style={{ color: "#64748b" }}>{t("caps.allRespond")}</span>
               )}
+              {/* The comparison belongs next to the live state, not on a
+                  marketing page: both answer the same question — what is real
+                  right now — and the strip is what makes the table checkable. */}
+              <div style={{ marginTop: 8, fontSize: 12.5 }}>
+                <Link href="/compare" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "none" }}>
+                  Как мы выглядим рядом с Bolt, Lovable, v0 и Replit →
+                </Link>
+                <span style={{ color: "#94a3b8" }}>{t("store.withSourceNote")}</span>
+              </div>
             </div>
           );
         })()}
@@ -532,8 +682,8 @@ export default function DevHubPage() {
                   </tr>
                 ))}
                 <tr>
-                  <td style={{ padding: "6px 14px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0" }}>Итого</td>
-                  <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>7 подписок, 7 логинов</td>
+                  <td style={{ padding: "6px 14px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0" }}>{t("store.total")}</td>
+                  <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>{t("store.subsLogins")}</td>
                   <td style={{ padding: "6px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0", fontVariantNumeric: "tabular-nums" }}>≈ $162</td>
                 </tr>
               </tbody>
@@ -554,11 +704,37 @@ export default function DevHubPage() {
           </div>
         )}
 
+        {/* Проекты гостя привязаны к ЭТОМУ БРАУЗЕРУ: личность лежит в
+            localStorage (lib/devhubGuest.ts). Очистил хранилище, открыл другой
+            браузер — проекты остались на сервере, но человек их больше не
+            видит, и вернуть их нечем.
+
+            Витрина при этом зовёт работать без аккаунта («No GitHub or cloud
+            accounts needed») и об этой цене не говорила НИГДЕ. Пригласить и
+            умолчать — то же самое, что обещать лишнее, только наоборот.
+
+            Строка показывается всем: страница о входе не знает вовсе, а
+            заводить здесь состояние авторизации ради одной подсказки — правка
+            крупнее самой пользы. Для вошедшего она просто не про него. */}
+        <p
+          style={{
+            fontSize: 12.5, color: "#64748b", margin: "0 0 14px",
+            display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+          }}
+        >
+          <span aria-hidden="true">💾</span>
+          {t("proj.browserBound")}
+        </p>
+
         {/* Loading */}
+        {/* Each branch carries its own key. Without them React reconciles these
+            by position, and when a late fetch flips the branch it remounts the
+            siblings below — including the snippet form, so anyone typing in it
+            during load lost what they had written. */}
         {loading ? (
-          <div style={{ textAlign: "center", padding: 60, color: "#94a3b8" }}>{t("proj.loading")}</div>
+          <div key="projects-loading" style={{ textAlign: "center", padding: 60, color: "#94a3b8" }}>{t("proj.loading")}</div>
         ) : projects.length === 0 ? (
-          <div style={{ textAlign: "center", padding: 80 }}>
+          <div key="projects-empty" style={{ textAlign: "center", padding: 80 }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🏗</div>
             <h2 style={{ fontSize: 20, color: "#0f172a", marginBottom: 8 }}>{t("proj.empty")}</h2>
             <p style={{ color: "#64748b", marginBottom: 24 }}>{t("proj.emptyHint")}</p>
@@ -570,7 +746,7 @@ export default function DevHubPage() {
             </button>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))", gap: 20 }}>
+          <div key="projects-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))", gap: 20 }}>
             {projects.map((p) => {
               const stackStyle = STACK_COLORS[p.stack] ?? { bg: "#64748b", fg: "#fff" };
               const statusStyle = STATUS_STYLES[p.status] ?? STATUS_STYLES.draft;
@@ -671,7 +847,7 @@ export default function DevHubPage() {
               <button
                 onClick={() => setSnippetError(null)}
                 className="font-bold text-rose-200"
-                aria-label="dismiss"
+                aria-label={t("a11y.dismiss")}
               >
                 ×
               </button>
@@ -679,13 +855,13 @@ export default function DevHubPage() {
           )}
 
           {snippetsLoading ? (
-            <div className="text-center text-slate-500 py-10">{t("snip.loading")}</div>
+            <div key="snippets-loading" className="text-center text-slate-500 py-10">{t("snip.loading")}</div>
           ) : snippets.length === 0 ? (
-            <div className="text-center text-slate-500 py-10 border border-dashed border-slate-800 rounded-lg">
+            <div key="snippets-empty" className="text-center text-slate-500 py-10 border border-dashed border-slate-800 rounded-lg">
               {t("snip.empty")}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div key="snippets-grid" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {snippets.map((s) => {
                 const preview = (s.content || "").slice(0, 200);
                 const truncated = (s.content || "").length > 200;
@@ -724,7 +900,7 @@ export default function DevHubPage() {
                       <button
                         onClick={() => starSnippet(s)}
                         className="flex items-center gap-1 text-xs font-semibold text-amber-300 hover:text-amber-200"
-                        aria-label="star snippet"
+                        aria-label={t("a11y.star")}
                       >
                         <span aria-hidden>★</span>
                         <span>{s.stars}</span>
@@ -757,23 +933,25 @@ export default function DevHubPage() {
           )}
 
           {/* Share form */}
-          <div className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+          <div ref={snippetFormRef} className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
             <h3 className="text-sm font-semibold text-white mb-3">
               {t("snip.share")}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input
                 type="text"
-                value={snippetForm.title}
+                data-prehydration-field="title"
+              value={snippetForm.title}
                 onChange={(e) =>
                   setSnippetForm((f) => ({ ...f, title: e.target.value }))
                 }
-                placeholder="Title"
+                placeholder={t("field.title")}
                 className="px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
               />
               <input
                 type="text"
-                value={snippetForm.language}
+                data-prehydration-field="language"
+              value={snippetForm.language}
                 onChange={(e) =>
                   setSnippetForm((f) => ({ ...f, language: e.target.value }))
                 }
@@ -782,6 +960,7 @@ export default function DevHubPage() {
               />
             </div>
             <textarea
+              data-prehydration-field="content"
               value={snippetForm.content}
               onChange={(e) =>
                 setSnippetForm((f) => ({ ...f, content: e.target.value }))
@@ -792,6 +971,7 @@ export default function DevHubPage() {
             />
             <input
               type="text"
+              data-prehydration-field="tags"
               value={snippetForm.tags}
               onChange={(e) =>
                 setSnippetForm((f) => ({ ...f, tags: e.target.value }))
@@ -828,9 +1008,17 @@ export default function DevHubPage() {
         <div
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
+          // Clicking the backdrop already closed this; Escape did nothing, so a
+          // keyboard had no way out of the dialog at all.
+          onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setShowModal(false); } }}
         >
-          <div style={{ background: "#fff", borderRadius: 16, padding: "20px clamp(16px, 4vw, 32px)", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
-            <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 20, color: "#0f172a" }}>{t("modal.title")}</h2>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="devhub-new-project-title"
+            style={{ background: "#fff", borderRadius: 16, padding: "20px clamp(16px, 4vw, 32px)", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}
+          >
+            <h2 id="devhub-new-project-title" style={{ fontSize: 20, fontWeight: 800, marginBottom: 20, color: "#0f172a" }}>{t("modal.title")}</h2>
 
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>

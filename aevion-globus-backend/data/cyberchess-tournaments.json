@@ -1,4 +1,5 @@
 {
+  "savedAt": "2026-08-29T09:10:30.506Z",
   "tournaments": [
     {
       "id": "spring-blitz-01",
@@ -11,7 +12,7 @@
       "maxPlayers": 128,
       "prizeChessy": 50000,
       "status": "upcoming",
-      "startsAt": "2026-05-18T19:00:00Z",
+      "startsAt": "2026-09-05T09:10:30.505Z",
       "description": "Открытый блиц-турнир с накопительным призовым фондом в Chessy.",
       "registeredUserIds": [],
       "roster": [],
@@ -186,7 +187,8 @@
           ]
         }
       ],
-      "realPlayers": false
+      "realPlayers": false,
+      "origin": "seed"
     },
     {
       "id": "weekly-rapid-22",
@@ -374,7 +376,8 @@
           ]
         }
       ],
-      "realPlayers": false
+      "realPlayers": false,
+      "origin": "seed"
     },
     {
       "id": "swiss-arena-may",
@@ -526,7 +529,8 @@
           ]
         }
       ],
-      "realPlayers": false
+      "realPlayers": false,
+      "origin": "seed"
     },
     {
       "id": "swiss-blitz-friday",
@@ -539,7 +543,7 @@
       "maxPlayers": 32,
       "prizeChessy": 18000,
       "status": "upcoming",
-      "startsAt": "2026-05-22T20:00:00Z",
+      "startsAt": "2026-09-05T09:10:30.505Z",
       "description": "7 туров швейцарки, блиц 3+2.",
       "swissRounds": 7,
       "currentRound": 0,
@@ -647,7 +651,8 @@
         }
       ],
       "rounds": [],
-      "realPlayers": false
+      "realPlayers": false,
+      "origin": "seed"
     },
     {
       "id": "classic-rr-may",
@@ -1098,7 +1103,8 @@
           ]
         }
       ],
-      "realPlayers": false
+      "realPlayers": false,
+      "origin": "seed"
     },
     {
       "id": "rapid-rr-mini",
@@ -1111,7 +1117,7 @@
       "maxPlayers": 6,
       "prizeChessy": 22000,
       "status": "upcoming",
-      "startsAt": "2026-05-19T16:00:00Z",
+      "startsAt": "2026-09-05T09:10:30.505Z",
       "description": "6 игроков, круговая система, рапид 10+5.",
       "currentRound": 0,
       "registeredUserIds": [],
@@ -1374,7 +1380,8 @@
           ]
         }
       ],
-      "realPlayers": false
+      "realPlayers": false,
+      "origin": "seed"
     },
     {
       "id": "classic-arena-may",
@@ -1561,7 +1568,8 @@
           ]
         }
       ],
-      "realPlayers": false
+      "realPlayers": false,
+      "origin": "seed"
     },
     {
       "id": "bullet-storm-7",
@@ -1574,11 +1582,12 @@
       "maxPlayers": 256,
       "prizeChessy": 15000,
       "status": "upcoming",
-      "startsAt": "2026-05-16T21:00:00Z",
+      "startsAt": "2026-09-05T09:10:30.505Z",
       "registeredUserIds": [],
       "roster": [],
       "rounds": [],
-      "realPlayers": false
+      "realPlayers": false,
+      "origin": "seed"
     },
     {
       "id": "veterans-cup",
@@ -1591,11 +1600,12 @@
       "maxPlayers": 64,
       "prizeChessy": 35000,
       "status": "upcoming",
-      "startsAt": "2026-05-20T17:00:00Z",
+      "startsAt": "2026-09-05T09:10:30.505Z",
       "registeredUserIds": [],
       "roster": [],
       "rounds": [],
-      "realPlayers": false
+      "realPlayers": false,
+      "origin": "seed"
     },
     {
       "id": "winter-arena-12",
@@ -1782,7 +1792,8 @@
           ]
         }
       ],
-      "realPlayers": false
+      "realPlayers": false,
+      "origin": "seed"
     },
     {
       "id": "newbies-rapid",
@@ -1795,11 +1806,12 @@
       "maxPlayers": 64,
       "prizeChessy": 5000,
       "status": "upcoming",
-      "startsAt": "2026-05-17T14:00:00Z",
+      "startsAt": "2026-09-05T09:10:30.505Z",
       "registeredUserIds": [],
       "roster": [],
       "rounds": [],
-      "realPlayers": false
+      "realPlayers": false,
+      "origin": "seed"
     },
     {
       "id": "real-swiss-demo",
@@ -1812,7 +1824,7 @@
       "maxPlayers": 8,
       "prizeChessy": 1000,
       "status": "upcoming",
-      "startsAt": "2026-05-19T18:00:00Z",
+      "startsAt": "2026-09-05T09:10:30.505Z",
       "description": "Демо-турнир с реальными игроками. Регистрация открыта.",
       "swissRounds": 3,
       "currentRound": 0,
@@ -1860,7 +1872,8 @@
         }
       ],
       "rounds": [],
-      "realPlayers": true
+      "realPlayers": true,
+      "origin": "seed"
     }
   ]
 }

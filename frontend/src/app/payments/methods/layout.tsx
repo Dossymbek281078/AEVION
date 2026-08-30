@@ -17,6 +17,11 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "AEVION",
   },
+  // СВОЙ canonical обязателен, иначе страница наследует родительский из
+  // payments/layout.tsx и говорит поисковику «я копия /payments». Проверено
+  // на проде 30.08.2026: /payments/api отдавал canonical на /payments, то
+  // есть тринадцать страниц раздела схлопывались в одну для поиска.
+  alternates: { canonical: "/payments/methods" },
   twitter: {
     card: "summary_large_image",
     title: "AEVION Payments — Payment Methods",

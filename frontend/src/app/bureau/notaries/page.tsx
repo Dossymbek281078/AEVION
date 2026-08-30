@@ -7,6 +7,10 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Notary Registry — AEVION IP Bureau",
   description: "Verified notarial partners who co-sign IP certificates with Ed25519 digital signatures.",
+  // СВОЙ canonical: без него страница наследует адрес раздела из его макета
+  // и просит поисковик показывать раздел вместо себя. Замер живого прода
+  // 30.08.2026 — так вели себя 78 страниц сайта.
+  alternates: { canonical: "/bureau/notaries" },
 };
 
 type Notary = {

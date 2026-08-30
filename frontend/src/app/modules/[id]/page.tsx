@@ -265,6 +265,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description: data.description,
     alternates: {
+      // СВОЙ canonical, динамический — адрес зависит от модуля.
+      // Без него страница модуля наследовала бы canonical каталога /modules,
+      // как только он свой объявит, и говорила бы «я копия каталога».
+      // Порядок важен: сперва canonical дочерним, потом разделу. Обратный
+      // порядок 30.08.2026 сломал три страницы разом, поймал сторож.
+      canonical: `/modules/${encodeURIComponent(id)}`,
       types: {
         "application/rss+xml": rssUrl,
       },

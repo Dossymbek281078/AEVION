@@ -113,6 +113,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     alternates: {
+      // СВОЙ canonical, динамический — адрес зависит от тега. Берётся `t`,
+      // приведённый к нижнему регистру: /modules/tags/AI и /modules/tags/ai
+      // показывают одно и то же, и указывать они должны на один адрес.
+      canonical: `/modules/tags/${encodeURIComponent(t)}`,
       types: {
         "application/rss+xml": `${getApiBase()}/api/modules/tags/${encodeURIComponent(t)}/changelog.rss`,
       },

@@ -56,6 +56,7 @@ import { PageTracking } from "@/components/PageTracking";
 // aevion-globus-backend/CLAUDE.md). Не проверил — не обещаю.
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/devhub/launch" },
   title: "AEVION DevHub — ранний доступ",
   // Описание для поиска обязано обещать столько же, сколько текст страницы, а не
   // больше. Здесь стояло «сценарии сборки под ключ» — то самое обещание, от

@@ -2193,6 +2193,15 @@ devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
 
   const { provisionProjectDatabase } = await import("../lib/devhubDbProvision");
   const result = await provisionProjectDatabase({ projectId: project.id, schemaSql });
+  // Отметка поставщика — там же, где он ДЕЙСТВИТЕЛЬНО используется, как у
+  // остальных шестнадцати. Отдельного опроса состояния нет намеренно: он
+  // означал бы живое подключение к административной базе на каждый вопрос
+  // о здоровье, а настоящий ответ даёт только настоящая выдача базы.
+  //
+  // До 30.08.2026 возможность «База данных» объявлялась рабочей, не спросив
+  // поставщика ни разу: панель показывала «live» по наличию переменной.
+  if (result.ok) noteProviderSuccess("database");
+  else noteProviderFailure("database", result.error);
   if (!result.ok) return res.status(502).json({ error: result.error });
 
   project.envVars = { ...(project.envVars || {}), DATABASE_URL: result.databaseUrl };

@@ -16,6 +16,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { rateLimit, clientIp } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { isAdminRequest } from "../lib/adminAuth";
 import { validate, WaitlistSubscribeSchema } from "../lib/constitutionSchemas";
 import { sendWaitlistConfirm, sendWeeklyDigestEmail as sendDigestEmail } from "../lib/constitutionBrevo";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -88,15 +89,13 @@ async function ensureWaitlistTable(): Promise<void> {
 const ADMIN_ALLOWLIST = (process.env.CONSTITUTION_ADMIN_ALLOWLIST || "yahiin1978@gmail.com")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
+// Третья копия той же проверки — сведена 30.08 в lib/adminAuth. Найдена не
+// сразу: при первом выносе я решил, что копий две, и внёс этот файл в список
+// «своя политика». Ложная запись в таком списке не врёт в отчёте — она
+// ВЫКЛЮЧАЕТ охрану для пункта. Подсказала соседняя вкладка: у неё 13 из 15
+// прощённых оказались ложными.
 function isAdmin(req: Request): boolean {
-  const payload = verifyBearerOptional(req);
-  if (!payload) return false;
-  const p = payload as Record<string, unknown>;
-  if (p.role === "admin") return true;
-  if (typeof p.email === "string" && ADMIN_ALLOWLIST.includes(p.email.toLowerCase())) {
-    return true;
-  }
-  return false;
+  return isAdminRequest(req);
 }
 
 // Формат email проверяется Zod-схемой WaitlistSubscribeSchema

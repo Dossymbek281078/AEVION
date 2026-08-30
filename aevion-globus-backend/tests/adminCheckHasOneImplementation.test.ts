@@ -58,12 +58,15 @@ const ROLE_ADMIN = ['role === "admin"', "role === 'admin'"];
 const OWN_POLICY = new Set([
   "src/routes/awards.ts",
   "src/routes/bureau.ts",
-  "src/routes/constitutionWaitlist.ts",
   "src/routes/modules.ts",
   "src/routes/pipeline.ts",
   "src/routes/qright.ts",
-  "src/routes/qsignV2.ts",
   "src/routes/quantum-shield.ts",
+  // НЕ политика и НЕ копия: инлайновая проверка «владелец ИЛИ админ» на
+  // конкретный ресурс (`auth.role === "admin"` рядом с isIssuer). Сводить
+  // нечего, но признак её ловит. Причина названа точно: прежняя общая
+  // формулировка «своя политика» была неверна для этого пункта.
+  "src/routes/qsignV2.ts",
 ]);
 
 function implementsAdminCheck(src: string): boolean {

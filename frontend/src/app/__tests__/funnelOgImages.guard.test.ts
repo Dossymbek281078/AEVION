@@ -24,6 +24,51 @@ const APP = join(HERE, "..");
  *  он и есть утверждение о том, что мы считаем входом в воронку. */
 const FUNNEL = ["go", "longevity", "en/go", "en/longevity", "shop", "constitution/pricing", "qsign", "compare", "partner", "qrenew", "qventure", "qlearn", "bank", "qnews", "qai", "studio", "explore", "sdk", "api-explorer", "build", "build/pricing", "build/vacancies"];
 
+/** Все каталоги, где кто-то нарисовал opengraph-image.tsx. Обходом, а не
+ *  списком: картинку рисуют осознанно, и сам факт её появления означает
+ *  «эту страницу будут пересылать». */
+function withOgImage(dir: string, rel = ""): string[] {
+  const out: string[] = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (!e.isDirectory()) continue;
+    if (e.name === "__tests__" || e.name === "_components") continue;
+    const sub = join(dir, e.name);
+    const route = rel ? `${rel}/${e.name}` : e.name;
+    if (existsSync(join(sub, "opengraph-image.tsx"))) out.push(route);
+    out.push(...withOgImage(sub, route));
+  }
+  return out;
+}
+
+describe("нарисована картинка — обязан быть и заголовок", () => {
+  const pages = withOgImage(APP);
+
+  it("таких страниц вообще много — иначе проверка пустая", () => {
+    // Контроль охвата: если обход сломается (переименовали каталог, съехал
+    // путь), список станет коротким, и проверка ниже будет зелёной, ничего
+    // не проверяя. Замер 30.08.2026: страниц с картинкой 149.
+    expect(pages.length).toBeGreaterThanOrEqual(100);
+  });
+
+  it("у каждой есть свой openGraph — в page.tsx или в layout.tsx", () => {
+    // ДВА МЕСТА обязательно: страница с "use client" не может объявлять
+    // metadata сама, и заголовок тогда живёт в layout.tsx рядом.
+    // Замер 30.08.2026: без своего заголовка было 17 страниц из 149 —
+    // ссылка на них приходила в мессенджер общим заголовком САЙТА.
+    // Сегодня закрыты все; этот сторож держит ноль.
+    const missing: string[] = [];
+    for (const route of pages) {
+      const dir = join(APP, ...route.split("/"));
+      const has = ["page.tsx", "layout.tsx"].some((f) => {
+        const file = join(dir, f);
+        return existsSync(file) && readFileSync(file, "utf8").includes("openGraph");
+      });
+      if (!has) missing.push(route);
+    }
+    expect(missing, "нет своего openGraph — ссылка придёт с заголовком сайта").toEqual([]);
+  });
+});
+
 describe("карточки страниц воронки", () => {
   it("у каждой входной страницы есть opengraph-image", () => {
     for (const route of FUNNEL) {

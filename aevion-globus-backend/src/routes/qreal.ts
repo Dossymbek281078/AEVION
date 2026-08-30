@@ -681,7 +681,15 @@ qrealRouter.get("/usage", async (req, res) => {
     return res.json({
       available: true,
       days: [...byDay.values()]
-        .map((d) => ({ ...d, distinctAddresses: ipsByDay.get(d.day) ?? 0 }))
+        // `?? 0` здесь означало бы «адресов не было», а правда — «за этот
+        // день счёт адресов не пришёл»: у двух запросов РАЗНЫЕ пределы
+        // выборки (days*2 строк итогов против days строк со счётом), и
+        // дальний день может попасть в один и не попасть в другой.
+        // Поймано вычиткой собственного дифа, а не тестом.
+        .map((d) => {
+          const n = ipsByDay.get(d.day);
+          return n === undefined ? d : { ...d, distinctAddresses: n };
+        })
         .sort((x, y) => (x.day < y.day ? 1 : -1)),
       caps: { renderGlobalDaily: RENDER_GLOBAL_DAILY_CAP, judgeGlobalDaily: JUDGE_GLOBAL_DAILY_CAP },
       note: "Числа — количество вызовов, НЕ стоимость: длительность рендера не хранится.",

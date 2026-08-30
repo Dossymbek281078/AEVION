@@ -337,10 +337,17 @@ async function checkCredit(
 ): Promise<{ allowed: boolean; used: number; limit: number; tier: StudioTier; usedUnknown: boolean }> {
   const tier = await getUserTier(userId);
   const limit = TIER_LIMITS[tier][capability];
-  // Безлимитный тариф: расход не читается вовсе, поэтому ноль здесь —
-  // заглушка, а не измерение. Признак это признаёт честно: соврать
-  // «знаем, израсходовано 0» было бы ровно тем, против чего вся правка.
-  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier, usedUnknown: true };
+  // Безлимитный тариф: расход не читается, потому что ограничивать нечего.
+  //
+  // Признак здесь FALSE, и это правка по вычитке собственного дифа. Сперва
+  // стояло true со смыслом «мы не читали». Но смысл признака затем сужен до
+  // строгого «ЧТЕНИЕ НЕ УДАЛОСЬ», и с true он оказался бы поднят у
+  // безлимитного тарифа ВСЕГДА — а признак, поднятый всегда, перестают
+  // читать, и он не сработает тогда, когда понадобится.
+  //
+  // Ничего не отказало, поэтому false. Число `used` здесь заглушка, но оно
+  // не участвует ни в одном решении: предела нет.
+  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier, usedUnknown: false };
   const month = creditMonth();
   const { used, known } = await getMonthUsage(userId, month, capability);
   // Поведение прежнее: при непрочитанном расходе предел по-прежнему

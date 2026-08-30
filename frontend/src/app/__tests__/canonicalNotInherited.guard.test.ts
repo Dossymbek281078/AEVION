@@ -85,11 +85,8 @@ const INHERITING_TODAY = new Set([
     "pricing/admin",
     "pricing/checkout/cancel",
     "pricing/checkout/success",
-    "pricing/contact",
     "pricing/for/[industry]",
     "pricing/paddle",
-    "pricing/provisioning",
-    "pricing/roadmap",
     "qchaingov/new",
     "qchaingov/proposals/[id]",
     "qcontract/create",
@@ -148,7 +145,7 @@ describe("canonical не наследуется молча", () => {
 
   it("обход находит и родителей, и страницы — иначе проверка пустая", () => {
     // Контроль охвата: сломается обход — списки опустеют, и проверки ниже
-    // пройдут, ничего не проверив. Замер 30.08.2026: 117 родителей, 78
+    // пройдут, ничего не проверив. Замер 30.08.2026: 120 родителей, 75
     // наследующие страницы.
     expect(parents.length).toBeGreaterThanOrEqual(50);
     expect(inheriting.length).toBeGreaterThanOrEqual(30);

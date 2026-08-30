@@ -2,6 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { track } from "@/lib/track";
+import { channelFrom } from "@/lib/products";
 
 /**
  * Ссылка на оплату, которая сама сообщает воронке о намерении купить.
@@ -45,17 +46,31 @@ export function BuyLink({
       rel="noopener noreferrer"
       style={style}
       className={className}
-      onClick={() =>
+      onClick={() => {
+        // Метку канала обычно передаёт серверная страница: она читает ?c= из
+        // адреса и отдаёт сюда готовой. Но так делают не все — /qrenew, куда
+        // ведут ролики, кнопку рисует из клиентского компонента и передать
+        // метку не может. Тогда берём её сами, здесь: на клике window уже
+        // есть, и SSR это не ломает.
+        //
+        // Запасной путь ниже прежнего по старшинству: если страница метку
+        // передала, берётся она. Два источника одного значения — та ещё
+        // затея, поэтому старшинство названо явно, а не выведено из порядка.
+        const fromUrl =
+          typeof window === "undefined"
+            ? null
+            : channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined);
+        const mark = channel ?? fromUrl;
         track({
           type: "checkout_start",
           source,
           value: priceUsd,
           meta: {
             ...(productId ? { product: productId } : {}),
-            ...(channel ? { channel } : {}),
+            ...(mark ? { channel: mark } : {}),
           },
-        })
-      }
+        });
+      }}
     >
       {children}
     </a>

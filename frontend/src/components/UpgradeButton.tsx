@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
-import { productById } from "@/lib/products";
+import { channelFrom, productById } from "@/lib/products";
 import { track } from "@/lib/track";
 
 // Единственный живой процессинг — Gumroad (Paddle/Stripe/LemonSqueezy не в
@@ -43,11 +43,27 @@ export function UpgradeButton({
     // only ever saw checkout_start from the /pricing table, so every upgrade
     // started here (9 module pages) was invisible. track() uses sendBeacon,
     // which survives the navigation below.
+    // Метка канала. Соседняя кнопка покупки (BuyLink) кладёт её в это же
+    // событие checkout_start, и пять страниц из шести её передают — а здесь,
+    // на девяти страницах модулей, её не было вовсе. Событие приходило, но
+    // на вопрос «какой канал принёс апселл» ответить было нечем.
+    //
+    // Читается из адреса, а не хуком useSearchParams: хук требует обёртки
+    // Suspense у каждой страницы, которая нас отрисовывает, а их девять.
+    // Так же поступает учёт заходов (PageTracking) — второго способа не завожу.
+    //
+    // Через channelFrom, а не сырым значением: он сверяет метку со списком
+    // известных каналов, и в отчёт попадает ровно тот словарь, которым уже
+    // пользуется BuyLink. Иначе одно и то же в отчёте назовётся двумя словами.
+    const channel =
+      typeof window === "undefined"
+        ? null
+        : channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined);
     track({
       type: "checkout_start",
       tier: tierId,
       source: `upgrade-button/${appId}`,
-      meta: { variant, processor: "gumroad" },
+      meta: { variant, processor: "gumroad", ...(channel ? { channel } : {}) },
     });
     // Gumroad hosted checkout — единственный живой рельс.
     window.location.href = gumroadCheckoutUrl({ key: appId, tier: tierId });

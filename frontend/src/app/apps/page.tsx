@@ -25,6 +25,20 @@ type Billing = "monthly" | "annual";
 // correcting it needs the real variant prices from the Lemon Squeezy dashboard,
 // and inventing a number would be worse than naming the gap. Fix = add Planet to
 // lib/products.ts with its verified price + href, then read it from there.
+// ПРОВЕРЕНО 30.08.2026, и пробел выше закрыт замером, а не догадкой.
+// Витрина Lemon Squeezy прочитана инструментом aevion-store-vs-price.mjs:
+//     магазин: AEVION Planet — Monthly  $250 / month
+//     магазин: AEVION Planet — Annual   $200 / month
+// Оба числа СОВПАДАЮТ с зашитыми ниже. То есть на сегодня страница называет
+// ту цену, которую списывает касса, — случай «All-Access $59», упомянутый
+// выше, здесь НЕ повторился.
+//
+// Что это НЕ отменяет: числа по-прежнему живут здесь, а не в lib/products.ts,
+// и следующее изменение цены в кабинете Lemon Squeezy разойдётся с ними так же
+// молча. Проверка — внешняя и ручная:
+//     node C:/Users/user/aevion-store-vs-price.mjs
+// Она читает живую витрину и печатает расхождения. Настоящая починка прежняя:
+// перенести Planet в lib/products.ts с проверенной ценой и ссылкой.
 const PLANET_MONTHLY = 250;
 const PLANET_ANNUAL_PER_MO = 200; // 12-month commitment, billed monthly
 

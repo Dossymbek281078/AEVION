@@ -21,6 +21,9 @@ import path from "node:path";
  */
 
 const STOREFRONT = path.join(__dirname, "..", "page.tsx");
+// Текст витрины переехал в словарь модуля (страница трёхъязычная), поэтому
+// сторож читает ОБА места: иначе он краснеет на честном переносе.
+const DICT = path.join(__dirname, "..", "i18n.ts");
 const EDITOR = path.join(__dirname, "..", "[id]", "page.tsx");
 
 const read = (p: string) => fs.readFileSync(p, "utf8");
@@ -46,24 +49,25 @@ function visible(src: string): string {
 
 describe("обещание правки кликами совпадает с продуктом", () => {
   test("прибор работает: витрина читается и содержит обещание", () => {
-    const v = visible(read(STOREFRONT));
+    const v = [visible(read(STOREFRONT)), read(DICT)].join(" ");
     expect(v.length).toBeGreaterThan(1000);
     expect(v).toContain("Visual Edit");
   });
 
   test("рядом с Visual Edit названо условие — деплой", () => {
-    const v = visible(read(STOREFRONT));
+    const v = [visible(read(STOREFRONT)), read(DICT)].join(" ");
     const i = v.indexOf("Visual Edit");
     // Условие должно стоять В ТОМ ЖЕ предложении, а не где-то на странице:
     // сноска внизу экрана обещания не исправляет.
     const around = v.slice(Math.max(0, i - 220), i + 120);
     expect(around, "витрина обещает правку кликами, не назвав, что она после деплоя").toMatch(
-      /После деплоя|после деплоя/,
+      // Условие — на языке записи: словарь несёт ru/en/kk.
+      /После деплоя|после деплоя|After deploy|after deploy|Орналастырғаннан кейін/,
     );
   });
 
   test("витрина не ставит Visual Edit перед деплоем в перечислении", () => {
-    const v = visible(read(STOREFRONT));
+    const v = [visible(read(STOREFRONT)), read(DICT)].join(" ");
     expect(v, "прежняя формулировка вернулась").not.toContain("Дальше — правь кликами");
   });
 });

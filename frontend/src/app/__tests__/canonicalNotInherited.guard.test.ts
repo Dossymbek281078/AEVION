@@ -74,9 +74,7 @@ const INHERITING_TODAY = new Set([
     "constitution/admin",
     "constitution/demo",
     "multichat-engine/launch",
-    "multichat-engine/library",
     "multichat-engine/shared/[token]",
-    "multichat-engine/verify",
     "planet/artifact/[id]",
     "planet/badge/[certId]",
     "planet/transparency",
@@ -142,7 +140,7 @@ describe("canonical не наследуется молча", () => {
 
   it("обход находит и родителей, и страницы — иначе проверка пустая", () => {
     // Контроль охвата: сломается обход — списки опустеют, и проверки ниже
-    // пройдут, ничего не проверив. Замер 30.08.2026: 123 родителя, 72
+    // пройдут, ничего не проверив. Замер 30.08.2026: 125 родителей, 70
     // наследующие страницы.
     expect(parents.length).toBeGreaterThanOrEqual(50);
     expect(inheriting.length).toBeGreaterThanOrEqual(30);

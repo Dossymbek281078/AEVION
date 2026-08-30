@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -43,7 +43,10 @@ describe("возврат после оплаты подтверждается", 
   });
 
   test("названа и подсказка на случай, если доступ не появился", () => {
-    const dict = readFileSync(join(__dirname, "..", "..", "..", "lib", "i18n-data.ts"), "utf8");
+    const dict = readdirSync(join(__dirname, "..", "..", "..", "lib", "i18n-lang"))
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => readFileSync(join(__dirname, "..", "..", "..", "lib", "i18n-lang", f), "utf8"))
+      .join(" ");
     expect(src.includes('t("constitution.pay.thanksBody"')).toBe(true);
     expect(dict.includes("откроем его вручную")).toBe(true);
     expect(dict.includes("open it manually")).toBe(true);

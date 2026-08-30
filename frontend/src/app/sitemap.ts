@@ -2,6 +2,9 @@ import type { MetadataRoute } from "next";
 import { DISALLOWED_PATHS } from "./robots";
 import { getApiBase } from "@/lib/apiBase";
 
+/** Адреса с `index: false`, собранные обходом; нужны и для статического списка. */
+let scannedNoIndex = new Set<string>();
+
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 // ⚠️ Руками сюда добавлять адрес МОЖНО только если страница уже есть:
@@ -213,6 +216,31 @@ async function scanAppRoutes(): Promise<string[]> {
 
     const routes: string[] = [];
 
+    /** Объявлен ли `index: false` у страницы или у любого её макета. */
+    async function isNoIndex(
+      fsMod: typeof import("node:fs/promises"),
+      pathMod: typeof import("node:path"),
+      root: string,
+      segments: string[],
+    ): Promise<boolean> {
+      const declares = async (file: string) => {
+        try {
+          return /index:\s*false/.test(await fsMod.readFile(file, "utf8"));
+        } catch {
+          // Файла нет или не читается — это НЕ «разрешено»: молча пропустить
+          // страницу в карту здесь безопаснее, чем молча выбросить. Ошибка
+          // чтения не должна убирать адрес из выдачи.
+          return false;
+        }
+      };
+      if (await declares(pathMod.join(root, ...segments, "page.tsx"))) return true;
+      for (let i = segments.length; i >= 0; i--) {
+        if (await declares(pathMod.join(root, ...segments.slice(0, i), "layout.tsx"))) return true;
+      }
+      return false;
+    }
+
+    const noIndex = new Set<string>();
     async function walk(dir: string, segments: string[]): Promise<void> {
       let entries;
       try {
@@ -242,11 +270,30 @@ async function scanAppRoutes(): Promise<string[]> {
 
         // Build the route path from the segments we walked into.
         const route = segments.length === 0 ? "/" : "/" + segments.join("/");
+
+        // Страница, помеченная `robots: { index: false }`, в карту попадать не
+        // должна: карта говорит Google «индексируй», а страница — «не
+        // индексируй». Два наших источника противоречат друг другу.
+        //
+        // Замер 28.08.2026: таких было 23 — /acquire, весь личный кабинет
+        // /bank (audit-log, income, settings, statement...), /pitch/print,
+        // /pricing/affiliate-dashboard и другие. Решение по ним уже принято
+        // тем, кто написал `index: false`; карта просто про это не знала.
+        //
+        // Смотрим и саму страницу, и МАКЕТЫ вверх по дереву: у /bank директива
+        // стоит именно в макете раздела и распространяется на все его страницы.
+        if (await isNoIndex(fs, path, appDir, segments)) noIndex.add(route);
+
         routes.push(route);
       }
     }
 
     await walk(appDir, []);
+    // Возвращаем и найденные адреса, и те из них, что помечены noindex:
+    // отбор нужен НЕ только здесь. Часть адресов приходит статическим списком
+    // TOP_LEVEL_ROUTES, и первая версия фильтра их не накрывала — сквозной
+    // сторож поймал ровно это (/constitution/embed, /constitution/welcome).
+    scannedNoIndex = noIndex;
     return routes;
   } catch {
     return [];
@@ -311,6 +358,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const overrideMap = new Map(TOP_LEVEL_ROUTES.map((r) => [r.path, r]));
   const allPaths = new Set<string>(TOP_LEVEL_ROUTES.map((r) => r.path));
   for (const p of scannedRoutes) allPaths.add(p);
+
+  // Отбор ПОСЛЕ объединения: адреса приходят из двух источников — обхода диска
+  // и статического TOP_LEVEL_ROUTES, — и noindex-страница может прийти любым.
+  // Фильтр только в обходе пропускал вторые.
+  for (const p of scannedNoIndex) allPaths.delete(p);
 
   const today = new Date();
   const staticRoutes: MetadataRoute.Sitemap = Array.from(allPaths).map((p) => {

@@ -6645,6 +6645,11 @@ devhubRouter.get("/providers/health", async (_req, res) => {
 // сетевая икота выключала бы работающую возможность.
 let zoneCache: { at: number; active: boolean | null } = { at: 0, active: null };
 const ZONE_TTL_MS = 5 * 60_000;
+// Отказ живёт в кэше НАМНОГО меньше успеха, и это не мелочь: при равном сроке
+// секундный сбой сети запирал на пять минут ответ «needs_token» — то есть мы
+// просили человека настроить то, что у него уже настроено. Незнание не должно
+// залипать наравне со знанием: успех — состояние, отказ — событие.
+const ZONE_FAIL_TTL_MS = 30_000;
 
 /** Сброс кэша зоны — для тестов: иначе первый случай отравляет второй. */
 export function __resetAevionBuildZoneCache(): void {
@@ -6654,7 +6659,8 @@ export function __resetAevionBuildZoneCache(): void {
 async function aevionBuildZoneActive(): Promise<boolean | null> {
   if (!process.env.CLOUDFLARE_ZONE_ID || !process.env.CLOUDFLARE_API_TOKEN) return null;
   const now = Date.now();
-  if (now - zoneCache.at < ZONE_TTL_MS) return zoneCache.active;
+  const ttl = zoneCache.active === null ? ZONE_FAIL_TTL_MS : ZONE_TTL_MS;
+  if (zoneCache.at !== 0 && now - zoneCache.at < ttl) return zoneCache.active;
   try {
     const r = await fetch(
       `https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE_ID}`,

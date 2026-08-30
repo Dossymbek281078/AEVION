@@ -42,6 +42,12 @@ const KEY = "canonical:";
  *   qcontract  2   документы
  *   остальные  по одному: qchaingov, qmaskcard, qpersona, bureau/org
  *
+ * ТРЕТИЙ ОБРАЗЕЦ (найден 30.08 позже): рядом с объектом живут страницы
+ * ДЕЙСТВИЙ над ним — «запросить заверение», «повысить уровень», «журнал».
+ * На них приходят СО СТРАНИЦЫ объекта, нажав кнопку, а не из выдачи. Им
+ * нужен index: false: в поиске они соревнуются с самим объектом, показывая
+ * форму вместо содержания. Закрыты notarize и upgrade у сертификата бюро.
+ *
  * ПОВТОРЯЮЩИЙСЯ ОБРАЗЕЦ: в каждом разделе есть «значок» (`badge`) — страница
  * для встраивания, а не для чтения. Ей нужен НЕ canonical, а index: false:
  * в выдаче она соревновалась бы со страницей самого объекта, показывая одну
@@ -96,10 +102,8 @@ const INHERITING_TODAY = new Set([
     "bank/share/[handle]",
     "bureau/author/[slug]",
     "bureau/cert/[certId]",
-    "bureau/cert/[certId]/notarize",
     "bureau/notaries/[notaryId]",
     "bureau/org/[orgId]",
-    "bureau/upgrade/[certId]",
     "planet/artifact/[id]",
     "pricing/[tierId]",
     "pricing/for/[industry]",

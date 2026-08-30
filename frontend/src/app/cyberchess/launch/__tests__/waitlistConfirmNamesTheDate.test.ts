@@ -4,27 +4,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-// Комментарии вырезаем: слово «Открываем» встречается и в пояснении к
-// коду, и тогда дата читается ИЗ КОММЕНТАРИЯ вместе с мусором — тест
-// краснел на верной странице. Маркеры собраны из кусков, иначе они
-// закрыли бы комментарий этого файла.
-const OTKR_K = "/" + "*";
-const ZAKR_K = "*" + "/";
-const NL_K = String.fromCharCode(10);
-function bezKomm(kod: string): string {
-  const bezBlochnyh = kod
-    .split(OTKR_K)
-    .map((k, i) => (i === 0 ? k : k.slice(k.indexOf(ZAKR_K) + 2)))
-    .join(" ");
-  return bezBlochnyh
-    .split(NL_K)
-    .filter((l) => !l.trim().startsWith("//"))
-    .join(NL_K);
-}
 const PAGE = readFileSync(join(HERE, "..", "page.tsx"), "utf8");
-// Отдельно — версия без комментариев. Вырезать их глобально нельзя:
-// соседняя проверка ищет ПОЯСНЕНИЕ к правке, то есть сам комментарий.
-const PAGE_KOD = bezKomm(PAGE);
 const CAPTURE = readFileSync(join(HERE, "..", "..", "..", "..", "components", "WaitlistCapture.tsx"), "utf8");
 
 /**
@@ -48,15 +28,10 @@ describe("подтверждение подписки на странице за
     // Ищем позиционно, без регулярки: собранный из строки шаблон здесь
     // уже терял обратные слэши и давал ложное «заголовка нет».
     const H = "Открываем ";
-    const h = PAGE_KOD.indexOf(H);
+    const h = PAGE.indexOf(H);
     expect(h, "на странице нет заголовка «Открываем …»").toBeGreaterThan(-1);
-    // Границей даты служит и кавычка: заголовок стал выражением с
-    // условием («Открываем 30 августа» : «CyberChess открыт»), и без этого
-    // в дату попадал хвост выражения — тест краснел на верной странице.
-    const date = PAGE_KOD.slice(h + H.length, h + H.length + 40)
-      .split("<")[0]
-      .split('"')[0]
-      .trim();
+    const date = PAGE.slice(h + H.length, h + H.length + 40)
+      .split("<")[0].trim();
     expect(date.length, "после «Открываем» не удалось прочитать дату").toBeGreaterThan(3);
     expect(
       PAGE.slice(at, at + 160),

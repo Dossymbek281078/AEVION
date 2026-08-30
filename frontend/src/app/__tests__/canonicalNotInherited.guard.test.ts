@@ -37,7 +37,8 @@ const KEY = "canonical:";
 //
 // РАЗБОР СПИСКА на 30.08.2026, чтобы следующий не считал заново:
 //   29 динамических (идентификатор в пути) — в поиске не нужны, это записи;
-//    5 служебных (вход, ящик, настройки, админка, экраны после действия);
+//    служебные 30.08 закрыты явным index: false и потому из списка ушли:
+//    сторож пропускает страницы, которым поиск запрещён, — им canonical не нужен;
 //    5 публичных — вот их и стоит разбирать.
 // Из семи публичных сразу отпадает `pricing/paddle`: это страница-
 // перенаправление, ей собственный canonical не нужен по устройству.
@@ -46,7 +47,6 @@ const KEY = "canonical:";
 // Остаются `bureau/launch` (расходится между ветками — сперва свести) и
 // `qright/transparency` (собирает метаданные функцией, нужен generateMetadata).
 const INHERITING_TODAY = new Set([
-    "auth/success",
     "awards/badge/[entryId]",
     "awards/entry/[entryId]",
     "bank/api",
@@ -62,15 +62,11 @@ const INHERITING_TODAY = new Set([
     "bureau/org/[orgId]",
     "bureau/org/accept/[token]",
     "bureau/upgrade/[certId]",
-    "constitution/admin",
     "multichat-engine/shared/[token]",
     "planet/artifact/[id]",
     "planet/badge/[certId]",
     "planet/webhooks/[id]",
     "pricing/[tierId]",
-    "pricing/admin",
-    "pricing/checkout/cancel",
-    "pricing/checkout/success",
     "pricing/for/[industry]",
     "pricing/paddle",
     "qchaingov/proposals/[id]",

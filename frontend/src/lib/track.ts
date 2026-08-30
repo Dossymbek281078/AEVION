@@ -1,4 +1,6 @@
 import { apiUrl } from "./apiBase";
+import { channelFrom } from "./products";
+
 
 /**
  * Лёгкий analytics-трекер для GTM-страниц.
@@ -55,8 +57,27 @@ function getSid(): string {
 export function track(payload: TrackPayload): void {
   if (typeof window === "undefined") return;
 
+  // Метка канала приезжает в meta, и сводка воронки читает ТОЛЬКО её: поле
+  // path рядом тоже несёт ?c=, но никто его не разбирает — и правильно, туда
+  // может прийти что угодно.
+  //
+  // Найдено 30.08.2026: из десяти мест, шлющих начало оплаты, метку клали два.
+  // Восемь остальных — страницы модулей, витрина, тарифы, посадочные под
+  // ролики — сообщали «начали платить», не говоря откуда пришёл человек.
+  // Чинится здесь, в единственной точке, через которую проходят все события:
+  // восемь одинаковых правок были бы восемью копиями одного механизма, и
+  // девятое место снова родилось бы без метки.
+  //
+  // Если отправитель метку передал — она старше: серверная страница читает ?c=
+  // надёжнее, чем мы здесь по адресу в браузере.
+  const givenChannel = payload.meta?.channel;
+  const fromUrl = channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined);
+  const meta =
+    givenChannel || !fromUrl ? payload.meta : { ...(payload.meta ?? {}), channel: fromUrl };
+
   const body = JSON.stringify({
     ...payload,
+    ...(meta ? { meta } : {}),
     sid: getSid(),
     path: window.location.pathname + window.location.search,
   });

@@ -178,11 +178,11 @@ export function buildWaitlistConfirmEmail(email: string, source?: string): Const
  * нас: написать в день запуска.
  */
 const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: string }> = [
-  { prefix: "cyberchess", name: "CyberChess", plan: "30 августа", page: "https://aevion.app/cyberchess/launch" },
-  { prefix: "bureau", name: "AEVION IP Bureau", plan: "6 сентября", page: "https://aevion.app/bureau/launch" },
-  { prefix: "qright", name: "AEVION IP Bureau", plan: "6 сентября", page: "https://aevion.app/bureau/launch" },
-  { prefix: "devhub", name: "DevHub Studio", plan: "13 сентября", page: "https://aevion.app/devhub/launch" },
-  { prefix: "multichat", name: "AEVION Multichat", plan: "20 сентября", page: "https://aevion.app/multichat-engine/launch" },
+  { prefix: "cyberchess", name: "CyberChess", plan: "30 сентября", page: "https://aevion.app/cyberchess/launch" },
+  { prefix: "bureau", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch" },
+  { prefix: "qright", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch" },
+  { prefix: "devhub", name: "DevHub Studio", plan: "10 сентября", page: "https://aevion.app/devhub/launch" },
+  { prefix: "multichat", name: "AEVION Multichat", plan: "10 сентября", page: "https://aevion.app/multichat-engine/launch" },
 ];
 
 /**
@@ -235,7 +235,11 @@ const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep
     prefix: "cyberchess",
     name: "CyberChess",
     page: "https://aevion.app/cyberchess",
-    liveFrom: Date.UTC(2026, 7, 30),
+    // ПЕРЕНЕСЕНО основателем 29.08.2026 на 30 сентября: «нет удобного
+    // разбора партии сразу после её конца, много недоработок».
+    // Дата здесь не украшение: 30.08 она сделала письмо ложным —
+    // подписчик получал «уже открыт» в день, когда запуска не было.
+    liveFrom: Date.UTC(2026, 8, 30),
     // Следующий шаг называем тем же, чем письмо запуска: задача дня решается
     // за минуту и работает с телефона — это самый короткий путь к первой
     // ценности. Цен и условий здесь нет: они живут в каталоге.

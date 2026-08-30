@@ -6,7 +6,7 @@ export type BuildStamp = {
 };
 
 export const BUILD_STAMP: BuildStamp = {
-  commit: "55f3848bc7f2",
-  branch: "feat/funnel-upsell-allaccess",
-  builtAt: "2026-08-28T14:56:18Z",
+  commit: "20fd4874fe26",
+  branch: "deploy/startupx-merged-2026-08-29",
+  builtAt: "2026-08-30T15:21:18Z",
 };

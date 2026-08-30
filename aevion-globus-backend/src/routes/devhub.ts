@@ -407,6 +407,22 @@ async function debitCredit(userId: string, capability: CapabilityKey, amount = 1
   }
 }
 
+/**
+ * ТОЛЬКО ДЛЯ ТЕСТОВ. Списание происходит внутри платных маршрутов, а они ходят
+ * к внешним поставщикам — поднять их в тесте ради проверки УЧЁТА значило бы
+ * мерить не то. Экспорт по образцу __resetDevHubStore, уже принятому в файле.
+ *
+ * Нужен, чтобы проверить ветку, которую иначе не достать: при отказе ЗАПИСИ
+ * трата паркуется в памяти, и её обязано быть видно при живой базе.
+ */
+export async function __debitCreditForTest(
+  userId: string,
+  capability: CapabilityKey,
+  amount = 1,
+): Promise<void> {
+  return debitCredit(userId, capability, amount);
+}
+
 async function getAllMonthUsage(userId: string): Promise<{
   tier: StudioTier;
   month: string;

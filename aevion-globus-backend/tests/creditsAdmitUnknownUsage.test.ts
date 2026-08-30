@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach, vi } from "vitest";
 import request from "supertest";
 import express from "express";
+import jwt from "jsonwebtoken";
 
 /**
  * «Израсходовано 0» и «прочитать не удалось» — разные ответы.
@@ -23,7 +24,7 @@ import express from "express";
 
 const { mockQuery, state } = vi.hoisted(() => ({
   mockQuery: vi.fn(),
-  state: { usageFails: false },
+  state: { usageFails: false, writeFails: false },
 }));
 vi.mock("../src/lib/dbPool", () => ({ getPool: () => ({ query: mockQuery }) }));
 vi.mock("../src/lib/ensureDevHubTables", () => ({
@@ -33,7 +34,7 @@ vi.mock("../src/lib/ensureDevHubTables", () => ({
 vi.mock("../src/services/qcoreai/providers", () => ({ getProviders: () => [], callProvider: vi.fn() }));
 
 // eslint-disable-next-line import/first
-import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
+import { devhubRouter, __resetDevHubStore, __debitCreditForTest } from "../src/routes/devhub";
 
 function makeApp() {
   const app = express();
@@ -45,19 +46,29 @@ function makeApp() {
 beforeEach(() => {
   __resetDevHubStore?.();
   state.usageFails = false;
+  state.writeFails = false;
   mockQuery.mockReset();
   mockQuery.mockImplementation(async (text: string) => {
     if (/FROM "DevHubUsage"/i.test(text)) {
       if (state.usageFails) throw new Error("connection terminated unexpectedly");
       return { rows: [{ used: 7 }], rowCount: 1 };
     }
+    if (/INSERT INTO "DevHubUsage"/i.test(text) && state.writeFails) {
+      throw new Error("write failed");
+    }
     if (/FROM "DevHubTier"/i.test(text)) return { rows: [{ tier: "free" }], rowCount: 1 };
     return { rows: [], rowCount: 0 };
   });
 });
 
-async function credits() {
-  const r = await request(makeApp()).get("/api/devhub/studio/credits");
+function tokenFor(sub: string) {
+  return jwt.sign({ sub, email: `${sub}@e.com`, role: "user" },
+    process.env.AUTH_JWT_SECRET || "dev-auth-secret", { algorithm: "HS256" });
+}
+
+async function credits(sub?: string) {
+  const req0 = request(makeApp()).get("/api/devhub/studio/credits");
+  const r = sub ? await req0.set("Authorization", `Bearer ${tokenFor(sub)}`) : await req0;
   expect(r.status, `ручка не ответила 200: ${r.text.slice(0, 200)}`).toBe(200);
   return r.body as { usage: Record<string, { used: number; limit: number; usedUnknown: boolean }> };
 }
@@ -88,6 +99,25 @@ describe("расход, который не удалось прочитать, �
     state.usageFails = true;
     const body = await credits();
     expect(body.usage.video.used, "поведение изменилось — это отдельное решение").toBe(0);
+  });
+
+  test("отложенное в память списание видно при ЖИВОЙ базе", async () => {
+    // debitCredit паркует трату в память, когда её собственная запись не
+    // удалась. Раньше эта карта читалась ТОЛЬКО при заведомо мёртвой базе —
+    // то есть при живой списание уходило в никуда, и платный вызов доставался
+    // бесплатно. Проверяем сложение, а не наличие: число обязано вырасти.
+    const before = await credits("u-1");
+    expect(before.usage.video.used, "контроль: база отдаёт своё число").toBe(7);
+
+    state.writeFails = true;
+    await __debitCreditForTest("u-1", "video", 3);
+    state.writeFails = false;
+
+    const after = await credits("u-1");
+    expect(
+      after.usage.video.used,
+      "отложенное списание не прибавилось: при живой базе оно теряется",
+    ).toBe(before.usage.video.used + 3);
   });
 
   test("признак есть у КАЖДОЙ возможности, а не у первой", async () => {

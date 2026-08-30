@@ -117,6 +117,11 @@ const INHERITING_TODAY = new Set([
     "bureau/notaries/[notaryId]",
     "bureau/org/[orgId]",
     "planet/artifact/[id]",
+    // НЕ ДЕФЕКТ, оставлено в списке только чтобы сторож не счёл его новым:
+    // страница состоит из одной строки redirect("/pricing"), никто на неё
+    // не ссылается, и наследовать canonical раздела для неё ПРАВИЛЬНО —
+    // она туда и ведёт. Проверено обходом всех 22 оставшихся: страница с
+    // одной переадресацией в списке ровно одна.
     "pricing/paddle",
     "qchaingov/proposals/[id]",
     "qcontract/documents/[id]",

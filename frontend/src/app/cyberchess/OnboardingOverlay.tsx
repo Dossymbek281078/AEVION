@@ -99,8 +99,8 @@ const INTENTS: Array<{
   hint: string;
 }> = [
   { intent: "play", icon: "♟", title: "Играть", hint: "Партия против AI 800–2400 — 5 секунд до старта" },
-  { intent: "learn", icon: "🎓", title: "Учиться", hint: `Курс из ${LESSONS.length} уроков и живой AI-тренер` },
-  { intent: "puzzles", icon: "⚡", title: "Пазлы", hint: "Тысячи задач под твой уровень" },
+  { intent: "learn", icon: "🎓", title: "Учиться", hint: `Курс из ${LESSONS.length} уроков и живой ИИ-тренер` },
+  { intent: "puzzles", icon: "⚡", title: "Задачи", hint: "Тысячи задач под твой уровень" },
 ];
 
 export default function OnboardingOverlay({ onComplete, onSkip, mode = "dark" }: Props) {

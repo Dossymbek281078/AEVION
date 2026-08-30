@@ -27,11 +27,11 @@ const C = {
 type FactorKey = "overall" | "E" | "T" | "O" | "B1" | "M1" | "M2" | "M3" | "H" | "Br";
 
 const FACTOR_META: Record<FactorKey, { label: string; emoji: string; desc: string }> = {
-  overall: { label: "Overall CPI",      emoji: "🏆", desc: "Композитный рейтинг — сводит все факторы ниже" },
-  E:       { label: "Точность",         emoji: "🎯", desc: "Минимум центипавн-loss на ход" },
+  overall: { label: "Общий CPI",        emoji: "🏆", desc: "Составной рейтинг — сводит все факторы ниже" },
+  E:       { label: "Точность",         emoji: "🎯", desc: "Насколько ходы близки к лучшим" },
   T:       { label: "Время",             emoji: "⏱",  desc: "Равномерное распределение времени" },
-  O:       { label: "Дебюты",            emoji: "📖", desc: "% попаданий в TOP-10 книги" },
-  B1:      { label: "Best line",        emoji: "①",   desc: "% ходов = engine #1" },
+  O:       { label: "Дебюты",            emoji: "📖", desc: "Доля ходов из первой десятки книги" },
+  B1:      { label: "Лучший ход",       emoji: "①",   desc: "Доля ходов, совпавших с выбором движка" },
   M1:      { label: "Мат-1 зрение",      emoji: "💀", desc: "% найденных матов в 1 ход" },
   M2:      { label: "Мат-2 зрение",      emoji: "💀💀", desc: "% найденных матов в 2 хода" },
   M3:      { label: "Мат-3 зрение",      emoji: "💀💀💀", desc: "% найденных матов в 3 хода" },
@@ -50,7 +50,11 @@ const FACTOR_META: Record<FactorKey, { label: string; emoji: string; desc: strin
  * `overall` из счёта исключён намеренно: это сводка по остальным, а не фактор
  * наравне с ними.
  */
-export const SORTABLE_FACTOR_COUNT = (Object.keys(FACTOR_META) as FactorKey[]).filter((k) => k !== "overall").length;
+// Не export: Next.js разрешает файлу страницы экспортировать только default
+// и служебные поля (metadata, generateStaticParams и т.п.), а лишний export
+// даёт ошибку типов в сгенерированном .next/types. Константу читает только
+// эта страница; сторож factorCountIsDerived сверяет её по тексту исходника.
+const SORTABLE_FACTOR_COUNT = (Object.keys(FACTOR_META) as FactorKey[]).filter((k) => k !== "overall").length;
 
 // Mock leaderboard data. In production, this would be /api/cyberchess/cpi/leaderboard.
 type Entry = {
@@ -83,12 +87,12 @@ const MOCK_ENTRIES: Entry[] = [
 ];
 
 function tierFor(cpi: number): { tier: string; color: string } {
-  if (cpi >= 2700) return { tier: "Grandmaster", color: C.gold };
-  if (cpi >= 2400) return { tier: "Master", color: C.purple };
-  if (cpi >= 2000) return { tier: "Expert", color: C.cyan };
-  if (cpi >= 1600) return { tier: "Club Player", color: C.green };
-  if (cpi >= 1200) return { tier: "Improving", color: C.yellow };
-  return { tier: "Beginner", color: C.silver };
+  if (cpi >= 2700) return { tier: "Гроссмейстер", color: C.gold };
+  if (cpi >= 2400) return { tier: "Мастер", color: C.purple };
+  if (cpi >= 2000) return { tier: "Эксперт", color: C.cyan };
+  if (cpi >= 1600) return { tier: "Клубный игрок", color: C.green };
+  if (cpi >= 1200) return { tier: "Растущий", color: C.yellow };
+  return { tier: "Начинающий", color: C.silver };
 }
 
 function rankBadge(rank: number): { bg: string; fg: string } {
@@ -210,7 +214,7 @@ export default function CPILeaderboardPage() {
             Таблица лидеров <span style={{ color: C.purple }}>CPI</span>
           </h1>
           <p style={{ fontSize: 14, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 640 }}>
-            Топ игроков по AEVION Chess Performance Index — композитному рейтингу качества игры.
+            Топ игроков по AEVION Chess Performance Index — составному рейтингу качества игры.
             Можешь сортировать по любому из {SORTABLE_FACTOR_COUNT} факторов, чтобы найти лидера в нужной области.
           </p>
         </div>

@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import SwRegister from "./SwRegister";
 import PwaInstall from "./PwaInstall";
+import RussianOnlyNotice from "./RussianOnlyNotice";
 export const metadata: Metadata = {
-  title: "CyberChess — AI-тренер и пазлы",
+  title: "CyberChess — шахматы с ИИ-тренером и полумиллионом задач",
   description:
-    "Шахматы нового поколения: AI-коуч Алексей, Blunder Rewind, Puzzle Rush с time-bonus, Game DNA, голосовой ввод. От AEVION.",
+    "Играйте с ИИ любого уровня, решайте задачи и разбирайте партии: тренер объяснит каждый ход, покажет ошибки и подберёт упражнения под вашу слабую сторону. От AEVION.",
   manifest: "/cyberchess-manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -50,6 +51,7 @@ export default function CyberChessLayout({ children }: { children: React.ReactNo
   return (
     <>
       <SwRegister />
+      <RussianOnlyNotice />
       {children}
       <PwaInstall />
     </>

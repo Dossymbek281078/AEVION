@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { ccPlural } from "../ccPlural";
 
 const C = {
   bg: "#0f172a",
@@ -57,10 +58,10 @@ const FACTOR_DRILLS: Record<string, { name: string; emoji: string; drillName: st
   T:  { name: "Время",            emoji: "⏱",  drillName: "Blitz (3+0)",              href: "/cyberchess?train=blitz",     reps: "3 партии" },
   O:  { name: "Дебюты",           emoji: "📖", drillName: "Opening Trainer",          href: "/cyberchess?train=openings",  reps: "10 линий" },
   B1: { name: "Лучшая линия",     emoji: "①",  drillName: "Analysis review",          href: "/cyberchess?tab=analysis",    reps: "Последняя партия" },
-  M1: { name: "Мат-1 зрение",     emoji: "💀", drillName: "Puzzle Rush — mate-1",     href: "/cyberchess?train=mate1",     reps: "20 пазлов" },
-  M2: { name: "Мат-2 зрение",     emoji: "💀💀", drillName: "Puzzle Rush — mate-2", href: "/cyberchess?train=mate2",   reps: "15 пазлов" },
-  M3: { name: "Мат-3 зрение",     emoji: "💀💀💀", drillName: "Mate-in-3 пазлы",     href: "/cyberchess?train=mate3",     reps: "10 пазлов" },
-  H:  { name: "Зевки",            emoji: "💥", drillName: "Defensive puzzles",        href: "/cyberchess?train=defense",   reps: "15 пазлов" },
+  M1: { name: "Мат-1 зрение",     emoji: "💀", drillName: "Серия задач — мат в 1",     href: "/cyberchess?train=mate1",     reps: "20 задач" },
+  M2: { name: "Мат-2 зрение",     emoji: "💀💀", drillName: "Серия задач — мат в 2", href: "/cyberchess?train=mate2",   reps: "15 задач" },
+  M3: { name: "Мат-3 зрение",     emoji: "💀💀💀", drillName: "Задачи на мат в 3",     href: "/cyberchess?train=mate3",     reps: "10 задач" },
+  H:  { name: "Зевки",            emoji: "💥", drillName: "Задачи на защиту",        href: "/cyberchess?train=defense",   reps: "15 задач" },
   Br: { name: "Бриллианты",       emoji: "💎", drillName: "Masters tab — изучай шедевры", href: "/cyberchess?tab=masters", reps: "5 партий" },
 };
 
@@ -141,8 +142,8 @@ export default function TrainingHubPage() {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "@id": "https://aevion.app/cyberchess/training",
-        name: "AEVION CyberChess Training Hub",
-        description: "Персональный ежедневный план тренировок — CPI weak factor, daily variant, Coach Knowledge spaced-repetition, AEV bonus.",
+        name: "Тренировки CyberChess — ежедневный план",
+        description: "Личный план на день: слабая сторона игры, вариант дня, темы для повторения и награда за выполнение.",
         isPartOf: { "@type": "WebSite", url: "https://aevion.app", name: "AEVION" },
         about: { "@type": "Thing", name: "Chess training" },
       }) }} />
@@ -207,7 +208,7 @@ export default function TrainingHubPage() {
             ) : (
               <>
                 <div style={{ fontSize: 13, color: C.dim, marginBottom: 10, lineHeight: 1.5 }}>
-                  Сыграй 3+ партии чтобы Coach определил твою слабую зону.
+                  Сыграй 3 партии или больше — тренер определит твою слабую зону.
                 </div>
                 <Link href="/cyberchess" style={{
                   display: "inline-block",
@@ -256,15 +257,15 @@ export default function TrainingHubPage() {
             padding: "16px 18px",
           }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: C.green, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>
-              🎓 Coach Review
+              🎓 Повторение с тренером
             </div>
             {reminders.length > 0 ? (
               <>
                 <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 4 }}>
-                  {reminders.length} тем{reminders.length === 1 ? "а" : "ы"} ждут повторения
+                  {reminders.length} {ccPlural(reminders.length, "тема", "темы", "тем")} ждут повторения
                 </div>
                 <div style={{ fontSize: 12, color: C.dim, marginBottom: 10, lineHeight: 1.5 }}>
-                  По системе spaced-repetition (1/3/7 дней). Повтори чтобы закрепить.
+                  С интервалами 1, 3 и 7 дней — так материал остаётся в памяти. Повтори чтобы закрепить.
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
                   {[1, 3, 7].map((ms) => {
@@ -311,13 +312,13 @@ export default function TrainingHubPage() {
             padding: "16px 18px",
           }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: C.gold, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>
-              🪙 Daily Chessy
+              🪙 Ежедневный Chessy
             </div>
             <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 4 }}>
-              {dailyClaimed ? "Сегодня забрано ✓" : "Заберать ежедневный бонус"}
+              {dailyClaimed ? "Сегодня уже получено ✓" : "Забрать ежедневный бонус"}
             </div>
             <div style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.5 }}>
-              <strong style={{ color: C.gold }}>+25 AEV</strong> за визит в центр обучения. Используй в «Экономике» для аукциона или аренды тренера.
+              <strong style={{ color: C.gold }}>+25 Chessy</strong> за визит в центр обучения. Используй в «Экономике» для аукциона или аренды тренера.
             </div>
             <button
               onClick={claimDaily}
@@ -331,7 +332,7 @@ export default function TrainingHubPage() {
                 cursor: dailyClaimed ? "default" : "pointer",
               }}
             >
-              {dailyClaimed ? "✓ Получено" : "Забрать +25 AEV"}
+              {dailyClaimed ? "✓ Получено" : "Забрать +25 Chessy"}
             </button>
           </div>
         </div>
@@ -360,7 +361,7 @@ export default function TrainingHubPage() {
             <Link href="/cyberchess/cpi/dashboard" style={{
               fontSize: 12, color: C.purple, textDecoration: "none", fontWeight: 700,
             }}>
-              📊 Открыть дашборд →
+              📊 Открыть сводку →
             </Link>
           </div>
         )}
@@ -372,9 +373,9 @@ export default function TrainingHubPage() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 10 }}>
             {[
-              { href: "/cyberchess/cpi/leaderboard", emoji: "🏆", label: "CPI Leaderboard", desc: "Топ-15 по композитному рейтингу" },
-              { href: "/cyberchess/economy", emoji: "🪙", label: "Economy", desc: "Аукцион, тренеры, стримеры" },
-              { href: "/cyberchess/cpi", emoji: "📐", label: "CPI Spec", desc: "Полная формула + примеры" },
+              { href: "/cyberchess/cpi/leaderboard", emoji: "🏆", label: "Таблица лидеров CPI", desc: "Первые 15 по составному рейтингу" },
+              { href: "/cyberchess/economy", emoji: "🪙", label: "Экономика", desc: "Аукцион, тренеры, стримеры" },
+              { href: "/cyberchess/cpi", emoji: "📐", label: "Как считается CPI", desc: "Полная формула и примеры" },
               { href: "/cyberchess", emoji: "♞", label: "Играть", desc: "Главная — играть партии" },
             ].map((r) => (
               <Link key={r.href} href={r.href} style={{

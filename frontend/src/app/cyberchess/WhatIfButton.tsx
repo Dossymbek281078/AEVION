@@ -64,7 +64,7 @@ export default function WhatIfButton({ fen, san, evalStr, rank, isBest }: Props)
     <div style={{ display: "inline-flex", flexDirection: "column", gap: 4, minWidth: 0, alignItems: "stretch" }}>
       <button
         onClick={fetchExplanation}
-        title="Что если бы я сыграл этот ход? (Coach объяснит)"
+        title="Что если бы я сыграл этот ход? (тренер объяснит)"
         className="cc-focus-ring"
         style={{
           padding: "2px 7px", borderRadius: RADIUS.sm, fontSize: 10, fontWeight: 800,

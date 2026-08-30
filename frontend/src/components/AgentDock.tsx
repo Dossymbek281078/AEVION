@@ -162,7 +162,7 @@ export function AgentDock() {
     return (
       <button
         onClick={() => setOpen(true)}
-        aria-label="Open AEVION AI Agent"
+        aria-label="Открыть ИИ-помощника AEVION"
         style={{
           position: "fixed",
           bottom: 16,
@@ -192,7 +192,7 @@ export function AgentDock() {
   return (
     <div
       role="dialog"
-      aria-label="AEVION AI Agent"
+      aria-label="ИИ-помощник AEVION"
       style={{
         position: "fixed",
         bottom: 16,
@@ -230,8 +230,8 @@ export function AgentDock() {
         {health && (
           <button
             onClick={() => setShowTools((v) => !v)}
-            aria-label="Show available tools"
-            title="Available tools"
+            aria-label="Показать доступные инструменты"
+            title="Доступные инструменты"
             style={{
               padding: "4px 9px",
               borderRadius: 999,
@@ -249,7 +249,7 @@ export function AgentDock() {
         )}
         <button
           onClick={() => setOpen(false)}
-          aria-label="Minimise agent"
+          aria-label="Свернуть помощника"
           style={{
             padding: "4px 8px",
             borderRadius: 6,
@@ -348,7 +348,7 @@ export function AgentDock() {
             onKeyDown={onKeyDown}
             rows={2}
             placeholder="Ask the agent to do something…"
-            aria-label="Message for the AI agent"
+            aria-label="Сообщение ИИ-помощнику"
             style={{
               flex: 1,
               resize: "none",

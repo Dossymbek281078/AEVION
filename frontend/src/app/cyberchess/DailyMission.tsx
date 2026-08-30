@@ -90,9 +90,9 @@ type MissionDef = {
 };
 
 const MISSIONS: MissionDef[] = [
-  { id: "puzzles3", emoji: "📚", label: "Реши 3 задачи", reward: 10, ctaTab: "puzzles", ctaLabel: "К пазлам",       current: s => Math.min(3, s.puzzles), target: 3 },
+  { id: "puzzles3", emoji: "📚", label: "Реши 3 задачи", reward: 10, ctaTab: "puzzles", ctaLabel: "К задачам",       current: s => Math.min(3, s.puzzles), target: 3 },
   { id: "game1",    emoji: "♔", label: "Сыграй партию", reward: 15, ctaTab: "play",    ctaLabel: "Играть",         current: s => Math.min(1, s.games),   target: 1 },
-  { id: "daily",    emoji: "⭐", label: "Реши пазл дня", reward: 50, ctaTab: "puzzles", ctaScroll: "daily-puzzle", ctaLabel: "Открыть",         current: s => s.dailyPuzzle ? 1 : 0, target: 1 },
+  { id: "daily",    emoji: "⭐", label: "Реши задачу дня", reward: 50, ctaTab: "puzzles", ctaScroll: "daily-puzzle", ctaLabel: "Открыть",         current: s => s.dailyPuzzle ? 1 : 0, target: 1 },
   { id: "coach",    emoji: "🎓", label: "Спроси Coach",   reward: 5,  ctaTab: "coach",   ctaLabel: "К тренеру",     current: s => s.coach ? 1 : 0,        target: 1 },
 ];
 

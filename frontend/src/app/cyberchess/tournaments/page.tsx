@@ -1,5 +1,7 @@
 "use client";
 
+import { человеческаяДата } from "./tournamentDate";
+
 // AEVION CyberChess — Tournament Hub (list view)
 // Zone: aevion-core/main owns frontend/src/app/cyberchess/**
 // Reads from /api/cyberchess-tournaments/list; falls back to mock if offline.
@@ -101,7 +103,7 @@ const MOCK_FALLBACK: Tournament[] = [
     players: 8,
     maxPlayers: 16,
     prizeChessy: 40_000,
-    status: "live",
+    status: "upcoming",
     origin: "seed",
     startsAt: "2026-05-16 18:00",
     swissRounds: 5,
@@ -118,7 +120,7 @@ const MOCK_FALLBACK: Tournament[] = [
     players: 8,
     maxPlayers: 8,
     prizeChessy: 120_000,
-    status: "live",
+    status: "upcoming",
     origin: "seed",
     startsAt: "2026-05-14 12:00",
   },
@@ -147,7 +149,7 @@ export default function TournamentsHubPage() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const r = await fetch("/api-backend/api/cyberchess-tournaments/list", { cache: "no-store" });
+      const r = await fetch("/api-backend/api/cyberchess-tournaments/list", { cache: "no-store", signal: AbortSignal.timeout(10_000) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       /* Ветка «пришло, но не то» раньше молчала: при 200 с телом без списка
@@ -264,7 +266,8 @@ export default function TournamentsHubPage() {
         )}
         {errorMsg && (
           <div style={{ color: T.orange, marginTop: 8, fontSize: 12 }}>
-            Бэкенд недоступен ({errorMsg}). Показываем sample data.
+            Турниры сейчас не загрузились — ниже показан ПРИМЕР того, как
+            выглядит список. Обновите страницу через минуту.
           </div>
         )}
       </header>
@@ -398,7 +401,11 @@ export default function TournamentsHubPage() {
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+          // min(340px, 100%) вместо жёстких 340: на экране уже 340 колонка
+          // перестаёт требовать невозможного и сжимается до ширины экрана.
+          // Замер 28.08.2026 на ширине 320: карточки были 340 при окне 305,
+          // и страница уезжала вбок на 52 пикселя. На 375 этого не видно.
+          gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))",
           gap: 16,
         }}
       >
@@ -521,7 +528,7 @@ function TournamentCard({ t }: { t: Tournament }) {
     if (!hovered || standings) return;
     let cancelled = false;
     setStandingsLoading(true);
-    fetch(`/api-backend/api/cyberchess-tournaments/${t.id}/standings`, { cache: "no-store" })
+    fetch(`/api-backend/api/cyberchess-tournaments/${t.id}/standings`, { cache: "no-store", signal: AbortSignal.timeout(10_000) })
       .then((r) => r.json())
       .then((data) => {
         if (!cancelled && data?.ok && Array.isArray(data.standings)) {
@@ -554,10 +561,16 @@ function TournamentCard({ t }: { t: Tournament }) {
         animation: isLive ? "cc-hub-live-glow 2.2s ease-in-out infinite" : undefined,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: 17, color: T.text }}>{t.title}</h3>
-          <div style={{ marginTop: 4, fontSize: 12, color: T.dim }}>{t.startsAt}</div>
+      {/* minWidth:0 у левого блока и flexShrink:0 у метки — не косметика.
+          Без первого блок с названием не может стать уже своего текста, и на
+          узком телефоне карточка вылезает за экран, утаскивая за собой всю
+          страницу. Замер 28.08.2026 на ширине 320: страница уезжала вбок на
+          52 пикселя, виновником сторож назвал метку «Завершён».
+          На 375 этого не видно — поломка живёт только на узких экранах. */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontSize: 17, color: T.text, overflowWrap: "anywhere" }}>{t.title}</h3>
+          <div style={{ marginTop: 4, fontSize: 12, color: T.dim }}>{человеческаяДата(t.startsAt)}</div>
         </div>
         <span
           style={{
@@ -569,6 +582,8 @@ function TournamentCard({ t }: { t: Tournament }) {
             display: "flex",
             alignItems: "center",
             gap: 6,
+            flexShrink: 0,
+            whiteSpace: "nowrap",
           }}
         >
           {isLive && (

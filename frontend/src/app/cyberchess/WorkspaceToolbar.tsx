@@ -32,7 +32,7 @@ export default function WorkspaceToolbar({ preset, onChange }: Props) {
     <div style={{ position: "relative" }}>
       <button
         onClick={() => setOpen(o => !o)}
-        title="Сменить layout (Ctrl+1–5)"
+        title="Сменить раскладку (Ctrl+1–5)"
         style={{
           display: "inline-flex", alignItems: "center", gap: 5,
           padding: "5px 10px", borderRadius: 8,

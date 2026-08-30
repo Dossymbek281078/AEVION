@@ -1,7 +1,9 @@
 import { ImageResponse } from "next/og";
 
+import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
+
 export const runtime = "edge";
-export const alt = "CyberChess — открываем 30 сентября: 500 000+ задач, Stockfish 18, ИИ-коуч";
+export const alt = "CyberChess — запуск 30 августа: 500 000+ задач, Stockfish 18, ИИ-коуч";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -48,7 +50,7 @@ export default function CyberChessLaunchOg() {
             AEVION · CyberChess
           </div>
           <div style={{ fontSize: 78, fontWeight: 800, lineHeight: 1.05, letterSpacing: -2, display: "flex" }}>
-            Открываем 30 сентября
+            {daysUntilLaunch(Date.UTC(2026, 7, 30)) > 0 ? "Открываем 30 августа" : "Уже открыт"}
           </div>
           <div style={{ fontSize: 30, color: MUTED, lineHeight: 1.35, maxWidth: 900, display: "flex" }}>
             Партия с движком, задача дня и тренер, который объясняет ход, а не просто оценивает.

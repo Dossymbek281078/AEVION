@@ -258,7 +258,7 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
             {ext && (
               <a href={ext} target="_blank" rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                title="Если страница не отображается — сайт запретил iframe"
+                title="Если страница не отображается — сайт запретил показ внутри другого сайта"
                 style={{
                   position: "absolute", top: 6, right: 6, zIndex: 2,
                   padding: "3px 8px", borderRadius: 999,

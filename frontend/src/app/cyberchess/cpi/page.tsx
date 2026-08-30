@@ -119,7 +119,7 @@ export default function CPIPreviewPage() {
           </h1>
           <p style={{ fontSize: 15, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 680 }}>
             Новая система рейтинга для CyberChess. Принципиально отличается от FIDE Elo, Lichess Glicko-2 и chess.com Glicko:{" "}
-            <strong style={{ color: C.text }}>даёт баллы за каждую партию независимо от результата</strong>, на основе композитной оценки качества игры.
+            <strong style={{ color: C.text }}>даёт баллы за каждую партию независимо от результата</strong>, на основе составной оценки качества игры.
           </p>
         </div>
 
@@ -281,7 +281,7 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
               <li><strong style={{ color: C.text }}>F2</strong> — Stockfish multiPV integration в game loop</li>
               <li><strong style={{ color: C.text }}>F3</strong> — <code style={{ color: C.cyan }}>cpi.ts</code> функция <code>computeGameCPI()</code> + unit tests</li>
               <li><strong style={{ color: C.text }}>F4</strong> — <code style={{ color: C.cyan }}>/cyberchess/cpi/dashboard</code> с SVG-графиками</li>
-              <li><strong style={{ color: C.text }}>F5</strong> — Coach by CPI — автоподборка упражнений по слабому фактору</li>
+              <li><strong style={{ color: C.text }}>F5</strong> — Подбор от тренера по CPI — автоподборка упражнений по слабому фактору</li>
             </ol>
           </div>
         </section>
@@ -291,11 +291,11 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Открытые вопросы</h2>
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 18px" }}>
             <ul style={{ margin: 0, paddingLeft: 22, fontSize: 13, color: C.dim, lineHeight: 1.7 }}>
-              <li><strong style={{ color: C.text }}>Weighting</strong> — симуляция на 100+ партий разного уровня</li>
-              <li><strong style={{ color: C.text }}>CPI ↔ FIDE mapping</strong> — показывать ли &laquo;эквивалент по FIDE&raquo;?</li>
-              <li><strong style={{ color: C.text }}>Anti-cheat</strong> — сильный игрок может симулировать ошибки. Считать только в режимах против AI?</li>
-              <li><strong style={{ color: C.text }}>Decay</strong> — должен ли CPI &laquo;затухать&raquo; если не играешь?</li>
-              <li><strong style={{ color: C.text }}>Glass ceiling</strong> — потолок 4000 — может ли быть мало для топов?</li>
+              <li><strong style={{ color: C.text }}>Веса факторов</strong> — симуляция на 100+ партий разного уровня</li>
+              <li><strong style={{ color: C.text }}>Сопоставление CPI и FIDE</strong> — показывать ли &laquo;эквивалент по FIDE&raquo;?</li>
+              <li><strong style={{ color: C.text }}>Античит</strong> — сильный игрок может симулировать ошибки. Считать только в режимах против AI?</li>
+              <li><strong style={{ color: C.text }}>Затухание</strong> — должен ли CPI &laquo;затухать&raquo; если не играешь?</li>
+              <li><strong style={{ color: C.text }}>Стеклянный потолок</strong> — потолок 4000 — может ли быть мало для топов?</li>
             </ul>
           </div>
         </section>

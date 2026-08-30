@@ -395,6 +395,21 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       console.warn(
         `[gumroad/webhook] sale ${saleId} unverifiable (no token or API unavailable) — provisioning anyway`,
       );
+      // И в Sentry, а не только в консоль.
+      //
+      // Это ЕДИНСТВЕННЫЙ путь, на котором доступ выдаётся без подтверждения
+      // продажи. Подписи у Gumroad нет — `GUMROAD_WEBHOOK_SECRET` на проде не
+      // задан (проверено 29.08.2026 запросом ИМЁН переменных у сервиса), — и
+      // если спросить сам Gumroad не удалось, мы намеренно открываем доступ,
+      // чтобы настоящий покупатель не остался ни с чем.
+      //
+      // Направление отказа выбрано верно, а вот видимость не выбирается.
+      // Консоль Railway пролистывается и никем не читается; смотрят Sentry.
+      // Пока эта ветка там молчит, всплеск выдач без подтверждения выглядит
+      // ровно как обычный день.
+      capture(new Error(`gumroad_sale_unverifiable_provisioned:${saleId}`), {
+        route: "gumroad/webhook",
+      });
     }
   }
 

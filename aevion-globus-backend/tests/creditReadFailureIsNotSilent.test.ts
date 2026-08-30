@@ -39,7 +39,7 @@ const BODY = getMonthUsageBody();
 describe("отказ чтения расхода не проходит молча", () => {
   test("контроль: тело функции разобрано и оно про расход", () => {
     expect(BODY.length, "тело пустое — проверять нечего").toBeGreaterThan(200);
-    expect(BODY.includes("DevHubUsage"), "разобрана не та функция").toBe(true);
+    expect(BODY.includes('"DevHubUsage"'), "разобрана не та функция").toBe(true);
   });
 
   test("у ветки отказа есть запись в журнал", () => {

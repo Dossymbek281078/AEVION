@@ -329,6 +329,10 @@ const SMOKES = [
   { name: "qevents", script: "qevents-smoke.js", readOnly: false },
   // New Wave MVPs (2026-05-13 batch) — startupx/kids-ai/mapreality/voe.
   { name: "startupx", script: "startupx-smoke.js", readOnly: false },
+  // Обход мусором по ручкам биржи: ключи прототипа, не те типы, NaN/Infinity,
+  // метасимволы LIKE, CRLF в почте, битые тела. Пишущий (публикует и сам
+  // убирает за собой), поэтому в прод-прогоне не запускается.
+  { name: "startupx-hostile", script: "startupx-hostile.js", readOnly: false },
   { name: "kids-ai", script: "kids-ai-smoke.js", readOnly: false },
   { name: "mapreality", script: "mapreality-smoke.js", readOnly: false },
   { name: "voe", script: "voe-smoke.js", readOnly: false },

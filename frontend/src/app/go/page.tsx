@@ -240,9 +240,9 @@ export default async function GoPage({
         <section style={styles.section}>
           <h2 style={styles.h2}>Ближайший запуск</h2>
           <LinkCard
-            href={keep("/cyberchess/launch")}
-            kicker="30 сентября · шахматы"
-            title="CyberChess — открываем 30 сентября"
+            href={keep("/apps")}
+            kicker="10 сентября · семь модулей"
+            title="DevHub, мультичат, QRight, QSign, бюро, биржа — открываем 10 сентября"
             note="Партия с движком, задача дня и тренер, который объясняет ход. Оставьте адрес — напишем в день запуска."
           />
         </section>

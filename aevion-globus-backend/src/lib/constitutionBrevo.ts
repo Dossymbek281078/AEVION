@@ -178,11 +178,11 @@ export function buildWaitlistConfirmEmail(email: string, source?: string): Const
  * нас: написать в день запуска.
  */
 const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: string }> = [
-  { prefix: "cyberchess", name: "CyberChess", plan: "30 августа", page: "https://aevion.app/cyberchess/launch" },
-  { prefix: "bureau", name: "AEVION IP Bureau", plan: "6 сентября", page: "https://aevion.app/bureau/launch" },
-  { prefix: "qright", name: "AEVION IP Bureau", plan: "6 сентября", page: "https://aevion.app/bureau/launch" },
-  { prefix: "devhub", name: "DevHub Studio", plan: "13 сентября", page: "https://aevion.app/devhub/launch" },
-  { prefix: "multichat", name: "AEVION Multichat", plan: "20 сентября", page: "https://aevion.app/multichat-engine/launch" },
+  { prefix: "cyberchess", name: "CyberChess", plan: "30 сентября", page: "https://aevion.app/cyberchess/launch" },
+  { prefix: "bureau", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch" },
+  { prefix: "qright", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch" },
+  { prefix: "devhub", name: "DevHub Studio", plan: "10 сентября", page: "https://aevion.app/devhub/launch" },
+  { prefix: "multichat", name: "AEVION Multichat", plan: "10 сентября", page: "https://aevion.app/multichat-engine/launch" },
 ];
 
 /**
@@ -196,7 +196,25 @@ const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: 
  * же класс, что чинили 19.08 для шахмат: источник доезжает до письма, а письмо
  * про него не знает.
  */
-const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep: string }> = [
+/**
+ * Часовой пояс запуска — Алматы, UTC+5 (тот же, что у обратного отсчёта на
+ * странице запуска). Держим число здесь, а не считаем от сервера: сервер
+ * живёт в UTC, и без сдвига письмо на шесть часов считало бы, что запуск
+ * ещё не наступил.
+ */
+const LAUNCH_TZ_OFFSET_MS = 5 * 3_600_000;
+
+/** Наступил ли день, с которого модуль считается открытым. */
+// Экспортируется РАДИ ПРОВЕРКИ: без параметра now и без экспорта поведение в
+// день запуска нельзя проверить иначе как переводом часов на машине.
+export function isLiveNow(liveFromUtcMidnight?: number, now: Date = new Date()): boolean {
+  if (liveFromUtcMidnight === undefined) return true;
+  const shifted = new Date(now.getTime() + LAUNCH_TZ_OFFSET_MS);
+  const today = Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate());
+  return today >= liveFromUtcMidnight;
+}
+
+const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep: string; liveFrom?: number }> = [
   {
     prefix: "longevity",
     name: "Протокол долголетия",
@@ -208,12 +226,33 @@ const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep
       "Там же можно забрать его в PDF, чтобы заполнять на нулевой и двенадцатой неделе, " +
       "и открыть подписку на остальные модули платформы.",
   },
+  {
+    // Шахматы переходят из «планируем» в «открыто» ПО ДАТЕ, а не рукой.
+    // Найдено 29.08.2026: список открытых модулей был статическим, и 30-го
+    // подписавшийся получил бы «Открываем по плану 30 августа» — в сам день
+    // запуска. Ручной шаг, о котором никто не вспомнит в день запуска, — это
+    // не шаг, а ловушка.
+    prefix: "cyberchess",
+    name: "CyberChess",
+    page: "https://aevion.app/cyberchess",
+    // ПЕРЕНЕСЕНО основателем 29.08.2026 на 30 сентября: «нет удобного
+    // разбора партии сразу после её конца, много недоработок».
+    // Дата здесь не украшение: 30.08 она сделала письмо ложным —
+    // подписчик получал «уже открыт» в день, когда запуска не было.
+    liveFrom: Date.UTC(2026, 8, 30),
+    // Следующий шаг называем тем же, чем письмо запуска: задача дня решается
+    // за минуту и работает с телефона — это самый короткий путь к первой
+    // ценности. Цен и условий здесь нет: они живут в каталоге.
+    nextStep:
+      "Начать проще всего с задачи дня — она решается за минуту. " +
+      "Там же рейтинг и турниры, а партию с движком удобнее играть с компьютера.",
+  },
 ];
 
 function liveEntryFromSource(source?: string) {
   if (!source) return null;
   const s = source.toLowerCase();
-  return LIVE_ENTRIES.find((m) => s === m.prefix || s.startsWith(`${m.prefix}-`)) ?? null;
+  return LIVE_ENTRIES.find((m) => (s === m.prefix || s.startsWith(`${m.prefix}-`)) && isLiveNow(m.liveFrom)) ?? null;
 }
 
 function moduleFromSource(source?: string) {

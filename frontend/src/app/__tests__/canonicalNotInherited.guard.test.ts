@@ -117,8 +117,6 @@ const INHERITING_TODAY = new Set([
     "bureau/notaries/[notaryId]",
     "bureau/org/[orgId]",
     "planet/artifact/[id]",
-    "pricing/[tierId]",
-    "pricing/for/[industry]",
     "pricing/paddle",
     "qchaingov/proposals/[id]",
     "qcontract/documents/[id]",

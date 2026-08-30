@@ -13,8 +13,22 @@ import type { Metadata } from "next";
  * Поэтому здесь сознательный размен: общий заголовок раздела вместо общего
  * заголовка САЙТА. Это лучше, чем было, и хуже, чем могло бы быть.
  * Когда у страницы появится серверный источник тарифов — заменить на
- * generateMetadata и подставить имя. */
-export const metadata: Metadata = {
+ * generateMetadata и подставить имя.
+ *
+ * ДОПОЛНЕНО 30.08.2026: сюда же добавлен canonical. Он выводится ИЗ АДРЕСА,
+ * запроса к API не требует, и потому оговорка выше его не касается. Без него
+ * страница наследовала canonical раздела /pricing — то есть каждый тариф
+ * представлялся поиску копией общей страницы цен и в выдачу не попадал.
+ */
+type Props = { params: Promise<{ industry: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const raw = (await params).industry || "";
+  // Значение приходит из адреса: обрезаем и кодируем, чтобы в canonical
+  // не уехал чужой текст.
+  const slug = encodeURIComponent(raw.slice(0, 64));
+  return {
+    alternates: { canonical: `/pricing/for/${slug}` },
   title: "AEVION — цены для вашей отрасли",
   description:
     "Какие модули AEVION нужны именно вашей отрасли и сколько это стоит. Подписка на экосистему или отдельные модули.",
@@ -31,7 +45,8 @@ export const metadata: Metadata = {
     description:
       "Какие модули AEVION нужны именно вашей отрасли и сколько это стоит. Подписка на экосистему или отдельные модули.",
   },
-};
+  };
+}
 
 export default function PricingIndustryLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>;

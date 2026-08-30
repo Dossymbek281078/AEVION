@@ -207,11 +207,48 @@ function moduleSlugForReference(ref: string): string | null {
 // webhook. Return a tiny JSON manifest instead so admins can sanity-check the
 // endpoint by visiting it.
 gumroadWebhookRouter.get("/webhook", (_req: Request, res: Response) => {
+  // Поля названы так, чтобы по ответу было видно, ЗАЩИЩЁН ли денежный путь,
+  // а не только жив ли адрес.
+  //
+  // Раньше ручка сообщала одно `signed` — и этого недостаточно. Замер на
+  // проде 28.08.2026: `signed: false`, то есть подпись не проверяется, а
+  // Ping-адрес публично известен. Единственная защита в этом режиме —
+  // подтверждение продажи через API Gumroad, и оно требует
+  // GUMROAD_ACCESS_TOKEN. Без токена `verifyGumroadSaleImpl` возвращает
+  // "unverifiable", а обработчик на этом вердикте ПРОВИЖИНИТ (сознательно:
+  // настоящий покупатель не должен терять доступ из-за сбоя у Gumroad).
+  //
+  // То есть «подписи нет» + «токена нет» = любой POST выдаёт платный тариф.
+  // Ответ молчал ровно о второй половине этой пары, и снаружи отличить
+  // защищённое состояние от беззащитного было нельзя.
+  //
+  // Ни секрет, ни токен наружу не отдаются — только признак наличия.
+  const signed = Boolean(process.env.GUMROAD_WEBHOOK_SECRET?.trim());
+  const saleCheckEnabled = process.env.GUMROAD_VERIFY_SALES !== "0";
+  const canVerifySales = Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim());
   res.json({
     ok: true,
     endpoint: "gumroad webhook",
     accepts: "POST application/x-www-form-urlencoded",
-    signed: Boolean(process.env.GUMROAD_WEBHOOK_SECRET),
+    signed,
+    saleVerification: !saleCheckEnabled
+      ? "disabled"
+      : canVerifySales
+        ? "api"
+        : "unavailable",
+    // Поле названо ОТРИЦАНИЕМ, как у Lemon Squeezy, и по той же причине.
+    //
+    // Сперва здесь стояло `pingAuthenticated`, и это обещало больше, чем
+    // проверено: наличие механизма — не то же самое, что проверенность
+    // каждого пинга. Подтверждение продажи «падает открыто»: если запрос к
+    // Gumroad не удался (сеть, 5xx, нет токена), обработчик провижинит, и
+    // это ОСОЗНАННО — настоящий покупатель не должен терять доступ из-за
+    // чужого сбоя.
+    //
+    // `true` здесь утверждает узкое и проверенное: удостоверять пинг нечем
+    // вовсе, значит платный тариф выдаст ЛЮБОЙ POST на публично известный
+    // адрес.
+    anyPingProvisions: !signed && !(saleCheckEnabled && canVerifySales),
     info: "Gumroad sends sale/refund pings here as POST form-encoded. GET is for liveness check only.",
   });
 });
@@ -358,6 +395,21 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       console.warn(
         `[gumroad/webhook] sale ${saleId} unverifiable (no token or API unavailable) — provisioning anyway`,
       );
+      // И в Sentry, а не только в консоль.
+      //
+      // Это ЕДИНСТВЕННЫЙ путь, на котором доступ выдаётся без подтверждения
+      // продажи. Подписи у Gumroad нет — `GUMROAD_WEBHOOK_SECRET` на проде не
+      // задан (проверено 29.08.2026 запросом ИМЁН переменных у сервиса), — и
+      // если спросить сам Gumroad не удалось, мы намеренно открываем доступ,
+      // чтобы настоящий покупатель не остался ни с чем.
+      //
+      // Направление отказа выбрано верно, а вот видимость не выбирается.
+      // Консоль Railway пролистывается и никем не читается; смотрят Sentry.
+      // Пока эта ветка там молчит, всплеск выдач без подтверждения выглядит
+      // ровно как обычный день.
+      capture(new Error(`gumroad_sale_unverifiable_provisioned:${saleId}`), {
+        route: "gumroad/webhook",
+      });
     }
   }
 
@@ -384,7 +436,29 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   // BureauVerification row (KYC approved but payment not yet confirmed).
   if (reference === "bureau-verified") {
     if (refunded || failed) {
-      console.log(`[gumroad/webhook] bureau ${result.status} for ${email} — ignored (one-time, no downgrade)`);
+      // ПОЛИТИКУ НЕ МЕНЯЮ, МЕНЯЮ ВИДИМОСТЬ.
+      //
+      // Verified — разовая покупка, и отдавать её обратно автоматически
+      // нельзя: возврат бывает спорным (chargeback), а автоотзыв наказал бы
+      // честного покупателя посреди разбирательства. Решение оставить статус
+      // осознанное, и оно остаётся.
+      //
+      // Но след был `console.log` — строка среди тысяч. Значит человек,
+      // оплативший «Verified», вернувший деньги и сохранивший значок на
+      // сертификате, не появлялся НИГДЕ. Механизм отзыва существует
+      // (POST /api/bureau/admin/cert/:certId/revoke-verification), просто
+      // никто не узнавал, что пора им воспользоваться.
+      //
+      // Теперь это ошибка в журнале и в Sentry: решение принимает человек,
+      // но узнаёт о поводе — сразу.
+      console.error(
+        `[gumroad/webhook] bureau ${result.status} for ${email}: статус Verified СОХРАНЁН (разовая покупка). ` +
+          "Отозвать вручную: POST /api/bureau/admin/cert/:certId/revoke-verification",
+      );
+      capture(
+        new Error("bureau Verified refunded — badge kept, manual review needed"),
+        { route: "gumroad/webhook", reference: "bureau-verified", status: result.status },
+      );
       return res.json({ ok: true, ignored: `bureau_${result.status}` });
     }
     if (result.status === "paid") {

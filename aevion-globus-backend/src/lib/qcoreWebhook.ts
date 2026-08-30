@@ -1,3 +1,4 @@
+import { checkPublicUrl } from "./publicUrlOnly";
 import { createHmac, randomUUID } from "crypto";
 import { getPool } from "../lib/dbPool";
 import { ensureQCoreTables, isDbReady } from "../lib/ensureQCoreTables";
@@ -171,6 +172,26 @@ export async function notifyEvent(
   if (target.secret) {
     const sig = createHmac("sha256", target.secret).update(body).digest("hex");
     headers["X-QCore-Signature"] = `sha256=${sig}`;
+  }
+
+  // Проверка стоит ЗДЕСЬ, у самого обращения, а не только при регистрации
+  // адреса. Гейт на входе не защищает то, что уже сохранено: адрес мог быть
+  // записан до появления проверки, при включённой отдушине для разработки или
+  // изменён в обход ручки. Ровно эту щель я 28.08 закрывал в трёх других
+  // модулях, а здесь она оставалась.
+  //
+  // checkPublicUrl разрешает имя и смотрит АДРЕСА, в которые оно ведёт:
+  // проверка по строке пропустила бы `evil.example.com`, указывающий на петлю.
+  const allowInternal =
+    process.env.QCORE_ALLOW_INTERNAL_WEBHOOKS === "1" || process.env.NODE_ENV === "test";
+  if (!allowInternal) {
+    const verdict = await checkPublicUrl(target.url);
+    if (!verdict.ok) {
+      console.warn(
+        `[QCoreAI] webhook (${target.source}) НЕ отправлен: адрес ведёт внутрь (${verdict.reason})`,
+      );
+      return;
+    }
   }
 
   const t0 = Date.now();

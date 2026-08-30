@@ -450,10 +450,15 @@ qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response)
   const { providerId, decisionReason } = selectProviderByStrategy(prompt, strategy);
 
   if (!providerId) {
+    // 28.08.2026: в ответе стоял `hint` с ИМЕНАМИ переменных окружения. Ключи
+    // не утекали, но имена — это карта нашей настройки для любого вызывающего.
+    // Подсказка нужна НАМ и уходит в журнал; человеку — понятная причина.
+    console.error("[qfusionai] нет провайдера: задайте один из ключей ИИ на сервере");
     return res.status(503).json({
       error: "no-provider-configured",
       strategy,
-      hint: "Set ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, or GROK_API_KEY on the server.",
+      message_ru: "Модуль ИИ сейчас недоступен. Мы уже знаем о сбое.",
+      message_en: "The AI module is unavailable right now. We are on it.",
     });
   }
 

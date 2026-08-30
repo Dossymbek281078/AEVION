@@ -7,6 +7,8 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { formatDate, formatDateTime } from "@/lib/formatDate";
+import { titleForAppSlug } from "@/lib/appSlugTitle";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 
@@ -122,6 +124,20 @@ export default function AccountPage() {
   // QVenture: тариф у него действительно free, а покупка живёт в другой
   // таблице, и кабинет её не читал.
   const [ownedApps, setOwnedApps] = useState<string[]>([]);
+  // Метка возврата из кассы. Замер 29.08.2026: после оплаты человек НИКУДА не
+  // возвращался — в ссылках кассы нет адреса возврата, а страниц «спасибо» нет
+  // вовсе (/thanks, /thank-you, /success дают 404). Договор простой: касса
+  // возвращает на /account?purchased=<id модуля>, и здесь это подтверждается
+  // явно. Без метки страница ведёт себя как раньше.
+  const [justPurchased, setJustPurchased] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get("purchased");
+      setJustPurchased(v && v.length <= 64 ? v : null);
+    } catch {
+      setJustPurchased(null);
+    }
+  }, []);
   // «Список пуст» и «узнать не удалось» — РАЗНЫЕ вещи, и на денежном пути
   // разница дороже всего (21.08.2026).
   const [ownedUnknown, setOwnedUnknown] = useState(false);
@@ -162,12 +178,12 @@ export default function AccountPage() {
         const d = await meRes.json();
         setMe(d.user || null);
         setName(d.user?.name || "");
-        // Купленные поштучно модули лежат отдельно от тарифа. Ручка публичная и
+        // Купленные поштучно модули лежат отдельно от тарифа. Ручка тепеличная и
         // работает по почте, поэтому спрашиваем сразу, как почта стала известна.
         const email = d.user?.email;
         if (email) {
           try {
-            const ar = await fetch(apiUrl(`/api/apps/access?email=${encodeURIComponent(email)}`));
+            const ar = await fetch(apiUrl("/api/apps/access"), { headers: authHeaders() });
             if (ar.ok) {
               const aj = await ar.json();
               setOwnedApps(Array.isArray(aj.apps) ? aj.apps : []);
@@ -451,6 +467,47 @@ export default function AccountPage() {
       <Wave1Nav />
       <ProductPageShell>
         <div style={{ maxWidth: 800, margin: "0 auto", padding: "32px 16px" }}>
+          {/*
+            Подтверждение возврата из кассы. Текст зависит от того, ПОДТВЕРДИЛИ
+            ли мы покупку у себя, а не от того, что написано в адресе.
+
+            Первая версия говорила «Оплата принята» всякому, у кого в адресе
+            стоит ?purchased=<что угодно>. Это ровно тот класс, который мы
+            вычищаем по всей платформе: утверждение об успехе, ничем не
+            проверенное. Метку в адрес кладёт касса, но переписать её может
+            кто угодно, а страница отвечала за кассу.
+
+            Теперь: право нашлось — говорим уверенно; ещё не пришло — говорим,
+            что ждём подтверждения, и это правда в обоих случаях (вебхук
+            приходит с задержкой). Про «оплата принята» молчим, пока не знаем.
+          */}
+          {justPurchased && (() => {
+            const confirmed = ownedApps.some(
+              (slug) => slug.toLowerCase() === justPurchased.toLowerCase(),
+            );
+            return (
+              <div
+                role="status"
+                style={{
+                  marginBottom: 20, padding: "14px 16px", borderRadius: 12,
+                  background: confirmed ? "#ecfdf5" : "#f8fafc",
+                  border: `1px solid ${confirmed ? "#a7f3d0" : "#cbd5e1"}`,
+                  color: confirmed ? "#065f46" : "#334155",
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 15 }}>
+                  {confirmed ? "Спасибо за покупку" : "Возвращаемся из кассы"}
+                </div>
+                <div style={{ fontSize: 13, marginTop: 4 }}>
+                  {confirmed
+                    ? "Доступ открыт — купленное в списке ниже."
+                    : ownedUnknown
+                      ? "Подтверждение пока не удалось проверить: список покупок не загрузился. Обновите страницу через минуту."
+                      : "Ждём подтверждения от кассы — оно приходит в течение минуты. Обновите страницу, и покупка появится в списке ниже."}
+                </div>
+              </div>
+            );
+          })()}
           <h1 style={{ fontSize: 28, fontWeight: 900, color: "#0f172a", margin: 0 }}>
             Account
           </h1>
@@ -532,7 +589,7 @@ export default function AccountPage() {
                   </div>
                   <div>
                     <div style={labelStyle}>Member since</div>
-                    <span>{new Date(me.createdAt).toUTCString()}</span>
+                    <span>{formatDate(me.createdAt)}</span>
                   </div>
                 </div>
               </div>
@@ -636,12 +693,12 @@ export default function AccountPage() {
                     {sub.validUntil && (
                       <div>
                         <div style={labelStyle}>Valid until</div>
-                        <span>{new Date(sub.validUntil).toLocaleDateString("ru-RU")}</span>
+                        <span>{formatDate(sub.validUntil)}</span>
                       </div>
                     )}
                     <div>
                       <div style={labelStyle}>Since</div>
-                      <span>{new Date(sub.createdAt).toLocaleDateString("ru-RU")}</span>
+                      <span>{formatDate(sub.createdAt)}</span>
                     </div>
                   </div>
                   {(sub.tierId === "lite" || sub.tierId === "free") && (
@@ -706,7 +763,7 @@ export default function AccountPage() {
                             border: "1px solid #a7f3d0", borderRadius: 999, fontSize: 13, fontWeight: 700,
                           }}
                         >
-                          {slug}
+                          {titleForAppSlug(slug)}
                         </span>
                       ))}
                     </div>
@@ -758,7 +815,7 @@ export default function AccountPage() {
                               </span>
                             )}
                             <span style={{ marginLeft: "auto", color: "#64748b" }}>
-                              {new Date(s.lastActiveAt).toLocaleString()}
+                              {formatDateTime(s.lastActiveAt)}
                             </span>
                             {!revoked && !s.isCurrent && (
                               <button onClick={() => revokeSession(s.id)} style={btnDanger}>
@@ -817,7 +874,7 @@ export default function AccountPage() {
                             {a.ip || "—"}
                           </span>
                           <span style={{ marginLeft: "auto", color: "#94a3b8", fontSize: 10 }}>
-                            {new Date(a.at).toLocaleString()}
+                            {formatDateTime(a.at)}
                           </span>
                         </div>
                       );

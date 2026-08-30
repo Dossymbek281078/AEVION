@@ -79,7 +79,7 @@ export const thesis = {
       kicker: "ONE PIPELINE",
       title: "Idea → registry → signature → bureau → certificate",
       body:
-        "QRight registers the work, QSign seals it with HMAC-SHA256, IP Bureau issues an Ed25519 certificate — admissible evidence of authorship & timestamp — with Shamir Secret Sharing, Planet validates compliance — all in one click.",
+        "QRight registers the work, QSign seals it with HMAC-SHA256, IP Bureau issues an Ed25519 certificate — cryptographic evidence of authorship and time — with Shamir Secret Sharing, Planet validates compliance — all in one click.",
     },
     {
       kicker: "ONE TRUST GRAPH",
@@ -354,7 +354,7 @@ export const launchedModules: PitchModule[] = [
     href: "/bureau",
     stage: "live",
     bucket: "ip-and-trust",
-    tagline: "Cryptographic proof-of-authorship bureau — admissible certificates in seconds.",
+    tagline: "Cryptographic proof-of-authorship bureau — signed, timestamped certificates in seconds.",
     problem:
       "Patent and IP filings take 6–18 months and cost $5K–$25K. There is no instant, internationally-recognised proof-of-prior-art mechanism for digital work.",
     killerFeature:
@@ -599,7 +599,7 @@ export const gtm = {
     {
       phase: "Phase 1 · Independent creators",
       body:
-        "AI-music and AI-film artists registering work in QRight + submitting to Awards. Wedge: 'admissible proof of authorship in 30 seconds'. Conversion to Bank is automatic (royalty payout settles to AEC).",
+        "AI-music and AI-film artists registering work in QRight + submitting to Awards. Wedge: 'provable authorship and timestamp in 30 seconds'. Conversion to Bank is automatic (royalty payout settles to AEC).",
     },
     {
       phase: "Phase 2 · IP-heavy SMBs",
@@ -836,7 +836,7 @@ export const competitive = {
       weakness:
         "Cryptographic proof exists, but no human-readable certificate, no legal framework citation, no validator network, no royalty rails on top.",
       aevionWin:
-        "QRight + Bureau wraps the same hash in an admissible-evidence certificate citing 6 international frameworks, plus auto-routes royalties via Bank.",
+        "QRight + Bureau wraps the same hash in a signed, timestamped certificate citing 6 international frameworks, plus auto-routes royalties via Bank.",
     },
     {
       name: "Stripe Atlas / Stripe Connect for creators",

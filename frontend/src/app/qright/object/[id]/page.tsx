@@ -528,8 +528,8 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
               <p style={{ fontSize: 12, color: "#475569", margin: 0, lineHeight: 1.55, maxWidth: 460 }}>
                 {bureauCert
                   ? bureauCert.verificationLevel === "verified"
-                    ? "This work is sealed by KYC-verified identity + notarized chain. Court-admissible in 130+ countries (Hague Convention)."
-                    : "Anonymous cert is registered. Complete KYC + payment to upgrade to a legally-binding Bureau certificate."
+                    ? "This work is sealed by a notarized chain: content hash, server timestamp and the bureau's signature, verifiable from the certificate page."
+                    : "Anonymous cert is registered. Complete identity check + payment to upgrade to a Bureau certificate."
                   : "Add KYC identity verification + Stripe-secured payment to receive a notary-grade IP certificate linked to this work."}
               </p>
             </div>

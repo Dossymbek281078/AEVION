@@ -1611,9 +1611,19 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const removeEnvVar = async (key: string) => {
     if (!project) return;
     try {
-      await fetch(apiUrl(`/api/devhub/projects/${project.id}/env/${encodeURIComponent(key)}`), { method: "DELETE" });
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/env/${encodeURIComponent(key)}`), { method: "DELETE" });
+      if (!r.ok) {
+        showToast("Failed to delete", "error");
+        return;
+      }
       fetchEnv();
-    } catch {}
+      showToast("Env var deleted", "success");
+    } catch {
+      // Соседняя saveEnvVar говорит об отказе, а удаление молчало: человек
+      // считал переменную удалённой, хотя запрос не прошёл. Для секрета это
+      // дороже обычного — его продолжают считать отозванным.
+      showToast("Failed to delete", "error");
+    }
   };
 
   const applyTemplate = async (templateId: string) => {

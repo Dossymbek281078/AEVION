@@ -24,7 +24,7 @@ import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 import { CHANGELOG, type ChangelogKind } from "../data/changelog";
-import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, type Subscription } from "./provisioning";
+import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, subsFile, type Subscription } from "./provisioning";
 import { clientIp } from "../lib/rateLimit";
 
 export const pricingRouter = Router();
@@ -1435,9 +1435,16 @@ pricingRouter.get("/subscription/me", (req, res) => {
     return res.status(401).json({ error: "invalid_token" });
   }
 
-  const SUBS_FILE = process.env.SUBSCRIPTIONS_FILE
-    ? process.env.SUBSCRIPTIONS_FILE
-    : join(process.cwd(), "data", "subscriptions.jsonl");
+  // Путь берём из provisioning — там же, где его вычисляют ЗАПИСИ платежей.
+  //
+  // Было: своя копия, считавшая от `process.cwd()`, тогда как записи идут от
+  // каталога пакета. Совпадут они или нет, зависело от того, откуда запущен
+  // процесс: запусти сервис из корня репозитория — и человек, только что
+  // заплативший, спрашивает свою подписку и получает «нет».
+  //
+  // Переменная SUBSCRIPTIONS_FILE перекрывает обе стороны и раньше, и теперь —
+  // но полагаться на неё нельзя: без неё стороны расходились молча.
+  const SUBS_FILE = subsFile();
 
   try {
     if (!existsSync(SUBS_FILE)) return res.json({ subscription: null });

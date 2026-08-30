@@ -70,6 +70,8 @@ const COPY = {
     tooMany: "Слишком много попыток подряд. Подождите минуту и повторите.",
     rejected: "Сервер не принял адрес. Проверьте написание.",
     ourFault: "Не смогли сохранить адрес — это на нашей стороне. Попробуйте ещё раз через минуту.",
+    notStored:
+      "Приняли адрес, но сохранить его насовсем сейчас не вышло — это на нашей стороне. Отправьте ещё раз через минуту, чтобы точно не потерять вас к запуску.",
     offline: "Не дозвонились до сервера. Проверьте связь и повторите.",
   },
   en: {
@@ -81,6 +83,8 @@ const COPY = {
     tooMany: "Too many attempts in a row. Wait a minute and try again.",
     rejected: "The server did not accept the address. Check the spelling.",
     ourFault: "We could not save the address — that is on our side. Try again in a minute.",
+    notStored:
+      "We took your address but could not store it permanently just now — that is on us. Please send it again in a minute so we do not lose you before launch.",
     offline: "Could not reach the server. Check the connection and try again.",
   },
 } as const;
@@ -121,6 +125,28 @@ export function WaitlistCapture({
         body: JSON.stringify({ email: value, source: source.slice(0, 60) }),
       });
       if (r.ok) {
+        // Ручка честно называет, КУДА легла подписка: "postgres" — сохранена,
+        // всё остальное значит запасное хранилище в памяти процесса, которое
+        // не переживёт перезапуск. Раньше мы читали только r.ok и говорили
+        // «адрес записан» в обоих случаях — то есть теряли подписчика молча,
+        // а человек уходил уверенным, что он в списке. Для канала запуска это
+        // дороже всего: письмо в день старта такому адресу не уйдёт.
+        //
+        // Поэтому непостоянное сохранение показываем как ОТКАЗ: это правда, и
+        // повтор через минуту может лечь уже в базу.
+        let storage: unknown = "postgres";
+        try {
+          storage = (await r.json())?.storage ?? "postgres";
+        } catch {
+          // тело не разобралось — считаем, что сохранено: ручка вернула 2xx,
+          // и пугать человека из-за нашей неспособности прочитать ответ нельзя
+          storage = "postgres";
+        }
+        if (storage !== "postgres") {
+          setStatus("error");
+          setMessage(copy.notStored);
+          return;
+        }
         setStatus("done");
         setMessage(doneText || copy.done);
         setEmail("");

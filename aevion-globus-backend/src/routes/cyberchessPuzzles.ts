@@ -234,14 +234,23 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
       page = matched.slice(offset, offset + limit);
     }
 
-    res.json({ ok: true, total, count: page.length, offset, poolSize: POOL.length, puzzles: page });
+    // poolSize — обслуживаемая выборка (упирается в cap), bankTotal — настоящий
+    // размер банка. Публиковать первое без второго нельзя: круглое число
+    // читается как измерение банка. См. разбор в шапке файла.
+    res.json({
+      ok: true, total, count: page.length, offset,
+      poolSize: POOL.length, bankTotal: POOL_TOTAL, capped: POOL_CAPPED,
+      puzzles: page,
+    });
   } catch (e) {
     console.warn("[cyberchess-puzzles] query failed:", e instanceof Error ? e.message : e);
     // ok:true with an empty list is indistinguishable from "your filter matched
     // nothing", so a failure here renders as a legitimately empty trainer.
     res.status(503).json({
       ok: false, reason: "puzzle_query_failed",
-      total: 0, count: 0, offset: 0, poolSize: POOL.length, puzzles: [],
+      total: 0, count: 0, offset: 0,
+      poolSize: POOL.length, bankTotal: POOL_TOTAL, capped: POOL_CAPPED,
+      puzzles: [],
     });
   }
 });
@@ -252,7 +261,20 @@ router.get("/themes", async (_req: Request, res: Response): Promise<void> => {
   const themes = [...THEME_INDEX.entries()]
     .map(([key, idxs]) => ({ theme: POOL[idxs[0]]?.theme ?? key, count: idxs.length }))
     .sort((a, b) => b.count - a.count);
-  res.json({ ok: true, poolSize: POOL.length, themes });
+  // poolSize здесь — сколько задач ОБСЛУЖИВАЕТСЯ, и он упирается в cap.
+  // Отдавать одно это число нельзя: при cap = 500 000 ответ «poolSize: 500000»
+  // выглядит измерением банка, а на деле это обрезка — ровно то, о чём
+  // предупреждает разбор в шапке файла. Замер 28.08.2026: /themes отвечал
+  // 500000, а /cyberchess-daily/puzzle про тот же банк — 502584, и по двум
+  // нашим ответам нельзя было понять, какой из них про что.
+  // Соседняя ручка /meta уже отдаёт обе величины; здесь их не хватало.
+  res.json({
+    ok: true,
+    poolSize: POOL.length,
+    bankTotal: POOL_TOTAL,
+    capped: POOL_CAPPED,
+    themes,
+  });
 });
 
 // GET /meta — pool health/size (cheap smoke).
@@ -293,7 +315,13 @@ router.post("/reload", async (req: Request, res: Response): Promise<void> => {
   }
   loadPromise = null;
   await ensureLoaded();
-  res.json({ ok: true, poolSize: POOL.length, themes: THEME_INDEX.size });
+  res.json({
+    ok: true,
+    poolSize: POOL.length,
+    bankTotal: POOL_TOTAL,
+    capped: POOL_CAPPED,
+    themes: THEME_INDEX.size,
+  });
 });
 
 export default router;

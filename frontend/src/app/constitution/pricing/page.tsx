@@ -331,6 +331,18 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
         const bodyText = await r.text().catch(() => "");
         throw new Error(`HTTP ${r.status}: ${bodyText.slice(0, 120)}`);
       }
+      // Ручка подписки честно называет, КУДА легла запись: "postgres" —
+      // сохранена, всё остальное значит запасное хранилище в памяти процесса,
+      // которое не переживёт перезапуск. Раньше здесь читался только код
+      // ответа, и человек получал подтверждение для потерянной подписки —
+      // ровно тот же дефект, что был у общей формы приёма адресов.
+      const data = (await r.json().catch(() => ({}))) as { storage?: string };
+      if ((data.storage ?? "postgres") !== "postgres") {
+        setError(
+          "Адрес приняли, но сохранить его насовсем сейчас не вышло — это на нашей стороне. Отправьте ещё раз через минуту.",
+        );
+        return;
+      }
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "subscribe_failed");

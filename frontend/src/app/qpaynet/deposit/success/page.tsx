@@ -6,6 +6,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
+import { PurchaseReturnTracker } from "@/components/PurchaseReturnTracker";
 
 interface CheckoutMeta {
   id: string;
@@ -119,6 +120,8 @@ export default function DepositSuccessPage() {
       <header className="border-b border-slate-800 px-6 py-4">
         <Link href="/qpaynet" className="text-slate-400 hover:text-white text-sm">← QPayNet</Link>
       </header>
+      {/* QPayNet возвращает сюда после оплаты — отметка связывает её с каналом. */}
+      <Suspense><PurchaseReturnTracker source="qpaynet-deposit" provider="qpaynet" /></Suspense>
       <Suspense><SuccessInner /></Suspense>
     </div>
   );

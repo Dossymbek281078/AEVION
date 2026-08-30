@@ -13,6 +13,7 @@
     "test:backend": "node scripts/run-all-tests.mjs aevion-globus-backend",
     "test:frontend": "node scripts/run-all-tests.mjs frontend",
     "audit:drift": "node scripts/audit-drift.mjs",
+    "audit:checkout-claims": "node scripts/checkout-claims-watch.mjs",
     "test:guards": "node scripts/multichat-dissent.test.mjs && node scripts/multichat-receipt.test.mjs && node scripts/multichat-contrast.test.mjs && npm run test:qreal",
     "test:qreal": "node scripts/qreal-judge.test.mjs && node scripts/qreal-characters.test.mjs && node scripts/qreal-continuity.test.mjs && node scripts/qreal-sync-rubric.mjs --check"
   },

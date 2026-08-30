@@ -37,7 +37,14 @@ const APIS = [
     name: "Bureau",
     color: "#f472b6",
     href: "/bureau",
-    desc: "Court-grade certificates. Cites Berne/WIPO/TRIPS/eIDAS on issuance. ETag/304, batch protect, enriched /health.",
+    // 28.08.2026: было «Court-grade certificates». Это четвёртая поверхность
+    // одного заявления: те же слова про суд стояли на странице бюро, на
+    // странице объекта QRight и в тарифе с нотариусом — все три смягчены
+    // раньше в этой ветке, а эту я тогда не нашёл. Допустимость в конкретном
+    // суде зависит от юрисдикции и спора, обеспечить её мы не можем.
+    // Ссылки на договоры ПРОВЕРЕНЫ и остаются: сертификат действительно их
+    // приводит (pipeline.ts:304-319 — Berne, WIPO WCT, TRIPS).
+    desc: "Certificates citing Berne/WIPO/TRIPS/eIDAS on issuance. ETag/304, batch protect, enriched /health.",
     // Поток защиты живёт в /api/pipeline, а не в /api/bureau: bureauRouter
     // отвечает за проверку личности, оплату и доверие, а объект QRight +
     // Quantum Shield + сертификат целиком собирает pipelineRouter.post("/protect").
@@ -241,7 +248,7 @@ curl -s https://aevion.app/api/qright/objects \\
   -H "Idempotency-Key: $(uuidgen)" \\
   -d '{"title":"My AI Track","kind":"music"}'
 
-# 3. Issue an admissible-evidence Bureau certificate
+# 3. Issue a Bureau certificate (timestamp + signature + treaty citations)
 curl -s https://aevion.app/api/pipeline/protect \\
   -H "Authorization: Bearer $TOKEN" \\
   -H "Content-Type: application/json" \\

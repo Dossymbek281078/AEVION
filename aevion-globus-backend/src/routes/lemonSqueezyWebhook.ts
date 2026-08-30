@@ -52,31 +52,23 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 import { safeErrorText } from "../lib/safeError";
+import { upsertAppSubscription } from "../lib/appEntitlements";
 
-async function upsertAppSubscription(
-  email: string,
-  appSlug: string,
-  status: "active" | "cancelled",
-  lsSubId?: string,
-): Promise<void> {
-  const pool = getPool();
-  try {
-    await pool.query(
-      `INSERT INTO "AppSubscription" ("id","email","appSlug","lsSubId","status","createdAt","updatedAt")
-       VALUES (gen_random_uuid(),$1,$2,$3,$4,NOW(),NOW())
-       ON CONFLICT ("email","appSlug") DO UPDATE
-         SET "status"=$4, "lsSubId"=COALESCE($3,"AppSubscription"."lsSubId"), "updatedAt"=NOW()`,
-      [email, appSlug, lsSubId ?? null, status],
-    );
-  } catch (err) {
-    console.error("[ls/app-sub] upsertAppSubscription error:", err instanceof Error ? err.message : err);
-    // Ошибку НЕ глотаем: раньше сбой записи давал ответ 200 с action
-    // "app_activated". Магазин считал доставку успешной и не повторял её —
-    // человек заплатил, доступа не получил, следов нет. Пробрасываем наверх,
-    // там ответ 500 и повторная доставка.
-    throw err;
-  }
-}
+/**
+ * Запись прав живёт в lib/appEntitlements и НЕ дублируется здесь.
+ *
+ * Копия была, и она разошлась с оригиналом ровно так, как предсказывал
+ * комментарий в самой библиотеке: молча и в трёх местах сразу.
+ *   • не создавала таблицу прав — первая же покупка на базе без миграции
+ *     падала в 500 и повторялась вечно;
+ *   • не приводила адрес к нижнему регистру, а ЧТЕНИЕ прав приводит —
+ *     покупка с адресом Ivan@Mail.ru не находилась никогда;
+ *   • не сбрасывала кэш прав, и только что заплативший до минуты упирался
+ *     в отказ.
+ *
+ * Через Gumroad те же покупки шли через библиотеку и работали. Один и тот
+ * же товар выдавался по-разному в зависимости от кассы.
+ */
 
 async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
   const pool = getPool();
@@ -162,10 +154,58 @@ function verifySignature(rawBody: string, presented: string | undefined, secret:
   }
 }
 
+/**
+ * Состояние вебхука — GET, для человека и для сторожа.
+ *
+ * Раньше ручки не было вовсе, и снаружи нельзя было отличить рабочий вебхук
+ * от заглушки. Разница при этом денежная: без секрета POST ниже отвечает
+ * `{ok:true, mode:"stub"}` — то есть говорит магазину «доставлено», ничего не
+ * провижинит, и повторной доставки не будет. Покупка исчезает молча, а через
+ * этот вебхук идут ВСЕ семь товаров каталога.
+ *
+ * Секрет наружу не отдаётся — только признак наличия. Сделано по образцу
+ * такой же ручки у Gumroad, чтобы у обоих денежных каналов ответ читался
+ * одинаково.
+ */
+lemonSqueezyWebhookRouter.get("/webhook", (_req, res) => {
+  const configured = Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim());
+  res.json({
+    ok: true,
+    endpoint: "lemon squeezy webhook",
+    accepts: "POST application/json with x-signature",
+    signed: configured,
+    // Поле названо ОТРИЦАНИЕМ и означает ровно то, что измеряет.
+    //
+    // Сперва здесь стояло `provisioningLive: configured`, и это обещало
+    // больше, чем проверено: секрет задан — ещё не значит, что провижининг
+    // работает (нужны и база, и разбор варианта, и живой Postgres). Поле с
+    // именем шире собственного замера — тот самый класс, из-за которого
+    // `/health.qsign` однажды прочитали как состояние всей подписи.
+    //
+    // `true` здесь утверждает узкое и проверенное: секрета нет, POST ниже
+    // отвечает магазину «доставлено» и НЕ провижинит. Обратное не обещает,
+    // что всё хорошо, — только что этой конкретной поломки нет.
+    purchasesDropped: !configured,
+    mode: configured ? "live" : "stub",
+    info: "GET is a status check. Without LEMON_SQUEEZY_WEBHOOK_SECRET the POST route is a no-op stub.",
+  });
+});
+
 lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
   const secret = process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim();
   if (!secret) {
-    console.log("[ls/webhook] STUB — LEMON_SQUEEZY_WEBHOOK_SECRET unset, ignoring");
+    // Отвечаем 200 намеренно: 5xx заставил бы магазин повторять доставку, а
+    // при СОЗНАТЕЛЬНО пустом секрете (превью, локальный запуск) это был бы
+    // поток повторов. Но молчать нельзя: в бою это означает, что оплаченная
+    // покупка исчезла и никто не узнал. Поэтому след громкий — ошибка в
+    // журнал и в Sentry, а не строчка console.log среди тысяч других.
+    console.error(
+      "[ls/webhook] STUB — LEMON_SQUEEZY_WEBHOOK_SECRET unset: покупка НЕ провижинена и повтора не будет",
+    );
+    capture(
+      new Error("lemonSqueezy webhook received while unconfigured — purchase dropped"),
+      { route: "lemonsqueezy/webhook", mode: "stub" },
+    );
     return res.json({ ok: true, mode: "stub" });
   }
 
@@ -248,17 +288,39 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       const appSlug = appSlugForReference(ref)!;
       if (ACTIVATE_EVENTS.has(event)) {
         await upsertAppSubscription(email, appSlug, "active", lsSubId);
-        // У DevHub доступ открывает не строка AppSubscription (её пока никто не
-        // читает), а тариф в DevHubTier/DevHubEmailTier — его и ставим.
+        // У DevHub доступ открывает НЕ ТОЛЬКО строка AppSubscription: у него есть
+        // свой тариф в DevHubTier/DevHubEmailTier, его и ставим отдельно.
+        //
+        // Формулировка «строку прав пока никто не читает» здесь была и устарела:
+        // её читает planGate (hasActiveAppSubscription) и маршрут /api/apps/access.
+        // Комментарий, объявляющий живой механизм мёртвым, опаснее отсутствия
+        // комментария: по нему следующий заведёт второй такой же.
         if (appSlug === "devhub") await upgradeDevHubByEmail(email, "pro");
         console.log(`[ls/webhook] ${event} → app_sub activated: ${appSlug} for ${email}`);
         return res.json({ ok: true, action: "app_activated", appSlug, email });
       }
       if (DEACTIVATE_EVENTS.has(event)) {
-        await upsertAppSubscription(email, appSlug, "cancelled", lsSubId);
-        // Без этого отмена подписки за $149 не забирала доступ: строка
-        // помечалась cancelled, а тариф DevHub оставался "pro" навсегда.
+        // ПОРЯДОК ЗДЕСЬ ЗНАЧИМ, и он обратный порядку активации.
+        //
+        // Записей две: строка прав (AppSubscription) и тариф, который РЕАЛЬНО
+        // открывает доступ (DevHubTier/DevHubEmailTier). Строку прав читает
+        // planGate. Между ними возможен сбой, и тогда важно, в какую
+        // сторону мы промахнёмся.
+        //
+        // Было: сперва «отменено» в правах, потом снятие тарифа. Упади второе
+        // — права говорят «отменено», а доступ ОСТАЁТСЯ. Магазин повторит
+        // доставку (ниже 500 и освобождение ключа дедупликации), но если
+        // повторы кончатся, платный доступ останется навсегда после отмены.
+        //
+        // Стало: сперва снимаем тариф. Упади вторая запись — доступа уже нет,
+        // а строка прав всего лишь отстала, и её поправит повтор. Отказ
+        // направлен в безопасную сторону.
+        //
+        // На активации порядок остаётся прежним намеренно: там безопасная
+        // сторона другая — человек заплатил, и открыть доступ раньше, чем
+        // дописать учёт, для него лучше.
         if (appSlug === "devhub") await upgradeDevHubByEmail(email, "free");
+        await upsertAppSubscription(email, appSlug, "cancelled", lsSubId);
         console.log(`[ls/webhook] ${event} → app_sub cancelled: ${appSlug} for ${email}`);
         return res.json({ ok: true, action: "app_cancelled", appSlug, email });
       }

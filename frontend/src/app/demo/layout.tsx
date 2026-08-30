@@ -7,7 +7,7 @@ const SITE = getSiteUrl();
 export const metadata: Metadata = {
   title: `AEVION · Live ecosystem demo — ${MODULE_NODES} nodes, one trust pipeline`,
   description:
-    "Walk through every AEVION module: registry → signature → bureau → compliance → wallet. Live API metrics. From idea to court-grade certificate in 90 seconds.",
+    "Walk through every AEVION module: registry → signature → bureau → compliance → wallet. Live API metrics. From idea to a signed, timestamped certificate in 90 seconds.",
   openGraph: {
     title: "AEVION ecosystem — live product demo",
     description: `${MODULE_NODES} modules deployed (~a dozen feature-complete) across IP, signatures, bureau, compliance, AI, banking. Walk the full trust pipeline.`,
@@ -28,7 +28,7 @@ const articleJsonLd = {
   headline: `Live ecosystem demo — ${MODULE_NODES} nodes, one trust pipeline.`,
   name: "AEVION Live Demo",
   description:
-    "Walk every AEVION module: registry → signature → bureau → compliance → wallet. Live API metrics, real backend, real data. From idea to court-grade certificate in 90 seconds.",
+    "Walk every AEVION module: registry → signature → bureau → compliance → wallet. Live API metrics, real backend, real data. From idea to a signed, timestamped certificate in 90 seconds.",
   inLanguage: ["en", "ru", "kk"],
   about: ["AEVION", "Trust Infrastructure", "QRight", "QSign", "Bureau", "Planet", "Bank"],
   publisher: { "@type": "Organization", name: "AEVION", url: SITE },

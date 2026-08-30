@@ -46,7 +46,7 @@ export default function DemoOg() {
               flexDirection: "column",
             }}
           >
-            <span>Idea → admissible</span>
+            <span>Idea → signed & timestamped</span>
             <span style={{ color: "#a78bfa" }}>certificate in 90s.</span>
           </div>
           <div style={{ fontSize: 22, color: "#cbd5e1", maxWidth: 980, lineHeight: 1.45, display: "flex" }}>

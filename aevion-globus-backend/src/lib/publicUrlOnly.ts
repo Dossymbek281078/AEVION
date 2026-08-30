@@ -1,0 +1,100 @@
+import { lookup } from "node:dns/promises";
+
+/**
+ * Можно ли нашему серверу сходить по этому адресу от имени постороннего.
+ *
+ * Зачем. `POST /api/devhub/media/upload-audio` принимал `sourceUrl` и делал
+ * `fetch(String(sourceUrl))` без единой проверки: ни авторизации, ни разбора
+ * адреса. Сегодня это закрыто СЛУЧАЙНО — ручка отвечает 503, пока не настроено
+ * хранилище R2. В день, когда его настроят, посторонний человек сможет заставить
+ * наш сервер ходить по любому адресу, который он назовёт, включая внутренние:
+ * служба метаданных облака (169.254.169.254), соседние сервисы на localhost,
+ * админки во внутренней сети. Ответ при этом возвращается вызывающему кодом
+ * статуса — то есть ручка ещё и зонд, которым удобно нащупывать внутреннюю сеть.
+ *
+ * Проверяем НЕ имя, а адреса, в которые имя разрешается: `evil.example.com`
+ * может указывать на 127.0.0.1, и проверка по строке это пропустит.
+ */
+
+/** Приватные, петлевые и служебные диапазоны IPv4. */
+function isPrivateIPv4(ip: string): boolean {
+  const p = ip.split(".").map((n) => Number(n));
+  if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return true;
+  const [a, b] = p;
+  if (a === 10) return true;                          // 10.0.0.0/8
+  if (a === 127) return true;                         // петля
+  if (a === 0) return true;                           // «этот хост»
+  if (a === 169 && b === 254) return true;            // link-local + метаданные облака
+  if (a === 172 && b >= 16 && b <= 31) return true;   // 172.16.0.0/12
+  if (a === 192 && b === 168) return true;            // 192.168.0.0/16
+  if (a === 100 && b >= 64 && b <= 127) return true;  // CGNAT
+  if (a >= 224) return true;                          // multicast и выше
+  return false;
+}
+
+function isPrivateIPv6(ip: string): boolean {
+  const s = ip.toLowerCase().split("%")[0];
+  if (s === "::1" || s === "::") return true;
+  if (s.startsWith("fc") || s.startsWith("fd")) return true;  // unique-local
+  if (s.startsWith("fe80")) return true;                      // link-local
+  // ::ffff:10.0.0.1 — IPv4 внутри IPv6
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(s);
+  if (mapped) return isPrivateIPv4(mapped[1]);
+  return false;
+}
+
+export function isPrivateAddress(ip: string, family: number): boolean {
+  return family === 6 ? isPrivateIPv6(ip) : isPrivateIPv4(ip);
+}
+
+export type UrlVerdict = { ok: true; url: URL } | { ok: false; reason: string };
+
+/**
+ * Разбирает адрес и проверяет, что он ведёт наружу.
+ *
+ * ⚠️ Остаточный риск, названный как ВЫБОР, а не как отсутствие проблемы:
+ * неудачное разрешение имени не всегда значит «имя не разрешается» — lookup
+ * может не удаться на мгновение и удаться при самом fetch. В это узкое окно
+ * имя, ведущее внутрь, пройдёт. Мы выбрали пропускать, потому что цена
+ * постоянных ложных отказов на живом пути выше цены узкого окна.
+ *
+ * Честная граница: между этой проверкой и самим запросом имя может
+ * перерезолвиться в приватный адрес (DNS rebinding). Полностью это лечится
+ * запросом по УЖЕ проверенному IP с подстановкой Host, что требует своего
+ * агента. Здесь закрыт основной путь — прямые внутренние адреса и имена,
+ * указывающие внутрь; остаточный риск назван, а не умолчан.
+ */
+export async function checkPublicUrl(raw: unknown): Promise<UrlVerdict> {
+  if (typeof raw !== "string" || !raw.trim()) return { ok: false, reason: "url_required" };
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return { ok: false, reason: "url_malformed" };
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return { ok: false, reason: "url_scheme_not_allowed" };
+  }
+  // Логин с паролем в адресе — способ протащить учётные данные во внутренний сервис.
+  if (url.username || url.password) return { ok: false, reason: "url_credentials_not_allowed" };
+
+  let addrs: Array<{ address: string; family: number }>;
+  try {
+    addrs = await lookup(url.hostname, { all: true });
+  } catch {
+    // Имя не разрешается — ЗАПРОС ПО НЕМУ ТОЖЕ НИКУДА НЕ ДОЙДЁТ, значит
+    // внутренней сети такой адрес не угрожает. Отказывать здесь значит
+    // ломать работу при икоте DNS и делать ручку непроверяемой офлайн
+    // (тесты берут зарезервированные имена вроде host.example — они
+    // не резолвятся намеренно). Отказываем только когда ЗНАЕМ, что
+    // адрес внутренний.
+    return { ok: true, url };
+  }
+  if (!addrs.length) return { ok: true, url };
+  // Достаточно ОДНОГО приватного адреса: имя может отдавать несколько, и
+  // выбор между ними от нас не зависит.
+  for (const a of addrs) {
+    if (isPrivateAddress(a.address, a.family)) return { ok: false, reason: "url_host_not_public" };
+  }
+  return { ok: true, url };
+}

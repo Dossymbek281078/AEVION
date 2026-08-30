@@ -64,7 +64,10 @@ const REGIONS: Region[] = [
     name: "Privacy & Networks",
     code: "NET",
     items: [
-      { name: "VeilNetX", slug: "veilnetx", desc: "Privacy proxy: Tor-routed traffic, encryption, anti-fingerprinting.", status: "live" },
+      // Tor помечен планом, а не возможностью: реестр (/api/aevion/catalog) про этот
+      // модуль пишет «Tor-proxy roadmap Q4 2026», а карточка обещала «Tor-routed
+      // traffic» со статусом live и без единой оговорки. Замер 27.08.2026.
+      { name: "VeilNetX", slug: "veilnetx", desc: "Privacy check: what your request reveals (IP/geo/UA + exposure score) and browser leaks (WebRTC/canvas). Tor proxy — roadmap Q4 2026.", status: "live" },
       { name: "ShadowNet", slug: "shadownet", desc: "An anonymous mesh network layered over VeilNetX.", status: "live" },
       { name: "QChainGov", slug: "qchaingov", desc: "DAO governance with identity-bound voting via AEVION Auth + QSign.", status: "live" },
     ],

@@ -1,3 +1,4 @@
+import { isInternalHost } from "../../lib/internalHost";
 import { getPool } from "../../lib/dbPool";
 import { isDbReady } from "../../lib/ensureQCoreTables";
 
@@ -98,18 +99,7 @@ export function validateWebhookUrl(raw: unknown): string | null {
   // QCORE_ALLOW_INTERNAL_WEBHOOKS=1 for local dev convenience.
   const allowInternal = process.env.QCORE_ALLOW_INTERNAL_WEBHOOKS === "1";
   if (!allowInternal) {
-    const host = parsed.hostname.toLowerCase();
-    if (
-      host === "localhost" ||
-      host === "127.0.0.1" ||
-      host === "::1" ||
-      host.endsWith(".local") ||
-      host.startsWith("192.168.") ||
-      host.startsWith("10.") ||
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host)
-    ) {
-      return null;
-    }
+    if (isInternalHost(parsed.hostname)) return null;
   }
   return parsed.toString();
 }

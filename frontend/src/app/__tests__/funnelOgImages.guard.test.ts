@@ -40,6 +40,11 @@ function withOgImage(dir: string, rel = ""): string[] {
   return out;
 }
 
+/* Ищется "openGraph:" С ДВОЕТОЧИЕМ, и это не придирка. Пока искали слово,
+ * проверка проходила на openGraphX — переименованное поле содержит прежнее
+ * имя как подстроку, а Next его уже не читает. Назвала это мутация: удаление
+ * блока сторож ловил, переименование пропускал.
+ * Проверка на подстроку без границы охраняет меньше, чем обещает. */
 describe("нарисована картинка — обязан быть и заголовок", () => {
   const pages = withOgImage(APP);
 
@@ -61,7 +66,7 @@ describe("нарисована картинка — обязан быть и з�
       const dir = join(APP, ...route.split("/"));
       const has = ["page.tsx", "layout.tsx"].some((f) => {
         const file = join(dir, f);
-        return existsSync(file) && readFileSync(file, "utf8").includes("openGraph");
+        return existsSync(file) && readFileSync(file, "utf8").includes("openGraph:");
       });
       if (!has) missing.push(route);
     }
@@ -166,8 +171,8 @@ describe("карточки страниц воронки", () => {
       // (qsign, partner, qlearn, studio, explore, qventure, qnews, qai).
       // Настоящий долг был у двух — /go и /shop, где layout нет вовсе.
       const layout = join(APP, ...route.split("/"), "layout.tsx");
-      const hasOg = readFileSync(file, "utf8").includes("openGraph")
-        || (existsSync(layout) && readFileSync(layout, "utf8").includes("openGraph"));
+      const hasOg = readFileSync(file, "utf8").includes("openGraph:")
+        || (existsSync(layout) && readFileSync(layout, "utf8").includes("openGraph:"));
       if (!hasOg) fresh.push(route);
     }
     expect(fresh).toEqual([]);
@@ -180,7 +185,7 @@ describe("карточки страниц воронки", () => {
     for (const route of OG_TITLE_DEBT) {
       const file = join(APP, ...route.split("/"), "page.tsx");
       if (!existsSync(file)) continue;
-      if (readFileSync(file, "utf8").includes("openGraph")) stale.push(route);
+      if (readFileSync(file, "utf8").includes("openGraph:")) stale.push(route);
     }
     expect(stale, "починено, но осталось в списке долга — уберите строку").toEqual([]);
   });

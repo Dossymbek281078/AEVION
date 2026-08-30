@@ -234,8 +234,8 @@ export default async function GoPage({
           <h2 style={styles.h2}>Ближайший запуск</h2>
           <LinkCard
             href={keep("/cyberchess/launch")}
-            kicker="30 августа · шахматы"
-            title="CyberChess — открываем 30 августа"
+            kicker="30 сентября · шахматы"
+            title="CyberChess — открываем 30 сентября"
             note="Партия с движком, задача дня и тренер, который объясняет ход. Оставьте адрес — напишем в день запуска."
           />
         </section>

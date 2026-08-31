@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { ListingWizard } from "../ListingWizard";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -23,11 +23,8 @@ import { join } from "node:path";
  * файл. Удалив, я потерял бы покрытие ровно того, ради чего тест писался.
  */
 
-const CALLS: Array<{ path: string; init?: RequestInit }> = [];
-
 function stubFetch(storage: "db" | "memory" | undefined) {
-  return vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    CALLS.push({ path: String(input), init });
+  return vi.fn(() => {
     const body =
       storage === undefined
         ? { id: 1, token: "t" }
@@ -41,7 +38,6 @@ function stubFetch(storage: "db" | "memory" | undefined) {
 }
 
 afterEach(() => {
-  CALLS.length = 0;
   vi.unstubAllGlobals();
 });
 

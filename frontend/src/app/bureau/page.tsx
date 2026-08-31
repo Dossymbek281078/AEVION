@@ -94,7 +94,29 @@ type SortMode = "newest" | "oldest" | "verified";
 // /bureau/page», то есть красной становится ВСЯ выкатка фронта, а не одна
 // страница. Образец границы взят из smeta-trainer/calc (5bc68b11e), где тот же
 // дефект чинили 21.05.
+/**
+ * Читает параметр ссылки и отдаёт его наверх. Отдельный компонент нужен, чтобы
+ * граница Suspense охватывала ТОЛЬКО его: useSearchParams делает своё поддерево
+ * динамическим, и пока он стоял в самой странице, вся она уходила за границу —
+ * а вместе с ней и всё содержимое из серверной разметки.
+ */
+function DeepLinkParam({ onId }: { onId: (id: string) => void }) {
+  const searchParams = useSearchParams();
+  const id = searchParams?.get("objectId") || searchParams?.get("qrightObjectId") || "";
+  useEffect(() => {
+    onId(id);
+  }, [id, onId]);
+  return null;
+}
+
 export default function BureauPage() {
+  // ⚠️ Разрешено 31.08.2026 в пользу ЭТОЙ стороны, и это не «моё против чужого».
+  // Ветка bureau-ssr-suspense заменяла весь блок на `return <BureauPageInner />`,
+  // то есть уносила вместе с обёрткой отметку возврата после оплаты. Без неё
+  // покупка, пришедшая из Stripe с ?paid=1, не связывается с каналом — деньги
+  // приходят, а откуда пришёл человек, мы больше не знаем.
+  //
+  // Их работа по скорости живёт в других местах файла и пришла БЕЗ конфликта.
   return (
     <Suspense fallback={<div style={{ minHeight: "60vh", padding: 24, color: "#64748b", fontSize: 14 }}>Загрузка…</div>}>
       {/* Stripe возвращает сюда с ?paid=1 — без этой отметки оплата не
@@ -185,9 +207,13 @@ function BureauPageInner() {
   // заголовку, автору и хешам — вышло бы «найдено 0», что читается как «моего
   // объекта здесь нет». Поэтому спрашиваем у QRight хеш содержимого объекта и
   // ищем по нему. Не разрешилось — говорим об этом, а не молчим.
-  const searchParams = useSearchParams();
-  const deepObjectId =
-    searchParams?.get("objectId") || searchParams?.get("qrightObjectId") || "";
+  // Параметр читает крошечный дочерний компонент внутри своей границы
+  // Suspense (см. DeepLinkParam ниже). Раньше useSearchParams стоял ЗДЕСЬ, и
+  // из-за него всю страницу приходилось оборачивать в Suspense — а робот,
+  // который не исполняет скрипты, видел вместо содержимого текст заглушки
+  // «Загрузка…». Замер 29.08.2026: вне скриптов в HTML было 623 символа,
+  // «Service Tiers» и «Legal Framework» отсутствовали вовсе.
+  const [deepObjectId, setDeepObjectId] = useState("");
   const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -427,6 +453,12 @@ function BureauPageInner() {
 
   return (
     <main>
+      {/* Единственное, что обязано быть за границей Suspense: чтение параметра
+          ссылки. Остальная страница рисуется на сервере и видна тем, кто не
+          исполняет скрипты. */}
+      <Suspense fallback={null}>
+        <DeepLinkParam onId={setDeepObjectId} />
+      </Suspense>
       <ProductPageShell maxWidth={920}>
         <Wave1Nav />
 

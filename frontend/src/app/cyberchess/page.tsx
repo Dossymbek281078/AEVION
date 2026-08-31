@@ -283,11 +283,11 @@ type PVLine = {pv:number;cp:number;mate:number;depth:number;moves:string[]};
 // поэтому конкурентные вызовы из разных эффектов больше не обнуляют колбэки
 // друг друга и каждый запрос доходит до bestmove. См. _submit/_pump/_finish.
 type SFJob={kind:"go"|"eval"|"multiPV";cmds:string[];cb:((f:string,t:string,p?:string)=>void)|null;ecb:((cp:number,mate:number,depth?:number)=>void)|null;mpvCb:((lines:PVLine[])=>void)|null};
-class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number,depth?:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];private q:SFJob[]=[];private cur:SFJob|null=null;
+class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number,depth?:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];private q:SFJob[]=[];private cur:SFJob|null=null;
   // Throttle eval-bar updates: Stockfish стримит десятки `info score` в секунду; без троттла
   // каждый = setState → ре-рендер всего компонента → дёрганье анимации хода. Обновляем ~8/сек.
   private ecbTimer:ReturnType<typeof setTimeout>|null=null;private pendingEval:{cp:number;mate:number;depth:number}|null=null;
-  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onerror=e=>{e.preventDefault();};this.w.onmessage=e=>{const l=String(e.data||"");
+  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onerror=e=>{e.preventDefault();this.ok=false;this.oshibka=(e as ErrorEvent).message||"движок не запустился";try{console.warn("[CyberChess] движок Stockfish не поднялся:",this.oshibka)}catch{}};this.w.onmessage=e=>{const l=String(e.data||"");
     // Diagnostic: log Stockfish init/feature lines so we can verify NNUE + threads in DevTools.
     // Look for: "info string NNUE evaluation using ..." and "info string Using N threads".
     if(l.startsWith("info string")||l==="readyok"||l==="uciok")try{console.log("[SF]",l)}catch{}
@@ -3751,7 +3751,10 @@ export default function CyberChessPage(){
     autoAnalysedRef.current=fp;
     // Small delay so Stockfish finishes AI last move evaluation first
     const t=setTimeout(async()=>{
-      if(!sfR.current?.ready())return;
+      if(!sfR.current?.ready()){
+        try{console.warn("[CyberChess] разбор партии не запущен: движок не готов")}catch{}
+        return;
+      }
       try{
         await runAnalysis(10);
         // Разбор готов — досохраняем его в уже записанную партию: при
@@ -3768,7 +3771,11 @@ export default function CyberChessPage(){
         }
         // After quick analysis, toast a summary
         // analysis state is updated inside runAnalysis via sAnalysis
-      }catch{}
+      }catch(e){
+        // Молчать здесь нельзя: разбор партии — то, ради чего человек ждёт
+        // после игры. Саму игру не роняем, но след оставляем.
+        try{console.warn("[CyberChess] разбор партии не удался:",e)}catch{}
+      }
     },800);
     return()=>clearTimeout(t);
   },[over,hist.length]);
@@ -8874,7 +8881,7 @@ export default function CyberChessPage(){
             <button onClick={()=>{sGhostDuelMode(false);sGhostDuelConfig(null);showToast("Дуэль завершена","info")}} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a78bfa",background:"white",color:"#6d28d9",fontSize:11,fontWeight:800,cursor:"pointer"}}>Выйти</button>
           </div>}
           {/* Status bar */}
-          {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
+          {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF&&sfOk} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
           {(tab==="play"||tab==="coach")&&over&&<PostGameCard hist={hist} analysis={analysis} pCol={pCol} schitaem={hist.length>=6} />}
           {/* Variant HUD: shows variant-specific info (Diceblade die, Twin Kings royal-queen status, Asymmetric armies) */}
           {variant!=="standard"&&on&&!over&&(tab==="play"||tab==="coach")&&<div style={{

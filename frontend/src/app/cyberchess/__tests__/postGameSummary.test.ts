@@ -9,6 +9,32 @@ import { postGameSummary, odnaFraza, hodIgroka, type PlyAnalysis } from "../post
 const a = (quality: string, cpLoss: number, best?: string): PlyAnalysis =>
   ({ move: 0, cp: 0, mate: 0, quality, cpLoss, best });
 
+describe("глагол согласуется с числом ошибок", () => {
+  // Увидено на живой сборке в первом же настоящем разборе: существительное
+  // склонялось, глагол остался во множественном — «1 ошибка стоили позиции».
+  const fraza = (oshibok: number) =>
+    odnaFraza({ vsego: 10, tochnyh: 5, netochnostey: 0, oshibok, zevkov: 0,
+                blestyashchih: 0, tochnost: 50, perelom: null });
+
+  it("одна ошибка — стоила", () => {
+    expect(fraza(1)).toContain("1 ошибка стоила позиции");
+  });
+
+  it("две — стоили", () => {
+    expect(fraza(2)).toContain("2 ошибки стоили позиции");
+  });
+
+  it("пять — стоили", () => {
+    expect(fraza(5)).toContain("5 ошибок стоили позиции");
+  });
+
+  it("двадцать одна — снова стоила", () => {
+    // Второй десяток и «21» ведут себя по-разному; ловим обе ветки.
+    expect(fraza(21)).toContain("21 ошибка стоила позиции");
+    expect(fraza(11)).toContain("11 ошибок стоили позиции");
+  });
+});
+
 describe("чей ход разбираем", () => {
   it("белые ходят чётными полуходами, чёрные нечётными", () => {
     expect(hodIgroka(0, "w")).toBe(true);

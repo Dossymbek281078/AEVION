@@ -177,7 +177,7 @@ export default function RoutingSimulator() {
             })}
           </svg>
 
-          <div
+          <div data-stack-mobile=""
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr",

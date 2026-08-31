@@ -143,7 +143,7 @@ export default function PostReader({ refreshKey }: Props) {
         read &amp; decrypt
       </h3>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+      <div data-stack-mobile="" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
         <div>
           <label style={labelStyle}>alias</label>
           <input aria-label="Ваш псевдоним"

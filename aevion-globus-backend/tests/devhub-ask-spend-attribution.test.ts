@@ -19,7 +19,13 @@ vi.mock("../src/services/qcoreai/smartComplete", () => ({
   }),
 }));
 
-const { runs } = vi.hoisted(() => ({ runs: [] as any[] }));
+const { runs, provider } = vi.hoisted(() => ({
+  runs: [] as any[],
+  // Ответ поставщика — в ИЗМЕНЯЕМОМ поле, а не подменой экспорта.
+  // Подмена экспорта насовсем протекла в соседний тест: он получал
+  // чужие токены и падал на сверке цены. Поймано падением.
+  provider: { reply: "", tokensIn: 1000, tokensOut: 500 },
+}));
 vi.mock("../src/lib/smartRunLog", () => ({
   insertSmartRun: (row: any) => { runs.push(row); },
 }));
@@ -28,9 +34,9 @@ vi.mock("../src/lib/smartRunLog", () => ({
 vi.mock("../src/services/qcoreai/providers", () => ({
   getProviders: () => [{ id: "openai", defaultModel: "gpt-4o-mini", configured: true }],
   callProvider: async () => ({
-    reply: JSON.stringify({ summary: "s", milestones: [] }),
+    reply: provider.reply || JSON.stringify({ summary: "s", milestones: [] }),
     model: "gpt-4o-mini",
-    usage: { prompt_tokens: 1000, completion_tokens: 500 },
+    usage: { prompt_tokens: provider.tokensIn, completion_tokens: provider.tokensOut },
   }),
 }));
 vi.mock("../src/lib/dbPool", () => ({ getPool: () => ({ query: vi.fn() }) }));
@@ -89,7 +95,13 @@ describe("расход /ask отделим: анонимный от вошедш
 });
 
 describe("расход /plan попадает в учёт и отделим", () => {
-  beforeEach(() => { runs.length = 0; });
+  beforeEach(() => {
+    runs.length = 0;
+    // Возврат к исходному: иначе один тест меняет вход другому.
+    provider.reply = "";
+    provider.tokensIn = 1000;
+    provider.tokensOut = 500;
+  });
 
   test("без входа расход записан и помечен как анонимный", async () => {
     const res = await request(await app())
@@ -99,6 +111,23 @@ describe("расход /plan попадает в учёт и отделим", ()
     // Считаем ПРИРОСТ записей, а не наличие: строка могла остаться от соседа.
     expect(runs).toHaveLength(1);
     expect(runs[0].module).toBe("devhub-anon");
+  });
+
+  test("деньги потрачены — учёт есть, даже если ответ не разобрался", async () => {
+    // Учёт стоит СРАЗУ после вызова поставщика, до разбора ответа, и это
+    // не косметика: поставщику уже заплачено. Разбери мы ответ неудачно —
+    // расход всё равно состоялся, и не записать его значит занизить сумму
+    // ровно в тех случаях, когда что-то пошло не так.
+    //
+    // Перенос строки учёта ПОСЛЕ разбора выглядел бы безобидной уборкой.
+    provider.reply = "это не JSON";   // разбор упадёт
+    const res = await request(await app())
+      .post("/api/devhub/plan")
+      .send({ idea: "магазин носков" });
+    // Ответ может быть любым — важно, что расход записан.
+    expect([200, 500, 502]).toContain(res.status);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].costUsd).toBeGreaterThan(0);
   });
 
   test("цена не нулевая — иначе учёт есть только на вид", async () => {

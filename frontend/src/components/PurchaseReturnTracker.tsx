@@ -47,6 +47,9 @@ export function PurchaseReturnTracker({
   provider,
   successParam,
   successValue,
+  tier,
+  value,
+  meta,
 }: {
   /** Откуда пришли: попадает в воронку как источник. */
   source: string;
@@ -72,6 +75,24 @@ export function PurchaseReturnTracker({
    * при любом заходе — дыра в интерфейсе самого компонента, а не в странице.
    */
   successValue?: string;
+  /**
+   * Тариф покупки, если страница его знает.
+   *
+   * Заведено 31.08.2026 по замечанию соседнего окна. Оно применило приём этого
+   * компонента у себя, но НЕ заменило свой учёт на него — и по верной причине:
+   * их событие несёт `tier`, `value` и `period`, а компонент их не умел.
+   * Замена ради единообразия стоила бы трёх полей воронки, то есть ровно тех,
+   * по которым видно, ЧТО покупают.
+   *
+   * Это второй за день случай, когда пропущенное применение общего компонента
+   * означало не небрежность, а отсутствие у него нужного поля. Инструмент,
+   * который беднее места применения, будут обходить — и правильно сделают.
+   */
+  tier?: string;
+  /** Сумма покупки в долларах, если известна. */
+  value?: number;
+  /** Дополнительные поля события: период, вариант A/B и прочее. */
+  meta?: Record<string, string | number | boolean | null>;
 }) {
   const params = useSearchParams();
   const fired = useRef(false);
@@ -90,14 +111,19 @@ export function PurchaseReturnTracker({
     track({
       type: "checkout_success",
       source,
+      ...(tier ? { tier } : {}),
+      ...(typeof value === "number" ? { value } : {}),
       meta: {
         provider,
         reference: params.get("reference"),
         checkoutId: params.get("cid"),
         stub: params.get("stub") === "1",
+        // Поля страницы кладутся ПОСЛЕ общих: если страница знает про
+        // провайдера или ссылку точнее нас, побеждает она.
+        ...(meta ?? {}),
       },
     });
-  }, [isSuccess, source, provider, params]);
+  }, [isSuccess, source, provider, params, tier, value, meta]);
 
   return null;
 }

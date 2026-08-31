@@ -1,3 +1,5 @@
+import { TOCHNYE_HODY, NETOCHNOST, type MoveQuality } from "./moveQuality";
+
 /**
  * AEVION CyberChess — FIDE rating calibration anchors + CPI metric regression.
  *
@@ -336,7 +338,11 @@ export type SavedGameForCPI = {
    *  calibrateFromGames uses real cp-loss stats instead of heuristics. */
   analysis?: Array<{
     ply: number;
-    quality?: "best" | "good" | "ok" | "inaccuracy" | "mistake" | "blunder";
+    /** Ярлык из classifyDrop. Свой список здесь был ТРЕТЬИМ словарём в
+     *  модуле ("ok", "inaccuracy", "best") и не совпадал ни с чем, что
+     *  движок отдаёт, — поэтому типы «подтверждали» заведомо ложные
+     *  сравнения. Берём общий тип, тогда расхождение станет ошибкой сборки. */
+    quality?: MoveQuality;
     /** Centipawn loss for this ply (always ≥ 0). Undefined on legacy records. */
     cpLoss?: number;
   }>;
@@ -407,8 +413,11 @@ export function calibrateFromGames(games: SavedGameForCPI[]): CPIMetrics {
         analyzedPlies++;
         if (a.quality === "blunder") blunderMoves++;
         else if (a.quality === "mistake") mistakeMoves++;
-        else if (a.quality === "inaccuracy") inaccuracyMoves++;
-        else if (a.quality === "best" || a.quality === "good") bestOrGoodMoves++;
+        else if (a.quality === NETOCHNOST) inaccuracyMoves++;
+        // Точными считаем и brilliant/great: раньше здесь стояло
+        // `"best" || "good"`, а ярлыка "best" движок не отдаёт вовсе —
+        // блестящие ходы шли мимо всех счётчиков и занижали accuracyPct.
+        else if (a.quality && TOCHNYE_HODY.has(a.quality)) bestOrGoodMoves++;
         if (typeof a.cpLoss === "number" && a.cpLoss >= 0) cpLosses.push(a.cpLoss);
       }
     }

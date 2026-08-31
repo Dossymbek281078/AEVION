@@ -26,7 +26,26 @@ export function nonPawnMaterialFromFEN(fen?:string):number{
   }
   return m; // макс ≈ 2*(2*3+2*3+2*5+9)=62
 }
-export function classifyDrop(drop:number,prevFromMover:number,currFromMover:number,fen?:string):"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder"{
+/**
+ * Ярлыки качества — ОДИН словарь на модуль.
+ *
+ * Заведён 31.08.2026, когда нашлось, что калибровка рейтинга сравнивает
+ * строки, которых classifyDrop не отдаёт НИКОГДА: "inaccuracy" (канон —
+ * "inacc") и "best" (такого ярлыка нет вовсе). Следствие было обратным
+ * здравому смыслу: brilliant и great не попадали в «точные», то есть чем
+ * лучше человек играл, тем ниже выходила оценка его силы.
+ *
+ * Строка ходит между четырьмя файлами и в localStorage, поэтому типы её не
+ * стерегут. Стережёт словарь: сравнивать надо с ним, а не с литералом.
+ */
+export type MoveQuality = "brilliant" | "great" | "good" | "inacc" | "mistake" | "blunder";
+
+/** Ходы, которые засчитываются человеку как точные. */
+export const TOCHNYE_HODY: ReadonlySet<string> = new Set<MoveQuality>(["brilliant", "great", "good"]);
+/** Ярлык неточности. Именно "inacc" — не "inaccuracy". */
+export const NETOCHNOST: MoveQuality = "inacc";
+
+export function classifyDrop(drop:number,prevFromMover:number,currFromMover:number,fen?:string):MoveQuality{
   const npm=nonPawnMaterialFromFEN(fen);
   // phase: 1.0 = полный материал (дебют/митель), стремится к ~0 в голом эндшпиле.
   // В эндшпиле множитель порогов <1 → те же потери классифицируются строже.

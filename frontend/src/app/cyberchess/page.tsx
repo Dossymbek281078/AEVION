@@ -46,6 +46,7 @@ import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, 
 import { COLOR as CC_LIGHT, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { PV, ev, mm, best } from "./chessEngine";
 import { classifyDrop } from "./moveQuality";
+import PostGameCard from "./PostGameCard";
 import { RANKS, gRank } from "./rating";
 import { pickDailyIdx } from "./dailyPick";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
@@ -8795,6 +8796,7 @@ export default function CyberChessPage(){
           </div>}
           {/* Status bar */}
           {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
+          {(tab==="play"||tab==="coach")&&over&&<PostGameCard hist={hist} analysis={analysis} pCol={pCol} schitaem={hist.length>=6} />}
           {/* Variant HUD: shows variant-specific info (Diceblade die, Twin Kings royal-queen status, Asymmetric armies) */}
           {variant!=="standard"&&on&&!over&&(tab==="play"||tab==="coach")&&<div style={{
             padding:"10px 14px",borderRadius:RADIUS.md,

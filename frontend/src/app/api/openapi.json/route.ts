@@ -747,6 +747,33 @@ const SPEC = {
         },
       },
     },
+    "/v1/health": {
+      get: {
+        summary: "Storage durability of the Payments Rail",
+        operationId: "paymentsHealth",
+        description:
+          "Whether payment records currently survive a restart. The storage layer falls back to process memory when no durable backend is configured, and that fallback is silent: every endpoint still answers 200. This is how an integrator can tell. `durable` covers refunds, disputes, the audit log and the webhook queue. `linksDurable` answers separately for payment links, which are not written to the durable backend at all, so configuring one does not change it.",
+        responses: {
+          "200": {
+            description: "Durability report.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean" },
+                    durable: { type: "boolean" },
+                    linksDurable: { type: "boolean" },
+                    degradedSince: { type: "string", nullable: true },
+                    note: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/v1/audit": {
       get: {
         summary: "Read audit log",

@@ -321,3 +321,38 @@ export function planSendBatch(input: {
     postponed: свежие.length - toSend.length,
   };
 }
+
+/**
+ * Можно ли отправлять СЕЙЧАС — решение отдельно от отправки.
+ *
+ * Отправка рассылки необратима: письмо ушло живым людям, «уже» не отменяется.
+ * Поэтому охрана вынесена сюда и проверяется без единого настоящего письма.
+ *
+ * Три жеста нужны независимые, чтобы случайно их не совершить:
+ *   флаг --send                    осознанный запуск не того скрипта;
+ *   LAUNCH_ANNOUNCE_CONFIRM=<модуль> не повторяется стрелкой вверх в терминале;
+ *   совпадение с аргументом        защита от «отправил не тем».
+ *
+ * И четвёртое условие, не жест: день запуска должен наступить. Письмо
+ * «открылось» до открытия хуже молчания — его нельзя отозвать, а продукт
+ * человек не увидит.
+ */
+export type SendGate =
+  | { allowed: true }
+  | { allowed: false; reason: "dry" | "confirm-missing" | "confirm-mismatch" | "not-live" };
+
+export function checkSendGate(input: {
+  slug: string;
+  sendFlag: boolean;
+  confirmEnv: string | undefined;
+  isLive: boolean;
+}): SendGate {
+  if (!input.sendFlag) return { allowed: false, reason: "dry" };
+  const confirm = (input.confirmEnv ?? "").trim();
+  if (!confirm) return { allowed: false, reason: "confirm-missing" };
+  if (confirm !== input.slug) return { allowed: false, reason: "confirm-mismatch" };
+  // Проверяется ПОСЛЕДНЕЙ намеренно: человек, собравший все три жеста, должен
+  // получить в ответ именно «день не наступил», а не общий отказ.
+  if (!input.isLive) return { allowed: false, reason: "not-live" };
+  return { allowed: true };
+}

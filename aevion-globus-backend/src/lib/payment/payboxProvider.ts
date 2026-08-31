@@ -24,6 +24,7 @@
  *   4. getIntent → POST get_status3.php для опроса статуса
  */
 
+import { timingSafeEqual } from "node:crypto";
 import { buildSuccessUrl } from "./successUrl";
 import { createHash, randomBytes } from "node:crypto";
 import type {
@@ -94,6 +95,13 @@ async function payboxPost(scriptName: string, params: Record<string, string>): P
     body,
   });
   return r.text();
+}
+
+function sigEqual(a: string, b: string): boolean {
+  const ba = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  if (ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
 }
 
 export const payboxPaymentProvider: PaymentProvider = {
@@ -183,7 +191,11 @@ export const payboxPaymentProvider: PaymentProvider = {
     }
 
     const expected = sign(scriptName, flat);
-    if (!presented || presented !== expected) {
+    // 31.08.2026. Сравнение подписи приведено к постоянному по времени:
+    // Lemon Squeezy и Gumroad здесь уже используют timingSafeEqual, PayBox
+    // сравнивал обычным !== — одна и та же задача решалась в модуле двумя
+    // способами. Длины сверяем заранее: timingSafeEqual бросает на разных.
+    if (!presented || !sigEqual(presented, expected)) {
       return {
         intentId: `paybox:${paymentId}`,
         result: { status: "failed" as const, paidAt: null, reason: "invalid_signature", raw: flat },

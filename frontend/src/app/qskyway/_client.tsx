@@ -51,9 +51,9 @@ interface AirspaceSummary {
 interface AirspaceCompliance {
   available: boolean;
   compliant: boolean | null;
-  exceedingSegments: number;
-  zeroCeilingSegments: number;
-  maxExceedanceM: number;
+  exceedingSegments: number | null;
+  zeroCeilingSegments: number | null;
+  maxExceedanceM: number | null;
   lowestCeilingM: number | null;
   note: string;
   /** тот же вердикт по-английски: приходит с сервера, `t()` до него не достаёт */
@@ -91,7 +91,7 @@ interface JustDoc {
   obstacleSegments?: number; measuredObstacleSegments?: number;
   /** где страховочный запас за неуверенность съеден полом коридора — под подписью */
   blindHeight?: { guessedSegments: number; inertPenaltySegments: number; clearedUpToM: number };
-  airspace: null | { authority: string; source: string; regime: string; effective: string; contentHash: string | null; compliant: boolean | null; exceedingSegments: number; maxExceedanceM: number; lowestCeilingM: number | null };
+  airspace: null | { authority: string; source: string; regime: string; effective: string; contentHash: string | null; compliant: boolean | null; exceedingSegments: number | null; maxExceedanceM: number | null; lowestCeilingM: number | null };
 }
 interface JustAttestation { alg: string; contentHash: string; signature: string; publicKey: string; ephemeral: boolean }
 interface Cell { c: number; r: number; }
@@ -1328,7 +1328,7 @@ export default function QSkywayClient() {
                         an unrestricted flight would have needed — say so, don't let it
                         read as the current route. */}
                     {ceilingBlocked && <span style={{ color: "#5f7086" }}>{t("qskyway.route.noCeilingLimit")}</span>}
-                    🛂 {airspaceRoute.compliant ? t("qskyway.route.withinCeiling") : t("qskyway.route.aboveCeiling", { m: airspaceRoute.maxExceedanceM, n: airspaceRoute.exceedingSegments })}
+                    🛂 {airspaceRoute.compliant ? t("qskyway.route.withinCeiling") : t("qskyway.route.aboveCeiling", { m: airspaceRoute.maxExceedanceM ?? "—", n: airspaceRoute.exceedingSegments ?? "—" })}
                     {airspaceRoute.lowestCeilingM != null && (
                       <span style={{ color: "#5f7086" }}>{t("qskyway.route.lowestCeiling", { m: airspaceRoute.lowestCeilingM })}</span>
                     )}

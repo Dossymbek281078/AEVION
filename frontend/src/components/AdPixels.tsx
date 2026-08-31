@@ -93,16 +93,56 @@ export function AdPixels() {
     // оплату разбросаны по /go, /shop, /apps и страницам модулей, и часть из
     // них — серверные компоненты. Один слушатель покрывает все и не требует
     // помнить о трекинге при добавлении следующей кнопки.
-    const onClick = (e: MouseEvent) => {
-      const link = (e.target as HTMLElement | null)?.closest?.("a");
-      const href = link?.getAttribute("href");
-      if (!href || !isCheckoutLink(href)) return;
-      const id = productIdFrom(href);
+    // Один заход к оплате — одно событие площадке.
+    //
+    // Путей к кассе два вида, и раньше счётчик знал только первый:
+    //   ссылка   <a href="…gumroad…"> — виден кликом;
+    //   кнопка   таблица тарифов, чип модуля, апселл: адрес приходит от
+    //            бэкенда, переход делает скрипт, клика по ссылке НЕТ.
+    // Второй вид — самые посещаемые денежные страницы, и площадка на них бы
+    // ничему не научилась.
+    //
+    // Теперь основной источник — наше собственное событие checkout_start: его
+    // шлют все десять отправителей. Слушатель кликов оставлен для ссылок,
+    // которые событие НЕ шлют (например, прямая ссылка на странице
+    // конституции), и гасится флагом, чтобы один заход не посчитали дважды.
+    let ужеОтправлено = false;
+    const пометить = (id: string | null) => {
       window.fbq?.("track", "InitiateCheckout", id ? { content_ids: [id] } : undefined);
       window.ttq?.track("InitiateCheckout", id ? { content_id: id } : undefined);
     };
-    document.addEventListener("click", onClick, { capture: true });
-    return () => document.removeEventListener("click", onClick, { capture: true });
+
+    const onTrack = (e: Event) => {
+      const d = (e as CustomEvent).detail as
+        | { type?: string; meta?: Record<string, unknown> }
+        | undefined;
+      if (!d || d.type !== "checkout_start") return;
+      ужеОтправлено = true;
+      // Флаг живёт один кадр: он гасит клик по ТОЙ ЖЕ ссылке, а не следующую
+      // покупку. Без сброса второй заход в кассу остался бы неучтённым.
+      setTimeout(() => {
+        ужеОтправлено = false;
+      }, 0);
+      const id = typeof d.meta?.product === "string" ? d.meta.product : null;
+      пометить(id);
+    };
+
+    const onClick = (e: MouseEvent) => {
+      if (ужеОтправлено) return;
+      const link = (e.target as HTMLElement | null)?.closest?.("a");
+      const href = link?.getAttribute("href");
+      if (!href || !isCheckoutLink(href)) return;
+      пометить(productIdFrom(href) ?? null);
+    };
+
+    window.addEventListener("aevion:track", onTrack);
+    // Слушатель кликов — на всплытии, а не на перехвате: обработчик самой
+    // ссылки успевает позвать track(), выставить флаг, и двойного счёта нет.
+    document.addEventListener("click", onClick);
+    return () => {
+      window.removeEventListener("aevion:track", onTrack);
+      document.removeEventListener("click", onClick);
+    };
   }, []);
 
   if (!META_ID && !TIKTOK_ID) return null;

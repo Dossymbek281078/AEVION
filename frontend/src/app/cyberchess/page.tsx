@@ -3105,6 +3105,7 @@ export default function CyberChessPage(){
   // when the user is actively playing (tab === "play", game on, not in P2P).
   useEffect(()=>{
     if(!on||over||tab!=="play"||p2pMode||hotseat||setup)return;
+    if(!myT)return; // ход соперника — движок занят его поиском, не мешаем
     if(!sfR.current?.ready())return;
     if(currentEndgame||pzCurrent)return; // skip in puzzle/endgame loops
     const fenForTop3=game.fen();
@@ -3135,7 +3136,7 @@ export default function CyberChessPage(){
         else if(idleId)clearTimeout(idleId as any);
       }catch{}
     };
-  },[bk,on,over,tab,p2pMode,hotseat,setup,sfOk]);// eslint-disable-line react-hooks/exhaustive-deps
+  },[bk,on,over,tab,p2pMode,hotseat,setup,sfOk,myT]);// eslint-disable-line react-hooks/exhaustive-deps
 
   // [reverted 2026-04-22] Earlier version of this effect terminated+reinit'd the Stockfish
   // worker on browseIdx/tab changes; deps included `tab` so every tab switch fired

@@ -64,8 +64,25 @@ function SuccessInner() {
       ? new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toLocaleDateString("ru-RU")
       : null;
 
-  const tierName = tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : "Pro";
-  const appLink = APP_LINKS[appId] ?? APP_LINKS["platform"];
+  const tierName = tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : null;
+
+  /*
+   * Что человек купил — знаем НЕ ВСЕГДА, и врать об этом нельзя.
+   *
+   * Замер 31.08.2026 в браузере: страница возврата говорила «Pro активирован!»
+   * на голом адресе и предлагала «Открыть QRight →» независимо от покупки.
+   * Проверено по коду всех четырёх касс: параметр appId не кладёт НИ ОДНА, то
+   * есть ссылку на QRight видел КАЖДЫЙ покупатель — включая тех, кто заплатил
+   * за QSign, QLearn или QCoreAI. Тариф теряется реже, но тоже теряется: у
+   * PayBox в адрес возврата уходит ref, а не tier, и казахстанский покупатель
+   * Lite читал «Pro активирован».
+   *
+   * Здесь тот же приём, что автор уже применил ниже к пункту «управлять
+   * подпиской»: не знаем — не называем. Неизвестный продукт ведёт в каталог,
+   * неизвестный тариф даёт «Оплата принята» без имени.
+   */
+  const knownApp = Object.prototype.hasOwnProperty.call(APP_LINKS, appId) && appId !== "platform";
+  const appLink = knownApp ? APP_LINKS[appId] : null;
 
   useEffect(() => {
     track({
@@ -106,8 +123,12 @@ function SuccessInner() {
           {stub
             ? t("pricing.checkoutSuccess.titleStub")
             : trialDays > 0
-              ? t("pricing.checkoutSuccess.titleTrial", { tier: tierName, days: trialDays })
-              : t("pricing.checkoutSuccess.titleActivated", { tier: tierName })}
+              ? tierName
+                ? t("pricing.checkoutSuccess.titleTrial", { tier: tierName, days: trialDays })
+                : t("pricing.checkoutSuccess.titleTrialNoTier", { days: trialDays })
+              : tierName
+                ? t("pricing.checkoutSuccess.titleActivated", { tier: tierName })
+                : t("pricing.checkoutSuccess.titleActivatedNoTier")}
         </h1>
 
         {/* Subtitle */}
@@ -116,7 +137,9 @@ function SuccessInner() {
             ? t("pricing.checkoutSuccess.subtitleStub")
             : trialDays > 0
               ? t("pricing.checkoutSuccess.subtitleTrial", { date: trialEndDate ?? "" })
-              : t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })}
+              : tierName
+                ? t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })
+                : t("pricing.checkoutSuccess.subtitleActivatedNoTier")}
         </p>
 
         {/* Trial end date badge */}
@@ -168,7 +191,7 @@ function SuccessInner() {
         {/* Action buttons */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
           <Link
-            href={appLink.href}
+            href={appLink ? appLink.href : "/apps"}
             style={{
               display: "inline-block", padding: "13px 28px",
               background: "#fff", color: "#0d9488",
@@ -176,7 +199,9 @@ function SuccessInner() {
               fontWeight: 800, fontSize: 15,
             }}
           >
-            {t("pricing.checkoutSuccess.openApp", { app: appLink.name })} →
+            {appLink
+              ? t("pricing.checkoutSuccess.openApp", { app: appLink.name })
+              : t("pricing.checkoutSuccess.openAppNoName")}{" "}→
           </Link>
           <Link
             href="/"
@@ -208,7 +233,12 @@ function SuccessInner() {
               { icon: "📧", text: processor
                   ? t("pricing.checkoutSuccess.nextEmail", { processor })
                   : t("pricing.checkoutSuccess.nextEmailNoName") },
-              { icon: "🚀", text: t("pricing.checkoutSuccess.nextOpenApp", { app: appLink.name }) },
+              {
+                icon: "🚀",
+                text: appLink
+                  ? t("pricing.checkoutSuccess.nextOpenApp", { app: appLink.name })
+                  : t("pricing.checkoutSuccess.nextOpenAppNoName"),
+              },
               // Куда идти управлять подпиской, можно сказать только зная сервис.
               // Не знаем — пункт не показываем, а не отправляем наугад.
               ...(processor

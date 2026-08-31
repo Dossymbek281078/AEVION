@@ -1,0 +1,94 @@
+/**
+ * Не добавлять новых адресов на домене, который НЕ ПРИНИМАЕТ почту.
+ *
+ * Замер 31.08.2026 (положительный контроль пройден — у `gmail.com` MX
+ * находится, у `aevion.io` тоже):
+ *
+ *   MX у aevion.app — НЕТ. TXT — только `brevo-code`, SPF отсутствует.
+ *   DKIM `resend._domainkey` — настоящий ключ, DMARC — `p=none`.
+ *
+ * Записи MX нет, а запасной путь по A-записи ведёт на веб-хост, который SMTP
+ * не принимает. Значит письмо на ЛЮБОЙ адрес `@aevion.app` не доходит никуда:
+ * `support@`, `billing@` (возвраты), `security@` (сообщения об уязвимостях),
+ * `privacy@` (запросы о данных) — все мертвы, и человек узнаёт об этом
+ * отлупом, а мы не узнаём вовсе.
+ *
+ * Это НЕ новая находка: она записана в памяти
+ * `feedback_promised_channel_never_verified` (там было 36 упоминаний). Сегодня
+ * их 34 — то есть за это время ничего не починено и не выросло.
+ *
+ * Чинится не кодом, а почтой домена: это решение основателя. Пока не починено,
+ * этот сторож держит РАЗМЕР беды — чтобы новые страницы не добавляли адресов,
+ * которых потом никто не найдёт. Список ниже заморожен; уменьшать его можно и
+ * нужно по мере починки, а расти он не должен.
+ */
+import { describe, it, expect } from "vitest";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+const КОРЕНЬ = join(process.cwd(), "src/app");
+
+/** Страницы, где адрес на мёртвом домене уже стоит. Список только сокращается. */
+const ИЗВЕСТНЫЕ = new Set([
+  "build/onboarding/page.tsx",
+  "constitution/pricing/page.tsx",
+  "constitution/showcase/page.tsx",
+  "developers/fintech/troubleshooting/page.tsx",
+  "devhub/[id]/page.tsx",
+  "pricing/affiliate-dashboard/page.tsx",
+  "pricing/glossary/page.tsx",
+  "pricing/page.tsx",
+  "pricing/refund-policy/page.tsx",
+  "pricing/security/page.tsx",
+  "qcoreai/budget/page.tsx",
+  "qstore/page.tsx",
+  "support/page.tsx",
+]);
+
+function страницы(каталог: string, префикс = ""): string[] {
+  const из: string[] = [];
+  for (const имя of readdirSync(каталог)) {
+    const полный = join(каталог, имя);
+    if (statSync(полный).isDirectory()) {
+      if (имя === "__tests__" || имя === "node_modules") continue;
+      из.push(...страницы(полный, префикс ? `${префикс}/${имя}` : имя));
+    } else if (имя.endsWith(".tsx")) {
+      из.push(префикс ? `${префикс}/${имя}` : имя);
+    }
+  }
+  return из;
+}
+
+const СМЕРТЕЛЬНЫЙ_ДОМЕН = /@aevion\.app/;
+
+describe("новых мёртвых адресов не появляется", () => {
+  const все = страницы(КОРЕНЬ);
+  const сАдресом = все.filter((p) =>
+    СМЕРТЕЛЬНЫЙ_ДОМЕН.test(readFileSync(join(КОРЕНЬ, p), "utf8")),
+  );
+
+  it("обход вообще что-то нашёл — иначе ноль ниже ничего не значит", () => {
+    // Контроль охвата: без него «новых нет» одинаково выглядит при исправном
+    // коде и при сломанном обходе каталогов.
+    expect(все.length).toBeGreaterThan(100);
+    expect(сАдресом.length).toBeGreaterThan(0);
+  });
+
+  it("ни одной новой страницы с адресом на домене без почты", () => {
+    const новые = сАдресом.filter((p) => !ИЗВЕСТНЫЕ.has(p));
+    expect(
+      новые,
+      "письмо на @aevion.app не доходит никуда: у домена нет MX. " +
+        "Дайте человеку адрес, который принимает почту, или форму на сайте",
+    ).toEqual([]);
+  });
+
+  it("список не протухает: починенное убирается из него", () => {
+    const исчезнувшие = [...ИЗВЕСТНЫЕ].filter((p) => !сАдресом.includes(p));
+    expect(
+      исчезнувшие,
+      "адрес убран со страницы — уберите её и из списка выше, иначе список " +
+        "будет обещать беду, которой уже нет",
+    ).toEqual([]);
+  });
+});

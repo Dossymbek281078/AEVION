@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { emailQuotaToday } from "../lib/brevoQuota";
 import { lemonSqueezyTiersConfigured } from "../data/lemonSqueezyVariants";
 
 /**
@@ -69,7 +70,12 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
    * не один общий, и общего специально нет.
    */
   const brevo = set("BREVO_API_KEY");
+  // Сколько писем ушло сегодня: у провайдера суточный потолок, и скрипт
+  // рассылки в отдельном процессе иначе о нём не узнает.
+  const quota = emailQuotaToday();
   const mail = {
+    sentToday: quota.count,
+    dailyCap: quota.cap,
     // подтверждение адреса при регистрации
     signup: { configured: email, via: smtp ? "smtp" : resend ? "resend" : null },
     // подтверждение подписки в воронке — отдельный провайдер

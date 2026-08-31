@@ -158,7 +158,26 @@ describe("Почта: три пути, три ответа", () => {
     process.env.RESEND_API_KEY = "re_x";
     const r = await get();
 
-    expect(Object.keys(r.body.mail).sort()).toEqual(["founderNotify", "signup", "waitlist"]);
+    // Проверяем СМЫСЛ, а не точный набор ключей: первая редакция требовала
+    // ровно три поля и покраснела на добавлении счётчика суток — то есть
+    // мешала работе вместо того, чтобы стеречь. Стеречь надо одно: чтобы не
+    // завели общий ответ «почта настроена», который и был источником спора.
+    for (const путь of ["signup", "waitlist", "founderNotify"]) {
+      expect(r.body.mail[путь], `пропал путь ${путь}`).toBeDefined();
+    }
     expect(r.body.mail.configured, "общий ответ вернулся — уберите его").toBeUndefined();
+    expect(r.body.mail.ok, "общий ответ под другим именем").toBeUndefined();
+  });
+});
+
+describe("расход писем за сутки виден снаружи", () => {
+  test("ручка отдаёт счётчик и потолок", async () => {
+    // Скрипт рассылки живёт в отдельном процессе и счётчик сервера сам по себе
+    // видит нулём. Без этих двух чисел он мог бы пробить суточный потолок
+    // провайдера: 301-е письмо не уходит, и узнать об этом неоткуда.
+    const r = await get();
+
+    expect(typeof r.body.mail.sentToday, "нет числа ушедших за сутки").toBe("number");
+    expect(r.body.mail.dailyCap, "нет потолка суток").toBeGreaterThan(0);
   });
 });

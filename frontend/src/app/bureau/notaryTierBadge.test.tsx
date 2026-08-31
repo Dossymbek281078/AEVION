@@ -6,9 +6,11 @@
 // ошибиться заметно: она утверждала одно и то же при любом состоянии реестра.
 //
 // Три исхода, а не два. Пустой реестр — «by request». Непустой — «live».
-// А вот «спросить не удалось» (сеть, 500, чужой ответ) — это НЕ ноль: понижать
-// тариф из-за собственной неудачи нельзя, иначе один сбой сети выглядит как
-// закрытие услуги. Ровно этот третий случай и проверяется отдельно.
+// А «спросить не удалось» (сеть, 500, чужой ответ) — это НЕ ноль и НЕ «live»:
+// утверждение о доступности платного тарифа делается только по подтверждению.
+// Понижение до «by request» правдиво в любом из миров и обратимо; обещание —
+// нет. Ровно этот третий случай и проверяется отдельно. (Направление изменено
+// 28.08.2026, разбор — у самой проверки ниже.)
 
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -41,6 +43,13 @@ function stubNotaries(reply: "empty" | "two" | "network-error" | "http-500" | "g
             notaries: reply === "two" ? [{ id: "n1", name: "Нотариус А" }, { id: "n2", name: "Нотариус Б" }] : [],
           }),
         };
+      }
+      if (u.includes("/api/bureau/health")) {
+        // Подпись нужна значку наравне с реестром: без ключа нотаризация
+        // подписывается HMAC на ПУБЛИЧНОМ ключе нотариуса, и обещать
+        // доступность тарифа в таком состоянии нельзя. Здесь отдаём настоящую,
+        // чтобы этот файл проверял СВОЁ условие — реестр.
+        return { ok: true, status: 200, json: async () => ({ notarySignature: "ed25519" }) };
       }
       return { ok: true, status: 200, json: async () => ({}) };
     }) as unknown as typeof fetch,
@@ -81,7 +90,7 @@ describe("Бюро: пометка тарифа Notarized идёт от реес
     expect(await badgeText()).not.toMatch(/live/i);
   });
 
-  test("в реестре есть нотариусы — тариф называется live", async () => {
+  test("в реестре есть нотариусы И подпись настоящая — тариф называется live", async () => {
     stubNotaries("two");
     renderPage();
     await waitFor(async () => {
@@ -89,8 +98,45 @@ describe("Бюро: пометка тарифа Notarized идёт от реес
     });
   });
 
+  // Условий с 29.08.2026 ДВА, и это продолжение той же мысли, ради которой
+  // писался файл: пометка идёт от настоящего состояния, а не от строки в коде.
+  // Нотариус в реестре отвечает на вопрос «есть кому подписать»; вопрос «чем
+  // подписано» — отдельный, и раньше его не задавали вовсе.
+  test("нотариусы есть, но подпись демонстрационная — не live", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const u = String(url);
+        if (u.includes("/api/bureau/notaries"))
+          return { ok: true, status: 200, json: async () => ({ notaries: [{ id: "n1", name: "Нотариус А" }] }) };
+        if (u.includes("/api/bureau/health"))
+          return { ok: true, status: 200, json: async () => ({ notarySignature: "demo" }) };
+        return { ok: true, status: 200, json: async () => ({}) };
+      }) as unknown as typeof fetch,
+    );
+    renderPage();
+    await waitFor(async () => {
+      expect(await badgeText()).toMatch(/by request/i);
+    });
+    expect(await badgeText()).not.toMatch(/live/i);
+  });
+
+  // ⚠️ Направление этой проверки ИЗМЕНЕНО 28.08.2026, и это осознанно.
+  //
+  // Прежняя версия требовала обратного: при неудачном опросе реестра пометка
+  // должна была остаться «live», чтобы собственный сбой не выглядел отсутствием
+  // услуги. Требование противоречит правилу, применённому к соседнему тарифу в
+  // тот же день: своя неосведомлённость — не повод обещать.
+  //
+  // Решает не симметрия, а ЦЕНА ошибки в каждую сторону:
+  //   «live» при неизвестном  -> утверждение о доступности, которого никто не
+  //                              проверял, на платном тарифе. Покупатель платит
+  //                              и упирается в пустой реестр.
+  //   «by request» при неизвестном -> правда в любом из миров: запросить можно
+  //                              всегда. Это не тревога и не отказ.
+  // Понижение здесь безопасно и обратимо, обещание — нет.
   test.each(["network-error", "http-500", "garbage"] as const)(
-    "спросить не удалось (%s) — пометка НЕ понижается: «не знаю» это не «ноль»",
+    "спросить не удалось (%s) — «live» НЕ утверждается: своя неудача не обещание",
     async (reply) => {
       stubNotaries(reply);
       renderPage();
@@ -99,8 +145,8 @@ describe("Бюро: пометка тарифа Notarized идёт от реес
       await screen.findByText("Notarized");
       await new Promise((r) => setTimeout(r, 30));
       const t = await badgeText();
-      expect(t, "собственный сбой выдан за отсутствие услуги").not.toMatch(/by request/i);
-      expect(t).toMatch(/live/i);
+      expect(t, "доступность утверждена без единого подтверждения").not.toMatch(/live/i);
+      expect(t).toMatch(/by request/i);
     },
   );
 });
@@ -148,13 +194,22 @@ async function verifiedTierText(): Promise<string> {
 }
 
 describe("тариф Verified называет состояние проверки личности", () => {
-  test("контроль: поставщик подключён — обещание про паспорт на месте", async () => {
+  // Контроль намеренно НЕ ищет слово «passport»: соседняя ветка убрала его как
+  // переобещание (глубина проверки зависит от поставщика, а не от нас), и
+  // сторож, стерегущий снятое обещание, охранял бы ложь. Контрактом остаётся
+  // различимость: при подключённом поставщике карточка не несёт предупреждения
+  // о демонстрационном режиме, при заглушке — несёт.
+  test("контроль: поставщик подключён — предупреждения о заглушке НЕТ", async () => {
     stubHealth("live");
     renderPage();
     await waitFor(async () =>
       expect(await verifiedTierText()).toMatch(/available now/i),
     );
-    expect(await verifiedTierText()).toMatch(/passport/i);
+    const txt = await verifiedTierText();
+    expect(txt).not.toMatch(/demo mode/i);
+    expect(txt).not.toMatch(/no document is actually verified|Ask us before buying/i);
+    // И описание механизма на месте — карточка платного тарифа не пустая.
+    expect(txt).toMatch(/identity check/i);
   });
 
   test("поставщика нет — не обещаем паспорт и не пишем «available now»", async () => {
@@ -167,7 +222,6 @@ describe("тариф Verified называет состояние проверк
     await waitFor(() => expect(screen.getByText("▲ demo mode")).toBeTruthy());
     const txt = await verifiedTierText();
     expect(txt).not.toMatch(/available now/i);
-    expect(txt).not.toMatch(/passport/i);
     // Промолчать тоже нельзя: тариф платный, человек должен знать до покупки.
     expect(txt).toMatch(/no document is actually verified|Ask us before buying/i);
   });
@@ -187,4 +241,32 @@ describe("тариф Verified называет состояние проверк
       expect(await verifiedTierText()).not.toMatch(/available now/i);
     },
   );
+});
+
+// ── Кнопка платного тарифа обязана куда-то вести ────────────────────────
+//
+// Единственная кнопка тарифа Verified ($19) вела на href="/bureau" — на ту же
+// страницу, где человек уже стоит. Нажатие не делало НИЧЕГО видимого: ни
+// перехода, ни прокрутки, ни формы. Внешне это неотличимо от сломанной кнопки,
+// и находится только нажатием — ни один сторож страниц такого не ловит, потому
+// что адрес живой и отвечает 200.
+describe("кнопка тарифа Verified ведёт дальше, а не на саму себя", () => {
+  test("href не равен текущей странице", async () => {
+    stubHealth("live");
+    renderPage();
+    const label = await screen.findByText(/Pick a cert to upgrade|Upgrade a cert/i);
+    const href = label.closest("a")?.getAttribute("href") || "";
+    expect(href, "кнопка платного тарифа ведёт на страницу, где человек уже стоит").not.toBe("/bureau");
+    expect(href.length, "у кнопки платного тарифа нет адреса вовсе").toBeGreaterThan(0);
+  });
+
+  test("ведёт в реестр — туда, где обновление действительно начинается", async () => {
+    stubHealth("live");
+    renderPage();
+    const label = await screen.findByText(/Pick a cert to upgrade|Upgrade a cert/i);
+    const href = label.closest("a")?.getAttribute("href") || "";
+    expect(href).toMatch(/registry/i);
+    // И якорь, на который она ссылается, на странице существует.
+    expect(document.querySelector("#registry"), "якорь #registry не найден").not.toBeNull();
+  });
 });

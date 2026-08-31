@@ -60,7 +60,6 @@ const BASELINE: Record<string, string> = {
   "/api/bank/test-webhook/:p": "предел прибора: сегмент собирается из переменной",
   "/api/build/bookmarks:p": "предел прибора: строка склеена",
   "/api/bureau/admin/verifications:p": "предел прибора: строка склеена",
-  "/api/help/contact": "проверить отдельно: POST-ручка, GET-пробой её не различает",
   "/api/constitution/scenarios":
     "НЕ дефект и НЕ вызов: строка из таблицы документации на странице /constitution/api. " +
     "Ручка существует — прод отвечает 200 (контроль: выдуманный сосед даёт 404), но резолвер " +

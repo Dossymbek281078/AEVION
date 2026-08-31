@@ -35,6 +35,9 @@ import {
   verifyProof as otsVerifyProof,
 } from "../lib/opentimestamps/anchor";
 import { computeWitnessCid } from "../lib/shamir/witnessCid";
+import { anchorSummary, pdfAnchorField } from "../lib/opentimestamps/anchorSummary";
+import { resolveEd25519 } from "../lib/qsignV2/keyRegistry";
+import { DEFAULT_ED25519_KID } from "../lib/qsignV2/ensureTables";
 import {
   CosignError,
   reverifyAuthorCosign,
@@ -59,6 +62,12 @@ const protectRateLimiter = createInMemoryRateLimiter({ max: 20 });
 // 30 / мин / IP / certId — /verify increments verifiedCount on every GET,
 // so anyone could pump a cert's count and game the «Most verified» sort.
 const verifyRateLimiter = createInMemoryRateLimiter({ max: 30 });
+// 240 / мин / IP — офлайн-пакет стал ПУБЛИЧНОЙ поверхностью 29.08.2026: его
+// спрашивают карточки предпросмотра ссылки при каждом построении. Раньше его
+// дёргали редко, по нажатию «скачать», и предела не было вовсе. Число взято у
+// соседних встраиваемых ручек (qright.ts:37, bureau.ts:37), чтобы предел был
+// один на весь класс, а не свой у каждой ручки.
+const bundleRateLimiter = createInMemoryRateLimiter({ max: 240 });
 
 interface QSignPayload {
   objectId: string;
@@ -131,6 +140,10 @@ async function ensureTables(): Promise<void> {
     );
   `);
   await pool.query(
+    // Заверение эфемерного ключа постоянным ключом платформы: без него офлайн
+    // нельзя отличить нашу подпись от чужой (ключ подписи приезжает в самом
+    // пакете). NULL — законное значение: у сертификатов, выпущенных до этой
+    // правки, и у выпусков, где постоянный ключ был недоступен.
     `ALTER TABLE "QuantumShield" ADD COLUMN IF NOT EXISTS "legacy" BOOLEAN NOT NULL DEFAULT false;`,
   );
   await pool.query(
@@ -185,6 +198,12 @@ async function ensureTables(): Promise<void> {
   // v2: signedAt хранит момент, вошедший в HMAC-пейлоад; без него
   // GET /verify/:certId не может пересчитать signatureHmac.
   await pool.query(
+    // Заверение эфемерного ключа постоянным ключом платформы. Колонки живут
+    // на IPCertificate, потому что пакет собирается из НЕЁ (SELECT * FROM
+    // "IPCertificate"): положить их на QuantumShield значило бы записать
+    // значение, которое никто не прочитает.
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "platformAttestationKid" TEXT;`,
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "platformAttestationSig" TEXT;`,
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "signedAt" TIMESTAMPTZ;`,
   );
   // v3 (Phase 3 — HMAC rotation): the QSign HMAC version that signed this
@@ -544,6 +563,47 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
     .toString("hex");
   wipeBuffer(pkcs8Signing);
 
+  /*
+   * Заверение эфемерного ключа ПОСТОЯННЫМ ключом платформы.
+   *
+   * Зачем. Подпись выше сделана ключом, который рождается на этот сертификат и
+   * уезжает к проверяющему В ТОМ ЖЕ пакете. Офлайн такая подпись доказывает,
+   * что payload не менялся, но НЕ то, чья она: посторонний сгенерирует свою
+   * пару и подпишет что угодно. Постоянный ключ платформы публикуется на
+   * /api/qsign/v2/keys, и его проверяющий может взять НЕЗАВИСИМО от пакета —
+   * тогда цепочка «платформа заверила этот эфемерный ключ» замыкается.
+   *
+   * Почему МЯГКО. Если семя постоянного ключа не задано, resolveEd25519 в
+   * боевом режиме бросает исключение. Ставить такой вызов на путь ВЫПУСКА
+   * жёстко нельзя: отсутствие настройки сломало бы выдачу сертификатов
+   * целиком. Не смогли заверить — сертификат всё равно выпускается, поле
+   * просто отсутствует, а проверяющий увидит «заверения нет» вместо ложного
+   * «всё в порядке».
+   */
+  let platformAttestation: { kid: string; signature: string } | null = null;
+  try {
+    const platform = await resolveEd25519(DEFAULT_ED25519_KID);
+    platformAttestation = {
+      kid: platform.kid,
+      // Подписываются UTF-8 байты hex-СТРОКИ ключа, а не сами 32 байта.
+      // Проверяющий берёт ровно это поле: `proofs.aevionEd25519.publicKeyRawHex`,
+      // и кодирует его так же. Обе стороны получают hex через .toString("hex"),
+      // то есть НИЖНИЙ регистр — расхождение регистра сделало бы все заверения
+      // ложно-красными, и заметить это на синтетике теста нельзя.
+      signature: crypto
+        .sign(null, Buffer.from(publicKeyRawHex, "utf8"), platform.privateKey)
+        .toString("hex"),
+    };
+  } catch (e) {
+    // Молчать нельзя: отсутствие заверения — это состояние, которое должно
+    // быть видно в журнале, иначе «у всех сертификатов его нет» откроется
+    // случайно и через месяц.
+    console.warn(
+      "[pipeline] платформенное заверение эфемерного ключа не сделано:",
+      (e as Error).message,
+    );
+  }
+
   let shards: AuthenticatedShard[];
   try {
     shards = splitAndAuthenticate(privateKeyRaw, shieldId);
@@ -621,8 +681,8 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
     );
 
     await client.query(
-      `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","fileHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'active',$20,$21,$22,$23,$24,$25)`,
+      `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","fileHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo","platformAttestationKid","platformAttestationSig")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'active',$20,$21,$22,$23,$24,$25,$26,$27)`,
       [
         certId,
         objectId,
@@ -649,6 +709,10 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
         cosign?.authorPublicKey ?? null,
         cosign?.authorSignature ?? null,
         cosign?.authorKeyAlgo ?? null,
+        // NULL — законное значение: постоянный ключ платформы мог быть
+        // недоступен, и выпуск сертификата от этого не останавливается.
+        platformAttestation?.kid ?? null,
+        platformAttestation?.signature ?? null,
       ],
     );
 
@@ -1485,6 +1549,25 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
           ? cert.signatureEd25519.slice(0, 64) + "..."
           : null,
         algorithm: cert.algorithm,
+        /**
+         * Заверение эфемерного ключа постоянным ключом платформы.
+         *
+         * Пакет его уже везёт, но третья сторона — суд, площадка, работодатель —
+         * открывает СНАЧАЛА эту страницу, а не офлайн-верификатор. Слой, который
+         * единственный отличает наш сертификат от собранного посторонним, обязан
+         * быть виден там, где смотрят первым.
+         *
+         * Подпись не сокращается, в отличие от соседней: её проверяют, а не
+         * разглядывают. kid нужен, чтобы взять открытый ключ НЕЗАВИСИМО, на
+         * /api/qsign/v2/keys.
+         */
+        platformAttestation:
+          cert.platformAttestationKid && cert.platformAttestationSig
+            ? {
+                kid: cert.platformAttestationKid,
+                signature: cert.platformAttestationSig,
+              }
+            : null,
         protectedAt: cert.protectedAt,
         status: cert.status,
         verificationLevel: cert.authorVerificationLevel || "anonymous",
@@ -1536,8 +1619,10 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         witness: witnessInfo,
       },
       bitcoinAnchor: {
-        status: cert.otsStatus ?? "not_stamped",
-        bitcoinBlockHeight: cert.otsBitcoinBlockHeight ?? null,
+        // Считается общим помощником — тем же, которым отвечают список,
+        // поиск по хешу и выгрузка. Здесь раньше был свой экземпляр той же
+        // арифметики: `?? "not_stamped"` и `?? null` слово в слово.
+        ...anchorSummary(cert as unknown as Record<string, unknown>),
         stampedAt: cert.otsStampedAt ?? null,
         upgradedAt: cert.otsUpgradedAt ?? null,
         hasProof: Boolean(cert.otsProof),
@@ -1649,7 +1734,7 @@ pipelineRouter.get("/certificates", async (_req, res) => {
     await ensureTables();
 
     const { rows } = await pool.query(
-      `SELECT "id","objectId","shieldId","title","kind","authorName","country","city","contentHash","fileHash","algorithm","status","protectedAt","verifiedCount"
+      `SELECT "id","objectId","shieldId","title","kind","authorName","country","city","contentHash","fileHash","algorithm","status","protectedAt","verifiedCount","otsStatus","otsBitcoinBlockHeight"
        FROM "IPCertificate" WHERE "status" = 'active' ORDER BY "protectedAt" DESC LIMIT 100`,
     );
 
@@ -1666,6 +1751,13 @@ pipelineRouter.get("/certificates", async (_req, res) => {
         protectedAt: r.protectedAt,
         verifiedCount: r.verifiedCount || 0,
         shieldId: r.shieldId || null,
+        // Состояние якоря в биткойне. До 28.08.2026 публичный реестр его не
+        // показывал вовсе: главный козырь продукта был невидим на его витрине.
+        //
+        // Имя поля — то же, что у ручки проверки (`bitcoinAnchor`), намеренно:
+        // второе имя для одного и того же понятия — это второй способ отвечать
+        // на один вопрос, и однажды они разойдутся.
+        bitcoinAnchor: anchorSummary(r),
         verifyUrl: `https://aevion.app/verify/${r.id}`,
       })),
       total: rows.length,
@@ -1718,8 +1810,8 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
     params.push(limit);
 
     const { rows } = await pool.query(
-      `SELECT "id","title","kind","authorName","country","city","contentHash","fileHash","algorithm","protectedAt","verifiedCount"
-       FROM "IPCertificate" WHERE ${conditions.join(" AND ")} ORDER BY ${orderBy} LIMIT $${params.length}`,
+      `SELECT "id","title","kind","authorName","country","city","contentHash","fileHash","algorithm","protectedAt","verifiedCount","otsStatus","otsBitcoinBlockHeight"
+       FROM "IPCertificate" WHERE ${conditions.join(" AND ")} ORDER BY ${orderBy} LIMIT ${params.length}`,
       params,
     );
 
@@ -1738,6 +1830,11 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
       "algorithm",
       "protectedAt",
       "verifiedCount",
+      // Столбцы якоря дописаны В КОНЕЦ намеренно: у CSV позиционный контракт,
+      // и вставка в середину сдвинула бы столбцы у всех, кто уже разбирает
+      // выгрузку по номеру.
+      "bitcoinAnchorStatus",
+      "bitcoinBlockHeight",
       "verifyUrl",
     ];
     const lines = [header.join(",")];
@@ -1758,6 +1855,8 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
               : r.protectedAt,
           ),
           esc(r.verifiedCount || 0),
+          esc(anchorSummary(r).status),
+          esc(anchorSummary(r).bitcoinBlockHeight ?? ""),
           esc(`https://aevion.app/verify/${r.id}`),
         ].join(","),
       );
@@ -1797,7 +1896,7 @@ pipelineRouter.get("/lookup/:hash", async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      `SELECT "id","title","kind","authorName","country","city","contentHash","fileHash","algorithm","protectedAt","verifiedCount"
+      `SELECT "id","title","kind","authorName","country","city","contentHash","fileHash","algorithm","protectedAt","verifiedCount","otsStatus","otsBitcoinBlockHeight"
        FROM "IPCertificate" WHERE "status" = 'active' AND ("contentHash" = $1 OR "fileHash" = $1) LIMIT 1`,
       [hash],
     );
@@ -1820,6 +1919,10 @@ pipelineRouter.get("/lookup/:hash", async (req, res) => {
         algorithm: r.algorithm,
         protectedAt: r.protectedAt,
         verifiedCount: r.verifiedCount || 0,
+        // Поиск по хешу — то, чем пользуется ТРЕТЬЯ сторона: «эта работа уже
+        // зарегистрирована?». Ответ без состояния якоря отвечает на половину
+        // вопроса: важно не только что запись есть, но и чем она подтверждена.
+        bitcoinAnchor: anchorSummary(r),
         verifyUrl: `https://aevion.app/verify/${r.id}`,
       },
     });
@@ -2066,6 +2169,10 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
         value: cert.contentHash,
       },
       { label: "HMAC-SHA256 SIGNATURE", value: cert.signatureHmac },
+      // Якорь в биткойне печатается ВСЕГДА, включая случай «его нет»: молчание
+      // читалось бы как «есть, просто не написали», а для сертификатов до
+      // появления якорения это неправда навсегда. Разбор — в самой функции.
+      pdfAnchorField(anchorSummary(cert as unknown as Record<string, unknown>)),
       {
         // Обрезанной подписью проверить нельзя ничего. Пока печатаем не всю —
         // называем вещи своими именами, чтобы её не приняли за подпись.
@@ -2191,6 +2298,23 @@ pipelineRouter.get("/health", async (_req, res) => {
   let certificateCount: number | null = null;
   let lastProtectedAt: string | null = null;
   /**
+   * Доступен ли постоянный ключ платформы для заверения.
+   *
+   * "available" — ключ разрешается и им можно подписывать.
+   * "unavailable" — семя не задано или неверно: сертификаты будут выходить
+   *   без заверения, и это надо видеть СРАЗУ, а не когда кто-то откроет пакет.
+   * null — спросить не удалось (иное, чем «ключа нет»).
+   */
+  let platformKeyState: "available" | "unavailable" | null = null;
+  try {
+    const k = await resolveEd25519(DEFAULT_ED25519_KID);
+    platformKeyState = k?.privateKey ? "available" : "unavailable";
+  } catch {
+    // Именно "unavailable", а не null: resolveEd25519 бросает ровно тогда,
+    // когда семени нет или оно негодно, — это ответ, а не отсутствие ответа.
+    platformKeyState = "unavailable";
+  }
+  /**
    * Состояние якорения в биткойн. Витрина обещает «Bitcoin-anchored», а
    * проверить это снаружи до 27.08.2026 было НЕЧЕМ: в этом ответе про якорь
    * не было ни слова. Обещание без ручки состояния — это обещание, про
@@ -2277,6 +2401,18 @@ pipelineRouter.get("/health", async (_req, res) => {
     crypto: {
       secretConfigured,
       hmacKeyVersion: HMAC_KEY_VERSION,
+      /**
+       * Может ли платформа заверять ключи сертификатов ПОСТОЯННЫМ ключом.
+       *
+       * Заверение — единственный слой пакета, чей ключ проверяющий берёт не из
+       * самого пакета. Если постоянный ключ недоступен, сертификаты выпускаются
+       * БЕЗ него (выпуск намеренно не ломается) — и узнать об этом иначе нельзя
+       * было бы до тех пор, пока кто-нибудь не откроет пакет.
+       *
+       * Три состояния, а не два: `null` значит «спросить не удалось», и это не
+       * то же самое, что «ключа нет».
+       */
+      platformAttestationKey: platformKeyState,
     },
     /**
      * Якорение в биткойн — то, что обещает витрина («Bitcoin-anchored»).
@@ -2306,7 +2442,7 @@ pipelineRouter.get("/ots/:certId/proof", async (req, res) => {
     await ensureTables();
     const { certId } = req.params;
     const { rows } = await pool.query(
-      `SELECT "otsProof","contentHash" FROM "IPCertificate" WHERE "id" = $1`,
+      `SELECT "otsProof","contentHash","otsStatus" FROM "IPCertificate" WHERE "id" = $1`,
       [certId],
     );
     if (rows.length === 0) {
@@ -2314,9 +2450,28 @@ pipelineRouter.get("/ots/:certId/proof", async (req, res) => {
     }
     const proof = rows[0].otsProof as Buffer | null;
     if (!proof) {
+      // «Не начинали» и «идёт» — РАЗНЫЕ ответы, и до 28.08 оба назывались PENDING.
+      // Апрельские сертификаты выданы до появления якорения: доказательства у них
+      // нет и не будет, а третьей стороне мы обещали «скоро». Различение уже есть
+      // в двух соседних ручках этого же файла (проверка и дообновление) — здесь
+      // просто не спрашивали колонку.
+      const otsStatus = (rows[0].otsStatus as string | null) ?? "not_stamped";
+      const reason =
+        otsStatus === "not_stamped"
+          ? "OT_NOT_STAMPED"
+          : otsStatus === "failed"
+            ? "OT_STAMP_FAILED"
+            : "OT_PROOF_PENDING";
       return res.status(404).json({
         error: "proof not ready",
-        reason: "OT_PROOF_PENDING",
+        reason,
+        status: otsStatus,
+        note:
+          otsStatus === "not_stamped"
+            ? "this certificate predates Bitcoin anchoring; no proof will become available"
+            : otsStatus === "failed"
+              ? "anchoring failed for this certificate; no proof is expected"
+              : "anchoring is in progress; retry after the next Bitcoin block",
       });
     }
     res.setHeader("Content-Type", "application/octet-stream");
@@ -2542,7 +2697,7 @@ pipelineRouter.post("/ots/:certId/verify", async (req, res) => {
     await ensureTables();
     const { certId } = req.params;
     const { rows } = await pool.query(
-      `SELECT "otsProof","contentHash" FROM "IPCertificate" WHERE "id" = $1`,
+      `SELECT "otsProof","contentHash","otsStatus" FROM "IPCertificate" WHERE "id" = $1`,
       [certId],
     );
     if (rows.length === 0) {
@@ -2551,9 +2706,19 @@ pipelineRouter.post("/ots/:certId/verify", async (req, res) => {
     const proof = rows[0].otsProof as Buffer | null;
     const contentHash = String(rows[0].contentHash || "");
     if (!proof || !contentHash) {
+      // Та же ветвь класса, что и у /proof: без статуса сторонний проверяющий не
+      // отличает «якорь ещё готовится» от «якоря не будет никогда».
+      const otsStatus = (rows[0].otsStatus as string | null) ?? "not_stamped";
       return res.status(409).json({
         ok: false,
         error: "proof or hash missing",
+        status: otsStatus,
+        note:
+          otsStatus === "not_stamped"
+            ? "this certificate predates Bitcoin anchoring; no proof will become available"
+            : otsStatus === "failed"
+              ? "anchoring failed for this certificate; no proof is expected"
+              : "anchoring is in progress; retry after the next Bitcoin block",
       });
     }
     const v = await otsVerifyProof(contentHash, proof);
@@ -2598,6 +2763,11 @@ pipelineRouter.post("/ots/:certId/verify", async (req, res) => {
  */
 pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
   try {
+    const rl = bundleRateLimiter.check(clientIp(req));
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
+      return res.status(429).json({ error: "rate limit exceeded — try again shortly" });
+    }
     await ensureTables();
     const { certId } = req.params;
     const { rows } = await pool.query(
@@ -2715,6 +2885,31 @@ pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
               signature: cert.signatureEd25519,
             }
           : null,
+        /*
+         * Заверение эфемерного ключа ПОСТОЯННЫМ ключом платформы.
+         *
+         * Без него подпись выше самосогласована: и подпись, и ключ к ней
+         * приезжают в этом же файле, так что посторонний соберёт такой пакет
+         * своей парой ключей. Здесь же лежит kid — по нему открытый ключ
+         * берётся НЕЗАВИСИМО, с /api/qsign/v2/keys, и цепочка замыкается.
+         *
+         * null — законное значение: сертификаты до этой правки и выпуски, где
+         * постоянный ключ был недоступен. Проверяющий обязан читать null как
+         * «заверения нет», а не как «всё в порядке».
+         */
+        platformAttestation:
+          cert.platformAttestationKid && cert.platformAttestationSig
+            ? {
+                algo: "Ed25519",
+                kid: cert.platformAttestationKid,
+                signedValue: "proofs.aevionEd25519.publicKeyRawHex",
+                signature: cert.platformAttestationSig,
+                note:
+                  "AEVION's long-lived key signs the per-certificate key. Fetch the " +
+                  "public half independently from /api/qsign/v2/keys — that is what " +
+                  "makes this layer independent of the bundle.",
+              }
+            : null,
         qsignHmac: signedAtIso
           ? {
               algo: "HMAC-SHA256",
@@ -2737,25 +2932,30 @@ pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
                 note: "Verify by signing the contentHash hex string (utf8 bytes) with this public key.",
               }
             : null,
-        openTimestamps: cert.otsStatus
-          ? {
-              status: cert.otsStatus,
-              bitcoinBlockHeight: cert.otsBitcoinBlockHeight ?? null,
-              stampedAt: cert.otsStampedAt ?? null,
-              upgradedAt: cert.otsUpgradedAt ?? null,
-              proofBase64: otsProof ? otsProof.toString("base64") : null,
-              note: "Verify with any OpenTimestamps client against the Bitcoin blockchain. The proof targets the contentHash exactly.",
-            }
-          : null,
+        // Раньше при отсутствии штампа сюда клался `null`, и он значил сразу
+        // две вещи: «не якорили» и «мы это поле не положили». Пакет —
+        // единственное, что остаётся у человека без нас; в нём различие
+        // должно быть написано словами. Состояние считается тем же общим
+        // помощником, что и на остальных поверхностях.
+        openTimestamps: {
+          ...anchorSummary(cert as unknown as Record<string, unknown>),
+          stampedAt: cert.otsStampedAt ?? null,
+          upgradedAt: cert.otsUpgradedAt ?? null,
+          proofBase64: otsProof ? otsProof.toString("base64") : null,
+          note: cert.otsStatus
+            ? "Verify with any OpenTimestamps client against the Bitcoin blockchain. The proof targets the contentHash exactly."
+            : "This certificate predates Bitcoin anchoring: no OpenTimestamps proof exists and none will appear. The other proof layers below are unaffected.",
+        },
       },
       shamirWitness: witness,
       verification: {
         howTo: [
           "1. Recompute SHA-256 of stableStringify({city, country, description, kind, title}) where each value is NFC-normalized; missing kind defaults to 'other'. Compare with proofs.contentHash.value.",
-          "2. Verify proofs.aevionEd25519.signature using publicKeyRawHex over the UTF-8 bytes of proofs.aevionEd25519.signedPayload (a JSON string).",
-          "3. If proofs.authorCosign is present, verify its signature using publicKeyBase64 over the UTF-8 bytes of proofs.contentHash.value (the hex string itself).",
-          "4. If proofs.openTimestamps.proofBase64 is present, decode and run any OT client (https://opentimestamps.org) against it; the protected file is the raw bytes of proofs.contentHash.value as a hex string. A bitcoinBlockHeight >= 1 means the timestamp is locked to a real Bitcoin block.",
-          "5. If proofs.openTimestamps shows status: bitcoin-confirmed, the certificate's existence is mathematically anchored to that block — independent of AEVION, IPFS, or any other party.",
+          "2. Verify proofs.aevionEd25519.signature using publicKeyRawHex over the UTF-8 bytes of proofs.aevionEd25519.signedPayload (a JSON string). Note what this does and does not show: it proves the payload was not altered after signing, NOT who signed it — that key travels inside this file and is generated per certificate. Step 3 is what ties it to AEVION.",
+          "3. If proofs.platformAttestation is present, verify its signature using AEVION's long-lived public key over the UTF-8 bytes of proofs.aevionEd25519.publicKeyRawHex. Fetch that key INDEPENDENTLY of this file — https://api.aevion.app/api/qsign/v2/keys, matching the kid — because a key that travels with the thing it signs proves nothing. This is the only step that distinguishes a certificate issued by AEVION from a bundle assembled by anyone else. If the field is absent, the certificate predates this layer.",
+          "4. If proofs.authorCosign is present, verify its signature using publicKeyBase64 over the UTF-8 bytes of proofs.contentHash.value (the hex string itself).",
+          "5. If proofs.openTimestamps.proofBase64 is present, decode and run any OT client (https://opentimestamps.org) against it; the protected file is the raw bytes of proofs.contentHash.value as a hex string. A bitcoinBlockHeight >= 1 means the timestamp is locked to a real Bitcoin block.",
+          "6. Do not rely on the status field for the anchor: we write it. What proves the timestamp is the .ots proof itself — it must commit to this contentHash and carry a Bitcoin attestation, which any OpenTimestamps client will tell you. When it does, the certificate's existence at that block is anchored independently of AEVION, IPFS, or any other party.",
         ],
         independence: [
           "AEVION's Ed25519 signature can be verified with any Ed25519 library — we are not in the trust path.",
@@ -3293,10 +3493,12 @@ pipelineRouter.get("/authors/:slug", async (req: Request, res: Response) => {
       id: string; title: string; kind: string; description: string;
       authorName: string | null; country: string | null; city: string | null;
       contentHash: string; protectedAt: Date; verifiedCount: number;
+      otsStatus: string | null; otsBitcoinBlockHeight: number | null;
     };
     const queryResult = await pool.query(
       `SELECT id, title, kind, description, "authorName", country, city,
-              "contentHash", "protectedAt", COALESCE("verifiedCount", 0) AS "verifiedCount"
+              "contentHash", "protectedAt", COALESCE("verifiedCount", 0) AS "verifiedCount",
+              "otsStatus", "otsBitcoinBlockHeight"
          FROM "IPCertificate"
         WHERE status = 'active'
           AND (
@@ -3328,6 +3530,10 @@ pipelineRouter.get("/authors/:slug", async (req: Request, res: Response) => {
         country: r.country, city: r.city, contentHash: r.contentHash,
         protectedAt: r.protectedAt?.toISOString() ?? "",
         verifiedCount: Number(r.verifiedCount) || 0,
+        // Публичная страница автора — то, что человек показывает миру наравне
+        // со страницей самой работы. Состояние якоря считается тем же общим
+        // помощником, что и на остальных поверхностях реестра.
+        bitcoinAnchor: anchorSummary(r as unknown as Record<string, unknown>),
       })),
     });
   } catch (err: unknown) {

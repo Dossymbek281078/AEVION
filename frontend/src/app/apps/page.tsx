@@ -196,7 +196,7 @@ const APP_DEFS: AppDef[] = [
     cat: "Business",
     highlights: [
       "SHA-256 content hash + signed audit trail",
-      "Notary review with registry reference",
+      "OpenTimestamps anchor in Bitcoin",
       "Tamper-evident certificates",
     ],
   },

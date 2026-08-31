@@ -31,6 +31,7 @@ import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { emitEcosystemEvent } from "../lib/ecosystemEvents";
 import { safeErrorText } from "../lib/safeError";
+import { anchorSummary } from "../lib/opentimestamps/anchorSummary";
 const captureBureauError = makeServiceCapture("bureau");
 
 const bureauEmbedRateLimit = rateLimit({
@@ -58,14 +59,41 @@ const pool = getPool();
  *
  * Поэтому состояние отдаётся наружу, и витрина обязана его спрашивать.
  */
+/**
+ * Имена, которые РЕАЛЬНО поддерживает фабрика `getKycProvider()`.
+ * Список продублирован сознательно (фабрику правит соседняя ветка, лезть туда
+ * нельзя), но он не может тихо разойтись: тест `kycModeIsHonest` спрашивает
+ * саму фабрику по каждому имени и краснеет, если она решает иначе.
+ */
+const KYC_LIVE_IDS = new Set(["sumsub"]);
+
+/**
+ * Общее правило для обоих барьеров.
+ *
+ * Нормализация ОБЯЗАНА совпадать с фабрикой посимвольно: она делает
+ * `(v || "stub").toLowerCase()` и НЕ обрезает пробелы. Прежняя версия здесь
+ * обрезала — и из-за этого `" sumsub"` (лишний пробел из панели окружения)
+ * читалось как «настоящий поставщик», тогда как фабрика на нём БРОСАЕТ
+ * исключение и поток не работает вовсе.
+ *
+ * Исходов три, а не два. Незнакомое имя — это не «живой» и не «заглушка», это
+ * «настроено неверно»: фабрика на нём падает. Отвечать в таком случае "live"
+ * значит обещать работающий приём денег и проверку паспорта там, где ни того,
+ * ни другого нет.
+ */
+function providerMode(
+  raw: string | undefined,
+  liveIds: ReadonlySet<string>,
+): "live" | "stub" | "misconfigured" {
+  const id = (raw || "stub").toLowerCase();
+  if (id === "stub") return "stub";
+  return liveIds.has(id) ? "live" : "misconfigured";
+}
+
 export function kycProviderMode(
   env: NodeJS.ProcessEnv = process.env,
-): "live" | "stub" {
-  const v = String(env.BUREAU_KYC_PROVIDER || "").trim();
-  // Пусто ИЛИ явное "stub" — демонстрационный путь. Любое другое имя
-  // означает настоящего поставщика: так же решает и сам обработчик заглушки,
-  // и расходиться эти два места не должны.
-  return v && v !== "stub" ? "live" : "stub";
+): "live" | "stub" | "misconfigured" {
+  return providerMode(env.BUREAU_KYC_PROVIDER, KYC_LIVE_IDS);
 }
 
 /**
@@ -82,20 +110,34 @@ export function kycProviderMode(
  * ВИДНО. Пока её не видно, утверждать нельзя ни «держит», ни «не держит».
  * Поэтому состояние отдаётся наружу: вопрос должен иметь ответ.
  */
+/**
+ * Имена, которые РЕАЛЬНО поддерживает фабрика `getPaymentProvider()`,
+ * включая все три написания LemonSqueezy, которые она принимает.
+ * Проверяется тестом против самой фабрики — см. KYC_LIVE_IDS выше.
+ */
+const PAYMENT_LIVE_IDS = new Set([
+  "stripe",
+  "gumroad",
+  "lemonsqueezy",
+  "lemon-squeezy",
+  "lemon_squeezy",
+]);
+
 export function paymentProviderMode(
   env: NodeJS.ProcessEnv = process.env,
-): "live" | "stub" {
-  const v = String(env.BUREAU_PAYMENT_PROVIDER || "").trim().toLowerCase();
-  // Пусто — это «stub»: ровно так решает и getPayProvider(). Совпадение с ним
-  // важнее краткости, иначе состояние будет описывать не тот код, что работает.
-  return v && v !== "stub" ? "live" : "stub";
+): "live" | "stub" | "misconfigured" {
+  return providerMode(env.BUREAU_PAYMENT_PROVIDER, PAYMENT_LIVE_IDS);
 }
 
 /**
  * Чем подписывает нотариус — настоящей Ed25519 или демонстрационной HMAC.
  *
- * Сам сертификат это уже называет (см. signNotarization ниже), то есть
- * покупателя никто не вводит в заблуждение. Не хватало другого: узнать
+ * Сам сертификат это уже называет (см. signNotarization ниже) — но отсюда НЕ
+ * следует, что покупателя никто не вводит в заблуждение: так здесь было
+ * написано, и ровно этот вывод позволил карточке тарифа обещать «co-signs with
+ * Ed25519», пока значок шёл от непустого реестра нотариусов и про подпись не
+ * спрашивал вовсе (починено 29.08). Честный сертификат не делает честной
+ * витрину: их читают разные люди в разное время. Не хватало другого: узнать
  * состояние СНАРУЖИ, не выпуская сертификат. Третий вопрос модуля из трёх —
  * рядом с kyc и payment, чтобы на «настоящее ли это» отвечала одна команда.
  *
@@ -713,8 +755,80 @@ bureauRouter.post("/payment/intent", async (req, res) => {
  * intent. Idempotent: re-calling on an already-verified cert is a no-op
  * that returns the current state.
  */
+/**
+ * Можно ли ВЫДАВАТЬ платный тариф прямо сейчас.
+ *
+ * Обе демонстрационные заглушки самозавершаются — так и задумано, чтобы поток
+ * работал в разработке без внешних действий:
+ *   kyc/stubProvider     getSession() ВСЕГДА отвечает "approved" с заявленным именем
+ *   payment/stubProvider getIntent()  сам помечает счёт оплаченным при первом чтении
+ *
+ * Значит без настоящих поставщиков проверки `kycStatus === "approved"` и
+ * `paymentStatus === "paid"` ниже проходят сами собой, и сертификат получает
+ * уровень «verified» без денег и без единого взгляда на документ. Для продукта,
+ * который продаёт ДОКАЗУЕМОСТЬ, это ложь в самих данных: на неё потом сошлётся
+ * третья сторона.
+ *
+ * Опираемся на ФАКТ («поставщик — заглушка»), а НЕ на NODE_ENV: в index.ts
+ * стоит `process.env.NODE_ENV || "development"`, а ни скрипт выкатки, ни
+ * nixpacks.toml эту переменную не задают — сторож по среде на нашем проде молча
+ * не сработал бы, а молчащий сторож хуже отсутствующего.
+ *
+ * Отказ закрытый: разработка и CI включают поток явным BUREAU_ALLOW_STUB_COMMERCE=1.
+ * Умолчание обязано быть безопасным, потому что прод — это ровно то место, где
+ * ничего не настроено.
+ */
+/**
+ * Ключи, без которых поставщик оплаты падает при первом же обращении.
+ *
+ * Зачем это здесь. Имя поставщика и его РАБОТОСПОСОБНОСТЬ — разные вещи:
+ * `BUREAU_PAYMENT_PROVIDER=stripe` без `STRIPE_SECRET_KEY` проходил проверку
+ * как «настоящий», а падал уже на выписке счёта. Соседняя вкладка измерила
+ * этот класс 29.08 на кассе «Конституции»: там завели ОДИН ключ из трёх, ветка
+ * включилась, заслонила собой рабочую кассу и упала. Частично настроенный
+ * поставщик хуже ненастроенного — тот хотя бы честно уступает.
+ *
+ * Перечислены только те ключи, которых провайдер требует через `need()`,
+ * то есть проверено по коду, а не по документации.
+ */
+const PAYMENT_REQUIRED_ENV: Record<string, readonly string[]> = {
+  stripe: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+};
+
+export function stubBarriersBlockingUpgrade(
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  if (env.BUREAU_ALLOW_STUB_COMMERCE === "1") return [];
+  const blocking: string[] = [];
+  if (kycProviderMode(env) !== "live") blocking.push("identity");
+  if (paymentProviderMode(env) !== "live") {
+    blocking.push("payment");
+  } else {
+    // Поставщик настоящий — но хватает ли ему ключей, чтобы работать.
+    const id = (env.BUREAU_PAYMENT_PROVIDER || "").toLowerCase();
+    const missing = (PAYMENT_REQUIRED_ENV[id] || []).filter(
+      (k) => !env[k]?.trim(),
+    );
+    if (missing.length > 0) blocking.push("payment");
+  }
+  return blocking;
+}
+
 bureauRouter.post("/upgrade/:certId", async (req, res) => {
   try {
+    // ДО обращения к базе — намеренно. Отказ «тариф не продаётся, пока
+    // поставщики не настроены» не зависит ни от базы, ни от сертификата, и
+    // ставить его после `ensureBureauTables()` значило бы возвращать 500 при
+    // недоступной базе вместо честного 503. Проверено тестом, который бьёт
+    // ручку заведомо несуществующими идентификаторами.
+    const blocking = stubBarriersBlockingUpgrade();
+    if (blocking.length > 0) {
+      return res.status(503).json({
+        error:
+          "Paid verification is not available: the identity and payment providers are not configured yet.",
+        stubBarriers: blocking,
+      });
+    }
     await ensureBureauTables();
     const { certId } = req.params;
     const { verificationId } = req.body || {};
@@ -1586,7 +1700,12 @@ bureauRouter.post("/org/accept/:token", async (req, res) => {
 /* ─────────────────── Stub-only helper for demo flow ─────────────────── */
 
 bureauRouter.get("/kyc-stub/:sessionId", (req: Request, res: Response) => {
-  if (process.env.BUREAU_KYC_PROVIDER && process.env.BUREAU_KYC_PROVIDER !== "stub") {
+  // Спрашиваем ту же функцию, что отдаёт состояние наружу, а не своё третье
+  // прочтение переменной. Раньше здесь было сравнение БЕЗ приведения регистра:
+  // при BUREAU_KYC_PROVIDER=STUB фабрика запускала демо-заглушку, а этот
+  // обработчик считал поставщика настоящим и отдавал 404 — три места читали
+  // одну переменную тремя разными способами.
+  if (kycProviderMode() !== "stub") {
     return res.status(404).json({ error: "stub flow disabled in this environment" });
   }
   const { sessionId } = req.params;
@@ -2981,7 +3100,7 @@ bureauRouter.get("/cert-for-qright/:qrightObjectId", bureauEmbedRateLimit, async
       return res.status(400).json({ error: "qrightObjectId required" });
     }
     const r = await pool.query(
-      `SELECT "id","status","authorVerificationLevel","protectedAt"
+      `SELECT "id","status","authorVerificationLevel","protectedAt","otsStatus","otsBitcoinBlockHeight"
        FROM "IPCertificate"
        WHERE "objectId" = $1 AND "status" != 'revoked'
        ORDER BY "protectedAt" DESC
@@ -3000,12 +3119,18 @@ bureauRouter.get("/cert-for-qright/:qrightObjectId", bureauEmbedRateLimit, async
       status: string;
       authorVerificationLevel: string;
       protectedAt: Date;
+      otsStatus: string | null;
+      otsBitcoinBlockHeight: number | null;
     };
     res.json({
       certId: row.id,
       status: row.status,
       verificationLevel: row.authorVerificationLevel,
       protectedAt: row.protectedAt,
+      // Публичная страница защищённой работы про якорь не говорила вовсе, хотя
+      // это главное, чем запись отличается от строки в чьей-то базе. Считается
+      // тем же общим помощником, что и остальные поверхности реестра.
+      bitcoinAnchor: anchorSummary(row as unknown as Record<string, unknown>),
       viewUrl: `/bureau/cert/${row.id}`,
       upgradeUrl: row.authorVerificationLevel === "anonymous"
         ? `/bureau/upgrade/${row.id}`

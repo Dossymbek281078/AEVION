@@ -26,10 +26,15 @@ describe("режим проверки личности определяется 
     expect(kycProviderMode({} as NodeJS.ProcessEnv)).toBe("stub");
   });
 
+  // Исходов три. Раньше их было два, и из-за этого «неизвестное имя» и
+  // «имя с лишним пробелом» отвечали "live" — то есть состояние обещало
+  // работающую проверку паспорта там, где фабрика getKycProvider() БРОСАЕТ
+  // исключение и поток не работает вовсе. Эталон теперь берётся у самой
+  // фабрики — см. providerModeMatchesFactory.test.ts.
   const stubbish: Array<[string, string]> = [
     ["явное stub", "stub"],
     ["пустая строка", ""],
-    ["пробелы", "   "],
+    ["регистр не важен — фабрика приводит его сама", "STUB"],
   ];
   it.each(stubbish)("%s → stub", (_n, v) => {
     expect(kycProviderMode({ BUREAU_KYC_PROVIDER: v } as NodeJS.ProcessEnv)).toBe(
@@ -39,8 +44,7 @@ describe("режим проверки личности определяется 
 
   const live: Array<[string, string]> = [
     ["sumsub", "sumsub"],
-    ["veriff", "veriff"],
-    ["любое другое имя", "some-partner"],
+    ["регистр не важен", "SumSub"],
   ];
   it.each(live)("%s → live", (_n, v) => {
     expect(kycProviderMode({ BUREAU_KYC_PROVIDER: v } as NodeJS.ProcessEnv)).toBe(
@@ -48,21 +52,51 @@ describe("режим проверки личности определяется 
     );
   });
 
-  it("решение совпадает с тем, как судит САМ обработчик заглушки", () => {
-    // Обработчик /kyc-stub отдаёт 404 при `BUREAU_KYC_PROVIDER &&
-    // !== "stub"`. Если эти два места разойдутся, витрина будет обещать одно,
-    // а поток вести себя иначе — и заметить это будет нечем.
-    const disabledByHandler = (v: string | undefined) =>
-      Boolean(v && v !== "stub");
-    for (const v of [undefined, "", "stub", "sumsub", "veriff"]) {
-      const mine = kycProviderMode({
-        ...(v === undefined ? {} : { BUREAU_KYC_PROVIDER: v }),
-      } as NodeJS.ProcessEnv);
-      expect(mine === "live", `значение ${JSON.stringify(v)}`).toBe(
-        disabledByHandler(v),
-      );
-    }
+  // Эти три раньше давали "live" — самый дорогой вид ошибки на этом барьере:
+  // обещать проверку личности, которой не будет. Пробелы фабрика НЕ обрезает,
+  // поэтому " sumsub" для неё такое же неизвестное имя, как "veriff".
+  const broken: Array<[string, string]> = [
+    ["одни пробелы", "   "],
+    ["неподдерживаемый поставщик", "veriff"],
+    ["лишний пробел из панели окружения", " sumsub"],
+  ];
+  it.each(broken)("%s → misconfigured", (_n, v) => {
+    expect(kycProviderMode({ BUREAU_KYC_PROVIDER: v } as NodeJS.ProcessEnv)).toBe(
+      "misconfigured",
+    );
   });
+
+  // Раньше здесь лежала СВОЯ КОПИЯ правила обработчика («v && v !== "stub"»),
+  // и сверялись две копии друг с другом — обработчик при этом не запускался ни
+  // разу. Такая проверка зелена при любом расхождении. Теперь дёргаем сам
+  // обработчик по HTTP: он либо отдаёт демо-страницу, либо закрывается.
+  it.each([
+    ["переменной нет — демо доступно", undefined, 200],
+    ['"stub" — демо доступно', "stub", 200],
+    ['"STUB" — фабрика даёт заглушку, значит демо тоже доступно', "STUB", 200],
+    ['"sumsub" — настоящий поставщик, демо закрыто', "sumsub", 404],
+  ] as Array<[string, string | undefined, number]>)(
+    "%s",
+    async (_n, v, expected) => {
+      const had = Object.prototype.hasOwnProperty.call(
+        process.env,
+        "BUREAU_KYC_PROVIDER",
+      );
+      const prev = process.env.BUREAU_KYC_PROVIDER;
+      if (v === undefined) delete process.env.BUREAU_KYC_PROVIDER;
+      else process.env.BUREAU_KYC_PROVIDER = v;
+      try {
+        const a = express();
+        a.use(express.json());
+        a.use("/api/bureau", bureauRouter);
+        const r = await request(a).get("/api/bureau/kyc-stub/demo-session");
+        expect(r.status, `значение ${JSON.stringify(v)}`).toBe(expected);
+      } finally {
+        if (had) process.env.BUREAU_KYC_PROVIDER = prev;
+        else delete process.env.BUREAU_KYC_PROVIDER;
+      }
+    },
+  );
 });
 
 describe("ручка состояния отдаёт режим наружу", () => {

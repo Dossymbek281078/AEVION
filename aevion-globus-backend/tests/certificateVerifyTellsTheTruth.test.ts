@@ -143,6 +143,32 @@ describe("Проверка сертификата говорит правду", 
     expect(r.body.integrityVerified).toBe(true);
   });
 
+
+  // ── Состояние якоря в ответе проверки ────────────────────────────────
+  //
+  // Мутационная проверка 28.08.2026: если зашить сюда `status: "pending"`,
+  // ОБА существовавших сторожа этой ручки остаются зелёными. То есть поле,
+  // по которому третья сторона судит о подтверждении в биткойне, не
+  // проверялось ничем: сертификат, закреплённый в блоке, мог бы отвечать
+  // «ожидает» — и никто бы не узнал.
+  test("состояние якоря идёт от записи, а не зашито", async () => {
+    certRow = { ...certRow, otsStatus: "bitcoin-confirmed", otsBitcoinBlockHeight: 912345 };
+    const r = await get();
+    expect(r.body.bitcoinAnchor?.status).toBe("bitcoin-confirmed");
+    expect(r.body.bitcoinAnchor?.bitcoinBlockHeight).toBe(912345);
+  });
+
+  test("три состояния якоря различимы в ответе проверки", async () => {
+    const seen = new Set<string>();
+    for (const s of [null, "pending", "bitcoin-confirmed"]) {
+      certRow = { ...certRow, otsStatus: s };
+      const r = await get();
+      seen.add(String(r.body.bitcoinAnchor?.status));
+    }
+    expect(seen.size, "ручка проверки не различает состояния якоря").toBe(3);
+    expect(seen.has("not_stamped"), "не якорённый выдан за что-то другое").toBe(true);
+  });
+
   test("отозванный щит роняет вердикт", async () => {
     // Контроль второй оси: вердикт обязан зависеть НЕ ТОЛЬКО от хеша.
     const prev = certRow;

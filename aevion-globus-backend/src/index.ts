@@ -14,6 +14,7 @@ import { qrightRouter } from "./routes/qright";
 import { qsignRouter } from "./routes/qsign";
 import { qsignV2Router } from "./routes/qsignV2";
 import { startWebhookWorker } from "./lib/qsignV2/webhooks";
+import { startOtsUpgradeWorker } from "./lib/opentimestamps/upgradeWorker";
 import { initSentry } from "./lib/qsignV2/sentry";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
@@ -1390,6 +1391,12 @@ const httpServer = app.listen(PORT, () => {
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
   // QSign v2 — DB-backed webhook delivery queue. Survives restarts.
   startWebhookWorker();
+
+  // Дообновление якорей OpenTimestamps. До 28.08.2026 полное доказательство
+  // забиралось ТОЛЬКО нажатием кнопки самим автором, и сертификат висел в
+  // состоянии «ожидает подтверждения» бессрочно — при том что якорь в биткойне
+  // уже существовал. Разбор — в самом модуле.
+  startOtsUpgradeWorker();
 
   // Карта версий токенов. Пока она не загружена, проверка отзыва НЕ
   // применяется (см. lib/tokenVersion.ts): это осознанный выбор направления

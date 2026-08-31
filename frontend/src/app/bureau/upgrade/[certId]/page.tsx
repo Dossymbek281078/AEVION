@@ -8,6 +8,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { InfoTip } from "@/components/InfoTip";
 import { useToast } from "@/components/ToastProvider";
 import { apiUrl } from "@/lib/apiBase";
+import { upgradeDisclosure, type KycMode } from "../kycDisclosure";
 
 type Step =
   | "intro"
@@ -43,6 +44,45 @@ export default function BureauUpgradePage() {
   const { showToast } = useToast();
 
   const [step, setStep] = useState<Step>("intro");
+
+  /**
+   * Подключён ли НАСТОЯЩИЙ поставщик проверки личности. null — «спросить не
+   * удалось»: страница тогда не обещает паспорт, но и не пугает заглушкой.
+   * Разбор направления осторожности — в kycDisclosure.ts.
+   */
+  const [kycMode, setKycMode] = useState<KycMode>(null);
+  /**
+   * ЗНАЕМ ли мы, что хотя бы один барьер демонстрационный.
+   *
+   * Умолчание `false` — и это не небрежность, а то же правило противоположных
+   * направлений, что в kycDisclosure.ts. Здесь вопрос «останавливать ли
+   * человека», и на незнании останавливать нельзя: прод сегодня полей
+   * состояния не отдаёт вовсе, и блокировка по незнанию закрыла бы тариф всем.
+   * Вопрос «обещать ли паспорт» — другой, и там незнание запрещает обещать.
+   */
+  const [barrierKnownStub, setBarrierKnownStub] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(apiUrl("/api/bureau/health"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        const v = d?.kyc;
+        setKycMode(v === "live" || v === "stub" ? v : null);
+        // Барьеров два, и второй так же обязателен: бэкенд отказывает в выдаче
+        // тарифа, пока хоть один демонстрационный. Знать об этом надо ЗДЕСЬ, на
+        // входе, а не после пройденной проверки личности и оплаты.
+        const p = d?.payment;
+        setBarrierKnownStub(
+          (v !== undefined && v !== "live") || (p !== undefined && p !== "live"),
+        );
+      })
+      .catch(() => { /* оставляем null */ });
+    return () => { alive = false; };
+  }, []);
+
+  const disclosure = upgradeDisclosure(kycMode);
   const [declaredName, setDeclaredName] = useState("");
   const [declaredCountry, setDeclaredCountry] = useState("KZ");
   const [verificationId, setVerificationId] = useState<string | null>(null);
@@ -215,17 +255,57 @@ export default function BureauUpgradePage() {
           })}
         </div>
 
+        {/* Отказ на ВХОДЕ, а не в конце. Бэкенд не выдаст тариф, пока хоть один
+            барьер демонстрационный, — и узнать об этом после пройденной проверки
+            личности и оплаты значит потратить чужое время впустую. Показываем
+            только когда ЗНАЕМ: незнание здесь не останавливает (см. комментарий
+            у barrierKnownStub — направление умолчания обратное тому, что у
+            обещаний). */}
+        {step === "intro" && barrierKnownStub && (
+          <div
+            // role="status", а не "alert": рядом уже есть тревога о раскрытии
+            // условий, и вторая подряд — шум для экранного диктора. Это
+            // сообщение информационное, а не аварийное. Заодно снималось
+            // столкновение с существующим тестом, который ищет alert по роли.
+            role="status"
+            style={{
+              borderRadius: 14,
+              border: "1px solid rgba(217,119,6,0.35)",
+              background: "rgba(254,243,199,0.55)",
+              padding: 14,
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 900, color: "#92400e", marginBottom: 6 }}>
+              This tier cannot be completed yet
+            </div>
+            <div style={{ fontSize: 12, color: "#78350f", lineHeight: 1.6 }}>
+              Our identity or payment provider is not configured, so the upgrade
+              would not go through. Nothing will be charged. Ask us and we will
+              tell you when the Verified tier opens.
+            </div>
+          </div>
+        )}
+
         {step === "intro" && (
           <div style={{ borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", padding: "20px 22px" }}>
             <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", marginBottom: 8 }}>What you&apos;ll do</div>
             <ol style={{ margin: 0, paddingLeft: 22, fontSize: 13, color: "#0f172a", lineHeight: 1.7 }}>
-              <li><b>Identity check</b> via our KYC partner — passport / national ID upload, ~2 minutes.</li>
+              <li>{disclosure.identityStep}</li>
               <li><b>Pay $19</b> for the Verified-tier upgrade.</li>
               <li><b>Certificate is upgraded</b> with your real-name attestation; the verify page now shows &ldquo;Verified Author&rdquo;.</li>
             </ol>
             <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", fontSize: 11, color: "#92400e", lineHeight: 1.55 }}>
-              <b>Privacy:</b> we store the KYC decision (verified name, country, document type) — not your ID image. Raw documents stay with the KYC vendor under their retention policy.
+              {disclosure.vendorNote}
             </div>
+            {disclosure.notice && (
+              <div
+                role="alert"
+                style={{ marginTop: 12, padding: "12px 14px", borderRadius: 10, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.25)", fontSize: 12, color: "#b91c1c", lineHeight: 1.6, fontWeight: 600 }}
+              >
+                {disclosure.notice}
+              </div>
+            )}
             <button onClick={() => setStep("kyc-form")} style={{ marginTop: 16, padding: "12px 18px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
               Start identity check →
             </button>
@@ -294,7 +374,12 @@ export default function BureauUpgradePage() {
         {step === "payment" && (
           <div style={{ borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", padding: "20px 22px" }}>
             <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-              <span aria-hidden>✓</span> Identity verified
+              {/* В демонстрационном режиме проверять было нечего: заглушка
+                  одобряет по умолчанию. Писать «Identity verified» здесь —
+                  то же переобещание, что на первом шаге, только уже ПОСЛЕ
+                  прохождения и прямо перед оплатой. */}
+              <span aria-hidden>✓</span>{" "}
+              {kycMode === "stub" ? "Identity step completed (demo mode)" : "Identity verified"}
               {status?.kyc.verifiedName && (
                 <span style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>
                   &nbsp;· <b>{status.kyc.verifiedName}</b>
@@ -303,8 +388,8 @@ export default function BureauUpgradePage() {
             </div>
             <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.6, marginBottom: 14 }}>
               Last step: $19 for the Verified-tier upgrade. After payment, the
-              certificate is stamped with your real-name attestation
-              automatically.
+              certificate is stamped with the name you declared
+              {kycMode === "stub" ? " (identity provider not connected yet)" : " as attested by our KYC provider"}.
             </div>
             {!status?.payment.intentId ? (
               <button onClick={startPayment} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #4f46e5, #6366f1)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>

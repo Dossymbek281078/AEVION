@@ -785,9 +785,11 @@ export const openapiSpec = {
                     valid: {
                       type: "boolean",
                       description:
-                        "Сертификат найден и не отозван. Это НЕ вердикт проверки: " +
-                        "у найденного сертификата значение всегда true. " +
-                        "Сошлось ли доказательство — в integrityVerified.",
+                        "Сертификат найден. Это НЕ вердикт проверки и НЕ признак отзыва: " +
+                        "у любого найденного сертификата значение всегда true, " +
+                        "включая отозванный. Отзыв смотрите в поле status " +
+                        "(active | revoked), а сошлось ли доказательство — " +
+                        "в integrityVerified.",
                     },
                     verified: { type: "boolean", description: "Запрос обслужен (совпадает с valid)" },
                     integrityVerified: {

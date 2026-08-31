@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
 import { InfoTip } from "@/components/InfoTip";
+import { bundleContents, ed25519FieldNote } from "./bundleContents";
 import {
   buildIntegrityChecks,
   deriveVerdict,
@@ -34,6 +35,8 @@ type VerifyData = {
     fileHash?: string | null;
     signatureHmac: string;
     signatureEd25519?: string | null;
+    /** Заверение ключа сертификата постоянным ключом платформы; null — его нет. */
+    platformAttestation?: { kid: string; signature: string } | null;
     algorithm: string;
     protectedAt: string;
     status: string;
@@ -381,7 +384,7 @@ export default function VerifyPage() {
               Cryptographic Proof
               <InfoTip
                 label="Cryptographic Proof"
-                text="Three derived proofs (SHA-256 content hash, HMAC signature, Ed25519 signature) plus the algorithm and certificate ID for context. Tamper with any registered field and at least one of the three derived values stops matching."
+                text="Derived proofs — the SHA-256 content hash, the HMAC and Ed25519 signatures, and AEVION's platform attestation of this certificate's key — plus the algorithm and certificate ID for context. Tampering with a field that the hash covers breaks at least one of them. Note the limit honestly: certificates issued under the earlier v1 rule hashed only title, description and work type, so country and city are recorded on the certificate but not covered by that hash — the row above says which rule applies."
               />
             </div>
             <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
@@ -398,9 +401,40 @@ export default function VerifyPage() {
                   tip: { name: "HMAC-SHA256", text: "Tamper-detection signature computed with AEVION's secret key. Anyone with the same key can re-derive it from the certificate fields and check that it has not been changed." },
                 },
                 {
-                  label: "Ed25519 Signature",
+                  // Подпись здесь ОБРЕЗАНА: ручка проверки отдаёт первые 64
+                  // символа и не отдаёт публичный ключ вовсе (замер на проде
+                  // 28.08.2026: длина 67 вместе с многоточием, поля
+                  // publicKeyEd25519 в ответе нет). Прежний текст обещал, что
+                  // «проверить может кто угодно» — возможность есть, но НЕ по
+                  // этим данным: полная подпись и ключ лежат в офлайн-пакете,
+                  // и офлайн-проверка их действительно сверяет. Подпись должна
+                  // называть то, что показано, и вести туда, где проверка
+                  // возможна.
+                  label: "Ed25519 Signature (first 64 chars)",
                   value: cert.signatureEd25519 || "N/A",
-                  tip: { name: "Ed25519", text: "An asymmetric digital signature. The matching public key is published, so anyone — not just AEVION — can verify that the signature is genuine." },
+                  // Текст зависит от того, ЕСТЬ ЛИ что проверять: у старой
+                  // схемы подписанный текст утрачен вместе с временной меткой,
+                  // и звать за проверкой в пакет означало бы обещать невозможное.
+                  tip: { name: "Ed25519", text: ed25519FieldNote(integrity.signatureHmacReason) },
+                },
+                {
+                  label: "Platform attestation",
+                  // Единственный слой, чей открытый ключ берётся НЕ из пакета:
+                  // по kid его получают на /api/qsign/v2/keys. Без него подпись
+                  // выше самосогласована — проверяется ключом, приехавшим рядом
+                  // с ней, — и пакет, собранный посторонним, выглядел бы так же.
+                  value: cert.platformAttestation
+                    ? `${cert.platformAttestation.kid}: ${cert.platformAttestation.signature.slice(0, 32)}…`
+                    : "N/A",
+                  // Именно `tip`, а не `note`: отрисовщик ниже читает только
+                  // `tip`, и поле с другим именем стало бы текстом, которого
+                  // никто не увидит.
+                  tip: {
+                    name: "Platform attestation",
+                    text: cert.platformAttestation
+                      ? "AEVION's long-lived key signs this certificate's key. Fetch the public half from /api/qsign/v2/keys to check it independently of this page — that is what makes this layer independent of the certificate itself."
+                      : "This certificate has no platform attestation: it was issued before the layer existed, or the platform key was unavailable at issue time. The signatures above still verify, but only against a key that travels with the certificate.",
+                  },
                 },
                 { label: "Algorithm", value: cert.algorithm },
                 { label: "Certificate ID", value: cert.id },
@@ -754,12 +788,26 @@ export default function VerifyPage() {
             </div>
             <InfoTip
               label="Verification bundle"
-              text="A single .json containing every proof — the canonical inputs, AEVION's Ed25519 signature, the author co-signature, the OpenTimestamps Bitcoin proof. With this bundle and a browser, anyone can verify the certificate forever without contacting AEVION."
+              text="A single .json with the proofs this certificate actually has — the canonical inputs, AEVION's Ed25519 signature where it exists, the author co-signature, the OpenTimestamps Bitcoin proof. With this bundle and a browser, anyone can check them forever without contacting AEVION."
             />
           </div>
           <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.55, marginBottom: 10 }}>
-            Most platforms&apos; certificates die when the platform dies. Ours don&apos;t. Download the bundle below — one <code style={{ fontSize: 11, padding: "1px 5px", background: "rgba(99,102,241,0.12)", borderRadius: 4 }}>.json</code> with every proof — then drop it into the offline verifier on any machine, any year. Bitcoin and Ed25519 are the trust anchors. We&apos;re replaceable; the math is not.
+            Most platforms&apos; certificates die when the platform dies. Ours don&apos;t. Download the bundle below — one <code style={{ fontSize: 11, padding: "1px 5px", background: "rgba(99,102,241,0.12)", borderRadius: 4 }}>.json</code> carrying this certificate&apos;s proofs — then drop it into the offline verifier on any machine, any year. Bitcoin and Ed25519 are the trust anchors. We&apos;re replaceable; the math is not.
           </div>
+          {(() => {
+            // Обещание выше дано безусловно, а выполняется не для всех записей:
+            // подпись AEVION попадает в пакет только при наличии отметки
+            // времени подписи. Замер на проде 28.08.2026 — 2 записи из 7.
+            // Оговорка стоит РЯДОМ с кнопкой скачивания, а не в подсказке:
+            // подсказку открывают не все, а скачивают все.
+            const b = bundleContents(integrity.signatureHmacReason);
+            if (!b.note) return null;
+            return (
+              <div style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 10, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 11, color: "#92400e", lineHeight: 1.55 }}>
+                {b.note}
+              </div>
+            );
+          })()}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <a
               href={apiUrl(`/api/pipeline/certificate/${cert.id}/bundle.json`)}

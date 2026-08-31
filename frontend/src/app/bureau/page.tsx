@@ -10,6 +10,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 import { getDeviceId } from "@/lib/aevApi";
+import { anchorBadge, ANCHOR_TONE_COLORS } from "./anchorBadge";
 
 type Certificate = {
   id: string;
@@ -27,6 +28,12 @@ type Certificate = {
   verifiedName?: string | null;
   verifiedAt?: string | null;
   shieldId?: string | null;
+  /**
+   * Состояние якоря в биткойне. Поле МОЖЕТ отсутствовать: бэкенд, который его
+   * отдаёт, выкатывается отдельно. Отсутствие — «не сказали», а не «якоря нет»,
+   * и обрабатывается в anchorBadge().
+   */
+  bitcoinAnchor?: { status?: string | null; bitcoinBlockHeight?: number | null } | null;
 };
 
 const KIND_ICONS: Record<string, string> = {
@@ -105,17 +112,24 @@ function BureauPageInner() {
   // страница писала «No certificates yet» и звала защитить первую работу —
   // человеку, у которого работы уже защищены (21.08.2026).
   const [certsFailed, setCertsFailed] = useState(false);
-  // Сколько нотариусов РЕАЛЬНО зарегистрировано.
+
+  // Сколько нотариусов РЕАЛЬНО зарегистрировано, и настроен ли настоящий
+  // поставщик проверки личности. Оба значения читаются с прода, а не пишутся
+  // строкой в коде: соседняя ветка честно отметила «прочитать значение на проде
+  // я не могу» — теперь можно, ручка /api/bureau/health добавлена 27.08.
   //
-  // Тариф «Notarized» показывал жёсткую пометку «▲ live» рядом с платной
-  // ценой, а список нотариусов пуст: GET /api/bureau/notaries отвечает
-  // {"notaries":[]} (проверено на проде 21.08.2026). Человек читал «в прямом
-  // эфире», нажимал «Просмотреть реестр» и попадал в пустоту.
-  //
-  // null означает «ещё не спросили» или «спросить не удалось» — и это НЕ то же
-  // самое, что ноль. При неизвестном состоянии пометка остаётся прежней:
-  // пугать отказом из-за собственной неудачи нельзя.
+  // null означает «ещё не спросили» или «спросить не удалось», и это НЕ ноль:
+  // при неизвестном состоянии карточка говорит «по запросу», то есть не
+  // обещает и не пугает. Пока бэкенд с ручкой не выкачен, так и будет.
   const [notaryCount, setNotaryCount] = useState<number | null>(null);
+  const [kycMode, setKycMode] = useState<"live" | "stub" | null>(null);
+  // Чем НА САМОМ ДЕЛЕ подписывает нотариус. Без ключа подпись — HMAC на
+  // ПУБЛИЧНОМ ключе нотариуса, то есть пересчитать её может кто угодно; код
+  // честно зовёт это "demo-hmac-sha256". Значок тарифа шёл только от
+  // непустого реестра и про подпись не спрашивал вовсе — то есть в день, когда
+  // появится первый нотариус, карточка пообещала бы Ed25519 независимо от того,
+  // настроен ли ключ. Состояние бюро это уже отдаёт, оставалось прочитать.
+  const [notarySig, setNotarySig] = useState<"ed25519" | "demo" | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -130,11 +144,6 @@ function BureauPageInner() {
     return () => { alive = false; };
   }, []);
 
-  // Настроен ли НАСТОЯЩИЙ поставщик проверки личности. null — «не знаю»:
-  // спросить не удалось. Замер на проде 27.08.2026 — "stub", то есть поток
-  // работает, а паспорт не смотрит никто, при том что тариф стоит $19.
-  const [kycMode, setKycMode] = useState<"live" | "stub" | null>(null);
-
   useEffect(() => {
     let alive = true;
     fetch(apiUrl("/api/bureau/health"))
@@ -143,10 +152,18 @@ function BureauPageInner() {
         if (!alive || !d) return;
         const v = d?.kyc;
         setKycMode(v === "live" || v === "stub" ? v : null);
+        const sig = d?.notarySignature;
+        setNotarySig(sig === "ed25519" || sig === "demo" ? sig : null);
       })
       .catch(() => { /* оставляем null: своя неудача — не «настроено» */ });
     return () => { alive = false; };
   }, []);
+
+  // Чем закончилась загрузка панели вошедшего человека. Три исхода, а не два:
+  // «идёт», «загрузилось», «не удалось» — и последний обязан быть виден.
+  // До 28.08 неудача оставляла dashboard в null, весь блок не рисовался вовсе,
+  // и человек с оплаченными сертификатами видел страницу так, будто их нет.
+  const [dashboardFailed, setDashboardFailed] = useState<null | "auth" | "error">(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
 
@@ -331,8 +348,17 @@ function BureauPageInner() {
         const r = await fetch(apiUrl("/api/bureau/dashboard"), {
           headers: { Authorization: `Bearer ${raw}` },
         });
-        if (r.ok) setDashboard((await r.json()) as DashboardData);
-      } catch {}
+        if (r.ok) {
+          setDashboard((await r.json()) as DashboardData);
+          setDashboardFailed(null);
+        } else {
+          // Отказы РАЗЛИЧАЮТСЯ: устаревший вход лечится входом, сбой сервиса — нет.
+          setDashboardFailed(r.status === 401 || r.status === 403 ? "auth" : "error");
+        }
+      } catch {
+        // Сети не было. Это тоже не «сертификатов нет».
+        setDashboardFailed("error");
+      }
     })();
   }, []);
 
@@ -432,12 +458,20 @@ function BureauPageInner() {
         </div>
 
         {/* ── My Identity (authed users only) ── */}
-        {authed && (myIdentity || inFlightUpgrade || (dashboard && dashboard.certificates.length > 0)) && (
+        {authed && (dashboardFailed || myIdentity || inFlightUpgrade || (dashboard && dashboard.certificates.length > 0)) && (
           <div style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(99,102,241,0.25)", background: "linear-gradient(135deg, rgba(99,102,241,0.04), rgba(79,70,229,0.04))", padding: "18px 22px" }}>
             <div style={{ fontSize: 13, fontWeight: 900, color: "#312e81", marginBottom: 8 }}>
               My Bureau identity
             </div>
-            {myIdentity ? (
+            {dashboardFailed ? (
+              <div style={{ fontSize: 12, color: "#7f1d1d", lineHeight: 1.6 }}>
+                <b>Не удалось загрузить ваши сертификаты.</b> Это сбой загрузки, а не
+                утверждение о том, что их нет: ничего не потеряно.
+                {dashboardFailed === "auth"
+                  ? " Похоже, вход устарел — войдите заново и откройте страницу ещё раз."
+                  : " Обновите страницу через минуту."}
+              </div>
+            ) : myIdentity ? (
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
                 <div style={{ flex: "1 1 240px" }}>
                   <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a" }}>
@@ -585,14 +619,40 @@ function BureauPageInner() {
               {
                 name: "Verified",
                 price: "$19 / cert",
-                // Описание идёт от ФАКТА: пока поставщик не подключён, поток
-                // проходится демонстрационной заглушкой, и обещать проверку
-                // паспорта нельзя. Промолчать тоже нельзя — тариф платный.
+                // Третья поверхность той же формулировки (28.08). Две другие — карточка бюро и
+// страница объекта QRight — смягчены ранее в этой же ветке; эта осталась
+// утверждать проверку паспорта как совершившийся факт, хотя ГЛУБИНА проверки
+// зависит от переменной окружения BUREAU_KYC_PROVIDER, которая по умолчанию
+// равна "stub" (aevion-globus-backend/src/lib/kyc/index.ts:18). Прочитать её
+// значение на проде я не могу, поэтому не утверждаю ни того, ни другого:
+// описываю механизм, а глубину называет сам провайдер отпечатком.
+// Вернуть сильную формулировку — в тот день, когда провайдер настроен и это
+// видно снаружи (решение основателя, красный пункт в сводке 28.08).
+// Ветвей здесь ТРИ, как и у значка ниже, и это не симметрия ради
+                // красоты. Раньше их было две, и «не знаю» попадало в ветку
+                // «настроено»: на проде /api/bureau/health полей состояния НЕ
+                // отдаёт вовсе (замер 29.08: ответ — только status/service/
+                // timestamp), поэтому kycMode там всегда null — и платный тариф
+                // (замер 29.08; как только ветка с полями состояния уедет на
+                //  прод, это перестанет быть правдой — тогда ветка "live" начнёт
+                //  срабатывать сама, и трогать здесь ничего не надо)
+                // утверждал «проверку выполняет наш KYC-провайдер», хотя
+                // проверяет заглушка.
+                //
+                // Направление умолчания у текста и у значка ПРОТИВОПОЛОЖНОЕ, и
+                // так и надо: значок при незнании говорит нейтральное «by
+                // request», а текст при незнании обязан НЕ обещать. Один и тот
+                // же предикат отвечает на два разных вопроса.
                 blurb:
                   kycMode === "stub"
-                    ? "Identity check is in demo mode right now: the flow works end to end, but no document is actually verified yet. Ask us before buying this tier."
-                    : "Author identity verified by KYC partner (passport / national ID). Bureau attests real-name authorship and stamps cert with the verification fingerprint.",
-                // Три исхода, а не два: «спросить не удалось» — не «доступно».
+                    ? "Identity check is in demo mode right now: the flow runs end to end, but no document is actually verified yet. Ask us before buying this tier."
+                    : kycMode === "live"
+                      ? "Identity check performed by our KYC provider. Bureau records the declared name alongside the certificate together with the provider's verification fingerprint."
+                      : "Identity verification is arranged on request — ask us to confirm it is available before buying this tier. Bureau records the declared name alongside the certificate.",
+                // Значок — из живого состояния бюро, три исхода вместо двух.
+                // «available now» говорится только когда поставщик действительно
+                // настроен; заглушка называется заглушкой ДО покупки, а своя
+                // неосведомлённость даёт нейтральное «by request».
                 badge:
                   kycMode === "stub"
                     ? "▲ demo mode"
@@ -600,20 +660,56 @@ function BureauPageInner() {
                       ? "▲ available now"
                       : "▲ by request",
                 badgeColor: "#4f46e5",
-                cta: { label: "Upgrade a cert", href: "/bureau" },
+                // Кнопка вела на /bureau — на страницу, где человек уже стоит:
+                // единственная кнопка платного тарифа не делала ничего видимого.
+                // Ведёт в реестр: обновление начинается с выбора сертификата,
+                // и у каждой карточки там есть своя кнопка «Upgrade to Verified».
+                cta: { label: "Pick a cert to upgrade", href: "#registry" },
               },
               {
                 name: "Notarized",
                 price: "From $89 / cert",
-                  // Сведено 31.08 при сборке к 10.09. Взято от каждой стороны своё:
-                  // ТЕКСТ наш — их редакция обещает «apostille-ready document admissible
-                  // in EAEU courts», а допустимость в конкретном суде зависит от
-                  // юрисдикции и самого спора, мы её обеспечить не можем.
-                  // ЗНАЧОК их — он считается ПО ФАКТУ (пустой реестр не называется
-                  // «live»), а наш был статическим «в плане» по замеру 28.08 и врал бы
-                  // в тот день, когда появится первый нотариус.
-blurb: "A licensed notary co-signs the certificate with Ed25519. The notary registry is still being assembled — check it for current availability.",
-                badge: notaryCount === 0 ? "▲ by request" : "▲ live",
+                // Обещание переписано вместе со значком (28.08). Прежний текст утверждал
+// готовый результат — «apostille-ready document admissible in EAEU courts» —
+// у тарифа, исполнить который сегодня некому. Допустимость в конкретном суде
+// зависит от юрисдикции и самого спора, мы её обеспечить не можем; описываем
+// МЕХАНИЗМ и честную доступность, а вывод о суде оставляем юристу покупателя.
+// Обещание Ed25519 даётся, только когда бюро подтверждает, что подпись
+                // действительно Ed25519. Без ключа подписывается HMAC на ПУБЛИЧНОМ
+                // ключе нотариуса — такую подпись может пересчитать кто угодно, и
+                // называть её криптографической нотаризацией нельзя. «Не знаю»
+                // (старая сборка прода полей состояния не отдаёт) обещания не даёт.
+                blurb:
+                  notarySig === "ed25519"
+                    ? "A licensed notary co-signs the certificate with Ed25519. The notary registry is still being assembled — check it for current availability."
+                    : "A licensed notary co-signs the certificate. Cryptographic co-signing is being finalised — ask us to confirm the current signing mode before buying this tier.",
+                // ⚠️ 28.08.2026: значок был «▲ live» при НУЛЕ нотариусов в реестре.
+                //
+                //   GET https://api.aevion.app/api/bureau/notaries -> {"notaries":[]}
+                //   (ручка отдаёт только активных; неактивный подписать не может)
+                //
+                // Тариф обещает подпись лицензированного нотариуса, а исполнить
+                // это сегодня физически некому. (Цену намеренно не называю числом: сторож
+                // retiredPrices ловит отставные номиналы в тексте страниц, и мой
+                // комментарий его справедливо уронил — он прав, а не я.)
+                // Цена и состав пакета — решение владельца
+                // продукта, их не трогаю; но «live» — утверждение о ДОСТУПНОСТИ, то есть
+                // факт, и он был неверен.
+                //
+                // Вернуть «▲ live» следует в тот день, когда в реестре появится первый
+                // активный нотариус, — не раньше.
+                // Значок идёт от реестра, а не от строки: ноль активных нотариусов
+                // и «спросить не удалось» одинаково дают «by request», и только
+                // непустой реестр даёт «live». (Заодно карточка снова целиком
+                // по-английски — русское «в плане» стояло среди английских.)
+                // «live» требует ОБОИХ условий: есть кому подписать И подпись
+                // настоящая. Прежде значок смотрел только на реестр, то есть
+                // обещал бы доступность в день появления первого нотариуса, даже
+                // если ключа нет и подпись демонстрационная.
+                badge:
+                  notaryCount && notaryCount > 0 && notarySig === "ed25519"
+                    ? "▲ live"
+                    : "▲ by request",
                 badgeColor: "#7c3aed",
                 cta: { label: "View Notary Registry", href: "/bureau/notaries" },
               },
@@ -867,6 +963,21 @@ blurb: "A licensed notary co-signs the certificate with Ed25519. The notary regi
                       ) : (
                         <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>✓ CERTIFIED</span>
                       )}
+                      {(() => {
+                        // Состояние якоря в биткойне — главный козырь продукта,
+                        // и до 28.08.2026 его не было видно в реестре вовсе.
+                        const b = anchorBadge(cert.bitcoinAnchor);
+                        if (!b) return null;
+                        const c = ANCHOR_TONE_COLORS[b.tone];
+                        return (
+                          <span
+                            title={b.title}
+                            style={{ padding: "3px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: c.bg, color: c.fg, whiteSpace: "nowrap" as const }}
+                          >
+                            {b.label}
+                          </span>
+                        );
+                      })()}
                       {cert.verifiedCount > 0 && <span style={{ fontSize: 10, color: "#94a3b8" }}>Verified {cert.verifiedCount}x</span>}
                     </div>
                   </div>

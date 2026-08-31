@@ -73,21 +73,18 @@ function levelTheme(level: string | undefined, status: string | undefined) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { certId } = await params;
   const origin = await getOrigin();
-  const ogImage = origin
-    ? `${origin}/api-backend/api/bureau/cert/${encodeURIComponent(certId)}/og.svg`
-    : `${getApiBase()}/api/bureau/cert/${encodeURIComponent(certId)}/og.svg`;
+  // Картинка карточки теперь файловая (opengraph-image.tsx, PNG): SVG,
+  // который был здесь, крупные площадки в предпросмотре не рисуют.
   const fallback: Metadata = {
     title: "AEVION Bureau certificate",
     description: "Public verification record on the AEVION Bureau registry.",
     openGraph: {
       type: "article",
       title: "AEVION Bureau certificate",
-      images: [{ url: ogImage, width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
       title: "AEVION Bureau certificate",
-      images: [ogImage],
     },
   };
   if (!certId) return fallback;
@@ -120,13 +117,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       type: "article",
       title: titleLine,
       description: desc,
-      images: [{ url: ogImage, width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
       title: titleLine,
       description: desc,
-      images: [ogImage],
     },
   };
 }

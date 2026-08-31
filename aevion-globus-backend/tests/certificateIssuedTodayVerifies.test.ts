@@ -243,6 +243,76 @@ describe("подделка после выдачи ловится", () => {
     expect(v.body.integrity.contentHashValid).toBe(false);
   });
 
+// ── Офлайн-пакет свежего сертификата ────────────────────────────────
+  //
+  // Замер на проде 28.08.2026: подпись AEVION лежит в пакете у ДВУХ записей из
+  // семи. У пяти апрельских её нет — их подписывала прежняя схема, где в
+  // подписанный текст входил `timestamp: Date.now()`, нигде не сохранённый.
+  // Восстановить сообщение нельзя, значит и проверить подпись нельзя никому.
+  //
+  // Отсюда вопрос, который не стерёг никто: а СЕГОДНЯШНИЙ сертификат — он
+  // проверяем? Обещание «переживёт AEVION» держится ровно на этом.
+  async function bundle(certId: string) {
+    return request(app()).get(`/api/pipeline/certificate/${certId}/bundle.json`);
+  }
+
+  test("у свежего сертификата в пакете ЕСТЬ подпись AEVION", async () => {
+    const issued = await issue();
+    const r = await bundle(issued.body.certificate.id);
+    expect(r.status).toBe(200);
+    const a = r.body?.proofs?.aevionEd25519;
+    expect(a, "подписи в пакете нет — обещание «проверьте без нас» пусто").toBeTruthy();
+    expect(String(a.signature).length, "подпись обрезана").toBeGreaterThan(100);
+    expect(String(a.publicKeyRawHex).length, "ключ не 32 байта").toBe(64);
+    expect(String(a.signedPayload).length, "нет подписанного текста").toBeGreaterThan(10);
+  });
+
+  test("⭐ подпись из пакета ДЕЙСТВИТЕЛЬНО сходится — проверено криптографией", async () => {
+    // Самая сильная возможная проверка обещания: берём из пакета ровно то, что
+    // получит посторонний, и сверяем подпись его же способом. Ни одна строка
+    // здесь не доверяет нашему коду на слово.
+    const issued = await issue();
+    const r = await bundle(issued.body.certificate.id);
+    const a = r.body.proofs.aevionEd25519;
+
+    const rawPub = Buffer.from(String(a.publicKeyRawHex), "hex");
+    expect(rawPub.length).toBe(32);
+    // RFC 8410: 12-байтовый префикс SPKI для Ed25519.
+    const spki = Buffer.concat([
+      Buffer.from("302a300506032b6570032100", "hex"),
+      rawPub,
+    ]);
+    const pubKey = crypto.createPublicKey({ key: spki, format: "der", type: "spki" });
+
+    const ok = crypto.verify(
+      null,
+      Buffer.from(String(a.signedPayload), "utf8"),
+      pubKey,
+      Buffer.from(String(a.signature), "hex"),
+    );
+    expect(ok, "подпись в пакете НЕ сходится с подписанным текстом").toBe(true);
+  });
+
+  test("контроль: испорченный подписанный текст подпись НЕ проходит", async () => {
+    // Без этого контроля предыдущая проверка могла бы быть зелёной по ошибке
+    // (например, если бы verify молча возвращал true на любом входе).
+    const issued = await issue();
+    const r = await bundle(issued.body.certificate.id);
+    const a = r.body.proofs.aevionEd25519;
+    const spki = Buffer.concat([
+      Buffer.from("302a300506032b6570032100", "hex"),
+      Buffer.from(String(a.publicKeyRawHex), "hex"),
+    ]);
+    const pubKey = crypto.createPublicKey({ key: spki, format: "der", type: "spki" });
+    const ok = crypto.verify(
+      null,
+      Buffer.from(String(a.signedPayload) + " ", "utf8"),
+      pubKey,
+      Buffer.from(String(a.signature), "hex"),
+    );
+    expect(ok, "подпись сходится с ЧУЖИМ текстом — проверка ничего не значит").toBe(false);
+  });
+
   test("отзыв сертификата виден в ответе", async () => {
     const issued = await issue();
     const id = issued.body.certificate.id;
@@ -362,6 +432,33 @@ describe("PDF не утверждает больше, чем проверено"
     expect(r.status).toBe(200);
     expect(r.headers["content-type"]).toMatch(/application\/pdf/);
     expect(r.body.toString("latin1").slice(0, 5)).toBe("%PDF-");
+  });
+
+test.each(["bitcoin-confirmed", "pending", "failed", null])(
+    "PDF рисуется при состоянии якоря %s — новая строка не роняет документ",
+    async (status) => {
+      const issued = await issue();
+      const id = issued.body.certificate.id;
+      store.IPCertificate[0].otsStatus = status;
+      store.IPCertificate[0].otsBitcoinBlockHeight = status === "bitcoin-confirmed" ? 912345 : null;
+      const r = await pdf(id);
+      expect(r.status).toBe(200);
+      expect(r.body.toString("latin1").slice(0, 5)).toBe("%PDF-");
+    },
+  );
+
+  test("строка про якорь действительно ВСТАВЛЕНА в документ", async () => {
+    // Надписи из PDFKit не извлекаются, поэтому «попала ли строка в документ»
+    // проверяется по исходнику. Проверка слабее чтения документа, но РЕАЛЬНАЯ:
+    // без неё функция pdfAnchorField была бы покрыта тестами и не вызвана
+    // ниоткуда — ровно тот класс «код обещает то, чего не делает».
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync(new URL("../src/routes/pipeline.ts", import.meta.url), "utf8"),
+    );
+    const i = src.indexOf(`label: "HMAC-SHA256 SIGNATURE"`);
+    expect(i, "не найден блок полей PDF — проверка смотрит не туда").toBeGreaterThan(0);
+    const block = src.slice(i, i + 900);
+    expect(block, "pdfAnchorField не вызывается в блоке полей PDF").toContain("pdfAnchorField(");
   });
 
   test("PDF рисуется и когда хеш НЕ сходится — документ не падает", async () => {

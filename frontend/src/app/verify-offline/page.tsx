@@ -66,13 +66,17 @@ export default function VerifyOfflinePage() {
           Verify without AEVION
           <InfoTip
             label="Offline verification"
-            text="Drop an AEVION bundle JSON. All checks run in your browser using SHA-256 and Ed25519 — no network call to AEVION. If the math passes, the certificate is authentic regardless of whether AEVION still exists."
+            text="Drop an AEVION bundle JSON. All checks run in your browser using SHA-256 and Ed25519 — no network call to AEVION. A bundle passes only when at least one signature or the Bitcoin anchor verifies — a matching content hash alone is not enough, since anyone can hash their own text. Read the signature rows for what they do and do not prove: the signing key is generated per certificate and travels inside the bundle, so only the Bitcoin anchor is independent of AEVION."
           />
         </h1>
         <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.6, marginBottom: 24 }}>
           Drop a verification bundle (<code style={{ fontSize: 12, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>.json</code>) and your browser will replay every cryptographic check locally — SHA-256, AEVION&apos;s Ed25519 signature, the author co-signature, and the OpenTimestamps Bitcoin proof.
           {' '}
-          <b>Zero network calls to AEVION.</b> If the math passes, the certificate is authentic — even if these servers were taken offline a decade ago.
+          <b>Zero network calls to AEVION.</b> The verdict passes only when at least one
+          attestation verifies — a signature or the Bitcoin anchor — and it keeps working
+          even if these servers were taken offline a decade ago. A matching content hash on
+          its own proves the text has not changed since it was hashed, not that AEVION
+          attested it: anyone can hash their own file.
         </p>
 
         {state.stage === "idle" && (
@@ -203,6 +207,19 @@ function ResultView({
       s: result.authorCosignature,
     },
     {
+      label: "Platform attestation",
+      tip: {
+        name: "Platform attestation",
+        text:
+          "AEVION's long-lived key signs the per-certificate key. This is the only row " +
+          "whose public key did NOT come from the bundle — it is pinned inside this page, " +
+          "so a bundle assembled by someone else fails here. You can compare the pinned " +
+          "key with the list AEVION publishes at /api/qsign/v2/keys; that comparison is " +
+          "optional, since the check itself needs no network.",
+      },
+      s: result.platformAttestation,
+    },
+    {
       label: "Bitcoin anchor (OpenTimestamps)",
       tip: { name: "Bitcoin anchor", text: "Presence check: does the bundle carry a Bitcoin-confirmed timestamp? For full mathematical proof, run the .ots bytes through any OpenTimestamps client against a Bitcoin node." },
       s: result.bitcoinAnchor,
@@ -216,11 +233,31 @@ function ResultView({
           {result.overall === "pass" ? "✅" : "⚠️"}
         </div>
         <div style={{ fontSize: 22, fontWeight: 900, color: headerColor, marginBottom: 4 }}>
-          {result.overall === "pass" ? "Bundle verified offline" : "Verification failed"}
+          {result.overall === "pass" ? "Bundle is internally consistent" : "Verification failed"}
         </div>
         <div style={{ fontSize: 12, color: "#475569" }}>
           {state.fileName}
         </div>
+        {/*
+          Заголовок раньше говорил «Bundle verified offline», и это обещало
+          больше, чем проверка делает: ключ подписи приезжает в самом пакете, а
+          у якоря сверяется поле status, не байты доказательства. То есть все
+          проверки подтверждают ВНУТРЕННЮЮ СОГЛАСОВАННОСТЬ, и пакет, собранный
+          посторонним, проходил бы их тоже.
+          Отсюда и один независимый шаг, названный прямо: байты якоря лежат в
+          пакете, их проверяет любой клиент OpenTimestamps — обращаясь к сети
+          биткойна, но НЕ к нам, так что обещание «без AEVION» сохраняется.
+        */}
+        {result.overall === "pass" && (
+          <div style={{ fontSize: 12, color: "#475569", marginTop: 10, lineHeight: 1.6 }}>
+            Every layer inside this file agrees with every other. To make the check
+            independent of whoever produced the file, verify{" "}
+            <code style={{ fontSize: 11, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>
+              proofs.openTimestamps.proofBase64
+            </code>{" "}
+            with any OpenTimestamps client: that talks to the Bitcoin network, not to AEVION.
+          </div>
+        )}
       </div>
 
       {/* Certificate summary */}

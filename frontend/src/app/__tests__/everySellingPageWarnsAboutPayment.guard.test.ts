@@ -46,11 +46,16 @@ const APP = resolve(HERE, "..");
 
 /** Ждут своей очереди; правятся чужими ветками. Список только сокращается. */
 const KNOWN_SILENT = [
+  // 31.08.2026: было пять, стало две. Русские страницы (go, longevity, qrenew)
+  // получили <PaymentReachNotice /> — тот же компонент, что на витрине.
+  //
+  // Эти две остаются НЕ потому, что руки не дошли. `PaymentReachNotice`
+  // содержит единственный текст, и он русский. Поставить его на английскую
+  // страницу значит завести смесь языков — ровно тот класс, который мы у себя
+  // же чиним. Снимаются вместе: у компонента появляется английский текст, и
+  // тогда обе строки уходят одним заходом.
   "en/go/page.tsx",
   "en/longevity/page.tsx",
-  "go/page.tsx",
-  "longevity/_client.tsx",
-  "qrenew/_client.tsx",
 ];
 
 /**
@@ -79,10 +84,20 @@ function sellingPages(): string[] {
     .filter((r) => !NOT_A_BUYER_SURFACE.includes(r));
 }
 
-/** Предупреждает ли страница о способах оплаты — сама или компонентом. */
+/**
+ * Предупреждает ли страница о способах оплаты — сама или компонентом.
+ *
+ * ⚠️ Ищем ОТРИСОВКУ (`<PaymentReachNotice`), а не имя. Раньше проверялось имя,
+ * и мутация это вскрыла: убрал с /go сам элемент, оставив импорт, — сторож
+ * остался зелёным. Импорт без отрисовки не предупреждает никого, а выглядит в
+ * файле точно так же. Ровно та форма, когда закреплена ФОРМА, а не следствие.
+ *
+ * `kztReady` / `payboxLive` оставлены: так проверяют страницы, спрашивающие
+ * состояние касс сами, без общего компонента.
+ */
 function warns(relPath: string): boolean {
   const text = readFileSync(join(APP, relPath), "utf8");
-  return text.includes("PaymentReachNotice") || text.includes("kztReady") || text.includes("payboxLive");
+  return text.includes("<PaymentReachNotice") || text.includes("kztReady") || text.includes("payboxLive");
 }
 
 describe("страница, с которой платят, предупреждает о способах оплаты", () => {

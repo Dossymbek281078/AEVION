@@ -50,7 +50,7 @@ const INPUT: React.CSSProperties = { width: "100%", padding: "10px 12px", border
 const LABEL: React.CSSProperties = { display: "block", fontSize: 11.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-faint, #74767c)", marginBottom: 5 };
 
 // Pure request helper — returns the analysis or an error string, no state.
-async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisResult } | { ok: false; error: string }> {
+async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisResult } | { ok: false; error: string; upgradeUrl?: string | null }> {
   if (!data.name.trim()) return { ok: false, error: "Company / product name is required." };
   if (data.description.trim().length < 12) return { ok: false, error: "Add a longer description (min 12 characters)." };
   try {
@@ -90,10 +90,25 @@ async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisRe
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
     });
     const j = await res.json();
-    if (!res.ok || !j?.ok) return { ok: false, error: j?.error || "Analysis failed." };
+    if (!res.ok || !j?.ok) {
+      // Сервер уже прислал ГОТОВЫЙ текст для человека и ссылку на оплату —
+      // берём их, а не машинный код. Прежняя строка брала j.error, и в день
+      // включения платной стены человек прочитал бы на экране слово
+      // "upgrade_required", а ссылка upgradeUrl, по которой он мог бы
+      // заплатить, была бы выброшена. Замер 31.08.2026: у ответа 402 из
+      // planGate есть поля message (по-русски) и upgradeUrl, и оба терялись.
+      const human =
+        (typeof j?.message === "string" && j.message) ||
+        (typeof j?.error === "string" && j.error) ||
+        "Не удалось выполнить разбор.";
+      const url = typeof j?.upgradeUrl === "string" ? j.upgradeUrl : null;
+      return { ok: false, error: human, upgradeUrl: url };
+    }
     return { ok: true, data: j.data as AnalysisResult };
   } catch {
-    return { ok: false, error: "Network error — is the backend running?" };
+    // Не спрашиваем человека, запущен ли бэкенд: это вопрос к нам, а не к
+    // нему, и на экране покупателя ему не место.
+    return { ok: false, error: "Не удалось связаться с сервером. Попробуйте ещё раз." };
   }
 }
 
@@ -260,15 +275,18 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
   const [form, setForm] = useState<FormShape>(emptyForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Ссылка на оплату приходит в отказе 402 вместе с текстом. Без неё человек
+  // читает, что модуль платный, и не знает, куда идти платить.
+  const [upgradeUrl, setUpgradeUrl] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
   const set = (k: keyof FormShape) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const run = useCallback(async (data: FormShape) => {
-    setError(null); setLoading(true); setResult(null);
+    setError(null); setUpgradeUrl(null); setLoading(true); setResult(null);
     const r = await analyzeReq(data);
-    if (r.ok) setResult(r.data); else setError(r.error);
+    if (r.ok) { setResult(r.data); } else { setError(r.error); setUpgradeUrl(r.upgradeUrl ?? null); }
     setLoading(false);
   }, []);
 
@@ -356,7 +374,22 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
           </span>
         </div>
         <FormFields form={form} set={set} sectors={sectors} full />
-        {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        {error && (
+          <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>
+            {error}
+            {/* Ссылка приходит в отказе 402 вместе с текстом. Без неё человек
+                читает, что модуль платный, и не знает, куда идти платить —
+                тупик ровно в том месте, где он готов заплатить. */}
+            {upgradeUrl && (
+              <>
+                {" "}
+                <a href={upgradeUrl} style={{ color: "#dc2626", fontWeight: 700, textDecoration: "underline" }}>
+                  Посмотреть тарифы
+                </a>
+              </>
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <button onClick={() => run(form)} disabled={loading} style={primaryBtn(loading)}>
             {loading ? "Analyzing…" : "Run analysis"}
@@ -379,6 +412,8 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
   const [b, setB] = useState<FormShape>(() => ({ ...emptyForm(), name: "Company B" }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Своё состояние: это отдельный компонент, у него нет доступа к первому.
+  const [upgradeUrl, setUpgradeUrl] = useState<string | null>(null);
   const [pair, setPair] = useState<[AnalysisResult, AnalysisResult] | null>(null);
 
   const setter = (which: "a" | "b") => (k: keyof FormShape) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -387,10 +422,13 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
   };
 
   const run = useCallback(async () => {
-    setError(null); setLoading(true); setPair(null);
+    setError(null); setUpgradeUrl(null); setLoading(true); setPair(null);
     const [ra, rb] = await Promise.all([analyzeReq(a), analyzeReq(b)]);
-    if (!ra.ok) { setError(`Company A: ${ra.error}`); setLoading(false); return; }
-    if (!rb.ok) { setError(`Company B: ${rb.error}`); setLoading(false); return; }
+    // Ссылку на оплату теряли и здесь: текст брался человеческий, а путь,
+    // куда идти платить, выбрасывался. Одна и та же мера обязана стоять на
+    // ОБЕИХ поверхностях — правка только на первой выглядит законченной.
+    if (!ra.ok) { setError(`Company A: ${ra.error}`); setUpgradeUrl(ra.upgradeUrl ?? null); setLoading(false); return; }
+    if (!rb.ok) { setError(`Company B: ${rb.error}`); setUpgradeUrl(rb.upgradeUrl ?? null); setLoading(false); return; }
     setPair([ra.data, rb.data]);
     setLoading(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -406,7 +444,19 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
           </div>
         ))}
       </div>
-      {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        {error && (
+          <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>
+            {error}
+            {upgradeUrl && (
+              <>
+                {" "}
+                <a href={upgradeUrl} style={{ color: "#dc2626", fontWeight: 700, textDecoration: "underline" }}>
+                  Посмотреть тарифы
+                </a>
+              </>
+            )}
+          </div>
+        )}
       <button onClick={run} disabled={loading} style={{ ...primaryBtn(loading), marginBottom: 18 }}>
         {loading ? "Analyzing both…" : "⚖ Compare"}
       </button>

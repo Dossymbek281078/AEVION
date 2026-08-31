@@ -34,6 +34,9 @@ export default function BatchPage() {
   const [progress, setProgress] = useState<{ done: number; total: number; current: string } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  // Ссылка на оплату из отказа 402. Одна на весь пакет: строк с ошибками
+  // бывает много, а идти платить нужно один раз.
+  const [upgradeUrl, setUpgradeUrl] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("composite");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -74,7 +77,17 @@ export default function BatchPage() {
         const aj = await an.json();
         if (!an.ok || !aj?.ok) {
           if (aj?.error === "rate_limited") { await sleep(11_000); continue; }
-          return { error: `${label}: ${aj?.error || "analysis failed"}` };
+          // Берём ГОТОВЫЙ текст сервера, а не машинный код, и запоминаем
+          // ссылку на оплату. При включённой платной стене здесь приходит 402
+          // с полями message и upgradeUrl; прежняя строка брала error, и
+          // человек читал бы «Компания X: upgrade_required» в каждой строке,
+          // а куда идти платить — нигде.
+          const human =
+            (typeof aj?.message === "string" && aj.message) ||
+            (typeof aj?.error === "string" && aj.error) ||
+            "не удалось выполнить разбор";
+          if (typeof aj?.upgradeUrl === "string") setUpgradeUrl(aj.upgradeUrl);
+          return { error: `${label}: ${human}` };
         }
         setNote(null);
         const r = aj.data;
@@ -99,7 +112,7 @@ export default function BatchPage() {
     if (!files.length) return;
     if (files.length > 20) { setErrors([`Max 20 decks per batch — first 20 of ${files.length} used.`]); }
     const batch = files.slice(0, 20);
-    setBusy(true); setErrors([]); setNote(null);
+    setBusy(true); setErrors([]); setNote(null); setUpgradeUrl(null);
     const collected: Row[] = [...rows];
     const errs: string[] = [];
     for (let i = 0; i < batch.length; i++) {
@@ -170,6 +183,13 @@ export default function BatchPage() {
           <div style={{ ...SECTION, borderColor: "#fecaca", background: "#fef2f2", marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#b91c1c", marginBottom: 6 }}>Skipped {errors.length} deck{errors.length > 1 ? "s" : ""}</div>
             {errors.map((e, i) => <div key={i} style={{ fontSize: 12.5, color: "#7f1d1d" }}>• {e}</div>)}
+            {upgradeUrl && (
+              <div style={{ fontSize: 12.5, marginTop: 8 }}>
+                <a href={upgradeUrl} style={{ color: "#b91c1c", fontWeight: 700, textDecoration: "underline" }}>
+                  Посмотреть тарифы
+                </a>
+              </div>
+            )}
           </div>
         )}
 

@@ -50,17 +50,52 @@ export type SmartRunRow = {
 };
 
 /** Fire-and-forget: persist one routed run. Never throws. */
+/**
+ * Сколько записей расхода НЕ сохранилось.
+ *
+ * Прежде отказ проглатывался полностью, с пометкой best-effort. Направление
+ * выбрано верно — учёт не должен ронять операцию, ради которой его зовут, —
+ * но МОЛЧАНИЕ было недосмотром, а не выбором: решение о деньгах принимали бы
+ * по числу, которое не знает, что оно неполное.
+ *
+ * Признак едет В САМИХ ДАННЫХ, как storage у conceptBoardStore: поле
+ * droppedRuns в сводке. Читатель видит её неполноту, не заглядывая в журнал.
+ */
+let droppedRuns = 0;
+
+/** Сколько записей расхода потеряно с момента запуска процесса. */
+export function droppedSmartRuns(): number {
+  return droppedRuns;
+}
+
 export function insertSmartRun(row: SmartRunRow): void {
   void (async () => {
     try {
-      if (!(await ensureTable())) return;
+      // Хранилище недоступно — это ТОЖЕ потерянная запись, и она самая
+      // вероятная. Первая редакция счётчика ловила только сбой запроса, а
+      // сюда управление до запроса не доходит вовсе: отказ оставался
+      // невидимым ровно в том случае, ради которого счётчик и заводился.
+      // Нашёл собственный сторож, не глаз.
+      if (!(await ensureTable())) {
+        droppedRuns++;
+        console.warn(
+          `[SmartRunLog] запись расхода потеряна (всего ${droppedRuns}), модуль ${row.module}: хранилище недоступно`,
+        );
+        return;
+      }
       await getPool().query(
         `INSERT INTO "smart_run_log" ("module","resolved","depth","costUsd","savedUsd") VALUES ($1,$2,$3,$4,$5)`,
         [row.module, row.resolved, row.depth ?? null, row.costUsd, row.savedUsd]
       );
-    } catch {
-      /* best-effort — drop silently */
-    }
+      } catch (e) {
+        // Не роняем: учёт не должен ломать операцию, ради которой его зовут.
+        // Но и не молчим — иначе сводка врёт правдоподобно: при сломанной
+        // записи она выглядит как при исправной, просто чисел меньше.
+        droppedRuns++;
+        console.warn(
+          `[SmartRunLog] запись расхода потеряна (всего ${droppedRuns}), модуль ${row.module}: ${String(e)}`,
+        );
+      }
   })();
 }
 
@@ -84,6 +119,8 @@ export type SmartAllTime = {
   savedUsd: number;
   savedPct: number;
   perModule: SmartModuleAgg[];
+  /** Записей расхода потеряно с запуска процесса. Больше нуля = сводка НЕПОЛНА. */
+  droppedRuns: number;
 };
 
 /** All-time aggregate from the DB, or null when persistence is unavailable. */
@@ -124,7 +161,9 @@ export async function aggregateSmartRuns(): Promise<SmartAllTime | null> {
     );
     const estAlwaysCouncilUsd = total.runs * EST_COUNCIL_COST_USD;
     const savedPct = estAlwaysCouncilUsd > 0 ? (100 * total.savedUsd) / estAlwaysCouncilUsd : 0;
-    return { ...total, estAlwaysCouncilUsd, savedPct, perModule };
+    // droppedRuns едет ВМЕСТЕ со сводкой: читатель узнаёт о её неполноте из
+    // самой сводки, а не из журнала сервера, куда никто не смотрит.
+    return { ...total, estAlwaysCouncilUsd, savedPct, perModule, droppedRuns };
   } catch {
     return null;
   }

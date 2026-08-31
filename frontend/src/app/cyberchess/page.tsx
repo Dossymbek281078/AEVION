@@ -3105,6 +3105,7 @@ export default function CyberChessPage(){
   // when the user is actively playing (tab === "play", game on, not in P2P).
   useEffect(()=>{
     if(!on||over||tab!=="play"||p2pMode||hotseat||setup)return;
+    if(!myT)return; // ход соперника — движок занят его поиском, не мешаем
     if(!sfR.current?.ready())return;
     if(currentEndgame||pzCurrent)return; // skip in puzzle/endgame loops
     const fenForTop3=game.fen();
@@ -3135,7 +3136,7 @@ export default function CyberChessPage(){
         else if(idleId)clearTimeout(idleId as any);
       }catch{}
     };
-  },[bk,on,over,tab,p2pMode,hotseat,setup,sfOk]);// eslint-disable-line react-hooks/exhaustive-deps
+  },[bk,on,over,tab,p2pMode,hotseat,setup,sfOk,myT]);// eslint-disable-line react-hooks/exhaustive-deps
 
   // [reverted 2026-04-22] Earlier version of this effect terminated+reinit'd the Stockfish
   // worker on browseIdx/tab changes; deps included `tab` so every tab switch fired
@@ -3763,6 +3764,10 @@ export default function CyberChessPage(){
         // Только если запись принадлежит ЭТОЙ партии: иначе разбор ляжет на
         // чужую строку истории и молча затрёт её.
         const id=zap&&zap.fp===gameStartTimeRef.current?zap.id:null;
+        if(!id){
+          try{console.warn("[CyberChess] разбор посчитан, но записывать не к чему:",
+            zap?`запись от другой партии (${zap.fp} против ${gameStartTimeRef.current})`:"партия не сохранена")}catch{}
+        }
         if(id){
           sAnalysis(cur=>{
             updateGameAnalysis(id,cur.map(a=>({ply:a.move,quality:a.quality,cpLoss:a.cpLoss})));

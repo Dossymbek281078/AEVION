@@ -218,7 +218,7 @@ export const MODULES: Product[] = [
     id: "devhub",
     title: "DevHub Studio Pro",
     format: "модуль · подписка",
-    desc: "Браузерная IDE на движке VS Code, генерация кода AI и деплой на Railway / Vercel / Cloudflare Pages.",
+    desc: "Браузерная IDE на движке VS Code, генерация кода AI и деплой на Cloudflare Pages.",
     priceUsd: 149,
     billing: "monthly",
     kind: "module",

@@ -194,6 +194,11 @@ export default function MvpConceptBoard({
                     rows={3}
                     value={draft[f.key] ?? ""}
                     onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                    // Подпись у поля ЕСТЬ (`f.label`), но до читалки не
+                    // доходила: наружу шёл только placeholder, а он исчезает
+                    // при вводе. Компонент стоит на 17 страницах — правка
+                    // закрывает их разом. Замер прода 29.08.2026.
+                    aria-label={f.label}
                     placeholder={f.placeholder}
                     className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-base sm:text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
                   />
@@ -202,6 +207,11 @@ export default function MvpConceptBoard({
                     type={f.type === "number" ? "number" : "text"}
                     value={draft[f.key] ?? ""}
                     onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                    // Подпись у поля ЕСТЬ (`f.label`), но до читалки не
+                    // доходила: наружу шёл только placeholder, а он исчезает
+                    // при вводе. Компонент стоит на 17 страницах — правка
+                    // закрывает их разом. Замер прода 29.08.2026.
+                    aria-label={f.label}
                     placeholder={f.placeholder}
                     className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-base sm:text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
                   />

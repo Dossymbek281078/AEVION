@@ -7353,6 +7353,8 @@ const en: Record<string, string> = {
   "wishlistPage.headline": "Save toward what you want.",
   "wishlistPage.kicker": "Wishlist",
   "wishlistPage.lede": "Each item gets its own savings counter and target. The wallet tracks progress against your real-time balance — no extra accounts, no extra apps.",
+  "qpaynet.notif.markFailed": "Could not mark as read ({status}). Nothing changed.",
+  "pricing.home.heroModule.kztUnknownNote": "Card payment. We'll confirm Kaspi availability at checkout.",
 };
 
 export default en;

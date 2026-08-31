@@ -435,7 +435,7 @@ export default function ElevatorsPage() {
                   if (e.key === "Enter" && !revealed[k]) handleCheck();
                 }}
                 disabled={!!revealed[k] && userOk}
-                placeholder="Введите число..."
+                aria-label="Введите число" placeholder="Введите число..."
                 className="flex-1 border border-slate-300 dark:border-slate-600 rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-slate-500 dark:bg-slate-800 dark:text-slate-200"
               />
               {!revealed[k] && (

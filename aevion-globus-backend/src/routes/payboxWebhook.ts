@@ -33,10 +33,30 @@ function referenceFromOrderId(orderId: string): string {
   return orderId.replace(/_\d+$/, "");
 }
 
-function tierForReference(ref: string): TierId {
+/**
+ * Тариф выводится ТОЛЬКО из строки заказа: суммы в обработчике нет вовсе.
+ *
+ * Дефолт `lite` для незнакомой ссылки безопасен, пока номер заказа строит
+ * `payboxProvider.ts` — он делает его из известной ссылки. Но 29.08.2026
+ * выяснилось, что второй путь (`routes/payments.ts`) шлёт подтверждение по
+ * другому адресу и строит номер иначе; стоит кому-нибудь «починить» адрес
+ * одной строкой — и незнакомый заказ пойдёт сюда, не совпадёт ни с одним
+ * образцом и человек получит САМЫЙ ДЕШЁВЫЙ тариф за любые деньги.
+ *
+ * Поведение не меняю — менять выдачу тарифов вслепую нельзя. Меняю одно:
+ * дефолт перестаёт быть молчаливым. Незнакомая ссылка теперь видна в
+ * Sentry, то есть расхождение обнаружится ДО того, как о нём напишет
+ * покупатель.
+ */
+/** Экспортируется ради теста: молчаливый дефолт стоит проверять отдельно. */
+export function tierForReference(ref: string): TierId {
   const r = ref.toLowerCase();
   if (r.includes("medium")) return "medium";
   if (r.includes("full") || r.includes("all-access") || r.includes("business") || r.includes("team")) return "full";
+  if (!r.includes("lite")) {
+    console.warn(`[paybox/webhook] незнакомая ссылка заказа "${ref}" — выдаём lite по умолчанию`);
+    capture(new Error(`paybox: неизвестная ссылка заказа "${ref}", выдан lite по умолчанию`));
+  }
   return "lite";
 }
 

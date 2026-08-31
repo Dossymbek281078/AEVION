@@ -157,14 +157,22 @@ export function purgeSubscriptions(email: string): { removed: number; remaining:
   return { removed, remaining: kept.length };
 }
 
-export function countSubscriptions(): number {
+export function countSubscriptions(): { ok: boolean; total: number } {
   try {
     const file = subsFile();
-    if (!existsSync(file)) return 0;
+    // Файла нет — это ЧЕСТНЫЙ ноль: подписок ещё не было.
+    if (!existsSync(file)) return { ok: true, total: 0 };
     const content = readFileSync(file, "utf8");
-    return content.split("\n").filter((l) => l.trim().length > 0).length;
+    const n = content.split(String.fromCharCode(10)).filter((l) => l.trim().length > 0).length;
+    return { ok: true, total: n };
   } catch {
-    return 0;
+    // А СБОЙ ЧТЕНИЯ нулём быть не должен: это «не знаю».
+    //
+    // Число уходит в ответ ручки и дальше в ежедневный отчёт основателю.
+    // Ноль при нечитаемом файле выглядит как «никто не купил» или «мы
+    // потеряли всех подписчиков» — ложная тревога, отличить которую от
+    // правды было нечем.
+    return { ok: false, total: 0 };
   }
 }
 
@@ -395,8 +403,9 @@ const TIER_DISPLAY: Record<TierId, string> = {
   medium: "Medium",
   full: "Full",
   enterprise: "Enterprise",
-  // `pro` is NOT a legacy alias — it is the live Universe tier ($249.99 in
-  // data/pricing.ts), and lib/planGate.ts normalizes it to `full` access.
+  // `pro` is NOT a legacy alias — it is the live Universe tier ($149/mo in
+  // data/pricing.ts; $249.99 → $149 при переоценке 13.08.2026), and
+  // lib/planGate.ts normalizes it to `full` access.
   // This map still called it "Lite", so someone who had just paid for Universe
   // got a welcome email headlined "Добро пожаловать в AEVION Lite". Same
   // mistaken assumption that once gated a Universe customer at Lite access

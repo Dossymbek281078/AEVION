@@ -14,7 +14,7 @@ export default function DistrictCoolingChillerPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">District Cooling</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">District Cooling</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">❄️ District Cooling — Централизованное холодоснабжение</h1>
           <p className="mt-3 text-slate-400 leading-relaxed max-w-3xl">Модуль #303. План «Астана-Холод» (Эспанаход, Астана-EXPO 2017 area) — централизованное cooling 50 МВт холода для офисных кварталов + EXPO Mall. Reference: ADWEA Empower Dubai (200 кв km coverage), Tabreed UAE 1300 МВт, Helsinki Energy DC. Технология — large chillers York YK 5000 RT (1 RT = 3.5 кВт холода) + ice storage thermal energy storage TES. Холод distributed через insulated chilled water pipe 5-7 °C supply → return 12-14 °C, primary loop с heat exchanger на zonal substations. ASHRAE 90.1 + IDEA District Cooling Best Practices + СНиП 41-01.</p>
@@ -62,7 +62,7 @@ export default function DistrictCoolingChillerPage() {
             <li>SCADA + BMS Siemens DESIGO + control room = 1.5 млрд</li>
             <li>Backup DG + UPS + civil works + проект 5% + PNR = 4.5 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~35 млрд тг (~$75M USD)</strong>. Удельная — $1500/кВт холода. Окупаемость 12-15 лет через cooling tariff $0.05-0.08/кВт·ч.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Refrigerant choice</h2>

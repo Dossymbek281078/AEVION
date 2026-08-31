@@ -177,6 +177,7 @@ export default function ConstitutionApiPlaygroundPage() {
             <div className="mb-3">
               <label className="text-xs text-[#9aa3c0]">title</label>
               <input
+                aria-label="title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 maxLength={120}
@@ -192,6 +193,7 @@ export default function ConstitutionApiPlaygroundPage() {
                       <code className="text-cyan-300">{m.key}</code>
                     </div>
                     <input
+                      aria-label={`${m.key}: ${m.label}`}
                       type="range"
                       min={0}
                       max={100}

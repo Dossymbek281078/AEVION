@@ -257,7 +257,7 @@ export default function AdminEventsPage() {
               type="password"
               value={adminToken}
               onChange={(e) => setAdminToken(e.target.value)}
-              placeholder="Введите ADMIN_TOKEN из .env бэка"
+              aria-label="Ключ администратора" placeholder="Введите ADMIN_TOKEN из .env бэка"
               style={{ ...inputStyle, flex: 1, minWidth: 280 }}
             />
             <button type="button" onClick={saveToken} style={btnPrimary}>
@@ -283,7 +283,7 @@ export default function AdminEventsPage() {
                 style={inputStyle}
                 value={sourceFilter}
                 onChange={(e) => setSourceFilter(e.target.value)}
-                placeholder="qmedia,qsocial"
+                aria-label="Модули" placeholder="qmedia,qsocial"
               />
             </div>
             <div>
@@ -292,7 +292,7 @@ export default function AdminEventsPage() {
                 style={inputStyle}
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                placeholder="cta_click,lead_submit"
+                aria-label="События" placeholder="cta_click,lead_submit"
               />
             </div>
             <div>
@@ -301,7 +301,7 @@ export default function AdminEventsPage() {
                 style={inputStyle}
                 value={tierFilter}
                 onChange={(e) => setTierFilter(e.target.value)}
-                placeholder="pro,enterprise"
+                aria-label="Тарифы" placeholder="pro,enterprise"
               />
             </div>
             <div>
@@ -310,12 +310,12 @@ export default function AdminEventsPage() {
                 style={inputStyle}
                 value={industryFilter}
                 onChange={(e) => setIndustryFilter(e.target.value)}
-                placeholder="saas,retail"
+                aria-label="Отрасли" placeholder="saas,retail"
               />
             </div>
             <div>
               <span style={labelStyle}>Recent limit</span>
-              <input
+              <input aria-label="Recent limit"
                 style={inputStyle}
                 type="number"
                 min={1}
@@ -326,7 +326,7 @@ export default function AdminEventsPage() {
             </div>
             <div>
               <span style={labelStyle}>Window (hours)</span>
-              <input
+              <input aria-label="Window (hours)"
                 style={inputStyle}
                 type="number"
                 min={1}

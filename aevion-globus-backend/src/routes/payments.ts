@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { isPayboxConfigured } from "../lib/payment/payboxProvider";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -262,9 +263,38 @@ paymentsRouter.get("/kaspi/config", (_req, res) => {
 /* ═══ General ═══ */
 
 paymentsRouter.get("/health", (_req, res) => {
+  // Выражение ДОСЛОВНО то же, что в checkout.ts, включая секрет вебхука:
+  // это одно утверждение о мире, и два его написания разъезжаются молча.
+  // Без секрета вебхук LemonSqueezy — заглушка на 200 OK, то есть деньги
+  // возьмутся, а купленное не выдастся; выдача есть у Gumroad, и выбор
+  // идёт как `lsReady ? ls : gumroad`.
+  const lsReady =
+    Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
+    Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim());
+  // Кто ОСНОВНОЙ — решает способность выдать купленное, а не взять деньги.
+  const lsCanDeliver =
+    lsReady && Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim());
   res.json({
-    gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: true },
-    paybox: { configured: Boolean(PAYBOX_MERCHANT()) },
+    // `primary` раньше стояло у Gumroad КОНСТАНТОЙ true. Поле выглядело
+    // замером, а было литералом — и после перехода на LemonSqueezy оно
+    // начало лгать: /api/pricing/checkout/healthz отвечал
+    // primaryProvider "lemonsqueezy", а эта ручка в тот же миг —
+    // gumroad primary true. Две наши собственные ручки спорили о том,
+    // кто принимает деньги, и верили бы более короткой.
+    //
+    // Выражение взято ОДИН В ОДИН из checkout.ts (/healthz), а не
+    // придумано заново: второй способ отвечать на тот же вопрос и есть
+    // причина расхождения.
+    lemonsqueezy: { configured: lsReady, primary: lsCanDeliver },
+    gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: !lsCanDeliver },
+    // Готовность PayBox спрашиваем у ЕГО ЖЕ модуля, а не пересобираем здесь:
+    // ему нужны И идентификатор продавца, И PAYBOX_SECRET (без секрета нельзя
+    // ни подписать запрос, ни проверить ответ). Своя проверка по одному
+    // продавцу расходилась бы с checkout/healthz, который зовёт эту функцию.
+    // Сегодня обе отвечают «нет», и разница невидима — она проявится в день,
+    // когда данные PayBox заданы наполовину: эта ручка объявит кассу для
+    // тенге готовой, а платить будет нельзя.
+    paybox: { configured: isPayboxConfigured() },
     kaspi: { configured: false },
     paddle: { configured: false, migrated: true },
     stripe: { configured: false, migrated: true },

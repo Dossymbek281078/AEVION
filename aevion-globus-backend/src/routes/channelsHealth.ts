@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { lemonSqueezyTiersConfigured } from "../data/lemonSqueezyVariants";
 
 import { variantMappingStatus } from "../data/lemonSqueezyVariants";
 
@@ -59,6 +60,21 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
    */
   const canRegister = email || google || github;
   const canPay = lemonsqueezy || gumroad || paybox || paypal;
+  // ДВА РАЗНЫХ ВОПРОСА, и раньше на них отвечало одно поле.
+  //
+  // `canPay` отвечает «есть ли настроенный провайдер» — то есть можем ли
+  // мы в принципе принимать деньги. Но покупка не начнётся без ВАРИАНТА
+  // товара у LemonSqueezy: он задаётся отдельной переменной на каждый
+  // тариф. При заданных ключах и отсутствующем варианте `canPay` говорит
+  // «да», а человек упирается в отказ.
+  //
+  // Замечено 29.08.2026 накануне запуска модуля: готовность называла цену,
+  // а можно ли её заплатить — не отвечал никто.
+  //
+  // Поле НЕ переименовываю: у `canPay` есть свой смысл и свои тесты.
+  // Добавляю второе, на второй вопрос.
+  const canStartPurchase =
+    (lemonsqueezy && lemonSqueezyTiersConfigured()) || gumroad || paybox || paypal;
 
   /**
    * ТРЕТИЙ ВОПРОС, которого здесь не было: превращается ли оплата в доступ.
@@ -82,7 +98,8 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
     ok: true,
     canRegister,
     canPay,
-    canGrant,
+      canGrant,
+      canStartPurchase,
     signup: {
       email: { configured: email, via: { smtp, resend } },
       google: { configured: google },

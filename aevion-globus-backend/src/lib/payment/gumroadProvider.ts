@@ -237,3 +237,33 @@ async function verifyGumroadSaleImpl(
     return { verdict: "unverifiable", sale: null };
   }
 }
+
+/**
+ * Какие тарифы Gumroad РЕАЛЬНО может продать — по именам, без значений.
+ *
+ * Токен доступа отвечает на вопрос «настроен ли провайдер», а продать тариф
+ * Gumroad может только при заданной ссылке на товар:
+ * GUMROAD_PERMALINK_<REFERENCE> либо общая GUMROAD_DEFAULT_PERMALINK. Это
+ * разные вопросы, и снаружи второй виден не был — ровно как было у
+ * LemonSqueezy до появления sellable.
+ *
+ * Важно это стало 29.08.2026: выбор провайдера уходит на Gumroad, когда
+ * LemonSqueezy не может ВЫДАТЬ купленное. Уходить есть смысл только туда, где
+ * тариф действительно продаётся; иначе покупатель получит честный 503, но
+ * продажи в этот момент остановятся — и знать об этом надо заранее.
+ *
+ * Значения переменных не возвращаются никогда, только имена тарифов.
+ */
+export function gumroadSellable(references: string[]): {
+  configured: string[];
+  missing: string[];
+} {
+  const общая = Boolean(process.env.GUMROAD_DEFAULT_PERMALINK?.trim());
+  const configured: string[] = [];
+  const missing: string[] = [];
+  for (const ref of references) {
+    const key = `GUMROAD_PERMALINK_${ref.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+    (process.env[key]?.trim() || общая ? configured : missing).push(ref);
+  }
+  return { configured: configured.sort(), missing: missing.sort() };
+}

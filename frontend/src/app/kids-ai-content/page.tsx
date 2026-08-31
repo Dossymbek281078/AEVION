@@ -40,7 +40,7 @@ const headerStyle: React.CSSProperties = {
   justifyContent: "space-between",
   alignItems: "center",
   position: "sticky",
-  top: 0,
+  top: 'var(--aevion-header-h, 0px)',
   zIndex: 10,
   backdropFilter: "blur(8px)",
 };

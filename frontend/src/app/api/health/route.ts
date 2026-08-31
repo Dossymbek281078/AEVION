@@ -76,6 +76,19 @@ export function GET() {
         env: process.env.VERCEL_ENV || "local",
         // Идентификатор сборки — он есть всегда, даже когда git-метки нет.
         deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
+        // Режим банковского модуля — и он важнее, чем кажется.
+        //
+        // `NEXT_PUBLIC_BANK_MODE` читают ДВА места с одинаковым дефолтом
+        // "test", но с противоположными последствиями:
+        //   • TestModeBanner — при дефолте баннер ПОКАЖЕТСЯ (это безопасно:
+        //     лучше лишний раз предупредить, чем скрыть тестовый режим);
+        //   • lib/sentry.ts — при дефолте боевые ошибки помечаются как
+        //     `environment: "test"`, то есть их отфильтруют вместе с шумом.
+        //
+        // Второе — тихая потеря тревог, и снаружи она неотличима от тишины.
+        // Значение не секрет (это имя режима), поэтому показываем как есть;
+        // `null` означает, что переменная не задана вовсе.
+        bankMode: process.env.NEXT_PUBLIC_BANK_MODE ?? null,
       },
       runtime: typeof process !== "undefined" ? process.version : "edge",
       memory_rss_mb: memUsed,

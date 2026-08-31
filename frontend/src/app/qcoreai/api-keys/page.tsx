@@ -491,7 +491,7 @@ export default function ApiKeysPage() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              placeholder="Key name (e.g. My Script, CI/CD Pipeline)"
+              aria-label="Key name" placeholder="Key name (e.g. My Script, CI/CD Pipeline)"
               style={S.input}
             />
             <select

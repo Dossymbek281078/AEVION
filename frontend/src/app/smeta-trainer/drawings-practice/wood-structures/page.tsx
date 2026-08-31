@@ -389,7 +389,7 @@ export default function WoodStructuresPage() {
                           e.key === "Enter" && !revealed[key] && handleCheck()
                         }
                         disabled={!!revealed[key]}
-                        placeholder="Введите число..."
+                        aria-label="Введите число" placeholder="Введите число..."
                         className="flex-1 border rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-amber-500 dark:bg-stone-800 dark:border-stone-600 dark:text-stone-200"
                       />
                       <span className="text-xs text-stone-500 dark:text-stone-400 font-mono w-12 text-right">

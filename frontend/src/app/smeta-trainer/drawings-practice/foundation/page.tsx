@@ -229,7 +229,7 @@ export default function FoundationPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-3">
           <Link href="/smeta-trainer/drawings-practice/advanced" className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400">
             ← L4 Продвинутый
@@ -317,7 +317,7 @@ export default function FoundationPage() {
                       onChange={(e) => setInputs((p) => ({ ...p, [key]: e.target.value }))}
                       onKeyDown={(e) => e.key === "Enter" && !revealed[key] && handleCheck()}
                       disabled={!!revealed[key]}
-                      placeholder="Число..."
+                      aria-label="Число" placeholder="Число..."
                       className="flex-1 border rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"
                     />
                     {!revealed[key] && (

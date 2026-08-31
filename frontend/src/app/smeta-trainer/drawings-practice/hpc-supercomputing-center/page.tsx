@@ -13,7 +13,7 @@ export default function HpcSupercomputingCenterPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">HPC Supercomputing</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">HPC Supercomputing</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🖥️ HPC Supercomputing Center (Exascale)</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #319. Astana Nazarbayev University Computer Center + Almaty Институт ИИВТ. Reference: Frontier ORNL (1.7 ExaFlops Top500 #1 2024), Fugaku Japan (442 PFlops), LUMI Finland (380 PFlops). HPC for climate modeling + drug discovery + AI training + nuclear physics simulation. Architecture: ~10 000 nodes × CPU AMD EPYC 9954 96-core + GPU NVIDIA H100/B200 80GB HBM3 × 4-8 per node, InfiniBand HDR 200 Gbps interconnect, parallel storage Lustre 100 PB. Liquid cooling direct-to-chip + adiabatic outdoor chillers. ISO 27001 + TIA-942 Tier IV + Green Grid PUE &lt;1.2 + СН РК 4.04-12.</p>
@@ -62,7 +62,7 @@ export default function HpcSupercomputingCenterPage() {
             <li>Security TIA-942 Tier IV + cybersecurity + NOC = 2 млрд</li>
             <li>Networking + IT + проект 5% + commissioning + insurance = 3 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~65 млрд тг (~$140M USD)</strong> на 100 PFlops HPC. Frontier ORNL $600M; LUMI Finland $200M.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Power efficiency</h2>

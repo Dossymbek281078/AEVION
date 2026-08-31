@@ -410,7 +410,15 @@ export default function AuthPage() {
                         title={
                           p.configured
                             ? `Войти через ${p.name}`
-                            : `Provider not configured. Set ${meta.envHint} on the backend.`
+                            // Посетителю — что это значит для него, а не имена
+                            // переменных окружения. Прежний текст показывал
+                            // GOOGLE_OAUTH_CLIENT_ID + ..._SECRET во всплывающей
+                            // подсказке, то есть любому, кто наведёт мышь: это и
+                            // жаргон на экране, и рассказ о внутреннем устройстве.
+                            // Имена переменных остались в OAUTH_META и в подсказке
+                            // сервера (503 с hint) — там их читает разработчик.
+                            // И язык теперь один: соседняя ветка условия русская.
+                            : `Вход через ${p.name} пока недоступен. Используйте почту.`
                         }
                         aria-disabled={!p.configured}
                         style={{
@@ -527,12 +535,12 @@ export default function AuthPage() {
               {mode === "register" ? (
                 <div>
                   <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Имя</div>
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Как к вам обращаться" style={inputStyle} disabled={busy} />
+                  <input aria-label="Имя" value={name} onChange={(e) => setName(e.target.value)} placeholder="Как к вам обращаться" style={inputStyle} disabled={busy} />
                 </div>
               ) : null}
               <div>
                 <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Почта</div>
-                <input
+                <input aria-label="Почта"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="user@example.com"
@@ -561,7 +569,7 @@ export default function AuthPage() {
               </div>
               <div>
                 <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Пароль</div>
-                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Не короче 6 знаков" style={inputStyle} disabled={busy} />
+                <input aria-label="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Не короче 6 знаков" style={inputStyle} disabled={busy} />
                 {password ? (
                   <div style={{ marginTop: 8 }}>
                     {/* Strength bar — 4 segments, fills left→right by score. */}

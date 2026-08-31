@@ -101,4 +101,30 @@ describe("Подсказка называет, чего не хватает", ()
     expect(m).toContain("GOOGLE_OAUTH_CLIENT_ID");
     expect(m).toContain("GITHUB_OAUTH_CLIENT_ID");
   });
+
+  test("canPay говорит «да» там, где покупку начать нельзя — на это есть отдельное поле", async () => {
+    // Два разных вопроса: «есть ли провайдер» и «начнётся ли покупка».
+    // Покупка не начнётся без варианта товара у LemonSqueezy, а он
+    // задаётся отдельной переменной на каждый тариф.
+    //
+    // Проверяем именно РАЗНИЦУ: тест на одно поле доказывал бы лишь то,
+    // что оно существует.
+    process.env.LEMON_SQUEEZY_API_KEY = "тест-ключ";
+    process.env.LEMON_SQUEEZY_STORE_ID = "1234";
+    for (const k of Object.keys(process.env)) {
+      if (k.startsWith("LEMON_SQUEEZY_VARIANT_")) delete process.env[k];
+    }
+    delete process.env.GUMROAD_ACCESS_TOKEN;
+    delete process.env.PAYBOX_MERCHANT_ID;
+    delete process.env.PAYPAL_CLIENT_ID;
+
+    const без = await request(app()).get("/api/health/channels");
+    expect(без.body.canPay).toBe(true);
+    expect(без.body.canStartPurchase).toBe(false);
+
+    process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY = "12345";
+    const с = await request(app()).get("/api/health/channels");
+    expect(с.body.canStartPurchase).toBe(true);
+    delete process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY;
+  });
 });

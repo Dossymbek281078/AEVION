@@ -13,7 +13,7 @@ export default function SuspensionBridgeLongSpanPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Suspension Bridge — Long Span</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Suspension Bridge — Long Span</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🌉 Висячий мост (Long-Span Suspension Bridge)</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #307. Концепт «Yellow River Bridge» Алтай (предлагаемый), а также reference world records: Akashi Kaikyo Japan main span 1991 m (1998), 1915 Çanakkale Turkey 2023 m (2022), Great Belt Denmark 1624 m, Verrazzano-Narrows USA 1298 m, Golden Gate 1280 m. Suspension bridge — главный кабель из 30 000-50 000 high-tensile steel wires Ø5 mm draped over two pylons + hangers vertical to deck. Aerodynamic instability (Tacoma Narrows 1940) requires wind tunnel testing + truss/box girder design. AASHTO LRFD + Eurocode EN 1993 + СН РК 5.04-10.</p>
@@ -61,7 +61,7 @@ export default function SuspensionBridgeLongSpanPage() {
             <li>Wind tunnel + aerodynamic testing + SHM monitoring = 8 млрд</li>
             <li>Approach spans + expansion joints + lighting + safety + проект 6% + ESIA + PNR + insurance = 39 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~420 млрд тг (~$900M USD)</strong>. Akashi Kaikyo 1991 m = $4.3B (1998), цена per linear m ≈ $700K-1M.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Aeroelastic stability</h2>

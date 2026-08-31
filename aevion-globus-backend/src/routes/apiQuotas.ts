@@ -136,7 +136,13 @@ apiQuotasRouter.get("/", (_req, res) => {
     version: QUOTAS_VERSION,
     publishedAt: PUBLISHED_AT,
     docsUrl: "https://github.com/Dossymbek281078/AEVION/blob/main/docs/api/PUBLIC_API_QUOTAS.md",
-    contact: "api@aevion.app",
+    // Адрес, на который клиент API напишет, если упрётся в квоту. Стоял
+    // api@aevion.app — у домена aevion.app НЕТ записи MX (перепроверено
+    // 29.08.2026: DNS отдаёт SOA вместо MX), то есть письмо отбивается и
+    // обращение не доходит НИ ДО КОГО. Здесь тот же адрес, что в
+    // /.well-known/security.txt и на публичных страницах, — единственный,
+    // про который известно, что он принимает почту.
+    contact: "yahiin1978@gmail.com",
     keyFormat: {
       pattern: "aev_(test|live)_<24bytes_base64url>",
       headerName: "X-Aevion-Api-Key",

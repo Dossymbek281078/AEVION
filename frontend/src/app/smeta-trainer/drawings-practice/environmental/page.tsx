@@ -158,7 +158,7 @@ export default function EnvironmentalPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Header */}
-      <div className="border-b border-green-200 dark:border-green-900 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-10">
+      <div style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-green-200 dark:border-green-900 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice/hub"

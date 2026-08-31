@@ -13,7 +13,7 @@ export default function RadioTelescopeVlbiPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Radio Telescope VLBI</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Radio Telescope VLBI</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">📡 Радиотелескоп VLBI</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #306. РТ-32 IVS (International VLBI Service) — план Алматинский предгорный радиотелескоп для участия в EVN European VLBI Network. Reference: Effelsberg 100 m, Green Bank 100 m, Yebes 40 m, Sheshan 65 m China. Antenna Ø32 m Cassegrain, surface accuracy λ/40 RMS = 0.3 мм для 30 GHz Ka-band. Дрифт-tracking 0.001° точность для VLBI baseline interferometry (combine с глоб. сетью телескопов → resolution arc-microsecond). Cryogenic LNA 4 K helium для T_sys {"<"}30 K. IAU + IVS + ITU-R RA.769 (RFI protection) + СН РК 4.04-04.</p>
@@ -62,7 +62,7 @@ export default function RadioTelescopeVlbiPage() {
             <li>Fiber-optic link 50 км до Almaty + maintenance crane + RFI shielding = 4 млрд</li>
             <li>Подъезд + ЛЭП + projecting 5% + PNR + insurance = 7 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~42 млрд тг (~$90M USD)</strong>. Effelsberg 100 m = ~$300M (1972), Green Bank 100 m = $75M USD.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — RFI protection</h2>

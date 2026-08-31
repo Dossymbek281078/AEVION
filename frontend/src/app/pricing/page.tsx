@@ -12,6 +12,7 @@ import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
 import { useABVariant, getAllVariants } from "@/lib/abVariant";
 import AskAi from "@/components/AskAi";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
@@ -280,6 +281,12 @@ export default function PricingPage() {
   // LemonSqueezy. Покупатель из Казахстана читал про Kaspi и попадал на оплату
   // в долларах. Обещание теперь следует за фактом, а не наоборот.
   const [payboxLive, setPayboxLive] = useState<boolean | null>(null);
+  // null = не спрашивали или поля ещё нет; массив = список ссылок, купить
+  // которые нельзя (у провайдера не задан вариант товара).
+  const [notSellable, setNotSellable] = useState<string[] | null>(null);
+  /** Можно ли купить этот тариф прямо сейчас. Незнание = НЕ запрещаем. */
+  const продаётся = (tierId: string) =>
+    notSellable === null ? true : !notSellable.includes(`tier_${tierId}_${period}`);
 
   useEffect(() => {
     let cancelled = false;
@@ -289,6 +296,16 @@ export default function PricingPage() {
         if (!r.ok) return;
         const j = await r.json();
         if (!cancelled) setPayboxLive(Boolean(j?.providers?.paybox?.configured));
+        // Что реально можно купить. `configured` у провайдера означает
+        // «есть ключ и магазин», но покупка не начнётся без варианта
+        // товара — он задаётся отдельной переменной на каждый тариф.
+        //
+        // Поле добавлено в healthz 29.08.2026. ПОКА ЕГО НЕТ (бэкенд не
+        // выкачен) остаётся null — «не знаем», и ничего не меняется.
+        // Путать «поля нет» с «нельзя купить» нельзя: первое про нашу
+        // осведомлённость, второе про товар.
+        const missing = j?.providers?.lemonsqueezy?.sellable?.missing;
+        if (!cancelled && Array.isArray(missing)) setNotSellable(missing as string[]);
       } catch {
         // Не спросили - значит не знаем. Оставляем null: обещать нельзя,
         // но и пугать «не работает» на основании сетевого сбоя тоже нельзя.
@@ -512,13 +529,24 @@ export default function PricingPage() {
               <div style={{ fontSize: 12, color: "#64748b" }}>
                 {t("pricing.home.heroModule.paymentCard")}{" "}
                 {currency === "KZT"
-                  ? (payboxLive ? t("pricing.home.heroModule.kztNote") : t("pricing.home.heroModule.kztFallbackNote"))
+                  ? (payboxLive === null
+                      // Не спросили — не знаем. Прежде null был ложным и
+                      // уходил в ветку «Kaspi не подключён»: код бережно
+                      // хранил незнание, а экран его терял и утверждал
+                      // покупателю то, чего мы не проверяли. Сегодня это
+                      // совпадает с правдой (PayBox не настроен), но при
+                      // настроенном PayBox один сетевой сбой отпугивал бы
+                      // покупателя в тенге ложным «Kaspi не подключён».
+                      ? t("pricing.home.heroModule.kztUnknownNote")
+                      : payboxLive
+                        ? t("pricing.home.heroModule.kztNote")
+                        : t("pricing.home.heroModule.kztFallbackNote"))
                   : t("pricing.home.heroModule.usdNote")}
               </div>
             </div>
             <button
               type="button"
-              disabled={checkingOut === "lite"}
+              disabled={checkingOut === "lite" || !продаётся("lite")}
               onClick={() => startCheckout({ tierId: "lite", period, seats: 1, modules: [heroModule] })}
               style={{
                 padding: "12px 28px",
@@ -968,7 +996,7 @@ export default function PricingPage() {
                   </select>
                 )}
                 <button
-                  disabled={checkingOut === tier.id}
+                  disabled={checkingOut === tier.id || !продаётся(tier.id)}
                   style={{
                     width: "100%",
                     padding: "10px 16px",
@@ -2292,6 +2320,23 @@ export default function PricingPage() {
           </code>
           .
         </div>
+      </section>
+
+      {/*
+        Захват адреса на странице цен.
+
+        Замер 29.08.2026: `WaitlistCapture` стоит на главной и на /go, а на
+        странице цен его не было — при том что именно здесь намерение купить
+        максимально. Человек посмотрел цены, не готов платить сегодня и
+        уходит, не оставив следа.
+
+        Поле `source` отличает этот поток от остальных: без него нельзя
+        сказать, откуда пришёл подписчик, и мерить нечего.
+      */}
+      <section style={{ margin: "28px auto 0", maxWidth: 760 }}>
+        {/* Страница цен светлая (#fff, #f1f5f9), а умолчание компонента — тёмное:
+            без tone="light" форма встала бы чужеродным чёрным блоком. */}
+        <WaitlistCapture source="pricing" tone="light" />
       </section>
 
       <section style={{ margin: "28px auto 0", maxWidth: 760, textAlign: "left" }}>

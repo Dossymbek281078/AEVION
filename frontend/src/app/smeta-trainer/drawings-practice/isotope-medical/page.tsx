@@ -30,7 +30,7 @@ export default function IsotopeMedicalPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Циклотроны и производство изотопов</div>
@@ -137,7 +137,7 @@ export default function IsotopeMedicalPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~18 млрд тг (допуск ±10%). 1.8+2.4+5+1.6+1.6+1.8+0.6+0.8+0.4+0.6+0.8+0.4+0.4+0.8+0.6 = 19.6 млрд тг ≈ 18 млрд тг (с оптимизацией). Cyclone-30 IBA сам стоит €8-12 млн ≈ 4-6 млрд тг. Полный комплекс с GMP-лабораторией = $40-50 млн ≈ 18-23 млрд тг.</p>

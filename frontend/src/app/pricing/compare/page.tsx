@@ -263,7 +263,7 @@ export default function PricingComparePage() {
         <div
           style={{
             position: "sticky",
-            top: 0,
+            top: 'var(--aevion-header-h, 0px)',
             zIndex: 20,
             background: "#fff",
             padding: "8px 0",

@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
+  apiError,
   checkIdempotency,
   gateRequest,
   genId,
@@ -11,7 +12,7 @@ import {
   withCors,
   type ApiLink,
 } from "../_lib";
-import { kvList, kvPush } from "../_persist";
+import { kvListChecked, kvPush } from "../_persist";
 import { logAudit } from "../_audit";
 import { enqueueAttempt } from "../_webhook_queue";
 
@@ -35,7 +36,22 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const linkId = url.searchParams.get("link_id");
 
-  const items = await kvList<ApiRefund>(REFUNDS_KEY);
+  // Отказ хранилища — это 503, а не пустой список. Довод тот же, что записан
+  // у споров: продавец, увидев «возвратов нет», оформит возврат ВТОРОЙ РАЗ.
+  // Пустая выдача при отказе неотличима от «их действительно нет».
+  const read = await kvListChecked<ApiRefund>(REFUNDS_KEY);
+  if (!read.ok) {
+    return attachRateHeaders(
+      withCors(
+        apiError(
+          "Refund storage is temporarily unreachable. Please retry.",
+          503
+        )
+      ),
+      gate.rateHeaders
+    );
+  }
+  const items = read.value;
   const filtered = linkId ? items.filter((r) => r.link_id === linkId) : items;
 
   return attachRateHeaders(
@@ -95,7 +111,68 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const prior = await kvList<ApiRefund>(REFUNDS_KEY);
+  // ⚠️ 29.08.2026: здесь стояло обычное kvList, и это был путь к ДВОЙНОМУ
+  // возврату.
+  //
+  // Ниже из этого списка считается refundedSoFar, а из него remaining. Если
+  // хранилище недоступно и чтение молча отдаёт пустой список, прошлых
+  // возвратов «не существует»: refundedSoFar = 0, remaining = вся сумма, и
+  // защита «уже возвращено полностью» не срабатывает. Деньги уходят второй
+  // раз, а ответ выглядит обычным.
+  //
+  // Направление отказа выбираем по цене: отказ в возврате восстановим —
+  // продавец повторит через минуту; двойной возврат не восстановим.
+  // Поэтому НЕ ЗНАЕМ значит НЕ ДЕЛАЕМ.
+  const priorRead = await kvListChecked<ApiRefund>(REFUNDS_KEY);
+  if (!priorRead.ok) {
+    return attachRateHeaders(
+      withCors(
+        apiError(
+          "Cannot read prior refunds right now; refund not issued. Please retry.",
+          503
+        )
+      ),
+      gate.rateHeaders
+    );
+  }
+  const prior = priorRead.value;
+
+  // 31.08.2026. Журнал возвратов ОДИН на все ссылки ("refunds.v1") и kvPush
+  // обрезает его до REFUND_LIST_CAP, выбрасывая САМЫЕ СТАРЫЕ записи. Значит у
+  // ссылки, которая старше самой старой уцелевшей записи, её возврат мог быть
+  // вытеснен — тогда refundedSoFar ниже считается нулём, remaining возвращается
+  // к полной сумме, и полностью возвращённая ссылка возвращается ВТОРОЙ РАЗ.
+  // Ответ при этом выглядит обычным: пропажа записи неотличима от «возвратов
+  // не было». Воспроизведено тестом refundCapCannotHidePriorRefunds.
+  //
+  // Тот же класс, что и недоступное хранилище строкой выше: чтение, результат
+  // которого идёт в вычисление ПРЕДЕЛА, а потеря данных делает предел БОЛЬШЕ.
+  // Направление отказа то же и по той же цене: отказ обратим (продавец придёт
+  // в поддержку), вторая выдача денег — нет.
+  //
+  // Проверка узкая намеренно. Возврат ссылки не может быть старше самой ссылки,
+  // поэтому у ссылки НЕ старше окна все её возвраты заведомо целы — такие
+  // проходят как раньше. Отказ включается только когда журнал полон И ссылка
+  // старше окна, то есть ровно тогда, когда ответа у нас действительно нет.
+  // Настоящее лечение — учёт по ссылке, который не обрезается; это меняет
+  // хранилище и сделано отдельно.
+  if (prior.length >= REFUND_LIST_CAP) {
+    const oldestRetained = prior.reduce(
+      (m, r) => (r.created < m ? r.created : m),
+      Number.POSITIVE_INFINITY
+    );
+    if (link.created < oldestRetained) {
+      return attachRateHeaders(
+        withCors(
+          apiError(
+            "Refund history for this link may have been truncated; refund not issued. Please contact support.",
+            409
+          )
+        ),
+        gate.rateHeaders
+      );
+    }
+  }
   const refundedSoFar = prior
     .filter((r) => r.link_id === link.id)
     .reduce((acc, r) => acc + r.amount, 0);
@@ -143,7 +220,8 @@ export async function POST(req: NextRequest) {
   void fanoutRefundWebhook(refund, getOrigin(req));
 
   const responseBody = JSON.stringify(refund);
-  idem.cleanup?.();
+  // Кэшируем ОТВЕТ: повтор с тем же ключом обязан вернуть возврат, а не эхо.
+  idem.cleanup?.(responseBody);
   return attachRateHeaders(
     withCors(
       new Response(responseBody, {

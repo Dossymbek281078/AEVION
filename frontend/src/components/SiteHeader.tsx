@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { getBackendOrigin } from "@/lib/apiBase";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
@@ -9,8 +10,39 @@ import AiOfflineToggle from "@/components/AiOfflineToggle";
 
 export function SiteHeader() {
   const origin = getBackendOrigin();
+  const headerRef = useRef<HTMLElement | null>(null);
+
+  // Шапка публикует свою ВЫСОТУ, чтобы прилипающие полосы разделов могли
+  // встать под ней, а не под неё. Замер 28.08.2026: полоса вкладок QGood
+  // тоже sticky с top: 0, но слоем 10 против 50 — при 1280x900 шапка
+  // накрывала её целиком, и все четыре вкладки давали 0 доступных точек
+  // из 16. Прокрутка не спасала: обе прилипают к нулю.
+  //
+  // Почему ResizeObserver, а не число: на узком экране шапка переносится
+  // в два ряда и её высота меняется. Именно поэтому дефект виден при
+  // 1280 и не виден при 1463 — фиксированное значение было бы неверным
+  // ровно там, где оно нужнее всего.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const publish = () => {
+      root.style.setProperty(
+        "--aevion-header-h",
+        `${Math.round(el.getBoundingClientRect().height)}px`,
+      );
+    };
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--aevion-header-h");
+    };
+  }, []);
   return (
     <header
+      ref={headerRef}
       style={{
         position: "sticky",
         top: 0,

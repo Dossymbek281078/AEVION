@@ -77,6 +77,14 @@ type Store = {
   idempotency: Map<string, { at: number; body: string }>;
 };
 
+// 31.08.2026. Платёжные ССЫЛКИ не пишутся в хранилище НИКОГДА: links/route.ts
+// делает только store.links.set, вызова kv для них нет ни одного. Это не то же
+// самое, что ненастроенный KV: подключение Redis возвраты, споры, аудит и
+// очередь спасёт, а ссылки — нет. Флаг стоит здесь, рядом со стором, чтобы
+// тот, кто переведёт ссылки в хранилище, поправил его тем же движением;
+// сторож linksDurabilityFlagIsHonest не даст флагу разойтись с кодом.
+export const LINKS_ARE_MEMORY_ONLY = true;
+
 const globalAny = globalThis as unknown as { __aevionPayStore?: Store };
 
 if (!globalAny.__aevionPayStore) {
@@ -198,6 +206,20 @@ export function badRequest(message: string, code = 400) {
   );
 }
 
+export function apiError(message: string, code = 503) {
+  // 31.08.2026. Наша собственная неуверенность — НЕ ошибка клиента.
+  // badRequest помечает ответ типом invalid_request_error, и с ним интегратор
+  // уходит отлаживать своё тело запроса, тогда как запрос был безупречен, а не
+  // смогли МЫ: хранилище не прочиталось или журнал обрезался. Хуже того, вместе
+  // с «please retry» это прямое противоречие — неверный запрос не станет верным
+  // от повтора. Такие ответы получают отдельный тип, чтобы человек на том конце
+  // понял, чья это сторона и стоит ли повторять.
+  return Response.json(
+    { error: { type: "api_error", message } },
+    { status: code }
+  );
+}
+
 export function withCors(res: Response): Response {
   res.headers.set("Access-Control-Allow-Origin", "*");
   res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -216,7 +238,7 @@ export function getOrigin(req: NextRequest): string {
 
 export function checkIdempotency(req: NextRequest, body: string):
   | { hit: true; cachedBody: string }
-  | { hit: false; cleanup: () => void } {
+  | { hit: false; cleanup: (responseBody?: string) => void } {
   const key = req.headers.get("idempotency-key");
   if (!key) {
     return { hit: false, cleanup: () => undefined };
@@ -225,8 +247,16 @@ export function checkIdempotency(req: NextRequest, body: string):
   if (prior) return { hit: true, cachedBody: prior.body };
   return {
     hit: false,
-    cleanup: () => {
-      store.idempotency.set(key, { at: Date.now(), body });
+    cleanup: (responseBody?: string) => {
+      // 31.08.2026. Кэшируется ОТВЕТ, а не то, что передали при проверке.
+      // Возвраты передавали сюда тело ЗАПРОСА, и на повтор продавец получал
+      // 200 со своим же {"link_id":...} вместо объекта возврата. Он проверял
+      // refund.status, видел undefined, считал попытку неудавшейся и повторял
+      // с НОВЫМ ключом — а новый ключ идёт мимо защиты от повтора. При
+      // частичном возврате остаток это позволяет: вернули 50 из 100, повтор
+      // вернёт ещё 50. Чекаут делал правильно, возвраты нет — расхождение
+      // внутри одного модуля.
+      store.idempotency.set(key, { at: Date.now(), body: responseBody ?? body });
       if (store.idempotency.size > 5000) {
         const cutoff = Date.now() - 24 * 60 * 60 * 1000;
         for (const [k, v] of store.idempotency.entries()) {

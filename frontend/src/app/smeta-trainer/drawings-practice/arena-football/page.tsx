@@ -30,7 +30,7 @@ export default function ArenaFootballPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Футбольные арены</div>
@@ -129,7 +129,7 @@ export default function ArenaFootballPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~195 млрд тг (допуск ±10%). 28+48+12+4.2+12+8+6.4+8.8+14+8.6+14+6.8+23.2 = 194 млрд тг. Astana Arena (2006-2009) стоила ~$200 млн ≈ 90 млрд тг (без учёта инфляции). С раздвижной крышей и Cat. 4 фактор удвоения — 195 млрд тг.</p>

@@ -291,7 +291,7 @@ for url in tree.findall("sm:url", ns):
         >
           <input
             type="text"
-            placeholder="Search by path or URL substring…"
+            aria-label="Search by path or URL" placeholder="Search by path or URL substring…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{

@@ -423,6 +423,11 @@ code {
 /* ── CyberChess utility classes ───────────────────────── */
 
 .cc-focus-ring:focus-visible {
+  /* Замер 29.08.2026: это кольцо НЕ РИСОВАЛОСЬ. У элементов (84 применения
+     в шахматах) своя тень задана СТРОЧНЫМ стилем, а он сильнее правила из
+     таблицы — значит фокус у них был невидим вообще, несмотря на класс.
+     Класс выглядел как забота о доступности и ею не был.
+     `!important` возвращает дизайну силу; без него он декоративен. */
   outline: none;
   box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.35);
   border-radius: var(--cc-radius-md);
@@ -591,8 +596,28 @@ a:focus-visible,
 [role="tab"]:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid #14b8a6;
+textarea:focus-visible,
+/* `summary` фокусируется и попадает под :focus-visible, но контура у него
+   НЕТ — оформление при фокусе не менялось вовсе. На странице цен это восемь
+   разворачивающихся вопросов: клавиатурой по ним идёшь вслепую.
+   Замер прода 29.08.2026. */
+summary:focus-visible,
+[role="switch"]:focus-visible,
+[role="checkbox"]:focus-visible,
+[role="radio"]:focus-visible,
+[role="menuitem"]:focus-visible,
+[role="option"]:focus-visible,
+[role="link"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  /* !important здесь ОСОЗНАННО, и вот замер, который его требует.
+     У части элементов контур снят СТРОЧНЫМ стилем (`style="outline: none"`),
+     а строчный сильнее любого правила из таблицы — общий контур не мог
+     победить в принципе. Проверено на /pricing: у `<summary>` в строке
+     стоит `outline: none`, и до этой правки фокус не был виден вовсе.
+     Видимый фокус — нижняя граница доступности, а не оформление, поэтому
+     он перебивает частные решения. Убирать строчные `outline: none` по
+     одному — 167 мест; это отдельная уборка, а защита нужна сейчас. */
+  outline: 2px solid #14b8a6 !important;
   outline-offset: 2px;
   border-radius: 6px;
 }

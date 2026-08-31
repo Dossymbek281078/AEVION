@@ -382,7 +382,13 @@ export default function SubscriptionsPage() {
             display: "grid",
             gap: 12,
             position: "sticky",
-            top: 16,
+            top: "calc(var(--aevion-header-h, 0px) + 16px)",
+            // Панель прилипшая и БЫВАЕТ ВЫШЕ ОКНА: без своей прокрутки её низ
+            // уходит за край и не достаётся ничем — прокрутка страницы её не
+            // двигает, она же прилипшая. Замер 29.08.2026: так пропадали девять
+            // фильтров каталога и поля форм на платежах.
+            maxHeight: "calc(100vh - var(--aevion-header-h, 0px) - 36px)",
+            overflowY: "auto",
           }}
         >
           <div
@@ -400,6 +406,7 @@ export default function SubscriptionsPage() {
           <div>
             <label style={labelStyle}>Plan name</label>
             <input
+              aria-label="Plan name"
               type="text"
               value={planName}
               onChange={(e) => setPlanName(e.target.value)}
@@ -411,6 +418,7 @@ export default function SubscriptionsPage() {
           <div>
             <label style={labelStyle}>Customer email</label>
             <input
+              aria-label="Customer email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -423,6 +431,7 @@ export default function SubscriptionsPage() {
             <div>
               <label style={labelStyle}>Amount</label>
               <input
+              aria-label="Amount"
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}

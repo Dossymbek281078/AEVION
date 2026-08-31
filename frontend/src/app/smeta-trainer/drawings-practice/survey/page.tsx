@@ -166,7 +166,7 @@ export default function SurveyPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="bg-indigo-700 text-white sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-indigo-700 text-white sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-3">
           <Link href="/smeta-trainer/drawings-practice/hub" className="text-xs text-indigo-200 hover:text-white">← К разделам</Link>
           <div className="flex-1">
@@ -357,7 +357,7 @@ export default function SurveyPage() {
                           onChange={e => setInp(p => ({ ...p, [k]: e.target.value }))}
                           onKeyDown={e => e.key === "Enter" && !rev[k] && go()}
                           disabled={!!rev[k]}
-                          placeholder="Число..."
+                          aria-label="Число" placeholder="Число..."
                           className="flex-1 border rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"
                         />
                         {!rev[k] && (

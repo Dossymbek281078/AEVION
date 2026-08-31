@@ -30,7 +30,7 @@ export default function MuseumArchivesPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Музеи и архивы</div>
@@ -130,7 +130,7 @@ export default function MuseumArchivesPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~58 млрд тг (допуск ±10%). 8.4+3.6+6.8+4.2+7.8+4.6+5.4+3.4+4.8+2.8+3.6+2.6 = 58.0 млрд тг. Национальный музей РК Астана (74 000 м², открыт 2014) стоил ~$230 млн ≈ 100 млрд тг — в 1.7 раза больше из-за престижного характера и удвоенной площади.</p>

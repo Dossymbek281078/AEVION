@@ -592,7 +592,7 @@ export default function PaintingPlasteringPage() {
                   onChange={(e) =>
                     setInputs((prev) => ({ ...prev, [ex.id]: e.target.value }))
                   }
-                  placeholder="Введите число..."
+                  aria-label="Введите число" placeholder="Введите число..."
                   className="w-full md:w-80 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:border-fuchsia-500 focus:outline-none"
                 />
               </div>

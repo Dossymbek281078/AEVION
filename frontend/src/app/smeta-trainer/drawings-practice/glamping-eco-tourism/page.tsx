@@ -30,7 +30,7 @@ export default function GlampingEcoTourismPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Глэмпинги и эко-туризм</div>
@@ -140,7 +140,7 @@ export default function GlampingEcoTourismPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~850 млн тг (допуск ±10%). 120+36+80+95+18+56+38+95+55+28+6+18+75+32+38+60 = 850 млн тг. Удельная стоимость ~42 млн тг/юнит — премиум-эко. С аналогом: Eco-Lodge класс «Six Senses» (Шри-Ланка, Бутан) — ~$200-300 тыс./юнит = 92-138 млн тг (выше за счёт международного бренда).</p>

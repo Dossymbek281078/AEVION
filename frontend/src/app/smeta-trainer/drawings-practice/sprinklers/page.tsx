@@ -451,7 +451,7 @@ export default function SprinklersPage() {
                 type="text"
                 value={ex4}
                 onChange={(e) => setEx4(e.target.value)}
-                placeholder="тг"
+                aria-label="Сумма, тенге" placeholder="тг"
                 className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm w-40"
               />
               <button

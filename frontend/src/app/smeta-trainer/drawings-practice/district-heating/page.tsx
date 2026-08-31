@@ -30,7 +30,7 @@ export default function DistrictHeatingPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Теплоэлектроцентрали (ТЭЦ)</div>
@@ -140,7 +140,7 @@ export default function DistrictHeatingPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~380 млрд тг (допуск ±10%). 28+96+65+12+14+22+8+4+28+14+8+16+12+8+35+10 = 380 млрд тг. Удельная стоимость ~1.0 млрд тг/МВт_эл — соответствует мировым угольным ТЭЦ (Bełchatów Польша $1.5/Вт, Indian NTPC $1.0-1.2/Вт). ТЭЦ-2 Алматы (модернизация) — оценочно $0.8 млрд = 380 млрд тг.</p>

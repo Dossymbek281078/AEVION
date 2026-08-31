@@ -160,7 +160,7 @@ export default function FireAlarmPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
       {/* Header */}
-      <header className="bg-gradient-to-r from-red-900 via-red-800 to-orange-800 border-b border-red-700 sticky top-0 z-10 shadow-lg">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-gradient-to-r from-red-900 via-red-800 to-orange-800 border-b border-red-700 sticky top-0 z-10 shadow-lg">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
           <Link
             href="/smeta-trainer/drawings-practice/hub"
@@ -581,7 +581,7 @@ export default function FireAlarmPage() {
                 type="text"
                 value={ex4.answer}
                 onChange={(e) => setEx4((s) => ({ ...s, answer: e.target.value }))}
-                placeholder="тг"
+                aria-label="Сумма, тенге" placeholder="тг"
                 className="w-40 px-3 py-1.5 bg-slate-900 border border-slate-600 rounded text-orange-200 text-xs font-mono focus:outline-none focus:border-orange-500"
               />
               <span className="text-xs text-slate-400">тг</span>

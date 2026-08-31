@@ -244,7 +244,7 @@ export default function LifeBoxPage() {
               <input
                 value={aliasInput}
                 onChange={(e) => setAliasInput(e.target.value)}
-                placeholder="например: my_future_self"
+                aria-label="Имя капсулы" placeholder="например: my_future_self"
                 maxLength={64}
                 style={{
                   flex: 1, background: palette.navy, color: palette.ink,

@@ -827,7 +827,7 @@ export default function QTradePage() {
                       </a>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <input
+                      <input aria-label="qty AEV"
                         value={aevSpotQty}
                         onChange={(e) => setAevSpotQty(e.target.value)}
                         type="number"
@@ -1049,7 +1049,7 @@ export default function QTradePage() {
                     <input value={alertPrice} onChange={(e) => setAlertPrice(e.target.value)} type="number" min={0} step="any"
                       placeholder={p.price.toFixed(p.price > 100 ? 2 : 4)}
                       style={{ width: 110, padding: "5px 8px", borderRadius: 4, border: "1px solid #334155", background: "#0f172a", color: "#fff", fontSize: 11, fontFamily: "ui-monospace, monospace" }} />
-                    <input value={alertNote} onChange={(e) => setAlertNote(e.target.value)} maxLength={40}
+                    <input aria-label="заметка" value={alertNote} onChange={(e) => setAlertNote(e.target.value)} maxLength={40}
                       placeholder="заметка (optional)"
                       style={{ flex: "1 1 120px", minWidth: 0, padding: "5px 8px", borderRadius: 4, border: "1px solid #334155", background: "#0f172a", color: "#fff", fontSize: 11 }} />
                     <button onClick={() => addAlert(p.id)}
@@ -1781,7 +1781,7 @@ export default function QTradePage() {
                           background: "rgba(99,102,241,0.10)", border: "1px solid rgba(99,102,241,0.25)",
                           display: "flex", flexDirection: "column" as const, gap: 6,
                         }}>
-                          <textarea
+                          <textarea aria-label="Заметка о сделке: вход на breakout, exit на news"
                             value={journalNote}
                             onChange={(e) => setJournalNote(e.target.value.slice(0, 240))}
                             rows={2}
@@ -1793,7 +1793,7 @@ export default function QTradePage() {
                               fontSize: 12, fontFamily: "inherit", resize: "vertical" as const, lineHeight: 1.4,
                             }}
                           />
-                          <input
+                          <input aria-label="Теги через запятую: breakout, news, trend, scalp"
                             value={journalTags}
                             onChange={(e) => setJournalTags(e.target.value)}
                             placeholder="Теги через запятую: breakout, news, trend, scalp"
@@ -1891,7 +1891,7 @@ export default function QTradePage() {
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>
                 Stop-loss distance ($)
-                <input
+                <input aria-label="e.g"
                   type="number" min={0.00001} step="any"
                   value={psStop} onChange={(e) => setPsStop(e.target.value)}
                   placeholder="e.g. 50"

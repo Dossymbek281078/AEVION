@@ -31,7 +31,7 @@ export function HelpClient({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search FAQ — попробуйте 'verified', 'AEV', 'CSV'…"
+          aria-label="Search FAQ" placeholder="Search FAQ — попробуйте 'verified', 'AEV', 'CSV'…"
           className="flex-1 rounded-lg border border-paper-rule bg-white px-3 py-2 text-sm text-paper-ink placeholder:text-paper-ink-faint-2 focus:border-paper-teal focus:outline-none"
         />
         {query && (

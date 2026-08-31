@@ -429,7 +429,7 @@ export default function PaymentMethodsPage() {
                     </div>
                   </div>
 
-                  <ToggleSwitch on={isOn} color={color} onClick={() => toggle(m.id)} />
+                  <ToggleSwitch on={isOn} color={color} onClick={() => toggle(m.id)} label={m.name} />
                 </header>
 
                 <p
@@ -655,20 +655,26 @@ export default function PaymentMethodsPage() {
   );
 }
 
+// У переключателя было состояние (`aria-pressed`), но не было ИМЕНИ: читалка
+// объявляла «кнопка, включено» — а КАКОЙ способ оплаты включаешь, непонятно.
+// На этой странице их двенадцать подряд. Замер прода 29.08.2026.
 function ToggleSwitch({
   on,
   color,
   onClick,
+  label,
 }: {
   on: boolean;
   color: string;
   onClick: () => void;
+  label: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={on}
+      aria-label={label}
       style={{
         position: "relative",
         width: 44,

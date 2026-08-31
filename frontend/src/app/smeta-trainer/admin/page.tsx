@@ -588,7 +588,7 @@ function StudentDrawer({
         className="bg-white w-full max-w-xl overflow-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="sticky top-0 bg-slate-900 text-white px-5 py-3 flex items-center justify-between">
+        <header style={{ top: "var(--aevion-header-h, 0px)" }} className="sticky top-0 bg-slate-900 text-white px-5 py-3 flex items-center justify-between">
           <div>
             <div className="text-base font-bold">
               {student.displayName ?? <span className="text-slate-400 italic">аноним</span>}

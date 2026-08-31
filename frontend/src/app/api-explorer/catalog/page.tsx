@@ -188,7 +188,13 @@ const { items } = await cat.list({${
               border: "1px solid rgba(15,23,42,0.08)",
               height: "fit-content",
               position: "sticky",
-              top: 18,
+              top: "calc(var(--aevion-header-h, 0px) + 18px)",
+              // Панель прилипшая и БЫВАЕТ ВЫШЕ ОКНА: без своей прокрутки её низ
+              // уходит за край и не достаётся ничем — прокрутка страницы её не
+              // двигает, она же прилипшая. Замер 29.08.2026: так пропадали девять
+              // фильтров каталога и поля форм на платежах.
+              maxHeight: "calc(100vh - var(--aevion-header-h, 0px) - 36px)",
+              overflowY: "auto",
             }}
           >
             <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>

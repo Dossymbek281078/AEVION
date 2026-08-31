@@ -429,7 +429,7 @@ export default function FraudPage() {
                         {r.category}
                       </div>
                     </div>
-                    <Toggle on={isOn} onClick={() => toggleRule(r.id)} />
+                    <Toggle on={isOn} onClick={() => toggleRule(r.id)} label={r.name} />
                   </header>
 
                   <p
@@ -461,6 +461,10 @@ export default function FraudPage() {
                         </span>
                       </div>
                       <input
+                        // Подпись порога рисуется рядом (`r.thresholdLabel`),
+                        // но до читалки не доходила: ползунок объявлялся просто
+                        // «регулятор». Имя собираем из правила и порога.
+                        aria-label={`${r.name} — ${r.thresholdLabel ?? "порог"}`}
                         type="range"
                         min={r.thresholdMin}
                         max={r.thresholdMax}
@@ -685,12 +689,17 @@ export default function FraudPage() {
   );
 }
 
-function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+// У переключателя было состояние (`aria-pressed`), но не было ИМЕНИ:
+// читалка объявляла «кнопка, включено» — а какое правило, непонятно.
+// На странице правил против мошенничества таких шесть подряд.
+// Замер прода 29.08.2026.
+function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={on}
+      aria-label={label}
       style={{
         position: "relative",
         width: 42,

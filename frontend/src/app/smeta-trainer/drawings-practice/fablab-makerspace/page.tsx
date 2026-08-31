@@ -13,7 +13,7 @@ export default function FablabMakerspacePage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">FabLab Makerspace</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">FabLab Makerspace</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🛠️ FabLab Makerspace MIT-Style</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #318. FabLab Astana Hub + Алматинский Politech FabLab — открытые мастерские для prototyping студентов + стартапов. Reference: MIT Center for Bits & Atoms (originator 2001), FabLab Network 2500+ globally. Equipment: laser cutter Trotec Speedy 400 + CNC mill Tormach PCNC + 3D printer Ultimaker S5 + Bambu X1C + microscope + electronics bench + PCB fabrication. Mission — democratize digital fabrication. Open-source culture, peer learning, university+industry partnerships. ISO 17025 + Fab Foundation Standards + СН РК 3.02-12.</p>
@@ -60,7 +60,7 @@ export default function FablabMakerspacePage() {
             <li>Computer lab Dell × 20 + AutoCAD + Fusion 360 + Adobe = 0.12 млрд</li>
             <li>Building 800 м² fitting-out + HVAC + проект 5% + insurance = 0.93 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~1.8 млрд тг (~$4M USD)</strong>. Sustainable через membership fees + grants + workshop revenue.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Safety policies</h2>

@@ -395,7 +395,13 @@ export default function PaymentLinksPage() {
             display: "grid",
             gap: 14,
             position: "sticky",
-            top: 16,
+            top: "calc(var(--aevion-header-h, 0px) + 16px)",
+            // Панель прилипшая и БЫВАЕТ ВЫШЕ ОКНА: без своей прокрутки её низ
+            // уходит за край и не достаётся ничем — прокрутка страницы её не
+            // двигает, она же прилипшая. Замер 29.08.2026: так пропадали девять
+            // фильтров каталога и поля форм на платежах.
+            maxHeight: "calc(100vh - var(--aevion-header-h, 0px) - 36px)",
+            overflowY: "auto",
           }}
         >
           <div
@@ -438,6 +444,7 @@ export default function PaymentLinksPage() {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              aria-label="Title"
               placeholder="What is the payer paying for?"
               style={inputStyle}
               required
@@ -448,6 +455,7 @@ export default function PaymentLinksPage() {
             <div>
               <label style={labelStyle}>Amount</label>
               <input
+                aria-label="Amount"
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}

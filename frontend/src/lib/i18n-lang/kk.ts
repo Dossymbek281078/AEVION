@@ -7312,6 +7312,8 @@ const kk: Record<string, string> = {
   "wishlistPage.headline": "Қалаған затыңызға жинаңыз.",
   "wishlistPage.kicker": "Тілектер",
   "wishlistPage.lede": "Әр заттың жеке есептегіші мен мақсаты бар. Әмиян ағымдағы балансқа қарсы прогресс жүргізеді — қосымша шотсыз, қосымша қосымшасыз.",
+  "qpaynet.notif.markFailed": "Оқылды деп белгілеу мүмкін болмады ({status}). Ештеңе өзгерген жоқ.",
+  "pricing.home.heroModule.kztUnknownNote": "Картамен төлем. Kaspi қолжетімділігін төлем қадамында нақтылаймыз.",
 };
 
 export default kk;

@@ -4037,13 +4037,22 @@ qpaynetRouter.get("/health", async (_req, res) => {
     res.json({
       status: degraded ? "degraded" : "ok",
       service: "qpaynet",
+      // ⚠️ 29.08.2026: поля не было, а ОПУБЛИКОВАННАЯ спецификация обещала
+      // его клиентам. openapiFintechSpec ссылает /api/qpaynet/health на общую
+      // схему HealthResponse = { status, service, timestamp }; все соседние
+      // health-ручки поле отдают, эта одна — нет. Клиент, разбирающий ответ
+      // по нашему же контракту, получал undefined.
+      //
+      // Чиню в сторону реальности, а не спецификации: поле дешёвое, схема
+      // общая, и убирать его из контракта значило бы расшатать остальные.
+      timestamp: new Date().toISOString(),
       wallets: Number(walletsR.rows[0]?.n ?? 0),
       pool: stats,
       encryption: isEncryptionEnabled() ? "enabled" : "disabled",
       stuckWebhookDeliveries: stuckDeliveries,
     });
   } catch (err) {
-    res.status(503).json({ status: "error", service: "qpaynet", error: safeErrorText(err, "internal error", "qpaynet") });
+    res.status(503).json({ status: "error", service: "qpaynet", timestamp: new Date().toISOString(), error: safeErrorText(err, "internal error", "qpaynet") });
   }
 });
 

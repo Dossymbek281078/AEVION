@@ -7353,6 +7353,8 @@ const ru: Record<string, string> = {
   "wishlistPage.headline": "Копите на то, что хотите.",
   "wishlistPage.kicker": "Wishlist",
   "wishlistPage.lede": "У каждой вещи свой счётчик и цель. Кошелёк ведёт прогресс против актуального баланса — без отдельных счетов и приложений.",
+  "qpaynet.notif.markFailed": "Не удалось отметить прочитанным ({status}). Ничего не изменилось.",
+  "pricing.home.heroModule.kztUnknownNote": "Оплата картой. Доступность Kaspi уточним на шаге оплаты.",
 };
 
 export default ru;

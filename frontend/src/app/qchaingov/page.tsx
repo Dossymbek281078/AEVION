@@ -83,7 +83,12 @@ export default function QChainGovLanding() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-sky-950/30 to-slate-950 text-slate-100">
-      <header className="border-b border-slate-800/60 px-5 py-3 backdrop-blur sticky top-0 z-30 bg-slate-950/60">
+      <header
+        // Полоса раздела прилипает ПОД шапкой сайта: у шапки тоже sticky
+        // top:0, но слой 50 против 30 — при прокрученной странице она
+        // закрывала кнопку «Купить» и строку цены. Замер прода 28.08.2026.
+        style={{ top: "var(--aevion-header-h, 0px)" }}
+        className="border-b border-slate-800/60 px-5 py-3 backdrop-blur sticky top-0 z-30 bg-slate-950/60">
         <div className="mx-auto max-w-6xl flex items-center justify-between">
           <Link href="/" className="text-sm text-slate-400 hover:text-white">← AEVION</Link>
           <div className="flex items-center gap-3">

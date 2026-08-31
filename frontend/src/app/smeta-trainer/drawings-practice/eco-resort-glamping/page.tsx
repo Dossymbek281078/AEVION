@@ -13,7 +13,7 @@ export default function EcoResortGlampingPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Eco Resort Glamping</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Eco Resort Glamping</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🏕️ Эко-курорт Glamping (Glamorous Camping)</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #316. Eco-glamping resort Чарын каньон / Алакольские степи / Боровое национальные парки. Reference: Andbeyond Sandibe Botswana, Singita Kruger South Africa, Amangiri Utah USA. Glamping — luxury "tent" experience с full hotel amenities в природе: safari tents Canvas Wall + ensuite bath + king bed + kitchen + WiFi. Off-grid solar + battery + composting toilets + greywater treatment. LEED Platinum + GSTC Sustainable Tourism Standards + СН РК 3.02-08.</p>
@@ -60,7 +60,7 @@ export default function EcoResortGlampingPage() {
             <li>Heating ground-source heat pump + wood stove + radiant floor = 0.25 млрд</li>
             <li>Roads + landscaping + observatory deck + LEED audit + GSTC + проект 5% + insurance = 0.5 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~4.2 млрд тг (~$9M USD)</strong> на 50 tents glamping. Окупаемость 5-7 лет at $300-500/night premium pricing.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Wildlife protection</h2>

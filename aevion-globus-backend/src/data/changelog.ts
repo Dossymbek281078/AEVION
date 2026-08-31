@@ -24,6 +24,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-13",
+    kind: "changed",
+    title: "Тарифы снижены обратно",
+    body:
+      "Lite $24→$19, Medium $39→$29, Full $89→$49, Universe $249.99→$149. Возврат к ценам до июльской переоценки: платформа стоит дешевле, чем набор отдельных инструментов, и мы вернулись к цене, по которой это видно сразу.",
+    scope: "pricing",
+  },
+  {
     date: "2026-07-23",
     kind: "changed",
     title: "Промокоды больше не могут обнулить тариф",
@@ -62,7 +70,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-04-29",
     kind: "added",
     title: "Sitemap — динамические /pricing/cases/[id]",
-    body: "sitemap.ts тянет список case-id с GET /api/pricing/cases и публикует страницы кейсов в XML. Добавлены /pricing/calculator/embed, /affiliate-dashboard, /partners-portal.",
+    body: "sitemap.ts тянет список case-id с GET /api/pricing/cases и публикует страницы кейсов в XML. Добавлены /pricing/calculator/embed, /pricing/affiliate-dashboard, /pricing/partners-portal.",
     scope: "seo",
   },
   {

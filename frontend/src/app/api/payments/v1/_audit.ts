@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { kvList, kvPush } from "./_persist";
+import { kvListChecked, kvPush } from "./_persist";
 
 export type AuditEntry = {
   id: string;
@@ -50,8 +50,21 @@ export async function logAudit(
   };
   try {
     await kvPush(AUDIT_KEY, entry, AUDIT_CAP);
-  } catch {
-    // best-effort; never fail the underlying request because of audit
+  } catch (e) {
+    // Направление отказа прежнее и верное: аудит НЕ роняет операцию, ради
+    // которой его пишут. Меняется только видимость — раньше здесь было
+    // молчание, и дыра в аудиторском следе не оставляла ни одного признака.
+    //
+    // А след этот на денежных маршрутах: возвраты, споры, чекаут, ссылки.
+    // Пропавшая запись означает, что событие произошло, а доказательства
+    // его нет — и узнать об этом было неоткуда.
+    //
+    // Пишем ЧТО и ПО ЧЕМУ не удалось. Ни адреса, ни IP, ни актора в журнал
+    // не выносим: они есть в самой записи, а журналы читают шире.
+    console.warn(
+      `[audit] запись не сохранена: action=${action} target=${target_id ?? "-"} ` +
+        `причина=${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 }
 
@@ -59,12 +72,19 @@ export async function readAudit(filter?: {
   action?: string;
   target_id?: string;
   limit?: number;
-}): Promise<AuditEntry[]> {
-  const all = await kvList<AuditEntry>(AUDIT_KEY);
+}): Promise<{ ok: boolean; entries: AuditEntry[] }> {
+  // Возвращаем ПРИЗНАК ЧТЕНИЯ, а не голый список. Пустой список при
+  // недоступном хранилище неотличим от «записей нет», и следователь по
+  // денежному спору сделал бы вывод «следа не существует» — тогда как след
+  // может быть цел, а недоступно хранилище. Тот же довод, что у споров и
+  // возвратов в этом же каталоге; контракт приведён к их образцу.
+  const read = await kvListChecked<AuditEntry>(AUDIT_KEY);
+  if (!read.ok) return { ok: false, entries: [] };
+  const all = read.value;
   const limit = Math.min(500, filter?.limit ?? 100);
   let out = all;
   if (filter?.action) out = out.filter((e) => e.action === filter.action);
   if (filter?.target_id)
     out = out.filter((e) => e.target_id === filter.target_id);
-  return out.slice(0, limit);
+  return { ok: true, entries: out.slice(0, limit) };
 }

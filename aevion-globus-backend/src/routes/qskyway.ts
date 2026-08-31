@@ -463,10 +463,12 @@ function astar(
 interface AirspaceCompliance {
   available: boolean;
   compliant: boolean | null;
-  coveragePct: number;
-  exceedingSegments: number;
-  zeroCeilingSegments: number;
-  maxExceedanceM: number;
+  // null = сетки потолков нет, вопрос не имеет ответа. Ноль сказал бы
+  // «посчитали, превышений нет» — то есть успокоил бы там, где мы не смотрели.
+  coveragePct: number | null;
+  exceedingSegments: number | null;
+  zeroCeilingSegments: number | null;
+  maxExceedanceM: number | null;
   lowestCeilingM: number | null;
   /**
    * Правило регулятора, действующее вместо потолка (город без сетки).
@@ -495,8 +497,15 @@ function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[],
     const perm = cityId ? permissionSummary(cityId) : null;
     const hasPermission = Boolean(perm && (perm as { available?: boolean }).available);
     return {
-      available: false, compliant: null, coveragePct: 0, exceedingSegments: 0,
-      zeroCeilingSegments: 0, maxExceedanceM: 0, lowestCeilingM: null,
+      // ⚠️ Было четыре нуля. Рядом стояли честные compliant: null и
+      // lowestCeilingM: null — то есть о неопределённости думали, но для
+      // одного поля из пяти. Непоследовательность внутри ОДНОГО литерала.
+      //
+      // И хуже: airspaceSummary в соседнем файле на тот же вопрос уже
+      // отвечает null. Два наших ответа об одном спорили, а читатель
+      // поверил бы тому, что ближе к делу, — ответу маршрута.
+      available: false, compliant: null, coveragePct: null, exceedingSegments: null,
+      zeroCeilingSegments: null, maxExceedanceM: null, lowestCeilingM: null,
       // Правило, которое ДЕЙСТВУЕТ вместо потолка — прямо здесь, а не отсылкой.
       //
       // 29.08.2026: примечание говорило «см. permission в /health», и это было
@@ -1081,7 +1090,9 @@ interface VertiportScore {
   /** published regulatory ceiling over the pad, metres AGL; null where no feed */
   ceilingM: number | null;
   /** pad sits where the regulator authorizes nothing automatically (0 ft ceiling) */
-  needsAtcCoordination: boolean;
+  // null = потолок неизвестен. Отдельное значение, а не false: «не требуется»
+  // и «мы не знаем» — противоположные ответы для того, кто собрался лететь.
+  needsAtcCoordination: boolean | null;
   suitability: number; class: "candidate-pad" | "needs-infrastructure" | "unsuitable";
 }
 function suitability(cityId: string, city: CityData): VertiportScore[] {
@@ -1122,7 +1133,12 @@ function suitability(cityId: string, city: CityData): VertiportScore[] {
       // наружу уходит null: публиковать «9999 м» там, где зон нет,
       // значит выдавать умолчание за измерение.
       distNoFlyM: zones.length ? Math.round(distNoFly) : null,
-      ceilingM, needsAtcCoordination: ceilingM === 0,
+      ceilingM,
+      // ⚠️ Было `ceilingM === 0`. У города без сетки потолков ceilingM равен
+      // null, а `null === 0` даёт false — то есть модуль отвечал
+      // «согласование с УВД не требуется» там, где о потолках не знает
+      // ничего. Для Астаны и Токио это ложное успокоение на КАЖДОЙ площадке.
+      needsAtcCoordination: ceilingM === null ? null : ceilingM === 0,
       suitability: score, class: cls,
     };
   });
@@ -1700,7 +1716,12 @@ qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
     if (!r) continue;
     routable++;
     if (r.airspace.compliant) compliant++;
-    worstExceedanceM = Math.max(worstExceedanceM, r.airspace.maxExceedanceM);
+    // Сюда не попасть без сетки (выше стоит ранний выход при !field), но
+    // сужаем ЯВНО: Math.max(x, null) молча считает null нулём, то есть
+    // «не знаем» превратилось бы в «превышений нет» — ровно та болезнь,
+    // от которой это поле и лечили.
+    const ex = r.airspace.maxExceedanceM;
+    if (ex !== null) worstExceedanceM = Math.max(worstExceedanceM, ex);
     if (buildRoute(id, city, r.from, r.to, true)) strictRoutable++;
   }
   // Pads the regulator authorizes nothing over: they cannot launch at all, which

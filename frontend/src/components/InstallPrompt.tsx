@@ -15,6 +15,8 @@ type BeforeInstallPromptEvent = Event & {
 export function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [hidden, setHidden] = useState(false);
+  // Плашка ждёт своей очереди: см. эффект ниже.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -40,6 +42,18 @@ export function InstallPrompt() {
     };
   }, []);
 
+  // Сведено 31.08 при сборке к 10.09. Нужны ОБЕ стороны: публикация высоты
+  // (иначе баннер закрывает подвал и кнопку агента) и самоскрытие через 12
+  // секунд (иначе он закрывает их всё время, пока висит).
+  //
+  // ⚠️ Наивное «обе стороны подряд» даёт ЗЕЛЁНЫЙ tsc и СЕМЬ красных тестов:
+  // «Rendered more hooks than during the previous render». Причина не в коде
+  // ни одной из сторон, а в ПОРЯДКЕ — ранний выход `if (!deferred || hidden)`
+  // из первой половины оказывается ПЕРЕД хуками второй. Выход ниже строже
+  // (учитывает ready) и делает ту же работу, поэтому ранний удалён.
+  //
+  // Замерено соседним окном на пробной ветке ДО мержа. Без этого мерж прошёл
+  // бы, типы промолчали, а плашка установки сломалась бы на всех страницах.
   // Баннер и кнопка AI-агента стоят в ОДНОМ углу: у обоих `bottom: 16, right:
   // 16`, а слои соседние (9999 и 9998). Замер 28.08.2026 браузером: пока баннер
   // виден, кнопка агента недоступна ПОЛНОСТЬЮ — 0 доступных точек из 70, и на
@@ -63,8 +77,58 @@ export function InstallPrompt() {
       root.style.removeProperty("--aevion-install-h");
     };
   }, [visible]);
+  // A fixed banner covers a strip of the page for as long as it is on screen —
+  // moving it left only changed which column it sat on. It is a nudge, not a
+  // permanent control, so it retires itself: the user gets one clear offer and
+  // the page is theirs again. Dismissal is not persisted here (that is what the
+  // × does) so a later visit can still offer install once.
+  //
+  // Отсчёт идёт от момента ПОКАЗА (ready ниже), а не от готовности браузера.
+  // Иначе эти 12 секунд истекали бы, пока плашка ещё ждёт своей очереди, и
+  // человек не увидел бы предложение вовсе.
+  useEffect(() => {
+    if (!deferred || hidden || !ready) return;
+    const t = setTimeout(() => setHidden(true), 12_000);
+    return () => clearTimeout(t);
+  }, [deferred, hidden, ready]);
 
-  if (!deferred || hidden) return null;
+  // ...и не появляется, пока человек ещё не осмотрелся или занят диалогом.
+  //
+  // Соседняя правка выше уже убирает плашку через 12 секунд — это про то,
+  // сколько она висит. Здесь про то, КОГДА она приходит: раньше показ шёл
+  // сразу по событию браузера, то есть в первые же секунды, поверх окна
+  // приветствия.
+  //
+  // Замер 27.08.2026 на телефоне 375 пикселей, CyberChess: плашка ложилась
+  // на окно «Добро пожаловать» и ПЕРЕХВАТЫВАЛА нажатия — автоматический
+  // браузер 30 секунд не мог нажать кнопку выбора и сам назвал виновника.
+  // То есть это не «мешает читать», а «не даёт выбрать». Тот же экран
+  // повторился ещё дважды: в партии и в окне возврата на второй день.
+  //
+  // Условие открытого диалога, а не таймер: пока на экране модальное окно,
+  // предлагать установку некуда — что бы человек ни делал, он занят.
+  useEffect(() => {
+    if (!deferred || hidden) return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      // Любое модальное окно на странице — повод подождать.
+      const busy = document.querySelector('[role="dialog"]');
+      if (busy) {
+        window.setTimeout(tick, 1000);
+        return;
+      }
+      setReady(true);
+    };
+    // Даём человеку осмотреться, прежде чем что-то предлагать.
+    const t = window.setTimeout(tick, 20_000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [deferred, hidden]);
+
+  if (!deferred || hidden || !ready) return null;
 
   const install = async () => {
     if (!deferred) return;
@@ -89,11 +153,16 @@ export function InstallPrompt() {
     <div
       ref={boxRef}
       role="region"
-      aria-label="PWA install prompt"
+      aria-label="Предложение установить приложение"
       style={{
         position: "fixed" as const,
         bottom: 16,
-        right: 16,
+        // Bottom-LEFT, not right: the AI Agent launcher already lives bottom-right
+        // on every page, so the two stacked there and the pair covered the right
+        // edge of page content — on /qventure/batch that is the ranking table's
+        // Stress column and its per-deal "Report →" links, i.e. the one control
+        // a reader wants after a batch finishes. Nothing else is anchored left.
+        left: 16,
         zIndex: 9999,
         padding: "10px 14px",
         borderRadius: 10,
@@ -130,11 +199,11 @@ export function InstallPrompt() {
           whiteSpace: "nowrap" as const,
         }}
       >
-        Install
+        Установить
       </button>
       <button
         onClick={dismiss}
-        aria-label="Скрыть install prompt"
+        aria-label="Скрыть предложение установки"
         style={{
           padding: "4px 7px",
           borderRadius: 4,

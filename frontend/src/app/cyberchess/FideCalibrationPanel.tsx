@@ -150,7 +150,7 @@ export default function FideCalibrationPanel({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="FIDE Calibration Panel"
+      aria-label="Панель калибровки рейтинга по шкале FIDE"
       style={{
         position: "fixed",
         inset: 0,

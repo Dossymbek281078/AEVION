@@ -86,13 +86,13 @@ export default function CyberChessLeaderboardPage() {
     try {
       const r = await fetch(
         `/api-backend/api/cyberchess/matchmaking/leaderboard?speed=${sp}&limit=100`,
-        { cache: "no-store" },
+        { cache: "no-store", signal: AbortSignal.timeout(10_000) },
       );
       const data = await r.json();
       if (!data?.ok) throw new Error("bad response");
       setRows(Array.isArray(data.leaderboard) ? data.leaderboard : []);
     } catch {
-      setError("Не удалось загрузить лидерборд. Попробуйте позже.");
+      setError("Не удалось загрузить таблицу лидеров. Попробуйте позже.");
       setRows([]);
     } finally {
       setLoading(false);
@@ -109,13 +109,13 @@ export default function CyberChessLeaderboardPage() {
     try {
       const r = await fetch(
         `/api-backend/api/cyberchess/matchmaking/wallet/leaderboard?limit=100`,
-        { cache: "no-store" },
+        { cache: "no-store", signal: AbortSignal.timeout(10_000) },
       );
       const data = await r.json();
       if (!data?.ok) throw new Error("bad response");
       setWalletRows(Array.isArray(data.leaderboard) ? data.leaderboard : []);
     } catch {
-      setWalletError("Не удалось загрузить лидерборд. Попробуйте позже.");
+      setWalletError("Не удалось загрузить таблицу лидеров. Попробуйте позже.");
       setWalletRows([]);
     } finally {
       setWalletLoading(false);
@@ -132,12 +132,12 @@ export default function CyberChessLeaderboardPage() {
         <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
             <div className="planet-eyebrow" style={{ marginBottom: 6 }}>
-              {view === "rating" ? "Glicko-2 · онлайн-матчи" : "Серверный кошелёк"}
+              {view === "rating" ? "Рейтинг · онлайн-матчи" : "Монеты за онлайн-матчи"}
             </div>
-            <h1 className="planet-h1">{view === "rating" ? "Рейтинг-лидерборд" : "Chessy-лидерборд"}</h1>
+            <h1 className="planet-h1">{view === "rating" ? "Таблица лидеров по рейтингу" : "Таблица лидеров по монетам"}</h1>
             <p className="planet-muted" style={{ marginTop: 6, fontSize: 13.5, maxWidth: "60ch" }}>
               {view === "rating"
-                ? "Топ игроков онлайн-матчей. Провизорные рейтинги (мало партий) помечены «?»."
+                ? "Топ игроков онлайн-матчей. Рейтинг считается по системе Glicko-2. Неточные рейтинги (сыграно мало партий) помечены «?»."
                 : "Топ игроков по заработанным в реальных матчах Chessy — не подделываемый через devtools."}
             </p>
           </div>
@@ -204,7 +204,7 @@ export default function CyberChessLeaderboardPage() {
                             </td>
                             <td className="planet-num" style={{ textAlign: "right", fontWeight: 700, fontFamily: "var(--pl-mono)" }}>
                               {row.rating}
-                              {provisional && <span className="planet-muted" title="Провизорный — мало партий">?</span>}
+                              {provisional && <span className="planet-muted" title="Неточный рейтинг: сыграно мало партий">?</span>}
                             </td>
                             <td className="planet-num planet-muted" style={{ textAlign: "right" }}>{row.games}</td>
                             <td className="planet-num planet-muted planet-hide-sm" style={{ textAlign: "right" }}>
@@ -231,7 +231,7 @@ export default function CyberChessLeaderboardPage() {
         {view === "chessy" && (
           <div className="planet-card" style={{ overflow: "hidden" }}>
             <div className="planet-muted" style={{ borderBottom: "1px solid var(--pl-line)", padding: "12px 16px", fontSize: 12 }}>
-              Только с реальных онлайн-матчей (не с пазлов/уроков/косметики) — серверный кошелёк, честный по конструкции.
+              Только с реальных онлайн-матчей (не с задач, уроков и косметики) — серверный кошелёк, честный по конструкции.
             </div>
             {walletLoading ? (
               <div className="planet-empty">Загрузка…</div>

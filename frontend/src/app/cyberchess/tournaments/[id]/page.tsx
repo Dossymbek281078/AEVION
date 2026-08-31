@@ -646,7 +646,7 @@ function BracketView({
   liveMatchId: string | null;
 }) {
   if (loading && rounds.length === 0) {
-    return <SkeletonBox label="Загружаем bracket..." />;
+    return <SkeletonBox label="Загружаем сетку турнира..." />;
   }
   if (rounds.length === 0) {
     return <EmptyBox label="Сетка ещё не сформирована." />;
@@ -1045,7 +1045,7 @@ function StandingsView({
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   if (loading && standings.length === 0) {
-    return <SkeletonBox label="Считаем standings..." />;
+    return <SkeletonBox label="Считаем таблицу..." />;
   }
 
   if (format === "single_elimination") {
@@ -1154,7 +1154,7 @@ function StandingsView({
       }}
     >
       {standings.length === 0 ? (
-        <EmptyBox label="Standings пока пустые." />
+        <EmptyBox label="Таблица пока пустая." />
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
@@ -1180,7 +1180,7 @@ function StandingsView({
               <th
                 onClick={() => handleSort("buchholz")}
                 style={thStyle({ active: sortKey === "buchholz", sortable: true, align: "center" })}
-                title="Сортировать по Buchholz"
+                title="Сортировать по коэффициенту Бухгольца"
               >
                 Buchholz <SortArrow active={sortKey === "buchholz"} />
               </th>

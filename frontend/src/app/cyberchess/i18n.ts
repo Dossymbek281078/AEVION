@@ -127,7 +127,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "fide.factor.opening":         "Глубина дебюта",
     "fide.factor.tactical":        "Тактическая эффективность",
     "fide.factor.endgame":         "Техника эндшпиля",
-    "fide.factor.blunder":         "Частота блундеров",
+    "fide.factor.blunder":         "Частота зевков",
     "fide.factor.time":            "Управление временем",
     "fide.whatif":                 "Что если?",
     "fide.whatif.hint":            "Двигай слайдеры — увидь как изменится оценка",

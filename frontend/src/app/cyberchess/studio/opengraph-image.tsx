@@ -36,7 +36,7 @@ export default function Image() {
         Streamer Studio
       </div>
       <div style={{ fontSize: 22, color: "#94a3b8", textAlign: "center", marginBottom: 52, maxWidth: 980 }}>
-        PiP с Twitch-чатом · OBS-пресеты · авто-аннотации ходов · голос коуча — стрим прямо из браузера
+        Мини-доска с чатом Twitch · готовые цвета для OBS · подписи к ходам · голос тренера — стрим прямо из браузера
       </div>
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>

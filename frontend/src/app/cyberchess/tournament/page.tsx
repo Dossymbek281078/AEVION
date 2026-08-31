@@ -172,7 +172,7 @@ function BracketView({ bracket }: { bracket: BracketRound[] }) {
 
 function BadgeShowcase({ playerId, badges }: { playerId: string; badges: TournamentBadge[] }) {
   if (badges.length === 0) return (
-    <div style={{ fontSize: 12, color: C.faint, fontStyle: "italic" }}>{playerId}: пока без бейджей</div>
+    <div style={{ fontSize: 12, color: C.faint, fontStyle: "italic" }}>{playerId}: пока без наград</div>
   );
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -264,7 +264,7 @@ export default function TournamentHubPage() {
         "@type": "WebPage",
         "@id": "https://aevion.app/cyberchess/tournament",
         name: "AEVION CyberChess Tournament Hub",
-        description: "Bracket visualization, badges и cross-tournament leaderboard. Single-elimination + round-robin форматы.",
+        description: "Наглядная сетка турнира, значки за достижения и сквозная таблица лидеров. Форматы: на выбывание и круговой.",
         isPartOf: { "@type": "WebSite", url: "https://aevion.app", name: "AEVION" },
         about: { "@type": "SportsEvent", name: "Chess tournaments" },
       }) }} />
@@ -290,13 +290,14 @@ export default function TournamentHubPage() {
           <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.025em", margin: "0 0 10px", lineHeight: 1.15 }}>
             Турнирный <span style={{ color: C.purple }}>хаб</span>
           </h1>
+          {/* Было техническое описание с адресом серверной ручки и словом
+              «фоллбэк» — прямо в тексте для посетителя. Человеку важно другое:
+              что здесь настоящее, а что образец. Найдено 28.08.2026 чтением
+              страницы. */}
           <p style={{ fontSize: 14, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 700 }}>
-            Твои трофеи и место в лидерборде — <strong style={{ color: C.green }}>реальные</strong>. Cross-tournament
-            лидерборд тянется с бэкенда{" "}
-            <code style={{ fontSize: 12, color: C.cyan, fontFamily: "ui-monospace, monospace" }}>
-              /api/cyberchess-tournaments/leaderboard
-            </code>{" "}
-            (фоллбэк на демо, если недоступен). Сетка и бейджи соперников — пока витрина.
+            Твои трофеи и место в общей таблице — <strong style={{ color: C.green }}>настоящие</strong>.
+            Если связь с сервером пропадёт, таблица ниже покажет образец —
+            это будет помечено. Сетка и значки соперников пока тоже образец.
           </p>
         </div>
 
@@ -314,7 +315,7 @@ export default function TournamentHubPage() {
               <Link href="/cyberchess" style={{ color: C.green, fontWeight: 700, textDecoration: "none" }}>
                 начать турнир →
               </Link>
-              {" "}— и твои медали появятся здесь, а сам ты встанешь в лидерборд ниже.
+              {" "}— и твои медали появятся здесь, а сам ты попадёшь в таблицу лидеров ниже.
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 240px), 1fr))", gap: 10 }}>
@@ -359,7 +360,7 @@ export default function TournamentHubPage() {
             🌸 Spring Cup 2026
           </button>
           <span style={{ alignSelf: "center", fontSize: 12, color: C.faint }}>
-            Активный · 8 игроков · single-elimination
+            Активный · 8 игроков · на вылет
           </span>
         </div>
 
@@ -376,13 +377,13 @@ export default function TournamentHubPage() {
           }}>
             {bracket.length > 0
               ? <BracketView bracket={bracket} />
-              : <div style={{ color: C.faint, fontStyle: "italic" }}>Bracket пуст</div>
+              : <div style={{ color: C.faint, fontStyle: "italic" }}>Сетка пока пуста</div>
             }
-            <div style={{
-              marginTop: 12, fontSize: 11, color: C.faint,
-              fontFamily: "ui-monospace, monospace",
-            }}>
-              Powered by <code style={{ color: C.cyan }}>buildBracket(players, results)</code> из tournament.ts
+            {/* Было «Powered by buildBracket(players, results) из
+                tournament.ts» — имя функции и файла исходного кода на экране
+                у посетителя. Второе такое место на этой странице. */}
+            <div style={{ marginTop: 12, fontSize: 11, color: C.faint }}>
+              Сетка перестраивается автоматически после каждого круга
             </div>
           </div>
         </section>
@@ -390,7 +391,7 @@ export default function TournamentHubPage() {
         {/* Leaderboard */}
         <section style={{ marginBottom: 32 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            🏆 Cross-tournament Leaderboard
+            🏆 Общая таблица по всем турнирам
             <span title={lbLive ? "Данные с бэкенда /api/cyberchess-tournaments/leaderboard" : "Бэкенд недоступен — показано демо-поле"}
               style={{
                 fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.6,
@@ -458,7 +459,7 @@ export default function TournamentHubPage() {
         {/* Badges */}
         <section style={{ marginBottom: 32 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>
-            💎 Achievements
+            💎 Достижения
           </h2>
           <div style={{
             background: C.panel,
@@ -476,7 +477,7 @@ export default function TournamentHubPage() {
           {/* Badge legend */}
           <div style={{ marginTop: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: C.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
-              Все возможные бейджи
+              Все возможные награды
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))", gap: 8 }}>
               {(Object.entries(BADGE_META) as Array<[TournamentBadge, typeof BADGE_META[TournamentBadge]]>).map(([key, m]) => (
@@ -504,14 +505,17 @@ export default function TournamentHubPage() {
           <span style={{ color: C.faint }}>·</span>
           <Link href="/cyberchess/cpi/leaderboard" style={{ color: C.purple, textDecoration: "none" }}>📊 CPI Leaderboard</Link>
           <span style={{ color: C.faint }}>·</span>
-          <Link href="/cyberchess/economy" style={{ color: C.purple, textDecoration: "none" }}>🪙 Economy</Link>
+          <Link href="/cyberchess/economy" style={{ color: C.purple, textDecoration: "none" }}>🪙 Экономика</Link>
           <span style={{ color: C.faint }}>·</span>
           <Link href="/cyberchess/training" style={{ color: C.purple, textDecoration: "none" }}>🎯 Тренировки</Link>
         </div>
 
+        {/* Здесь стояло «Powered by tournament.ts · Leaderboard: GET /api/...
+            (live, с фоллбэком на демо)» — имя файла исходного кода и адрес
+            серверной ручки, показанные посетителю. Ему это ничего не говорит,
+            а нам не нужно: подпись заменена на то, что человеку полезно. */}
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>
-          Powered by <code style={{ color: C.cyan, fontFamily: "ui-monospace, monospace" }}>tournament.ts</code> ·
-          Leaderboard: <code style={{ color: C.cyan, fontFamily: "ui-monospace, monospace" }}>GET /api/cyberchess-tournaments/leaderboard</code> (live, с фоллбэком на демо)
+          Общая таблица обновляется после каждого завершённого турнира
         </div>
       </article>
     </main>

@@ -18,7 +18,23 @@ const nextConfig: NextConfig = {
   turbopack: {
     // Monorepo root — без этого Turbopack ограничивает резолюцию
     // папкой frontend/ и не видит `../packages/aevion-catalog-client/`.
-    root: path.resolve(process.cwd(), ".."),
+    //
+    // Отключается только локально: AEVION_TURBOPACK_ROOT_HERE=1.
+    // Нужно для worktree, где `node_modules` в корне — симлинк наружу (на
+    // основной каталог репозитория). Turbopack на таком симлинке падает
+    // насмерть: «Symlink [project]/node_modules is invalid, it points out of
+    // the filesystem root», причём одинаково и в сборке, и в режиме
+    // разработки, и ещё на обходе дерева маршрутов — то есть проверить
+    // фронтенд в таком worktree нельзя вообще никак.
+    //
+    // С флагом корнем становится сама папка приложения, симлинк выходит из
+    // области видимости, и страница поднимается. Цена: не резолвится
+    // `../packages/*`. Для «посмотреть глазами, как выглядит экран» этого
+    // достаточно; для сборки в прод флаг ставить нельзя.
+    root:
+      process.env.AEVION_TURBOPACK_ROOT_HERE === "1"
+        ? process.cwd()
+        : path.resolve(process.cwd(), ".."),
   },
 
   async headers() {

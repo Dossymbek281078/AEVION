@@ -8,7 +8,7 @@ export const contentType = "image/png";
 export default function Image() {
   const chips = [
     { name: "Auction", color: "#facc15", icon: "🪙" },
-    { name: "Coach Rental", color: "#facc15", icon: "🎓" },
+    { name: "Аренда тренера", color: "#facc15", icon: "🎓" },
     { name: "Streams", color: "#facc15", icon: "📺" },
   ];
 

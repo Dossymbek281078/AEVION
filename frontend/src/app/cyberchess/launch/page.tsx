@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { channelFrom, keepChannel } from "@/lib/products";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
+import { ccPlural } from "../ccPlural";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { LandingView } from "@/components/LandingView";
 import { PageTracking } from "@/components/PageTracking";
@@ -123,11 +124,11 @@ export default async function CyberChessLaunchPage({
               letterSpacing: "-0.01em",
             }}
           >
-            Открываем 30 сентября
+            {left > 0 ? "Открываем 30 сентября" : "CyberChess открыт"}
           </h1>
           <p style={{ color: MUTED, fontSize: 15.5, lineHeight: 1.6, margin: "12px 0 0" }}>
             {left > 0
-              ? `Через ${left} ${left === 1 ? "день" : left < 5 ? "дня" : "дней"}. Оставьте адрес — напишем в день запуска и пришлём условия раннего доступа, пока цена стартовая.`
+              ? `Через ${left} ${ccPlural(left, "день", "дня", "дней")}. Оставьте адрес — напишем в день запуска и пришлём условия раннего доступа, пока цена стартовая.`
               : "Уже открыто. Оставьте адрес, если хотите получать разборы и новости о турнирах."}
           </p>
         </header>
@@ -138,13 +139,19 @@ export default async function CyberChessLaunchPage({
         <WaitlistCapture
           source={source}
           tone="light"
-          title="Написать вам в день запуска"
-          description="Одно письмо на запуск и условия раннего доступа. Ничего больше."
+          title={left > 0
+            ? "Написать вам в день запуска"
+            : "Оставить адрес — напишем о ближайших турнирах"}
+          description={left > 0
+            ? "Одно письмо на запуск и условия раннего доступа. Ничего больше."
+            : "Одно письмо о ближайших турнирах и новостях модуля. Ничего лишнего."}
           // Подтверждение называет ДАТУ, как и всё остальное на этой странице.
           // Общий текст компонента — «напишем, когда будет что показать» —
           // верен там, где даты нет, но здесь он звучал расплывчатее самого
           // обещания, и человек уходил с меньшей уверенностью, чем пришёл.
-          doneText="Готово — адрес записан. Напишем 30 сентября, в день открытия."
+          doneText={left > 0
+            ? "Готово — адрес записан. Напишем 30 сентября, в день открытия."
+            : "Готово — адрес записан. Напишем о ближайших турнирах."}
         />
 
         {/* Приложение УЖЕ открыто, и это надо говорить рядом с формой, а не

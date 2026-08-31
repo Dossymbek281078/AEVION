@@ -664,7 +664,7 @@ export default function VoiceCoach({
       <div
         role="button"
         tabIndex={0}
-        aria-label="Развернуть AI Voice Coach"
+        aria-label="Развернуть голосового тренера"
         onClick={() => setCollapsed(false)}
         onKeyDown={(e) => e.key === 'Enter' && setCollapsed(false)}
         style={{
@@ -690,10 +690,10 @@ export default function VoiceCoach({
   }
 
   return (
-    <div style={panelStyle} role="region" aria-label="AI Voice Coach">
+    <div style={panelStyle} role="region" aria-label="Голосовой тренер">
       <div style={headerStyle}>
         <span style={titleStyle}>
-          <span aria-hidden>🎙️</span> AI Voice Coach
+          <span aria-hidden>🎙️</span> Голосовой тренер
           {isLoadingComment && (
             <span style={indicatorStyle}>
               <span aria-hidden>⏳</span> думает…

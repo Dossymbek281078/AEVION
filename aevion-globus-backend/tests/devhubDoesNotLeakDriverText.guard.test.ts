@@ -2,6 +2,17 @@ import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+/*
+ * Имя обёртки изменено 31.08.2026: safeErrorText -> redactInfraDetails.
+ * Причина не косметическая — в lib/safeError.ts была функция С ТЕМ ЖЕ ИМЕНЕМ и
+ * ВСТРЕЧНОЙ стратегией (белый список против вычистки). Ошибка в пути импорта
+ * молча меняла защиту на более слабую, и заметить это можно было только по
+ * утечке.
+ *
+ * ⚠️ Этот сторож проверяет наличие обёртки ПО ИМЕНИ, поэтому переименование
+ * обязано доехать и сюда — иначе он покраснеет на исправном коде, а к красному,
+ * которое «всегда такое», привыкают и отключают.
+ */
 /**
  * Сырой текст исключения не уходит клиенту оттуда, где он может прийти от
  * драйвера базы или внешнего вызова.
@@ -11,7 +22,7 @@ import { join } from "node:path";
  * или вызов провайдера. Такой текст бывает вида
  * "connect ECONNREFUSED 10.130.0.7:5432" — внутренний адрес и порт базы.
  *
- * Все 22 обёрнуты в safeErrorText, поэтому сторож требует НОЛЬ, а не
+ * Все 22 обёрнуты в redactInfraDetails, поэтому сторож требует НОЛЬ, а не
  * храповик: вечно красная проверка перестаёт читаться в первый же день.
  */
 const SRC = readFileSync(join(__dirname, "..", "src", "routes", "devhub.ts"), "utf8");
@@ -33,7 +44,7 @@ function risky(): string[] {
   // собственным сообщениям она не вредит, а чужому тексту не даёт пройти.
   const out: string[] = [];
   LINES.forEach((l, i) => {
-    if (l.includes("safeErrorText")) return;
+    if (l.includes("redactInfraDetails")) return;
     if (!l.includes("e?.message") && !l.includes("err?.message")) return;
     if (!l.includes("res.status") && !l.includes("res.json")) return;
     out.push(String(i + 1));
@@ -45,15 +56,15 @@ describe("текст исключения от базы и внешних выз
   test("прибор работает: обёрнутые места найдены", () => {
     // Без этого «нарушений нет» означало бы и «файл не прочитался», и
     // «шаблон ничего не понимает» — то есть ничего.
-    const wrapped = LINES.filter((l) => l.includes("safeErrorText(")).length;
-    expect(wrapped, "ни одного вызова safeErrorText — разбор не сработал").toBeGreaterThan(10);
+    const wrapped = LINES.filter((l) => l.includes("redactInfraDetails(")).length;
+    expect(wrapped, "ни одного вызова redactInfraDetails — разбор не сработал").toBeGreaterThan(10);
     expect(LINES.length, "файл не прочитался").toBeGreaterThan(1000);
   });
 
   test("ни одного места с сырым e?.message в ответе — без исключений", () => {
     expect(
       risky(),
-      "сырой текст исключения уходит клиенту: оберните в safeErrorText(e) из lib/safeErrorText",
+      "сырой текст исключения уходит клиенту: оберните в redactInfraDetails(e) из lib/redactInfraDetails",
     ).toEqual([]);
   });
 });

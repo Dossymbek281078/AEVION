@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { safeErrorText } from "../src/lib/safeErrorText";
+import { redactInfraDetails } from "../src/lib/safeErrorText";
 
 /**
  * Устройство нашей сети не уходит клиенту вместе с текстом ошибки.
@@ -25,7 +25,7 @@ describe("текст ошибки не выдаёт устройство сис�
     // «проходит» ничего не проверив.
     expect(REAL.length).toBeGreaterThan(3);
     for (const raw of REAL) {
-      const out = safeErrorText(new Error(raw));
+      const out = redactInfraDetails(new Error(raw));
       expect(out, raw).not.toMatch(/[0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}/);
       expect(out, raw).not.toContain("devhub_rw");
       expect(out, raw).not.toContain("aevion_app");
@@ -38,7 +38,7 @@ describe("текст ошибки не выдаёт устройство сис�
     // а не чтением: правило выглядело исчерпывающим.
     for (const raw of ["connect ECONNREFUSED [::1]:5432",
                        "no route to host 2a03:2880:f12f:83:face:b00c:0:25de"]) {
-      const out = safeErrorText(new Error(raw));
+      const out = redactInfraDetails(new Error(raw));
       expect(out, raw).not.toContain("::1");
       expect(out, raw).not.toContain("2a03");
       expect(out, raw).toContain("скрыт");
@@ -56,38 +56,38 @@ describe("текст ошибки не выдаёт устройство сис�
     ];
     expect(cases.length).toBeGreaterThan(2);
     for (const [raw, secret] of cases) {
-      expect(safeErrorText(new Error(raw)), raw).not.toContain(secret);
+      expect(redactInfraDetails(new Error(raw)), raw).not.toContain(secret);
     }
   });
 
   test("имя таблицы остаётся — оно помогает разбирать отказ", () => {
     // Граница: прячем то, что описывает НАШУ инфраструктуру, а не то,
     // что объясняет причину. Имя таблицы карту сети не выдаёт.
-    const out = safeErrorText(new Error("relation " + JSON.stringify("DevHubFile") + " does not exist"));
+    const out = redactInfraDetails(new Error("relation " + JSON.stringify("DevHubFile") + " does not exist"));
     expect(out).toContain("DevHubFile");
   });
 
   test("обычное время не принимается за адрес", () => {
     // Обратный контроль: правило, вычищающее лишнее, портит сообщения
     // и этим так же мешает разбирать отказ.
-    const out = safeErrorText(new Error("произошло в 12:34:56 при выгрузке"));
+    const out = redactInfraDetails(new Error("произошло в 12:34:56 при выгрузке"));
     expect(out).toContain("12:34:56");
   });
 
   test("причина остаётся видимой — иначе разбирать нечего", () => {
     // Обратный контроль: вычищать всё подряд так же плохо. «Не получилось»
     // без причины не отличает отказ базы от нашей поломки.
-    const out = safeErrorText(new Error("connect ECONNREFUSED 10.130.0.7:5432"));
+    const out = redactInfraDetails(new Error("connect ECONNREFUSED 10.130.0.7:5432"));
     expect(out).toContain("ECONNREFUSED");
   });
 
   test("длина ограничена — стек не уезжает клиенту", () => {
-    const out = safeErrorText(new Error("x".repeat(5000)));
+    const out = redactInfraDetails(new Error("x".repeat(5000)));
     expect(out.length).toBeLessThanOrEqual(200);
   });
 
   test("не падает на том, что вовсе не Error", () => {
-    expect(safeErrorText(undefined)).toBe("undefined");
-    expect(safeErrorText({ a: 1 })).toContain("object");
+    expect(redactInfraDetails(undefined)).toBe("undefined");
+    expect(redactInfraDetails({ a: 1 })).toContain("object");
   });
 });

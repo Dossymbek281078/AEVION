@@ -889,7 +889,7 @@ export default function QRightPage() {
                   Browse…
                   <input
                     type="file"
-                    style={{ display: "none" }}
+                    className="aevion-file-input"
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) hashFile(f); }}
                   />
                 </label>

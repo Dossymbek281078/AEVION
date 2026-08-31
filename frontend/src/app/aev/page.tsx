@@ -3227,7 +3227,7 @@ function DataManagementPanel() {
         }}>
           ⬆ Import backup
           <input type="file" accept="application/json,.json" onChange={importData}
-            style={{ display: "none" }} />
+            className="aevion-file-input" />
         </label>
         <button onClick={resetAll}
           style={{

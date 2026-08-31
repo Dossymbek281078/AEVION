@@ -1159,3 +1159,27 @@ body {
     padding-top: var(--aevion-pill-h, 0px);
   }
 }
+
+/* Поле выбора файла, спрятанное через display:none, выпадает из обхода Tab
+   целиком: человек без мыши не может его нажать вовсе. Замер 31.08.2026 —
+   девять таких полей на девяти страницах, в том числе «Восстановить из файла».
+   Прячем визуально, оставляя в обходе. */
+.aevion-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Само поле размером 1px — фокус на нём не виден. Показываем его на подписи,
+   которая поле оборачивает: иначе Tab доходит, а человек этого не видит. */
+label:has(> .aevion-file-input:focus-visible),
+label:has(.aevion-file-input:focus-visible) {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
+}

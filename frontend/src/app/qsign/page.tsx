@@ -943,7 +943,7 @@ export default function QSignPage() {
                         }
                       }}
                       disabled={hashingFile}
-                      style={{ display: "none" }}
+                      className="aevion-file-input"
                     />
                   </label>
                   <button

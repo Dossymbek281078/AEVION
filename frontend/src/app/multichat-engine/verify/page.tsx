@@ -125,7 +125,7 @@ export default function VerifyReceiptPage() {
             {busy ? "Считаю…" : "Проверить"}
           </button>
           <label style={{ fontSize: 13, color: T.textFaded, cursor: "pointer" }}>
-            <input type="file" accept="application/json,.json" style={{ display: "none" }}
+            <input type="file" accept="application/json,.json" className="aevion-file-input"
               onChange={(e) => void onFile(e.target.files?.[0] || undefined)} />
             …или выберите файл
           </label>

@@ -149,7 +149,7 @@ export default function PipelinePage() {
               </span>
               <label style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#475569", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                 ↑ Import JSON
-                <input type="file" accept=".json" style={{ display: "none" }} onChange={(e) => {
+                <input type="file" accept=".json" className="aevion-file-input" onChange={(e) => {
                   const file = e.target.files?.[0]; if (!file) return;
                   const reader = new FileReader();
                   reader.onload = (ev) => {

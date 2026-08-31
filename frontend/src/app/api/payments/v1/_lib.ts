@@ -230,7 +230,7 @@ export function getOrigin(req: NextRequest): string {
 
 export function checkIdempotency(req: NextRequest, body: string):
   | { hit: true; cachedBody: string }
-  | { hit: false; cleanup: () => void } {
+  | { hit: false; cleanup: (responseBody?: string) => void } {
   const key = req.headers.get("idempotency-key");
   if (!key) {
     return { hit: false, cleanup: () => undefined };
@@ -239,8 +239,16 @@ export function checkIdempotency(req: NextRequest, body: string):
   if (prior) return { hit: true, cachedBody: prior.body };
   return {
     hit: false,
-    cleanup: () => {
-      store.idempotency.set(key, { at: Date.now(), body });
+    cleanup: (responseBody?: string) => {
+      // 31.08.2026. Кэшируется ОТВЕТ, а не то, что передали при проверке.
+      // Возвраты передавали сюда тело ЗАПРОСА, и на повтор продавец получал
+      // 200 со своим же {"link_id":...} вместо объекта возврата. Он проверял
+      // refund.status, видел undefined, считал попытку неудавшейся и повторял
+      // с НОВЫМ ключом — а новый ключ идёт мимо защиты от повтора. При
+      // частичном возврате остаток это позволяет: вернули 50 из 100, повтор
+      // вернёт ещё 50. Чекаут делал правильно, возвраты нет — расхождение
+      // внутри одного модуля.
+      store.idempotency.set(key, { at: Date.now(), body: responseBody ?? body });
       if (store.idempotency.size > 5000) {
         const cutoff = Date.now() - 24 * 60 * 60 * 1000;
         for (const [k, v] of store.idempotency.entries()) {

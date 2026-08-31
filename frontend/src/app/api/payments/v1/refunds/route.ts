@@ -220,7 +220,8 @@ export async function POST(req: NextRequest) {
   void fanoutRefundWebhook(refund, getOrigin(req));
 
   const responseBody = JSON.stringify(refund);
-  idem.cleanup?.();
+  // Кэшируем ОТВЕТ: повтор с тем же ключом обязан вернуть возврат, а не эхо.
+  idem.cleanup?.(responseBody);
   return attachRateHeaders(
     withCors(
       new Response(responseBody, {

@@ -178,6 +178,13 @@ devhubRouter.get("/health", (_req, res) => {
 // ИИ без предела. Ключ отдельный: общий на все генерации означал бы, что один
 // модуль расходует лимит другого (см. feedback_default_that_means_share).
 devhubRouter.post("/ask", dhCostlyLimit("dhask"), async (req, res) => {
+  // Метка модуля расщеплена на «вошёл / не вошёл» СПЕЦИАЛЬНО. Ручка зовёт
+  // платного поставщика и входа не требует, поэтому анонимный расход шёл в
+  // учёт одной строкой вместе с расходом платящих — отделить было нельзя.
+  // Схему не трогаем: колонка module свободный текст, сравнений с закрытым
+  // списком нет (проверено), сводка группирует по значению.
+  const askAuth = verifyBearerOptional(req);
+  const askModule = askAuth?.sub ? "devhub" : "devhub-anon";
   const question = typeof req.body?.question === "string" ? req.body.question.trim().slice(0, 8000) : "";
   const context = typeof req.body?.context === "string" ? req.body.context.trim().slice(0, 8000) : "";
   if (!question) return res.status(400).json({ error: "question required" });
@@ -186,7 +193,7 @@ devhubRouter.post("/ask", dhCostlyLimit("dhask"), async (req, res) => {
     ? `Context (a developer's project/code):\n${context}\n\nQuestion: ${question}`
     : question;
   try {
-    const { answer, routing } = await smartComplete({ userInput }, { module: "devhub" });
+    const { answer, routing } = await smartComplete({ userInput }, { module: askModule });
     return res.json({ answer, routing });
   } catch (e: any) {
     captureException(e);

@@ -725,7 +725,7 @@ const SPEC = {
         summary: "Send a test delivery to a webhook endpoint",
         operationId: "testWebhook",
         description:
-          "Signs a sample payload with the endpoint secret and delivers it to the registered URL, so you can verify your signature check end to end. Returns 200 when your endpoint accepted the delivery and 502 when it did not; the body carries the outcome either way, including the signature we sent.",
+          "Rate limited to 30 requests per minute — half the platform default, because each call makes us open a connection to your server. Signs a sample payload with the endpoint secret and delivers it to the registered URL, so you can verify your signature check end to end. Returns 200 when your endpoint accepted the delivery and 502 when it did not; the body carries the outcome either way, including the signature we sent.",
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" } },
         ],

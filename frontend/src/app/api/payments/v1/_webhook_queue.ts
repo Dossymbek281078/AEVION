@@ -23,6 +23,57 @@ const MAX_ATTEMPTS = 6;
 // 10s, 30s, 2m, 10m, 1h, 6h
 const BACKOFF_MS = [10_000, 30_000, 120_000, 600_000, 3_600_000, 21_600_000];
 
+// 31.08.2026. Обрезка очереди была ПЕРЕВЁРНУТА, и это хуже обычной потери.
+// kvPush и slice(0, CAP) выбрасывают хвост, а хвост очереди — самые старые
+// записи. Доставленные и провалившиеся остаются в списке наравне с
+// ожидающими, поэтому самые старые здесь — это ровно те доставки, которые
+// ещё НЕ сделаны: попытка с растущей паузой стареет и уходит в хвост.
+// Итог: под нагрузкой из очереди молча выпадала НЕСДЕЛАННАЯ работа, а
+// сделанная занимала место. Снаружи очередь при этом выглядела здоровой —
+// длина в пределах, ошибок нет, счётчики delivered/failed на месте.
+//
+// Здесь обрезка считается со статусом: ожидающие удерживаются первыми,
+// остаток места достаётся уже завершённым (список идёт новыми вперёд, то
+// есть выпадает самое старое завершённое). Порядок записей сохраняется.
+let droppedPending = 0;
+
+export function capKeepingPending(
+  items: QueuedAttempt[],
+  cap = QUEUE_CAP
+): QueuedAttempt[] {
+  if (items.length <= cap) return items;
+  const keep = new Set<string>();
+  for (const a of items) {
+    if (a.status === "pending" && keep.size < cap) keep.add(a.id);
+  }
+  for (const a of items) {
+    if (keep.size >= cap) break;
+    if (!keep.has(a.id)) keep.add(a.id);
+  }
+  const kept = items.filter((a) => keep.has(a.id));
+
+  // Если ожидающих больше самого предела, вытеснить их всё же приходится —
+  // но молчать об этом нельзя. Потеря доставки без следа неотличима от
+  // успеха: получатель ничего не ждёт, а у нас пропадает обязательство.
+  const lost = items.filter((a) => a.status === "pending" && !keep.has(a.id));
+  if (lost.length > 0) {
+    droppedPending += lost.length;
+    for (const a of lost.slice(0, 5)) {
+      console.warn(
+        `[webhook-queue] доставка потеряна при обрезке: ${a.id} -> ${a.webhook_url} (${a.event}), попыток ${a.attempts}`
+      );
+    }
+    if (lost.length > 5) {
+      console.warn(`[webhook-queue] ...и ещё ${lost.length - 5} потерянных доставок`);
+    }
+  }
+  return kept;
+}
+
+export function __droppedPendingCount(): number {
+  return droppedPending;
+}
+
 export async function enqueueAttempt(opts: {
   webhook_id: string;
   webhook_url: string;
@@ -52,7 +103,15 @@ export async function enqueueAttempt(opts: {
   // ожидающие доставки. kvPush делает ровно то же добавление в начало с тем
   // же ограничением длины, но при неудачном чтении не трогает ключ и
   // придерживает запись — поэтому здесь он, а не своя копия этой логики.
-  await kvPush(QUEUE_KEY, attempt, QUEUE_CAP);
+  // Не голый kvPush: он режет хвост вслепую, а хвост — несделанные доставки.
+  // Читаем проверяемо; если хранилище не читается, возвращаемся к kvPush —
+  // он придержит запись и не затрёт чужое (в этом и была его роль здесь).
+  const q = await kvListChecked<QueuedAttempt>(QUEUE_KEY);
+  if (q.ok) {
+    await persistQueue([attempt, ...q.value]);
+  } else {
+    await kvPush(QUEUE_KEY, attempt, QUEUE_CAP);
+  }
   return attempt;
 }
 
@@ -61,7 +120,8 @@ export async function readQueue(): Promise<QueuedAttempt[]> {
 }
 
 async function persistQueue(items: QueuedAttempt[]): Promise<void> {
-  await kvSet(QUEUE_KEY, items.slice(0, QUEUE_CAP));
+  // Обрезка со статусом, а не slice(0, CAP): см. capKeepingPending выше.
+  await kvSet(QUEUE_KEY, capKeepingPending(items));
 }
 
 async function fireOnce(att: QueuedAttempt): Promise<{

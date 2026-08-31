@@ -169,6 +169,34 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
         ON "DevHubGuestEmail" ("email");
     `);
 
+  // Токены связывания гостя с покупкой.
+  //
+  // Строка DevHubGuestEmail создаётся ТОЛЬКО после подтверждения по почте:
+  // иначе форма «я оплатил, вот мой адрес» стала бы способом присвоить
+  // чужую покупку — адрес покупателя знает кто угодно, кому он его называл.
+  //
+  // guestId запоминается в момент ЗАПРОСА, а не подтверждения. Иначе ссылку
+  // из чужого письма мог бы открыть посторонний и привязать покупку к своему
+  // браузеру. Так ссылка работает только там, откуда её попросили.
+  //
+  // Секрет хранится ХЕШЕМ, как у подтверждения адреса в routes/auth.ts:
+  // утечка базы не должна давать возможность войти в чужую покупку.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "DevHubGuestLinkToken" (
+      "id"         TEXT PRIMARY KEY,
+      "guestId"    TEXT NOT NULL,
+      "email"      TEXT NOT NULL,
+      "tokenHash"  TEXT NOT NULL,
+      "expiresAt"  TIMESTAMPTZ NOT NULL,
+      "usedAt"     TIMESTAMPTZ,
+      "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "DevHubGuestLinkToken_guest_idx"
+    ON "DevHubGuestLinkToken" ("guestId");
+  `);
+
     // One row per AI-driven multi-file write (generate_code / workflow "code"
     // step) — the prior content of every file it touched, so it can be
     // reverted in one shot ("undo the last AI change") without re-generating.

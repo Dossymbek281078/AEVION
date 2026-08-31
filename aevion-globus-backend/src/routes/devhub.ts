@@ -3,6 +3,7 @@ import { pgIntId } from "../lib/queryNumber";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { requesterId } from "../lib/devhubGuest";
+import { requestGuestLink, confirmGuestLink } from "../lib/devhubGuestLink";
 import { noteEmailSent } from "../lib/brevoQuota";
 // Ограничитель дорогих ручек. Тот же помощник, что стоит на 27 соседних ручках в
 // коммите d9cc19ce0 (28.07) — он ждёт мержа 22 дня, поэтому здесь пока только две
@@ -125,6 +126,73 @@ devhubRouter.use(
   ["/media/email", "/media/email-template-send", "/media/sms", "/media/whatsapp"],
   dhSendLimit(),
 );
+
+/**
+ * Ограничитель для формы связывания. Отдельный и СТРОЖЕ обычного: форма
+ * отправляет письма на адрес, который назвал вызывающий, то есть без
+ * предела она становится рассылочной пушкой чужими руками. Три попытки в
+ * десять минут — человек, ищущий свою покупку, столько не сделает.
+ */
+function dhLinkLimit() {
+  const raw = Number(process.env.DEVHUB_LINK_RATE_LIMIT);
+  const max = Number.isFinite(raw) && raw > 0 ? raw : 3;
+  return rateLimit({
+    windowMs: 10 * 60_000,
+    max,
+    keyPrefix: "dhlink",
+    message: "Слишком много попыток. Подождите десять минут.",
+  });
+}
+
+// Одна фраза на все исходы. Разные ответы превратили бы форму в способ
+// узнать, кто у нас покупал: достаточно перебрать адреса и смотреть текст.
+const LINK_NEUTRAL = "Если на этой почте есть покупка DevHub, мы отправили на неё письмо со ссылкой.";
+
+// POST /api/devhub/guest/link-request — «я оплатил, вот адрес покупки»
+devhubRouter.post("/guest/link-request", dhLinkLimit(), async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const guestId = requesterId(req, auth?.sub);
+  const email = typeof req.body?.email === "string" ? req.body.email : "";
+  const siteBase = process.env.PUBLIC_SITE_URL || "https://aevion.app";
+
+  const outcome = await requestGuestLink(guestId, email, siteBase);
+
+  // Отказ ХРАНИЛИЩА и отказ ТРАНСПОРТА наружу не маскируем под успех:
+  // человек иначе будет ждать письма, которого не будет. Но и подробностей
+  // не выдаём — категория, без адреса базы и имени провайдера.
+  if (outcome === "storage_down" || outcome === "transport_down") {
+    return res.status(503).json({
+      ok: false,
+      error: "link_unavailable",
+      message: "Сейчас не получилось отправить письмо. Попробуйте позже.",
+    });
+  }
+  // "sent" и "no_purchase" отвечают ОДИНАКОВО — и кодом, и текстом.
+  return res.json({ ok: true, message: LINK_NEUTRAL });
+});
+
+// POST /api/devhub/guest/link-confirm — переход по ссылке из письма
+devhubRouter.post("/guest/link-confirm", dhLinkLimit(), async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const guestId = requesterId(req, auth?.sub);
+  const id = typeof req.body?.id === "string" ? req.body.id : "";
+  const token = typeof req.body?.token === "string" ? req.body.token : "";
+
+  const outcome = await confirmGuestLink(id, token, guestId);
+  if (outcome === "storage_down") {
+    return res.status(503).json({ ok: false, error: "link_unavailable" });
+  }
+  if (outcome === "invalid") {
+    // 400, а не 500: данные прислал клиент. Пятисотка ушла бы в Sentry и
+    // топила бы там настоящие аварии.
+    return res.status(400).json({
+      ok: false,
+      error: "link_invalid",
+      message: "Ссылка не подошла: она устарела, уже использована или открыта в другом браузере.",
+    });
+  }
+  return res.json({ ok: true, message: "Покупка подключена. Обновите страницу." });
+});
 
 // GET /api/devhub/health — module health probe for aevion hub
 devhubRouter.get("/health", (_req, res) => {

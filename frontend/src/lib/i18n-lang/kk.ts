@@ -7351,6 +7351,7 @@ const kk: Record<string, string> = {
   "pricing.checkoutSuccess.openAppNoName": "Өнімдер каталогын ашу",
   "pricing.checkoutSuccess.subtitleActivatedNoTier": "Рақмет! Жазылымыңыз белсенді.",
   "pricing.checkoutSuccess.titleActivatedNoTier": "Төлем қабылданды!",
+  "pricing.checkoutSuccess.titlePending": "Төлем қабылданды — қолжетімділікті тексеріп жатырмыз",
   "pricing.checkoutSuccess.titleTrialNoTier": "Сынақ кезеңі — {days} күн",
   "pricing.home.notice.currencyDiffers": "Экранда {shown}, ал касса {charged} есептейді. Жалғастыру үшін тағы басыңыз.",
 };

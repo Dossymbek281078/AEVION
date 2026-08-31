@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
+import { apiUrl } from "@/lib/apiBase";
 
 const APP_LINKS: Record<string, { name: string; href: string }> = {
   qcoreai:    { name: "QCoreAI", href: "/qcoreai" },
@@ -111,6 +112,54 @@ function SuccessInner() {
   const knownApp = Object.prototype.hasOwnProperty.call(APP_LINKS, appId) && appId !== "platform";
   const appLink = knownApp ? APP_LINKS[appId] : null;
 
+  /*
+   * ⚠️ 31.08.2026: экран УТВЕРЖДАЛ активацию, ничего не спросив.
+   *
+   * Замер: 305 строк, обращений к серверу НОЛЬ. Тариф брался из адреса
+   * (`?tier=pro`), и любой, кто открыл ссылку — или вернулся кнопкой «назад»,
+   * бросив оплату, — читал «Pro активирован!». На самом дорогом экране
+   * платформы, сразу после того, как деньги списаны.
+   *
+   * Это не падение и не ошибка: страница уверенно отвечает успехом. Именно
+   * поэтому её не видел ни один тест — ей нечем было упасть.
+   *
+   * Теперь спрашиваем сервер, кто мы есть, и сверяем с тем, что обещает адрес.
+   * Три состояния, а не два:
+   *
+   *   null   ещё спрашиваем      — «оплата принята, проверяем доступ»
+   *   true   тариф подтверждён   — «активирован», и это правда
+   *   false  не подтверждён      — «доступ появится за несколько минут»
+   *
+   * Третье состояние — не «ошибка»: у гостя без входа доступ и не может быть
+   * виден, а выдача после оплаты занимает секунды. Врать в эту сторону тоже
+   * нельзя — поэтому текст не пугает, а называет, что делать, если не появится.
+   */
+  const [confirmed, setConfirmed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (stub) return;
+    let живо = true;
+    fetch(apiUrl("/api/me/entitlements"), { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!живо) return;
+        const план = String(d?.plan ?? "").toLowerCase();
+        // Тариф из адреса подтверждён, если сервер называет ТОТ ЖЕ. Незнание
+        // тарифа (PayBox не кладёт его в адрес) — не подтверждение: тогда
+        // достаточно того, что сервер видит любой платный.
+        const ждали = String(tier ?? "").toLowerCase();
+        setConfirmed(ждали ? план === ждали : план !== "" && план !== "free");
+      })
+      .catch(() => {
+        // Отказ сети — это «не знаем», а не «не активировано». Тон текста
+        // одинаков для обоих: мы не обещаем и не пугаем.
+        if (живо) setConfirmed(false);
+      });
+    return () => {
+      живо = false;
+    };
+  }, [stub, tier]);
+
   useEffect(() => {
     track({
       type: "checkout_success",
@@ -153,9 +202,18 @@ function SuccessInner() {
               ? tierName
                 ? t("pricing.checkoutSuccess.titleTrial", { tier: tierName, days: trialDays })
                 : t("pricing.checkoutSuccess.titleTrialNoTier", { days: trialDays })
-              : tierName
-                ? t("pricing.checkoutSuccess.titleActivated", { tier: tierName })
-                : t("pricing.checkoutSuccess.titleActivatedNoTier")}
+              : confirmed === true
+                ? tierName
+                  ? t("pricing.checkoutSuccess.titleActivated", { tier: tierName })
+                  : t("pricing.checkoutSuccess.titleActivatedNoTier")
+                : /*
+                   * Пока сервер не подтвердил — «оплата принята», а не
+                   * «активирован». Разница не в вежливости: второе человек
+                   * читает как «можно идти пользоваться», и если выдача не
+                   * прошла, он узнает об этом сам, наткнувшись на платную
+                   * стену, и уже не свяжет одно с другим.
+                   */
+                  t("pricing.checkoutSuccess.titlePending")}
         </h1>
 
         {/* Subtitle */}

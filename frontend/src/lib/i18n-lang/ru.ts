@@ -7392,6 +7392,7 @@ const ru: Record<string, string> = {
   "pricing.checkoutSuccess.openAppNoName": "Открыть каталог продуктов",
   "pricing.checkoutSuccess.subtitleActivatedNoTier": "Спасибо! Ваша подписка активна.",
   "pricing.checkoutSuccess.titleActivatedNoTier": "Оплата принята!",
+  "pricing.checkoutSuccess.titlePending": "Оплата принята — проверяем доступ",
   "pricing.checkoutSuccess.titleTrialNoTier": "Пробный период — {days} дней",
   "pricing.home.notice.currencyDiffers": "На экране {shown}, а касса спишет {charged}. Нажмите ещё раз, если это подходит.",
 };

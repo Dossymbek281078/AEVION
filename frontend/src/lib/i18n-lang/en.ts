@@ -7392,6 +7392,7 @@ const en: Record<string, string> = {
   "pricing.checkoutSuccess.openAppNoName": "Open the product catalogue",
   "pricing.checkoutSuccess.subtitleActivatedNoTier": "Thank you! Your subscription is active.",
   "pricing.checkoutSuccess.titleActivatedNoTier": "Payment received!",
+  "pricing.checkoutSuccess.titlePending": "Payment received — checking your access",
   "pricing.checkoutSuccess.titleTrialNoTier": "Trial started — {days} days",
   "pricing.home.notice.currencyDiffers": "Prices shown in {shown}, the checkout charges {charged}. Click again to continue.",
 };

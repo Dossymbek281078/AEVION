@@ -129,7 +129,15 @@ export function noteEmailSent(recipients = 1): { day: string; count: number } {
  * Отдаётся наружу через /api/health/channels, значений и адресов там нет.
  */
 export function emailQuotaToday(): { day: string; count: number; cap: number } {
-  return { day: sentDay, count: sentCount, cap: DAILY_SOFT_CAP };
+  // ⚠️ Починено 31.08 при сборке к 10.09: БЕСКОНФЛИКТНЫЙ мерж сломал сборку.
+  // Одна ветка превратила константу DAILY_SOFT_CAP в функцию dailySoftCap()
+  // (потолок читался ПРИ ЗАГРУЗКЕ модуля, и поведение зависело от порядка
+  // импорта), другая рядом добавила обращение к старому имени. Строки не
+  // пересеклись — git промолчал, tsc нашёл.
+  //
+  // Это ровно тот класс, ради которого перед мержем спрашивают связность, а
+  // после — типы: «конфликтов нет» и «собирается» разные утверждения.
+  return { day: sentDay, count: sentCount, cap: dailySoftCap() };
 }
 
 /** Для проверок: текущее состояние счётчика без побочных действий. */

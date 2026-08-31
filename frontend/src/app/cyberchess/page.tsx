@@ -6516,7 +6516,7 @@ export default function CyberChessPage(){
                 }}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                     <span>⚡ Быстрый матч</span>
-                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>AI ≈ {rat}</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>ИИ ≈ {rat}</span>
                   </div>
                 </Btn>
                 <Btn size="lg" variant="secondary" onClick={()=>{sHotseat(true);sRivalMode(false);setTimeout(()=>newG(),50)}}
@@ -6584,7 +6584,7 @@ export default function CyberChessPage(){
                 <button disabled={lichessLoading} onClick={async()=>{
                   if(lichessLoading)return;
                   sLichessLoading(true);
-                  showToast("⏳ Загружаю Lichess Daily…","info");
+                  showToast("⏳ Загружаю задачу дня с Lichess…","info");
                   try{
                     const r=await fetch("https://lichess.org/api/puzzle/daily",{headers:{Accept:"application/json"}});
                     if(!r.ok)throw new Error(`HTTP ${r.status}`);
@@ -6602,7 +6602,7 @@ export default function CyberChessPage(){
                     const mv=probe.move({from:first.slice(0,2),to:first.slice(2,4),promotion:first.slice(4)||undefined});
                     if(!mv)throw new Error("solution invalid");
                     const fakePz:Puzzle={
-                      name:`Lichess Daily · ${j?.puzzle?.id||"?"}`,
+                      name:`Задача дня Lichess · ${j?.puzzle?.id||"?"}`,
                       r:Number(j?.puzzle?.rating)||1500,
                       theme:(j?.puzzle?.themes?.[0]||"tactics") as any,
                       phase:"Middlegame",
@@ -6629,7 +6629,7 @@ export default function CyberChessPage(){
                     border:`1px solid #c4b5fd`,background:lichessLoading?"#f5f3ff":"linear-gradient(135deg,#f5f3ff,#ede9fe)",color:CC.accent,
                     fontSize:12,fontWeight:800,cursor:lichessLoading?"wait":"pointer",
                     display:"inline-flex",alignItems:"center",gap:5,opacity:lichessLoading?0.6:1}}>
-                  🌐 Lichess Daily{lichessLoading?" …":""}
+                  🌐 Задача дня · Lichess{lichessLoading?" …":""}
                 </button>
                 <button onClick={()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}}
                   className="cc-focus-ring"
@@ -13605,7 +13605,7 @@ ${question.trim()}`;
               <li><b>Подсказка в задаче</b> 5</li>
               <li><b>Ghost-подсказка</b> 15 (стрелка лучшего хода)</li>
               <li><b>Глубокий разбор</b> 20 (коуч)</li>
-              <li><b>Открытие Master AI</b> 30 (2400 ELO)</li>
+              <li><b>Открытие уровня «Мастер»</b> 30 (2400 ELO)</li>
               <li><b>Premium-тема</b> 50 (Neon / Obsidian / Sakura)</li>
               <li><b>AI Rival Алексей</b> 100 (бета)</li>
             </ul>
@@ -15243,7 +15243,7 @@ ${question.trim()}`;
         {id:"pz-3min",      icon:"⏱", group:"Puzzles", label:"3-минутный режим",  hint:"Реши как можно больше за 3 мин · +3с за каждый верный ответ", run:()=>{sTab("puzzles");sPzMode("timed3");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-5min",      icon:"⏱", group:"Puzzles", label:"5-минутный режим",  hint:"300 секунд на одну задачу",                 run:()=>{sTab("puzzles");sPzMode("timed5");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-lichess",   icon:"🌐",group:"Puzzles", label:"Задача дня с Lichess",hint:"Задача дня с lichess.org (live)",          run:async()=>{
-          if(lichessLoading)return;sLichessLoading(true);showToast("⏳ Загружаю Lichess Daily…","info");
+          if(lichessLoading)return;sLichessLoading(true);showToast("⏳ Загружаю задачу дня с Lichess…","info");
           try{
             const r=await fetch("https://lichess.org/api/puzzle/daily",{headers:{Accept:"application/json"}});
             if(!r.ok)throw new Error(`HTTP ${r.status}`);
@@ -15256,7 +15256,7 @@ ${question.trim()}`;
             const first=sols[0];const probe=new Chess(ch.fen());
             const mv=probe.move({from:first.slice(0,2),to:first.slice(2,4),promotion:first.slice(4)||undefined});
             if(!mv)throw new Error("solution invalid");
-            const fakePz:Puzzle={name:`Lichess Daily · ${j?.puzzle?.id||"?"}`,r:Number(j?.puzzle?.rating)||1500,theme:(j?.puzzle?.themes?.[0]||"tactics") as any,phase:"Middlegame",side:ch.turn() as "w"|"b",goal:"Best move",mateIn:0,fen:ch.fen(),sol:[first]};
+            const fakePz:Puzzle={name:`Задача дня Lichess · ${j?.puzzle?.id||"?"}`,r:Number(j?.puzzle?.rating)||1500,theme:(j?.puzzle?.themes?.[0]||"tactics") as any,phase:"Middlegame",side:ch.turn() as "w"|"b",goal:"Best move",mateIn:0,fen:ch.fen(),sol:[first]};
             sTab("puzzles");setGame(new Chess(fakePz.fen));sBk(k=>k+1);sPzCurrent(fakePz);sPzAttempt("idle");sLm(null);sSel(null);sVm(new Set());sHist([]);sFenHist([fakePz.fen]);sPCol(fakePz.side as any);sFlip(fakePz.side==="b");sOn(true);
             showToast(`🌐 Задача дня Lichess · рейтинг ${fakePz.r}`,"success");
           }catch(e:any){showToast(`Lichess недоступен: ${e?.message||"network"}`,"error")}finally{sLichessLoading(false)}

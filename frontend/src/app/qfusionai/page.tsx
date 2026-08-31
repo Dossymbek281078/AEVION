@@ -148,7 +148,7 @@ export default function QFusionAIPage() {
       </section>
 
       {/* Main content: Playground + Side panels */}
-      <section style={{
+      <section data-stack-mobile="" style={{
         maxWidth: 1100,
         margin: "0 auto",
         padding: "0 24px 60px",

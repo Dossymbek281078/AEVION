@@ -178,7 +178,7 @@ export default function SecurityPage() {
           </p>
           <div style={{ display: "grid", gap: 8 }}>
             {COMPLIANCE.map((c) => (
-              <div
+              <div data-stack-mobile=""
                 key={c.code}
                 style={{
                   display: "grid",

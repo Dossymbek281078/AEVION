@@ -66,7 +66,7 @@ if (INVOKED_DIRECTLY && !TOKEN) {
   );
 }
 
-type Row = { email: string; source: string };
+type Row = { email: string; source: string; channel?: string | null };
 
 /**
  * Достаёт список подписчиков из ответа выгрузки.
@@ -141,6 +141,31 @@ async function main(): Promise<void> {
   console.log(`  просмотрено     : ${plan.scanned}`);
   console.log(`  получателей     : ${plan.recipients.length}`);
   console.log(`  отправлено      : ${plan.sent}  ← этот скрипт не отправляет`);
+
+  /*
+   * Откуда пришли эти люди.
+   *
+   * Метка канала у подписчиков появилась 31.08.2026; до неё в списке хранилась
+   * только страница. Ответ печатается здесь, потому что подписчиков не видно
+   * НИГДЕ БОЛЬШЕ: экрана со списком нет, и единственный читатель этой выгрузки —
+   * два скрипта рассылки.
+   *
+   * «не знаем» показывается отдельной строкой и не сливается с прямыми
+   * заходами: подписавшиеся до 31.08 и пришедшие без метки — это незнание, а не
+   * прямой трафик, и смешивать их значит завышать долю прямых.
+   */
+  const поКаналам = new Map<string, number>();
+  for (const r of rows) {
+    const k = r.channel && String(r.channel).trim() ? String(r.channel) : "не знаем";
+    поКаналам.set(k, (поКаналам.get(k) ?? 0) + 1);
+  }
+  if (поКаналам.size) {
+    console.log("");
+    console.log("  откуда пришли (по всему списку, не только получатели):");
+    for (const [k, v] of [...поКаналам.entries()].sort((a, b) => b[1] - a[1])) {
+      console.log(`    ${k.padEnd(12)} ${v}`);
+    }
+  }
 
   if (source !== "postgres") {
     console.log("");

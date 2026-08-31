@@ -71,6 +71,32 @@ describe("оценка силы не наказывает за блестящу�
     expect(bl.accuracyPct).toBeGreaterThan(50);
   });
 
+  it("ходы соперника не идут в счёт человека", () => {
+    // Человек зевает КАЖДЫМ своим ходом, движок каждым своим играет хорошо.
+    // Если считать все полуходы подряд, точность выходит ~50% вместо 0%.
+    const smeshannaya: SavedGameForCPI = {
+      moves: Array.from({ length: 80 }, () => "e4"),
+      result: "AI wins",
+      rating: 1500,
+      tc: "5+0",
+      playerColor: "w",
+      analysis: Array.from({ length: 80 }, (_, ply) => ({
+        ply,
+        quality: (ply % 2 === 0 ? "blunder" : "good") as never,
+        cpLoss: ply % 2 === 0 ? 400 : 0,
+      })),
+    } as SavedGameForCPI;
+    const m = calibrateFromGames([smeshannaya, smeshannaya, smeshannaya]);
+    // Все ходы ЧЕЛОВЕКА — зевки, значит точных среди них нет вовсе.
+    // 20 — намеренный пол расчёта: оценка силы не падает в ноль.
+    expect(m.accuracyPct).toBeLessThanOrEqual(20);
+    // Контроль прибора: обратный случай той же формы обязан дать высокую
+    // точность — иначе «меньше 10» получается просто оттого, что расчёт
+    // по разбору не запускается.
+    const zerkalo = { ...smeshannaya, playerColor: "b" as const };
+    expect(calibrateFromGames([zerkalo, zerkalo, zerkalo]).accuracyPct).toBeGreaterThan(90);
+  });
+
   it("партия из зевков заметно хуже партии из точных ходов", () => {
     const pl = calibrateFromGames([partiya("blunder"), partiya("blunder"), partiya("blunder")]);
     const go = calibrateFromGames([partiya("good"), partiya("good"), partiya("good")]);

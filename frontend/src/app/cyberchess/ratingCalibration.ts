@@ -1,4 +1,5 @@
 import { TOCHNYE_HODY, NETOCHNOST, type MoveQuality } from "./moveQuality";
+import { hodIgroka } from "./postGameSummary";
 
 /**
  * AEVION CyberChess — FIDE rating calibration anchors + CPI metric regression.
@@ -410,6 +411,13 @@ export function calibrateFromGames(games: SavedGameForCPI[]): CPIMetrics {
     // Analysis-based blunder/quality stats
     if (g.analysis && g.analysis.length > 0) {
       for (const a of g.analysis) {
+        // Считаем ТОЛЬКО ходы человека. Раньше в тот же счёт шли ходы
+        // соперника: движок на высоком уровне играет почти без ошибок, и его
+        // ходы разбавляли статистику человека — точность завышалась, доля
+        // зевков делилась пополам. Карточка разбора рядом соперника
+        // пропускала, то есть модуль давал два разных ответа о точности
+        // одного и того же человека.
+        if (!hodIgroka(a.ply, g.playerColor)) continue;
         analyzedPlies++;
         if (a.quality === "blunder") blunderMoves++;
         else if (a.quality === "mistake") mistakeMoves++;

@@ -65,6 +65,17 @@ export type ApiSettlement = {
   paid_at: number | null;
   reference: string;
   payments: number;
+  /**
+   * true — запись из НАЧАЛЬНОГО НАБОРА, а не настоящая выплата.
+   *
+   * Стор выплат засеивается образцами при старте (единственный из всех:
+   * ссылки, споры, вебхуки и подписки начинаются пустыми). Суммы там
+   * правдоподобные — 124500 со статусом paid, — и в ответе ничто не говорило,
+   * что это образец. Интегратор и наша же панель показали бы «выплачено
+   * $1 245.00», которых не было. Признак нужен в САМОЙ записи: ответ
+   * путешествует один, и по нему нельзя спросить, откуда он взялся.
+   */
+  sample?: true;
   royalty: { party: string; share: number }[];
 };
 
@@ -104,6 +115,7 @@ function seedSettlements(): Map<string, ApiSettlement> {
   const map = new Map<string, ApiSettlement>();
   const samples: ApiSettlement[] = [
     {
+      sample: true as const,
       id: "st_q9w2k4",
       amount: 124500,
       currency: "USD",
@@ -121,6 +133,7 @@ function seedSettlements(): Map<string, ApiSettlement> {
       ],
     },
     {
+      sample: true as const,
       id: "st_b8h5n2",
       amount: 38900,
       currency: "EUR",

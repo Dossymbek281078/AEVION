@@ -231,6 +231,11 @@ const SPEC = {
           paid_at: { type: ["integer", "null"] },
           reference: { type: "string" },
           payments: { type: "integer" },
+          sample: {
+            type: "boolean",
+            description:
+              "Present and true when this settlement comes from the starter data set, not from a real payout. Absent on real settlements. The field lives on the record itself because a response travels alone: nothing else in it says where it came from.",
+          },
           royalty: {
             type: "array",
             items: {

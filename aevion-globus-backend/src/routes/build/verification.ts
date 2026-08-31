@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
+import { noteEmailSent } from "../../lib/brevoQuota";
 
 export const verificationRouter = Router();
 
@@ -101,6 +102,10 @@ verificationRouter.post("/admin/:userId/approve", async (req, res) => {
           text: `Hi ${u.rows[0].name},\n\nGreat news! Your profile has been verified. The ✓ Verified badge is now visible on your public profile.\n\nhttps://aevion.app/build/u/${userId}\n\n— AEVION QBuild`,
         }),
       }).catch(() => {});
+      // Расход считается по ПОПЫТКЕ, а не по подтверждённой доставке: ответа
+      // здесь не ждут. Занижение опаснее завышения — завышение лишь предупредит
+      // раньше, а занижение промолчит, когда письма уже перестали доходить.
+      noteEmailSent();
     }
     return ok(res, { userId, approved: true });
   } catch (err: unknown) {

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
+import { noteEmailSent } from "../../lib/brevoQuota";
 
 export const alertsRouter = Router();
 
@@ -143,6 +144,17 @@ export async function dispatchJobAlerts(vacancy: {
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ from: "QBuild <noreply@aevion.app>", to: batch, subject, text }),
       }).catch(() => {});
+      // Расход считается по ПОЛУЧАТЕЛЯМ, а не по запросам: провайдер берёт
+      // квоту за каждое письмо, а здесь один запрос везёт до пятидесяти.
+      // Отметка «плюс один» за пачку занижала бы расход в полсотни раз — то
+      // есть счётчик молчал бы ровно на той рассылке, которая потолок и
+      // выбирает.
+      //
+      // Считается ПОПЫТКА, а не подтверждённая доставка: отправка здесь
+      // fire-and-forget, ответа мы не ждём. Направление выбрано осознанно —
+      // завышение расхода лишь предупредит раньше, занижение промолчит
+      // тогда, когда письма уже перестали доходить.
+      noteEmailSent(batch.length);
     }
     console.info(`[build] job alerts sent to ${matches.length} subscribers for vacancy ${vacancy.id}`);
   } catch (e) {

@@ -12,6 +12,7 @@ import {
   getRecruiterTier,
 } from "../../lib/build";
 import { sendToUser } from "./push";
+import { noteEmailSent } from "../../lib/brevoQuota";
 
 export const applicationsRouter = Router();
 
@@ -955,6 +956,10 @@ async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECT
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from: "QBuild <noreply@aevion.app>", to: email, subject, text }),
     });
+    // Одно письмо — один получатель. Отметка обязана стоять на КАЖДОМ пути:
+    // счётчик, видящий часть путей, занижает расход и молчит именно тогда,
+    // когда потолок выбран.
+    noteEmailSent();
     console.info(`[build] email sent to ${email} (${status})`);
   } catch (e) {
     console.warn("[build] email notify failed:", (e as Error).message);

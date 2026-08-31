@@ -1,3 +1,4 @@
+import { noteEmailSent } from "../../lib/brevoQuota";
 import { Router } from "express";
 import crypto from "crypto";
 import { dispatchJobAlerts } from "./alerts";
@@ -267,6 +268,10 @@ vacanciesRouter.post("/:id/invite", async (req, res) => {
           text: `Hi,\n\n${recruiterName} thinks you'd be a great fit for:\n\n"${owner.rows[0].title}"\n\nApply here: https://aevion.app/build/vacancy/${id}\n\n— AEVION QBuild`,
         }),
       }).catch(() => {});
+      // Расход считается по ПОПЫТКЕ, а не по подтверждённой доставке: ответа
+      // здесь не ждут. Занижение опаснее завышения — завышение лишь предупредит
+      // раньше, а занижение промолчит, когда письма уже перестали доходить.
+      noteEmailSent();
     }
 
     return ok(res, { invited: true, email: emailVal.value });

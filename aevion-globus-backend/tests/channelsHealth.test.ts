@@ -28,6 +28,7 @@ const VARS = [
   "PAYBOX_MERCHANT_ID", "PAYBOX_SECRET", "PAYPAL_CLIENT_ID", "PAYPAL_SECRET",
   "PAYPAL_WEBHOOK_ID",
   "BREVO_API_KEY",
+  "ADMIN_TOKEN",
 ];
 const saved: Record<string, string | undefined> = {};
 beforeEach(() => VARS.forEach((v) => { saved[v] = process.env[v]; delete process.env[v]; }));
@@ -177,7 +178,17 @@ describe("расход писем за сутки виден снаружи", ()
     // провайдера: 301-е письмо не уходит, и узнать об этом неоткуда.
     const r = await get();
 
-    expect(typeof r.body.mail.sentToday, "нет числа ушедших за сутки").toBe("number");
+    // Потолок открыт: это свойство тарифа у провайдера. Расход — нет: по нему
+    // видно, сколько на платформе движения, и посторонним это ни к чему.
     expect(r.body.mail.dailyCap, "нет потолка суток").toBeGreaterThan(0);
+
+    // Значение латиницей: кириллица в HTTP-заголовке недопустима.
+    process.env.ADMIN_TOKEN = "t0ken-test";
+    const чужой = await get();
+    expect(чужой.body.mail.sentToday, "расход виден без токена").toBeUndefined();
+
+    const свой = await request(app()).get("/api/health/channels").set("x-admin-token", "t0ken-test");
+    expect(typeof свой.body.mail.sentToday, "по токену расход не отдан").toBe("number");
+    delete process.env.ADMIN_TOKEN;
   });
 });

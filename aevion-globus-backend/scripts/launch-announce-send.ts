@@ -106,7 +106,11 @@ async function читатьПодписчиков(): Promise<Array<{ email: stri
  */
 async function спроситьРасход(): Promise<{ count: number; cap: number; неизвестно: boolean }> {
   try {
-    const r = await fetch(`${BASE}/api/health/channels`);
+    // Расход отдают только по админскому заголовку: наружу это число не
+    // выкладывается. Токен у скрипта есть — тот же, которым он читает список.
+    const r = await fetch(`${BASE}/api/health/channels`, {
+      headers: process.env.ADMIN_TOKEN ? { "x-admin-token": process.env.ADMIN_TOKEN } : {},
+    });
     const j = (await r.json()) as { mail?: { sentToday?: number; dailyCap?: number } };
     const count = j.mail?.sentToday;
     const cap = j.mail?.dailyCap ?? DAILY_CAP;

@@ -564,6 +564,16 @@ export default function DevHubPage() {
                 {t("pro.emailNote")}
               </span>
 
+              {/* Вход в подключение уже совершённой покупки. Без этой ссылки
+                  ручки связывания работают, а дойти до них человеку неоткуда:
+                  письма после оплаты мы не шлём, магазин про нас не знает. */}
+              <Link
+                href="/devhub/link"
+                style={{ color: "rgba(255,255,255,0.85)", fontSize: 11.5, textDecoration: "underline" }}
+              >
+                {t("pro.linkPurchase")}
+              </Link>
+
               <a
                 href="/apps"
                 style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", textDecoration: "underline", whiteSpace: "nowrap" }}

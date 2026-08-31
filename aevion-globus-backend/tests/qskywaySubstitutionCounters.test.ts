@@ -1,6 +1,8 @@
 import { describe, test, expect } from "vitest";
 import express from "express";
 import request from "supertest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 import { qskywayRouter } from "../src/routes/qskyway";
 
@@ -22,7 +24,34 @@ import { qskywayRouter } from "../src/routes/qskyway";
 // отвечает 400 «нужны числовые from, to», и перебор молча проверяет ноль пар.
 const app = express().use(express.json()).use("/api/qskyway", qskywayRouter);
 
-const CITIES = ["astana", "nyc", "tokyo"] as const;
+/**
+ * Список городов выводится ИЗ КОДА, а не перечисляется здесь.
+ *
+ * ПОВОД. Он был зашит тремя строками. Сегодня совпадает с кодом — проверено, —
+ * но добавят четвёртый город, и счётчики подстановки для него молча перестанут
+ * проверяться: положительный список не краснеет от того, чего не знает.
+ * Это третий такой случай за ночь (тесты модуля, ключи перевода, города).
+ */
+const ROUTES_SRC = readFileSync(
+  path.join(__dirname, "..", "src", "routes", "qskyway.ts"),
+  "utf8",
+);
+const CITIES: readonly string[] = (() => {
+  const at = ROUTES_SRC.indexOf("const CITIES: Record<string, CityData> = {");
+  if (at < 0) return [];
+  const open = ROUTES_SRC.indexOf("{", at);
+  const close = ROUTES_SRC.indexOf("}", open);
+  return Array.from(
+    ROUTES_SRC.slice(open + 1, close).matchAll(/([a-z][a-z0-9]*)\s*:/g),
+    (m) => m[1],
+  );
+})();
+
+describe("список городов выведен, а не пуст", () => {
+  test("разбор нашёл города — иначе все проверки ниже пусты", () => {
+    expect(CITIES.length, "разбор CITIES сломался: проверки стали бы пустыми").toBeGreaterThanOrEqual(3);
+  });
+});
 
 describe("счётчики подстановки на всех парах площадок", () => {
   for (const city of CITIES) {

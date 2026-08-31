@@ -44,6 +44,68 @@ async function jpost(p, b) { const r = await fetch(`${BASE}${p}`, { method: "POS
  * went to exactly that on 2026-07-27. A liveness check is not enough: something
  * answers, it is just the wrong something.
  */
+/**
+ * Личность сервера, а не его способность.
+ *
+ * 29.08.2026: смоук прошёл 153/153, НЕ имея запущенного бэкенда этой
+ * ветки — на порту 4001 сидел сервер соседней сессии. Проверки ниже
+ * его пропустили, и это не недосмотр автора: он ЗНАЛ про общий порт
+ * (см. комментарий выше про потерянный час 27.07) и построил защиту.
+ * Она проверяла СПОСОБНОСТЬ — «это QSkyway? есть ли фича?» — а
+ * способность у всех 18 worktree одинаковая: это один репозиторий.
+ * Поэтому проверка пропускала ровно тот случай, против которого
+ * написана.
+ *
+ * Цена не в ложном зелёном: смоук БРОНИРУЕТ слоты, то есть пишет в
+ * чужой процесс. Соседняя сессия увидит брони, которых не делала.
+ *
+ * Ответ здесь чистый (без сети и без git), чтобы его можно было
+ * проверить таблицей случаев — включая те, что руками не повторить.
+ */
+function identityVerdict(health, opts) {
+  const branch = health && typeof health.branch === "string" ? health.branch : "";
+  const known = branch !== "" && branch !== "unknown";
+  const explicit = Boolean(opts && opts.baseIsExplicit);
+  const local = opts && opts.localBranch ? opts.localBranch : "";
+
+  if (!known) {
+    if (explicit) {
+      return { ok: true, note: "ветка не названа; BASE задан явно — доверяю оператору" };
+    }
+    return {
+      ok: false,
+      reason: "unidentified",
+      message:
+        "сервер на порту по умолчанию не называет свою ветку. На этой машине порт делят 18+ worktree, " +
+        "а смоук БРОНИРУЕТ слоты: прогон против чужого процесса испортит чужие данные и ничего не скажет " +
+        "о вашем коде. Поднимите бэкенд этой ветки или задайте BASE явно.",
+    };
+  }
+  if (local && branch !== local) {
+    if (explicit) {
+      return { ok: true, note: "ветка сервера " + branch + " против локальной " + local + "; BASE задан явно" };
+    }
+    return {
+      ok: false,
+      reason: "other-branch",
+      message: "сервер собран из ветки " + branch + ", а вы работаете в " + local + " — это чужая сессия.",
+    };
+  }
+  return { ok: true, note: "ветка сервера: " + branch };
+}
+
+function localBranchOrEmpty() {
+  try {
+    return require("node:child_process")
+      .execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+      .trim();
+  } catch {
+    // Не смогли спросить git — это «не знаю», а не «совпадает».
+    // Пустая строка отключает сравнение веток, но НЕ отключает отказ
+    // неопознанному серверу: слабее становится одна проверка из двух.
+    return "";
+  }
+}
 async function assertRightBackend() {
   let h;
   try {
@@ -62,6 +124,17 @@ async function assertRightBackend() {
     console.error("Restart it from this worktree, or point BASE at the right port.");
     process.exit(1);
   }
+
+  const verdict = identityVerdict(h.json, {
+    baseIsExplicit: Boolean(process.env.BASE),
+    localBranch: localBranchOrEmpty(),
+  });
+  if (!verdict.ok) {
+    console.error("");
+    console.error("Не тот сервер: " + verdict.message);
+    process.exit(1);
+  }
+  console.log("сервер опознан — " + verdict.note);
 }
 
 async function main() {
@@ -634,11 +707,17 @@ async function main() {
     process.exit(failed === 0 ? 0 : 1);
   }
   let okCount = 0, conflict = false;
+  // Последний ответ держим ВНЕ цикла: 31.08 подсказка про предел частоты
+  // читала `s.status`, а `const s` жила внутри цикла — ReferenceError,
+  // причём КАЖДЫЙ раз, потому что аргументы считаются до вызова assert.
+  // Прогон умирал здесь, и 14 утверждений хвоста не выполнялись никогда.
+  let lastStatus = 0;
   for (let i = 0; i < 5; i++) {
     const s = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T09:00:00Z", t1: "2026-07-11T09:03:00Z", holder: "op" + i });
+    lastStatus = s.status;
     if (s.status === 201) okCount++; else if (s.status === 409) conflict = true;
   }
-  assert(okCount === 4, "slot market books up to capacity", `booked=${okCount}`);
+  assert(okCount === 4, "slot market books up to capacity" + rateLimitHint(lastStatus), `booked=${okCount}`);
   assert(conflict, "slot market rejects over-capacity (409)");
   const late = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T10:00:00Z", t1: "2026-07-11T10:03:00Z", holder: "late" });
   assert(late.status === 201, "non-overlapping window bookable", `status=${late.status}`);
@@ -656,7 +735,78 @@ async function main() {
   assert(after.json?.count === before.json.count + okCount + 1, "GET /slots count reflects new bookings", `${before.json.count} → ${after.json?.count}`);
   assert(after.json.slots.some((s) => s.id === late.json.slot.id), "GET /slots list includes the just-booked slot");
 
+  // ── Phase 9: байты, которыми проверяющий проверяет нас ──────────
+  //
+  // Обе ручки заведены 29.08 и до сих пор жили только в тестах. Их смысл
+  // в том, чтобы человек СО СТОРОНЫ мог пересчитать наш хэш: без байтов
+  // подпись доказывает лишь, что мы что-то подписали. Молчаливая поломка
+  // здесь неотличима от работы — 200 отдаётся в обоих случаях, поэтому
+  // проверяем не код ответа, а воспроизводимость.
+  const ed = await jget("/api/qskyway/airspace/edition?city=nyc");
+  assert(ed.status === 200, "GET /airspace/edition отвечает", `status=${ed.status}`);
+  assert(typeof ed.json?.payload === "string" && ed.json.payload.length > 0,
+    "редакция публикует сами байты, а не только хэш");
+  assert(ed.json?.payloadBytes === Buffer.byteLength(ed.json?.payload ?? "", "utf8"),
+    "заявленная длина байтов совпадает с настоящей");
+  // `verifyYourself` — ОБЪЕКТ со `steps`, а не массив. Первая версия
+  // спрашивала массив и падала на исправном коде; форму спросил у живой
+  // ручки, а не вспомнил.
+  assert(Array.isArray(ed.json?.verifyYourself?.steps) && ed.json.verifyYourself.steps.length > 0,
+    "к байтам приложен рецепт проверки");
+
+  const sp = await jget("/api/qskyway/city/signed-payload?city=nyc");
+  assert(sp.status === 200, "GET /city/signed-payload отвечает", `status=${sp.status}`);
+  assert(typeof sp.json?.payload === "string" && sp.json.payload.length > 0,
+    "подпись твина публикует байты, которые она покрывает");
+  assert(sp.json?.payloadBytes === Buffer.byteLength(sp.json?.payload ?? "", "utf8"),
+    "длина байтов твина совпадает с настоящей");
+
   console.log(`\n${summary()}`);
   process.exit(failed === 0 ? 0 : 1);
 }
-main().catch((e) => { console.error("smoke crashed:", e); process.exit(1); });
+// Запуск только когда файл вызван напрямую. Без этого условия ЛЮБОЙ
+// импорт (в том числе из теста) поднимал бы боевой смоук: сеть, брони
+// в чужом процессе и process.exit посреди чужого прогона.
+if (require.main === module) {
+  main().catch((e) => {
+    // Падение обязано называть, СКОЛЬКО проверок осталось невыполненными.
+    // 31.08 прогон умирал на 147-м из ~155, и это выглядело как одна
+    // упавшая проверка: четырнадцать хвостовых не выполнялись НИКОГДА, а
+    // заметили это только через сутки. Доля («девять процентов») тут
+    // успокаивает, число — нет: у этих четырнадцати нет замены, они в
+    // режиме записи и на проде не гоняются.
+    let total = 0;
+    try {
+      const own = require("node:fs").readFileSync(__filename, "utf8");
+      // Без регулярки НАМЕРЕННО: при генерации этого файла обратный слэш
+      // съелся на границе инструмента, и /\bassert.../ стал символом забоя —
+      // совпадений ноль, счётчик молча дал бы 0 и число из сообщения
+      // исчезло бы. Подсчёт по подстроке этого класса отказов не имеет.
+      total = own.split("assert(").length - 1;
+    } catch { /* не смогли посчитать — скажем только выполненные */ }
+    console.error("");
+    console.error("ПРОГОН ОБОРВАН на проверке " + step +
+      (total ? " из примерно " + total + "; НЕ ВЫПОЛНЕНО около " + Math.max(0, total - step) : "") +
+      " — это не одна упавшая проверка, а оборванный хвост набора.");
+    console.error("smoke crashed:", e);
+    process.exit(1);
+  });
+}
+
+// Открыто ради проверки таблицей случаев: часть из них (чужая ветка на
+// нашем порту) руками не воспроизвести, не подняв вторую сессию.
+/**
+ * Отличить «предел частоты исчерпан» от настоящего отказа.
+ *
+ * 29.08.2026: второй прогон подряд падал с booked=0 и status=429, а
+ * сообщения шли по делу («slot market books up to capacity»). Читается
+ * как поломка ветки — я сам перебрал два неверных диагноза, прежде чем
+ * посмотрел код ответа. Подсказка стоит одной строки и экономит час.
+ */
+function rateLimitHint(status) {
+  if (status !== 429) return "";
+  return " — ПРЕДЕЛ ЧАСТОТЫ (429), а не поломка ветки: смоук выжег свою же квоту. " +
+    "Перезапустите сервер или подождите окно предела.";
+}
+
+module.exports = { identityVerdict, rateLimitHint };

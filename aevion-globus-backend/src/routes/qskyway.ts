@@ -5,12 +5,19 @@ import { CITY_NYC } from "./qskyway.city.nyc";
 import { CITY_TOKYO } from "./qskyway.city.tokyo";
 import { NOFLY, WIND, NoFlyZone } from "./qskyway.zones";
 import { getMetarWind, metarStatus } from "./qskyway.metar";
-import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt, ceilingField, NO_CEILING } from "./qskyway.airspace";
+import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt, ceilingField, signablePayload, NO_CEILING } from "./qskyway.airspace";
 import { airspaceFreshness } from "./qskyway.airspace.freshness";
-import { anchorAirspace, verifyAnchoredAirspace } from "./qskyway.airspace.anchor";
+import { anchorAirspace, verifyAnchoredAirspace, anchorRecipe } from "./qskyway.airspace.anchor";
 import { AIRSPACE_PROOFS } from "./qskyway.airspace.proof";
 import { PERMISSION, permissionSummary, type CityPermission } from "./qskyway.permission";
 import { getPool } from "../lib/dbPool";
+// Общее правило платформы, а не своё: `safeErrorText` живёт в lib и уже
+// используется bureau, lifebox, pipeline и вебхуком платежей. Свой санитайзер
+// я написал этим вечером, не увидев его, — это был второй способ делать то же
+// самое, и он к тому же СЛАБЕЕ: фильтровал опознавательное, тогда как общий
+// пропускает наружу ТОЛЬКО помеченное публичным. Утечка у него невозможна по
+// устройству, а не по полноте списка шаблонов.
+import { safeErrorText } from "../lib/safeError";
 import { isSmokeSlot, countLiveSlots } from "../lib/slotOrigin";
 import { heightReviewFor, heightReviewsForCity } from "../data/qskywayHeightReview";
 import { rateLimit } from "../lib/rateLimit";
@@ -91,7 +98,74 @@ const resolveCity = (id: unknown): { id: string; city: CityData } | null => {
   return key ? { id: key, city: CITIES[key] } : null;
 };
 
+/**
+ * Отказ, которым отвечают ОДИННАДЦАТЬ ручек, когда `resolveCity` вернул null.
+ *
+ * Держим одним ответом, а не одиннадцатью копиями, по цене расхождения.
+ * 28.08.2026 все одиннадцать были без английской половины — то есть добавлять
+ * её пришлось бы в одиннадцати местах, и это одиннадцать шансов пропустить
+ * одно. Свип, который их искал, к тому же видел только многострочную форму
+ * записи и не заметил ни одной: однострочный `res.status(404).json({ … })`
+ * прошёл мимо шаблона.
+ */
+const refuseUnknownCity = (res: Response) =>
+  res.status(404).json({
+    error: "неизвестный город",
+    errorEn: "unknown city",
+    available: Object.keys(CITIES),
+  });
+
+/**
+ * Второй отказ-близнец: две ручки маршрута разбирают одно и то же тело запроса.
+ *
+ * Свёл сюда не из любви к порядку, а потому что сторож отказов поймал: час
+ * назад я добавил английскую половину в обе копии ОТДЕЛЬНО, то есть развёл два
+ * места, где текст обязан совпадать. Разойдутся они молча.
+ */
+const refuseNonNumericPair = (res: Response) =>
+  res.status(400).json({
+    error: "нужны числовые from, to (индексы вертипортов)",
+    errorEn: "numeric from, to are required (vertiport indices)",
+  });
+
 // ── engine constants ─────────────────────────────────────────────────────────
+/**
+ * Считать ли `clearedUpToM` по ФАКТИЧЕСКОЙ высоте коридора вместо константы.
+ *
+ * Сейчас поле отдаёт `FLOOR - CLEAR` = 35 м: «этот коридор терпит препятствие
+ * не выше 35 м». Это верно только там, где коридор лежит НА ПОЛУ. Участок со
+ * съеденным штрафом может стоять и выше (условие `bandWithPenalty ===
+ * bandNoPenalty` выполняется на любой ступени, не только на нулевой), и тогда
+ * настоящий выдержанный просвет больше обещанного.
+ *
+ * То есть константа ЗАНИЖАЕТ — врёт в безопасную сторону. Поэтому включение
+ * выключателя это не починка опечатки, а СМЕНА ЗАЯВЛЕНИЯ О БЕЗОПАСНОСТИ: мы
+ * начинаем публиковать бо́льшую терпимую высоту. Такое решение принимает
+ * основатель, а не я, — код готов и ждёт одного слова.
+ *
+ * Обещать надо МИНИМУМ по участкам со съеденным штрафом: заявление держится
+ * самым слабым местом маршрута, а не средним.
+ */
+const CLEARED_UP_TO_FROM_CORRIDOR = false;
+
+/**
+ * Высота препятствия, до которой обещанный запас над коридором ВЫДЕРЖАН.
+ *
+ * Флаг — параметр, а не только модульная константа: иначе выключенное
+ * состояние проверяется, а включённое живёт непроверенным до самого дня, когда
+ * его включат.
+ *
+ * `inertMinAltM === null` значит «участков со съеденным штрафом нет вовсе» —
+ * тогда и уточнять нечего, отдаём прежнее значение.
+ */
+export function clearedUpToMFor(
+  inertMinAltM: number | null,
+  enabled: boolean = CLEARED_UP_TO_FROM_CORRIDOR,
+): number {
+  if (!enabled || inertMinAltM === null) return FLOOR - CLEAR;
+  return inertMinAltM - CLEAR;
+}
+
 const FLOOR = 50;
 const CLEAR = 15;
 const BAND = 25;
@@ -137,6 +211,93 @@ function plural(n: number, one: string, few: string, many: string): string {
   if (mod10 === 1 && mod100 !== 11) return `${n} ${one}`;
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} ${few}`;
   return `${n} ${many}`;
+}
+
+// ── ПОДГОТОВЛЕНО, НЕ ВКЛЮЧЕНО: подстановка высоты там, где мы не знаем ничего ──
+//
+// Высоты коридоров — продуктовое решение основателя, не моё, и переключатель
+// ниже стоит в `false`. Здесь лежит готовая реализация, чтобы «да» стоило
+// одного слова, а не получаса.
+//
+// Зачем. Слепая ячейка несёт фиктивные 12 м, и 12 + CLEAR + SRC_CLEARANCE[2]
+// = 43 < FLOOR: штраф за неуверенность целиком съедается полом коридора, то
+// есть защита молчит именно там, где нужна. Замер 28.08.2026 по твинам:
+// в Астане на этом дефолте 498 ячеек, в Токио 42, в Мидтауне Манхэттена 4.
+//
+// Что даст включение (медиана известных высот в радиусе 200 м):
+//   Астана     360 из 498 ячеек поднимаются, гарантия просвета 35 -> 60 м
+//   Токио       38 из  42,                   гарантия 35 -> 60 м
+//   Нью-Йорк     4 из   4,                   гарантия 35 -> 85 м
+// Цена: коридор над неизвестными кварталами поднимается на одну ступень, 25 м.
+//
+// Медиана, а не 75-й процентиль: гарантия та же, а максимум коридора в Астане
+// 100 м вместо 125 — выигрыш достаётся дешевле.
+//
+// Твин НЕ меняется: он остаётся записью того, что мы знаем. Подстановка живёт
+// только на пути ПЛАНИРОВАНИЯ и только ВВЕРХ — записанную высоту не понижает.
+// Разбор спорных высот и скоринг площадок берут сырые числа по-прежнему.
+//
+// Честная слабость: оценка наследует высоту соседей, и сарай рядом с башней
+// получит высоту башни. Снимается не выбором процентиля, а данными — LiDAR,
+// CityGML LOD2, 3D Tiles.
+//
+// Переключатель — КОНСТАНТА, а не переменная окружения, намеренно: переменная
+// меняет поведение невидимо для git, и мы это уже проходили с отметкой сборки,
+// которая пережила образ и уверенно врала. Для высот в авиационном модуле цена
+// такой невидимости выше.
+const BLIND_NEIGHBOUR_ESTIMATE = false;
+const BLIND_RADIUS_CELLS = 10;   // 10 ячеек по 20 м = 200 м вокруг
+const BLIND_MIN_SAMPLE = 8;      // меньше известных соседей — берём по городу
+const BLIND_PERCENTILE = 0.5;
+
+const planningGrids = new WeakMap<CityData["grid"], number[]>();
+
+function percentileOf(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0;
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))];
+}
+
+// Флаг ПАРАМЕТРОМ, а не только константой: иначе выключенная ветка никем не
+// исполняется и тихо протухает — свой же класс «написано, но не вызывается».
+// Тесты гоняют оба состояния.
+export function planningHeights(
+  g: CityData["grid"],
+  enabled: boolean = BLIND_NEIGHBOUR_ESTIMATE,
+): number[] {
+  if (!enabled) return g.heights;
+  const cached = planningGrids.get(g);
+  if (cached) return cached;
+  const out = g.heights.slice();
+  const known: number[] = [];
+  for (let i = 0; i < g.heights.length; i++) {
+    if (g.heights[i] > 0 && (g.src?.[i] ?? 0) !== 2) known.push(g.heights[i]);
+  }
+  known.sort((a, b) => a - b);
+  const cityWide = percentileOf(known, BLIND_PERCENTILE);
+  for (let r = 0; r < g.rows; r++) {
+    for (let c = 0; c < g.cols; c++) {
+      const i = r * g.cols + c;
+      if (g.heights[i] <= 0 || (g.src?.[i] ?? 0) !== 2) continue;
+      const near: number[] = [];
+      for (let dr = -BLIND_RADIUS_CELLS; dr <= BLIND_RADIUS_CELLS; dr++) {
+        const rr = r + dr;
+        if (rr < 0 || rr >= g.rows) continue;
+        for (let dc = -BLIND_RADIUS_CELLS; dc <= BLIND_RADIUS_CELLS; dc++) {
+          const cc = c + dc;
+          if (cc < 0 || cc >= g.cols) continue;
+          const j = rr * g.cols + cc;
+          if (g.heights[j] > 0 && (g.src?.[j] ?? 0) !== 2) near.push(g.heights[j]);
+        }
+      }
+      near.sort((a, b) => a - b);
+      const est = near.length >= BLIND_MIN_SAMPLE
+        ? percentileOf(near, BLIND_PERCENTILE)
+        : cityWide;
+      if (est > out[i]) out[i] = est;
+    }
+  }
+  planningGrids.set(g, out);
+  return out;
 }
 
 const obstOf = (g: CityData["grid"]) => (c: number, r: number): number =>
@@ -307,6 +468,11 @@ interface AirspaceCompliance {
   zeroCeilingSegments: number;
   maxExceedanceM: number;
   lowestCeilingM: number | null;
+  /**
+   * Правило регулятора, действующее вместо потолка (город без сетки).
+   * `null`, когда сетка есть или регулятор для города не подключён вовсе.
+   */
+  permission?: unknown;
   note: string;
   /** тот же вердикт по-английски: страница показывает его как есть */
   noteEn: string;
@@ -331,6 +497,14 @@ function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[],
     return {
       available: false, compliant: null, coveragePct: 0, exceedingSegments: 0,
       zeroCeilingSegments: 0, maxExceedanceM: 0, lowestCeilingM: null,
+      // Правило, которое ДЕЙСТВУЕТ вместо потолка — прямо здесь, а не отсылкой.
+      //
+      // 29.08.2026: примечание говорило «см. permission в /health», и это было
+      // честно, но требовало второго запроса. Ответ маршрута — то, по чему
+      // действуют; правило, которому маршрут подчиняется, должно ехать вместе
+      // с ним. Иначе «сетки потолков нет» читается как «ничто не регулирует»,
+      // а у Астаны там ЗАПРЕТ.
+      permission: hasPermission ? perm : null,
       note: hasPermission
         ? "Сетки потолков высоты у этого города нет, поэтому соответствие потолку не проверялось. Правило регулятора при этом действует и учтено: см. permission в /health — его запретные зоны коридор обходит."
         : "Регуляторный фид для этого города не подключён — соответствие потолку не проверялось.",
@@ -354,6 +528,15 @@ function assessCeiling(field: CeilingField | null, path: Cell[], alts: number[],
   return {
     available: true,
     compliant,
+    // Поле есть ВСЕГДА, даже когда данных нет. Раньше в этой ветке его
+    // не было вовсе: у города с сеткой потолков `permission` просто не
+    // отдавалось, и читатель ответа получал `undefined`.
+    //
+    // Отсутствие поля читается как «требований к разрешению нет» — вывод,
+    // которого мы не делали. `null` говорит ровно то, что есть: данных о
+    // разрешительном режиме у нас нет. Это та же форма класса, что и
+    // подстановка нуля, только вместо ложного значения — ложная тишина.
+    permission: cityId ? PERMISSION[cityId] ?? null : null,
     coveragePct: Math.round((100 * covered) / Math.max(1, alts.length)),
     exceedingSegments: exceeding,
     zeroCeilingSegments: zeroSegs,
@@ -408,6 +591,7 @@ interface RouteResult {
     inertPenaltySegments: number;
     clearedUpToM: number;
     note: string;
+    noteEn: string;
   };
   respectCeiling: boolean;
   airspace: AirspaceCompliance;
@@ -436,6 +620,9 @@ function buildRoute(
   const obstacles: number[] = [];
   let timeStill = 0, timeWind = 0, windSum = 0, confSum = 0, measuredEdges = 0;
   let guessedSegments = 0, guessedInertSegments = 0;
+  // null, а не 0: «таких участков не было» и «участок на нулевой высоте» —
+  // разные вещи, и ноль здесь читался бы как второе.
+  let inertMinAlt: number | null = null;
   let confSumOnObstacles = 0;
   let obstacleSegments = 0, measuredObstacleSegments = 0;
   for (let k = 0; k < path.length - 1; k++) {
@@ -463,7 +650,11 @@ function buildRoute(
       guessedSegments++;
       const bandNoPenalty = Math.max(0, Math.ceil((maxObst + CLEAR - FLOOR) / BAND));
       const bandWithPenalty = Math.max(0, Math.ceil((maxObst + CLEAR + confClear(worstSrc) - FLOOR) / BAND));
-      if (bandWithPenalty === bandNoPenalty) guessedInertSegments++;
+      if (bandWithPenalty === bandNoPenalty) {
+        guessedInertSegments++;
+        // Заявление держится самым низким таким участком, поэтому минимум.
+        if (inertMinAlt === null || alt < inertMinAlt) inertMinAlt = alt;
+      }
     }
     // Участок с настоящим препятствием — только там вопрос «а обмерена ли эта
     // высота?» вообще имеет смысл.
@@ -536,10 +727,21 @@ function buildRoute(
     blindHeight: {
       guessedSegments,
       inertPenaltySegments: guessedInertSegments,
-      clearedUpToM: FLOOR - CLEAR,
+      clearedUpToM: clearedUpToMFor(inertMinAlt),
+      // Обе версии — то же правило, что у `scope`/`scopeEn` ниже: защищает та,
+      // которую читатель понимает. Первая версия этого поля была только
+      // русской, и я нарушил собственное соглашение модуля через несколько
+      // часов после того, как его записал.
       note: guessedInertSegments > 0
-        ? `На ${guessedInertSegments} участк(ах) высота угадана, а страховочный запас за неуверенность съеден полом коридора: просвет ${CLEAR} м гарантирован только если здание не выше ${FLOOR - CLEAR} м.`
+        // Склонение, а не «участк(ах)». Рядом в этом же файле стоит правило:
+        // цифра, которую модуль честно считает, а потом рисует как
+        // «1 площадок», обесценивает всю аккуратность расчёта. Своё же
+        // правило я и нарушил, добавляя это поле ночью.
+        ? `На ${plural(guessedInertSegments, "участке", "участках", "участках")} высота угадана, а страховочный запас за неуверенность съеден полом коридора: просвет ${CLEAR} м гарантирован только если здание не выше ${FLOOR - CLEAR} м.`
         : "Все участки с угаданной высотой получили настоящий страховочный запас.",
+      noteEn: guessedInertSegments > 0
+        ? `On ${guessedInertSegments} segment(s) the building height is a guess and the low-confidence margin is absorbed by the corridor floor: the ${CLEAR} m clearance holds only if the building is no taller than ${FLOOR - CLEAR} m.`
+        : "Every segment with a guessed height received the full low-confidence margin.",
     },
     respectCeiling,
     airspace: assessCeiling(field, path, alts, cityId),
@@ -725,7 +927,17 @@ interface HeightDispute {
   building: number;
   /** элемент OSM: из разбора, иначе из твина, иначе неизвестен */
   osm: string | null;
-  taggedM: number;
+  /**
+   * Высота по тегу OSM — или `null`, если тега нет. Раньше подставлялся
+   * НОЛЬ, а он читается как измерение: страница печатала бы «0 м в теге
+   * OSM», то есть утверждала бы, что здание нулевой высоты.
+   *
+   * Соседнее поле `publishedM` уже было приведено к `null` ровно с этим
+   * рассуждением — комментарий про это лежит строкой ниже. Одно место,
+   * один автор, разное обращение с двумя соседними полями: почти всегда
+   * недосмотр, а не решение.
+   */
+  taggedM: number | null;
   /** что публикует статья объекта; null — разбора человеком ещё нет */
   publishedM: number | null;
   publishedSource: string | null;
@@ -791,7 +1003,7 @@ function heightDisputeFor(
     // Элемент, если он известен твину, — даже когда разбора ещё нет: по нему
     // высоту можно проверить и завести замечание.
     osm: rev?.osm ?? suspectEntry?.osm ?? null,
-    taggedM: rev?.taggedM ?? city.buildings[building]?.h ?? 0,
+    taggedM: rev?.taggedM ?? city.buildings[building]?.h ?? null,
     // null, а не 0. Ноль здесь означал бы «в статье объекта опубликовано 0 м»,
     // и интерфейс так и печатал: «382 м в теге OSM против 0 м в статье».
     // Сегодня не выстреливало — единственная спорная высота разобрана и до
@@ -856,7 +1068,16 @@ export const __engineForTests = { buildRoute, heightDisputeFor, suspectCellsOf, 
 // ── vertiport suitability (шаг к муниципальным площадкам) ──────────────────────
 interface VertiportScore {
   id: string; c: number; r: number; x: number; y: number;
-  openRadiusM: number; clearanceM: number; distNoFlyM: number;
+  openRadiusM: number; clearanceM: number;
+  /**
+   * Расстояние до ближайшей запретной зоны — или `null`, если зон в
+   * городе НЕТ ВОВСЕ. Раньше здесь уезжало 9999: расчёту оно нужно как
+   * «бесконечно далеко», но в ответе читается как измерение — «до
+   * запрета 9999 метров». Страница это знала и показывала «далеко», а
+   * любой другой читатель ответа (смоук, регулятор, чужой клиент) принял
+   * бы за факт. Отсутствие данных обязано выглядеть отсутствием.
+   */
+  distNoFlyM: number | null;
   /** published regulatory ceiling over the pad, metres AGL; null where no feed */
   ceilingM: number | null;
   /** pad sits where the regulator authorizes nothing automatically (0 ft ceiling) */
@@ -896,7 +1117,11 @@ function suitability(cityId: string, city: CityData): VertiportScore[] {
     const ceilingM = ceil === NO_CEILING ? null : ceil;
     return {
       id: `vp${i}`, c: v.c, r: v.r, x: v.x, y: v.y,
-      openRadiusM: openR, clearanceM: clearance, distNoFlyM: Math.round(distNoFly),
+      openRadiusM: openR, clearanceM: clearance,
+      // Сторожевое значение остаётся ВНУТРИ расчёта (`noflyScore` выше),
+      // наружу уходит null: публиковать «9999 м» там, где зон нет,
+      // значит выдавать умолчание за измерение.
+      distNoFlyM: zones.length ? Math.round(distNoFly) : null,
       ceilingM, needsAtcCoordination: ceilingM === 0,
       suitability: score, class: cls,
     };
@@ -1191,7 +1416,7 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
     vertiports: CITY.vertiports.length,
     grid: { cols: CITY.grid.cols, rows: CITY.grid.rows, cellM: CITY.grid.cell },
     altitude: { floorM: FLOOR, bandM: BAND, clearanceM: CLEAR },
-    clearanceModel: { baseM: CLEAR, byHeightSourceM: { measured: SRC_CLEARANCE[0], derived: SRC_CLEARANCE[1], guessed: SRC_CLEARANCE[2] }, note: "Страховочный просвет растёт при низкой уверенности высоты; лучше данные (LiDAR/LOD2/3D Tiles) → ниже крейсер." },
+    clearanceModel: { baseM: CLEAR, byHeightSourceM: { measured: SRC_CLEARANCE[0], derived: SRC_CLEARANCE[1], guessed: SRC_CLEARANCE[2] }, note: "Страховочный просвет растёт при низкой уверенности высоты; лучше данные (LiDAR/LOD2/3D Tiles) → ниже крейсер.", noteEn: "Safety clearance grows when height confidence is low; better data (LiDAR/LOD2/3D Tiles) → a lower cruise." },
     // Плоский список читается как «умеем во всех городах». Для шести пунктов
     // это правда, для седьмого — нет: сетку потолков публикует только FAA, и
     // ниже в этом же ответе `airspace.astana.available` и `airspace.tokyo`
@@ -1216,6 +1441,35 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
       "regulatory-airspace-ceilings": Object.keys(CITIES).filter((id) => AIRSPACE[id]),
     },
     airspace: Object.fromEntries(Object.keys(CITIES).map((id) => [id, airspaceBlock(id, CITIES[id])])),
+    /**
+     * Открытая половина ключа, которым подписаны документы модуля.
+     *
+     * ЗАЧЕМ. 28.08.2026 прочитал подписанный документ глазами того, кто понесёт
+     * его регулятору. Подпись настоящая Ed25519, ключ приложен — но приложен В
+     * ТОМ ЖЕ документе. Проверка ключом из проверяемого документа доказывает
+     * только внутреннюю связность: подписать своим ключом и приложить его может
+     * кто угодно. Ключ не публиковался НИГДЕ — ни здесь, ни в реестре ключей
+     * платформы (`/api/qsign/v2/keys` держит ключи QSign, не наши).
+     *
+     * Теперь его можно взять у живой службы по TLS и сравнить с тем, что в
+     * документе. Это не делает подпись доказательством перед тем, кто не
+     * доверяет домену, — но убирает случай «кто угодно подписал что угодно».
+     *
+     * `ephemeral` говорит правду и здесь: без `QSKYWAY_SIGN_SK` ключ рождается
+     * при старте и живёт до перезапуска, а значит проверять по нему старый
+     * документ бессмысленно. Молчать об этом было бы хуже, чем не публиковать.
+     */
+    signing: {
+      alg: "Ed25519",
+      publicKey: SIGN_PK_B64,
+      ephemeral: SIGN_EPHEMERAL,
+      note: SIGN_EPHEMERAL
+        ? "Ключ создан при старте процесса и сменится при перезапуске: документы, подписанные до него, этим ключом не проверятся."
+        : "Постоянный ключ службы. Сверьте его с полем attestation.publicKey в документе.",
+      noteEn: SIGN_EPHEMERAL
+        ? "The key was created at process start and changes on restart: documents signed earlier will not verify against it."
+        : "The service's persistent key. Compare it with attestation.publicKey in the document.",
+    },
     slotsStore: slotsDbAvailable ? "postgres" : "memory",
     slotsBooked,
     /** Брони без наших же тестовых. null означает «спросить не удалось», а не ноль. */
@@ -1260,13 +1514,14 @@ qskywayRouter.get("/cities", (_req: Request, res: Response) => {
       total: Object.keys(CITIES).length,
       missing: Object.keys(CITIES).filter((id) => !AIRSPACE[id] && !PERMISSION[id]),
       note: "Регуляторный слой есть там, где регулятор вообще публикует ограничения — сеткой потолков, режимом разрешений или запретной зоной в AIP. Форма публикации разная: фид, растровый слой, нормативный документ. «Нет API» не равно «нет правила» — правило читается из того, в чём оно опубликовано.",
+      noteEn: "A regulatory layer exists wherever the regulator publishes restrictions at all — as a ceiling grid, a permission regime, or a no-fly zone in the AIP. The form of publication varies: a feed, a raster layer, a normative document. \"No API\" does not mean \"no rule\" — the rule is read from whatever it was published in.",
     },
   });
 });
 
 qskywayRouter.get("/city", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const { id, city } = resolved;
   const zones = zonesMeters(id, city);
   res.json({
@@ -1278,10 +1533,15 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
     // починка принадлежит OSM. См. src/data/qskywayHeightReview.ts.
     heightReview: heightReviewsForCity(id),
     nofly: zones.map((z) => ({ id: z.id, name: z.name, kind: z.kind, x: Math.round(z.x), y: Math.round(z.y), radiusM: z.radiusM, until: z.until ?? null, realityNote: z.realityNote ?? null })),
+    // Один знак после запятой, а не сырое число с плавающей точкой. На экране
+    // стояло «5.14→27.35 м/с»: две цифры точности у величины, ВЕРХНЯЯ ЧАСТЬ
+    // которой — иллюстративная модель (это сказано в note ниже). Ложная
+    // точность внушает уверенность, которой в источнике нет, а модуль рядом
+    // округляет `confClearOnObstaclesM` тем же способом.
     wind: {
       fromDeg: windAt(id, FLOOR).fromDeg,
-      groundMs: windAt(id, FLOOR).speedMs,
-      topMs: windAt(id, city.grid.heights.reduce((m, v) => Math.max(m, v), 0) + CLEAR).speedMs,
+      groundMs: +windAt(id, FLOOR).speedMs.toFixed(1),
+      topMs: +windAt(id, city.grid.heights.reduce((m, v) => Math.max(m, v), 0) + CLEAR).speedMs.toFixed(1),
       source: windSourceOf(id),
       note: windSourceOf(id) === "metar"
         ? "у земли — реальный METAR ближайшего аэропорта; рост по высоте — иллюстративная модель (METAR не содержит данных о ветре на высоте)"
@@ -1312,9 +1572,111 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
 // sits on the first screen.
 const impactCache = new Map<string, unknown>();
 
+/**
+ * ТО, ЧТО ЗАХЭШИРОВАНО — целиком и байт в байт.
+ *
+ * ПОВОД (29.08.2026). Мы публиковали `contentHash` редакции и привязанное к
+ * Bitcoin доказательство на него, но НЕ публиковали содержимое, над которым
+ * хэш взят: `signablePayload` использовался только внутри. Третья сторона
+ * могла подтвердить, что какой-то 32-байтовый дайджест проштампован в таком-то
+ * блоке, и НЕ могла проверить, что этот дайджест относится к нашей редакции
+ * воздушного пространства.
+ *
+ * То есть доказательство было неопровержимым в бесполезную сторону, а весь
+ * продукт стоит на обещании «проверьте сами». Публикуем ровно ту строку,
+ * которая идёт в sha256 — не «эквивалентную», не «пересобранную»: любое
+ * расхождение в порядке ключей, пробелах или экранировании даст другой хэш, и
+ * проверяющий решит, что мы врём, хотя врал бы формат.
+ */
+/**
+ * Байты, которые подписаны у двойника города, — целиком и байт в байт.
+ *
+ * ПОВОД (29.08.2026). `/city` отдаёт `_signature`, страница показывает знак
+ * «подписано», а пересчитать этот хэш из ответа НЕЛЬЗЯ: подписывается объект
+ * `CityData` ДО того, как в ответ добавляются `heightReview`, `nofly`,
+ * `vertiportScores` и прочее. Замер (nyc): опубликован d6147d9b…, из тела
+ * ответа 17272fde… — не сходится.
+ *
+ * То есть знак обещал проверяемость, которой не было. Тот же класс, что у
+ * редакции воздушного пространства, и лечится тем же: публикуем ровно ту
+ * строку, которая идёт в sha256. Путь выбран аддитивный — значение хэша не
+ * меняется, знак на витрине остаётся прежним, ломать нечего.
+ */
+qskywayRouter.get("/city/signed-payload", (req: Request, res: Response) => {
+  const resolved = resolveCity(req.query.city);
+  if (!resolved) return refuseUnknownCity(res);
+  const { id, city } = resolved;
+  const payload = JSON.stringify(city);
+  res.json({
+    city: id,
+    contentHash: signCity(id, city).contentHash,
+    payload,
+    payloadBytes: Buffer.byteLength(payload, "utf8"),
+    verifyYourself: {
+      steps: [
+        "1. возьмите payload КАК ЕСТЬ — это строка, которая идёт в хэш; не пересобирайте её",
+        "2. contentHash = sha256(payload в UTF-8), в hex — обязан совпасть с полем contentHash",
+        "3. он же лежит в _signature.contentHash ответа GET /api/qskyway/city?city=" + id,
+        "4. подпись Ed25519 стоит на БАЙТАХ этого хэша; ключ — GET /api/qskyway/health -> signing.publicKey",
+      ],
+      stepsEn: [
+        "1. take the payload AS IS - it is the exact string that goes into the hash; do not re-serialise it",
+        "2. contentHash = sha256(payload as UTF-8) in hex - must equal the contentHash field",
+        "3. the same value is in _signature.contentHash of GET /api/qskyway/city?city=" + id,
+        "4. the Ed25519 signature covers the BYTES of that hash; the key is at GET /api/qskyway/health -> signing.publicKey",
+      ],
+      warning: "Подписан ИМЕННО этот объект, а не ответ /city целиком: там к нему добавлены heightReview, nofly и другие поля. Пересборка payload из ответа /city даст ДРУГОЙ хэш.",
+      warningEn: "This exact object is signed, not the whole /city response: that one has heightReview, nofly and other fields appended. Rebuilding the payload from /city will yield a DIFFERENT hash.",
+    },
+  });
+});
+
+qskywayRouter.get("/airspace/edition", (req: Request, res: Response) => {
+  const resolved = resolveCity(req.query.city);
+  if (!resolved) return refuseUnknownCity(res);
+  const src = AIRSPACE[resolved.id];
+  if (!src) {
+    return res.json({
+      city: resolved.id,
+      available: false,
+      payload: null,
+      contentHash: null,
+      note: "Сетки потолков для этого города регулятор не публикует — редакции, которую можно было бы захэшировать, нет.",
+      noteEn: "The regulator publishes no ceiling grid for this city — there is no edition to hash.",
+    });
+  }
+  const payload = signablePayload(src);
+  res.json({
+    city: resolved.id,
+    available: true,
+    authority: src.authority,
+    source: src.source,
+    effective: src.effective,
+    contentHash: airspaceContentHash(src),
+    payload,
+    payloadBytes: Buffer.byteLength(payload, "utf8"),
+    verifyYourself: {
+      steps: [
+        "1. возьмите поле payload КАК ЕСТЬ — это строка, которая идёт в хэш; не пересобирайте её",
+        "2. contentHash = sha256(payload в кодировке UTF-8), в hex — обязан совпасть с полем contentHash",
+        "3. доказательство времени: GET /api/qskyway/airspace/anchor/verify с этим contentHash и otsProofB64 из /airspace/anchor",
+        "4. attestation Bitcoin проверяется любым клиентом OpenTimestamps: .ots здесь — обычный detached-таймстамп НАД ЭТИМ ДАЙДЖЕСТОМ, а не над файлом",
+      ],
+      stepsEn: [
+        "1. take the payload field AS IS - it is the exact string that goes into the hash; do not re-serialise it",
+        "2. contentHash = sha256(payload as UTF-8) in hex - must equal the contentHash field",
+        "3. for the timestamp: GET /api/qskyway/airspace/anchor/verify with this contentHash and the otsProofB64 from /airspace/anchor",
+        "4. the Bitcoin attestation checks with any OpenTimestamps client: the .ots here is a plain detached timestamp OVER THIS DIGEST, not over a file",
+      ],
+      warning: "Пересборка payload из полей ответа почти наверняка даст ДРУГОЙ хэш: значение имеют порядок ключей, отсутствие пробелов и то, как сериализованы не-ASCII символы.",
+      warningEn: "Rebuilding the payload from the response fields will almost certainly yield a DIFFERENT hash: key order, absence of whitespace and non-ASCII serialisation all matter.",
+    },
+  });
+});
+
 qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const cached = impactCache.get(resolved.id);
   if (cached) return res.json(cached);
   const { id, city } = resolved;
@@ -1323,6 +1685,7 @@ qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
     const none = {
       city: id, available: false,
       note: "Сетки потолков для этого города регулятор не публикует — измерять нечего.",
+      noteEn: "The regulator does not publish ceiling grids for this city — there is nothing to measure.",
     };
     impactCache.set(id, none);
     return res.json(none);
@@ -1360,6 +1723,11 @@ qskywayRouter.get("/airspace/impact", (req: Request, res: Response) => {
     zeroCeilingCells: field.zeroCeilingCells,
     gridCells: field.cols * field.rows,
     note: `${compliant} из ${pairs} маршрутов между площадками укладываются в опубликованный потолок; ${plural(padsNeedingAtc, "площадка стоит", "площадки стоят", "площадок стоят")} там, где автоматического допуска нет вовсе.`,
+    // Английская пара НЕ повторяет конструкцию русской: `plural` склоняет
+    // числительное по русским правилам, а английскому здесь достаточно
+    // единственного и множественного. Копировать вызов было бы дословным
+    // переводом формы, а не смысла.
+    noteEn: `${compliant} of ${pairs} routes between pads fit within the published ceiling; ${padsNeedingAtc} ${padsNeedingAtc === 1 ? "pad stands" : "pads stand"} where there is no automatic authorisation at all.`,
   };
   impactCache.set(id, payload);
   res.json(payload);
@@ -1394,7 +1762,7 @@ const disputeImpactCache = new Map<string, unknown>();
 const substitutionImpactCache = new Map<string, unknown>();
 qskywayRouter.get("/height-substitution", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const cached = substitutionImpactCache.get(resolved.id);
   if (cached) return res.json(cached);
   const { id, city } = resolved;
@@ -1403,6 +1771,7 @@ qskywayRouter.get("/height-substitution", (req: Request, res: Response) => {
     const none = {
       city: id, available: false, buildings: 0, pairs: 0, routable: 0, affectedPairs: 0, maxSegments: 0,
       note: "Высот, подставленных по типу застройки, в этом городе нет: у всех зданий высота либо измерена, либо выведена из этажности самого дома.",
+      noteEn: "There are no heights substituted by building type in this city: every building height is either measured or derived from that building own floor count.",
     };
     substitutionImpactCache.set(id, none);
     return res.json(none);
@@ -1437,7 +1806,7 @@ qskywayRouter.get("/height-substitution", (req: Request, res: Response) => {
 
 qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const cached = disputeImpactCache.get(resolved.id);
   if (cached) return res.json(cached);
   const { id, city } = resolved;
@@ -1446,6 +1815,7 @@ qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
     const none = {
       city: id, available: false, pairs: 0, affectedPairs: 0,
       note: "Высот, которые твин считает спорными и не переопределяет сам, в этом городе нет.",
+      noteEn: "There are no heights that the twin considers disputed and does not override itself in this city.",
     };
     disputeImpactCache.set(id, none);
     return res.json(none);
@@ -1467,7 +1837,8 @@ qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
     const cellCount = [...cells.values()].filter((v) => v === bi).length;
     return {
       building: bi,
-      taggedM: city.buildings[bi]?.h ?? 0,
+      // null, а не 0: ноль здесь означал бы «здание нулевой высоты».
+      taggedM: city.buildings[bi]?.h ?? null,
       cells: cellCount,
       // Элемент источника называем даже без разбора: по нему можно проверить
       // высоту и завести замечание, а разбор появится потом.
@@ -1490,20 +1861,27 @@ qskywayRouter.get("/height-dispute", (req: Request, res: Response) => {
 
 qskywayRouter.get("/vertiports", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const scored = suitability(resolved.id, resolved.city);
   res.json({
     city: resolved.id, count: scored.length, vertiports: scored,
     note: "Скоринг пригодности площадок (открытый радиус, просвет, удалённость от запретных зон). Реальные вертипорты требуют муниципального размещения и наземной инфраструктуры — это алгоритмические кандидаты, не утверждённые площадки.",
+    noteEn: "Pad suitability scoring (open radius, clearance, distance from no-fly zones). Real vertiports require municipal siting and ground infrastructure — these are algorithmic candidates, not approved pads.",
   });
 });
 
 qskywayRouter.post("/route", (req: Request, res: Response) => {
   const { from, to, city, respectCeiling } = req.body ?? {};
-  if (typeof from !== "number" || typeof to !== "number")
-    return res.status(400).json({ error: "нужны числовые from, to (индексы вертипортов)" });
+  // ⚠️ ЦЕЛОЕ, а не просто число. `1.5` проходило `typeof === "number"`, дальше
+  // им индексировали список вертипортов, и ручка отвечала 500 с ПУСТЫМ телом.
+  //
+  // Замер 28.08.2026 перебором граничных входов: из пяти пар четыре дают
+  // честный 422, а `from: 1.5, to: 2.5` — пятисотку. По правилам платформы
+  // неверные данные это 4xx: 500 значит «сломались мы», поднимает людей и
+  // топит Sentry шумом, среди которого не видно настоящих аварий.
+  if (!Number.isInteger(from) || !Number.isInteger(to)) return refuseNonNumericPair(res);
   const resolved = resolveCity(city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const strict = respectCeiling === true;
   const route = buildRoute(resolved.id, resolved.city, from, to, strict);
   if (!route) {
@@ -1514,6 +1892,7 @@ qskywayRouter.post("/route", (req: Request, res: Response) => {
       if (relaxed) {
         return res.status(422).json({
           error: "нет коридора в пределах опубликованного потолка регулятора",
+          errorEn: "no corridor within the regulator's published ceiling",
           reason: "airspace-ceiling",
           respectCeiling: true,
           airspaceIfUnrestricted: relaxed.airspace,
@@ -1523,7 +1902,7 @@ qskywayRouter.post("/route", (req: Request, res: Response) => {
         });
       }
     }
-    return res.status(422).json({ error: "маршрут не найден / некорректные вертипорты / отрезан запретными зонами" });
+    return res.status(422).json({ error: "маршрут не найден / некорректные вертипорты / отрезан запретными зонами", errorEn: "route not found / invalid vertiports / cut off by no-fly zones" });
   }
   // Считается ТОЛЬКО здесь, а не внутри buildRoute: расчёт сам строит теневой
   // маршрут по разобранным высотам, и вложенный вызов ушёл бы в рекурсию.
@@ -1565,6 +1944,38 @@ qskywayRouter.post("/route", (req: Request, res: Response) => {
  * forbidden, not permitted subject to coordination» — именно это различие
  * модуль и защищает от размывания.
  */
+/**
+ * Оговорка о КАЧЕСТВЕ ВЫСОТ для подписанного документа.
+ *
+ * ЗАЧЕМ. 28.08.2026 прочитал готовый документ глазами того, кто понесёт его
+ * регулятору. `scope` честно объясняет воздушное ограничение — вплоть до того,
+ * что документ «служит основанием НЕ для полёта». А про высоты не говорит
+ * ничего, хотя в полях рядом лежит `heightConfidencePct: 82` и тут же
+ * `measuredObstacleSegments: 0` из `obstacleSegments: 20`.
+ *
+ * Первое число успокаивает, второе тревожит, и они об одном и том же. Разницу
+ * модуль знает: `heightConfidencePct` считается по ВСЕМ участкам, включая
+ * открытую землю, и потому разбавлен — рядом уже есть неразбавленный
+ * `confClearOnObstaclesM`, но старое поле намеренно не трогали. В документе для
+ * регулятора «82%» без пояснения читается как «данные хорошие».
+ *
+ * Поэтому оговорка, а не новое вычисление: называем вслух то, что уже посчитано.
+ * `null` — когда говорить нечего: под крылом нет зданий либо все высоты
+ * обмерены городом.
+ */
+function heightScopeNote(
+  obstacleSegments: number,
+  measuredObstacleSegments: number,
+): { ru: string; en: string } | null {
+  if (obstacleSegments <= 0) return null;
+  if (measuredObstacleSegments >= obstacleSegments) return null;
+  const pct = Math.round((100 * measuredObstacleSegments) / obstacleSegments);
+  return {
+    ru: ` Отдельно о высотах: из ${obstacleSegments} участков со зданием под крылом на обмеренной городом высоте стоят ${measuredObstacleSegments} (${pct}%). Остальные выведены из тега или счёта этажей OpenStreetMap либо подставлены — это заявления участников проекта, а не обмер службы. Общий процент уверенности в полях документа считается по ВСЕМ участкам, включая открытую землю, и потому выше этого.`,
+    en: ` On heights specifically: of ${obstacleSegments} segments with a building under the wing, ${measuredObstacleSegments} (${pct}%) stand on a city-surveyed height. The rest are derived from an OpenStreetMap tag or floor count, or substituted — these are contributor statements, not an official survey. The overall confidence percentage in the document fields counts ALL segments, open ground included, and is therefore higher than this.`,
+  };
+}
+
 function scopeTexts(hasCeilingFeed: boolean, perm: CityPermission | undefined): { ru: string; en: string } {
   if (hasCeilingFeed) {
     return {
@@ -1592,12 +2003,18 @@ function scopeTexts(hasCeilingFeed: boolean, perm: CityPermission | undefined): 
 
 qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   const { from, to, city, respectCeiling } = req.body ?? {};
-  if (typeof from !== "number" || typeof to !== "number")
-    return res.status(400).json({ error: "нужны числовые from, to (индексы вертипортов)" });
+  // ⚠️ ЦЕЛОЕ, а не просто число. `1.5` проходило `typeof === "number"`, дальше
+  // им индексировали список вертипортов, и ручка отвечала 500 с ПУСТЫМ телом.
+  //
+  // Замер 28.08.2026 перебором граничных входов: из пяти пар четыре дают
+  // честный 422, а `from: 1.5, to: 2.5` — пятисотку. По правилам платформы
+  // неверные данные это 4xx: 500 значит «сломались мы», поднимает людей и
+  // топит Sentry шумом, среди которого не видно настоящих аварий.
+  if (!Number.isInteger(from) || !Number.isInteger(to)) return refuseNonNumericPair(res);
   const resolved = resolveCity(city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const route = buildRoute(resolved.id, resolved.city, from, to, respectCeiling === true);
-  if (!route) return res.status(422).json({ error: "маршрут не найден — обосновывать нечего" });
+  if (!route) return res.status(422).json({ error: "маршрут не найден — обосновывать нечего", errorEn: "route not found — there is nothing to justify" });
 
   const src = AIRSPACE[resolved.id];
   const twinSig = signCity(resolved.id, resolved.city);
@@ -1617,7 +2034,14 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   // Покрывает все три случая. У города может быть режим разрешений без сетки
   // потолков, и «регуляторного вердикта нет» рядом с режимом в самом документе
   // сделало бы подписанный артефакт противоречащим собственной оговорке.
-  const scopeText = scopeTexts(!!src, PERMISSION[resolved.id]);
+  const scopeBase = scopeTexts(!!src, PERMISSION[resolved.id]);
+  // Оговорка о высотах ДОПИСЫВАЕТСЯ к воздушной, а не заменяет её: это два
+  // разных ограничения, и объединять их в одно предложение значило бы, что
+  // читатель запомнит только первое.
+  const hNote = heightScopeNote(route.obstacleSegments, route.measuredObstacleSegments ?? 0);
+  const scopeText = hNote
+    ? { ru: scopeBase.ru + hNote.ru, en: scopeBase.en + hNote.en }
+    : scopeBase;
 
   // ASCII-only and explicitly ordered: this is the byte sequence the signature
   // covers, so it must not depend on locale, key order, or JSON escaping
@@ -1741,13 +2165,72 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
     scope: scopeText.ru,
     scopeEn: scopeText.en,
     verify: "POST /api/qskyway/route/justification/verify {document, attestation}",
+    /**
+     * Как проверить документ БЕЗ НАС.
+     *
+     * ЗАЧЕМ. Поле `verify` выше отправляет проверяющего к нашей же ручке. Для
+     * того, кто несёт бумагу регулятору, это половина обещания: наш ответ
+     * «подпись верна» стоит ровно столько, сколько доверия к нам.
+     *
+     * Проверить самому можно — всё нужное в документе есть. Но НЕОЧЕВИДНО, на
+     * чём стоит подпись: не на тексте документа, а на БАЙТАХ ХЕША. Я сам
+     * ошибся на этом, когда писал проверку: подписал JSON и получил «не
+     * сходится». Посторонний ошибётся так же, и решит, что документ поддельный.
+     *
+     * Поэтому рецепт — в самом документе, а не в документации, которую к
+     * бумаге не приложат.
+     */
+    verifyYourself: {
+      steps: [
+        "1. canonical = документ как КОМПАКТНЫЙ JSON: без пробелов и переносов, порядок полей как пришёл. В JS это ровно JSON.stringify(document); в python — json.dumps(doc, separators=(',',':'), ensure_ascii=False), потому что по умолчанию он ставит пробелы и хэш не сойдётся",
+        "2. contentHash = sha256(canonical), в hex — обязан совпасть с attestation.contentHash",
+        "3. подпись Ed25519 стоит на БАЙТАХ этого хэша (Buffer.from(contentHash, 'hex')), НЕ на тексте",
+        "4. ключ возьмите у службы: GET /api/qskyway/health -> signing.publicKey (SPKI, base64)",
+        "5. сверьте его с attestation.publicKey: расхождение значит, что подписал не этот сервис",
+      ],
+      stepsEn: [
+        "1. canonical = the document as COMPACT JSON: no spaces, no newlines, key order as received. In JS that is exactly JSON.stringify(document); in Python use json.dumps(doc, separators=(',',':'), ensure_ascii=False) - the default adds spaces and the hash will not match",
+        "2. contentHash = sha256(canonical) in hex - must equal attestation.contentHash",
+        "3. the Ed25519 signature covers the BYTES of that hash (Buffer.from(contentHash, 'hex')), not the text",
+        "4. take the key from the service: GET /api/qskyway/health -> signing.publicKey (SPKI, base64)",
+        "5. compare it with attestation.publicKey: a mismatch means this service did not sign it",
+      ],
+      /**
+       * Проверено 28.08.2026 ПОСТОРОННИМ инструментом на настоящем документе
+       * с прода: openssl сказал «Signature Verified Successfully». Рецепт,
+       * проверенный только тем же языком, на котором написан сервис, проверен
+       * наполовину — этот проверен чужим.
+       */
+      /**
+       * ⚠️ Это НЕ RFC 8785. Соседний модуль платформы (QSign) объявляет у себя
+       * `canonicalization: "RFC8785"`, и знакомый с ним инженер применит её и
+       * здесь — а она переупорядочивает ключи и иначе печатает числа, значит
+       * байты выйдут другими и честный документ прочтётся как поддельный.
+       *
+       * У нас проще и жёстче: подписаны РОВНО ТЕ БАЙТЫ, что пришли. Документ
+       * собран с явным порядком полей, ничего перекладывать не надо и нельзя.
+       */
+      notRfc8785: "Каноникализация RFC 8785 здесь НЕ применяется. Считайте хэш от документа КАК ОН ПРИШЁЛ: не переупорядочивайте ключи и не пересобирайте JSON своей библиотекой.",
+      notRfc8785En: "RFC 8785 canonicalization does NOT apply here. Hash the document AS RECEIVED: do not reorder keys, do not re-serialize it with your own library.",
+      openssl: [
+        "хэш в файл:      printf %s <contentHash> | xxd -r -p > hash.bin",
+        "подпись в файл:  echo <signature> | base64 -d > sig.bin",
+        "ключ в PEM:      обернуть attestation.publicKey в -----BEGIN PUBLIC KEY----- / -----END PUBLIC KEY-----",
+        "проверка:        openssl pkeyutl -verify -pubin -inkey pub.pem -rawin -in hash.bin -sigfile sig.bin",
+      ],
+      limit: "Это доказывает, что документ не менялся после подписи и что подписал его владелец ключа с этого адреса. Что владелец — AEVION, доказывает TLS домена, а не сама подпись.",
+      limitEn: "This proves the document was not altered after signing and that it was signed by the holder of the key served at this address. That the holder is AEVION is proven by the domain's TLS, not by the signature itself.",
+    },
   });
 });
 
 qskywayRouter.post("/route/justification/verify", (req: Request, res: Response) => {
   const { document, attestation } = req.body ?? {};
   if (!document || !attestation?.signature || !attestation?.contentHash)
-    return res.status(400).json({ error: "нужны document и attestation {contentHash, signature}" });
+    return res.status(400).json({
+      error: "нужны document и attestation {contentHash, signature}",
+      errorEn: "document and attestation {contentHash, signature} are required",
+    });
   const contentHash = crypto.createHash("sha256").update(JSON.stringify(document)).digest("hex");
   const hashValid = contentHash === attestation.contentHash;
   let signatureValid = false;
@@ -1805,13 +2288,13 @@ qskywayRouter.post("/route/justification/verify", (req: Request, res: Response) 
 
 qskywayRouter.get("/verify", (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const sig = signCity(resolved.id, resolved.city);
   const twinValid = verifyCity(resolved.city, sig);
   const asSig = signAirspace(resolved.id);
   const airspace = asSig
     ? { attested: true as const, valid: verifyAirspace(resolved.id, asSig), contentHash: asSig.contentHash, effective: AIRSPACE[resolved.id].effective, authority: AIRSPACE[resolved.id].authority }
-    : { attested: false as const, valid: null, note: "Для этого города нет подключённого фида регулятора — подписывать нечего." };
+    : { attested: false as const, valid: null, note: "Для этого города нет подключённого фида регулятора — подписывать нечего.", noteEn: "No regulator feed is connected for this city — there is nothing to sign." };
   res.json({
     city: resolved.id,
     // `valid` stays the twin verdict so existing callers (the UI badge) don't shift meaning.
@@ -1841,9 +2324,24 @@ qskywayRouter.get("/verify", (req: Request, res: Response) => {
 
 // Bitcoin-anchor the ceiling layer: Ed25519 says who signed it, OpenTimestamps
 // says it existed by block N — the edition date stops resting on our clock.
-qskywayRouter.post("/airspace/anchor", async (req: Request, res: Response) => {
+// Сегодня этот путь наружу недостижим: у единственного города готовое
+// доказательство есть, и ветка ниже отдаёт его, не обращаясь в календари.
+// Но защита держится на СОВПАДЕНИИ хеша: поправят данные воздушного
+// пространства — хеш разойдётся, ветка перестанет срабатывать, и каждый
+// запрос пойдёт в чужую инфраструктуру. Предел стоит здесь ровно на этот
+// случай: пока путь закрыт, он не стоит ничего, а в день, когда откроется,
+// поток будет ограничен с первого запроса, а не после жалобы календарей.
+const anchorLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyPrefix: "qskyway-anchor",
+  message: "Слишком много привязок — привязка обращается во внешние календари, попробуйте через минуту."
+    + " / Too many anchor requests — anchoring calls external calendars, try again in a minute.",
+});
+
+qskywayRouter.post("/airspace/anchor", anchorLimiter, async (req: Request, res: Response) => {
   const resolved = resolveCity(req.body?.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   // A public POST that submits to the OpenTimestamps calendars is an open tap
   // into someone else's infrastructure: spam it and we flood them. It is also
   // pointless work — a second timestamp over an identical hash proves nothing
@@ -1863,11 +2361,16 @@ qskywayRouter.post("/airspace/anchor", async (req: Request, res: Response) => {
       calendars: [],
       error: null,
       reused: true,
+      // ⚠️ Тот же рецепт, что и у свежей привязки. Иначе два наших ответа об
+      // ОДНОМ доказательстве отличались бы: у свежего инструкция есть, у
+      // готового — нет, и это зависело бы от того, когда спросили.
+      verifyYourself: anchorRecipe(resolved.id),
       note: "Эта редакция уже привязана и подтверждена Bitcoin — возвращён существующий пруф, повторный штамп не создавался: над тем же хэшем он не доказал бы ничего нового.",
+      noteEn: "This edition is already anchored and confirmed in Bitcoin — the existing proof was returned; no second stamp was created, because over the same hash it would prove nothing new.",
     });
   }
   const anchor = await anchorAirspace(resolved.id);
-  if (!anchor) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — привязывать нечего", city: resolved.id });
+  if (!anchor) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — привязывать нечего", errorEn: "no regulator feed is connected for this city — there is nothing to anchor", city: resolved.id });
   res.json(anchor);
 });
 
@@ -1881,7 +2384,11 @@ const anchorVerifyLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
   keyPrefix: "qskyway-anchor-verify",
-  message: "Слишком много проверок якоря — проверка обращается к внешним календарям, попробуйте через минуту.",
+  // Двуязычно ОДНОЙ строкой: общий лимитер кладёт в ответ ровно одно поле
+  // (`error: message`), пары он не умеет, а менять его ради двух сообщений
+  // значит трогать код, которым пользуются все модули.
+  message: "Слишком много проверок якоря — проверка обращается к внешним календарям, попробуйте через минуту."
+    + " / Too many anchor checks — verification calls external calendars, try again in a minute.",
 });
 
 // A serialized .ots proof for one hash is well under a kilobyte (ours is 3.7 KB
@@ -1894,8 +2401,10 @@ qskywayRouter.post("/airspace/anchor/verify", anchorVerifyLimiter, async (req: R
   if (typeof proofB64 === "string" && proofB64.length > MAX_OTS_PROOF_B64) {
     return res.status(413).json({
       error: "пруф слишком большой",
+      errorEn: "proof too large",
       maxBytesB64: MAX_OTS_PROOF_B64,
       note: "Сериализованный .ots-пруф на один хэш — единицы килобайт; всё, что заметно больше, проверить всё равно не удастся.",
+      noteEn: "A serialised .ots proof for a single hash is a few kilobytes; anything noticeably larger cannot be verified anyway.",
     });
   }
   res.json(await verifyAnchoredAirspace(req.body));
@@ -1915,9 +2424,9 @@ const proofVerdictCache = new Map<string, unknown>();
 
 qskywayRouter.get("/airspace/proof", async (req: Request, res: Response) => {
   const resolved = resolveCity(req.query.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const proof = AIRSPACE_PROOFS[resolved.id];
-  if (!proof) return res.status(404).json({ error: "для этого города вшитого пруфа нет", city: resolved.id });
+  if (!proof) return res.status(404).json({ error: "для этого города вшитого пруфа нет", errorEn: "no built-in proof exists for this city", city: resolved.id });
   const settled = proofVerdictCache.get(resolved.id);
   if (settled) return res.json(settled);
   const current = AIRSPACE[resolved.id] ? airspaceContentHash(AIRSPACE[resolved.id]) : null;
@@ -1957,21 +2466,23 @@ const registerLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
   keyPrefix: "qskyway-airspace-register",
-  message: "Слишком много обращений к реестру — попробуйте через минуту.",
+  message: "Слишком много обращений к реестру — попробуйте через минуту."
+    + " / Too many registry requests — try again in a minute.",
 });
 const registeredCache = new Map<string, { qrightObjectId: string; contentHash: string }>();
 
 qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, res: Response) => {
   const resolved = resolveCity(req.body?.city);
-  if (!resolved) return res.status(404).json({ error: "неизвестный город", available: Object.keys(CITIES) });
+  if (!resolved) return refuseUnknownCity(res);
   const src = AIRSPACE[resolved.id];
-  if (!src) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — регистрировать нечего", city: resolved.id });
+  if (!src) return res.status(422).json({ error: "для этого города нет подключённого фида регулятора — регистрировать нечего", errorEn: "no regulator feed is connected for this city — there is nothing to register", city: resolved.id });
   const known = registeredCache.get(resolved.id);
   if (known && known.contentHash === airspaceContentHash(src)) {
     return res.json({
       ok: true, alreadyRegistered: true, qrightObjectId: known.qrightObjectId,
       contentHash: known.contentHash, link: "/qright",
       note: "Эта редакция уже зарегистрирована — ответ из памяти процесса, база не запрашивалась.",
+      noteEn: "This edition is already registered — the answer came from process memory, the database was not queried.",
     });
   }
 
@@ -2001,6 +2512,7 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
         ok: true, alreadyRegistered: true, qrightObjectId: row.id, contentHash,
         registeredAt: row.createdAt, link: "/qright",
         note: "Эта редакция уже зарегистрирована — хэш совпадает, дубликат не создан.",
+      noteEn: "This edition is already registered — the hash matches, no duplicate was created.",
       });
     }
     const objectId = "qs-" + crypto.randomUUID().slice(0, 12);
@@ -2014,6 +2526,7 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
       ok: true, alreadyRegistered: false, qrightObjectId: objectId, contentHash,
       authority: src.authority, effective: src.effective, link: "/qright",
       note: "Редакция ограничений внесена в реестр QRight как датированный объект.",
+      noteEn: "The restrictions edition has been entered into the QRight registry as a dated object.",
     });
   } catch (err) {
     // Реестр QRight — не опциональная база: сказать «не выполнено» честнее, чем
@@ -2027,8 +2540,10 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
     console.warn("[qskyway] airspace register failed:", err instanceof Error ? err.message : err);
     res.status(503).json({
       error: "реестр QRight недоступен — регистрация не выполнена",
+      errorEn: "QRight registry unavailable — registration was not performed",
       contentHash,
       note: "Подпись и якорь слоя не затронуты; повторите регистрацию, когда база доступна.",
+      noteEn: "The layer signature and anchor are untouched; retry registration when the database is available.",
     });
   }
 });
@@ -2044,7 +2559,7 @@ qskywayRouter.get("/slots", async (_req: Request, res: Response) => {
       error: "рынок слотов недоступен: не удалось прочитать хранилище",
       errorEn: "the slot market is unavailable: the store could not be read",
       store: "postgres",
-      detail: e instanceof Error ? e.message : String(e),
+      detail: safeErrorText(e, "хранилище недоступно"),
     });
   }
   // `count` остаётся прежним (все записи) — на него опирается прод-смок и
@@ -2085,7 +2600,7 @@ qskywayRouter.get("/slots/:id/verify", async (req: Request, res: Response) => {
     return res.status(503).json({
       error: "проверка невозможна: хранилище слотов недоступно",
       errorEn: "verification is impossible: the slot store is unavailable",
-      detail: e instanceof Error ? e.message : String(e),
+      detail: safeErrorText(e, "хранилище недоступно"),
     });
   }
   const slot = slots.find((s) => s.id === String(req.params.id));
@@ -2095,14 +2610,42 @@ qskywayRouter.get("/slots/:id/verify", async (req: Request, res: Response) => {
       errorEn: "slot not found",
       // «Не найден» и «подделан» — разные ответы; сливать их нельзя.
       note: "Это не признак подделки: слота с таким идентификатором в хранилище нет.",
+      noteEn: "This is not a sign of forgery: no slot with this identifier exists in storage.",
     });
   }
   const expected = slotReceipt(slot);
   const matches = expected === slot.receipt;
+  // ⚠️ Отдаём ТЕ САМЫЕ байты, а не «эквивалентные».
+  //
+  // 29.08.2026: ручка сообщала только `matches`. То есть проверяющий узнавал,
+  // что МЫ говорим, будто сходится, — и не мог убедиться сам. Для страницы,
+  // которая обещает «по квитанции видно, что запись не изменялась», это
+  // обещание, выполняемое нашим же честным словом.
+  //
+  // Тот же класс, что и с редакцией воздушного пространства: публиковали
+  // доказательство и не публиковали доказываемое. Здесь дешевле — секрета в
+  // квитанции нет по устройству (это контрольная сумма публичных полей),
+  // поэтому отдать входные байты можно без каких-либо последствий.
+  const payload = JSON.stringify({ ...slot, receipt: "" });
   res.json({
     id: slot.id,
     receipt: slot.receipt,
     matches,
+    payload,
+    verifyYourself: {
+      steps: [
+        "1. возьмите payload КАК ЕСТЬ — это строка, которая идёт в хэш; не пересобирайте её",
+        "2. посчитайте sha256(payload в UTF-8), возьмите hex",
+        "3. квитанция = \"qright:\" + первые 32 символа этого hex — обязана совпасть с полем receipt",
+      ],
+      stepsEn: [
+        "1. take payload AS IS - it is the exact string that goes into the hash; do not re-serialise it",
+        "2. compute sha256(payload as UTF-8), take the hex digest",
+        "3. the receipt is \"qright:\" + the first 32 characters of that hex - it must equal the receipt field",
+      ],
+      warning: "Секрета в квитанции НЕТ: это контрольная сумма публичных полей. Она показывает, что запись не менялась, и НЕ доказывает, что выдали её мы.",
+      warningEn: "The receipt holds NO secret: it is a checksum over public fields. It shows the record is unaltered; it does NOT prove we issued it.",
+    },
     note: matches
       ? "Запись не изменялась с момента выдачи квитанции."
       : "Содержимое записи не сходится с квитанцией — запись изменена после выдачи.",
@@ -2114,11 +2657,41 @@ qskywayRouter.get("/slots/:id/verify", async (req: Request, res: Response) => {
   });
 });
 
-qskywayRouter.post("/slots", async (req: Request, res: Response) => {
+/**
+ * Бронь пишет в БОЕВУЮ базу и не спрашивает, кто звонит.
+ *
+ * Замер 28.08.2026: у двух ручек модуля ограничитель есть (проверка якоря,
+ * регистрация редакции), а у ЗАПИСИ его не было. То есть единственная ручка
+ * модуля, которая создаёт строки, оказалась единственной без предела.
+ *
+ * Опознания звонящего здесь нет и не будет: демо-кнопка на публичной странице
+ * подписывается зашитым «AEVION demo», имени посетителя мы не спрашиваем. Пока
+ * так, предел по адресу — единственное, что отделяет 41 запись от сорока тысяч.
+ *
+ * Число 6 в минуту выбрано не с потолка: человек на странице делает одну бронь
+ * за раз и смотрит на квитанцию; шесть — это вчетверо больше самого нетерпеливого
+ * и вчетверо меньше того, что заметно нагрузит базу.
+ */
+const slotBookLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 6,
+  keyPrefix: "qskyway-slot-book",
+  // Двуязычно одной строкой — как у соседей: общий лимитер кладёт в ответ одно
+  // поле, пары он не умеет.
+  message: "Слишком много броней подряд — подождите минуту."
+    + " / Too many bookings in a row — wait a minute.",
+});
+
+qskywayRouter.post("/slots", slotBookLimiter, async (req: Request, res: Response) => {
   const { routeId, t0, t1, holder } = req.body ?? {};
-  if (!routeId || !t0 || !t1 || !holder) return res.status(400).json({ error: "нужны routeId, t0, t1, holder" });
+  if (!routeId || !t0 || !t1 || !holder) {
+    return res.status(400).json({
+      error: "нужны routeId, t0, t1, holder",
+      errorEn: "routeId, t0, t1, holder are required",
+    });
+  }
   const a0 = Date.parse(t0), a1 = Date.parse(t1);
-  if (isNaN(a0) || isNaN(a1) || a1 <= a0) return res.status(400).json({ error: "некорректное окно времени (ISO-8601, t1>t0)" });
+  if (isNaN(a0) || isNaN(a1) || a1 <= a0) return res.status(400).json({ error: "некорректное окно времени (ISO-8601, t1>t0)", errorEn: "invalid time window (ISO-8601, t1>t0)" });
   const result = await bookSlot(String(routeId), String(t0), String(t1), String(holder));
   // Две причины отказа — два разных ответа. «Слот занят» (409) говорит о рынке,
   // «хранилище недоступно» (503) — о нас, и путать их нельзя: первое читается
@@ -2128,9 +2701,10 @@ qskywayRouter.post("/slots", async (req: Request, res: Response) => {
       error: "право не зафиксировано: хранилище слотов недоступно",
       errorEn: "the right was not recorded: the slot store is unavailable",
       note: "Квитанция не выдана намеренно. Записать бронь в память было бы хуже отказа: она не попала бы ни в список, ни в проверку лимита, а квитанция утверждала бы обратное.",
+      noteEn: "No receipt was issued, deliberately. Recording the booking in memory would be worse than refusing: it would appear in neither the list nor the quota check, while a receipt would claim otherwise.",
     });
   }
-  if (!result.ok) return res.status(409).json({ error: "слот занят", routeId, capacity: SLOT_CAPACITY, concurrent: result.concurrent });
+  if (!result.ok) return res.status(409).json({ error: "слот занят", errorEn: "slot is taken", routeId, capacity: SLOT_CAPACITY, concurrent: result.concurrent });
   res.status(201).json({
     ok: true,
     slot: result.slot,

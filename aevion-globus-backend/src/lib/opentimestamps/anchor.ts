@@ -14,7 +14,73 @@ import * as OpenTimestamps from "opentimestamps";
 export type AnchorStatus =
   | "pending"            // submitted to OT calendars, no Bitcoin attestation yet
   | "bitcoin-confirmed"  // at least one BitcoinBlockHeaderAttestation present
-  | "failed";            // network failure during stamp; proof not created
+  | "failed"             // network failure during stamp; proof not created
+  // Нечего оценивать: доказательство не прислали, прислали не-base64 или у
+  // снимка нет хеша. Раньше эти случаи докладывались как "pending", то есть
+  // «подано, ждём Bitcoin» — и это про продукт о доказуемости было хуже
+  // отсутствия поля: снаружи неотличимо от честного ожидания.
+  | "not-submitted"
+  // Доказательство прислали, и оно проверку НЕ прошло. Раньше этот случай
+  // тоже докладывался как "pending": статус считался по высоте блока и не
+  // смотрел на исход проверки вовсе. Снаружи «недействительно» выглядело
+  // как «ещё не подтвердилось, зайдите позже» — ложь в выгодную нам сторону.
+  | "invalid";
+
+/**
+ * Что значит статус и что делать человеку — рядом с самим статусом.
+ *
+ * ПОВОД. 29.08.2026 мы завели два новых значения (`invalid`, `not-submitted`),
+ * потому что отказ прежде докладывался как ожидание. Но продукт обещает
+ * «проверьте сами», а слово, которое получает третья сторона, не объяснено
+ * нигде: ни в ответе, ни в рецепте самопроверки. Различие «подождите» против
+ * «ждать бессмысленно» — как раз то, ради чего всё и правилось; оставить его
+ * невысказанным значит сделать работу наполовину.
+ *
+ * ⚠️ Тип `Record<AnchorStatus, …>` здесь не косметика: он ЗАСТАВИТ автора
+ * нового статуса написать пояснение — иначе сборка не пройдёт. Проверка
+ * временем компиляции надёжнее сторожа, потому что её нельзя забыть запустить.
+ */
+export interface AnchorStatusMeaning {
+  /** Что произошло. */
+  ru: string;
+  en: string;
+  /** Что делать дальше — короткой строкой, без «см. документацию». */
+  nextRu: string;
+  nextEn: string;
+}
+
+export const ANCHOR_STATUS_MEANING: Record<AnchorStatus, AnchorStatusMeaning> = {
+  "bitcoin-confirmed": {
+    ru: "Хэш привязан к блоку Bitcoin.",
+    en: "The hash is anchored to a Bitcoin block.",
+    nextRu: "Ничего делать не нужно — это доказано.",
+    nextEn: "Nothing to do — this is proven.",
+  },
+  pending: {
+    ru: "Доказательство подано в календари, привязки к блоку Bitcoin ещё нет.",
+    en: "Submitted to the calendars; no Bitcoin block attestation yet.",
+    nextRu: "Повторите проверку позже — обычно занимает от часа до шести.",
+    nextEn: "Re-verify later — this usually takes one to six hours.",
+  },
+  invalid: {
+    ru: "Доказательство не сходится с этим хэшем.",
+    en: "The proof does not check out against this hash.",
+    nextRu: "Ждать бессмысленно: проверьте, тот ли хэш и то ли доказательство.",
+    nextEn: "Waiting will not help: check that the hash and the proof belong together.",
+  },
+  "not-submitted": {
+    ru: "Оценивать нечего: доказательство не прислали или его формат негоден.",
+    en: "Nothing to evaluate: no proof was supplied, or its format is unusable.",
+    nextRu: "Пришлите otsProofB64 и contentHash — см. поле error.",
+    nextEn: "Supply otsProofB64 and contentHash — see the error field.",
+  },
+  failed: {
+    ru: "Сбой сети при обращении к календарям; доказательство не создано.",
+    en: "Network failure while reaching the calendars; no proof was created.",
+    nextRu: "Повторите привязку — подпись Ed25519 этим не затронута.",
+    nextEn: "Retry the anchor — the Ed25519 signature is unaffected.",
+  },
+};
 
 export interface AnchorStampResult {
   status: AnchorStatus;
@@ -37,6 +103,17 @@ export interface AnchorVerifyResult {
   bitcoinBlockHeight: number | null;
   attestations: string[];         // human-readable list
   error: string | null;
+  /**
+   * ПОЧЕМУ не получилось — различитель, без которого `ok:false` двусмыслен.
+   *
+   * `ok` ложен в ДВУХ разных случаях: доказательство ещё не привязано к блоку
+   * (честное ожидание, повторите позже) и доказательство не сходится вовсе
+   * (ждать бессмысленно). Раньше вызывающие не могли их отличить и звали оба
+   * "pending" — то есть недействительному доказательству отвечали «зайдите
+   * позже». Угадывать по тексту ошибки нельзя: он приходит из чужой
+   * библиотеки и меняется с её версией.
+   */
+  reason: "awaiting-bitcoin" | "proof-error" | null;
 }
 
 function extractBitcoinHeight(detached: any): number | null {
@@ -190,6 +267,7 @@ export async function verifyProof(
         bitcoinBlockHeight: null,
         attestations: summary,
         error: "no Bitcoin attestation yet (still pending)",
+        reason: "awaiting-bitcoin",
       };
     }
     // verify() returns a Map<Buffer, number> of attestations verified against
@@ -200,6 +278,7 @@ export async function verifyProof(
       bitcoinBlockHeight: height,
       attestations: summary,
       error: null,
+      reason: null,
     };
   } catch (err: unknown) {
     return {
@@ -207,6 +286,7 @@ export async function verifyProof(
       bitcoinBlockHeight: null,
       attestations: [],
       error: err instanceof Error ? err.message : String(err),
+      reason: "proof-error",
     };
   }
 }

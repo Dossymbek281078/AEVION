@@ -61,6 +61,38 @@ function pathIn(text: string): string | null {
  * Тело функции по имени — грубо, от объявления до следующего объявления
  * верхнего уровня. Точный разбор тут не нужен: путь стоит в `return`.
  */
+/**
+ * Путь по ЦЕПОЧКЕ вызовов, включая переход в соседний файл.
+ *
+ * Глубина ограничена тремя шагами намеренно: этого хватает на нашу цепочку с
+ * запасом, а неограниченный обход по всему каталогу начал бы притаскивать
+ * посторонние пути и превратил бы находку в шум. Пройденные имена помним —
+ * иначе взаимный вызов зациклил бы разбор.
+ */
+function pathViaCalls(line: string, ownText: string, depth = 3, seen = new Set<string>()): string | null {
+  const call = /:?\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(line);
+  if (!call || depth <= 0) return null;
+  const name = call[1];
+  if (seen.has(name)) return null;
+  seen.add(name);
+
+  // Сперва свой файл, потом остальные файлы платежей: помощник мог переехать.
+  const texts = [ownText, ...providerFiles().map((f) => readFileSync(f, "utf8"))];
+  for (const t of texts) {
+    const body = functionBody(t, name);
+    if (!body) continue;
+    const here = pathIn(body);
+    if (here) return here;
+    // Путь глубже: тело зовёт следующий помощник.
+    for (const l of body.split("\n")) {
+      if (!/return\s|=\s/.test(l)) continue;
+      const deeper = pathViaCalls(l, t, depth - 1, seen);
+      if (deeper) return deeper;
+    }
+  }
+  return null;
+}
+
 function functionBody(text: string, name: string): string | null {
   const at = text.indexOf(`function ${name}(`);
   if (at < 0) return null;
@@ -104,11 +136,23 @@ function returnPaths(): Array<{ path: string; file: string }> {
         add(direct);
         continue;
       }
-      // Значение — вызов функции: путь внутри неё.
-      const call = /:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(line);
-      if (!call) continue;
-      const body = functionBody(text, call[1]);
-      const viaFn = body ? pathIn(body) : null;
+      // Значение — вызов функции: идём по ЦЕПОЧКЕ вызовов, а не на один шаг.
+      //
+      // ⚠️ Расширено 31.08.2026. Прежняя версия шла на ОДИН уровень и только в
+      // том же файле, и этого хватало ровно до консолидации 30.08: адрес
+      // возврата лежал в ТРЁХ копиях, их свели в общий `buildSuccessUrl`
+      // (lib/payment/successUrl.ts). После этого цепочка стала такой:
+      //
+      //     redirect_url: successRedirectUrl(...)      ← поле есть, пути нет
+      //       -> successRedirectUrl = buildSuccessUrl(...)   ← и здесь нет
+      //         -> `${base}/pricing/checkout/success`        ← путь ЗДЕСЬ, в другом файле
+      //
+      // Ни одна строка не проходит оба условия сразу, поэтому разбор потерял
+      // самую дорогую кассу. Заметил это не глаз и не тип, а КОНТРОЛЬ ОХВАТА
+      // рядом с проверкой: «адреса возврата вообще найдены». Без него
+      // консолидация прошла бы молча, а покрытие исчезло бы — проверка
+      // «каждая страница считает возврат» осталась бы зелёной на пустом списке.
+      const viaFn = pathViaCalls(line, text);
       if (viaFn) add(viaFn);
     }
   }

@@ -72,6 +72,14 @@ const SHOP_IDS = shopIds();
 const PRICED = new Set(
   MODULES_PRICING.filter((m) => typeof m.addonMonthly === "number" && (m.addonMonthly as number) > 0).map((m) => m.id),
 );
+/**
+ * Видимость модуля на /pricing даёт НАЛИЧИЕ ЗАПИСИ, а не цена надстройки.
+ * Первая редакция проверки ниже мерила видимость через PRICED (цена > 0) и
+ * из-за этого требовала цену там, где цену ставить нельзя: у DevHub оплата
+ * надстройки прошла бы, а доступ не выдался (см. devhubAddonOnlyWhenEntitled).
+ * Мерило было неверным, требование — верным.
+ */
+const IN_CATALOG = new Set(MODULES_PRICING.map((m) => m.id));
 const SELLABLE = projects.filter((p) => p.status === "live" || p.status === "mvp");
 
 function canBeBought(id: string): boolean {
@@ -106,7 +114,7 @@ function monthlyShopModules(): string[] {
       const rest = parts[i].slice(aidAt + 8);
       alias = rest.slice(0, rest.indexOf('"'));
     }
-    out.push(alias && PRICED.has(alias) ? alias : id);
+    out.push(alias && IN_CATALOG.has(alias) ? alias : id);
   }
   return out;
 }
@@ -183,7 +191,7 @@ describe("живой модуль можно оплатить или сказа�
   });
 
   test("модуль-подписка из магазина есть и в каталоге цен", () => {
-    const missing = monthlyShopModules().filter((id) => !PRICED.has(id));
+    const missing = monthlyShopModules().filter((id) => !IN_CATALOG.has(id));
     expect(
       missing,
       "модуль продаётся на /apps как подписка, но на /pricing его нет вовсе: " +

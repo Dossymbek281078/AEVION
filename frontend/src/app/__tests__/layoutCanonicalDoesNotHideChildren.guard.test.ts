@@ -41,7 +41,15 @@ function declaredCanonical(dir: string): string | null {
   if (i < 0) return null;
   const rest = src.slice(i + "canonical:".length);
   const m = /^[\s]*[`"']([^`"']+)/.exec(rest);
-  return m ? m[1] : null;
+  // canonical может задаваться ПЕРЕМЕННОЙ внутри generateMetadata:
+  // `alternates: { canonical: url }`. Раньше шаблон не совпадал, функция
+  // отвечала null — «макет промолчал», — и обход уходил ВЫШЕ, до макета
+  // раздела. Оттуда бралась ссылка на раздел, и страница объявлялась
+  // уводящей. Замер 31.08.2026: так были оболганы карточки startup-exchange,
+  // у которых на проде canonical правильный, по своему адресу.
+  // Значение статически неизвестно — возвращаем метку «свой, динамический».
+  if (!m) return "*динамический*";
+  return m[1];
 }
 
 /** Действующий canonical страницы — ближайший объявленный вверх по дереву. */
@@ -113,6 +121,8 @@ describe("страница в карте сайта не уводит canonical 
   const away = pages
     .map((segs) => ({ url: toUrl(segs), canon: effectiveCanonical(APP, segs) }))
     .filter((x) => x.canon !== null)
+    // объявил свой canonical через generateMetadata — не уводящий
+    .filter((x) => x.canon !== "*динамический*")
     .map((x) => ({ url: x.url, canon: (x.canon as string).replace("${SITE}", "").replace(SITE, "") }))
     .filter((x) => x.canon.replace(/\/+$/, "") !== x.url.replace(/\/+$/, ""));
 

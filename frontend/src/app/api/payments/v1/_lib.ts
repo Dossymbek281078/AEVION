@@ -65,6 +65,17 @@ export type ApiSettlement = {
   paid_at: number | null;
   reference: string;
   payments: number;
+  /**
+   * true — запись из НАЧАЛЬНОГО НАБОРА, а не настоящая выплата.
+   *
+   * Стор выплат засеивается образцами при старте (единственный из всех:
+   * ссылки, споры, вебхуки и подписки начинаются пустыми). Суммы там
+   * правдоподобные — 124500 со статусом paid, — и в ответе ничто не говорило,
+   * что это образец. Интегратор и наша же панель показали бы «выплачено
+   * $1 245.00», которых не было. Признак нужен в САМОЙ записи: ответ
+   * путешествует один, и по нему нельзя спросить, откуда он взялся.
+   */
+  sample?: true;
   royalty: { party: string; share: number }[];
 };
 
@@ -104,6 +115,7 @@ function seedSettlements(): Map<string, ApiSettlement> {
   const map = new Map<string, ApiSettlement>();
   const samples: ApiSettlement[] = [
     {
+      sample: true as const,
       id: "st_q9w2k4",
       amount: 124500,
       currency: "USD",
@@ -121,6 +133,7 @@ function seedSettlements(): Map<string, ApiSettlement> {
       ],
     },
     {
+      sample: true as const,
       id: "st_b8h5n2",
       amount: 38900,
       currency: "EUR",
@@ -199,10 +212,42 @@ export function signHmac(secret: string, body: string) {
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
+export function readLimit(
+  raw: string | null,
+  опции: { поумолчанию: number; максимум: number }
+): number {
+  // 31.08.2026. Здесь стояло `Number(searchParams.get("limit") ?? 25)` в трёх
+  // местах. На мусоре (`?limit=zzz`) это даёт NaN, а NaN проходит сквозь
+  // Math.min невредимым: `slice(0, NaN)` возвращает ПУСТОЙ список, и ответ
+  // читается как «у вас ничего нет». Для журнала выплат и аудита платежей это
+  // не пустяк: пустой список неотличим от честного ответа.
+  //
+  // Помощник один на всех, чтобы не появилась четвёртая копия: сегодня три
+  // копии форматирования валюты и три сборки адреса возврата разошлись именно
+  // так.
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return опции.поумолчанию;
+  return Math.min(опции.максимум, Math.floor(n));
+}
+
 export function badRequest(message: string, code = 400) {
   return Response.json(
     { error: { type: "invalid_request_error", message } },
     { status: code }
+  );
+}
+
+export function storageUnavailableError(message: string) {
+  // 31.08.2026. У этой ситуации в модуле УЖЕ было решение: споры и аудит
+  // отвечают типом "storage_unavailable" (четыре места). Утром я, починяя
+  // возвраты, завёл для того же случая свой api_error — и получился третий
+  // словарь для одного смысла. Здесь возвращаю прежнее решение: оно старше,
+  // оно точнее (называет ЧТО именно недоступно), и менять его ради своего
+  // предпочтения незачем. api_error остаётся для случаев, когда хранилище
+  // исправно, а ответить мы всё равно не можем.
+  return Response.json(
+    { error: { type: "storage_unavailable", message } },
+    { status: 503 }
   );
 }
 

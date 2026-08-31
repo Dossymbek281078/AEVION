@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 // 29.08.2026: публичная страница платёжного API обещала «100 req/sec», а код
@@ -28,5 +28,37 @@ describe("предел частоты на витрине совпадает с 
       (l) => l.includes("req/sec") && !l.trim().startsWith("{/*") && !l.trim().startsWith("*")
     );
     expect(proseSec, "страница снова обещает запросы в секунду").toEqual([]);
+  });
+
+  it("предел, отличный от общего, назван в контракте", () => {
+    // 31.08.2026. Число на витрине я привёл к коду и на этом остановился, а
+    // предел у обработчиков не один: тестовая доставка вебхука держит 30 в
+    // минуту, вдвое строже общего. Интегратор, считающий по витрине, получил
+    // бы отказ на половине заявленного темпа.
+    const spec = readFileSync(join(R, "app", "api", "openapi.json", "route.ts"), "utf8");
+    const свои: number[] = [];
+    const обойти = (dir: string) => {
+      for (const i of readdirSync(dir, { withFileTypes: true })) {
+        if (i.name === "__tests__") continue;
+        const путь = join(dir, i.name);
+        if (i.isDirectory()) обойти(путь);
+        else if (i.name === "route.ts") {
+          for (const m of readFileSync(путь, "utf8").matchAll(
+            /gateRequest\(\s*req\s*,\s*\{\s*limit:\s*(\d+)/g
+          )) свои.push(Number(m[1]));
+        }
+      }
+    };
+    обойти(join(R, "app", "api", "payments", "v1"));
+
+    // Знаменатель: такой обработчик заведомо есть. Пустой список означал бы
+    // сломанный обход, а не отсутствие исключений.
+    expect(свои.length, "обработчиков со своим пределом не найдено — обход сломан")
+      .toBeGreaterThan(0);
+
+    const необъявленные = свои.filter(
+      (n) => !spec.includes(`${n} requests per minute`)
+    );
+    expect(необъявленные, "у обработчика свой предел, а в контракте о нём нет").toEqual([]);
   });
 });

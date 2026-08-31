@@ -67,6 +67,8 @@ describe("возврат не выдаётся, если прошлые возв
     // Наша неуверенность — не ошибка клиента: с типом invalid_request_error
     // интегратор уходит отлаживать безупречный запрос, а с «please retry»
     // это ещё и противоречие. Тип обязан называть НАШУ сторону.
-    expect((тело as { error?: { type?: string } })?.error?.type).toBe("api_error");
+    expect((тело as { error?: { type?: string } })?.error?.type).toBe(
+      "storage_unavailable"
+    );
   });
 });

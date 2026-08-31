@@ -20,6 +20,13 @@ const SPEC = {
       },
     },
     parameters: {
+      IdempotentReplayed: {
+        name: "Idempotent-Replayed",
+        in: "header",
+        description:
+          "Present and set to \"true\" when this response was replayed from a previous request with the same Idempotency-Key. Its absence means the action was performed now. On refunds this is the difference between money that moved and money that did not.",
+        schema: { type: "string", enum: ["true"] },
+      },
       IdempotencyKey: {
         name: "Idempotency-Key",
         in: "header",
@@ -73,6 +80,8 @@ const SPEC = {
                   "invalid_request_error",
                   "rate_limit_error",
                   "api_error",
+                  "storage_unavailable",
+                  "not_found",
                 ],
               },
               message: { type: "string" },
@@ -222,6 +231,11 @@ const SPEC = {
           paid_at: { type: ["integer", "null"] },
           reference: { type: "string" },
           payments: { type: "integer" },
+          sample: {
+            type: "boolean",
+            description:
+              "Present and true when this settlement comes from the starter data set, not from a real payout. Absent on real settlements. The field lives on the record itself because a response travels alone: nothing else in it says where it came from.",
+          },
           royalty: {
             type: "array",
             items: {
@@ -716,7 +730,7 @@ const SPEC = {
         summary: "Send a test delivery to a webhook endpoint",
         operationId: "testWebhook",
         description:
-          "Signs a sample payload with the endpoint secret and delivers it to the registered URL, so you can verify your signature check end to end. Returns 200 when your endpoint accepted the delivery and 502 when it did not; the body carries the outcome either way, including the signature we sent.",
+          "Rate limited to 30 requests per minute — half the platform default, because each call makes us open a connection to your server. Signs a sample payload with the endpoint secret and delivers it to the registered URL, so you can verify your signature check end to end. Returns 200 when your endpoint accepted the delivery and 502 when it did not; the body carries the outcome either way, including the signature we sent.",
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" } },
         ],

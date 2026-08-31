@@ -3,6 +3,7 @@ import {
   attachRateHeaders,
   badRequest,
   apiError,
+  storageUnavailableError,
   checkIdempotency,
   gateRequest,
   genId,
@@ -43,9 +44,8 @@ export async function GET(req: NextRequest) {
   if (!read.ok) {
     return attachRateHeaders(
       withCors(
-        apiError(
-          "Refund storage is temporarily unreachable. Please retry.",
-          503
+        storageUnavailableError(
+          "Refund storage is temporarily unreachable. Please retry."
         )
       ),
       gate.rateHeaders
@@ -77,7 +77,15 @@ export async function POST(req: NextRequest) {
       withCors(
         new Response(idem.cachedBody, {
           status: 200,
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            // 31.08.2026. Заголовок ставили ЧЕТВЕРО обработчиков из пяти —
+            // ссылки, чекаут, подписки, вебхуки, — и не ставили возвраты.
+            // Без него повтор неотличим от новой выдачи: продавец видит 200 и
+            // объект возврата и не может сказать, ушли ли деньги ещё раз.
+            // Именно на денежном возврате это нужнее всего.
+            "idempotent-replayed": "true",
+          },
         })
       ),
       gate.rateHeaders
@@ -127,9 +135,8 @@ export async function POST(req: NextRequest) {
   if (!priorRead.ok) {
     return attachRateHeaders(
       withCors(
-        apiError(
-          "Cannot read prior refunds right now; refund not issued. Please retry.",
-          503
+        storageUnavailableError(
+          "Cannot read prior refunds right now; refund not issued. Please retry."
         )
       ),
       gate.rateHeaders

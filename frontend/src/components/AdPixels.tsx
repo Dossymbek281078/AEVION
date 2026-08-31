@@ -1,5 +1,6 @@
 "use client";
 
+import { сигналОПокупке } from "@/lib/adPurchaseSignal";
 import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
@@ -114,9 +115,14 @@ export function AdPixels() {
 
     const onTrack = (e: Event) => {
       const d = (e as CustomEvent).detail as
-        | { type?: string; meta?: Record<string, unknown> }
+        | { type?: string; value?: unknown; meta?: Record<string, unknown> }
         | undefined;
-      if (!d || d.type !== "checkout_start") return;
+      if (!d) return;
+      if (d.type === "checkout_success") {
+        onSuccess(d);
+        return;
+      }
+      if (d.type !== "checkout_start") return;
       ужеОтправлено = true;
       // Флаг живёт один кадр: он гасит клик по ТОЙ ЖЕ ссылке, а не следующую
       // покупку. Без сброса второй заход в кассу остался бы неучтённым.
@@ -125,6 +131,40 @@ export function AdPixels() {
       }, 0);
       const id = typeof d.meta?.product === "string" ? d.meta.product : null;
       пометить(id);
+    };
+
+    /*
+     * Покупка. Четыре кассы возвращают покупателя на наш экран
+     * `/pricing/checkout/success`, и он шлёт `checkout_success` — но до сегодня
+     * счётчик это событие не слушал вовсе. Значит площадки не знали НИ ОБ ОДНОЙ
+     * покупке, а именно на покупках они и учатся: без них показы оптимизируются
+     * по заходам в кассу, то есть по намерению вместо результата.
+     *
+     * Две границы, каждая куплена разбором кода экрана:
+     *
+     * 1. Бесплатное — не покупка. У свободного тарифа возврат несёт `total=0`,
+     *    а у заглушки `stub=true`. Посчитать их значило бы учить площадку
+     *    приводить людей, которые не платят.
+     *
+     * 2. Meta у возврата Gumroad пропускается. Gumroad шлёт Purchase сам —
+     *    из настроек товара, полем Facebook Pixel ID. Свой Purchase поверх дал
+     *    бы ДВОЙНОЙ счёт, а завышенная выручка хуже отсутствующей: по ней
+     *    принимают решение о бюджете. Обратная сторона честная: если поле в
+     *    Gumroad не заполнено, Meta покупок оттуда не увидит — это тот самый
+     *    ручной шаг, что описан в шапке файла.
+     *
+     * TikTok шлём всегда: у Gumroad поле только для Facebook, и без нас
+     * TikTok не узнает о покупке ни от кого.
+     *
+     * Сумму передаём, только если знаем: у PayBox в адрес возврата уходит ref,
+     * а не сумма. Ноль вместо неизвестного сказал бы, что покупка ничего не
+     * стоила, и это хуже молчания.
+     */
+    const onSuccess = (d: { value?: unknown; meta?: Record<string, unknown> }) => {
+      const сигнал = сигналОПокупке(d);
+      if (!сигнал) return;
+      if (сигнал.вMeta) window.fbq?.("track", "Purchase", сигнал.деньги);
+      if (сигнал.вTikTok) window.ttq?.track("CompletePayment", сигнал.деньги);
     };
 
     const onClick = (e: MouseEvent) => {

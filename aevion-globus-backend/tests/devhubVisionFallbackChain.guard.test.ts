@@ -61,6 +61,37 @@ describe("скриншот в код: отказ провайдера не ро�
     expect(calls).toEqual(["anthropic", "gemini", "openai"]);
   });
 
+  test("картинка есть, зрячих провайдеров НЕТ — честный отказ, а не тихая потеря", async () => {
+    // Граница, которая до 31.08.2026 не была покрыта ни одним из тридцати
+    // тестов модуля. Поведение существовало и раньше; я его сохранил, меняя
+    // выбор провайдера на перебор, но сохранил БЕЗ доказательства.
+    //
+    // Важно именно «не тихо»: молча выбросить картинку и сгенерировать код по
+    // одному тексту — худший исход. Человек получил бы правдоподобный ответ,
+    // не имеющий отношения к его скриншоту.
+    vi.resetModules();
+    vi.doMock("../src/services/qcoreai/providers", () => ({
+      getProviders: () => [
+        { id: "groq", name: "Groq", models: [], defaultModel: "m", envKey: "GROQ_API_KEY", configured: true },
+      ],
+      callProvider: async () => { throw new Error("не должен вызываться"); },
+    }));
+    const { devhubRouter: r2 } = await import("../src/routes/devhub");
+    const a = express();
+    a.use(express.json({ limit: "5mb" }));
+    a.use("/api/devhub", r2);
+    const cr = await request(a).post("/api/devhub/projects").send({ name: "V3" });
+    const res = await request(a)
+      .post(`/api/devhub/projects/${cr.body.project.id}/generate`)
+      .send({ prompt: "сделай кнопку", imageBase64: "eA==", imageMediaType: "image/png" });
+    // Отказ обязан НАЗЫВАТЬ причину: без имён переменных человек не поймёт,
+    // что именно настроить.
+    // Проверяем СЛЕДСТВИЕ, а не внутренний код ошибки: наружу уходит текст
+    // без префикса NO_VISION_PROVIDER, и это правильно — префикс наш, а не
+    // человека. Важно, что отказ ЯВНЫЙ и называет, чего не хватает.
+    expect(res.body.error).toMatch(/attach-a-screenshot|скриншот/i);
+  });
+
   test("без картинки цепочка не задействуется — вызов один", async () => {
     // Контроль: без него перебор, включённый ВЕЗДЕ, прошёл бы первую проверку
     // и молча жёг деньги на лишних вызовах там, где запасной не нужен.

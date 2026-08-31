@@ -3764,6 +3764,10 @@ export default function CyberChessPage(){
         // Только если запись принадлежит ЭТОЙ партии: иначе разбор ляжет на
         // чужую строку истории и молча затрёт её.
         const id=zap&&zap.fp===gameStartTimeRef.current?zap.id:null;
+        if(!id){
+          try{console.warn("[CyberChess] разбор посчитан, но записывать не к чему:",
+            zap?`запись от другой партии (${zap.fp} против ${gameStartTimeRef.current})`:"партия не сохранена")}catch{}
+        }
         if(id){
           sAnalysis(cur=>{
             updateGameAnalysis(id,cur.map(a=>({ply:a.move,quality:a.quality,cpLoss:a.cpLoss})));

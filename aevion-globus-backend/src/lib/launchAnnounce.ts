@@ -266,3 +266,55 @@ export function planLaunchAnnounce(
     sent: 0,
   };
 }
+
+/**
+ * Что отправлять ПРЯМО СЕЙЧАС из готового плана.
+ *
+ * Отправка рассылки — единственное действие на платформе, которое нельзя
+ * отменить: письмо ушло живым людям. Поэтому решение «кому именно сейчас»
+ * вынесено сюда, в чистую функцию без ввода-вывода: её можно прогнать на
+ * любых списках и проверить без единого настоящего письма.
+ *
+ * Три правила, и каждое куплено чужой болью:
+ *
+ *   уже получил   повтор рассылки после обрыва не должен слать второй раз;
+ *                 список отправленных ведётся снаружи и передаётся сюда;
+ *   потолок суток у Brevo на нашем плане 300 писем в сутки, и он ЖЁСТКИЙ:
+ *                 291-е письмо просто не уйдёт, а мы об этом не узнаем;
+ *   остаток       сколько осталось на завтра — чтобы человек видел, что
+ *                 рассылка не закончена, а не решил, что все получили.
+ */
+export type SendBatch = {
+  /** Кому слать в этот заход. */
+  toSend: string[];
+  /** Уже получили раньше — пропущены. */
+  alreadySent: number;
+  /** Не влезли в сегодняшний потолок; их надо доотправить завтра. */
+  postponed: number;
+};
+
+export function planSendBatch(input: {
+  recipients: string[];
+  alreadySent: Iterable<string>;
+  /** Сколько писем сегодня уже ушло ЛЮБЫМ каналом. */
+  usedToday: number;
+  /** Потолок провайдера на сутки. */
+  dailyCap: number;
+}): SendBatch {
+  const было = new Set(
+    [...input.alreadySent].map((e) => e.trim().toLowerCase()).filter(Boolean),
+  );
+  const свежие = input.recipients
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((e) => !было.has(e));
+
+  const остатокСуток = Math.max(0, input.dailyCap - Math.max(0, input.usedToday));
+  const toSend = свежие.slice(0, остатокСуток);
+
+  return {
+    toSend,
+    alreadySent: input.recipients.length - свежие.length,
+    postponed: свежие.length - toSend.length,
+  };
+}

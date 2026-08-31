@@ -48,21 +48,23 @@ vi.mock("../src/lib/sentry/platform", () => ({
 }));
 
 let полезная: Record<string, string> = {};
+let статус = "paid";
 vi.mock("../src/lib/payment/payboxProvider", () => ({
   payboxPaymentProvider: {
     parseWebhook: () => ({
-      result: { status: "paid", reason: null, raw: полезная },
+      result: { status: статус, reason: null, raw: полезная },
       eventId: полезная.pg_payment_id,
     }),
   },
 }));
 
 let полезнаяPaypal: Record<string, unknown> = {};
+let статусPaypal = "paid";
 vi.mock("../src/lib/payment/paypalProvider", () => ({
   verifyPaypalWebhook: async () => true,
   paypalPaymentProvider: {
     parseWebhook: () => ({
-      result: { status: "paid", reason: null, raw: полезнаяPaypal },
+      result: { status: статусPaypal, reason: null, raw: полезнаяPaypal },
       eventId: String(полезнаяPaypal.id ?? ""),
     }),
   },
@@ -82,7 +84,8 @@ function приложение() {
 }
 
 let счётчик = 0;
-function оплата(модуль?: string) {
+function оплата(модуль?: string, вид = "paid") {
+  статус = вид;
   счётчик += 1;
   полезная = {
     pg_user_contact_email: "buyer@example.com",
@@ -98,6 +101,8 @@ beforeEach(() => {
   upserts.length = 0;
   captured.length = 0;
   пуститьОшибку = false;
+  статус = "paid";
+  статусPaypal = "paid";
 });
 
 describe("купленный модуль переживает потерю файла", () => {
@@ -167,5 +172,58 @@ describe("вторая касса закрыта тем же правилом", 
     expect(upserts.length, "модуль куплен через PayPal, а долговечной записи нет").toBe(1);
     expect(upserts[0][1], "записан не тот модуль").toBe("qlearn");
     expect(upserts[0][0], "адрес не приведён к нижнему регистру").toBe("buyer@example.com");
+  });
+});
+
+describe("возврат денег снимает доступ к модулю", () => {
+  // Пара обязана быть замкнутой: если покупка создаёт строку в базе, то
+  // возврат обязан её снимать. Иначе тариф понижается в файле, строка
+  // остаётся активной, и запасной путь стены пускает человека, которому
+  // деньги вернули. Lemon Squeezy это делает давно — здесь было упущено.
+  test("возврат ставит записи cancelled", async () => {
+    const res = await оплата("qcoreai", "refunded");
+
+    expect(res.body.action, "возврат не был обработан — тест мерит не то").toBe("downgraded");
+    expect(upserts.length, "возврат не тронул долговечную запись").toBe(1);
+    expect(upserts[0][1]).toBe("qcoreai");
+    expect(upserts[0][2], "запись осталась активной после возврата").toBe("cancelled");
+  });
+
+  test("сбой базы при возврате НЕ выдаётся за успех", async () => {
+    // Направление отказа обратное покупке: здесь молчание означает, что
+    // человек пользуется тем, за что ему вернули деньги.
+    пуститьОшибку = true;
+    const шпион = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await оплата("qcoreai", "refunded");
+    шпион.mockRestore();
+
+    expect(res.status, "сбой снятия доступа отдан кассе как успех").toBe(500);
+    expect(res.body.action, "ответ утверждает, что доступ снят").toBeUndefined();
+    expect(captured.length, "сбой не доехал до Sentry").toBeGreaterThan(0);
+  });
+});
+
+describe("возврат у второй кассы закрыт тем же правилом", () => {
+  test("возврат через PayPal тоже ставит cancelled", async () => {
+    статусPaypal = "refunded";
+    счётчик += 1;
+    полезнаяPaypal = {
+      id: `pp-r-${счётчик}`,
+      payer: { email_address: "buyer@example.com" },
+      custom_id: JSON.stringify({ reference: "aevion-lite-monthly", module: "qlearn" }),
+    };
+
+    const a = express();
+    a.use((req, _res, next) => {
+      (req as unknown as { rawBody: Buffer }).rawBody = Buffer.from("x");
+      next();
+    });
+    a.use("/api/paypal", paypalWebhookRouter);
+
+    const res = await request(a).post("/api/paypal/webhook").send();
+
+    expect(res.body.action, "возврат не был обработан — тест мерит не то").toBe("downgraded");
+    expect(upserts.length, "возврат через PayPal не тронул долговечную запись").toBe(1);
+    expect(upserts[0][2], "запись осталась активной после возврата").toBe("cancelled");
   });
 });

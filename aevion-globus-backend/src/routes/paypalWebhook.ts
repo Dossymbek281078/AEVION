@@ -113,6 +113,29 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         source: `paypal:${result.status}`,
       };
       writeSubscription(downgrade);
+
+      // Возврат обязан снимать И помодульную запись. Тариф понижается в
+      // файле, а строка в AppSubscription живёт отдельно — и запасной путь
+      // стены (planGate -> hasActiveAppSubscription) пускал бы по ней
+      // человека, которому деньги вернули. Создаём запись при покупке —
+      // обязаны снимать здесь, иначе пара разомкнута.
+      //
+      // ⚠ Направление отказа тут ОБРАТНОЕ покупке. При покупке сбой базы
+      // безвреден: доступ уже выдан файлом, ронять нечего. При возврате
+      // сбой означает, что человек ПРОДОЛЖАЕТ пользоваться оплаченным и
+      // возвращённым. Поэтому не глотаем: внешний catch освобождает ключ
+      // дедупликации, и касса повторит доставку. Понижение в файле
+      // идемпотентно, повтор его не испортит.
+      if (module) {
+        try {
+          await upsertAppSubscription(email, module, "cancelled", downgrade.id);
+        } catch (e) {
+          const причина = e instanceof Error ? e.message : String(e);
+          console.error(`[paypal/webhook] возврат НЕ снял доступ к модулю -> ${email}/${module}: ${причина}`);
+          capture(e, { route: "paypal/webhook/refund", email, module });
+          throw e;
+        }
+      }
       console.log(`[paypal/webhook] ${result.status} → downgraded ${email} to free`);
       return res.json({ ok: true, action: "downgraded", email });
     }

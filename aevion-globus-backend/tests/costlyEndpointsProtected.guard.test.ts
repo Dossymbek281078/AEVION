@@ -237,7 +237,14 @@ describe("дорогие ручки защищены от перебора", () 
     for (const g of gone) {
       expect(offenders.includes(g), `${g} убран из списка, но защиты у него нет`).toBe(false);
     }
-    expect(offenders.length).toBeLessThanOrEqual(KNOWN_UNPROTECTED.size);
+    expect(
+      offenders.length,
+      "Незащищённых дорогих ручек стало БОЛЬШЕ. Список KNOWN_UNPROTECTED — " +
+        "храповик: он только сокращается. НЕ вносите туда новую ручку, чтобы " +
+        "погасить красный, — это узаконит утечку денег. После мержа такой " +
+        "красный чаще всего значит, что победила чужая сторона routes/devhub.ts " +
+        "и с маршрутов пропал dhCostlyLimit. Правильно: вернуть его.",
+    ).toBeLessThanOrEqual(KNOWN_UNPROTECTED.size);
   });
 
   it.skip("ЦЕЛЬ: у каждой дорогой ручки есть ограничитель или квота", () => {

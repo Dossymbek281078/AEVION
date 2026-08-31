@@ -690,7 +690,7 @@ export const MODULES_PRICING: ModulePrice[] = [
     // как у соседей veilnetx/qchaingov/z-tide. Закрывает audit:projects-pricing.
     id: "qskyway",
     addonMonthly: null,
-    includedIn: ["full", "enterprise"],
+    includedIn: [],
     availability: "beta",
     oneLiner: "Провайдер-независимые 3D-аэрокоридоры для аэротакси над цифровым двойником города",
   },

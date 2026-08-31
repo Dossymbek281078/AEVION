@@ -5437,8 +5437,23 @@ export default function CyberChessPage(){
       sAnalysisProgress(Math.round((i/fenHist.length)*100)); // прогресс «N/всего» во время ручного разбора
       const fen=fenHist[i];const turn=fen.split(" ")[1];
       const{cp,mate,best:bestUci}=await new Promise<{cp:number;mate:number;best?:string}>(res=>{
-        let lastCp=0,lastMate=0;
-        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},(b)=>res({cp:lastCp,mate:lastMate,best:b}));
+        let lastCp=0,lastMate=0,gotovo=false;
+        // 🔴 Предохранитель по времени. У ЖИВОГО разбора (тот же движок,
+        // соседний код) он есть — 8 секунд на позицию; здесь его не было, и
+        // один пропущенный ответ движка вешал разбор партии НАВСЕГДА. Наружу
+        // это не выходило: вызывающий обёрнут в пустой catch, а человек видел
+        // «Разбираю партию…» без конца.
+        //
+        // Замерено на боевой сборке 31.08.2026: после сдачи разбор не приходил
+        // и через 50 секунд, хотя движок был жив и играл ходы. В его же коде
+        // при этом вылетает «e.trim is not a function» — одного такого сбоя
+        // хватает, чтобы очередь осталась без ответа.
+        //
+        // Отдаём то, что успели услышать: неполная оценка честнее вечного
+        // ожидания, и ход всё равно получит ярлык.
+        const otvet=(v:{cp:number;mate:number;best?:string})=>{if(!gotovo){gotovo=true;clearTimeout(storozh);res(v)}};
+        const storozh=setTimeout(()=>otvet({cp:lastCp,mate:lastMate}),8000);
+        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},(b)=>otvet({cp:lastCp,mate:lastMate,best:b}));
       });
       if(i>0){
         // Evaluate quality of move played that led to this position

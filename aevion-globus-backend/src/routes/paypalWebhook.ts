@@ -17,6 +17,7 @@ import { provisionSubscription, writeSubscription, type Subscription } from "./p
 import type { TierId, BillingPeriod } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
+import { upsertAppSubscription } from "../lib/appEntitlements";
 
 const capture = makeServiceCapture("paypalWebhook");
 
@@ -126,6 +127,22 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         modules: module ? [module] : [],
         source: "paypal",
       });
+
+      // Помодульную покупку записываем ЕЩЁ и в базу — см. тот же разбор в
+      // payboxWebhook.ts: тариф живёт в файле, помодульная покупка в
+      // Postgres, и её читает запасной путь стены. Через Lemon Squeezy обе
+      // записи были, через PayPal — только файл.
+      //
+      // Не роняем: доступ уже выдан файлом. Но отказ обязан оставить след.
+      if (module) {
+        try {
+          await upsertAppSubscription(email, module, "active", provResult.subscription.id);
+        } catch (e) {
+          const причина = e instanceof Error ? e.message : String(e);
+          console.warn(`[paypal/webhook] долговечная запись не сохранена -> ${email}/${module}: ${причина}`);
+          capture(e, { route: "paypal/webhook", email, module });
+        }
+      }
       console.log(`[paypal/webhook] paid → provisioned ${tierId}/${period} for ${email} (ref=${reference})`);
       return res.json({ ok: true, action: "activated", tierId, email, subscriptionId: provResult.subscription.id });
     }

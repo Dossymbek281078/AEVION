@@ -32,6 +32,13 @@ export interface PaymentIntentInput {
    *  module for a Lite subscription). Provider-specific: LemonSqueezy forwards
    *  it on subscription events. */
   customData?: Record<string, string>;
+  /**
+   * Идентификатор купленного модуля — ТОЛЬКО для адреса возврата, чтобы
+   * страница после оплаты назвала то, за что заплатили. Намеренно отдельно
+   * от customData: та уезжает провайдеру и возвращается в вебхуке, и её
+   * расширение меняло бы выдачу прав, а не подпись на экране.
+   */
+  successAppId?: string;
 }
 
 export interface PaymentIntent {

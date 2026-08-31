@@ -156,6 +156,11 @@ checkoutRouter.post("/session", async (req, res) => {
         const intent = await payboxPaymentProvider.createIntent({
           reference, amountCents: kztCents, currency: "KZT", description, email: body.email ?? null,
           customData: liteModule ? { module: liteModule } : undefined,
+          // Модуль для адреса возврата: страница после оплаты обязана
+          // назвать то, за что заплатили. Только при ОДНОМ купленном
+          // модуле — на наборе называть один было бы враньём.
+          successAppId:
+            (body.modules ?? []).length === 1 ? (body.modules ?? [])[0] : undefined,
         });
         return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paybox", intentId: intent.intentId });
       } catch (e) {
@@ -172,6 +177,11 @@ checkoutRouter.post("/session", async (req, res) => {
         const intent = await paypalPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
           customData: liteModule ? { module: liteModule } : undefined,
+          // Модуль для адреса возврата: страница после оплаты обязана
+          // назвать то, за что заплатили. Только при ОДНОМ купленном
+          // модуле — на наборе называть один было бы враньём.
+          successAppId:
+            (body.modules ?? []).length === 1 ? (body.modules ?? [])[0] : undefined,
         });
         return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paypal", intentId: intent.intentId });
       } catch (e) {
@@ -209,6 +219,11 @@ checkoutRouter.post("/session", async (req, res) => {
         const intent = await lemonSqueezyPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
           customData: liteModule ? { module: liteModule } : undefined,
+          // Модуль для адреса возврата: страница после оплаты обязана
+          // назвать то, за что заплатили. Только при ОДНОМ купленном
+          // модуле — на наборе называть один было бы враньём.
+          successAppId:
+            (body.modules ?? []).length === 1 ? (body.modules ?? [])[0] : undefined,
         });
         return res.json({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", intentId: intent.intentId });
       } catch (e) {

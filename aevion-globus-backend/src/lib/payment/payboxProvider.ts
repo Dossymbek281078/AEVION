@@ -24,6 +24,7 @@
  *   4. getIntent → POST get_status3.php для опроса статуса
  */
 
+import { buildSuccessUrl } from "./successUrl";
 import { createHash, randomBytes } from "node:crypto";
 import type {
   PaymentIntent,
@@ -112,7 +113,7 @@ export const payboxPaymentProvider: PaymentProvider = {
       pg_salt: genSalt(),
       pg_testing_mode: testingMode(),
       pg_result_url: `${base}/api/paybox/webhook`,
-      pg_success_url: `${base}/pricing/checkout/success?paybox=1&ref=${encodeURIComponent(input.reference)}`,
+      pg_success_url: buildSuccessUrl(base, input, { provider: "paybox", flags: { paybox: "1" } }),
       pg_failure_url: `${base}/pricing/checkout/cancel?paybox=1`,
     };
     if (input.email) params.pg_user_contact_email = input.email;

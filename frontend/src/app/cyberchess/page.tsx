@@ -2083,6 +2083,9 @@ export default function CyberChessPage(){
   // must let the one-shot "game just ended" publish through too, or the
   // backend's archiveFinishedGame() (triggered by result being set on
   // /publish) never fires and the replay archive silently never populates.
+  // Разбор досчитан до конца партии: единственный момент, когда график
+  // оценок становится полным и его стоит отправить зрителю ещё раз.
+  const analysisReady=hist.length>0&&analysis.length>=hist.length;
   useEffect(()=>{
     if(!spectatorPublish||setup)return;
     if(!on&&!over)return;
@@ -2131,7 +2134,12 @@ export default function CyberChessPage(){
         body:JSON.stringify(broadcastBody),
       }).catch(()=>{/* best-effort */});
     }).catch(()=>{});
-  },[spectatorPublish,on,setup,bk,over]);
+    // analysisReady, а не analysis: график оценок для зрителя раньше уходил
+  // ПУСТЫМ — авто-анализ считается уже после конца партии, а этот эффект
+  // на него не пересобирался. Ставим не сам analysis (иначе отправка
+  // повторялась бы на каждый посчитанный ход — шквал запросов), а признак
+  // «разбор досчитан до конца»: он меняется ровно один раз.
+},[spectatorPublish,on,setup,bk,over,analysisReady]);
   // Mirror Mode — AI plays like the player based on game history
   const[mirrorActive,sMirrorActive]=useState(false);
   const[mirrorProfile,sMirrorProfile]=useState<PlayerProfile|null>(null);

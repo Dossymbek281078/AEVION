@@ -412,6 +412,8 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
   const [b, setB] = useState<FormShape>(() => ({ ...emptyForm(), name: "Company B" }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Своё состояние: это отдельный компонент, у него нет доступа к первому.
+  const [upgradeUrl, setUpgradeUrl] = useState<string | null>(null);
   const [pair, setPair] = useState<[AnalysisResult, AnalysisResult] | null>(null);
 
   const setter = (which: "a" | "b") => (k: keyof FormShape) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -420,10 +422,13 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
   };
 
   const run = useCallback(async () => {
-    setError(null); setLoading(true); setPair(null);
+    setError(null); setUpgradeUrl(null); setLoading(true); setPair(null);
     const [ra, rb] = await Promise.all([analyzeReq(a), analyzeReq(b)]);
-    if (!ra.ok) { setError(`Company A: ${ra.error}`); setLoading(false); return; }
-    if (!rb.ok) { setError(`Company B: ${rb.error}`); setLoading(false); return; }
+    // Ссылку на оплату теряли и здесь: текст брался человеческий, а путь,
+    // куда идти платить, выбрасывался. Одна и та же мера обязана стоять на
+    // ОБЕИХ поверхностях — правка только на первой выглядит законченной.
+    if (!ra.ok) { setError(`Company A: ${ra.error}`); setUpgradeUrl(ra.upgradeUrl ?? null); setLoading(false); return; }
+    if (!rb.ok) { setError(`Company B: ${rb.error}`); setUpgradeUrl(rb.upgradeUrl ?? null); setLoading(false); return; }
     setPair([ra.data, rb.data]);
     setLoading(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -439,7 +444,19 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
           </div>
         ))}
       </div>
-      {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        {error && (
+          <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>
+            {error}
+            {upgradeUrl && (
+              <>
+                {" "}
+                <a href={upgradeUrl} style={{ color: "#dc2626", fontWeight: 700, textDecoration: "underline" }}>
+                  Посмотреть тарифы
+                </a>
+              </>
+            )}
+          </div>
+        )}
       <button onClick={run} disabled={loading} style={{ ...primaryBtn(loading), marginBottom: 18 }}>
         {loading ? "Analyzing both…" : "⚖ Compare"}
       </button>

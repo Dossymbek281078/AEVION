@@ -7215,6 +7215,88 @@ async function aevionBuildZoneActive(): Promise<boolean | null> {
   }
 }
 
+// GET /api/devhub/studio/deploy-stats?days=N — доля успешных публикаций.
+//
+// Вопрос основателя, на который до 31.08.2026 ответа не было: доходит ли
+// человек до РАБОТАЮЩЕГО приложения. «Шестнадцать возможностей» и «движок
+// VS Code» описывают наличие механизма, а не результат.
+//
+// Данные лежали в "DevHubDeployment" с самого начала: двенадцать обращений к
+// таблице, и все вида «покажи выкатки этого проекта». Ни одного считающего —
+// число было в базе и недоступно никому без доступа к базе.
+//
+// Ручка ЧИТАЮЩАЯ: ничего не пишет и ничего не меняет.
+devhubRouter.get("/studio/deploy-stats", async (req, res) => {
+  const raw = Number(req.query.days);
+  const days = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 365) : 30;
+
+  // Статус в таблице — свободная строка (interface DevHubDeployment), закрытого
+  // перечисления нет. Поэтому считаем ФАКТИЧЕСКОЕ распределение, а не заранее
+  // придуманный список: иначе новый статус молча выпадет из знаменателя.
+  const counts = new Map<string, number>();
+  let storage: "db" | "memory" = "db";
+
+  if (!isDevHubDbReady()) {
+    storage = "memory";
+    const since = Date.now() - days * 86_400_000;
+    for (const d of memDeployments.values()) {
+      if (Date.parse(d.triggeredAt) >= since) {
+        counts.set(d.status, (counts.get(d.status) ?? 0) + 1);
+      }
+    }
+  } else {
+    // Отказ хранилища — НЕ наша поломка, и отвечать на него пятисоткой значит
+    // выдать чужую недоступность за свою аварию. Поймал не я: платформенный
+    // сторож devhubReadsAreHonestWhenStorageFails увидел «deploy-stats -> 500»
+    // при первом же прогоне. Штатный ответ здесь 503 storage_unavailable, и
+    // помощник для него уже есть — второй способ отвечать заводить незачем.
+    try {
+      const r = await pool.query(
+        `SELECT "status", COUNT(*)::int AS n
+           FROM "DevHubDeployment"
+          WHERE "triggeredAt" >= NOW() - ($1::int * INTERVAL '1 day')
+          GROUP BY "status"`,
+        [days],
+      );
+      for (const row of r.rows as Array<{ status: string; n: number }>) {
+        counts.set(row.status, Number(row.n));
+      }
+    } catch {
+      return replyStorageUnavailable(res);
+    }
+  }
+
+  const byStatus = [...counts.entries()]
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count);
+  const total = byStatus.reduce((s, x) => s + x.count, 0);
+  const live = counts.get("live") ?? 0;
+
+  return res.json({
+    days,
+    total,
+    byStatus,
+    // NULL, а не 0, когда считать не из чего. Ноль здесь читался бы как
+    // «ни одна публикация не удалась» — это другое утверждение, и оно
+    // отправило бы человека чинить работающее.
+    //
+    // ⚠️ Мутация «убрать тернарник» этим сторожем НЕ ловится, и это не дыра:
+    // при total = 0 голый расчёт даёт NaN, а NaN в JSON сериализуется в null.
+    // Снаружи ответ тот же — значит и падать нечему. Проверено: JSON.stringify
+    // от NaN даёт null.
+    //
+    // Явная запись оставлена намеренно: полагаться на то, что NaN «случайно»
+    // превратится в правильный ответ, — это работать через побочный эффект
+    // сериализации. Первый же потребитель ВНУТРИ процесса получит NaN, а не
+    // null, и сравнение `=== null` у него молча не сработает.
+    successRate: total > 0 ? Math.round((1000 * live) / total) / 10 : null,
+    // Признак едет В САМИХ ДАННЫХ: при недоступной базе числа считаны из
+    // памяти процесса и живут до перезапуска. Молча выдать их за историю —
+    // тот же класс, что пустой список вместо отказа.
+    storage,
+  });
+});
+
 devhubRouter.get("/studio/capabilities", async (_req, res) => {
   // Живая проба вместо переменной: переменную ставит человек, проверив зону,
   // и она протухает молча в тот день, когда зона перестанет отвечать.

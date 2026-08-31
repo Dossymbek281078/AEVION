@@ -24,7 +24,7 @@ const { runs, provider } = vi.hoisted(() => ({
   // Ответ поставщика — в ИЗМЕНЯЕМОМ поле, а не подменой экспорта.
   // Подмена экспорта насовсем протекла в соседний тест: он получал
   // чужие токены и падал на сверке цены. Поймано падением.
-  provider: { reply: "", tokensIn: 1000, tokensOut: 500 },
+  provider: { reply: "", tokensIn: 1000, tokensOut: 500, throws: false },
 }));
 vi.mock("../src/lib/smartRunLog", () => ({
   insertSmartRun: (row: any) => { runs.push(row); },
@@ -33,11 +33,14 @@ vi.mock("../src/lib/smartRunLog", () => ({
 // и проверка «расход записан» прошла бы на сломанном учёте.
 vi.mock("../src/services/qcoreai/providers", () => ({
   getProviders: () => [{ id: "openai", defaultModel: "gpt-4o-mini", configured: true }],
-  callProvider: async () => ({
+  callProvider: async () => {
+    if (provider.throws) throw new Error("провайдер недоступен");
+    return {
     reply: provider.reply || JSON.stringify({ summary: "s", milestones: [] }),
     model: "gpt-4o-mini",
-    usage: { prompt_tokens: provider.tokensIn, completion_tokens: provider.tokensOut },
-  }),
+      usage: { prompt_tokens: provider.tokensIn, completion_tokens: provider.tokensOut },
+    };
+  },
 }));
 vi.mock("../src/lib/dbPool", () => ({ getPool: () => ({ query: vi.fn() }) }));
 vi.mock("../src/lib/ensureDevHubTables", () => ({
@@ -101,6 +104,7 @@ describe("расход /plan попадает в учёт и отделим", ()
     provider.reply = "";
     provider.tokensIn = 1000;
     provider.tokensOut = 500;
+    provider.throws = false;
   });
 
   test("без входа расход записан и помечен как анонимный", async () => {
@@ -111,6 +115,24 @@ describe("расход /plan попадает в учёт и отделим", ()
     // Считаем ПРИРОСТ записей, а не наличие: строка могла остаться от соседа.
     expect(runs).toHaveLength(1);
     expect(runs[0].module).toBe("devhub-anon");
+  });
+
+  test("отказ ИИ — это 200 с ok:false, а НЕ пятисотка", async () => {
+    // Договор честности: планировщик не бросает при отказе поставщика, а
+    // возвращает ok:false. Витрина это читает (data.ok === false) и говорит
+    // человеку. Проверено 31.08.2026 по обеим сторонам.
+    //
+    // Закрепляю проверкой, а не комментарием: соблазн «привести к общему
+    // виду» и отдавать 5xx выглядит как уборка, а сломает две вещи разом —
+    // сообщение человеку и чистоту Sentry. Пятисотка означает «у нас
+    // сломалось» и поднимает людей; отказ чужого поставщика — не наша авария.
+    provider.reply = "";
+    provider.throws = true;
+    const res = await request(await app())
+      .post("/api/devhub/plan")
+      .send({ idea: "магазин носков" });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(false);
   });
 
   test("деньги потрачены — учёт есть, даже если ответ не разобрался", async () => {

@@ -37,6 +37,46 @@ const PROTECTED = /Limit\b|limiter|rateLimit|generationLimit|checkCredit|qcoreQu
 /** Осознанные исключения — каждое с причиной. */
 const ALLOWED: Array<{ file: string; path: string; reason: string }> = [];
 
+// ── Слепая зона, закрытая 31.08.2026 ────────────────────────────────────────
+// Сторож брал ТОЛЬКО тело обработчика. Ручка, зовущая платного поставщика
+// через локального помощника, была ему невидима целиком — не попадала даже
+// в счётчик дорогих. Так /api/devhub/plan прожил без ограничителя: в теле
+// стоит planProjectWithAI(...), а callProvider лежит внутри помощника.
+// Это потеря следа на границе функции, наш давний класс.
+//
+// Разбор без регулярок намеренно: шаблон, собранный строкой, теряет
+// экранирование на границе вызова и молча перестаёт совпадать.
+function localHelperBodies(src: string): Map<string, string> {
+  const out = new Map<string, string>();
+  let at = 0;
+  for (;;) {
+    const i = src.indexOf("function ", at);
+    if (i < 0) break;
+    at = i + 9;
+    let j = at;
+    while (j < src.length && /[A-Za-z0-9_$]/.test(src[j])) j++;
+    const name = src.slice(at, j);
+    if (!name) continue;
+    // тело: до ближайшей закрывающей скобки в начале строки
+    const close = src.indexOf(String.fromCharCode(10) + "}", j);   // без литерального слэша: он теряется на границе вызова
+    if (close < 0) continue;
+    out.set(name, src.slice(j, close));
+  }
+  return out;
+}
+
+// Дорогая ли ручка с учётом ОДНОГО уровня вложенности.
+// Глубже не идём намеренно: за вторым уровнем разбор начинает врать, а
+// сторож, который врёт, хуже отсутствующего.
+function bodyIsCostly(body: string, helpers: Map<string, string>, COSTLY: RegExp): boolean {
+  if (COSTLY.test(body)) return true;
+  for (const [name, hbody] of helpers) {
+    if (body.includes(name + "(") && COSTLY.test(hbody)) return true;
+  }
+  return false;
+}
+
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     if (entry === "node_modules") continue;
@@ -92,7 +132,7 @@ export function findUnprotectedCostly(files: string[]): {
       }
       if (depth !== 0) continue;
       const body = src.slice(m.index!, i);
-      if (!COSTLY.test(body)) continue;
+      if (!bodyIsCostly(body, localHelperBodies(src), COSTLY)) continue;
       costly++;
       // Защита ищется в объявлении (middleware) ИЛИ в теле (квота).
       if (PROTECTED.test(body)) continue;
@@ -136,6 +176,14 @@ describe("дорогие ручки защищены от перебора", () 
    * уберёте, не защитив, третья проверка ниже покраснеет.
    */
   const KNOWN_UNPROTECTED = new Set([
+    // Вскрыто 31.08.2026 расширением сторожа на ОДИН уровень вложенности.
+    // Ручка зовёт платного поставщика через локального помощника, поэтому
+    // прежний сторож её не видел вовсе — она не попадала даже в счётчик
+    // дорогих. Это не новая регрессия, а долг, ставший видимым.
+    // Зона qreal, не моя: передано владельцу, ограничитель ставить ему.
+    // Две такие же ручки devhub (agent/workflow и .../stream) закрыты тем
+    // же заходом — они были в моей зоне.
+    "qreal.ts  /projects/:id/storyboard",
     "agentRuntime.ts  /run",
     "coach.ts  /chat",
     "devhub.ts  /media/sfx",

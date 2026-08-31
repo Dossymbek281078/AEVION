@@ -2415,7 +2415,14 @@ devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req,
 // project-scoped (no /projects/:id/ prefix): works standalone for someone
 // who hasn't created a project yet, and optionally accounts for an existing
 // project's files when `projectId` is given in the body.
-devhubRouter.post("/plan", async (req, res) => {
+// Ограничитель добавлен 31.08.2026. До него ручка была БЕЗ предела вовсе,
+// хотя planProjectWithAI зовёт callProvider — то есть настоящего платного
+// поставщика (OpenAI/Anthropic по ключу). Входа ручка не требует.
+// Я сам сперва счёл её бесплатной: проверил только вызовы smartComplete,
+// а платный путь здесь ДРУГОЙ. Контроль отвечал не на тот вопрос.
+// Предел взят тот же, что у соседней платной /ask — заводить второй
+// способ ограничивать одно и то же незачем.
+devhubRouter.post("/plan", dhCostlyLimit("dhplan"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const { idea, projectId } = req.body || {};
@@ -4970,10 +4977,10 @@ function groupWorkflowSteps(steps: any[]): number[][] {
 }
 
 // POST /api/devhub/projects/:id/agent/workflow — orchestrate multi-step AI workflow
-devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
+devhubRouter.post("/projects/:id/agent/workflow", dhCostlyLimit("dhwf"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));   // как у /projects/:id/generate: с промежуточным слоем тип параметра шире
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -5048,10 +5055,10 @@ devhubRouter.get("/agent/templates", (_req, res) => {
 });
 
 // POST /api/devhub/projects/:id/agent/workflow/stream — SSE per-step progress
-devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
+devhubRouter.post("/projects/:id/agent/workflow/stream", dhCostlyLimit("dhwfs"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));   // как у /projects/:id/generate: с промежуточным слоем тип параметра шире
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });

@@ -50,6 +50,42 @@ function highlightsOf(src: string, id: string): string[] {
     .map((l) => l.replace(/^"/, "").replace(/",?$/, ""));
 }
 
+// Заморозка ловит ИЗМЕНЕНИЕ обещания, но не его ЛОЖНОСТЬ: если кто-то поправит
+// и список, и разбор в шапке, сторож промолчит. Одно из шести обещаний
+// проверяемо машинно — числа лимитов, и они живут в бэкенде. Сверяем.
+const BACKEND = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..", "..", "..", "..",
+  "aevion-globus-backend", "src", "routes", "devhub.ts",
+);
+
+describe("числа витрины совпадают с таблицей тарифов", () => {
+  const src = readFileSync(BACKEND, "utf8");
+
+  it("прибор исправен: таблица тарифов найдена и разобрана", () => {
+    // Контроль охвата. Без него пустой разбор дал бы «расхождений нет» —
+    // самый частый вид ложного зелёного.
+    const at = src.indexOf("const TIER_LIMITS");
+    expect(at, "таблица тарифов не найдена — сторож смотрит не туда").toBeGreaterThan(0);
+    expect(src.slice(at, at + 400)).toContain("pro:");
+  });
+
+  it("«50 AI videos · 200 images/mo» — это то, что даёт платный тариф", () => {
+    const at = src.indexOf("const TIER_LIMITS");
+    const pro = src.slice(src.indexOf("pro:", at), src.indexOf("enterprise:", at));
+    const num = (key: string) => {
+      const m = pro.indexOf(key + ":");
+      expect(m, `в тарифе нет ключа ${key}`).toBeGreaterThan(-1);
+      return parseInt(pro.slice(m + key.length + 1).trim(), 10);
+    };
+    const claim = ПРОВЕРЕНО.find((c) => c.includes("videos"));
+    expect(claim, "обещание про числа исчезло из списка").toBeTruthy();
+    const [видео, картинки] = (claim as string).match(/[0-9]+/g)!.map(Number);
+    expect(видео, "витрина обещает не столько видео, сколько даёт тариф").toBe(num("video"));
+    expect(картинки, "витрина обещает не столько картинок, сколько даёт тариф").toBe(num("image"));
+  });
+});
+
 describe("витрина DevHub: обещания заморожены", () => {
   const src = readFileSync(APPS, "utf8");
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -236,5 +236,76 @@ describe("возврат после оплаты отмечается на ка�
       silent,
       "провайдер вернул человека сюда, а покупка не считается — продажа выпадает из воронки",
     ).toEqual([]);
+  });
+
+  /**
+   * Отметку ставит ОБЩИЙ компонент, а не своя копия на каждой странице.
+   *
+   * Дыра в этом же стороже, найденная 31.08.2026. Проверки выше требуют, чтобы
+   * страница возврата покупку СЧИТАЛА, и молчат о том, считает ли она только
+   * НАСТОЯЩИЙ возврат. `/pricing/checkout/success` завела свою копию
+   * `useEffect` + `track({ type: "checkout_success" })` без единого условия:
+   * событие уходит при каждом открытии адреса. Итоговый шаг воронки считает
+   * ЗАХОДЫ, а не покупки, и завышение попадает ровно в ту цифру, ради точности
+   * которой отметка и делалась.
+   *
+   * Общий `PurchaseReturnTracker` этого не допускает: у него есть
+   * `if (!isSuccess || fired.current) return`, то есть признак успеха и защита
+   * от повторной отрисовки. Правило «не копировать его тело на страницы»
+   * записано в самом компоненте — копия одного действия расходится молча.
+   *
+   * Поэтому инвариант формулируется просто и проверяется надёжно: инлайновых
+   * вызовов `checkout_success` быть не должно, отметку ставит компонент.
+   *
+   * ⚠️ Это ХРАПОВИК. Страницу правят прямо сейчас две чужие ветки, поэтому
+   * правку туда не несу — держу список известных, и он обязан только таять.
+   */
+  const KNOWN_INLINE = ["pricing/checkout/success/page.tsx"];
+
+  /** Инлайновая отметка: событие названо прямо в файле страницы. */
+  function firesInline(file: string): boolean {
+    const text = readFileSync(file, "utf8");
+    // Компонент ставит отметку сам — его использование инлайном не считается.
+    if (text.includes("PurchaseReturnTracker")) return false;
+    return /track\(\s*\{[\s\S]{0,200}?checkout_success/.test(text);
+  }
+
+  test("контроль: способ отличает инлайновую отметку от общего компонента", () => {
+    // Обе стороны пробой, а не наличием дефекта: иначе после починки контроль
+    // покраснел бы именно потому, что чинить больше нечего.
+    const inlineSample = 'useEffect(() => { track({ type: "checkout_success", tier }); }, []);';
+    const componentSample = '<PurchaseReturnTracker source="bureau" provider="stripe" successParam="paid" />';
+    const tmp = join(APP, "__tests__", "__probe_inline__.tsx");
+    writeFileSync(tmp, inlineSample, "utf8");
+    expect(firesInline(tmp), "признак не видит инлайновую отметку").toBe(true);
+    writeFileSync(tmp, componentSample, "utf8");
+    expect(firesInline(tmp), "признак считает инлайном использование общего компонента").toBe(false);
+    rmSync(tmp, { force: true });
+  });
+
+  test("новых страниц со своей копией отметки не появилось", () => {
+    const inline = paths
+      .map((p) => pageFileFor(p.path))
+      .filter((f): f is string => f !== null)
+      .filter((f) => firesInline(f))
+      .map((f) => relative(APP, f).split(sep).join("/"));
+    const fresh = inline.filter((f) => !KNOWN_INLINE.includes(f));
+    expect(
+      fresh,
+      "страница возврата ставит отметку своей копией: без условия успеха событие " +
+        "уходит при каждом открытии адреса, и воронка считает заходы вместо покупок",
+    ).toEqual([]);
+  });
+
+  test("храповик не протух: всё, что в списке, всё ещё ставит отметку инлайном", () => {
+    const inline = new Set(
+      paths
+        .map((p) => pageFileFor(p.path))
+        .filter((f): f is string => f !== null)
+        .filter((f) => firesInline(f))
+        .map((f) => relative(APP, f).split(sep).join("/")),
+    );
+    const stale = KNOWN_INLINE.filter((f) => !inline.has(f));
+    expect(stale, `уже через общий компонент, убрать из списка: ${stale.join(", ")}`).toEqual([]);
   });
 });

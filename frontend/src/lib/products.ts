@@ -243,7 +243,7 @@ export const MODULES: Product[] = [
     id: "qventure",
     title: "QVenture",
     format: "модуль · подписка",
-    desc: "Разбор венчурной сделки: TAM/SAM/SOM, юнит-экономика, проверка допущений основателя.",
+    desc: "Разбор венчурной сделки: TAM/SOM, юнит-экономика, проверка допущений основателя.",
     priceUsd: 39,
     billing: "monthly",
     kind: "module",

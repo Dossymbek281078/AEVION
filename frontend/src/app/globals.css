@@ -153,7 +153,10 @@ code {
 
 .demo-aurora {
   position: absolute;
-  inset: -20%;
+  /* По горизонтали не выпускаем: декоративное свечение с inset -20%
+     вылезало на 78px вправо и расширяло документ до 430px на телефоне
+     (замер 31.08.2026). Вертикальный вылет оставлен — он безвреден. */
+  inset: -20% 0;
   background:
     radial-gradient(ellipse 80% 60% at 20% 30%, rgba(13, 148, 136, 0.45), transparent 55%),
     radial-gradient(ellipse 70% 50% at 85% 70%, rgba(59, 130, 246, 0.38), transparent 50%),
@@ -1128,4 +1131,13 @@ button:focus:not(:focus-visible) {
   [data-stack-mobile] {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* Длинные слитные строки («registry+signature+bureau+...», адреса,
+   токены) браузер не переносит и они распирают страницу: замер
+   31.08.2026 на /pitch — абзац шириной 208px требовал 297.
+   `break-word` рвёт слово ТОЛЬКО когда иначе оно не влезет,
+   поэтому на обычный текст не влияет. */
+p, li, dd, td, blockquote, figcaption {
+  overflow-wrap: break-word;
 }

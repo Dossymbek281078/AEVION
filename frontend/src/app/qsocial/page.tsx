@@ -553,7 +553,7 @@ export default function QSocialPage() {
     <>
       <Wave1Nav />
       <ProductPageShell>
-        <div
+        <div data-stack-mobile=""
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 300px",
@@ -674,7 +674,7 @@ export default function QSocialPage() {
 
             {/* DM tab */}
             {tab === "dm" && (
-              <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 12, height: 480 }}>
+              <div data-stack-mobile="" style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 12, height: 480 }}>
                 {/* Conversation list */}
                 <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, overflowY: "auto" }}>
                   <div style={{ padding: "10px 14px", fontWeight: 700, fontSize: 13, borderBottom: "1px solid #f1f5f9" }}>Диалоги</div>

@@ -22,11 +22,27 @@ import path from "node:path";
  * дороже, чем польза, а вопрос здесь простой — есть ли связь.
  */
 const HERE = path.dirname(new URL(import.meta.url).pathname.replace(/^[/]([A-Za-z]:)/, "$1"));
-const SRC = fs.readFileSync(path.resolve(HERE, "..", "page.tsx"), "utf8");
+const SRC = fs.readFileSync(path.resolve(HERE, "..", "page.tsx"), "utf8");
+// Экраны модуля, где есть кнопки: одиночный разбор, пакетный и сам разбор.
+// Список получен ПЕРЕЧИСЛЕНИЕМ, а не по памяти: за день я дважды сказал
+// «поверхностей две», а их оказывалось три и пять.
+const BATCH = fs.readFileSync(path.resolve(HERE, "..", "batch", "page.tsx"), "utf8");
+const RESULT = fs.readFileSync(path.resolve(HERE, "..", "_result.tsx"), "utf8");
 const NL = String.fromCharCode(10);
 const BODY = SRC.split(NL).filter((l) => !l.trim().startsWith("//")).join(NL);
 
 /** Обработчики, стоящие на кнопках: текст между onClick={ и первой } . */
+function handlersIn(src: string): string[] {
+  const out: string[] = [];
+  const body = src.split(NL).filter((l) => !l.trim().startsWith("//")).join(NL);
+  const parts = body.split("onClick={");
+  for (let i = 1; i < parts.length; i++) {
+    const end = parts[i].indexOf("}");
+    if (end > 0) out.push(parts[i].slice(0, end).trim());
+  }
+  return out;
+}
+
 function handlers(): string[] {
   const out: string[] = [];
   const parts = BODY.split("onClick={");
@@ -64,6 +80,28 @@ describe("кнопки модуля делают то, что обещают", (
     ).toContain("onClick={() => run(form)}");
   });
 
+  it("на всех экранах модуля нет пустых обработчиков", () => {
+    // Замер 31.08.2026: кнопка загрузки файла в пакетном разборе и кнопка
+    // «поделиться» переживали выпотрошивание незамеченными.
+    const bad: string[] = [];
+    for (const [name, src] of [["batch", BATCH], ["result", RESULT]] as const) {
+      for (const h of handlersIn(src)) {
+        const t = h.replace(/\s/g, "");
+        if (t === "()=>{" || t === "()=>{}" || t === "()=>null" || t === "") bad.push(name + ": " + h);
+      }
+    }
+    expect(bad, "у кнопки пустой обработчик: нажатие ни к чему не приводит").toEqual([]);
+  });
+
+  it("вход в пакетный разбор связан: кнопка открывает выбор файла", () => {
+    // Это ВХОД в модуль — как данные вообще попадают внутрь. Сломается —
+    // пакетный разбор станет бесполезным, и ни одна ошибка не появится.
+    expect(
+      BATCH,
+      "кнопка загрузки не открывает выбор файла: данные в пакетный разбор не попадут",
+    ).toContain("fileRef.current?.click()");
+  });
+
   it("кнопка примера и кнопка сравнения тоже связаны", () => {
     expect(BODY, "кнопка примера потеряла обработчик").toContain("onClick={runSample}");
     expect(BODY, "кнопка сравнения потеряла обработчик").toContain("onClick={run}");

@@ -47,6 +47,7 @@ import { COLOR as CC_LIGHT, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { PV, ev, mm, best } from "./chessEngine";
 import { classifyDrop } from "./moveQuality";
 import PostGameCard from "./PostGameCard";
+import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
 import { pickDailyIdx } from "./dailyPick";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
@@ -6219,16 +6220,16 @@ export default function CyberChessPage(){
             {/* Accuracy trend sparkline — last 10 saved games */}
             {savedGames.filter(g=>g.analysis&&g.analysis.length>0).length>=3&&(()=>{
               const gms=savedGames.filter(g=>g.analysis&&g.analysis.length>0).slice(0,10).reverse();
-              const accs=gms.map(g=>{
-                const myMvs=g.analysis!.filter(m=>g.playerColor==="w"?m.ply%2===0:m.ply%2===1);
-                if(!myMvs.length)return 50;
-                const gr=myMvs.filter(m=>m.quality==="great"||m.quality==="brilliant").length;
-                const go=myMvs.filter(m=>m.quality==="good").length;
-                const ia=myMvs.filter(m=>m.quality==="inacc").length;
-                const mk=myMvs.filter(m=>m.quality==="mistake").length;
-                const bl=myMvs.filter(m=>m.quality==="blunder").length;
-                return Math.round(100*(gr*1+go*0.85+ia*0.6+mk*0.3+bl*0)/myMvs.length);
-              });
+              // Точность считаем ОДНИМ способом на модуль: тем же, что
+              // показывает карточка разбора и панель FIDE. Свой взвешенный
+              // расчёт давал для одной и той же партии другое число, и человек
+              // видел два наших ответа об одном.
+              const accs=gms.map(g=>tochnostSohranennoy(g.analysis!,g.playerColor))
+                            .filter((v):v is number=>v!==null);
+              // Фильтр может опустошить список (в записи нет ни одного хода
+              // игрока), и тогда Math.min([]) даёт Infinity, а last2 —
+              // undefined: человек увидел бы «Точность undefined%».
+              if(!accs.length)return null;
               const W2=48,H2=16,pad2=2;
               const mn2=Math.min(...accs),mx2=Math.max(...accs);const rng2=Math.max(mx2-mn2,20);
               const x2=(i:number)=>pad2+(i/(accs.length-1||1))*(W2-pad2*2);
@@ -6240,7 +6241,7 @@ export default function CyberChessPage(){
                   <polyline points={accs.map((v,i)=>`${x2(i).toFixed(1)},${y2(v).toFixed(1)}`).join(" ")} fill="none" stroke={col2} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"/>
                   <circle cx={x2(accs.length-1).toFixed(1)} cy={y2(last2).toFixed(1)} r={2.5} fill={col2}/>
                 </svg>
-                <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>ACC <b style={{color:col2}}>{last2}%</b></span>
+                <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>Точность <b style={{color:col2}}>{last2}%</b></span>
               </React.Fragment>;
             })()}
             {/* CPI live-бейдж + breakdown tooltip при наведении */}

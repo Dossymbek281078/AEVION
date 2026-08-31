@@ -24,7 +24,10 @@ describe("чей ход разбираем", () => {
     const s = postGameSummary(hist, an, "w");
     expect(s.vsego).toBe(2);
     expect(s.zevkov).toBe(0);
-    expect(s.tochnost).toBe(100);
+    // 85, а не 100: точность считается с частичным зачётом — той же
+    // формулой, что и в пяти местах page.tsx. Хороший ход весит 0.85,
+    // единицу дают только brilliant и great.
+    expect(s.tochnost).toBe(85);
   });
 });
 
@@ -35,7 +38,10 @@ describe("счёт и точность", () => {
                 a("mistake", 150), a("good", 0), a("blunder", 400), a("good", 0)];
     const s = postGameSummary(hist, an, "w");
     expect([s.vsego, s.blestyashchih, s.netochnostey, s.oshibok, s.zevkov]).toEqual([4, 1, 1, 1, 1]);
-    expect(s.tochnost).toBe(25); // хорош только блестящий
+    // brilliant 1 + inacc 0.6 + mistake 0.3 + blunder 0 = 1.9 из 4 → 48%.
+    // Прежние 25% были долей точных ходов — расчёт, которого в модуле больше
+    // нет: он расходился с тем, что человек видит на других экранах.
+    expect(s.tochnost).toBe(48);
   });
 
   it("пустой разбор не выдумывает чисел", () => {

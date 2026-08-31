@@ -31,7 +31,7 @@ describe("карточка разбора после партии", () => {
     render(<PostGameCard hist={hist} analysis={an} pCol="w" schitaem={false} />);
 
     expect(screen.getByTestId("post-game-card")).toBeTruthy();
-    expect(screen.getByText(/67%/)).toBeTruthy();      // 2 хороших из 3 ходов белых
+    expect(screen.getByText(/57%/)).toBeTruthy();      // good+good+blunder = (0.85+0.85+0)/3
     // Один зевок — «зевок», не «зевков». Прежняя редакция требовала «зевков»
     // и тем закрепляла дефект: подписи фишек не склонялись вовсе.
     expect(screen.getByText("зевок")).toBeTruthy();

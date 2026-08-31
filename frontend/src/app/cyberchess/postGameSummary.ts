@@ -1,4 +1,5 @@
 import { ccPlural } from "./ccPlural";
+import { TOCHNYE_HODY } from "./moveQuality";
 
 /**
  * Разбор партии сразу после её конца — без обращения к ИИ.
@@ -37,7 +38,6 @@ export type GameSummary = {
   perelom: { nomerHoda: number; zapis: string; poterya: number; luchshe?: string } | null;
 };
 
-const HOROSHIE = new Set(["brilliant", "great", "good"]);
 
 /** Ход под индексом i в истории сделан игроком? Белые ходят чётными. */
 export function hodIgroka(i: number, pCol: "w" | "b"): boolean {
@@ -56,6 +56,7 @@ export function postGameSummary(
   if (!analysis?.length || !hist?.length) return pustoy;
 
   let vsego = 0, tochnyh = 0, netochnostey = 0, oshibok = 0, zevkov = 0, blestyashchih = 0;
+  let summaTochnosti = 0;
   let hudshiy: { i: number; a: PlyAnalysis } | null = null;
 
   for (let i = 0; i < analysis.length && i < hist.length; i++) {
@@ -64,7 +65,8 @@ export function postGameSummary(
     if (!a) continue;
     vsego++;
     if (a.quality === "brilliant") blestyashchih++;
-    if (HOROSHIE.has(a.quality)) tochnyh++;
+    summaTochnosti += vesTochnosti(a.quality);
+    if (TOCHNYE_HODY.has(a.quality)) tochnyh++;
     else if (a.quality === "inacc") netochnostey++;
     else if (a.quality === "mistake") oshibok++;
     else if (a.quality === "blunder") zevkov++;
@@ -96,7 +98,7 @@ export function postGameSummary(
 
   return {
     vsego, tochnyh, netochnostey, oshibok, zevkov, blestyashchih,
-    tochnost: Math.round((tochnyh / vsego) * 100),
+    tochnost: Math.round((summaTochnosti / vsego) * 100),
     perelom,
   };
 }
@@ -118,3 +120,43 @@ export function odnaFraza(s: GameSummary): string {
   return `Главное, над чем работать: ${s.zevkov} ${ccPlural(s.zevkov, "зевок", "зевка", "зевков")} за партию.`;
 }
 
+/**
+ * Точность по СОХРАНЁННОЙ партии: доля точных ходов среди ходов игрока.
+ *
+ * Заведено 31.08.2026: «точность» показывалась человеку в трёх местах и
+ * считалась тремя способами. Карточка разбора и панель FIDE считают долю
+ * точных ходов, а график на странице давал частичный зачёт неточностям и
+ * ошибкам — то есть для одной и той же партии два наших числа расходились.
+ *
+ * Возвращает null, когда ходов игрока в записи нет: это «не знаю», и
+ * подставлять вместо него 50 нельзя — ровная середина выглядит как замер.
+ */
+export function tochnostSohranennoy(
+  hody: ReadonlyArray<{ ply: number; quality?: string }>,
+  pCol: "w" | "b",
+): number | null {
+  const moi = hody.filter((m) => hodIgroka(m.ply, pCol));
+  if (!moi.length) return null;
+  const summa = moi.reduce((acc, m) => acc + vesTochnosti(m.quality), 0);
+  return Math.round((summa / moi.length) * 100);
+}
+
+/**
+ * Вес хода в точности партии. Числа не выбраны заново: это ровно та формула,
+ * которая уже стоит в ПЯТИ местах page.tsx (grt*1 + goo*0.85 + ina*0.6 +
+ * mis*0.3 + bl*0) и которую человек видит как «точность» по всему модулю.
+ *
+ * 31.08.2026 я сперва свёл всё к своей формуле «доля точных ходов» — и был
+ * неправ: моя карточка написана накануне и стояла в двух местах, а модульная
+ * — в пяти. Канон определяет не тот, кто пишет последним.
+ *
+ * Частичный зачёт здесь осмыслен: неточность — это не то же самое, что зевок,
+ * и человеку честнее видеть разницу.
+ */
+export function vesTochnosti(quality?: string): number {
+  if (quality === "brilliant" || quality === "great") return 1;
+  if (quality === "good") return 0.85;
+  if (quality === "inacc") return 0.6;
+  if (quality === "mistake") return 0.3;
+  return 0; // blunder и неизвестный ярлык
+}

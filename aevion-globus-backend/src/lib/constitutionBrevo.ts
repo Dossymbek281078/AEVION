@@ -113,8 +113,16 @@ async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise<{
  * ручку и несёт токен; если подписывать нечем (нет секрета), вместо ссылки в письме
  * стоит живой адрес почты, а не ссылка, которая молча не сработает.
  */
-function unsubBlock(email: string, color = "#64748b"): string {
+function unsubBlock(email: string, color = "#64748b", lang: "ru" | "en" = "ru"): string {
   const url = unsubscribeUrl(email);
+  // Подпись отписки на языке ПИСЬМА, а не платформы: английское письмо с
+  // русской строкой «Отписаться» — то же самое расхождение, только мельче
+  // (поймано 29.08 собственной пробой сразу после починки языка письма).
+  if (lang === "en") {
+    return url
+      ? `<a href="${url}" style="color:${color}">Unsubscribe</a>`
+      : `Unsubscribe: write to <a href="mailto:${unsubContact()}" style="color:${color}">${unsubContact()}</a>`;
+  }
   return url
     ? `<a href="${url}" style="color:${color}">Отписаться</a>`
     : `Отписаться: напишите на <a href="mailto:${unsubContact()}" style="color:${color}">${unsubContact()}</a>`;
@@ -214,10 +222,19 @@ export function isLiveNow(liveFromUtcMidnight?: number, now: Date = new Date()):
   return today >= liveFromUtcMidnight;
 }
 
-const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep: string; liveFrom?: number }> = [
+const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep: string;
+  liveFrom?: number; nameEn?: string; nextStepEn?: string }> = [
   {
     prefix: "longevity",
     name: "Протокол долголетия",
+    // Английское имя и следующий шаг: без них письмо англоязычному
+    // подписчику выходило смесью — «Протокол долголетия is open» (поймано
+    // собственной пробой 29.08 сразу после починки языка).
+    nameEn: "The Longevity Protocol",
+    nextStepEn:
+      "The protocol is open in full on the page — markers, an evidence-ranked stack " +
+      "and what is overrated. You can also take it as a PDF to fill in at day zero " +
+      "and at day ninety.",
     page: "https://aevion.app/longevity",
     // Следующий шаг называем без цен и без скидок: цена живёт в каталоге, а
     // условия решает основатель (это же сказано у соседнего письма выше).
@@ -251,17 +268,91 @@ const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep
 
 function liveEntryFromSource(source?: string) {
   if (!source) return null;
-  const s = source.toLowerCase();
+  // Снимаем языковую приставку: «en-longevity» — тот же модуль, что
+  // «longevity», и англоязычный подписчик должен получить письмо «уже
+  // открыт», а не общее «вы в списке» (поймано 29.08 собственной пробой).
+  const s = source.toLowerCase().replace(/^en-/, "");
   return LIVE_ENTRIES.find((m) => (s === m.prefix || s.startsWith(`${m.prefix}-`)) && isLiveNow(m.liveFrom)) ?? null;
 }
 
 function moduleFromSource(source?: string) {
   if (!source) return null;
-  const s = source.toLowerCase();
+  const s = source.toLowerCase().replace(/^en-/, "");
   return LAUNCH_MODULES.find((m) => s === m.prefix || s.startsWith(`${m.prefix}-`)) ?? null;
 }
 
+/**
+ * Подписался на АНГЛИЙСКОЙ странице — получает английское письмо.
+ *
+ * Найдено 29.08.2026 вкладкой воронки, за сутки до запуска: письмо честно
+ * подставляло, ОТКУДА человек подписался, но про язык не знало вовсе —
+ * упоминаний языка во всём файле было ноль. Четыре ролика из одиннадцати
+ * опубликованных англоязычные и ведут на /en/go; первое письмо от нас
+ * приходило бы на языке, которого человек может не знать. При этом всё
+ * «работает»: адрес сохранён, письмо ушло, отказов нет.
+ *
+ * Метка источника доезжает сюда как `en-go` / `en-longevity`, поэтому язык
+ * читается из неё же — второго источника правды не заводим.
+ */
+export function isEnglishSource(source?: string): boolean {
+  return String(source ?? "")
+    .split(",")
+    .map((m) => m.trim().toLowerCase())
+    .some((m) => m === "en" || m.startsWith("en-"));
+}
+
+/** Английский вариант того же письма. Русский путь ниже не трогается. */
+function buildPlatformWaitlistEmailEn(email: string, source?: string): ConstitutionEmailPayload {
+  const live = liveEntryFromSource(source);
+  const mod = live ? null : moduleFromSource(source);
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf7">
+      <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION</div>
+      <p style="margin:0 0 16px">${live
+        ? `You are in — ${live.nameEn ?? live.name} is already open.`
+        : `You are on the early-access list${mod ? ` for ${mod.name}` : ""}.`}</p>
+      <p style="color:#9aa3c0;margin:0 0 16px">
+        ${live
+          ? (live.nextStepEn ?? "Open it from the link below — no account needed to look around.")
+          : mod
+            ? `We open ${mod.plan}. You get one email on launch day, with early-access terms.`
+            : "AEVION ships one module at a time. You get one email when the next one opens."}
+      </p>
+      <p style="color:#9aa3c0;margin:0 0 24px">
+        ${live
+          ? `Open: <a href="${live.page}" style="color:#22d3ee">${live.page.replace("https://", "")}</a>`
+          : mod
+            ? `Launch page: <a href="${mod.page}" style="color:#22d3ee">${mod.page.replace("https://", "")}</a>`
+            : `Meanwhile, see what already works: <a href="https://aevion.app/en/go" style="color:#22d3ee">aevion.app/en/go</a>`}
+      </p>
+      <hr style="border:none;border-top:1px solid rgba(212,175,55,0.2);margin-bottom:16px">
+      <p style="color:#64748b;font-size:11px;margin:0">
+        You get this email because you left your address on aevion.app.
+        ${unsubBlock(email, "#64748b", "en")}
+      </p>
+    </div>
+  `;
+  return {
+    to: [{ email }],
+    subject: live
+      ? `${live.nameEn ?? live.name} is open`
+      : mod
+        ? `You are on the list: ${mod.name}`
+        : "You are on the AEVION early-access list",
+    htmlContent: html,
+    textContent: live
+      ? `${live.nameEn ?? live.name} is already open. Open: ${live.page}`
+      : mod
+        ? `You are on the early-access list for ${mod.name}. We open ${mod.plan}. Launch page: ${mod.page}`
+        : "You are on the AEVION early-access list. We ship one module at a time.",
+    tags: ["waitlist-confirm", "platform", "en"],
+  };
+}
+
 export function buildPlatformWaitlistEmail(email: string, source?: string): ConstitutionEmailPayload {
+  // Английская страница — английское письмо. Развилка ОДНА и стоит первой,
+  // чтобы русский путь ниже остался нетронутым (он несёт запуск 30.08).
+  if (isEnglishSource(source)) return buildPlatformWaitlistEmailEn(email, source);
   const live = liveEntryFromSource(source);
   const mod = live ? null : moduleFromSource(source);
   const where = live

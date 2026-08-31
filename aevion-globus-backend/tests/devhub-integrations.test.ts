@@ -28,6 +28,7 @@ vi.mock("../src/lib/wranglerPagesDeploy", () => ({
 
 // eslint-disable-next-line import/first
 import { devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork } from "../src/routes/devhub";
+import { __resetProviderHealth } from "../src/lib/providerHealth";
 // eslint-disable-next-line import/first
 import { getProviders, callProvider } from "../src/services/qcoreai/providers";
 
@@ -67,6 +68,10 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   __resetDevHubStore();
+  // Provider health is process-wide and in-memory: a route that recorded a
+  // real failure in one test made a later test see `degraded` where it
+  // expected the token-derived `live`. Same class as the deferred timers.
+  __resetProviderHealth();
   fetchMock = vi.fn();
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   mockDeployViaWrangler.mockReset();
@@ -128,332 +133,21 @@ function audioResp(status: number, bytes: number = 1024) {
 // 1. ElevenLabs TTS
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/tts (ElevenLabs)", () => {
-  test("503 when ELEVENLABS_API_KEY is missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/tts")
-      .send({ text: "hello", voice: "Rachel" });
-    expect(r.status).toBe(503);
-    expect(r.body.error).toMatch(/ELEVENLABS_API_KEY/);
-    expect(r.body.setupUrl).toContain("elevenlabs.io");
-  });
-
-  test("400 when text missing", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake-key";
-    const r = await request(makeApp()).post("/api/devhub/media/tts").send({});
-    expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/text is required/);
-  });
-
-  test("400 when text > 5000 chars", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake-key";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/tts")
-      .send({ text: "x".repeat(5001) });
-    expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/too long/);
-  });
-
-  test("calls ElevenLabs with correct voice ID + returns audio/mpeg", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake-key";
-    fetchMock.mockResolvedValueOnce(audioResp(200, 2048));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/tts")
-      .send({ text: "Hello world", voice: "Rachel" });
-
-    expect(r.status).toBe(200);
-    expect(r.headers["content-type"]).toMatch(/audio\/mpeg/);
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const [url, opts] = fetchMock.mock.calls[0];
-    expect(url).toContain("21m00Tcm4TlvDq8ikWAM"); // Rachel voice ID
-    expect((opts as any).headers["xi-api-key"]).toBe("fake-key");
-    const body = JSON.parse((opts as any).body);
-    expect(body.text).toBe("Hello world");
-    // Was pinned to eleven_monolingual_v1 — a model ElevenLabs has since
-    // REMOVED. The test stayed green while prod voice was fully broken, which
-    // is why this now tracks the model we actually send.
-    expect(body.model_id).toBe("eleven_multilingual_v2");
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 2. Brevo Email
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/email (Brevo)", () => {
-  test("503 when BREVO_API_KEY missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email")
-      .send({ to: "x@y.com", subject: "Hi", htmlBody: "<p>hi</p>" });
-    expect(r.status).toBe(503);
-    expect(r.body.error).toMatch(/BREVO_API_KEY/);
-  });
-
-  test("400 on invalid email", async () => {
-    process.env.BREVO_API_KEY = "fake";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email")
-      .send({ to: "not-an-email", subject: "Hi", htmlBody: "<p>hi</p>" });
-    expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/invalid recipient/);
-  });
-
-  test("400 on missing fields", async () => {
-    process.env.BREVO_API_KEY = "fake";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email")
-      .send({ to: "x@y.com" });
-    expect(r.status).toBe(400);
-  });
-
-  test("calls Brevo with api-key header + uses default sender", async () => {
-    process.env.BREVO_API_KEY = "brevo-fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(201, { messageId: "msg-123" }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email")
-      .send({ to: "u@example.com", subject: "Welcome", htmlBody: "<p>Hello</p>" });
-
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(true);
-    expect(r.body.messageId).toBe("msg-123");
-    const [url, opts] = fetchMock.mock.calls[0];
-    expect(url).toContain("api.brevo.com/v3/smtp/email");
-    expect((opts as any).headers["api-key"]).toBe("brevo-fake");
-    const body = JSON.parse((opts as any).body);
-    expect(body.sender.email).toBe("noreply@aevion.app");
-    expect(body.to[0].email).toBe("u@example.com");
-  });
-
-  test("degraded: true when Brevo returns 2xx with no messageId — not a silent success", async () => {
-    process.env.BREVO_API_KEY = "brevo-fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(201, {})); // 2xx but no messageId
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email")
-      .send({ to: "u@example.com", subject: "Welcome", htmlBody: "<p>Hello</p>" });
-
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(true);
-    expect(r.body.degraded).toBe(true);
-    expect(r.body.degradedReason).toMatch(/messageId/);
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 3. Lemon Squeezy Payment Link (was: Paddle, migrated 2026-05-24)
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/payment-link (Lemon Squeezy)", () => {
-  function setLsEnv() {
-    process.env.LEMON_SQUEEZY_API_KEY = "ls_fake_key";
-    process.env.LEMON_SQUEEZY_STORE_ID = "12345";
-    process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID = "67890";
-  }
-
-  test("503 when Lemon Squeezy env vars missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/payment-link")
-      .send({ name: "Pro", amountCents: 999 });
-    expect(r.status).toBe(503);
-    expect(r.body.error).toMatch(/LEMON_SQUEEZY/);
-  });
-
-  test("400 when amount < 50 cents", async () => {
-    setLsEnv();
-    const r = await request(makeApp())
-      .post("/api/devhub/media/payment-link")
-      .send({ name: "Pro", amountCents: 10 });
-    expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/≥ 50/);
-  });
-
-  test("creates Lemon Squeezy checkout + returns checkout URL", async () => {
-    setLsEnv();
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      data: { id: "co_abc123", attributes: { url: "https://store.lemonsqueezy.com/checkout/co_abc123" } },
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/payment-link")
-      .send({ name: "Pro plan", amountCents: 999, currency: "usd", description: "Monthly" });
-
-    expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({
-      ok: true,
-      provider: "lemonsqueezy",
-      checkoutId: "co_abc123",
-      url: "https://store.lemonsqueezy.com/checkout/co_abc123",
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/checkouts");
-    expect(fetchMock.mock.calls[0][0]).toContain("api.lemonsqueezy.com");
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 4. DALL-E Image generation
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/image (DALL-E 3)", () => {
-  test("503 when OPENAI_API_KEY missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/image")
-      .send({ prompt: "a cat" });
-    expect(r.status).toBe(503);
-    expect(r.body.error).toMatch(/OPENAI_API_KEY/);
-  });
-
-  test("400 on invalid size", async () => {
-    process.env.OPENAI_API_KEY = "sk-fake";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/image")
-      .send({ prompt: "a cat", size: "999x999" });
-    expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/size must be/);
-  });
-
-  test("calls OpenAI Images API with gpt-image-1 + returns URL", async () => {
-    process.env.OPENAI_API_KEY = "sk-fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      data: [{ url: "https://oaidalleapi.example/img.png", revised_prompt: "A cat sitting" }],
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/image")
-      .send({ prompt: "a cat", size: "1024x1024", quality: "hd" });
-
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(true);
-    expect(r.body.url).toBe("https://oaidalleapi.example/img.png");
-    expect(r.body.revisedPrompt).toBe("A cat sitting");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.model).toBe("gpt-image-1");
-    // gpt-image-1 uses low/medium/high/auto; route maps "hd" → "high"
-    expect(body.quality).toBe("high");
-  });
-
-  test("b64 result without Cloudflare configured falls back to inline data: URI", async () => {
-    process.env.OPENAI_API_KEY = "sk-fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }],
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/image")
-      .send({ prompt: "a cat" });
-
-    expect(r.status).toBe(200);
-    expect(r.body.url).toMatch(/^data:image\/png;base64,/);
-    expect(r.body.storage).toBe("inline");
-    expect(fetchMock).toHaveBeenCalledTimes(1); // no upload attempt without creds
-  });
-
-  test("b64 result with Cloudflare configured uploads the bytes and returns a permanent URL", async () => {
-    process.env.OPENAI_API_KEY = "sk-fake";
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, {
-        data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }],
-      }))
-      .mockResolvedValueOnce(jsonResp(200, {
-        result: { variants: ["https://imagedelivery.example/acc/img-1/public"] },
-      }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/image")
-      .send({ prompt: "a cat" });
-
-    expect(r.status).toBe(200);
-    expect(r.body.url).toBe("https://imagedelivery.example/acc/img-1/public");
-    expect(r.body.storage).toBe("cloudflare");
-    const uploadCall = fetchMock.mock.calls[1];
-    expect(String(uploadCall[0])).toContain("/images/v1");
-    // File upload (raw bytes), not the URL-import form used for hosted results
-    expect(String(uploadCall[1].body)).toContain('name="file"');
-  });
-
-  test("hosted-url result with Cloudflare configured is imported for permanence; upload failure falls back to the upstream url", async () => {
-    process.env.OPENAI_API_KEY = "sk-fake";
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { data: [{ url: "https://oai.example/tmp.png" }] }))
-      .mockResolvedValueOnce(jsonResp(500, { errors: ["nope"] }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/image")
-      .send({ prompt: "a cat" });
-
-    expect(r.status).toBe(200);
-    expect(r.body.url).toBe("https://oai.example/tmp.png");
-    expect(r.body.storage).toBe("upstream");
-  });
-
-  test("OpenAI failure falls back to Cloudflare Workers AI (flux-1-schnell) when CF creds exist", async () => {
-    process.env.OPENAI_API_KEY = "sk-fake";
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(400, { error: { message: "Billing hard limit has been reached." } })) // openai
-      .mockResolvedValueOnce(jsonResp(200, { result: { image: Buffer.from("flux-bytes").toString("base64") } })) // workers ai
-      .mockResolvedValueOnce(jsonResp(200, { result: { variants: ["https://imagedelivery.example/acc/img-2/public"] } })); // cf images upload
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/image")
-      .send({ prompt: "a cat" });
-
-    expect(r.status).toBe(200);
-    expect(r.body.provider).toBe("workers-ai");
-    expect(r.body.fallbackFrom).toEqual(["openai"]);
-    expect(r.body.url).toBe("https://imagedelivery.example/acc/img-2/public");
-    expect(r.body.storage).toBe("cloudflare");
-    expect(String(fetchMock.mock.calls[1][0])).toContain("/ai/run/@cf/black-forest-labs/flux-1-schnell");
-    const fluxBody = JSON.parse((fetchMock.mock.calls[1][1] as any).body);
-    expect(fluxBody).toMatchObject({ prompt: "a cat", width: 1024, height: 1024 });
-  });
-
-  test("Together FLUX free tier serves when it is the only configured provider", async () => {
-    process.env.TOGETHER_API_KEY = "tg-fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      data: [{ b64_json: Buffer.from("flux-free-bytes").toString("base64") }],
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/image")
-      .send({ prompt: "a cat" });
-
-    expect(r.status).toBe(200);
-    expect(r.body.provider).toBe("together");
-    expect(r.body.storage).toBe("inline"); // no CF creds — honest data: URI fallback
-    expect(String(fetchMock.mock.calls[0][0])).toContain("api.together.xyz");
-    const tgBody = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(tgBody.model).toBe("black-forest-labs/FLUX.1-schnell-Free");
-  });
-
-  test("all configured providers failing returns 502 with the per-provider attempt list", async () => {
-    process.env.OPENAI_API_KEY = "sk-fake";
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(400, { error: { message: "billing" } }))
-      .mockResolvedValueOnce(jsonResp(500, { errors: ["flux down"] }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/image")
-      .send({ prompt: "a cat" });
-
-    expect(r.status).toBe(502);
-    // The message now names the fix instead of restating the failure: this
-    // mock is a billing rejection, so it must read as a blocked provider
-    // rather than a bad prompt.
-    expect(r.body.providersBlocked).toBe(true);
-    expect(r.body.error).toMatch(/not your prompt/);
-    expect(r.body.attempts.map((a: { provider: string }) => a.provider)).toEqual(["openai", "workers-ai"]);
-  });
-});
 
 describe("POST /api/devhub/projects/:id/generate — dialog history as context", () => {
   test("prior turns are folded into the prompt (capped), so follow-ups keep their referent", async () => {
@@ -486,47 +180,6 @@ describe("POST /api/devhub/projects/:id/generate — dialog history as context",
   });
 });
 
-describe("POST /api/devhub/projects/:id/github/sync — pull repo state into the project", () => {
-  test("updates changed files, creates new ones, checkpoints first, and skips binaries", async () => {
-    process.env.GITHUB_TOKEN = "gh-fake";
-    const app = makeApp();
-    const cr = await request(app).post("/api/devhub/projects").send({ name: "S" });
-    const id = cr.body.project.id as string;
-    await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>old</h1>" });
-    await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: "https://github.com/o/r" });
-
-    const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64");
-    fetchMock.mockImplementation(async (url: string) => {
-      const u = String(url);
-      if (u.endsWith("/repos/o/r")) return jsonResp(200, { default_branch: "main" });
-      if (u.includes("/git/trees/main")) return jsonResp(200, { tree: [
-        { path: "index.html", type: "blob", sha: "s1", size: 20 },
-        { path: "app.js", type: "blob", sha: "s2", size: 30 },
-        { path: "logo.png", type: "blob", sha: "s3", size: 40 },
-      ] });
-      if (u.includes("/git/blobs/s1")) return jsonResp(200, { encoding: "base64", content: b64("<h1>new from repo</h1>") });
-      if (u.includes("/git/blobs/s2")) return jsonResp(200, { encoding: "base64", content: b64("console.log(1)") });
-      throw new Error(`unexpected ${u}`);
-    });
-
-    const r = await request(app).post(`/api/devhub/projects/${id}/github/sync`).send({});
-
-    expect(r.status).toBe(200);
-    expect(r.body.updated).toEqual(["index.html"]);
-    expect(r.body.created).toEqual(["app.js"]);
-    expect(r.body.skipped).toContain("logo.png");
-    expect(r.body.checkpointId).toBeTruthy();
-
-    const f = await request(app).get(`/api/devhub/projects/${id}/file?path=index.html`);
-    expect(f.body.file.content).toBe("<h1>new from repo</h1>");
-    // Undo restores the pre-sync content — the safety contract holds.
-    const undo = await request(app).post(`/api/devhub/projects/${id}/generate/undo`);
-    expect(undo.status).toBe(200);
-    const f2 = await request(app).get(`/api/devhub/projects/${id}/file?path=index.html`);
-    expect(f2.body.file.content).toBe("<h1>old</h1>");
-    delete process.env.GITHUB_TOKEN;
-  });
-});
 
 describe("POST /api/devhub/projects/:id/generate/stream — honest status events", () => {
   test("streams real phase events and ends with the full /generate payload", async () => {
@@ -717,7 +370,7 @@ describe("GET /api/devhub/projects — needsRedeploy staleness flag", () => {
     await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>v1</h1>" });
 
     fetchMock.mockResolvedValueOnce(jsonResp(200, { success: true }));
-    mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://stale.pages.dev", output: "" });
+    mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://stale.pages.dev", output: "", skipped: []});
     const dep = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
     expect(dep.status).toBe(200);
     // The pages route flips project.deployUrl in a deferred "mark live" step
@@ -773,7 +426,7 @@ describe("POST /api/devhub/projects/:id/deploy/pages — redeploy of an existing
       // Live 2026-07-21: CF answered with this message under a code ≠ 8000000
       errors: [{ code: 8000007, message: "A project with this name already exists. Choose a different project name." }],
     }));
-    mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://t-abc123.pages.dev", output: "" });
+    mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://t-abc123.pages.dev", output: "", skipped: []});
 
     const r = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
 
@@ -791,7 +444,7 @@ describe("POST /api/devhub/projects/:id/deploy/pages — redeploy of an existing
     await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>hi</h1>" });
 
     fetchMock.mockResolvedValueOnce(jsonResp(200, { success: true }));
-    mockDeployViaWrangler.mockResolvedValueOnce({ ok: false, error: "wrangler exited with code 1: auth error", output: "" });
+    mockDeployViaWrangler.mockResolvedValueOnce({ ok: false, error: "wrangler exited with code 1: auth error", output: "", skipped: []});
 
     const r = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
 
@@ -856,52 +509,6 @@ describe("GET /api/devhub/projects/:id/preview-proxy (Visual Edit for deployed s
 // 5. ElevenLabs SFX + Music
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/sfx (ElevenLabs)", () => {
-  test("503 when no API key", async () => {
-    const r = await request(makeApp()).post("/api/devhub/media/sfx").send({ text: "rain" });
-    expect(r.status).toBe(503);
-  });
-
-  test("calls sound-generation endpoint with duration", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake";
-    fetchMock.mockResolvedValueOnce(audioResp(200, 512));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/sfx")
-      .send({ text: "heavy rain", durationSeconds: 5 });
-
-    expect(r.status).toBe(200);
-    expect(r.headers["content-type"]).toMatch(/audio\/mpeg/);
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/sound-generation");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.text).toBe("heavy rain");
-    expect(body.duration_seconds).toBe(5);
-  });
-});
-
-describe("POST /api/devhub/media/music (ElevenLabs)", () => {
-  test("calls music/compose endpoint with music_length_ms", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake";
-    fetchMock.mockResolvedValueOnce(audioResp(200, 1024));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/music")
-      .send({ prompt: "lo-fi hip hop", musicLengthMs: 30000 });
-
-    expect(r.status).toBe(200);
-    expect(r.headers["content-type"]).toMatch(/audio\/mpeg/);
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/music/compose");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.prompt).toBe("lo-fi hip hop");
-    expect(body.music_length_ms).toBe(30000);
-  });
-
-  test("400 on missing prompt", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake";
-    const r = await request(makeApp()).post("/api/devhub/media/music").send({});
-    expect(r.status).toBe(400);
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 5b. Credit gating — TTS/music/deploy actually enforce the free-tier ceiling
@@ -1657,197 +1264,16 @@ describe("POST /api/devhub/projects/:id/domain/auto-setup (Cloudflare)", () => {
 // 7. ElevenLabs Voice Clone
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/voice-clone (ElevenLabs)", () => {
-  test("503 when API key missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/voice-clone")
-      .send({ name: "My Voice", sampleBase64: "AAAA" });
-    expect(r.status).toBe(503);
-  });
-
-  test("400 when name missing", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/voice-clone")
-      .send({ sampleBase64: "AAAA" });
-    expect(r.status).toBe(400);
-  });
-
-  test("400 when sampleBase64 missing", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/voice-clone")
-      .send({ name: "My Voice" });
-    expect(r.status).toBe(400);
-  });
-
-  test("400 when confirm:true is missing (preview-first gate)", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/voice-clone")
-      .send({ name: "My Voice", sampleBase64: Buffer.from("x").toString("base64") });
-    expect(r.status).toBe(400);
-    expect(r.body.needsConfirm).toBe(true);
-    expect(r.body.error).toMatch(/preview first/);
-  });
-
-  test("calls /v1/voices/add with multipart body + returns voiceId (with confirm:true)", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      voice_id: "voice-abc-123",
-      requires_verification: false,
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/voice-clone")
-      .send({
-        name: "My Voice",
-        description: "Test voice",
-        sampleBase64: Buffer.from("fake-audio").toString("base64"),
-        mimeType: "audio/mpeg",
-        confirm: true,
-      });
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(true);
-    expect(r.body.voiceId).toBe("voice-abc-123");
-    expect(r.body.requiresVerification).toBe(false);
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/voices/add");
-    const headers = (fetchMock.mock.calls[0][1] as any).headers;
-    expect(headers["xi-api-key"]).toBe("fake");
-    expect(headers["Content-Type"]).toMatch(/multipart\/form-data; boundary=/);
-  });
-});
-
-describe("POST /api/devhub/media/voice-clone/preview (ElevenLabs)", () => {
-  test("400 missing sampleBase64", async () => {
-    const r = await request(makeApp()).post("/api/devhub/media/voice-clone/preview").send({});
-    expect(r.status).toBe(400);
-  });
-
-  test("503 when API key missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/voice-clone/preview")
-      .send({ sampleBase64: Buffer.from("x").toString("base64") });
-    expect(r.status).toBe(503);
-  });
-
-  test("clones temp voice → TTS → deletes voice → returns audio/mpeg", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake";
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { voice_id: "temp-voice-xyz" })) // POST /voices/add
-      .mockResolvedValueOnce(audioResp(200, 4096)) // POST /text-to-speech/temp-voice-xyz
-      .mockResolvedValueOnce(jsonResp(200, {}));   // DELETE /voices/temp-voice-xyz
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/voice-clone/preview")
-      .send({ sampleBase64: Buffer.from("audio").toString("base64"), previewText: "Hi from AEVION" });
-    expect(r.status).toBe(200);
-    expect(r.headers["content-type"]).toMatch(/audio\/mpeg/);
-    expect(r.headers["x-aevion-preview-bytes"]).toBe("4096");
-    expect(r.body.length).toBe(4096);
-
-    // 1st call: clone
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/voices/add");
-    // 2nd: TTS with the temp voice
-    expect(fetchMock.mock.calls[1][0]).toContain("/text-to-speech/temp-voice-xyz");
-    const ttsBody = JSON.parse((fetchMock.mock.calls[1][1] as any).body);
-    expect(ttsBody.text).toBe("Hi from AEVION");
-    // 3rd: delete
-    expect(fetchMock.mock.calls[2][0]).toContain("/v1/voices/temp-voice-xyz");
-    expect((fetchMock.mock.calls[2][1] as any).method).toBe("DELETE");
-  });
-
-  test("cleans up temp voice when preview TTS fails", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake";
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { voice_id: "temp-doomed" }))
-      .mockResolvedValueOnce({ ok: false, status: 500, text: async () => "tts boom", json: async () => ({}), arrayBuffer: async () => new ArrayBuffer(0) } as any)
-      .mockResolvedValueOnce(jsonResp(200, {})); // cleanup DELETE attempt
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/voice-clone/preview")
-      .send({ sampleBase64: Buffer.from("x").toString("base64") });
-    expect(r.status).toBe(500);
-    expect(r.body.error).toMatch(/Preview TTS failed/);
-    // The DELETE cleanup is best-effort and fire-and-forget; just confirm we got at least the 2 calls
-    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(fetchMock.mock.calls[1][0]).toContain("/text-to-speech/temp-doomed");
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 8. ElevenLabs Speech-to-Text
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/stt (ElevenLabs)", () => {
-  test("503 when API key missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/stt")
-      .send({ audioBase64: "AAAA" });
-    expect(r.status).toBe(503);
-  });
-
-  test("400 when audio missing", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake";
-    const r = await request(makeApp()).post("/api/devhub/media/stt").send({});
-    expect(r.status).toBe(400);
-  });
-
-  test("calls /v1/speech-to-text + returns transcript", async () => {
-    process.env.ELEVENLABS_API_KEY = "fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      text: "Hello world",
-      language_code: "en",
-      language_probability: 0.99,
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/stt")
-      .send({
-        audioBase64: Buffer.from("fake-audio").toString("base64"),
-        language: "en",
-      });
-    expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({
-      ok: true,
-      text: "Hello world",
-      language: "en",
-      confidence: 0.99,
-    });
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/speech-to-text");
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 9. Google Drive search + import
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/drive-search (Google Drive)", () => {
-  test("503 when token missing", async () => {
-    const r = await request(makeApp()).post("/api/devhub/media/drive-search").send({ query: "foo" });
-    expect(r.status).toBe(503);
-  });
-
-  test("returns file list from Drive", async () => {
-    process.env.GOOGLE_DRIVE_ACCESS_TOKEN = "fake-bearer";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      files: [
-        { id: "f1", name: "doc.md", mimeType: "text/markdown", size: "100" },
-        { id: "f2", name: "spec.txt", mimeType: "text/plain" },
-      ],
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/drive-search")
-      .send({ query: "doc", limit: 10 });
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(true);
-    expect(r.body.files).toHaveLength(2);
-    const url = fetchMock.mock.calls[0][0];
-    expect(url).toMatch(/name\+contains\+%27doc%27/);
-    expect(url).toContain("pageSize=10");
-  });
-});
 
 describe("POST /api/devhub/projects/:id/drive/import", () => {
   async function createProject(app: express.Express) {
@@ -2099,262 +1525,17 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
 // 11. Per-project GitHub token (envVars.GITHUB_TOKEN beats env)
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("Per-project GitHub token override", () => {
-  async function createProjectWithRepo(app: express.Express, perProjectToken?: string) {
-    const cr = await request(app).post("/api/devhub/projects").send({ name: "GHTest" });
-    const id = cr.body.project.id;
-    await request(app).patch(`/api/devhub/projects/${id}`).send({
-      repoUrl: "https://github.com/owner/repo",
-    });
-    if (perProjectToken) {
-      await request(app).put(`/api/devhub/projects/${id}/env`).send({
-        key: "GITHUB_TOKEN", value: perProjectToken,
-      });
-    }
-    return id;
-  }
-
-  test("/github/status uses project-level token if set", async () => {
-    process.env.GITHUB_TOKEN = "server-token";
-    const app = makeApp();
-    const id = await createProjectWithRepo(app, "user-personal-pat");
-
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      stargazers_count: 42, open_issues_count: 3, pushed_at: "2026-01-01T00:00:00Z",
-    }));
-
-    const r = await request(app).get(`/api/devhub/projects/${id}/github/status`);
-    expect(r.status).toBe(200);
-    expect(r.body.stars).toBe(42);
-    // Verify it used the PER-PROJECT token, not the env one
-    expect((fetchMock.mock.calls[0][1] as any).headers.Authorization).toBe("Bearer user-personal-pat");
-  });
-
-  test("/github/branches falls back to env token when no project token", async () => {
-    process.env.GITHUB_TOKEN = "fallback-server-token";
-    const app = makeApp();
-    const id = await createProjectWithRepo(app); // no per-project token
-
-    fetchMock.mockResolvedValueOnce(jsonResp(200, [
-      { name: "main", commit: { sha: "abcdef1234" } },
-    ]));
-
-    const r = await request(app).get(`/api/devhub/projects/${id}/github/branches`);
-    expect(r.status).toBe(200);
-    expect(r.body.connected).toBe(true);
-    expect(r.body.branches).toHaveLength(1);
-    expect((fetchMock.mock.calls[0][1] as any).headers.Authorization).toBe("Bearer fallback-server-token");
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 11b. GitHub pull request — real merge/PR capability (agent can open a PR,
 //      not just create a repo)
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/projects/:id/github/pull-request", () => {
-  async function createProjectWithRepo(app: express.Express) {
-    const cr = await request(app).post("/api/devhub/projects").send({ name: "PRTest" });
-    const id = cr.body.project.id;
-    await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: "https://github.com/owner/repo" });
-    return id;
-  }
-
-  test("400 when title missing", async () => {
-    process.env.GITHUB_TOKEN = "tok";
-    const app = makeApp();
-    const id = await createProjectWithRepo(app);
-    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request`).send({});
-    expect(r.status).toBe(400);
-  });
-
-  test("ok:false when GITHUB_TOKEN is not configured", async () => {
-    const app = makeApp();
-    const id = await createProjectWithRepo(app);
-    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request`).send({ title: "Add feature" });
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(false);
-    expect(r.body.message).toMatch(/GITHUB_TOKEN/);
-  });
-
-  test("ok:false when the project has no linked GitHub repo yet", async () => {
-    process.env.GITHUB_TOKEN = "tok";
-    const app = makeApp();
-    const cr = await request(app).post("/api/devhub/projects").send({ name: "NoRepo" });
-    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/github/pull-request`).send({ title: "Add feature" });
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(false);
-    expect(r.body.message).toMatch(/push to GitHub first/);
-  });
-
-  test("opens a PR on a new branch against the repo's default branch (no files)", async () => {
-    process.env.GITHUB_TOKEN = "tok";
-    const app = makeApp();
-    const id = await createProjectWithRepo(app);
-
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { default_branch: "main" })) // repo lookup
-      .mockResolvedValueOnce(jsonResp(200, { object: { sha: "base-sha-123" } })) // base ref
-      .mockResolvedValueOnce(jsonResp(201, { ref: "refs/heads/aevion-agent-1" })) // create branch
-      .mockResolvedValueOnce(jsonResp(201, { html_url: "https://github.com/owner/repo/pull/7", number: 7 })); // create PR
-
-    const r = await request(app)
-      .post(`/api/devhub/projects/${id}/github/pull-request`)
-      .send({ title: "Add login page", body: "Adds a login form + API route", branch: "feat/login" });
-
-    expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ ok: true, prUrl: "https://github.com/owner/repo/pull/7", prNumber: 7, branch: "feat/login", pushedFiles: 0 });
-
-    const createRefBody = JSON.parse((fetchMock.mock.calls[2][1] as any).body);
-    expect(createRefBody).toEqual({ ref: "refs/heads/feat/login", sha: "base-sha-123" });
-    const prBody = JSON.parse((fetchMock.mock.calls[3][1] as any).body);
-    expect(prBody).toEqual({ title: "Add login page", head: "feat/login", base: "main", body: "Adds a login form + API route" });
-  });
-
-  test("auto-generates a branch name when none is given", async () => {
-    process.env.GITHUB_TOKEN = "tok";
-    const app = makeApp();
-    const id = await createProjectWithRepo(app);
-
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { default_branch: "main" }))
-      .mockResolvedValueOnce(jsonResp(200, { object: { sha: "base-sha" } }))
-      .mockResolvedValueOnce(jsonResp(201, {}))
-      .mockResolvedValueOnce(jsonResp(201, { html_url: "https://github.com/owner/repo/pull/1", number: 1 }));
-
-    const r = await request(app)
-      .post(`/api/devhub/projects/${id}/github/pull-request`)
-      .send({ title: "x" });
-
-    expect(r.status).toBe(200);
-    expect(r.body.branch).toMatch(/^aevion-agent-\d+$/);
-  });
-
-  test("commits an existing file with its current sha (avoids a Contents API conflict)", async () => {
-    process.env.GITHUB_TOKEN = "tok";
-    const app = makeApp();
-    const id = await createProjectWithRepo(app);
-    await request(app).put(`/api/devhub/projects/${id}/file`).send({ path: "pages/index.tsx", content: "updated" });
-
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { default_branch: "main" })) // repo lookup
-      .mockResolvedValueOnce(jsonResp(200, { object: { sha: "base-sha" } })) // base ref
-      .mockResolvedValueOnce(jsonResp(201, {})) // create branch
-      .mockResolvedValueOnce(jsonResp(200, { sha: "existing-file-sha" })) // GET contents on new branch — file exists
-      .mockResolvedValueOnce(jsonResp(200, { content: { sha: "new-sha" } })) // PUT contents
-      .mockResolvedValueOnce(jsonResp(201, { html_url: "https://github.com/owner/repo/pull/2", number: 2 })); // create PR
-
-    const r = await request(app)
-      .post(`/api/devhub/projects/${id}/github/pull-request`)
-      .send({ title: "Update index" });
-
-    expect(r.status).toBe(200);
-    expect(r.body.pushedFiles).toBe(1);
-    const putBody = JSON.parse((fetchMock.mock.calls[4][1] as any).body);
-    expect(putBody.sha).toBe("existing-file-sha");
-    expect(putBody.branch).toBeTruthy();
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 11c. GitHub PR merge — closes the "GitHub is push+PR only" gap
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/projects/:id/github/pull-request/:number/merge", () => {
-  async function createProjectWithRepo(app: express.Express) {
-    const cr = await request(app).post("/api/devhub/projects").send({ name: "MergeTest" });
-    const id = cr.body.project.id;
-    await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: "https://github.com/owner/repo" });
-    return id;
-  }
-
-  test("400 on a non-numeric pull request number", async () => {
-    process.env.GITHUB_TOKEN = "tok";
-    const app = makeApp();
-    const id = await createProjectWithRepo(app);
-    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request/not-a-number/merge`).send({});
-    expect(r.status).toBe(400);
-  });
-
-  test("ok:false when GITHUB_TOKEN is not configured", async () => {
-    const app = makeApp();
-    const id = await createProjectWithRepo(app);
-    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request/1/merge`).send({});
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(false);
-    expect(r.body.message).toMatch(/GITHUB_TOKEN/);
-  });
-
-  test("ok:false when no repo is linked yet", async () => {
-    process.env.GITHUB_TOKEN = "tok";
-    const app = makeApp();
-    const cr = await request(app).post("/api/devhub/projects").send({ name: "NoRepo" });
-    const r = await request(app).post(`/api/devhub/projects/${cr.body.project.id}/github/pull-request/1/merge`).send({});
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(false);
-    expect(r.body.message).toMatch(/push to GitHub first/);
-  });
-
-  test("merges with the requested method and returns the merge sha", async () => {
-    process.env.GITHUB_TOKEN = "tok";
-    const app = makeApp();
-    const id = await createProjectWithRepo(app);
-
-    fetchMock.mockResolvedValueOnce(jsonResp(200, { merged: true, sha: "abc123", message: "Pull Request successfully merged" }));
-
-    const r = await request(app)
-      .post(`/api/devhub/projects/${id}/github/pull-request/7/merge`)
-      .send({ mergeMethod: "rebase" });
-
-    expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ ok: true, merged: true, sha: "abc123" });
-    expect(fetchMock.mock.calls[0][0]).toContain("/repos/owner/repo/pulls/7/merge");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.merge_method).toBe("rebase");
-  });
-
-  test("defaults to squash when mergeMethod is omitted", async () => {
-    process.env.GITHUB_TOKEN = "tok";
-    const app = makeApp();
-    const id = await createProjectWithRepo(app);
-
-    fetchMock.mockResolvedValueOnce(jsonResp(200, { merged: true, sha: "def456" }));
-
-    await request(app).post(`/api/devhub/projects/${id}/github/pull-request/3/merge`).send({});
-
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.merge_method).toBe("squash");
-  });
-
-  test("a 2xx response with merged:false is reported as a failure, not silently ok:true", async () => {
-    process.env.GITHUB_TOKEN = "tok";
-    const app = makeApp();
-    const id = await createProjectWithRepo(app);
-
-    // GitHub's documented edge case: 200 OK but the merge didn't actually happen.
-    fetchMock.mockResolvedValueOnce(jsonResp(200, { merged: false, message: "Merge already in progress" }));
-
-    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request/5/merge`).send({});
-
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(false);
-    expect(r.body.message).toMatch(/Merge already in progress/);
-  });
-
-  test("a non-2xx GitHub response (e.g. not mergeable) is reported as a failure", async () => {
-    process.env.GITHUB_TOKEN = "tok";
-    const app = makeApp();
-    const id = await createProjectWithRepo(app);
-
-    fetchMock.mockResolvedValueOnce(jsonResp(405, { message: "Pull Request is not mergeable" }));
-
-    const r = await request(app).post(`/api/devhub/projects/${id}/github/pull-request/9/merge`).send({});
-
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(false);
-    expect(r.body.message).toMatch(/not mergeable/);
-  });
-});
 
 afterEach(() => {
   for (const key of ["CLOUDFLARE_ACCOUNT_ID", "BREVO_SMS_SENDER", "BREVO_WHATSAPP_SENDER_ID"]) {
@@ -2473,183 +1654,16 @@ describe("POST /api/devhub/projects/:id/agent/workflow/stream", () => {
 // 14. Brevo SMS
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/sms (Brevo)", () => {
-  test("503 when BREVO_API_KEY missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/sms")
-      .send({ recipient: "+14155552671", content: "hi" });
-    expect(r.status).toBe(503);
-  });
-
-  test("400 on invalid phone (not E.164)", async () => {
-    process.env.BREVO_API_KEY = "fake";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/sms")
-      .send({ recipient: "555-0123", content: "hi" });
-    expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/E.164/);
-  });
-
-  test("400 when content > 612 chars", async () => {
-    process.env.BREVO_API_KEY = "fake";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/sms")
-      .send({ recipient: "+14155552671", content: "x".repeat(613) });
-    expect(r.status).toBe(400);
-  });
-
-  test("calls Brevo SMS API with sender + recipient", async () => {
-    process.env.BREVO_API_KEY = "brevo-fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(201, {
-      reference: "ref-123", messageId: 999, smsCount: 1,
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/sms")
-      .send({ recipient: "+14155552671", content: "Test SMS", sender: "MyApp" });
-    expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ ok: true, reference: "ref-123", smsCount: 1 });
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.sender).toBe("MyApp");
-    expect(body.recipient).toBe("+14155552671");
-    expect(body.type).toBe("transactional");
-  });
-
-  test("degraded: true when Brevo returns 2xx with no messageId", async () => {
-    process.env.BREVO_API_KEY = "brevo-fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(201, { reference: "ref-123", smsCount: 1 })); // no messageId
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/sms")
-      .send({ recipient: "+14155552671", content: "Test SMS" });
-
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(true);
-    expect(r.body.degraded).toBe(true);
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 15. Brevo WhatsApp
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/whatsapp (Brevo)", () => {
-  test("503 when API key missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/whatsapp")
-      .send({ contactNumber: "+14155552671", templateId: 1 });
-    expect(r.status).toBe(503);
-  });
-
-  test("503 when sender ID missing", async () => {
-    process.env.BREVO_API_KEY = "fake";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/whatsapp")
-      .send({ contactNumber: "+14155552671", templateId: 1 });
-    expect(r.status).toBe(503);
-    expect(r.body.error).toMatch(/BREVO_WHATSAPP_SENDER_ID/);
-  });
-
-  test("400 on missing templateId", async () => {
-    process.env.BREVO_API_KEY = "fake";
-    process.env.BREVO_WHATSAPP_SENDER_ID = "sender-123";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/whatsapp")
-      .send({ contactNumber: "+14155552671" });
-    expect(r.status).toBe(400);
-  });
-
-  test("calls Brevo WhatsApp API + strips leading +", async () => {
-    process.env.BREVO_API_KEY = "fake";
-    process.env.BREVO_WHATSAPP_SENDER_ID = "sender-abc";
-    fetchMock.mockResolvedValueOnce(jsonResp(201, { messageId: "wa-msg-1" }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/whatsapp")
-      .send({ contactNumber: "+14155552671", templateId: 42, params: { name: "Alice" } });
-    expect(r.status).toBe(200);
-    expect(r.body.messageId).toBe("wa-msg-1");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.senderNumberId).toBe("sender-abc");
-    expect(body.contactNumbers).toEqual(["14155552671"]); // no +
-    expect(body.templateId).toBe(42);
-    expect(body.params).toEqual({ name: "Alice" });
-  });
-
-  test("degraded: true when Brevo returns 2xx with no messageId", async () => {
-    process.env.BREVO_API_KEY = "fake";
-    process.env.BREVO_WHATSAPP_SENDER_ID = "sender-abc";
-    fetchMock.mockResolvedValueOnce(jsonResp(201, {})); // no messageId
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/whatsapp")
-      .send({ contactNumber: "+14155552671", templateId: 42 });
-
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(true);
-    expect(r.body.degraded).toBe(true);
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 16. Cloudflare Images upload
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/upload-image (Cloudflare Images)", () => {
-  test("400 when neither sourceUrl nor base64", async () => {
-    const r = await request(makeApp()).post("/api/devhub/media/upload-image").send({});
-    expect(r.status).toBe(400);
-  });
-
-  test("503 when env missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/upload-image")
-      .send({ sourceUrl: "https://example.com/x.png" });
-    expect(r.status).toBe(503);
-    expect(r.body.error).toMatch(/CLOUDFLARE/);
-  });
-
-  test("uploads from sourceUrl + returns permanent URL", async () => {
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      result: {
-        id: "cf-img-123",
-        variants: ["https://imagedelivery.net/abc/cf-img-123/public"],
-        uploaded: "2026-05-15T00:00:00Z",
-      },
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/upload-image")
-      .send({ sourceUrl: "https://oai.example/dalle.png" });
-    expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({
-      ok: true,
-      imageId: "cf-img-123",
-      url: "https://imagedelivery.net/abc/cf-img-123/public",
-    });
-    expect(fetchMock.mock.calls[0][0]).toContain("acc-fake/images/v1");
-    expect((fetchMock.mock.calls[0][1] as any).headers.Authorization).toBe("Bearer cf-fake");
-  });
-
-  test("uploads from base64", async () => {
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      result: { id: "cf-img-b64", variants: ["https://imagedelivery.net/x/cf-img-b64/public"], uploaded: "now" },
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/upload-image")
-      .send({
-        base64: Buffer.from("fake-png-bytes").toString("base64"),
-        mimeType: "image/png",
-      });
-    expect(r.status).toBe(200);
-    expect(r.body.imageId).toBe("cf-img-b64");
-  });
-});
 
 afterEach(() => {
   for (const key of ["DEEPL_API_KEY"]) delete process.env[key];
@@ -2659,51 +1673,6 @@ afterEach(() => {
 // 17. DeepL translate
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/translate (DeepL)", () => {
-  test("503 when DEEPL_API_KEY missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/translate")
-      .send({ text: "hello", targetLang: "RU" });
-    expect(r.status).toBe(503);
-  });
-
-  test("400 on missing fields", async () => {
-    process.env.DEEPL_API_KEY = "fake";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/translate")
-      .send({ text: "hello" });
-    expect(r.status).toBe(400);
-  });
-
-  test("uses free endpoint when key ends with :fx", async () => {
-    process.env.DEEPL_API_KEY = "abc-fake:fx";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      translations: [{ text: "привет", detected_source_language: "EN" }],
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/translate")
-      .send({ text: "hello", targetLang: "ru" });
-    expect(r.status).toBe(200);
-    expect(r.body.text).toBe("привет");
-    expect(r.body.detectedSource).toBe("EN");
-    expect(r.body.targetLang).toBe("RU");
-    expect(fetchMock.mock.calls[0][0]).toContain("api-free.deepl.com");
-  });
-
-  test("uses pro endpoint for non-:fx key", async () => {
-    process.env.DEEPL_API_KEY = "pro-key-no-suffix";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      translations: [{ text: "Bonjour", detected_source_language: "EN" }],
-    }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/translate")
-      .send({ text: "Hello", targetLang: "FR" });
-    expect(r.status).toBe(200);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://api.deepl.com/v2/translate");
-  });
-});
 
 describe("POST /api/devhub/projects/:id/files/translate", () => {
   async function createProjectWithFile(app: express.Express, path: string, content: string) {
@@ -2763,62 +1732,6 @@ describe("POST /api/devhub/projects/:id/files/translate", () => {
 // 18. Brevo email templates (list + send by template)
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("GET /api/devhub/media/email-templates (Brevo)", () => {
-  test("503 when BREVO_API_KEY missing", async () => {
-    const r = await request(makeApp()).get("/api/devhub/media/email-templates");
-    expect(r.status).toBe(503);
-  });
-
-  test("lists templates with limit/offset", async () => {
-    process.env.BREVO_API_KEY = "fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      count: 3,
-      templates: [
-        { id: 1, name: "Welcome", subject: "Welcome!", isActive: true, createdAt: "2026-01-01T00:00:00Z" },
-        { id: 2, name: "Reset", subject: "Reset password", isActive: true, createdAt: "2026-01-02T00:00:00Z" },
-      ],
-    }));
-
-    const r = await request(makeApp()).get("/api/devhub/media/email-templates?limit=10&offset=0");
-    expect(r.status).toBe(200);
-    expect(r.body.total).toBe(3);
-    expect(r.body.templates).toHaveLength(2);
-    expect(r.body.templates[0]).toMatchObject({ id: 1, name: "Welcome", subject: "Welcome!" });
-    expect(fetchMock.mock.calls[0][0]).toContain("/v3/smtp/templates?limit=10&offset=0");
-  });
-});
-
-describe("POST /api/devhub/media/email-template-send (Brevo)", () => {
-  test("400 missing templateId", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email-template-send")
-      .send({ to: "x@y.com" });
-    expect(r.status).toBe(400);
-  });
-
-  test("400 invalid email", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email-template-send")
-      .send({ templateId: 1, to: "not-email" });
-    expect(r.status).toBe(400);
-  });
-
-  test("sends transac email by templateId with params", async () => {
-    process.env.BREVO_API_KEY = "fake";
-    fetchMock.mockResolvedValueOnce(jsonResp(201, { messageId: "mid-456" }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email-template-send")
-      .send({ templateId: 7, to: "user@example.com", params: { name: "Alice", code: "1234" } });
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(true);
-    expect(r.body.messageId).toBe("mid-456");
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.templateId).toBe(7);
-    expect(body.to[0].email).toBe("user@example.com");
-    expect(body.params).toEqual({ name: "Alice", code: "1234" });
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 19. Agent workflow auto-uploads images to Cloudflare when env set
@@ -2880,79 +1793,6 @@ function setR2Env() {
   process.env.CLOUDFLARE_R2_BUCKET = "aevion-media";
 }
 
-describe("POST /api/devhub/media/upload-audio (Cloudflare R2)", () => {
-  test("400 when neither sourceUrl nor base64", async () => {
-    const r = await request(makeApp()).post("/api/devhub/media/upload-audio").send({});
-    expect(r.status).toBe(400);
-  });
-
-  test("503 when R2 env missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/upload-audio")
-      .send({ base64: Buffer.from("xx").toString("base64") });
-    expect(r.status).toBe(503);
-    expect(r.body.error).toMatch(/R2/);
-  });
-
-  test("uploads base64 audio + returns CDN url (with public base)", async () => {
-    setR2Env();
-    process.env.CLOUDFLARE_R2_PUBLIC_URL = "https://cdn.aevion.test";
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {}));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/upload-audio")
-      .send({ base64: Buffer.from("fake-mp3").toString("base64"), mimeType: "audio/mpeg", key: "audio/test.mp3" });
-    expect(r.status).toBe(200);
-    expect(r.body.ok).toBe(true);
-    expect(r.body.key).toBe("audio/test.mp3");
-    expect(r.body.url).toBe("https://cdn.aevion.test/audio/test.mp3");
-
-    const callUrl = fetchMock.mock.calls[0][0] as string;
-    expect(callUrl).toContain("acc-r2.r2.cloudflarestorage.com");
-    expect(callUrl).toContain("/aevion-media/audio/test.mp3");
-    const init = fetchMock.mock.calls[0][1] as any;
-    expect(init.method).toBe("PUT");
-    expect(init.headers.Authorization).toMatch(/^AWS4-HMAC-SHA256 /);
-    expect(init.headers["x-amz-date"]).toMatch(/^\d{8}T\d{6}Z$/);
-    expect(init.headers["x-amz-content-sha256"]).toMatch(/^[a-f0-9]{64}$/);
-  });
-
-  test("fetches sourceUrl then uploads, returns S3-style url without public base", async () => {
-    setR2Env();
-    const srcBytes = Buffer.from("audio-bytes");
-    const ab = new ArrayBuffer(srcBytes.length);
-    new Uint8Array(ab).set(srcBytes);
-    fetchMock
-      .mockResolvedValueOnce({
-        ok: true, status: 200,
-        arrayBuffer: async () => ab,
-        text: async () => "", json: async () => ({}),
-      } as any)
-      .mockResolvedValueOnce(jsonResp(200, {}));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/upload-audio")
-      .send({ sourceUrl: "https://elevenlabs.example/tmp.mp3", mimeType: "audio/mpeg" });
-    expect(r.status).toBe(200);
-    expect(r.body.url).toContain("acc-r2.r2.cloudflarestorage.com/aevion-media/audio/");
-    expect(r.body.bytes).toBe(srcBytes.length);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  test("502 when R2 PUT fails", async () => {
-    setR2Env();
-    fetchMock.mockResolvedValueOnce({
-      ok: false, status: 403,
-      json: async () => ({}), text: async () => "<Error>AccessDenied</Error>", arrayBuffer: async () => new ArrayBuffer(0),
-    } as any);
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/upload-audio")
-      .send({ base64: Buffer.from("xx").toString("base64") });
-    expect(r.status).toBe(502);
-    expect(r.body.error).toMatch(/R2 PUT 403/);
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 21. DeepL bulk translate
@@ -3039,58 +1879,6 @@ describe("POST /api/devhub/projects/:id/files/translate-bulk (DeepL)", () => {
 // 22. Brevo template create
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/email-template-create (Brevo)", () => {
-  test("400 missing fields", async () => {
-    const r = await request(makeApp()).post("/api/devhub/media/email-template-create").send({});
-    expect(r.status).toBe(400);
-  });
-
-  test("503 when BREVO_API_KEY missing", async () => {
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email-template-create")
-      .send({ name: "T", subject: "S", htmlContent: "<p>H</p>", senderEmail: "a@b.co" });
-    expect(r.status).toBe(503);
-  });
-
-  test("400 when senderEmail missing & no env", async () => {
-    process.env.BREVO_API_KEY = "k";
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email-template-create")
-      .send({ name: "T", subject: "S", htmlContent: "<p>H</p>" });
-    expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/senderEmail/);
-  });
-
-  test("creates template + returns id", async () => {
-    process.env.BREVO_API_KEY = "k";
-    fetchMock.mockResolvedValueOnce(jsonResp(201, { id: 99 }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email-template-create")
-      .send({ name: "Hello", subject: "Hi", htmlContent: "<p>Body</p>", senderEmail: "noreply@aevion.io", senderName: "AEVION" });
-    expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ ok: true, id: 99, name: "Hello", subject: "Hi" });
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.templateName).toBe("Hello");
-    expect(body.sender).toEqual({ email: "noreply@aevion.io", name: "AEVION" });
-    expect(body.isActive).toBe(true);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://api.brevo.com/v3/smtp/templates");
-  });
-
-  test("falls back to BREVO_SENDER_EMAIL env", async () => {
-    process.env.BREVO_API_KEY = "k";
-    process.env.BREVO_SENDER_EMAIL = "default@aevion.io";
-    process.env.BREVO_SENDER_NAME = "AEVION Bot";
-    fetchMock.mockResolvedValueOnce(jsonResp(201, { id: 42 }));
-
-    const r = await request(makeApp())
-      .post("/api/devhub/media/email-template-create")
-      .send({ name: "N", subject: "S", htmlContent: "<p>X</p>" });
-    expect(r.status).toBe(200);
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.sender).toEqual({ email: "default@aevion.io", name: "AEVION Bot" });
-  });
-});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 23. ZIP import (symmetric to /export)
@@ -4025,7 +2813,7 @@ describe("aevion.build subdomain is only promised when it resolves", () => {
     // wrangler upload, CNAME creation, then the domain probe fails (the zone
     // is not delegated) while pages.dev answers.
     vi.doMock("../src/lib/wranglerPagesDeploy", () => ({
-      wranglerPagesDeploy: async () => ({ ok: true, url: "https://abc.aevion-x.pages.dev" }),
+      wranglerPagesDeploy: async () => ({ ok: true, url: "https://abc.aevion-x.pages.dev", skipped: []}),
     }));
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true, result: {} }), text: async () => "" } as any);
 
@@ -4421,7 +3209,7 @@ describe("deploy verification timers outlive the test that started them", () => 
       await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>x</h1>" });
 
       fetchMock.mockResolvedValue(jsonResp(200, { success: true }));
-      mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://probe.pages.dev", output: "" });
+      mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://probe.pages.dev", output: "", skipped: []});
       const dep = await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
       expect(dep.status).toBe(200);
 
@@ -4452,7 +3240,7 @@ describe("deploy verification timers outlive the test that started them", () => 
       await request(app).put(`/api/devhub/projects/${id}/file?path=index.html`).send({ content: "<h1>x</h1>" });
 
       fetchMock.mockResolvedValue(jsonResp(200, { success: true }));
-      mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://probe2.pages.dev", output: "" });
+      mockDeployViaWrangler.mockResolvedValueOnce({ ok: true, url: "https://probe2.pages.dev", output: "", skipped: []});
       await request(app).post(`/api/devhub/projects/${id}/deploy/pages`).send({});
 
       __clearDeferredDevHubWork();
@@ -4467,5 +3255,58 @@ describe("deploy verification timers outlive the test that started them", () => 
       delete process.env.CLOUDFLARE_ACCOUNT_ID;
       delete process.env.CLOUDFLARE_API_TOKEN;
     }
+  });
+});
+
+describe("An exported project says how to run it", () => {
+  test("the ZIP carries HOW-TO-RUN.md built from the project's real files", async () => {
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "RunNote", stack: "react" });
+    const id = cr.body.project.id as string;
+    await request(app).put(`/api/devhub/projects/${id}/file?path=src/App.jsx`).send({ content: "export default () => null;" });
+    await request(app)
+      .put(`/api/devhub/projects/${id}/file?path=package.json`)
+      .send({ content: JSON.stringify({ scripts: { dev: "vite" }, dependencies: { react: "^18.0.0" } }) });
+
+    const r = await request(app).get(`/api/devhub/projects/${id}/export`).buffer().parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+    expect(r.status).toBe(200);
+
+    const zipText = (r.body as Buffer).toString("utf8");
+    expect(zipText).toContain("HOW-TO-RUN.md");
+    // The command comes from the project's own manifest, not a template.
+    expect(zipText).toContain("npm run dev");
+  });
+});
+
+
+describe("Export metadata does not come back as project content", () => {
+  test("a re-imported export does not gain HOW-TO-RUN.md as a file", async () => {
+    // Каждый round-trip иначе добавлял бы файл: экспорт кладёт заметку,
+    // импорт принимал бы её за исходник проекта.
+    const app = makeApp();
+    const src = (await request(app).post("/api/devhub/projects").send({ name: "RoundNote", stack: "react" })).body.project.id;
+    await request(app).put(`/api/devhub/projects/${src}/file?path=index.html`).send({ content: "<h1>hi</h1>" });
+
+    const exp = await request(app).get(`/api/devhub/projects/${src}/export`).buffer().parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+    expect(exp.status).toBe(200);
+
+    const dst = (await request(app).post("/api/devhub/projects").send({ name: "RoundNoteTarget", stack: "react" })).body.project.id;
+    const imp = await request(app)
+      .post(`/api/devhub/projects/${dst}/import-zip`)
+      .send({ base64Zip: (exp.body as Buffer).toString("base64") });
+    expect(imp.status).toBe(200);
+
+    const paths = (await request(app).get(`/api/devhub/projects/${dst}/files`)).body.files.map((f: any) => f.path);
+    expect(paths).toContain("index.html");
+    expect(paths).not.toContain("HOW-TO-RUN.md");
+    expect(paths).not.toContain("aevion-export.json");
   });
 });

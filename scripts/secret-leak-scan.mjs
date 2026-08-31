@@ -153,7 +153,7 @@ let examples = 0;
 // postgres://postgres:postgres@127.0.0.1 для одноразового контейнера в CI:
 // «пароль» там равен имени пользователя и снаружи не значит ничего. Держать
 // это в находках значит приучить читателя пролистывать список.
-const LOCAL_DB = /(127\.0\.0\.1|localhost|db:|@postgres[:/])/;
+const LOCAL_DB = /(127\.0\.0\.1|localhost|\bdb:|@postgres[:/])/;
 
 for (const b of branches) {
   for (const hit of grepRef(b)) {

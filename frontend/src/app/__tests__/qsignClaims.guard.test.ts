@@ -34,6 +34,16 @@ const FORBIDDEN: { pattern: RegExp; why: string }[] = [
   { pattern: /we already ship it/i, why: "«we already ship it» о постквантовой подписи" },
   { pattern: /ML-DSA-65 on the shelf/i, why: "«on the shelf» — утверждение о доступности" },
   { pattern: /No one else ships ML-DSA-65/i, why: "непроверяемое «никто больше не поставляет»" },
+  // Добавлено 28.08.2026. Прежние восемь шаблонов — ровно те формулировки, что
+  // отгрузились в августе. Сторож по образцам знает только их: скажи то же самое
+  // иначе — не заметит. Ниже равнозначные формы и, главное, РУССКИЕ: весь список
+  // выше английский, а половина страниц говорит по-русски.
+  //
+  // Проверено ДО добавления: на сегодняшнем тексте эти шаблоны дают НОЛЬ
+  // совпадений — они не требуют переписывать ни одну живую страницу.
+  { pattern: /ML-DSA-65[^.\n]{0,40}\b(live|active|enabled|shipping)\b/i, why: "ML-DSA-65 названа действующей — прод отвечает preview" },
+  { pattern: /постквантов[а-яё]*[^.\n]{0,40}(работает|включена|активна|уже есть)/i, why: "по-русски сказано, что постквантовая подпись работает" },
+  { pattern: /FIPS\s*204[^.\n]{0,40}(работает|включен)/i, why: "по-русски сказано, что FIPS 204 включён" },
 ];
 
 function collectSourceFiles(dir: string): string[] {
@@ -85,6 +95,17 @@ describe("post-quantum claims match what production answers", () => {
     // The fixture holds the exact wording that shipped on /acquire before this
     // guard existed. If the matcher ever stops recognising it, the check above
     // becomes decoration.
-    expect(findClaimViolations([seeded]).length).toBeGreaterThan(0);
+    const found = findClaimViolations([seeded]);
+    expect(found.length).toBeGreaterThan(0);
+
+    // Усилено 28.08.2026. «Больше нуля» доказывает, что сработал КАКОЙ-ТО
+    // шаблон, а не каждый: перечень выглядит охватом, а ловить может половину.
+    // Поэтому образец обязан задевать ВСЕ шаблоны — иначе добавленный сегодня
+    // может молча не работать.
+    // Нарушения — СТРОКИ с уже вписанной причиной, а не объекты: первый заход я
+    // читал у них поле `why` и получил «не сработал ни один» на шаблонах,
+    // которые заведомо срабатывают. Пустое поле значило «читаю не ту форму».
+    const silent = FORBIDDEN.filter((f) => !found.some((v) => v.includes(f.why))).map((f) => f.why);
+    expect(silent, "шаблоны не сработали ни на одной строке образца: " + silent.join(" | ")).toEqual([]);
   });
 });

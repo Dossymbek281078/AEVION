@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { listPosts } from "@/lib/constitution-blog";
 import { getServerT } from "@/lib/i18n-server";
+import { ConstitutionFunnelPing } from "@/components/ConstitutionFunnelPing";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
@@ -23,6 +24,7 @@ export default async function BlogIndexPage() {
   const posts = listPosts();
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
+      <ConstitutionFunnelPing event="blog_view" props={{ kind: "index" }} />
       <div className="max-w-4xl mx-auto">
         <header className="mb-8">
           <Link href="/constitution" className="text-[#d4af37] hover:underline text-sm">

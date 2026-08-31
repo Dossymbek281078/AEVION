@@ -42,6 +42,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import {
   referenceForVariantId,
+  resolveLemonSqueezyVariant,
   tierForLemonSqueezyReference,
   isAppReference,
   appSlugForReference,
@@ -244,7 +245,12 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     // доступа — ветка subscription_* ниже; здесь остаётся разовая покупка того
     // же варианта. Оба пути ведут в одну и ту же выдачу, повтор безвреден
     // (upgradeDevHubByEmail — upsert).
-    const studioVariant = process.env.LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO?.trim();
+    // Через ОБЩУЮ карту, а не напрямую из окружения: имя переменной живёт в
+    // data/lemonSqueezyVariants.ts, и прямое чтение было вторым источником того
+    // же факта. Переименуй кто-нибудь переменную в карте — прямое чтение
+    // сохранило бы старое имя, выдача тарифа за $149 тихо перестала бы
+    // срабатывать, а заплативший не получил бы ничего.
+    const studioVariant = resolveLemonSqueezyVariant("app_devhub");
     const variantId = String(attrs.variant_id ?? "");
     if (studioVariant && variantId === studioVariant && email) {
       const tier = revoke ? "free" : "pro";

@@ -21,6 +21,19 @@ type Tier = {
 export default function ConstitutionPricingPage() {
   const { t } = useI18n();
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  // Касса возвращает сюда с ?stub=1, когда платёжный провайдер не настроен.
+  // До 29.08.2026 страница этот признак не читала: человек нажимал «Купить»,
+  // молча оказывался на той же странице и не понимал, что произошло. Нажал бы
+  // ещё раз — и снова ничего. Такая поломка не падает и никем не видна.
+  //
+  // Признак берётся в useEffect, а не из useSearchParams: страница не обязана
+  // из-за него оборачиваться в Suspense, а до гидратации показывать нечего.
+  const [payUnavailable, setPayUnavailable] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setPayUnavailable(new URLSearchParams(window.location.search).get("stub") === "1");
+  }, []);
   const [showWaitlist, setShowWaitlist] = useState<boolean>(false);
   const { track } = useFunnel();
 
@@ -161,6 +174,15 @@ export default function ConstitutionPricingPage() {
           на «сколько человек пришло на AEVION и сколько ушло платить»,
           складывать их между собой нельзя. */}
       <PageTracking page="constitution-pricing" />
+      {payUnavailable ? (
+        <div
+          role="status"
+          className="mx-auto mb-6 max-w-3xl rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-100"
+        >
+          <strong className="block mb-1">{t("constitution.pay.unavailableTitle")}</strong>
+          {t("constitution.pay.unavailableBody")}
+        </div>
+      ) : null}
       <div className="max-w-6xl mx-auto">
         <header className="mb-10 text-center">
           <Link href="/constitution" className="text-[#d4af37] hover:underline text-sm">

@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
+import { variantMappingStatus } from "../data/lemonSqueezyVariants";
+
 /**
  * GET /api/health/channels — работает ли то, что мы ОБЕЩАЕМ человеку.
  *
@@ -58,17 +60,41 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
   const canRegister = email || google || github;
   const canPay = lemonsqueezy || gumroad || paybox || paypal;
 
+  /**
+   * ТРЕТИЙ ВОПРОС, которого здесь не было: превращается ли оплата в доступ.
+   *
+   * `canPay` отвечает «провайдер настроен», и этого мало. Выдача прав висит на
+   * переменной КОНКРЕТНОГО варианта товара: не задана — вебхук заплатившего
+   * доходит до `ignored` и возвращает `ok: true`, не выдав ничего. Магазин
+   * деньги принял, покупатель прав не получил, тревоги нет ни у кого.
+   *
+   * Поэтому поле отдельное, а не внутри `canPay`: молчаливая правка смысла
+   * старого поля хуже нового поля — на `canPay` уже кто-то ссылается.
+   *
+   * Порог намеренно «хотя бы один», а не «все»: часть товаров может быть ещё
+   * не выставлена, и вечно красная проверка перестаёт читаться. Список
+   * несопоставленных отдаётся рядом — по нему видно, чего именно нет.
+   */
+  const variants = variantMappingStatus();
+  const canGrant = !lemonsqueezy || variants.mapped > 0;
+
   res.json({
     ok: true,
     canRegister,
     canPay,
+    canGrant,
     signup: {
       email: { configured: email, via: { smtp, resend } },
       google: { configured: google },
       github: { configured: github },
     },
     payments: {
-      lemonsqueezy: { configured: lemonsqueezy, signed: signedLemon },
+      lemonsqueezy: {
+        configured: lemonsqueezy,
+        signed: signedLemon,
+        // Наружу — только наши внутренние имена товаров, не идентификаторы.
+        variants: { total: variants.total, mapped: variants.mapped, unmapped: variants.unmapped },
+      },
       gumroad: { configured: gumroad, signed: signedGumroad },
       paybox: { configured: paybox },
       paypal: { configured: paypal, signed: signedPaypal },
@@ -78,6 +104,9 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
       ...(email ? [] : ["SMTP_HOST+SMTP_USER+SMTP_PASS либо RESEND_API_KEY"]),
       ...(google ? [] : ["GOOGLE_OAUTH_CLIENT_ID+SECRET"]),
       ...(github ? [] : ["GITHUB_OAUTH_CLIENT_ID+SECRET"]),
+      ...(lemonsqueezy && variants.mapped === 0
+        ? ["LEMON_SQUEEZY_VARIANT_* (деньги принимаются, доступ не выдаётся ни за один товар)"]
+        : []),
       ...(gumroad && !signedGumroad ? ["GUMROAD_WEBHOOK_SECRET (оплата принимается без подписи)"] : []),
     ],
   });

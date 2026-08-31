@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/ToastProvider";
 import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -33,6 +34,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string
 };
 
 export default function MemoryPage() {
+  const { showToast } = useToast();
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,11 +83,22 @@ export default function MemoryPage() {
   };
 
   const deleteMemory = async (id: string) => {
+    // Оптимистичное удаление: строку убираем сразу, чтобы список не мигал.
+    //
+    // Но откат стоял ТОЛЬКО в catch, а `fetch` не бросает исключение на 500 или
+    // 403 — он спокойно возвращает ответ. То есть неудавшееся удаление
+    // оставляло запись скрытой: человек считал, что удалил, а после
+    // перезагрузки она возвращалась. Отказ выглядел успехом.
     setMemories((prev) => prev.filter((m) => m.id !== id));
     try {
-      await fetch(apiUrl(`/api/qcoreai/me/memories/${id}`), { method: "DELETE", headers: bearerHeader() });
+      const r = await fetch(apiUrl(`/api/qcoreai/me/memories/${id}`), { method: "DELETE", headers: bearerHeader() });
+      if (!r.ok) {
+        await loadMemories();
+        showToast(`Не удалось удалить (${r.status}). Запись на месте.`, "error");
+      }
     } catch {
       await loadMemories();
+      showToast("Не удалось удалить — проверьте связь. Запись на месте.", "error");
     }
   };
 

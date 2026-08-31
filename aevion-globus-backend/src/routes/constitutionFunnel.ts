@@ -18,6 +18,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { isAdminRequest } from "../lib/adminAuth";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { queryNumber } from "../lib/queryNumber";
 
@@ -63,20 +64,11 @@ function clientIp(req: Request): string {
   );
 }
 
-const ADMIN_ALLOWLIST = (process.env.CONSTITUTION_ADMIN_ALLOWLIST || "yahiin1978@gmail.com")
-  .split(",")
-  .map((s) => s.trim().toLowerCase())
-  .filter(Boolean);
-
+// Проверка вынесена в lib/adminAuth: понадобилась вторая (сводка расхода
+// QReal), а копировать решение об авторизации нельзя — копии расходятся
+// молча. Правило допуска и умолчание перенесены дословно.
 function isAdmin(req: Request): boolean {
-  const payload = verifyBearerOptional(req);
-  if (!payload) return false;
-  const p = payload as Record<string, unknown>;
-  if (p.role === "admin") return true;
-  if (typeof p.email === "string" && ADMIN_ALLOWLIST.includes(p.email.toLowerCase())) {
-    return true;
-  }
-  return false;
+  return isAdminRequest(req);
 }
 
 type EventRow = {

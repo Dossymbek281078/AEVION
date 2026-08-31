@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "AEVION Bank — Trust Badge embed",
   description: "Generate an embeddable Trust Badge SVG for your portfolio, profile, or website.",
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/badge" },
 };
 
 export default function BadgeLayout({ children }: { children: React.ReactNode }) {

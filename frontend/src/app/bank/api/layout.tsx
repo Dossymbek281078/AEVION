@@ -31,6 +31,7 @@ export const metadata: Metadata = {
     siteName: "AEVION",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/api" },
 };
 
 export default function ApiDocsLayout({ children }: { children: React.ReactNode }) {

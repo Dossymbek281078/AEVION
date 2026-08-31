@@ -106,3 +106,6 @@ benchmark-out/
 .aevion-data-test-*/
 
 .vercel
+# Playwright artefacts: written by every run, useful to nobody in git.
+test-results/
+**/test-results/

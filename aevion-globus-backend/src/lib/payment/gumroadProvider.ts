@@ -52,7 +52,12 @@ function publicBase(): string {
   return (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 }
 
-function resolvePermalink(reference: string): string {
+function resolvePermalink(reference: string, explicit?: string): string {
+  // Явно переданная ссылка перебивает всё: её знает вызывающая сторона, у
+  // которой у каждого тарифа свой товар. Без этого общая запасная ссылка
+  // (GUMROAD_DEFAULT_PERMALINK) стояла выше переданного значения и уводила
+  // покупателя на чужой продукт — см. `permalink` в PaymentIntentInput.
+  if (explicit && explicit.trim()) return explicit.trim();
   // GUMROAD_PERMALINK_<UPPER_REFERENCE> → specific product
   // GUMROAD_DEFAULT_PERMALINK → catch-all
   const envKey = `GUMROAD_PERMALINK_${reference.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
@@ -73,7 +78,7 @@ export const gumroadPaymentProvider: PaymentProvider = {
   id: "gumroad",
 
   async createIntent(input: PaymentIntentInput): Promise<PaymentIntent> {
-    const permalink = resolvePermalink(input.reference);
+    const permalink = resolvePermalink(input.reference, input.permalink);
     const checkoutUrl = gumroadCheckoutUrl(permalink, input.email);
     // intentId = permalink:email:ts — used for loose dedup (Gumroad has no
     // server-created intent; sale_id from the webhook is the real id).

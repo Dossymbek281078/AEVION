@@ -99,6 +99,19 @@ const MAX_LEN = 5_000;
 
 const ckey = (target: string, text: string) => `${target}${text}`;
 
+/**
+ * Remember a translation only when the engine actually produced one.
+ *
+ * `undefined` means the engine gave us nothing and the caller fell back to the
+ * source; an unchanged string means nothing was translated. Neither is worth
+ * pinning: the next request should get a fresh attempt rather than a permanent
+ * echo of the source text.
+ */
+export function shouldCache(source: string, engineResult: string | undefined): boolean {
+  if (typeof engineResult !== "string" || engineResult === "") return false;
+  return engineResult !== source;
+}
+
 async function deeplBatch(texts: string[], deeplTarget: string): Promise<string[]> {
   const apiKey = process.env.DEEPL_API_KEY?.trim();
   if (!apiKey) throw new Error("DEEPL_API_KEY not configured");
@@ -262,9 +275,19 @@ i18nRouter.post("/translate", generationLimit("i_n_translate"), async (req, res)
       // or over quota — which is exactly what broke it in production for years.
       const translated = await translateBatch(target, missTexts);
       for (let j = 0; j < missIdx.length; j++) {
-        const tr = translated[j] ?? missTexts[j];
+        const engine = translated[j];
+        const tr = engine ?? missTexts[j];
         out[missIdx[j]] = tr;
-        if (cache.size < MAX_CACHE) cache.set(ckey(target, missTexts[j]), tr);
+        // Only a real translation is worth remembering. A result equal to the
+        // source is either a brand token (cheap to ask again) or the shape a
+        // failure takes here — and caching that pins the failure for the life
+        // of the deploy. Measured 28.07.2026: 39 module captions on the home
+        // page came back as themselves for every German visitor, while the
+        // same strings sent fresh translated correctly. The cache was serving
+        // an old identity answer, not the engine.
+        if (shouldCache(missTexts[j], engine) && cache.size < MAX_CACHE) {
+          cache.set(ckey(target, missTexts[j]), tr);
+        }
       }
     }
 
@@ -273,6 +296,42 @@ i18nRouter.post("/translate", generationLimit("i_n_translate"), async (req, res)
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "translate failed" });
   }
+});
+
+/**
+ * POST /api/i18n/cache/clear   header X-Admin-Token
+ *
+ * Drops the server-side translation cache. It exists because the cache lives in
+ * process memory: when a bad answer got in — the engine occasionally returns a
+ * string unchanged — every visitor was served that echo until the next deploy.
+ * Measured 28.07.2026: 104 visible strings across six pages were stuck in
+ * Russian for German visitors this way. Caching such answers is fixed above;
+ * this is the way to recover a cache that was poisoned before the fix, without
+ * waiting for a deploy or restarting the service.
+ *
+ * Fails closed. Every miss costs a paid call to DeepL or Claude, so an open
+ * endpoint would be a way to burn the budget; without ADMIN_TOKEN configured it
+ * refuses rather than allowing anyone to clear it.
+ */
+i18nRouter.post("/cache/clear", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) {
+    return res.status(503).json({ error: "ADMIN_TOKEN not configured; refusing to expose cache control" });
+  }
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+  if (got !== required) return res.status(401).json({ error: "unauthorized" });
+
+  const target = typeof req.query.target === "string" ? req.query.target.trim() : "";
+  let cleared = 0;
+  if (target) {
+    for (const key of [...cache.keys()]) {
+      if (key.startsWith(target)) { cache.delete(key); cleared++; }
+    }
+  } else {
+    cleared = cache.size;
+    cache.clear();
+  }
+  res.json({ cleared, remaining: cache.size, target: target || "all" });
 });
 
 i18nRouter.get("/health", (_req, res) => {

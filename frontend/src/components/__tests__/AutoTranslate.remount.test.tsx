@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, act, waitFor } from "@testing-library/react";
 import { useEffect, useRef } from "react";
-import { I18nProvider, LangSwitch } from "@/lib/i18n";
+import { I18nProvider, LangSwitch, loadDict } from "@/lib/i18n";
 import { AutoTranslate } from "../AutoTranslate";
 
 // Рендер React в jsdom при полном параллельном прогоне выходил за дефолтные
@@ -36,7 +36,11 @@ function MountCounter({ onMount }: { onMount: () => void }) {
   return <span data-testid="child">Open project</span>;
 }
 
-beforeEach(() => {
+// Since 10.08.2026 only English is compiled into a page and the rest arrive as
+// chunks, so the translating pass waits for the dictionary it seeds from.
+// Awaiting it here makes that wait explicit instead of a race against waitFor.
+beforeEach(async () => {
+  await loadDict("ru");
   localStorage.clear();
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,

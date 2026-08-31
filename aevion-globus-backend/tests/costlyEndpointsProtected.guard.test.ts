@@ -219,3 +219,121 @@ describe("дорогие ручки защищены от перебора", () 
     }
   });
 });
+
+/**
+ * Храповик на САМ ограничитель темпа.
+ *
+ * Проверка выше принимает ЛЮБУЮ защиту — ограничитель ИЛИ проверку кредитов.
+ * Мутация 28.08.2026 показала, чем это плохо: сняв `dhCostlyLimit` с генерации
+ * и оставив проверку кредитов, сторож остаётся зелёным. А защищают они от
+ * РАЗНОГО: кредиты — от перерасхода за месяц, ограничитель — от всплеска,
+ * когда один пользователь за минуту заказывает сотню прогонов модели.
+ *
+ * Поэтому здесь список ПОИМЁННО: числовой храповик пережил бы снятие
+ * ограничителя с дорогой ручки и добавление на дешёвую.
+ */
+describe("ограничитель темпа стоит на дорогих ручках поимённо", () => {
+  const SRC = readFileSync(join(ROUTES, "devhub.ts"), "utf8");
+
+  it("прибор исправен: файл прочитан", () => {
+    expect(SRC.length).toBeGreaterThan(2000);
+  });
+
+  it("три дорогие ручки объявлены с ограничителем", () => {
+    for (const [route, key] of [
+      ["/ask", "dhask"],
+      ["/projects/:id/generate", "dhgenerate"],
+      ["/media/upload-image", "dhmedia_upload"],
+    ]) {
+      expect(
+        SRC.includes(`devhubRouter.post("${route}", dhCostlyLimit("${key}")`),
+        `с ${route} снят ограничитель темпа`,
+      ).toBe(true);
+    }
+  });
+});
+
+/**
+ * Квота — НЕ предел темпа. Замер 29.08.2026.
+ *
+ * PROTECTED выше признаёт ручку защищённой по ЛЮБОМУ из признаков:
+ * ограничитель темпа ИЛИ проверка квоты (checkCredit). Для восьми
+ * дорогих ручек DevHub сработал второй, и они выпали из поля зрения
+ * сторожа целиком — при том что квота ограничивает МЕСЯЧНЫЙ расход,
+ * а не скорость.
+ *
+ * Почему это не придирка: в TIER_LIMITS у enterprise все возможности
+ * равны -1, а у pro -1 стоит на deploy. checkCredit на -1 отвечает
+ * allowed сразу, не читая расход. То есть для этих тарифов предела
+ * нет ВООБЩЕ — ни месячного, ни по темпу, и один аккаунт жжёт наши
+ * деньги так быстро, как отвечает сеть.
+ *
+ * Код уже починен в d9cc19ce0 (27.07, ограничитель на 27 дорогих
+ * ручек) и ждёт мержа — поэтому здесь ХРАПОВИК, а не запрет:
+ * список обязан только сокращаться. Требовать ноль сегодня значит
+ * сделать сторожа вечно красным, а такого перестают читать.
+ */
+export function findQuotaOnlyCostly(files: string[]): string[] {
+  const out: string[] = [];
+  const RATE = ["generationLimit(", "rateLimit(", "Limiter", "Limit("];
+  const QUOTA = ["checkCredit(", "checkQuota(", "qcoreQuota"];
+  for (const file of files) {
+    const src = readFileSync(file, "utf8");
+    const rel = file.slice(ROUTES.length + 1).split(String.fromCharCode(92)).join("/");
+    for (const verb of [".post(", ".put(", ".patch("]) {
+      let from = 0;
+      for (;;) {
+        const at = src.indexOf(verb, from);
+        if (at < 0) break;
+        from = at + verb.length;
+        const q1 = src.indexOf(String.fromCharCode(34), at);
+        if (q1 < 0 || q1 > at + verb.length + 2) continue;
+        const q2 = src.indexOf(String.fromCharCode(34), q1 + 1);
+        if (q2 < 0) continue;
+        const path = src.slice(q1 + 1, q2);
+        let depth = 0;
+        let i = at + verb.length - 1;
+        for (; i < src.length; i++) {
+          if (src[i] === "(") depth++;
+          else if (src[i] === ")") {
+            depth--;
+            if (depth === 0) break;
+          }
+        }
+        if (depth !== 0) continue;
+        const body = src.slice(at, i);
+        if (!COSTLY.test(body)) continue;
+        if (!QUOTA.some((k) => body.includes(k))) continue;
+        if (RATE.some((k) => body.includes(k))) continue;
+        if (routerPathLists(src).has(path)) continue;
+        out.push(rel + "  " + path);
+      }
+    }
+  }
+  return out;
+}
+
+describe("дорогую ручку не заводят с одной месячной квотой", () => {
+  const KNOWN_QUOTA_ONLY = new Set([
+    "devhub.ts  /projects/:id/deploy",
+    "devhub.ts  /projects/:id/deploy/vercel",
+    "devhub.ts  /projects/:id/deploy/pages",
+    "devhub.ts  /media/tts",
+    "devhub.ts  /media/image",
+    "devhub.ts  /media/music",
+    "devhub.ts  /media/video",
+    "devhub.ts  /media/3d",
+  ]);
+
+  it("список квотных ручек не растёт", () => {
+    const found = findQuotaOnlyCostly(walk(ROUTES));
+    // Контроль прибора: разбор, нашедший ноль, сделал бы «нарушений
+    // нет» бессмысленным утверждением.
+    expect(found.length, "разбор не нашёл ни одной квотной ручки").toBeGreaterThan(0);
+    const fresh = found.filter((f) => !KNOWN_QUOTA_ONLY.has(f));
+    expect(
+      fresh,
+      "Новая дорогая ручка защищена только месячной квотой. На тарифах с -1 это не защита: добавьте generationLimit по образцу lib/rateLimit.ts",
+    ).toEqual([]);
+  });
+});

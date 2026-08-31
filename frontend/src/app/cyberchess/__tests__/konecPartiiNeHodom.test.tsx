@@ -53,7 +53,7 @@ describe("партия сохраняется на ЛЮБОМ конце, не �
   it("есть отдельный эффект сохранения по over", () => {
     const s = stranica();
     expect(s.length).toBeGreaterThan(100000); // контроль: файл прочитан
-    expect(s).toContain("if(!over||!hist.length)return;");
+    expect(s).toContain("if(!over||!hist.length||!partiyaIgralasRef.current)return;");
     expect(s).toContain("saveGame(sg);lastSavedGameIdRef.current={id:sg.id,fp:gameStartTimeRef.current};");
   });
 
@@ -63,6 +63,22 @@ describe("партия сохраняется на ЛЮБОМ конце, не �
     const s = stranica();
     expect(s).toContain('sOver("You resigned")');
     expect(s).toContain('sOver("Draw agreed")');
+  });
+
+  it("загруженная для просмотра партия НЕ сохраняется как новая", () => {
+    // 🔴 Поймано вычиткой собственного дифа, а не тестом: sOver(...) ставится
+    // и когда партию ЗАГРУЖАЮТ для просмотра (пять мест — восстановление
+    // последней, открытие из истории, разбор). Без признака «партия игралась»
+    // эффект плодил бы дубль в истории при каждом открытии.
+    const s = stranica();
+    expect(s).toContain("!partiyaIgralasRef.current)return;");
+    // Признак ставится там же, где начинается НАСТОЯЩАЯ партия…
+    expect(s).toContain("partiyaIgralasRef.current=true;");
+    // …и снимается сразу после записи, чтобы не сохранить дважды.
+    expect(s).toContain("partiyaIgralasRef.current=false;");
+    // Контроль: мест, где партию загружают под sOver, действительно несколько.
+    const zagruzki = (s.match(/sOver\((?:g|last|sg)\.result\)/g) || []).length;
+    expect(zagruzki).toBeGreaterThanOrEqual(4);
   });
 
   it("ссылка на сохранённую партию помнит, ЧЬЯ она", () => {

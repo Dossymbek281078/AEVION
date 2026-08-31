@@ -75,7 +75,7 @@ export default function CyberChessOfflinePage() {
             fontWeight: 700,
           }}
         >
-          Нет сети — играем оффлайн с AI
+          Нет сети — играем оффлайн с ИИ
         </h1>
 
         <p style={{ margin: '0 0 22px', color: '#94a3b8', fontSize: 15 }}>

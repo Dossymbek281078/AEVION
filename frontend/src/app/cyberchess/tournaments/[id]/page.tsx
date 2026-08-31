@@ -521,7 +521,7 @@ export default function TournamentDetailPage({
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
           }}
         >
-          tournament_id: {tournamentId}
+          Адрес турнира: {tournamentId}
         </div>
         {/* Образец обязан сказать о себе ДО того, как человек начнёт читать
             сетку. В списке турниров подпись уже стоит (12.08), а здесь её не
@@ -1044,6 +1044,25 @@ function StandingsView({
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  // Хук объявлен ДО ранних возвратов: ниже их два (скелет загрузки и
+  // сетка на выбывание), и если хук оставить после них, число хуков между
+  // отрисовками будет разным — React считает это ошибкой и роняет страницу.
+  const sortedStandings = useMemo(() => {
+    const arr = [...standings];
+    const getter: Record<SortKey, (r: StandingRow) => number> = {
+      score: (r) => r.score,
+      buchholz: (r) => r.buchholz,
+      rating: (r) => r.rating,
+      games: (r) => r.gamesPlayed,
+    };
+    const fn = getter[sortKey];
+    arr.sort((a, b) => {
+      const diff = fn(a) - fn(b);
+      return sortDir === "asc" ? diff : -diff;
+    });
+    return arr;
+  }, [standings, sortKey, sortDir]);
+
   if (loading && standings.length === 0) {
     return <SkeletonBox label="Считаем таблицу..." />;
   }
@@ -1111,21 +1130,6 @@ function StandingsView({
   }
 
   // A) Sortable swiss / round_robin → table
-  const sortedStandings = useMemo(() => {
-    const arr = [...standings];
-    const getter: Record<SortKey, (r: StandingRow) => number> = {
-      score: (r) => r.score,
-      buchholz: (r) => r.buchholz,
-      rating: (r) => r.rating,
-      games: (r) => r.gamesPlayed,
-    };
-    const fn = getter[sortKey];
-    arr.sort((a, b) => {
-      const diff = fn(a) - fn(b);
-      return sortDir === "asc" ? diff : -diff;
-    });
-    return arr;
-  }, [standings, sortKey, sortDir]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {

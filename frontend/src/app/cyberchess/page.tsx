@@ -898,15 +898,15 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,bran
             aria-label={item.label} aria-current={active?"page":undefined}
             style={{
               display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,
-              padding:"10px 16px 8px",border:"none",background:"transparent",
+              padding:"10px 6px 8px",border:"none",background:"transparent",
               borderTop:active?`2px solid ${brand}`:"2px solid transparent",
               color:active?brand:textMute,cursor:"pointer",fontSize:10,fontWeight:800,
-              letterSpacing:0.3,flex:1,
+              letterSpacing:0.3,flex:"1 1 0",minWidth:0,
             }}
             onMouseEnter={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=brand}}
             onMouseLeave={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=textMute}}>
             <span style={{fontSize:20}} aria-hidden>{item.icon}</span>
-            <span>{item.label}</span>
+            <span style={{maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</span>
           </button>
         );
       })}
@@ -3727,17 +3727,20 @@ export default function CyberChessPage(){
   const autoAnalysedRef=useRef<string|null>(null);
   // id последней записанной партии — чтобы разбор лёг именно в неё
   const lastSavedGameIdRef=useRef<{id:string;fp:number}|null>(null);
+  // Играли ли партию в этой сессии. Загруженная для просмотра — не играли.
+  const partiyaIgralasRef=useRef(false);
   // Конец партии НЕ ходом — сдача, ничья по договорённости, падение флага.
   // saveGame зовётся только из обработчика хода, поэтому такие партии в
   // историю не попадали вовсе: ни в список, ни в калибровку силы. Замерено на
   // боевой сборке 31.08.2026 — сдался, партии в истории нет.
   useEffect(()=>{
-    if(!over||!hist.length)return;
+    if(!over||!hist.length||!partiyaIgralasRef.current)return;
     const zap=lastSavedGameIdRef.current;
     if(zap&&zap.fp===gameStartTimeRef.current)return; // уже сохранена ходом
     const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
     const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist],result:over,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as SavedGame["category"],opening:currentOpening?.name};
     saveGame(sg);lastSavedGameIdRef.current={id:sg.id,fp:gameStartTimeRef.current};sSavedGames(loadGames());
+    partiyaIgralasRef.current=false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[over]);
 
@@ -5057,6 +5060,7 @@ export default function CyberChessPage(){
     metricsRef.current.reset();
     prevEvalCpForCpiRef.current=0;
     gameStartTimeRef.current=Date.now();
+    partiyaIgralasRef.current=true; // это НАСТОЯЩАЯ партия, а не загруженная для просмотра
     sMoveAnnotations({});sAnnotPicker(null);sMoveComments({});sCommentEditPly(null);
     // Reset Ghost Duel and P2P if they were active (new game started)
     if(ghostDuelMode){sGhostDuelMode(false);sGhostDuelConfig(null);sGhostDuelDivergePly(null)}
@@ -5433,8 +5437,23 @@ export default function CyberChessPage(){
       sAnalysisProgress(Math.round((i/fenHist.length)*100)); // прогресс «N/всего» во время ручного разбора
       const fen=fenHist[i];const turn=fen.split(" ")[1];
       const{cp,mate,best:bestUci}=await new Promise<{cp:number;mate:number;best?:string}>(res=>{
-        let lastCp=0,lastMate=0;
-        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},(b)=>res({cp:lastCp,mate:lastMate,best:b}));
+        let lastCp=0,lastMate=0,gotovo=false;
+        // 🔴 Предохранитель по времени. У ЖИВОГО разбора (тот же движок,
+        // соседний код) он есть — 8 секунд на позицию; здесь его не было, и
+        // один пропущенный ответ движка вешал разбор партии НАВСЕГДА. Наружу
+        // это не выходило: вызывающий обёрнут в пустой catch, а человек видел
+        // «Разбираю партию…» без конца.
+        //
+        // Замерено на боевой сборке 31.08.2026: после сдачи разбор не приходил
+        // и через 50 секунд, хотя движок был жив и играл ходы. В его же коде
+        // при этом вылетает «e.trim is not a function» — одного такого сбоя
+        // хватает, чтобы очередь осталась без ответа.
+        //
+        // Отдаём то, что успели услышать: неполная оценка честнее вечного
+        // ожидания, и ход всё равно получит ярлык.
+        const otvet=(v:{cp:number;mate:number;best?:string})=>{if(!gotovo){gotovo=true;clearTimeout(storozh);res(v)}};
+        const storozh=setTimeout(()=>otvet({cp:lastCp,mate:lastMate}),8000);
+        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},(b)=>otvet({cp:lastCp,mate:lastMate,best:b}));
       });
       if(i>0){
         // Evaluate quality of move played that led to this position
@@ -6516,7 +6535,7 @@ export default function CyberChessPage(){
                 }}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                     <span>⚡ Быстрый матч</span>
-                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>AI ≈ {rat}</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>ИИ ≈ {rat}</span>
                   </div>
                 </Btn>
                 <Btn size="lg" variant="secondary" onClick={()=>{sHotseat(true);sRivalMode(false);setTimeout(()=>newG(),50)}}
@@ -6584,7 +6603,7 @@ export default function CyberChessPage(){
                 <button disabled={lichessLoading} onClick={async()=>{
                   if(lichessLoading)return;
                   sLichessLoading(true);
-                  showToast("⏳ Загружаю Lichess Daily…","info");
+                  showToast("⏳ Загружаю задачу дня с Lichess…","info");
                   try{
                     const r=await fetch("https://lichess.org/api/puzzle/daily",{headers:{Accept:"application/json"}});
                     if(!r.ok)throw new Error(`HTTP ${r.status}`);
@@ -6602,7 +6621,7 @@ export default function CyberChessPage(){
                     const mv=probe.move({from:first.slice(0,2),to:first.slice(2,4),promotion:first.slice(4)||undefined});
                     if(!mv)throw new Error("solution invalid");
                     const fakePz:Puzzle={
-                      name:`Lichess Daily · ${j?.puzzle?.id||"?"}`,
+                      name:`Задача дня Lichess · ${j?.puzzle?.id||"?"}`,
                       r:Number(j?.puzzle?.rating)||1500,
                       theme:(j?.puzzle?.themes?.[0]||"tactics") as any,
                       phase:"Middlegame",
@@ -6629,7 +6648,7 @@ export default function CyberChessPage(){
                     border:`1px solid #c4b5fd`,background:lichessLoading?"#f5f3ff":"linear-gradient(135deg,#f5f3ff,#ede9fe)",color:CC.accent,
                     fontSize:12,fontWeight:800,cursor:lichessLoading?"wait":"pointer",
                     display:"inline-flex",alignItems:"center",gap:5,opacity:lichessLoading?0.6:1}}>
-                  🌐 Lichess Daily{lichessLoading?" …":""}
+                  🌐 Задача дня · Lichess{lichessLoading?" …":""}
                 </button>
                 <button onClick={()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}}
                   className="cc-focus-ring"
@@ -13605,7 +13624,7 @@ ${question.trim()}`;
               <li><b>Подсказка в задаче</b> 5</li>
               <li><b>Ghost-подсказка</b> 15 (стрелка лучшего хода)</li>
               <li><b>Глубокий разбор</b> 20 (коуч)</li>
-              <li><b>Открытие Master AI</b> 30 (2400 ELO)</li>
+              <li><b>Открытие уровня «Мастер»</b> 30 (2400 ELO)</li>
               <li><b>Premium-тема</b> 50 (Neon / Obsidian / Sakura)</li>
               <li><b>AI Rival Алексей</b> 100 (бета)</li>
             </ul>
@@ -15243,7 +15262,7 @@ ${question.trim()}`;
         {id:"pz-3min",      icon:"⏱", group:"Puzzles", label:"3-минутный режим",  hint:"Реши как можно больше за 3 мин · +3с за каждый верный ответ", run:()=>{sTab("puzzles");sPzMode("timed3");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-5min",      icon:"⏱", group:"Puzzles", label:"5-минутный режим",  hint:"300 секунд на одну задачу",                 run:()=>{sTab("puzzles");sPzMode("timed5");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-lichess",   icon:"🌐",group:"Puzzles", label:"Задача дня с Lichess",hint:"Задача дня с lichess.org (live)",          run:async()=>{
-          if(lichessLoading)return;sLichessLoading(true);showToast("⏳ Загружаю Lichess Daily…","info");
+          if(lichessLoading)return;sLichessLoading(true);showToast("⏳ Загружаю задачу дня с Lichess…","info");
           try{
             const r=await fetch("https://lichess.org/api/puzzle/daily",{headers:{Accept:"application/json"}});
             if(!r.ok)throw new Error(`HTTP ${r.status}`);
@@ -15256,7 +15275,7 @@ ${question.trim()}`;
             const first=sols[0];const probe=new Chess(ch.fen());
             const mv=probe.move({from:first.slice(0,2),to:first.slice(2,4),promotion:first.slice(4)||undefined});
             if(!mv)throw new Error("solution invalid");
-            const fakePz:Puzzle={name:`Lichess Daily · ${j?.puzzle?.id||"?"}`,r:Number(j?.puzzle?.rating)||1500,theme:(j?.puzzle?.themes?.[0]||"tactics") as any,phase:"Middlegame",side:ch.turn() as "w"|"b",goal:"Best move",mateIn:0,fen:ch.fen(),sol:[first]};
+            const fakePz:Puzzle={name:`Задача дня Lichess · ${j?.puzzle?.id||"?"}`,r:Number(j?.puzzle?.rating)||1500,theme:(j?.puzzle?.themes?.[0]||"tactics") as any,phase:"Middlegame",side:ch.turn() as "w"|"b",goal:"Best move",mateIn:0,fen:ch.fen(),sol:[first]};
             sTab("puzzles");setGame(new Chess(fakePz.fen));sBk(k=>k+1);sPzCurrent(fakePz);sPzAttempt("idle");sLm(null);sSel(null);sVm(new Set());sHist([]);sFenHist([fakePz.fen]);sPCol(fakePz.side as any);sFlip(fakePz.side==="b");sOn(true);
             showToast(`🌐 Задача дня Lichess · рейтинг ${fakePz.r}`,"success");
           }catch(e:any){showToast(`Lichess недоступен: ${e?.message||"network"}`,"error")}finally{sLichessLoading(false)}

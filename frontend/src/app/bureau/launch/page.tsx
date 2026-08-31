@@ -77,13 +77,13 @@ export default async function BureauLaunchPage({
   const source = channel ? `bureau-${channel}` : "bureau";
 
   return (
-    <main style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px" }}>
+    <main style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "clamp(16px, 4vw, 32px) 18px 56px" }}>
       {/* Заходы сюда не считались до 28.08.2026: страница собирает адреса, но
           события page_view не слала. Воронка считает переходы ОТ page_view,
           поэтому её посетители не попадали в знаменатель — конверсия выглядела
           лучше, чем есть. Компонент сам читает ?c= из ссылки. */}
       <PageTracking page="bureau-launch" />
-      <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
+      <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", flexDirection: "column", gap: "clamp(18px, 4vw, 28px)" }}>
         <header>
           <div style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: "0.12em", color: GOLD, textTransform: "uppercase" }}>
             AEVION · IP Bureau
@@ -91,7 +91,7 @@ export default async function BureauLaunchPage({
           <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 34, lineHeight: 1.15, margin: "10px 0 0", letterSpacing: "-0.01em" }}>
             Доказать, что это ваше
           </h1>
-          <p style={{ color: MUTED, fontSize: 15.5, lineHeight: 1.6, margin: "12px 0 0" }}>
+          <p style={{ color: MUTED, fontSize: 15.5, lineHeight: 1.5, margin: "10px 0 0" }}>
             Трек, текст, макет, идея — фиксируются хешем содержимого, подписываются
             криптографически и получают сертификат, который любой может проверить по
             ссылке, не входя в систему.

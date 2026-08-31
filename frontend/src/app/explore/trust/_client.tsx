@@ -64,6 +64,15 @@ export default function TrustClient() {
     setAnchoring(true); setAnchor(null); setVerifyOut(null);
     try {
       const r = await fetch(apiUrl("/api/data-quality/trust-score/anchor"), { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      // Ошибка сервера — тот же ЧЕСТНЫЙ отказ, что и обрыв связи.
+      // Без этой ветки при 500 `j.anchor` оказывался пустым, и экран
+      // показывал НИЧЕГО вместо «не удалось»: человек не мог понять,
+      // закрепилась его оценка доверия или нет. Состояние отказа в
+      // файле уже смоделировано ниже — используем его, а не своё.
+      if (!r.ok) {
+        setAnchor({ status: "failed", contentHash: "", otsProofB64: null, bitcoinBlockHeight: null, calendars: [], error: `server error ${r.status}`, note: "Could not reach the anchor endpoint." });
+        return;
+      }
       const j = await r.json();
       setAnchor(j.anchor); setAnchorSnapshot(j.snapshot);
     } catch {
@@ -106,7 +115,7 @@ export default function TrustClient() {
         with zero trust in AEVION.
       </p>
 
-      {loadErr && <p style={{ color: "#fb7185" }}>Trust Score endpoint is not reachable right now.</p>}
+      {loadErr && <p style={{ color: "#fb7185" }}>Trust Score is unavailable right now. Please try again in a minute.</p>}
 
       {ts && (
         <>

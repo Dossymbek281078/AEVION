@@ -106,9 +106,22 @@ export default function TikTokPublisherPage() {
   }, [loadCreator]);
 
   const disconnect = async () => {
-    await fetch(`${API}/logout`, { method: "POST", credentials: "include" });
-    setCreator(null);
-    setCfg((c) => (c ? { ...c, connected: false } : c));
+    // Ответ сервера ОБЯЗАТЕЛЬНО проверяем. Без этого экран показывал
+    // «не подключено» даже когда отвязать не удалось: человек считал
+    // аккаунт TikTok отключённым, а он оставался привязанным — и мог
+    // получить публикацию, которой не ждал.
+    setErr(null);
+    try {
+      const r = await fetch(`${API}/logout`, { method: "POST", credentials: "include" });
+      if (!r.ok) {
+        setErr(`Отключить не удалось (${r.status}). Аккаунт TikTok всё ещё привязан.`);
+        return;
+      }
+      setCreator(null);
+      setCfg((c) => (c ? { ...c, connected: false } : c));
+    } catch {
+      setErr("Не удалось связаться с сервером — аккаунт TikTok всё ещё привязан.");
+    }
   };
 
   // Опрос состояния публикации. TikTok отвечает не сразу: ролик сначала

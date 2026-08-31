@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -27,18 +28,32 @@ async function getOrigin(): Promise<string> {
   return "";
 }
 
-async function loadPublic(id: string): Promise<PublicSig | null> {
+/**
+ * Три исхода, а не два — как на странице проверки (см. verify/[id]/page.tsx).
+ *
+ * `if (!res.ok) return null` уравнивал «подписи нет» и «мы не смогли
+ * спросить», и встраиваемая карточка на любой выдуманный id отвечала 200.
+ * 404 ставим ТОЛЬКО по авторитетному ответу сервера: отдать его при
+ * временной аварии значит сказать поисковику, что живых страниц нет.
+ */
+type Loaded =
+  | { state: "found"; data: PublicSig }
+  | { state: "absent" }
+  | { state: "unknown" };
+
+async function loadPublic(id: string): Promise<Loaded> {
   try {
     const origin = await getOrigin();
-    if (!origin) return null;
+    if (!origin) return { state: "unknown" };
     const res = await fetch(`${origin}/api/qsign/v2/${id}/public`, {
       cache: "no-store",
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
-    return (await res.json()) as PublicSig;
+    if (res.status === 404 || res.status === 410) return { state: "absent" };
+    if (!res.ok) return { state: "unknown" };
+    return { state: "found", data: (await res.json()) as PublicSig };
   } catch {
-    return null;
+    return { state: "unknown" };
   }
 }
 
@@ -54,7 +69,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function QSignEmbedPage({ params }: Props) {
   const { id } = await params;
-  const pub = await loadPublic(id);
+  const zagruzka = await loadPublic(id);
+  // Подписи НЕТ — честный 404. Рядом лежит своя not-found.tsx: показывать
+  // внутри чужого iframe полную страницу сайта было бы неуместно.
+  // При "unknown" (не смогли спросить) остаётся 200 и прежний вид.
+  if (zagruzka.state === "absent") notFound();
+  const pub = zagruzka.state === "found" ? zagruzka.data : null;
   const origin = await getOrigin();
   const fullUrl = origin ? `${origin}/qsign/verify/${id}` : `/qsign/verify/${id}`;
 

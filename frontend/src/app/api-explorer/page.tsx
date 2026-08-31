@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getApiBase } from "@/lib/apiBase";
+import { getApiBase, getClientApiBase } from "@/lib/apiBase";
 import { repoPath } from "@/lib/repoUrl";
 import { REGISTRY_ENTRIES } from "@/data/pitchFacts";
 
@@ -252,12 +252,24 @@ export default async function ApiExplorerIndexPage() {
               { ep: "/api/aevion/openapi.json", desc: "OpenAPI 3.1 index across modules" },
               { ep: "/api/aevion/sitemap.xml", desc: "Cross-module sitemap" },
               { ep: "/api/aevion/version", desc: "Build info + uptime + release SHA" },
-            ].map((r) => (
+            ].map((r) => {
+              // Адреса написаны от корня САЙТА, а ручки живут в бэкенде: без
+              // базы все восемь отвечали 404 (замер 28.08.2026 на живой
+              // странице). База — getClientApiBase: детерминирована при SSR и
+              // на клиенте, в отличие от getApiBase, который при серверной
+              // отрисовке отдал бы http://127.0.0.1:4001.
+              //
+              // Два адреса из восьми — ОБРАЗЦЫ с :id. Они и с базой дадут 404,
+              // потому что это шаблон из документации, а не ссылка. Делать их
+              // кликабельными — обещать то, чего нет, поэтому href у них нет
+              // вовсе, и подпись честно называет их шаблоном.
+              const isTemplate = r.ep.includes(":");
+              return (
               <a
                 key={r.ep}
-                href={r.ep}
-                target="_blank"
-                rel="noreferrer"
+                href={isTemplate ? undefined : `${getClientApiBase()}${r.ep}`}
+                target={isTemplate ? undefined : "_blank"}
+                rel={isTemplate ? undefined : "noreferrer"}
                 style={{
                   display: "block",
                   padding: "10px 12px",
@@ -278,10 +290,11 @@ export default async function ApiExplorerIndexPage() {
                   {r.ep}
                 </div>
                 <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 2, lineHeight: 1.5 }}>
-                  {r.desc}
+                  {isTemplate ? `${r.desc} — template, not a live link` : r.desc}
                 </div>
               </a>
-            ))}
+              );
+            })}
           </div>
         </section>
 

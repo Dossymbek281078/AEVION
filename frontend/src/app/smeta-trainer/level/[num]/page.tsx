@@ -1,4 +1,5 @@
 import { Level1View } from "../../components/Level1View";
+import { notFound } from "next/navigation";
 import { Level2View } from "../../components/Level2View";
 import { Level3View } from "../../components/Level3View";
 import { Level4View } from "../../components/Level4View";
@@ -32,6 +33,16 @@ export default async function LevelPage({ params }: Props) {
 
   const numInt = parseInt(num);
   const levelDef = LEVELS.find((l) => l.num === numInt);
+
+  // Такого уровня НЕТ — честный 404 вместо 200 с пустой оболочкой.
+  // Замер 28.08.2026 на живом сайте: /level/99 и /level/qqq отвечали 200,
+  // то есть поисковику сообщалось «страница существует» для бесконечного
+  // множества выдуманных номеров.
+  //
+  // Здесь случай проще, чем на страницах с загрузчиком: источник правды
+  // ЛОКАЛЬНЫЙ (LEVEL_META и LEVELS), сеть не участвует. Значит «нет такого»
+  // это факт, а не догадка, и риска отдать 404 при чужой аварии нет вовсе.
+  if (!meta || !levelDef) notFound();
 
   return (
     <main className="min-h-screen bg-slate-100 flex flex-col">

@@ -584,7 +584,7 @@ export default function PaymentMethodsPage() {
                     fontWeight: 700,
                   }}
                 >
-                  Mock checkout · $99.00 USD
+                  Demo checkout · $99.00 USD
                 </div>
               </div>
             </div>

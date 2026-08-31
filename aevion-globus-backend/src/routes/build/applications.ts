@@ -322,7 +322,11 @@ applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {
         .join(","),
     ).join("\n");
 
-    const vacancySlug = String(owner.rows[0].title || id).replace(/[^a-z0-9]/gi, "-").toLowerCase();
+    const slugRaw = String(owner.rows[0].title || id)
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase();
+    const vacancySlug = /[a-z0-9]/.test(slugRaw) ? slugRaw.slice(0, 40) : String(id);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="applications-${vacancySlug}-${new Date().toISOString().slice(0, 10)}.csv"`);
     return res.send(`${header}\n${body}`);

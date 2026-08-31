@@ -5895,7 +5895,9 @@ qcoreaiRouter.post("/notebook/auto-tag", async (req, res) => {
       }
     } catch {
       // Fallback: simple keyword extraction
-      const words = String(content).toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 4);
+      // Кириллица в классе обязательна: без неё русский текст превращался в
+      // одни пробелы, и запасное извлечение тегов возвращало пустой список.
+      const words = String(content).toLowerCase().replace(/[^a-z0-9а-яё\s]/giu, " ").split(/\s+/).filter((w) => w.length > 4);
       const freq = new Map<string, number>();
       for (const w of words) freq.set(w, (freq.get(w) || 0) + 1);
       tags = Array.from(freq.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([w]) => w);

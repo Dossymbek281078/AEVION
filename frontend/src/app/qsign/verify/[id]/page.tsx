@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { getApiBase } from "@/lib/apiBase";
 import { CopyButton, ShareButton } from "./ClientBits";
@@ -39,16 +40,37 @@ type PublicView = {
   } | null;
 };
 
-async function loadPublic(id: string): Promise<PublicView | null> {
+/**
+ * Три исхода, а не два.
+ *
+ * Раньше функция возвращала null и когда подписи НЕТ, и когда мы не смогли
+ * спросить (5xx, обрыв, таймаут). Страница на оба случая отвечала 200 с
+ * текстом «не существует ИЛИ бэкенд недоступен» — то есть выдавала догадку
+ * за факт, а поисковик получал «страница есть» на несуществующий id.
+ *
+ * Разделение нужно именно здесь: отдать 404 при временной аварии бэкенда
+ * значит сказать поисковику, что живых страниц не существует, и вылететь
+ * из выдачи. Поэтому 404 ставим ТОЛЬКО по авторитетному ответу сервера.
+ */
+type Loaded =
+  | { state: "found"; data: PublicView }
+  | { state: "absent" }
+  | { state: "unknown" };
+
+async function loadPublic(id: string): Promise<Loaded> {
   try {
     const res = await fetch(
       `${getApiBase()}/api/qsign/v2/${encodeURIComponent(id)}/public`,
       { cache: "no-store", signal: AbortSignal.timeout(6000) },
     );
-    if (!res.ok) return null;
-    return (await res.json()) as PublicView;
+    // 404 и 410 — сервер ЗНАЕТ, что такой подписи нет. Это факт.
+    if (res.status === 404 || res.status === 410) return { state: "absent" };
+    // Остальные неуспехи — «спросить не удалось», а не «нет».
+    if (!res.ok) return { state: "unknown" };
+    return { state: "found", data: (await res.json()) as PublicView };
   } catch {
-    return null;
+    // Обрыв, таймаут, недоступность — тоже «не знаю».
+    return { state: "unknown" };
   }
 }
 
@@ -80,8 +102,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
   if (!id) return fallback;
 
-  const pub = await loadPublic(id);
-  if (!pub) return fallback;
+  const zagruzka = await loadPublic(id);
+  if (zagruzka.state !== "found") return fallback;
+  const pub = zagruzka.data;
 
   const statusText = pub.revoked
     ? "revoked"
@@ -134,7 +157,14 @@ const label: CSSProperties = {
 
 export default async function QSignVerifyPage({ params }: Props) {
   const { id } = await params;
-  const pub = await loadPublic(id);
+  const zagruzka = await loadPublic(id);
+  // Подписи НЕТ — честный 404, а не «200 со страницей про отсутствие».
+  // Мягкий 404 плодит бесконечный индексируемый мусор: у каждого семейства
+  // маршрутов бесконечно много несуществующих id, и все отвечали «есть».
+  // При state === "unknown" (бэкенд не ответил) остаётся 200 и объяснение:
+  // 404 в этом случае сказал бы поисковику, что живой страницы не существует.
+  if (zagruzka.state === "absent") notFound();
+  const pub = zagruzka.state === "found" ? zagruzka.data : null;
   const origin = await getOrigin();
   const shareUrl = origin ? `${origin}/qsign/verify/${id}` : `/qsign/verify/${id}`;
 
@@ -173,7 +203,7 @@ export default async function QSignVerifyPage({ params }: Props) {
             {id}
           </h1>
           <p style={{ color: "#64748b", fontSize: 14, margin: "0 0 20px" }}>
-            This QSign signature id does not exist, or the backend is unavailable.
+            This QSign signature was not found. Either the link is wrong, or the service is temporarily unavailable — try again in a minute.
           </p>
           <Link
             href="/qsign"

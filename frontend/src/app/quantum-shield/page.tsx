@@ -405,7 +405,7 @@ export default function QuantumShieldPage() {
           <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 10, border: "1px dashed rgba(245,158,11,0.4)", background: "rgba(245,158,11,0.08)", fontSize: 12, color: "#92400e", display: "flex", gap: 10, alignItems: "center" }}>
             <span style={{ fontSize: 14 }}>&#x26A0;&#xFE0F;</span>
             <div>
-              <b>Demo data</b> — backend unreachable. Records below are placeholders. Sign in or check API connection to see live shields.
+              <b>Demo data</b> — the service is unavailable right now, so the records below are examples. Sign in or try again in a minute to see your real shields.
             </div>
           </div>
         )}

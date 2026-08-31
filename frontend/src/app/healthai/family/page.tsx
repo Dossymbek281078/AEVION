@@ -176,9 +176,20 @@ export default function FamilyPage() {
   async function deleteProfile(id: string) {
     setDeleting(true);
     try {
-      await fetch(`${BACKEND}/api/healthai/profile/${encodeURIComponent(id)}`, {
+      // Ответ сервера ОБЯЗАТЕЛЬНО проверяем: без этого профиль исчезал с
+      // экрана даже когда сервер отказал, и человек считал медицинские
+      // данные удалёнными, а на сервере они оставались.
+      const res = await fetch(`${BACKEND}/api/healthai/profile/${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
+      // 404 считаем успехом: профиля на сервере уже нет, значит цель
+      // достигнута, и держать его в местном списке незачем.
+      if (!res.ok && res.status !== 404) {
+        setError("Не удалось удалить профиль — сервер ответил отказом. Данные на месте, попробуйте ещё раз.");
+        setDeleteId(null);
+        return;
+      }
+      setError("");
       // Remove from local list
       const existing = getStoredProfiles().filter((x) => x !== id);
       saveStoredProfiles(existing);
@@ -194,7 +205,10 @@ export default function FamilyPage() {
       setDeleteId(null);
       await fetchProfiles();
     } catch {
-      // ignore delete errors
+      // Молчать нельзя: раньше при обрыве связи не происходило НИЧЕГО —
+      // ни удаления, ни сообщения. Человек нажимал «удалить» и видел, что
+      // ничего не изменилось, без объяснения почему.
+      setError("Не удалось связаться с сервером — профиль не удалён. Проверьте связь и попробуйте ещё раз.");
       setDeleteId(null);
     } finally {
       setDeleting(false);

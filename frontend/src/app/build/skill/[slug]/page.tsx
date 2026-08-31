@@ -1,3 +1,4 @@
+import { getClientApiBase } from "@/lib/apiBase";
 import type { Metadata } from "next";
 import { formatSalary } from "@/lib/build/format";
 import Link from "next/link";
@@ -69,10 +70,22 @@ export async function generateMetadata({
   return {
     title,
     description: desc,
+    // Пустой результат НЕ индексируем.
+    //
+    // Эта страница — ПОИСК, а не реестр: ручка `/api/build/vacancies?skill=X`
+    // принимает любую строку и отвечает 200 с `{items: [], total: 0}`. Значит
+    // `notFound()` здесь был бы НЕВЕРНОЙ правкой — пустой результат поиска
+    // это законный ответ, а не отсутствие страницы.
+    //
+    // Но мусор для поисковика остаётся тем же: обходчик умеет придумать
+    // бесконечно много навыков, и каждый отвечал 200 с полной страницей.
+    // Правильный ответ здесь — noindex на пустоте, а не ложный 404.
+    // Замер 28.08.2026: `?skill=qqq-no-such-987` -> 200 {"items":[],"total":0}.
+    robots: vacancies.length > 0 ? undefined : { index: false, follow: true },
     openGraph: { title, description: desc },
     alternates: {
       types: {
-        "application/rss+xml": `/api/build/public/rss/vacancies.xml?skill=${encodeURIComponent(skill)}`,
+        "application/rss+xml": `${getClientApiBase()}/api/build/public/rss/vacancies.xml?skill=${encodeURIComponent(skill)}`,
       },
     },
   };
@@ -133,7 +146,7 @@ export default async function SkillPage({
 
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <a
-            href={`/api/build/public/rss/vacancies.xml?skill=${encodeURIComponent(skill)}`}
+            href={`${getClientApiBase()}/api/build/public/rss/vacancies.xml?skill=${encodeURIComponent(skill)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/20"

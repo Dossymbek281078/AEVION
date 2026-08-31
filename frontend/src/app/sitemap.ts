@@ -268,6 +268,41 @@ async function scanAppRoutes(): Promise<string[]> {
         if (!entry.isFile()) continue;
         if (name !== "page.tsx" && name !== "page.ts" && name !== "page.jsx" && name !== "page.js") continue;
 
+        // Страницы, которые ТОЛЬКО перенаправляют, в карту не попадают.
+        //
+        // ЗАЧЕМ. Карта сайта должна перечислять КОНЕЧНЫЕ адреса. Замер
+        // 29.08.2026 сторожем aevion-sitemap-live.mjs: из 765 адресов пять
+        // отвечали 307/308 — /legal/terms, /legal/privacy, /legal/refund,
+        // /pricing/paddle, /en/yt. Сами перенаправления верные, но
+        // поисковик считает такие записи в карте признаком небрежности:
+        // он идёт по адресу и получает не страницу, а указание идти дальше.
+        //
+        // Признак НАМЕРЕННО узкий: файл зовёт redirect/permanentRedirect И
+        // при этом ничего не рисует. Страницу, которая перенаправляет
+        // УСЛОВНО (например, неавторизованного) и в остальных случаях
+        // работает, исключать нельзя — она настоящая. Замер по всему
+        // дереву: строго перенаправляющих 10, условных 0, то есть признак
+        // здесь однозначен.
+        //
+        // Ошибка чтения не должна выкидывать маршрут: не смогли прочитать —
+        // считаем обычной страницей, потеря записи в карте хуже лишней.
+        try {
+          const src = await fs.readFile(path.join(dir, name), "utf8");
+          const зовётRedirect =
+            src.includes("permanentRedirect(") || src.includes("redirect(");
+          if (зовётRedirect) {
+            const безКомментариев = src
+              .split("/*")
+              .map((кусок, i) => (i ? кусок.split("*/").slice(1).join("*/") : кусок))
+              .join("");
+            const рисует =
+              безКомментариев.includes("return (") || /<[A-Za-z]/.test(безКомментариев);
+            if (!рисует) continue;
+          }
+        } catch {
+          // читать не смогли — оставляем маршрут в карте
+        }
+
         // Build the route path from the segments we walked into.
         const route = segments.length === 0 ? "/" : "/" + segments.join("/");
 

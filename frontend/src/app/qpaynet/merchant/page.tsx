@@ -48,6 +48,11 @@ export default function MerchantPage() {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
+  // Отдельно от revokeError: имя должно говорить правду о том, ЧТО не
+  // получилось. Отказ создания раньше не показывался никак — ответ сервера
+  // не проверялся, и в список ключей уходила запись с пустыми полями, а в
+  // окно «ваш ключ» — undefined. Человек считал ключ созданным.
+  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = getAuthToken() ?? "";
@@ -66,15 +71,31 @@ export default function MerchantPage() {
   async function createKey() {
     if (!newKeyWallet) return;
     setCreating(true);
-    const r = await fetch(apiUrl("/api/qpaynet/merchant/keys"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name: newKeyName || t("qpaynet.merchant.defaultKeyName"), walletId: newKeyWallet }),
-    });
-    const d = await r.json();
-    setCreatedKey(d.key);
-    setKeys(prev => [{ id: d.id, name: d.name, key_prefix: d.keyPrefix, wallet_id: newKeyWallet, revoked_at: null, created_at: new Date().toISOString() }, ...prev]);
-    setCreating(false);
+    setCreateError(null);
+    try {
+      const r = await fetch(apiUrl("/api/qpaynet/merchant/keys"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: newKeyName || t("qpaynet.merchant.defaultKeyName"), walletId: newKeyWallet }),
+      });
+      const d = await r.json().catch(() => null);
+      // Проверяем И код ответа, И что ключ действительно пришёл: без второго
+      // условия в окно «ваш ключ» попадал бы undefined, а в список — запись
+      // с пустым идентификатором.
+      if (!r.ok || !d || !d.key) {
+        setCreateError((d && (d.error || d.message)) || `Не удалось создать ключ (${r.status}).`);
+        setCreating(false);
+        return;
+      }
+      setCreatedKey(d.key);
+      setKeys(prev => [{ id: d.id, name: d.name, key_prefix: d.keyPrefix, wallet_id: newKeyWallet, revoked_at: null, created_at: new Date().toISOString() }, ...prev]);
+    } catch {
+      // Обрыв связи тоже перестаёт быть тишиной: раньше исключение уходило
+      // наружу необработанным, кнопка оставалась в состоянии «создаю».
+      setCreateError("Не удалось связаться с сервером — ключ не создан.");
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function revokeKey(id: string) {
@@ -142,6 +163,11 @@ export default function MerchantPage() {
                 </select>
               </div>
             </div>
+            {createError && (
+              <div role="alert" className="text-sm text-rose-300 bg-rose-950/40 border border-rose-900 rounded-lg px-3 py-2 mb-2">
+                {createError}
+              </div>
+            )}
             <button onClick={createKey} disabled={creating || !newKeyWallet}
               className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-lg text-sm font-semibold">
               {creating ? t("qpaynet.merchant.creating") : t("qpaynet.merchant.createKey")}

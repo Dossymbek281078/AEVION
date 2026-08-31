@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
@@ -165,40 +166,20 @@ export default async function AwardsEntryPage({ params }: Props) {
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           <div style={{ ...card, color: "#b91c1c", borderColor: "rgba(185,28,28,0.2)" }}>
             <div style={{ fontWeight: 800, marginBottom: 4 }}>Could not load entry</div>
-            <div style={{ fontSize: 13 }}>The Awards backend is temporarily unreachable.</div>
+            <div style={{ fontSize: 13 }}>The Awards service is temporarily unavailable. Please try again in a minute.</div>
           </div>
         </div>
       </main>
     );
   }
 
-  if (data.status === "not_found") {
-    return (
-      <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "48px 16px" }}>
-        <div style={{ maxWidth: 720, margin: "0 auto" }}>
-          <div
-            style={{
-              ...card,
-              borderColor: "rgba(234,179,8,0.4)",
-              background: "rgba(254,252,232,0.6)",
-              color: "#854d0e",
-            }}
-          >
-            <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 16 }}>Entry not found</div>
-            <div style={{ fontSize: 13, marginBottom: 12 }}>
-              No award entry matches <code style={{ fontFamily: "ui-monospace, monospace" }}>{entryId}</code>.
-            </div>
-            <Link
-              href="/awards"
-              style={{ color: "#0d9488", fontWeight: 800, textDecoration: "none", fontSize: 13 }}
-            >
-              Browse AEVION Awards →
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  // Заявки НЕТ — честный 404 вместо 200 с той же вёрсткой: выдуманных
+  // идентификаторов бесконечно много, и каждый выглядел как настоящая
+  // страница. Текст ответа переехал в not-found.tsx рядом.
+  // Ветка срабатывает только по коду 404 от сервера (см. loadEmbed): при
+  // недоступности бэкенда data === null и страница отвечает как прежде.
+  if (data.status === "not_found") notFound();
+
 
   const theme = medalTheme(data.medalPlace, data.status);
   const submittedAt = data.submittedAt

@@ -106,6 +106,55 @@ function gumroadFromSite() {
 }
 
 /**
+ * Сколько КАССА возьмёт на самом деле.
+ *
+ * ЗАЧЕМ отдельно от цен витрины. Всё, что карта знала о ценах, бралось из
+ * НАШИХ же файлов: `products.ts`, `/api/pricing`. Это отвечает на вопрос
+ * «согласованы ли наши источники между собой», но не на вопрос «спишет ли
+ * касса ту сумму, которую мы обещали». Между ними целый Gumroad: там цену
+ * правят руками в панели, и наш репозиторий об этом не узнаёт.
+ *
+ * Как узнаём. Ссылка `gumroad.com/l/<permalink>?wanted=true` перенаправляет на
+ * оплату, и НАСТОЯЩАЯ цена лежит прямо в адресе перенаправления:
+ * `...&price=5900&recurrence=monthly...`. Значит достаточно одного запроса на
+ * товар, без единой копейки и без входа в аккаунт.
+ *
+ * Замер 28.08.2026: девять товаров из девяти сошлись — витрина обещает ровно
+ * то, что спишет касса.
+ *
+ * Отказ считается ОТКАЗОМ, а не совпадением: `price: null` и в отчёте
+ * «спросить не удалось». Молчаливое «сошлось» здесь было бы худшим из
+ * возможных ответов.
+ */
+async function gumroadRealPrices(rows) {
+  const out = [];
+  for (const r of rows) {
+    try {
+      const res = await fetch(`https://aevion.gumroad.com/l/${encodeURIComponent(r.id)}?wanted=true`, {
+        headers: { "User-Agent": UA },
+        redirect: "follow",
+        signal: AbortSignal.timeout(25_000),
+      });
+      const u = new URL(res.url);
+      const cents = u.searchParams.get("price");
+      const rec = u.searchParams.get("recurrence");
+      out.push({
+        id: r.id,
+        title: r.title,
+        siteUsd: r.usd,
+        realUsd: cents === null ? null : Number(cents) / 100,
+        recurrence: rec,
+        billing: r.billing,
+        http: res.status,
+      });
+    } catch (e) {
+      out.push({ id: r.id, title: r.title, siteUsd: r.usd, realUsd: null, recurrence: null, billing: r.billing, why: String(e?.message ?? e).slice(0, 60) });
+    }
+  }
+  return out;
+}
+
+/**
  * Какие кассы РЕАЛЬНО включены на проде.
  *
  * Карта отвечала «сколько стоит», но не отвечала «можно ли за это заплатить».
@@ -113,6 +162,41 @@ function gumroadFromSite() {
  * сайт обещал Kaspi, а страница интеграций показывала его как доступный.
  * Теперь состояние касс — часть карты, и берётся оно запросом, а не из памяти.
  */
+/**
+ * Что о выручке говорит САМА платформа.
+ *
+ * В карте выручка лежит в SALES_SNAPSHOT — числе, вписанном руками из панели
+ * Gumroad, с датой замера. Это честно, но замер стареет: на 28.08.2026 ему
+ * было две недели.
+ *
+ * У платформы есть свой счёт: `/api/revenue/summary`. Замер 28.08.2026 показал,
+ * что источники РАСХОДЯТСЯ: снимок говорит 3 продажи на $29.97, ручка — 2 на
+ * $19.98. Разница ровно в одну покупку $9.99, и рядом ручка сообщает про 2
+ * ВНУТРЕННИЕ (проверочные) покупки, которые в выручку не входят. Похоже, в
+ * ручной снимок попала одна из них.
+ *
+ * Разрешить спор может только панель Gumroad, то есть рука основателя. Пока
+ * этого не произошло, карта показывает ОБА числа с их источниками: одно число
+ * без второго читалось бы как истина.
+ */
+async function liveRevenue() {
+  try {
+    const j = await getJson(`${API}/api/revenue/summary`);
+    return {
+      grossUsd: Number(j.grossUsd ?? 0),
+      saleCount: Number(j.saleCount ?? 0),
+      internalUsd: Number(j.internalUsd ?? 0),
+      internalCount: Number(j.internalCount ?? 0),
+      // Ручка сама помечает неполный экспорт. Отсутствие метки — это «данные
+      // полные», а не «мы не проверяли».
+      degraded: Boolean(j.degraded ?? j.incomplete ?? false),
+    };
+  } catch (e) {
+    // Отказ — это «не знаю», а не «ноль выручки».
+    return null;
+  }
+}
+
 async function cashDesks() {
   try {
     const j = await getJson(`${API}/api/pricing/checkout/healthz`);
@@ -308,7 +392,7 @@ function row(cells) {
 }
 
 function main(data) {
-  const { pricing, shop, gum, nameToModule, measuredAt, desks, claims, regressions, pending } = data;
+  const { pricing, shop, gum, real, live, nameToModule, measuredAt, desks, claims, regressions, pending } = data;
 
   const tierPrice = new Map(pricing.tiers.map((t) => [t.id, t.priceMonthly]));
 
@@ -518,11 +602,36 @@ function main(data) {
   writeFileSync(OUT, html, "utf8");
   console.log(`Карта собрана: ${OUT}`);
   console.log(`  товаров ${totalProducts} · модулей с ценой ${modRows.length} · расхождений цены ${mismatches}`);
-  console.log(`  заработано ${soldTotal.toFixed(2)} за ${soldCount} продаж (замер ${SALES_SNAPSHOT.measuredAt})`);
+  console.log(`  заработано ${soldTotal.toFixed(2)} за ${soldCount} продаж (ручной замер ${SALES_SNAPSHOT.measuredAt})`);
+  // Второе число — от самой платформы. Показываем рядом, а не вместо: одно
+  // без другого читается как истина, а они расходятся.
+  if (live) {
+    const diff = Math.abs(live.grossUsd - soldTotal) > 0.005 || live.saleCount !== soldCount;
+    console.log(`  платформа считает: $${live.grossUsd.toFixed(2)} за ${live.saleCount} продаж` +
+      (live.internalCount ? ` (плюс ${live.internalCount} внутренних на $${live.internalUsd.toFixed(2)}, в выручку не входят)` : "") +
+      (live.degraded ? " · ⚠️ экспорт НЕПОЛНЫЙ" : "") +
+      (diff ? " · 🔴 РАСХОДИТСЯ с ручным замером" : ""));
+  } else {
+    console.log("  платформа о выручке: спросить не удалось — это НЕ ноль");
+  }
+  // Отдельная строка про КАССУ. Три исхода, а не два: сошлось / разошлось /
+  // спросить не удалось. Третий не сливаем с первым — молчаливое «сошлось»
+  // про деньги хуже отсутствия проверки.
+  if (Array.isArray(real) && real.length) {
+    const asked = real.filter((r) => r.realUsd !== null);
+    const bad = asked.filter((r) => Math.abs(r.realUsd - r.siteUsd) > 0.005);
+    const mute = real.length - asked.length;
+    console.log(`  касса берёт как обещано: ${asked.length - bad.length} из ${asked.length}` +
+      (bad.length ? ` · РАСХОЖДЕНИЕ: ${bad.map((r) => `${r.id} витрина $${r.siteUsd} касса $${r.realUsd}`).join(", ")}` : "") +
+      (mute ? ` · спросить не удалось: ${mute}` : ""));
+  } else {
+    console.log("  касса: НЕ СПРАШИВАЛИ — это не «сошлось»");
+  }
 }
 
 try {
   const [pricing, shop] = await Promise.all([getJson(`${API}/api/pricing`), storefront()]);
+  const gumRows = gumroadFromSite();
   let commit = null;
   try { commit = (await getJson(`${API}/api/health`)).commit; } catch { /* необязательно */ }
   if (!pricing.tiers?.length) throw new Error("прод не отдал тарифы — карта была бы пустой");
@@ -531,9 +640,11 @@ try {
   main({
     pricing: { ...pricing, commit },
     shop,
-    gum: gumroadFromSite(),
+    gum: gumRows,
+    real: await gumroadRealPrices(gumRows),
     nameToModule: storeNameToModule(),
     desks: await cashDesks(),
+    live: await liveRevenue(),
     claims: await scaleClaims(),
     regressions: await prodRegressions(),
     pending: awaitingFounder(),

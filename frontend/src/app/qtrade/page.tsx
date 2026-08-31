@@ -638,9 +638,9 @@ export default function QTradePage() {
       <PitchValueCallout moduleId="qtrade" variant="dark" />
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>QTrade</h1>
       <div style={{ color: "#666", marginBottom: 16 }}>
-        Live Markets с симулированной ценой и торговый ledger. Данные ledger'а — backend disk (
-        <code style={{ fontSize: 13 }}>.aevion-data/qtrade.json</code>); цены и позиции
-        — клиентский localStorage.
+        Цены здесь симулированы — это демонстрация, а не настоящая биржа.
+        История сделок хранится на сервере, а выбранные вами настройки и
+        открытые позиции — в вашем браузере.
       </div>
 
       <FeesPanel closed={closedPositions} />

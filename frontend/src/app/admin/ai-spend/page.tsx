@@ -1,5 +1,7 @@
 "use client";
 
+import { spendCompleteness } from "@/lib/spendCompleteness";
+
 // Admin dashboard: cross-module AI spend + savings from the smartComplete
 // platform layer. Reads GET /api/qcoreai/smart/savings, which returns the
 // durable all-time aggregate (per module) from the smart_run_log when a
@@ -30,6 +32,9 @@ type Savings = {
   savedUsd: number;
   savedPct: number;
   perModule: ModuleAgg[];
+  /** Записей расхода потеряно. Необязательное: старый бэкенд поля не шлёт,
+   *  и «нет поля» — это не ноль, а «не знаю». */
+  droppedRuns?: number;
 };
 
 const usd = (n: number) => (n >= 0.005 ? `$${n.toFixed(2)}` : n > 0 ? "<$0.01" : "$0.00");
@@ -112,6 +117,24 @@ export default function AiSpendPage() {
               <div style={{ fontSize: 12, color: "#64748b" }}>Actual spend</div>
               <div style={{ fontSize: 24, fontWeight: 900 }}>{usd(data.totalCostUsd)}</div>
               <div style={{ fontSize: 12, color: "#64748b" }}>vs {usd(data.estAlwaysCouncilUsd)} always-Council</div>
+              {/* Полнота числа выше. Учёт расхода — «по возможности»: он не роняет
+                  операцию, ради которой его зовут, и потому может тихо не записать.
+                  Раньше об этом знал только журнал сервера, куда никто не смотрит,
+                  а сводка при сломанной записи выглядела как при исправной.
+                  Три исхода различаются намеренно: поля НЕТ (старый бэкенд, ответа
+                  нет вовсе) — это не то же самое, что ноль. */}
+              {(() => {
+                const c = spendCompleteness(data.droppedRuns);
+                if (c.kind === "unknown")
+                  return <div style={{ fontSize: 12, color: "#94a3b8" }}>полнота не сообщается</div>;
+                if (c.kind === "incomplete")
+                  return (
+                    <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 700 }}>
+                      неполно: {c.lost} записей потеряно
+                    </div>
+                  );
+                return null;
+              })()}
             </div>
             <div style={card}>
               <div style={{ fontSize: 12, color: "#64748b" }}>Scope</div>

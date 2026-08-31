@@ -80,6 +80,8 @@ const SPEC = {
                   "invalid_request_error",
                   "rate_limit_error",
                   "api_error",
+                  "storage_unavailable",
+                  "not_found",
                 ],
               },
               message: { type: "string" },

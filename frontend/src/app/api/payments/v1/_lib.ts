@@ -206,6 +206,20 @@ export function badRequest(message: string, code = 400) {
   );
 }
 
+export function storageUnavailableError(message: string) {
+  // 31.08.2026. У этой ситуации в модуле УЖЕ было решение: споры и аудит
+  // отвечают типом "storage_unavailable" (четыре места). Утром я, починяя
+  // возвраты, завёл для того же случая свой api_error — и получился третий
+  // словарь для одного смысла. Здесь возвращаю прежнее решение: оно старше,
+  // оно точнее (называет ЧТО именно недоступно), и менять его ради своего
+  // предпочтения незачем. api_error остаётся для случаев, когда хранилище
+  // исправно, а ответить мы всё равно не можем.
+  return Response.json(
+    { error: { type: "storage_unavailable", message } },
+    { status: 503 }
+  );
+}
+
 export function apiError(message: string, code = 503) {
   // 31.08.2026. Наша собственная неуверенность — НЕ ошибка клиента.
   // badRequest помечает ответ типом invalid_request_error, и с ним интегратор

@@ -3,6 +3,7 @@ import {
   attachRateHeaders,
   badRequest,
   apiError,
+  storageUnavailableError,
   checkIdempotency,
   gateRequest,
   genId,
@@ -43,9 +44,8 @@ export async function GET(req: NextRequest) {
   if (!read.ok) {
     return attachRateHeaders(
       withCors(
-        apiError(
-          "Refund storage is temporarily unreachable. Please retry.",
-          503
+        storageUnavailableError(
+          "Refund storage is temporarily unreachable. Please retry."
         )
       ),
       gate.rateHeaders
@@ -135,9 +135,8 @@ export async function POST(req: NextRequest) {
   if (!priorRead.ok) {
     return attachRateHeaders(
       withCors(
-        apiError(
-          "Cannot read prior refunds right now; refund not issued. Please retry.",
-          503
+        storageUnavailableError(
+          "Cannot read prior refunds right now; refund not issued. Please retry."
         )
       ),
       gate.rateHeaders

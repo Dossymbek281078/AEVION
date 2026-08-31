@@ -126,7 +126,24 @@ describe("имена тарифов в текстах существуют", () 
  * символов по scripts/, src/ и tests/ показал ровно два места — то и это.
  */
 describe("время ответа в текстах совпадает с тарифом", () => {
-  const I18N_PATH = path.resolve(SRC, "lib/i18n-data.ts");
+  // ⚠️ Починено 31.08.2026 при сборке к 10.09.
+  //
+  // Читался lib/i18n-data.ts — а словарь разбит по языкам 10.08 (ради веса
+  // страницы: 1.3 МБ из 2.5 грузились на каждой), и там осталось 3.3 КБ
+  // служебных данных. Проверка «ни один текст не обещает другого срока»
+  // перебирала пустоту и была ЗЕЛЁНОЙ, ничего не охраняя.
+  //
+  // Контроля прибора у неё не было — поэтому и не заметили. Теперь есть:
+  // ниже отдельная проверка, что ключи tierDetail вообще нашлись.
+  const I18N_DIR = path.resolve(SRC, "lib/i18n-lang");
+  function dictLines(): string[] {
+    const out: string[] = [];
+    for (const f of readdirSync(I18N_DIR)) {
+      if (!f.endsWith(".ts")) continue;
+      out.push(...readFileSync(path.join(I18N_DIR, f), "utf8").split(String.fromCharCode(10)));
+    }
+    return out;
+  }
 
   /** id тарифа → часы ответа, из реестра. */
   function slaHours(): Record<string, number | null> {
@@ -148,12 +165,13 @@ describe("время ответа в текстах совпадает с тар
 
   test("ни один текст не обещает другого срока", () => {
     const hours = slaHours();
-    const src = readFileSync(I18N_PATH, "utf8");
     const bad: string[] = [];
 
-    for (const line of src.split("\n")) {
+    let seen = 0;
+    for (const line of dictLines()) {
       const key = /"(pricing\.tierDetail[^"]+)":/.exec(line)?.[1];
       if (!key) continue;
+      seen++;
       const tier = /\.(free|lite|medium|full|pro|enterprise)\./.exec(key)?.[1];
       if (!tier) continue;
       const expected = hours[tier];
@@ -167,6 +185,10 @@ describe("время ответа в текстах совпадает с тар
       }
     }
 
+      // Контроль прибора: если ключей tierDetail не нашлось вовсе, проверка
+      // ничего не проверила. До 31.08 она читала опустевший файл и была
+      // зелёной именно так.
+      expect(seen, "ключей pricing.tierDetail не найдено — сторож читает пустоту").toBeGreaterThan(0);
     expect(bad, bad.join("; ")).toEqual([]);
   });
 });

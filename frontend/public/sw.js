@@ -50,6 +50,23 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Шахматный движок мимо кэша — иначе он не запускается ВООБЩЕ.
+//
+// Замер 31.08.2026, чистый A/B на одной и той же странице:
+//   service worker разрешён   → «worker sent an unknown command undefined», движок мёртв
+//   service worker заблокирован → uciok, 19 сообщений, движок играет
+//
+// Причина в устройстве сборки: это WASM-сборка с потоками, она сама порождает
+// дочерние воркеры из ТОГО ЖЕ адреса. Отданный из кэша скрипт ломает эту
+// цепочку, и родитель принимает ответы детей за мусор.
+//
+// Следствие было тихим и дорогим: разбор партии после её конца не запускался
+// никогда, а сильные уровни соперника молча играли запасным выбором ходов.
+// На проде тоже.
+function isEngineAsset(url) {
+  return /^\/stockfish[\w.-]*\.(js|wasm)$/i.test(url.pathname);
+}
+
 function isStaticAsset(url) {
   return /\.(css|js|svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|eot)$/i.test(url.pathname)
     || url.pathname.startsWith("/_next/static/");
@@ -68,6 +85,9 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   // API: network-only
   if (isApi(url)) return;
+
+  // Движок обслуживаем только сетью — см. isEngineAsset.
+  if (isEngineAsset(url)) return;
 
   // Static: cache-first + background revalidate
   if (isStaticAsset(url)) {

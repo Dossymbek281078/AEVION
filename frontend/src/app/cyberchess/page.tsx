@@ -3751,7 +3751,10 @@ export default function CyberChessPage(){
     autoAnalysedRef.current=fp;
     // Small delay so Stockfish finishes AI last move evaluation first
     const t=setTimeout(async()=>{
-      if(!sfR.current?.ready())return;
+      if(!sfR.current?.ready()){
+        try{console.warn("[CyberChess] разбор партии не запущен: движок не готов")}catch{}
+        return;
+      }
       try{
         await runAnalysis(10);
         // Разбор готов — досохраняем его в уже записанную партию: при
@@ -3768,7 +3771,11 @@ export default function CyberChessPage(){
         }
         // After quick analysis, toast a summary
         // analysis state is updated inside runAnalysis via sAnalysis
-      }catch{}
+      }catch(e){
+        // Молчать здесь нельзя: разбор партии — то, ради чего человек ждёт
+        // после игры. Саму игру не роняем, но след оставляем.
+        try{console.warn("[CyberChess] разбор партии не удался:",e)}catch{}
+      }
     },800);
     return()=>clearTimeout(t);
   },[over,hist.length]);

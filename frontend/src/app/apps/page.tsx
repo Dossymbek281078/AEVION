@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { channelFrom, withChannel } from "@/lib/products";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { productById } from "@/lib/products";
@@ -267,6 +268,13 @@ const PAID_APPS = APPS.filter((a) => a.price > 0);
 const RACK_RATE = PAID_APPS.reduce((s, a) => s + a.price, 0);
 
 export default function AppsPage() {
+  // Метка канала для ссылок в кассу. Витрина модулей — клиентская
+  // страница, поэтому метка берётся после отрисовки: на сервере адреса
+  // ещё нет, и сборка ссылки при отрисовке разошлась бы с разметкой.
+  const [channel, setChannel] = useState<string | null>(null);
+  useEffect(() => {
+    setChannel(channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined));
+  }, []);
   const [billing, setBilling] = useState<Billing>("monthly");
   const planetPrice = billing === "monthly" ? PLANET_MONTHLY : PLANET_ANNUAL_PER_MO;
   const savings = RACK_RATE - planetPrice;
@@ -412,9 +420,9 @@ export default function AppsPage() {
               )}
 
               <a
-                href={billing === "annual"
+                href={withChannel(billing === "annual"
                   ? "https://aevion.lemonsqueezy.com/checkout/buy/a6a35e07-9942-4089-aec3-0faa0ea9b722"
-                  : "https://aevion.lemonsqueezy.com/checkout/buy/23fa912b-b6dc-4b42-8dd8-7498b6298b1b"}
+                  : "https://aevion.lemonsqueezy.com/checkout/buy/23fa912b-b6dc-4b42-8dd8-7498b6298b1b", channel, "apps")}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() =>

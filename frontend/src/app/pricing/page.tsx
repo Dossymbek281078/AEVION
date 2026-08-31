@@ -264,7 +264,13 @@ export default function PricingPage() {
       });
       const j = await r.json();
       if (j.url) {
-        window.location.href = j.url;
+        // Метка канала доводится до кассы. Найдено 31.08.2026: главный путь
+        // оплаты — этот, и он уходил по готовому адресу от бэкенда как есть.
+        // Вчерашняя правка на этой же странице касалась только ссылки на
+        // набор через Gumroad, а таблица тарифов идёт через сессию и метку
+        // теряла. Получатели готовы оба: вебхук LemonSqueezy читает
+        // custom_data.channel, вебхук Gumroad — url_params[channel].
+        window.location.href = withChannel(j.url, channel, "pricing");
       } else {
         console.error("[checkout] no url returned", j);
         setCheckoutNotice(t("pricing.home.notice.checkoutError"));

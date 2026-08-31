@@ -36,7 +36,19 @@ export default function PostGameCard({
     );
   }
 
-  if (s.vsego === 0) return null;
+  // Партия короче шести полуходов: разбирать нечего, и анализ для неё даже
+  // не запускается. Молчать здесь нельзя — человек только что видел, как у
+  // соседней партии появился разбор, и решит, что сломалось. Говорим прямо.
+  if (s.vsego === 0) {
+    return (
+      <div style={obolochka} role="status" data-testid="post-game-card-short">
+        <div style={{ fontSize: 13, color: "#5d6b7a" }}>
+          Партия слишком короткая для разбора — сыграйте подлиннее, и я покажу,
+          где она решилась.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={obolochka} role="status" data-testid="post-game-card">

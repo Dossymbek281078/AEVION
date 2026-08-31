@@ -18,9 +18,11 @@ describe("карточка разбора после партии", () => {
     expect(screen.queryByText(/0%/)).toBeNull();
   });
 
-  it("короткая партия без анализа не рисует пустую карточку", () => {
-    const { container } = render(<PostGameCard hist={["e4"]} analysis={[]} pCol="w" schitaem={false} />);
-    expect(container.textContent).toBe("");
+  it("короткая партия объясняет, почему разбора нет", () => {
+    // молчать нельзя: человек только что видел разбор у прошлой партии и
+    // решит, что сломалось. Проверяем именно объяснение, а не пустоту
+    render(<PostGameCard hist={["e4"]} analysis={[]} pCol="w" schitaem={false} />);
+    expect(screen.getByTestId("post-game-card-short").textContent).toContain("слишком короткая");
   });
 
   it("показывает точность, зевки и переломный ход с альтернативой", () => {

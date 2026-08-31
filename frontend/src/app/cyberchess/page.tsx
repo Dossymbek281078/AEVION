@@ -898,15 +898,15 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,bran
             aria-label={item.label} aria-current={active?"page":undefined}
             style={{
               display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,
-              padding:"10px 16px 8px",border:"none",background:"transparent",
+              padding:"10px 6px 8px",border:"none",background:"transparent",
               borderTop:active?`2px solid ${brand}`:"2px solid transparent",
               color:active?brand:textMute,cursor:"pointer",fontSize:10,fontWeight:800,
-              letterSpacing:0.3,flex:1,
+              letterSpacing:0.3,flex:"1 1 0",minWidth:0,
             }}
             onMouseEnter={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=brand}}
             onMouseLeave={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=textMute}}>
             <span style={{fontSize:20}} aria-hidden>{item.icon}</span>
-            <span>{item.label}</span>
+            <span style={{maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</span>
           </button>
         );
       })}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { formatPaymentAmount } from "@/lib/paymentAmount";
 import { use, useEffect, useMemo, useState, type CSSProperties } from "react";
 
 type Currency = "USD" | "EUR" | "KZT" | "AEC";
@@ -41,11 +42,10 @@ const FALLBACK_METHODS: PaymentMethod[] = [
 ];
 
 function formatAmount(amount: number, currency: Currency) {
-  if (currency === "AEC") return `${amount.toLocaleString()} AEC`;
-  if (currency === "KZT") return `${amount.toLocaleString("ru-RU")} ₸`;
-  if (currency === "EUR")
-    return `€${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // Сумма приходит в МИНОРНЫХ единицах (так объявляет API и его спека).
+  // Раньше здесь она печаталась как есть, и цена на экране была в сто раз
+  // больше выставленной. Показатель валюты живёт в одном месте.
+  return formatPaymentAmount(amount, currency);
 }
 
 type Phase =

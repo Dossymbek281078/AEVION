@@ -255,7 +255,23 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
     });
     const j = await r.json();
     if (!r.ok) {
-      return { ok: false, mode: "real", error: j.message ?? `HTTP ${r.status}` };
+      // 31.08.2026. Здесь был единственный молчаливый выход из трёх: исключение
+      // ниже зовёт capture, «2xx без id» рядом тоже, а самый вероятный отказ —
+      // 4xx/5xx от Resend (неподтверждённый домен, неверный ключ, превышен
+      // темп) — возвращался без следа. Письмо после ПОКУПКИ не уходило, а
+      // узнать об этом было неоткуда: вызывающие вебхуки результат не читают.
+      //
+      // Операцию не роняем: человек уже заплатил и доступ получил, письмо не
+      // должно этого отменять. Меняется только одно — отказ перестаёт быть
+      // невидимым, и в следе есть ЧТО и КОМУ не ушло.
+      const причина = j.message ?? `HTTP ${r.status}`;
+      console.warn(`[email] не отправлено -> ${payload.to}: ${причина}`);
+      capture(new Error(`sendEmail failed: ${причина}`), {
+        route: "provisioning/sendEmail",
+        to: payload.to,
+        subject: payload.subject,
+      });
+      return { ok: false, mode: "real", error: причина };
     }
     if (!j.id) {
       // Resend returned 2xx but no message id — not the documented success shape.

@@ -143,6 +143,32 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
       );
     `);
 
+    // Связь «гость → почта». Модуль намеренно работает БЕЗ аккаунта, а
+    // оплата приходит вебхуком с одним лишь адресом почты. Тариф при этом
+    // ищется по идентификатору, и у гостя учётной записи нет — значит
+    // заплативший видит бесплатный тариф (замер 29.08.2026 на живом проде:
+    // /studio/credits с заголовком гостя отдаёт tier free).
+    //
+    // Эта таблица — недостающее звено, и она нужна при ЛЮБОМ из трёх
+    // способов починки (вход перед оплатой / адрес на нашей стороне /
+    // подсказка после оплаты). Заполняет её тот способ, который выберет
+    // владелец продукта; чтение тарифа одинаково для всех трёх.
+    //
+    // Записи сюда НЕ создаёт ничто, кроме подтверждённой связи: адрес
+    // здесь означает «этот гость доказал, что почта его», иначе любой
+    // получил бы чужой оплаченный тариф, назвав чужую почту.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "DevHubGuestEmail" (
+        "guestId"   TEXT PRIMARY KEY,
+        "email"     TEXT NOT NULL,
+        "linkedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "DevHubGuestEmail_email_idx"
+        ON "DevHubGuestEmail" ("email");
+    `);
+
     // One row per AI-driven multi-file write (generate_code / workflow "code"
     // step) — the prior content of every file it touched, so it can be
     // reverted in one shot ("undo the last AI change") without re-generating.

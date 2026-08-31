@@ -307,11 +307,23 @@ async function getUserTierChecked(userId: string): Promise<{ tier: StudioTier; t
   try {
     const r = await pool.query(`SELECT "tier" FROM "DevHubTier" WHERE "userId"=$1`, [userId]);
     if (r.rows[0]?.tier) return { tier: r.rows[0].tier as StudioTier, tierKnown: true };
-    // Check email-based tier (set by payment webhook before user registered)
+    // Тариф, оплаченный ДО регистрации. Ищем двумя путями, потому что
+    // человек приходит к нам двумя: как учётная запись и как ГОСТЬ.
+    //
+    // Второй путь и был дырой: модуль намеренно работает без аккаунта,
+    // оплата приходит с одним адресом почты, а тариф искался только через
+    // AEVIONUser — значит заплативший гость видел бесплатный тариф.
+    // Связь «гость → почта» кладёт тот способ, который выберет владелец
+    // продукта; чтение одинаково для всех трёх.
     const er = await pool.query(`
       SELECT det."tier" FROM "AEVIONUser" au
       JOIN "DevHubEmailTier" det ON det."email" = LOWER(au."email")
-      WHERE au."id" = $1 LIMIT 1
+      WHERE au."id" = $1
+      UNION ALL
+      SELECT det2."tier" FROM "DevHubGuestEmail" ge
+      JOIN "DevHubEmailTier" det2 ON det2."email" = LOWER(ge."email")
+      WHERE ge."guestId" = $1
+      LIMIT 1
     `, [userId]);
     if (er.rows[0]?.tier && er.rows[0].tier !== "free") {
       const promoted = er.rows[0].tier as StudioTier;

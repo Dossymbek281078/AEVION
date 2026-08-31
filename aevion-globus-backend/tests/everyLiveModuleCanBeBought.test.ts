@@ -78,6 +78,39 @@ function canBeBought(id: string): boolean {
   return PRICED.has(id) || SHOP_IDS.has(id);
 }
 
+/**
+ * Подписочные модули магазина. Разбор БЕЗ регулярок намеренно: в
+ * одноразовых шаблонах на этой машине экранирование теряется на границе
+ * вызова, и шаблон молча перестаёт совпадать (см. правила, §2е).
+ */
+function monthlyShopModules(): string[] {
+  if (!existsSync(SHOP)) return [];
+  const src = readFileSync(SHOP, "utf8");
+  const out: string[] = [];
+  const parts = src.split('    id: "');
+  for (let i = 1; i < parts.length; i++) {
+    const end = parts[i].indexOf('"');
+    if (end <= 0) continue;
+    const id = parts[i].slice(0, end);
+    const body = parts[i].slice(0, 600);
+    if (!body.includes('kind: "module"')) continue;
+    if (!body.includes('billing: "monthly"')) continue;
+    // Модуль засчитывается и по appId: в магазине сокращённое имя
+    // (smeta, qpaynet), а в каталоге цен полное (smeta-trainer,
+    // qpaynet-embedded). Первая редакция этой проверки смотрела только
+    // id и назвала оба расхождением — ложно, они на месте. Настоящей из
+    // трёх находок была одна.
+    const aidAt = parts[i].indexOf('appId: "');
+    let alias = '';
+    if (aidAt >= 0 && aidAt < 600) {
+      const rest = parts[i].slice(aidAt + 8);
+      alias = rest.slice(0, rest.indexOf('"'));
+    }
+    out.push(alias && PRICED.has(alias) ? alias : id);
+  }
+  return out;
+}
+
 describe("живой модуль можно оплатить или сказано, почему нет", () => {
   test("контроль: все три источника прочитаны и не пусты", () => {
     // Пустой источник обнулил бы проверку и оставил её зелёной навсегда.
@@ -124,5 +157,37 @@ describe("живой модуль можно оплатить или сказа�
     const known = new Set(projects.map((p) => p.id));
     const ghosts = [...Object.keys(AWAITING_FOUNDER), ...Object.keys(NOT_FOR_SALE)].filter((id) => !known.has(id));
     expect(ghosts, "строка про модуль, которого нет в реестре — опечатка или он переименован").toEqual([]);
+  });
+
+  /**
+   * НЕДОСТАЮЩЕЕ НАПРАВЛЕНИЕ СВЕРКИ (добавлено 31.08.2026).
+   *
+   * canBeBought() выше считает два каталога ВЗАИМОЗАМЕНЯЕМЫМИ: модуль
+   * засчитывается, если он есть в ценах ИЛИ в магазине. Для вопроса «можно
+   * ли вообще заплатить» это верно, и именно поэтому расхождение между
+   * каталогами было невидимо: страница /pricing строится ТОЛЬКО из
+   * MODULES_PRICING, а /apps — только из products.ts.
+   *
+   * Замер 31.08.2026: DevHub Studio Pro продавался на /apps за $149/мес
+   * (касса отвечала 302 при 404 у выдуманного товара) и отсутствовал в
+   * каталоге цен — то есть самого дорогого модуля платформы не было на
+   * странице с названием «цены». Прежние проверки этого не видели и не
+   * могли: SELLABLE берётся из реестра проектов, а DevHub в реестре нет.
+   */
+  test("контроль: разбор магазина находит подписки и умеет промахнуться", () => {
+    const monthly = monthlyShopModules();
+    // Пустой разбор дал бы «расхождений нет» на любом состоянии каталогов.
+    expect(monthly.length, "разбор магазина не нашёл ни одной подписки — путь или формат изменились").toBeGreaterThan(3);
+    expect(monthly, "разбор не видит DevHub, хотя он в магазине есть").toContain("devhub");
+    expect(monthly, "разбор признал модулем то, чего в магазине нет").not.toContain("net-takogo-modulya-xyz");
+  });
+
+  test("модуль-подписка из магазина есть и в каталоге цен", () => {
+    const missing = monthlyShopModules().filter((id) => !PRICED.has(id));
+    expect(
+      missing,
+      "модуль продаётся на /apps как подписка, но на /pricing его нет вовсе: " +
+        "покупатель, сравнивающий цены, его не найдёт. Добавьте запись в MODULES_PRICING.",
+    ).toEqual([]);
   });
 });

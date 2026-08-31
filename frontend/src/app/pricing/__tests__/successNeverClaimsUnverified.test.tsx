@@ -22,7 +22,7 @@ import SuccessPage from "../checkout/success/page";
 const t = (k: string) => k; // подписи не важны: сверяем КЛЮЧИ, они однозначны
 
 vi.mock("@/lib/i18n", () => ({ useI18n: () => ({ t, lang: "ru" }) }));
-vi.mock("@/lib/track", () => ({ track: () => {} }));
+vi.mock("@/lib/track", () => ({ track: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams("tier=pro&provider=paybox"),
 }));
@@ -73,5 +73,44 @@ describe("экран после оплаты не обещает того, че�
     await waitFor(() =>
       expect(screen.getByText("pricing.checkoutSuccess.titlePending")).toBeTruthy(),
     );
+  });
+});
+
+/**
+ * Учёт покупки не срабатывает на голом заходе.
+ *
+ * Замер 31.08.2026: событие уходило БЕЗУСЛОВНО, при каждом открытии адреса.
+ * Итоговый шаг воронки считал ЗАХОДЫ, а не покупки — достаточно было вернуться
+ * кнопкой «назад», бросив оплату. Ошибка не видна ни в одном отчёте: числа
+ * просто больше настоящих, и «конверсия» выглядит лучше, чем она есть.
+ */
+describe("учёт покупки требует признака возврата", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.restoreAllMocks());
+
+  it("есть касса в адресе — событие уходит", async () => {
+    mockPlan("pro");
+    vi.doMock("next/navigation", () => ({
+      useSearchParams: () => new URLSearchParams("tier=pro&provider=paybox"),
+    }));
+    const { track } = await import("@/lib/track");
+    render(<SuccessPage />);
+    await waitFor(() => expect(track).toHaveBeenCalled());
+  });
+
+  it("голый адрес без кассы — событие НЕ уходит", async () => {
+    mockPlan("free");
+    vi.resetModules();
+    vi.doMock("next/navigation", () => ({
+      useSearchParams: () => new URLSearchParams(""),
+    }));
+    const { track } = await import("@/lib/track");
+    const Page = (await import("../checkout/success/page")).default;
+    render(<Page />);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(
+      track,
+      "человек просто открыл адрес, а воронка засчитала покупку",
+    ).not.toHaveBeenCalled();
   });
 });

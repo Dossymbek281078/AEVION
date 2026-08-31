@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
@@ -160,7 +160,27 @@ function SuccessInner() {
     };
   }, [stub, tier]);
 
+  /*
+   * ⚠️ 31.08.2026: ворота на учёт. Раньше событие уходило БЕЗУСЛОВНО, при
+   * каждом открытии адреса — то есть итоговый шаг воронки считал ЗАХОДЫ, а не
+   * покупки. Достаточно было вернуться кнопкой «назад», бросив оплату.
+   *
+   * Признак настоящего возврата на странице уже был: у каждой кассы он свой
+   * (intentId, ref, sale_id), и страница сводит их в `provider` выше. Нет
+   * признака — нет и покупки.
+   *
+   * Заглушка (?stub) в `provider` не попадает и не считается: показ не продажа.
+   *
+   * Общий PurchaseReturnTracker сюда не ставлю намеренно, хотя он и написан
+   * ровно для этого: он не несёт тариф, сумму и период, а они здесь в событии
+   * есть. Замена ради единообразия стоила бы трёх полей воронки — беру у него
+   * ПРИЁМ (ворота плюс защита от повторной отрисовки), а не тело.
+   */
+  const учтено = useRef(false);
+
   useEffect(() => {
+    if (!provider || учтено.current) return;
+    учтено.current = true;
     track({
       type: "checkout_success",
       tier: tier ?? undefined,

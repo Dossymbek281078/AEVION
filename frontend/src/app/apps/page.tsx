@@ -1,5 +1,6 @@
 "use client";
 
+import { channelNow } from "@/lib/channelNow";
 import { useEffect, useState } from "react";
 import { channelFrom, withChannel } from "@/lib/products";
 import Link from "next/link";
@@ -273,7 +274,7 @@ export default function AppsPage() {
   // ещё нет, и сборка ссылки при отрисовке разошлась бы с разметкой.
   const [channel, setChannel] = useState<string | null>(null);
   useEffect(() => {
-    setChannel(channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined));
+    setChannel(channelNow());
   }, []);
   const [billing, setBilling] = useState<Billing>("monthly");
   const planetPrice = billing === "monthly" ? PLANET_MONTHLY : PLANET_ANNUAL_PER_MO;

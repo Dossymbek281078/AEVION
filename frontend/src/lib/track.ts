@@ -1,5 +1,5 @@
 import { apiUrl } from "./apiBase";
-import { channelFrom } from "./products";
+import { channelNow } from "./channelNow";
 
 
 /**
@@ -40,46 +40,6 @@ export interface TrackPayload {
   meta?: Record<string, string | number | boolean | null>;
 }
 
-const CHANNEL_KEY = "aevion_gtm_channel";
-
-/**
- * Метка канала, пережившая поход в кассу.
- *
- * Замерено 31.08.2026: НИ ОДИН из четырёх адресов возврата (PayBox, PayPal,
- * LemonSqueezy, Gumroad) не несёт `c=`, а канал читался только из адреса. Значит
- * событие «оплата принята» приходило без канала — и покупку нельзя было отнести
- * к источнику в нашей же аналитике. Вся цепочка привязки (короткая ссылка →
- * переходы по сайту → адрес кассы) обрывалась на последнем и самом важном шаге.
- *
- * Кладём рядом с `sid`, в то же хранилище: у него ровно нужный срок жизни —
- * вкладка. Отдельный механизм здесь был бы вторым способом делать то же самое.
- *
- * Держим ПЕРВОЕ касание и не перезаписываем: так же считает сервер у списка
- * подписчиков (COALESCE), и два источника не должны спорить о том, откуда
- * пришёл человек.
- *
- * Сознательно НЕ localStorage. Он пережил бы закрытие вкладки, и покупка
- * досталась бы каналу, по которому человек заходил неделю назад. Завышение
- * опаснее пропуска: по нему увеличивают бюджет каналу, который его не заработал.
- * Пропуск же виден как «источник неизвестен».
- */
-function запомнитьКанал(c: string): void {
-  try {
-    if (!sessionStorage.getItem(CHANNEL_KEY)) sessionStorage.setItem(CHANNEL_KEY, c);
-  } catch {
-    // Хранилище может быть закрыто (приватный режим). Метка тогда просто не
-    // переживёт кассу — это ухудшение точности, а не поломка замера.
-  }
-}
-
-function запомненныйКанал(): string | undefined {
-  try {
-    return sessionStorage.getItem(CHANNEL_KEY) ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function getSid(): string {
   if (typeof window === "undefined") return "";
   try {
@@ -111,16 +71,8 @@ export function track(payload: TrackPayload): void {
   // Если отправитель метку передал — она старше: серверная страница читает ?c=
   // надёжнее, чем мы здесь по адресу в браузере.
   const givenChannel = payload.meta?.channel;
-  const меткаИзАдреса = new URLSearchParams(window.location.search).get("c") ?? undefined;
-  const fromUrl = channelFrom(меткаИзАдреса);
-  // Храним КОРОТКУЮ метку, как она пришла, а не разобранное имя: `channelFrom`
-  // принимает метки и отдаёт имена, и обратно имя уже не принимается. Первая
-  // редакция клала имя — и на возврате из кассы канал молча пропадал.
-  if (fromUrl && меткаИзАдреса) запомнитьКанал(меткаИзАдреса);
-  // Из хранилища — только когда в адресе метки нет: так возврат из кассы
-  // («оплата принята», «оплата отменена») сохраняет источник, а обычные
-  // страницы по-прежнему верят адресу.
-  const channel = fromUrl ?? channelFrom(запомненныйКанал());
+
+  const channel = channelNow();
   const meta =
     givenChannel || !channel ? payload.meta : { ...(payload.meta ?? {}), channel };
 

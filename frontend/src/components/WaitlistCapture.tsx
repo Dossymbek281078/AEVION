@@ -21,7 +21,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
-import { channelFrom } from "@/lib/products";
+import { channelNow } from "@/lib/channelNow";
 
 type Status = "idle" | "sending" | "done" | "error";
 
@@ -119,7 +119,7 @@ export function WaitlistCapture({
       const канал =
         typeof window === "undefined"
           ? null
-          : channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined);
+          : channelNow()
       const r = await fetch(apiUrl("/api/constitution/waitlist/subscribe"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },

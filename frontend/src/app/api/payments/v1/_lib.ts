@@ -198,6 +198,20 @@ export function badRequest(message: string, code = 400) {
   );
 }
 
+export function apiError(message: string, code = 503) {
+  // 31.08.2026. Наша собственная неуверенность — НЕ ошибка клиента.
+  // badRequest помечает ответ типом invalid_request_error, и с ним интегратор
+  // уходит отлаживать своё тело запроса, тогда как запрос был безупречен, а не
+  // смогли МЫ: хранилище не прочиталось или журнал обрезался. Хуже того, вместе
+  // с «please retry» это прямое противоречие — неверный запрос не станет верным
+  // от повтора. Такие ответы получают отдельный тип, чтобы человек на том конце
+  // понял, чья это сторона и стоит ли повторять.
+  return Response.json(
+    { error: { type: "api_error", message } },
+    { status: code }
+  );
+}
+
 export function withCors(res: Response): Response {
   res.headers.set("Access-Control-Allow-Origin", "*");
   res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");

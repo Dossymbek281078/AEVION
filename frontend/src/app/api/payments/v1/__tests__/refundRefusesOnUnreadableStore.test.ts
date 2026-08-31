@@ -64,5 +64,9 @@ describe("возврат не выдаётся, если прошлые возв
     expect(res.status, "возврат выдан при нечитаемом хранилище").toBe(503);
     const тело = await res.json();
     expect(JSON.stringify(тело)).toContain("retry");
+    // Наша неуверенность — не ошибка клиента: с типом invalid_request_error
+    // интегратор уходит отлаживать безупречный запрос, а с «please retry»
+    // это ещё и противоречие. Тип обязан называть НАШУ сторону.
+    expect((тело as { error?: { type?: string } })?.error?.type).toBe("api_error");
   });
 });

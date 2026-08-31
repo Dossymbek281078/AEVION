@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import {
   attachRateHeaders,
   badRequest,
+  apiError,
   checkIdempotency,
   gateRequest,
   genId,
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
   if (!read.ok) {
     return attachRateHeaders(
       withCors(
-        badRequest(
+        apiError(
           "Refund storage is temporarily unreachable. Please retry.",
           503
         )
@@ -126,7 +127,7 @@ export async function POST(req: NextRequest) {
   if (!priorRead.ok) {
     return attachRateHeaders(
       withCors(
-        badRequest(
+        apiError(
           "Cannot read prior refunds right now; refund not issued. Please retry.",
           503
         )
@@ -163,7 +164,7 @@ export async function POST(req: NextRequest) {
     if (link.created < oldestRetained) {
       return attachRateHeaders(
         withCors(
-          badRequest(
+          apiError(
             "Refund history for this link may have been truncated; refund not issued. Please contact support.",
             409
           )

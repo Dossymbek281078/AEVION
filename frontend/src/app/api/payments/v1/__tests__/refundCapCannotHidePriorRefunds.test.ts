@@ -72,5 +72,9 @@ describe("обрезанный журнал не открывает вторую
     expect(res.status, `касса ответила ${res.status}: ${JSON.stringify(тело)}`)
       .not.toBe(200);
     expect(JSON.stringify(тело)).not.toContain('"status":"succeeded"');
+    // Наша неуверенность — не ошибка клиента: с типом invalid_request_error
+    // интегратор уходит отлаживать безупречный запрос, а с «please retry»
+    // это ещё и противоречие. Тип обязан называть НАШУ сторону.
+    expect((тело as { error?: { type?: string } })?.error?.type).toBe("api_error");
   });
 });

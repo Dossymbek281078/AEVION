@@ -24,3 +24,46 @@ export function spendCompleteness(droppedRuns?: number | null): SpendCompletenes
   if (!Number.isFinite(droppedRuns) || droppedRuns <= 0) return { kind: "complete" };
   return { kind: "incomplete", lost: droppedRuns };
 }
+
+/**
+ * Насколько свежи данные графика расходов.
+ *
+ * Замер 31.08.2026 на проде: за 7 и за 30 дней ручка отдаёт пустой ряд, за 90 —
+ * девяносто дней, из которых прогоны есть РОВНО В ОДНОМ, 16 июля. То есть
+ * последняя запись расхода старше полутора месяцев.
+ *
+ * Панель при этом просто НЕ РИСОВАЛА график: секция висела на условии
+ * `daily.length > 0`. Отсутствие графика читается как «нечего показывать», а не
+ * как «за неделю активности не было» и тем более не как «запись могла
+ * сломаться». Это тот же класс, что пустой список вместо отказа.
+ *
+ * Заполнение пустых дней на сервере ведётся НАЗАД ОТ ПОСЛЕДНЕЙ ЗАПИСИ, а не от
+ * сегодня (намеренно, чтобы не звать Date.now в общей библиотеке). Значит даже
+ * нарисованный график заканчивается датой данных, и без подписи его читают как
+ * «по сегодня».
+ */
+export type SeriesRecency =
+  | { kind: "empty" }
+  | { kind: "current"; lastDate: string }
+  | { kind: "stale"; lastDate: string; daysBehind: number };
+
+export function seriesRecency(dates: string[], todayISO: string): SeriesRecency {
+  const clean = dates.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  // Ранний выход ИЗБЫТОЧЕН, и это проверено: убери его — пустой ряд всё
+  // равно даст "empty" ниже, через проверку на NaN (Date.parse от
+  // undefined). Мутация «убрать эту строку» НЕ ловится, и это не дыра
+  // в проверках, а два пути к одному ответу.
+  //
+  // Оставлен намеренно: полагаться на NaN от склейки undefined со
+  // строкой — читаемость хуже, чем явное условие. Пишу это здесь,
+  // чтобы следующий не принял выжившую мутацию за пустой сторож.
+  if (clean.length === 0) return { kind: "empty" };
+  const last = clean[clean.length - 1];
+  const ms = Date.parse(last + "T00:00:00Z");
+  const now = Date.parse(todayISO + "T00:00:00Z");
+  if (!Number.isFinite(ms) || !Number.isFinite(now)) return { kind: "empty" };
+  const behind = Math.round((now - ms) / 86400000);
+  return behind <= 0
+    ? { kind: "current", lastDate: last }
+    : { kind: "stale", lastDate: last, daysBehind: behind };
+}

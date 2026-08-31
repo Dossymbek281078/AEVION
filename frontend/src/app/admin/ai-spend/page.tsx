@@ -1,6 +1,6 @@
 "use client";
 
-import { spendCompleteness } from "@/lib/spendCompleteness";
+import { spendCompleteness, seriesRecency } from "@/lib/spendCompleteness";
 
 // Admin dashboard: cross-module AI spend + savings from the smartComplete
 // platform layer. Reads GET /api/qcoreai/smart/savings, which returns the
@@ -143,12 +143,51 @@ export default function AiSpendPage() {
             </div>
           </div>
 
+          {/* Пустой ряд раньше просто ПРЯТАЛ секцию: отсутствие графика
+              читается как «нечего показывать», а не как «за неделю активности
+              не было» и тем более не как «запись расхода могла сломаться».
+              Замер 31.08.2026: за 7 дней ручка отдаёт пусто, а последняя
+              запись расхода на проде — 16 июля, то есть 46 дней назад. */}
+          {daily.length === 0 && (
+            <div style={{ ...card, marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#64748b" }}>Расход по дням</div>
+              <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6 }}>
+                за выбранный период записей нет
+              </div>
+              <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
+                это не то же самое, что «расхода не было»: запись расхода может
+                молча не сработать — смотрите полноту сводки выше
+              </div>
+            </div>
+          )}
           {daily.length > 0 && (
             <div style={{ ...card, marginBottom: 18 }}>
               <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
                 Saved per day · last {daily.length} days · total {usd(daily.reduce((s, d) => s + d.savedUsd, 0))}
               </div>
               <Sparkline days={daily} />
+              {(() => {
+                // Заполнение пустых дней на сервере идёт НАЗАД ОТ ПОСЛЕДНЕЙ
+                // ЗАПИСИ, а не от сегодня. Значит график заканчивается датой
+                // данных, и без подписи его читают как «по сегодня».
+                const r = seriesRecency(
+                  daily.map((d) => d.date),
+                  new Date().toISOString().slice(0, 10),
+                );
+                if (r.kind === "stale")
+                  return (
+                    <div style={{ fontSize: 12, color: "#b45309", marginTop: 6 }}>
+                      данные по {r.lastDate} — это {r.daysBehind} дн. назад, не сегодня
+                    </div>
+                  );
+                if (r.kind === "current")
+                  return (
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>
+                      данные по {r.lastDate}
+                    </div>
+                  );
+                return null;
+              })()}
             </div>
           )}
 

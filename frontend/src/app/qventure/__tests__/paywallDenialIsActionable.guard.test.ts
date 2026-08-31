@@ -22,7 +22,12 @@ import path from "node:path";
  */
 const HERE = path.dirname(new URL(import.meta.url).pathname.replace(/^[/]([A-Za-z]:)/, "$1"));
 const PAGE = path.resolve(HERE, "..", "page.tsx");
-const SRC = fs.readFileSync(PAGE, "utf8");
+const SRC = fs.readFileSync(PAGE, "utf8");
+// Третья поверхность: пакетный разбор. Найдена перечислением, а не глазами —
+// я дважды подряд считал, что экранов меньше, чем есть. Перечисление это
+// команда, а не память.
+const BATCH = path.resolve(HERE, "..", "batch", "page.tsx");
+const BATCH_SRC = fs.readFileSync(BATCH, "utf8");
 const NL = String.fromCharCode(10);
 function noComments(src: string): string {
   return src.split(NL).filter((l) => !l.trim().startsWith("//")).join(NL);
@@ -71,6 +76,20 @@ describe("отказ платной стены понятен и не тупик
       "экранов со своим состоянием ссылки " + owners + ", а рисуют её " + links + ": " +
         "на остальных человек прочитает, что модуль платный, и не узнает, куда идти платить",
     ).toBe(owners);
+  });
+
+  it("пакетный разбор тоже читает текст и ссылку", () => {
+    const body = noComments(BATCH_SRC);
+    expect(body.length, "пакетный экран не прочитан").toBeGreaterThan(2000);
+    expect(body, "читается не тот файл").toContain("qventure/analyze");
+    expect(
+      body,
+      "пакетный экран не читает message: в каждой строке человек увидит машинный код",
+    ).toContain("aj?.message");
+    expect(
+      body,
+      "в пакетном экране нет ссылки на оплату: строк с отказом много, а идти платить некуда",
+    ).toMatch(/href=\{upgradeUrl\}/);
   });
 
   it("на экране покупателя нет вопросов про бэкенд", () => {

@@ -701,6 +701,43 @@ const SPEC = {
         },
       },
     },
+    "/v1/webhooks/{id}/test": {
+      post: {
+        summary: "Send a test delivery to a webhook endpoint",
+        operationId: "testWebhook",
+        description:
+          "Signs a sample payload with the endpoint secret and delivers it to the registered URL, so you can verify your signature check end to end. Returns 200 when your endpoint accepted the delivery and 502 when it did not; the body carries the outcome either way, including the signature we sent.",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Your endpoint accepted the test delivery.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    webhook_id: { type: "string" },
+                    event: { type: "string" },
+                    delivered: { type: "boolean" },
+                    http_code: { type: "integer", nullable: true },
+                    duration_ms: { type: "integer" },
+                    timestamp: { type: "integer" },
+                    signature: { type: "string" },
+                    url: { type: "string" },
+                    error: { type: "string", nullable: true },
+                    payload: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          "502": { description: "Your endpoint rejected or did not answer the test delivery." },
+        },
+      },
+    },
     "/v1/webhooks/process": {
       get: {
         summary: "Read webhook delivery queue stats",

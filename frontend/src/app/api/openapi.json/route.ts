@@ -64,7 +64,17 @@ const SPEC = {
             type: "object",
             required: ["type", "message"],
             properties: {
-              type: { type: "string" },
+              type: {
+                type: "string",
+                description:
+                  "Whose side the failure is on. api_error means the request was fine and we could not complete it — retry is meaningful there and pointless for invalid_request_error.",
+                enum: [
+                  "authentication_error",
+                  "invalid_request_error",
+                  "rate_limit_error",
+                  "api_error",
+                ],
+              },
               message: { type: "string" },
             },
           },
@@ -584,7 +594,7 @@ const SPEC = {
           },
           "409": {
             description:
-              "Link is not paid, already fully refunded, or amount exceeds remaining.",
+              "Link is not paid, already fully refunded, the amount exceeds remaining, or the refund history for this link may have been truncated and we will not issue a refund we cannot verify.",
             content: {
               "application/json": { schema: { $ref: "#/components/schemas/Error" } },
             },

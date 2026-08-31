@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { execFileSync } from "child_process";
+import { describe, it, expect, beforeAll, vi } from "vitest";
+import { execFile } from "child_process";
 import * as path from "path";
 
 // Каждый случай ниже поднимает отдельный процесс node, а `session-claim.mjs`
@@ -20,45 +20,99 @@ import * as path from "path";
 // Оба числа выше намеренно с датами: так видно, что это замеры, а не
 // свойство машины.
 //
+// Замер 31.08.2026, второй раз: предел 60 с снова не помог — файл шёл 351 с
+// и одиночный случай в него не уложился. Причина устройственная: КАЖДЫЙ из
+// двенадцати случаев поднимал свой процесс и заново обходил весь парк, то есть
+// было двенадцать независимых шансов не уложиться, и цена росла с числом
+// worktree линейно.
+//
+// Поэтому обход вынесен в ОДИН разогрев с пулом процессов: одиннадцать разных
+// входов вместо четырнадцати вызовов, по четыре одновременно. Сами случаи
+// стали мгновенными — они читают готовый ответ. Так остаётся один ограниченный
+// срок вместо двенадцати, и он не растёт от того, что случаев станет больше.
+//
+// Пул намеренно узкий: на машине бывает под 170 процессов node от всех вкладок,
+// и одиннадцать своих разом — это плата за скорость чужой ценой.
+//
 // Если файл снова начнёт краснеть по времени — смотрите не сюда, а
-// `git worktree list | wc -l`. И не поднимайте предел: он уже поднят до 60 с
-// и не помог, потому что устарел не предел, а допущение о числе.
-vi.setConfig({ testTimeout: 60_000 });
-
-// `session-claim.mjs` выдаёт РАЗРЕШЕНИЕ редактировать модуль. Значит опасный для
-// него исход — не отказ, а ложное «свободно»: оно посылает сессию в чужой
-// каталог, ровно туда, ради чего инструмент и написан.
-//
-// 28.07.2026 ложное «свободно» выдавалось на двух обычных входах:
-//   • путь вместо имени модуля — `frontend/src/app/compare` склеивалось в
-//     несуществующую зону `frontend/src/app/frontend/src/app/compare`. Этот вход
-//     естественнее правильного: в глобальном правиле команда стоит рядом с
-//     путями, и рука подставляет путь. Проверено на живом столкновении — каталог
-//     БЫЛ занят чужой веткой `feat/compare-page`, а инструмент отвечал «FREE».
-//   • любая описка в имени модуля (`qskiway`) — зоны не существует, совпадений
-//     нет, ответ «FREE».
-//
-// Тесты НЕ утверждают, свободен ли конкретный модуль: это зависит от того, какие
-// worktree живы прямо сейчас, и такой тест мигал бы. Проверяется только то, что
-// от состояния не зависит: разбор аргумента и запрет отвечать «свободно», когда
-// проверка не выполнена.
+// `git worktree list | wc -l`. Предел поднимать бесполезно: дважды проверено.
+vi.setConfig({ testTimeout: 20_000, hookTimeout: 240_000 });
 
 const SCRIPT = path.join(__dirname, "..", "..", "scripts", "session-claim.mjs");
 
-function run(arg?: string): { code: number; out: string } {
-  try {
-    const out = execFileSync(process.execPath, arg === undefined ? [SCRIPT] : [SCRIPT, arg], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { code: 0, out };
-  } catch (e) {
-    const err = e as { status?: number; stdout?: string; stderr?: string };
-    return { code: err.status ?? -1, out: (err.stdout ?? "") + (err.stderr ?? "") };
-  }
+type Ответ = { code: number; out: string };
+
+// Обратные слэши в исходнике теряются на границе вызова инструмента (проверено
+// не раз), поэтому windows-путь собирается из кода символа, а не пишется
+// литералом. Читается хуже, зато доезжает целым.
+const СЛЭШ = String.fromCharCode(92);
+const WIN_PATH = ["frontend", "src", "app", "compare"].join(СЛЭШ);
+
+/** Все входы, которые спрашивают случаи ниже. Каждый обходится РОВНО раз. */
+const ВХОДЫ = [
+  "qskiway",
+  "qskyway",
+  "модуль-которого-нет",
+  "frontend/src/app/compare",
+  "aevion-globus-backend/src/routes/qskyway.ts",
+  WIN_PATH,
+  "frontend/src/app/build",
+  "frontend/src/app/bureau",
+  "frontend/src/app/qpaynet",
+  "aevion-globus-backend/src/routes/ztide.ts",
+  "docs/readme.md",
+];
+
+function запустить(arg: string): Promise<Ответ> {
+  return new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      [SCRIPT, arg],
+      { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        const код = err ? (err as { code?: unknown }).code : 0;
+        resolve({
+          code: typeof код === "number" ? код : err ? -1 : 0,
+          out: (stdout ?? "") + (stderr ?? ""),
+        });
+      },
+    );
+  });
+}
+
+const ответы = new Map<string, Ответ>();
+
+beforeAll(async () => {
+  const очередь = [...ВХОДЫ];
+  const работник = async () => {
+    for (;;) {
+      const arg = очередь.shift();
+      if (arg === undefined) return;
+      ответы.set(arg, await запустить(arg));
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, работник));
+});
+
+/**
+ * Ответ разогрева. Бросает, если входа в списке не было: молчаливое undefined
+ * превратило бы описку в имени входа в зелёный случай, который ничего не
+ * проверил, — ровно тот ложный зелёный, от которого этот файл и защищает.
+ */
+function run(arg: string): Ответ {
+  const r = ответы.get(arg);
+  if (!r) throw new Error(`вход "${arg}" не обойдён в разогреве — добавьте его в ВХОДЫ`);
+  return r;
 }
 
 describe("session-claim не выдаёт разрешение, которого не проверял", () => {
+  it("разогрев состоялся: обойдены все входы", () => {
+    // Контроль охвата. Без него сорванный разогрев дал бы пустую карту, а
+    // случаи ниже падали бы с невнятным «вход не обойдён» — и причину искали
+    // бы в инструменте, а не в разогреве.
+    expect(ответы.size, "разогрев обошёл не все входы").toBe(ВХОДЫ.length);
+  });
+
   it("описка в имени модуля — отказ, а не «свободно»", () => {
     const r = run("qskiway");
     expect(r.out).not.toContain("FREE");
@@ -90,7 +144,7 @@ describe("session-claim не выдаёт разрешение, которого
   });
 
   it("путь с обратными слэшами (Windows) разбирается так же", () => {
-    expect(run("frontend\\src\\app\\compare").out).toContain('отнесён к модулю "compare"');
+    expect(run(WIN_PATH).out).toContain('отнесён к модулю "compare"');
   });
 
   it.each([

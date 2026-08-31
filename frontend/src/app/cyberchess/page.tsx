@@ -3110,10 +3110,13 @@ export default function CyberChessPage(){
     if(currentEndgame||pzCurrent)return; // skip in puzzle/endgame loops
     const fenForTop3=game.fen();
     let cancelled=false;
+    let poiskIdyot=false; // наш поиск метрик ещё занимает движок
     const idleId=typeof window!=="undefined"&&"requestIdleCallback" in window
       ?(window as any).requestIdleCallback(()=>{
         if(cancelled||!sfR.current?.ready())return;
+        poiskIdyot=true;
         sfR.current.multiPV(fenForTop3,sfDepth,3,(lines)=>{
+          poiskIdyot=false;
           if(cancelled||!lines||lines.length===0)return;
           try{
             // Convert in-page PVLine shape to MetricsPVLine (structurally identical).
@@ -3123,7 +3126,9 @@ export default function CyberChessPage(){
       },{timeout:600})
       :setTimeout(()=>{
         if(cancelled||!sfR.current?.ready())return;
+        poiskIdyot=true;
         sfR.current.multiPV(fenForTop3,sfDepth,3,(lines)=>{
+          poiskIdyot=false;
           if(cancelled||!lines||lines.length===0)return;
           try{metricsRef.current.setPendingTop3(fenForTop3,lines as unknown as MetricsPVLine[])}catch{}
         });
@@ -3135,6 +3140,10 @@ export default function CyberChessPage(){
           (window as any).cancelIdleCallback(idleId);
         else if(idleId)clearTimeout(idleId as any);
       }catch{}
+      // Человек сходил — движок нужен для ответа соперника. Отменённый флаг
+      // не освобождает воркер, поиск идёт дальше и держит очередь: замерено
+      // лентой, 7.1 секунды на один такой поиск.
+      if(poiskIdyot){try{sfR.current?.stop()}catch{}}
     };
   },[bk,on,over,tab,p2pMode,hotseat,setup,sfOk,myT]);// eslint-disable-line react-hooks/exhaustive-deps
 

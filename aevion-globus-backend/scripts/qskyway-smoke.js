@@ -603,6 +603,22 @@ async function main() {
   assert(pt?.kind === "permission", "[tokyo] permission regime keeps its own kind", `kind=${pt?.kind}`);
   assert(pa.basis === "ingested" && /UAP28/.test(pa.regime ?? ""), "[astana] zone identifier and provenance are stated", `${pa?.regime?.slice(0, 40)}`);
   assert(pa.coveragePct === 100 && /ЗАПРЕТНОЙ/.test(pa.note ?? ""), "[astana] full coverage is stated as prohibition, not as 'needs permission'");
+
+  // Город без сетки потолков: незнание отдаётся как null, а не как нули.
+  //
+  // Дублирует сторожей qskywayAtcUnknownIsNotNo и qskywayNoGridPublishesNull
+  // НАМЕРЕННО: те поднимают роутер в процессе, а этот ходит по настоящему
+  // HTTP. Починка может работать и не доезжать — если маршрут смонтирован
+  // не так, как ждут тесты, они останутся зелёными при живом 404.
+  const noGrid = await jpost("/api/qskyway/route", { from: 0, to: 3, city: "astana" });
+  assert(noGrid.status === 200, "[astana] маршрут строится и без сетки потолков", `HTTP ${noGrid.status}`);
+  const ag = noGrid.json?.airspace ?? {};
+  assert(ag.available === false, "[astana] сетки потолков нет — так и сказано");
+  const zeroed = ["coveragePct", "exceedingSegments", "zeroCeilingSegments", "maxExceedanceM"].filter((k) => ag[k] === 0);
+  assert(zeroed.length === 0, "[astana] числа о потолках не подменены нулями", `нулями отвечают: ${zeroed.join(", ") || "нет"}`);
+  const pads = (await jget("/api/qskyway/city?city=astana")).json?.vertiportScores ?? [];
+  const falseAtc = pads.filter((v) => v.needsAtcCoordination === false).length;
+  assert(falseAtc === 0, "[astana] «согласование не требуется» не говорится при неизвестном потолке", `площадок с false: ${falseAtc} из ${pads.length}`);
   // A demo circle named after a real restriction must say it is a demo circle.
   const gov = (permAst.json?.nofly ?? []).find((z) => z.id === "nfz-gov");
   assert(gov && /демо/i.test(gov.name ?? ""), "[astana] the placeholder zone is named as a placeholder", gov?.name);

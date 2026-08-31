@@ -32,7 +32,9 @@ describe("карточка разбора после партии", () => {
 
     expect(screen.getByTestId("post-game-card")).toBeTruthy();
     expect(screen.getByText(/67%/)).toBeTruthy();      // 2 хороших из 3 ходов белых
-    expect(screen.getByText(/зевков/)).toBeTruthy();
+    // Один зевок — «зевок», не «зевков». Прежняя редакция требовала «зевков»
+    // и тем закрепляла дефект: подписи фишек не склонялись вовсе.
+    expect(screen.getByText("зевок")).toBeTruthy();
     const perelom = screen.getByText(/Где решилась партия/).parentElement!;
     expect(perelom.textContent).toContain("Qh5");
     expect(perelom.textContent).toContain("3.2");

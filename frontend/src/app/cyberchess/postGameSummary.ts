@@ -1,3 +1,5 @@
+import { ccPlural } from "./ccPlural";
+
 /**
  * Разбор партии сразу после её конца — без обращения к ИИ.
  *
@@ -83,7 +85,12 @@ export function postGameSummary(
           nomerHoda: Math.floor(hudshiy.i / 2) + 1,
           zapis: hist[hudshiy.i],
           poterya: Math.round((hudshiy.a.cpLoss / 100) * 10) / 10,
-          luchshe: hudshiy.a.best,
+          // Совет показываем, только если он ОТЛИЧАЕТСЯ от сыгранного хода:
+          // иначе человек читает «сильнее было Bxd1» про Bxd1, который сам
+          // и сделал. Поймано глазами на стенде, тестами не ловилось.
+          luchshe: hudshiy.a.best && hudshiy.a.best !== hist[hudshiy.i]
+            ? hudshiy.a.best
+            : undefined,
         }
       : null;
 
@@ -106,16 +113,8 @@ export function odnaFraza(s: GameSummary): string {
       : "Партия без грубых ошибок — так и держать.";
   }
   if (s.zevkov === 0) {
-    return `Грубых зевков нет, но ${s.oshibok} ${sklonenie(s.oshibok, "ошибка", "ошибки", "ошибок")} стоили позиции.`;
+    return `Грубых зевков нет, но ${s.oshibok} ${ccPlural(s.oshibok, "ошибка", "ошибки", "ошибок")} стоили позиции.`;
   }
-  return `Главное, над чем работать: ${s.zevkov} ${sklonenie(s.zevkov, "зевок", "зевка", "зевков")} за партию.`;
+  return `Главное, над чем работать: ${s.zevkov} ${ccPlural(s.zevkov, "зевок", "зевка", "зевков")} за партию.`;
 }
 
-function sklonenie(n: number, one: string, few: string, many: string): string {
-  const a = Math.abs(n) % 100;
-  const b = a % 10;
-  if (a > 10 && a < 20) return many;
-  if (b > 1 && b < 5) return few;
-  if (b === 1) return one;
-  return many;
-}

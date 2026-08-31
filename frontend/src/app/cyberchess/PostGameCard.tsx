@@ -1,6 +1,7 @@
 'use client';
 
 import { postGameSummary, odnaFraza, type PlyAnalysis } from "./postGameSummary";
+import { ccPlural } from "./ccPlural";
 
 /**
  * Разбор партии сразу после её конца.
@@ -58,10 +59,10 @@ export default function PostGameCard({
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: s.perelom ? 10 : 0 }}>
         <Chip label="точность" value={`${s.tochnost}%`} tone="#0f766e" />
-        {s.blestyashchih > 0 && <Chip label="блестящих" value={String(s.blestyashchih)} tone="#7c3aed" />}
-        {s.zevkov > 0 && <Chip label="зевков" value={String(s.zevkov)} tone="#b91c1c" />}
-        {s.oshibok > 0 && <Chip label="ошибок" value={String(s.oshibok)} tone="#c2410c" />}
-        {s.netochnostey > 0 && <Chip label="неточностей" value={String(s.netochnostey)} tone="#a16207" />}
+        {s.blestyashchih > 0 && <Chip label={ccPlural(s.blestyashchih, "блестящий", "блестящих", "блестящих")} value={String(s.blestyashchih)} tone="#7c3aed" />}
+        {s.zevkov > 0 && <Chip label={ccPlural(s.zevkov, "зевок", "зевка", "зевков")} value={String(s.zevkov)} tone="#b91c1c" />}
+        {s.oshibok > 0 && <Chip label={ccPlural(s.oshibok, "ошибка", "ошибки", "ошибок")} value={String(s.oshibok)} tone="#c2410c" />}
+        {s.netochnostey > 0 && <Chip label={ccPlural(s.netochnostey, "неточность", "неточности", "неточностей")} value={String(s.netochnostey)} tone="#a16207" />}
       </div>
 
       {s.perelom && (
@@ -69,9 +70,9 @@ export default function PostGameCard({
           fontSize: 13, lineHeight: 1.5, padding: "8px 10px", borderRadius: 8,
           background: "#fff7ed", border: "1px solid #fed7aa", color: "#7c2d12",
         }}>
-          <b>Где решилась партия:</b> ход {s.perelom.nomerHoda}, {s.perelom.zapis} —
-          потеряно {s.perelom.poterya} пешки
-          {s.perelom.luchshe ? <> . Сильнее было {s.perelom.luchshe}</> : null}
+          <b>Где решилась партия:</b> ход {s.perelom.nomerHoda}, {s.perelom.zapis}:
+          цена ошибки — {s.perelom.poterya} {peshki(s.perelom.poterya)}.
+          {s.perelom.luchshe ? <> Сильнее было {s.perelom.luchshe}.</> : null}
         </div>
       )}
 
@@ -107,4 +108,9 @@ function Chip({ label, value, tone }: { label: string; value: string; tone: stri
       <span style={{ opacity: 0.8, fontWeight: 600 }}>{label}</span>
     </span>
   );
+}
+
+/** «1 пешка», «2 пешки», «5 пешек» — но у дробного всегда «пешки». */
+function peshki(n: number): string {
+  return Number.isInteger(n) ? ccPlural(n, "пешка", "пешки", "пешек") : "пешки";
 }

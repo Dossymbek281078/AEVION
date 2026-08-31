@@ -40,6 +40,32 @@ beforeEach(() => {
 });
 
 describe("отметка возврата после оплаты", () => {
+  test("successValue=\"*\" отмечает при ЛЮБОМ непустом значении", () => {
+    // Заведено 31.08.2026 ради /qpaynet/deposit/success: провайдер возвращает
+    // туда `?cid=<uuid>`, то есть признак успеха ЕСТЬ, но он не равен
+    // фиксированной строке. До этого страница работала без признака вовсе и
+    // отмечала покупку при любом заходе — считались посещения, а не покупки.
+    query = "cid=7f3a1c2e-0000-4444-8888-abcdefabcdef";
+    render(<PurchaseReturnTracker source="qpaynet-deposit" provider="qpaynet" successParam="cid" successValue="*" />);
+    expect(trackSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test("successValue=\"*\" МОЛЧИТ, когда параметра нет", () => {
+    // Обратная сторона, ради которой всё и делалось: голое открытие адреса
+    // покупкой не считается. Без этой проверки предыдущая была бы зелёной и
+    // при отметке, которая срабатывает всегда.
+    query = "";
+    render(<PurchaseReturnTracker source="qpaynet-deposit" provider="qpaynet" successParam="cid" successValue="*" />);
+    expect(trackSpy).not.toHaveBeenCalled();
+  });
+
+  test("successValue=\"*\" молчит и на пустом значении", () => {
+    // `?cid=` без значения — это не успех, а обрезанный адрес.
+    query = "cid=";
+    render(<PurchaseReturnTracker source="qpaynet-deposit" provider="qpaynet" successParam="cid" successValue="*" />);
+    expect(trackSpy).not.toHaveBeenCalled();
+  });
+
   test("при успехе отмечает покупку один раз", () => {
     query = "paid=1&reference=ref-9";
     render(<PurchaseReturnTracker source="bureau" provider="stripe" successParam="paid" />);

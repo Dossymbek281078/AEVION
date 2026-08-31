@@ -20,6 +20,13 @@ const SPEC = {
       },
     },
     parameters: {
+      IdempotentReplayed: {
+        name: "Idempotent-Replayed",
+        in: "header",
+        description:
+          "Present and set to \"true\" when this response was replayed from a previous request with the same Idempotency-Key. Its absence means the action was performed now. On refunds this is the difference between money that moved and money that did not.",
+        schema: { type: "string", enum: ["true"] },
+      },
       IdempotencyKey: {
         name: "Idempotency-Key",
         in: "header",

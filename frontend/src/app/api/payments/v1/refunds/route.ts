@@ -77,7 +77,15 @@ export async function POST(req: NextRequest) {
       withCors(
         new Response(idem.cachedBody, {
           status: 200,
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            // 31.08.2026. Заголовок ставили ЧЕТВЕРО обработчиков из пяти —
+            // ссылки, чекаут, подписки, вебхуки, — и не ставили возвраты.
+            // Без него повтор неотличим от новой выдачи: продавец видит 200 и
+            // объект возврата и не может сказать, ушли ли деньги ещё раз.
+            // Именно на денежном возврате это нужнее всего.
+            "idempotent-replayed": "true",
+          },
         })
       ),
       gate.rateHeaders

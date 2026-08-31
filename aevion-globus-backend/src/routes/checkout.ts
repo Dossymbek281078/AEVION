@@ -162,7 +162,13 @@ checkoutRouter.post("/session", async (req, res) => {
           successAppId:
             (body.modules ?? []).length === 1 ? (body.modules ?? [])[0] : undefined,
         });
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paybox", intentId: intent.intentId });
+        // 31.08.2026. Валюта в ответе, потому что страница обещает её ЗАРАНЕЕ: она
+        // спрашивает состояние канала при загрузке и, если PayBox жив, говорит
+        // «оплата в тенге». А здесь вызов PayBox может упасть, и тогда мы уходим
+        // к запасным, которые считают в долларах. Обещание было дано по
+        // состоянию, а исход у ЭТОГО запроса может быть другим — пусть витрина
+        // узнаёт правду из ответа, а не выводит её из имени провайдера.
+        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paybox", currency: "KZT", intentId: intent.intentId });
       } catch (e) {
         capture(e);
         console.error("[checkout/session] PayBox createIntent failed, falling back to LS/Gumroad/stub", e);
@@ -183,7 +189,7 @@ checkoutRouter.post("/session", async (req, res) => {
           successAppId:
             (body.modules ?? []).length === 1 ? (body.modules ?? [])[0] : undefined,
         });
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paypal", intentId: intent.intentId });
+        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paypal", currency: "USD", intentId: intent.intentId });
       } catch (e) {
         capture(e);
         console.error("[checkout/session] PayPal createIntent failed, falling back to LS/Gumroad/stub", e);
@@ -225,7 +231,7 @@ checkoutRouter.post("/session", async (req, res) => {
           successAppId:
             (body.modules ?? []).length === 1 ? (body.modules ?? [])[0] : undefined,
         });
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", intentId: intent.intentId });
+        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", currency: "USD", intentId: intent.intentId });
       } catch (e) {
         capture(e);
         console.error("[checkout/session] LS createIntent failed, falling back to Gumroad/stub", e);
@@ -237,7 +243,7 @@ checkoutRouter.post("/session", async (req, res) => {
       const intent = await gumroadPaymentProvider.createIntent({
         reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
       });
-      return res.json({ url: intent.checkoutUrl, mode: "real", provider: "gumroad", intentId: intent.intentId });
+      return res.json({ url: intent.checkoutUrl, mode: "real", provider: "gumroad", currency: "USD", intentId: intent.intentId });
     }
 
     // 3) Процессинга для этого tier:period нет.

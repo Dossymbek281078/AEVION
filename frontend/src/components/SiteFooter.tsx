@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
+import { KeepChannelLink } from "./KeepChannelLink";
 import { repoUrl } from "@/lib/repoUrl";
 
 /**
@@ -68,13 +69,13 @@ export function SiteFooter() {
             Products
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <Link href="/qright" style={footerLink}>QRight — IP Registry</Link>
-            <Link href="/qsign" style={footerLink}>QSign — Signatures</Link>
-            <Link href="/bureau" style={footerLink}>IP Bureau</Link>
-            <Link href="/planet" style={footerLink}>Planet Compliance</Link>
-            <Link href="/awards" style={footerLink}>Awards</Link>
-            <Link href="/bank" style={footerLink}>AEVION Bank</Link>
-            <Link href="/cyberchess" style={footerLink}>CyberChess</Link>
+            <KeepChannelLink href="/qright" style={footerLink}>QRight — IP Registry</KeepChannelLink>
+            <KeepChannelLink href="/qsign" style={footerLink}>QSign — Signatures</KeepChannelLink>
+            <KeepChannelLink href="/bureau" style={footerLink}>IP Bureau</KeepChannelLink>
+            <KeepChannelLink href="/planet" style={footerLink}>Planet Compliance</KeepChannelLink>
+            <KeepChannelLink href="/awards" style={footerLink}>Awards</KeepChannelLink>
+            <KeepChannelLink href="/bank" style={footerLink}>AEVION Bank</KeepChannelLink>
+            <KeepChannelLink href="/cyberchess" style={footerLink}>CyberChess</KeepChannelLink>
           </div>
         </div>
 
@@ -84,10 +85,10 @@ export function SiteFooter() {
             Company
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <Link href="/demo" style={footerLink}>Demo</Link>
-            <Link href="/terms" style={footerLink}>Terms of Service</Link>
-            <Link href="/privacy" style={footerLink}>Privacy Policy</Link>
-            <Link href="/help" style={footerLink}>Help Center</Link>
+            <KeepChannelLink href="/demo" style={footerLink}>Demo</KeepChannelLink>
+            <KeepChannelLink href="/terms" style={footerLink}>Terms of Service</KeepChannelLink>
+            <KeepChannelLink href="/privacy" style={footerLink}>Privacy Policy</KeepChannelLink>
+            <KeepChannelLink href="/help" style={footerLink}>Help Center</KeepChannelLink>
           </div>
         </div>
 
@@ -132,9 +133,9 @@ export function SiteFooter() {
       >
         <div>&copy; {year} AEVION. All rights reserved.</div>
         <div style={{ display: "flex", gap: 16 }}>
-          <Link href="/terms" style={footerLinkMuted}>Terms</Link>
-          <Link href="/privacy" style={footerLinkMuted}>Privacy</Link>
-          <Link href="/help" style={footerLinkMuted}>Help</Link>
+          <KeepChannelLink href="/terms" style={footerLinkMuted}>Terms</KeepChannelLink>
+          <KeepChannelLink href="/privacy" style={footerLinkMuted}>Privacy</KeepChannelLink>
+          <KeepChannelLink href="/help" style={footerLinkMuted}>Help</KeepChannelLink>
         </div>
       </div>
     </footer>

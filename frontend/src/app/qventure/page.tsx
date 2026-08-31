@@ -236,6 +236,18 @@ function MarketingSections() {
         </div>
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.12)", fontSize: 11.5, color: "#94a3b8" }}>
           QVenture is an AI screening tool for research purposes — not investment advice, an offer, or a solicitation. Figures are model estimates, not guarantees.
+          {" "}
+          {/* Доступ выдаётся по почте подписки: planGate спрашивает
+              hasActiveAppSubscription(plan.email, "qventure"), а plan.email берётся
+              из токена входа. Модуль при этом работает и анонимно, поэтому
+              человек может оплатить подписку и не связать покупку с собой —
+              сегодня это незаметно (платная стена включена у 6 модулей из 43,
+              QVenture среди них нет), но включение стены и есть запуск.
+              Строка на языке окружающего блока: язык интерфейса модуля —
+              открытый вопрос к основателю, и вводить второй язык внутри
+              одного абзаца хуже, чем следовать соседнему тексту. */}
+          Paid access is tied to the email on your subscription — sign in with that
+          same email after paying, or the analyses stay on the free tier.
         </div>
       </div>
     </div>

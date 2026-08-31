@@ -80,7 +80,10 @@ async function sendViaResend(to: string, subject: string, html: string): Promise
  * не отправив ни одного письма. Значение возвращается всегда; кто хочет
  * прежнее поведение «выстрелил и забыл», по-прежнему пишет `void send(...)`.
  */
-async function send(to: string, subject: string, html: string): Promise<boolean> {
+// Экспортирован 31.08.2026: связывание гостя с покупкой (DevHub) шлёт своё
+// письмо, и второй транспорт рядом с этим был бы источником расхождений —
+// выбор провайдера, квоты и учёт отправленного живут здесь.
+export async function send(to: string, subject: string, html: string): Promise<boolean> {
   try {
     const transport = getTransport();
     if (!transport) {

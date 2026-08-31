@@ -129,7 +129,7 @@ const APP_DEFS: AppDef[] = [
     tagline: "AI investment analyst · score 0–100",
     href: "/qventure",
     cat: "Finance",
-    highlights: ["4-role advice panel", "Market sizing & risk matrix", "PDF export"],
+    highlights: ["4-role advice panel", "Market sizing, stress test & red flags", "PDF export"],
   },
   {
     id: "qpaynet",

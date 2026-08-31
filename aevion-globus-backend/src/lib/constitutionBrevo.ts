@@ -191,6 +191,15 @@ const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: 
   { prefix: "qright", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch" },
   { prefix: "devhub", name: "DevHub Studio", plan: "10 сентября", page: "https://aevion.app/devhub/launch" },
   { prefix: "multichat", name: "AEVION Multichat", plan: "10 сентября", page: "https://aevion.app/multichat-engine/launch" },
+  // ⚠️ Добавлено 31.08.2026. Найдено сторожем воронки при сборке: подписчик со
+  // страницы QSkyway получал ОБЩЕЕ письмо «платформа выпускает модули по
+  // одному» вместо письма про свой модуль — а QSkyway в списке основателя на
+  // 10 сентября.
+  //
+  // Адрес ведёт на страницу МОДУЛЯ, а не на /qskyway/launch: страницы запуска
+  // у него нет. Выдумывать адрес нельзя — у нас это уже давало ложные находки
+  // и повело бы человека из письма в 404. Страница модуля проверена: 200.
+  { prefix: "qskyway", name: "AEVION QSkyway", plan: "10 сентября", page: "https://aevion.app/qskyway" },
 ];
 
 /**

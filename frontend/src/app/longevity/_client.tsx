@@ -6,6 +6,7 @@ import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 import { keepChannel, productById, withChannel } from "@/lib/products";
 import { BuyLink } from "@/components/BuyLink";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 // Longevity — the measure → act → re-measure protocol over the deterministic
 // backend. Three live tools: your assessment (flag out-of-range markers + get a
@@ -457,6 +458,12 @@ export default function LongevityClient({ channel = null }: { channel?: string |
           promise="Пишем только по делу — при изменении градации или панели. Отписка одной ссылкой."
           buttonLabel="Присылать обновления"
         />
+        {/* Предупреждение о способах оплаты. Молчит, когда предупреждать не о
+            чем: спрашивает checkout/healthz и рисует что-либо только при
+            недоступной оплате в тенге. Страница продаёт, значит человек должен
+            узнать про способ оплаты ДО кассы, а не в ней. */}
+        <PaymentReachNotice style={styles.foot} />
+
         <p style={styles.foot}>
           Связанные модули: <a href="/qrenew" style={styles.link}>QRenew</a> (биовозраст) · <a href="/qmelanin" style={styles.link}>QMelanin</a> (пигмент, Zn:Cu) · <a href={keepChannel("/shop", channel)} style={styles.link}>магазин</a>.
         </p>

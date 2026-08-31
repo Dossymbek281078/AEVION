@@ -12,6 +12,7 @@
  *   SMTP_FROM="AEVION QBuild <you@gmail.com>"
  */
 import nodemailer from "nodemailer";
+import { noteEmailSent } from "../brevoQuota";
 
 function getTransport() {
   const host = process.env.SMTP_HOST?.trim();
@@ -64,6 +65,13 @@ async function sendViaResend(to: string, subject: string, html: string): Promise
       console.warn("[build/email] resend rejected:", r.status);
       return false;
     }
+    // Здесь, в отличие от прямых вызовов в routes/build/*, ответ провайдера
+    // у нас есть — отмечаем только принятое письмо.
+    //
+    // Путь через SMTP ниже НЕ считается намеренно: это может быть чужой
+    // сервер со своей квотой или без неё вовсе, и тревога о чужом потолке
+    // хуже отсутствия тревоги — к вечно красному сторожу перестают ходить.
+    noteEmailSent();
     return true;
   } catch (e) {
     console.warn("[build/email] resend failed:", (e as Error).message);

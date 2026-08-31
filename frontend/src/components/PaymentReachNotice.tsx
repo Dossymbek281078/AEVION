@@ -22,7 +22,34 @@ import { apiUrl } from "@/lib/apiBase";
  * строка исчезнет сама — безусловная подпись врала бы в другую сторону и
  * отпугивала платящих.
  */
-export function PaymentReachNotice({ style }: { style?: React.CSSProperties }) {
+/**
+ * Тексты по языкам.
+ *
+ * Заведено 31.08.2026. До этого текст был один и русский, поэтому на /en/go и
+ * /en/longevity компонент поставить было нельзя: предупреждение появилось бы
+ * по-русски посреди английской страницы — тот самый класс «объявленный язык
+ * не совпадает с содержимым», который мы у себя же чиним. Обе страницы
+ * продавали молча только из-за этого.
+ *
+ * Форма взята у WaitlistCapture (`lang?: "ru" | "en"` + карта COPY): она уже
+ * стоит на обеих половинах воронки, и второй способ локализации здесь заводить
+ * незачем.
+ */
+const COPY = {
+  ru: "Оплата картой через международные платёжные системы. Карты, выпущенные в "
+    + "России, там не проходят — оплата в тенге и местными картами пока недоступна.",
+  en: "Payment is taken by card through international payment systems. Cards issued "
+    + "in Russia are not accepted, and payment in tenge or with local cards is not "
+    + "available yet.",
+} as const;
+
+export function PaymentReachNotice({
+  style,
+  lang = "ru",
+}: {
+  style?: React.CSSProperties;
+  lang?: "ru" | "en";
+}) {
   const [kztReady, setKztReady] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -47,10 +74,6 @@ export function PaymentReachNotice({ style }: { style?: React.CSSProperties }) {
   if (kztReady !== false) return null;
 
   return (
-    <p style={style}>
-      Оплата картой через международные платёжные системы. Карты, выпущенные в
-      России, там не проходят — оплата в тенге и местными картами пока
-      недоступна.
-    </p>
+    <p style={style}>{COPY[lang]}</p>
   );
 }

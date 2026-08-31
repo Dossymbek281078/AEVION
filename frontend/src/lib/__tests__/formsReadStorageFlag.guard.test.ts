@@ -134,6 +134,9 @@ const KNOWN_UNREAD = new Set([
   "app/qgood/campaigns/[id]/DonateForm.tsx",
   "app/qgood/components/AiChat.tsx",
   "app/qgood/matching-pools/AdminPanel.tsx",
+  // IdeaCard и InterestModal ушли из списка 31.08: соседнее окно перевело
+  // биржу идей на общий lib.ts, и обе формы теперь читают признак хранения
+  // сами. Храповик это и поймал — список обязан таять, а не только расти.
   "app/voice-of-earth/page.tsx",
 ]);
 

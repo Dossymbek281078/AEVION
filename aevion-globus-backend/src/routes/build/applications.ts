@@ -12,6 +12,7 @@ import {
   getRecruiterTier,
 } from "../../lib/build";
 import { sendToUser } from "./push";
+import { noteEmailSent } from "../../lib/brevoQuota";
 
 export const applicationsRouter = Router();
 
@@ -965,6 +966,11 @@ async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECT
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from: "QBuild <noreply@aevion.app>", to: email, subject, text }),
     });
+        // Сведено 31.08 при сборке к 10.09: обе стороны дописали РАЗНОЕ в одно
+        // место. Наша — разбор ответа провайдера (раньше «письмо отправлено»
+        // печаталось независимо от кода, и отказ выглядел в журнале удачей).
+        // Их — отметка расхода в счётчике суточной квоты. Нужны обе: первая
+        // не даёт соврать в журнале, вторая не даёт молча выжечь квоту.
     // Ответ ОБЯЗАН быть прочитан: раньше строка «email sent» печаталась
     // независимо от кода, и отказ провайдера выглядел в журнале удачей. Это
     // хуже отсутствия журнала — на такую запись потом ссылаются как на
@@ -976,6 +982,10 @@ async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECT
       );
       return;
     }
+    // Одно письмо — один получатель. Отметка обязана стоять на КАЖДОМ пути:
+    // счётчик, видящий часть путей, занижает расход и молчит именно тогда,
+    // когда потолок выбран.
+    noteEmailSent();
     console.info(`[build] email sent to ${email} (${status})`);
   } catch (e) {
     console.warn("[build] email notify failed:", (e as Error).message);

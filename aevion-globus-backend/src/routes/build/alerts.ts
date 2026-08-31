@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
+import { noteEmailSent } from "../../lib/brevoQuota";
 
 export const alertsRouter = Router();
 
@@ -147,6 +148,11 @@ export async function dispatchJobAlerts(vacancy: {
     let accepted = 0;
     for (let i = 0; i < matches.length; i += 50) {
       const batch = matches.slice(i, i + 50);
+        // Сведено 31.08 при сборке к 10.09: обе стороны дописали РАЗНОЕ в одно
+        // место. Наша — разбор ответа провайдера (раньше «письмо отправлено»
+        // печаталось независимо от кода, и отказ выглядел в журнале удачей).
+        // Их — отметка расхода в счётчике суточной квоты. Нужны обе: первая
+        // не даёт соврать в журнале, вторая не даёт молча выжечь квоту.
       try {
         const resp = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -166,6 +172,22 @@ export async function dispatchJobAlerts(vacancy: {
           `[build] ПАЧКА ОПОВЕЩЕНИЙ НЕ УШЛА: ${batch.length} адресов, вакансия ${vacancy.id}: ${e instanceof Error ? e.message : String(e)}`,
         );
       }
+      fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from: "QBuild <noreply@aevion.app>", to: batch, subject, text }),
+      }).catch(() => {});
+      // Расход считается по ПОЛУЧАТЕЛЯМ, а не по запросам: провайдер берёт
+      // квоту за каждое письмо, а здесь один запрос везёт до пятидесяти.
+      // Отметка «плюс один» за пачку занижала бы расход в полсотни раз — то
+      // есть счётчик молчал бы ровно на той рассылке, которая потолок и
+      // выбирает.
+      //
+      // Считается ПОПЫТКА, а не подтверждённая доставка: отправка здесь
+      // fire-and-forget, ответа мы не ждём. Направление выбрано осознанно —
+      // завышение расхода лишь предупредит раньше, занижение промолчит
+      // тогда, когда письма уже перестали доходить.
+      noteEmailSent(batch.length);
     }
     console.info(`[build] job alerts accepted for ${accepted} of ${matches.length} subscribers for vacancy ${vacancy.id}`);
   } catch (e) {

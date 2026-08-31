@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import { LandingView } from "@/components/LandingView";
 import {
   GUIDES,
@@ -343,6 +344,13 @@ export default async function GoPage({
           )}
         </section>
 
+
+        {/* Предупреждение о способах оплаты. Молчит, когда предупреждать
+            не о чем: компонент спрашивает checkout/healthz и рисует что-либо
+            только при недоступной оплате в тенге. Эта страница — единственная
+            ссылка в шапках соцсетей, то есть первый экран для человека из
+            рекламы; узнать, что заплатить нечем, он должен ДО кассы. */}
+        <PaymentReachNotice style={styles.foot} />
 
         <p style={styles.foot}>
           Материалы о здоровье — образовательные, не медицина. Не предназначены для диагностики,

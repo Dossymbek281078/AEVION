@@ -6,6 +6,7 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 import { BuyLink } from "@/components/BuyLink";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 import { channelFrom, productById, withChannel } from "@/lib/products";
+import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 // QRenew — cellular-renewal program. Two live tools over the deterministic
 // backend: a biological-age calculator (PhenoAge / Levine 2018) and the
@@ -219,6 +220,12 @@ export default function QRenewClient() {
             </BuyLink>
           ))}
         </div>
+
+        {/* Предупреждение о способах оплаты. Молчит, когда предупреждать не о
+            чем: спрашивает checkout/healthz и рисует что-либо только при
+            недоступной оплате в тенге. Страница продаёт, значит человек должен
+            узнать про способ оплаты ДО кассы, а не в ней. */}
+        <PaymentReachNotice style={styles.foot} />
 
         <p style={styles.foot}>
           Связанный модуль: <a href="/qmelanin" style={styles.link}>QMelanin</a> — видимый дашборд седины

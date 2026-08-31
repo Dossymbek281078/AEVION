@@ -4,6 +4,7 @@ import { LandingView } from "@/components/LandingView";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
 import { productById, channelFrom, withChannel, keepChannel, type Product } from "@/lib/products";
+import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 // /en/go — англоязычная посадочная под ссылку в профиле.
 //
@@ -231,6 +232,12 @@ export default async function EnGoPage({
             />
           </div>
         </section>
+
+        {/* Payment-reach notice. Silent unless there is something to warn
+            about: it asks checkout/healthz and renders only when tenge payment
+            is unavailable. lang="en" — the copy must match the page, otherwise
+            we introduce the very language mismatch we fix elsewhere. */}
+        <PaymentReachNotice style={styles.foot} lang="en" />
 
         <p style={styles.foot}>
           Wellness and education. Not diagnosis, not treatment, and no promises

@@ -40,6 +40,7 @@ import {
   isLiveNow,
   planLaunchAnnounce,
   planSendBatch,
+  checkSendGate,
 } from "../src/lib/launchAnnounce";
 import { sendBrevoEmail } from "../src/lib/constitutionBrevo";
 import { extractRows } from "./launch-announce-dry";
@@ -128,16 +129,21 @@ async function main(): Promise<void> {
   if (!модуль) стоп(1, `Неизвестный модуль «${slug}». Известны: ${Object.keys(LAUNCH_MODULES).join(", ")}`);
   if (!TOKEN) стоп(2, "Нет AEVION_ADMIN_TOKEN — список подписчиков закрыт админ-токеном.");
 
-  if (ЖИВОЙ && ПОДТВЕРЖДЕНИЕ !== slug) {
-    стоп(
-      1,
-      `Отправка требует LAUNCH_ANNOUNCE_CONFIRM=${slug}.`,
-      "\nЭто второй жест: он не повторяется стрелкой вверх в терминале.",
-    );
-  }
-
-  if (ЖИВОЙ && !isLiveNow(модуль.liveFromUtcMidnight)) {
-    стоп(1, `День запуска «${модуль.name}» ещё не наступил. Письмо «открылось» до открытия хуже молчания.`);
+  // Решение вынесено в lib/launchAnnounce.ts и проверено там же: отправка
+  // необратима, и охрана обязана быть прогоняемой без настоящих писем.
+  const ворота = checkSendGate({
+    slug,
+    sendFlag: ЖИВОЙ,
+    confirmEnv: ПОДТВЕРЖДЕНИЕ,
+    isLive: isLiveNow(модуль.liveFromUtcMidnight),
+  });
+  if (!ворота.allowed && ворота.reason !== "dry") {
+    const тексты: Record<string, string> = {
+      "confirm-missing": `Отправка требует LAUNCH_ANNOUNCE_CONFIRM=${slug}. Это второй жест: он не повторяется стрелкой вверх в терминале.`,
+      "confirm-mismatch": `LAUNCH_ANNOUNCE_CONFIRM не совпадает с модулем «${slug}» — похоже, отправляете не то.`,
+      "not-live": `День запуска «${модуль.name}» ещё не наступил. Письмо «открылось» до открытия хуже молчания.`,
+    };
+    стоп(1, тексты[ворота.reason]);
   }
 
   const rows = await читатьПодписчиков();

@@ -13,7 +13,11 @@ import {
   SHAMIR_THRESHOLD,
 } from "../config/qright";
 import { QRightError, type QRightErrorCode } from "../lib/errors/QRightError";
-import { canonicalContentHash } from "../lib/contentHash";
+import {
+  canonicalContentHash,
+  pdfContentHashLabel,
+  verifyContentHash,
+} from "../lib/contentHash";
 import {
   combineAndVerify,
   generateEphemeralEd25519,
@@ -805,7 +809,9 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
  */
 pipelineRouter.post("/protect", async (req, res) => {
   try {
-    const ip = (req.ip || req.socket.remoteAddress || "unknown") as string;
+    // clientIp(), а не сырой req.ip: он схлопывает IPv6 до /64, иначе
+    // ограничитель обходится подбором адреса внутри своей же подсети.
+    const ip = clientIp(req);
     const rl = protectRateLimiter.check(ip);
     if (!rl.allowed) {
       res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
@@ -857,7 +863,9 @@ const MAX_BATCH_PROTECT = 25;
 
 pipelineRouter.post("/protect-batch", async (req, res) => {
   try {
-    const ip = (req.ip || req.socket.remoteAddress || "unknown") as string;
+    // clientIp(), а не сырой req.ip: он схлопывает IPv6 до /64, иначе
+    // ограничитель обходится подбором адреса внутри своей же подсети.
+    const ip = clientIp(req);
     const rl = protectRateLimiter.check(ip);
     if (!rl.allowed) {
       res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
@@ -1256,7 +1264,9 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
     // Per-(IP, certId) limiter so the verifiedCount column can't be pumped
     // by a single attacker — the bureau «Most verified» sort would otherwise
     // be game-able for free.
-    const ip = (req.ip || req.socket.remoteAddress || "unknown") as string;
+    // clientIp(), а не сырой req.ip: он схлопывает IPv6 до /64, иначе
+    // ограничитель обходится подбором адреса внутри своей же подсети.
+    const ip = clientIp(req);
     const rl = verifyRateLimiter.check(`${ip}:${certId}`);
     const skipIncrement = !rl.allowed;
     const { rows } = await pool.query(
@@ -1314,15 +1324,26 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       // never let logging failures affect the verify outcome
     }
 
-    /* Re-verify content hash (canonical: NFC + sorted keys + null defaults) */
-    const hashCheck = canonicalContentHash({
-      title: cert.title,
-      description: cert.description,
-      kind: cert.kind,
-      country: cert.country,
-      city: cert.city,
-    });
-    const hashValid = hashCheck === cert.contentHash;
+    /* Re-verify content hash under the rule that was in effect at issuance.
+     *
+     * Проверять только нынешним правилом значило объявлять недействительным
+     * всё, что выдано до канонизации. Замер 27.08.2026 по публичному реестру:
+     * 4 сертификата из 5 совпадали с правилом v1 и получали «hash mismatch» —
+     * то есть страница обвиняла в подделке записи, которые сама же и выдала.
+     *
+     * Порядок проб — v2, затем v1 (см. verifyContentHash). */
+    const hashVerdict = verifyContentHash(
+      {
+        title: cert.title,
+        description: cert.description,
+        kind: cert.kind,
+        country: cert.country,
+        city: cert.city,
+      },
+      cert.contentHash,
+    );
+    const hashValid = hashVerdict.valid;
+    const contentHashRule = hashVerdict.rule;
 
     /* Re-verify QSign HMAC using stored signedAt (null for pre-v2 rows) */
     let signatureHmacValid: boolean | null = null;
@@ -1429,8 +1450,23 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
     );
 
     res.json({
+      // ВНИМАНИЕ: `valid` отвечает на вопрос «сертификат найден и не отозван»,
+      // а НЕ «доказательство сходится». Значение здесь постоянное, и человек,
+      // читающий ответ через API, принимает его за вердикт проверки. Замер на
+      // проде 23.08.2026: все 5 сертификатов отвечали valid=true, при этом
+      // contentHashValid=false у всех пяти. Поле оставлено как есть ради
+      // совместимости (страница /verify/[id] по нему решает, показывать ли
+      // разбор вообще), а честный вердикт вынесен отдельным полем ниже.
       valid: true,
       verified: true,
+      // Единственное поле, которое можно читать как «проверка сошлась».
+      // Расхождение хеша или подписи делает его false; неизвестное состояние
+      // подписи (сертификаты до v2, signedAt отсутствует) вердикт не роняет —
+      // это «нечего проверять», а не «не сошлось».
+      integrityVerified:
+        hashValid === true &&
+        signatureHmacValid !== false &&
+        shieldStatus === "active",
       verifiedAt: new Date().toISOString(),
       certificate: {
         id: cert.id,
@@ -1458,6 +1494,12 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       },
       integrity: {
         contentHashValid: hashValid,
+        /**
+         * Каким правилом сошёлся хеш. null — не сошёлся ни одним.
+         * "v1" означает, что страна и город хешем НЕ покрыты: это надо
+         * показывать человеку, а не прятать за общим зелёным.
+         */
+        contentHashRule,
         signatureHmacValid,
         signatureHmacReason,
         qsignKeyVersion:
@@ -1809,6 +1851,26 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
     }
 
     const cert = rows[0];
+
+    /* Пересчитываем хеш ПРЯМО СЕЙЧАС, а не печатаем сохранённое как факт.
+     *
+     * До 27.08.2026 PDF брал строку из базы и печатал «CERTIFICATE OF
+     * INTELLECTUAL PROPERTY PROTECTION» над её полями, ничего не проверяя.
+     * То есть у записи с подменённым названием получался такой же красивый
+     * документ, как у целой, — а именно PDF покупатель уносит с собой и
+     * показывает третьей стороне. Утверждение обязано быть не сильнее
+     * проверки, которая за ним стоит. */
+    const pdfHashVerdict = verifyContentHash(
+      {
+        title: cert.title,
+        description: cert.description,
+        kind: cert.kind,
+        country: cert.country,
+        city: cert.city,
+      },
+      cert.contentHash,
+    );
+
     const PDFDocument = (await import("pdfkit")).default;
     const QRCode = await import("qrcode");
 
@@ -1878,6 +1940,22 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
         yTitle + 52,
         { align: "center", width: W },
       );
+
+    /* ── Расхождение видно на первом экране, а не в мелком блоке внизу ── */
+    if (!pdfHashVerdict.valid) {
+      doc.rect(50, yTitle + 66, W, 16).fill("#fef2f2");
+      doc
+        .fontSize(8)
+        .font("Helvetica-Bold")
+        .fillColor("#b91c1c")
+        .text(
+          "INTEGRITY CHECK FAILED — the fields above do not match the recorded content hash. " +
+            "Verify at the link below before relying on this document.",
+          50,
+          yTitle + 70,
+          { align: "center", width: W },
+        );
+    }
 
     /* ── Divider ── */
     const yDiv1 = yTitle + 75;
@@ -1981,10 +2059,17 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
       .text("Cryptographic Proof", 50, yCryptoTitle);
 
     const fields = [
-      { label: "CONTENT HASH (SHA-256)", value: cert.contentHash },
+      {
+        // Не «хеш», а «хеш и что с ним прямо сейчас»: подпись строки без
+        // результата проверки читается как подтверждение, которого не было.
+        label: pdfContentHashLabel(pdfHashVerdict, new Date().toISOString()),
+        value: cert.contentHash,
+      },
       { label: "HMAC-SHA256 SIGNATURE", value: cert.signatureHmac },
       {
-        label: "Ed25519 SIGNATURE",
+        // Обрезанной подписью проверить нельзя ничего. Пока печатаем не всю —
+        // называем вещи своими именами, чтобы её не приняли за подпись.
+        label: "Ed25519 SIGNATURE (first 64 chars — full value at the link below)",
         value: (cert.signatureEd25519 || "").slice(0, 64) + "...",
       },
       { label: "ALGORITHM", value: cert.algorithm },
@@ -2105,15 +2190,46 @@ pipelineRouter.get("/health", async (_req, res) => {
   let storageOk = true;
   let certificateCount: number | null = null;
   let lastProtectedAt: string | null = null;
+  /**
+   * Состояние якорения в биткойн. Витрина обещает «Bitcoin-anchored», а
+   * проверить это снаружи до 27.08.2026 было НЕЧЕМ: в этом ответе про якорь
+   * не было ни слова. Обещание без ручки состояния — это обещание, про
+   * которое нельзя узнать, что оно перестало выполняться.
+   *
+   * Считается ТЕМ ЖЕ запросом и только по базе: ни одного обращения в сеть,
+   * иначе проверка состояния сама станет источником отказов.
+   *
+   * null во всех полях означает «спросить не удалось» — это НЕ ноль.
+   */
+  let anchoring: {
+    stamped: number;
+    pending: number;
+    confirmed: number;
+    lastStampedAt: string | null;
+  } | null = null;
   try {
     await ensureTables();
     const { rows } = await pool.query(
-      `SELECT COUNT(*)::int AS "count", MAX("protectedAt") AS "last" FROM "IPCertificate" WHERE "status" = 'active'`,
+      `SELECT COUNT(*)::int AS "count", MAX("protectedAt") AS "last",
+              COUNT("otsProof")::int AS "stamped",
+              COUNT(*) FILTER (WHERE "otsStatus" = 'pending')::int AS "pending",
+              COUNT("otsBitcoinBlockHeight")::int AS "confirmed",
+              MAX("otsStampedAt") AS "lastStamped"
+         FROM "IPCertificate" WHERE "status" = 'active'`,
     );
     const row = rows?.[0];
     certificateCount = typeof row?.count === "number" ? row.count : null;
     lastProtectedAt =
       row?.last instanceof Date ? row.last.toISOString() : row?.last ?? null;
+    anchoring = {
+      stamped: Number(row?.stamped ?? 0),
+      pending: Number(row?.pending ?? 0),
+      confirmed: Number(row?.confirmed ?? 0),
+      lastStampedAt:
+        row?.lastStamped instanceof Date
+          ? row.lastStamped.toISOString()
+          : (row?.lastStamped ?? null),
+    };
   } catch (err) {
     storageOk = false;
     console.error(
@@ -2162,6 +2278,12 @@ pipelineRouter.get("/health", async (_req, res) => {
       secretConfigured,
       hmacKeyVersion: HMAC_KEY_VERSION,
     },
+    /**
+     * Якорение в биткойн — то, что обещает витрина («Bitcoin-anchored»).
+     * null означает «спросить не удалось», а не «якорений ноль»: своя
+     * неудача чтения не должна выглядеть как факт о продукте.
+     */
+    anchoring,
     uptimeSeconds: Math.round(process.uptime()),
     responseTimeMs: Date.now() - startedAt,
     at: new Date().toISOString(),

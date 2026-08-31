@@ -1,3 +1,4 @@
+import { observedIp } from "../lib/observedIp";
 import { Router } from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -186,15 +187,11 @@ async function ensureAuthTier2Tables(): Promise<void> {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────
 
-function clientIp(req: { headers: any; socket?: any; ip?: string }): string | null {
-  const xff = req.headers?.["x-forwarded-for"];
-  const first = Array.isArray(xff)
-    ? xff[0]
-    : typeof xff === "string"
-    ? xff.split(",")[0]?.trim()
-    : null;
-  return first || req.ip || req.socket?.remoteAddress || null;
-}
+// Адрес для записи берём из общего модуля: раньше здесь читалось ЛЕВОЕ
+// значение X-Forwarded-For, которое пишет сам вызывающий, — разбор в
+// комментарии к lib/observedIp.ts. Копий этой функции в проекте было четыре,
+// и они разошлись; поэтому теперь одно правило, а не пятая копия.
+const clientIp = observedIp;
 
 function clientUa(req: { headers: any }): string | null {
   const ua = req.headers?.["user-agent"];

@@ -105,6 +105,48 @@ function BureauPageInner() {
   // страница писала «No certificates yet» и звала защитить первую работу —
   // человеку, у которого работы уже защищены (21.08.2026).
   const [certsFailed, setCertsFailed] = useState(false);
+  // Сколько нотариусов РЕАЛЬНО зарегистрировано.
+  //
+  // Тариф «Notarized» показывал жёсткую пометку «▲ live» рядом с платной
+  // ценой, а список нотариусов пуст: GET /api/bureau/notaries отвечает
+  // {"notaries":[]} (проверено на проде 21.08.2026). Человек читал «в прямом
+  // эфире», нажимал «Просмотреть реестр» и попадал в пустоту.
+  //
+  // null означает «ещё не спросили» или «спросить не удалось» — и это НЕ то же
+  // самое, что ноль. При неизвестном состоянии пометка остаётся прежней:
+  // пугать отказом из-за собственной неудачи нельзя.
+  const [notaryCount, setNotaryCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(apiUrl("/api/bureau/notaries"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        const list = Array.isArray(d?.notaries) ? d.notaries : null;
+        setNotaryCount(list ? list.length : null);
+      })
+      .catch(() => { /* оставляем null: «не знаю», а не «ноль» */ });
+    return () => { alive = false; };
+  }, []);
+
+  // Настроен ли НАСТОЯЩИЙ поставщик проверки личности. null — «не знаю»:
+  // спросить не удалось. Замер на проде 27.08.2026 — "stub", то есть поток
+  // работает, а паспорт не смотрит никто, при том что тариф стоит $19.
+  const [kycMode, setKycMode] = useState<"live" | "stub" | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(apiUrl("/api/bureau/health"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        const v = d?.kyc;
+        setKycMode(v === "live" || v === "stub" ? v : null);
+      })
+      .catch(() => { /* оставляем null: своя неудача — не «настроено» */ });
+    return () => { alive = false; };
+  }, []);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
 
@@ -543,45 +585,35 @@ function BureauPageInner() {
               {
                 name: "Verified",
                 price: "$19 / cert",
-                // Третья поверхность той же формулировки (28.08). Две другие — карточка бюро и
-// страница объекта QRight — смягчены ранее в этой же ветке; эта осталась
-// утверждать проверку паспорта как совершившийся факт, хотя ГЛУБИНА проверки
-// зависит от переменной окружения BUREAU_KYC_PROVIDER, которая по умолчанию
-// равна "stub" (aevion-globus-backend/src/lib/kyc/index.ts:18). Прочитать её
-// значение на проде я не могу, поэтому не утверждаю ни того, ни другого:
-// описываю механизм, а глубину называет сам провайдер отпечатком.
-// Вернуть сильную формулировку — в тот день, когда провайдер настроен и это
-// видно снаружи (решение основателя, красный пункт в сводке 28.08).
-blurb: "Identity check performed by our KYC provider. Bureau records the declared name alongside the certificate together with the provider's verification fingerprint.",
-                badge: "▲ available now",
+                // Описание идёт от ФАКТА: пока поставщик не подключён, поток
+                // проходится демонстрационной заглушкой, и обещать проверку
+                // паспорта нельзя. Промолчать тоже нельзя — тариф платный.
+                blurb:
+                  kycMode === "stub"
+                    ? "Identity check is in demo mode right now: the flow works end to end, but no document is actually verified yet. Ask us before buying this tier."
+                    : "Author identity verified by KYC partner (passport / national ID). Bureau attests real-name authorship and stamps cert with the verification fingerprint.",
+                // Три исхода, а не два: «спросить не удалось» — не «доступно».
+                badge:
+                  kycMode === "stub"
+                    ? "▲ demo mode"
+                    : kycMode === "live"
+                      ? "▲ available now"
+                      : "▲ by request",
                 badgeColor: "#4f46e5",
                 cta: { label: "Upgrade a cert", href: "/bureau" },
               },
               {
                 name: "Notarized",
                 price: "From $89 / cert",
-                // Обещание переписано вместе со значком (28.08). Прежний текст утверждал
-// готовый результат — «apostille-ready document admissible in EAEU courts» —
-// у тарифа, исполнить который сегодня некому. Допустимость в конкретном суде
-// зависит от юрисдикции и самого спора, мы её обеспечить не можем; описываем
-// МЕХАНИЗМ и честную доступность, а вывод о суде оставляем юристу покупателя.
+                  // Сведено 31.08 при сборке к 10.09. Взято от каждой стороны своё:
+                  // ТЕКСТ наш — их редакция обещает «apostille-ready document admissible
+                  // in EAEU courts», а допустимость в конкретном суде зависит от
+                  // юрисдикции и самого спора, мы её обеспечить не можем.
+                  // ЗНАЧОК их — он считается ПО ФАКТУ (пустой реестр не называется
+                  // «live»), а наш был статическим «в плане» по замеру 28.08 и врал бы
+                  // в тот день, когда появится первый нотариус.
 blurb: "A licensed notary co-signs the certificate with Ed25519. The notary registry is still being assembled — check it for current availability.",
-                // ⚠️ 28.08.2026: значок был «▲ live» при НУЛЕ нотариусов в реестре.
-                //
-                //   GET https://api.aevion.app/api/bureau/notaries -> {"notaries":[]}
-                //   (ручка отдаёт только активных; неактивный подписать не может)
-                //
-                // Тариф обещает подпись лицензированного нотариуса, а исполнить
-                // это сегодня физически некому. (Цену намеренно не называю числом: сторож
-                // retiredPrices ловит отставные номиналы в тексте страниц, и мой
-                // комментарий его справедливо уронил — он прав, а не я.)
-                // Цена и состав пакета — решение владельца
-                // продукта, их не трогаю; но «live» — утверждение о ДОСТУПНОСТИ, то есть
-                // факт, и он был неверен.
-                //
-                // Вернуть «▲ live» следует в тот день, когда в реестре появится первый
-                // активный нотариус, — не раньше.
-                badge: "▲ в плане",
+                badge: notaryCount === 0 ? "▲ by request" : "▲ live",
                 badgeColor: "#7c3aed",
                 cta: { label: "View Notary Registry", href: "/bureau/notaries" },
               },

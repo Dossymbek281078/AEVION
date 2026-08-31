@@ -769,10 +769,78 @@ export const openapiSpec = {
               "application/json": {
                 schema: {
                   type: "object",
+                  // Описание приведено к тому, что ручка ОТДАЁТ (замер на проде
+                  // 23.08.2026). Прежняя версия обещала поле `cert` и поле
+                  // `reason`; в ответе их нет — сертификат лежит в `certificate`,
+                  // а при 404 приходит `error`. По такой спеке сгенерированный
+                  // клиент читал бы undefined и молчал.
                   properties: {
-                    valid: { type: "boolean" },
-                    reason: { type: "string", nullable: true, description: "When valid=false, why" },
-                    cert: { $ref: "#/components/schemas/IPCertificate" },
+                    valid: {
+                      type: "boolean",
+                      description:
+                        "Сертификат найден и не отозван. Это НЕ вердикт проверки: " +
+                        "у найденного сертификата значение всегда true. " +
+                        "Сошлось ли доказательство — в integrityVerified.",
+                    },
+                    verified: { type: "boolean", description: "Запрос обслужен (совпадает с valid)" },
+                    integrityVerified: {
+                      type: "boolean",
+                      description:
+                        "Вердикт проверки: хеш содержимого сошёлся, подпись не разошлась, " +
+                        "щит активен. Единственное поле, которое можно показывать человеку " +
+                        "как «сертификат подтверждён».",
+                    },
+                    verifiedAt: { type: "string", format: "date-time" },
+                    certificate: { $ref: "#/components/schemas/IPCertificate" },
+                    integrity: {
+                      type: "object",
+                      description: "Послойный разбор: каждое поле — отдельная независимая проверка",
+                      properties: {
+                        contentHashValid: { type: "boolean" },
+                        contentHashRule: {
+                          type: "string",
+                          enum: ["v1", "v2"],
+                          nullable: true,
+                          description:
+                            "Каким правилом сошёлся хеш. null — не сошёлся ни одним. v1 — правило до канонизации: страна и город хешем НЕ покрыты.",
+                        },
+                        signatureHmacValid: { type: "boolean", nullable: true, description: "null = проверять нечего" },
+                        signatureHmacReason: { type: "string", enum: ["OK", "NO_SIGNED_AT", "MISMATCH", "ERROR"] },
+                        qsignKeyVersion: { type: "integer" },
+                        currentKeyVersion: { type: "integer" },
+                        keyRotatedSinceSigning: { type: "boolean" },
+                        quantumShieldStatus: { type: "string" },
+                        shieldLegacy: { type: "boolean" },
+                        shieldId: { type: "string", nullable: true },
+                        shards: { type: "integer" },
+                        threshold: { type: "integer" },
+                        authorCosign: { type: "object", description: "{present:false} либо {present:true, valid, fingerprint}" },
+                      },
+                    },
+                    shardDistribution: {
+                      type: "object",
+                      properties: {
+                        policy: { type: "string" },
+                        realDistributed: { type: "boolean", description: "false = все доли лежат у нас, разделение защитой не является" },
+                        locations: { type: "array", items: { type: "object" } },
+                        witness: { type: "object", nullable: true },
+                      },
+                    },
+                    bitcoinAnchor: {
+                      type: "object",
+                      properties: {
+                        status: { type: "string", enum: ["not_stamped", "pending", "bitcoin-confirmed", "failed"] },
+                        bitcoinBlockHeight: { type: "integer", nullable: true },
+                        stampedAt: { type: "string", format: "date-time", nullable: true },
+                        upgradedAt: { type: "string", format: "date-time", nullable: true },
+                        hasProof: { type: "boolean" },
+                        network: { type: "string" },
+                        proofUrl: { type: "string", nullable: true },
+                        upgradeUrl: { type: "string", nullable: true },
+                      },
+                    },
+                    legalBasis: { type: "object" },
+                    stats: { type: "object" },
                   },
                 },
               },

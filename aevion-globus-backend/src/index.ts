@@ -21,6 +21,7 @@ import { authOauthRouter } from "./routes/authOauth";
 import { tiktokRouter } from "./routes/tiktok";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
+import { helpContactRouter } from "./routes/helpContact";
 import { statusRouter } from "./routes/status";
 import { entitlementsRouter } from "./routes/entitlements";
 import { requireModule } from "./lib/planGate";
@@ -428,6 +429,12 @@ app.get("/api/globus/projects/:id", (req, res) => {
 });
 
 app.use("/api/modules", modulesRouter);
+
+// Приём обращений со страницы помощи. Ручка вызывалась формой с 12.08 и
+// отвечала 404; запасная ветка (открыть почтовый клиент) срабатывала ВСЕГДА
+// и вела на домен без записей MX. Теперь обращение сохраняется, и «принято»
+// говорится только по факту записи.
+app.use("/api/help", helpContactRouter);
 app.use("/api/status", statusRouter);
 
 // Module paywall — dormant unless the module id is listed in PAYWALL_MODULES
@@ -1144,6 +1151,18 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/startupx", "startup-exchange"],
   ["/api/ventures", "ventures"],
   ["/api/qventure", "qventure"],
+  // Добавлено 28.08.2026 сверкой таблицы шлюзов с MODULES_PRICING. Три
+  // платных модуля были в прайсе, но их префиксов здесь не было — значит
+  // ВКЛЮЧИТЬ для них стену было нечем: переменная PAYWALL_MODULES принимала
+  // бы их имя и молча ничего не делала. Ни один из трёх сейчас не включён,
+  // поэтому проводка ничего не меняет сегодня; она делает переключатель
+  // работающим. Полноту стережёт tests/paywallGateCoversPricing.test.ts.
+  ["/api/qmelanin", "qmelanin"],
+  ["/api/revenue", "revenue-hub"],
+  // qskyway крепится манифестом ниже (строка ~1328), а шлюзы регистрируются
+  // выше (~1196) — Express идёт по порядку регистрации, поэтому шлюз успевает
+  // встать перед роутером.
+  ["/api/qskyway", "qskyway"],
   ["/api/qreal", "qreal"],
   ["/api/deepsan", "deepsan"],
   ["/api/mapreality", "mapreality"],

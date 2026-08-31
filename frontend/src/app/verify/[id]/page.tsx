@@ -4,10 +4,22 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
 import { InfoTip } from "@/components/InfoTip";
+import {
+  buildIntegrityChecks,
+  deriveVerdict,
+  verdictCopy,
+} from "./integrityVerdict";
 
 type VerifyData = {
+  /**
+   * ⚠️ КОНСТАНТА, а не вердикт: ручка возвращает true на любом найденном
+   * сертификате. Читать как «запись существует». Замер 23.08.2026: все 5
+   * сертификатов прода отвечали valid: true при contentHashValid: false.
+   */
   valid: boolean;
   verified: boolean;
+  /** Вердикт сервера по целостности. Может отсутствовать у старой сборки. */
+  integrityVerified?: boolean;
   verifiedAt: string;
   certificate: {
     id: string;
@@ -194,7 +206,13 @@ export default function VerifyPage() {
   const cert = data.certificate;
   const integrity = data.integrity;
   const legal = data.legalBasis;
-  const allChecksPass = integrity.contentHashValid && integrity.quantumShieldStatus === "active";
+  // Вердикт выводится ИЗ ПЛИТОК, а не считается рядом с ними: раньше баннер
+  // смотрел на две оси из семи и мог обещать «every layer matches» над красной
+  // плиткой. Разбор — в комментарии к integrityVerdict.ts.
+  const checks = buildIntegrityChecks(data);
+  const verdict = deriveVerdict(checks, data.integrityVerified);
+  const banner = verdictCopy(verdict);
+  const allChecksPass = verdict !== "warning";
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
@@ -221,15 +239,11 @@ export default function VerifyPage() {
             : "linear-gradient(135deg, rgba(245,158,11,0.08), rgba(239,68,68,0.06))",
           border: `1px solid ${allChecksPass ? "rgba(16,185,129,0.2)" : "rgba(245,158,11,0.2)"}`,
         }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>{allChecksPass ? "✅" : "⚠️"}</div>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>{banner.icon}</div>
           <div style={{ fontSize: 24, fontWeight: 900, color: allChecksPass ? "#059669" : "#d97706", marginBottom: 6 }}>
-            {allChecksPass ? "Certificate Verified" : "Verification Warning"}
+            {banner.title}
           </div>
-          <div style={{ fontSize: 14, color: "#475569" }}>
-            {allChecksPass
-              ? "Every cryptographic layer matches. The work below was registered by the named author at the time shown, and no field has been altered since."
-              : "One or more integrity layers did not match. The per-layer breakdown below shows exactly which check failed and what it means."}
-          </div>
+          <div style={{ fontSize: 14, color: "#475569" }}>{banner.body}</div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 8 }}>
             Verified at {new Date(data.verifiedAt).toLocaleString()} · Check #{data.stats.verifiedCount}
           </div>
@@ -431,96 +445,41 @@ export default function VerifyPage() {
               Integrity Checks
               <InfoTip
                 label="Integrity Checks"
-                text="Each tile is one independent test. Green tiles passed; red tiles failed. A certificate is fully valid only when every tile is green."
+                text="Each tile is one independent test. Green passed. Red failed — something does not match and the certificate cannot be relied on. Grey means the layer did not exist yet when this certificate was issued, so there is nothing to check: that is the certificate's age, not a failure."
               />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-              {(() => {
-                const certKv = integrity.qsignKeyVersion ?? 1;
-                const curKv = integrity.currentKeyVersion ?? 1;
-                const rotated = integrity.keyRotatedSinceSigning === true;
-                const hmacOk = integrity.signatureHmacValid === true;
-                return [
-                  {
-                    label: "Content Hash",
-                    status: integrity.contentHashValid,
-                    detail: integrity.contentHashValid ? "SHA-256 verified" : "Hash mismatch",
-                    tip: { name: "Content Hash", text: "We re-hash the certificate's metadata with SHA-256 and compare it to the stored value. Match means the registered fields have not changed since protection." },
-                  },
-                  {
-                    label: "HMAC Signature",
-                    status: hmacOk,
-                    detail:
-                      hmacOk
-                        ? "HMAC-SHA256 re-verified"
-                        : integrity.signatureHmacReason === "NO_SIGNED_AT"
-                          ? "Legacy row — signedAt not recorded"
-                          : integrity.signatureHmacReason === "MISMATCH"
-                            ? "Signature mismatch"
-                            : "Verification error",
-                    tip: { name: "HMAC Signature", text: "We recompute the HMAC-SHA256 from the certificate's signed fields with the secret key version that signed it, and compare. Match proves no field has been tampered with." },
-                  },
-                  {
-                    label: "HMAC Key Version",
-                    status: hmacOk,
-                    detail: rotated
-                      ? `Signed under v${certKv} · current is v${curKv} · key rotated, signature still valid`
-                      : `Signed under v${certKv} · current key`,
-                    tip: { name: "Key Rotation", text: "AEVION can rotate signing keys without invalidating older certificates. Each row records the version it was signed with, so we always verify under the right key." },
-                  },
-                  {
-                    label: "Quantum Shield",
-                    status: integrity.quantumShieldStatus === "active" && integrity.shieldLegacy !== true,
-                    detail: integrity.shieldLegacy === true ? "Legacy shield (pre-v2)" : `Status: ${integrity.quantumShieldStatus}`,
-                    tip: { name: "Quantum Shield", text: "AEVION's protection envelope. Combines Ed25519 signing with Shamir secret-sharing so no single party can recover the private key alone." },
-                  },
-                  {
-                    label: "Secret Sharing",
-                    status: integrity.shieldLegacy !== true,
-                    detail: integrity.shieldLegacy === true ? "Legacy — not real SSS" : `${integrity.shards} shards, threshold ${integrity.threshold} (Shamir SSS)`,
-                    tip: { name: "Shamir Secret Sharing", text: "The Ed25519 private key is split into 3 shards. Any 2 reconstruct it; any 1 alone reveals nothing. AEVION never holds 2 of them." },
-                  },
-                  (() => {
-                    const co = integrity.authorCosign;
-                    if (!co || !co.present) {
-                      return {
-                        label: "Author Co-Signature",
-                        status: false,
-                        detail: "Not signed by author (legacy single-party cert)",
-                        tip: { name: "Author co-signing", text: "Modern AEVION certificates carry a second Ed25519 signature held only by the author's browser. This row was protected before that layer existed — its other integrity checks remain valid." },
-                      };
-                    }
-                    return {
-                      label: "Author Co-Signature",
-                      status: co.valid,
-                      detail: co.valid
-                        ? `Verified · author key ed25519:${co.fingerprint}`
-                        : `Signature mismatch · purported key ed25519:${co.fingerprint || "unknown"}`,
-                      tip: { name: "Author co-signing", text: "An Ed25519 signature made with the author's browser-held private key. AEVION never sees this key — even a full platform breach cannot forge a valid co-signature for someone else's identity." },
-                    };
-                  })(),
-                  {
-                    label: "Certificate Status",
-                    status: cert.status === "active",
-                    detail: cert.status,
-                    tip: undefined as { name: string; text: string } | undefined,
-                  },
-                ];
-              })().map((check) => (
+              {checks.map((check) => {
+                // Три состояния, а не два. Красный — «сломано сейчас».
+                // Серый — «слоя не существовало в момент выдачи»: это возраст
+                // записи, и рисовать его как поломку значит пугать человека
+                // тем, что он не может исправить.
+                const tone = check.status
+                  ? "pass"
+                  : check.tier === "era"
+                    ? "n/a"
+                    : "fail";
+                const palette = {
+                  pass: { line: "rgba(16,185,129,0.2)", fill: "rgba(16,185,129,0.04)", mark: "✅", aria: "passed" },
+                  "n/a": { line: "rgba(148,163,184,0.28)", fill: "rgba(148,163,184,0.06)", mark: "—", aria: "not applicable to this certificate" },
+                  fail: { line: "rgba(239,68,68,0.2)", fill: "rgba(239,68,68,0.04)", mark: "❌", aria: "failed" },
+                }[tone];
+                return (
                 <div key={check.label} style={{
                   padding: "12px 14px",
                   borderRadius: 10,
-                  border: `1px solid ${check.status ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)"}`,
-                  background: check.status ? "rgba(16,185,129,0.04)" : "rgba(239,68,68,0.04)",
+                  border: `1px solid ${palette.line}`,
+                  background: palette.fill,
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 14 }} aria-label={check.status ? "passed" : "failed"}>{check.status ? "✅" : "❌"}</span>
+                    <span style={{ fontSize: 14 }} aria-label={palette.aria}>{palette.mark}</span>
                     <span style={{ fontSize: 12, fontWeight: 800, color: "#0f172a" }}>{check.label}</span>
                     {check.tip && <InfoTip label={check.tip.name} text={check.tip.text} size={12} />}
                   </div>
                   <div style={{ fontSize: 11, color: "#64748b" }}>{check.detail}</div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {integrity.shieldId && (

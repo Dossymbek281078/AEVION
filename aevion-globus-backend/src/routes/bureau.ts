@@ -42,11 +42,87 @@ const bureauEmbedRateLimit = rateLimit({
 export const bureauRouter = Router();
 const pool = getPool();
 
+/**
+ * Настроен ли НАСТОЯЩИЙ поставщик проверки личности.
+ *
+ * Замер на проде 27.08.2026: `GET /api/bureau/kyc-stub/<любой>` отвечает 200 и
+ * отдаёт страницу «AEVION KYC (stub)». Переменной BUREAU_KYC_PROVIDER в
+ * окружении нет, а заглушка закрывается только ЕЁ наличием — то есть на проде
+ * живёт демонстрационный путь, паспорт никто не смотрит.
+ *
+ * При этом карточка тарифа «Verified» ($19 за сертификат) была помечена
+ * «▲ available now» строкой в коде и обещала проверку паспорта партнёром.
+ * Пометка не могла ошибиться заметно: она утверждала одно и то же при любом
+ * состоянии площадки. Тот же класс, что пометка «live» у пустого реестра
+ * нотариусов, только на ПЛАТНОМ тарифе.
+ *
+ * Поэтому состояние отдаётся наружу, и витрина обязана его спрашивать.
+ */
+export function kycProviderMode(
+  env: NodeJS.ProcessEnv = process.env,
+): "live" | "stub" {
+  const v = String(env.BUREAU_KYC_PROVIDER || "").trim();
+  // Пусто ИЛИ явное "stub" — демонстрационный путь. Любое другое имя
+  // означает настоящего поставщика: так же решает и сам обработчик заглушки,
+  // и расходиться эти два места не должны.
+  return v && v !== "stub" ? "live" : "stub";
+}
+
+/**
+ * Настроен ли НАСТОЯЩИЙ приём денег.
+ *
+ * Почему это здесь, рядом с проверкой личности. Отметка «Verified Author»
+ * ставится на сертификат только при одобренной проверке И подтверждённой
+ * оплате. Разобрав 27.08.2026 первый барьер (он оказался заглушкой), я сказал
+ * основателю «второй держит» — и это было сказано ПО КОДУ, а `getPayProvider()`
+ * по умолчанию возвращает ту же заглушку: `BUREAU_PAYMENT_PROVIDER || "stub"`.
+ * У заглушки `parseWebhook` тоже не смотрит заголовки, то есть подписи нет.
+ *
+ * Держит барьер или нет — зависит от переменной окружения, которую СНАРУЖИ НЕ
+ * ВИДНО. Пока её не видно, утверждать нельзя ни «держит», ни «не держит».
+ * Поэтому состояние отдаётся наружу: вопрос должен иметь ответ.
+ */
+export function paymentProviderMode(
+  env: NodeJS.ProcessEnv = process.env,
+): "live" | "stub" {
+  const v = String(env.BUREAU_PAYMENT_PROVIDER || "").trim().toLowerCase();
+  // Пусто — это «stub»: ровно так решает и getPayProvider(). Совпадение с ним
+  // важнее краткости, иначе состояние будет описывать не тот код, что работает.
+  return v && v !== "stub" ? "live" : "stub";
+}
+
+/**
+ * Чем подписывает нотариус — настоящей Ed25519 или демонстрационной HMAC.
+ *
+ * Сам сертификат это уже называет (см. signNotarization ниже), то есть
+ * покупателя никто не вводит в заблуждение. Не хватало другого: узнать
+ * состояние СНАРУЖИ, не выпуская сертификат. Третий вопрос модуля из трёх —
+ * рядом с kyc и payment, чтобы на «настоящее ли это» отвечала одна команда.
+ *
+ * Секрета здесь не раскрывается: наличие ключа и так видно в каждом
+ * выпущенном сертификате.
+ */
+export function notarySignatureMode(
+  env: NodeJS.ProcessEnv = process.env,
+): "ed25519" | "demo" {
+  // Условие ровно то же, что в signNotarization: pem после trim непустой.
+  // Разойдутся — состояние будет описывать не тот код, что подписывает.
+  return env.BUREAU_NOTARY_SIGNING_KEY?.trim() ? "ed25519" : "demo";
+}
+
 bureauRouter.get("/health", (_req, res) => {
   res.json({
     status: "ok",
     service: "bureau",
     timestamp: new Date().toISOString(),
+    // "stub" значит: поток проверки личности работает, но паспорт не
+    // проверяется никем. Витрина не имеет права называть это «available now».
+    kyc: kycProviderMode(),
+    // Второй барьер перед отметкой «Verified Author». Тоже обязан быть виден:
+    // если оба в режиме заглушки, отметка достаётся без документа и без денег.
+    payment: paymentProviderMode(),
+    // Третий вопрос: чем подписывает нотариус в платном тарифе Notarized.
+    notarySignature: notarySignatureMode(),
   });
 });
 
@@ -1823,6 +1899,83 @@ bureauRouter.get("/admin/whoami", (req, res) => {
 });
 
 // 🔹 Admin: list verifications (?status, ?limit≤200).
+/**
+ * GET /api/bureau/admin/waitlist
+ *
+ * ЗАЧЕМ. Таблица "BureauWaitlist" до 28.08.2026 только ЗАПОЛНЯЛАСЬ: INSERT при
+ * записи человека и COUNT(*) ради числа на экране. Прочитать сам список было
+ * нечем — ни ручки, ни скрипта, ни выгрузки.
+ *
+ * То есть форма говорила «You're on the waitlist!», а механизма когда-либо
+ * этим списком воспользоваться не существовало. Обещание без механизма: люди
+ * оставляют адрес в ожидании письма, которое некому отправить.
+ *
+ * Доступ — ровно как у соседних админских ручек этого файла (isBureauAdmin,
+ * Bearer + роль/почта из BUREAU_ADMIN_EMAILS). Здесь это не формальность:
+ * наружу отдаются чужие адреса.
+ *
+ * Пагинация обычная, `before` — курсор по времени записи.
+ */
+bureauRouter.get("/admin/waitlist", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureBureauTables();
+
+  const limit = Math.min(
+    Math.max(parseInt(String(req.query.limit || "100"), 10) || 100, 1),
+    500,
+  );
+  const source = String(req.query.source || "").trim();
+
+  // Курсор проверяется ДО подстановки: строка произвольного вида уходила бы в
+  // SQL как время и роняла запрос пятисоткой вместо честного 400.
+  const beforeRaw = String(req.query.before || "").trim();
+  let before: Date | null = null;
+  if (beforeRaw) {
+    const t = Date.parse(beforeRaw);
+    if (!Number.isFinite(t)) {
+      return res.status(400).json({ error: "invalid_before", hint: "ISO-8601 timestamp" });
+    }
+    before = new Date(t);
+  }
+
+  const args: unknown[] = [];
+  const conds: string[] = [];
+  if (source) {
+    args.push(source);
+    conds.push(`"source" = $${args.length}`);
+  }
+  if (before) {
+    args.push(before);
+    conds.push(`"createdAt" < $${args.length}`);
+  }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  args.push(limit);
+
+  try {
+    const r = await pool.query(
+      `SELECT "email","source","createdAt"
+         FROM "BureauWaitlist" ${where}
+        ORDER BY "createdAt" DESC LIMIT $${args.length}`,
+      args,
+    );
+    const total = await pool.query(`SELECT COUNT(*)::int AS "n" FROM "BureauWaitlist"`);
+    res.json({
+      rows: r.rows,
+      // Сколько ВСЕГО, отдельно от того, сколько показано: число, равное
+      // пределу выборки, иначе читается как весь список.
+      total: total.rows?.[0]?.n ?? null,
+      returned: r.rows.length,
+      limit,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "waitlist read failed";
+    console.error("[Bureau] admin waitlist:", msg);
+    captureBureauError(err, { route: "admin waitlist" });
+    res.status(500).json({ error: "waitlist_read_failed" });
+  }
+});
+
 bureauRouter.get("/admin/verifications", async (req, res) => {
   const a = isBureauAdmin(req);
   if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });

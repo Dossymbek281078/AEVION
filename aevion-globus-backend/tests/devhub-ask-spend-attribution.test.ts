@@ -19,6 +19,29 @@ vi.mock("../src/services/qcoreai/smartComplete", () => ({
   }),
 }));
 
+const { runs, provider } = vi.hoisted(() => ({
+  runs: [] as any[],
+  // Ответ поставщика — в ИЗМЕНЯЕМОМ поле, а не подменой экспорта.
+  // Подмена экспорта насовсем протекла в соседний тест: он получал
+  // чужие токены и падал на сверке цены. Поймано падением.
+  provider: { reply: "", tokensIn: 1000, tokensOut: 500, throws: false },
+}));
+vi.mock("../src/lib/smartRunLog", () => ({
+  insertSmartRun: (row: any) => { runs.push(row); },
+}));
+// Поставщик подменён так, чтобы вернуть ТОКЕНЫ: без них цена всегда 0,
+// и проверка «расход записан» прошла бы на сломанном учёте.
+vi.mock("../src/services/qcoreai/providers", () => ({
+  getProviders: () => [{ id: "openai", defaultModel: "gpt-4o-mini", configured: true }],
+  callProvider: async () => {
+    if (provider.throws) throw new Error("провайдер недоступен");
+    return {
+    reply: provider.reply || JSON.stringify({ summary: "s", milestones: [] }),
+    model: "gpt-4o-mini",
+      usage: { prompt_tokens: provider.tokensIn, completion_tokens: provider.tokensOut },
+    };
+  },
+}));
 vi.mock("../src/lib/dbPool", () => ({ getPool: () => ({ query: vi.fn() }) }));
 vi.mock("../src/lib/ensureDevHubTables", () => ({
   ensureDevHubTables: vi.fn().mockResolvedValue(undefined),
@@ -71,5 +94,74 @@ describe("расход /ask отделим: анонимный от вошедш
     // Именно это утверждение ловит откат к одной метке на обе половины:
     // проверки по отдельности переживут его, если обе станут "devhub".
     expect(anon).not.toBe(calls[0].module);
+  });
+});
+
+describe("расход /plan попадает в учёт и отделим", () => {
+  beforeEach(() => {
+    runs.length = 0;
+    // Возврат к исходному: иначе один тест меняет вход другому.
+    provider.reply = "";
+    provider.tokensIn = 1000;
+    provider.tokensOut = 500;
+    provider.throws = false;
+  });
+
+  test("без входа расход записан и помечен как анонимный", async () => {
+    const res = await request(await app())
+      .post("/api/devhub/plan")
+      .send({ idea: "магазин носков" });
+    expect(res.status).toBe(200);
+    // Считаем ПРИРОСТ записей, а не наличие: строка могла остаться от соседа.
+    expect(runs).toHaveLength(1);
+    expect(runs[0].module).toBe("devhub-anon");
+  });
+
+  test("отказ ИИ — это 200 с ok:false, а НЕ пятисотка", async () => {
+    // Договор честности: планировщик не бросает при отказе поставщика, а
+    // возвращает ok:false. Витрина это читает (data.ok === false) и говорит
+    // человеку. Проверено 31.08.2026 по обеим сторонам.
+    //
+    // Закрепляю проверкой, а не комментарием: соблазн «привести к общему
+    // виду» и отдавать 5xx выглядит как уборка, а сломает две вещи разом —
+    // сообщение человеку и чистоту Sentry. Пятисотка означает «у нас
+    // сломалось» и поднимает людей; отказ чужого поставщика — не наша авария.
+    provider.reply = "";
+    provider.throws = true;
+    const res = await request(await app())
+      .post("/api/devhub/plan")
+      .send({ idea: "магазин носков" });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(false);
+  });
+
+  test("деньги потрачены — учёт есть, даже если ответ не разобрался", async () => {
+    // Учёт стоит СРАЗУ после вызова поставщика, до разбора ответа, и это
+    // не косметика: поставщику уже заплачено. Разбери мы ответ неудачно —
+    // расход всё равно состоялся, и не записать его значит занизить сумму
+    // ровно в тех случаях, когда что-то пошло не так.
+    //
+    // Перенос строки учёта ПОСЛЕ разбора выглядел бы безобидной уборкой.
+    provider.reply = "это не JSON";   // разбор упадёт
+    const res = await request(await app())
+      .post("/api/devhub/plan")
+      .send({ idea: "магазин носков" });
+    // Ответ может быть любым — важно, что расход записан.
+    expect([200, 500, 502]).toContain(res.status);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].costUsd).toBeGreaterThan(0);
+  });
+
+  test("цена не нулевая — иначе учёт есть только на вид", async () => {
+    await request(await app()).post("/api/devhub/plan").send({ idea: "магазин носков" });
+    // Прежняя редакция утверждала costUsd > 0 и была СЛАБЕЕ своего названия:
+    // мутация «обнулить prompt_tokens» её пережила — цену вытягивал второй
+    // счётчик. Поймано мутацией, не глазами.
+    //
+    // Сверяем с ценой, посчитанной платформенной таблицей от ТЕХ ЖЕ токенов:
+    // потеря любого из двух входов теперь меняет число и ловится.
+    const { costUsd } = await import("../src/services/qcoreai/pricing");
+    expect(runs[0].costUsd).toBe(costUsd("openai", "gpt-4o-mini", 1000, 500));
+    expect(runs[0].costUsd).toBeGreaterThan(0);   // контроль: модель с ценой
   });
 });

@@ -39,6 +39,8 @@ import { ensureDevHubTables, isDevHubDbReady, getDevHubDbError } from "../lib/en
 import { callProvider, getProviders, type ChatImage } from "../services/qcoreai/providers";
 import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcoreai/jsonReply";
 import { smartComplete } from "../services/qcoreai/smartComplete";
+import { insertSmartRun } from "../lib/smartRunLog";
+import { costUsd } from "../services/qcoreai/pricing";
 import { applyHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
@@ -1432,7 +1434,7 @@ interface ProjectPlan {
  * "help me figure out what to build, in what order" layer that sits before
  * generate_code, not a replacement for it. Works with no open project
  * (greenfield) or accounts for an existing one's files when given. */
-async function planProjectWithAI(idea: string, existingFiles: Array<{ path: string; content: string }>): Promise<ProjectPlan> {
+async function planProjectWithAI(idea: string, existingFiles: Array<{ path: string; content: string }>, moduleTag: string): Promise<ProjectPlan> {
   const fallback: ProjectPlan = {
     ok: true, aiGenerated: false,
     summary: idea, targetUsers: "", stack: "next",
@@ -1465,6 +1467,28 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
       { role: "system", content: systemPrompt },
       { role: "user", content: userMsg },
     ], provider.defaultModel, 0.3);
+      // Учёт расхода. До 31.08.2026 его здесь не было вовсе: /plan зовёт
+      // платного поставщика НАПРЯМУЮ, минуя smartComplete, а учёт пишет
+      // именно smartComplete. Расход ручки был невидим полностью — и это
+      // при том, что входа она не требует.
+      //
+      // Таблица цен берётся платформенная (services/qcoreai/pricing):
+      // второй источник цен развёл бы наш отчёт с отчётом qcoreai.
+      // costUsd честно возвращает 0 для модели без цены — лучше выдумки,
+      // но значит: 0 здесь читается как «цена неизвестна», а не «бесплатно».
+      try {
+        insertSmartRun({
+          module: moduleTag,
+          resolved: "single",
+          costUsd: costUsd(
+            provider.id,
+            provider.defaultModel,
+            result.usage?.prompt_tokens,
+            result.usage?.completion_tokens,
+          ),
+          savedUsd: 0,
+        });
+      } catch { /* учёт не должен ронять ответ, ради которого его зовут */ }
     const parsed = extractJsonObject(result.reply) as any;
     if (!parsed) throw new Error("unparseable plan reply");
     const milestones = Array.isArray(parsed.milestones)
@@ -2495,8 +2519,17 @@ devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req,
 // project-scoped (no /projects/:id/ prefix): works standalone for someone
 // who hasn't created a project yet, and optionally accounts for an existing
 // project's files when `projectId` is given in the body.
-devhubRouter.post("/plan", async (req, res) => {
+// Ограничитель добавлен 31.08.2026. До него ручка была БЕЗ предела вовсе,
+// хотя planProjectWithAI зовёт callProvider — то есть настоящего платного
+// поставщика (OpenAI/Anthropic по ключу). Входа ручка не требует.
+// Я сам сперва счёл её бесплатной: проверил только вызовы smartComplete,
+// а платный путь здесь ДРУГОЙ. Контроль отвечал не на тот вопрос.
+// Предел взят тот же, что у соседней платной /ask — заводить второй
+// способ ограничивать одно и то же незачем.
+devhubRouter.post("/plan", dhCostlyLimit("dhplan"), async (req, res) => {
   const auth = verifyBearerOptional(req);
+  // Метка та же, что у /ask: расход анонимных должен быть отделим.
+  const planModule = auth?.sub ? "devhub" : "devhub-anon";
   const userId = requesterId(req, auth?.sub);
   const { idea, projectId } = req.body || {};
   if (!idea || typeof idea !== "string" || !idea.trim()) {
@@ -2516,7 +2549,7 @@ devhubRouter.post("/plan", async (req, res) => {
   }
 
   try {
-    const plan = await planProjectWithAI(idea.trim(), existingFiles);
+    const plan = await planProjectWithAI(idea.trim(), existingFiles, planModule);
     return res.json(plan);
   } catch (e: any) {
     captureException(e, { route: "devhub/plan" });
@@ -5050,10 +5083,10 @@ function groupWorkflowSteps(steps: any[]): number[][] {
 }
 
 // POST /api/devhub/projects/:id/agent/workflow — orchestrate multi-step AI workflow
-devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
+devhubRouter.post("/projects/:id/agent/workflow", dhCostlyLimit("dhwf"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));   // как у /projects/:id/generate: с промежуточным слоем тип параметра шире
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -5128,10 +5161,10 @@ devhubRouter.get("/agent/templates", (_req, res) => {
 });
 
 // POST /api/devhub/projects/:id/agent/workflow/stream — SSE per-step progress
-devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
+devhubRouter.post("/projects/:id/agent/workflow/stream", dhCostlyLimit("dhwfs"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));   // как у /projects/:id/generate: с промежуточным слоем тип параметра шире
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -7261,6 +7294,88 @@ async function aevionBuildZoneActive(): Promise<boolean | null> {
     return null;
   }
 }
+
+// GET /api/devhub/studio/deploy-stats?days=N — доля успешных публикаций.
+//
+// Вопрос основателя, на который до 31.08.2026 ответа не было: доходит ли
+// человек до РАБОТАЮЩЕГО приложения. «Шестнадцать возможностей» и «движок
+// VS Code» описывают наличие механизма, а не результат.
+//
+// Данные лежали в "DevHubDeployment" с самого начала: двенадцать обращений к
+// таблице, и все вида «покажи выкатки этого проекта». Ни одного считающего —
+// число было в базе и недоступно никому без доступа к базе.
+//
+// Ручка ЧИТАЮЩАЯ: ничего не пишет и ничего не меняет.
+devhubRouter.get("/studio/deploy-stats", async (req, res) => {
+  const raw = Number(req.query.days);
+  const days = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 365) : 30;
+
+  // Статус в таблице — свободная строка (interface DevHubDeployment), закрытого
+  // перечисления нет. Поэтому считаем ФАКТИЧЕСКОЕ распределение, а не заранее
+  // придуманный список: иначе новый статус молча выпадет из знаменателя.
+  const counts = new Map<string, number>();
+  let storage: "db" | "memory" = "db";
+
+  if (!isDevHubDbReady()) {
+    storage = "memory";
+    const since = Date.now() - days * 86_400_000;
+    for (const d of memDeployments.values()) {
+      if (Date.parse(d.triggeredAt) >= since) {
+        counts.set(d.status, (counts.get(d.status) ?? 0) + 1);
+      }
+    }
+  } else {
+    // Отказ хранилища — НЕ наша поломка, и отвечать на него пятисоткой значит
+    // выдать чужую недоступность за свою аварию. Поймал не я: платформенный
+    // сторож devhubReadsAreHonestWhenStorageFails увидел «deploy-stats -> 500»
+    // при первом же прогоне. Штатный ответ здесь 503 storage_unavailable, и
+    // помощник для него уже есть — второй способ отвечать заводить незачем.
+    try {
+      const r = await pool.query(
+        `SELECT "status", COUNT(*)::int AS n
+           FROM "DevHubDeployment"
+          WHERE "triggeredAt" >= NOW() - ($1::int * INTERVAL '1 day')
+          GROUP BY "status"`,
+        [days],
+      );
+      for (const row of r.rows as Array<{ status: string; n: number }>) {
+        counts.set(row.status, Number(row.n));
+      }
+    } catch {
+      return replyStorageUnavailable(res);
+    }
+  }
+
+  const byStatus = [...counts.entries()]
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count);
+  const total = byStatus.reduce((s, x) => s + x.count, 0);
+  const live = counts.get("live") ?? 0;
+
+  return res.json({
+    days,
+    total,
+    byStatus,
+    // NULL, а не 0, когда считать не из чего. Ноль здесь читался бы как
+    // «ни одна публикация не удалась» — это другое утверждение, и оно
+    // отправило бы человека чинить работающее.
+    //
+    // ⚠️ Мутация «убрать тернарник» этим сторожем НЕ ловится, и это не дыра:
+    // при total = 0 голый расчёт даёт NaN, а NaN в JSON сериализуется в null.
+    // Снаружи ответ тот же — значит и падать нечему. Проверено: JSON.stringify
+    // от NaN даёт null.
+    //
+    // Явная запись оставлена намеренно: полагаться на то, что NaN «случайно»
+    // превратится в правильный ответ, — это работать через побочный эффект
+    // сериализации. Первый же потребитель ВНУТРИ процесса получит NaN, а не
+    // null, и сравнение `=== null` у него молча не сработает.
+    successRate: total > 0 ? Math.round((1000 * live) / total) / 10 : null,
+    // Признак едет В САМИХ ДАННЫХ: при недоступной базе числа считаны из
+    // памяти процесса и живут до перезапуска. Молча выдать их за историю —
+    // тот же класс, что пустой список вместо отказа.
+    storage,
+  });
+});
 
 devhubRouter.get("/studio/capabilities", async (_req, res) => {
   // Живая проба вместо переменной: переменную ставит человек, проверив зону,

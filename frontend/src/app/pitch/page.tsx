@@ -1238,7 +1238,7 @@ export default function PitchPage() {
               key={u.persona}
               style={{
                 display: "grid",
-                gridTemplateColumns: "auto 1fr",
+                gridTemplateColumns: "auto minmax(0, 1fr)",
                 gap: 20,
                 padding: 24,
                 borderRadius: 16,
@@ -1465,7 +1465,7 @@ export default function PitchPage() {
               key={a.number}
               style={{
                 display: "grid",
-                gridTemplateColumns: "auto 1fr",
+                gridTemplateColumns: "auto minmax(0, 1fr)",
                 gap: 24,
                 padding: 24,
                 borderRadius: 16,
@@ -1517,7 +1517,7 @@ export default function PitchPage() {
                 key={r.risk}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "auto 1fr",
+                  gridTemplateColumns: "auto minmax(0, 1fr)",
                   gap: 18,
                   padding: 20,
                   borderRadius: 14,
@@ -1565,7 +1565,7 @@ export default function PitchPage() {
               key={s.phase}
               style={{
                 display: "grid",
-                gridTemplateColumns: "auto 1fr",
+                gridTemplateColumns: "auto minmax(0, 1fr)",
                 gap: 20,
                 padding: 20,
                 borderRadius: 14,

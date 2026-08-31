@@ -104,7 +104,7 @@ export default function RefineriesOilPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во резервуаров, шт"
+            aria-label="Кол-во резервуаров, шт" placeholder="Кол-во резервуаров, шт"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 6_000_000/365=16_438 т/сут → 16438/0.85=19_338 м³/сут. 30 сут × 19338 = 580 000 м³ сырья = ~32 РВС. Готовая продукция (бензин/керосин/ДТ/мазут): ~10 дней × 4 вида × 5000 м³ = 200_000 м³ ≈ 12 РВС. С запасом «2N+1» на ремонт и оборачиваемость = ~720 РВС-20000 включая «малые» РВС-5000/10000 (общая ёмкость).</p>

@@ -107,7 +107,7 @@ export default function DentalClinicsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Защита стены, ×10 мм Pb"
+            aria-label="Защита стены, ×10 мм Pb" placeholder="Защита стены, ×10 мм Pb"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: для прицельного 60-70 кВ — 2 мм Pb. Для ОПТГ 80-90 кВ — 2.5-3 мм Pb. Для КТ 100-120 кВ — 4-6 мм Pb. Для зала с несколькими аппаратами — расчёт по сумме экспозиций (typ. 1.8 мм Pb-эквив.). В учебной задаче — 1.8 мм Pb = 18 (×10).</p>

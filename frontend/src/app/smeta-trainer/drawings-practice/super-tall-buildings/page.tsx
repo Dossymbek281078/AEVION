@@ -105,7 +105,7 @@ export default function SuperTallBuildingsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во свай"
+            aria-label="Кол-во свай" placeholder="Кол-во свай"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 600_000 × 9.81 / 1000 = 5886 МН вертикально. /25 МН = 236 свай. +25% запас = 295 свай. +дополнительно по 5-8 свай под каждую из 8 мегаколонн (40-50) = ~320 шт.</p>

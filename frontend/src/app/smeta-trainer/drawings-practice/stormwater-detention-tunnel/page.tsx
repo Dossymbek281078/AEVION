@@ -48,7 +48,7 @@ export default function StormwaterDetentionTunnelPage() {
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Объём storage</h2>
           <p className="text-slate-300">Tunnel Ø8 м × 10 км. Useable fraction 70% (gravity flow + air gap). Объём (м³)?</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="м³" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="м³" placeholder="м³" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>Площадь = π(8/2)² = 50.3 м². V = 50.3 × 10 000 × 0.7 = <strong>~280 000 м³</strong>. Покрывает 1-hr 100-year storm event 300 м³/с × 1 hr × 50% peak factor.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс tunnel</h2>

@@ -71,6 +71,7 @@ export default function RoutingSimulator() {
             hops: {hops}
           </label>
           <input
+            aria-label="hops"
             type="range"
             min={3}
             max={7}
@@ -176,7 +177,7 @@ export default function RoutingSimulator() {
             })}
           </svg>
 
-          <div
+          <div data-stack-mobile=""
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr",

@@ -110,7 +110,7 @@ export default function EdutechSchoolModernPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во Promethean ActivPanel"
+            aria-label="Кол-во Promethean ActivPanel" placeholder="Кол-во Promethean ActivPanel"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 32 + 8 = 40 шт; +20% = 48 шт. +дополнит. в MPR (2) + библиотека (3) + кафе-инфо (1) + админ (2) — но это в учебной задаче не считаем. 48 ActivPanel = ~$3500 каждая = $168 000 = 78 млн тг (значит. часть IT-бюджета EduTech-школы).</p>

@@ -78,7 +78,7 @@ export default function SupercapacitorFlywheelStoragePage() {
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">
           <h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Energy storage MJ</h2>
           <p className="text-slate-300">Flywheel 1000 кг compositе carbon fiber rim, Ø1 м, ω = 16 000 rpm = 1675 rad/s. I=0.5·m·r² для тонкого цилиндра. Сколько МДж?</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="МДж" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="МДж" placeholder="МДж" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>E = ½·I·ω² = ½·(0.5·1000·0.25)·1675² = 175 МДж теоретическая. С учётом max stress in CF (1500 MPa) reality ≈ <strong>30-40 МДж</strong> = 25 кВт·ч max (Beacon Power Smart Matrix).</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">

@@ -220,7 +220,7 @@ export default function TechConnectionPage() {
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">Плата за ТП, тг</span>
-              <input value={ex3} onChange={e => setEx3(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" placeholder="15000000" />
+              <input value={ex3} onChange={e => setEx3(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="15000000" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx3} className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded transition text-sm">Проверить</button>

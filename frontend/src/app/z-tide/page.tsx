@@ -137,7 +137,7 @@ export default function ZTidePage() {
         // закрывала кнопку «Купить» и строку цены. Замер прода 28.08.2026.
         style={{ top: "var(--aevion-header-h, 0px)" }}
         className="border-b border-slate-800/60 px-5 py-3 backdrop-blur sticky top-0 z-30 bg-slate-950/60">
-        <div className="mx-auto max-w-6xl flex items-center justify-between">
+        <div className="mx-auto max-w-6xl flex flex-wrap items-center justify-between gap-2">
           <Link href="/" className="text-sm text-slate-400 hover:text-white">← AEVION</Link>
           <div className="flex items-center gap-3">
             <ModulePricingChip moduleId="z-tide" theme="dark" />

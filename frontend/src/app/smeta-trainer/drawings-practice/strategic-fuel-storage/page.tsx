@@ -107,7 +107,7 @@ export default function StrategicFuelStoragePage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Масса стали, ×100 кг (для 162 т → 1620)"
+            aria-label="Масса стали, ×100 кг (для 162 т → 1620)" placeholder="Масса стали, ×100 кг (для 162 т → 1620)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: M_ст = π × 45.6 × 12 × 0.015 × 7850 = 202 000 кг = 202 т (средняя толщ. 15 мм); M_дно = π × 22.8² × 0.01 × 7850 = 128 000 кг = 128 т; M_крыша = π × 22.8² × 0.005 × 7850 / cos(22.5°) ≈ 69 т. Итого ~400 т. С учётом плавающего понтона и узлов = ~500 т. Для 600 000 м³ парка (30 РВС) = 30 × 500 = 15 000 т. Но в учебной задаче — ~162 т на 1 РВС (с упрощённым понтоном и без узлов = чистая сталь оболочки).</p>

@@ -48,7 +48,7 @@ export default function HyperbaricOxygenChamberPage() {
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Sessions per day</h2>
           <p className="text-slate-300">12 patients × 2-hr session × 2-3 sessions/day × 6 days = total sessions/week:</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="sessions" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="sessions" placeholder="sessions" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>12 × 2.5 × 6 = ~180 patient-sessions/week ⇒ <strong>~60 sessions per chamber day</strong>.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс HBO unit</h2>

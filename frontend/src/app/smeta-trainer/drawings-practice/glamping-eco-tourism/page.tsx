@@ -109,7 +109,7 @@ export default function GlampingEcoTourismPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во биотуалетов"
+            aria-label="Кол-во биотуалетов" placeholder="Кол-во биотуалетов"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 20 юнитов = 20 индивид. биотуалетов + 4-6 общественных (бар, ресепшен) = ~26-28 шт. С учётом резерва +50% = 32 биотуалета общая инсталляция. Phoenix ÆR 200 — Top-of-class (нет запаха, аэробная компостирование 6-12 мес → удобрение для ландшафтов).</p>

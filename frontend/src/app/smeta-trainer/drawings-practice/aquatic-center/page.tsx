@@ -108,7 +108,7 @@ export default function AquaticCenterPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Q, м³/час"
+            aria-label="Q, м³/час" placeholder="Q, м³/час"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: Q_основн = 2500 / 4 = 625 м³/ч. С учётом 25-м тренировочного (625 м³), 21×25×5 м прыжки (2 625 м³), 30×20×3 м водного поло (1800 м³), синхро 30×20×3 (1800 м³) — суммарный объём ~9 350 м³. Циркуляция за 3-4 ч = 2 340-3 100 м³/ч. С учётом запаса +20% → 3 300 м³/час фильтровальной мощности.</p>

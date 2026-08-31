@@ -111,7 +111,7 @@ export default function GreenHydrogenElectrolyzerPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="м³/год"
+            aria-label="м³/год" placeholder="м³/год"
             className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-blue-500 focus:outline-none"
           />
           {showResults && (

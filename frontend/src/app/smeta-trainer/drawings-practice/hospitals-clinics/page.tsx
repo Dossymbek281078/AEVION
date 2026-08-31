@@ -102,7 +102,7 @@ export default function HospitalsClinicsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Расход O₂, л/мин"
+            aria-label="Расход O₂, л/мин" placeholder="Расход O₂, л/мин"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 400+90+138 = 628 л/мин. С запасом 30% и неравномерностью → ~540 л/мин расчётный (при ~85% нагрузке среднеcуточно). Кислородная станция криогенная (жидкий O₂) или генератор PSA с резервом.</p>

@@ -856,7 +856,7 @@ export default function QLearnPage() {
               </button>
             ))}
           </div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 24 }}>
             {LEVELS.map((l) => (
               <button
                 key={l.id}

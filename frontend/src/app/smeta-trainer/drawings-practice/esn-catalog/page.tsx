@@ -604,7 +604,7 @@ export default function EsnCatalogPage() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="🔎 Поиск: бетон, кровля, Сб.6, кабель, §15..."
+            aria-label="🔎 Поиск: бетон, кровля, Сб.6, кабель, §15..." placeholder="🔎 Поиск: бетон, кровля, Сб.6, кабель, §15..."
             className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
           />
           <div className="flex items-center gap-2 text-xs">

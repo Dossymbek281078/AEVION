@@ -301,7 +301,7 @@ export default function EquipmentPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="🔎 Поиск машины (название, расход, особенность)..."
+              aria-label="🔎 Поиск машины (название, расход, особенность)..." placeholder="🔎 Поиск машины (название, расход, особенность)..."
               className="w-full px-4 py-2.5 rounded-lg border-2 border-orange-300 dark:border-orange-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
             />
           </div>

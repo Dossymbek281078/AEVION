@@ -106,7 +106,7 @@ export default function MountainResortPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во ×100 (для 24 → 2400)"
+            aria-label="Кол-во ×100 (для 24 → 2400)" placeholder="Кол-во ×100 (для 24 → 2400)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V_снега = 75000 × 0.3 = 22 500 м³ за сезон. С учётом 50% эффект. (часть в воздух, ветер) ~45 000 м³. С учётом 10 ч × 30 дней = 300 ч работы × 10 м³/ч × 0.8 = 2400 м³/генератор/сезон. n = 45000/2400 ≈ 19 шт ≈ 2400 (×100). Для всех 7 трасс Чимбулака ~80-120 снегогенераторов.</p>

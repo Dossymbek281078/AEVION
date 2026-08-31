@@ -48,7 +48,7 @@ export default function RadioTelescopeVlbiPage() {
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Antenna diameter</h2>
           <p className="text-slate-300">Для G/T ≥40 dB/K @ Ka-band T_sys 30 K, η 60%, λ 1 см. Diameter (м)?</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="м" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="Ответ, м" placeholder="м" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>G/T = 40 = 10·log(η·(πD/λ)²) − 10·log(T_sys) ⇒ G = 40+15 = 55 dBi = η·(πD/λ)² = 3.2·10⁵ ⇒ D ≈ <strong>32 м</strong>. Соответствует РТ-32 Effelsberg-style.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс РТ-32 VLBI</h2>

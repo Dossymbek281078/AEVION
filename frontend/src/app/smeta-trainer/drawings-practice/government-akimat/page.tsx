@@ -107,7 +107,7 @@ export default function GovernmentAkimatPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь, м²"
+            aria-label="Площадь, м²" placeholder="Площадь, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 850 × 5.5 = 4675 + 35 × 32 = 1120 = 5795 м² рабочих; +50% общие (приёмы/залы) = +2900 = 8695 м²; +30% коридоры = +2600 = 11 300 м². С учётом представительских залов и архивов в гос. зданиях ~24 000 м² типично (как реальные акиматы РК Алматы 22 000 м², Шымкент 18 000 м², Атырау 14 000 м²).</p>

@@ -270,7 +270,7 @@ export default function PricingCalculatorEmbedPage() {
               </div>
             </Field>
             <Field label="SEATS">
-              <input
+              <input aria-label="Seats"
                 type="number"
                 min={1}
                 max={1000}

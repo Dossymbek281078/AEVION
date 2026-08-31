@@ -103,7 +103,7 @@ export default function MetroStationsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V_бетона, ×100 м³"
+            aria-label="V_бетона, ×100 м³" placeholder="V_бетона, ×100 м³"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: S = π × (3² − 2.7²) = π × 1.71 = 5.37 м²; V = 5.37 × 1500 = 8055 м³ × 2 тоннеля (двухпутка) = 16 110 м³. +5% потерь = 17 000 м³. Введите в ×100 м³ → ~48 (т.е. 4 800 м³ на ОДИН тоннель × 1 км × тюбинги облегч. полые → реальн. бетон ~48 ×100=4800).</p>

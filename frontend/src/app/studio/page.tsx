@@ -414,7 +414,7 @@ export default function StudioPage() {
         <div style={{ marginTop: 48, background: "#0f172a", borderRadius: 16, padding: "32px 36px", color: "#e2e8f0" }}>
           <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 8px", color: "#fff" }}>Activate all capabilities</h2>
           <p style={{ fontSize: 14, color: "#94a3b8", margin: "0 0 24px" }}>Add these env vars to Railway → AEVION backend service → Variables:</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))", gap: 12 }}>
             {[
               { token: "GITHUB_TOKEN", where: "github.com/settings/tokens", desc: "GitHub PAT — scope: repo, workflow" },
               { token: "RAILWAY_API_TOKEN", where: "railway.app → Account → API Tokens", desc: "Deploy backends to Railway" },

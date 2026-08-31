@@ -75,7 +75,7 @@ export default function Onboarding({ onStarted }: Props) {
       <div style={styles.field}>
         <label style={styles.label}>Псевдоним</label>
         <div style={styles.row}>
-          <input
+          <input aria-label="Псевдоним"
             type="text"
             value={alias}
             onChange={(e) => setAlias(e.target.value.toLowerCase())}

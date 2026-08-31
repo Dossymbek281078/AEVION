@@ -331,7 +331,7 @@ export default function DustNoiseControlPage() {
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">L₂, дБА</span>
-              <input value={ex2} onChange={(e) => setEx2(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" placeholder="93" />
+              <input value={ex2} onChange={(e) => setEx2(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="93" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx2} className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded transition text-sm">Проверить</button>
@@ -433,7 +433,7 @@ L₂ ≈ 93 дБА
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">Стоимость, тг</span>
-              <input value={ex4} onChange={(e) => setEx4(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" placeholder="3750000" />
+              <input value={ex4} onChange={(e) => setEx4(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="3750000" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx4} className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded transition text-sm">Проверить</button>

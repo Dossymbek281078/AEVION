@@ -110,7 +110,7 @@ export default function CoworkingFlexOfficePage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во рабочих мест"
+            aria-label="Кол-во рабочих мест" placeholder="Кол-во рабочих мест"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 125 + 83 + (400/12=33) = 241 место + дополнит. в переговорных и lounge = ~280 рабочих мест в 2000 м² коворкинге. WeWork стандарт ~7-8 м²/место (более плотно), Premium коворкинги ~10 м²/место (комфортнее).</p>

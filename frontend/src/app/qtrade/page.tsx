@@ -1891,7 +1891,7 @@ export default function QTradePage() {
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>
                 Stop-loss distance ($)
-                <input aria-label="e.g"
+                <input aria-label="Stop-loss distance ($)"
                   type="number" min={0.00001} step="any"
                   value={psStop} onChange={(e) => setPsStop(e.target.value)}
                   placeholder="e.g. 50"

@@ -510,7 +510,7 @@ Microsoft Azure: PUE = 1.12
                 onChange={(e) => setEx3(e.target.value)}
                 type="number"
                 className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100"
-                placeholder="800"
+                aria-label="Ответ" placeholder="800"
               />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">

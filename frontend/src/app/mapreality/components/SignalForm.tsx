@@ -145,7 +145,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
 
       <input
         type="text"
-        placeholder={t("mapreality.form.titlePh")}
+        aria-label={t("mapreality.form.titlePh")} placeholder={t("mapreality.form.titlePh")}
         maxLength={200}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -154,7 +154,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       />
 
       <textarea
-        placeholder={t("mapreality.form.descPh")}
+        aria-label={t("mapreality.form.descPh")} placeholder={t("mapreality.form.descPh")}
         maxLength={2000}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
@@ -166,7 +166,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <input
           type="text"
-          placeholder={t("mapreality.form.countryPh")}
+          aria-label={t("mapreality.form.countryPh")} placeholder={t("mapreality.form.countryPh")}
           maxLength={64}
           value={country}
           onChange={(e) => setCountry(e.target.value)}
@@ -175,7 +175,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
         />
         <input
           type="text"
-          placeholder={t("mapreality.form.cityPh")}
+          aria-label={t("mapreality.form.cityPh")} placeholder={t("mapreality.form.cityPh")}
           maxLength={80}
           value={city}
           onChange={(e) => setCity(e.target.value)}
@@ -186,14 +186,14 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "stretch" }}>
         <input
           type="text"
-          placeholder={t("mapreality.form.latPh")}
+          aria-label={t("mapreality.form.latPh")} placeholder={t("mapreality.form.latPh")}
           value={lat}
           onChange={(e) => setLat(e.target.value)}
           style={inputStyle}
         />
         <input
           type="text"
-          placeholder={t("mapreality.form.lngPh")}
+          aria-label={t("mapreality.form.lngPh")} placeholder={t("mapreality.form.lngPh")}
           value={lng}
           onChange={(e) => setLng(e.target.value)}
           style={inputStyle}

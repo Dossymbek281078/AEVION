@@ -108,7 +108,7 @@ export default function StadiumLargeFootballPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь трибун, м²"
+            aria-label="Площадь трибун, м²" placeholder="Площадь трибун, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 50 000 × 0.5 = 25 000 м² зрит.; ×1.3 = 32 500 м² с проходами. С учётом наклонной поверхности ступеней трибун (≈30-35°) реальная поверхность ~28 000 м² в плане. С учётом подтрибунных помещений (раздевалки, VIP, технические) общая полезная площадь стадиона ~80 000 м². Reception зоны и outside ~21 000 м² (в плане для расчёта стройки = ~21 000 м² зрительских поверхностей).</p>

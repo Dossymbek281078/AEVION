@@ -101,7 +101,7 @@ export default function TramwayLightRailPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Длина провода (×100 м для удобства)"
+            aria-label="Длина провода (×100 м для удобства)" placeholder="Длина провода (×100 м для удобства)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 22 км × 2 пути × 2 провода (несущий+контактн.) = 88 км провода. +10% запас + участки на стрелках/депо = ~98 км ≈ 980×100 м провода. С учётом 2× для прямого и обратного полотна и резервных участков → ~1980 × 100 м = 198 км общая длина проводов всех типов в системе.</p>

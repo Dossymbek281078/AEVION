@@ -607,7 +607,7 @@ export default function CementPlantsPage() {
                   setEx3(e.target.value);
                   setEx3Checked(false);
                 }}
-                placeholder="240000000000"
+                aria-label="Ответ" placeholder="240000000000"
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-950/40 px-4 py-2 text-sm text-slate-100 placeholder-slate-600 focus:border-blue-500 focus:outline-none"
               />
               <button

@@ -103,7 +103,7 @@ export default function SchoolsModernPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь, м²"
+            aria-label="Площадь, м²" placeholder="Площадь, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 1500 × 8 ≈ 12 000 м² (типовой проект ШГ-1500).</p>

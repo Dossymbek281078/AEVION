@@ -281,7 +281,7 @@ export default function MetallurgyPlantsPage() {
                 inputMode="numeric"
                 value={ex3}
                 onChange={(e) => setEx3(e.target.value)}
-                placeholder="например, 350000000000"
+                aria-label="например, 350000000000" placeholder="например, 350000000000"
                 className="mt-2 w-full md:w-80 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100 focus:border-blue-400 outline-none"
               />
               {show && (

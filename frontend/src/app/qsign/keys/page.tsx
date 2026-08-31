@@ -442,7 +442,7 @@ function RotationForm({ onRotated }: { onRotated: () => void }) {
       <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr" }}>
         <div>
           <label style={labelStyle}>Admin bearer token</label>
-          <input
+          <input aria-label="Admin bearer token"
             type="password"
             value={token}
             onChange={(e) => setToken(e.target.value)}
@@ -473,7 +473,7 @@ function RotationForm({ onRotated }: { onRotated: () => void }) {
           </div>
           <div>
             <label style={labelStyle}>Notes (optional)</label>
-            <input
+            <input aria-label="Notes (optional)"
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -494,7 +494,7 @@ function RotationForm({ onRotated }: { onRotated: () => void }) {
           >
             <div>
               <label style={labelStyle}>publicKey (64-hex, optional)</label>
-              <input
+              <input aria-label="publicKey (64-hex, optional)"
                 type="text"
                 value={publicKey}
                 onChange={(e) => setPublicKey(e.target.value)}
@@ -505,7 +505,7 @@ function RotationForm({ onRotated }: { onRotated: () => void }) {
             </div>
             <div>
               <label style={labelStyle}>secretRef (env var name, optional)</label>
-              <input
+              <input aria-label="secretRef (env var name, optional)"
                 type="text"
                 value={secretRef}
                 onChange={(e) => setSecretRef(e.target.value)}

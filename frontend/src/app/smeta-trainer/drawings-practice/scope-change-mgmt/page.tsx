@@ -345,7 +345,7 @@ export default function ScopeChangeMgmtPage() {
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">Рост, %</span>
-              <input value={ex2} onChange={(e) => setEx2(e.target.value)} type="number" step="0.1" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" placeholder="10" />
+              <input value={ex2} onChange={(e) => setEx2(e.target.value)} type="number" step="0.1" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="10" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx2} className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded transition text-sm">Проверить</button>
@@ -453,7 +453,7 @@ export default function ScopeChangeMgmtPage() {
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">Claim, тг</span>
-              <input value={ex4} onChange={(e) => setEx4(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" placeholder="15000000" />
+              <input value={ex4} onChange={(e) => setEx4(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="15000000" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx4} className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded transition text-sm">Проверить</button>

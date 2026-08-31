@@ -313,7 +313,7 @@ export default function NaturalStonePage() {
                 type="text"
                 value={a2}
                 onChange={(e) => setA2(e.target.value)}
-                placeholder="Например: 3000000"
+                aria-label="Например: 3000000" placeholder="Например: 3000000"
                 className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm w-48 focus:border-amber-500 outline-none"
               />
               <span className="text-slate-400 text-sm">тг</span>

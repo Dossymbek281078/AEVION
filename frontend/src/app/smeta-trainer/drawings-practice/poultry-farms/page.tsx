@@ -107,7 +107,7 @@ export default function PoultryFarmsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь корпусов, м²"
+            aria-label="Площадь корпусов, м²" placeholder="Площадь корпусов, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: S = 100 000 / 18 = 5 556 м² — мин. полезная площадь для одного тура. С учётом санитарного цикла (42 дн откорма + 14 дн санобработка = 56 дн между поставками одного корпуса) и непрерывного потока (5 туров/год значит постоянно 2-3 партии в работе) — фактич. площадь нужна ~3 × 1600 = ~4800 м². Берём 4500 м² как оптимум для 100 000 голов/тур с 7 корпусами 100×16 м.</p>

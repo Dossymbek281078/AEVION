@@ -107,7 +107,7 @@ export default function RecyclingPlantsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="P, т/час"
+            aria-label="P, т/час" placeholder="P, т/час"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 31.25 × 1.3 × 1.6 = 65 т/ч. Это пиковая. Постоянная нагрузка 30-40 т/ч. При плотности ТБО 200-300 кг/м³ — объёмная произв. 200-300 м³/ч. Скорость конвейера 0.7-1.0 м/с при ширине 2.0 м.</p>

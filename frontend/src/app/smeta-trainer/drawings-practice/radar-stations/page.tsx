@@ -109,7 +109,7 @@ export default function RadarStationsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Дальность, км"
+            aria-label="Дальность, км" placeholder="Дальность, км"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: переведём в линейный масштаб. P_T=10⁶ Вт; G=10^3.4 ≈ 2512; λ=0.6 м; σ=10; P_min=10^(-11)/1000=10⁻¹⁴ Вт; L_loss=10. R⁴ = (10⁶ × 2512² × 0.36 × 10) / ((4π)³ × 10⁻¹⁴ × 10) = (10⁶ × 6.3×10⁶ × 3.6) / (1984 × 10⁻¹³) ≈ 2.27×10¹³ / 1.984×10⁻¹⁰ ≈ 10²³. R = 10²³/⁴ ≈ 1.78×10⁵ м = 178 км. С учётом реальных потерь и шумов в импульсном режиме П-18 — типично 250-270 км. Введите ~254 км.</p>

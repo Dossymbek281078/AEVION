@@ -101,7 +101,7 @@ export default function LngPlantsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Объём СПГ, м³"
+            aria-label="Объём СПГ, м³" placeholder="Объём СПГ, м³"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: π × 40² × 39 × 0.85 = 167 000 м³ полезный (от номинального ~196 000 м³). Это эквивалент 80 000 т СПГ (плотность 0.42-0.46 т/м³).</p>

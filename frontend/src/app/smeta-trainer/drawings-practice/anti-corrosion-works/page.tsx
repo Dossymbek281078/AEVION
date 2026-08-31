@@ -554,7 +554,7 @@ export default function AntiCorrosionWorksPage() {
                 value={ex3}
                 onChange={(e) => setEx3(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && checkEx3()}
-                placeholder="Введите число (тг)..."
+                aria-label="Введите число (тг)..." placeholder="Введите число (тг)..."
                 className="flex-1 min-w-[200px] border border-slate-700 rounded px-3 py-2 text-sm font-mono bg-slate-900 text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
               />
               <button

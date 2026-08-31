@@ -109,7 +109,7 @@ export default function LogisticsWarehousePage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во палетомест"
+            aria-label="Кол-во палетомест" placeholder="Кол-во палетомест"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 70 000 м² × 0.4 (полезная под стеллажи с учётом проездов) × 2 (палет в ширину) × 4 (яруса) ≈ 224 000 п.м. Но это идеализир. С учётом узлов сопряжения, рамп, погрузочных зон — фактич. ~56 000 палетомест (как в Хоргос-DAMU). Удельная плотность ~0.56 п.м./м².</p>

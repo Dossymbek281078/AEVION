@@ -286,7 +286,7 @@ export default function GovernmentTenderPage() {
                 type="text"
                 value={ex1Answer}
                 onChange={(e) => setEx1Answer(e.target.value)}
-                placeholder="введите сумму в тг"
+                aria-label="введите сумму в тг" placeholder="введите сумму в тг"
                 className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100 w-56 focus:outline-none focus:border-blue-500"
               />
               <button

@@ -285,7 +285,7 @@ export default function CaseCafePage() {
                 type="text"
                 value={ex1}
                 onChange={(e) => setEx1(e.target.value)}
-                placeholder="Введите расход в м³/ч"
+                aria-label="Введите расход в м³/ч" placeholder="Введите расход в м³/ч"
                 className="px-4 py-2 rounded-lg bg-slate-800 border border-rose-900/50 text-slate-100 focus:outline-none focus:border-rose-500 w-64"
               />
               <span className="text-slate-400">м³/ч</span>
@@ -444,7 +444,7 @@ export default function CaseCafePage() {
                 type="text"
                 value={ex4}
                 onChange={(e) => setEx4(e.target.value)}
-                placeholder="Введите площадь в м²"
+                aria-label="Введите площадь в м²" placeholder="Введите площадь в м²"
                 className="px-4 py-2 rounded-lg bg-slate-800 border border-rose-900/50 text-slate-100 focus:outline-none focus:border-rose-500 w-64"
               />
               <span className="text-slate-400">м²</span>

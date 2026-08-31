@@ -459,7 +459,7 @@ export default function MilitaryDefensePage() {
               type="text"
               value={a3}
               onChange={(e) => setA3(e.target.value)}
-              placeholder="Площадь, м²"
+              aria-label="Площадь, м²" placeholder="Площадь, м²"
               className="w-full md:w-72 px-4 py-2 rounded-lg bg-slate-950 border border-stone-700 text-stone-200 placeholder-stone-600 focus:border-amber-400 focus:outline-none text-sm"
             />
             <div className="flex gap-2 mt-4">

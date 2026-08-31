@@ -232,7 +232,7 @@ export default function EquipmentMountingPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск по типу / применению..."
+              aria-label="Поиск по типу / применению..." placeholder="Поиск по типу / применению..."
               className="text-xs border border-orange-300 dark:border-slate-600 rounded px-2 py-1 w-64 bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
             />
           </div>

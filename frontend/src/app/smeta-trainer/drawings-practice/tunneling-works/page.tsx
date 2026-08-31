@@ -249,7 +249,7 @@ export default function TunnelingWorksPage() {
                 inputMode="numeric"
                 value={ex3}
                 onChange={(e) => { setEx3(e.target.value); setEx3Checked(false); }}
-                placeholder="например: 113000000000"
+                aria-label="например: 113000000000" placeholder="например: 113000000000"
                 className="w-72 rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-100 placeholder-slate-600 focus:border-blue-500 focus:outline-none"
               />
               <button

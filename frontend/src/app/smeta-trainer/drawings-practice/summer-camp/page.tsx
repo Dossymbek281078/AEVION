@@ -107,7 +107,7 @@ export default function SummerCampPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="S, м²"
+            aria-label="S, м²" placeholder="S, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 600 × 7.5 = 4500 м² жилых корпусов. Это объект уровня «Балдаурен» (с 4 корпусами по ~1125 м² каждый) — соответствует реальным детским лагерям РК. Дополнит. площади: столовая 1500 м² + ФОК 2000 м² + Эстрада 800 м² + кружковая 800 м² + админ 400 м² = +5500 м² всех других зданий.</p>

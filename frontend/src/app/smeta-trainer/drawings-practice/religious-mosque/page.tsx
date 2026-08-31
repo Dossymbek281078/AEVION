@@ -110,7 +110,7 @@ export default function ReligiousMosquePage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь, м²"
+            aria-label="Площадь, м²" placeholder="Площадь, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: S_муж = 3150 м², S_жен = 1800 м² (балкон), +30% = +1485 = ИТОГО 6435 м² ≈ 6500 м² зала на 5000 верующих. Для сравнения: Хазрет Султан Астана 17 800 м² общей застр., из них молельный 1700 м² на 5-6 тыс. чел. Большие мечети имеют 1.0-1.5 м²/верующий с учётом просторности.</p>

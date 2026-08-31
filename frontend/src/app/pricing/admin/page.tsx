@@ -278,7 +278,7 @@ export default function PricingAdminPage() {
           </p>
           <input
             type="password"
-            placeholder="x-admin-token"
+            aria-label="Admin token" placeholder="x-admin-token"
             value={tokenInput}
             onChange={(e) => setTokenInput(e.target.value)}
             style={{

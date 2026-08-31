@@ -107,7 +107,7 @@ export default function GlassFactoriesPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V газа, ×100 м³/час"
+            aria-label="V газа, ×100 м³/час" placeholder="V газа, ×100 м³/час"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 3300 × 1000 = 3 300 000 МДж/сут / 36 МДж/м³ = 91 700 м³/сут / 24 ч = 3820 м³/час. С учётом КПД печи 80% → ~4700 м³/час. Введите 24 (×100 = 2400 м³/час чистого, без учёта дополнит. подогрева Lehr/Float Bath + регенерации).</p>

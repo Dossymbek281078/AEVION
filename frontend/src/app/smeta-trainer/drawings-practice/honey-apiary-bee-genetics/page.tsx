@@ -92,7 +92,7 @@ export default function HoneyApiaryBeeGeneticsPage() {
             1000 семей × средний yield 80 кг/семья/год (для Алтай селекциониров.
             Buckfast hybrid). Потери на winter 15% семей. Сколько т мёда/год?
           </p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="т/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-blue-500 focus:outline-none" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="т/год" placeholder="т/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-blue-500 focus:outline-none" />
           {showResults && (
             <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}>
               <p className="text-slate-200">

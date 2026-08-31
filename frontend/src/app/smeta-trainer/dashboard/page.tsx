@@ -225,7 +225,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 gap-2 mb-3">
               <input
                 type="text"
-                placeholder="Ваше имя"
+                aria-label="Ваше имя" placeholder="Ваше имя"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 maxLength={80}
@@ -233,7 +233,7 @@ export default function DashboardPage() {
               />
               <input
                 type="text"
-                placeholder="Группа (необязательно)"
+                aria-label="Группа (необязательно)" placeholder="Группа (необязательно)"
                 value={group}
                 onChange={(e) => setGroup(e.target.value)}
                 maxLength={40}

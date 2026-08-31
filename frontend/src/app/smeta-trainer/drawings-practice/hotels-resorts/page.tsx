@@ -102,7 +102,7 @@ export default function HotelsResortsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кратность × 10 (для 5.2 → введите 52)"
+            aria-label="Кратность × 10 (для 5.2 → введите 52)" placeholder="Кратность × 10 (для 5.2 → введите 52)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: L_номер = 2 × 60 = 120 м³/ч + 75 м³/ч ванна = 195 м³/ч / 93 м³ = 2.1 1/ч с учётом турбины зимний/летний баланс и фильтрации F7+F9 → расчётно ~5.2 (×10=52).</p>

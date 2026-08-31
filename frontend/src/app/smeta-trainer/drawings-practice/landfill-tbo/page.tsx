@@ -107,7 +107,7 @@ export default function LandfillTboPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь, га"
+            aria-label="Площадь, га" placeholder="Площадь, га"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V = 350 000 × 25 / 0.8 = 10 937 500 м³; S_рабочая = 10 937 500 / 25 = 437 500 м² = 43.75 га; +30% инфра = ~57 га. С учётом сужения «пирамиды» сверху (откосы 1:3) и резервных секций — типично ~36 га на 350 тыс. т/год × 25 лет (как реальный Кеңқарасу).</p>

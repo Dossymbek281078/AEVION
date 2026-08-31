@@ -104,7 +104,7 @@ export default function WindSolarFarmsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь, га"
+            aria-label="Площадь, га" placeholder="Площадь, га"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: P_DC = 50×1.3 = 65 МВт DC; N = 65_000_000 / 550 ≈ 118_000 модулей; S_панелей = 118_000×2.6 ≈ 307 000 м²; S_общ = 307_000 × 3 = 921 000 м² ≈ 92 га. Для трекеров типично 1.5-2 га/МВт DC, для фикс. рядов 2.5-3 га/МВт.</p>

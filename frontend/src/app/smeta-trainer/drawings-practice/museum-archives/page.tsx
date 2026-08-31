@@ -104,7 +104,7 @@ export default function MuseumArchivesPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кратность × 10 (для 1.2 → 12)"
+            aria-label="Кратность × 10 (для 1.2 → 12)" placeholder="Кратность × 10 (для 1.2 → 12)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: общее за сутки 6+1=7 крат → 7/24 ≈ 0.29 1/ч. Но для учёта пиковых нагрузок (массовая фильтрация после ремонтных работ или открытия залов) — расчётно 1.2 1/ч (×10=12).</p>

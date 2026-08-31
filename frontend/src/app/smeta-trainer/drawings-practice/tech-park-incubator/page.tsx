@@ -105,7 +105,7 @@ export default function TechParkIncubatorPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во floor boxes"
+            aria-label="Кол-во floor boxes" placeholder="Кол-во floor boxes"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 4000 / 2.25 = 1778 шт; +20% = 2133 шт; +дополнит. в переговорных и кафе = ~2600 floor boxes. Это огромная инсталляция (стоимость floor box ~$200/шт = $520 000 = 240 млн тг). Astana Hub имеет сопоставимое количество.</p>

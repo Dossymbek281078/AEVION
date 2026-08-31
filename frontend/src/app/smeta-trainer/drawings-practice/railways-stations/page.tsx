@@ -639,7 +639,7 @@ export default function RailwaysStationsPage() {
                   setEx3(e.target.value);
                   setEx3Checked(false);
                 }}
-                placeholder="например, 9600000000000"
+                aria-label="например, 9600000000000" placeholder="например, 9600000000000"
                 className="flex-1 px-4 py-2 rounded-lg bg-slate-950/60 border border-slate-700 text-slate-100 focus:border-blue-500 focus:outline-none text-sm"
               />
               <button

@@ -79,7 +79,7 @@ export default function BessGridBatteryPage() {
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">
           <h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Power rating</h2>
           <p className="text-slate-300">BESS 200 МВт·ч × 4-час discharge. Какова power rating (МВт)?</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="МВт" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="МВт" placeholder="МВт" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>P = E/t = 200/1 = <strong>200 МВт</strong> (4h * 50 МВт). C-rate = 0.25 (E/P=4 h). NFPA 855 + IEEE 1547.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">

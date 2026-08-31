@@ -108,7 +108,7 @@ export default function CircusAmphitheaterPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь трибун, м²"
+            aria-label="Площадь трибун, м²" placeholder="Площадь трибун, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 2000 × 0.85 = 1700 м² кресла; ×1.3 = 2210 м² с проходами в 4 ярусах. С учётом «сужающихся» нижних ярусов (близко к манежу) и расширяющихся верхних — реально площадь занятия в плане ~3000 м². С учётом междурядных лестниц, ВИП-секций, технического кольца под трибунами и фойе — общий зрительный объём ~4500 м² зала.</p>

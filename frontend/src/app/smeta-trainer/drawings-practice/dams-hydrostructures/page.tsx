@@ -352,7 +352,7 @@ export default function DamsHydrostructuresPage() {
               <input
                 value={ex3}
                 onChange={(e) => { setEx3(e.target.value); setEx3Result(null); }}
-                placeholder="например, 120000000000"
+                aria-label="например, 120000000000" placeholder="например, 120000000000"
                 className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-sm w-64 focus:outline-none focus:border-amber-500"
               />
               <button onClick={checkEx3} className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold text-sm">Проверить</button>

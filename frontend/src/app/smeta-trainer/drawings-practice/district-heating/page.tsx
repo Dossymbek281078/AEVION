@@ -110,7 +110,7 @@ export default function DistrictHeatingPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="d, мм"
+            aria-label="d, мм" placeholder="d, мм"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: Cp = 1 ккал/(кг·°C); G = 1500×10⁶ / (1×60) = 25 × 10⁶ кг/час; V = 25 × 10⁶ / 970 (ρ при 100°C) = 25 773 м³/час = 7.16 м³/с; S = 7.16 / 2.5 = 2.86 м²; d = √(4×2.86/π) = 1.91 м = 1910 мм. С учётом потерь на трение и теплоотдачи ≈ Ø 1500 мм (стандартный ряд DN1400-1500). Размещается в подземн. бесканальной прокладке с PUR-изоляцией 200 мм по EN 13941.</p>

@@ -106,7 +106,7 @@ export default function UniversitiesCampusesPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь, м²"
+            aria-label="Площадь, м²" placeholder="Площадь, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 8000×(12+6.4+1.5+1+2) = 8000×22.9 = 183 000 м² → с учётом коридоров/санузлов/лест. (~30% от полез.) ≈ 96 000 м² капитальной застройки + общежития ≈48 000 м² + 48 000 м² учебно-научное. (Для НУ — ~150 000 м² при кампусе 152 га.)</p>

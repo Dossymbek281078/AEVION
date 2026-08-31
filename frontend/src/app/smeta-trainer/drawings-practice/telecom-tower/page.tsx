@@ -108,7 +108,7 @@ export default function TelecomTowerPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Масса, ×10 кг (для 420 т → 4200)"
+            aria-label="Масса, ×10 кг (для 420 т → 4200)" placeholder="Масса, ×10 кг (для 420 т → 4200)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: S_низ = 144 м², S_верх = 9 м², S_сред ≈ 65 м² (но т.к. сужение нелинейно, лучше 50 м²); V = 50 × 120 = 6000 м³ × 40 кг/м³ = 240 000 кг = 240 т. С учётом площадок, лестниц, кабельных мостов и оборудования ~420 т.</p>

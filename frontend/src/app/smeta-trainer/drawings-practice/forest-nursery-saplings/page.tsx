@@ -95,7 +95,7 @@ export default function ForestNurserySaplingsPage() {
             walkways/services. Сколько cells/м² total и сколько саженцев надо?
             Введи number of saplings:
           </p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="штук" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-blue-500 focus:outline-none" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="штук" placeholder="штук" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-blue-500 focus:outline-none" />
           {showResults && (
             <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}>
               <p className="text-slate-200">

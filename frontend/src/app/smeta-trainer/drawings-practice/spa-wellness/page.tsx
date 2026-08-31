@@ -110,7 +110,7 @@ export default function SpaWellnessPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Q, л/мин"
+            aria-label="Q, л/мин" placeholder="Q, л/мин"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 90 × 1000 / (24 × 60) = 62.5 л/мин чистая подпитка. +потери на испарение в саунах ~50 л/мин + душевые гостей (для 1500 гостей/день × 200 л/чел = 300 000 л/сут = 208 л/мин) + резерв процедурные = ~480 л/мин общий расход скважины. Sary-Agash скважина даёт 800-1200 л/мин — достаточно.</p>

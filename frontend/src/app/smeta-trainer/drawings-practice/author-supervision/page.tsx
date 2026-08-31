@@ -266,7 +266,7 @@ export default function AuthorSupervisionPage() {
               <input
                 value={a1}
                 onChange={(e) => setA1(e.target.value)}
-                placeholder="тенге"
+                aria-label="тенге" placeholder="тенге"
                 className="w-48 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
               />
               <button
@@ -313,7 +313,7 @@ export default function AuthorSupervisionPage() {
               <input
                 value={a2}
                 onChange={(e) => setA2(e.target.value)}
-                placeholder="тенге"
+                aria-label="тенге" placeholder="тенге"
                 className="w-48 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
               />
               <button

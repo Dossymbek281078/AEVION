@@ -256,7 +256,7 @@ export default function AccountsLedgerSection() {
         <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
           <h2 style={{ fontSize: 18, marginBottom: 10 }}>Create account</h2>
           <form onSubmit={createAccount} style={{ display: "grid", gap: 10 }}>
-            <input
+            <input aria-label="Owner"
               placeholder="Owner (e.g. AEVION Test)"
               value={owner}
               onChange={(e) => setOwner(e.target.value)}
@@ -294,7 +294,7 @@ export default function AccountsLedgerSection() {
                 </option>
               ))}
             </select>
-            <input
+            <input aria-label="Top-up amount"
               placeholder="Amount"
               value={topupAmount}
               onChange={(e) => setTopupAmount(e.target.value)}
@@ -350,7 +350,7 @@ export default function AccountsLedgerSection() {
               ))}
             </select>
 
-            <input
+            <input aria-label="Transfer amount"
               placeholder="Amount"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}

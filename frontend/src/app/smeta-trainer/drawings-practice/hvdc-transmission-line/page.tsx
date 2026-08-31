@@ -81,7 +81,7 @@ export default function HvdcTransmissionLinePage() {
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">
           <h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Длина ЛЭП</h2>
           <p className="text-slate-300">HVDC Экибастуз-Алашанькоу (Хоргос) сколько км?</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="км" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="км" placeholder="км" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>Экибастуз → Алашанькоу прямой ≈ <strong>1500 км</strong>. HVDC break-even с HVAC при ≥600 км — здесь однозначно HVDC.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">

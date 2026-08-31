@@ -283,7 +283,7 @@ export default function ExpertiseDocsPage() {
                 inputMode="decimal"
                 value={ex1Answer}
                 onChange={(e) => setEx1Answer(e.target.value)}
-                placeholder="например, 250000"
+                aria-label="например, 250000" placeholder="например, 250000"
                 className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-purple-500"
               />
               <span className="text-sm text-slate-400">тг</span>

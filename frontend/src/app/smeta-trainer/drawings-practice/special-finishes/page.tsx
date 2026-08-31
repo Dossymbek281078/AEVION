@@ -523,7 +523,7 @@ export default function SpecialFinishesPage() {
                 type="text"
                 value={a3}
                 onChange={(e) => setA3(e.target.value)}
-                placeholder="Например: 2400000"
+                aria-label="Например: 2400000" placeholder="Например: 2400000"
                 className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm w-48 focus:border-amber-500 outline-none"
               />
               <span className="text-slate-400 text-sm">тг</span>

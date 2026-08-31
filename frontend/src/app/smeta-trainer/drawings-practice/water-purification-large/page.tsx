@@ -111,7 +111,7 @@ export default function WaterPurificationLargePage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="S, м²"
+            aria-label="S, м²" placeholder="S, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: S_min = 20 833 / 8 = 2600 м². +25% запас = 3250 м². При размещении в 12 фильтрах ~270 м² каждый (например, 12×22 м прямоугольных). С учётом площади резервуаров промывной воды + системы воздуходувок + дренаж + проходы = ~21 000 м² общей площади узла фильтрации.</p>

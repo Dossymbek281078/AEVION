@@ -564,7 +564,7 @@ export default function FaqPage() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Поиск по FAQ — вопрос, ответ, тег..."
+              aria-label="Поиск по FAQ — вопрос, ответ, тег..." placeholder="Поиск по FAQ — вопрос, ответ, тег..."
               className="w-full rounded-lg border-2 border-indigo-300 dark:border-indigo-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm sm:text-base text-slate-900 dark:text-indigo-100 placeholder-slate-400 dark:placeholder-indigo-400/60 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
             />
           </label>

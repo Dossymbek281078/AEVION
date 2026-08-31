@@ -305,7 +305,7 @@ export default function PowerPlantsPage() {
             <input
               value={a3}
               onChange={(e) => setA3(e.target.value)}
-              placeholder="например: 33000000000"
+              aria-label="например: 33000000000" placeholder="например: 33000000000"
               className="mt-3 w-full md:w-80 px-4 py-3 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-pink-500"
             />
             {a3.length > 0 && (

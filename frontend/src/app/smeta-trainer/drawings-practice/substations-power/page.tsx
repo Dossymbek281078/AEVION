@@ -392,7 +392,7 @@ export default function SubstationsPowerPage() {
               inputMode="numeric"
               value={ex3}
               onChange={(e) => setEx3(e.target.value)}
-              placeholder="17000000000"
+              aria-label="Ответ" placeholder="17000000000"
               className="w-full md:w-80 px-3 py-2 rounded-md bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
             />
             {showResults && (

@@ -131,7 +131,7 @@ function Exercise({ number, title, description, expected, tolerance = 0.02, unit
             setInput(e.target.value);
             setSubmitted(false);
           }}
-          placeholder="Ваш ответ"
+          aria-label="Ваш ответ" placeholder="Ваш ответ"
           className="w-48 rounded border border-amber-400 bg-white px-3 py-2 text-base focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 dark:border-amber-600 dark:bg-slate-800 dark:text-white"
         />
         <span className="text-sm text-slate-600 dark:text-slate-400">{unit}</span>
@@ -282,7 +282,7 @@ export default function TransportPage() {
             type="text"
             value={vehicleSearch}
             onChange={(e) => setVehicleSearch(e.target.value)}
-            placeholder="🔍 Поиск по типу ТС или грузоподъёмности…"
+            aria-label="🔍 Поиск по типу ТС или грузоподъёмности…" placeholder="🔍 Поиск по типу ТС или грузоподъёмности…"
             className="mb-3 w-full max-w-md rounded border border-amber-400 bg-white px-3 py-2 text-sm focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 dark:border-amber-600 dark:bg-slate-800 dark:text-white"
           />
           <div className="overflow-x-auto rounded-lg border border-amber-300 dark:border-amber-700">
@@ -327,7 +327,7 @@ export default function TransportPage() {
             type="text"
             value={deliverySearch}
             onChange={(e) => setDeliverySearch(e.target.value)}
-            placeholder="🔍 Поиск по материалу или пункту отправки…"
+            aria-label="🔍 Поиск по материалу или пункту отправки…" placeholder="🔍 Поиск по материалу или пункту отправки…"
             className="mb-3 w-full max-w-md rounded border border-amber-400 bg-white px-3 py-2 text-sm focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 dark:border-amber-600 dark:bg-slate-800 dark:text-white"
           />
           <div className="overflow-x-auto rounded-lg border border-amber-300 dark:border-amber-700">

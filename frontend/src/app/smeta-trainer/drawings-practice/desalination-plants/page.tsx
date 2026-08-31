@@ -109,7 +109,7 @@ export default function DesalinationPlantsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во мембран, ×100 (для 3600 → 36)"
+            aria-label="Кол-во мембран, ×100 (для 3600 → 36)" placeholder="Кол-во мембран, ×100 (для 3600 → 36)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: N = 100 000 / 40 = 2500 шт. + 15% резерв = ~2875 шт. (в корпусах 8×40' по 8 мембран в корпусе = 360 корпусов). Введите 36 (×100). С учётом 2-pass и резервных корпусов на чистку — реально 3600 мембран в установленных. Округление до 36 ×100 = 3600 мембран всего.</p>

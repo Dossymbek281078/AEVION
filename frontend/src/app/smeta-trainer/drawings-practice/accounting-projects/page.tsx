@@ -156,7 +156,7 @@ function NumericExercise({
           type="text"
           value={val}
           onChange={(e) => setVal(e.target.value)}
-          placeholder="Ваш ответ"
+          aria-label="Ваш ответ" placeholder="Ваш ответ"
           className="w-40 rounded-md border border-blue-700/40 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-cyan-400 focus:outline-none"
         />
         <span className="text-xs text-slate-400">{unit}</span>

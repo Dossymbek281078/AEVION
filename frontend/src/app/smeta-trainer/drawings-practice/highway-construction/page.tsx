@@ -108,7 +108,7 @@ export default function HighwayConstructionPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Масса А/Б, тысяч тонн"
+            aria-label="Масса А/Б, тысяч тонн" placeholder="Масса А/Б, тысяч тонн"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: S = 66000×27 = 1 782 000 м²; V = 1 782 000 × 0.21 = 374 220 м³; M = 374 220 × 2.4 × 1.05 = 942 824 т ≈ 980 тыс. т. Это масса всех слоёв А/Б на 66 км трассы (для сравнения, годовая производит. крупного асфальтобетонного завода 200-300 тыс. т).</p>

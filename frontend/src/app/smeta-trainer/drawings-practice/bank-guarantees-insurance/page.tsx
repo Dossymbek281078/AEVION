@@ -447,7 +447,7 @@ export default function BankGuaranteesInsurancePage() {
                         inputMode="decimal"
                         value={answers[ex.id] ?? ""}
                         onChange={(e) => setAnswer(ex.id, e.target.value)}
-                        placeholder="Введите число"
+                        aria-label="Введите число" placeholder="Введите число"
                         className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:border-amber-500 focus:outline-none w-48"
                       />
                       <span className="text-sm text-slate-400">{ex.unit}</span>

@@ -501,7 +501,7 @@ export default function CrematoriumPage() {
               type="text"
               value={a3}
               onChange={(e) => setA3(e.target.value)}
-              placeholder="Количество мест"
+              aria-label="Количество мест" placeholder="Количество мест"
               className="w-full md:w-72 px-4 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-200 placeholder-slate-600 focus:border-amber-400 focus:outline-none text-sm"
             />
             <div className="flex gap-2 mt-4">

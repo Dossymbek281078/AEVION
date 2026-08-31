@@ -109,7 +109,7 @@ export default function SimulatorTrainingCenterPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во FFS Level D"
+            aria-label="Кол-во FFS Level D" placeholder="Кол-во FFS Level D"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 3000/4000 = 0.75 — для basics 1 FFS достаточно. +новые пилоты (type rating ~200 ч на одного, 20-40 пилотов/год = 4000-8000 ч) → нужно 2 FFS только A320. +B737 (отдельный тип) + B767/787 = ещё 1-2 FFS. Air Astana Training Centre имеет 4 FFS (2× A320 + 1× B737 + 1× B767/787 combo).</p>

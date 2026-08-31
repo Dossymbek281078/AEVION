@@ -455,7 +455,7 @@ export default function GasProcessingPlantsPage() {
               <input
                 value={ex3Val}
                 onChange={(e) => setEx3Val(e.target.value)}
-                placeholder="введите число в тенге"
+                aria-label="введите число в тенге" placeholder="введите число в тенге"
                 className="px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 min-w-[260px]"
               />
               <button

@@ -35,6 +35,24 @@ export function minorUnitDigits(currency: string): number {
     : 2;
 }
 
+/**
+ * Обратное преобразование: то, что ввёл человек, — в минорные единицы.
+ *
+ * ЗАЧЕМ. Показ и ввод обязаны считать одинаково, иначе цена «чинится» на
+ * одном конце и ломается на другом. 31.08.2026 так и вышло: панель ссылок
+ * отправляла в API `parseFloat("99.00")` = 99, то есть ДОЛЛАРЫ, при том что
+ * контракт API объявляет минорные единицы («amount must be a positive number
+ * (minor units)», пример в спецификации — 9900). Пока показ печатал число как
+ * есть, ссылки из панели выглядели верно, а ссылки из API — в сто раз дороже.
+ * Починка показа поменяла местами, кто именно врёт.
+ *
+ * Верна сторона контракта, поэтому исправлен производитель: панель теперь
+ * шлёт минорные единицы, и обе стороны считают одинаково.
+ */
+export function toMinorUnits(value: number, currency: string): number {
+  return Math.round(value * 10 ** minorUnitDigits(currency));
+}
+
 export function formatPaymentAmount(minor: number, currency: string): string {
   const digits = minorUnitDigits(currency);
   const value = minor / 10 ** digits;

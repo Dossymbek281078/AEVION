@@ -1,5 +1,6 @@
 "use client";
 
+import { toMinorUnits } from "@/lib/paymentAmount";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
@@ -214,7 +215,9 @@ export default function PaymentLinksPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount: local.amount,
+          // Человек вводит доллары, а контракт API — минорные единицы.
+          // Считаем одним помощником с показом, иначе стороны разойдутся.
+          amount: toMinorUnits(local.amount, local.currency),
           currency: local.currency,
           title: local.title,
           description: local.description,

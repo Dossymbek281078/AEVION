@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { formatPaymentAmount, minorUnitDigits } from "@/lib/paymentAmount";
+import {
+  formatPaymentAmount,
+  minorUnitDigits,
+  toMinorUnits,
+} from "@/lib/paymentAmount";
 
 /**
  * Сторож: цена на экране покупателя равна цене, выставленной продавцом.
@@ -30,6 +34,40 @@ describe("сумма на странице оплаты — минорные е�
         `валюта ${cur} печатает сырое число`
       ).not.toMatch(/9900/);
     }
+  });
+
+  it("что ввёл человек — то он и увидит (круговой ход)", () => {
+    // 31.08.2026. Показ и ввод считали ПО-РАЗНОМУ: панель ссылок слала в API
+    // доллары (parseFloat("99.00") = 99), а контракт объявляет минорные
+    // единицы. Пока показ печатал число как есть, ссылки из панели выглядели
+    // верно, а из API — в сто раз дороже; починка показа поменяла местами,
+    // кто врёт. Здесь закреплено, что обе стороны считают одинаково.
+    for (const [валюта, ожидание] of [
+      ["USD", "$99.00"],
+      ["EUR", "€99.00"],
+    ] as const) {
+      expect(toMinorUnits(99, валюта)).toBe(9900);
+      expect(
+        formatPaymentAmount(toMinorUnits(99, валюта), валюта),
+        `круговой ход ${валюта} потерял цену`
+      ).toBe(ожидание);
+    }
+    // У знака без дробной части круг тоже должен сходиться.
+    expect(toMinorUnits(99, "AEC")).toBe(99);
+    expect(formatPaymentAmount(toMinorUnits(99, "AEC"), "AEC")).toContain("99");
+  });
+
+  it("панель ссылок не шлёт в API сырую сумму", () => {
+    const page = readFileSync(
+      join(ROOT, "app", "payments", "links", "page.tsx"),
+      "utf8"
+    );
+    // Контроль прибора: файл прочитан и это действительно панель ссылок.
+    expect(page.includes("api/payments/v1/links"), "прочитан не тот файл").toBe(true);
+    expect(
+      page.includes("amount: local.amount,"),
+      "панель снова шлёт доллары туда, где ждут минорные единицы"
+    ).toBe(false);
   });
 
   it("служебное слово вместо валюты не даёт NaN на цене", () => {

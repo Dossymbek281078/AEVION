@@ -1,5 +1,6 @@
 "use client";
 
+import { channelNow } from "@/lib/channelNow";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -453,7 +454,7 @@ export default function PricingPage() {
     }
     // Без метки покупка приходит в отчёт как пришедшая ниоткуда: обработчик
     // оплаты читает url_params[channel], но эта ссылка его не передавала.
-    setChannel(channelFrom(params.get("c") ?? undefined));
+    setChannel(channelNow());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 

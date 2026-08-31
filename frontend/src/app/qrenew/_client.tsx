@@ -1,5 +1,6 @@
 "use client";
 
+import { channelNow } from "@/lib/channelNow";
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
@@ -59,7 +60,7 @@ export default function QRenewClient() {
   // бы с серверной разметкой.
   const [channel, setChannel] = useState<string | null>(null);
   useEffect(() => {
-    setChannel(channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined));
+    setChannel(channelNow());
   }, []);
   const [vals, setVals] = useState<Record<string, string>>({});
   const [bio, setBio] = useState<BioResult | null>(null);

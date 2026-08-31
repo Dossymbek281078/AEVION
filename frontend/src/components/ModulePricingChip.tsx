@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
-import { channelFrom, withChannel } from "@/lib/products";
+import { withChannel } from "@/lib/products";
+import { channelNow } from "@/lib/channelNow";
 
 // Compact pricing chip + one-click buy for module pages. Mirrors the REAL GTM
 // tiers (Lite / Medium / Full) from /api/pricing — the same prices the checkout
@@ -136,7 +137,7 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
         // url_params[channel]. Не хватало отправителя, и покупка приходила в
         // отчёт ниоткуда. withChannel сам знает обе кассы и подставляет нужную
         // форму параметра.
-        const mark = channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined);
+        const mark = channelNow();
         window.location.href = withChannel(j.url, mark, "module-chip");
         return; // keep the spinner while the browser navigates away
       }

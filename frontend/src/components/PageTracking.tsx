@@ -1,5 +1,6 @@
 "use client";
 
+import { channelNow } from "@/lib/channelNow";
 import { useEffect, useRef } from "react";
 import { track } from "@/lib/track";
 import { channelFrom } from "@/lib/products";
@@ -39,8 +40,12 @@ export function PageTracking({ page }: { page: string }) {
     //                     по росту этой доли 21.08 заметили, что для Дзена и
     //                     VK не заведены метки и продажи с них терялись.
     //                     Какая именно метка пришла, видно в поле path рядом.
+    // Через общий источник: иначе просмотр после перехода без метки скажет
+    // «прямой заход», а покупка в той же вкладке — «из TikTok». Два наших
+    // ответа об одном человеке разошлись бы, и воронка перестала бы сходиться.
     const raw = new URLSearchParams(window.location.search).get("c");
-    const channel = raw ? (channelFrom(raw) ?? "unknown") : "direct";
+    const известный = channelNow();
+    const channel = известный ?? (raw ? "unknown" : "direct");
 
     // В dev React вызывает эффект дважды. Без защёлки сводка показывала бы
     // вдвое больше посещений на пустом месте.

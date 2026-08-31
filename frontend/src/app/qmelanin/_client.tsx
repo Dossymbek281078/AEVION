@@ -1,5 +1,6 @@
 "use client";
 
+import { channelNow } from "@/lib/channelNow";
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
@@ -70,7 +71,7 @@ export default function QMelaninClient() {
   // бы с серверной разметкой.
   const [channel, setChannel] = useState<string | null>(null);
   useEffect(() => {
-    setChannel(channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined));
+    setChannel(channelNow());
   }, []);
   const [values, setValues] = useState<Record<string, string>>({});
   const [plan, setPlan] = useState<Plan | null>(null);

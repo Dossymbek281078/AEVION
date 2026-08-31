@@ -54,6 +54,10 @@ interface EventsSummary {
   checkoutBySource?: Record<string, number>;
   /** Канал привлечения из метки ?c= (BuyLink кладёт его в meta.channel). */
   checkoutByChannel?: Record<string, number>;
+  purchaseByChannel?: Record<string, number>;
+  purchaseRevenueByChannel?: Record<string, number>;
+  purchaseCount?: number;
+  purchaseWithKnownAmount?: number;
   byIndustry: Record<string, number>;
   /** Канал раздачи (tt / ig / yt …) — по нему видно, какая раздача привела людей. */
   byChannel?: Record<string, number>;
@@ -516,6 +520,27 @@ export default function PricingAdminPage() {
                 title={t("pricing.admin.breakdown.checkoutByChannel")}
                 data={summary.checkoutByChannel ?? {}}
                 accent="#7c3aed"
+              />
+              {/* Панели выше считают НАЧАЛА оплаты. Этого мало, чтобы решать,
+                  куда тратить: канал приводит много заходов в кассу и ноль
+                  покупок — и выглядит лучшим. Общий срез «по каналам» ещё
+                  хуже: он складывает просмотры, нажатия и заходы, то есть
+                  вознаграждает трафик, а не выручку.
+
+                  Ниже — то, чем платят. Выручка отдельно от счёта покупок и
+                  честно подписана: у возврата PayBox в адрес уходит ref, а не
+                  сумма, поэтому известна она не у всех. Сколько покупок с
+                  известной суммой — в подписи, иначе частичная выручка
+                  читается как полная и молча занижает канал. */}
+              <Breakdown
+                title={t("pricing.admin.breakdown.purchaseByChannel")}
+                data={summary.purchaseByChannel ?? {}}
+                accent="#0f766e"
+              />
+              <Breakdown
+                title={`${t("pricing.admin.breakdown.purchaseRevenueByChannel")} · ${summary.purchaseWithKnownAmount ?? 0}/${summary.purchaseCount ?? 0}`}
+                data={summary.purchaseRevenueByChannel ?? {}}
+                accent="#166534"
               />
               {/* Их две панели выше считают НАЧАЛА ОПЛАТЫ. Эта — клики по кнопке
                   «купить» в разрезе товаров: при 26 товарах и трёх продажах за

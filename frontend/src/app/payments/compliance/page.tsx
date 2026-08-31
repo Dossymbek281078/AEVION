@@ -48,11 +48,11 @@ const KYC_TIERS: {
 ];
 
 const SANCTIONS_LISTS = [
-  { id: "ofac", label: "OFAC SDN", country: "US", lastSync: "2026-04-28 06:00" },
-  { id: "eu", label: "EU consolidated list", country: "EU", lastSync: "2026-04-28 06:05" },
-  { id: "un", label: "UN Security Council", country: "UN", lastSync: "2026-04-28 06:10" },
-  { id: "uk", label: "UK HMT", country: "UK", lastSync: "2026-04-28 06:12" },
-  { id: "kz", label: "KZ AFM", country: "KZ", lastSync: "2026-04-28 06:18" },
+  { id: "ofac", label: "OFAC SDN", country: "US" },
+  { id: "eu", label: "EU consolidated list", country: "EU" },
+  { id: "un", label: "UN Security Council", country: "UN" },
+  { id: "uk", label: "UK HMT", country: "UK" },
+  { id: "kz", label: "KZ AFM", country: "KZ" },
 ];
 
 type VatRow = {
@@ -397,21 +397,22 @@ export default function CompliancePage() {
                     style={{
                       padding: "2px 8px",
                       borderRadius: 5,
-                      background: "rgba(5,150,105,0.12)",
-                      color: "#047857",
+                      background: "rgba(217,119,6,0.12)",
+                      color: "#b45309",
                       fontSize: 10,
                       fontWeight: 800,
                       textTransform: "uppercase",
                     }}
                   >
-                    Synced
+                    Not connected
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: "#64748b" }}>
                   Jurisdiction: {s.country}
                 </div>
                 <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                  Last sync: {s.lastSync}
+                  Screening is not wired to this list yet — no automated check
+                  runs against it today.
                 </div>
               </div>
             ))}

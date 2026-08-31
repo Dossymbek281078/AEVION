@@ -32,6 +32,7 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import { emitEcosystemEvent } from "../lib/ecosystemEvents";
 import { safeErrorText } from "../lib/safeError";
 import { anchorSummary } from "../lib/opentimestamps/anchorSummary";
+import { queryDate } from "../lib/queryDate";
 const captureBureauError = makeServiceCapture("bureau");
 
 const bureauEmbedRateLimit = rateLimit({
@@ -2048,15 +2049,19 @@ bureauRouter.get("/admin/waitlist", async (req, res) => {
 
   // Курсор проверяется ДО подстановки: строка произвольного вида уходила бы в
   // SQL как время и роняла запрос пятисоткой вместо честного 400.
-  const beforeRaw = String(req.query.before || "").trim();
-  let before: Date | null = null;
-  if (beforeRaw) {
-    const t = Date.parse(beforeRaw);
-    if (!Number.isFinite(t)) {
-      return res.status(400).json({ error: "invalid_before", hint: "ISO-8601 timestamp" });
-    }
-    before = new Date(t);
+  // ⚠️ 31.08.2026: здесь стоял свой Date.parse. Мусор он отклоняет, но
+  // `?before=1` пропускает как 2001 год, а `?before=2026` — как 1 января.
+  // Это не пятисотка и не ошибка: человек получает ТИХО неверную выборку и
+  // не узнаёт об этом. Платформенный queryDate проверяет ФОРМУ до разбора.
+  //
+  // Сторож queryDateGuard требовал именно его, и он был прав — я сперва
+  // прочитал его красное как ложную тревогу, потому что проверка тут ЕСТЬ.
+  // «Проверка есть» и «проверка не слабее платформенной» — разные утверждения.
+  const beforeIso = queryDate(req.query.before);
+  if (beforeIso === undefined) {
+    return res.status(400).json({ error: "invalid_before", hint: "ISO-8601 timestamp" });
   }
+  const before: Date | null = beforeIso ? new Date(beforeIso) : null;
 
   const args: unknown[] = [];
   const conds: string[] = [];

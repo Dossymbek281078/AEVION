@@ -431,6 +431,29 @@ const GK="aevion_chess_games_v1";
 function loadGames():SavedGame[]{try{return JSON.parse(localStorage.getItem(GK)||"[]")}catch{return[]}}
 function saveGame(g:SavedGame){try{const all=loadGames();all.unshift(g);if(all.length>200)all.length=200;localStorage.setItem(GK,JSON.stringify(all))}catch{}}
 
+/**
+ * Досохранить разбор в уже записанную партию.
+ *
+ * Партия кладётся в историю В МОМЕНТ конца, а анализ считается через 800 мс
+ * ПОСЛЕ него — значит поле analysis уходило в хранилище пустым ВСЕГДА, хотя
+ * рядом в коде обещано «per-move cp-loss analysis for richer FIDE
+ * calibration». Обещание было, данных не было: калибровка FIDE не получала
+ * качества ходов, а история партий оставалась без разбора.
+ *
+ * Обновляем по id, а не «первую в списке»: пока считался анализ, человек мог
+ * начать и закончить ещё одну партию, и разбор лёг бы на чужую.
+ */
+function updateGameAnalysis(id: string, entries: {ply:number;quality:string;cpLoss?:number}[]) {
+  try {
+    if (!id || !entries?.length) return;
+    const all = loadGames();
+    const i = all.findIndex(g => g.id === id);
+    if (i < 0) return;
+    all[i] = { ...all[i], analysis: entries };
+    localStorage.setItem(GK, JSON.stringify(all));
+  } catch { /* история — не критичный путь, игру не роняем */ }
+}
+
 /* ═══ Chessy — in-game currency ═══ */
 type ChessyState={v:1;balance:number;lifetime:number;lastDaily?:string;streak:number;welcome:boolean;owned:Record<string,boolean>;ach:Record<string,number>};
 const CK="aevion_chessy_v1";
@@ -3583,7 +3606,7 @@ export default function CyberChessPage(){
         ? analysis.map(a => ({ply: a.move, quality: a.quality, cpLoss: a.cpLoss}))
         : undefined;
       const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name,...(analysisEntries?{analysis:analysisEntries}:{})};
-      saveGame(sg);sSavedGames(loadGames())}
+      saveGame(sg);lastSavedGameIdRef.current=sg.id;sSavedGames(loadGames())}
     return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch,hotseat,dailyState,currentEndgame]);
 
   /* ── F2-phase: centralized CPI update on every game-end ──
@@ -3693,6 +3716,8 @@ export default function CyberChessPage(){
 
   /* ── Auto-analysis at game-end (depth 10, silent — just populates move badges) ── */
   const autoAnalysedRef=useRef<string|null>(null);
+  // id последней записанной партии — чтобы разбор лёг именно в неё
+  const lastSavedGameIdRef=useRef<string|null>(null);
   useEffect(()=>{
     if(!over||hist.length<6)return;
     const fp=`${gameStartTimeRef.current}|auto`;
@@ -3703,6 +3728,15 @@ export default function CyberChessPage(){
       if(!sfR.current?.ready())return;
       try{
         await runAnalysis(10);
+        // Разбор готов — досохраняем его в уже записанную партию: при
+        // сохранении (в момент конца) он ещё не был посчитан.
+        const id=lastSavedGameIdRef.current;
+        if(id){
+          sAnalysis(cur=>{
+            updateGameAnalysis(id,cur.map(a=>({ply:a.move,quality:a.quality,cpLoss:a.cpLoss})));
+            return cur;
+          });
+        }
         // After quick analysis, toast a summary
         // analysis state is updated inside runAnalysis via sAnalysis
       }catch{}

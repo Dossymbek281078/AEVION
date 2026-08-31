@@ -30,23 +30,36 @@ export function суммы(текст: string): string[] {
 }
 
 function словари(): Record<string, Record<string, string>> {
-  const t = readFileSync(ФАЙЛ, "utf8");
-  const границы = [...t.matchAll(/^\s{2}(en|ru|kk):\s*\{/gm)].map((m) => ({
-    яз: m[1],
-    i: m.index as number,
-  }));
+  // ⚠️ Переписано 31.08.2026 при сборке к 10.09.
+  //
+  // Прежняя версия читала src/lib/i18n-data.ts и разбирала в нём блоки
+  // en/ru/kk. Словарь разбит по языкам 10.08 (ради веса страницы: 1.3 МБ из
+  // 2.5 грузились на каждой), блоков там больше нет, и сторож получал пустоту.
+  // То есть проверка «суммы в разных языках не спорят» сравнивала три пустых
+  // словаря и была бы зелёной всегда.
+  //
+  // Разбор ПОЗИЦИОННЫЙ, без регулярок: обратный слэш в этой среде теряется на
+  // границе вызова, и шаблон молча перестаёт совпадать — сегодня это трижды
+  // ломало файлы до состояния «no tests».
+  const dir = join(process.cwd(), "src", "lib", "i18n-lang");
   const out: Record<string, Record<string, string>> = {};
-  for (let k = 0; k < границы.length; k++) {
-    const s = границы[k].i;
-    const e = k + 1 < границы.length ? границы[k + 1].i : t.length;
-    const блок = t.slice(s, e);
-    const пары: Record<string, string> = {};
-    for (const x of блок.matchAll(/"([a-zA-Z0-9._]+)":\s*"([^"]*)"/g)) пары[x[1]] = x[2];
-    out[границы[k].яз] = пары;
+  for (const яз of ["en", "ru", "kk"]) {
+    const текст = readFileSync(join(dir, яз + ".ts"), "utf8");
+    const d: Record<string, string> = {};
+    for (const line of текст.split(String.fromCharCode(10))) {
+      const t = line.trim();
+      if (!t.startsWith('"')) continue;
+      const kEnd = t.indexOf('":');
+      if (kEnd < 1) continue;
+      const key = t.slice(1, kEnd);
+      let val = t.slice(kEnd + 2).trim();
+      if (val.endsWith(",")) val = val.slice(0, -1).trim();
+      if (val.length > 1 && val.startsWith('"') && val.endsWith('"')) d[key] = val.slice(1, -1);
+    }
+    out[яз] = d;
   }
   return out;
 }
-
 describe("суммы согласованы между языками", () => {
   it("разделители тысяч не считаются расхождением", () => {
     // Это и есть та ошибка, на которой я поймал себя при написании.

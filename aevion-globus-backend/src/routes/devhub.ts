@@ -1315,8 +1315,19 @@ async function generateCodeWithAI(
   // A screenshot needs a vision-capable model; the first configured provider
   // may be text-only. Pick honestly or refuse — never silently drop the image.
   let provider = configured[0];
+  let visionChain: typeof configured = [];
   if (images?.length) {
-    const vision = configured.find((pr) => VISION_PROVIDERS.has(pr.id));
+    // Список, а не один: при отказе первого пробуем следующего. До 31.08.2026
+    // здесь стоял find() — брался ПЕРВЫЙ подходящий и только он. При трёх
+    // настроенных ключах запасных не было ни одного, а панель показывала
+    // возможность живой: три ключа означали «любой годится, чтобы включить»,
+    // а не «три запасных на случай отказа».
+    //
+    // Образец взят из этого же файла: у картинок цепочка уже написана, и там
+    // же объяснено почему — отказ одного платного провайдера не должен
+    // ронять всю возможность.
+    visionChain = configured.filter((pr) => VISION_PROVIDERS.has(pr.id));
+    const vision = visionChain[0];
     if (!vision) {
       throw new Error("NO_VISION_PROVIDER: attach-a-screenshot needs ANTHROPIC_API_KEY, GEMINI_API_KEY or OPENAI_API_KEY — none configured");
     }
@@ -1341,7 +1352,24 @@ async function generateCodeWithAI(
   onProgress?.("calling_model");
   let result;
   try {
-    result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+    // Порядок попыток: при картинке — вся цепочка зрячих провайдеров, иначе
+    // один выбранный. Ошибку КАЖДОГО запоминаем: молча съесть их значило бы
+    // потерять причину отказа, а она отличает «кончились деньги» от «ключ
+    // неверный».
+    const attempts: Array<{ provider: string; error: string }> = [];
+    const chain = images?.length && visionChain.length > 0 ? visionChain : [provider];
+    for (const cand of chain) {
+      try {
+        result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+        provider = cand;
+        break;
+      } catch (inner) {
+        attempts.push({ provider: cand.id, error: inner instanceof Error ? inner.message : String(inner) });
+      }
+    }
+    if (!result) {
+      throw new Error("ALL_PROVIDERS_FAILED: " + attempts.map((a) => a.provider + ": " + a.error).join(" | "));
+    }
   } catch (e) {
     if (e instanceof Error && e.message.startsWith("NO_VISION_PROVIDER")) throw e;
     const path = targetFiles[0] || "generated.ts";

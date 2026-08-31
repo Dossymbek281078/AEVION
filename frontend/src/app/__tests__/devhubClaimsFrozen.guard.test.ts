@@ -25,6 +25,26 @@ import { fileURLToPath } from "node:url";
 
 const APPS = join(dirname(fileURLToPath(import.meta.url)), "..", "apps", "page.tsx");
 
+// 🔴 ЕСЛИ ЭТОТ СТОРОЖ ПОКРАСНЕЛ ПОСЛЕ МЕРЖА — НЕ ПРАВЬТЕ СПИСОК.
+//
+// Замер 31.08.2026: две выкаточные ветки несут СТАРЫЕ обещания карточки —
+// «Deploy: Railway · Vercel · Cloudflare Pages» и обещание домена
+// *.aevion.build:
+//
+//   deploy/launch-2026-08-30-chess       4 расхождения с этим списком
+//   deliver/silent-failures-2026-08-28   4 расхождения
+//   merge/devhub-backlog-2026-08-27      0 — там уже починено
+//
+// Оба старых обещания ЛОЖНЫ, и это измерено на проде:
+// GET /api/devhub/studio/capabilities → railway not_available, vercel
+// needs_token, работает одна цель из трёх (pages). Зона aevion.build не
+// делегирована.
+//
+// Значит красный после мержа означает ровно одно: ложное обещание вернулось
+// вместе с чужой стороной файла. Правильная починка — взять НАШУ сторону
+// apps/page.tsx, а не подогнать список под то, что приехало. Подгонка под
+// срок тихо вернёт на карточку за $149/мес обещание, которого мы не
+// выполняем.
 const ПРОВЕРЕНО = [
   "Monaco IDE (VS Code engine)",
   "AI code generation",
@@ -49,6 +69,42 @@ function highlightsOf(src: string, id: string): string[] {
     .filter((l) => l.startsWith('"'))
     .map((l) => l.replace(/^"/, "").replace(/",?$/, ""));
 }
+
+// Заморозка ловит ИЗМЕНЕНИЕ обещания, но не его ЛОЖНОСТЬ: если кто-то поправит
+// и список, и разбор в шапке, сторож промолчит. Одно из шести обещаний
+// проверяемо машинно — числа лимитов, и они живут в бэкенде. Сверяем.
+const BACKEND = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..", "..", "..", "..",
+  "aevion-globus-backend", "src", "routes", "devhub.ts",
+);
+
+describe("числа витрины совпадают с таблицей тарифов", () => {
+  const src = readFileSync(BACKEND, "utf8");
+
+  it("прибор исправен: таблица тарифов найдена и разобрана", () => {
+    // Контроль охвата. Без него пустой разбор дал бы «расхождений нет» —
+    // самый частый вид ложного зелёного.
+    const at = src.indexOf("const TIER_LIMITS");
+    expect(at, "таблица тарифов не найдена — сторож смотрит не туда").toBeGreaterThan(0);
+    expect(src.slice(at, at + 400)).toContain("pro:");
+  });
+
+  it("«50 AI videos · 200 images/mo» — это то, что даёт платный тариф", () => {
+    const at = src.indexOf("const TIER_LIMITS");
+    const pro = src.slice(src.indexOf("pro:", at), src.indexOf("enterprise:", at));
+    const num = (key: string) => {
+      const m = pro.indexOf(key + ":");
+      expect(m, `в тарифе нет ключа ${key}`).toBeGreaterThan(-1);
+      return parseInt(pro.slice(m + key.length + 1).trim(), 10);
+    };
+    const claim = ПРОВЕРЕНО.find((c) => c.includes("videos"));
+    expect(claim, "обещание про числа исчезло из списка").toBeTruthy();
+    const [видео, картинки] = (claim as string).match(/[0-9]+/g)!.map(Number);
+    expect(видео, "витрина обещает не столько видео, сколько даёт тариф").toBe(num("video"));
+    expect(картинки, "витрина обещает не столько картинок, сколько даёт тариф").toBe(num("image"));
+  });
+});
 
 describe("витрина DevHub: обещания заморожены", () => {
   const src = readFileSync(APPS, "utf8");

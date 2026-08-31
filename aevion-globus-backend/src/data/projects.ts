@@ -302,9 +302,9 @@ export const projects: GlobusProject[] = [
   {
     id: "startup-exchange",
     code: "STARTUPX",
-    name: "Startup Exchange — Protected Ideas Marketplace",
+    name: "Startup Exchange — Idea / MVP / Product Marketplace",
     description:
-      "Биржа стартапов: submit идеи → авто-защита через QRight-style SHA-256 → лента → interest от инвесторов + concept board. Privacy by default. MVP 2026-05-15 — /api/startupx.",
+      "Биржа стартапов на трёх уровнях: только идея (доля за вложение в разработку), идея + MVP (доля за вложение в доработку), готовый продукт (выкуп целиком или доли). У каждой заявки — названные условия сделки, бесплатный детерминированный разбор с рыночным диапазоном цены и SHA-256 отпечаток авторства. /api/startupx.",
     kind: "product",
     status: "live",
     priority: 2,

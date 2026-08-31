@@ -31,9 +31,14 @@
  * with the old prices, the dashboard price on each variant MUST be updated
  * (or a new variant created and the env var repointed) — this file only
  * changes what data/pricing.ts *displays/computes*, it cannot change what an
- * already-configured LS variant actually charges. Same applies to
- * `app_cyberchess`'s variant if it's live: cyberchess's addonMonthly moved
- * 19 → 9.99. There is currently no `tier_pro_*` reference for the Universe
+ * already-configured LS variant actually charges.
+ *
+ * ПОПРАВКА 28.08.2026. Здесь стояло «cyberchess's addonMonthly moved 19 → 9.99»
+ * — это неверно и стоило мне поисков несуществующего расхождения за два дня до
+ * запуска шахмат. 9.99 принадлежит `qcoreai` (data/pricing.ts), у cyberchess
+ * там же стоит 19. Проверено по всей цепочке: products.ts — 19, pricing.ts —
+ * 19, витрина /shop показывает «$19/мес», касса Lemon Squeezy берёт
+ * «$19.00 billed every month». Расхождения нет. There is currently no `tier_pro_*` reference for the Universe
  * tier — a "pro" checkout falls through to Gumroad/stub, not LS, until one
  * is added here.
  *

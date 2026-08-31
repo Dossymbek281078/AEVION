@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { BuyLink } from "@/components/BuyLink";
-import { apiUrl } from "@/lib/apiBase";
+import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import {
   SUBSCRIPTIONS,
   GUIDES,
@@ -119,32 +119,6 @@ export default async function ShopPage({
   // чекаута, иначе переход «страница профиля → магазин → покупка» теряет источник
   // ровно там, где человек и решает платить.
   const channel = channelFrom((await searchParams).c);
-
-  // Честно ли мы предупреждаем о том, чем можно заплатить.
-  //
-  // Замер 29.08.2026: настроены только lemonsqueezy и gumroad, а они берут
-  // карты через Stripe. Карты РФ там не проходят — это записано ещё 14.08
-  // замером из Астаны. При этом ни одна страница воронки об этом не говорила,
-  // хотя /pricing умеет: там ответ ручки решает, какую подпись показать.
-  // Человек доходил до кассы и упирался в стену без предупреждения.
-  //
-  // Спрашиваем на сервере: страница и так серверная, лишнего запроса из
-  // браузера не нужно. НЕ ЗНАЕМ — молчим: утверждать про чужие карты, не
-  // проверив, хуже, чем не сказать ничего.
-  let kztReady: boolean | null = null;
-  try {
-    const r = await fetch(apiUrl("/api/pricing/checkout/healthz"), {
-      signal: AbortSignal.timeout(4000),
-      next: { revalidate: 300 },
-    });
-    if (r.ok) {
-      const j = await r.json();
-      kztReady = Boolean(j?.providers?.paybox?.configured);
-    }
-  } catch {
-    // Состояние неизвестно — строка не появится. Страницу не роняем: магазин
-    // должен работать, даже если ручка состояния молчит.
-  }
   // Язык объявляется на самом блоке: в корневом макете стоит lang="en",
   // а витрина русская — замер на проде 28.08.2026 дал 2634 русских буквы
   // против 1028 латинских. Несоответствие браузер лечит машинным переводом
@@ -188,13 +162,7 @@ export default async function ShopPage({
           channel={channel}
         />
 
-        {kztReady === false && (
-          <p style={styles.foot}>
-            Оплата картой через международные платёжные системы. Карты, выпущенные
-            в России, там не проходят — оплата в тенге и местными картами пока
-            недоступна.
-          </p>
-        )}
+        <PaymentReachNotice style={styles.foot} />
 
         <p style={styles.foot}>
           Материалы о здоровье и долголетии — образовательные и wellness-материалы. Не предназначены

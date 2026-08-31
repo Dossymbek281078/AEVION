@@ -5,6 +5,7 @@ import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
 import { productById, channelFrom, withChannel } from "@/lib/products";
 import { LongevityTool } from "./_tool";
+import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 // /en/longevity — англоязычный разбор протокола, бесплатно и целиком.
 //
@@ -375,6 +376,12 @@ export default async function EnLongevityPage({
             />
           </div>
         </section>
+
+        {/* Payment-reach notice. Silent unless there is something to warn
+            about: it asks checkout/healthz and renders only when tenge payment
+            is unavailable. lang="en" — the copy must match the page, otherwise
+            we introduce the very language mismatch we fix elsewhere. */}
+        <PaymentReachNotice style={styles.foot} lang="en" />
 
         <p style={styles.foot}>
           Educational and wellness material. Not diagnosis, not treatment. Target

@@ -110,7 +110,6 @@ const OZHIDAYUT = new Set([
   "app/smeta-trainer/drawings-practice/underwater-tunnels-subsea/page.tsx",
   "app/smeta-trainer/exam-analytics/page.tsx",
   "app/smeta-trainer/exam-journal/page.tsx",
-  "app/startup-exchange/page.tsx",
   "app/status/page.tsx",
   "app/studio/page.tsx",
   "app/veilnetx/ledger/page.tsx",

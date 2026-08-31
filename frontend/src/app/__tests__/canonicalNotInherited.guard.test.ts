@@ -107,10 +107,6 @@ const KEY = "canonical:";
 // `qright/transparency` (собирает метаданные функцией, нужен generateMetadata).
 const INHERITING_TODAY = new Set([
     "awards/entry/[entryId]",
-    "bank/api",
-    "bank/badge",
-    "bank/explore",
-    "bank/leaderboard",
     "bank/share/[handle]",
     "bureau/author/[slug]",
     "bureau/cert/[certId]",

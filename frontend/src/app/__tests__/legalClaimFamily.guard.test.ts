@@ -42,12 +42,7 @@ const DISCLAIMERS = [
 /** Известные места С ОБЕЩАНИЕМ на 29.08.2026. Список обязан только сокращаться. */
 const BASELINE = [
   "app/bureau/page.tsx",
-  "app/demo/opengraph-image.tsx",
-  "app/demo/page.tsx",
-  "app/developers/page.tsx",
-  "app/help/page.tsx",
   "app/terms/page.tsx",
-  "data/demoDeep.ts",
   "data/pitchModel.ts",
 ];
 

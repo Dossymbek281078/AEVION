@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { fetchOrPaywall } from "@/lib/paywall";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import QSkywayClient from "./_client";
+import { PageTracking } from "@/components/PageTracking";
 
 const TITLE = "QSkyway — navigation layer for the urban sky";
 const DESCRIPTION =
@@ -36,6 +37,23 @@ export const metadata: Metadata = {
 
 export default async function Page() {
   const r = await fetchOrPaywall("/api/qskyway/health");
-  if ("paywall" in r) return <PaywallScreen payload={r.paywall} backHref="/modules" />;
-  return <QSkywayClient />;
+  // Считаем ОБЕ ветки. Посещение есть посещение: человек, пришедший с ролика
+  // по /go?c=yt и упёршийся в платную стену, пришёл на страницу так же, как
+  // тот, кто увидел модуль. Считай мы только вторую — число называлось бы
+  // «посещения qskyway», а означало бы «посещения теми, у кого есть доступ»,
+  // и канал выглядел бы слабее, чем он есть.
+  if ("paywall" in r) {
+    return (
+      <>
+        <PageTracking page="qskyway" />
+        <PaywallScreen payload={r.paywall} backHref="/modules" />
+      </>
+    );
+  }
+  return (
+    <>
+      <PageTracking page="qskyway" />
+      <QSkywayClient />
+    </>
+  );
 }

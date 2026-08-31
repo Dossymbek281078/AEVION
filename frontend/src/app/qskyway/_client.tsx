@@ -1557,6 +1557,7 @@ export default function QSkywayClient() {
             // посетитель слышал от читалки «Получить ранний доступ».
             // Поймано замером отрисованной страницы, в исходнике не видно.
             buttonLabel={t("qskyway.wait.cta")}
+                promise={t("qskyway.wait.promise")}
           />
         </div>
       </div>

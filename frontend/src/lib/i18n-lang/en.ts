@@ -7387,6 +7387,7 @@ const en: Record<string, string> = {
   "qskyway.wait.cta": "Get early access",
   "qskyway.wait.desc": "We will write when the module opens. No newsletter: the address is only used to tell you it is ready.",
   "qskyway.wait.title": "Write to me when corridors open in my city",
+  "qskyway.wait.promise": "One email when the module launches. Unsubscribe with one link in every email.",
 };
 
 export default en;

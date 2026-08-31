@@ -707,11 +707,17 @@ async function main() {
     process.exit(failed === 0 ? 0 : 1);
   }
   let okCount = 0, conflict = false;
+  // Последний ответ держим ВНЕ цикла: 31.08 подсказка про предел частоты
+  // читала `s.status`, а `const s` жила внутри цикла — ReferenceError,
+  // причём КАЖДЫЙ раз, потому что аргументы считаются до вызова assert.
+  // Прогон умирал здесь, и 14 утверждений хвоста не выполнялись никогда.
+  let lastStatus = 0;
   for (let i = 0; i < 5; i++) {
     const s = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T09:00:00Z", t1: "2026-07-11T09:03:00Z", holder: "op" + i });
+    lastStatus = s.status;
     if (s.status === 201) okCount++; else if (s.status === 409) conflict = true;
   }
-  assert(okCount === 4, "slot market books up to capacity" + rateLimitHint(s.status), `booked=${okCount}`);
+  assert(okCount === 4, "slot market books up to capacity" + rateLimitHint(lastStatus), `booked=${okCount}`);
   assert(conflict, "slot market rejects over-capacity (409)");
   const late = await jpost("/api/qskyway/slots", { routeId: rid, t0: "2026-07-11T10:00:00Z", t1: "2026-07-11T10:03:00Z", holder: "late" });
   assert(late.status === 201, "non-overlapping window bookable", `status=${late.status}`);

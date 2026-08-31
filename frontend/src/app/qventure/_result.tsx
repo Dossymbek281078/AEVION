@@ -418,6 +418,9 @@ interface ComparablesData {
 function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: string }) {
   const [data, setData] = useState<ComparablesData | null>(null);
   const [loading, setLoading] = useState(true);
+  // Отказ запроса и «данных нет» — РАЗНЫЕ вещи. Без этого флага раздел
+  // просто исчезал, и человек читал это как «сравнимых сделок не бывает».
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -425,7 +428,7 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
     fetch(apiUrl(`/api/qventure/comparables?sector=${encodeURIComponent(sectorLabel)}&stage=${encodeURIComponent(stage)}`))
       .then((r) => r.json())
       .then((j) => { if (!cancelled) setData(j?.ok ? j.data : null); })
-      .catch(() => { if (!cancelled) setData(null); })
+      .catch(() => { if (!cancelled) { setData(null); setFailed(true); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [sectorLabel, stage]);
@@ -435,6 +438,18 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
       <div style={SECTION}>
         <h2 style={H2}>Recent comparable rounds</h2>
         <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>Searching for recent {sectorLabel} · {stage} rounds…</div>
+      </div>
+    );
+  }
+  // Отказ показываем строкой, а не исчезновением раздела: пропавший блок
+  // читается как «таких сделок не бывает», то есть как факт о рынке.
+  if (failed) {
+    return (
+      <div style={SECTION}>
+        <h2 style={H2}>Recent comparable rounds</h2>
+        <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>
+          Could not load comparable rounds — this does not mean there are none.
+        </div>
       </div>
     );
   }
@@ -510,6 +525,9 @@ function ordinal(n: number): string {
 function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: string; sectorLabel: string; stage: string; score: number }) {
   const [data, setData] = useState<BenchmarkData | null>(null);
   const [loading, setLoading] = useState(true);
+  // Отказ запроса и «данных нет» — РАЗНЫЕ вещи. Без этого флага раздел
+  // просто исчезал, и человек читал это как «сравнимых сделок не бывает».
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -517,11 +535,21 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
     fetch(apiUrl(`/api/qventure/benchmark?sector=${encodeURIComponent(sectorId)}&stage=${encodeURIComponent(stage)}&score=${encodeURIComponent(String(score))}`))
       .then((r) => r.json())
       .then((j) => { if (!cancelled) setData(j?.ok ? j.data : null); })
-      .catch(() => { if (!cancelled) setData(null); })
+      .catch(() => { if (!cancelled) { setData(null); setFailed(true); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [sectorId, stage, score]);
 
+  if (failed) {
+    return (
+      <div style={SECTION}>
+        <h2 style={H2}>QVenture benchmark</h2>
+        <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>
+          Could not load the benchmark — this is a loading failure, not a verdict.
+        </div>
+      </div>
+    );
+  }
   if (loading || !data) return null;
 
   const header = (

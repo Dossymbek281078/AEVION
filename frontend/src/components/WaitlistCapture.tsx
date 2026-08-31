@@ -21,6 +21,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { channelFrom } from "@/lib/products";
 
 type Status = "idle" | "sending" | "done" | "error";
 
@@ -115,10 +116,25 @@ export function WaitlistCapture({
     setStatus("sending");
     setMessage("");
     try {
+      const канал =
+        typeof window === "undefined"
+          ? null
+          : channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined);
       const r = await fetch(apiUrl("/api/constitution/waitlist/subscribe"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: value, source: source.slice(0, 60) }),
+        body: JSON.stringify({
+          email: value,
+          source: source.slice(0, 60),
+          // Канал привлечения — ОТДЕЛЬНО от source. source отвечает «с какой
+          // страницы», channel — «кто привёл». До 31.08.2026 второго не было
+          // вовсе: про покупки мы знали канал, а про подписчиков — нет, хотя
+          // список для запуска и есть главный актив воронки.
+          //
+          // Через channelFrom, а не сырым значением: чужое ?c= из посторонней
+          // ссылки в учёт не поедет, и словарь останется тот же, что у покупок.
+          ...(канал ? { channel: канал } : {}),
+        }),
       });
       if (r.ok) {
         setStatus("done");

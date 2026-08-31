@@ -159,7 +159,7 @@ export function LevelHome() {
             <div className="mt-4 flex gap-2">
               <Link
                 href={`/smeta-trainer/level/${lessonsState.nextLevel}#lesson-${encodeURIComponent(lessonsState.unread[0]?.id ?? "")}`}
-                className="flex-1 flex items-center gap-3 bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white rounded-lg p-3 shadow-sm"
+                className="flex-1 min-w-0 flex items-center gap-3 bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white rounded-lg p-3 shadow-sm"
               >
                 <div className="text-2xl">▶️</div>
                 <div className="flex-1 min-w-0">

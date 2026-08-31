@@ -1109,3 +1109,23 @@ button:focus:not(:focus-visible) {
   .cc-rush-hud { font-size: 20px !important; }
   .cc-rush-streak { font-size: 28px !important; }
 }
+
+/* Телефон: двухколоночная раскладка биржи стартапов не помещается.
+   Жёсткая колонка 360px при контейнере 350px распирала документ до 566px —
+   замер 31.08.2026. На десктопе пропорции не меняются: правило действует
+   только ниже 720px. */
+@media (max-width: 720px) {
+  [data-se-layout] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Телефон: блоки-таблички из нескольких колонок складываем в одну.
+   `minmax(0, 1fr)` спасает сетку от распирания, но текст внутри
+   ячейки шириной 45px всё равно не влезает — это обмен одной
+   поломки на другую. Замер 31.08.2026. */
+@media (max-width: 720px) {
+  [data-stack-mobile] {
+    grid-template-columns: 1fr !important;
+  }
+}

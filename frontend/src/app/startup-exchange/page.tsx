@@ -199,7 +199,12 @@ export default function StartupExchangePage() {
         )}
 
         {/* Layout */}
+        {/* Жёсткая колонка 360px не помещается в 350px контейнера на
+            телефоне и распирала страницу до 566px. Пропорции десктопа не
+            трогаю — страница продающая; перенос в одну колонку делает
+            правило под ширину телефона в globals.css. */}
         <div
+          data-se-layout=""
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 360px",

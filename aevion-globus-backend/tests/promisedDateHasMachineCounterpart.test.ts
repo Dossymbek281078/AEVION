@@ -1,0 +1,83 @@
+import { describe, test, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/**
+ * Обещанная человеку дата имеет машинного двойника.
+ *
+ * Письмо подтверждения подписки говорит «Открываем по плану 10 сентября». Это
+ * утверждение о БУДУЩЕМ, и оно становится ложным само по себе, без единой
+ * правки кода — просто когда день наступит и пройдёт. Ни один тест такого не
+ * ловит: сегодня текст верен.
+ *
+ * У шахмат двойник есть — `liveFrom: Date.UTC(...)` плюс `isLiveNow()`, и текст
+ * переключается по дате. В комментарии там записано, почему это не украшение:
+ * 30.08 дата сделала письмо ложным, подписчик получал «уже открыт» в день,
+ * когда запуска не было. У остальных четырёх модулей двойника нет вовсе.
+ *
+ * Замер 31.08.2026 по всем живым веткам (HEAD, probe/build-2026-09-10,
+ * deliver/all-work-2026-08-20, launch/2026-08-30) — одинаково: `liveFrom` один,
+ * записей с обещанной датой пять.
+ *
+ * ⚠️ Это ХРАПОВИК, а не запрет. Правку самих дат делает окно запуска: файл
+ * спорный, и «когда открываем» — их решение, не моё. Задача сторожа — не дать
+ * появиться НОВОМУ обещанию с датой без машинного двойника и показывать, что
+ * долг не растёт. Список обязан только сокращаться.
+ *
+ * Как снять запись из списка: дать модулю машинную дату и переключать по ней
+ * текст. НЕ на «уже открыт» — дата в календаре не значит, что модуль открылся;
+ * честное третье состояние звучит как «обещали такого-то числа, откроем —
+ * напишем».
+ */
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SRC = join(HERE, "..", "src", "lib", "constitutionBrevo.ts");
+
+/** Известные обещания без машинной даты на 31.08.2026. Список обязан таять. */
+const KNOWN_WITHOUT_MACHINE_DATE = ["bureau", "qright", "devhub", "multichat"];
+
+/** Записи вида `prefix: "x", name: "...", plan: "10 сентября"`. */
+function promises(code: string): string[] {
+  return [...code.matchAll(/prefix:\s*"([a-z-]+)",\s*name:\s*"[^"]+",\s*plan:\s*"([^"]+)"/g)]
+    .map((m) => m[1]);
+}
+
+/** Записи, у которых есть машинная дата в пределах своего блока. */
+function withMachineDate(code: string): string[] {
+  return [...code.matchAll(/prefix:\s*"([a-z-]+)"[\s\S]{0,1200}?(?:liveFrom|planUtc):\s*Date\.UTC\(/g)]
+    .map((m) => m[1]);
+}
+
+describe("обещанная дата имеет машинного двойника", () => {
+  const code = readFileSync(SRC, "utf8");
+
+  test("контроль: обещания и машинные даты вообще находятся", () => {
+    // Без этого «новых долгов нет» могло бы значить «я не умею искать».
+    const p = promises(code);
+    const m = withMachineDate(code);
+    expect(p.length, `обещаний с датой найдено: ${p.join(", ")}`).toBeGreaterThanOrEqual(4);
+    expect(m, "прибор не видит машинную дату там, где она ТОЧНО есть").toContain("cyberchess");
+  });
+
+  test("новых обещаний без машинной даты не появилось", () => {
+    const machine = new Set(withMachineDate(code));
+    const naked = promises(code).filter((p) => !machine.has(p));
+    const fresh = naked.filter((p) => !KNOWN_WITHOUT_MACHINE_DATE.includes(p));
+    expect(
+      fresh,
+      "модулю обещают дату в письме, а переключить текст по ней нечем: " +
+        "после этого дня письмо будет звать в будущее дату из прошлого",
+    ).toEqual([]);
+  });
+
+  test("храповик не протух: всё, что в списке, всё ещё без машинной даты", () => {
+    const machine = new Set(withMachineDate(code));
+    const naked = new Set(promises(code).filter((p) => !machine.has(p)));
+    const stale = KNOWN_WITHOUT_MACHINE_DATE.filter((p) => !naked.has(p));
+    expect(
+      stale,
+      `уже с машинной датой, убрать из списка: ${stale.join(", ")}`,
+    ).toEqual([]);
+  });
+});

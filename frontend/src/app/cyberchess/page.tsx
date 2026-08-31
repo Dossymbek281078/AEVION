@@ -3615,7 +3615,7 @@ export default function CyberChessPage(){
         ? analysis.map(a => ({ply: a.move, quality: a.quality, cpLoss: a.cpLoss}))
         : undefined;
       const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name,...(analysisEntries?{analysis:analysisEntries}:{})};
-      saveGame(sg);lastSavedGameIdRef.current=sg.id;sSavedGames(loadGames())}
+      saveGame(sg);lastSavedGameIdRef.current={id:sg.id,fp:gameStartTimeRef.current};sSavedGames(loadGames())}
     return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch,hotseat,dailyState,currentEndgame]);
 
   /* ── F2-phase: centralized CPI update on every game-end ──
@@ -3726,7 +3726,21 @@ export default function CyberChessPage(){
   /* ── Auto-analysis at game-end (depth 10, silent — just populates move badges) ── */
   const autoAnalysedRef=useRef<string|null>(null);
   // id последней записанной партии — чтобы разбор лёг именно в неё
-  const lastSavedGameIdRef=useRef<string|null>(null);
+  const lastSavedGameIdRef=useRef<{id:string;fp:number}|null>(null);
+  // Конец партии НЕ ходом — сдача, ничья по договорённости, падение флага.
+  // saveGame зовётся только из обработчика хода, поэтому такие партии в
+  // историю не попадали вовсе: ни в список, ни в калибровку силы. Замерено на
+  // боевой сборке 31.08.2026 — сдался, партии в истории нет.
+  useEffect(()=>{
+    if(!over||!hist.length)return;
+    const zap=lastSavedGameIdRef.current;
+    if(zap&&zap.fp===gameStartTimeRef.current)return; // уже сохранена ходом
+    const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
+    const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist],result:over,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as SavedGame["category"],opening:currentOpening?.name};
+    saveGame(sg);lastSavedGameIdRef.current={id:sg.id,fp:gameStartTimeRef.current};sSavedGames(loadGames());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[over]);
+
   useEffect(()=>{
     if(!over||hist.length<6)return;
     const fp=`${gameStartTimeRef.current}|auto`;
@@ -3739,7 +3753,10 @@ export default function CyberChessPage(){
         await runAnalysis(10);
         // Разбор готов — досохраняем его в уже записанную партию: при
         // сохранении (в момент конца) он ещё не был посчитан.
-        const id=lastSavedGameIdRef.current;
+        const zap=lastSavedGameIdRef.current;
+        // Только если запись принадлежит ЭТОЙ партии: иначе разбор ляжет на
+        // чужую строку истории и молча затрёт её.
+        const id=zap&&zap.fp===gameStartTimeRef.current?zap.id:null;
         if(id){
           sAnalysis(cur=>{
             updateGameAnalysis(id,cur.map(a=>({ply:a.move,quality:a.quality,cpLoss:a.cpLoss})));

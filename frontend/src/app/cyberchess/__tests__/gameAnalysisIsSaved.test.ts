@@ -17,7 +17,7 @@ const KOD = bezKommentariev(readFileSync(join(__dirname, "..", "page.tsx"), "utf
 
 describe("разбор доезжает до сохранённой партии", () => {
   it("id записанной партии запоминается", () => {
-    expect(KOD).toMatch(/saveGame\(sg\);\s*lastSavedGameIdRef\.current\s*=\s*sg\.id/);
+    expect(KOD).toMatch(/saveGame\(sg\);\s*lastSavedGameIdRef\.current\s*=\s*\{id:sg\.id,fp:gameStartTimeRef\.current\}/);
   });
 
   it("досохранение идёт по id, а не по «первой в списке»", () => {

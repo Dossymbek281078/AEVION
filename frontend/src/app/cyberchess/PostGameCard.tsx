@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from "react";
 import { postGameSummary, odnaFraza, type PlyAnalysis } from "./postGameSummary";
 import { ccPlural } from "./ccPlural";
 
@@ -25,6 +26,40 @@ export default function PostGameCard({
   onPodrobnee?: () => void;
 }) {
   const s = postGameSummary(hist, analysis, pCol);
+
+  /*
+   * Сколько ждать разбор, прежде чем сказать честно, что его не будет.
+   *
+   * Замер на боевой сборке 31.08.2026: сдался в партии — карточка осталась на
+   * «Разбираю партию… через пару секунд» НАВСЕГДА. Разбор запускается в
+   * эффекте страницы и молча не запускается, если движок не поднялся, а сама
+   * попытка обёрнута в пустой catch. Для человека это неотличимо от зависания,
+   * и обещание «через пару секунд» превращается во враньё.
+   *
+   * Двенадцать секунд — с запасом: обычный разбор на глубине 10 занимает
+   * одну-три. Ждём ТОЛЬКО пока нечего показать; как только разбор пришёл,
+   * ожидание больше ни на что не влияет.
+   */
+  const [dolgoZhdyom, sDolgoZhdyom] = useState(false);
+  const pusto = s.vsego === 0;
+  useEffect(() => {
+    if (!schitaem || !pusto) { sDolgoZhdyom(false); return; }
+    const t = setTimeout(() => sDolgoZhdyom(true), 12000);
+    return () => clearTimeout(t);
+  }, [schitaem, pusto]);
+
+  // Разбор не пришёл, и ждать его больше нечего.
+  if (schitaem && s.vsego === 0 && dolgoZhdyom) {
+    return (
+      <div style={obolochka} role="status" data-testid="post-game-card-net-razbora">
+        <div style={{ fontWeight: 800, marginBottom: 4 }}>Разбор не получился</div>
+        <div style={{ fontSize: 13, color: "#5d6b7a" }}>
+          Движок не успел разобрать партию. Откройте «Анализ» — там можно
+          запустить разбор вручную.
+        </div>
+      </div>
+    );
+  }
 
   if (schitaem && s.vsego === 0) {
     return (

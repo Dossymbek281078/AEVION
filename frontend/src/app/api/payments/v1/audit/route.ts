@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { attachRateHeaders, gateRequest, withCors } from "../_lib";
+import {
+  readLimit, attachRateHeaders, gateRequest, withCors } from "../_lib";
 import { readAudit } from "../_audit";
 
 export async function GET(req: NextRequest) {
@@ -8,7 +9,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const action = url.searchParams.get("action") ?? undefined;
   const target_id = url.searchParams.get("target_id") ?? undefined;
-  const limit = Number(url.searchParams.get("limit") ?? 100);
+  const limit = readLimit(url.searchParams.get("limit"), { поумолчанию: 100, максимум: 1000 });
 
   const read = await readAudit({ action, target_id, limit });
   if (!read.ok) {

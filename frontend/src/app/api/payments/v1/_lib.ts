@@ -199,6 +199,24 @@ export function signHmac(secret: string, body: string) {
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
+export function readLimit(
+  raw: string | null,
+  опции: { поумолчанию: number; максимум: number }
+): number {
+  // 31.08.2026. Здесь стояло `Number(searchParams.get("limit") ?? 25)` в трёх
+  // местах. На мусоре (`?limit=zzz`) это даёт NaN, а NaN проходит сквозь
+  // Math.min невредимым: `slice(0, NaN)` возвращает ПУСТОЙ список, и ответ
+  // читается как «у вас ничего нет». Для журнала выплат и аудита платежей это
+  // не пустяк: пустой список неотличим от честного ответа.
+  //
+  // Помощник один на всех, чтобы не появилась четвёртая копия: сегодня три
+  // копии форматирования валюты и три сборки адреса возврата разошлись именно
+  // так.
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return опции.поумолчанию;
+  return Math.min(опции.максимум, Math.floor(n));
+}
+
 export function badRequest(message: string, code = 400) {
   return Response.json(
     { error: { type: "invalid_request_error", message } },

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getOrigin, store, withCors } from "../../payments/v1/_lib";
 import { sendReceiptEmail } from "../../payments/v1/_email";
+import { formatPaymentAmount } from "@/lib/paymentAmount";
 
 export async function GET(
   _req: NextRequest,
@@ -77,14 +78,12 @@ export async function POST(
 
   let emailQueued = false;
   if (email) {
-    const amountLabel =
-      link.currency === "AEC"
-        ? `${link.amount.toLocaleString()} AEC`
-        : link.currency === "KZT"
-          ? `${link.amount.toLocaleString("ru-RU")} ₸`
-          : link.currency === "EUR"
-            ? `€${link.amount.toFixed(2)}`
-            : `$${link.amount.toFixed(2)}`;
+    // 31.08.2026. Здесь стояла ТРЕТЬЯ копия форматирования суммы, и она
+    // повторяла тот же дефект, что и страница оплаты: сумма приходит в
+    // МИНОРНЫХ единицах, а печаталась как есть. Покупатель, заплативший
+    // $99.00, получал чек на $9900.00 — цену в сто раз больше. Копий было
+    // три, поэтому они и разошлись; теперь показатель валюты один на всех.
+    const amountLabel = formatPaymentAmount(link.amount, link.currency);
     // ⚠️ 29.08.2026: было `void sendReceiptEmail(...)` и следом БЕЗУСЛОВНОЕ
     // emailQueued = true. То есть результат отправки выбрасывался, а клиенту
     // в ответе уходило `email_queued: true` даже когда письмо не отправлялось

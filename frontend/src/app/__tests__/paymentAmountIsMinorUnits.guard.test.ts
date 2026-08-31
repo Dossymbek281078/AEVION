@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { formatPaymentAmount, minorUnitDigits } from "@/lib/paymentAmount";
 
@@ -38,6 +38,38 @@ describe("сумма на странице оплаты — минорные е�
       expect(minorUnitDigits(мусор), `${мусор} сломал показатель`).toBe(2);
       expect(formatPaymentAmount(9900, мусор)).not.toMatch(/NaN/);
     }
+  });
+
+  it("ни одна платёжная поверхность не форматирует сумму сама", () => {
+    // Копий форматирования было ТРИ, и разошлись они именно поэтому: страница
+    // оплаты и письмо-чек несли один и тот же дефект независимо. Сторож
+    // охраняет класс, а не два известных места.
+    const поверхности: string[] = [];
+    const обойти = (dir: string) => {
+      for (const i of readdirSync(dir, { withFileTypes: true })) {
+        if (i.name === "__tests__") continue;
+        const путь = join(dir, i.name);
+        if (i.isDirectory()) обойти(путь);
+        else if (i.name.endsWith(".ts") || i.name.endsWith(".tsx")) {
+          const src = readFileSync(путь, "utf8");
+          if (src.includes("link.amount") || src.includes("refund.amount")) {
+            поверхности.push(путь);
+          }
+        }
+      }
+    };
+    обойти(join(ROOT, "app", "pay"));
+    обойти(join(ROOT, "app", "api", "pay"));
+
+    // Знаменатель: поверхностей заведомо несколько, иначе обход сломан.
+    expect(поверхности.length, "поверхностей не найдено — сторож проверял пустоту")
+      .toBeGreaterThan(1);
+
+    const свои = поверхности.filter((f) => {
+      const src = readFileSync(f, "utf8");
+      return /\.amount\.(toFixed|toLocaleString)\s*\(/.test(src);
+    });
+    expect(свои, "поверхность печатает сумму мимо общего показателя валюты").toEqual([]);
   });
 
   it("страница оплаты не форматирует сумму сама", () => {

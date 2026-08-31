@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { channelFrom, withChannel } from "@/lib/products";
 
 // Compact pricing chip + one-click buy for module pages. Mirrors the REAL GTM
 // tiers (Lite / Medium / Full) from /api/pricing — the same prices the checkout
@@ -124,7 +125,19 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
       });
       const j = await r.json();
       if (j?.url) {
-        window.location.href = j.url;
+        // Метка канала доводится до САМОЙ КАССЫ, а не только до нашего события.
+        //
+        // Найдено 31.08.2026 обходом пути покупателя в браузере: эта кнопка —
+        // ТРЕТИЙ путь оплаты, мимо обоих, что чинились накануне. Она не строит
+        // адрес сама, а получает готовый от бэкенда и уходит по нему как есть.
+        //
+        // Получатель давно готов: вебхук LemonSqueezy читает
+        // custom_data.channel (заведено 19.08.2026), а вебхук Gumroad —
+        // url_params[channel]. Не хватало отправителя, и покупка приходила в
+        // отчёт ниоткуда. withChannel сам знает обе кассы и подставляет нужную
+        // форму параметра.
+        const mark = channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined);
+        window.location.href = withChannel(j.url, mark, "module-chip");
         return; // keep the spinner while the browser navigates away
       }
       setBuyError(true);

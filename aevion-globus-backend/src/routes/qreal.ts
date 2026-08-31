@@ -37,7 +37,7 @@ import { REALISM_DIRECTIVES } from "../services/qreal/directives";
 import { CONTINUITY_CRITERIA, CONTINUITY_ANCHORS, continuityThreshold, buildContinuityPrompt, scoreContinuity, isMeasurable } from "../services/qreal/continuity";
 import { ensureQRealTables } from "../lib/ensureQRealTables";
 import { getPool } from "../lib/dbPool";
-import { clientIp } from "../lib/rateLimit";
+import { clientIp, rateLimit } from "../lib/rateLimit";
 import { isAdminRequest } from "../lib/adminAuth";
 
 const captureQRealError = makeServiceCapture("qreal");
@@ -766,9 +766,16 @@ qrealRouter.get("/projects/:id", (req, res) => {
   res.json({ project: p });
 });
 
-qrealRouter.post("/projects/:id/storyboard", async (req, res) => {
+// Раскадровка дёргает модель, поэтому ограничена: публичная ИИ-ручка без лимита —
+// это чужой счёт за наши вызовы. Идиом тот же, что в соседних модулях.
+const storyboardLimiter = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "qreal:storyboard", message: "rate_limited" });
+// Перенесено из feat/free-fleet-keys (28.07.2026) дословно: починка там уже
+// была и просто не доехала до этой линии. Свой вариант стал бы вторым
+// способом делать то же самое и разошёлся бы с их при мерже.
+
+qrealRouter.post("/projects/:id/storyboard", storyboardLimiter, async (req, res) => {
   try {
-    const p = memProjects.get(req.params.id);
+    const p = memProjects.get(String(req.params.id));
     if (!p) return res.status(404).json({ error: "not found" });
     const variation = Math.min(5, Math.max(1, Number(req.body?.variation) || 1));
     const viaAi = await aiStoryboard(p, variation);

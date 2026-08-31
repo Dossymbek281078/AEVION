@@ -16,7 +16,25 @@ import { captureException } from "./sentry";
  * недосчитывает. Это осознанно — он ПОРОГОВЫЙ сигнал, а не учёт для биллинга, и
  * недосчёт здесь означает «сообщим позже», а не «пропустим навсегда».
  */
-const DAILY_SOFT_CAP = Number(process.env.BREVO_DAILY_SOFT_CAP) || 300;
+/**
+ * Суточный потолок — читается ПРИ ВЫЗОВЕ, а не при загрузке модуля.
+ *
+ * Было `const DAILY_SOFT_CAP = Number(process.env...) || 300`, то есть значение
+ * замерзало в момент первого импорта. Снаружи это выглядит безобидно, но
+ * означает, что поведение модуля зависит от ПОРЯДКА ИМПОРТА, а порядок никто
+ * не контролирует.
+ *
+ * Замер 31.08.2026: тесты квоты задают потолок 30 в beforeEach, а первый импорт
+ * случался внутри первого теста — то есть уже после хука, и всё работало по
+ * счастливой случайности. Стоило прогреть модули в beforeAll (обычная мера
+ * против таймаута), как модуль взял боевые 300, и три теста перестали видеть
+ * тревогу. Зелёный цвет об этой хрупкости не говорил ничего.
+ *
+ * Ленивое чтение — то, как устроен остальной код (`GUMROAD_TOKEN`, `isProd` и
+ * прочие в routes/* объявлены стрелками ровно поэтому). Здесь было
+ * исключением: свип по 62 чтениям окружения дал ровно один такой случай.
+ */
+const dailySoftCap = (): number => Number(process.env.BREVO_DAILY_SOFT_CAP) || 300;
 let sentDay = "";
 let sentCount = 0;
 const warnedAt = new Set<number>();
@@ -37,7 +55,7 @@ export function noteEmailSent(): { day: string; count: number } {
   // переменной), и жёсткий стоп мог бы оборвать письма раньше настоящего
   // лимита провайдера. Задача этого порога — сделать исчерпание ВИДИМЫМ.
   for (const share of [2 / 3, 9 / 10, 1]) {
-    const mark = Math.floor(DAILY_SOFT_CAP * share);
+    const mark = Math.floor(dailySoftCap() * share);
     if (sentCount >= mark && !warnedAt.has(mark)) {
       warnedAt.add(mark);
       // Текст начинается со слова ПРЕДУПРЕЖДЕНИЕ намеренно.
@@ -50,16 +68,16 @@ export function noteEmailSent(): { day: string; count: number } {
       // невидимой. Видимость здесь важнее аккуратности ярлыка, а чтобы человек не
       // принял это за аварию, сообщение само говорит, чем оно является.
       const msg =
-        (sentCount >= DAILY_SOFT_CAP
-          ? `ИСЧЕРПАНО: [Brevo] суточный потолок ${DAILY_SOFT_CAP} писем достигнут — `
+        (sentCount >= dailySoftCap()
+          ? `ИСЧЕРПАНО: [Brevo] суточный потолок ${dailySoftCap()} писем достигнут — `
             + `подтверждения подписки дальше могут не доходить, и снаружи это выглядит `
             + `как «письма задерживаются». Отправлено ${sentCount}.`
           : "") ||
         `ПРЕДУПРЕЖДЕНИЕ (не авария): [Brevo] за сутки отправлено ${sentCount} писем ` +
-        `из ${DAILY_SOFT_CAP} — при исчерпании подтверждения подписки перестанут ` +
+        `из ${dailySoftCap()} — при исчерпании подтверждения подписки перестанут ` +
         `приходить всем, и снаружи это выглядит как «письма задерживаются»`;
       console.warn(msg);
-      captureException(new Error(msg), { where: "brevo.dailyQuota", sent: sentCount, cap: DAILY_SOFT_CAP });
+      captureException(new Error(msg), { where: "brevo.dailyQuota", sent: sentCount, cap: dailySoftCap() });
     }
   }
   return { day: sentDay, count: sentCount };
@@ -67,7 +85,7 @@ export function noteEmailSent(): { day: string; count: number } {
 
 /** Для проверок: текущее состояние счётчика без побочных действий. */
 export function __emailCounter(): { day: string; count: number; cap: number } {
-  return { day: sentDay, count: sentCount, cap: DAILY_SOFT_CAP };
+  return { day: sentDay, count: sentCount, cap: dailySoftCap() };
 }
 
 /** Для проверок: обнулить счётчик между случаями. */

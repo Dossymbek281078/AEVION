@@ -77,6 +77,14 @@ type Store = {
   idempotency: Map<string, { at: number; body: string }>;
 };
 
+// 31.08.2026. Платёжные ССЫЛКИ не пишутся в хранилище НИКОГДА: links/route.ts
+// делает только store.links.set, вызова kv для них нет ни одного. Это не то же
+// самое, что ненастроенный KV: подключение Redis возвраты, споры, аудит и
+// очередь спасёт, а ссылки — нет. Флаг стоит здесь, рядом со стором, чтобы
+// тот, кто переведёт ссылки в хранилище, поправил его тем же движением;
+// сторож linksDurabilityFlagIsHonest не даст флагу разойтись с кодом.
+export const LINKS_ARE_MEMORY_ONLY = true;
+
 const globalAny = globalThis as unknown as { __aevionPayStore?: Store };
 
 if (!globalAny.__aevionPayStore) {

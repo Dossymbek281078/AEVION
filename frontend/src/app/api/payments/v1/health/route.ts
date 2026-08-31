@@ -1,4 +1,4 @@
-import { withCors } from "../_lib";
+import { withCors, LINKS_ARE_MEMORY_ONLY } from "../_lib";
 import { kvBackend, kvDegradedSince } from "../_persist";
 
 /**
@@ -20,6 +20,12 @@ import { kvBackend, kvDegradedSince } from "../_persist";
  */
 export async function GET() {
   const durable = kvBackend() === "kv";
+  // Поле durable отвечает ТОЛЬКО за записи, которые идут через KV: возвраты,
+  // споры, аудит, очередь вебхуков. Сами платёжные ссылки в KV не пишутся
+  // вовсе, поэтому у них свой ответ. Без этого разделения поле оказалось бы
+  // шире того, что измеряет: настроят Redis — durable станет true, и
+  // «сохраняются долговременно» будет неправдой про ссылки.
+  const linksDurable = !LINKS_ARE_MEMORY_ONLY;
   const degraded = kvDegradedSince();
   return withCors(
     Response.json({
@@ -28,6 +34,8 @@ export async function GET() {
       durable,
       // Если хранилище отвалилось на ходу — когда это случилось.
       degradedSince: degraded?.at ?? null,
+      // Ссылки живут в памяти процесса независимо от настройки хранилища.
+      linksDurable,
       note: durable
         ? "Платёжные записи сохраняются долговременно."
         : "ВНИМАНИЕ: записи хранятся в памяти процесса и исчезнут при перезапуске.",

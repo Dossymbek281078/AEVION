@@ -52,6 +52,18 @@ function referenceFromOrderId(orderId: string): string {
 /** Экспортируется ради теста: молчаливый дефолт стоит проверять отдельно. */
 export function tierForReference(ref: string): TierId {
   const r = ref.toLowerCase();
+  // Касса строит ссылку как `tier_<id>_<период>` (checkout.ts), а наш каталог
+  // продаёт ещё два тарифа, которых не было в списке ниже: `pro` («Universe»,
+  // $149/мес) и `enterprise`. Оба принимаются ручкой чекаута явно — и оба
+  // проваливались в дефолт `lite`, то есть человек платил за старший тариф и
+  // получал самый дешёвый. Проверено прогоном: tier_pro_monthly -> "lite" при
+  // контроле tier_medium_monthly -> "medium".
+  //
+  // Сверяем ТОЧНЫМ префиксом, а не подстрокой: `includes("pro")` поймал бы и
+  // `tier_promo_*`. Ниже по течению оба значения понятны — normalizeTier
+  // переводит "pro" в "full", "enterprise" оставляет как есть.
+  if (r.startsWith("tier_pro_")) return "pro";
+  if (r.startsWith("tier_enterprise_")) return "enterprise";
   if (r.includes("medium")) return "medium";
   if (r.includes("full") || r.includes("all-access") || r.includes("business") || r.includes("team")) return "full";
   if (!r.includes("lite")) {

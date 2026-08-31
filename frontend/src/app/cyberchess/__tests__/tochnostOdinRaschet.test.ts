@@ -12,7 +12,7 @@ import { join } from "path";
  * тому, что показано короче и увереннее, а он-то и врал.
  */
 
-const hody = (kach: string[]) => kach.map((quality, ply) => ({ ply, quality }));
+const hody = (kach: string[]) => kach.map((quality, i) => ({ ply: i + 1, quality }));
 
 describe("точность считается одним способом", () => {
   it("совпадает с числом на карточке разбора для той же партии", () => {
@@ -37,7 +37,8 @@ describe("точность считается одним способом", () =
   it("нет ходов игрока — честное «не знаю», а не 50", () => {
     // Ровная середина неотличима от замера: раньше здесь подставлялась 50,
     // и график рисовал точку, за которой не стояло ничего.
-    expect(tochnostSohranennoy([{ ply: 1, quality: "good" }], "w")).toBeNull();
+    expect(tochnostSohranennoy([{ ply: 2, quality: "good" }], "w")).toBeNull();
+    expect(tochnostSohranennoy([{ ply: 1, quality: "good" }], "b")).toBeNull();
     expect(tochnostSohranennoy([], "w")).toBeNull();
   });
 
@@ -95,7 +96,7 @@ describe("панель FIDE и карточка сходятся на одной
       rating: 1500,
       tc: "5+0",
       playerColor: "w",
-      analysis: kach.map((quality, ply) => ({ ply, quality: quality as never, cpLoss: 0 })),
+      analysis: kach.map((quality, i) => ({ ply: i + 1, quality: quality as never, cpLoss: 0 })),
     } as SavedGameForCPI;
     const panel = calibrateFromGames([igra, igra, igra]).accuracyPct;
     const grafik = tochnostSohranennoy(igra.analysis!, "w")!;

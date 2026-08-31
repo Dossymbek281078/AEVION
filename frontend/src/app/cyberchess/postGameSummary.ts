@@ -135,7 +135,7 @@ export function tochnostSohranennoy(
   hody: ReadonlyArray<{ ply: number; quality?: string }>,
   pCol: "w" | "b",
 ): number | null {
-  const moi = hody.filter((m) => hodIgroka(m.ply, pCol));
+  const moi = hody.filter((m) => hodIgrokaPoPly(m.ply, pCol));
   if (!moi.length) return null;
   const summa = moi.reduce((acc, m) => acc + vesTochnosti(m.quality), 0);
   return Math.round((summa / moi.length) * 100);
@@ -159,4 +159,21 @@ export function vesTochnosti(quality?: string): number {
   if (quality === "inacc") return 0.6;
   if (quality === "mistake") return 0.3;
   return 0; // blunder и неизвестный ярлык
+}
+
+/**
+ * Ход игрока в СОХРАНЁННОЙ записи партии.
+ *
+ * Нумерация там ДРУГАЯ, и это не мелочь. Живой разбор хранится массивом, где
+ * элемент i описывает ход hist[i], — там работает hodIgroka(i, …). А в записи
+ * лежит поле `ply`, куда пишется `move`, а `move` заполняется как `i + 1`
+ * (см. обе фазы разбора в page.tsx). То есть в записи ply считается С ЕДИНИЦЫ,
+ * и белые играют НЕЧЁТНЫЕ ply.
+ *
+ * Пока конвенций было две, а функция одна, все читатели сохранённых партий
+ * отбирали ходы СОПЕРНИКА вместо своих — молча и с правдоподобным числом на
+ * экране. Поэтому имена два: перепутать их теперь можно только намеренно.
+ */
+export function hodIgrokaPoPly(ply: number, pCol: "w" | "b"): boolean {
+  return hodIgroka(ply - 1, pCol);
 }

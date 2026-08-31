@@ -1,5 +1,5 @@
 import { TOCHNYE_HODY, NETOCHNOST, type MoveQuality } from "./moveQuality";
-import { hodIgroka } from "./postGameSummary";
+import { hodIgrokaPoPly } from "./postGameSummary";
 
 /**
  * AEVION CyberChess — FIDE rating calibration anchors + CPI metric regression.
@@ -417,7 +417,7 @@ export function calibrateFromGames(games: SavedGameForCPI[]): CPIMetrics {
         // зевков делилась пополам. Карточка разбора рядом соперника
         // пропускала, то есть модуль давал два разных ответа о точности
         // одного и того же человека.
-        if (!hodIgroka(a.ply, g.playerColor)) continue;
+        if (!hodIgrokaPoPly(a.ply, g.playerColor)) continue;
         analyzedPlies++;
         if (a.quality === "blunder") blunderMoves++;
         else if (a.quality === "mistake") mistakeMoves++;

@@ -59,7 +59,7 @@ describe("оценка силы не наказывает за блестящу�
     rating: 1500,
     tc: "5+0",
     playerColor: "w",
-    analysis: Array.from({ length: 40 }, (_, ply) => ({ ply, quality: kach as never, cpLoss: 0 })),
+    analysis: Array.from({ length: 40 }, (_, i) => ({ ply: i + 1, quality: kach as never, cpLoss: 0 })),
   } as SavedGameForCPI);
 
   it("партия из блестящих ходов не хуже партии из хороших", () => {
@@ -80,10 +80,11 @@ describe("оценка силы не наказывает за блестящу�
       rating: 1500,
       tc: "5+0",
       playerColor: "w",
-      analysis: Array.from({ length: 80 }, (_, ply) => ({
-        ply,
-        quality: (ply % 2 === 0 ? "blunder" : "good") as never,
-        cpLoss: ply % 2 === 0 ? 400 : 0,
+      // ply в записи считается С ЕДИНИЦЫ: белые играют НЕЧЁТНЫЕ ply.
+      analysis: Array.from({ length: 80 }, (_, i) => ({
+        ply: i + 1,
+        quality: (i % 2 === 0 ? "blunder" : "good") as never,
+        cpLoss: i % 2 === 0 ? 400 : 0,
       })),
     } as SavedGameForCPI;
     const m = calibrateFromGames([smeshannaya, smeshannaya, smeshannaya]);

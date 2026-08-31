@@ -3727,17 +3727,20 @@ export default function CyberChessPage(){
   const autoAnalysedRef=useRef<string|null>(null);
   // id последней записанной партии — чтобы разбор лёг именно в неё
   const lastSavedGameIdRef=useRef<{id:string;fp:number}|null>(null);
+  // Играли ли партию в этой сессии. Загруженная для просмотра — не играли.
+  const partiyaIgralasRef=useRef(false);
   // Конец партии НЕ ходом — сдача, ничья по договорённости, падение флага.
   // saveGame зовётся только из обработчика хода, поэтому такие партии в
   // историю не попадали вовсе: ни в список, ни в калибровку силы. Замерено на
   // боевой сборке 31.08.2026 — сдался, партии в истории нет.
   useEffect(()=>{
-    if(!over||!hist.length)return;
+    if(!over||!hist.length||!partiyaIgralasRef.current)return;
     const zap=lastSavedGameIdRef.current;
     if(zap&&zap.fp===gameStartTimeRef.current)return; // уже сохранена ходом
     const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
     const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist],result:over,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as SavedGame["category"],opening:currentOpening?.name};
     saveGame(sg);lastSavedGameIdRef.current={id:sg.id,fp:gameStartTimeRef.current};sSavedGames(loadGames());
+    partiyaIgralasRef.current=false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[over]);
 
@@ -5057,6 +5060,7 @@ export default function CyberChessPage(){
     metricsRef.current.reset();
     prevEvalCpForCpiRef.current=0;
     gameStartTimeRef.current=Date.now();
+    partiyaIgralasRef.current=true; // это НАСТОЯЩАЯ партия, а не загруженная для просмотра
     sMoveAnnotations({});sAnnotPicker(null);sMoveComments({});sCommentEditPly(null);
     // Reset Ghost Duel and P2P if they were active (new game started)
     if(ghostDuelMode){sGhostDuelMode(false);sGhostDuelConfig(null);sGhostDuelDivergePly(null)}

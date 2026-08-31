@@ -750,7 +750,7 @@ export default function DrawingsDashboard() {
                 type="file"
                 accept="application/json,.json"
                 onChange={handleImportFile}
-                className="hidden"
+                className="aevion-file-input"
               />
             </label>
           </div>

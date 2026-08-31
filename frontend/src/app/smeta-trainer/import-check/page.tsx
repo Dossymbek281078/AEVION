@@ -289,7 +289,7 @@ export default function ImportCheckPage() {
               </button>
               <label className="text-[11px] text-sky-600 hover:text-sky-800 underline cursor-pointer">
                 Открыть .csv файл
-                <input type="file" accept=".csv,.txt" onChange={handleFile} className="hidden" />
+                <input type="file" accept=".csv,.txt" onChange={handleFile} className="aevion-file-input" />
               </label>
             </div>
           </div>

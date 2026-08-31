@@ -781,7 +781,7 @@ function BureauPageInner() {
             </div>
             <label style={{ padding: "6px 12px", borderRadius: 7, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 11, fontWeight: 700, color: "#475569", cursor: "pointer", flexShrink: 0 }}>
               Browse
-              <input type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) hashAndSearch(f); }} />
+              <input type="file" className="aevion-file-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) hashAndSearch(f); }} />
             </label>
           </div>
 

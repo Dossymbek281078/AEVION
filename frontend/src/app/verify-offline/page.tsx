@@ -117,7 +117,7 @@ export default function VerifyOfflinePage() {
                 const f = e.target.files?.[0];
                 if (f) handleFile(f);
               }}
-              style={{ display: "none" }}
+              className="aevion-file-input"
             />
           </label>
         )}

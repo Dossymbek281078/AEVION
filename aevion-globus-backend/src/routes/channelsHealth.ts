@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { emailQuotaToday } from "../lib/brevoQuota";
 import { lemonSqueezyTiersConfigured } from "../data/lemonSqueezyVariants";
 
 import { variantMappingStatus } from "../data/lemonSqueezyVariants";
@@ -71,7 +72,25 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
    * не один общий, и общего специально нет.
    */
   const brevo = set("BREVO_API_KEY");
+  // Сколько писем ушло сегодня: у провайдера суточный потолок, и скрипт
+  // рассылки в отдельном процессе иначе о нём не узнает.
+  const quota = emailQuotaToday();
+  /*
+   * Расход за сутки — операционное число, и наружу оно не нужно: по нему видно,
+   * сколько на платформе движения. Отдаём только по админскому заголовку, тем
+   * же способом, что уже принят в events.ts. Потолок остаётся открытым: это
+   * свойство нашего тарифа у провайдера, а не показательподвижности.
+   *
+   * Скрипту рассылки поле нужно, и токен у него есть. Не получил — берёт
+   * половину потолка и говорит об этом вслух, то есть закрытие поля делает
+   * рассылку осторожнее, а не ломает её.
+   */
+  const нуженТокен = process.env.ADMIN_TOKEN?.trim();
+  const токенПришёл = (_req.headers["x-admin-token"] as string | undefined)?.trim();
+  const свой = !нуженТокен || токенПришёл === нуженТокен;
   const mail = {
+    ...(свой ? { sentToday: quota.count } : {}),
+    dailyCap: quota.cap,
     // подтверждение адреса при регистрации
     signup: { configured: email, via: smtp ? "smtp" : resend ? "resend" : null },
     // подтверждение подписки в воронке — отдельный провайдер

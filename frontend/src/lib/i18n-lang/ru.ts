@@ -7388,6 +7388,12 @@ const ru: Record<string, string> = {
   "qskyway.wait.desc": "Напишем, когда модуль откроется. Рассылки нет: адрес нужен только чтобы сообщить о готовности.",
   "qskyway.wait.title": "Написать, когда коридоры откроются в моём городе",
   "qskyway.wait.promise": "Письмо приходит на запуск модуля. Отписка — одной ссылкой в каждом письме.",
+  "pricing.checkoutSuccess.nextOpenAppNoName": "Откройте каталог и выберите оплаченное",
+  "pricing.checkoutSuccess.openAppNoName": "Открыть каталог продуктов",
+  "pricing.checkoutSuccess.subtitleActivatedNoTier": "Спасибо! Ваша подписка активна.",
+  "pricing.checkoutSuccess.titleActivatedNoTier": "Оплата принята!",
+  "pricing.checkoutSuccess.titleTrialNoTier": "Пробный период — {days} дней",
+  "pricing.home.notice.currencyDiffers": "На экране {shown}, а касса спишет {charged}. Нажмите ещё раз, если это подходит.",
 };
 
 export default ru;

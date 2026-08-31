@@ -9,6 +9,7 @@ import { fetchAiSavings } from "@/lib/aiSavings";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
 import { channelFrom, withChannel } from "@/lib/products";
 import { track } from "@/lib/track";
+import { chargeCurrencyNoteKey, shouldWarnAboutCurrency } from "@/lib/chargeCurrencyNote";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
 import { useABVariant, getAllVariants } from "@/lib/abVariant";
@@ -208,6 +209,23 @@ export default function PricingPage() {
   const [quoting, setQuoting] = useState(false);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
   const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
+  // Один раз предупредили о валюте — второй клик считаем осознанным.
+  const [согласенНаВалюту, setСогласенНаВалюту] = useState(false);
+
+  /*
+   * Чем на самом деле спишется — заметка для ВСЕХ, а не только для пришедших
+   * по ссылке с ?module=.
+   *
+   * Найдено 31.08.2026 окном платёжных ссылок: текст существовал, был переведён
+   * и работал, но жил внутри блока heroModule, который включается только
+   * диплинком. Обычный посетитель переключал валюту на ₸, видел цены в тенге и
+   * не видел ни слова о том, что спишут доллары. На проде paybox.configured
+   * сейчас false, то есть тенге мы действительно не принимаем.
+   *
+   * Текст не новый — те же ключи, что и в блоке модуля; здесь только место.
+   */
+  const чемСпишется = (): string => t(chargeCurrencyNoteKey(currency, payboxLive));
+
 
   async function submitNewsletter(e: React.FormEvent) {
     e.preventDefault();
@@ -264,6 +282,26 @@ export default function PricingPage() {
         body: JSON.stringify({ ...opts, currency }),
       });
       const j = await r.json();
+      /*
+       * Валюта списания приходит от кассы — и если она не та, что человек
+       * видит на экране, молча уводить его нельзя.
+       *
+       * Задача от окна платежей, 31.08.2026: страница показывает цены в тенге,
+       * а при недоступном PayBox касса переходит к запасным провайдерам,
+       * которые считают в долларах. Человек видит одну валюту, платит другой.
+       *
+       * Поле необязательное: пока его нет в ответе, ведём себя как раньше —
+       * отсутствие данных это не «валюта совпала». Появится — предупредим один
+       * раз и дадим нажать ещё раз осознанно.
+       */
+      if (shouldWarnAboutCurrency({ shown: currency, fromCheckout: j.currency, alreadyWarned: согласенНаВалюту })) {
+        setСогласенНаВалюту(true);
+        setCheckoutNotice(
+          t("pricing.home.notice.currencyDiffers", { shown: currency, charged: String(j.currency) }),
+        );
+        setCheckingOut(null);
+        return;
+      }
       if (j.url) {
         // Метка канала доводится до кассы. Найдено 31.08.2026: главный путь
         // оплаты — этот, и он уходил по готовому адресу от бэкенда как есть.
@@ -542,20 +580,14 @@ export default function PricingPage() {
               </div>
               <div style={{ fontSize: 12, color: "#64748b" }}>
                 {t("pricing.home.heroModule.paymentCard")}{" "}
-                {currency === "KZT"
-                  ? (payboxLive === null
-                      // Не спросили — не знаем. Прежде null был ложным и
-                      // уходил в ветку «Kaspi не подключён»: код бережно
-                      // хранил незнание, а экран его терял и утверждал
-                      // покупателю то, чего мы не проверяли. Сегодня это
-                      // совпадает с правдой (PayBox не настроен), но при
-                      // настроенном PayBox один сетевой сбой отпугивал бы
-                      // покупателя в тенге ложным «Kaspi не подключён».
-                      ? t("pricing.home.heroModule.kztUnknownNote")
-                      : payboxLive
-                        ? t("pricing.home.heroModule.kztNote")
-                        : t("pricing.home.heroModule.kztFallbackNote"))
-                  : t("pricing.home.heroModule.usdNote")}
+                {/* Сведено 31.08: взята их сторона — та же логика, вынесенная в
+                    lib/chargeCurrencyNote.ts. Причина не в красоте: страница цен
+                    в тестовой среде не поднимается без полного слепка данных,
+                    и правило проверять было НЕГДЕ. Теперь у него девять
+                    случаев, включая ветку «не спросили»: ложное «Kaspi не
+                    подключён» отпугивает покупателя ровно так же, как ложное
+                    обещание Kaspi его обманывает. */}
+                {чемСпишется()}
               </div>
             </div>
             <button
@@ -812,7 +844,10 @@ export default function PricingPage() {
         </div>
         <select
           value={currency}
-          onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
+          onChange={(e) => {
+            setСогласенНаВалюту(false);
+            setCurrency(e.target.value as CurrencyCode);
+          }}
           style={{
             padding: "8px 12px",
             fontSize: 13,
@@ -829,6 +864,18 @@ export default function PricingPage() {
             </option>
           ))}
         </select>
+        {/*
+          Чем спишется — рядом с переключателем валюты, а не только внутри
+          блока модуля: до него доходит лишь тот, кто пришёл по ссылке с
+          ?module=. Обычный посетитель переключал на ₸ и не видел ни слова о
+          том, что спишут доллары.
+        */}
+        <div
+          data-testid="charge-currency-note"
+          style={{ fontSize: 12, color: "#64748b", width: "100%", marginTop: 6 }}
+        >
+          {t("pricing.home.heroModule.paymentCard")} {чемСпишется()}
+        </div>
       </section>
 
       {/* Checkout notice */}

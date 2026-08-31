@@ -29,6 +29,15 @@ type WaitlistRow = {
   email: string;
   source: string;
   createdAt: string;
+  /**
+   * Канал привлечения. Отдельно от source: тот отвечает «с какой страницы»,
+   * этот — «кто привёл». null значит «не знаем» (подписался до 31.08.2026 или
+   * пришёл без метки); выдуманный «direct» раздул бы долю прямых заходов.
+   *
+   * Поле есть и здесь, в запасном хранении в памяти: иначе при недоступной
+   * базе метка терялась бы молча, а снаружи это неотличимо от «канала не было».
+   */
+  channel?: string | null;
 };
 
 const memList = new Map<string, WaitlistRow>();
@@ -76,6 +85,9 @@ async function ensureWaitlistTable(): Promise<void> {
         "source"    TEXT NOT NULL DEFAULT 'unknown',
         "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      -- Канал привлечения. Отдельной командой, потому что таблица живёт на
+      -- проде с мая: CREATE TABLE IF NOT EXISTS существующую не тронет.
+      ALTER TABLE constitution_waitlist ADD COLUMN IF NOT EXISTS "channel" TEXT;
       CREATE INDEX IF NOT EXISTS idx_constitution_waitlist_created
         ON constitution_waitlist ("createdAt" DESC);
     `);
@@ -157,14 +169,18 @@ constitutionWaitlistRouter.post(
   validate(WaitlistSubscribeSchema),
   async (req: Request, res: Response) => {
     try {
-      const body = req.body as { email: string; source?: string };
+      const body = req.body as { email: string; source?: string; channel?: string };
       const emailRaw = body.email.trim().toLowerCase();
       const sourceRaw = (body.source ?? "unknown").slice(0, 60);
+      // Пусто — это «не знаем», а не «прямой заход»: выдуманный «direct»
+      // раздул бы долю прямых и спрятал бы каналы, которые просто не доехали.
+      const channelRaw = body.channel ? body.channel.slice(0, 24) : null;
 
       const row: WaitlistRow = {
         email: emailRaw,
         source: sourceRaw,
         createdAt: new Date().toISOString(),
+        channel: channelRaw,
       };
 
       await ensureWaitlistTable();
@@ -180,8 +196,8 @@ constitutionWaitlistRouter.post(
           // xmax = 0 у строки, которая была ВСТАВЛЕНА; у обновлённой конфликтом
           // там номер транзакции. Штатный способ различить их в одном запросе.
           const ins = await pool.query(
-            `INSERT INTO constitution_waitlist ("email","source","createdAt")
-             VALUES ($1,$2,$3)
+            `INSERT INTO constitution_waitlist ("email","source","createdAt","channel")
+             VALUES ($1,$2,$3,$4)
              ON CONFLICT ("email") DO UPDATE SET "source" =
                CASE
                  -- Метка уже в списке — оставляем как есть.
@@ -200,9 +216,13 @@ constitutionWaitlistRouter.post(
                             - position(',' in reverse(left(constitution_waitlist."source" || ',' || EXCLUDED."source", 250)))
                         )
                       )
-               END
+               END,
+               -- Канал держим ПЕРВЫЙ: он и привёл человека. Повторная подписка
+               -- с другой метки не переписывает историю привлечения, а пустая
+               -- метка не стирает известную.
+               "channel" = COALESCE(constitution_waitlist."channel", EXCLUDED."channel")
              RETURNING (xmax = 0) AS inserted`,
-            [row.email, row.source, row.createdAt],
+            [row.email, row.source, row.createdAt, channelRaw],
           );
           isNew = ins.rows?.[0]?.inserted !== false;
           storage = "postgres";
@@ -370,7 +390,7 @@ constitutionWaitlistAdminRouter.get(
         try {
           const pool = getPool();
           const r = await pool.query(
-            `SELECT "email","source","createdAt"
+            `SELECT "email","source","createdAt","channel"
              FROM constitution_waitlist
              ORDER BY "createdAt" DESC
              LIMIT ${ROW_CAP}`,
@@ -378,6 +398,10 @@ constitutionWaitlistAdminRouter.get(
           rows = r.rows.map((x: Record<string, unknown>) => ({
             email: String(x.email),
             source: String(x.source),
+            // Канал отдаём наружу вместе со строкой: колонка, которую никто не
+            // читает, — это видимость учёта. Пусто у подписавшихся до 31.08 и у
+            // пришедших без метки; «direct» тут не выдумываем.
+            channel: x.channel == null ? null : String(x.channel),
             createdAt: x.createdAt instanceof Date
               ? x.createdAt.toISOString()
               : String(x.createdAt),

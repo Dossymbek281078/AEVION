@@ -33,6 +33,10 @@ export function KeepChannelLink({
   className?: string;
   children: ReactNode;
 }) {
+  const абсолютный = /^https?:/i.test(href);
+  const своё = (u: string) =>
+    typeof window !== "undefined" && u.startsWith(window.location.origin);
+
   function keep(e: React.MouseEvent<HTMLAnchorElement>) {
     // Особые клики (новая вкладка, средняя кнопка) не перехватываем.
     if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -41,12 +45,26 @@ export function KeepChannelLink({
     const mark = channelFrom(raw ?? undefined);
     if (!mark || !raw) return;
     if (href.includes("c=")) return;
+    // Абсолютный адрес — только СВОЙ. Чужому сайту наша метка не нужна и
+    // отдавать её туда незачем; для касс это делает withChannel своей формой
+    // параметра, а не этой.
+    if (абсолютный && !своё(href)) return;
     e.preventDefault();
     const sep = href.includes("?") ? "&" : "?";
     window.location.href = `${href}${sep}c=${encodeURIComponent(raw)}`;
   }
 
-  return (
+  /*
+   * Абсолютные адреса тоже бывают внутренними. Экран платной стены получает
+   * ссылку «выбрать тариф» от бэкенда, и она приходит целиком —
+   * `https://aevion.app/pricing`. Через next/link такую не отдать, поэтому для
+   * неё обычная ссылка, а логика метки та же.
+   */
+  return абсолютный ? (
+    <a href={href} style={style} className={className} onClick={keep}>
+      {children}
+    </a>
+  ) : (
     <Link href={href} style={style} className={className} onClick={keep}>
       {children}
     </Link>

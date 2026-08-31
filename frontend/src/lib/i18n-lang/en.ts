@@ -7388,6 +7388,12 @@ const en: Record<string, string> = {
   "qskyway.wait.desc": "We will write when the module opens. No newsletter: the address is only used to tell you it is ready.",
   "qskyway.wait.title": "Write to me when corridors open in my city",
   "qskyway.wait.promise": "One email when the module launches. Unsubscribe with one link in every email.",
+  "pricing.checkoutSuccess.nextOpenAppNoName": "Open the catalogue and pick what you paid for",
+  "pricing.checkoutSuccess.openAppNoName": "Open the product catalogue",
+  "pricing.checkoutSuccess.subtitleActivatedNoTier": "Thank you! Your subscription is active.",
+  "pricing.checkoutSuccess.titleActivatedNoTier": "Payment received!",
+  "pricing.checkoutSuccess.titleTrialNoTier": "Trial started — {days} days",
+  "pricing.home.notice.currencyDiffers": "Prices shown in {shown}, the checkout charges {charged}. Click again to continue.",
 };
 
 export default en;

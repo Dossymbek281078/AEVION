@@ -28,6 +28,7 @@ const VARS = [
   "PAYBOX_MERCHANT_ID", "PAYBOX_SECRET", "PAYPAL_CLIENT_ID", "PAYPAL_SECRET",
   "PAYPAL_WEBHOOK_ID",
   "BREVO_API_KEY",
+  "ADMIN_TOKEN",
 ];
 const saved: Record<string, string | undefined> = {};
 beforeEach(() => VARS.forEach((v) => { saved[v] = process.env[v]; delete process.env[v]; }));
@@ -184,7 +185,36 @@ describe("Почта: три пути, три ответа", () => {
     process.env.RESEND_API_KEY = "re_x";
     const r = await get();
 
-    expect(Object.keys(r.body.mail).sort()).toEqual(["founderNotify", "signup", "waitlist"]);
+    // Проверяем СМЫСЛ, а не точный набор ключей: первая редакция требовала
+    // ровно три поля и покраснела на добавлении счётчика суток — то есть
+    // мешала работе вместо того, чтобы стеречь. Стеречь надо одно: чтобы не
+    // завели общий ответ «почта настроена», который и был источником спора.
+    for (const путь of ["signup", "waitlist", "founderNotify"]) {
+      expect(r.body.mail[путь], `пропал путь ${путь}`).toBeDefined();
+    }
     expect(r.body.mail.configured, "общий ответ вернулся — уберите его").toBeUndefined();
+    expect(r.body.mail.ok, "общий ответ под другим именем").toBeUndefined();
+  });
+});
+
+describe("расход писем за сутки виден снаружи", () => {
+  test("ручка отдаёт счётчик и потолок", async () => {
+    // Скрипт рассылки живёт в отдельном процессе и счётчик сервера сам по себе
+    // видит нулём. Без этих двух чисел он мог бы пробить суточный потолок
+    // провайдера: 301-е письмо не уходит, и узнать об этом неоткуда.
+    const r = await get();
+
+    // Потолок открыт: это свойство тарифа у провайдера. Расход — нет: по нему
+    // видно, сколько на платформе движения, и посторонним это ни к чему.
+    expect(r.body.mail.dailyCap, "нет потолка суток").toBeGreaterThan(0);
+
+    // Значение латиницей: кириллица в HTTP-заголовке недопустима.
+    process.env.ADMIN_TOKEN = "t0ken-test";
+    const чужой = await get();
+    expect(чужой.body.mail.sentToday, "расход виден без токена").toBeUndefined();
+
+    const свой = await request(app()).get("/api/health/channels").set("x-admin-token", "t0ken-test");
+    expect(typeof свой.body.mail.sentToday, "по токену расход не отдан").toBe("number");
+    delete process.env.ADMIN_TOKEN;
   });
 });

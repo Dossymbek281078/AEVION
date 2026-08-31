@@ -118,6 +118,20 @@ export function noteEmailSent(recipients = 1): { day: string; count: number } {
   return { day: sentDay, count: sentCount };
 }
 
+/**
+ * Сколько писем ушло СЕГОДНЯ и каков потолок.
+ *
+ * Нужно не только проверкам: скрипт рассылки на запуск живёт в отдельном
+ * процессе и счётчик сервера не видит. Без этого числа он считал бы, что
+ * сегодня не ушло ничего, и мог бы пробить суточный потолок провайдера —
+ * 301-е письмо просто не уходит, и узнать об этом неоткуда.
+ *
+ * Отдаётся наружу через /api/health/channels, значений и адресов там нет.
+ */
+export function emailQuotaToday(): { day: string; count: number; cap: number } {
+  return { day: sentDay, count: sentCount, cap: DAILY_SOFT_CAP };
+}
+
 /** Для проверок: текущее состояние счётчика без побочных действий. */
 export function __emailCounter(): { day: string; count: number; cap: number } {
   return { day: sentDay, count: sentCount, cap: dailySoftCap() };

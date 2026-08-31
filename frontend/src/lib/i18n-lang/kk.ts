@@ -7347,6 +7347,12 @@ const kk: Record<string, string> = {
   "qskyway.wait.desc": "Модуль ашылғанда жазамыз. Таратылым жоқ: мекенжай тек дайындығы туралы хабарлау үшін қажет.",
   "qskyway.wait.title": "Қалаамда дәліздер ашылғанда жазыңыз",
   "qskyway.wait.promise": "Модуль іске қосылған кезде бір хат келеді. Әр хаттағы бір сілтемемен жазылудан бас тартуға болады.",
+  "pricing.checkoutSuccess.nextOpenAppNoName": "Каталогты ашып, төленгенін таңдаңыз",
+  "pricing.checkoutSuccess.openAppNoName": "Өнімдер каталогын ашу",
+  "pricing.checkoutSuccess.subtitleActivatedNoTier": "Рақмет! Жазылымыңыз белсенді.",
+  "pricing.checkoutSuccess.titleActivatedNoTier": "Төлем қабылданды!",
+  "pricing.checkoutSuccess.titleTrialNoTier": "Сынақ кезеңі — {days} күн",
+  "pricing.home.notice.currencyDiffers": "Экранда {shown}, ал касса {charged} есептейді. Жалғастыру үшін тағы басыңыз.",
 };
 
 export default kk;

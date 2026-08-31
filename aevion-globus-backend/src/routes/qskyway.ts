@@ -1081,7 +1081,9 @@ interface VertiportScore {
   /** published regulatory ceiling over the pad, metres AGL; null where no feed */
   ceilingM: number | null;
   /** pad sits where the regulator authorizes nothing automatically (0 ft ceiling) */
-  needsAtcCoordination: boolean;
+  // null = потолок неизвестен. Отдельное значение, а не false: «не требуется»
+  // и «мы не знаем» — противоположные ответы для того, кто собрался лететь.
+  needsAtcCoordination: boolean | null;
   suitability: number; class: "candidate-pad" | "needs-infrastructure" | "unsuitable";
 }
 function suitability(cityId: string, city: CityData): VertiportScore[] {
@@ -1122,7 +1124,12 @@ function suitability(cityId: string, city: CityData): VertiportScore[] {
       // наружу уходит null: публиковать «9999 м» там, где зон нет,
       // значит выдавать умолчание за измерение.
       distNoFlyM: zones.length ? Math.round(distNoFly) : null,
-      ceilingM, needsAtcCoordination: ceilingM === 0,
+      ceilingM,
+      // ⚠️ Было `ceilingM === 0`. У города без сетки потолков ceilingM равен
+      // null, а `null === 0` даёт false — то есть модуль отвечал
+      // «согласование с УВД не требуется» там, где о потолках не знает
+      // ничего. Для Астаны и Токио это ложное успокоение на КАЖДОЙ площадке.
+      needsAtcCoordination: ceilingM === null ? null : ceilingM === 0,
       suitability: score, class: cls,
     };
   });

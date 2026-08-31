@@ -68,7 +68,7 @@ interface CityData {
   nofly?: NoFly[];
   wind?: { fromDeg: number; groundMs: number; topMs: number; source?: "metar" | "illustrative" };
   airspace?: AirspaceSummary;
-  vertiportScores?: { c: number; r: number; suitability: number; class: string; openRadiusM: number; clearanceM: number; distNoFlyM: number; ceilingM?: number | null; needsAtcCoordination?: boolean }[];
+  vertiportScores?: { c: number; r: number; suitability: number; class: string; openRadiusM: number; clearanceM: number; distNoFlyM: number; ceilingM?: number | null; needsAtcCoordination?: boolean | null }[];
   /** QSkyway-specific: heights the generator flagged as towering over the rest
    *  of the city. Kept out of the shared DataQuality type on purpose — other
    *  modules do not have an obstacle grid, and a wrong height only matters
@@ -485,7 +485,7 @@ export default function QSkywayClient() {
         return {
           id: `H-${i + 1}`, suitability: s?.suitability ?? 0, cls: s?.class ?? "unscored",
           openRadiusM: s?.openRadiusM ?? null, clearanceM: s?.clearanceM ?? null, distNoFlyM: s?.distNoFlyM ?? null,
-          ceilingM: s?.ceilingM ?? null, needsAtc: s ? s.needsAtcCoordination === true : null,
+          ceilingM: s?.ceilingM ?? null, needsAtc: s ? (s.needsAtcCoordination ?? null) : null,
         };
       }).sort((a, b) => b.suitability - a.suitability));
       setLoaded(true);

@@ -79,3 +79,31 @@ describe("ссылка доносит метку канала", () => {
     expect(мимо, "ссылка подвала не доносит метку: оберните в KeepChannelLink").toEqual([]);
   });
 });
+
+describe("абсолютные адреса своего сайта", () => {
+  // Экран платной стены получает ссылку «выбрать тариф» от бэкенда целиком:
+  // https://aevion.app/pricing. Её видит каждый, кто пришёл в закрытый модуль.
+  test("свой абсолютный адрес получает метку", () => {
+    Object.defineProperty(window, "location", {
+      value: { search: "?c=tg", href: "", origin: "https://aevion.app", pathname: "/qskyway" },
+      writable: true,
+    });
+    render(<KeepChannelLink href="https://aevion.app/pricing">Тарифы</KeepChannelLink>);
+
+    fireEvent.click(screen.getByText("Тарифы"));
+
+    expect(window.location.href).toBe("https://aevion.app/pricing?c=tg");
+  });
+
+  test("чужому сайту метку не отдаём", () => {
+    Object.defineProperty(window, "location", {
+      value: { search: "?c=tg", href: "", origin: "https://aevion.app", pathname: "/go" },
+      writable: true,
+    });
+    render(<KeepChannelLink href="https://example.test/x">Наружу</KeepChannelLink>);
+
+    fireEvent.click(screen.getByText("Наружу"));
+
+    expect(window.location.href).toBe("");
+  });
+});

@@ -2571,6 +2571,7 @@ export const translations = {
     "constitution.status.footer": "In-memory ring buffer (last 5000 pings per service) + Postgres when available. Checks target the Railway instance, not the Vercel edge.",
     /* Constitution — batch i18n rollout */
     "pricing.home.notice.checkoutError": "Payment error. Please try again or contact sales.",
+    "pricing.home.notice.currencyDiffers": "Prices shown in {shown}, the checkout charges {charged}. Click again to continue.",
     "pricing.home.notice.connectionError": "No connection — check your internet and try again.",
     "pricing.home.notice.selectLiteModule": "First select a product for the Lite plan",
     "pricing.home.heroModule.badge": "Lite plan — 1 product",
@@ -6632,6 +6633,7 @@ export const translations = {
     "constitution.status.footer": "In-memory ring buffer (last 5000 pings per service) + Postgres когда доступен. Checks target Railway instance, not Vercel edge.",
     /* Constitution — batch i18n rollout */
     "pricing.home.notice.checkoutError": "Ошибка оплаты. Попробуйте ещё раз или свяжитесь с продажами.",
+    "pricing.home.notice.currencyDiffers": "На экране {shown}, а касса спишет {charged}. Нажмите ещё раз, если это подходит.",
     "pricing.home.notice.connectionError": "Нет соединения — проверьте интернет и попробуйте ещё раз.",
     "pricing.home.notice.selectLiteModule": "Сначала выберите продукт для тарифа Lite",
     "pricing.home.heroModule.badge": "Тариф Lite — 1 продукт",
@@ -10685,6 +10687,7 @@ export const translations = {
     "constitution.status.footer": "In-memory ring buffer (әр қызмет үшін соңғы 5000 ping) + қолжетімді болғанда Postgres. Тексерулер Vercel edge-ті емес, Railway instance-ті нысанаға алады.",
     /* Constitution — batch i18n rollout */
     "pricing.home.notice.checkoutError": "Төлем қатесі. Қайта көріңіз немесе сату бөліміне хабарласыңыз.",
+    "pricing.home.notice.currencyDiffers": "Экранда {shown}, ал касса {charged} есептейді. Жалғастыру үшін тағы басыңыз.",
     "pricing.home.notice.connectionError": "Байланыс жоқ — интернетті тексеріп, қайта көріңіз.",
     "pricing.home.notice.selectLiteModule": "Алдымен Lite тарифі үшін өнімді таңдаңыз",
     "pricing.home.heroModule.badge": "Lite тарифі — 1 өнім",

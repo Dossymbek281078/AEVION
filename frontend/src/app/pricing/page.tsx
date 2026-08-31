@@ -9,10 +9,12 @@ import { fetchAiSavings } from "@/lib/aiSavings";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
 import { channelFrom, withChannel } from "@/lib/products";
 import { track } from "@/lib/track";
+import { chargeCurrencyNoteKey, shouldWarnAboutCurrency } from "@/lib/chargeCurrencyNote";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
 import { useABVariant, getAllVariants } from "@/lib/abVariant";
 import AskAi from "@/components/AskAi";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
@@ -207,6 +209,23 @@ export default function PricingPage() {
   const [quoting, setQuoting] = useState(false);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
   const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
+  // Один раз предупредили о валюте — второй клик считаем осознанным.
+  const [согласенНаВалюту, setСогласенНаВалюту] = useState(false);
+
+  /*
+   * Чем на самом деле спишется — заметка для ВСЕХ, а не только для пришедших
+   * по ссылке с ?module=.
+   *
+   * Найдено 31.08.2026 окном платёжных ссылок: текст существовал, был переведён
+   * и работал, но жил внутри блока heroModule, который включается только
+   * диплинком. Обычный посетитель переключал валюту на ₸, видел цены в тенге и
+   * не видел ни слова о том, что спишут доллары. На проде paybox.configured
+   * сейчас false, то есть тенге мы действительно не принимаем.
+   *
+   * Текст не новый — те же ключи, что и в блоке модуля; здесь только место.
+   */
+  const чемСпишется = (): string => t(chargeCurrencyNoteKey(currency, payboxLive));
+
 
   async function submitNewsletter(e: React.FormEvent) {
     e.preventDefault();
@@ -263,6 +282,26 @@ export default function PricingPage() {
         body: JSON.stringify({ ...opts, currency }),
       });
       const j = await r.json();
+      /*
+       * Валюта списания приходит от кассы — и если она не та, что человек
+       * видит на экране, молча уводить его нельзя.
+       *
+       * Задача от окна платежей, 31.08.2026: страница показывает цены в тенге,
+       * а при недоступном PayBox касса переходит к запасным провайдерам,
+       * которые считают в долларах. Человек видит одну валюту, платит другой.
+       *
+       * Поле необязательное: пока его нет в ответе, ведём себя как раньше —
+       * отсутствие данных это не «валюта совпала». Появится — предупредим один
+       * раз и дадим нажать ещё раз осознанно.
+       */
+      if (shouldWarnAboutCurrency({ shown: currency, fromCheckout: j.currency, alreadyWarned: согласенНаВалюту })) {
+        setСогласенНаВалюту(true);
+        setCheckoutNotice(
+          t("pricing.home.notice.currencyDiffers", { shown: currency, charged: String(j.currency) }),
+        );
+        setCheckingOut(null);
+        return;
+      }
       if (j.url) {
         // Метка канала доводится до кассы. Найдено 31.08.2026: главный путь
         // оплаты — этот, и он уходил по готовому адресу от бэкенда как есть.
@@ -291,6 +330,12 @@ export default function PricingPage() {
   // LemonSqueezy. Покупатель из Казахстана читал про Kaspi и попадал на оплату
   // в долларах. Обещание теперь следует за фактом, а не наоборот.
   const [payboxLive, setPayboxLive] = useState<boolean | null>(null);
+  // null = не спрашивали или поля ещё нет; массив = список ссылок, купить
+  // которые нельзя (у провайдера не задан вариант товара).
+  const [notSellable, setNotSellable] = useState<string[] | null>(null);
+  /** Можно ли купить этот тариф прямо сейчас. Незнание = НЕ запрещаем. */
+  const продаётся = (tierId: string) =>
+    notSellable === null ? true : !notSellable.includes(`tier_${tierId}_${period}`);
 
   useEffect(() => {
     let cancelled = false;
@@ -300,6 +345,16 @@ export default function PricingPage() {
         if (!r.ok) return;
         const j = await r.json();
         if (!cancelled) setPayboxLive(Boolean(j?.providers?.paybox?.configured));
+        // Что реально можно купить. `configured` у провайдера означает
+        // «есть ключ и магазин», но покупка не начнётся без варианта
+        // товара — он задаётся отдельной переменной на каждый тариф.
+        //
+        // Поле добавлено в healthz 29.08.2026. ПОКА ЕГО НЕТ (бэкенд не
+        // выкачен) остаётся null — «не знаем», и ничего не меняется.
+        // Путать «поля нет» с «нельзя купить» нельзя: первое про нашу
+        // осведомлённость, второе про товар.
+        const missing = j?.providers?.lemonsqueezy?.sellable?.missing;
+        if (!cancelled && Array.isArray(missing)) setNotSellable(missing as string[]);
       } catch {
         // Не спросили - значит не знаем. Оставляем null: обещать нельзя,
         // но и пугать «не работает» на основании сетевого сбоя тоже нельзя.
@@ -525,14 +580,12 @@ export default function PricingPage() {
               </div>
               <div style={{ fontSize: 12, color: "#64748b" }}>
                 {t("pricing.home.heroModule.paymentCard")}{" "}
-                {currency === "KZT"
-                  ? (payboxLive ? t("pricing.home.heroModule.kztNote") : t("pricing.home.heroModule.kztFallbackNote"))
-                  : t("pricing.home.heroModule.usdNote")}
+                {чемСпишется()}
               </div>
             </div>
             <button
               type="button"
-              disabled={checkingOut === "lite"}
+              disabled={checkingOut === "lite" || !продаётся("lite")}
               onClick={() => startCheckout({ tierId: "lite", period, seats: 1, modules: [heroModule] })}
               style={{
                 padding: "12px 28px",
@@ -784,7 +837,10 @@ export default function PricingPage() {
         </div>
         <select
           value={currency}
-          onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
+          onChange={(e) => {
+            setСогласенНаВалюту(false);
+            setCurrency(e.target.value as CurrencyCode);
+          }}
           style={{
             padding: "8px 12px",
             fontSize: 13,
@@ -801,6 +857,18 @@ export default function PricingPage() {
             </option>
           ))}
         </select>
+        {/*
+          Чем спишется — рядом с переключателем валюты, а не только внутри
+          блока модуля: до него доходит лишь тот, кто пришёл по ссылке с
+          ?module=. Обычный посетитель переключал на ₸ и не видел ни слова о
+          том, что спишут доллары.
+        */}
+        <div
+          data-testid="charge-currency-note"
+          style={{ fontSize: 12, color: "#64748b", width: "100%", marginTop: 6 }}
+        >
+          {t("pricing.home.heroModule.paymentCard")} {чемСпишется()}
+        </div>
       </section>
 
       {/* Checkout notice */}
@@ -982,7 +1050,7 @@ export default function PricingPage() {
                   </select>
                 )}
                 <button
-                  disabled={checkingOut === tier.id}
+                  disabled={checkingOut === tier.id || !продаётся(tier.id)}
                   style={{
                     width: "100%",
                     padding: "10px 16px",
@@ -1499,6 +1567,7 @@ export default function PricingPage() {
             </div>
             <div>
               <label
+                htmlFor="calc-seats"
                 style={{
                   fontSize: 11,
                   fontWeight: 800,
@@ -1511,6 +1580,7 @@ export default function PricingPage() {
                 {tp("calc.seats")}
               </label>
               <input
+                id="calc-seats"
                 type="number"
                 min={1}
                 max={1000}
@@ -1530,6 +1600,7 @@ export default function PricingPage() {
             </div>
             <div>
               <label
+                htmlFor="calc-promo"
                 style={{
                   fontSize: 11,
                   fontWeight: 800,
@@ -1544,6 +1615,7 @@ export default function PricingPage() {
               <input
                 value={calcPromo}
                 onChange={(e) => setCalcPromo(e.target.value.toUpperCase())}
+                id="calc-promo"
                 placeholder="AEVION20 / STARTUP50"
                 style={{
                   width: 200,
@@ -2137,6 +2209,11 @@ export default function PricingPage() {
             <input
               type="email"
               required
+              // Подпись для читалки. Placeholder «your@email.com» исчезает
+              // при вводе, и поле становится безымянным ровно тогда, когда
+              // человек в нём работает. Замер 28.08.2026 зондом
+              // aevion-a11y-names на живом проде.
+              aria-label={tp("newsletter.emailLabel")}
               placeholder={tp("newsletter.placeholder")}
               value={newsletterEmail}
               onChange={(e) => setNewsletterEmail(e.target.value)}
@@ -2297,6 +2374,23 @@ export default function PricingPage() {
           </code>
           .
         </div>
+      </section>
+
+      {/*
+        Захват адреса на странице цен.
+
+        Замер 29.08.2026: `WaitlistCapture` стоит на главной и на /go, а на
+        странице цен его не было — при том что именно здесь намерение купить
+        максимально. Человек посмотрел цены, не готов платить сегодня и
+        уходит, не оставив следа.
+
+        Поле `source` отличает этот поток от остальных: без него нельзя
+        сказать, откуда пришёл подписчик, и мерить нечего.
+      */}
+      <section style={{ margin: "28px auto 0", maxWidth: 760 }}>
+        {/* Страница цен светлая (#fff, #f1f5f9), а умолчание компонента — тёмное:
+            без tone="light" форма встала бы чужеродным чёрным блоком. */}
+        <WaitlistCapture source="pricing" tone="light" />
       </section>
 
       <section style={{ margin: "28px auto 0", maxWidth: 760, textAlign: "left" }}>

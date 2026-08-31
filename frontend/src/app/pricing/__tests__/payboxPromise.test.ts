@@ -49,7 +49,23 @@ describe("обещание про Kaspi следует за фактом", () =>
     ).toBe(false);
 
     expect(page).toContain("payboxLive");
-    expect(page).toContain("kztFallbackNote");
+
+    // 31.08.2026: решение «что написать под ценой» вынесено из страницы в
+    // lib/chargeCurrencyNote.ts — страница цен в тестовой среде не поднимается
+    // без полного слепка данных, и правило проверять было негде. Проверка
+    // ДОПОЛНЕНА, а не заменена: честный ключ обязан быть там, где принимается
+    // решение, и это место называется прямо.
+    const правило = readFileSync(
+      join(process.cwd(), "src/lib/chargeCurrencyNote.ts"),
+      "utf8",
+    );
+    expect(
+      page.includes("kztFallbackNote") || page.includes("chargeCurrencyNoteKey"),
+      "страница больше не связана с честной подписью ни текстом, ни правилом",
+    ).toBe(true);
+    expect(правило, "честный запасной текст исчез из правила").toContain("kztFallbackNote");
+    expect(правило, "ветка «не спросили» исчезла — вернётся ложное «Kaspi не подключён»")
+      .toContain("kztUnknownNote");
   });
 
   test("честный текст есть на всех трёх языках", () => {

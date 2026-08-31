@@ -121,7 +121,10 @@ export default function DepositSuccessPage() {
         <Link href="/qpaynet" className="text-slate-400 hover:text-white text-sm">← QPayNet</Link>
       </header>
       {/* QPayNet возвращает сюда после оплаты — отметка связывает её с каналом. */}
-      <Suspense><PurchaseReturnTracker source="qpaynet-deposit" provider="qpaynet" /></Suspense>
+      {/* Признак успеха — идентификатор пополнения из адреса: провайдер
+          возвращает сюда `?cid=<uuid>`. Без него отметка уходила при ЛЮБОМ
+          открытии адреса, и воронка считала заходы вместо покупок. */}
+        <Suspense><PurchaseReturnTracker source="qpaynet-deposit" provider="qpaynet" successParam="cid" successValue="*" /></Suspense>
       <Suspense><SuccessInner /></Suspense>
     </div>
   );

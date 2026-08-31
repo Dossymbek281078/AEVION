@@ -19,6 +19,20 @@ vi.mock("../src/services/qcoreai/smartComplete", () => ({
   }),
 }));
 
+const { runs } = vi.hoisted(() => ({ runs: [] as any[] }));
+vi.mock("../src/lib/smartRunLog", () => ({
+  insertSmartRun: (row: any) => { runs.push(row); },
+}));
+// Поставщик подменён так, чтобы вернуть ТОКЕНЫ: без них цена всегда 0,
+// и проверка «расход записан» прошла бы на сломанном учёте.
+vi.mock("../src/services/qcoreai/providers", () => ({
+  getProviders: () => [{ id: "openai", defaultModel: "gpt-4o-mini", configured: true }],
+  callProvider: async () => ({
+    reply: JSON.stringify({ summary: "s", milestones: [] }),
+    model: "gpt-4o-mini",
+    usage: { prompt_tokens: 1000, completion_tokens: 500 },
+  }),
+}));
 vi.mock("../src/lib/dbPool", () => ({ getPool: () => ({ query: vi.fn() }) }));
 vi.mock("../src/lib/ensureDevHubTables", () => ({
   ensureDevHubTables: vi.fn().mockResolvedValue(undefined),
@@ -71,5 +85,32 @@ describe("расход /ask отделим: анонимный от вошедш
     // Именно это утверждение ловит откат к одной метке на обе половины:
     // проверки по отдельности переживут его, если обе станут "devhub".
     expect(anon).not.toBe(calls[0].module);
+  });
+});
+
+describe("расход /plan попадает в учёт и отделим", () => {
+  beforeEach(() => { runs.length = 0; });
+
+  test("без входа расход записан и помечен как анонимный", async () => {
+    const res = await request(await app())
+      .post("/api/devhub/plan")
+      .send({ idea: "магазин носков" });
+    expect(res.status).toBe(200);
+    // Считаем ПРИРОСТ записей, а не наличие: строка могла остаться от соседа.
+    expect(runs).toHaveLength(1);
+    expect(runs[0].module).toBe("devhub-anon");
+  });
+
+  test("цена не нулевая — иначе учёт есть только на вид", async () => {
+    await request(await app()).post("/api/devhub/plan").send({ idea: "магазин носков" });
+    // Прежняя редакция утверждала costUsd > 0 и была СЛАБЕЕ своего названия:
+    // мутация «обнулить prompt_tokens» её пережила — цену вытягивал второй
+    // счётчик. Поймано мутацией, не глазами.
+    //
+    // Сверяем с ценой, посчитанной платформенной таблицей от ТЕХ ЖЕ токенов:
+    // потеря любого из двух входов теперь меняет число и ловится.
+    const { costUsd } = await import("../src/services/qcoreai/pricing");
+    expect(runs[0].costUsd).toBe(costUsd("openai", "gpt-4o-mini", 1000, 500));
+    expect(runs[0].costUsd).toBeGreaterThan(0);   // контроль: модель с ценой
   });
 });

@@ -38,6 +38,8 @@ import { ensureDevHubTables, isDevHubDbReady, getDevHubDbError } from "../lib/en
 import { callProvider, getProviders, type ChatImage } from "../services/qcoreai/providers";
 import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcoreai/jsonReply";
 import { smartComplete } from "../services/qcoreai/smartComplete";
+import { insertSmartRun } from "../lib/smartRunLog";
+import { costUsd } from "../services/qcoreai/pricing";
 import { applyHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
@@ -1352,7 +1354,7 @@ interface ProjectPlan {
  * "help me figure out what to build, in what order" layer that sits before
  * generate_code, not a replacement for it. Works with no open project
  * (greenfield) or accounts for an existing one's files when given. */
-async function planProjectWithAI(idea: string, existingFiles: Array<{ path: string; content: string }>): Promise<ProjectPlan> {
+async function planProjectWithAI(idea: string, existingFiles: Array<{ path: string; content: string }>, moduleTag: string): Promise<ProjectPlan> {
   const fallback: ProjectPlan = {
     ok: true, aiGenerated: false,
     summary: idea, targetUsers: "", stack: "next",
@@ -1385,6 +1387,28 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
       { role: "system", content: systemPrompt },
       { role: "user", content: userMsg },
     ], provider.defaultModel, 0.3);
+      // Учёт расхода. До 31.08.2026 его здесь не было вовсе: /plan зовёт
+      // платного поставщика НАПРЯМУЮ, минуя smartComplete, а учёт пишет
+      // именно smartComplete. Расход ручки был невидим полностью — и это
+      // при том, что входа она не требует.
+      //
+      // Таблица цен берётся платформенная (services/qcoreai/pricing):
+      // второй источник цен развёл бы наш отчёт с отчётом qcoreai.
+      // costUsd честно возвращает 0 для модели без цены — лучше выдумки,
+      // но значит: 0 здесь читается как «цена неизвестна», а не «бесплатно».
+      try {
+        insertSmartRun({
+          module: moduleTag,
+          resolved: "single",
+          costUsd: costUsd(
+            provider.id,
+            provider.defaultModel,
+            result.usage?.prompt_tokens,
+            result.usage?.completion_tokens,
+          ),
+          savedUsd: 0,
+        });
+      } catch { /* учёт не должен ронять ответ, ради которого его зовут */ }
     const parsed = extractJsonObject(result.reply) as any;
     if (!parsed) throw new Error("unparseable plan reply");
     const milestones = Array.isArray(parsed.milestones)
@@ -2424,6 +2448,8 @@ devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req,
 // способ ограничивать одно и то же незачем.
 devhubRouter.post("/plan", dhCostlyLimit("dhplan"), async (req, res) => {
   const auth = verifyBearerOptional(req);
+  // Метка та же, что у /ask: расход анонимных должен быть отделим.
+  const planModule = auth?.sub ? "devhub" : "devhub-anon";
   const userId = requesterId(req, auth?.sub);
   const { idea, projectId } = req.body || {};
   if (!idea || typeof idea !== "string" || !idea.trim()) {
@@ -2443,7 +2469,7 @@ devhubRouter.post("/plan", dhCostlyLimit("dhplan"), async (req, res) => {
   }
 
   try {
-    const plan = await planProjectWithAI(idea.trim(), existingFiles);
+    const plan = await planProjectWithAI(idea.trim(), existingFiles, planModule);
     return res.json(plan);
   } catch (e: any) {
     captureException(e, { route: "devhub/plan" });

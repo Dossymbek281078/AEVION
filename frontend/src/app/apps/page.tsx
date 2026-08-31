@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { channelFrom, withChannel } from "@/lib/products";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { productById } from "@/lib/products";
@@ -25,6 +26,20 @@ type Billing = "monthly" | "annual";
 // correcting it needs the real variant prices from the Lemon Squeezy dashboard,
 // and inventing a number would be worse than naming the gap. Fix = add Planet to
 // lib/products.ts with its verified price + href, then read it from there.
+// ПРОВЕРЕНО 30.08.2026, и пробел выше закрыт замером, а не догадкой.
+// Витрина Lemon Squeezy прочитана инструментом aevion-store-vs-price.mjs:
+//     магазин: AEVION Planet — Monthly  $250 / month
+//     магазин: AEVION Planet — Annual   $200 / month
+// Оба числа СОВПАДАЮТ с зашитыми ниже. То есть на сегодня страница называет
+// ту цену, которую списывает касса, — случай «All-Access $59», упомянутый
+// выше, здесь НЕ повторился.
+//
+// Что это НЕ отменяет: числа по-прежнему живут здесь, а не в lib/products.ts,
+// и следующее изменение цены в кабинете Lemon Squeezy разойдётся с ними так же
+// молча. Проверка — внешняя и ручная:
+//     node C:/Users/user/aevion-store-vs-price.mjs
+// Она читает живую витрину и печатает расхождения. Настоящая починка прежняя:
+// перенести Planet в lib/products.ts с проверенной ценой и ссылкой.
 const PLANET_MONTHLY = 250;
 const PLANET_ANNUAL_PER_MO = 200; // 12-month commitment, billed monthly
 
@@ -256,6 +271,13 @@ const PAID_APPS = APPS.filter((a) => a.price > 0);
 const RACK_RATE = PAID_APPS.reduce((s, a) => s + a.price, 0);
 
 export default function AppsPage() {
+  // Метка канала для ссылок в кассу. Витрина модулей — клиентская
+  // страница, поэтому метка берётся после отрисовки: на сервере адреса
+  // ещё нет, и сборка ссылки при отрисовке разошлась бы с разметкой.
+  const [channel, setChannel] = useState<string | null>(null);
+  useEffect(() => {
+    setChannel(channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined));
+  }, []);
   const [billing, setBilling] = useState<Billing>("monthly");
   const planetPrice = billing === "monthly" ? PLANET_MONTHLY : PLANET_ANNUAL_PER_MO;
   const savings = RACK_RATE - planetPrice;
@@ -401,9 +423,9 @@ export default function AppsPage() {
               )}
 
               <a
-                href={billing === "annual"
+                href={withChannel(billing === "annual"
                   ? "https://aevion.lemonsqueezy.com/checkout/buy/a6a35e07-9942-4089-aec3-0faa0ea9b722"
-                  : "https://aevion.lemonsqueezy.com/checkout/buy/23fa912b-b6dc-4b42-8dd8-7498b6298b1b"}
+                  : "https://aevion.lemonsqueezy.com/checkout/buy/23fa912b-b6dc-4b42-8dd8-7498b6298b1b", channel, "apps")}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() =>

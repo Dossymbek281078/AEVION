@@ -14,6 +14,8 @@ vi.mock("@/lib/track", () => ({ track: trackMock }));
 
 // eslint-disable-next-line import/first
 import { PageTracking } from "../PageTracking";
+// eslint-disable-next-line import/first
+import { channelFrom } from "@/lib/products";
 
 function eventsOfType(type: string) {
   return trackMock.mock.calls.map((c) => c[0]).filter((e) => e.type === type);
@@ -38,7 +40,10 @@ describe("замер посадочной страницы", () => {
     const views = eventsOfType("page_view");
     expect(views).toHaveLength(1);
     expect(views[0].source).toBe("qmelanin");
-    expect(views[0].meta.channel).toBe("tt");
+    // «tiktok», а не «tt»: метка приводится к тому же словарю, каким
+    // пользуются события оплаты. Иначе в панели один канал назван двумя
+    // словами и заходы не сопоставить с покупками.
+    expect(views[0].meta.channel).toBe("tiktok");
   });
 
   test("без метки канал пишется как direct, а не теряется", () => {
@@ -62,7 +67,7 @@ describe("замер посадочной страницы", () => {
     expect(clicks).toHaveLength(1);
     expect(clicks[0].source).toBe("shop");
     expect(clicks[0].meta.product).toBe("tmuyxw");
-    expect(clicks[0].meta.channel).toBe("tt");
+    expect(clicks[0].meta.channel).toBe("tiktok");
   });
 
   test("внутренние переходы в намерение купить НЕ засчитываются", () => {
@@ -96,5 +101,27 @@ describe("замер посадочной страницы", () => {
     render(<PageTracking page="qmelanin" />);
 
     expect(eventsOfType("page_view").map((e) => e.source).sort()).toEqual(["qmelanin", "qrenew"]);
+  });
+});
+
+describe("словарь меток один на всю воронку", () => {
+  test("чужая метка попадает в unknown, а не в direct", () => {
+    // Различать их обязательно: именно по росту доли unknown 21.08 заметили,
+    // что для Дзена и VK не заведены метки и продажи с них терялись. Слейся
+    // они с direct — заметить было бы нечем.
+    at("/qmelanin?c=zzzz");
+    render(<PageTracking page="qmelanin" />);
+
+    expect(eventsOfType("page_view")[0].meta.channel).toBe("unknown");
+  });
+
+  test("заход и начало оплаты называют канал ОДНИМ словом", () => {
+    // Это и есть защита от расхождения: пока обе стороны зовут channelFrom,
+    // словарь один. Разъедутся — тест покраснеет.
+    at("/qmelanin?c=tg");
+    render(<PageTracking page="qmelanin" />);
+    const fromView = eventsOfType("page_view")[0].meta.channel;
+
+    expect(fromView).toBe(channelFrom("tg"));
   });
 });

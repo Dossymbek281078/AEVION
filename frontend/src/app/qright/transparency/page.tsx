@@ -47,6 +47,14 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   return {
     title: t("metaTitle"),
     description: t("metaDesc"),
+    // СВОЙ canonical. Без него страница наследует адрес из макета раздела и
+    // говорит поисковику «я копия /qright, показывай его вместо меня». Замер
+    // живого прода 30.08.2026: так вели себя 78 страниц сайта.
+    //
+    // Адрес постоянный, хотя метаданные строятся функцией: язык выбирается по
+    // параметру и заголовкам, но СТРАНИЦА одна и та же. Разные языки одного
+    // адреса — это не разные адреса.
+    alternates: { canonical: "/qright/transparency" },
     openGraph: {
       type: "article",
       title: t("metaTitle"),

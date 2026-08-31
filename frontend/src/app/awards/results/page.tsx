@@ -106,6 +106,10 @@ async function loadResults(
 export const metadata: Metadata = {
   title: "AEVION Awards results",
   description: "Frozen medal lists from AEVION Awards finalized seasons.",
+  // СВОЙ canonical: без него страница наследует адрес раздела из его макета
+  // и просит поисковик показывать раздел вместо себя. Замер живого прода
+  // 30.08.2026 — так вели себя 78 страниц сайта.
+  alternates: { canonical: "/awards/results" },
   openGraph: {
     type: "article",
     title: "AEVION Awards results",

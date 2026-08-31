@@ -27,6 +27,7 @@ const VARS = [
   "GUMROAD_ACCESS_TOKEN", "GUMROAD_WEBHOOK_SECRET",
   "PAYBOX_MERCHANT_ID", "PAYBOX_SECRET", "PAYPAL_CLIENT_ID", "PAYPAL_SECRET",
   "PAYPAL_WEBHOOK_ID",
+  "BREVO_API_KEY",
 ];
 const saved: Record<string, string | undefined> = {};
 beforeEach(() => VARS.forEach((v) => { saved[v] = process.env[v]; delete process.env[v]; }));
@@ -126,5 +127,64 @@ describe("Подсказка называет, чего не хватает", ()
     const с = await request(app()).get("/api/health/channels");
     expect(с.body.canStartPurchase).toBe(true);
     delete process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY;
+  });
+});
+
+describe("Почта: три пути, три ответа", () => {
+  /*
+   * 31.08.2026 два окна намеряли состояние почты и получили противоположные
+   * ответы — оба верные. Одно спрашивало путь входа (Resend, работает), другое
+   * видело молчащую отправку (SMTP без пароля). Слово «почта» покрывало три
+   * механизма, и каждый был прав про свой.
+   *
+   * Эти проверки закрепляют, что общего ответа тут нет и не должно быть.
+   */
+  test("Resend поднимает ТОЛЬКО вход: подписка и уведомление молчат", async () => {
+    process.env.RESEND_API_KEY = "re_x";
+    const r = await get();
+
+    expect(r.body.mail.signup.configured).toBe(true);
+    expect(r.body.mail.waitlist.configured, "подписка идёт через Brevo, не Resend").toBe(false);
+    expect(r.body.mail.founderNotify.configured, "уведомление идёт по SMTP").toBe(false);
+  });
+
+  test("Brevo поднимает ТОЛЬКО подписку", async () => {
+    process.env.BREVO_API_KEY = "xkeysib_x";
+    const r = await get();
+
+    expect(r.body.mail.waitlist.configured).toBe(true);
+    expect(r.body.mail.signup.configured).toBe(false);
+    expect(r.body.mail.founderNotify.configured).toBe(false);
+  });
+
+  test("SMTP без пароля не поднимает НИЧЕГО — это и было настоящее состояние прода", async () => {
+    // 31.08 на проде заданы SMTP_HOST, SMTP_USER, SMTP_PORT, SMTP_FROM — и не
+    // задан SMTP_PASS. Транспорт при этом возвращает null и отправка выходит
+    // молча: заявка на бирже принята, основатель о ней не узнаёт.
+    process.env.SMTP_HOST = "smtp.example.test";
+    process.env.SMTP_USER = "u";
+    const r = await get();
+
+    expect(r.body.mail.founderNotify.configured).toBe(false);
+    expect(r.body.mail.signup.configured).toBe(false);
+  });
+
+  test("полный SMTP поднимает вход И уведомление, но не подписку", async () => {
+    process.env.SMTP_HOST = "smtp.example.test";
+    process.env.SMTP_USER = "u";
+    process.env.SMTP_PASS = "p";
+    const r = await get();
+
+    expect(r.body.mail.founderNotify.configured).toBe(true);
+    expect(r.body.mail.signup.configured).toBe(true);
+    expect(r.body.mail.waitlist.configured).toBe(false);
+  });
+
+  test("общего поля «почта настроена» нет — оно и было источником спора", async () => {
+    process.env.RESEND_API_KEY = "re_x";
+    const r = await get();
+
+    expect(Object.keys(r.body.mail).sort()).toEqual(["founderNotify", "signup", "waitlist"]);
+    expect(r.body.mail.configured, "общий ответ вернулся — уберите его").toBeUndefined();
   });
 });

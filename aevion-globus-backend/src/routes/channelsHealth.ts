@@ -58,6 +58,30 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
    * либо любой OAuth. Ложное «да» здесь дороже ложного «нет»: человек уходит
    * молча и не пишет в поддержку.
    */
+  /**
+   * ── ПОЧТА: путей ТРИ, и провайдеры у них РАЗНЫЕ ────────────────────────
+   *
+   * 31.08.2026 два окна независимо намеряли состояние почты и получили
+   * противоположные ответы — оба верные. Одно спрашивало путь входа (Resend,
+   * работает), другое видело молчащую отправку (SMTP без пароля). Слово
+   * «почта» покрывало три разных механизма, и каждый был прав про свой.
+   *
+   * Отсюда правило, ради которого этот блок и написан: «почта работает» — не
+   * утверждение, пока не назван ПУТЬ. Поэтому здесь три отдельных признака, а
+   * не один общий, и общего специально нет.
+   */
+  const brevo = set("BREVO_API_KEY");
+  const mail = {
+    // подтверждение адреса при регистрации
+    signup: { configured: email, via: smtp ? "smtp" : resend ? "resend" : null },
+    // подтверждение подписки в воронке — отдельный провайдер
+    waitlist: { configured: brevo, via: "brevo" },
+    // уведомление основателю о новой заявке на бирже стартапов.
+    // Единственный потребитель SMTP: без пароля транспорт возвращает null и
+    // функция молча выходит — заявка принята, а основатель о ней не узнаёт.
+    founderNotify: { configured: smtp, via: "smtp" },
+  };
+
   const canRegister = email || google || github;
   const canPay = lemonsqueezy || gumroad || paybox || paypal;
   // ДВА РАЗНЫХ ВОПРОСА, и раньше на них отвечало одно поле.
@@ -100,6 +124,7 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
     canPay,
       canGrant,
       canStartPurchase,
+      mail,
     signup: {
       email: { configured: email, via: { smtp, resend } },
       google: { configured: google },

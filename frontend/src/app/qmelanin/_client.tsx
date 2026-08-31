@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { channelFrom, withChannel } from "@/lib/products";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 
@@ -62,6 +63,15 @@ interface AiPlan {
 }
 
 export default function QMelaninClient() {
+  // Метка канала для ссылок в кассу. Ролики ведут именно сюда, поэтому
+  // потеря метки на этой странице стоит дороже всего: покупка приходит
+  // как пришедшая ниоткуда. Держится в состоянии и заполняется после
+  // отрисовки — на сервере адреса ещё нет, и чтение из window разошлось
+  // бы с серверной разметкой.
+  const [channel, setChannel] = useState<string | null>(null);
+  useEffect(() => {
+    setChannel(channelFrom(new URLSearchParams(window.location.search).get("c") ?? undefined));
+  }, []);
   const [values, setValues] = useState<Record<string, string>>({});
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
@@ -134,7 +144,7 @@ export default function QMelaninClient() {
 
         <div style={styles.buyRow}>
           <a
-            href="https://aevion.gumroad.com/l/tmuyxw"
+            href={withChannel("https://aevion.gumroad.com/l/tmuyxw", channel, "qmelanin-ru")}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => track({ type: "checkout_start", source: "qmelanin/ru", value: 9, meta: { permalink: "tmuyxw", processor: "gumroad" } })}
@@ -150,7 +160,7 @@ export default function QMelaninClient() {
             <span style={styles.buyBtn}>Получить за&nbsp;$9&nbsp;→</span>
           </a>
           <a
-            href="https://aevion.gumroad.com/l/kkiavh"
+            href={withChannel("https://aevion.gumroad.com/l/kkiavh", channel, "qmelanin-en")}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => track({ type: "checkout_start", source: "qmelanin/en", value: 19, meta: { permalink: "kkiavh", processor: "gumroad" } })}

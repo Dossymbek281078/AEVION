@@ -102,3 +102,84 @@ describe("каждая видимая кнопка нажимается", () => 
     );
   }, 30000);
 });
+
+describe("кнопки, появляющиеся только после успеха, тоже нажимаются", () => {
+  /**
+   * ПОВОД (31.08). Проверка выше нажимает все ВИДИМЫЕ кнопки — и я
+   * докладывал ворота 2 закрытыми. Замер показал, что это выборка:
+   * после построения обоснования появляются ещё две («Download JSON» и
+   * «Verify»), а кнопка «построить» исчезает. Их не нажимал никто.
+   *
+   * «Все видимые» и «все» — разные множества, когда часть интерфейса
+   * рождается только после успешного действия.
+   */
+  test("скачать и проверить обоснование не роняют страницу", async () => {
+    const route = {
+      path: [{ c: 1, r: 1 }, { c: 6, r: 4 }], alts: [100, 110], distanceKm: 1.2,
+      cruiseAltM: 110, etaMinWind: 1, etaMinStill: 1, avgWindMs: 2, windFromDeg: 90, airspace: {},
+    };
+    const just = {
+      document: { from: 0, to: 1, city: "astana", distanceKm: 1.2, cruiseAltM: 110 },
+      attestation: { alg: "Ed25519", contentHash: "abc", signature: "sig", publicKey: "pk" },
+      scope: "демо", scopeEn: "demo",
+    };
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/route/justification/verify")) return jsonOk({ valid: true });
+      if (url.includes("/route/justification")) return jsonOk(just);
+      if (url.includes("/api/qskyway/route")) return jsonOk(route);
+      if (url.includes("/api/qskyway/city")) return jsonOk(cityMinimal);
+      if (url.includes("/api/qskyway/cities")) {
+        return jsonOk({ default: "astana", cities: [{ id: "astana", name: "Astana" }] });
+      }
+      return jsonOk({});
+    }) as unknown as typeof fetch;
+
+    const r = render(
+      <I18nProvider>
+        <Client />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(r.container.querySelectorAll("button").length).toBeGreaterThan(3), { timeout: 10000 });
+
+    const build = Array.from(r.container.querySelectorAll("button"))
+      .find((b) => /justification|обоснован/i.test(b.textContent ?? ""));
+    expect(build, "кнопки построения обоснования нет").toBeTruthy();
+    fireEvent.click(build as HTMLElement);
+
+    // Ждём именно ПОЯВЛЕНИЯ новых кнопок, а не смены их числа:
+    // одна исчезает, две появляются, и счётчик мог бы обмануть.
+    await waitFor(
+      () => {
+        const labels = Array.from(r.container.querySelectorAll("button")).map((b) => b.textContent ?? "");
+        expect(labels.some((l) => /download|скачать/i.test(l)), "кнопка скачивания не появилась").toBe(true);
+      },
+      { timeout: 8000 },
+    );
+
+    // Следим за СЛЕДСТВИЕМ, а не за фактом нажатия. Первая версия только
+    // жала кнопки и проверяла, что страница не опустела: мутация
+    // onClick={() => {}} её НЕ ломала — нажатие было декоративным.
+    // Скачивание видно по URL.createObjectURL: его зовёт обработчик.
+    const madeBlob: number[] = [];
+    const realCreate = URL.createObjectURL;
+    URL.createObjectURL = ((b: Blob) => { madeBlob.push(b.size); return "blob:probe"; }) as typeof URL.createObjectURL;
+    const realRevoke = URL.revokeObjectURL;
+    URL.revokeObjectURL = (() => {}) as typeof URL.revokeObjectURL;
+
+    let pressed = 0;
+    for (const rx of [/download|скачать/i, /verify|провер/i]) {
+      const b = Array.from(r.container.querySelectorAll("button")).find((x) => rx.test(x.textContent ?? ""));
+      if (!b || (b as HTMLButtonElement).disabled) continue;
+      fireEvent.click(b);
+      pressed++;
+      expect((r.container.textContent ?? "").length, "страница опустела после нажатия").toBeGreaterThan(50);
+    }
+    URL.createObjectURL = realCreate;
+    URL.revokeObjectURL = realRevoke;
+
+    expect(pressed, "ни одна из двух кнопок не нажата — проверка пуста").toBe(2);
+    expect(madeBlob.length, "нажали «скачать», а файл не собрался").toBeGreaterThan(0);
+    expect(madeBlob[0], "файл обоснования пуст").toBeGreaterThan(50);
+  }, 40000);
+});

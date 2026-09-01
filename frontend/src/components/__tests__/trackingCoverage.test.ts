@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -51,6 +51,7 @@ const NOT_A_SALES_PAGE: Record<string, string> = {
   "revenue/page.tsx": "внутренний дашборд выручки, не для покупателя",
   "qmelanin/_client.tsx": "часть страницы qmelanin — замер стоит в её page.tsx, второй считал бы то же посещение дважды",
   "longevity/_client.tsx": "часть страницы longevity — замер стоит в её page.tsx, второй считал бы то же посещение дважды",
+  "qskyway/_client.tsx": "часть страницы qskyway — замер стоит в её page.tsx, второй счётчик дал бы ДВА события на заход. Проверено 01.09.2026: PageTracking в page.tsx 3 раза, в _client.tsx 0; форма подписки живёт в клиенте, поэтому сторож видел клиент без счётчика. Переносить счётчик в клиент нельзя — потеряется ветка платной стены, а посещение есть посещение.",
   "devhub/[id]/page.tsx": "рабочее место внутри DevHub: касса там нужна пользователю, чтобы продать СВОЙ материал, а не нам — свой",
 };
 
@@ -101,7 +102,33 @@ describe("страницы с покупкой умеют считать пос�
       const sells = BUY_MARKERS.some((re) => re.test(src));
       const collects = LEAD_MARKERS.some((re) => re.test(src));
       if (!sells && !collects) continue;
-      if (NOT_A_SALES_PAGE[rel(f)]) continue;
+      /*
+       * ⚠️ 01.09.2026: исключение стало УСЛОВНЫМ, и это не строгость ради
+       * строгости.
+       *
+       * Раньше запись в списке снимала проверку НАСОВСЕМ. Вписав сюда
+       * `qskyway/_client.tsx` с причиной «замер стоит в page.tsx», я прогнал
+       * мутацию — сломал импорт счётчика в САМОМ page.tsx — и сторож остался
+       * зелёным. То есть модуль перестал проверяться вовсе: клиент прощён
+       * списком, а страница не попадает под правило, потому что признаков
+       * продажи в ней нет.
+       *
+       * Причина «замер стоит в соседнем файле» верна ровно до тех пор, пока он
+       * там ДЕЙСТВИТЕЛЬНО стоит. Теперь это проверяется, а не берётся на веру.
+       *
+       * Прежние две записи (qmelanin, longevity) той же формы — они тоже
+       * начинают проверяться, и это правильно: у них ровно то же обоснование.
+       */
+      if (NOT_A_SALES_PAGE[rel(f)]) {
+        const соседняя = f.replace(/_client\.tsx$/, "page.tsx");
+        if (f.endsWith("_client.tsx") && existsSync(соседняя)) {
+          const рядом = readFileSync(соседняя, "utf8");
+          if (!VIEW_MARKERS.some((re) => re.test(рядом))) {
+            silent.push(rel(f) + " (прощён списком, но в соседней page.tsx замера НЕТ)");
+          }
+        }
+        continue;
+      }
       if (VIEW_MARKERS.some((re) => re.test(src))) continue;
       silent.push(rel(f));
     }

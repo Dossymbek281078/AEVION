@@ -47,6 +47,7 @@ import { COLOR as CC_LIGHT, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { PV, ev, mm, best } from "./chessEngine";
 import { classifyDrop } from "./moveQuality";
 import PostGameCard from "./PostGameCard";
+import { temaZadachiRu, fazaRu } from "./puzzleLabels";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
 import { pickDailyIdx } from "./dailyPick";
@@ -5204,7 +5205,7 @@ export default function CyberChessPage(){
     else if(pzMode==="custom")startClock(pzCustomSec);
     else if(pzMode==="rush"){/* keep running deadline */}
     else startClock(0);
-    showToast(`${pz.name} · ${pz.theme} · ${pz.r}`,"info");
+    showToast(`${pz.name} · ${temaZadachiRu(pz.theme)} · ${pz.r}`,"info");
     // reset per-puzzle stopwatch
     if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);
     pzTimerRef.current=Date.now();sPzTimer(0);paintPzTimer(0);
@@ -10130,7 +10131,7 @@ export default function CyberChessPage(){
                     fontWeight:800,border:"1px solid currentColor",opacity:0.7}}>
                     ⭐ {pzCurrent.r}
                   </span>}
-                  {[pzCurrent.phase,pzCurrent.theme].filter(Boolean).map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
+                  {[fazaRu(pzCurrent.phase),temaZadachiRu(pzCurrent.theme)].filter(Boolean).map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
                   {pzCurrent.goal==="Mate"&&pzCurrent.mateIn&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#fef2f2",color:"#991b1b",fontWeight:800}}>Мат в {pzCurrent.mateIn}</span>}
                 </div>
                 {/* Result banner */}
@@ -10490,7 +10491,7 @@ export default function CyberChessPage(){
                       <div style={{fontSize:12,color:T.dim,display:"flex",gap:10,flexWrap:"wrap"}}>
                         <span>{sideLabel}</span>
                         {phaseLabel&&<span>{phaseLabel}</span>}
-                        {pz.theme&&<span style={{color:T.blue,fontWeight:600}}>{pz.theme}</span>}
+                        {pz.theme&&<span style={{color:T.blue,fontWeight:600}}>{temaZadachiRu(pz.theme)}</span>}
                       </div>
                     </div>
                     <span style={{fontSize:16,fontWeight:900,color:pz.r<600?T.accent:pz.r<1200?T.blue:pz.r<1800?T.purple:T.danger,padding:"6px 14px",borderRadius:7,background:pz.r<600?"#d1fae5":pz.r<1200?"#dbeafe":pz.r<1800?"#ede9fe":"#fee2e2",minWidth:68,textAlign:"center",flexShrink:0}}>{pz.r}</span>

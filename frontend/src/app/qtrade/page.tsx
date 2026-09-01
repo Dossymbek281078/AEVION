@@ -715,6 +715,7 @@ export default function QTradePage() {
                 {/* Star button */}
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleWatch(p.id); }}
+                  aria-label={(isWatched ? "Убрать из вотчлиста: " : "Добавить в вотчлист: ") + p.id}
                   title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
                   style={{
                     position: "absolute", top: 8, right: 8, zIndex: 2,

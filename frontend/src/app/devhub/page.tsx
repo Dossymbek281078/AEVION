@@ -440,7 +440,7 @@ export default function DevHubPage() {
                 соседнее окно добавляло доступное имя, я взял его как есть. */}
             <textarea
               data-prehydration-field="ideaPrompt"
-              aria-label={t("ideaPrompt.label")}
+              aria-label={t("hero.ideaAria")}
               value={ideaPrompt}
               onChange={(e) => setIdeaPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) startFromIdea(); }}

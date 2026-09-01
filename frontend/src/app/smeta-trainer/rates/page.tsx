@@ -317,7 +317,21 @@ function RatesCatalogPageInner() {
                         className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
                         onClick={() => setExpandedCode(expanded ? null : r.code)}
                       >
-                        <td className="px-2 py-2 font-mono text-[10px] text-slate-900">{r.code}</td>
+                        <td className="px-2 py-2 font-mono text-[10px] text-slate-900">
+                          {/* Нажатие по СТРОКЕ раскрывает подробности, но строка не попадает в
+                              обход Tab: замер прода 01.09.2026 — с клавиатуры расценку не
+                              раскрыть. Роль кнопки на <tr> сломала бы семантику таблицы,
+                              поэтому кнопкой становится код расценки в первой ячейке. */}
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setExpandedCode(expanded ? null : r.code); }}
+                            aria-expanded={expanded}
+                            aria-label={`Расценка ${r.code}: ${r.title}`}
+                            className="font-mono text-[10px] text-slate-900 underline decoration-dotted underline-offset-2"
+                          >
+                            {r.code}
+                          </button>
+                        </td>
                         <td className="px-2 py-2 text-slate-800">{r.title}</td>
                         <td className="px-2 py-2">
                           <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${CATEGORY_COLOR[r.category] ?? "bg-slate-100"}`}>

@@ -200,7 +200,13 @@ pricingRouter.get("/bundles", (_req, res) => {
 pricingRouter.post("/quote", (req, res) => {
   const body = req.body ?? {};
   const tierId = body.tierId as TierId | undefined;
-  if (!tierId || !["free", "lite", "medium", "full", "enterprise"].includes(tierId)) {
+  // Список тарифов НЕ перечисляем: он уже есть в каталоге, а копия расходится.
+  // Замер 01.09.2026: витрина получает шесть тарифов, включая pro («Universe»,
+  // $149/мес), рисует для него кнопку — а эта проверка отвечала 400
+  // invalid_tier. Калькулятор цен ломался на самом дорогом тарифе.
+  // Это была ЧЕТВЁРТАЯ копия одного пропуска: раньше pro путали с Lite в стене
+  // (починено 22.07), в письме о покупке и в разборе ссылки заказа (31.08).
+  if (!tierId || !getTier(tierId)) {
     return res.status(400).json({ error: "invalid_tier", tierId });
   }
   const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
@@ -241,7 +247,7 @@ pricingRouter.post("/promo/validate", (req, res) => {
   if (!code) {
     return res.status(400).json({ valid: false, reason: "empty_code" });
   }
-  if (!tierId || !["free", "lite", "medium", "full", "enterprise"].includes(tierId)) {
+  if (!tierId || !getTier(tierId)) {
     return res.status(400).json({ valid: false, reason: "invalid_tier" });
   }
   const { promo, reason } = resolvePromoCode(code, tierId, period);
@@ -298,7 +304,7 @@ pricingRouter.post("/lead", (req, res) => {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
   const company = typeof body.company === "string" ? body.company.trim().slice(0, 200) : undefined;
   const industry = typeof body.industry === "string" ? body.industry.trim().slice(0, 60) : undefined;
-  const tier = typeof body.tier === "string" && ["free", "lite", "medium", "full", "enterprise"].includes(body.tier)
+  const tier = typeof body.tier === "string" && getTier(body.tier)
     ? (body.tier as TierId)
     : undefined;
   const seats = Number.isFinite(body.seats) ? Math.min(10000, Math.max(1, Math.floor(body.seats))) : undefined;

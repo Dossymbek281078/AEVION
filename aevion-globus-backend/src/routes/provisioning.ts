@@ -488,7 +488,17 @@ const TIER_DISPLAY: Record<TierId, string> = {
   medium: "Medium",
   full: "Full",
   enterprise: "Enterprise",
-  // `pro` is NOT a legacy alias — it is the live Universe tier ($249.99 in
+  // ⚠️ 01.09.2026: здесь стояла ОТСТАВНАЯ цена. Она не совпадала ни с каталогом,
+  // ни с продом — у Universe сейчас $149. Комментарий утверждал состояние,
+  // которое изменилось, и делал это увереннее кода: читающий верит пояснению,
+  // потому что оно написано человеком для человека.
+  //
+  // Поймал сторож отставных цен. Соседнее окно сочло его срабатывание ложным —
+  // «споткнулся о комментарий». Он и правда споткнулся о комментарий, но
+  // комментарий был неверен: тревога настоящая. Прежде чем звать красное
+  // ложным, стоит проверить утверждение, о которое споткнулись.
+  //
+  // `pro` НЕ устаревший псевдоним — это живой тариф Universe ($149 в
   // data/pricing.ts), and lib/planGate.ts normalizes it to `full` access.
   // This map still called it "Lite", so someone who had just paid for Universe
   // got a welcome email headlined "Добро пожаловать в AEVION Lite". Same

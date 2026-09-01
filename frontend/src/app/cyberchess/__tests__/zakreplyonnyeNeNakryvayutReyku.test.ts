@@ -54,3 +54,14 @@ describe("закреплённые элементы и правая рейка",
     expect(баннер).toMatch(/removeProperty\(\s*"--aevion-projects-w"/);
   });
 });
+
+describe("блок покупки в рейке", () => {
+  it("поднят над полосой всплывашек", async () => {
+    const { POLOSA_VSPLYVASHEK } = await import("../AevionProjectsBanner");
+    // 16px отступ контейнера + высота типичной всплывашки. Меньше 90 —
+    // и «Купить» снова уедет под всплывашку, как 01.09.2026.
+    expect(POLOSA_VSPLYVASHEK).toBeGreaterThanOrEqual(90);
+    const баннер = readFileSync(join(__dirname, "..", "AevionProjectsBanner.tsx"), "utf8");
+    expect(баннер).toContain("marginBottom: POLOSA_VSPLYVASHEK");
+  });
+});

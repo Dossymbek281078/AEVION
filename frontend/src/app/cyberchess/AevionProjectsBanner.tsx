@@ -17,6 +17,14 @@ interface Props {
 
 const BANNER_W = 240;
 
+/**
+ * Высота полосы у нижнего края экрана, которую занимает общий контейнер
+ * всплывашек (bottom:16 + сама всплывашка). Ниже этой отметки любой орган
+ * управления рискует оказаться под всплывашкой и перестать нажиматься.
+ * Замер 01.09.2026: так были накрыты цена, «Купить» и «Все тарифы →».
+ */
+export const POLOSA_VSPLYVASHEK = 96;
+
 export default function AevionProjectsBanner({ onHide }: Props) {
   // Панель фиксированная и лежит ПОВЕРХ страницы: без компенсации она срезает
   // правый край контента — на лаунчпаде под неё уходил край кнопки «Играть».
@@ -99,7 +107,12 @@ export default function AevionProjectsBanner({ onHide }: Props) {
 
       {/* CyberChess pricing — live from /api/pricing via ModulePricingChip */}
       <div style={{
-        margin: "8px", padding: "10px 12px", flexShrink: 0,
+        // Нижние 96px рейки отдаём всплывашкам: общий контейнер прижат к низу
+        // экрана (bottom:16, z-index 9999) и ловит касания. 01.09.2026 он
+        // накрывал здесь цену, «Купить» и «Все тарифы →» — весь путь покупки.
+        // Поднимаем блок над этой полосой, а не спорим со слоями: контейнер
+        // общий для платформы, двигать его ради одного модуля нельзя.
+        margin: "8px", marginBottom: POLOSA_VSPLYVASHEK, padding: "10px 12px", flexShrink: 0,
         border: "1px solid #3d3b39", borderRadius: 6,
         background: "#262421",
       }}>

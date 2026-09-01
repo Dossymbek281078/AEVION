@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
@@ -12,13 +12,34 @@ function CancelInner() {
   const sp = useSearchParams();
   const tier = sp.get("tier");
 
+  // Отмену отмечаем ТОЛЬКО при настоящем возврате из кассы.
+  //
+  // Замер 31.08.2026: событие уходило безусловно, при каждом открытии адреса.
+  // Значит доля брошенных оплат завышалась — а по ней судят, работает ли касса.
+  // Тот же класс, что нашёлся в этот день на соседней странице успеха; там он
+  // портил число продаж, здесь портит число отказов, и второе тише: завышенный
+  // отказ выглядит как честная воронка.
+  //
+  // Признак настоящего возврата есть: сюда возвращают ровно две кассы, и каждая
+  // помечает себя — `?paybox=1` (`payboxProvider.ts:116`) и `?paypal=1`
+  // (`paypalProvider.ts:130`). Lemon Squeezy свой адрес отмены не задаёт и сюда
+  // не возвращает вовсе, поэтому её отсутствие в списке — не пропуск.
+  const provider = sp.get("paybox") ? "paybox" : sp.get("paypal") ? "paypal" : null;
+  const fired = useRef(false);
+
   useEffect(() => {
+    // Один раз за монтирование: страница перерисовывается при смене языка, а
+    // повторное событие завысило бы ровно ту цифру, ради которой отметка и
+    // ставится.
+    if (!provider || fired.current) return;
+    fired.current = true;
     track({
       type: "checkout_cancel",
       tier: tier ?? undefined,
       source: "pricing",
+      meta: { provider },
     });
-  }, [tier]);
+  }, [tier, provider]);
 
   return (
     <ProductPageShell maxWidth={680}>

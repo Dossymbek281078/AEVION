@@ -291,6 +291,30 @@ const memCheckpoints = new Map<string, DevHubCheckpoint>();
 type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy";
 type StudioTier = "free" | "pro" | "enterprise";
 
+/**
+ * Имя голоса → идентификатор у поставщика. ОДНА таблица на модуль.
+ *
+ * Их было две: девять голосов в ручке озвучки и четыре в шаге рабочего
+ * процесса агента. Значения у общих четырёх совпадали, но пяти — Arnold, Domi,
+ * Elli, Josh, Sam — во второй не было, а рядом стоял запасной путь
+ * `VOICE_IDS[выбор] || VOICE_IDS.Rachel`. То есть сценарий, просивший Josh,
+ * молча получал Rachel: ни ошибки, ни предупреждения, просто чужой голос.
+ *
+ * Замер 01.09.2026. Два источника одного факта разошлись не значениями, а
+ * ПОЛНОТОЙ — такое не ловится сравнением значений.
+ */
+const VOICE_IDS: Record<string, string> = {
+  Rachel: "21m00Tcm4TlvDq8ikWAM",
+  Adam:   "pNInz6obpgDQGcFmaJgB",
+  Antoni: "ErXwobaYiN019PkySvjV",
+  Arnold: "VR6AewLTigWG4xSOukaG",
+  Bella:  "EXAVITQu4vr4xnSDxMaL",
+  Domi:   "AZnzlk1XvdvUeBnXmlld",
+  Elli:   "MF3mGyEYCl7XYWbV9V6O",
+  Josh:   "TxGEqnHWrfWFTfGW9XjX",
+  Sam:    "yoZ06aMxZJJ28mfd3POQ",
+};
+
 const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
   free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
   // tts у платного тарифа поднят до уровня бесплатного 01.09.2026. Было 30000
@@ -3893,17 +3917,7 @@ devhubRouter.post("/media/tts", async (req, res) => {
   }
 
   // Map voice name → ElevenLabs voice ID (common voices)
-  const VOICE_IDS: Record<string, string> = {
-    Rachel: "21m00Tcm4TlvDq8ikWAM",
-    Adam:   "pNInz6obpgDQGcFmaJgB",
-    Antoni: "ErXwobaYiN019PkySvjV",
-    Arnold: "VR6AewLTigWG4xSOukaG",
-    Bella:  "EXAVITQu4vr4xnSDxMaL",
-    Domi:   "AZnzlk1XvdvUeBnXmlld",
-    Elli:   "MF3mGyEYCl7XYWbV9V6O",
-    Josh:   "TxGEqnHWrfWFTfGW9XjX",
-    Sam:    "yoZ06aMxZJJ28mfd3POQ",
-  };
+
   const voiceId = VOICE_IDS[voice as string] ?? VOICE_IDS["Rachel"];
 
   try {
@@ -4912,10 +4926,7 @@ async function executeWorkflowStep(
       if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
       const text = String(step.text || "");
       if (!text) throw new Error("text required for tts step");
-      const VOICE_IDS: Record<string, string> = {
-        Rachel: "21m00Tcm4TlvDq8ikWAM", Adam: "pNInz6obpgDQGcFmaJgB",
-        Antoni: "ErXwobaYiN019PkySvjV", Bella: "EXAVITQu4vr4xnSDxMaL",
-      };
+
       const voiceId = VOICE_IDS[String(step.voice || "Rachel")] || VOICE_IDS.Rachel;
       const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
         method: "POST",

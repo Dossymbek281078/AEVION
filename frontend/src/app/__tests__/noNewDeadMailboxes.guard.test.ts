@@ -37,8 +37,13 @@ const ИЗВЕСТНЫЕ = new Set([
   "devhub/[id]/page.tsx",
   "pricing/affiliate-dashboard/page.tsx",
   "pricing/glossary/page.tsx",
-  "pricing/page.tsx",
-  "pricing/refund-policy/page.tsx",
+  // pricing/page.tsx убрана 01.09.2026: в подписи к FAQ стоял mailto на ящик
+  // нашего домена, и вопрос покупателя уходил в пустоту. Ссылка ведёт на форму
+  // связи, подпись заведена ключом faq.contactCta на двух языках.
+  // pricing/refund-policy убрана 01.09.2026: страница возврата денег звала писать
+  // на billing@aevion.app — ящик домена без записи MX — и это стояло ШАГОМ 1
+  // процедуры возврата. Шесть мест на двух языках переведены на форму связи.
+  // Сторож потребовал сокращения сам, проверкой «список не протухает».
   "pricing/security/page.tsx",
   "qcoreai/budget/page.tsx",
   "qstore/page.tsx",

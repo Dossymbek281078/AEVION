@@ -2050,9 +2050,15 @@ export default function PricingPage() {
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
           {tp("faq.subtitle")}{" "}
-          <a href="mailto:hello@aevion.app" style={{ color: "#0d9488", fontWeight: 700 }}>
-            hello@aevion.app
-          </a>
+          {/*
+            01.09.2026: здесь стоял mailto на ящик нашего домена. Записи MX у него
+            нет — письмо не доходит никуда, и вопрос из FAQ пропадал вместе с
+            человеком. Ведём на форму связи: её обращения пишутся на постоянный
+            том и читаются защищённой ручкой.
+          */}
+          <Link href="/pricing/contact" style={{ color: "#0d9488", fontWeight: 700 }}>
+            {tp("faq.contactCta")}
+          </Link>
           .
         </p>
         <div>

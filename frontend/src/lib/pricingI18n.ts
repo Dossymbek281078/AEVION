@@ -459,6 +459,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* FAQ */
     "faq.title": "Вопросы и ответы",
     "faq.subtitle": "Самое частое — здесь. Если нет ответа, напишите",
+    "faq.contactCta": "напишите нам через форму связи",
 
     /* Newsletter */
     "newsletter.title": "Не готовы покупать сейчас?",
@@ -941,6 +942,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "faq.title": "FAQ",
     "faq.subtitle": "Most common questions — here. If yours isn't, email",
+    "faq.contactCta": "write to us via the contact form",
 
     "newsletter.title": "Not ready to buy yet?",
     "newsletter.subtitle": "Subscribe to email updates — every 2 weeks: new modules, customer cases, promo codes.",

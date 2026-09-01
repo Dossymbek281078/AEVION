@@ -114,12 +114,38 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     if (result.status === "paid") {
       const tierId = tierForReference(reference);
       const period = periodForReference(reference);
+      // СУММА — только если касса рассчиталась в долларах.
+      //
+      // 🔴 Ловушка единиц, из-за которой поле должно оставаться пустым в
+      // остальных случаях: pg_amount приходит в ОСНОВНОЙ единице валюты
+      // платежа, а у PayBox это тенге. Поле в записи подписки называется
+      // amountUsd. Записать одно в другое значило бы завысить выручку в сотни
+      // раз, и заметили бы это только по абсурдной цифре в панели.
+      //
+      // Пересчёт по курсу здесь делать нельзя: курса на день платежа мы не
+      // храним, а «сегодняшний» сделал бы прошлые суммы плавающими. Пустое
+      // поле честнее приблизительного — рядом в сводке всегда идёт
+      // знаменатель withAmount, и он покажет пробел как пробел.
+      const payboxCurrency = (raw.pg_currency ?? "").trim().toUpperCase();
+      const payboxAmount = Number(raw.pg_amount);
+      const amountUsd =
+        payboxCurrency === "USD" && Number.isFinite(payboxAmount) && payboxAmount > 0
+          ? payboxAmount
+          : undefined;
+
+      // ⚠️ КАНАЛ привлечения сюда не доходит вовсе, и это измерено, а не
+      // предположено: в payboxProvider ссылка на кассу собирается без
+      // pg_param_channel (0 вхождений). Читать его здесь значило бы завести
+      // мёртвый код, поэтому не читаем. Пока так, покупки через PayBox
+      // попадают в сводке в ключ "direct" — это не потеря денег, но канал
+      // у них неизвестен. Чинится в ССЫЛКЕ кассы, а не тут.
       const provResult = await provisionSubscription({
         email,
         tierId,
         period,
         modules: module ? [module] : [],
         source: "paybox",
+        ...(amountUsd === undefined ? {} : { amountUsd }),
       });
       console.log(`[paybox/webhook] paid → provisioned ${tierId}/${period} for ${email} (ref=${reference})`);
       return res.json({ ok: true, action: "activated", tierId, email, subscriptionId: provResult.subscription.id });

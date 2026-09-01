@@ -4250,7 +4250,7 @@ devhubRouter.post("/media/image", async (req, res) => {
 });
 
 // POST /api/devhub/media/sfx — ElevenLabs sound effect
-devhubRouter.post("/media/sfx", async (req, res) => {
+devhubRouter.post("/media/sfx", dhCostlyLimit("dhsfx"), async (req, res) => {
   const { text, durationSeconds, promptInfluence } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) {
     return res.status(400).json({ error: "text (sfx description) required" });
@@ -4477,7 +4477,7 @@ function buildVoiceCloneMultipart(opts: { name: string; description?: string; mi
 }
 
 // POST /api/devhub/media/voice-clone — ElevenLabs custom voice from sample (requires confirm:true after preview)
-devhubRouter.post("/media/voice-clone", async (req, res) => {
+devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvclone"), async (req, res) => {
   const { name, description, sampleBase64, mimeType = "audio/mpeg", confirm } = req.body || {};
   if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
   if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
@@ -4515,7 +4515,7 @@ devhubRouter.post("/media/voice-clone", async (req, res) => {
 // POST /api/devhub/media/voice-clone/preview — clone temp voice → TTS sample → delete voice
 // Body: { sampleBase64, mimeType?, previewText? }
 // Response: audio/mpeg of `previewText` rendered with the cloned voice
-devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
+devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvcprev"), async (req, res) => {
   const { sampleBase64, mimeType = "audio/mpeg", previewText } = req.body || {};
   if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
   if (sampleBase64.length > 12_000_000) return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
@@ -4580,7 +4580,7 @@ devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
 });
 
 // POST /api/devhub/media/stt — ElevenLabs Speech-to-Text (scribe-v1)
-devhubRouter.post("/media/stt", async (req, res) => {
+devhubRouter.post("/media/stt", dhCostlyLimit("dhstt"), async (req, res) => {
   const { audioBase64, mimeType = "audio/mpeg", language } = req.body || {};
   if (!audioBase64 || typeof audioBase64 !== "string") return res.status(400).json({ error: "audioBase64 required" });
   if (audioBase64.length > 30_000_000) return res.status(400).json({ error: "audio too large (max ~22 MB base64)" });
@@ -5406,7 +5406,7 @@ async function tryAutoUploadToCloudflare(sourceUrl: string): Promise<string | nu
 }
 
 // POST /api/devhub/media/translate — DeepL text translation
-devhubRouter.post("/media/translate", async (req, res) => {
+devhubRouter.post("/media/translate", dhCostlyLimit("dhtr"), async (req, res) => {
   const { text, targetLang, sourceLang, formality } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) return res.status(400).json({ error: "text required" });
   if (!targetLang || typeof targetLang !== "string") return res.status(400).json({ error: "targetLang required (e.g. EN, RU, DE, ES, FR)" });
@@ -5475,10 +5475,10 @@ devhubRouter.post("/media/translate", async (req, res) => {
 });
 
 // POST /api/devhub/projects/:id/files/translate — translate project file → save as new file
-devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
+devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhftr"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -5687,12 +5687,12 @@ devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
 // Bulk DeepL translate (multi-file × multi-lang)
 // ═════════════════════════════════════════════════════════════════════════════
 
-devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
+devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhftrb"), async (req, res) => {
   // Массовый перевод — ПЛАТНЫЙ. Файлы в памяти исчезнут при перезапуске.
   let storageFallback = false;
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -6553,7 +6553,7 @@ devhubRouter.post("/media/upload-audio", async (req, res) => {
 // Brevo: create SMTP email template
 // ═════════════════════════════════════════════════════════════════════════════
 
-devhubRouter.post("/media/email-template-create", async (req, res) => {
+devhubRouter.post("/media/email-template-create", dhCostlyLimit("dhmail"), async (req, res) => {
   const { name, subject, htmlContent, senderEmail, senderName, replyTo, tag, isActive } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   if (!subject || typeof subject !== "string") return res.status(400).json({ error: "subject required" });

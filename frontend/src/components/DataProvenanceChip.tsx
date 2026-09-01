@@ -1,6 +1,7 @@
 "use client";
 
 import { InfoTip } from "@/components/InfoTip";
+import { useI18nOptional } from "@/lib/i18n";
 import {
   type DataQuality,
   type ProvenanceLabels,
@@ -33,8 +34,39 @@ const dotStyle = (color: string): React.CSSProperties => ({
 });
 
 export function DataProvenanceChip({ dataQuality, labels, compact }: Props) {
+  /*
+   * Подписи берутся ИЗ СЛОВАРЯ, а не из умолчаний компонента.
+   *
+   * 01.09.2026, поправка соседнего окна: вынести русский текст из разметки в
+   * DEFAULT_PROVENANCE_LABELS было половиной дела. Умолчания русские, а три
+   * страницы подписи не передают — значит на английской странице посетитель
+   * читал ровно то же, что и раньше. Строка сменила МЕСТО, а не язык на экране.
+   *
+   * Проверка «нет литералов в разметке» при этом ЧЕСТНО зеленела: она про
+   * форму, а вопрос был про следствие. Поэтому источник теперь один — словарь,
+   * общий на все три страницы; передать подписи пропом по-прежнему можно, но
+   * это уже осознанное исключение, а не единственный способ получить перевод.
+   *
+   * Хук берём необязательный: вне провайдера (в тестах) он вернёт null, и тогда
+   * ключ покажется САМ СОБОЙ — видимая неполнота лучше молчаливо русской.
+   */
+  const i18n = useI18nOptional();
   if (!dataQuality || !dataQuality.total) return null;
-  const L: ProvenanceLabels = { ...DEFAULT_PROVENANCE_LABELS, ...labels };
+  const fromDict: Partial<ProvenanceLabels> = i18n
+    ? {
+        measured: i18n.t("provenance.measured"),
+        derived: i18n.t("provenance.derived"),
+        guessed: i18n.t("provenance.guessed"),
+        real: i18n.t("provenance.real"),
+        tipMeasured: i18n.t("provenance.tipMeasured"),
+        tipDerived: i18n.t("provenance.tipDerived"),
+        tipGuessed: i18n.t("provenance.tipGuessed"),
+        tipSource: i18n.t("provenance.tipSource"),
+        tipTotal: i18n.t("provenance.tipTotal"),
+        tipLabel: i18n.t("provenance.tipLabel"),
+      }
+    : {};
+  const L: ProvenanceLabels = { ...DEFAULT_PROVENANCE_LABELS, ...fromDict, ...labels };
   const { measured, derived, guessed, total, measuredPct, realPct, source, note } = dataQuality;
   const unit = L.unit ? ` ${L.unit}` : "";
   const headTone = provenanceTone(measuredPct);

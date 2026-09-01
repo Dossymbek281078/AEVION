@@ -144,6 +144,18 @@ export function useI18n() {
   return ctx;
 }
 
+/**
+ * То же, что useI18n, но БЕЗ броска вне провайдера.
+ *
+ * Нужен компонентам, которые рисуют и отдельно от приложения — например в
+ * тестах, где провайдера нет. Бросок там означал бы, что компонент нельзя
+ * проверить в одиночку, и его подписи пришлось бы держать зашитыми; ровно так
+ * русский текст и уезжал на английские страницы.
+ */
+export function useI18nOptional() {
+  return useContext(I18nContext);
+}
+
 function isLang(x: unknown): x is Lang {
   return typeof x === "string" && (LANGS as string[]).includes(x);
 }

@@ -7356,6 +7356,16 @@ const kk: Record<string, string> = {
   "pricing.checkoutSuccess.titlePending": "Төлем қабылданды — қолжетімділікті тексеріп жатырмыз",
   "pricing.checkoutSuccess.titleTrialNoTier": "Сынақ кезеңі — {days} күн",
   "pricing.home.notice.currencyDiffers": "Экранда {shown}, ал касса {charged} есептейді. Жалғастыру үшін тағы басыңыз.",
+  "provenance.real": "нақты",
+  "provenance.tipMeasured": "нақты өлшем/жазба",
+  "provenance.tipDerived": "аралас сигналдан шығарылған",
+  "provenance.tipGuessed": "әдепкі толтырғыш",
+  "provenance.tipSource": "Дереккөз",
+  "provenance.tipTotal": "Барлығы",
+  "provenance.tipLabel": "Деректер шығу тегі",
+  "provenance.measured": "өлшенген",
+  "provenance.derived": "шығарылған",
+  "provenance.guessed": "болжанған",
 };
 
 export default kk;

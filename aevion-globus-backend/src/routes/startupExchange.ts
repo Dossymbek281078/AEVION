@@ -16,6 +16,8 @@ import { Router, Request, Response, NextFunction } from "express";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
+import { insertSmartRun } from "../lib/smartRunLog";
+import { costUsd } from "../services/qcoreai/pricing";
 import { pgIntId } from "../lib/queryNumber";
 import {
   callProvider,
@@ -1551,6 +1553,23 @@ startupExchangeRouter.post(
 
     try {
       const result = await callProvider(providerId, messages, model, 0.3);
+      // Расход этой ручки не записывался НИГДЕ: скоринг идеи — платный вызов,
+      // а в отчёт по деньгам он не попадал вовсе. Цену берём платформенной
+      // таблицей; второй источник цен развёл бы наш отчёт с отчётом соседей.
+      // Учёт не имеет права ронять ответ, ради которого его завели.
+      try {
+        insertSmartRun({
+          module: "startup-exchange",
+          resolved: "single",
+          costUsd: costUsd(
+            providerId,
+            model,
+            result.usage?.prompt_tokens,
+            result.usage?.completion_tokens,
+          ),
+          savedUsd: 0,
+        });
+      } catch { /* потеря записи видна в droppedSmartRuns, а не в тишине */ }
       aiScore = parseAiScore(result.reply);
     } catch (e) {
       console.error("[StartupX] QCoreAI call failed", e);

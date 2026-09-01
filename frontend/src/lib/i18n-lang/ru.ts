@@ -7397,6 +7397,16 @@ const ru: Record<string, string> = {
   "pricing.checkoutSuccess.titlePending": "Оплата принята — проверяем доступ",
   "pricing.checkoutSuccess.titleTrialNoTier": "Пробный период — {days} дней",
   "pricing.home.notice.currencyDiffers": "На экране {shown}, а касса спишет {charged}. Нажмите ещё раз, если это подходит.",
+  "provenance.real": "реальных",
+  "provenance.tipMeasured": "реальный замер/запись",
+  "provenance.tipDerived": "выведено из смежного сигнала",
+  "provenance.tipGuessed": "дефолт-заглушка",
+  "provenance.tipSource": "Источник",
+  "provenance.tipTotal": "Всего",
+  "provenance.tipLabel": "Провенанс данных",
+  "provenance.measured": "измерено",
+  "provenance.derived": "выведено",
+  "provenance.guessed": "угадано",
 };
 
 export default ru;

@@ -1267,6 +1267,18 @@ function foldHistory(history: ChatTurn[] | undefined): string {
  * с отчётом qcoreai. costUsd честно возвращает 0 для модели без цены — значит
  * 0 здесь читается как «цена неизвестна», а не как «бесплатно».
  */
+/**
+ * Метка модуля для учёта: гость или вошедший.
+ *
+ * Вычисление ОДНО на оба места вызова генератора. Копия условия в двух местах
+ * разошлась бы молча — ровно этот класс я сегодня чинил в таблицах голосов, где
+ * значения совпадали, а полнота нет.
+ */
+function меткаГенерации(userId: string): string {
+  const гость = userId.startsWith("guest:") || userId === "anonymous";
+  return гость ? "devhub-generate-anon" : "devhub-generate";
+}
+
 function учтиГенерацию(
   providerId: string,
   model: string,
@@ -2168,9 +2180,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
 async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string) => void) {
   const existingFiles = await dbListFiles(project.id);
   const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
-      // Гость или вошедший — видно по идентификатору запросившего: у гостя
-      // он начинается с "guest:" либо равен "anonymous".
-      userId.startsWith("guest:") || userId === "anonymous" ? "devhub-generate-anon" : "devhub-generate");
+      меткаГенерации(userId));
   onProgress?.("saving");
   let storage: "db" | "memory" = "db";
   const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
@@ -4937,7 +4947,8 @@ async function executeWorkflowStep(
         ? step.saveAs.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
         : (step.saveAs ? [String(step.saveAs)] : []);
       const existingFiles = await dbListFiles(project.id);
-      const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
+      const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles,
+            undefined, undefined, undefined, меткаГенерации(userId));
       const cpStep = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
       const checkpointId = cpStep?.id ?? null;
       for (const gf of files) {

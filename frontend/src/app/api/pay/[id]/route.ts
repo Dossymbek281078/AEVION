@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getOrigin, store, withCors } from "../../payments/v1/_lib";
-import { sendReceiptEmail } from "../../payments/v1/_email";
+import { receiptSendable, sendReceiptEmail } from "../../payments/v1/_email";
 
 export async function GET(
   _req: NextRequest,
@@ -85,16 +85,29 @@ export async function POST(
           : link.currency === "EUR"
             ? `€${link.amount.toFixed(2)}`
             : `$${link.amount.toFixed(2)}`;
-    void sendReceiptEmail({
-      to: email,
-      origin: getOrigin(req),
-      link_id: link.id,
-      amount_label: amountLabel,
-      title: link.title,
-      method,
-      last4: last4 ?? null,
-    });
-    emailQueued = true;
+    // Домен получателя в журнал идёт, полный адрес — нет: это ПДн, а для
+    // разбора хватает домена. Отправку не ждём и не роняем ею оплату, но и не
+    // обещаем того, чего не будет.
+    const domain = email.split("@")[1] ?? "?";
+    const sendable = receiptSendable(email);
+    emailQueued = sendable.ok;
+    if (sendable.ok) {
+      void sendReceiptEmail({
+        to: email,
+        origin: getOrigin(req),
+        link_id: link.id,
+        amount_label: amountLabel,
+        title: link.title,
+        method,
+        last4: last4 ?? null,
+      }).then((res) => {
+        if (!res.ok && !res.skipped) {
+          console.warn(`[чек] не отправлен: ${res.error ?? "?"} домен=${domain}`);
+        }
+      });
+    } else {
+      console.warn(`[чек] не отправлен: ${sendable.reason} домен=${domain}`);
+    }
   }
 
   return withCors(

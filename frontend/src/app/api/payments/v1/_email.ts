@@ -11,15 +11,35 @@ type SendArgs = {
   last4?: string | null;
 };
 
+/**
+ * Можно ли вообще отправить чек — БЕЗ обращения к сети.
+ *
+ * Заведено 01.09.2026. Ручка оплаты отвечала `email_queued: true` безусловно:
+ * результат отправки выбрасывался через `void`, поэтому отсутствующий ключ,
+ * неверный адрес и отказ провайдера выглядели одинаково успешно. Поле уходит
+ * наружу, во внешний API, и читает его тот, кто уже заплатил.
+ *
+ * Условия живут ЗДЕСЬ, а не копией у вызывающего: две копии одного условия
+ * расходятся молча, и ответ снова начнёт обещать больше, чем делается.
+ */
+export function receiptSendable(
+  to: string
+): { ok: true } | { ok: false; reason: "no_key" | "invalid_email" } {
+  if (!process.env.RESEND_API_KEY) return { ok: false, reason: "no_key" };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return { ok: false, reason: "invalid_email" };
+  return { ok: true };
+}
+
 export async function sendReceiptEmail(
   args: SendArgs
 ): Promise<{ ok: boolean; error?: string; skipped?: boolean }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return { ok: false, skipped: true };
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(args.to)) {
-    return { ok: false, error: "invalid_email" };
+  const check = receiptSendable(args.to);
+  if (!check.ok) {
+    return check.reason === "no_key"
+      ? { ok: false, skipped: true }
+      : { ok: false, error: check.reason };
   }
+  const apiKey = process.env.RESEND_API_KEY as string;
 
   const from = process.env.RESEND_FROM ?? "AEVION Payments <receipts@aevion.app>";
   const receiptUrl = `${args.origin}/r/${args.link_id}`;

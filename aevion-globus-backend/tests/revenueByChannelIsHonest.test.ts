@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 import express from "express";
-import { writeFileSync, rmSync } from "node:fs";
+import { writeFileSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -59,6 +59,19 @@ afterEach(() => {
 });
 
 describe("выручка по каналам: закрыта и честна", () => {
+  test("маршрут ДЕЙСТВИТЕЛЬНО подключён к приложению", () => {
+    // Стенд выше монтирует роутер своей рукой — и остался бы зелёным, даже
+    // если бы в приложении маршрут не был подключён вовсе. Класс известный:
+    // у нас 524 теста монтировали роутер сами, и удаление записи из манифеста
+    // не красило ни один. Поэтому подключение проверяется отдельно и по
+    // ИСХОДНИКУ приложения, а не по стенду.
+    const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+    expect(
+      src.includes('app.use("/api/pricing/provisioning", provisioningRouter)'),
+      "роутер выдачи прав не подключён — ручка отвечала бы 404 при зелёных тестах",
+    ).toBe(true);
+  });
+
   test("без ADMIN_TOKEN ручка ЗАКРЫТА, а не открыта", async () => {
     // Отличие от соседних админ-ручек намеренное. У них проверка вида
     // `if (required)` оставляет ручку открытой, когда переменная не задана —

@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
 
 import { HeightDisputePanel, type HeightDispute } from "./HeightDisputePanel";
@@ -37,8 +37,22 @@ function renderPanel(node: React.ReactElement) {
 }
 
 describe("HeightDisputePanel", () => {
-  test("называет обе высоты, разницу и куда идти чинить", () => {
+  test("называет обе высоты, разницу и куда идти чинить", async () => {
     renderPanel(<HeightDisputePanel dispute={ABU_DHABI_PLAZA} />);
+
+    // ЖДЁМ, а не читаем сразу. Подписи панели приходят из словаря, а он
+    // грузится по-разному: цельным файлом синхронно или разбитым по языкам
+    // через динамический import(). Во втором случае чтение сразу после
+    // render застаёт пустоту, и тест краснеет на исправном коде.
+    //
+    // 01.09.2026: так и вышло в общей сборке — 13 падений в четырёх файлах
+    // при зелёном прогоне на моей ветке. Ожидание делает проверку годной при
+    // ОБОИХ устройствах словаря, а не подгоняет её под одно.
+    await waitFor(() => {
+      const t = screen.getByTestId("height-dispute").textContent ?? "";
+      expect(t.length, "панель пуста — словарь ещё не загрузился").toBeGreaterThan(20);
+    }, { timeout: 10000 });
+
     const panel = screen.getByTestId("height-dispute");
     const text = panel.textContent ?? "";
 

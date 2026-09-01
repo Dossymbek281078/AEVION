@@ -46,9 +46,9 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "spectator.hub.ago.hr":        "ч назад",
     // Spectator viewer
     "spectator.viewer.connecting": "Подключение...",
-    "spectator.viewer.live":       "🔴 LIVE",
-    "spectator.viewer.offline":    "OFFLINE",
-    "spectator.viewer.finished":   "FINISHED",
+    "spectator.viewer.live":       "🔴 В ЭФИРЕ",
+    "spectator.viewer.offline":    "НЕ В ЭФИРЕ",
+    "spectator.viewer.finished":   "ЗАВЕРШЕНА",
     "spectator.viewer.your_turn":  "ход",
     "spectator.viewer.back_all":   "← все трансляции",
     "spectator.viewer.back_main":  "к шахматам",
@@ -62,7 +62,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "chat.error.rate_limited":     "Слишком быстро — подожди",
     "chat.error.bad_text":         "Сообщение неверного формата",
     "chat.error.not_found":        "Стрим не найден",
-    "chat.host_badge":             "👑 host",
+    "chat.host_badge":             "👑 ведущий",
     // Replay hub
     "replay.hub.title":            "Архив трансляций",
     "replay.hub.subtitle":         "Завершённые партии — посмотри как другие играли",
@@ -100,7 +100,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "match.position":              "Позиция в очереди",
     "match.estimated":             "Примерное ожидание",
     "match.back":                  "← Назад в CyberChess",
-    "match.p2p_live":              "P2P LIVE",
+    "match.p2p_live":              "🔴 ИГРА НАПРЯМУЮ",
     "match.p2p_badge":             "⚔ P2P",
     // Anti-cheat panel
     "ac.title":                    "Анти-чит анализ",
@@ -181,7 +181,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "stats.card.draws":            "Ничьи",
     "stats.card.streak":           "Текущая серия",
     "stats.card.best_streak":      "Лучшая серия побед",
-    "stats.card.login_streak":     "Login streak",
+    "stats.card.login_streak":     "Серия заходов",
     "stats.card.avg_length":       "Средняя длина",
     "stats.card.peak_hour":        "Пиковый час",
     // Common shared

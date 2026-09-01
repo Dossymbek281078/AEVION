@@ -79,7 +79,7 @@ export default async function GalleryPage() {
 
         {examples.length === 0 ? (
           <div style={{ textAlign: "center", padding: "50px 20px", color: "var(--ink-faint, #74767c)" }}>
-            Examples are warming up — check back in a moment, or{" "}
+            Примеры готовятся — загляните через минуту или{" "}
             <Link href="/qventure" style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700 }}>запустите свой разбор</Link>.
           </div>
         ) : (

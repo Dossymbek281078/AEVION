@@ -45,6 +45,40 @@ function kod(raw: string): string {
  * класс символов, собранный строкой, у нас уже терял обратный слэш и делал
  * сторожа пустым МОЛЧА.
  */
+/**
+ * СЛЕПАЯ ЗОНА, закрытая 01.09.2026. Разбор «текст между тегами» не видит
+ * подписи, за которой сразу идёт выражение: `>Narrative engine: {...}`.
+ * Таких нашлось шесть, все на экране — «Searching for recent», «STEP»,
+ * «Skipped», «base LTV/CAC» и две фразы про данные рынка. То есть сторож
+ * был зелёным при английских подписях, и именно поэтому их не заметил я.
+ *
+ * Правило: найдя слепую зону, расширяй охват и ГОНИ ЗАНОВО, а не дочиняй
+ * найденное руками — находки в слепой зоне не приходят по одной.
+ */
+function podpisiPeredVyrazheniem(src: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < src.length; i++) {
+    if (src[i] !== ">") continue;
+    // Стрелка функции — не тег. Без этого условия ловились куски кода
+    // вида `(k) => setSort(k)} style=` и сторож краснел на исправном.
+    if (i > 0 && src[i - 1] === "=") continue;
+    const j = src.indexOf("{", i + 1);
+    if (j < 0) break;
+    // Между > и { не должно быть других тегов — иначе это не одна подпись.
+    const t = src.slice(i + 1, j);
+    if (t.includes("<") || t.includes(">")) continue;
+    const tt = t.trim();
+    if (tt.length < 3 || tt.length > 60) continue;
+    if (!/^[A-Za-z]/.test(tt)) continue;
+    // Код, а не подпись: скобки, присваивание, точка с запятой.
+    if (/[()=;]/.test(tt)) continue;
+    if (/[А-ЯЁа-яё]/.test(tt)) continue;
+    if (tt.replace(/[^A-Za-z]+/g, " ").trim().split(" ").every((w) => TERMINY.has(w))) continue;
+    out.push(tt);
+  }
+  return out;
+}
+
 function podpisi(src: string): string[] {
   const out: string[] = [];
   for (let i = 0; i < src.length; i++) {
@@ -106,7 +140,8 @@ describe("QVenture говорит на одном языке", () => {
   test("английских подписей нет, кроме терминов", () => {
     const narusheniya: string[] = [];
     for (const p of fajly()) {
-      for (const t of podpisi(kod(fs.readFileSync(p, "utf8")))) {
+      const src = kod(fs.readFileSync(p, "utf8"));
+      for (const t of [...podpisi(src), ...podpisiPeredVyrazheniem(src)]) {
         if (TERMINY.has(t)) continue;
         narusheniya.push(path.basename(p) + ": " + t);
       }

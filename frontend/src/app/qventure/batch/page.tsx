@@ -181,7 +181,7 @@ export default function BatchPage() {
 
         {errors.length > 0 && (
           <div style={{ ...SECTION, borderColor: "#fecaca", background: "#fef2f2", marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#b91c1c", marginBottom: 6 }}>Skipped {errors.length} deck{errors.length > 1 ? "s" : ""}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#b91c1c", marginBottom: 6 }}>Пропущено презентаций: {errors.length}</div>
             {errors.map((e, i) => <div key={i} style={{ fontSize: 12.5, color: "#7f1d1d" }}>• {e}</div>)}
             {upgradeUrl && (
               <div style={{ fontSize: 12.5, marginTop: 8 }}>

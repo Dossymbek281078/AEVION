@@ -31,7 +31,10 @@ function withoutComments(src: string): string {
 describe("источник разбора виден человеку", () => {
   it("контроль: файл прочитан и это он", () => {
     expect(SRC.length, "разметка разбора не прочитана").toBeGreaterThan(5000);
-    expect(SRC, "читается не тот файл").toContain("council");
+    // Якорь контроля — КОД, а не подпись на экране: 01.09.2026 перевод модуля
+    // покрасил этот сторож при целом продукте, а красное по такой причине
+    // читается как поломка продукта и стоит получаса поисков.
+    expect(SRC, "читается не тот файл").toContain("council.aiUsed");
   });
 
   it("на экране написано, чем собран разбор", () => {
@@ -39,14 +42,14 @@ describe("источник разбора виден человеку", () => {
       withoutComments(SRC),
       "со страницы пропала строка про движок разбора: детерминированный текст " +
         "будет выдан за работу совета из четырёх ролей, которую обещает витрина",
-    ).toContain("Narrative engine");
+    ).toContain("Текст собран");
   });
 
   it("надпись ЗАВИСИТ от aiUsed, а не написана всегда одинаково", () => {
     // Главная проверка. Строка «live model» на месте, но не привязанная к
     // флагу, — это не пометка, а украшение: она соврёт ровно в тот день,
     // когда провайдер отвалится и разбор соберётся без модели.
-    const at = withoutComments(SRC).indexOf("Narrative engine");
+    const at = withoutComments(SRC).indexOf("Текст собран");
     const line = withoutComments(SRC).slice(at, at + 260);
     expect(
       line,
@@ -56,11 +59,11 @@ describe("источник разбора виден человеку", () => {
   });
 
   it("у обеих веток есть свой текст", () => {
-    const at = withoutComments(SRC).indexOf("Narrative engine");
+    const at = withoutComments(SRC).indexOf("Текст собран");
     const line = withoutComments(SRC).slice(at, at + 260);
     // Тернарный оператор с пустой второй веткой означал бы, что при отказе
     // модели человеку не сказано ничего.
-    expect(line, "нет ветки для случая с живой моделью").toMatch(/live model/i);
+    expect(line, "нет ветки для случая с живой моделью").toMatch(/живая модель/i);
     const q = String.fromCharCode(58);
     expect(line.includes(q), "у надписи нет второй ветки — при отказе модели экран промолчит").toBe(true);
   });

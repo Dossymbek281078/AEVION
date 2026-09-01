@@ -250,7 +250,7 @@ export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink, #17181a)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
-        About this company · {100 - sectorWeight}% of the score
+        О самой компании · {100 - sectorWeight}% of the score
       </div>
       {company.map((f) => <FactorBar key={f.key} f={f} />)}
 
@@ -449,7 +449,7 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
     return (
       <div style={SECTION}>
         <h2 style={H2}>Похожие сделки за последнее время</h2>
-        <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>Searching for recent {sectorLabel} · {stage} rounds…</div>
+        <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>Ищем недавние сделки: {sectorLabel} · {stage} rounds…</div>
       </div>
     );
   }
@@ -713,7 +713,7 @@ function StressPanel({ stress }: { stress: NonNullable<AnalysisResult["result"][
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
         <h2 style={{ ...H2, margin: 0 }}>Стресс-тест финансов</h2>
         <span style={{ padding: "3px 10px", borderRadius: 999, background: r.c, color: "#fff", fontSize: 12, fontWeight: 800 }}>{r.label}</span>
-        <span style={{ fontSize: 12.5, color: "var(--ink-soft, #45474c)" }}>base LTV/CAC {stress.base.ltvCac} → worst-case {stress.worstLtvCac}</span>
+        <span style={{ fontSize: 12.5, color: "var(--ink-soft, #45474c)" }}>базовый LTV/CAC {stress.base.ltvCac} → worst-case {stress.worstLtvCac}</span>
       </div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 420 }}>
@@ -755,7 +755,7 @@ function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: nu
       }}
     >
       <span style={{ width: 8, height: 8, borderRadius: 999, background: color }} />
-      <span><b style={{ color }}>{pct}%</b> signal coverage · {label}</span>
+      <span><b style={{ color }}>{pct}%</b> охват сигналов · {label}</span>
       <span style={{ color: "var(--ink-faint, #74767c)" }}>({fields} metric{fields === 1 ? "" : "s"} parsed)</span>
     </div>
   );
@@ -821,8 +821,8 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
         <h2 style={H2}>Инвестиционное резюме</h2>
         <p style={{ whiteSpace: "pre-wrap", fontSize: 14, color: "var(--ink, #17181a)", lineHeight: 1.6, margin: 0 }}>{result.result.council.memo}</p>
         <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>
-          Narrative engine: {result.result.council.aiUsed ? `live model (${result.result.council.aiProvider})` : "deterministic (no AI key configured)"}
-          {result.result.rubricVersion ? ` · scored by rubric v${result.result.rubricVersion} — scores are only comparable within a version` : ""}
+          Текст собран: {result.result.council.aiUsed ? `живая модель (${result.result.council.aiProvider})` : "детерминированно, без модели (ключ ИИ не настроен)"}
+          {result.result.rubricVersion ? ` · оценка по рубрике v${result.result.rubricVersion} — оценки сравнимы только внутри одной версии` : ""}
         </div>
       </div>
 
@@ -861,7 +861,7 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
         <div style={SECTION}>
           <h2 style={{ ...H2, marginBottom: 6 }}>Источники рыночных данных</h2>
           <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--ink-faint, #74767c)" }}>
-            Market-size and growth figures for {result.result.sector.label} are anchored to recent third-party research:
+            Данные о размере рынка и росте для {result.result.sector.label} are anchored to recent third-party research:
           </p>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--ink-soft, #45474c)" }}>
             {result.result.sector.sources.map((s, i) => (

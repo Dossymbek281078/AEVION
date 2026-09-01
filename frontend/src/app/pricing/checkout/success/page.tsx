@@ -111,7 +111,37 @@ function SuccessInner() {
   const knownApp = Object.prototype.hasOwnProperty.call(APP_LINKS, appId) && appId !== "platform";
   const appLink = knownApp ? APP_LINKS[appId] : null;
 
+  /*
+   * След оплаты: чем настоящий возврат из кассы отличается от простого захода.
+   *
+   * Событие «оплата принята» отправлялось БЕЗУСЛОВНО, при любом открытии этого
+   * адреса. А адрес публичный: его открывает бот, любопытный, поисковик,
+   * человек, которому переслали ссылку. Каждый такой заход считался ПОКУПКОЙ —
+   * и в нашей сводке «покупки по каналам», и, при включённой рекламе, в
+   * событии Purchase для Meta и TikTok.
+   *
+   * Цена ошибки не в статистике: по этим числам решают, куда тратить бюджет, а
+   * площадки на них учатся. Завышение здесь дороже пропуска — оно выглядит как
+   * успех и подталкивает платить за канал, который ничего не заработал.
+   *
+   * Решаем ОДИН раз и здесь, а не у каждого потребителя: иначе счётчик рекламы
+   * и сводка начнут считать по-разному, и сверить их станет нечем.
+   *
+   * Признак нужен такой, чтобы он был у ВСЕХ четырёх касс:
+   *   PayBox         ?paybox=1&ref=…      — провайдер и ссылка на заказ;
+   *   PayPal         ?paypal=1&ref=…      — то же;
+   *   Gumroad        ?gumroad=true&…      — провайдер (или sale_id);
+   *   LemonSqueezy   ?tier=…&total=4900   — провайдера НЕТ, но есть сумма.
+   * Простой заход не несёт ни одного из трёх.
+   */
+  const естьСледОплаты =
+    Boolean(provider) ||
+    Boolean(sessionId ?? saleId) ||
+    (typeof totalUsd === "number" && totalUsd > 0) ||
+    stub;
+
   useEffect(() => {
+    if (!естьСледОплаты) return;
     track({
       type: "checkout_success",
       tier: tier ?? undefined,
@@ -119,7 +149,7 @@ function SuccessInner() {
       value: totalUsd ?? undefined,
       meta: { stub, period: period ?? null, sessionId: sessionId ?? saleId ?? null, provider },
     });
-  }, [sessionId, stub, tier, period, totalUsd]);
+  }, [sessionId, stub, tier, period, totalUsd, естьСледОплаты]);
 
   return (
     <ProductPageShell maxWidth={680}>

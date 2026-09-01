@@ -13,8 +13,10 @@ import { Router } from "express";
 import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { join, dirname } from "path";
 import type { TierId, BillingPeriod } from "../data/pricing";
+import { projects } from "../data/projects";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { degraded } from "../lib/degradedResponse";
+import { rateLimit } from "../lib/rateLimit";
 
 const capture = makeServiceCapture("provisioning");
 
@@ -43,7 +45,20 @@ const capture = makeServiceCapture("provisioning");
  */
 const PACKAGE_ROOT = join(__dirname, "..", "..");
 
-function subsFile(): string {
+/**
+ * Единственное место, где вычисляется путь к хранилищу подписок.
+ *
+ * Экспортируется намеренно: 30.08.2026 нашлась ВТОРАЯ реализация — ручка
+ * «моя подписка» в routes/pricing.ts считала путь сама и брала за основу
+ * `process.cwd()`, тогда как записи платежей идут от каталога ПАКЕТА. Совпадут
+ * они или нет, зависит от того, откуда запущен процесс: запусти сервис из
+ * корня репозитория — и человек, только что заплативший, спросит свою
+ * подписку и получит «нет».
+ *
+ * Тот же класс, что копия записи прав в вебхуке: две реализации одного,
+ * расходятся молча, и разницу видно только при сравнении.
+ */
+export function subsFile(): string {
   const fromEnv = process.env.SUBSCRIPTIONS_FILE?.trim();
   if (fromEnv) return fromEnv;
   return join(PACKAGE_ROOT, "data", "subscriptions.jsonl");
@@ -159,12 +174,43 @@ export function countSubscriptions(): number {
  * the LS subscription webhook on cancel/expire) correctly supersedes an
  * earlier paid record. Returns null if the email has no records.
  */
+/**
+ * Не удалось ПРОЧИТАТЬ хранилище подписок — в отличие от «записей нет».
+ *
+ * Разные вещи, а отвечали одинаково: и то и другое давало `null`, а выше по
+ * стеку превращалось в «tierId: free». То есть при пропаже или порче файла
+ * каждый заплативший тихо становился бесплатным, и снаружи это неотличимо от
+ * «человек не платил»: ни строки в журнале, ни признака в ответе.
+ *
+ * Три исхода вместо двух (правило из разбора сторожей 18.08):
+ *   файла нет вовсе      — честный ноль, до первой покупки он законно отсутствует;
+ *   файл прочитан        — настоящее значение;
+ *   файл есть, но не читается — НЕ ЗНАЮ, и об этом должно быть слышно.
+ *
+ * Поведение намеренно НЕ меняется: отказ чтения по-прежнему не роняет запрос и
+ * даёт «free». Меняется одно — он перестаёт быть невидимым.
+ */
+let warnedUnreadableStore = false;
+
+/** Видел ли процесс нечитаемое хранилище подписок. Для ручек состояния. */
+export function subscriptionStoreUnreadable(): boolean {
+  return warnedUnreadableStore;
+}
+
+/** Только для тестов: вернуть признак в исходное состояние. */
+export function resetSubscriptionStoreWarning(): void {
+  warnedUnreadableStore = false;
+}
+
 export function readLatestSubscription(email: string): Subscription | null {
   const target = email.trim().toLowerCase();
   if (!target) return null;
+  const file = subsFile();
+  // Отсутствие файла — законный ноль: до первой покупки его нет. Шуметь тут
+  // нельзя, иначе журнал забьётся на пустой системе и предупреждение ниже
+  // потеряется среди него.
+  if (!existsSync(file)) return null;
   try {
-    const file = subsFile();
-    if (!existsSync(file)) return null;
     const lines = readFileSync(file, "utf8").split("\n").filter((l) => l.trim().length > 0);
     let latest: Subscription | null = null;
     for (const line of lines) {
@@ -176,7 +222,18 @@ export function readLatestSubscription(email: string): Subscription | null {
       }
     }
     return latest;
-  } catch {
+  } catch (err) {
+    // Файл ЕСТЬ, а прочитать не вышло: права, порча, диск. Один раз на процесс —
+    // на каждый вызов кричать незачем, а один громкий след обязателен: без него
+    // «все стали бесплатными» выглядит как обычный день.
+    if (!warnedUnreadableStore) {
+      warnedUnreadableStore = true;
+      console.error(
+        `[provisioning] хранилище подписок НЕ ЧИТАЕТСЯ (${file}): ${
+          err instanceof Error ? err.message : String(err)
+        }. Пока так, каждый заплативший отвечает как бесплатный.`,
+      );
+    }
     return null;
   }
 }
@@ -247,7 +304,35 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
     });
     const j = await r.json();
     if (!r.ok) {
-      return { ok: false, mode: "real", error: j.message ?? `HTTP ${r.status}` };
+      /*
+       * Отказ поставщика — самый тихий провал на денежном пути.
+       *
+       * Ниже по цепочке признак `emailSent` возвращается вызывающему, но
+       * замер 01.09.2026: его не читает НИ ОДНА из четырёх касс (gumroad,
+       * lemonSqueezy, paybox, paypal). Значит человек заплатил, письмо с
+       * доступом не ушло — и об этом не знает никто: ни журнал, ни Sentry.
+       * Соседние ветки этой же функции при отказе капчурят (исключение,
+       * пустой id, вырожденный режим), а эта — единственная — молчала.
+       * Непоследовательность внутри одной функции почти всегда недосмотр.
+       *
+       * Отправку по-прежнему НЕ роняем: письмо не должно валить выдачу
+       * доступа, ради которой оно шлётся. Меняется одно — отказ перестаёт
+       * быть невидимым.
+       *
+       * Адрес получателя не пишем целиком: это персональные данные, а для
+       * разбора хватает домена и темы. Домен и есть главное: отказы вида
+       * «домен отправителя не подтверждён» и «получатель отвергнут» по нему
+       * и различаются.
+       */
+      const причина = j.message ?? `HTTP ${r.status}`;
+      const доменПолучателя = String(payload.to).split("@").pop() ?? "?";
+      capture(new Error(`sendEmail rejected: ${причина}`), {
+        route: "provisioning/sendEmail",
+        subject: payload.subject,
+        recipientDomain: доменПолучателя,
+        status: String(r.status),
+      });
+      return { ok: false, mode: "real", error: причина };
     }
     if (!j.id) {
       // Resend returned 2xx but no message id — not the documented success shape.
@@ -263,6 +348,73 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
     capture(e);
     return { ok: false, mode: "real", error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/**
+ * Сколько модулей мы реально отдаём — СЧИТАЕТСЯ из реестра, не пишется рукой.
+ *
+ * В письме покупателю стояло «Все 27 модулей AEVION». Число пришло из
+ * документации апреля 2026 и с тех пор устарело: в `data/projects.ts` сейчас
+ * 41 запись, из них 36 со статусом live. То есть письмо, которое человек
+ * получает СРАЗУ ПОСЛЕ ОПЛАТЫ, занижало продукт на девять живых модулей.
+ *
+ * Занижение опаснее завышения ровно тем, что его никто не поймает: на
+ * завышение приходит жалоба, на заниженное обещание — тишина.
+ */
+export const LIVE_MODULE_COUNT = projects.filter((p) => String(p.status) === "live").length;
+
+/**
+ * Что написать в блоке «Что входит».
+ *
+ * Пустой `modules` значит РАЗНОЕ у разных тарифов, и прежний текст этого не
+ * различал: у `full` пустой список это «всё», а у `lite` — «модуль ещё не
+ * выбран». Подписчику Lite уходило «Все N модулей», то есть обещание,
+ * которого его тариф не даёт.
+ */
+export function includedLine(sub: Subscription): string {
+  if (sub.modules.length > 0) return sub.modules.join(" · ");
+  if (sub.tierId === "lite") {
+    return "Один модуль на ваш выбор — выберите его в кабинете";
+  }
+  if (sub.tierId === "free") return "Бесплатный доступ к открытым модулям";
+  return `Все модули AEVION (сейчас ${LIVE_MODULE_COUNT} в работе)`;
+}
+
+/**
+ * Куда вести из письма.
+ *
+ * Раньше здесь был зашитый QRight — и кнопку «Открыть QRight» получал каждый,
+ * включая того, кто только что купил CyberChess. Ведём в купленный модуль,
+ * когда он один и известен, иначе в кабинет, где человек видит свою подписку.
+ */
+export function ctaFor(sub: Subscription): { href: string; label: string } {
+  if (sub.modules.length === 1 && isKnownModule(sub.modules[0])) {
+    return { href: `/${sub.modules[0]}`, label: "Открыть модуль" };
+  }
+  return { href: "/account", label: "Открыть кабинет" };
+}
+
+/**
+ * Слаг модуля — из реестра, а не «любая строка».
+ *
+ * Нашёл вычиткой СВОЕЙ ЖЕ правки, зелёные тесты этого не показывали. У тарифа
+ * Lite покупатель выбирает один продукт, и слаг приезжает так:
+ *
+ *   webhook -> payload.meta.custom_data.module -> sub.modules[0] -> ссылка
+ *
+ * Подпись вебхука доказывает, что данные пришли от Lemon Squeezy, но НЕ то,
+ * что значение осмысленно: адрес чекаута с `checkout[custom][module]=…`
+ * собирается на стороне покупателя. То есть в письмо попадала бы любая
+ * строка, а мой же `href="${FRONTEND_URL}/${slug}"` превращал бы её в ссылку —
+ * `//чужой-сайт` увёл бы человека наружу прямо из нашего письма о покупке.
+ *
+ * Сверяем с реестром: неизвестный слаг ведёт в кабинет, где человек видит,
+ * что у него на самом деле есть. Ссылка в письме о покупке обязана вести
+ * туда, куда мы намеревались, а не туда, что прислали.
+ */
+function isKnownModule(slug: string): boolean {
+  if (typeof slug !== "string" || slug.length === 0) return false;
+  return projects.some((p) => String((p as { id?: unknown }).id ?? "") === slug);
 }
 
 const TIER_DISPLAY: Record<TierId, string> = {
@@ -282,8 +434,28 @@ const TIER_DISPLAY: Record<TierId, string> = {
   business: "Full",
 };
 
-function welcomeHtml(sub: Subscription): string {
+
+/**
+ * Экранирование для HTML-версии письма.
+ *
+ * В блок «Что входит» попадает слаг модуля из `custom_data` чекаута, то есть
+ * строка, которую собрал покупатель. В текстовой версии это безвредно, а в
+ * HTML — вставка в разметку письма, которое мы же и отправляем. Экранируем в
+ * МЕСТЕ ВСТАВКИ, а не внутри includedLine: тогда текстовая версия остаётся
+ * читаемой, без &amp; вместо амперсанда.
+ */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function welcomeHtml(sub: Subscription): string {
   const tierName = TIER_DISPLAY[sub.tierId];
+  const cta = ctaFor(sub);
   const trialBlock = sub.trialDays > 0
     ? `<div style="margin:16px 0;padding:14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;color:#78350f">
          <strong>Триал-период активен до ${new Date(Date.now() + sub.trialDays * 86400000).toLocaleDateString("ru-RU")}.</strong>
@@ -308,17 +480,34 @@ function welcomeHtml(sub: Subscription): string {
           ${trialBlock}
           <p style="font-size:13px;color:#64748b;line-height:1.5;margin:16px 0">
             <strong>Что входит:</strong><br/>
-            ${sub.modules.length > 0 ? sub.modules.join(" · ") : "Все 27 модулей AEVION"}
+            ${escapeHtml(includedLine(sub))}
           </p>
           <div style="margin:24px 0;text-align:center">
-            <a href="${FRONTEND_URL}/qright" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#0d9488,#0ea5e9);color:#fff;text-decoration:none;border-radius:10px;font-weight:800;font-size:14px">
-              Открыть QRight
+            <a href="${FRONTEND_URL}${cta.href}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#0d9488,#0ea5e9);color:#fff;text-decoration:none;border-radius:10px;font-weight:800;font-size:14px">
+              ${cta.label}
             </a>
           </div>
+          <!--
+            Поддержка ведёт на ФОРМУ, а не на почтовый адрес.
+
+            Замер 01.09.2026 (контроль пройден: у gmail.com запись MX находится,
+            у чужого aevion.io тоже): у домена aevion.app записи MX НЕТ. Значит
+            письмо на hello@aevion.app — а он стоял здесь — не доходит никуда, и
+            человек узнаёт об этом отлупом, а мы не узнаём вовсе. Хуже места для
+            мёртвого адреса нет: это письмо получает тот, кто уже ЗАПЛАТИЛ.
+
+            Форма /pricing/contact проверена по всей цепочке: пишет в файл,
+            каталог лежит на постоянном томе (события с 26 мая целы), читается
+            защищённой ручкой /api/pricing/leads, ADMIN_TOKEN на проде задан.
+            То есть обращение доходит до человека, а адрес — нет.
+
+            Когда у домена появится почта, сюда можно вернуть адрес — но тогда
+            уже проверенный, а не обещанный.
+          -->
           <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
           <p style="font-size:12px;color:#94a3b8;line-height:1.5;margin:0">
             ID подписки: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">${sub.id}</code><br/>
-            Поддержка: <a href="mailto:hello@aevion.app" style="color:#0d9488">hello@aevion.app</a>
+            Поддержка: <a href="${FRONTEND_URL}/pricing/contact" style="color:#0d9488">${FRONTEND_URL.replace(/^https?:\/\//, "")}/pricing/contact</a>
           </p>
         </td></tr>
       </table>
@@ -337,12 +526,12 @@ function welcomeText(sub: Subscription): string {
 
 Ваша подписка активна.${trial}
 Что входит:
-${sub.modules.length > 0 ? sub.modules.join(" · ") : "Все 27 модулей AEVION"}
+${includedLine(sub)}
 
-Открыть QRight: ${FRONTEND_URL}/qright
+${ctaFor(sub).label}: ${FRONTEND_URL}${ctaFor(sub).href}
 
 ID подписки: ${sub.id}
-Поддержка: hello@aevion.app
+Поддержка: ${FRONTEND_URL}/pricing/contact
 `;
 }
 
@@ -525,7 +714,31 @@ provisioningRouter.get("/stats", (_req, res) => {
   }
 });
 
-provisioningRouter.get("/history", (req, res) => {
+
+/**
+ * Ограничитель на публичный поиск подписки по адресу.
+ *
+ * Ручка `/history` намеренно открыта: страница /pricing/provisioning даёт
+ * человеку посмотреть свою подписку без входа. Цена этого решения в том, что
+ * тем же запросом можно спросить про ЧУЖОЙ адрес и увидеть тариф, сумму
+ * оплаты, промокод и модули (замер 28.08.2026 на проде: 200 без токена).
+ *
+ * Требовать вход здесь — значит убрать работающую функцию, и это решение
+ * основателя, а не моё. Что можно сделать, ничего не ломая: сделать НЕВОЗМОЖНЫМ
+ * перебор. Свой человек смотрит свою подписку раз-другой; тому, кто проверяет
+ * список адресов, нужны тысячи запросов.
+ *
+ * keyPrefix задан явно: без него шесть вызовов этого помощника делили один
+ * счётчик, и каждый сравнивал общую сумму со своим пределом.
+ */
+const historyLookupLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyPrefix: "provisioning-history-lookup",
+  message: "Слишком много запросов. Подождите минуту и попробуйте снова.",
+});
+
+provisioningRouter.get("/history", historyLookupLimiter, (req, res) => {
   try {
     const email = (req.query.email as string | undefined)?.trim();
     if (!email) return res.status(400).json({ error: "missing_email", hint: "use ?email=..." });

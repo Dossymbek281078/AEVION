@@ -208,7 +208,12 @@ export default function PricingAdminPage() {
      * отсчёт начинается заново. Панель показывала бы выручку «с последней
      * выкатки» как всю историю, а снаружи это неотличимо от «продаж было мало».
      */
-    storage?: { onVolume?: boolean; oldestRecord?: string | null; recordsTotal?: number };
+    storage?: {
+      onVolume?: boolean;
+      oldestRecord?: string | null;
+      newestRecord?: string | null;
+      recordsTotal?: number;
+    };
   } | null>(null);
   const [фактическаяОтвет, setФактическаяОтвет] = useState<"нет" | "есть" | "закрыта" | null>(null);
   /*
@@ -676,6 +681,34 @@ export default function PricingAdminPage() {
                   {фактическая.storage?.oldestRecord
                     ? ` Самая ранняя запись: ${new Date(фактическая.storage.oldestRecord).toLocaleDateString()}.`
                     : ""}
+                </div>
+              ) : null}
+              {/* Пустая колонка — НЕ «продаж нет».
+                  Замер соседнего окна 01.09.2026: покупок в базе 31, свежайшей
+                  36 дней. При окне по умолчанию (сутки) панель покажет ноль, и
+                  ноль прочтётся как «мы не продаём», хотя правда — «не продали
+                  за выбранный период». Разница решает, побежит ли человек
+                  чинить работающее.
+                  Поэтому при пустом окне называем дату последней покупки и
+                  общее число записей: тогда ноль читается как срез, а не как
+                  приговор. */}
+              {фактическая && фактическая.total === 0 ? (
+                <div
+                  style={{
+                    gridColumn: "1 / -1",
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    background: "#eff6ff",
+                    color: "#1e3a8a",
+                    fontSize: 13,
+                  }}
+                >
+                  За выбранный период покупок нет. Это не «продаж нет»: всего записей{" "}
+                  {фактическая.storage?.recordsTotal ?? "?"}
+                  {фактическая.storage?.newestRecord
+                    ? `, последняя ${new Date(фактическая.storage.newestRecord).toLocaleDateString()}`
+                    : ""}
+                  . Расширьте окно, чтобы увидеть их.
                 </div>
               ) : null}
               {фактическая ? (

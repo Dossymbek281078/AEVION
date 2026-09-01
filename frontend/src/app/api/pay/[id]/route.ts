@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getOrigin, store, withCors } from "../../payments/v1/_lib";
-import { receiptSendable, sendReceiptEmail } from "../../payments/v1/_email";
+import { sendReceiptEmail } from "../../payments/v1/_email";
+import { formatPaymentAmount } from "@/lib/paymentAmount";
 
 export async function GET(
   _req: NextRequest,
@@ -77,36 +78,38 @@ export async function POST(
 
   let emailQueued = false;
   if (email) {
-    const amountLabel =
-      link.currency === "AEC"
-        ? `${link.amount.toLocaleString()} AEC`
-        : link.currency === "KZT"
-          ? `${link.amount.toLocaleString("ru-RU")} ₸`
-          : link.currency === "EUR"
-            ? `€${link.amount.toFixed(2)}`
-            : `$${link.amount.toFixed(2)}`;
-    // Домен получателя в журнал идёт, полный адрес — нет: это ПДн, а для
-    // разбора хватает домена. Отправку не ждём и не роняем ею оплату, но и не
-    // обещаем того, чего не будет.
-    const domain = email.split("@")[1] ?? "?";
-    const sendable = receiptSendable(email);
-    emailQueued = sendable.ok;
-    if (sendable.ok) {
-      void sendReceiptEmail({
-        to: email,
-        origin: getOrigin(req),
-        link_id: link.id,
-        amount_label: amountLabel,
-        title: link.title,
-        method,
-        last4: last4 ?? null,
-      }).then((res) => {
-        if (!res.ok && !res.skipped) {
-          console.warn(`[чек] не отправлен: ${res.error ?? "?"} домен=${domain}`);
-        }
-      });
-    } else {
-      console.warn(`[чек] не отправлен: ${sendable.reason} домен=${domain}`);
+    // 31.08.2026. Здесь стояла ТРЕТЬЯ копия форматирования суммы, и она
+    // повторяла тот же дефект, что и страница оплаты: сумма приходит в
+    // МИНОРНЫХ единицах, а печаталась как есть. Покупатель, заплативший
+    // $99.00, получал чек на $9900.00 — цену в сто раз больше. Копий было
+    // три, поэтому они и разошлись; теперь показатель валюты один на всех.
+    const amountLabel = formatPaymentAmount(link.amount, link.currency);
+    // ⚠️ 29.08.2026: было `void sendReceiptEmail(...)` и следом БЕЗУСЛОВНОЕ
+    // emailQueued = true. То есть результат отправки выбрасывался, а клиенту
+    // в ответе уходило `email_queued: true` даже когда письмо не отправлялось
+    // вовсе: при незаданном RESEND_API_KEY функция честно возвращает
+    // { ok: false, skipped: true }, и этот ответ никто не читал.
+    //
+    // Отказ выглядел успехом ровно там, где человек только что заплатил.
+    //
+    // Ждать здесь безопасно: платёж уже записан выше, и неудача с письмом его
+    // не отменяет — меняется только честность поля и появляется след в журнале.
+    // Адрес в журнал не пишем, достаточно ссылки: журналы читают не только мы.
+    const чек = await sendReceiptEmail({
+      to: email,
+      origin: getOrigin(req),
+      link_id: link.id,
+      amount_label: amountLabel,
+      title: link.title,
+      method,
+      last4: last4 ?? null,
+    });
+    emailQueued = чек.ok;
+    if (!чек.ok) {
+      console.warn(
+        `[pay/${link.id}] чек не отправлен: ` +
+          (чек.skipped ? "не задан RESEND_API_KEY" : чек.error ?? "причина не названа"),
+      );
     }
   }
 

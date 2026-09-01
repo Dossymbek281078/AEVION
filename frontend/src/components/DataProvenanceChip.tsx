@@ -17,7 +17,7 @@ import {
 //   <DataProvenanceChip dataQuality={dq} labels={{ measured:"факт",      // any module
 //     derived:"оценка", guessed:"допущение", unit:"позиций" }} />
 //
-// `compact` renders a single "X% измерено · Y% реальных" line (for dense toolbars);
+// `compact` renders a single "X% измерено · Y% {L.real}" line (for dense toolbars);
 // the default renders the three-tier breakdown with colour dots.
 
 type Props = {
@@ -39,16 +39,30 @@ export function DataProvenanceChip({ dataQuality, labels, compact }: Props) {
   const unit = L.unit ? ` ${L.unit}` : "";
   const headTone = provenanceTone(measuredPct);
 
+  /*
+   * ⚠️ 01.09.2026: вся подсказка была зашита ПО-РУССКИ, хотя рядом стоят
+   * настраиваемые L.measured / L.derived / L.guessed.
+   *
+   * Сторож языка нашёл только видимую подпись — подсказка живёт в атрибуте и
+   * показывается по наведению, то есть его охвату недоступна. Шесть мест из
+   * семи он не видел и не мог: он сравнивает ВИДИМЫЙ текст.
+   *
+   * Компонент используют три страницы, поэтому зашитое слово доезжало до всех
+   * сразу: на английской человек читал «96% measured, 50.1% реальных».
+   */
   const tip =
-    (note || `${L.measured} — реальный замер/запись; ${L.derived} — выведено из смежного сигнала; ${L.guessed} — дефолт-заглушка.`) +
-    (source ? `\nИсточник: ${source}.` : "") +
-    `\nВсего: ${total}${unit} · ${L.measured} ${measured} · ${L.derived} ${derived} · ${L.guessed} ${guessed}.`;
+    (note ||
+      `${L.measured} — ${L.tipMeasured}; ${L.derived} — ${L.tipDerived}; ${L.guessed} — ${L.tipGuessed}.`) +
+    (source ? `
+${L.tipSource}: ${source}.` : "") +
+    `
+${L.tipTotal}: ${total}${unit} · ${L.measured} ${measured} · ${L.derived} ${derived} · ${L.guessed} ${guessed}.`;
 
   if (compact) {
     return (
       <span style={{ fontFamily: "monospace", fontSize: 11, color: "#9fb0c4", display: "inline-flex", alignItems: "center" }}>
-        📊 <span style={{ color: headTone, marginLeft: 4 }}>{measuredPct}% {L.measured}</span>, {realPct}% реальных
-        <InfoTip label="Провенанс данных" text={tip} size={13} />
+        📊 <span style={{ color: headTone, marginLeft: 4 }}>{measuredPct}% {L.measured}</span>, {realPct}% {L.real}
+        <InfoTip label={L.tipLabel} text={tip} size={13} />
       </span>
     );
   }
@@ -81,7 +95,7 @@ export function DataProvenanceChip({ dataQuality, labels, compact }: Props) {
           {Math.round((1000 * guessed) / total) / 10}% {L.guessed}
         </span>
       )}
-      <InfoTip label="Провенанс данных" text={tip} size={13} />
+      <InfoTip label={L.tipLabel} text={tip} size={13} />
     </span>
   );
 }

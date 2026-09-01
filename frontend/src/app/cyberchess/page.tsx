@@ -6288,7 +6288,7 @@ export default function CyberChessPage(){
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                   <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>AI</span>
-                  <input type="range" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
+                  <input type="range" aria-label="Уровень соперника ИИ" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
                     value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
                     onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>

@@ -63,10 +63,21 @@ function resolvePermalink(reference: string): string {
   );
 }
 
-function gumroadCheckoutUrl(permalink: string, email?: string | null): string {
-  const base = `https://app.gumroad.com/l/${permalink}`;
-  if (!email) return base;
-  return `${base}?wanted_email=${encodeURIComponent(email)}`;
+function gumroadCheckoutUrl(
+  permalink: string,
+  email?: string | null,
+  channel?: string | null,
+): string {
+  const q = new URLSearchParams();
+  if (email) q.set("wanted_email", email);
+  // Канал привлечения — тем же именем, которое УЖЕ читает наш вебхук
+  // (`url_params[channel]`). Соглашение не новое: так его кладёт витрина,
+  // собирая ссылку сама. Здесь то же самое для ссылок, которые собираем мы, —
+  // иначе канал доезжает не всеми путями, а выручка по каналам считается
+  // только там, где известны И сумма, И канал.
+  if (channel) q.set("url_params[channel]", channel);
+  const qs = q.toString();
+  return qs ? `https://app.gumroad.com/l/${permalink}?${qs}` : `https://app.gumroad.com/l/${permalink}`;
 }
 
 export const gumroadPaymentProvider: PaymentProvider = {
@@ -74,7 +85,7 @@ export const gumroadPaymentProvider: PaymentProvider = {
 
   async createIntent(input: PaymentIntentInput): Promise<PaymentIntent> {
     const permalink = resolvePermalink(input.reference);
-    const checkoutUrl = gumroadCheckoutUrl(permalink, input.email);
+    const checkoutUrl = gumroadCheckoutUrl(permalink, input.email, input.customData?.channel);
     // intentId = permalink:email:ts — used for loose dedup (Gumroad has no
     // server-created intent; sale_id from the webhook is the real id).
     const intentId = `gumroad:${permalink}:${Date.now()}`;

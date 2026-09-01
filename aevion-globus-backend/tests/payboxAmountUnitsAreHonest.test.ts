@@ -46,7 +46,7 @@ const app = () => {
 };
 
 let n = 0;
-function paid(currency: string, amount: string) {
+function paid(currency: string, amount: string, channel?: string) {
   n += 1;
   parseWebhook.mockReturnValue({
     eventId: `pb_${n}`,
@@ -60,6 +60,7 @@ function paid(currency: string, amount: string) {
         pg_user_contact_email: "buyer@test.aev",
         pg_currency: currency,
         pg_amount: amount,
+        ...(channel ? { pg_param_channel: channel } : {}),
       },
     },
   });
@@ -67,7 +68,9 @@ function paid(currency: string, amount: string) {
 }
 
 const lastArg = () =>
-  provisionSubscription.mock.calls.at(-1)?.[0] as { amountUsd?: number } | undefined;
+  provisionSubscription.mock.calls.at(-1)?.[0] as
+    | { amountUsd?: number; channel?: string }
+    | undefined;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -98,5 +101,31 @@ describe("PayBox: сумма пишется только в своей валю�
     expect(lastArg() && "amountUsd" in (lastArg() as object), "ноль записан как сумма").toBe(false);
     await paid("USD", "мусор");
     expect(lastArg() && "amountUsd" in (lastArg() as object), "нечисловое записано как сумма").toBe(false);
+  });
+});
+
+/**
+ * Канал привлечения доезжает до записи подписки.
+ *
+ * ЗАЧЕМ. Выручка по каналу считается только там, где известны ОБА поля —
+ * сумма и канал. До 01.09.2026 звена не было вовсе: витрина канал знала,
+ * ссылка на кассу его не несла, и покупки через PayBox попадали в сводке в
+ * ключ "direct". Деньги не терялись, но ответа «что окупилось» по ним не было.
+ *
+ * Путь общий, не особый: тело чекаута → customData → pg_param_channel → сюда.
+ * Тем же путём давно ездит выбранный модуль.
+ */
+describe("PayBox: канал привлечения доезжает", () => {
+  test("канал из ссылки кассы попадает в запись", async () => {
+    const r = await paid("USD", "19.00", "tt");
+    expect(r.status).toBe(200);
+    expect(lastArg()?.channel, "канал не дошёл — выручка по каналам его не увидит").toBe("tt");
+  });
+
+  test("без канала поле не выдумывается", async () => {
+    // Пустой канал хуже отсутствующего: в сводке он стал бы отдельным
+    // безымянным ключом, и сумма по каналам перестала бы сходиться с общей.
+    await paid("USD", "19.00");
+    expect(lastArg() && "channel" in (lastArg() as object), "поле проставлено на пустом месте").toBe(false);
   });
 });

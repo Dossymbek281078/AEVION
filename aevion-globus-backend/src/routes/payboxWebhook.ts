@@ -133,12 +133,16 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
           ? payboxAmount
           : undefined;
 
-      // ⚠️ КАНАЛ привлечения сюда не доходит вовсе, и это измерено, а не
-      // предположено: в payboxProvider ссылка на кассу собирается без
-      // pg_param_channel (0 вхождений). Читать его здесь значило бы завести
-      // мёртвый код, поэтому не читаем. Пока так, покупки через PayBox
-      // попадают в сводке в ключ "direct" — это не потеря денег, но канал
-      // у них неизвестен. Чинится в ССЫЛКЕ кассы, а не тут.
+      // КАНАЛ привлечения. Едет общим путём: витрина кладёт его в тело
+      // чекаута, провайдер превращает customData в pg_param_*, сюда он
+      // приходит как pg_param_channel — тем же способом, что и выбранный
+      // модуль строкой выше.
+      //
+      // До 01.09.2026 этого звена не было, и покупки через PayBox попадали в
+      // сводке выручки в ключ "direct": деньги не терялись, но ответа на
+      // вопрос «что окупилось» по ним не было.
+      const purchaseChannel = raw.pg_param_channel?.trim().slice(0, 40) || undefined;
+
       const provResult = await provisionSubscription({
         email,
         tierId,
@@ -146,6 +150,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         modules: module ? [module] : [],
         source: "paybox",
         ...(amountUsd === undefined ? {} : { amountUsd }),
+        ...(purchaseChannel ? { channel: purchaseChannel } : {}),
       });
       console.log(`[paybox/webhook] paid → provisioned ${tierId}/${period} for ${email} (ref=${reference})`);
       return res.json({ ok: true, action: "activated", tierId, email, subscriptionId: provResult.subscription.id });

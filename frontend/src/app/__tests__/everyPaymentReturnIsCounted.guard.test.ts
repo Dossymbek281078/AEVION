@@ -193,8 +193,13 @@ function countsPurchase(pageFile: string): boolean {
    * в отрисовке всегда идёт пробел, косая черта или закрывающая скобка, и ни
    * один из них не может оказаться буквой продолжения имени.
    */
-  const рисуетКомпонент = ["<PurchaseReturnTracker ", "<PurchaseReturnTracker/", "<PurchaseReturnTracker>", "<PurchaseReturnTracker
-"]
+  const рисуетКомпонент = ["<PurchaseReturnTracker ", "<PurchaseReturnTracker/", "<PurchaseReturnTracker>",
+    // Перевод строки как форма границы. Раньше он был записан НАСТОЯЩИМ
+    // переносом внутри литерала — файл переставал разбираться целиком, и
+    // сторож не запускался вовсе. Среди сотен файлов это незаметно: набор
+    // отвечает «no tests» по одному файлу, а не падением.
+    "<PurchaseReturnTracker" + String.fromCharCode(10),
+  ]
     .some((форма) => text.includes(форма));
   return text.includes("checkout_success") || рисуетКомпонент;
 }
@@ -329,8 +334,7 @@ describe("возврат после оплаты отмечается на ка�
     // Урок дороже правки: починив класс в одном месте, надо спросить, где ЕЩЁ
     // он живёт. Я знал про подстроку внутри длинного имени, назвал этот класс
     // вслух — и оставил его через двадцать строк от собственного объяснения.
-    if (["<PurchaseReturnTracker ", "<PurchaseReturnTracker/", "<PurchaseReturnTracker>", "<PurchaseReturnTracker
-"]
+    if (["<PurchaseReturnTracker ", "<PurchaseReturnTracker/", "<PurchaseReturnTracker>", "<PurchaseReturnTracker" + String.fromCharCode(10)]
       .some((форма) => text.includes(форма))) return false;
     return /track\(\s*\{[\s\S]{0,200}?checkout_success/.test(text);
   }

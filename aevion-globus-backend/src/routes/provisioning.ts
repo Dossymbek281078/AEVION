@@ -116,6 +116,27 @@ export function writeSubscription(sub: Subscription): void {
   } catch (e) {
     capture(e);
     console.error("[provisioning] writeSubscription failed", e);
+    // Ошибку НЕ глотаем, и это не косметика.
+    //
+    // Раньше отказ записи возвращался как успех: выдача продолжалась, человеку
+    // уходило письмо «доступ открыт», вебхук отвечал кассе 200 activated —
+    // касса считала доставку успешной и БОЛЬШЕ НЕ ПОВТОРЯЛА. Человек получил
+    // письмо, доступа не получил, и восстановить это было нечем: тарифный
+    // доступ решает именно файл подписок, а записи в нём нет.
+    //
+    // Тот же разбор давно сделан для второго хранилища в lemonSqueezyWebhook;
+    // здесь оставалось по-старому.
+    //
+    // Все шесть вызывающих стоят внутри try/catch: четыре пути возврата, смена
+    // выбранного модуля и основная выдача. Значит бросок даёт честный 5xx и
+    // повторную доставку, а не упавший запрос.
+    //
+    // ⚠️ 01.09.2026 эта строка ИСЧЕЗЛА при сведении: я взял чужую сторону файла
+    // ради того, что в журнал идёт домен, а не адрес человека, — и вместе с ней
+    // взял версию ДО починки. Поймал их же тест. Разрешая конфликт «по
+    // существу», надо спрашивать не только про то, ради чего берёшь сторону,
+    // но и про то, что на ней могло устареть.
+    throw e;
   }
 }
 
@@ -127,6 +148,23 @@ export function writeSubscription(sub: Subscription): void {
  *
  * Used by the admin purge endpoint for GDPR removal and to clear test
  * records left by verify pings.
+ */
+/**
+ * ⚠️ ГОНКА С ЗАПИСЬЮ ОПЛАТЫ — известна и принята осознанно (01.09.2026).
+ *
+ * Здесь файл читается целиком, а затем ЗАМЕНЯЕТСЯ (tmp + rename). Запись
+ * оплаты, случившаяся между чтением и заменой, пропадёт молча: rename положит
+ * содержимое, которое старше этой оплаты. Атомарность tmp+rename защищает от
+ * обрыва посреди записи, но НЕ от параллельного дописывания.
+ *
+ * Почему не чиню блокировкой: ручка закрыта админским токеном (и при
+ * незаданном токене отвечает 401), то есть нужно, чтобы человек осознанно
+ * чистил подписки ровно в миллисекунду оплаты. Цена механизма блокировок выше
+ * этого риска.
+ *
+ * Но окно НЕЛЬЗЯ расширять. Если когда-нибудь захочется сделать очистку
+ * фоновой, отложенной или пакетной — сперва блокировка, потом перенос:
+ * из миллисекунд окно станет секундами, и «редко» превратится в «регулярно».
  */
 export function purgeSubscriptions(email: string): { removed: number; remaining: number } {
   const target = email.trim().toLowerCase();
@@ -157,14 +195,22 @@ export function purgeSubscriptions(email: string): { removed: number; remaining:
   return { removed, remaining: kept.length };
 }
 
-export function countSubscriptions(): number {
+export function countSubscriptions(): { ok: boolean; total: number } {
   try {
     const file = subsFile();
-    if (!existsSync(file)) return 0;
+    // Файла нет — это ЧЕСТНЫЙ ноль: подписок ещё не было.
+    if (!existsSync(file)) return { ok: true, total: 0 };
     const content = readFileSync(file, "utf8");
-    return content.split("\n").filter((l) => l.trim().length > 0).length;
+    const n = content.split(String.fromCharCode(10)).filter((l) => l.trim().length > 0).length;
+    return { ok: true, total: n };
   } catch {
-    return 0;
+    // А СБОЙ ЧТЕНИЯ нулём быть не должен: это «не знаю».
+    //
+    // Число уходит в ответ ручки и дальше в ежедневный отчёт основателю.
+    // Ноль при нечитаемом файле выглядит как «никто не купил» или «мы
+    // потеряли всех подписчиков» — ложная тревога, отличить которую от
+    // правды было нечем.
+    return { ok: false, total: 0 };
   }
 }
 
@@ -326,6 +372,25 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
        */
       const причина = j.message ?? `HTTP ${r.status}`;
       const доменПолучателя = String(payload.to).split("@").pop() ?? "?";
+      /*
+       * След в журнале контейнера, а не только в Sentry.
+       *
+       * 01.09.2026: два окна независимо сделали ПРАВИЛЬНОЕ и несовместимое.
+       * Одно писало в журнал полный адрес покупателя — чтобы отказ было видно
+       * и можно было понять, КОМУ не ушло. Другое заменило адрес доменом —
+       * чтобы почта человека не попадала в логи, которые читают и пересылают.
+       *
+       * Разрешено в пользу приватности, но НЕ ценой видимости: адрес человека
+       * в журнал не пишем, а сам отказ обязан быть виден. Домена и кода ответа
+       * хватает, чтобы понять, что сломалось и у какого получателя.
+       *
+       * Только Sentry было мало: в контейнере не остаётся ничего, и человек,
+       * читающий журнал прода, видит тишину на месте несостоявшегося письма.
+       */
+      console.warn(
+        `[provisioning] письмо НЕ отправлено: получатель @${доменПолучателя}, ` +
+          `код ${r.status}, причина: ${причина}`,
+      );
       capture(new Error(`sendEmail rejected: ${причина}`), {
         route: "provisioning/sendEmail",
         subject: payload.subject,
@@ -423,7 +488,17 @@ const TIER_DISPLAY: Record<TierId, string> = {
   medium: "Medium",
   full: "Full",
   enterprise: "Enterprise",
-  // `pro` is NOT a legacy alias — it is the live Universe tier ($249.99 in
+  // ⚠️ 01.09.2026: здесь стояла ОТСТАВНАЯ цена. Она не совпадала ни с каталогом,
+  // ни с продом — у Universe сейчас $149. Комментарий утверждал состояние,
+  // которое изменилось, и делал это увереннее кода: читающий верит пояснению,
+  // потому что оно написано человеком для человека.
+  //
+  // Поймал сторож отставных цен. Соседнее окно сочло его срабатывание ложным —
+  // «споткнулся о комментарий». Он и правда споткнулся о комментарий, но
+  // комментарий был неверен: тревога настоящая. Прежде чем звать красное
+  // ложным, стоит проверить утверждение, о которое споткнулись.
+  //
+  // `pro` НЕ устаревший псевдоним — это живой тариф Universe ($149 в
   // data/pricing.ts), and lib/planGate.ts normalizes it to `full` access.
   // This map still called it "Lite", so someone who had just paid for Universe
   // got a welcome email headlined "Добро пожаловать в AEVION Lite". Same
@@ -692,6 +767,115 @@ function maskEmail(email: string): string {
 }
 
 export const provisioningRouter = Router();
+
+/**
+ * GET /api/pricing/provisioning/subscriptions/by-channel?hours=720
+ *
+ * Сколько денег ФАКТИЧЕСКИ пришло по каждому каналу привлечения.
+ *
+ * ЗАЧЕМ. Панель выручки до сих пор считает сумму из АДРЕСА ВОЗВРАТА — нашу
+ * ожидаемую, а не списанную. Пока сверки не было, разница выглядела
+ * теоретической; 01.09.2026 выяснилось, что кассы не смотрели на сумму вовсе, и
+ * заплатить могли не столько, сколько обещала страница. Фактическая сумма
+ * теперь пишется в запись подписки, эта ручка её складывает.
+ *
+ * ФОРМА ОТВЕТА ЗАДАНА ЧИТАТЕЛЕМ — окном, которое строит панель. Так поле не
+ * окажется тем, что удобно отдать, вместо того, что нужно показать. Доводы
+ * читателя, каждый со своей ценой ошибки:
+ *
+ *   amountUsdSum считается ТОЛЬКО по записям с суммой, и рядом обязателен
+ *   withAmount — иначе частичная сумма прочтётся как полная выручка;
+ *
+ *   withChannel отдаётся ОТДЕЛЬНО от withAmount: у PayBox в адрес возврата
+ *   уходит ссылка, а не сумма, а канал может быть неизвестен у другой покупки.
+ *   Это разные пробелы, и одно число их смешает;
+ *
+ *   записи без канала идут в ключ "direct", а не выбрасываются: иначе сумма по
+ *   каналам не сойдётся с общей и это будет выглядеть потерей денег;
+ *
+ *   ноль не выдумывается нигде — покупка без суммы в amountUsdSum просто не
+ *   участвует, а не добавляет 0.
+ *
+ * ⚠️ ОТКАЗ В ЗАКРЫТУЮ, и это отличие от соседних админ-ручек намеренное. В
+ * events.ts проверка вида `if (required) {...}` оставляет ручку ОТКРЫТОЙ, когда
+ * ADMIN_TOKEN не задан. Для счётчиков событий это терпимо; здесь нет: у нас уже
+ * был случай, когда /api/metrics оказался открыт на проде ровно потому, что
+ * переменную не задали. Незаданный токен значит «закрыто», а не «свободно».
+ *
+ * ПЕРСОНАЛЬНЫХ ДАННЫХ НЕТ: только агрегаты. Адреса покупателей не уходят наружу
+ * даже под админ-токеном — для вопроса «что окупилось» они не нужны, а утечь
+ * могут.
+ */
+provisioningRouter.get("/subscriptions/by-channel", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) {
+    return res.status(503).json({
+      error: "admin_token_not_configured",
+      hint: "ADMIN_TOKEN не задан — ручка закрыта намеренно: здесь деньги, а не счётчики",
+    });
+  }
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+  if (got !== required) return res.status(401).json({ error: "unauthorized" });
+
+  const hoursRaw = Number(req.query.hours);
+  // Мусор в параметре не должен становиться пустым окном: NaN проходит сквозь
+  // Math.min/Math.max и молча обнуляет выборку. Умолчание — 30 суток.
+  const windowHours = Number.isFinite(hoursRaw) && hoursRaw > 0 ? Math.min(hoursRaw, 24 * 365) : 720;
+  const since = Date.now() - windowHours * 3600_000;
+
+  const subs = readSubscriptions().filter((s) => {
+    const t = Date.parse(s.ts);
+    return Number.isFinite(t) && t >= since;
+  });
+
+  const byChannel: Record<string, { count: number; amountUsdSum: number; withAmount: number }> = {};
+  for (const s of subs) {
+    const key = s.channel?.trim() || "direct";
+    const row = (byChannel[key] ??= { count: 0, amountUsdSum: 0, withAmount: 0 });
+    row.count += 1;
+    if (typeof s.amountUsd === "number" && Number.isFinite(s.amountUsd)) {
+      row.withAmount += 1;
+      row.amountUsdSum = Math.round((row.amountUsdSum + s.amountUsd) * 100) / 100;
+    }
+  }
+
+  // ⚠️ ОТКУДА ДАННЫЕ — вместе с самими данными.
+  //
+  // Записи о покупках лежат в файле. Если он НЕ на постоянном диске, контейнер
+  // пересобирается при каждой выкатке, и сводка честно складывает всё, что
+  // видит, — а видит она только покупки с последней выкатки. Снаружи это
+  // неотличимо от «продаж было мало».
+  //
+  // Поэтому рядом с числами идёт происхождение: на диске ли файл и какая
+  // запись самая старая. Читатель панели обязан подписать окно данных, а не
+  // выдавать его за всю историю. Замер 01.09.2026: SUBSCRIPTIONS_FILE на проде
+  // не задана, том подключён — то есть файл В КОНТЕЙНЕРЕ.
+  const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim() || null;
+  const file = subsFile().split(String.fromCharCode(92)).join("/");
+  const onVolume = mount ? file.startsWith(mount.split(String.fromCharCode(92)).join("/")) : false;
+  const all = readSubscriptions();
+  const oldest = all.reduce<string | null>((acc, x) => {
+    const t = Date.parse(x.ts);
+    if (!Number.isFinite(t)) return acc;
+    return acc === null || t < Date.parse(acc) ? x.ts : acc;
+  }, null);
+
+  return res.json({
+    byChannel,
+    total: subs.length,
+    withAmount: subs.filter((s) => typeof s.amountUsd === "number" && Number.isFinite(s.amountUsd)).length,
+    withChannel: subs.filter((s) => Boolean(s.channel?.trim())).length,
+    windowHours,
+    storage: {
+      // false означает «данные начинаются с последней выкатки», а не «мало продаж».
+      onVolume,
+      // Самая старая запись ВООБЩЕ, не в окне: по ней видно, с какого момента
+      // история существует. null = записей нет совсем.
+      oldestRecord: oldest,
+      recordsTotal: all.length,
+    },
+  });
+});
 
 const HISTORY_LIMIT = 100;
 

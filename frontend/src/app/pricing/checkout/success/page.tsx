@@ -1,5 +1,6 @@
 "use client";
 
+import { PurchaseReturnTracker } from "@/components/PurchaseReturnTracker";
 import { естьСледОплаты } from "@/lib/paymentTrace";
 import Link from "next/link";
 import { Suspense, useEffect } from "react";
@@ -112,10 +113,6 @@ function SuccessInner() {
   const knownApp = Object.prototype.hasOwnProperty.call(APP_LINKS, appId) && appId !== "platform";
   const appLink = knownApp ? APP_LINKS[appId] : null;
 
-  // Событие уходит только при следе оплаты: адрес публичный, и голый заход
-  // считался бы покупкой — в сводке и в рекламе. Полное объяснение и разбор
-  // всех четырёх касс живут в `lib/paymentTrace.ts`, рядом с самим признаком:
-  // два описания одного правила разъезжаются молча.
   const следОплаты = естьСледОплаты({
     provider,
     ref: sessionId ?? saleId,
@@ -123,16 +120,19 @@ function SuccessInner() {
     stub,
   });
 
-  useEffect(() => {
-    if (!следОплаты) return;
-    track({
-      type: "checkout_success",
-      tier: tier ?? undefined,
-      source: "pricing",
-      value: totalUsd ?? undefined,
-      meta: { stub, period: period ?? null, sessionId: sessionId ?? saleId ?? null, provider },
-    });
-  }, [sessionId, stub, tier, period, totalUsd, следОплаты]);
+  /*
+   * Учёт покупки — ОБЩИМ компонентом, а не своей строкой на этой странице.
+   *
+   * У меня здесь был свой вызов track(), у сборки — компонент
+   * PurchaseReturnTracker, и оба под ОДНИМ признаком следа оплаты (его сборка
+   * взяла у меня после замера про LemonSqueezy). Слить это как есть значило бы
+   * посчитать каждую покупку ДВАЖДЫ — и в сводке, и в рекламных счётчиках, где
+   * задвоенная выручка выглядит как успех и уводит бюджет.
+   *
+   * Поэтому беру их устройство: одна точка учёта на все страницы возврата.
+   * Мету передаём свою — она точнее общей: у общего компонента `stub`
+   * читается как `stub=1`, а наши адреса заглушки несут `stub=true`.
+   */
 
   return (
     <ProductPageShell maxWidth={680}>
@@ -201,7 +201,17 @@ function SuccessInner() {
         )}
 
         {/* Amount */}
-        {!stub && totalUsd !== null && totalUsd > 0 && (
+        {следОплаты && (
+        <PurchaseReturnTracker
+          source="pricing"
+          provider={provider ?? "unknown"}
+          tier={tier ?? undefined}
+          value={totalUsd ?? undefined}
+          meta={{ stub, period: period ?? null, sessionId: sessionId ?? saleId ?? null }}
+        />
+      )}
+
+      {!stub && totalUsd !== null && totalUsd > 0 && (
           <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 20 }}>
             {t("pricing.checkoutSuccess.amountLabel")} <strong>${totalUsd}</strong>
           </div>

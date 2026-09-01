@@ -166,7 +166,7 @@ export default function InternationalStandardsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-slate-800">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-slate-800">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
           <Link href="/smeta-trainer/drawings-practice" className="text-violet-400 hover:text-violet-300 text-sm">
             ← К разделам

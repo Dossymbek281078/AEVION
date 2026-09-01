@@ -188,7 +188,8 @@ export default function PricingIntegrationsPage() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder={tp("integrations.searchPlaceholder")}
+          aria-label={tp("integrations.searchPlaceholder")}
+ placeholder={tp("integrations.searchPlaceholder")}
           style={{
             flex: "1 1 200px",
             padding: "8px 12px",

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
@@ -6,6 +7,7 @@ import { getApiBase } from "@/lib/apiBase";
 import { revokeReasonLabel } from "@/lib/qrightRevokeReasons";
 import { pickLang, tString } from "@/lib/qrightServerI18n";
 import { CopyHash } from "./CopyHash";
+import { anchorBadge, ANCHOR_TONE_COLORS } from "@/app/bureau/anchorBadge";
 import { fixDoubledScheme } from "@/lib/urls";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +50,12 @@ type BureauCertView = {
   protectedAt: string;
   viewUrl: string;
   upgradeUrl: string | null;
+  /**
+   * Состояние якоря в биткойне. Может отсутствовать: бэкенд, который его
+   * отдаёт, выкатывается отдельно. Отсутствие — «не сказали», а не «якоря
+   * нет»; разбирает это anchorBadge().
+   */
+  bitcoinAnchor?: { status?: string | null; bitcoinBlockHeight?: number | null } | null;
 };
 
 async function loadBureauCert(qrightObjectId: string): Promise<BureauCertView | null> {
@@ -214,42 +222,20 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
     );
   }
 
-  if (data.status === "not_found") {
-    return (
-      <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "48px 16px" }}>
-        <div style={{ maxWidth: 720, margin: "0 auto" }}>
-          <div
-            style={{
-              ...card,
-              borderColor: "rgba(234,179,8,0.4)",
-              background: "rgba(254,252,232,0.6)",
-              color: "#854d0e",
-            }}
-          >
-            <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 16 }}>{t("notFoundTitle")}</div>
-            <div style={{ fontSize: 13, marginBottom: 12 }}>
-              {(() => {
-                const [pre, post] = t("notFoundDetail").split("{id}");
-                return (
-                  <>
-                    {pre}
-                    <code style={mono}>{id}</code>
-                    {post}
-                  </>
-                );
-              })()}
-            </div>
-            <Link
-              href="/qright"
-              style={{ color: "#0d9488", fontWeight: 800, textDecoration: "none", fontSize: 13 }}
-            >
-              {t("registerCta")}
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  // Объекта НЕТ в реестре — честный 404 вместо 200 с той же вёрсткой:
+  // выдуманных идентификаторов бесконечно много, и каждый выглядел как
+  // настоящая запись реестра.
+  //
+  // Ветка срабатывает только по коду 404 от сервера (см. loadEmbed): при
+  // недоступности бэкенда data === null и страница отвечает как прежде.
+  //
+  // Своя not-found.tsx тут НЕ заводится осознанно. Перевод на этой странице
+  // делает ЛОКАЛЬНЫЙ помощник `t`, объявленный внутри функции, а не общий
+  // механизм — отдельный файл потребовал бы дублировать словарь. Общая
+  // страница 404 переводимая, и это меньшее зло, чем вторая копия словаря.
+
+  if (data.status === "not_found") notFound();
+
 
   const isRevoked = data.status === "revoked";
   const accent = isRevoked ? "#dc2626" : "#0d9488";
@@ -518,6 +504,22 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
                 <span>🏛</span>
                 <span>AEVION IP Bureau</span>
               </div>
+              {(() => {
+                // Публичная страница защищённой работы про якорь молчала, хотя
+                // это главное, чем запись отличается от строки в чьей-то базе.
+                // Пометка та же, что в реестре бюро — общий модуль, не копия.
+                const b = anchorBadge(bureauCert?.bitcoinAnchor);
+                if (!b) return null;
+                const c = ANCHOR_TONE_COLORS[b.tone];
+                return (
+                  <div
+                    title={b.title}
+                    style={{ display: "inline-block", marginBottom: 6, padding: "3px 9px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: c.bg, color: c.fg, whiteSpace: "nowrap" }}
+                  >
+                    {b.label}
+                  </div>
+                );
+              })()}
               <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", margin: 0, marginBottom: 4 }}>
                 {bureauCert
                   ? bureauCert.verificationLevel === "verified"

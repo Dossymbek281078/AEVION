@@ -82,7 +82,7 @@ export default function GlazingWorksPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice"
@@ -317,7 +317,7 @@ export default function GlazingWorksPage() {
                 type="text"
                 value={a2}
                 onChange={(e) => setA2(e.target.value)}
-                placeholder="Например: 500000"
+                aria-label="Например: 500000" placeholder="Например: 500000"
                 className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm w-48 focus:border-sky-500 outline-none"
               />
               <span className="text-slate-400 text-sm">тг</span>

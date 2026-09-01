@@ -34,7 +34,7 @@ export default function RailwaysStationsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice"
@@ -639,7 +639,7 @@ export default function RailwaysStationsPage() {
                   setEx3(e.target.value);
                   setEx3Checked(false);
                 }}
-                placeholder="например, 9600000000000"
+                aria-label="например, 9600000000000" placeholder="например, 9600000000000"
                 className="flex-1 px-4 py-2 rounded-lg bg-slate-950/60 border border-slate-700 text-slate-100 focus:border-blue-500 focus:outline-none text-sm"
               />
               <button

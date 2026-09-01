@@ -101,7 +101,7 @@ export default function EncryptedPostForm({ onPosted }: Props) {
 
       <div style={{ marginBottom: "12px" }}>
         <label style={labelStyle}>alias (your handle)</label>
-        <input
+        <input aria-label="alias (your handle)"
           type="text"
           value={alias}
           onChange={(e) => setAlias(e.target.value)}
@@ -113,7 +113,7 @@ export default function EncryptedPostForm({ onPosted }: Props) {
 
       <div style={{ marginBottom: "12px" }}>
         <label style={labelStyle}>plaintext</label>
-        <textarea
+        <textarea aria-label="plaintext"
           value={plaintext}
           onChange={(e) => setPlaintext(e.target.value)}
           rows={5}
@@ -125,7 +125,7 @@ export default function EncryptedPostForm({ onPosted }: Props) {
 
       <div style={{ marginBottom: "16px" }}>
         <label style={labelStyle}>password (min 8 chars)</label>
-        <input
+        <input aria-label="password (min 8 chars)"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}

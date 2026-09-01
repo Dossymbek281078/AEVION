@@ -40,7 +40,7 @@ export default function AsbestosRemovalPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-stone-800/60 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-stone-800/60 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice/hub"
@@ -271,7 +271,7 @@ export default function AsbestosRemovalPage() {
               type="text"
               value={a2}
               onChange={(e) => setA2(e.target.value)}
-              placeholder="Введите число комплектов"
+              aria-label="Введите число комплектов" placeholder="Введите число комплектов"
               className="w-full md:w-72 px-4 py-2 rounded-lg bg-slate-950 border border-stone-700 text-stone-200 placeholder-stone-600 focus:border-amber-400 focus:outline-none text-sm"
             />
             <div className="flex gap-2 mt-4">
@@ -323,7 +323,7 @@ export default function AsbestosRemovalPage() {
               type="text"
               value={a3}
               onChange={(e) => setA3(e.target.value)}
-              placeholder="Объём, м³"
+              aria-label="Объём, м³" placeholder="Объём, м³"
               className="w-full md:w-72 px-4 py-2 rounded-lg bg-slate-950 border border-stone-700 text-stone-200 placeholder-stone-600 focus:border-amber-400 focus:outline-none text-sm"
             />
             <div className="flex gap-2 mt-4">
@@ -376,7 +376,7 @@ export default function AsbestosRemovalPage() {
               type="text"
               value={a4}
               onChange={(e) => setA4(e.target.value)}
-              placeholder="Сумма, тг"
+              aria-label="Сумма, тг" placeholder="Сумма, тг"
               className="w-full md:w-72 px-4 py-2 rounded-lg bg-slate-950 border border-stone-700 text-stone-200 placeholder-stone-600 focus:border-amber-400 focus:outline-none text-sm"
             />
             <div className="flex gap-2 mt-4">

@@ -30,7 +30,7 @@ export default function TechParkIncubatorPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Технопарки и IT-инкубаторы</div>
@@ -105,7 +105,7 @@ export default function TechParkIncubatorPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во floor boxes"
+            aria-label="Кол-во floor boxes" placeholder="Кол-во floor boxes"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 4000 / 2.25 = 1778 шт; +20% = 2133 шт; +дополнит. в переговорных и кафе = ~2600 floor boxes. Это огромная инсталляция (стоимость floor box ~$200/шт = $520 000 = 240 млн тг). Astana Hub имеет сопоставимое количество.</p>
@@ -138,7 +138,7 @@ export default function TechParkIncubatorPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~28 млрд тг (допуск ±10%). 5.4+1.8+1.2+2.4+0.8+0.6+1.6+1.4+0.8+0.4+1.2+0.2+0.4+0.6+0.8+0.3+0.6+0.5 = 21 млрд тг + резерв и фит-аут = 28 млрд тг (с оптимизацией). Удельная стоимость ~1.56 млн тг/м² — премиум-класс. Astana Hub (26 000 м², 2018) — оценочно $30 млн = 14 млрд тг (по ценам 2018), сейчас (с инфляцией+апгрейд WELL) = ~30 млрд тг.</p>

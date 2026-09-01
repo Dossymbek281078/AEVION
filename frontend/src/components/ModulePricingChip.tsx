@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { withChannel } from "@/lib/products";
+import { channelNow } from "@/lib/channelNow";
 
 // Compact pricing chip + one-click buy for module pages. Mirrors the REAL GTM
 // tiers (Lite / Medium / Full) from /api/pricing — the same prices the checkout
@@ -84,6 +86,52 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
     };
   }, []);
 
+  /*
+   * ⚠️ Стоит ЗДЕСЬ, до первого раннего возврата: хук после `return null`
+   * даёт «Rendered more hooks than during the previous render» — компонент
+   * падает у всех 37 модулей. Поймал собственный тест, глазами не видно.
+   *
+   * 🔴 ПОКУПКА ВТОРОЙ РАЗ НЕ ДОЛЖНА ДАВАТЬ МЕНЬШЕ, ЧЕМ БЫЛО (01.09.2026).
+   *
+   * Кнопка жёстко оформляет тариф Lite: `tierId: "lite"`. Она стоит на 37
+   * страницах модулей и НИ РАЗУ не спрашивала, какой тариф у человека.
+   *
+   * Замер соседнего окна на сквозном стенде (настоящий вебхук, настоящий файл
+   * подписок, настоящая функция стены):
+   *
+   *     купил medium              -> medium
+   *     затем «докупил модуль»    -> LITE
+   *
+   * Для кассы «докупить модуль» и «перейти на Lite» — одно событие: ссылка
+   * заказа собирается как `tier_<id>_<период>`. То есть человек платил второй
+   * раз и получал МЕНЬШЕ доступа, чем имел, молча — ни предупреждения, ни следа.
+   *
+   * ⚠️ Чиню НЕ ценой и НЕ составом пакетов: это решение основателя. Убираю
+   * ровно вред — предложение, которое понижает. Кто уже платит больше Lite,
+   * видит не «Купить», а путь к своему тарифу.
+   *
+   * Незнание трактуется в пользу покупки: гость и человек без входа обязаны
+   * иметь возможность купить. Молчание сервера не должно закрывать кассу.
+   */
+  const [ownTier, setOwnTier] = useState<string | null>(null);
+
+  useEffect(() => {
+    let живо = true;
+    fetch(apiUrl("/api/me/entitlements"), { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (живо) setOwnTier(typeof d?.plan === "string" ? d.plan.toLowerCase() : null);
+      })
+      .catch(() => {});
+    return () => {
+      живо = false;
+    };
+  }, []);
+
+  // Порядок тарифов ровно тот, что у стены на сервере. Незнакомое значение —
+  // ноль: неизвестный тариф не повод запрещать покупку.
+  const RANK: Record<string, number> = { free: 0, lite: 1, medium: 2, full: 3, pro: 4, enterprise: 5 };
+  const покупкаПонизит = (RANK[ownTier ?? ""] ?? 0) > RANK.lite;
   if (!data || !Array.isArray(data.tiers)) return null;
 
   const findTier = (id: string) => data.tiers.find((t) => t.id === id);
@@ -104,6 +152,7 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
   // The backend /checkout/session picks the processor (LS primary → Gumroad →
   // stub), treats this module as Lite's "one of choice" (no add-on), and returns
   // a ready checkout URL. Email is collected on the hosted page.
+
   async function buyNow() {
     setBuying(true);
     setBuyError(false);
@@ -124,7 +173,19 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
       });
       const j = await r.json();
       if (j?.url) {
-        window.location.href = j.url;
+        // Метка канала доводится до САМОЙ КАССЫ, а не только до нашего события.
+        //
+        // Найдено 31.08.2026 обходом пути покупателя в браузере: эта кнопка —
+        // ТРЕТИЙ путь оплаты, мимо обоих, что чинились накануне. Она не строит
+        // адрес сама, а получает готовый от бэкенда и уходит по нему как есть.
+        //
+        // Получатель давно готов: вебхук LemonSqueezy читает
+        // custom_data.channel (заведено 19.08.2026), а вебхук Gumroad —
+        // url_params[channel]. Не хватало отправителя, и покупка приходила в
+        // отчёт ниоткуда. withChannel сам знает обе кассы и подставляет нужную
+        // форму параметра.
+        const mark = channelNow();
+        window.location.href = withChannel(j.url, mark, "module-chip");
         return; // keep the spinner while the browser navigates away
       }
       setBuyError(true);
@@ -183,7 +244,31 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
           </>
         )}
       </Link>
-      {!hideBuy && (
+      {/*
+        Покупателю, у которого тариф ВЫШЕ Lite, кнопка не показывается: она
+        оформила бы Lite и понизила его. Вместо неё — путь к своему тарифу.
+        Это не «спрятать кассу»: человек уже платит больше, продавать ему
+        меньшее за деньги нечестно.
+      */}
+      {!hideBuy && покупкаПонизит && (
+        <Link
+          href="/account"
+          title="У вас тариф выше Lite — эта кнопка оформила бы Lite и понизила доступ"
+          style={{
+            padding: "6px 14px",
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 800,
+            whiteSpace: "nowrap",
+            textDecoration: "none",
+            color: palette.muted,
+            border: `1px solid ${palette.border}`,
+          }}
+        >
+          Уже включено
+        </Link>
+      )}
+      {!hideBuy && !покупкаПонизит && (
         <button
           type="button"
           onClick={buyNow}

@@ -54,7 +54,7 @@ export default function SpectatorHubPage() {
   const fetchList = useCallback(async () => {
     try {
       const res = await fetch("/api-backend/api/cyberchess-spectator/list", {
-        cache: "no-store",
+        cache: "no-store", signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -232,14 +232,19 @@ export default function SpectatorHubPage() {
             <div style={{ fontSize: 15, color: T.text, marginBottom: 6 }}>
               {t("spectator.hub.empty")}
             </div>
+            {/* Адрес страницы — не имя места для человека. Было:
+                «попроси друга включить 📡 в /cyberchess» — посетитель видит
+                кусок адреса вместо названия раздела. Найдено 27.08.2026
+                чтением экрана. */}
             <div style={{ fontSize: 13 }}>
-              попроси друга включить 📡 в{" "}
+              Попросите друга включить трансляцию{" "}
               <Link
                 href="/cyberchess"
                 style={{ color: T.accent, textDecoration: "none" }}
               >
-                /cyberchess
+                в приложении
               </Link>
+              {" "}— значок 📡 в верхней панели.
             </div>
           </div>
         )}
@@ -249,7 +254,9 @@ export default function SpectatorHubPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+              // min(...) вместо жёстких 320: на экране такой же ширины
+              // колонка иначе требует невозможного и тянет страницу вбок.
+              gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))",
               gap: 14,
             }}
           >

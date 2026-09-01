@@ -8,6 +8,7 @@ import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
+import { activatable } from "@/lib/activatable";
 
 type AuthShard = {
   index: number;
@@ -405,7 +406,7 @@ export default function QuantumShieldPage() {
           <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 10, border: "1px dashed rgba(245,158,11,0.4)", background: "rgba(245,158,11,0.08)", fontSize: 12, color: "#92400e", display: "flex", gap: 10, alignItems: "center" }}>
             <span style={{ fontSize: 14 }}>&#x26A0;&#xFE0F;</span>
             <div>
-              <b>Demo data</b> — backend unreachable. Records below are placeholders. Sign in or check API connection to see live shields.
+              <b>Demo data</b> — the service is unavailable right now, so the records below are examples. Sign in or try again in a minute to see your real shields.
             </div>
           </div>
         )}
@@ -436,9 +437,11 @@ export default function QuantumShieldPage() {
             <div style={{ textAlign: "center" as const, padding: 40 }}><div style={{ fontSize: 48, marginBottom: 12 }}>&#x1F6E1;</div><div style={{ fontWeight: 700, fontSize: 16, color: "#334155", marginBottom: 6 }}>No Shield records yet</div><button onClick={() => setTab("create")} style={{ padding: "10px 20px", borderRadius: 10, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>Create Shield</button></div>
           ) : (<div style={{ display: "grid", gap: 12 }}>
             {records.map((rec) => (
-              <div key={rec.id} onClick={() => openDetail(rec)} style={{ border: "1px solid rgba(15,23,42,0.1)", borderRadius: 14, padding: 16, background: "#fff", boxShadow: "0 2px 8px rgba(15,23,42,0.04)", cursor: "pointer", transition: "all 0.2s" }}
+              <div key={rec.id} {...activatable(() => openDetail(rec))} style={{ border: "1px solid rgba(15,23,42,0.1)", borderRadius: 14, padding: 16, background: "#fff", boxShadow: "0 2px 8px rgba(15,23,42,0.04)", cursor: "pointer", transition: "all 0.2s" }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 16px rgba(13,148,136,0.12)"; (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(13,148,136,0.3)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 8px rgba(15,23,42,0.04)"; (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(15,23,42,0.1)"; }}>
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 8px rgba(15,23,42,0.04)"; (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(15,23,42,0.1)"; }}
+                    onFocus={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 16px rgba(13,148,136,0.25)"; }}
+                    onBlur={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 8px rgba(15,23,42,0.06)"; }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" as const }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" as const }}>

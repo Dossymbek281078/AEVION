@@ -53,7 +53,7 @@ test.describe("founder flow: describe → built app", () => {
     expect(paths.some((p) => /^src\/.+\.(jsx|tsx|js|ts)$/.test(p))).toBe(true);
 
     // Live preview renders: open Visual Edit and ask the overlay for element 0.
-    await page.getByRole("button", { name: /Visual Edit/ }).click();
+    await page.getByRole("tab", { name: /Visual Edit/ }).click();
     const iframe = page.locator('iframe[sandbox="allow-scripts"]');
     await expect(iframe).toBeVisible({ timeout: 30_000 });
 
@@ -86,5 +86,81 @@ test.describe("founder flow: describe → built app", () => {
         })
     );
     expect(rendered).toBe(true);
+  });
+
+  /**
+   * The same path for a Next.js project.
+   *
+   * `next` is the stack the "New project" form defaults to and the one /plan
+   * falls back to, yet nothing checked it against production: the flow above
+   * generates whatever the hero prompt produces, which has always been React.
+   * Client-side preview for Next resolves a different module graph entirely
+   * (route entries, next/link, next/image, next/font, CSS Modules) — it was
+   * broken for every Next project until PR #920 and only unit tests guard it.
+   *
+   * Driven through the API rather than the hero box: the point is the stack,
+   * and the UI half is already covered by the test above.
+   */
+  test("a Next.js project generates real files and previews without a deploy", async ({ page }) => {
+    const api = "/api-backend/api/devhub";
+    const created = await page.request.post(`${api}/projects`, {
+      data: { name: `nightly-next-${Date.now().toString(36)}`, description: "nightly next preview check", stack: "next" },
+    });
+    expect(created.ok()).toBe(true);
+    const projectId = (await created.json()).project.id as string;
+
+    try {
+      const gen = await page.request.post(`${api}/projects/${projectId}/generate`, {
+        data: { prompt: "простая страница с заголовком и кнопкой-счётчиком" },
+        timeout: 300_000,
+      });
+      expect(gen.ok()).toBe(true);
+      const genBody = await gen.json();
+      // A fallback stub is not a generation — the flow would "pass" on a page
+      // of placeholder comments otherwise.
+      expect(genBody.aiGenerated).toBe(true);
+
+      const filesResp = await page.request.get(`${api}/projects/${projectId}/files`);
+      const paths: string[] = ((await filesResp.json()).files ?? []).map((f: { path: string }) => f.path);
+      expect(paths).not.toEqual(["output.ts"]);
+      expect(paths.length).toBeGreaterThan(0);
+
+      await page.goto(`/devhub/${projectId}`);
+      await page.getByRole("tab", { name: /Visual Edit/ }).click();
+      const iframe = page.locator('iframe[sandbox="allow-scripts"]');
+      await expect(iframe).toBeVisible({ timeout: 30_000 });
+
+      // Same probe as above: a reply can only come from an overlay that
+      // mounted inside a rendered document.
+      const rendered = await page.evaluate(
+        () =>
+          new Promise<boolean>((resolve) => {
+            const frame = document.querySelector('iframe[sandbox]') as HTMLIFrameElement | null;
+            if (!frame) return resolve(false);
+            const onMsg = (e: MessageEvent) => {
+              if (e.data && e.data.source === "devhub-visual-edit") {
+                window.removeEventListener("message", onMsg);
+                resolve(true);
+              }
+            };
+            window.addEventListener("message", onMsg);
+            let tries = 0;
+            const timer = setInterval(() => {
+              for (let v = 0; v <= 5; v++) {
+                frame.contentWindow?.postMessage({ source: "devhub-visual-edit-select", vid: String(v) }, "*");
+              }
+              if (++tries >= 10) {
+                clearInterval(timer);
+                setTimeout(() => resolve(false), 4_000);
+              }
+            }, 3_000);
+          })
+      );
+      expect(rendered).toBe(true);
+    } finally {
+      // Never leave nightly projects on the public shelf — they accumulated
+      // there before and had to be cleaned by hand.
+      await page.request.delete(`${api}/projects/${projectId}`).catch(() => {});
+    }
   });
 });

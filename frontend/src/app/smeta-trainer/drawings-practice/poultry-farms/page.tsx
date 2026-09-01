@@ -30,7 +30,7 @@ export default function PoultryFarmsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Птицефабрики</div>
@@ -107,7 +107,7 @@ export default function PoultryFarmsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь корпусов, м²"
+            aria-label="Площадь корпусов, м²" placeholder="Площадь корпусов, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: S = 100 000 / 18 = 5 556 м² — мин. полезная площадь для одного тура. С учётом санитарного цикла (42 дн откорма + 14 дн санобработка = 56 дн между поставками одного корпуса) и непрерывного потока (5 туров/год значит постоянно 2-3 партии в работе) — фактич. площадь нужна ~3 × 1600 = ~4800 м². Берём 4500 м² как оптимум для 100 000 голов/тур с 7 корпусами 100×16 м.</p>
@@ -139,7 +139,7 @@ export default function PoultryFarmsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~8.4 млрд тг (допуск ±10%). 1.8+2.4+0.8+0.4+0.6+1.4+0.5+0.4+0.18+0.32+0.3+0.15+0.18+0.15+0.2+0.92 = 10.7 млрд тг (но с оптимизацией CAPEX и упрощением кормозавода = 8.4 млрд тг). Удельная стоимость ~16-20 тыс. тг/голову мощности. Шымкент-Кус оценочно стоила $30-40 млн ≈ 14-18 млрд тг.</p>

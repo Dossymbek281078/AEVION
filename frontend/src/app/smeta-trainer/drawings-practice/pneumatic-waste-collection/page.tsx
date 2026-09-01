@@ -14,7 +14,7 @@ export default function PneumaticWasteCollectionPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Pneumatic Waste Collection</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Pneumatic Waste Collection</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🚮 Pneumatic Waste Collection — Подземная пневмосистема</h1>
           <p className="mt-3 text-slate-400 leading-relaxed max-w-3xl">Модуль #305. Astana EXPO 2017 city + новый Astana Hub Almaty pilot — pneumatic waste collection AVAC Envac Sweden. Underground pneumatic tubes Ø500-700 мм vacuum 0.6 бар transport waste from street inlets к central collection station 2-5 км, no garbage trucks streets. Reference: Hammarby Sjöstad Stockholm 12 000 households 1992, Songdo South Korea, Disney World USA, Barcelona OlympicVillage 1992, Roosevelt Island NYC. Capacity 1-3 tonnes/hr collection, separation organic/recyclables/general waste. ISWA Sustainable Waste Management + СН РК 4.04-23 (городское ЖКХ).</p>
@@ -48,7 +48,7 @@ export default function PneumaticWasteCollectionPage() {
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Airflow velocity</h2>
           <p className="text-slate-300">Транспорт waste pneumatic vacuum 0.6 бар. Pipe Ø600 мм. Какая velocity (м/с)?</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="м/с" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="м/с" placeholder="м/с" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>Pneumatic waste transport velocity = <strong>~50 м/с</strong> minimum для suspended-flow transport (100-150 м/с peak slug-flow). Below 25 м/с — material drops out. Energy ~80-120 кВт·ч/т.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс 5000 households</h2>
@@ -60,7 +60,7 @@ export default function PneumaticWasteCollectionPage() {
             <li>SCADA Siemens TIA + RFID network + IT + monitoring = 0.5 млрд</li>
             <li>Collection station building + civil works + проект 5% + ESG audit + PNR = 0.4 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~9.5 млрд тг (~$20M USD)</strong> на 5000 households. Удельная — $4000/household installed. Хорошо подходит для high-end residential premier districts.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Maintenance challenges</h2>

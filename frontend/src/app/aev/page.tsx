@@ -712,10 +712,10 @@ export default function AEVPage() {
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
               <label style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>Agent</label>
-              <input value={computeAgent} onChange={(e) => setComputeAgent(e.target.value)} disabled={computeRunning}
+              <input aria-label="Agent" value={computeAgent} onChange={(e) => setComputeAgent(e.target.value)} disabled={computeRunning}
                 style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 13, fontFamily: "ui-monospace, monospace", width: 200 }} />
               <label style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>Units</label>
-              <input type="number" min={RATE_CARD.compute.minBatch} max={RATE_CARD.compute.maxBatch}
+              <input aria-label="Units" type="number" min={RATE_CARD.compute.minBatch} max={RATE_CARD.compute.maxBatch}
                 value={computeSize} onChange={(e) => setComputeSize(Number(e.target.value))} disabled={computeRunning}
                 style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 13, width: 90, fontFamily: "ui-monospace, monospace" }} />
               <button onClick={startCompute} disabled={computeRunning}
@@ -780,7 +780,7 @@ export default function AEVPage() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
-              <input type="number" min={RATE_CARD.stewardship.minStake} step="any"
+              <input aria-label="Сколько застейкать" type="number" min={RATE_CARD.stewardship.minStake} step="any"
                 placeholder={`Сколько застейкать (мин. ${RATE_CARD.stewardship.minStake})`}
                 value={stakeAmt} onChange={(e) => setStakeAmt(e.target.value)}
                 style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 13, width: 240, fontFamily: "ui-monospace, monospace" }} />
@@ -926,8 +926,8 @@ export default function AEVPage() {
           fontSize: 12, color: "#475569", lineHeight: 1.6,
         }}>
           <strong style={{ color: "#0f172a" }}>Tokenomics в одной строке:</strong> один кошелёк, три параллельных движка эмиссии,
-          хард-кап 21M, балланс persist в localStorage. Продай AEV в <a href="/qtrade" style={{ color: "#2563eb", fontWeight: 700 }}>QTrade</a> по
-          симулированной паре AEV/USD (random-walk price feed). В продакшне Proof-of-Play хуки добавятся в каждый Wave1-модуль и в QCoreAI run-trace.
+          предел выпуска 21 млн, баланс сохраняется в вашем браузере. Продай AEV в <a href="/qtrade" style={{ color: "#2563eb", fontWeight: 700 }}>QTrade</a> по
+          симулированной паре AEV/USD: цена меняется случайно, это demo-режим. В продакшне Proof-of-Play хуки добавятся в каждый Wave1-модуль и в QCoreAI run-trace.
         </div>
       </ProductPageShell>
     </main>
@@ -1345,10 +1345,10 @@ function FutureEngines() {
           ✨ Своя идея
         </div>
         <div style={{ display: "flex", flexDirection: "column" as const, gap: 6 }}>
-          <input value={draftName} onChange={(e) => setDraftName(e.target.value)} maxLength={60}
+          <input aria-label="Название" value={draftName} onChange={(e) => setDraftName(e.target.value)} maxLength={60}
             placeholder="Название (например: Proof-of-Stewardship-of-Strangers)"
             style={{ padding: "7px 10px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13 }} />
-          <textarea value={draftDesc} onChange={(e) => setDraftDesc(e.target.value)} maxLength={280}
+          <textarea aria-label="Что значит и как майнится" value={draftDesc} onChange={(e) => setDraftDesc(e.target.value)} maxLength={280}
             rows={2}
             placeholder="Что значит и как майнится. 1-3 предложения."
             style={{ padding: "7px 10px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, resize: "vertical" as const, fontFamily: "inherit" }} />
@@ -1470,14 +1470,14 @@ function MentorshipPanel({ mentorship, setMentorship, owned }: {
         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>
           Принять под крыло
         </span>
-        <input value={draftName} onChange={(e) => setDraftName(e.target.value)} maxLength={40}
+        <input aria-label="Имя" value={draftName} onChange={(e) => setDraftName(e.target.value)} maxLength={40}
           placeholder="Имя (или auto)"
           style={{
             padding: "6px 10px", borderRadius: 5,
             border: "1px solid rgba(255,255,255,0.25)", background: "rgba(0,0,0,0.25)",
             color: "#fff", fontSize: 12, flex: "1 1 180px", minWidth: 0,
           }} />
-        <input type="number" value={draftRating} onChange={(e) => setDraftRating(e.target.value)}
+        <input aria-label="Старт-рейтинг" type="number" value={draftRating} onChange={(e) => setDraftRating(e.target.value)}
           placeholder={`Старт-рейтинг (${MENTORSHIP.defaultStartRating})`}
           min={800} max={2500}
           style={{
@@ -1707,7 +1707,7 @@ function NetworkPanel({ wallet, setWallet, network, setNetwork, owned }: {
         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>
           Демо · симуляция invite
         </span>
-        <input value={draftName} onChange={(e) => setDraftName(e.target.value)} maxLength={40}
+        <input aria-label="Имя друга" value={draftName} onChange={(e) => setDraftName(e.target.value)} maxLength={40}
           placeholder="Имя друга (или оставь пустым — сгенерирую)"
           style={{
             padding: "6px 10px", borderRadius: 5,
@@ -1919,14 +1919,14 @@ function CurationWall({ wallet, setWallet, pins, setPins, owned }: {
             </select>
             <span style={{ fontSize: 11, color: "#64748b" }}>{remaining > 0 ? `Осталось ${remaining} в лимите дня` : "Дневной лимит исчерпан"}</span>
           </div>
-          <input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} maxLength={120}
+          <input aria-label="Заголовок" value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} maxLength={120}
             placeholder="Заголовок (например: «победа над Master в 24 хода»)"
             style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13 }} />
-          <textarea value={draftNote} onChange={(e) => setDraftNote(e.target.value)} maxLength={240}
+          <textarea aria-label="Заметка / разбор / контекст" value={draftNote} onChange={(e) => setDraftNote(e.target.value)} maxLength={240}
             rows={2}
             placeholder="Заметка / разбор / контекст (optional, до 240 char)"
             style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, resize: "vertical" as const, fontFamily: "inherit" }} />
-          <input value={draftLink} onChange={(e) => setDraftLink(e.target.value)} maxLength={200}
+          <input aria-label="Ссылка" value={draftLink} onChange={(e) => setDraftLink(e.target.value)} maxLength={200}
             placeholder="Ссылка (optional, например /cyberchess?pgn=…)"
             style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, fontFamily: "ui-monospace, monospace" }} />
           <div style={{ display: "flex", gap: 8, alignItems: "center" as const, flexWrap: "wrap" as const }}>
@@ -2116,7 +2116,7 @@ function InsightPanel({ wallet, setWallet, insight, setInsight }: {
           </div>
           <textarea value={draftQ} onChange={(e) => setDraftQ(e.target.value.slice(0, 240))}
             rows={3}
-            placeholder="Задай содержательный вопрос — например: «Почему в Каро-Канн c..d4 даёт чёрным более активную игру против системы Фантази?»"
+            aria-label="Вопрос к AEV" placeholder="Задай содержательный вопрос — например: «Почему в Каро-Канн c..d4 даёт чёрным более активную игру против системы Фантази?»"
             style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, resize: "vertical" as const, fontFamily: "inherit", lineHeight: 1.4 }} />
           <div style={{ display: "flex", gap: 10, alignItems: "center" as const, flexWrap: "wrap" as const }}>
             <div style={{ flex: "1 1 200px", minWidth: 200 }}>
@@ -2807,7 +2807,7 @@ function MarketplacePanel({
           </span>
           {editingQuote ? (
             <>
-              <input
+              <input aria-label="Твоя цитата на /aev hero"
                 value={quoteDraft}
                 onChange={(e) => setQuoteDraft(e.target.value.slice(0, 80))}
                 placeholder="Твоя цитата на /aev hero (до 80 char)"
@@ -3227,7 +3227,7 @@ function DataManagementPanel() {
         }}>
           ⬆ Import backup
           <input type="file" accept="application/json,.json" onChange={importData}
-            style={{ display: "none" }} />
+            className="aevion-file-input" />
         </label>
         <button onClick={resetAll}
           style={{

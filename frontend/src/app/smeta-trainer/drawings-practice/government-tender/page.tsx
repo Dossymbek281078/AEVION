@@ -125,7 +125,7 @@ export default function GovernmentTenderPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* HEADER */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice/hub"
@@ -286,7 +286,7 @@ export default function GovernmentTenderPage() {
                 type="text"
                 value={ex1Answer}
                 onChange={(e) => setEx1Answer(e.target.value)}
-                placeholder="введите сумму в тг"
+                aria-label="введите сумму в тг" placeholder="введите сумму в тг"
                 className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100 w-56 focus:outline-none focus:border-blue-500"
               />
               <button

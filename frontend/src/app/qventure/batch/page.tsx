@@ -34,6 +34,9 @@ export default function BatchPage() {
   const [progress, setProgress] = useState<{ done: number; total: number; current: string } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  // Ссылка на оплату из отказа 402. Одна на весь пакет: строк с ошибками
+  // бывает много, а идти платить нужно один раз.
+  const [upgradeUrl, setUpgradeUrl] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("composite");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -74,7 +77,17 @@ export default function BatchPage() {
         const aj = await an.json();
         if (!an.ok || !aj?.ok) {
           if (aj?.error === "rate_limited") { await sleep(11_000); continue; }
-          return { error: `${label}: ${aj?.error || "analysis failed"}` };
+          // Берём ГОТОВЫЙ текст сервера, а не машинный код, и запоминаем
+          // ссылку на оплату. При включённой платной стене здесь приходит 402
+          // с полями message и upgradeUrl; прежняя строка брала error, и
+          // человек читал бы «Компания X: upgrade_required» в каждой строке,
+          // а куда идти платить — нигде.
+          const human =
+            (typeof aj?.message === "string" && aj.message) ||
+            (typeof aj?.error === "string" && aj.error) ||
+            "не удалось выполнить разбор";
+          if (typeof aj?.upgradeUrl === "string") setUpgradeUrl(aj.upgradeUrl);
+          return { error: `${label}: ${human}` };
         }
         setNote(null);
         const r = aj.data;
@@ -99,7 +112,7 @@ export default function BatchPage() {
     if (!files.length) return;
     if (files.length > 20) { setErrors([`Max 20 decks per batch — first 20 of ${files.length} used.`]); }
     const batch = files.slice(0, 20);
-    setBusy(true); setErrors([]); setNote(null);
+    setBusy(true); setErrors([]); setNote(null); setUpgradeUrl(null);
     const collected: Row[] = [...rows];
     const errs: string[] = [];
     for (let i = 0; i < batch.length; i++) {
@@ -136,7 +149,7 @@ export default function BatchPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--teal-deep, #075b53)", letterSpacing: 1, textTransform: "uppercase" }}>AEVION · QVenture</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 28, fontWeight: 800, color: "var(--ink, #17181a)" }}>Deal funnel — batch analysis</h1>
+            <h1 style={{ margin: "6px 0 0", fontSize: 28, fontWeight: 800, color: "var(--ink, #17181a)" }}>Воронка сделок — пакетный разбор</h1>
           </div>
           <Link href="/qventure" style={{ padding: "9px 18px", background: "#fff", color: "var(--teal-deep, #075b53)", border: "1px solid var(--rule-mid, #b9b8b0)", borderRadius: 10, fontWeight: 700, fontSize: 13.5, textDecoration: "none" }}>
             ← Single deal
@@ -162,14 +175,21 @@ export default function BatchPage() {
           )}
           {note && <span style={{ fontSize: 13, color: "#b45309", fontWeight: 600 }}>{note}</span>}
           {!busy && !progress && rows.length === 0 && (
-            <span style={{ fontSize: 12.5, color: "var(--ink-faint, #74767c)" }}>Text-based PDFs only (not scanned images).</span>
+            <span style={{ fontSize: 12.5, color: "var(--ink-faint, #74767c)" }}>Только текстовые PDF, не сканы.</span>
           )}
         </div>
 
         {errors.length > 0 && (
           <div style={{ ...SECTION, borderColor: "#fecaca", background: "#fef2f2", marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#b91c1c", marginBottom: 6 }}>Skipped {errors.length} deck{errors.length > 1 ? "s" : ""}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#b91c1c", marginBottom: 6 }}>Пропущено презентаций: {errors.length}</div>
             {errors.map((e, i) => <div key={i} style={{ fontSize: 12.5, color: "#7f1d1d" }}>• {e}</div>)}
+            {upgradeUrl && (
+              <div style={{ fontSize: 12.5, marginTop: 8 }}>
+                <a href={upgradeUrl} style={{ color: "#b91c1c", fontWeight: 700, textDecoration: "underline" }}>
+                  Посмотреть тарифы
+                </a>
+              </div>
+            )}
           </div>
         )}
 
@@ -200,8 +220,8 @@ export default function BatchPage() {
 
             <div style={{ ...SECTION }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
-                <h2 style={{ ...H2, margin: 0, flex: 1 }}>Ranking</h2>
-                <span style={{ fontSize: 12, color: "var(--ink-faint, #74767c)" }}>Sort:</span>
+                <h2 style={{ ...H2, margin: 0, flex: 1 }}>Рейтинг</h2>
+                <span style={{ fontSize: 12, color: "var(--ink-faint, #74767c)" }}>Сортировка:</span>
                 {(["composite", "redFlags", "name"] as SortKey[]).map((k) => (
                   <button key={k} type="button" onClick={() => setSort(k)} style={{
                     padding: "5px 11px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer",
@@ -215,12 +235,12 @@ export default function BatchPage() {
                   <thead>
                     <tr style={{ textAlign: "left", color: "var(--ink-faint, #74767c)", fontSize: 12, borderBottom: "2px solid var(--rule, #d4d3cc)" }}>
                       <th style={{ padding: "8px 6px" }}>#</th>
-                      <th style={{ padding: "8px 6px" }}>Company</th>
-                      <th style={{ padding: "8px 6px" }}>Sector · Stage</th>
-                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Score</th>
-                      <th style={{ padding: "8px 6px" }}>Verdict</th>
-                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Flags</th>
-                      <th style={{ padding: "8px 6px" }}>Stress</th>
+                      <th style={{ padding: "8px 6px" }}>Компания</th>
+                      <th style={{ padding: "8px 6px" }}>Отрасль · стадия</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Оценка</th>
+                      <th style={{ padding: "8px 6px" }}>Вердикт</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Флаги</th>
+                      <th style={{ padding: "8px 6px" }}>Стресс</th>
                       <th style={{ padding: "8px 6px" }} />
                     </tr>
                   </thead>
@@ -239,7 +259,7 @@ export default function BatchPage() {
                         <td style={{ padding: "9px 6px", textAlign: "right", fontWeight: 700, color: r.redFlags > 0 ? "#b45309" : "var(--ink-faint, #74767c)" }}>{r.redFlags}</td>
                         <td style={{ padding: "9px 6px", color: r.resilience === "underwater" || r.resilience === "fragile" ? "#b45309" : "var(--ink-soft, #45474c)", textTransform: "capitalize" }}>{r.resilience}</td>
                         <td style={{ padding: "9px 6px", textAlign: "right" }}>
-                          <Link href={`/qventure/a/${r.id}`} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none", whiteSpace: "nowrap" }}>Report →</Link>
+                          <Link href={`/qventure/a/${r.id}`} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none", whiteSpace: "nowrap" }}>Отчёт →</Link>
                         </td>
                       </tr>
                     ))}

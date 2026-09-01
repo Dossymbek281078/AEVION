@@ -51,7 +51,7 @@ const MOCK_AUCTIONS: Auction[] = [
     player: "ShadowKnight_2400",
     elo: 2410,
     title: "Сицилианская защита, Найдорф — победа над IM",
-    desc: "Annotated PGN 47 ходов + Stockfish 18 анализ + 3 brilliancies",
+    desc: "Партия на 47 ходов с разбором, анализ движка и три блестящих хода",
     startPrice: 350,
     bids: 12,
     featured: true,
@@ -61,7 +61,7 @@ const MOCK_AUCTIONS: Auction[] = [
     player: "EndgameKnight",
     elo: 2180,
     title: "Эндшпиль ладья+пешка против ладьи — позиция Лусены",
-    desc: "Mini-разбор 18 ходов с альтернативами и теорией Лусены/Филидора",
+    desc: "Краткий разбор 18 ходов с альтернативами и теорией Лусены/Филидора",
     startPrice: 120,
     bids: 7,
   },
@@ -388,7 +388,7 @@ export default function EconomyHubPage() {
             <div style={{ fontSize: 13, color: C.text }}>
               <span style={{ fontSize: 18, marginRight: 8 }}>{activeCoach.emoji}</span>
               Активная аренда: <strong>{activeCoach.name}</strong>
-              <span style={{ color: C.dim, marginLeft: 8 }}>· Coach Chat без ограничений</span>
+              <span style={{ color: C.dim, marginLeft: 8 }}>· разговор с тренером без ограничений</span>
             </div>
             <code style={{ fontSize: 12, color: C.green, fontFamily: "ui-monospace, monospace" }}>
               осталось {formatRemaining(coachRented.expiresAt - now)}
@@ -401,7 +401,7 @@ export default function EconomyHubPage() {
           <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 10 }}>
             <span>🪙</span> Аукцион уроков
             <span style={{ fontSize: 11, fontWeight: 600, color: C.faint, marginLeft: 6 }}>
-              · annotated PGN + анализ за Chessy
+              · разобранные партии и анализ за Chessy
             </span>
           </h2>
           {/* Оговорка стоит ЗДЕСЬ, а не внизу страницы. Внизу она была — строкой
@@ -457,7 +457,7 @@ export default function EconomyHubPage() {
                       <div style={{ fontSize: 22, fontWeight: 900, color: C.gold, fontFamily: "ui-monospace, monospace", lineHeight: 1.1 }}>
                         {currentPrice} AEV
                       </div>
-                      <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>🔥 {totalBids} {totalBids === 1 ? "бид" : "бидов"}</div>
+                      <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>🔥 {totalBids} {totalBids === 1 ? "ставка" : "ставок"}</div>
                       <button
                         onClick={() => placeBid(a)}
                         disabled={!mounted || !canBid}
@@ -490,7 +490,7 @@ export default function EconomyHubPage() {
           <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 10 }}>
             <span>🎓</span> Аренда тренера
             <span style={{ fontSize: 11, fontWeight: 600, color: C.faint, marginLeft: 6 }}>
-              · виртуальные GM/IM-боты в Coach Chat
+              · соперники уровня гроссмейстера и мастера в разговоре с тренером
             </span>
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 12 }}>
@@ -555,7 +555,7 @@ export default function EconomyHubPage() {
           <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 10 }}>
             <span>📺</span> Подписка на стримеров
             <span style={{ fontSize: 11, fontWeight: 600, color: C.faint, marginLeft: 6 }}>
-              · 200 AEV / месяц · уведомления + private chat
+              · 200 AEV в месяц · уведомления и личные сообщения
             </span>
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))", gap: 12 }}>
@@ -620,7 +620,7 @@ export default function EconomyHubPage() {
           <span style={{ color: C.faint }}>·</span>
           <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>📊 Рейтинг CPI</Link>
           <span style={{ color: C.faint }}>·</span>
-          <Link href="/bank" style={{ color: C.purple, textDecoration: "none" }}>🏦 AEVION Bank — тиры Pro/Ultimate</Link>
+          <Link href="/bank" style={{ color: C.purple, textDecoration: "none" }}>🏦 AEVION Bank — тарифы Pro/Ultimate</Link>
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>

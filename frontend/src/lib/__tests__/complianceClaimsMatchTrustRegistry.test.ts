@@ -23,13 +23,32 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TRUST = join(HERE, "..", "..", "..", "..", "aevion-globus-backend", "src", "data", "trust.ts");
-const I18N = join(HERE, "..", "i18n-data.ts");
+/**
+ * ⚠️ Словарь платформы РАЗБИТ по языкам (10.08.2026, ради веса страницы: 1.3 МБ
+ * из 2.5 грузились на каждой). В i18n-data.ts переводов больше НЕТ — там
+ * остались служебные данные, 3.3 КБ.
+ *
+ * Сторож читал именно его и проверял ПУСТОТУ. Спасла только его собственная
+ * проверка «словарь на месте» (длина больше 10 000) — она и покраснела при
+ * сведении веток 31.08.2026. Без неё поиск запрещённых заявлений шёл бы по
+ * трём килобайтам служебного кода и был бы зелёным всегда.
+ *
+ * Читаем ВСЕ языковые файлы: заявление, переведённое на один язык и забытое в
+ * другом, — тот же самый дефект.
+ */
+const I18N_DIR = join(HERE, "..", "i18n-lang");
+function dictText(): string {
+  return readdirSync(I18N_DIR)
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => readFileSync(join(I18N_DIR, f), "utf8"))
+    .join(String.fromCharCode(10));
+}
 
 /** Стандарты из реестра, которые ЕЩЁ НЕ получены. */
 function pendingStandards(): Array<{ id: string; label: string; status: string }> {
@@ -65,11 +84,11 @@ describe("витрина не обгоняет реестр доверия", () 
     const all = [...src.matchAll(/\{\s*id:\s*"([^"]+)",\s*label:\s*"([^"]+)",\s*status:\s*"([^"]+)"/g)];
     expect(all.length, "в реестре не разобрано НИ ОДНОЙ записи — разбор сломан").toBeGreaterThan(3);
     // И словарь на месте: иначе поиск по нему был бы бессмысленно зелёным.
-    expect(readFileSync(I18N, "utf8").length).toBeGreaterThan(10_000);
+    expect(dictText().length, "словарь не прочитан — разбор сломан").toBeGreaterThan(10_000);
   });
 
   it("ни один незавершённый стандарт не объявлен полученным", () => {
-    const dict = readFileSync(I18N, "utf8").toLowerCase();
+    const dict = dictText().toLowerCase();
     const bad: string[] = [];
 
     for (const std of pendingStandards()) {

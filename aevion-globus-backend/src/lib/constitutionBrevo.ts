@@ -113,8 +113,16 @@ async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise<{
  * ручку и несёт токен; если подписывать нечем (нет секрета), вместо ссылки в письме
  * стоит живой адрес почты, а не ссылка, которая молча не сработает.
  */
-function unsubBlock(email: string, color = "#64748b"): string {
+function unsubBlock(email: string, color = "#64748b", lang: "ru" | "en" = "ru"): string {
   const url = unsubscribeUrl(email);
+  // Подпись отписки на языке ПИСЬМА, а не платформы: английское письмо с
+  // русской строкой «Отписаться» — то же самое расхождение, только мельче
+  // (поймано 29.08 собственной пробой сразу после починки языка письма).
+  if (lang === "en") {
+    return url
+      ? `<a href="${url}" style="color:${color}">Unsubscribe</a>`
+      : `Unsubscribe: write to <a href="mailto:${unsubContact()}" style="color:${color}">${unsubContact()}</a>`;
+  }
   return url
     ? `<a href="${url}" style="color:${color}">Отписаться</a>`
     : `Отписаться: напишите на <a href="mailto:${unsubContact()}" style="color:${color}">${unsubContact()}</a>`;
@@ -177,12 +185,38 @@ export function buildWaitlistConfirmEmail(email: string, source?: string): Const
  * запуска — цель доски, и она может сдвинуться. Обещаем то, что зависит от
  * нас: написать в день запуска.
  */
-const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: string }> = [
-  { prefix: "cyberchess", name: "CyberChess", plan: "30 сентября", page: "https://aevion.app/cyberchess/launch" },
-  { prefix: "bureau", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch" },
-  { prefix: "qright", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch" },
-  { prefix: "devhub", name: "DevHub Studio", plan: "10 сентября", page: "https://aevion.app/devhub/launch" },
-  { prefix: "multichat", name: "AEVION Multichat", plan: "10 сентября", page: "https://aevion.app/multichat-engine/launch" },
+const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: string; planUtc: number }> = [
+  { prefix: "cyberchess", name: "CyberChess", plan: "30 сентября", page: "https://aevion.app/cyberchess/launch", planUtc: Date.UTC(2026, 8, 30) },
+  { prefix: "bureau", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch", planUtc: Date.UTC(2026, 8, 10) },
+  { prefix: "qright", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch", planUtc: Date.UTC(2026, 8, 10) },
+  { prefix: "devhub", name: "DevHub Studio", plan: "10 сентября", page: "https://aevion.app/devhub/launch", planUtc: Date.UTC(2026, 8, 10) },
+  { prefix: "multichat", name: "AEVION Multichat", plan: "10 сентября", page: "https://aevion.app/multichat-engine/launch", planUtc: Date.UTC(2026, 8, 10) },
+  // ⚠️ Добавлено 31.08.2026. Найдено сторожем воронки при сборке: подписчик со
+  // страницы QSkyway получал ОБЩЕЕ письмо «платформа выпускает модули по
+  // одному» вместо письма про свой модуль — а QSkyway в списке основателя на
+  // 10 сентября.
+  //
+  // Адрес ведёт на страницу МОДУЛЯ, а не на /qskyway/launch: страницы запуска
+  // у него нет. Выдумывать адрес нельзя — у нас это уже давало ложные находки
+  // и повело бы человека из письма в 404. Страница модуля проверена: 200.
+  { prefix: "qskyway", name: "AEVION QSkyway", plan: "10 сентября", page: "https://aevion.app/qskyway", planUtc: Date.UTC(2026, 8, 10) },
+  // ⚠️ Ещё три модуля 31.08.2026, и нашлись они не глазами, а РАСХОЖДЕНИЕМ ДВУХ
+  // НАШИХ СПИСКОВ. Сторож сверяет письмо с планом основателя; я добавил в письмо
+  // QSkyway, он покраснел — и при разборе выяснилось, что у плана на 10 сентября
+  // ВОСЕМЬ модулей, а письмо знало пять. То есть подписчики трёх модулей,
+  // выходящих в один день с остальными, получили бы общее письмо «платформа
+  // выпускает модули по одному» — ровно в день выпуска своего.
+  //
+  // Ни один тест этого не видел: письмо уходило, ошибок не было, список просто
+  // не знал про них. Отсутствие не падает.
+  //
+  // Адреса ведут на страницы МОДУЛЕЙ: страниц /launch у этих трёх нет, а
+  // выдумывать адрес нельзя — человек из письма попал бы в 404. Все три
+  // проверены на проде: 200, при контроле (заведомо несуществующий адрес)
+  // ответ иной.
+  { prefix: "qsign", name: "AEVION QSign", plan: "10 сентября", page: "https://aevion.app/qsign", planUtc: Date.UTC(2026, 8, 10) },
+  { prefix: "startup", name: "Биржа стартапов", plan: "10 сентября", page: "https://aevion.app/startup-exchange", planUtc: Date.UTC(2026, 8, 10) },
+  { prefix: "qventure", name: "AEVION QVenture", plan: "10 сентября", page: "https://aevion.app/qventure", planUtc: Date.UTC(2026, 8, 10) },
 ];
 
 /**
@@ -204,6 +238,37 @@ const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: 
  */
 const LAUNCH_TZ_OFFSET_MS = 5 * 3_600_000;
 
+/**
+ * Как назвать дату человеку — с учётом того, что день мог УЖЕ ПРОЙТИ.
+ *
+ * «Открываем по плану 10 сентября» становится ложью само по себе, без единой
+ * правки кода: просто когда день наступит и пройдёт. Ни один тест этого не
+ * ловит — сегодня текст верен.
+ *
+ * После даты НЕ пишем «уже открыт»: календарь не значит, что модуль работает,
+ * и 30.08 это уже стоило нам письма, звавшего в запуск, которого не было.
+ * Честное третье состояние — «обещали такого-то, напишем, как откроем».
+ *
+ * `now` параметром и экспорт — ради проверки: иначе день запуска нельзя
+ * проверить иначе как переводом часов на машине.
+ */
+export function planPhrase(
+  plan: string,
+  planUtc: number,
+  ru: boolean,
+  now: Date = new Date(),
+): string {
+  const прошёл = isLiveNow(planUtc, now);
+  if (ru) {
+    return прошёл
+      ? `Обещали ${plan} — напишем, как только откроем.`
+      : `Открываем по плану ${plan}. Напишем вам в день запуска.`;
+  }
+  return прошёл
+    ? `We promised ${plan} — we will write the moment it opens.`
+    : `We open ${plan}. You get one email on launch day.`;
+}
+
 /** Наступил ли день, с которого модуль считается открытым. */
 // Экспортируется РАДИ ПРОВЕРКИ: без параметра now и без экспорта поведение в
 // день запуска нельзя проверить иначе как переводом часов на машине.
@@ -214,10 +279,19 @@ export function isLiveNow(liveFromUtcMidnight?: number, now: Date = new Date()):
   return today >= liveFromUtcMidnight;
 }
 
-const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep: string; liveFrom?: number }> = [
+const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep: string;
+  liveFrom?: number; nameEn?: string; nextStepEn?: string }> = [
   {
     prefix: "longevity",
     name: "Протокол долголетия",
+    // Английское имя и следующий шаг: без них письмо англоязычному
+    // подписчику выходило смесью — «Протокол долголетия is open» (поймано
+    // собственной пробой 29.08 сразу после починки языка).
+    nameEn: "The Longevity Protocol",
+    nextStepEn:
+      "The protocol is open in full on the page — markers, an evidence-ranked stack " +
+      "and what is overrated. You can also take it as a PDF to fill in at day zero " +
+      "and at day ninety.",
     page: "https://aevion.app/longevity",
     // Следующий шаг называем без цен и без скидок: цена живёт в каталоге, а
     // условия решает основатель (это же сказано у соседнего письма выше).
@@ -251,17 +325,91 @@ const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep
 
 function liveEntryFromSource(source?: string) {
   if (!source) return null;
-  const s = source.toLowerCase();
+  // Снимаем языковую приставку: «en-longevity» — тот же модуль, что
+  // «longevity», и англоязычный подписчик должен получить письмо «уже
+  // открыт», а не общее «вы в списке» (поймано 29.08 собственной пробой).
+  const s = source.toLowerCase().replace(/^en-/, "");
   return LIVE_ENTRIES.find((m) => (s === m.prefix || s.startsWith(`${m.prefix}-`)) && isLiveNow(m.liveFrom)) ?? null;
 }
 
 function moduleFromSource(source?: string) {
   if (!source) return null;
-  const s = source.toLowerCase();
+  const s = source.toLowerCase().replace(/^en-/, "");
   return LAUNCH_MODULES.find((m) => s === m.prefix || s.startsWith(`${m.prefix}-`)) ?? null;
 }
 
+/**
+ * Подписался на АНГЛИЙСКОЙ странице — получает английское письмо.
+ *
+ * Найдено 29.08.2026 вкладкой воронки, за сутки до запуска: письмо честно
+ * подставляло, ОТКУДА человек подписался, но про язык не знало вовсе —
+ * упоминаний языка во всём файле было ноль. Четыре ролика из одиннадцати
+ * опубликованных англоязычные и ведут на /en/go; первое письмо от нас
+ * приходило бы на языке, которого человек может не знать. При этом всё
+ * «работает»: адрес сохранён, письмо ушло, отказов нет.
+ *
+ * Метка источника доезжает сюда как `en-go` / `en-longevity`, поэтому язык
+ * читается из неё же — второго источника правды не заводим.
+ */
+export function isEnglishSource(source?: string): boolean {
+  return String(source ?? "")
+    .split(",")
+    .map((m) => m.trim().toLowerCase())
+    .some((m) => m === "en" || m.startsWith("en-"));
+}
+
+/** Английский вариант того же письма. Русский путь ниже не трогается. */
+function buildPlatformWaitlistEmailEn(email: string, source?: string): ConstitutionEmailPayload {
+  const live = liveEntryFromSource(source);
+  const mod = live ? null : moduleFromSource(source);
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf7">
+      <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION</div>
+      <p style="margin:0 0 16px">${live
+        ? `You are in — ${live.nameEn ?? live.name} is already open.`
+        : `You are on the early-access list${mod ? ` for ${mod.name}` : ""}.`}</p>
+      <p style="color:#9aa3c0;margin:0 0 16px">
+        ${live
+          ? (live.nextStepEn ?? "Open it from the link below — no account needed to look around.")
+          : mod
+            ? `${planPhrase(mod.plan, mod.planUtc, false)} With early-access terms.`
+            : "AEVION ships one module at a time. You get one email when the next one opens."}
+      </p>
+      <p style="color:#9aa3c0;margin:0 0 24px">
+        ${live
+          ? `Open: <a href="${live.page}" style="color:#22d3ee">${live.page.replace("https://", "")}</a>`
+          : mod
+            ? `Launch page: <a href="${mod.page}" style="color:#22d3ee">${mod.page.replace("https://", "")}</a>`
+            : `Meanwhile, see what already works: <a href="https://aevion.app/en/go" style="color:#22d3ee">aevion.app/en/go</a>`}
+      </p>
+      <hr style="border:none;border-top:1px solid rgba(212,175,55,0.2);margin-bottom:16px">
+      <p style="color:#64748b;font-size:11px;margin:0">
+        You get this email because you left your address on aevion.app.
+        ${unsubBlock(email, "#64748b", "en")}
+      </p>
+    </div>
+  `;
+  return {
+    to: [{ email }],
+    subject: live
+      ? `${live.nameEn ?? live.name} is open`
+      : mod
+        ? `You are on the list: ${mod.name}`
+        : "You are on the AEVION early-access list",
+    htmlContent: html,
+    textContent: live
+      ? `${live.nameEn ?? live.name} is already open. Open: ${live.page}`
+      : mod
+        ? `You are on the early-access list for ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, false)} Launch page: ${mod.page}`
+        : "You are on the AEVION early-access list. We ship one module at a time.",
+    tags: ["waitlist-confirm", "platform", "en"],
+  };
+}
+
 export function buildPlatformWaitlistEmail(email: string, source?: string): ConstitutionEmailPayload {
+  // Английская страница — английское письмо. Развилка ОДНА и стоит первой,
+  // чтобы русский путь ниже остался нетронутым (он несёт запуск 30.08).
+  if (isEnglishSource(source)) return buildPlatformWaitlistEmailEn(email, source);
   const live = liveEntryFromSource(source);
   const mod = live ? null : moduleFromSource(source);
   const where = live
@@ -281,7 +429,7 @@ export function buildPlatformWaitlistEmail(email: string, source?: string): Cons
         ${live
           ? live.nextStep
           : mod
-            ? `Открываем по плану ${mod.plan}. Напишем вам в день запуска — с условиями раннего доступа, пока цена стартовая. Если дата сдвинется, письмо всё равно придёт в день, когда откроем.`
+            ? `${planPhrase(mod.plan, mod.planUtc, true)}`
             : "Платформа выпускает модули по одному. Как только выйдет следующий, вы получите письмо в день запуска — с условиями раннего доступа, пока цена стартовая."}
       </p>
       <p style="color:#9aa3c0;margin:0 0 24px">
@@ -309,7 +457,7 @@ export function buildPlatformWaitlistEmail(email: string, source?: string): Cons
     textContent: live
       ? `Адрес записан — «${live.name}» уже открыт. ${live.nextStep} Открыть: ${live.page}`
       : mod
-        ? `Адрес записан — вы в списке раннего доступа к ${mod.name}. Открываем по плану ${mod.plan}, напишем в день запуска. Страница: ${mod.page}`
+        ? `Адрес записан — вы в списке раннего доступа к ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, true)} Страница: ${mod.page}`
         : `Адрес записан — вы в списке раннего доступа AEVION. Напишем в день запуска следующего модуля. Что уже работает: aevion.app/go`,
     tags: live ? ["platform", "live-entry-confirm"] : ["platform", "waitlist-confirm"],
   };

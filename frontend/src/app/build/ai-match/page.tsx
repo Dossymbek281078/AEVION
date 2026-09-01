@@ -108,7 +108,7 @@ export default function AiMatchPage() {
               rows={6}
               value={profileText}
               onChange={(e) => setProfileText(e.target.value)}
-              placeholder={t("build.aiMatch.profilePlaceholder")}
+              aria-label={t("build.aiMatch.profileLabel")} placeholder={t("build.aiMatch.profilePlaceholder")}
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-violet-500 transition-colors resize-none"
             />
           </div>
@@ -120,7 +120,7 @@ export default function AiMatchPage() {
               rows={6}
               value={vacancyText}
               onChange={(e) => setVacancyText(e.target.value)}
-              placeholder={t("build.aiMatch.vacancyPlaceholder")}
+              aria-label={t("build.aiMatch.vacancyLabel")} placeholder={t("build.aiMatch.vacancyPlaceholder")}
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-violet-500 transition-colors resize-none"
             />
           </div>

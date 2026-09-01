@@ -20,7 +20,7 @@ export default function MineShaftsUndergroundPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Шахты и подземные выработки</div>
@@ -296,7 +296,7 @@ export default function MineShaftsUndergroundPage() {
               inputMode="decimal"
               value={ex3}
               onChange={(e) => setEx3(e.target.value)}
-              placeholder="например 9600000000"
+              aria-label="например 9600000000" placeholder="например 9600000000"
               className="mt-3 w-64 px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-700 text-slate-100 focus:outline-none focus:border-blue-500"
             />
             <button onClick={() => setEx3Done(true)} className="ml-2 px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 transition text-white">Проверить</button>

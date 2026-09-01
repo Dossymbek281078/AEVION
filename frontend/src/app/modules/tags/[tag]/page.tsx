@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import { getApiBase } from "@/lib/apiBase";
 import { pickLang } from "@/lib/qrightServerI18n";
 
@@ -113,6 +114,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     alternates: {
+      // СВОЙ canonical, динамический — адрес зависит от тега. Берётся `t`,
+      // приведённый к нижнему регистру: /modules/tags/AI и /modules/tags/ai
+      // показывают одно и то же, и указывать они должны на один адрес.
+      canonical: `/modules/tags/${encodeURIComponent(t)}`,
       types: {
         "application/rss+xml": `${getApiBase()}/api/modules/tags/${encodeURIComponent(t)}/changelog.rss`,
       },
@@ -144,6 +149,21 @@ export default async function ModulesTagPage({ params, searchParams }: Props) {
   const apiBase = getApiBase();
   const rssHref = `${apiBase}/api/modules/tags/${encodeURIComponent(tag)}/changelog.rss`;
   const tagExists = !!tags?.items.find((i) => i.tag === tag);
+
+  // Несуществующий тег — честный 404, а не страница с кодом 200.
+  //
+  // Раньше под любой выдуманный тег отдавалась страница с УНИКАЛЬНЫМ
+  // заголовком «AEVION modules · #zzqq-vydumannyj-777»: для поисковика это
+  // отдельный раздел сайта, и таких можно наделать сколько угодно. Замерено
+  // 06.08.2026 на живом проде.
+  //
+  // Условие `tags &&` здесь обязательно и не для красоты: loadTags() при
+  // сбое или таймауте возвращает null, и тогда tagExists ложно равен false.
+  // Без этой проверки временная недоступность реестра выкидывала бы из
+  // индекса ЖИВЫЕ теги — то есть лечение было бы хуже болезни.
+  if (tags && !tagExists) {
+    notFound();
+  }
 
   // Structured data: BreadcrumbList only — tag pages don't have a single
   // canonical entity, just a filtered listing.

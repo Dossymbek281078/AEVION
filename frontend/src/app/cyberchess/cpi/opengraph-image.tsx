@@ -36,7 +36,7 @@ export default function Image() {
         Рейтинг CPI
       </div>
       <div style={{ fontSize: 22, color: "#64748b", textAlign: "center", marginBottom: 52, maxWidth: 980 }}>
-        Композитный рейтинг — 11 факторов, не только результат
+        Составной рейтинг — 11 факторов, не только результат
       </div>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>

@@ -103,7 +103,7 @@ export default function VerifyReceiptPage() {
             value={raw}
             onChange={(e) => setRaw(e.target.value)}
             rows={8}
-            placeholder="Перетащите файл чека сюда или вставьте его содержимое"
+            aria-label="Содержимое чека" placeholder="Перетащите файл чека сюда или вставьте его содержимое"
             style={{
               width: "100%", background: "transparent", border: "none", outline: "none",
               color: T.textDim, fontSize: 13, fontFamily: "ui-monospace, monospace", lineHeight: 1.5, resize: "vertical",
@@ -125,7 +125,7 @@ export default function VerifyReceiptPage() {
             {busy ? "Считаю…" : "Проверить"}
           </button>
           <label style={{ fontSize: 13, color: T.textFaded, cursor: "pointer" }}>
-            <input type="file" accept="application/json,.json" style={{ display: "none" }}
+            <input type="file" accept="application/json,.json" className="aevion-file-input"
               onChange={(e) => void onFile(e.target.files?.[0] || undefined)} />
             …или выберите файл
           </label>

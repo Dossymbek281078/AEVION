@@ -150,7 +150,7 @@ export default function MapRealityPage() {
           <div style={{ display: "flex", flexWrap: "wrap", rowGap: 8, alignItems: "center", gap: 8 }}>
             <ModulePricingChip moduleId="mapreality" theme="dark" />
             <label style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>Your alias</label>
-            <input
+            <input aria-label="Your alias"
               type="text"
               value={alias}
               onChange={(e) => setAlias(e.target.value.slice(0, 64))}

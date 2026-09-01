@@ -18,7 +18,7 @@ export default function AromaticsBtxPlantPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200">← К разделам</Link>
           <div className="text-xs text-slate-500">BTX — Aromatics Complex</div>
@@ -77,7 +77,7 @@ export default function AromaticsBtxPlantPage() {
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">
           <h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Feed naphtha rate</h2>
           <p className="text-slate-300">Выпуск 500 000 т PX/год. Reformate aromatic content 70%, PX selectivity на aromatics 60%. Расход naphtha (т/год)?</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="т/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="т/год" placeholder="т/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>Naphtha = 500 000 / (0.7 × 0.6) = <strong>1.19 млн т/год</strong> naphtha feed. Атырау НПЗ ~5 млн т/год нефти, naphtha ~25% = 1.25 млн т ⇒ matches.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">
@@ -92,7 +92,7 @@ export default function AromaticsBtxPlantPage() {
             <li>Storage 12× 1000 м³ spheres + 8× tanks PX/B/T = 50 млрд</li>
             <li>Flare 80 м + DCS + safety + EU IED BAT compliance + проект 4% + ПИР + СП + PNR = 80 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~950 млрд тг (~$2B USD)</strong>. Удельная — $4000/т PX/год.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">

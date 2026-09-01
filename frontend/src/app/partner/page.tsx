@@ -290,7 +290,7 @@ export default function PartnerPage() {
           <h2 style={{ fontSize: "clamp(26px, 4vw, 42px)", fontWeight: 900, lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 36 }}>
             При команде 80-100 человек и primary-капитале в рост.
           </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
+          <div data-stack-mobile="" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16, marginBottom: 28 }}>
             {SCENARIO.map(s => (
               <div key={s.year} style={{ padding: 28, background: "rgba(255,255,255,0.03)", border: `1px solid ${s.color}30`, borderRadius: 18, textAlign: "center" }}>
                 <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.2em", color: s.color, textTransform: "uppercase", marginBottom: 12 }}>{s.year}</div>
@@ -318,7 +318,7 @@ export default function PartnerPage() {
         </h2>
         <div style={{ padding: 36, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 24 }}>
           {DEAL.map((d, i) => (
-            <div key={d.label} style={{ display: "grid", gridTemplateColumns: "minmax(220px, 260px) 1fr", gap: 24, padding: "15px 0", borderBottom: i === DEAL.length - 1 ? "none" : "1px solid rgba(255,255,255,0.06)" }}>
+            <div key={d.label} data-stack-mobile="" style={{ display: "grid", gridTemplateColumns: "minmax(0, 260px) minmax(0, 1fr)", gap: 24, padding: "15px 0", borderBottom: i === DEAL.length - 1 ? "none" : "1px solid rgba(255,255,255,0.06)" }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.15em", color: "#94a3b8", textTransform: "uppercase", paddingTop: 2 }}>
                 {d.label}
               </div>

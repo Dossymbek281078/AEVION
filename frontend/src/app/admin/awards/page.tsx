@@ -536,7 +536,7 @@ export default function AdminAwardsPage() {
                       <div
                         style={{
                           position: "sticky",
-                          top: 0,
+                          top: 'var(--aevion-header-h, 0px)',
                           zIndex: 5,
                           background: "#0f172a",
                           color: "#fff",

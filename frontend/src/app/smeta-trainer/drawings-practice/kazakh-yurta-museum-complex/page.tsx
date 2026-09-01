@@ -13,7 +13,7 @@ export default function KazakhYurtaMuseumComplexPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Kazakh Yurta Museum Complex</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Kazakh Yurta Museum Complex</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🛖 Этно-комплекс «Юрта Великой Степи»</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #321. Этнокомплекс Хан-Шатыр / Нур-Алем (Астана) / Алтын Эмель — традиционная юрта казахов UNESCO Intangible Cultural Heritage 2014. Юрта kiiz (felt) Ø8 м H=4 м, kerege (lattice wall) deciduous wood frame, uyk (roof poles), shanyrak (apex crown), tundyk (smoke hole). Восстановленные юрты музейного качества + visitor centre + outdoor amphitheatre для traditional music + ремесленные мастерские (felt-making + jewelry + saddle leather). UNESCO Operational Guidelines + ICOMOS + СН РК 1.04-25 (memorial buildings).</p>
@@ -47,7 +47,7 @@ export default function KazakhYurtaMuseumComplexPage() {
           ].map((o) => (<label key={o.v} className={`block px-4 py-3 rounded-lg border cursor-pointer transition ${oc(ex1, o.v, ok.ex1)}`}><input type="radio" name="ex1" value={o.v} checked={ex1 === o.v} onChange={() => setEx1(o.v)} className="mr-3" />{o.t}</label>))}</div>
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Yurts count</h2>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="шт" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="шт" placeholder="шт" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>8 yurts</strong> radial arrangement central plaza — symbolic 8-directions of Kazakh cosmology, also practical для visitor flow + accommodation overnight options.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс этно-комплекс</h2>
@@ -61,7 +61,7 @@ export default function KazakhYurtaMuseumComplexPage() {
             <li>Conservation storage climate-controlled + display cases + cataloging = 1.2 млрд</li>
             <li>UNESCO certification + проект 5% + insurance + heritage audit + open ceremony = 2.3 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~12 млрд тг (~$25M USD)</strong> на этнокомплекс. Туристический revenue $5-15/visitor + сувениры + restaurant.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Cultural protocol</h2>

@@ -184,7 +184,7 @@ function ReplayContent() {
       {/* Controls */}
       <div
         style={{
-          position: "sticky", top: 0, zIndex: 10,
+          position: "sticky", top: 'var(--aevion-header-h, 0px)', zIndex: 10,
           background: "rgba(248,250,252,0.95)", backdropFilter: "blur(8px)",
           borderRadius: 12, border: "1px solid rgba(15,23,42,0.1)",
           padding: "12px 16px", marginBottom: 16,

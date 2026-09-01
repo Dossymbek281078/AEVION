@@ -37,6 +37,46 @@ const PROTECTED = /Limit\b|limiter|rateLimit|generationLimit|checkCredit|qcoreQu
 /** Осознанные исключения — каждое с причиной. */
 const ALLOWED: Array<{ file: string; path: string; reason: string }> = [];
 
+// ── Слепая зона, закрытая 31.08.2026 ────────────────────────────────────────
+// Сторож брал ТОЛЬКО тело обработчика. Ручка, зовущая платного поставщика
+// через локального помощника, была ему невидима целиком — не попадала даже
+// в счётчик дорогих. Так /api/devhub/plan прожил без ограничителя: в теле
+// стоит planProjectWithAI(...), а callProvider лежит внутри помощника.
+// Это потеря следа на границе функции, наш давний класс.
+//
+// Разбор без регулярок намеренно: шаблон, собранный строкой, теряет
+// экранирование на границе вызова и молча перестаёт совпадать.
+function localHelperBodies(src: string): Map<string, string> {
+  const out = new Map<string, string>();
+  let at = 0;
+  for (;;) {
+    const i = src.indexOf("function ", at);
+    if (i < 0) break;
+    at = i + 9;
+    let j = at;
+    while (j < src.length && /[A-Za-z0-9_$]/.test(src[j])) j++;
+    const name = src.slice(at, j);
+    if (!name) continue;
+    // тело: до ближайшей закрывающей скобки в начале строки
+    const close = src.indexOf(String.fromCharCode(10) + "}", j);   // без литерального слэша: он теряется на границе вызова
+    if (close < 0) continue;
+    out.set(name, src.slice(j, close));
+  }
+  return out;
+}
+
+// Дорогая ли ручка с учётом ОДНОГО уровня вложенности.
+// Глубже не идём намеренно: за вторым уровнем разбор начинает врать, а
+// сторож, который врёт, хуже отсутствующего.
+function bodyIsCostly(body: string, helpers: Map<string, string>, COSTLY: RegExp): boolean {
+  if (COSTLY.test(body)) return true;
+  for (const [name, hbody] of helpers) {
+    if (body.includes(name + "(") && COSTLY.test(hbody)) return true;
+  }
+  return false;
+}
+
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     if (entry === "node_modules") continue;
@@ -92,7 +132,7 @@ export function findUnprotectedCostly(files: string[]): {
       }
       if (depth !== 0) continue;
       const body = src.slice(m.index!, i);
-      if (!COSTLY.test(body)) continue;
+      if (!bodyIsCostly(body, localHelperBodies(src), COSTLY)) continue;
       costly++;
       // Защита ищется в объявлении (middleware) ИЛИ в теле (квота).
       if (PROTECTED.test(body)) continue;
@@ -135,6 +175,23 @@ describe("дорогие ручки защищены от перебора", () 
    * Список обязан только СОКРАЩАТЬСЯ. Защитили ручку — уберите строку; если
    * уберёте, не защитив, третья проверка ниже покраснеет.
    */
+  // 🔴 ЕСЛИ ЭТОТ СТОРОЖ ПОКРАСНЕЛ ПОСЛЕ МЕРЖА — НЕ ДОПИСЫВАЙТЕ СЮДА ПУТИ.
+  //
+  // Замер 31.08.2026 моим же расширенным разбором по трём веткам:
+  //
+  //   deliver/all-work-2026-08-20          4 дорогих без ограничителя
+  //   deploy/launch-2026-08-30-chess       7
+  //   deliver/silent-failures-2026-08-28   7
+  //
+  // Разница ровно в трёх ручках, закрытых 31.08: /plan и две agent/workflow.
+  // В выкаточных ветках они ещё БЕЗ ограничителя, и /plan там анонимна и
+  // платна (planProjectWithAI → callProvider, ключи OpenAI/Anthropic).
+  //
+  // Значит красный после сведения означает, что при мерже победила их сторона
+  // routes/devhub.ts и ограничители потерялись. Дописать пути в список ниже —
+  // значит узаконить потерю: список обязан только СОКРАЩАТЬСЯ, это его смысл.
+  //
+  // Правильная починка — взять НАШУ сторону routes/devhub.ts.
   const KNOWN_UNPROTECTED = new Set([
     "agentRuntime.ts  /run",
     "coach.ts  /chat",
@@ -180,7 +237,14 @@ describe("дорогие ручки защищены от перебора", () 
     for (const g of gone) {
       expect(offenders.includes(g), `${g} убран из списка, но защиты у него нет`).toBe(false);
     }
-    expect(offenders.length).toBeLessThanOrEqual(KNOWN_UNPROTECTED.size);
+    expect(
+      offenders.length,
+      "Незащищённых дорогих ручек стало БОЛЬШЕ. Список KNOWN_UNPROTECTED — " +
+        "храповик: он только сокращается. НЕ вносите туда новую ручку, чтобы " +
+        "погасить красный, — это узаконит утечку денег. После мержа такой " +
+        "красный чаще всего значит, что победила чужая сторона routes/devhub.ts " +
+        "и с маршрутов пропал dhCostlyLimit. Правильно: вернуть его.",
+    ).toBeLessThanOrEqual(KNOWN_UNPROTECTED.size);
   });
 
   it.skip("ЦЕЛЬ: у каждой дорогой ручки есть ограничитель или квота", () => {
@@ -217,5 +281,123 @@ describe("дорогие ручки защищены от перебора", () 
       rmSync(bad, { force: true });
       rmSync(good, { force: true });
     }
+  });
+});
+
+/**
+ * Храповик на САМ ограничитель темпа.
+ *
+ * Проверка выше принимает ЛЮБУЮ защиту — ограничитель ИЛИ проверку кредитов.
+ * Мутация 28.08.2026 показала, чем это плохо: сняв `dhCostlyLimit` с генерации
+ * и оставив проверку кредитов, сторож остаётся зелёным. А защищают они от
+ * РАЗНОГО: кредиты — от перерасхода за месяц, ограничитель — от всплеска,
+ * когда один пользователь за минуту заказывает сотню прогонов модели.
+ *
+ * Поэтому здесь список ПОИМЁННО: числовой храповик пережил бы снятие
+ * ограничителя с дорогой ручки и добавление на дешёвую.
+ */
+describe("ограничитель темпа стоит на дорогих ручках поимённо", () => {
+  const SRC = readFileSync(join(ROUTES, "devhub.ts"), "utf8");
+
+  it("прибор исправен: файл прочитан", () => {
+    expect(SRC.length).toBeGreaterThan(2000);
+  });
+
+  it("три дорогие ручки объявлены с ограничителем", () => {
+    for (const [route, key] of [
+      ["/ask", "dhask"],
+      ["/projects/:id/generate", "dhgenerate"],
+      ["/media/upload-image", "dhmedia_upload"],
+    ]) {
+      expect(
+        SRC.includes(`devhubRouter.post("${route}", dhCostlyLimit("${key}")`),
+        `с ${route} снят ограничитель темпа`,
+      ).toBe(true);
+    }
+  });
+});
+
+/**
+ * Квота — НЕ предел темпа. Замер 29.08.2026.
+ *
+ * PROTECTED выше признаёт ручку защищённой по ЛЮБОМУ из признаков:
+ * ограничитель темпа ИЛИ проверка квоты (checkCredit). Для восьми
+ * дорогих ручек DevHub сработал второй, и они выпали из поля зрения
+ * сторожа целиком — при том что квота ограничивает МЕСЯЧНЫЙ расход,
+ * а не скорость.
+ *
+ * Почему это не придирка: в TIER_LIMITS у enterprise все возможности
+ * равны -1, а у pro -1 стоит на deploy. checkCredit на -1 отвечает
+ * allowed сразу, не читая расход. То есть для этих тарифов предела
+ * нет ВООБЩЕ — ни месячного, ни по темпу, и один аккаунт жжёт наши
+ * деньги так быстро, как отвечает сеть.
+ *
+ * Код уже починен в d9cc19ce0 (27.07, ограничитель на 27 дорогих
+ * ручек) и ждёт мержа — поэтому здесь ХРАПОВИК, а не запрет:
+ * список обязан только сокращаться. Требовать ноль сегодня значит
+ * сделать сторожа вечно красным, а такого перестают читать.
+ */
+export function findQuotaOnlyCostly(files: string[]): string[] {
+  const out: string[] = [];
+  const RATE = ["generationLimit(", "rateLimit(", "Limiter", "Limit("];
+  const QUOTA = ["checkCredit(", "checkQuota(", "qcoreQuota"];
+  for (const file of files) {
+    const src = readFileSync(file, "utf8");
+    const rel = file.slice(ROUTES.length + 1).split(String.fromCharCode(92)).join("/");
+    for (const verb of [".post(", ".put(", ".patch("]) {
+      let from = 0;
+      for (;;) {
+        const at = src.indexOf(verb, from);
+        if (at < 0) break;
+        from = at + verb.length;
+        const q1 = src.indexOf(String.fromCharCode(34), at);
+        if (q1 < 0 || q1 > at + verb.length + 2) continue;
+        const q2 = src.indexOf(String.fromCharCode(34), q1 + 1);
+        if (q2 < 0) continue;
+        const path = src.slice(q1 + 1, q2);
+        let depth = 0;
+        let i = at + verb.length - 1;
+        for (; i < src.length; i++) {
+          if (src[i] === "(") depth++;
+          else if (src[i] === ")") {
+            depth--;
+            if (depth === 0) break;
+          }
+        }
+        if (depth !== 0) continue;
+        const body = src.slice(at, i);
+        if (!COSTLY.test(body)) continue;
+        if (!QUOTA.some((k) => body.includes(k))) continue;
+        if (RATE.some((k) => body.includes(k))) continue;
+        if (routerPathLists(src).has(path)) continue;
+        out.push(rel + "  " + path);
+      }
+    }
+  }
+  return out;
+}
+
+describe("дорогую ручку не заводят с одной месячной квотой", () => {
+  const KNOWN_QUOTA_ONLY = new Set([
+    "devhub.ts  /projects/:id/deploy",
+    "devhub.ts  /projects/:id/deploy/vercel",
+    "devhub.ts  /projects/:id/deploy/pages",
+    "devhub.ts  /media/tts",
+    "devhub.ts  /media/image",
+    "devhub.ts  /media/music",
+    "devhub.ts  /media/video",
+    "devhub.ts  /media/3d",
+  ]);
+
+  it("список квотных ручек не растёт", () => {
+    const found = findQuotaOnlyCostly(walk(ROUTES));
+    // Контроль прибора: разбор, нашедший ноль, сделал бы «нарушений
+    // нет» бессмысленным утверждением.
+    expect(found.length, "разбор не нашёл ни одной квотной ручки").toBeGreaterThan(0);
+    const fresh = found.filter((f) => !KNOWN_QUOTA_ONLY.has(f));
+    expect(
+      fresh,
+      "Новая дорогая ручка защищена только месячной квотой. На тарифах с -1 это не защита: добавьте generationLimit по образцу lib/rateLimit.ts",
+    ).toEqual([]);
   });
 });

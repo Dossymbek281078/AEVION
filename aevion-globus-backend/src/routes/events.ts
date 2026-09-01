@@ -160,6 +160,53 @@ export function summarizeCheckoutStarts(events: Array<Pick<AnalyticsEvent, "type
   return { bySource, byChannel };
 }
 
+/**
+ * Покупки по каналам — и отдельно выручка по тем, у кого сумма известна.
+ *
+ * Зачем отдельно от `byChannel`. Тот считает ВСЕ события подряд: просмотры,
+ * нажатия, заходы в кассу. Канал с большим трафиком и нулём продаж выглядит в
+ * нём лучше канала с одной покупкой — то есть по этому числу нельзя решать,
+ * куда тратить деньги, а выглядит оно как раз таким числом.
+ *
+ * Сумма известна не у всех: у возврата PayBox в адрес уходит `ref`, а не сумма.
+ * Поэтому выручка и счёт покупок разведены, а рядом едет `сКоторыхИзвестнаСумма`
+ * — знаменатель. Без него частичная выручка читается как полная и занижает
+ * канал молча, а это ровно тот случай, когда решение принимают по числу.
+ */
+export function summarizePurchases(
+  events: Array<Pick<AnalyticsEvent, "type" | "value"> & { meta?: Record<string, unknown> }>,
+): {
+  byChannel: Record<string, number>;
+  revenueByChannel: Record<string, number>;
+  total: number;
+  сКоторыхИзвестнаСумма: number;
+} {
+  const byChannel: Record<string, number> = {};
+  const revenueByChannel: Record<string, number> = {};
+  let total = 0;
+  let сКоторыхИзвестнаСумма = 0;
+
+  for (const ev of events) {
+    if (ev.type !== "checkout_success") continue;
+    // Заглушка и бесплатный тариф покупкой не считаются: иначе канал,
+    // приводящий любителей бесплатного, выглядит как приносящий деньги.
+    if (ev.meta?.stub === true) continue;
+    const сумма = typeof ev.value === "number" ? ev.value : null;
+    if (сумма === 0) continue;
+
+    total += 1;
+    const ch = ev.meta?.channel;
+    const chKey = typeof ch === "string" && ch.trim() ? ch.trim() : "direct";
+    byChannel[chKey] = (byChannel[chKey] ?? 0) + 1;
+    if (сумма !== null) {
+      сКоторыхИзвестнаСумма += 1;
+      revenueByChannel[chKey] = (revenueByChannel[chKey] ?? 0) + сумма;
+    }
+  }
+
+  return { byChannel, revenueByChannel, total, сКоторыхИзвестнаСумма };
+}
+
 const ALLOWED_TYPES = new Set([
   "page_view",
   "cta_click",
@@ -306,8 +353,56 @@ eventsRouter.get("/summary", (req, res) => {
   }
 
   const lines = content.split("\n").filter((l) => l.trim().length > 0);
-  // Берём последние `limit` строк (мы append-only, так что хвост = свежие)
-  const tail = lines.slice(-limit);
+  /*
+   * Обрезка окна должна называть себя.
+   *
+   * Порядок здесь такой: сперва берём ПОСЛЕДНИЕ `limit` строк, и только потом
+   * фильтруем по времени. Значит при журнале длиннее предела ответ на вопрос
+   * «что было за 30 дней» молча превращается в «что было за последние N
+   * событий» — и выглядит он при этом как полный ответ.
+   *
+   * Замер 01.09.2026: в журнале прода 4476 событий при пределе 5000, то есть
+   * 89 % запаса уже израсходовано. Первый же всплеск трафика — ради которого
+   * всё и делается — сделает числа тихо заниженными, и заметить это будет
+   * нечем: панель покажет меньшую выручку по каналам как факт.
+   *
+   * Поэтому отдаём ПРИЗНАК обрезки и время самого старого учтённого события.
+   * Число без знаменателя здесь опаснее отсутствия числа: по нему решают,
+   * куда тратить деньги.
+   */
+  /*
+   * Окно берём ПО ВРЕМЕНИ, а не по числу строк.
+   *
+   * Журнал append-only и метку времени ставит сервер при записи, значит он
+   * упорядочен. Идём с конца и останавливаемся на первом событии старше окна:
+   * тогда «за 30 дней» отвечено ровно за 30 дней, сколько бы строк это ни было.
+   *
+   * `limit` остаётся ПРЕДОХРАНИТЕЛЕМ от неограниченной памяти, а не окном. И
+   * теперь он честно виден: если предохранитель сработал ВНУТРИ окна — значит
+   * ответ неполон, и это ровно то, о чём сообщает `truncated`.
+   */
+  const отобранные: string[] = [];
+  let упёрлисьВПредохранитель = false;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (отобранные.length >= limit) {
+      // Предохранитель сработал, а строки ещё есть — значит окно не дочитано.
+      упёрлисьВПредохранитель = true;
+      break;
+    }
+    const строка = lines[i];
+    let ts: unknown = null;
+    try {
+      ts = JSON.parse(строка)?.ts;
+    } catch {
+      // Битую строку не считаем границей окна: одна порча не должна обрезать
+      // весь ответ. Пропускаем её и идём дальше — счёт ниже её не учтёт.
+      continue;
+    }
+    if (typeof ts === "string" && new Date(ts).getTime() < sinceMs) break;
+    отобранные.push(строка);
+  }
+  const обрезано = упёрлисьВПредохранитель;
+  const tail = отобранные.reverse();
 
   const byType: Record<string, number> = {};
   const bySource: Record<string, number> = {};
@@ -315,6 +410,7 @@ eventsRouter.get("/summary", (req, res) => {
   const byIndustry: Record<string, number> = {};
   /** Разбивку по ним считает summarizeCheckoutStarts — см. её комментарий. */
   const checkoutEvents: AnalyticsEvent[] = [];
+  const purchaseEvents: AnalyticsEvent[] = [];
   // Канал (tt / ig / yt …) — единственный ответ на вопрос «какая раздача
   // принесла людей». Он приезжает в meta, а сводка до 13.08.2026 считала
   // только поля верхнего уровня: метка доезжала и НЕ показывалась никому.
@@ -341,12 +437,14 @@ eventsRouter.get("/summary", (req, res) => {
       if (product) byProduct[product] = (byProduct[product] ?? 0) + 1;
       if (ev.sid) sids.add(ev.sid);
       if (ev.type === "checkout_start") checkoutEvents.push(ev);
+      if (ev.type === "checkout_success") purchaseEvents.push(ev);
     } catch {
       // skip malformed line
     }
   }
 
   const checkoutSummary = summarizeCheckoutStarts(checkoutEvents);
+  const purchases = summarizePurchases(purchaseEvents);
 
   res.json({
     total,
@@ -356,10 +454,18 @@ eventsRouter.get("/summary", (req, res) => {
     byIndustry,
     checkoutBySource: checkoutSummary.bySource,
     checkoutByChannel: checkoutSummary.byChannel,
+    purchaseByChannel: purchases.byChannel,
+    purchaseRevenueByChannel: purchases.revenueByChannel,
+    purchaseCount: purchases.total,
+    purchaseWithKnownAmount: purchases.сКоторыхИзвестнаСумма,
     byChannel,
     byProduct,
     sessionCount: sids.size,
     windowHours: sinceHours,
+    // Обрезано ли окно журналом: если да, «за 30 дней» отвечено НЕ за 30 дней.
+    truncated: обрезано,
+    consideredEvents: tail.length,
+    totalEvents: lines.length,
   });
 });
 

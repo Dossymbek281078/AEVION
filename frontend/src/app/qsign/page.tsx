@@ -11,7 +11,6 @@ import { PitchValueCallout } from "@/components/PitchValueCallout";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import { ldWallet, svWallet, recordPlay } from "../aev/aevToken";
-import { repoPath } from "@/lib/repoUrl";
 
 // AEV connector — Proof-of-Play engine A: успешные signing/verify действия mint'ят
 // AEV в общий wallet. Возвращает количество сminted AEV или 0 если cap/off-mode.
@@ -81,7 +80,12 @@ type Health = {
 type DilithiumPreview = {
   algo: "ML-DSA-65";
   kid: string;
-  mode: "preview";
+  /**
+   * Бэкенд возвращает ДВА режима, а здесь стоял литерал "preview" — то есть
+   * сайт объявлял, что другого не бывает. Пока ключ подписи не задан, это
+   * незаметно; в день, когда его зададут, тип начнёт врать о живом ответе.
+   */
+  mode: "preview" | "real";
   digest: string;
   valid: boolean | null;
   note: string;
@@ -858,6 +862,7 @@ export default function QSignPage() {
             <div style={{ flex: 1, minWidth: 200 }}>
               <input
                 type={showToken ? "text" : "password"}
+                aria-label="Auth"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 placeholder="Bearer token (auto-filled from /auth)"
@@ -943,7 +948,7 @@ export default function QSignPage() {
                         }
                       }}
                       disabled={hashingFile}
-                      style={{ display: "none" }}
+                      className="aevion-file-input"
                     />
                   </label>
                   <button
@@ -968,6 +973,7 @@ export default function QSignPage() {
                 </div>
               </div>
               <textarea
+                aria-label="Payload (JSON)"
                 value={payloadText}
                 onChange={(e) => setPayloadText(e.target.value)}
                 rows={8}
@@ -1352,6 +1358,7 @@ export default function QSignPage() {
             >
               <div style={label}>HMAC kid</div>
               <input
+                aria-label="HMAC kid"
                 value={verifyHmacKid}
                 onChange={(e) => setVerifyHmacKid(e.target.value)}
                 placeholder="leave empty → active"
@@ -1359,6 +1366,7 @@ export default function QSignPage() {
               />
               <div style={label}>HMAC sig</div>
               <input
+                aria-label="HMAC sig"
                 value={verifyHmacSig}
                 onChange={(e) => setVerifyHmacSig(e.target.value)}
                 placeholder="64 hex chars"
@@ -1366,6 +1374,7 @@ export default function QSignPage() {
               />
               <div style={label}>Ed25519 kid</div>
               <input
+                aria-label="Ed25519 kid"
                 value={verifyEdKid}
                 onChange={(e) => setVerifyEdKid(e.target.value)}
                 placeholder="optional"
@@ -1373,6 +1382,7 @@ export default function QSignPage() {
               />
               <div style={label}>Ed25519 sig</div>
               <input
+                aria-label="Ed25519 sig"
                 value={verifyEdSig}
                 onChange={(e) => setVerifyEdSig(e.target.value)}
                 placeholder="optional · 128 hex"
@@ -1447,7 +1457,7 @@ export default function QSignPage() {
                   ) : null}
                   {verifyResult.dilithium ? (
                     <div>
-                      Dilithium-3 (preview):{" "}
+                      Dilithium-3 ({verifyResult.dilithium.mode}):{" "}
                       <strong
                         style={{
                           color:
@@ -1461,8 +1471,8 @@ export default function QSignPage() {
                         {verifyResult.dilithium.valid === null
                           ? "not checked"
                           : verifyResult.dilithium.valid
-                          ? "preview-ok"
-                          : "preview-mismatch"}
+                          ? `${verifyResult.dilithium.mode}-ok`
+                          : `${verifyResult.dilithium.mode}-mismatch`}
                       </strong>
                     </div>
                   ) : null}
@@ -1681,6 +1691,7 @@ export default function QSignPage() {
 
             <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
               <input
+                aria-label="Webhook URL"
                 value={webhookUrlInput}
                 onChange={(e) => setWebhookUrlInput(e.target.value)}
                 placeholder="https://your-app.example.com/qsign-webhook"
@@ -1895,10 +1906,12 @@ export default function QSignPage() {
             >
               OpenAPI 3.0 spec ↗
             </a>
-            <a
-              href={repoPath("tree/main/aevion-globus-backend/sdk")}
-              target="_blank"
-              rel="noreferrer"
+            {/* Вела на GitHub, который отдаёт 404, пока аккаунт приостановлен.
+                Уводим на собственную живую страницу /sdk («SDK for AEVION Hub»)
+                — она работает и отвечает на тот же вопрос. Возвращать внешнюю
+                ссылку после переезда НЕ обязательно: своя страница лучше. */}
+            <Link
+              href="/sdk"
               style={{
                 padding: "8px 14px",
                 borderRadius: 8,
@@ -1911,7 +1924,7 @@ export default function QSignPage() {
               }}
             >
               SDK packages ↗
-            </a>
+            </Link>
           </div>
         </div>
 

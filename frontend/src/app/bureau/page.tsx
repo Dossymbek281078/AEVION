@@ -10,6 +10,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 import { getDeviceId } from "@/lib/aevApi";
+import { anchorBadge, ANCHOR_TONE_COLORS } from "./anchorBadge";
 
 type Certificate = {
   id: string;
@@ -27,6 +28,12 @@ type Certificate = {
   verifiedName?: string | null;
   verifiedAt?: string | null;
   shieldId?: string | null;
+  /**
+   * Состояние якоря в биткойне. Поле МОЖЕТ отсутствовать: бэкенд, который его
+   * отдаёт, выкатывается отдельно. Отсутствие — «не сказали», а не «якоря нет»,
+   * и обрабатывается в anchorBadge().
+   */
+  bitcoinAnchor?: { status?: string | null; bitcoinBlockHeight?: number | null } | null;
 };
 
 const KIND_ICONS: Record<string, string> = {
@@ -87,7 +94,29 @@ type SortMode = "newest" | "oldest" | "verified";
 // /bureau/page», то есть красной становится ВСЯ выкатка фронта, а не одна
 // страница. Образец границы взят из smeta-trainer/calc (5bc68b11e), где тот же
 // дефект чинили 21.05.
+/**
+ * Читает параметр ссылки и отдаёт его наверх. Отдельный компонент нужен, чтобы
+ * граница Suspense охватывала ТОЛЬКО его: useSearchParams делает своё поддерево
+ * динамическим, и пока он стоял в самой странице, вся она уходила за границу —
+ * а вместе с ней и всё содержимое из серверной разметки.
+ */
+function DeepLinkParam({ onId }: { onId: (id: string) => void }) {
+  const searchParams = useSearchParams();
+  const id = searchParams?.get("objectId") || searchParams?.get("qrightObjectId") || "";
+  useEffect(() => {
+    onId(id);
+  }, [id, onId]);
+  return null;
+}
+
 export default function BureauPage() {
+  // ⚠️ Разрешено 31.08.2026 в пользу ЭТОЙ стороны, и это не «моё против чужого».
+  // Ветка bureau-ssr-suspense заменяла весь блок на `return <BureauPageInner />`,
+  // то есть уносила вместе с обёрткой отметку возврата после оплаты. Без неё
+  // покупка, пришедшая из Stripe с ?paid=1, не связывается с каналом — деньги
+  // приходят, а откуда пришёл человек, мы больше не знаем.
+  //
+  // Их работа по скорости живёт в других местах файла и пришла БЕЗ конфликта.
   return (
     <Suspense fallback={<div style={{ minHeight: "60vh", padding: 24, color: "#64748b", fontSize: 14 }}>Загрузка…</div>}>
       {/* Stripe возвращает сюда с ?paid=1 — без этой отметки оплата не
@@ -105,6 +134,58 @@ function BureauPageInner() {
   // страница писала «No certificates yet» и звала защитить первую работу —
   // человеку, у которого работы уже защищены (21.08.2026).
   const [certsFailed, setCertsFailed] = useState(false);
+
+  // Сколько нотариусов РЕАЛЬНО зарегистрировано, и настроен ли настоящий
+  // поставщик проверки личности. Оба значения читаются с прода, а не пишутся
+  // строкой в коде: соседняя ветка честно отметила «прочитать значение на проде
+  // я не могу» — теперь можно, ручка /api/bureau/health добавлена 27.08.
+  //
+  // null означает «ещё не спросили» или «спросить не удалось», и это НЕ ноль:
+  // при неизвестном состоянии карточка говорит «по запросу», то есть не
+  // обещает и не пугает. Пока бэкенд с ручкой не выкачен, так и будет.
+  const [notaryCount, setNotaryCount] = useState<number | null>(null);
+  const [kycMode, setKycMode] = useState<"live" | "stub" | null>(null);
+  // Чем НА САМОМ ДЕЛЕ подписывает нотариус. Без ключа подпись — HMAC на
+  // ПУБЛИЧНОМ ключе нотариуса, то есть пересчитать её может кто угодно; код
+  // честно зовёт это "demo-hmac-sha256". Значок тарифа шёл только от
+  // непустого реестра и про подпись не спрашивал вовсе — то есть в день, когда
+  // появится первый нотариус, карточка пообещала бы Ed25519 независимо от того,
+  // настроен ли ключ. Состояние бюро это уже отдаёт, оставалось прочитать.
+  const [notarySig, setNotarySig] = useState<"ed25519" | "demo" | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(apiUrl("/api/bureau/notaries"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        const list = Array.isArray(d?.notaries) ? d.notaries : null;
+        setNotaryCount(list ? list.length : null);
+      })
+      .catch(() => { /* оставляем null: «не знаю», а не «ноль» */ });
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(apiUrl("/api/bureau/health"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        const v = d?.kyc;
+        setKycMode(v === "live" || v === "stub" ? v : null);
+        const sig = d?.notarySignature;
+        setNotarySig(sig === "ed25519" || sig === "demo" ? sig : null);
+      })
+      .catch(() => { /* оставляем null: своя неудача — не «настроено» */ });
+    return () => { alive = false; };
+  }, []);
+
+  // Чем закончилась загрузка панели вошедшего человека. Три исхода, а не два:
+  // «идёт», «загрузилось», «не удалось» — и последний обязан быть виден.
+  // До 28.08 неудача оставляла dashboard в null, весь блок не рисовался вовсе,
+  // и человек с оплаченными сертификатами видел страницу так, будто их нет.
+  const [dashboardFailed, setDashboardFailed] = useState<null | "auth" | "error">(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
 
@@ -126,9 +207,13 @@ function BureauPageInner() {
   // заголовку, автору и хешам — вышло бы «найдено 0», что читается как «моего
   // объекта здесь нет». Поэтому спрашиваем у QRight хеш содержимого объекта и
   // ищем по нему. Не разрешилось — говорим об этом, а не молчим.
-  const searchParams = useSearchParams();
-  const deepObjectId =
-    searchParams?.get("objectId") || searchParams?.get("qrightObjectId") || "";
+  // Параметр читает крошечный дочерний компонент внутри своей границы
+  // Suspense (см. DeepLinkParam ниже). Раньше useSearchParams стоял ЗДЕСЬ, и
+  // из-за него всю страницу приходилось оборачивать в Suspense — а робот,
+  // который не исполняет скрипты, видел вместо содержимого текст заглушки
+  // «Загрузка…». Замер 29.08.2026: вне скриптов в HTML было 623 символа,
+  // «Service Tiers» и «Legal Framework» отсутствовали вовсе.
+  const [deepObjectId, setDeepObjectId] = useState("");
   const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -289,8 +374,17 @@ function BureauPageInner() {
         const r = await fetch(apiUrl("/api/bureau/dashboard"), {
           headers: { Authorization: `Bearer ${raw}` },
         });
-        if (r.ok) setDashboard((await r.json()) as DashboardData);
-      } catch {}
+        if (r.ok) {
+          setDashboard((await r.json()) as DashboardData);
+          setDashboardFailed(null);
+        } else {
+          // Отказы РАЗЛИЧАЮТСЯ: устаревший вход лечится входом, сбой сервиса — нет.
+          setDashboardFailed(r.status === 401 || r.status === 403 ? "auth" : "error");
+        }
+      } catch {
+        // Сети не было. Это тоже не «сертификатов нет».
+        setDashboardFailed("error");
+      }
     })();
   }, []);
 
@@ -359,6 +453,12 @@ function BureauPageInner() {
 
   return (
     <main>
+      {/* Единственное, что обязано быть за границей Suspense: чтение параметра
+          ссылки. Остальная страница рисуется на сервере и видна тем, кто не
+          исполняет скрипты. */}
+      <Suspense fallback={null}>
+        <DeepLinkParam onId={setDeepObjectId} />
+      </Suspense>
       <ProductPageShell maxWidth={920}>
         <Wave1Nav />
 
@@ -390,12 +490,20 @@ function BureauPageInner() {
         </div>
 
         {/* ── My Identity (authed users only) ── */}
-        {authed && (myIdentity || inFlightUpgrade || (dashboard && dashboard.certificates.length > 0)) && (
+        {authed && (dashboardFailed || myIdentity || inFlightUpgrade || (dashboard && dashboard.certificates.length > 0)) && (
           <div style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(99,102,241,0.25)", background: "linear-gradient(135deg, rgba(99,102,241,0.04), rgba(79,70,229,0.04))", padding: "18px 22px" }}>
             <div style={{ fontSize: 13, fontWeight: 900, color: "#312e81", marginBottom: 8 }}>
               My Bureau identity
             </div>
-            {myIdentity ? (
+            {dashboardFailed ? (
+              <div style={{ fontSize: 12, color: "#7f1d1d", lineHeight: 1.6 }}>
+                <b>Не удалось загрузить ваши сертификаты.</b> Это сбой загрузки, а не
+                утверждение о том, что их нет: ничего не потеряно.
+                {dashboardFailed === "auth"
+                  ? " Похоже, вход устарел — войдите заново и откройте страницу ещё раз."
+                  : " Обновите страницу через минуту."}
+              </div>
+            ) : myIdentity ? (
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
                 <div style={{ flex: "1 1 240px" }}>
                   <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a" }}>
@@ -552,10 +660,43 @@ function BureauPageInner() {
 // описываю механизм, а глубину называет сам провайдер отпечатком.
 // Вернуть сильную формулировку — в тот день, когда провайдер настроен и это
 // видно снаружи (решение основателя, красный пункт в сводке 28.08).
-blurb: "Identity check performed by our KYC provider. Bureau records the declared name alongside the certificate together with the provider's verification fingerprint.",
-                badge: "▲ available now",
+// Ветвей здесь ТРИ, как и у значка ниже, и это не симметрия ради
+                // красоты. Раньше их было две, и «не знаю» попадало в ветку
+                // «настроено»: на проде /api/bureau/health полей состояния НЕ
+                // отдаёт вовсе (замер 29.08: ответ — только status/service/
+                // timestamp), поэтому kycMode там всегда null — и платный тариф
+                // (замер 29.08; как только ветка с полями состояния уедет на
+                //  прод, это перестанет быть правдой — тогда ветка "live" начнёт
+                //  срабатывать сама, и трогать здесь ничего не надо)
+                // утверждал «проверку выполняет наш KYC-провайдер», хотя
+                // проверяет заглушка.
+                //
+                // Направление умолчания у текста и у значка ПРОТИВОПОЛОЖНОЕ, и
+                // так и надо: значок при незнании говорит нейтральное «by
+                // request», а текст при незнании обязан НЕ обещать. Один и тот
+                // же предикат отвечает на два разных вопроса.
+                blurb:
+                  kycMode === "stub"
+                    ? "Identity check is in demo mode right now: the flow runs end to end, but no document is actually verified yet. Ask us before buying this tier."
+                    : kycMode === "live"
+                      ? "Identity check performed by our KYC provider. Bureau records the declared name alongside the certificate together with the provider's verification fingerprint."
+                      : "Identity verification is arranged on request — ask us to confirm it is available before buying this tier. Bureau records the declared name alongside the certificate.",
+                // Значок — из живого состояния бюро, три исхода вместо двух.
+                // «available now» говорится только когда поставщик действительно
+                // настроен; заглушка называется заглушкой ДО покупки, а своя
+                // неосведомлённость даёт нейтральное «by request».
+                badge:
+                  kycMode === "stub"
+                    ? "▲ demo mode"
+                    : kycMode === "live"
+                      ? "▲ available now"
+                      : "▲ by request",
                 badgeColor: "#4f46e5",
-                cta: { label: "Upgrade a cert", href: "/bureau" },
+                // Кнопка вела на /bureau — на страницу, где человек уже стоит:
+                // единственная кнопка платного тарифа не делала ничего видимого.
+                // Ведёт в реестр: обновление начинается с выбора сертификата,
+                // и у каждой карточки там есть своя кнопка «Upgrade to Verified».
+                cta: { label: "Pick a cert to upgrade", href: "#registry" },
               },
               {
                 name: "Notarized",
@@ -565,7 +706,15 @@ blurb: "Identity check performed by our KYC provider. Bureau records the declare
 // у тарифа, исполнить который сегодня некому. Допустимость в конкретном суде
 // зависит от юрисдикции и самого спора, мы её обеспечить не можем; описываем
 // МЕХАНИЗМ и честную доступность, а вывод о суде оставляем юристу покупателя.
-blurb: "A licensed notary co-signs the certificate with Ed25519. The notary registry is still being assembled — check it for current availability.",
+// Обещание Ed25519 даётся, только когда бюро подтверждает, что подпись
+                // действительно Ed25519. Без ключа подписывается HMAC на ПУБЛИЧНОМ
+                // ключе нотариуса — такую подпись может пересчитать кто угодно, и
+                // называть её криптографической нотаризацией нельзя. «Не знаю»
+                // (старая сборка прода полей состояния не отдаёт) обещания не даёт.
+                blurb:
+                  notarySig === "ed25519"
+                    ? "A licensed notary co-signs the certificate with Ed25519. The notary registry is still being assembled — check it for current availability."
+                    : "A licensed notary co-signs the certificate. Cryptographic co-signing is being finalised — ask us to confirm the current signing mode before buying this tier.",
                 // ⚠️ 28.08.2026: значок был «▲ live» при НУЛЕ нотариусов в реестре.
                 //
                 //   GET https://api.aevion.app/api/bureau/notaries -> {"notaries":[]}
@@ -581,7 +730,18 @@ blurb: "A licensed notary co-signs the certificate with Ed25519. The notary regi
                 //
                 // Вернуть «▲ live» следует в тот день, когда в реестре появится первый
                 // активный нотариус, — не раньше.
-                badge: "▲ в плане",
+                // Значок идёт от реестра, а не от строки: ноль активных нотариусов
+                // и «спросить не удалось» одинаково дают «by request», и только
+                // непустой реестр даёт «live». (Заодно карточка снова целиком
+                // по-английски — русское «в плане» стояло среди английских.)
+                // «live» требует ОБОИХ условий: есть кому подписать И подпись
+                // настоящая. Прежде значок смотрел только на реестр, то есть
+                // обещал бы доступность в день появления первого нотариуса, даже
+                // если ключа нет и подпись демонстрационная.
+                badge:
+                  notaryCount && notaryCount > 0 && notarySig === "ed25519"
+                    ? "▲ live"
+                    : "▲ by request",
                 badgeColor: "#7c3aed",
                 cta: { label: "View Notary Registry", href: "/bureau/notaries" },
               },
@@ -653,7 +813,7 @@ blurb: "A licensed notary co-signs the certificate with Ed25519. The notary regi
             </div>
             <label style={{ padding: "6px 12px", borderRadius: 7, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 11, fontWeight: 700, color: "#475569", cursor: "pointer", flexShrink: 0 }}>
               Browse
-              <input type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) hashAndSearch(f); }} />
+              <input type="file" className="aevion-file-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) hashAndSearch(f); }} />
             </label>
           </div>
 
@@ -835,6 +995,21 @@ blurb: "A licensed notary co-signs the certificate with Ed25519. The notary regi
                       ) : (
                         <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>✓ CERTIFIED</span>
                       )}
+                      {(() => {
+                        // Состояние якоря в биткойне — главный козырь продукта,
+                        // и до 28.08.2026 его не было видно в реестре вовсе.
+                        const b = anchorBadge(cert.bitcoinAnchor);
+                        if (!b) return null;
+                        const c = ANCHOR_TONE_COLORS[b.tone];
+                        return (
+                          <span
+                            title={b.title}
+                            style={{ padding: "3px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: c.bg, color: c.fg, whiteSpace: "nowrap" as const }}
+                          >
+                            {b.label}
+                          </span>
+                        );
+                      })()}
                       {cert.verifiedCount > 0 && <span style={{ fontSize: 10, color: "#94a3b8" }}>Verified {cert.verifiedCount}x</span>}
                     </div>
                   </div>

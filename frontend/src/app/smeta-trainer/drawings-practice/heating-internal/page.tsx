@@ -321,7 +321,7 @@ export default function HeatingInternalPage() {
                   inputMode="decimal"
                   value={answers.ex1.value}
                   onChange={(e) => updateValue("ex1", e.target.value)}
-                  placeholder="м"
+                  aria-label="Ответ, м" placeholder="м"
                   className="w-32 rounded-md border border-orange-800/50 bg-zinc-900 px-3 py-2 text-orange-100 focus:border-orange-500 focus:outline-none"
                 />
                 <button
@@ -368,7 +368,7 @@ export default function HeatingInternalPage() {
                   inputMode="decimal"
                   value={answers.ex2.value}
                   onChange={(e) => updateValue("ex2", e.target.value)}
-                  placeholder="тг"
+                  aria-label="Сумма, тенге" placeholder="тг"
                   className="w-40 rounded-md border border-orange-800/50 bg-zinc-900 px-3 py-2 text-orange-100 focus:border-orange-500 focus:outline-none"
                 />
                 <button
@@ -415,7 +415,7 @@ export default function HeatingInternalPage() {
                   inputMode="decimal"
                   value={answers.ex3.value}
                   onChange={(e) => updateValue("ex3", e.target.value)}
-                  placeholder="тг"
+                  aria-label="Сумма, тенге" placeholder="тг"
                   className="w-40 rounded-md border border-orange-800/50 bg-zinc-900 px-3 py-2 text-orange-100 focus:border-orange-500 focus:outline-none"
                 />
                 <button
@@ -462,7 +462,7 @@ export default function HeatingInternalPage() {
                   inputMode="decimal"
                   value={answers.ex4.value}
                   onChange={(e) => updateValue("ex4", e.target.value)}
-                  placeholder="дн."
+                  aria-label="дн." placeholder="дн."
                   className="w-32 rounded-md border border-orange-800/50 bg-zinc-900 px-3 py-2 text-orange-100 focus:border-orange-500 focus:outline-none"
                 />
                 <button

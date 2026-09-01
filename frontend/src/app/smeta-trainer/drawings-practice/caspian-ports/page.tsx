@@ -30,7 +30,7 @@ export default function CaspianPortsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Каспийские морпорты</div>
@@ -108,7 +108,7 @@ export default function CaspianPortsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V, м³"
+            aria-label="V, м³" placeholder="V, м³"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: Δh=7.3 м; верхняя ширина = 220 + 2×4×7.3 = 220 + 58.4 = 278.4 м; средняя = (220+278.4)/2 = 249.2 м; S = 249.2 × 7.3 = 1819 м²; V = 1819 × 8000 = 14.55 млн м³ (грубое приближение). С учётом поворотного круга и сужений ≈ 1.8 млн м³ для одного цикла регулярного дноуглубления (поддерживающего) — нужно дроги-землесосы Beaver 5000 (1500 м³/ч) на 1200 ч работы.</p>
@@ -135,7 +135,7 @@ export default function CaspianPortsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~220 млрд тг (допуск ±10%). 28+38+24+32+12+18+8+4+18+12+8+18 = 220 млрд тг. Удельная стоимость ~44 млрд тг/млн т/год — соответствует мировым проектам Каспия (Бечуньджи, Дюбенди, Туркменбаши).</p>

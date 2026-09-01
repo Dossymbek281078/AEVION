@@ -8,7 +8,7 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import paper from "@/styles/aevionPaper.module.css";
 import {
-  ResultView, ScoreGauge, STAGES, VERDICT_COLOR, VERDICT_LABEL,
+  ResultView, ScoreGauge, STAGES, STAGE_LABEL, VERDICT_COLOR, VERDICT_LABEL,
   SECTION, H2, SERIF, type AnalysisResult, type Verdict,
 } from "./_result";
 
@@ -50,8 +50,8 @@ const INPUT: React.CSSProperties = { width: "100%", padding: "10px 12px", border
 const LABEL: React.CSSProperties = { display: "block", fontSize: 11.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-faint, #74767c)", marginBottom: 5 };
 
 // Pure request helper — returns the analysis or an error string, no state.
-async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisResult } | { ok: false; error: string }> {
-  if (!data.name.trim()) return { ok: false, error: "Company / product name is required." };
+async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisResult } | { ok: false; error: string; upgradeUrl?: string | null }> {
+  if (!data.name.trim()) return { ok: false, error: "Укажите название компании или продукта." };
   if (data.description.trim().length < 12) return { ok: false, error: "Add a longer description (min 12 characters)." };
   try {
     const payload: Record<string, unknown> = {
@@ -90,10 +90,25 @@ async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisRe
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
     });
     const j = await res.json();
-    if (!res.ok || !j?.ok) return { ok: false, error: j?.error || "Analysis failed." };
+    if (!res.ok || !j?.ok) {
+      // Сервер уже прислал ГОТОВЫЙ текст для человека и ссылку на оплату —
+      // берём их, а не машинный код. Прежняя строка брала j.error, и в день
+      // включения платной стены человек прочитал бы на экране слово
+      // "upgrade_required", а ссылка upgradeUrl, по которой он мог бы
+      // заплатить, была бы выброшена. Замер 31.08.2026: у ответа 402 из
+      // planGate есть поля message (по-русски) и upgradeUrl, и оба терялись.
+      const human =
+        (typeof j?.message === "string" && j.message) ||
+        (typeof j?.error === "string" && j.error) ||
+        "Не удалось выполнить разбор.";
+      const url = typeof j?.upgradeUrl === "string" ? j.upgradeUrl : null;
+      return { ok: false, error: human, upgradeUrl: url };
+    }
     return { ok: true, data: j.data as AnalysisResult };
   } catch {
-    return { ok: false, error: "Network error — is the backend running?" };
+    // Не спрашиваем человека, запущен ли бэкенд: это вопрос к нам, а не к
+    // нему, и на экране покупателя ему не место.
+    return { ok: false, error: "Не удалось связаться с сервером. Попробуйте ещё раз." };
   }
 }
 
@@ -121,7 +136,7 @@ export default function QVenturePage() {
         <div style={{ borderTop: "3px solid var(--rule-bold, #17181a)", paddingTop: 14, marginBottom: 22 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--teal-deep, #075b53)", letterSpacing: "0.32em", textTransform: "uppercase" }}>AEVION · QVenture</div>
           <h1 style={{ margin: "8px 0 10px", fontFamily: SERIF, fontSize: 36, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--ink, #17181a)", lineHeight: 1.1 }}>
-            AI Investment Analyst for Any Business
+            ИИ-аналитик инвестиций для любого бизнеса
           </h1>
           <p style={{ margin: 0, fontSize: 15.5, color: "var(--ink-soft, #45474c)", maxWidth: 760, lineHeight: 1.55 }}>
             Fund-grade due diligence in seconds. A transparent quant score, a four-role expert council
@@ -133,7 +148,7 @@ export default function QVenturePage() {
             fontSize: 14, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none",
             borderBottom: "1px solid color-mix(in srgb, var(--teal, #0a7d72) 45%, transparent)",
           }}>
-            See a live example → <span style={{ fontWeight: 400, color: "var(--ink-faint, #74767c)" }}>(NeuroDx report)</span>
+            Живой пример → <span style={{ fontWeight: 400, color: "var(--ink-faint, #74767c)" }}>(NeuroDx report)</span>
           </Link>
         </div>
 
@@ -148,7 +163,7 @@ export default function QVenturePage() {
                 color: mode === m ? "var(--teal-deep, #075b53)" : "#64748b",
                 boxShadow: mode === m ? "0 1px 3px rgba(15,23,42,0.1)" : "none",
               }}>
-                {m === "single" ? "Analyze one" : "⚖ Compare two"}
+                {m === "single" ? "Одна сделка" : "⚖ Сравнить две"}
               </button>
             ))}
           </div>
@@ -199,12 +214,12 @@ function MarketingSections() {
   return (
     <div style={{ marginTop: 28 }}>
       <div style={SECTION}>
-        <h2 style={H2}>How it works</h2>
+        <h2 style={H2}>Как это работает</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
           {steps.map((s, i) => (
             <div key={i} style={{ padding: "4px 4px" }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>{s.icon}</div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "var(--teal-deep, #075b53)" }}>STEP {i + 1}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "var(--teal-deep, #075b53)" }}>ШАГ {i + 1}</div>
               <div style={{ fontSize: 16, fontWeight: 800, color: "var(--ink, #17181a)", margin: "2px 0 6px" }}>{s.title}</div>
               <p style={{ margin: 0, fontSize: 13.5, color: "#475569", lineHeight: 1.5 }}>{s.body}</p>
             </div>
@@ -213,7 +228,7 @@ function MarketingSections() {
       </div>
 
       <div style={SECTION}>
-        <h2 style={H2}>Who it&apos;s for</h2>
+        <h2 style={H2}>Кому подходит</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
           {audience.map((a, i) => (
             <div key={i} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, background: "#fff" }}>
@@ -236,6 +251,18 @@ function MarketingSections() {
         </div>
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.12)", fontSize: 11.5, color: "#94a3b8" }}>
           QVenture is an AI screening tool for research purposes — not investment advice, an offer, or a solicitation. Figures are model estimates, not guarantees.
+          {" "}
+          {/* Доступ выдаётся по почте подписки: planGate спрашивает
+              hasActiveAppSubscription(plan.email, "qventure"), а plan.email берётся
+              из токена входа. Модуль при этом работает и анонимно, поэтому
+              человек может оплатить подписку и не связать покупку с собой —
+              сегодня это незаметно (платная стена включена у 6 модулей из 43,
+              QVenture среди них нет), но включение стены и есть запуск.
+              Строка на языке окружающего блока: язык интерфейса модуля —
+              открытый вопрос к основателю, и вводить второй язык внутри
+              одного абзаца хуже, чем следовать соседнему тексту. */}
+          Paid access is tied to the email on your subscription — sign in with that
+          same email after paying, or the analyses stay on the free tier.
         </div>
       </div>
     </div>
@@ -248,15 +275,18 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
   const [form, setForm] = useState<FormShape>(emptyForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Ссылка на оплату приходит в отказе 402 вместе с текстом. Без неё человек
+  // читает, что модуль платный, и не знает, куда идти платить.
+  const [upgradeUrl, setUpgradeUrl] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
   const set = (k: keyof FormShape) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const run = useCallback(async (data: FormShape) => {
-    setError(null); setLoading(true); setResult(null);
+    setError(null); setUpgradeUrl(null); setLoading(true); setResult(null);
     const r = await analyzeReq(data);
-    if (r.ok) setResult(r.data); else setError(r.error);
+    if (r.ok) { setResult(r.data); } else { setError(r.error); setUpgradeUrl(r.upgradeUrl ?? null); }
     setLoading(false);
   }, []);
 
@@ -330,7 +360,7 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
   return (
     <>
       <div style={SECTION}>
-        <h2 style={H2}>Analyze an opportunity</h2>
+        <h2 style={H2}>Разбор сделки</h2>
         <div style={{ border: "1px dashed var(--rule-mid, #b9b8b0)", background: "var(--paper-2, #efeee8)", borderRadius: 12, padding: "14px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <input ref={fileRef} type="file" accept="application/pdf,.pdf" onChange={onDeckFile} style={{ display: "none" }} />
           <button type="button" onClick={() => fileRef.current?.click()} disabled={extracting || loading} style={{
@@ -344,15 +374,30 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
           </span>
         </div>
         <FormFields form={form} set={set} sectors={sectors} full />
-        {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        {error && (
+          <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>
+            {error}
+            {/* Ссылка приходит в отказе 402 вместе с текстом. Без неё человек
+                читает, что модуль платный, и не знает, куда идти платить —
+                тупик ровно в том месте, где он готов заплатить. */}
+            {upgradeUrl && (
+              <>
+                {" "}
+                <a href={upgradeUrl} style={{ color: "#dc2626", fontWeight: 700, textDecoration: "underline" }}>
+                  Посмотреть тарифы
+                </a>
+              </>
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <button onClick={() => run(form)} disabled={loading} style={primaryBtn(loading)}>
-            {loading ? "Analyzing…" : "Run analysis"}
+            {loading ? "Разбираем…" : "Разобрать"}
           </button>
           <button onClick={runSample} disabled={loading} type="button" style={ghostBtn(loading)}>
-            ✨ See a sample analysis
+            ✨ Показать пример разбора
           </button>
-          <span style={{ fontSize: 12.5, color: "#94a3b8" }}>No input needed — loads a real seed-stage case.</span>
+          <span style={{ fontSize: 12.5, color: "#94a3b8" }}>Ничего вводить не нужно — загрузим настоящий пример стадии посева.</span>
         </div>
       </div>
       {result && <ResultView result={result} />}
@@ -367,6 +412,8 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
   const [b, setB] = useState<FormShape>(() => ({ ...emptyForm(), name: "Company B" }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Своё состояние: это отдельный компонент, у него нет доступа к первому.
+  const [upgradeUrl, setUpgradeUrl] = useState<string | null>(null);
   const [pair, setPair] = useState<[AnalysisResult, AnalysisResult] | null>(null);
 
   const setter = (which: "a" | "b") => (k: keyof FormShape) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -375,10 +422,13 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
   };
 
   const run = useCallback(async () => {
-    setError(null); setLoading(true); setPair(null);
+    setError(null); setUpgradeUrl(null); setLoading(true); setPair(null);
     const [ra, rb] = await Promise.all([analyzeReq(a), analyzeReq(b)]);
-    if (!ra.ok) { setError(`Company A: ${ra.error}`); setLoading(false); return; }
-    if (!rb.ok) { setError(`Company B: ${rb.error}`); setLoading(false); return; }
+    // Ссылку на оплату теряли и здесь: текст брался человеческий, а путь,
+    // куда идти платить, выбрасывался. Одна и та же мера обязана стоять на
+    // ОБЕИХ поверхностях — правка только на первой выглядит законченной.
+    if (!ra.ok) { setError(`Company A: ${ra.error}`); setUpgradeUrl(ra.upgradeUrl ?? null); setLoading(false); return; }
+    if (!rb.ok) { setError(`Company B: ${rb.error}`); setUpgradeUrl(rb.upgradeUrl ?? null); setLoading(false); return; }
     setPair([ra.data, rb.data]);
     setLoading(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -394,9 +444,21 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
           </div>
         ))}
       </div>
-      {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        {error && (
+          <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>
+            {error}
+            {upgradeUrl && (
+              <>
+                {" "}
+                <a href={upgradeUrl} style={{ color: "#dc2626", fontWeight: 700, textDecoration: "underline" }}>
+                  Посмотреть тарифы
+                </a>
+              </>
+            )}
+          </div>
+        )}
       <button onClick={run} disabled={loading} style={{ ...primaryBtn(loading), marginBottom: 18 }}>
-        {loading ? "Analyzing both…" : "⚖ Compare"}
+        {loading ? "Разбираем оба…" : "⚖ Compare"}
       </button>
       {pair && <CompareResult a={pair[0]} b={pair[1]} />}
     </>
@@ -444,12 +506,12 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
       </div>
 
       <div style={SECTION}>
-        <h2 style={H2}>Factor-by-factor delta</h2>
+        <h2 style={H2}>Разница по факторам</h2>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 460 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "#64748b", fontSize: 12 }}>
-                <th style={{ padding: "6px 8px" }}>Factor</th>
+                <th style={{ padding: "6px 8px" }}>Фактор</th>
                 <th style={{ padding: "6px 8px", textAlign: "center" }}>{a.name}</th>
                 <th style={{ padding: "6px 8px", textAlign: "center" }}>{b.name}</th>
                 <th style={{ padding: "6px 8px", textAlign: "center" }}>Δ (B−A)</th>
@@ -474,7 +536,7 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
                 );
               })}
               <tr style={{ borderTop: "2px solid #e2e8f0" }}>
-                <td style={{ padding: "8px", fontWeight: 800, color: "var(--ink, #17181a)" }}>Composite</td>
+                <td style={{ padding: "8px", fontWeight: 800, color: "var(--ink, #17181a)" }}>Итог</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800 }}>{a.composite}</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800 }}>{b.composite}</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800, color: b.composite - a.composite >= 0 ? "#16a34a" : "#dc2626" }}>
@@ -525,45 +587,45 @@ function FormFields({ form, set, sectors, full = false }: {
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 14 }}>
         <div>
-          <label style={LABEL}>Company / product name *</label>
-          <input style={INPUT} value={form.name} onChange={set("name")} placeholder="e.g. NeuroDx" />
+          <label style={LABEL}>Название компании или продукта *</label>
+          <input aria-label="Название компании или продукта" style={INPUT} value={form.name} onChange={set("name")} placeholder="e.g. NeuroDx" />
         </div>
         <div>
-          <label style={LABEL}>Sector</label>
+          <label style={LABEL}>Отрасль</label>
           <select style={INPUT} value={form.sector} onChange={set("sector")}>
-            {sectors.length === 0 && <option value="ai_app">AI Applications</option>}
+            {sectors.length === 0 && <option value="ai_app">ИИ-приложения</option>}
             {sectors.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </div>
         <div>
-          <label style={LABEL}>Stage</label>
+          <label style={LABEL}>Стадия</label>
           <select style={INPUT} value={form.stage} onChange={set("stage")}>
-            {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+            {STAGES.map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
           </select>
         </div>
         {full && (
           <>
             <div>
-              <label style={LABEL}>Target market</label>
-              <input style={INPUT} value={form.geography} onChange={set("geography")} placeholder="US" />
+              <label style={LABEL}>Целевой рынок</label>
+              <input aria-label="Целевой рынок" style={INPUT} value={form.geography} onChange={set("geography")} placeholder="US" />
             </div>
             <div>
-              <label style={LABEL}>Raising (USD, optional)</label>
-              <input style={INPUT} value={form.askUsd} onChange={set("askUsd")} placeholder="5,000,000" inputMode="numeric" />
+              <label style={LABEL}>Привлекают (USD, необязательно)</label>
+              <input aria-label="Привлекают (USD, необязательно)" style={INPUT} value={form.askUsd} onChange={set("askUsd")} placeholder="5,000,000" inputMode="numeric" />
             </div>
           </>
         )}
       </div>
       <div style={{ marginBottom: full ? 14 : 0 }}>
-        <label style={LABEL}>What does it do? *</label>
+        <label style={LABEL}>Что делает продукт? *</label>
         <textarea style={{ ...INPUT, minHeight: 72, resize: "vertical" }} value={form.description} onChange={set("description")}
-          placeholder="One-paragraph description of the product, the problem it solves, and the wedge." />
+          aria-label="What does it do?" placeholder="One-paragraph description of the product, the problem it solves, and the wedge." />
       </div>
       {full && (
         <div style={{ marginBottom: 16 }}>
-          <label style={LABEL}>Traction / metrics</label>
+          <label style={LABEL}>Тяга и метрики</label>
           <textarea style={{ ...INPUT, minHeight: 56, resize: "vertical" }} value={form.tractionNotes} onChange={set("tractionNotes")}
-            placeholder="e.g. $40k MRR growing 18% MoM, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x" />
+            aria-label="Traction / metrics" placeholder="e.g. $40k MRR growing 18% MoM, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x" />
           {/* Execution carries 28% of the composite and scores low — not neutral — when
               nothing is submitted. Saying so here beats letting someone submit an empty
               field and be surprised by the number. */}
@@ -585,13 +647,13 @@ function FormFields({ form, set, sectors, full = false }: {
             Exact financials & projections (optional — precise numbers beat parsing the text)
           </summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
-            <div><label style={LABEL}>ARR (USD)</label><input style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
-            <div><label style={LABEL}>Gross margin (%)</label><input style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
-            <div><label style={LABEL}>LTV / CAC ratio</label><input style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
+            <div><label style={LABEL}>ARR (USD)</label><input aria-label="ARR (USD)" style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Валовая маржа (%)</label><input aria-label="Gross margin (%)" style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
+            <div><label style={LABEL}>LTV / CAC ratio</label><input aria-label="LTV / CAC ratio" style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
             <div>
-              <label style={LABEL}>Churn (%)</label>
+              <label style={LABEL}>Отток (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
-                <input style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" />
+                <input style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} aria-label="Churn (%)" placeholder="3" inputMode="numeric" />
                 <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label="Churn period">
                   <option value="weekly">/ week</option>
                   <option value="monthly">/ month</option>
@@ -600,11 +662,11 @@ function FormFields({ form, set, sectors, full = false }: {
                 </select>
               </div>
             </div>
-            <div><label style={LABEL}>Customers</label><input style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Клиенты</label><input aria-label="Клиенты" style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
             <div>
-              <label style={LABEL}>Growth (%)</label>
+              <label style={LABEL}>Рост (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
-                <input style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} placeholder="15" inputMode="numeric" />
+                <input style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} aria-label="Growth (%)" placeholder="15" inputMode="numeric" />
                 <select style={{ ...INPUT, width: 104 }} value={form.finGrowthPeriod} onChange={set("finGrowthPeriod")} aria-label="Growth period">
                   <option value="WoW">WoW</option>
                   <option value="MoM">MoM</option>
@@ -612,14 +674,14 @@ function FormFields({ form, set, sectors, full = false }: {
                 </select>
               </div>
             </div>
-            <div><label style={LABEL}>Bottom-up TAM (USD)</label><input style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>TAM снизу вверх (USD)</label><input aria-label="TAM снизу вверх (USD)" style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
           </div>
           <div style={{ marginTop: 14 }}>
             <label style={LABEL}>Projected revenue (USD) — this year / +1yr / +2yr (for the hockey-stick check)</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-              <input style={INPUT} value={form.projY0} onChange={set("projY0")} placeholder="Y0: 2,000,000" inputMode="numeric" />
-              <input style={INPUT} value={form.projY1} onChange={set("projY1")} placeholder="Y1: 5,000,000" inputMode="numeric" />
-              <input style={INPUT} value={form.projY2} onChange={set("projY2")} placeholder="Y2: 12,000,000" inputMode="numeric" />
+              <input style={INPUT} aria-label="Projected revenue this year" value={form.projY0} onChange={set("projY0")} placeholder="Y0: 2,000,000" inputMode="numeric" />
+              <input style={INPUT} aria-label="Projected revenue +1yr" value={form.projY1} onChange={set("projY1")} placeholder="Y1: 5,000,000" inputMode="numeric" />
+              <input style={INPUT} aria-label="Projected revenue +2yr" value={form.projY2} onChange={set("projY2")} placeholder="Y2: 12,000,000" inputMode="numeric" />
             </div>
           </div>
         </details>

@@ -157,14 +157,22 @@ export function purgeSubscriptions(email: string): { removed: number; remaining:
   return { removed, remaining: kept.length };
 }
 
-export function countSubscriptions(): number {
+export function countSubscriptions(): { ok: boolean; total: number } {
   try {
     const file = subsFile();
-    if (!existsSync(file)) return 0;
+    // Файла нет — это ЧЕСТНЫЙ ноль: подписок ещё не было.
+    if (!existsSync(file)) return { ok: true, total: 0 };
     const content = readFileSync(file, "utf8");
-    return content.split("\n").filter((l) => l.trim().length > 0).length;
+    const n = content.split(String.fromCharCode(10)).filter((l) => l.trim().length > 0).length;
+    return { ok: true, total: n };
   } catch {
-    return 0;
+    // А СБОЙ ЧТЕНИЯ нулём быть не должен: это «не знаю».
+    //
+    // Число уходит в ответ ручки и дальше в ежедневный отчёт основателю.
+    // Ноль при нечитаемом файле выглядит как «никто не купил» или «мы
+    // потеряли всех подписчиков» — ложная тревога, отличить которую от
+    // правды было нечем.
+    return { ok: false, total: 0 };
   }
 }
 
@@ -304,7 +312,35 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
     });
     const j = await r.json();
     if (!r.ok) {
-      return { ok: false, mode: "real", error: j.message ?? `HTTP ${r.status}` };
+      /*
+       * Отказ поставщика — самый тихий провал на денежном пути.
+       *
+       * Ниже по цепочке признак `emailSent` возвращается вызывающему, но
+       * замер 01.09.2026: его не читает НИ ОДНА из четырёх касс (gumroad,
+       * lemonSqueezy, paybox, paypal). Значит человек заплатил, письмо с
+       * доступом не ушло — и об этом не знает никто: ни журнал, ни Sentry.
+       * Соседние ветки этой же функции при отказе капчурят (исключение,
+       * пустой id, вырожденный режим), а эта — единственная — молчала.
+       * Непоследовательность внутри одной функции почти всегда недосмотр.
+       *
+       * Отправку по-прежнему НЕ роняем: письмо не должно валить выдачу
+       * доступа, ради которой оно шлётся. Меняется одно — отказ перестаёт
+       * быть невидимым.
+       *
+       * Адрес получателя не пишем целиком: это персональные данные, а для
+       * разбора хватает домена и темы. Домен и есть главное: отказы вида
+       * «домен отправителя не подтверждён» и «получатель отвергнут» по нему
+       * и различаются.
+       */
+      const причина = j.message ?? `HTTP ${r.status}`;
+      const доменПолучателя = String(payload.to).split("@").pop() ?? "?";
+      capture(new Error(`sendEmail rejected: ${причина}`), {
+        route: "provisioning/sendEmail",
+        subject: payload.subject,
+        recipientDomain: доменПолучателя,
+        status: String(r.status),
+      });
+      return { ok: false, mode: "real", error: причина };
     }
     if (!j.id) {
       // Resend returned 2xx but no message id — not the documented success shape.
@@ -459,10 +495,27 @@ export function welcomeHtml(sub: Subscription): string {
               ${cta.label}
             </a>
           </div>
+          <!--
+            Поддержка ведёт на ФОРМУ, а не на почтовый адрес.
+
+            Замер 01.09.2026 (контроль пройден: у gmail.com запись MX находится,
+            у чужого aevion.io тоже): у домена aevion.app записи MX НЕТ. Значит
+            письмо на любой адрес этого домена — а такой стоял здесь — не доходит, и
+            человек узнаёт об этом отлупом, а мы не узнаём вовсе. Хуже места для
+            мёртвого адреса нет: это письмо получает тот, кто уже ЗАПЛАТИЛ.
+
+            Форма /pricing/contact проверена по всей цепочке: пишет в файл,
+            каталог лежит на постоянном томе (события с 26 мая целы), читается
+            защищённой ручкой /api/pricing/leads, ADMIN_TOKEN на проде задан.
+            То есть обращение доходит до человека, а адрес — нет.
+
+            Когда у домена появится почта, сюда можно вернуть адрес — но тогда
+            уже проверенный, а не обещанный.
+          -->
           <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
           <p style="font-size:12px;color:#94a3b8;line-height:1.5;margin:0">
             ID подписки: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">${sub.id}</code><br/>
-            Поддержка: <a href="mailto:hello@aevion.app" style="color:#0d9488">hello@aevion.app</a>
+            Поддержка: <a href="${FRONTEND_URL}/pricing/contact" style="color:#0d9488">${FRONTEND_URL.replace(/^https?:\/\//, "")}/pricing/contact</a>
           </p>
         </td></tr>
       </table>
@@ -486,7 +539,7 @@ ${includedLine(sub)}
 ${ctaFor(sub).label}: ${FRONTEND_URL}${ctaFor(sub).href}
 
 ID подписки: ${sub.id}
-Поддержка: hello@aevion.app
+Поддержка: ${FRONTEND_URL}/pricing/contact
 `;
 }
 

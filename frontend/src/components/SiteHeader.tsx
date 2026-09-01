@@ -1,6 +1,13 @@
 "use client";
 
-import Link from "next/link";
+import { useEffect, useRef } from "react";
+import { KeepChannelLink } from "@/components/KeepChannelLink";
+// Ссылки шапки идут через KeepChannelLink, а не через обычный Link, намеренно.
+// Замер 31.08.2026 в браузере на /en/go?c=yt: из 29 внутренних ссылок страницы
+// метку канала несла ОДНА — написанная в теле страницы. Остальные 28 приходят
+// из общих шапки и подвала и метку теряли. Человек приходит с ролика, жмёт
+// «Pricing» — и покупка после этого приходит в отчёт как пришедшая ниоткуда.
+// Внешняя ссылка на openapi.json ниже намеренно осталась обычной <a>.
 import { getBackendOrigin } from "@/lib/apiBase";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import PlatformAiSavings from "@/components/PlatformAiSavings";
@@ -9,8 +16,39 @@ import AiOfflineToggle from "@/components/AiOfflineToggle";
 
 export function SiteHeader() {
   const origin = getBackendOrigin();
+  const headerRef = useRef<HTMLElement | null>(null);
+
+  // Шапка публикует свою ВЫСОТУ, чтобы прилипающие полосы разделов могли
+  // встать под ней, а не под неё. Замер 28.08.2026: полоса вкладок QGood
+  // тоже sticky с top: 0, но слоем 10 против 50 — при 1280x900 шапка
+  // накрывала её целиком, и все четыре вкладки давали 0 доступных точек
+  // из 16. Прокрутка не спасала: обе прилипают к нулю.
+  //
+  // Почему ResizeObserver, а не число: на узком экране шапка переносится
+  // в два ряда и её высота меняется. Именно поэтому дефект виден при
+  // 1280 и не виден при 1463 — фиксированное значение было бы неверным
+  // ровно там, где оно нужнее всего.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const publish = () => {
+      root.style.setProperty(
+        "--aevion-header-h",
+        `${Math.round(el.getBoundingClientRect().height)}px`,
+      );
+    };
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--aevion-header-h");
+    };
+  }, []);
   return (
     <header
+      ref={headerRef}
       style={{
         position: "sticky",
         top: 0,
@@ -32,23 +70,23 @@ export function SiteHeader() {
           flexWrap: "wrap",
         }}
       >
-        <Link href="/" style={{ textDecoration: "none", color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
+        <KeepChannelLink href="/" style={{ textDecoration: "none", color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontWeight: 900, fontSize: 18, letterSpacing: "-0.02em" }}>AEVION</span>
           <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
             Trust · IP · Globus
           </span>
-        </Link>
+        </KeepChannelLink>
 
         <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-          <Link href="/demo" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#fff", background: "linear-gradient(135deg, #0d9488, #0ea5e9)" }}>
+          <KeepChannelLink href="/demo" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#fff", background: "linear-gradient(135deg, #0d9488, #0ea5e9)" }}>
             Demo
-          </Link>
-          <Link href="/explore" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#1a1205", background: "linear-gradient(135deg, #a9761f, #e6b24a)" }}>
+          </KeepChannelLink>
+          <KeepChannelLink href="/explore" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#1a1205", background: "linear-gradient(135deg, #a9761f, #e6b24a)" }}>
             Explore
-          </Link>
-          <Link href="/shop" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#fff", background: "linear-gradient(135deg, #059669, #10b981)" }}>
+          </KeepChannelLink>
+          <KeepChannelLink href="/shop" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#fff", background: "linear-gradient(135deg, #059669, #10b981)" }}>
             Shop
-          </Link>
+          </KeepChannelLink>
           {[
             { href: "/auth", label: "Auth" },
             { href: "/qright", label: "QRight" },
@@ -60,9 +98,9 @@ export function SiteHeader() {
             { href: "/cyberchess", label: "Chess" },
             { href: "/pricing", label: "Pricing" },
           ].map((x) => (
-            <Link key={x.href} href={x.href} style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#334155", fontSize: 12, fontWeight: 600 }}>
+            <KeepChannelLink key={x.href} href={x.href} style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#334155", fontSize: 12, fontWeight: 600 }}>
               {x.label}
-            </Link>
+            </KeepChannelLink>
           ))}
           <a href={`${origin}/api/openapi.json`} target="_blank" rel="noreferrer" style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#0d9488", fontSize: 12, fontWeight: 600, border: "1px solid rgba(13,148,136,0.3)" }}>
             API

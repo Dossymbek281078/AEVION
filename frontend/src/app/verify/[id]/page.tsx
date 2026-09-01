@@ -4,10 +4,23 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
 import { InfoTip } from "@/components/InfoTip";
+import { bundleContents, ed25519FieldNote } from "./bundleContents";
+import {
+  buildIntegrityChecks,
+  deriveVerdict,
+  verdictCopy,
+} from "./integrityVerdict";
 
 type VerifyData = {
+  /**
+   * ⚠️ КОНСТАНТА, а не вердикт: ручка возвращает true на любом найденном
+   * сертификате. Читать как «запись существует». Замер 23.08.2026: все 5
+   * сертификатов прода отвечали valid: true при contentHashValid: false.
+   */
   valid: boolean;
   verified: boolean;
+  /** Вердикт сервера по целостности. Может отсутствовать у старой сборки. */
+  integrityVerified?: boolean;
   verifiedAt: string;
   certificate: {
     id: string;
@@ -22,6 +35,8 @@ type VerifyData = {
     fileHash?: string | null;
     signatureHmac: string;
     signatureEd25519?: string | null;
+    /** Заверение ключа сертификата постоянным ключом платформы; null — его нет. */
+    platformAttestation?: { kid: string; signature: string } | null;
     algorithm: string;
     protectedAt: string;
     status: string;
@@ -194,7 +209,13 @@ export default function VerifyPage() {
   const cert = data.certificate;
   const integrity = data.integrity;
   const legal = data.legalBasis;
-  const allChecksPass = integrity.contentHashValid && integrity.quantumShieldStatus === "active";
+  // Вердикт выводится ИЗ ПЛИТОК, а не считается рядом с ними: раньше баннер
+  // смотрел на две оси из семи и мог обещать «every layer matches» над красной
+  // плиткой. Разбор — в комментарии к integrityVerdict.ts.
+  const checks = buildIntegrityChecks(data);
+  const verdict = deriveVerdict(checks, data.integrityVerified);
+  const banner = verdictCopy(verdict);
+  const allChecksPass = verdict !== "warning";
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
@@ -221,15 +242,11 @@ export default function VerifyPage() {
             : "linear-gradient(135deg, rgba(245,158,11,0.08), rgba(239,68,68,0.06))",
           border: `1px solid ${allChecksPass ? "rgba(16,185,129,0.2)" : "rgba(245,158,11,0.2)"}`,
         }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>{allChecksPass ? "✅" : "⚠️"}</div>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>{banner.icon}</div>
           <div style={{ fontSize: 24, fontWeight: 900, color: allChecksPass ? "#059669" : "#d97706", marginBottom: 6 }}>
-            {allChecksPass ? "Certificate Verified" : "Verification Warning"}
+            {banner.title}
           </div>
-          <div style={{ fontSize: 14, color: "#475569" }}>
-            {allChecksPass
-              ? "Every cryptographic layer matches. The work below was registered by the named author at the time shown, and no field has been altered since."
-              : "One or more integrity layers did not match. The per-layer breakdown below shows exactly which check failed and what it means."}
-          </div>
+          <div style={{ fontSize: 14, color: "#475569" }}>{banner.body}</div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 8 }}>
             Verified at {new Date(data.verifiedAt).toLocaleString()} · Check #{data.stats.verifiedCount}
           </div>
@@ -367,7 +384,7 @@ export default function VerifyPage() {
               Cryptographic Proof
               <InfoTip
                 label="Cryptographic Proof"
-                text="Three derived proofs (SHA-256 content hash, HMAC signature, Ed25519 signature) plus the algorithm and certificate ID for context. Tamper with any registered field and at least one of the three derived values stops matching."
+                text="Derived proofs — the SHA-256 content hash, the HMAC and Ed25519 signatures, and AEVION's platform attestation of this certificate's key — plus the algorithm and certificate ID for context. Tampering with a field that the hash covers breaks at least one of them. Note the limit honestly: certificates issued under the earlier v1 rule hashed only title, description and work type, so country and city are recorded on the certificate but not covered by that hash — the row above says which rule applies."
               />
             </div>
             <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
@@ -384,9 +401,40 @@ export default function VerifyPage() {
                   tip: { name: "HMAC-SHA256", text: "Tamper-detection signature computed with AEVION's secret key. Anyone with the same key can re-derive it from the certificate fields and check that it has not been changed." },
                 },
                 {
-                  label: "Ed25519 Signature",
+                  // Подпись здесь ОБРЕЗАНА: ручка проверки отдаёт первые 64
+                  // символа и не отдаёт публичный ключ вовсе (замер на проде
+                  // 28.08.2026: длина 67 вместе с многоточием, поля
+                  // publicKeyEd25519 в ответе нет). Прежний текст обещал, что
+                  // «проверить может кто угодно» — возможность есть, но НЕ по
+                  // этим данным: полная подпись и ключ лежат в офлайн-пакете,
+                  // и офлайн-проверка их действительно сверяет. Подпись должна
+                  // называть то, что показано, и вести туда, где проверка
+                  // возможна.
+                  label: "Ed25519 Signature (first 64 chars)",
                   value: cert.signatureEd25519 || "N/A",
-                  tip: { name: "Ed25519", text: "An asymmetric digital signature. The matching public key is published, so anyone — not just AEVION — can verify that the signature is genuine." },
+                  // Текст зависит от того, ЕСТЬ ЛИ что проверять: у старой
+                  // схемы подписанный текст утрачен вместе с временной меткой,
+                  // и звать за проверкой в пакет означало бы обещать невозможное.
+                  tip: { name: "Ed25519", text: ed25519FieldNote(integrity.signatureHmacReason) },
+                },
+                {
+                  label: "Platform attestation",
+                  // Единственный слой, чей открытый ключ берётся НЕ из пакета:
+                  // по kid его получают на /api/qsign/v2/keys. Без него подпись
+                  // выше самосогласована — проверяется ключом, приехавшим рядом
+                  // с ней, — и пакет, собранный посторонним, выглядел бы так же.
+                  value: cert.platformAttestation
+                    ? `${cert.platformAttestation.kid}: ${cert.platformAttestation.signature.slice(0, 32)}…`
+                    : "N/A",
+                  // Именно `tip`, а не `note`: отрисовщик ниже читает только
+                  // `tip`, и поле с другим именем стало бы текстом, которого
+                  // никто не увидит.
+                  tip: {
+                    name: "Platform attestation",
+                    text: cert.platformAttestation
+                      ? "AEVION's long-lived key signs this certificate's key. Fetch the public half from /api/qsign/v2/keys to check it independently of this page — that is what makes this layer independent of the certificate itself."
+                      : "This certificate has no platform attestation: it was issued before the layer existed, or the platform key was unavailable at issue time. The signatures above still verify, but only against a key that travels with the certificate.",
+                  },
                 },
                 { label: "Algorithm", value: cert.algorithm },
                 { label: "Certificate ID", value: cert.id },
@@ -431,96 +479,41 @@ export default function VerifyPage() {
               Integrity Checks
               <InfoTip
                 label="Integrity Checks"
-                text="Each tile is one independent test. Green tiles passed; red tiles failed. A certificate is fully valid only when every tile is green."
+                text="Each tile is one independent test. Green passed. Red failed — something does not match and the certificate cannot be relied on. Grey means the layer did not exist yet when this certificate was issued, so there is nothing to check: that is the certificate's age, not a failure."
               />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-              {(() => {
-                const certKv = integrity.qsignKeyVersion ?? 1;
-                const curKv = integrity.currentKeyVersion ?? 1;
-                const rotated = integrity.keyRotatedSinceSigning === true;
-                const hmacOk = integrity.signatureHmacValid === true;
-                return [
-                  {
-                    label: "Content Hash",
-                    status: integrity.contentHashValid,
-                    detail: integrity.contentHashValid ? "SHA-256 verified" : "Hash mismatch",
-                    tip: { name: "Content Hash", text: "We re-hash the certificate's metadata with SHA-256 and compare it to the stored value. Match means the registered fields have not changed since protection." },
-                  },
-                  {
-                    label: "HMAC Signature",
-                    status: hmacOk,
-                    detail:
-                      hmacOk
-                        ? "HMAC-SHA256 re-verified"
-                        : integrity.signatureHmacReason === "NO_SIGNED_AT"
-                          ? "Legacy row — signedAt not recorded"
-                          : integrity.signatureHmacReason === "MISMATCH"
-                            ? "Signature mismatch"
-                            : "Verification error",
-                    tip: { name: "HMAC Signature", text: "We recompute the HMAC-SHA256 from the certificate's signed fields with the secret key version that signed it, and compare. Match proves no field has been tampered with." },
-                  },
-                  {
-                    label: "HMAC Key Version",
-                    status: hmacOk,
-                    detail: rotated
-                      ? `Signed under v${certKv} · current is v${curKv} · key rotated, signature still valid`
-                      : `Signed under v${certKv} · current key`,
-                    tip: { name: "Key Rotation", text: "AEVION can rotate signing keys without invalidating older certificates. Each row records the version it was signed with, so we always verify under the right key." },
-                  },
-                  {
-                    label: "Quantum Shield",
-                    status: integrity.quantumShieldStatus === "active" && integrity.shieldLegacy !== true,
-                    detail: integrity.shieldLegacy === true ? "Legacy shield (pre-v2)" : `Status: ${integrity.quantumShieldStatus}`,
-                    tip: { name: "Quantum Shield", text: "AEVION's protection envelope. Combines Ed25519 signing with Shamir secret-sharing so no single party can recover the private key alone." },
-                  },
-                  {
-                    label: "Secret Sharing",
-                    status: integrity.shieldLegacy !== true,
-                    detail: integrity.shieldLegacy === true ? "Legacy — not real SSS" : `${integrity.shards} shards, threshold ${integrity.threshold} (Shamir SSS)`,
-                    tip: { name: "Shamir Secret Sharing", text: "The Ed25519 private key is split into 3 shards. Any 2 reconstruct it; any 1 alone reveals nothing. AEVION never holds 2 of them." },
-                  },
-                  (() => {
-                    const co = integrity.authorCosign;
-                    if (!co || !co.present) {
-                      return {
-                        label: "Author Co-Signature",
-                        status: false,
-                        detail: "Not signed by author (legacy single-party cert)",
-                        tip: { name: "Author co-signing", text: "Modern AEVION certificates carry a second Ed25519 signature held only by the author's browser. This row was protected before that layer existed — its other integrity checks remain valid." },
-                      };
-                    }
-                    return {
-                      label: "Author Co-Signature",
-                      status: co.valid,
-                      detail: co.valid
-                        ? `Verified · author key ed25519:${co.fingerprint}`
-                        : `Signature mismatch · purported key ed25519:${co.fingerprint || "unknown"}`,
-                      tip: { name: "Author co-signing", text: "An Ed25519 signature made with the author's browser-held private key. AEVION never sees this key — even a full platform breach cannot forge a valid co-signature for someone else's identity." },
-                    };
-                  })(),
-                  {
-                    label: "Certificate Status",
-                    status: cert.status === "active",
-                    detail: cert.status,
-                    tip: undefined as { name: string; text: string } | undefined,
-                  },
-                ];
-              })().map((check) => (
+              {checks.map((check) => {
+                // Три состояния, а не два. Красный — «сломано сейчас».
+                // Серый — «слоя не существовало в момент выдачи»: это возраст
+                // записи, и рисовать его как поломку значит пугать человека
+                // тем, что он не может исправить.
+                const tone = check.status
+                  ? "pass"
+                  : check.tier === "era"
+                    ? "n/a"
+                    : "fail";
+                const palette = {
+                  pass: { line: "rgba(16,185,129,0.2)", fill: "rgba(16,185,129,0.04)", mark: "✅", aria: "passed" },
+                  "n/a": { line: "rgba(148,163,184,0.28)", fill: "rgba(148,163,184,0.06)", mark: "—", aria: "not applicable to this certificate" },
+                  fail: { line: "rgba(239,68,68,0.2)", fill: "rgba(239,68,68,0.04)", mark: "❌", aria: "failed" },
+                }[tone];
+                return (
                 <div key={check.label} style={{
                   padding: "12px 14px",
                   borderRadius: 10,
-                  border: `1px solid ${check.status ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)"}`,
-                  background: check.status ? "rgba(16,185,129,0.04)" : "rgba(239,68,68,0.04)",
+                  border: `1px solid ${palette.line}`,
+                  background: palette.fill,
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 14 }} aria-label={check.status ? "passed" : "failed"}>{check.status ? "✅" : "❌"}</span>
+                    <span style={{ fontSize: 14 }} aria-label={palette.aria}>{palette.mark}</span>
                     <span style={{ fontSize: 12, fontWeight: 800, color: "#0f172a" }}>{check.label}</span>
                     {check.tip && <InfoTip label={check.tip.name} text={check.tip.text} size={12} />}
                   </div>
                   <div style={{ fontSize: 11, color: "#64748b" }}>{check.detail}</div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {integrity.shieldId && (
@@ -795,12 +788,26 @@ export default function VerifyPage() {
             </div>
             <InfoTip
               label="Verification bundle"
-              text="A single .json containing every proof — the canonical inputs, AEVION's Ed25519 signature, the author co-signature, the OpenTimestamps Bitcoin proof. With this bundle and a browser, anyone can verify the certificate forever without contacting AEVION."
+              text="A single .json with the proofs this certificate actually has — the canonical inputs, AEVION's Ed25519 signature where it exists, the author co-signature, the OpenTimestamps Bitcoin proof. With this bundle and a browser, anyone can check them forever without contacting AEVION."
             />
           </div>
           <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.55, marginBottom: 10 }}>
-            Most platforms&apos; certificates die when the platform dies. Ours don&apos;t. Download the bundle below — one <code style={{ fontSize: 11, padding: "1px 5px", background: "rgba(99,102,241,0.12)", borderRadius: 4 }}>.json</code> with every proof — then drop it into the offline verifier on any machine, any year. Bitcoin and Ed25519 are the trust anchors. We&apos;re replaceable; the math is not.
+            Most platforms&apos; certificates die when the platform dies. Ours don&apos;t. Download the bundle below — one <code style={{ fontSize: 11, padding: "1px 5px", background: "rgba(99,102,241,0.12)", borderRadius: 4 }}>.json</code> carrying this certificate&apos;s proofs — then drop it into the offline verifier on any machine, any year. Bitcoin and Ed25519 are the trust anchors. We&apos;re replaceable; the math is not.
           </div>
+          {(() => {
+            // Обещание выше дано безусловно, а выполняется не для всех записей:
+            // подпись AEVION попадает в пакет только при наличии отметки
+            // времени подписи. Замер на проде 28.08.2026 — 2 записи из 7.
+            // Оговорка стоит РЯДОМ с кнопкой скачивания, а не в подсказке:
+            // подсказку открывают не все, а скачивают все.
+            const b = bundleContents(integrity.signatureHmacReason);
+            if (!b.note) return null;
+            return (
+              <div style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 10, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 11, color: "#92400e", lineHeight: 1.55 }}>
+                {b.note}
+              </div>
+            );
+          })()}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <a
               href={apiUrl(`/api/pipeline/certificate/${cert.id}/bundle.json`)}

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import {
+  readLimit,
   attachRateHeaders,
   badRequest,
   checkIdempotency,
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
   const gate = gateRequest(req);
   if (!gate.ok) return gate.response;
   const { searchParams } = new URL(req.url);
-  const limit = Math.min(100, Number(searchParams.get("limit") ?? 25));
+  const limit = readLimit(searchParams.get("limit"), { поумолчанию: 25, максимум: 100 });
   const data = Array.from(store.links.values())
     .sort((a, b) => b.created - a.created)
     .slice(0, limit);

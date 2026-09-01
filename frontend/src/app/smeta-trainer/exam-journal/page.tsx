@@ -192,7 +192,7 @@ export default function ExamJournalPage() {
             </div>
             <div className="max-h-48 overflow-auto">
               <table className="w-full text-[11px]">
-                <thead className="text-slate-500 text-left sticky top-0 bg-white">
+                <thead style={{ top: "var(--aevion-header-h, 0px)" }} className="text-slate-500 text-left sticky top-0 bg-white">
                   <tr>
                     <th className="py-1 pr-2">Когда</th>
                     <th className="py-1 pr-2">Тип</th>

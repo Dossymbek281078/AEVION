@@ -1,5 +1,32 @@
+import type { CSSProperties } from "react";
 import Link from "next/link";
+import { KeepChannelLink } from "./KeepChannelLink";
 import { repoUrl } from "@/lib/repoUrl";
+
+/**
+ * Ссылка подвала. Раньше тот же объект стиля был вписан в каждую из двенадцати
+ * ссылок; теперь он один, и вместе с ним задана минимальная площадь касания.
+ *
+ * Замер 31.08.2026 в браузере на экране 390px: ссылки подвала имели высоту
+ * 20px при нижней границе 24px, ниже которой попасть пальцем трудно (WCAG
+ * 2.5.8). Трафик воронки идёт с роликов, то есть почти весь с телефонов.
+ * Шестнадцать таких ссылок в подвале и двадцать шесть в шапке; шапку правят
+ * шесть чужих ветвей, поэтому здесь только подвал, а шапка передана владельцу.
+ *
+ * Высота задаётся минимумом, а не отступом: отступ раздвинул бы колонку и
+ * изменил вид, а min-height добирает площадь касания, оставляя вид прежним.
+ */
+const footerLink: CSSProperties = {
+  color: "#94a3b8",
+  textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 24,
+};
+
+/** Приглушённый ряд внизу: цвет другой, площадь касания та же. */
+const footerLinkMuted: CSSProperties = { ...footerLink, color: "#64748b" };
+
 
 export function SiteFooter() {
   const year = new Date().getFullYear();
@@ -42,13 +69,13 @@ export function SiteFooter() {
             Products
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <Link href="/qright" style={{ color: "#94a3b8", textDecoration: "none" }}>QRight — IP Registry</Link>
-            <Link href="/qsign" style={{ color: "#94a3b8", textDecoration: "none" }}>QSign — Signatures</Link>
-            <Link href="/bureau" style={{ color: "#94a3b8", textDecoration: "none" }}>IP Bureau</Link>
-            <Link href="/planet" style={{ color: "#94a3b8", textDecoration: "none" }}>Planet Compliance</Link>
-            <Link href="/awards" style={{ color: "#94a3b8", textDecoration: "none" }}>Awards</Link>
-            <Link href="/bank" style={{ color: "#94a3b8", textDecoration: "none" }}>AEVION Bank</Link>
-            <Link href="/cyberchess" style={{ color: "#94a3b8", textDecoration: "none" }}>CyberChess</Link>
+            <KeepChannelLink href="/qright" style={footerLink}>QRight — IP Registry</KeepChannelLink>
+            <KeepChannelLink href="/qsign" style={footerLink}>QSign — Signatures</KeepChannelLink>
+            <KeepChannelLink href="/bureau" style={footerLink}>IP Bureau</KeepChannelLink>
+            <KeepChannelLink href="/planet" style={footerLink}>Planet Compliance</KeepChannelLink>
+            <KeepChannelLink href="/awards" style={footerLink}>Awards</KeepChannelLink>
+            <KeepChannelLink href="/bank" style={footerLink}>AEVION Bank</KeepChannelLink>
+            <KeepChannelLink href="/cyberchess" style={footerLink}>CyberChess</KeepChannelLink>
           </div>
         </div>
 
@@ -58,10 +85,10 @@ export function SiteFooter() {
             Company
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <Link href="/demo" style={{ color: "#94a3b8", textDecoration: "none" }}>Demo</Link>
-            <Link href="/terms" style={{ color: "#94a3b8", textDecoration: "none" }}>Terms of Service</Link>
-            <Link href="/privacy" style={{ color: "#94a3b8", textDecoration: "none" }}>Privacy Policy</Link>
-            <Link href="/help" style={{ color: "#94a3b8", textDecoration: "none" }}>Help Center</Link>
+            <KeepChannelLink href="/demo" style={footerLink}>Demo</KeepChannelLink>
+            <KeepChannelLink href="/terms" style={footerLink}>Terms of Service</KeepChannelLink>
+            <KeepChannelLink href="/privacy" style={footerLink}>Privacy Policy</KeepChannelLink>
+            <KeepChannelLink href="/help" style={footerLink}>Help Center</KeepChannelLink>
           </div>
         </div>
 
@@ -71,7 +98,7 @@ export function SiteFooter() {
             Contact
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <a href="mailto:yahiin1978@gmail.com" style={{ color: "#94a3b8", textDecoration: "none" }}>yahiin1978@gmail.com</a>
+            <a href="mailto:yahiin1978@gmail.com" style={footerLink}>yahiin1978@gmail.com</a>
             <span>Astana, Kazakhstan</span>
             <span>+7 702 625 83 77</span>
           </div>
@@ -80,7 +107,7 @@ export function SiteFooter() {
               href={repoUrl()}
               target="_blank"
               rel="noreferrer"
-              style={{ color: "#64748b", textDecoration: "none", fontWeight: 700 }}
+              style={{ ...footerLinkMuted, fontWeight: 700 }}
             >
               GitHub
             </a>
@@ -106,9 +133,9 @@ export function SiteFooter() {
       >
         <div>&copy; {year} AEVION. All rights reserved.</div>
         <div style={{ display: "flex", gap: 16 }}>
-          <Link href="/terms" style={{ color: "#64748b", textDecoration: "none" }}>Terms</Link>
-          <Link href="/privacy" style={{ color: "#64748b", textDecoration: "none" }}>Privacy</Link>
-          <Link href="/help" style={{ color: "#64748b", textDecoration: "none" }}>Help</Link>
+          <KeepChannelLink href="/terms" style={footerLinkMuted}>Terms</KeepChannelLink>
+          <KeepChannelLink href="/privacy" style={footerLinkMuted}>Privacy</KeepChannelLink>
+          <KeepChannelLink href="/help" style={footerLinkMuted}>Help</KeepChannelLink>
         </div>
       </div>
     </footer>

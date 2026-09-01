@@ -17,14 +17,29 @@ import { provisionSubscription, writeSubscription, type Subscription } from "./p
 import type { TierId, BillingPeriod } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
+import { upsertAppSubscription } from "../lib/appEntitlements";
 
 const capture = makeServiceCapture("paypalWebhook");
 
 export const paypalWebhookRouter = Router();
 
 
-function tierForReference(ref: string): TierId {
+/** Экспортируется ради теста: копия та же, что у PayBox, и ошибаться они
+ *  обязаны одинаково — иначе сторож охраняет одну кассу из двух. */
+export function tierForReference(ref: string): TierId {
   const r = ref.toLowerCase();
+  // Касса строит ссылку как `tier_<id>_<период>` (checkout.ts), а наш каталог
+  // продаёт ещё два тарифа, которых не было в списке ниже: `pro` («Universe»,
+  // $149/мес) и `enterprise`. Оба принимаются ручкой чекаута явно — и оба
+  // проваливались в дефолт `lite`, то есть человек платил за старший тариф и
+  // получал самый дешёвый. Проверено прогоном: tier_pro_monthly -> "lite" при
+  // контроле tier_medium_monthly -> "medium".
+  //
+  // Сверяем ТОЧНЫМ префиксом, а не подстрокой: `includes("pro")` поймал бы и
+  // `tier_promo_*`. Ниже по течению оба значения понятны — normalizeTier
+  // переводит "pro" в "full", "enterprise" оставляет как есть.
+  if (r.startsWith("tier_pro_")) return "pro";
+  if (r.startsWith("tier_enterprise_")) return "enterprise";
   if (r.includes("medium")) return "medium";
   if (r.includes("full") || r.includes("all-access") || r.includes("business") || r.includes("team")) return "full";
   return "lite";
@@ -112,6 +127,29 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         source: `paypal:${result.status}`,
       };
       writeSubscription(downgrade);
+
+      // Возврат обязан снимать И помодульную запись. Тариф понижается в
+      // файле, а строка в AppSubscription живёт отдельно — и запасной путь
+      // стены (planGate -> hasActiveAppSubscription) пускал бы по ней
+      // человека, которому деньги вернули. Создаём запись при покупке —
+      // обязаны снимать здесь, иначе пара разомкнута.
+      //
+      // ⚠ Направление отказа тут ОБРАТНОЕ покупке. При покупке сбой базы
+      // безвреден: доступ уже выдан файлом, ронять нечего. При возврате
+      // сбой означает, что человек ПРОДОЛЖАЕТ пользоваться оплаченным и
+      // возвращённым. Поэтому не глотаем: внешний catch освобождает ключ
+      // дедупликации, и касса повторит доставку. Понижение в файле
+      // идемпотентно, повтор его не испортит.
+      if (module) {
+        try {
+          await upsertAppSubscription(email, module, "cancelled", downgrade.id);
+        } catch (e) {
+          const причина = e instanceof Error ? e.message : String(e);
+          console.error(`[paypal/webhook] возврат НЕ снял доступ к модулю -> ${email}/${module}: ${причина}`);
+          capture(e, { route: "paypal/webhook/refund", email, module });
+          throw e;
+        }
+      }
       console.log(`[paypal/webhook] ${result.status} → downgraded ${email} to free`);
       return res.json({ ok: true, action: "downgraded", email });
     }
@@ -126,6 +164,22 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         modules: module ? [module] : [],
         source: "paypal",
       });
+
+      // Помодульную покупку записываем ЕЩЁ и в базу — см. тот же разбор в
+      // payboxWebhook.ts: тариф живёт в файле, помодульная покупка в
+      // Postgres, и её читает запасной путь стены. Через Lemon Squeezy обе
+      // записи были, через PayPal — только файл.
+      //
+      // Не роняем: доступ уже выдан файлом. Но отказ обязан оставить след.
+      if (module) {
+        try {
+          await upsertAppSubscription(email, module, "active", provResult.subscription.id);
+        } catch (e) {
+          const причина = e instanceof Error ? e.message : String(e);
+          console.warn(`[paypal/webhook] долговечная запись не сохранена -> ${email}/${module}: ${причина}`);
+          capture(e, { route: "paypal/webhook", email, module });
+        }
+      }
       console.log(`[paypal/webhook] paid → provisioned ${tierId}/${period} for ${email} (ref=${reference})`);
       return res.json({ ok: true, action: "activated", tierId, email, subscriptionId: provResult.subscription.id });
     }

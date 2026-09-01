@@ -24,6 +24,56 @@ const APP = join(HERE, "..");
  *  он и есть утверждение о том, что мы считаем входом в воронку. */
 const FUNNEL = ["go", "longevity", "en/go", "en/longevity", "shop", "constitution/pricing", "qsign", "compare", "partner", "qrenew", "qventure", "qlearn", "bank", "qnews", "qai", "studio", "explore", "sdk", "api-explorer", "build", "build/pricing", "build/vacancies"];
 
+/** Все каталоги, где кто-то нарисовал opengraph-image.tsx. Обходом, а не
+ *  списком: картинку рисуют осознанно, и сам факт её появления означает
+ *  «эту страницу будут пересылать». */
+function withOgImage(dir: string, rel = ""): string[] {
+  const out: string[] = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (!e.isDirectory()) continue;
+    if (e.name === "__tests__" || e.name === "_components") continue;
+    const sub = join(dir, e.name);
+    const route = rel ? `${rel}/${e.name}` : e.name;
+    if (existsSync(join(sub, "opengraph-image.tsx"))) out.push(route);
+    out.push(...withOgImage(sub, route));
+  }
+  return out;
+}
+
+/* Ищется "openGraph:" С ДВОЕТОЧИЕМ, и это не придирка. Пока искали слово,
+ * проверка проходила на openGraphX — переименованное поле содержит прежнее
+ * имя как подстроку, а Next его уже не читает. Назвала это мутация: удаление
+ * блока сторож ловил, переименование пропускал.
+ * Проверка на подстроку без границы охраняет меньше, чем обещает. */
+describe("нарисована картинка — обязан быть и заголовок", () => {
+  const pages = withOgImage(APP);
+
+  it("таких страниц вообще много — иначе проверка пустая", () => {
+    // Контроль охвата: если обход сломается (переименовали каталог, съехал
+    // путь), список станет коротким, и проверка ниже будет зелёной, ничего
+    // не проверяя. Замер 30.08.2026: страниц с картинкой 149.
+    expect(pages.length).toBeGreaterThanOrEqual(100);
+  });
+
+  it("у каждой есть свой openGraph — в page.tsx или в layout.tsx", () => {
+    // ДВА МЕСТА обязательно: страница с "use client" не может объявлять
+    // metadata сама, и заголовок тогда живёт в layout.tsx рядом.
+    // Замер 30.08.2026: без своего заголовка было 17 страниц из 149 —
+    // ссылка на них приходила в мессенджер общим заголовком САЙТА.
+    // Сегодня закрыты все; этот сторож держит ноль.
+    const missing: string[] = [];
+    for (const route of pages) {
+      const dir = join(APP, ...route.split("/"));
+      const has = ["page.tsx", "layout.tsx"].some((f) => {
+        const file = join(dir, f);
+        return existsSync(file) && readFileSync(file, "utf8").includes("openGraph:");
+      });
+      if (!has) missing.push(route);
+    }
+    expect(missing, "нет своего openGraph — ссылка придёт с заголовком сайта").toEqual([]);
+  });
+});
+
 describe("карточки страниц воронки", () => {
   it("у каждой входной страницы есть opengraph-image", () => {
     for (const route of FUNNEL) {
@@ -80,6 +130,65 @@ describe("карточки страниц воронки", () => {
     walk(APP, []);
     return found;
   })();
+
+  // Известный долг: страницы без своего openGraph.
+  //
+  // Замер 29.08.2026 — 15 из 22. Сперва я думал, что забыл у двух (/go и /shop),
+  // и записал так основателю; пересчёт показал, что класс платформенный.
+  // Поэтому база, а не пустой список: сторож, красный с первого дня, перестают
+  // читать, и он не поймает НОВЫЙ пропуск — тот утонет среди пятнадцати старых.
+  //
+  // Сокращать список можно только вниз. Строку убирают вместе с добавлением
+  // openGraph на страницу — образец рядом, в /longevity и /en/go.
+  // Долг пересчитан 30.08.2026 после того, как сторож научился смотреть и в
+  // layout.tsx: из пятнадцати «должников» настоящих оказалось ДВА. Остальные
+  // тринадцать заголовок имеют — просто в layout, потому что их page.tsx
+  // клиентский и metadata объявлять не может.
+  // Сокращение списка делает сторожа СТРОЖЕ: те тринадцать теперь под охраной,
+  // и если у кого-то заголовок пропадёт, набор покраснеет.
+  // У /go и /shop layout.tsx нет вовсе — им нужен либо он, либо перенос
+  // разметки в серверный компонент. Это работа, а не строчка, поэтому долг.
+  // 30.08.2026 долг ЗАКРЫТ ПОЛНОСТЬЮ: /go и /shop получили свой openGraph
+  // (обе страницы серверные, metadata у них был — не хватало только блока
+  // предпросмотра). Список пуст намеренно: теперь КАЖДАЯ входная страница
+  // обязана иметь свой заголовок, и появление новой без него краснит набор.
+  const OG_TITLE_DEBT = new Set<string>([]);
+
+  it("новая входная страница обязана иметь СВОЙ заголовок предпросмотра", () => {
+    // Карточка-картинка и заголовок — разные вещи, и я это перепутал. На живом
+    // сайте картинки были у всех, а свой openGraph.title — у меньшинства: при
+    // шеринге /go показывал общий заголовок макета «AEVION — Trust
+    // infrastructure & AI», то есть безликую вывеску вместо страницы.
+    const fresh: string[] = [];
+    for (const route of FUNNEL) {
+      if (OG_TITLE_DEBT.has(route)) continue;
+      const file = join(APP, ...route.split("/"), "page.tsx");
+      if (!existsSync(file)) continue;
+      // ДВА МЕСТА, а не одно. Страница с "use client" не может объявлять
+      // metadata вовсе — Next это запрещает, и заголовок тогда живёт в
+      // layout.tsx рядом. Замер 30.08.2026: сторож смотрел только page.tsx
+      // и записал в долг ВОСЕМЬ страниц, у которых заголовок есть в layout
+      // (qsign, partner, qlearn, studio, explore, qventure, qnews, qai).
+      // Настоящий долг был у двух — /go и /shop, где layout нет вовсе.
+      const layout = join(APP, ...route.split("/"), "layout.tsx");
+      const hasOg = readFileSync(file, "utf8").includes("openGraph:")
+        || (existsSync(layout) && readFileSync(layout, "utf8").includes("openGraph:"));
+      if (!hasOg) fresh.push(route);
+    }
+    expect(fresh).toEqual([]);
+  });
+
+  it("долг не растёт молча: список сверен с действительностью", () => {
+    // Если страницу починили, а строку из долга убрать забыли — список начнёт
+    // покрывать исправное и однажды скроет настоящий пропуск.
+    const stale: string[] = [];
+    for (const route of OG_TITLE_DEBT) {
+      const file = join(APP, ...route.split("/"), "page.tsx");
+      if (!existsSync(file)) continue;
+      if (readFileSync(file, "utf8").includes("openGraph:")) stale.push(route);
+    }
+    expect(stale, "починено, но осталось в списке долга — уберите строку").toEqual([]);
+  });
 
   it("обход вообще находит короткие входы — иначе две проверки ниже пусты", () => {
     // Без этого утверждения любая поломка обхода делает сторожа зелёным и

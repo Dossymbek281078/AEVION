@@ -163,7 +163,7 @@ export function ResourceEditor({ position, rate, onSave, onReset, onClose }: Pro
         {/* Table */}
         <div className="flex-1 overflow-auto">
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 sticky top-0">
+            <thead style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-slate-50 sticky top-0">
               <tr className="text-left text-slate-600 uppercase text-[10px]">
                 <th className="px-2 py-2 w-12"></th>
                 <th className="px-2 py-2">Наименование</th>

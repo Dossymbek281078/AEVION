@@ -1,0 +1,107 @@
+{
+  "note": "Эталоны канонического хеша AEVION. Источник истины — реализация сервера (aevion-globus-backend/src/lib/contentHash.ts), которой считаются хеши при ВЫДАЧЕ. Браузерная копия (frontend/src/lib/canonicalContentHash.ts и verifyBundle.ts) обязана давать те же значения: она независима по замыслу, поэтому расхождение возможно и проявится неверным вердиктом у покупателя, а не падением.",
+  "generatedFrom": "aevion-globus-backend/src/lib/contentHash.ts",
+  "vectors": [
+    {
+      "note": "латиница, все поля",
+      "input": {
+        "title": "Sunrise",
+        "description": "a photo",
+        "kind": "photo",
+        "country": "KZ",
+        "city": "Almaty"
+      },
+      "v2": "864d2366959c3b379fe4335d43dd4d5ad3c34a79c91832bfec45906c59a2323d",
+      "v1": "5b4c5b5394606a4c29a4c921e84b4a1ed890c4d755a3af0fac5d85c886a47512"
+    },
+    {
+      "note": "кириллица, все поля",
+      "input": {
+        "title": "Степной рассвет",
+        "description": "фотография, снята на рассвете",
+        "kind": "photo",
+        "country": "KZ",
+        "city": "Алматы"
+      },
+      "v2": "acd907aca6f69d9d5269e7eef073e4ac3544dbb320f752847c0fb020fc41e5b7",
+      "v1": "9a665f05a260b5c388d7ca8b8e5e8b8f5b29b242fefc778b5a61cfad42d2c3f7"
+    },
+    {
+      "note": "без страны и города",
+      "input": {
+        "title": "Idea",
+        "description": "just an idea",
+        "kind": "idea"
+      },
+      "v2": "8694bbdfb673acf7bdb1d28dbea9b55939d9ff4cde580f666439d4d9fcb08010",
+      "v1": "a2f28a1e37d4e2c546416e98be4beba2aa4520140d60c756350588ddcfc4b6d6"
+    },
+    {
+      "note": "пустые описание и вид",
+      "input": {
+        "title": "1",
+        "description": "",
+        "kind": ""
+      },
+      "v2": "a208e73d17a1c43ddc9a9fb8a2224a695807ac5ada454372087a1b5c499d3098",
+      "v1": "680af1fa4549d66426adb21691f089fb43da2aadea42d2e73850efe73bca4dc7"
+    },
+    {
+      "note": "составной символ NFC (й как и+бревис)",
+      "input": {
+        "title": "Мой файл",
+        "description": "проверка нормализации",
+        "kind": "text",
+        "country": "KZ",
+        "city": "Астана"
+      },
+      "v2": "3cab7e86c148a58a3e0afb19543d56593f9af947987ef9b673c40afef860d239",
+      "v1": "ca9e0c4a1e9b1677a7c57ff4d5351fe98ff83c5ce9a4a30f17f2d051ee0d21ec"
+    },
+    {
+      "note": "эмодзи и кавычки",
+      "input": {
+        "title": "Работа «№1» 🎵",
+        "description": "тест \"кавычек\" и  слэша",
+        "kind": "music",
+        "country": null,
+        "city": null
+      },
+      "v2": "65c38af3bb727223798a838d0eddbe171d25596283df944f7569ffa2ba1e4888",
+      "v1": "1126be276676a38654e2331229e5b0d5b9315ee65c9ef975479ebfb7d2205c24"
+    },
+    {
+      "note": "поле kind ОТСУТСТВУЕТ — ветка умолчания",
+      "input": {
+        "title": "No kind",
+        "description": "kind не передан вовсе",
+        "country": "KZ",
+        "city": "Алматы"
+      },
+      "v2": "938dbf447826c3f9f53e082d0fa33f478f3473539aee7b3e7295e567f472bdb9",
+      "v1": "592596a2a7f69648bb902b789e43d93191e2f0b3f3ccb1c6b0cca43b4ea36226"
+    },
+    {
+      "note": "поля title и description отсутствуют",
+      "input": {
+        "kind": "text",
+        "country": null,
+        "city": null
+      },
+      "v2": "ee5b2534a6cadb4a739b57156b9a029bd604bd0c10dfbd0ccbf765979a9a5b7a",
+      "v1": "560edb753473e538f5dab5d6947e8f7e3b6fe1498f309612cba7bdb6219f0b2c"
+    },
+    {
+      "note": "длинное описание",
+      "input": {
+        "title": "Long",
+        "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "kind": "code",
+        "country": "US",
+        "city": "New York"
+      },
+      "v2": "2db4df5affe1d816c31ff92a32428f20d86710135661e31d6fdb3964acfe4ca7",
+      "v1": "6cadae94fa6d4f19bef1733ab77edbb25270169d8c9539e2aceaa05be2a75cf7"
+    }
+  ]
+}

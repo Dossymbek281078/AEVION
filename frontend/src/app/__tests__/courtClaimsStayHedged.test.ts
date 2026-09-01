@@ -49,7 +49,10 @@ function sourceFiles(): string[] {
   while (stack.length) {
     const cur = stack.pop()!;
     for (const e of readdirSync(cur)) {
-      if (e === "node_modules" || e === "__tests__") continue;
+      // __fixtures__ — данные для тестов, человек их не видит. Найдено
+      // 31.08.2026: сторож краснел на cityMinimal.json, где слово живёт в
+      // описании воздушной зоны.
+      if (e === "node_modules" || e === "__tests__" || e === "__fixtures__") continue;
       const p = join(cur, e);
       if (statSync(p).isDirectory()) { stack.push(p); continue; }
       if (/[.](tsx?|json|md)$/.test(e)) out.push(p);
@@ -69,7 +72,19 @@ function unhedged(): string[] {
       // на этом сторож уже краснел у меня сегодня на собственном пояснении.
       if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return;
       const low = line.toLowerCase();
-      if (!VERDICT_WORDS.some((w) => low.includes(w))) return;
+      const hit = VERDICT_WORDS.find((w) => low.includes(w));
+      if (!hit) return;
+      // ОТРИЦАНИЕ — не обещание, а наоборот. Строка «flight along it is not
+      // admissible» говорит, что полёта НЕ будет; считать её обещанием
+      // правового результата — ложная тревога, а к постоянному красному
+      // привыкают и сторожа отключают.
+      //
+      // Смотрим короткий кусок ПЕРЕД словом: там и живёт отрицание.
+      // Найдено 31.08.2026 при сборке — сторож зацепился за описание
+      // воздушной зоны, где слово вообще про допустимость ПОЛЁТА.
+      const at = low.indexOf(hit);
+      const before = low.slice(Math.max(0, at - 24), at);
+      if (before.includes("not ") || before.includes("isn't") || before.includes("не ")) return;
       if (HEDGES.some((h) => low.includes(h.toLowerCase()))) return;
       bad.push(`${f.slice(f.indexOf("src"))}:${i + 1}  ${t.slice(0, 90)}`);
     });

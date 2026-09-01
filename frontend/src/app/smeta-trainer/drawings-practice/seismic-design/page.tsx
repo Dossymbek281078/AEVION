@@ -78,7 +78,7 @@ export default function SeismicDesignPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-sky-300 hover:text-sky-200 transition">
             ← К разделам
@@ -274,11 +274,11 @@ export default function SeismicDesignPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
               <label className="flex flex-col">
                 <span className="text-slate-400 text-xs mb-1">Высота h, мм</span>
-                <input value={ex2H} onChange={(e) => setEx2H(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" placeholder="400" />
+                <input value={ex2H} onChange={(e) => setEx2H(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="400" />
               </label>
               <label className="flex flex-col">
                 <span className="text-slate-400 text-xs mb-1">Длина пояса L, м</span>
-                <input value={ex2L} onChange={(e) => setEx2L(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" placeholder="24" />
+                <input value={ex2L} onChange={(e) => setEx2L(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="24" />
               </label>
             </div>
             <div className="flex flex-wrap gap-3 mt-4">
@@ -370,7 +370,7 @@ V = 1.44 м³ бетона B15
             </div>
             <label className="flex flex-col text-sm max-w-xs">
               <span className="text-slate-400 text-xs mb-1">Общая площадь S, м²</span>
-              <input value={ex4Area} onChange={(e) => setEx4Area(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" placeholder="1500" />
+              <input value={ex4Area} onChange={(e) => setEx4Area(e.target.value)} type="number" className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100" aria-label="Ответ" placeholder="1500" />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">
               <button onClick={checkEx4} className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded transition text-sm">Проверить</button>

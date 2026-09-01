@@ -14,7 +14,7 @@ export default function AgroGreenhousesPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice"
@@ -384,7 +384,7 @@ export default function AgroGreenhousesPage() {
                   setEx3(e.target.value);
                   setEx3Checked(false);
                 }}
-                placeholder="введите сумму в тенге"
+                aria-label="введите сумму в тенге" placeholder="введите сумму в тенге"
                 className="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-600"
               />
               <button

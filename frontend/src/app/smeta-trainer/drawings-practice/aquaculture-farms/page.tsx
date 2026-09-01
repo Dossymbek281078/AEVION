@@ -30,7 +30,7 @@ export default function AquacultureFarmsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Рыбоводные хозяйства</div>
@@ -106,7 +106,7 @@ export default function AquacultureFarmsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V_общ, м³"
+            aria-label="V_общ, м³" placeholder="V_общ, м³"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V_товарн = 1667 м³, +50%+15%+5% = +70% = 2833 м³. С учётом фактич. одновременного содержания (срез по времени) на ~50% — реально работающий объём ~850 м³. Если все возрастные группы единомоментно — 1700-2000 м³.</p>
@@ -133,7 +133,7 @@ export default function AquacultureFarmsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~8.4 млрд тг (допуск ±10%). 1.6+0.98+0.32+1.4+0.24+0.38+0.58+0.42+0.24+0.32+0.28+1.6+0.04 = 8.42 млрд тг. Удельный CAPEX осетровой RAS-фермы — $80-120/кг производ. мощности (200 000 кг × $90 = $18 млн ≈ 8.4 млрд тг).</p>

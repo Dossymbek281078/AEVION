@@ -30,7 +30,7 @@ export default function LandfillTboPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Полигоны ТБО (захоронение)</div>
@@ -107,7 +107,7 @@ export default function LandfillTboPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь, га"
+            aria-label="Площадь, га" placeholder="Площадь, га"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V = 350 000 × 25 / 0.8 = 10 937 500 м³; S_рабочая = 10 937 500 / 25 = 437 500 м² = 43.75 га; +30% инфра = ~57 га. С учётом сужения «пирамиды» сверху (откосы 1:3) и резервных секций — типично ~36 га на 350 тыс. т/год × 25 лет (как реальный Кеңқарасу).</p>
@@ -132,7 +132,7 @@ export default function LandfillTboPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~24 млрд тг (допуск ±10%). 1.8+4.2+6.8+1.6+3.6+1.4+2.4+0.4+1.2+0.6+0.6 = 24.6 млрд тг. Удельная стоимость ~70 тыс. тг/т годовой ёмкости — соответствует современным EU-стандартам полигонов 2-го поколения.</p>

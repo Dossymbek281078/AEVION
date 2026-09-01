@@ -1,3 +1,4 @@
+import { getClientApiBase } from "@/lib/apiBase";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
@@ -145,7 +146,9 @@ export default function ChangelogPage() {
             ← Developer docs
           </Link>
           <a
-            href="/api/build/public/rss/vacancies.xml"
+            // Адрес написан от корня САЙТА, а лента живёт в бэкенде: без базы
+            // ссылка отвечала 404 (замер 28.08.2026 на живой странице).
+            href={`${getClientApiBase()}/api/build/public/rss/vacancies.xml`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-md border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-amber-200 hover:bg-amber-400/20"

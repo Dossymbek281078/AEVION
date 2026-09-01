@@ -30,7 +30,7 @@ export default function TvRadioStudioPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Теле- и радиостудии</div>
@@ -109,7 +109,7 @@ export default function TvRadioStudioPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="P, кВт"
+            aria-label="P, кВт" placeholder="P, кВт"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: N = E × S / (Φ × η) = 2000 × 150 / (25 000 × 0.45) = 300 000 / 11 250 = 27 шт; P = 27 × 0.28 = 7.6 кВт. Но с учётом резерва, дополнительной заливочной + back-light + key-light + fill-light с интерактивной коррекцией DMX = ~18 прожекторов Arri S60-C × 0.28 = 5 кВт основного + резерв + контурные = ~5 кВт. (Большие шоу-студии используют до 100 кВт освещ. с диммерами).</p>
@@ -141,7 +141,7 @@ export default function TvRadioStudioPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~14.5 млрд тг (допуск ±10%). 1.4+0.3+0.4+0.2+0.8+0.4+0.6+1.4+0.6+1.2+0.8+0.4+1.2+1.8+0.4+1.4+1.0 = 14.3 млрд тг ≈ 14.5 млрд тг. Хабар Astana Studio Complex полностью (с 12 студиями + AVK + спутник.) — оценочно $100 млн ≈ 46 млрд тг.</p>

@@ -561,7 +561,7 @@ export default function DrawingsHub() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-4">
           <Link href="/smeta-trainer" className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400">
             ← К курсу
@@ -576,7 +576,7 @@ export default function DrawingsHub() {
           </div>
           <input
             type="search"
-            placeholder="Поиск..."
+            aria-label="Поиск..." placeholder="Поиск..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="text-xs px-3 py-1.5 border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 rounded-lg w-40"

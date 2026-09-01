@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { activatable } from "@/lib/activatable";
 import Link from "next/link";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
@@ -541,7 +542,11 @@ const { nodes, edges } = await cat.graph({
             border: "1px solid rgba(15,23,42,0.08)",
             marginBottom: 14,
             position: "sticky",
-            top: 14,
+            // Шапка сайта прилипает к top: 0 и слоем выше. Полоса с top: 14
+            // уезжала под неё целиком: шесть органов управления недостижимы.
+            // Высоту шапки публикует SiteHeader (89px десктоп, 185px телефон),
+            // запасной ноль означает «переменной нет — поведение прежнее».
+            top: "calc(var(--aevion-header-h, 0px) + 14px)",
             zIndex: 5,
             display: "grid",
             gap: 14,
@@ -768,7 +773,10 @@ const { nodes, edges } = await cat.graph({
                     style={{ cursor: "pointer" }}
                     onMouseEnter={() => setHover({ id: n.id, x: p.x, y: p.y })}
                     onMouseLeave={() => setHover((h) => (h?.id === n.id ? null : h))}
-                    onClick={() => setSelected((s) => (s === n.id ? null : n.id))}
+  {...activatable(() => setSelected((s) => (s === n.id ? null : n.id)))}
+  aria-label={"Модуль " + n.id}
+  onFocus={() => setHover({ id: n.id, x: p.x, y: p.y })}
+  onBlur={() => setHover((h) => (h?.id === n.id ? null : h))}
                   >
                     <circle
                       r={r + 3}

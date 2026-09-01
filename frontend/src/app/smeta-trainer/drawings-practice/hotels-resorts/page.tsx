@@ -30,7 +30,7 @@ export default function HotelsResortsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Гостиницы и курорты</div>
@@ -102,7 +102,7 @@ export default function HotelsResortsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кратность × 10 (для 5.2 → введите 52)"
+            aria-label="Кратность × 10 (для 5.2 → введите 52)" placeholder="Кратность × 10 (для 5.2 → введите 52)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: L_номер = 2 × 60 = 120 м³/ч + 75 м³/ч ванна = 195 м³/ч / 93 м³ = 2.1 1/ч с учётом турбины зимний/летний баланс и фильтрации F7+F9 → расчётно ~5.2 (×10=52).</p>
@@ -123,7 +123,7 @@ export default function HotelsResortsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~38 млрд тг (допуск ±10%). 11200+4600+5800+2400+3800+1600+1800+1400+2600+1800 = 37 000 млн → с НР+СП и инфляц. ~38 млрд.</p>

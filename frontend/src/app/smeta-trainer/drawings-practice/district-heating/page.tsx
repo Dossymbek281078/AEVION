@@ -30,7 +30,7 @@ export default function DistrictHeatingPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Теплоэлектроцентрали (ТЭЦ)</div>
@@ -110,7 +110,7 @@ export default function DistrictHeatingPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="d, мм"
+            aria-label="d, мм" placeholder="d, мм"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: Cp = 1 ккал/(кг·°C); G = 1500×10⁶ / (1×60) = 25 × 10⁶ кг/час; V = 25 × 10⁶ / 970 (ρ при 100°C) = 25 773 м³/час = 7.16 м³/с; S = 7.16 / 2.5 = 2.86 м²; d = √(4×2.86/π) = 1.91 м = 1910 мм. С учётом потерь на трение и теплоотдачи ≈ Ø 1500 мм (стандартный ряд DN1400-1500). Размещается в подземн. бесканальной прокладке с PUR-изоляцией 200 мм по EN 13941.</p>
@@ -140,7 +140,7 @@ export default function DistrictHeatingPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~380 млрд тг (допуск ±10%). 28+96+65+12+14+22+8+4+28+14+8+16+12+8+35+10 = 380 млрд тг. Удельная стоимость ~1.0 млрд тг/МВт_эл — соответствует мировым угольным ТЭЦ (Bełchatów Польша $1.5/Вт, Indian NTPC $1.0-1.2/Вт). ТЭЦ-2 Алматы (модернизация) — оценочно $0.8 млрд = 380 млрд тг.</p>

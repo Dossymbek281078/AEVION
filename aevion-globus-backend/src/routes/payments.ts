@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { isPayboxConfigured } from "../lib/payment/payboxProvider";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -186,6 +187,32 @@ paymentsRouter.post("/paybox/init", async (req, res) => {
 // кода, а неверный адрес в кабинете), и ответ прежний, чтобы PayBox не начал
 // повторять в пустоту. Ничего не теряется, и это видно.
 paymentsRouter.post("/paybox/callback", (req, res) => {
+  // ПРОБА ИЛИ НАСТОЯЩАЯ ОПЛАТА — тревогу поднимаем только на вторую.
+  //
+  // Замер 28.08.2026: единственное срабатывание за неделю пришло с
+  // `browser = curl 8.21.0` — то есть это была ручная проба (наш смоук либо
+  // чужой сканер), а не касса. Денежная тревога, которая звонит на пробы,
+  // приучает себя не читать; в тот единственный раз, когда на старый адрес
+  // придёт настоящая оплата, её отмахнут вместе с шумом.
+  //
+  // Различаем по телу: PayBox шлёт application/x-www-form-urlencoded, и такой
+  // разборщик у нас смонтирован (index.ts, express.urlencoded) — значит у
+  // настоящего уведомления поля `pg_*` в теле ЕСТЬ, а у пробы тело пустое.
+  //
+  // Направление отказа выбрано в сторону тревоги: пробой считается ТОЛЬКО
+  // полностью пустое тело. Есть хоть одно поле, пусть и незнакомое, — звоним.
+  // Ошибиться молчанием здесь дороже, чем лишним письмом.
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const isProbe = Object.keys(body).length === 0;
+  if (isProbe) {
+    console.warn(
+      "[payments] проба на устаревший путь /api/payments/paybox/callback:" +
+        " тело пустое, это не уведомление PayBox. Тревога не поднимается.",
+    );
+    res.setHeader("Content-Type", "text/xml");
+    res.send(`<?xml version="1.0" encoding="utf-8"?><response><pg_status>ok</pg_status></response>`);
+    return;
+  }
   capturePaymentsError(
     new Error("paybox_callback_on_legacy_path"),
     {
@@ -240,9 +267,38 @@ paymentsRouter.get("/kaspi/config", (_req, res) => {
 /* ═══ General ═══ */
 
 paymentsRouter.get("/health", (_req, res) => {
+  // Выражение ДОСЛОВНО то же, что в checkout.ts, включая секрет вебхука:
+  // это одно утверждение о мире, и два его написания разъезжаются молча.
+  // Без секрета вебхук LemonSqueezy — заглушка на 200 OK, то есть деньги
+  // возьмутся, а купленное не выдастся; выдача есть у Gumroad, и выбор
+  // идёт как `lsReady ? ls : gumroad`.
+  const lsReady =
+    Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
+    Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim());
+  // Кто ОСНОВНОЙ — решает способность выдать купленное, а не взять деньги.
+  const lsCanDeliver =
+    lsReady && Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim());
   res.json({
-    gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: true },
-    paybox: { configured: Boolean(PAYBOX_MERCHANT()) },
+    // `primary` раньше стояло у Gumroad КОНСТАНТОЙ true. Поле выглядело
+    // замером, а было литералом — и после перехода на LemonSqueezy оно
+    // начало лгать: /api/pricing/checkout/healthz отвечал
+    // primaryProvider "lemonsqueezy", а эта ручка в тот же миг —
+    // gumroad primary true. Две наши собственные ручки спорили о том,
+    // кто принимает деньги, и верили бы более короткой.
+    //
+    // Выражение взято ОДИН В ОДИН из checkout.ts (/healthz), а не
+    // придумано заново: второй способ отвечать на тот же вопрос и есть
+    // причина расхождения.
+    lemonsqueezy: { configured: lsReady, primary: lsCanDeliver },
+    gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: !lsCanDeliver },
+    // Готовность PayBox спрашиваем у ЕГО ЖЕ модуля, а не пересобираем здесь:
+    // ему нужны И идентификатор продавца, И PAYBOX_SECRET (без секрета нельзя
+    // ни подписать запрос, ни проверить ответ). Своя проверка по одному
+    // продавцу расходилась бы с checkout/healthz, который зовёт эту функцию.
+    // Сегодня обе отвечают «нет», и разница невидима — она проявится в день,
+    // когда данные PayBox заданы наполовину: эта ручка объявит кассу для
+    // тенге готовой, а платить будет нельзя.
+    paybox: { configured: isPayboxConfigured() },
     kaspi: { configured: false },
     paddle: { configured: false, migrated: true },
     stripe: { configured: false, migrated: true },

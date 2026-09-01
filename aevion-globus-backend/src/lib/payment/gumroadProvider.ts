@@ -52,7 +52,12 @@ function publicBase(): string {
   return (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 }
 
-function resolvePermalink(reference: string): string {
+function resolvePermalink(reference: string, explicit?: string): string {
+  // Явно переданная ссылка перебивает всё: её знает вызывающая сторона, у
+  // которой у каждого тарифа свой товар. Без этого общая запасная ссылка
+  // (GUMROAD_DEFAULT_PERMALINK) стояла выше переданного значения и уводила
+  // покупателя на чужой продукт — см. `permalink` в PaymentIntentInput.
+  if (explicit && explicit.trim()) return explicit.trim();
   // GUMROAD_PERMALINK_<UPPER_REFERENCE> → specific product
   // GUMROAD_DEFAULT_PERMALINK → catch-all
   const envKey = `GUMROAD_PERMALINK_${reference.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
@@ -72,9 +77,9 @@ function gumroadCheckoutUrl(
   if (email) q.set("wanted_email", email);
   // Канал привлечения — тем же именем, которое УЖЕ читает наш вебхук
   // (`url_params[channel]`). Соглашение не новое: так его кладёт витрина,
-  // собирая ссылку сама. Здесь то же самое для ссылок, которые собираем мы, —
-  // иначе канал доезжает не всеми путями, а выручка по каналам считается
-  // только там, где известны И сумма, И канал.
+  // собирая ссылку сама. Здесь то же для ссылок, которые собираем мы: иначе
+  // канал доезжает не всеми путями, а выручка по каналам считается только
+  // там, где известны И сумма, И канал.
   if (channel) q.set("url_params[channel]", channel);
   const qs = q.toString();
   return qs ? `https://app.gumroad.com/l/${permalink}?${qs}` : `https://app.gumroad.com/l/${permalink}`;
@@ -84,7 +89,7 @@ export const gumroadPaymentProvider: PaymentProvider = {
   id: "gumroad",
 
   async createIntent(input: PaymentIntentInput): Promise<PaymentIntent> {
-    const permalink = resolvePermalink(input.reference);
+    const permalink = resolvePermalink(input.reference, input.permalink);
     const checkoutUrl = gumroadCheckoutUrl(permalink, input.email, input.customData?.channel);
     // intentId = permalink:email:ts — used for loose dedup (Gumroad has no
     // server-created intent; sale_id from the webhook is the real id).
@@ -242,4 +247,34 @@ async function verifyGumroadSaleImpl(
   } catch {
     return { verdict: "unverifiable", sale: null };
   }
+}
+
+/**
+ * Какие тарифы Gumroad РЕАЛЬНО может продать — по именам, без значений.
+ *
+ * Токен доступа отвечает на вопрос «настроен ли провайдер», а продать тариф
+ * Gumroad может только при заданной ссылке на товар:
+ * GUMROAD_PERMALINK_<REFERENCE> либо общая GUMROAD_DEFAULT_PERMALINK. Это
+ * разные вопросы, и снаружи второй виден не был — ровно как было у
+ * LemonSqueezy до появления sellable.
+ *
+ * Важно это стало 29.08.2026: выбор провайдера уходит на Gumroad, когда
+ * LemonSqueezy не может ВЫДАТЬ купленное. Уходить есть смысл только туда, где
+ * тариф действительно продаётся; иначе покупатель получит честный 503, но
+ * продажи в этот момент остановятся — и знать об этом надо заранее.
+ *
+ * Значения переменных не возвращаются никогда, только имена тарифов.
+ */
+export function gumroadSellable(references: string[]): {
+  configured: string[];
+  missing: string[];
+} {
+  const общая = Boolean(process.env.GUMROAD_DEFAULT_PERMALINK?.trim());
+  const configured: string[] = [];
+  const missing: string[] = [];
+  for (const ref of references) {
+    const key = `GUMROAD_PERMALINK_${ref.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+    (process.env[key]?.trim() || общая ? configured : missing).push(ref);
+  }
+  return { configured: configured.sort(), missing: missing.sort() };
 }

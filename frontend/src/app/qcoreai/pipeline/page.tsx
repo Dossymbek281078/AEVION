@@ -149,7 +149,7 @@ export default function PipelinePage() {
               </span>
               <label style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#475569", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                 ↑ Import JSON
-                <input type="file" accept=".json" style={{ display: "none" }} onChange={(e) => {
+                <input type="file" accept=".json" className="aevion-file-input" onChange={(e) => {
                   const file = e.target.files?.[0]; if (!file) return;
                   const reader = new FileReader();
                   reader.onload = (ev) => {
@@ -169,12 +169,12 @@ export default function PipelinePage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 3 }}>Name *</label>
-                <input value={pName} onChange={(e) => setPName(e.target.value)} placeholder="e.g. Deep Research Pipeline"
+                <input value={pName} onChange={(e) => setPName(e.target.value)} aria-label="Название конвейера" placeholder="e.g. Deep Research Pipeline"
                   style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 3 }}>Description</label>
-                <input value={pDesc} onChange={(e) => setPDesc(e.target.value)} placeholder="Optional description"
+                <input value={pDesc} onChange={(e) => setPDesc(e.target.value)} aria-label="Описание" placeholder="Optional description"
                   style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
               </div>
             </div>
@@ -197,7 +197,7 @@ export default function PipelinePage() {
                           {ROLE_OPTIONS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                         </select>
                         <input value={step.name || ""} onChange={(e) => updateStep(i, { name: e.target.value })}
-                          placeholder="Custom name (opt.)"
+                          aria-label="Своё название шага" placeholder="Custom name (opt.)"
                           style={{ flex: 1, padding: "4px 8px", borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 12, outline: "none" }} />
                         <button onClick={() => setExpandedStep(expanded ? null : i)} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 12, color: "#94a3b8" }}>
                           {expanded ? "▴" : "▾"} Config
@@ -270,7 +270,7 @@ export default function PipelinePage() {
                       <button onClick={() => {
                         const blob = new Blob([JSON.stringify({ name: p.name, description: p.description, steps: p.steps }, null, 2)], { type: "application/json" });
                         const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-                        a.download = `pipeline-${p.name.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.json`; a.click();
+                        a.download = `pipeline-${p.name.replace(/[^a-z0-9а-яё]+/giu, "-").replace(/^-+|-+$/g, "").toLowerCase()}.json`; a.click();
                       }} title="Export as JSON" style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: 10, cursor: "pointer" }}>⬇</button>
                       <button onClick={() => del(p.id)} style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #fecaca", background: "#fff", color: "#991b1b", fontSize: 10, cursor: "pointer" }}>×</button>
                     </div>

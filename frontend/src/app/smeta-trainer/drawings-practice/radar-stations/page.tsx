@@ -30,7 +30,7 @@ export default function RadarStationsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · РЛС и узлы связи</div>
@@ -109,7 +109,7 @@ export default function RadarStationsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Дальность, км"
+            aria-label="Дальность, км" placeholder="Дальность, км"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: переведём в линейный масштаб. P_T=10⁶ Вт; G=10^3.4 ≈ 2512; λ=0.6 м; σ=10; P_min=10^(-11)/1000=10⁻¹⁴ Вт; L_loss=10. R⁴ = (10⁶ × 2512² × 0.36 × 10) / ((4π)³ × 10⁻¹⁴ × 10) = (10⁶ × 6.3×10⁶ × 3.6) / (1984 × 10⁻¹³) ≈ 2.27×10¹³ / 1.984×10⁻¹⁰ ≈ 10²³. R = 10²³/⁴ ≈ 1.78×10⁵ м = 178 км. С учётом реальных потерь и шумов в импульсном режиме П-18 — типично 250-270 км. Введите ~254 км.</p>
@@ -142,7 +142,7 @@ export default function RadarStationsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~38 млрд тг (допуск ±10%). 1.4+1.2+4.2+0.6+6.4+3.8+2.4+2.8+0.8+1.4+2.4+1.4+1.8+1.6+2.4+0.8+2.6 = 38 млрд тг. РЛС «Дарьял-У» Сары-Шаган (модернизация Россией 2010-х) обошлась в $300+ млн ≈ 140 млрд тг — более мощная фазиров. решётка.</p>

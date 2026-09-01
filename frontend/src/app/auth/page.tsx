@@ -8,6 +8,10 @@ import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import {
+  providerHint,
+  shouldShowOauthBlock,
+} from "./oauthVisibility";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 
@@ -394,8 +398,10 @@ export default function AuthPage() {
               ))}
             </div>
 
-            {/* OAuth providers — only rendered when /providers returned at least one. */}
-            {!token && oauthProviders && oauthProviders.length > 0 ? (
+            {/* Блок показывается, только если ХОТЬ ОДИН провайдер настроен.
+                Раньше условием была длина массива, а он приходит непустым и
+                при нуле настроенных — см. комментарий в oauthVisibility.ts. */}
+            {!token && oauthProviders && shouldShowOauthBlock(oauthProviders) ? (
               <div style={{ maxWidth: 440, marginBottom: 20 }}>
                 <div style={{ display: "grid", gap: 8 }}>
                   {oauthProviders.map((p) => {
@@ -407,11 +413,7 @@ export default function AuthPage() {
                         type="button"
                         onClick={() => p.configured && startOauth(p.id)}
                         disabled={!p.configured || busy}
-                        title={
-                          p.configured
-                            ? `Войти через ${p.name}`
-                            : `Provider not configured. Set ${meta.envHint} on the backend.`
-                        }
+                        title={providerHint(p)}
                         aria-disabled={!p.configured}
                         style={{
                           display: "flex",
@@ -527,12 +529,12 @@ export default function AuthPage() {
               {mode === "register" ? (
                 <div>
                   <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Имя</div>
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Как к вам обращаться" style={inputStyle} disabled={busy} />
+                  <input aria-label="Имя" value={name} onChange={(e) => setName(e.target.value)} placeholder="Как к вам обращаться" style={inputStyle} disabled={busy} />
                 </div>
               ) : null}
               <div>
                 <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Почта</div>
-                <input
+                <input aria-label="Почта"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="user@example.com"
@@ -561,7 +563,7 @@ export default function AuthPage() {
               </div>
               <div>
                 <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Пароль</div>
-                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Не короче 6 знаков" style={inputStyle} disabled={busy} />
+                <input aria-label="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Не короче 6 знаков" style={inputStyle} disabled={busy} />
                 {password ? (
                   <div style={{ marginTop: 8 }}>
                     {/* Strength bar — 4 segments, fills left→right by score. */}

@@ -6,7 +6,7 @@ import {
   store,
   withCors,
 } from "../../_lib";
-import { kvList, kvListChecked, kvSet } from "../../_persist";
+import { kvListChecked, kvSet } from "../../_persist";
 import { logAudit } from "../../_audit";
 import { enqueueAttempt } from "../../_webhook_queue";
 
@@ -34,10 +34,6 @@ type ApiDispute = {
   created: number;
   updated: number;
 };
-
-async function loadAll(): Promise<ApiDispute[]> {
-  return (await kvList<ApiDispute>(DISPUTES_KEY)) ?? [];
-}
 
 /**
  * Отказ хранилища — это 503 «попробуйте позже», а НЕ 404 «такого спора нет».

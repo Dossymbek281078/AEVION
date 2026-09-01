@@ -34,7 +34,7 @@ export default function ConstructionTaxesPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Header */}
-      <header className="border-b border-emerald-900/40 bg-slate-950/80 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-emerald-900/40 bg-slate-950/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice"
@@ -182,7 +182,7 @@ export default function ConstructionTaxesPage() {
                 type="text"
                 value={ex1}
                 onChange={(e) => setEx1(e.target.value)}
-                placeholder="введите сумму в тг"
+                aria-label="введите сумму в тг" placeholder="введите сумму в тг"
                 className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-48"
               />
               <button
@@ -231,7 +231,7 @@ export default function ConstructionTaxesPage() {
                 type="text"
                 value={ex2}
                 onChange={(e) => setEx2(e.target.value)}
-                placeholder="полная сумма в тг"
+                aria-label="полная сумма в тг" placeholder="полная сумма в тг"
                 className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-48"
               />
               <button
@@ -353,7 +353,7 @@ export default function ConstructionTaxesPage() {
                 type="text"
                 value={ex4}
                 onChange={(e) => setEx4(e.target.value)}
-                placeholder="сумма НДС в тг"
+                aria-label="сумма НДС в тг" placeholder="сумма НДС в тг"
                 className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-48"
               />
               <button

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { activatable } from "@/lib/activatable";
+import { useToast } from "@/components/ToastProvider";
 import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -360,6 +362,21 @@ function runStats(run: RunState): { tokensIn: number; tokensOut: number; costUsd
    ═══════════════════════════════════════════════════════════════════════ */
 
 export default function QCoreMultiAgentPage() {
+  // Разделы начальной загрузки, которые НЕ загрузились.
+  //
+  // До 28.08.2026 у пяти запросов ниже не проверялся res.ok: ответ 500 или 402
+  // (платная стена) просто не давал нужного поля, и раздел рисовался пустым.
+  // На этой странице это означало пустой список провайдеров (нечем выбрать
+  // модель) и ПУСТОЙ ПРАЙС на платном модуле — то есть «у продукта ничего нет»
+  // вместо «не загрузилось».
+  //
+  // Обёртка try/catch тут не спасала: `.catch(() => ({}))` гасит исключение, и
+  // внешний catch не срабатывает никогда.
+  const [partial, setPartial] = useState<string[]>([]);
+  // Штатный механизм проекта; провайдер стоит в корневом макете
+  // (ClientProviders -> ToastProvider), поэтому доступен на любой странице.
+  // Второй способ сообщать человеку заводить не стал.
+  const { showToast } = useToast();
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [roleDefaults, setRoleDefaults] = useState<RoleDefault[]>([]);
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
@@ -643,11 +660,18 @@ export default function QCoreMultiAgentPage() {
           fetch(apiUrl("/api/qcoreai/pricing")),
           fetch(apiUrl("/api/qcoreai/health")),
         ]);
+        const failed: string[] = [];
         const provData = await provRes.json().catch(() => ({}));
+        if (!provRes.ok) failed.push("список провайдеров");
         const agData = await agRes.json().catch(() => ({}));
+        if (!agRes.ok) failed.push("агенты и роли");
         const sessData = await sessRes.json().catch(() => ({}));
+        if (!sessRes.ok) failed.push("сессии");
         const priceData = await priceRes.json().catch(() => ({}));
+        if (!priceRes.ok) failed.push("цены");
         const healthData = await healthRes.json().catch(() => ({}));
+        if (!healthRes.ok) failed.push("состояние сервиса");
+        setPartial(failed);
         if (typeof healthData?.webhookConfigured === "boolean") {
           setWebhookConfigured(healthData.webhookConfigured);
         }
@@ -679,6 +703,7 @@ export default function QCoreMultiAgentPage() {
         try {
           const pRes = await fetch(apiUrl("/api/qcoreai/me/personas"), { headers: bearerHeader() });
           const pData = await pRes.json().catch(() => ({}));
+          if (!pRes.ok) setPartial((p) => p.includes("персоны агентов") ? p : [...p, "персоны агентов"]);
           if (Array.isArray(pData?.personas)) {
             const map: Record<string, { name: string; emoji?: string; color?: string }> = {};
             for (const p of pData.personas) map[p.roleId] = { name: p.name, emoji: p.emoji, color: p.color };
@@ -693,7 +718,9 @@ export default function QCoreMultiAgentPage() {
             fetch(apiUrl("/api/qcoreai/templates/public?limit=20")),
           ]);
           const tmplData = await tmplRes.json().catch(() => ({}));
+          if (!tmplRes.ok) setPartial((p) => p.includes("мои шаблоны") ? p : [...p, "мои шаблоны"]);
           const pubData = await pubTmplRes.json().catch(() => ({}));
+          if (!pubTmplRes.ok) setPartial((p) => p.includes("общие шаблоны") ? p : [...p, "общие шаблоны"]);
           if (Array.isArray(tmplData?.items)) setTemplates(tmplData.items);
           if (Array.isArray(pubData?.items)) setPublicTemplates(pubData.items);
         } catch { /* templates are non-critical */ }
@@ -1754,7 +1781,10 @@ export default function QCoreMultiAgentPage() {
     const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) return;
     try {
-      await fetch(apiUrl(`/api/qcoreai/annotations/${annotationId}`), { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      const annRes = await fetch(apiUrl(`/api/qcoreai/annotations/${annotationId}`), { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      // Раньше заметка исчезала с экрана независимо от ответа: на сервере она
+      // оставалась и возвращалась при следующей загрузке.
+      if (!annRes.ok) return;
       setAnnotationsMap((prev) => ({ ...prev, [runId]: (prev[runId] || []).filter((a) => a.id !== annotationId) }));
     } catch { /* non-fatal */ }
   }, []);
@@ -1967,6 +1997,18 @@ export default function QCoreMultiAgentPage() {
     <main>
       <ProductPageShell maxWidth={1200}>
         <Wave1Nav />
+        {partial.length > 0 && (
+          <div
+            style={{
+              color: "#92400e", background: "rgba(245,158,11,0.08)",
+              border: "1px solid rgba(245,158,11,0.25)",
+              borderRadius: 10, padding: "8px 12px", fontSize: 12, marginBottom: 12,
+            }}
+          >
+            Часть данных не загрузилась: {partial.join(", ")}. Показанное неполно —
+            это не значит, что список пуст.
+          </div>
+        )}
 
         {storageDown && (
           <div
@@ -3062,11 +3104,23 @@ export default function QCoreMultiAgentPage() {
                                 if (!personaName.trim()) return;
                                 const res = await fetch(apiUrl(`/api/qcoreai/me/personas/${role}`), { method: "PUT", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify({ name: personaName.trim(), emoji: personaEmoji.trim() || null, bio: personaBio.trim() || null, systemPromptHint: personaSystemHint.trim() || null }) });
                                 const d = await res.json().catch(() => ({}));
-                                if (d.persona) { setPersonas((p) => ({ ...p, [role]: { name: d.persona.name, emoji: d.persona.emoji, bio: d.persona.bio, systemPromptHint: d.persona.systemPromptHint } })); }
+                                // Раньше редактор закрывался ВСЕГДА, в том числе
+                                // при отказе, — человек видел закрытие и считал,
+                                // что сохранилось. Молчаливый провал, выглядящий
+                                // успехом, хуже явной ошибки.
+                                if (!res.ok || !d.persona) {
+                                  showToast(d?.error || `Не удалось сохранить (${res.status}). Попробуйте ещё раз.`, "error");
+                                  return;
+                                }
+                                setPersonas((p) => ({ ...p, [role]: { name: d.persona.name, emoji: d.persona.emoji, bio: d.persona.bio, systemPromptHint: d.persona.systemPromptHint } }));
                                 setPersonaEditRole(null);
                               }} style={{ flex: 1, padding: "4px", borderRadius: 5, border: "none", background: "#0f172a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
                               {personas[role] && <button onClick={async () => {
-                                await fetch(apiUrl(`/api/qcoreai/me/personas/${role}`), { method: "DELETE", headers: bearerHeader() });
+                                const delRes = await fetch(apiUrl(`/api/qcoreai/me/personas/${role}`), { method: "DELETE", headers: bearerHeader() });
+                                if (!delRes.ok) {
+                                  showToast(`Не удалось удалить (${delRes.status}). Персона на месте.`, "error");
+                                  return;
+                                }
                                 setPersonas((p) => { const n = { ...p }; delete n[role]; return n; });
                                 setPersonaEditRole(null);
                               }} style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid #fecaca", background: "#fff", color: "#991b1b", fontSize: 11, cursor: "pointer" }}>Reset</button>}
@@ -3095,7 +3149,7 @@ export default function QCoreMultiAgentPage() {
                         onClick={async () => {
                           try {
                             const tok = typeof window !== "undefined" ? (getAuthToken() || "") : "";
-                            await fetch(`/api/qcoreai/me/memories/extract`, { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify({ runId: lastDoneRun.id }) });
+                            await fetch(apiUrl(`/api/qcoreai/me/memories/extract`), { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify({ runId: lastDoneRun.id }) });
                           } catch { /* ignore */ }
                         }}
                         style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(124,58,237,0.3)", background: "rgba(124,58,237,0.07)", color: "#6d28d9", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
@@ -3273,15 +3327,21 @@ export default function QCoreMultiAgentPage() {
                   onClick={async () => {
                     const ids = Array.from(selectedSessionIds);
                     try {
-                      await fetch(apiUrl("/api/qcoreai/sessions/bulk-delete"), {
+                      const bulkDelRes = await fetch(apiUrl("/api/qcoreai/sessions/bulk-delete"), {
                         method: "POST",
                         headers: { "Content-Type": "application/json", ...bearerHeader() },
                         body: JSON.stringify({ sessionIds: ids }),
                       });
+                      if (!bulkDelRes.ok) {
+                        // Действие ПАЧКОЙ: убрать сессии с экрана, не проверив
+                        // ответ, — значит соврать сразу про все выбранные.
+                        showToast(`Не удалось удалить ({bulkDelRes.status}). Сессии на месте.`, "error");
+                        return;
+                      }
                       setSessions((prev) => prev.filter((s) => !ids.includes(s.id)));
                       setSelectedSessionIds(new Set());
                       setSelectMode(false);
-                    } catch { /* noop */ }
+                    } catch { showToast("Не удалось удалить — проверьте связь. Сессии на месте.", "error"); }
                   }}
                   style={{
                     flex: 1, padding: "6px 8px", borderRadius: 8,
@@ -3295,15 +3355,21 @@ export default function QCoreMultiAgentPage() {
                   onClick={async () => {
                     const ids = Array.from(selectedSessionIds);
                     try {
-                      await fetch(apiUrl("/api/qcoreai/sessions/bulk-archive"), {
+                      const bulkArcRes = await fetch(apiUrl("/api/qcoreai/sessions/bulk-archive"), {
                         method: "POST",
                         headers: { "Content-Type": "application/json", ...bearerHeader() },
                         body: JSON.stringify({ sessionIds: ids, archive: true }),
                       });
+                      if (!bulkArcRes.ok) {
+                        // Действие ПАЧКОЙ: убрать сессии с экрана, не проверив
+                        // ответ, — значит соврать сразу про все выбранные.
+                        showToast(`Не удалось архивировать ({bulkArcRes.status}). Сессии на месте.`, "error");
+                        return;
+                      }
                       setSessions((prev) => prev.filter((s) => !ids.includes(s.id)));
                       setSelectedSessionIds(new Set());
                       setSelectMode(false);
-                    } catch { /* noop */ }
+                    } catch { showToast("Не удалось архивировать — проверьте связь. Сессии на месте.", "error"); }
                   }}
                   style={{
                     flex: 1, padding: "6px 8px", borderRadius: 8,
@@ -4100,8 +4166,15 @@ export default function QCoreMultiAgentPage() {
                       const tok = typeof window !== "undefined" ? (getAuthToken() || "") : "";
                       const r = await fetch(apiUrl("/api/qcoreai/templates/suggest"), { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) } });
                       const d = await r.json().catch(() => ({}));
-                      if (Array.isArray(d?.suggestions)) setTemplateSuggestions(d.suggestions);
-                    } catch { /* ignore */ } finally { setTemplateSuggestBusy(false); }
+                      if (!r.ok || !Array.isArray(d?.suggestions)) {
+                        // Было `catch { ignore }`: кнопка отрабатывала, ничего
+                        // не появлялось, и причина не доходила ни до человека,
+                        // ни в журнал.
+                        showToast(d?.error || `Не удалось подобрать шаблоны (${r.status}).`, "error");
+                        return;
+                      }
+                      setTemplateSuggestions(d.suggestions);
+                    } catch { showToast("Не удалось подобрать шаблоны — проверьте связь.", "error"); } finally { setTemplateSuggestBusy(false); }
                   }}
                   style={{ marginBottom: 10, padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(124,58,237,0.3)", background: "rgba(124,58,237,0.06)", color: "#6d28d9", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
                 >
@@ -4112,7 +4185,7 @@ export default function QCoreMultiAgentPage() {
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>AI Suggestions</div>
                     {templateSuggestions.map((s, i) => (
                       <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, padding: "6px 10px", borderRadius: 8, background: "rgba(124,58,237,0.04)", border: "1px solid rgba(124,58,237,0.15)", cursor: "pointer" }}
-                        onClick={() => { setInput(s.input); setStrategy(s.strategy as any); setTemplatePanelOpen(false); setTemplateSuggestions([]); }}>
+                        {...activatable(() => { setInput(s.input); setStrategy(s.strategy as any); setTemplatePanelOpen(false); setTemplateSuggestions([]); })}>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{s.name}</div>
                           {s.description && <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>{s.description}</div>}
@@ -4139,7 +4212,7 @@ export default function QCoreMultiAgentPage() {
                             padding: "6px 10px", borderRadius: 8, background: "#fff",
                             border: "1px solid rgba(15,23,42,0.08)", cursor: "pointer",
                           }}
-                          onClick={() => applyTemplate(t)}
+                          {...activatable(() => applyTemplate(t))}
                         >
                           <span style={{ fontSize: 13, flex: 1, fontWeight: 600 }}>{t.name}</span>
                           <span style={{ fontSize: 10, color: "#94a3b8", borderRadius: 6, padding: "2px 6px", background: "#f1f5f9" }}>{t.strategy}</span>
@@ -4167,7 +4240,7 @@ export default function QCoreMultiAgentPage() {
                             padding: "6px 10px", borderRadius: 8, background: "#fff",
                             border: "1px solid rgba(124,58,237,0.12)", cursor: "pointer",
                           }}
-                          onClick={() => applyTemplate(t)}
+                          {...activatable(() => applyTemplate(t))}
                         >
                           <span style={{ fontSize: 13, flex: 1, fontWeight: 600 }}>{t.name}</span>
                           <span style={{ fontSize: 10, color: "#6d28d9", borderRadius: 6, padding: "2px 6px", background: "rgba(124,58,237,0.07)" }}>{t.useCount} uses</span>
@@ -4305,7 +4378,7 @@ export default function QCoreMultiAgentPage() {
                             <button onClick={() => { setPromptHistory([]); localStorage.removeItem("qcore_prompt_history"); setHistoryOpen(false); }} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#fca5a5" }}>Clear</button>
                           </div>
                           {promptHistory.map((h, i) => (
-                            <div key={i} onClick={() => { setInput(h); setHistoryOpen(false); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                            <div key={i} {...activatable(() => { setInput(h); setHistoryOpen(false); setTimeout(() => textareaRef.current?.focus(), 50); })}
                               style={{ padding: "7px 12px", cursor: "pointer", fontSize: 12, color: "#0f172a", borderTop: "1px solid #f8fafc", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
                               onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                               onMouseLeave={(e) => (e.currentTarget.style.background = "")}>
@@ -4420,11 +4493,11 @@ export default function QCoreMultiAgentPage() {
                     {matchedSessions.map((s) => (
                       <div
                         key={s.id}
-                        onClick={() => {
+                        {...activatable(() => {
                           setPaletteOpen(false);
                           setActiveSessionId(s.id);
                           loadSession(s.id);
-                        }}
+                        })}
                         style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center" }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "")}
@@ -4445,10 +4518,10 @@ export default function QCoreMultiAgentPage() {
                     {paletteRunResults.map((r) => (
                       <div
                         key={r.id}
-                        onClick={() => {
+                        {...activatable(() => {
                           setPaletteOpen(false);
                           if (r.sessionId) { setActiveSessionId(r.sessionId); loadSession(r.sessionId); }
-                        }}
+                        })}
                         style={{ padding: "8px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "flex-start" }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "")}
@@ -4489,7 +4562,7 @@ export default function QCoreMultiAgentPage() {
                     ].map((a) => (
                       <div
                         key={a.label}
-                        onClick={a.action}
+                        {...activatable(a.action)}
                         style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center" }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "")}
@@ -4621,6 +4694,7 @@ function WebhookLogPanel() {
 }
 
 function SpendLimitPanel() {
+  const { showToast } = useToast();
   const [summary, setSummary] = useState<{
     spentUsd: number; limitUsd: number | null; alertAt: number; pct: number | null;
     alerting: boolean; exceeded: boolean;
@@ -4664,7 +4738,14 @@ function SpendLimitPanel() {
   const remove = async () => {
     setSaving(true);
     try {
-      await fetch(apiUrl("/api/qcoreai/me/spend-limit"), { method: "DELETE", headers: bearerHeader() });
+      // Денежный путь: пока ответ не проверен, снимать предел на экране нельзя.
+      // Иначе человек считает, что ограничение на трату снято, а сервер его
+      // держит — и расхождение вскроется в самый неудобный момент.
+      const r = await fetch(apiUrl("/api/qcoreai/me/spend-limit"), { method: "DELETE", headers: bearerHeader() });
+      if (!r.ok) {
+        showToast(`Не удалось снять предел расходов (${r.status}). Он остаётся в силе.`, "error");
+        return;
+      }
       setSummary((prev) => prev ? { ...prev, limitUsd: null, pct: null, alerting: false, exceeded: false } : prev);
       setEditing(false);
     } finally { setSaving(false); }

@@ -286,7 +286,7 @@ export function LessonViewer({ level }: Props) {
                   isBookmarked(lesson.id) ? "text-amber-500" : "text-slate-300 hover:text-amber-400"
                 }`}
                 title={isBookmarked(lesson.id) ? "Убрать из избранного" : "В избранное"}
-                aria-label="bookmark-current"
+                aria-label={isBookmarked(lesson.id) ? "Убрать из избранного" : "В избранное"}
               >
                 {isBookmarked(lesson.id) ? "★" : "☆"}
               </button>

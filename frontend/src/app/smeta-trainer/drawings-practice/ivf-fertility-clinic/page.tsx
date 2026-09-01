@@ -13,7 +13,7 @@ export default function IvfFertilityClinicPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">IVF Fertility Clinic</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">IVF Fertility Clinic</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">👶 IVF Fertility Clinic + ART лаборатории</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #310. ЭКО клиника Институт репродуктивной медицины (ИРМ Алматы), ESCRH-стандарт (European Society Human Reproduction & Embryology). IVF Lab — strict ISO 14644 class 7 cleanroom + IVF-grade air HEPA + activated carbon + UV для VOC removal (volatile organic compounds toxic to embryos), CO2 incubators 5% CO2 + 5% O2 + 90% N2 atmosphere + 37 °C ± 0.1, LN2 cryostorage embryos + sperm + oocytes, embryoscope time-lapse Cooperative Vitrolife EmbryoScope+. Capacity 1500 ART cycles/year. WHO 6th + ESHRE Guidelines + HFEA UK + СН РК 3.02-19.</p>
@@ -48,7 +48,7 @@ export default function IvfFertilityClinicPage() {
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Cycles per year</h2>
           <p className="text-slate-300">Clinic capacity 4 cycles/day × 6 days × 50 weeks = ART cycles/year:</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="cycles" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="cycles" placeholder="cycles" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>4 × 6 × 50 = <strong>1200-1500 cycles/year</strong>, scale-up to 2000 with night shifts.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс IVF clinic</h2>
@@ -62,7 +62,7 @@ export default function IvfFertilityClinicPage() {
             <li>PGT-A NGS Illumina MiSeq + Roche Cobas hormone lab = 1.3 млрд</li>
             <li>Recovery + counselling + pharmacy + building + проект 5% + PNR = 1.6 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~9.5 млрд тг (~$20M USD)</strong>. Окупаемость 5-7 лет при $5000-8000 per IVF cycle.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Vitrification protocol</h2>

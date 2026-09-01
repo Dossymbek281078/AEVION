@@ -30,7 +30,7 @@ export default function BanksBranchesPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Банковские отделения и хранилища</div>
@@ -102,7 +102,7 @@ export default function BanksBranchesPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V, м³"
+            aria-label="V, м³" placeholder="V, м³"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V_нар = 5.56×5.56×3.56 ≈ 110 м³; V_бетон = 110−75 = 35 м³ × повышенная плотность армирования и доп. слои защиты (плёнки, теплозвукоизол.) → объём ниши и проёмов добавит ~30%, итого по смете ~320 м³ включая фундамент + дверной короб.</p>
@@ -121,7 +121,7 @@ export default function BanksBranchesPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~980 млн тг (допуск ±10%). 360+240+95+85+75+80+45 = 980 млн тг.</p>

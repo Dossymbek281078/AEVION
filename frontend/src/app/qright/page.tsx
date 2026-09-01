@@ -661,6 +661,17 @@ export default function QRightPage() {
     // регистрации хуже строки в договоре: он утверждает действие ПРЯМО СЕЙЧАС,
     // и человек видит его каждый раз.
     { label: "Issuing certificate and public verify link...", icon: "🛡️" },
+    // «Forever-verifiable» — самое сильное обещание платформы, и оно ПРОВЕРЕНО,
+    // а не заявлено: тест «подпись свежего сертификата сверяется криптографией»
+    // (aevion-globus-backend/tests/certificateIssuedTodayVerifies.test.ts) берёт
+    // из офлайн-пакета ровно то, что получит посторонний, и сверяет подпись
+    // независимо от нашего кода. Рядом там же — якорь в биткойне.
+    //
+    // ⚠️ Что сделало бы эту строку ложной: расхождение между текстом, который
+    // подписывают при выдаче, и текстом, который восстанавливает пакет. Именно
+    // так и вышло со схемой до августа — в подпись входила временная метка,
+    // которую нигде не сохраняли, и подписи тех сертификатов не проверить
+    // никому. Меняя любую из двух сторон, гоните тот тест.
     { label: "Forever-verifiable certificate ready", icon: "✅" },
   ];
 
@@ -820,7 +831,7 @@ export default function QRightPage() {
                             const f = e.target.files?.[0];
                             if (f) restoreKeyFromFile(f);
                           }}
-                          style={{ display: "none" }}
+                          className="aevion-file-input"
                         />
                       </label>
                     </div>
@@ -889,7 +900,7 @@ export default function QRightPage() {
                   Browse…
                   <input
                     type="file"
-                    style={{ display: "none" }}
+                    className="aevion-file-input"
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) hashFile(f); }}
                   />
                 </label>
@@ -1011,19 +1022,19 @@ export default function QRightPage() {
                 <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr", marginTop: 12 }}>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Name</div>
-                    <input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="Your name" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <input aria-label="Name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="Your name" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Email</div>
-                    <input value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="your@email.com" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <input aria-label="Email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="your@email.com" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Country</div>
-                    <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="e.g. Kazakhstan" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <input aria-label="Country" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="e.g. Kazakhstan" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>City</div>
-                    <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Astana" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <input aria-label="City" value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Astana" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                 </div>
               </details>

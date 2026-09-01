@@ -24,7 +24,7 @@ export default function NuclearRadiationPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Атомные и радиационные объекты</div>
@@ -450,7 +450,7 @@ export default function NuclearRadiationPage() {
                 value={ex3Input}
                 onChange={(e) => setEx3Input(e.target.value)}
                 disabled={ex3Checked}
-                placeholder="м³"
+                aria-label="м³" placeholder="м³"
                 className="px-4 py-3 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 focus:outline-none focus:border-blue-500 w-48"
               />
               <button

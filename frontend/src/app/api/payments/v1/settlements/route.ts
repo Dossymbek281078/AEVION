@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { attachRateHeaders, gateRequest, store, withCors } from "../_lib";
+import {
+  readLimit, attachRateHeaders, gateRequest, store, withCors } from "../_lib";
 
 export async function GET(req: NextRequest) {
   const gate = gateRequest(req);
@@ -7,7 +8,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const currency = searchParams.get("currency");
-  const limit = Math.min(100, Number(searchParams.get("limit") ?? 25));
+  const limit = readLimit(searchParams.get("limit"), { поумолчанию: 25, максимум: 100 });
 
   let data = Array.from(store.settlements.values()).sort(
     (a, b) => b.scheduled_for - a.scheduled_for

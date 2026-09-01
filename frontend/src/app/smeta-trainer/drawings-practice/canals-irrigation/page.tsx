@@ -30,7 +30,7 @@ export default function CanalsIrrigationPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Магистральные каналы и ирригация</div>
@@ -107,7 +107,7 @@ export default function CanalsIrrigationPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V_бетона, ×100 м³ (1280 = 128 000)"
+            aria-label="V_бетона, ×100 м³ (1280 = 128 000)" placeholder="V_бетона, ×100 м³ (1280 = 128 000)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: P = 8 + 2×4×√(1+4) = 8 + 8×2.24 = 8 + 17.9 = 25.9 м (включая 0.5 м бермы → ~27 м); V = 27 × 0.22 × 80 000 = 475 200 м³ + 20% потерь = ~570 000 м³ для облицовки и плит = ~1 280 × 100 м³ с учётом мостов, шлюзов, узлов сопряжения (общие монолитные части ~1 280 × 100 м³).</p>
@@ -133,7 +133,7 @@ export default function CanalsIrrigationPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~165 млрд тг (допуск ±10%). 26+38+4.2+14+32+18+12+8.4+3.6+2.8+4.6+1.4 = 165 млрд тг. Удельная стоимость ~2 млрд тг/км — соответствует мировым magistral. каналам с насосными станциями. БАК (168 км) — ~280 млрд тг в ценах 2026.</p>

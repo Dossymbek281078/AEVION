@@ -361,7 +361,7 @@ export default function SteelStructuresPage() {
                           e.key === "Enter" && !revealed[key] && handleCheck()
                         }
                         disabled={!!revealed[key]}
-                        placeholder="Введите число..."
+                        aria-label="Введите число" placeholder="Введите число..."
                         className="flex-1 border rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"
                       />
                       <span className="text-xs text-slate-500 dark:text-slate-400 font-mono w-8">

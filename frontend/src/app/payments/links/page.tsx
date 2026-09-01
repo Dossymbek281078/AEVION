@@ -1,5 +1,6 @@
 "use client";
 
+import { toMinorUnits } from "@/lib/paymentAmount";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
@@ -214,7 +215,9 @@ export default function PaymentLinksPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount: local.amount,
+          // Человек вводит доллары, а контракт API — минорные единицы.
+          // Считаем одним помощником с показом, иначе стороны разойдутся.
+          amount: toMinorUnits(local.amount, local.currency),
           currency: local.currency,
           title: local.title,
           description: local.description,
@@ -395,7 +398,7 @@ export default function PaymentLinksPage() {
             display: "grid",
             gap: 14,
             position: "sticky",
-            top: 16,
+            top: "calc(var(--aevion-header-h, 0px) + 16px)",
           }}
         >
           <div
@@ -438,6 +441,7 @@ export default function PaymentLinksPage() {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              aria-label="Title"
               placeholder="What is the payer paying for?"
               style={inputStyle}
               required
@@ -448,6 +452,7 @@ export default function PaymentLinksPage() {
             <div>
               <label style={labelStyle}>Amount</label>
               <input
+                aria-label="Amount"
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}

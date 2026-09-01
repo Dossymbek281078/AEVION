@@ -11,20 +11,35 @@ name: DevHub E2E (browser)
 # that prompted it — right-click → Rename / Delete in the file tree did nothing
 # at all, because the menu closed before the click landed.
 
+# The path list must name everything the gate now covers. It grew past DevHub on
+# 10.08.2026 — translation guards, the language switcher, page-weight budgets —
+# while the filter still said "devhub" only, so an i18n change would have skipped
+# the gate that exists to watch it, and the run would simply not appear. A gate
+# that does not fire is indistinguishable from a gate that passed.
 on:
   workflow_dispatch:
   pull_request:
-    paths:
+    paths: &gate_paths
       - "frontend/src/app/devhub/**"
       - "frontend/src/lib/devhub*"
+      - "frontend/src/lib/i18n*"
+      - "frontend/src/components/AutoTranslate.tsx"
       - "frontend/e2e/devhub-*"
+      - "frontend/e2e/i18n-*"
+      - "frontend/e2e/translation-*"
+      - "frontend/e2e/language-*"
+      - "frontend/e2e/page-weight*"
+      - "frontend/e2e/globe-lazy*"
+      # The Studio usage panel renders DevHub's credit meter, so it belongs to
+      # this gate even though it lives under another route.
+      - "frontend/src/app/studio/**"
+      - "frontend/e2e/studio-*"
       - ".github/workflows/devhub-e2e.yml"
   push:
     branches: [main]
+    paths: *gate_paths
     paths:
-      - "frontend/src/app/devhub/**"
-      - "frontend/src/lib/devhub*"
-      - "frontend/e2e/devhub-*"
+    paths:
 
 jobs:
   devhub-e2e:
@@ -43,6 +58,15 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm install --ignore-scripts
       - run: npx playwright install --with-deps chromium
+      # Turbopack does not type-check route entries, so `next build` stays green
+      # over pages whose params are typed in a shape Next 16 rejects — eight of
+      # them had accumulated by 28.07.2026, and only `next build --webpack`
+      # complained. `next typegen` writes the same generated route types in
+      # seconds; tsc then judges them.
+      - name: Route types (what Turbopack does not check)
+        run: |
+          npx next typegen
+          npx tsc --noEmit
       - run: npm run build
       # The founder-flow spec is excluded on purpose: it fires a real AI
       # generation against production and belongs to the nightly, not to a
@@ -62,10 +86,18 @@ jobs:
             e2e/devhub-deploy-honesty.spec.ts \
             e2e/devhub-compare.spec.ts \
             e2e/devhub-snippet.spec.ts \
+            e2e/devhub-github-honesty.spec.ts \
+            e2e/studio-credits-honesty.spec.ts \
+            e2e/devhub-agent-results.spec.ts \
             e2e/language-honesty.spec.ts \
             e2e/translation-canary.spec.ts \
             e2e/translation-cache.spec.ts \
             e2e/globe-lazy.spec.ts \
+            e2e/page-weight.spec.ts \
+            e2e/i18n-lazy-dictionary.spec.ts \
+            e2e/i18n-server-render.spec.ts \
+            e2e/i18n-global-header.spec.ts \
+            e2e/i18n-pill.spec.ts \
             --project=chromium
       - if: failure()
         uses: actions/upload-artifact@v4

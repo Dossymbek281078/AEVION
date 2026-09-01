@@ -30,7 +30,7 @@ export default function StockExchangeFintechPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Биржи и финтех-центры</div>
@@ -109,7 +109,7 @@ export default function StockExchangeFintechPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во Bloomberg Terminals"
+            aria-label="Кол-во Bloomberg Terminals" placeholder="Кол-во Bloomberg Terminals"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 220 + 10% = 242 для основной площадки. С DR-сайтом ещё 20% дублирование = +44 шт. Но в задаче только основная площадка = ~240 терминалов. Стоимость подписки: 240 × $24 000 × 12 мес = $69 млн/год = 32 млрд тг/год (огромная операционная статья).</p>
@@ -141,7 +141,7 @@ export default function StockExchangeFintechPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~38 млрд тг (допуск ±10%). 3.6+1.8+14+1.4+5.4+1.8+0.6+4.2+2.8+0.6+0.45+0.6+0.45+0.02+0.45+0.2+0.43 = 38 млрд тг. AIX (открыта 2018, $1 млрд проект МФЦА) — суммарная инвестиция $80-100 млн = 37-46 млрд тг.</p>

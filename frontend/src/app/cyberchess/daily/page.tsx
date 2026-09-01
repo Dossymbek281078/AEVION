@@ -182,7 +182,7 @@ export default function DailyPuzzlePage() {
   // а это разные вещи для человека, который решает, стоит ли играть.
   useEffect(() => {
     let alive = true;
-    fetch('/api-backend/api/cyberchess-daily/leaderboard?limit=100')
+    fetch('/api-backend/api/cyberchess-daily/leaderboard?limit=100', { signal: AbortSignal.timeout(10_000) })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j) => {
         if (!alive) return;
@@ -210,7 +210,7 @@ export default function DailyPuzzlePage() {
   // честно скажет, что задача резервная.
   useEffect(() => {
     let alive = true;
-    fetch('/api-backend/api/cyberchess-daily/puzzle')
+    fetch('/api-backend/api/cyberchess-daily/puzzle', { signal: AbortSignal.timeout(10_000) })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!alive) return;
@@ -497,7 +497,7 @@ export default function DailyPuzzlePage() {
       chessRef.current = c2;
       refreshBoard();
       setLastMove(null);
-      setMessage(`Не тот ход для пазла. Ожидался другой. Попробуй ещё раз.`);
+      setMessage(`Не тот ход для этой задачи. Ожидался другой. Попробуй ещё раз.`);
       return;
     }
 
@@ -677,7 +677,7 @@ export default function DailyPuzzlePage() {
           🧩 Задача дня
         </h1>
         <p style={{ color: '#9aa0b4', margin: '0 0 24px 0', fontSize: 14 }}>
-          Один пазл в день. Решай каждый день — держи серию. Многоходовые пазлы: бот отвечает за противника.
+          Одна задача в день. Решай каждый день — держи серию. Многоходовые задачи: бот отвечает за противника.
         </p>
 
         {/* Перенос вместо сетки: жёсткие 360px боковой колонки плюс отступ 24 не
@@ -875,7 +875,7 @@ export default function DailyPuzzlePage() {
                     cursor: solved || hintLevel === 3 ? 'not-allowed' : 'pointer',
                     fontSize: 14,
                   }}
-                  title="3 уровня подсказки: район → клетка-начало → полный ход. Каждая снимает +1 hint и блокирует +1 streak за пазл."
+                  title="3 уровня подсказки: район → клетка-начало → полный ход. Каждая тратит одну подсказку и снимает прибавку к серии за эту задачу."
                 >
                   💡 Подсказка ({hintLevel}/3)
                 </button>

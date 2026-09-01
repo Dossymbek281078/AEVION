@@ -4,6 +4,7 @@ import { ClientProviders } from "@/components/ClientProviders";
 import { getSiteUrl } from "@/lib/siteUrl";
 import { MODULE_NODES } from "@/data/pitchFacts";
 import "./globals.css";
+import { DevHubGuestIdentity } from "@/components/DevHubGuestIdentity";
 
 const SITE = getSiteUrl();
 
@@ -87,6 +88,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      {/* Личность посетителя DevHub ставится ГЛОБАЛЬНО, а не в макете
+          модуля. Замер 29.08.2026: /studio, /acquire и /compare зовут API
+          модуля из браузера, а подмена запросов жила только под /devhub —
+          значит заголовок гостя оттуда не уходил, и человек видел тариф и
+          расход общей «анонимной» личности вместо своих. На странице,
+          которая продаёт Studio Pro, это худшее место для такой ошибки.
+
+          Ставить глобально безопасно: подмена проверяет адрес и трогает
+          только запросы к /api/devhub/, остальные проходят нетронутыми. */}
       <body
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
@@ -130,6 +140,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
         <ClientProviders>
+          <DevHubGuestIdentity />
           {children}
         </ClientProviders>
         {/*
@@ -179,7 +190,38 @@ export default function RootLayout({
           языка человеком стоит ВЫШЕ: скрипт выше ставит `data-lang-src`, и
           этот тогда молчит.
         */}
-        <script dangerouslySetInnerHTML={{ __html: "(function(){try{var d=document.documentElement;function seen(){var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null),s='',n,t;while((n=w.nextNode())){t=n.parentNode&&n.parentNode.nodeName;if(t==='SCRIPT'||t==='STYLE'||t==='NOSCRIPT'||t==='TEMPLATE')continue;s+=n.nodeValue;if(s.length>20000)break;}return s;}function decide(){if(d.getAttribute('data-lang-src'))return true;if(location.pathname==='/en'||location.pathname.indexOf('/en/')===0){d.setAttribute('data-lang-src','path');return true;}var t=seen(),c=0,l=0,i,k;for(i=0;i<t.length;i++){k=t.charCodeAt(i);if((k>=1040&&k<=1103)||k===1025||k===1105)c++;else if((k>=65&&k<=90)||(k>=97&&k<=122))l++;}if(c>l*0.5&&c>40){d.lang='ru';d.setAttribute('data-lang-src','content');return true;}return false;}if(decide())return;document.addEventListener('DOMContentLoaded',decide);window.addEventListener('load',decide);}catch(e){}})()" }} />
+        {/*
+          ⚠️ ПОЧЕМУ ЗДЕСЬ НАБЛЮДАТЕЛЬ, а не только два прежних повтора (31.08.2026).
+
+          Скрипт решает язык по содержимому: считает кириллицу против латиницы в
+          теле страницы. Он стоял в конце тела и повторялся на DOMContentLoaded и
+          load. На бумаге этого хватает; на нашей платформе — нет.
+
+          Замер на проде, прямым запросом (то есть ровно тем, что видит браузер в
+          момент разбора документа):
+
+              /bank/glossary   кириллицы 11, латиницы 27767
+              /support         кириллицы 11, латиницы  7436
+              /pricing/paddle  кириллицы  0, латиницы    24
+
+          Русского текста в исходном HTML НЕТ — страницы клиентские, текст рисует
+          React уже после. То есть решение принималось по пустой странице и было
+          «латиница», причём честно: считать было нечего. Оба повтора срабатывают
+          ДО отрисовки и решают то же самое.
+
+          Следствие измерено сторожем языка настоящим браузером: 61 адрес из 62
+          объявляли английский при русском тексте, и «починено за всё время: 0».
+          Починка была написана и выкачена — она просто не успевала.
+
+          Наблюдатель ждёт появления текста и решает тогда, когда есть что
+          считать; отключается сам, как только решил, и в любом случае через 15
+          секунд, чтобы не жить на странице вечно.
+
+          Почему это не косметика: среди пострадавших /pricing/paddle — страница
+          ОПЛАТЫ. Браузер, увидев английский язык при русском тексте, предлагает
+          машинный перевод, а местами переводит сам.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: "(function(){try{var d=document.documentElement;function seen(){var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null),s='',n,t;while((n=w.nextNode())){t=n.parentNode&&n.parentNode.nodeName;if(t==='SCRIPT'||t==='STYLE'||t==='NOSCRIPT'||t==='TEMPLATE')continue;s+=n.nodeValue;if(s.length>20000)break;}return s;}function decide(){if(d.getAttribute('data-lang-src'))return true;if(location.pathname==='/en'||location.pathname.indexOf('/en/')===0){d.setAttribute('data-lang-src','path');return true;}var t=seen(),c=0,l=0,i,k;for(i=0;i<t.length;i++){k=t.charCodeAt(i);if((k>=1040&&k<=1103)||k===1025||k===1105)c++;else if((k>=65&&k<=90)||(k>=97&&k<=122))l++;}if(c>l*0.5&&c>40){d.lang='ru';d.setAttribute('data-lang-src','content');return true;}return false;}if(decide())return;document.addEventListener('DOMContentLoaded',decide);window.addEventListener('load',decide);var mo=new MutationObserver(function(){if(decide()){mo.disconnect();}});mo.observe(document.body,{childList:true,subtree:true,characterData:true});setTimeout(function(){mo.disconnect();},15000);}catch(e){}})()" }} />
       </body>
     </html>
   );

@@ -27,6 +27,8 @@ const VARS = [
   "GUMROAD_ACCESS_TOKEN", "GUMROAD_WEBHOOK_SECRET",
   "PAYBOX_MERCHANT_ID", "PAYBOX_SECRET", "PAYPAL_CLIENT_ID", "PAYPAL_SECRET",
   "PAYPAL_WEBHOOK_ID",
+  "BREVO_API_KEY",
+  "ADMIN_TOKEN",
 ];
 const saved: Record<string, string | undefined> = {};
 beforeEach(() => VARS.forEach((v) => { saved[v] = process.env[v]; delete process.env[v]; }));
@@ -100,5 +102,119 @@ describe("Подсказка называет, чего не хватает", ()
     expect(m).toContain("RESEND_API_KEY");
     expect(m).toContain("GOOGLE_OAUTH_CLIENT_ID");
     expect(m).toContain("GITHUB_OAUTH_CLIENT_ID");
+  });
+
+  test("canPay говорит «да» там, где покупку начать нельзя — на это есть отдельное поле", async () => {
+    // Два разных вопроса: «есть ли провайдер» и «начнётся ли покупка».
+    // Покупка не начнётся без варианта товара у LemonSqueezy, а он
+    // задаётся отдельной переменной на каждый тариф.
+    //
+    // Проверяем именно РАЗНИЦУ: тест на одно поле доказывал бы лишь то,
+    // что оно существует.
+    process.env.LEMON_SQUEEZY_API_KEY = "тест-ключ";
+    process.env.LEMON_SQUEEZY_STORE_ID = "1234";
+    for (const k of Object.keys(process.env)) {
+      if (k.startsWith("LEMON_SQUEEZY_VARIANT_")) delete process.env[k];
+    }
+    delete process.env.GUMROAD_ACCESS_TOKEN;
+    delete process.env.PAYBOX_MERCHANT_ID;
+    delete process.env.PAYPAL_CLIENT_ID;
+
+    const без = await request(app()).get("/api/health/channels");
+    expect(без.body.canPay).toBe(true);
+    expect(без.body.canStartPurchase).toBe(false);
+
+    process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY = "12345";
+    const с = await request(app()).get("/api/health/channels");
+    expect(с.body.canStartPurchase).toBe(true);
+    delete process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY;
+  });
+});
+
+describe("Почта: три пути, три ответа", () => {
+  /*
+   * 31.08.2026 два окна намеряли состояние почты и получили противоположные
+   * ответы — оба верные. Одно спрашивало путь входа (Resend, работает), другое
+   * видело молчащую отправку (SMTP без пароля). Слово «почта» покрывало три
+   * механизма, и каждый был прав про свой.
+   *
+   * Эти проверки закрепляют, что общего ответа тут нет и не должно быть.
+   */
+  test("Resend поднимает ТОЛЬКО вход: подписка и уведомление молчат", async () => {
+    process.env.RESEND_API_KEY = "re_x";
+    const r = await get();
+
+    expect(r.body.mail.signup.configured).toBe(true);
+    expect(r.body.mail.waitlist.configured, "подписка идёт через Brevo, не Resend").toBe(false);
+    expect(r.body.mail.founderNotify.configured, "уведомление идёт по SMTP").toBe(false);
+  });
+
+  test("Brevo поднимает ТОЛЬКО подписку", async () => {
+    process.env.BREVO_API_KEY = "xkeysib_x";
+    const r = await get();
+
+    expect(r.body.mail.waitlist.configured).toBe(true);
+    expect(r.body.mail.signup.configured).toBe(false);
+    expect(r.body.mail.founderNotify.configured).toBe(false);
+  });
+
+  test("SMTP без пароля не поднимает НИЧЕГО — это и было настоящее состояние прода", async () => {
+    // 31.08 на проде заданы SMTP_HOST, SMTP_USER, SMTP_PORT, SMTP_FROM — и не
+    // задан SMTP_PASS. Транспорт при этом возвращает null и отправка выходит
+    // молча: заявка на бирже принята, основатель о ней не узнаёт.
+    process.env.SMTP_HOST = "smtp.example.test";
+    process.env.SMTP_USER = "u";
+    const r = await get();
+
+    expect(r.body.mail.founderNotify.configured).toBe(false);
+    expect(r.body.mail.signup.configured).toBe(false);
+  });
+
+  test("полный SMTP поднимает вход И уведомление, но не подписку", async () => {
+    process.env.SMTP_HOST = "smtp.example.test";
+    process.env.SMTP_USER = "u";
+    process.env.SMTP_PASS = "p";
+    const r = await get();
+
+    expect(r.body.mail.founderNotify.configured).toBe(true);
+    expect(r.body.mail.signup.configured).toBe(true);
+    expect(r.body.mail.waitlist.configured).toBe(false);
+  });
+
+  test("общего поля «почта настроена» нет — оно и было источником спора", async () => {
+    process.env.RESEND_API_KEY = "re_x";
+    const r = await get();
+
+    // Проверяем СМЫСЛ, а не точный набор ключей: первая редакция требовала
+    // ровно три поля и покраснела на добавлении счётчика суток — то есть
+    // мешала работе вместо того, чтобы стеречь. Стеречь надо одно: чтобы не
+    // завели общий ответ «почта настроена», который и был источником спора.
+    for (const путь of ["signup", "waitlist", "founderNotify"]) {
+      expect(r.body.mail[путь], `пропал путь ${путь}`).toBeDefined();
+    }
+    expect(r.body.mail.configured, "общий ответ вернулся — уберите его").toBeUndefined();
+    expect(r.body.mail.ok, "общий ответ под другим именем").toBeUndefined();
+  });
+});
+
+describe("расход писем за сутки виден снаружи", () => {
+  test("ручка отдаёт счётчик и потолок", async () => {
+    // Скрипт рассылки живёт в отдельном процессе и счётчик сервера сам по себе
+    // видит нулём. Без этих двух чисел он мог бы пробить суточный потолок
+    // провайдера: 301-е письмо не уходит, и узнать об этом неоткуда.
+    const r = await get();
+
+    // Потолок открыт: это свойство тарифа у провайдера. Расход — нет: по нему
+    // видно, сколько на платформе движения, и посторонним это ни к чему.
+    expect(r.body.mail.dailyCap, "нет потолка суток").toBeGreaterThan(0);
+
+    // Значение латиницей: кириллица в HTTP-заголовке недопустима.
+    process.env.ADMIN_TOKEN = "t0ken-test";
+    const чужой = await get();
+    expect(чужой.body.mail.sentToday, "расход виден без токена").toBeUndefined();
+
+    const свой = await request(app()).get("/api/health/channels").set("x-admin-token", "t0ken-test");
+    expect(typeof свой.body.mail.sentToday, "по токену расход не отдан").toBe("number");
+    delete process.env.ADMIN_TOKEN;
   });
 });

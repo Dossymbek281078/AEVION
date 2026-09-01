@@ -50,7 +50,11 @@ const isTestFile = (rel: string) => /\.test\.tsx?$/.test(rel);
 
 /** Объявление константы, значение которой похоже на имя ключа авторизации. */
 const DEFINES_KEY =
-  /(?:const|let)\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*["'`][^"'`]*(?:token|jwt|auth)[^"'`]*["'`]/i;
+  // В строке ключа не бывает пробелов. Без этого условия шаблон ловил
+  // маркетинговый абзац со словом Authorship (const BOILERPLATE = `...`)
+  // на /press и краснел на прозе. Проверено на четырёх случаях: настоящие
+  // ключи ловятся по-прежнему, проза — нет.
+  /(?:const|let)\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*["'`][^"'`\s]*(?:token|jwt|auth)[^"'`\s]*["'`]/i;
 
 function walk(dir: string, acc: string[] = []): string[] {
   for (const e of readdirSync(dir)) {

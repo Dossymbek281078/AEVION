@@ -117,6 +117,7 @@ export function AgentDock() {
 
   // Keep a live ref to send so the (empty-deps) global listener never fires a
   // stale closure over busy/input.
+  const launcherRef = useRef<HTMLButtonElement | null>(null);
   const sendRef = useRef(send);
   sendRef.current = send;
 
@@ -157,15 +158,38 @@ export function AgentDock() {
     }
   };
 
+  // Кнопка стоит в правом нижнем углу и НАВСЕГДА закрывала ссылку
+  // «Помощь» в подвале: внизу страницы уехать из-под неё некуда.
+  // Замер живого прода 28.08.2026 зондом aevion-overlay-probe, десктоп
+  // 1280px. Поэтому кнопка публикует свой след, а страница на него
+  // отступает — так же, как под баннер установки.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (open) {
+      root.style.removeProperty("--aevion-dock-h");
+      return;
+    }
+    const h = launcherRef.current?.getBoundingClientRect().height ?? 0;
+    root.style.setProperty("--aevion-dock-h", `${Math.round(h) + 12}px`);
+    return () => {
+      root.style.removeProperty("--aevion-dock-h");
+    };
+  }, [open]);
+
   // ── Launcher button (collapsed) ────────────────────────────────────
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
-        aria-label="Open AEVION AI Agent"
+        ref={launcherRef}
+        aria-label="Открыть ИИ-помощника AEVION"
         style={{
           position: "fixed",
-          bottom: 16,
+          // Отступаем на высоту баннера установки, если он показан: они стоят в
+          // одном углу, и баннер (z-index 9999) полностью накрывал эту кнопку —
+          // замер 28.08.2026: 0 доступных точек из 70. Переменную публикует
+          // InstallPrompt; нет баннера — нет переменной, отступ обычный.
+          bottom: "calc(16px + var(--aevion-install-h, 0px))",
           right: 16,
           zIndex: 9998,
           padding: "10px 16px",
@@ -192,7 +216,7 @@ export function AgentDock() {
   return (
     <div
       role="dialog"
-      aria-label="AEVION AI Agent"
+      aria-label="ИИ-помощник AEVION"
       style={{
         position: "fixed",
         bottom: 16,
@@ -230,8 +254,8 @@ export function AgentDock() {
         {health && (
           <button
             onClick={() => setShowTools((v) => !v)}
-            aria-label="Show available tools"
-            title="Available tools"
+            aria-label="Показать доступные инструменты"
+            title="Доступные инструменты"
             style={{
               padding: "4px 9px",
               borderRadius: 999,
@@ -249,7 +273,7 @@ export function AgentDock() {
         )}
         <button
           onClick={() => setOpen(false)}
-          aria-label="Minimise agent"
+          aria-label="Свернуть помощника"
           style={{
             padding: "4px 8px",
             borderRadius: 6,
@@ -348,7 +372,7 @@ export function AgentDock() {
             onKeyDown={onKeyDown}
             rows={2}
             placeholder="Ask the agent to do something…"
-            aria-label="Message for the AI agent"
+            aria-label="Сообщение ИИ-помощнику"
             style={{
               flex: 1,
               resize: "none",

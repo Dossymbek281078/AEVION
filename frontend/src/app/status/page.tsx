@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { apiUrl } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 type ServiceProbe = {
   name: string;
@@ -569,7 +569,7 @@ export default function StatusPage() {
                 Backend process
               </div>
               <Link
-                href="/api/metrics/json"
+                href={`${getClientApiBase()}/api/metrics/json`}
                 style={{ fontSize: 10, color: "#0d9488", textDecoration: "none", fontFamily: "monospace" }}
               >
                 /api/metrics/json →
@@ -1136,7 +1136,7 @@ export default function StatusPage() {
         <div style={{ marginTop: 22, fontSize: 11, color: "#94a3b8" }}>
           Source: <code>GET /api/aevion/health</code> ·{" "}
           <code>GET /api/status/incidents</code> · Cache 10s ·{" "}
-          <Link href="/api/aevion/openapi.json" style={{ color: "#0d9488" }}>
+          <Link href={`${getClientApiBase()}/api/aevion/openapi.json`} style={{ color: "#0d9488" }}>
             OpenAPI index
           </Link>
         </div>

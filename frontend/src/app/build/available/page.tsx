@@ -98,13 +98,13 @@ export default function AvailablePage() {
           <input
             value={city}
             onChange={(e) => setCity(e.target.value)}
-            placeholder={t("build.available.cityPlaceholder")}
+            aria-label={t("build.available.cityPlaceholder")} placeholder={t("build.available.cityPlaceholder")}
             className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
           />
           <input
             value={specialty}
             onChange={(e) => setSpecialty(e.target.value)}
-            placeholder={t("build.available.specialtyPlaceholder")}
+            aria-label={t("build.available.specialtyPlaceholder")} placeholder={t("build.available.specialtyPlaceholder")}
             className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
           />
           <button

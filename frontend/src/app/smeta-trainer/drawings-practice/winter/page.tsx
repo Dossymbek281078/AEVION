@@ -544,7 +544,7 @@ export default function WinterPage() {
                             e.key === "Enter" && !rev[k] && go()
                           }
                           disabled={!!rev[k]}
-                          placeholder="Число..."
+                          aria-label="Число" placeholder="Число..."
                           className="flex-1 border border-blue-200 dark:border-slate-600 rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-slate-800 dark:text-slate-200"
                         />
                         {!rev[k] && (

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import VoteForm from "./VoteForm";
@@ -35,12 +36,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-async function loadProposal(id: string): Promise<{ proposal: Proposal; tally: Tally[]; totals: { total: number; total_weight: number } } | null> {
+async function loadProposal(id: string): Promise<{ proposal: Proposal; tally: Tally[]; totals: { total: number; total_weight: number } } | null | "absent"> {
   try {
     const r = await fetch(`${getApiBase()}/api/qchaingov/proposals/${encodeURIComponent(id)}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(6000),
     });
+    // Три исхода, а не два: «предложения нет» (404 от сервера) и «мы не
+    // смогли спросить» (5xx, обрыв) раньше давали одинаковый null, и на
+    // любой выдуманный id страница отвечала 200 с полной вёрсткой.
+    if (r.status === 404 || r.status === 410) return "absent" as const;
     if (!r.ok) return null;
     return await r.json();
   } catch { return null; }
@@ -53,6 +58,10 @@ const STATUS_COLORS: Record<string, string> = {
 export default async function ProposalPage({ params }: Props) {
   const { id } = await params;
   const data = await loadProposal(id);
+  // Предложения НЕТ — честный 404. 404 ставится ТОЛЬКО по коду от сервера:
+  // при аварии бэкенда data === null и страница отвечает как прежде, иначе
+  // поисковик решил бы, что живых предложений не существует.
+  if (data === "absent") notFound();
 
   if (!data) {
     return (

@@ -19,6 +19,14 @@ const PROTO_KEYS = ["constructor", "__proto__", "toString", "valueOf", "hasOwnPr
 const CITY_ROUTES = ["/api/qskyway/city", "/api/qskyway/airspace/impact"];
 
 describe("QSkyway — ключ прототипа в ?city= не выдаётся за город", () => {
+  it("набор служебных ключей не сократился молча", () => {
+    // Перебор идёт ПО СПИСКУ: убрал ключ — проверка перестала его спрашивать и
+    // осталась зелёной. 28.08.2026 тот же пробел нашёлся у пяти списков модуля;
+    // здесь он последний. Порог поднимать можно и нужно, опускать — только
+    // вместе с осознанным решением, что ключ больше не опасен.
+    expect(PROTO_KEYS.length, "набор служебных слов сократился — покрытие упало молча").toBeGreaterThanOrEqual(5);
+  });
+
   for (const route of CITY_ROUTES) {
     it.each(PROTO_KEYS)(`${route}?city=%s → 404, а не 500`, async (key) => {
       const r = await request(app).get(route).query({ city: key });

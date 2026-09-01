@@ -129,7 +129,7 @@ function BankContent() {
     if (intent === "cyberchess-pro") return {
       tier: "pro", amount: searchParams.get("amount") || "500",
       label: "CyberChess Pro",
-      features: ["Master AI до 2800 ELO","Безлимитные подсказки","Глубокий разбор каждой партии","Multi-PV анализ до 5 линий","Auto-Reels без водяного знака","Дебютная теория мастер-уровня"],
+      features: ["Master AI до 3500 ELO — полная сила движка","Безлимитные подсказки","Глубокий разбор каждой партии","Multi-PV анализ до 5 линий","Auto-Reels без водяного знака","Дебютная теория мастер-уровня"],
     };
     if (intent === "cyberchess-ultimate") return {
       tier: "ultimate", amount: searchParams.get("amount") || "5000",

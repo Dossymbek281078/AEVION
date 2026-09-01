@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { isSmokeSlot, countLiveSlots } from "../src/lib/slotOrigin";
+import { readFileSync, existsSync } from "node:fs";
+import path from "node:path";
 
 // Живой aevion.app 10.08.2026: `GET /api/qskyway/slots` → count 34, и 33 из них
 // оставлены нашим же прод-смоком (`smoke-route-…`, держатели op0..op3 / late /
@@ -37,5 +39,55 @@ describe("происхождение брони: смок или человек"
   it("живая глубина рынка на прод-выборке — 1 из 4", () => {
     expect(countLiveSlots(PROD_SAMPLE)).toBe(1);
     expect(countLiveSlots([])).toBe(0);
+  });
+
+  it("демо-кнопка самой страницы не считается рынком", () => {
+    // Публичная страница шлёт зашитый holder "AEVION demo" — поля имени там нет.
+    // Клик посетителя не должен публиковаться как заявка оператора.
+    expect(isSmokeSlot({ routeId: "astana-vp-112_2", holder: "AEVION demo" })).toBe(true);
+    expect(isSmokeSlot({ routeId: "astana-vp-112_2", holder: "aevion demo" })).toBe(true);
+    // Соседний контроль: похожее, но НЕ демо-имя остаётся живым.
+    expect(isSmokeSlot({ routeId: "astana-vp-112_2", holder: "AEVION Logistics" })).toBe(false);
+    expect(countLiveSlots([
+      { routeId: "astana-vp-112_2", holder: "AEVION demo" },
+      { routeId: "astana-vp-112_2", holder: "aero-taxi-kz" },
+    ])).toBe(1);
+  });
+});
+
+/**
+ * Литерал держателя берётся ИЗ СТРАНИЦЫ, а не копируется в тест.
+ *
+ * ПОВОД. Проверка выше закрепляет строку "AEVION demo", вписанную руками. Это
+ * копия значения, а не связь: поменяют подпись в `_client.tsx` — тест
+ * останется зелёным, а демо-брони снова начнут считаться живым спросом. Ровно
+ * тот дефект, ради которого классификация и заводилась.
+ *
+ * ⚠️ Да, тест бэкенда читает файл фронта — граница пересечена НАМЕРЕННО.
+ * Знание («чем подписывается демо-бронь») и так живёт в двух местах; пока это
+ * так, лучше пусть связь будет видимой и проверяемой, чем невидимой. Если
+ * страница переедет, тест скажет об этом прямо, а не промолчит.
+ */
+const CLIENT = path.join(
+  __dirname, "..", "..", "frontend", "src", "app", "qskyway", "_client.tsx",
+);
+
+describe("демо-держатель бэкенда связан со страницей", () => {
+  it("страница на месте — иначе связь надо переписать, а не удалять", () => {
+    expect(
+      existsSync(CLIENT),
+      "не нашёл " + CLIENT + ": страница переехала, поправьте путь в этом тесте",
+    ).toBe(true);
+  });
+
+  it("то, что страница РЕАЛЬНО шлёт, классифицируется как не живой спрос", () => {
+    const src = readFileSync(CLIENT, "utf8");
+    const m = src.match(/holder:\s*"([^"]+)"/);
+    expect(m, "страница больше не шлёт holder литералом — проверку надо переписать").toBeTruthy();
+    const sent = String(m![1]);
+    expect(
+      isSmokeSlot({ routeId: "astana-vp-112_2", holder: sent }),
+      "страница шлёт holder=" + JSON.stringify(sent) + ", а бэкенд считает это живой бронью",
+    ).toBe(true);
   });
 });

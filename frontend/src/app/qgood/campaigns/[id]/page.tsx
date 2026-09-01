@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import { getServerT } from "@/lib/i18n-server";
@@ -38,13 +39,20 @@ type DetailResponse = {
   donations: Donation[];
 };
 
-async function loadCampaign(id: string): Promise<DetailResponse | null> {
+async function loadCampaign(id: string): Promise<DetailResponse | null | "absent"> {
   try {
     const r = await fetch(`${getApiBase()}/api/qgood/campaigns/${encodeURIComponent(id)}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(6000),
     });
-    if (r.status === 404) return null;
+    // Различие было ЗДЕСЬ и выбрасывалось следующей строкой: 404 от сервера
+    // означает «такой кампании нет», а прочие неуспехи — «мы не смогли
+    // спросить». Возвращая на оба одинаковый null, страница отвечала 200 с
+    // полной вёрсткой на любой выдуманный id.
+    //
+    // 404 ставим ТОЛЬКО по коду сервера: отдать его при аварии значит
+    // сказать поисковику, что живых кампаний не существует.
+    if (r.status === 404 || r.status === 410) return "absent" as const;
     if (!r.ok) return null;
     const data = await r.json();
     if (!data || typeof data !== "object" || !data.campaign) return null;
@@ -95,7 +103,10 @@ function timeAgo(iso: string): string {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const data = await loadCampaign(id);
-  if (!data) {
+  // "absent" сюда тоже попадает: в метаданных отсутствие и недоступность
+  // ведут к одному и тому же — не индексировать. Различать их надо на
+  // странице, где от этого зависит КОД ОТВЕТА, а не заголовок.
+  if (!data || data === "absent") {
     return {
       title: "Campaign not found · QGood · AEVION",
       robots: { index: false, follow: false },
@@ -122,6 +133,11 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function QGoodCampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const data = await loadCampaign(id);
+  // Кампании НЕТ — честный 404. Своя not-found.tsx не нужна: общая страница
+  // сайта переводимая, а «такой кампании нет» здесь ошибка навигации, а не
+  // ответ, за которым пришли. Прежний текст остаётся на пути "не смогли
+  // спросить" — там 200 и объяснение, как было.
+  if (data === "absent") notFound();
   const { t } = await getServerT();
 
   if (!data) {

@@ -219,7 +219,7 @@ export default function WallsPage() {
                   </label>
                   <div className="flex gap-2">
                     <input type="text" value={inputs[key]??""} onChange={(e)=>setInputs(p=>({...p,[key]:e.target.value}))}
-                      onKeyDown={(e)=>e.key==="Enter"&&!revealed[key]&&handleCheck()} disabled={!!revealed[key]} placeholder="Число..."
+                      onKeyDown={(e)=>e.key==="Enter"&&!revealed[key]&&handleCheck()} disabled={!!revealed[key]} aria-label="Число" placeholder="Число..."
                       className="flex-1 border rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-orange-500 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"/>
                     {!revealed[key]&&<button onClick={handleCheck} disabled={!inputs[key]?.trim()}
                       className="px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded hover:bg-orange-700 disabled:opacity-40">✓</button>}

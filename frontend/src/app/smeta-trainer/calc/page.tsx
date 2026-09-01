@@ -174,7 +174,7 @@ function Field({ label, value, onChange, unit, step = "0.01" }: { label: string;
   return (
     <div className="flex items-center gap-2">
       <label className="text-xs text-slate-600 flex-1">{label}</label>
-      <input
+      <input aria-label={label}
         type="number"
         step={step}
         value={value}

@@ -30,7 +30,7 @@ export default function PermafrostObjectsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Объекты на вечной мерзлоте</div>
@@ -101,7 +101,7 @@ export default function PermafrostObjectsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Кол-во термосифонов, шт"
+            aria-label="Кол-во термосифонов, шт" placeholder="Кол-во термосифонов, шт"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 900 × 0.04 = 36 шт; +20% = ~42 шт термосифонов (расставлены по периметру 2×60+2×15=150 м через 3.6 м + усиление на углах).</p>
@@ -127,7 +127,7 @@ export default function PermafrostObjectsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~6.8 млрд тг (допуск ±10%). 0.58+0.18+0.24+0.165+2.4+0.98+0.38+0.42+0.28+0.72+0.435 = 6.78 млрд тг. Удельная стоимость ~1.5 млн тг/м² — в 2 раза выше юга РК из-за термостабилизации и сезонности.</p>

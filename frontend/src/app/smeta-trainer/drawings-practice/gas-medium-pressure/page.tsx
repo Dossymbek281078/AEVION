@@ -32,7 +32,7 @@ export default function GasMediumPressurePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
       {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice/hub"
@@ -371,7 +371,7 @@ export default function GasMediumPressurePage() {
                 type="text"
                 value={ex2Input}
                 onChange={(e) => setEx2Input(e.target.value)}
-                placeholder="нм³/ч"
+                aria-label="нм³/ч" placeholder="нм³/ч"
                 className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:border-yellow-500"
               />
               <span className="text-slate-400 text-sm">нм³/ч</span>
@@ -526,7 +526,7 @@ export default function GasMediumPressurePage() {
                 type="text"
                 value={ex4Input}
                 onChange={(e) => setEx4Input(e.target.value)}
-                placeholder="тенге"
+                aria-label="тенге" placeholder="тенге"
                 className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm w-40 focus:outline-none focus:border-yellow-500"
               />
               <span className="text-slate-400 text-sm">тг</span>

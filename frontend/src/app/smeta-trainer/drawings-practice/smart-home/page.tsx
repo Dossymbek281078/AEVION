@@ -340,7 +340,7 @@ export default function SmartHomePage() {
                 inputMode="decimal"
                 value={ex2Input}
                 onChange={(e) => setEx2Input(e.target.value)}
-                placeholder="Каналов"
+                aria-label="Каналов" placeholder="Каналов"
                 className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 w-32 focus:outline-none focus:border-emerald-500"
               />
               <span className="text-slate-400 text-sm">каналов</span>
@@ -402,7 +402,7 @@ export default function SmartHomePage() {
                 inputMode="decimal"
                 value={ex3Input}
                 onChange={(e) => setEx3Input(e.target.value)}
-                placeholder="Метров"
+                aria-label="Метров" placeholder="Метров"
                 className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 w-32 focus:outline-none focus:border-emerald-500"
               />
               <span className="text-slate-400 text-sm">м</span>
@@ -463,7 +463,7 @@ export default function SmartHomePage() {
                 inputMode="decimal"
                 value={ex4Input}
                 onChange={(e) => setEx4Input(e.target.value)}
-                placeholder="Тенге"
+                aria-label="Тенге" placeholder="Тенге"
                 className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 w-40 focus:outline-none focus:border-emerald-500"
               />
               <span className="text-slate-400 text-sm">тг</span>

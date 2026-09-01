@@ -515,7 +515,7 @@ export default function DrawingsDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* HEADER */}
-      <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-4">
           <Link href="/smeta-trainer/drawings-practice/hub" className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">
             ← К разделам
@@ -750,7 +750,7 @@ export default function DrawingsDashboard() {
                 type="file"
                 accept="application/json,.json"
                 onChange={handleImportFile}
-                className="hidden"
+                className="aevion-file-input"
               />
             </label>
           </div>

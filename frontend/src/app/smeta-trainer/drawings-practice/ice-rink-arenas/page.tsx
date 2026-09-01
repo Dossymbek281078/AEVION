@@ -30,7 +30,7 @@ export default function IceRinkArenasPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Ледовые арены</div>
@@ -106,7 +106,7 @@ export default function IceRinkArenasPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="L_общ, ×10 м (для 7200 → 720)"
+            aria-label="L_общ, ×10 м (для 7200 → 720)" placeholder="L_общ, ×10 м (для 7200 → 720)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 300 рядов × 60 м = 18 000 м + петли разворота (300 × 0.3 м) = 18 090 м. Но петли разделяют на 36 коллекторов по 600 м (8.4 м³/час каждый при ΔT=3°C, V=1.5 м/с), для упрощения сложности расчёта — общая длина в учебном плане ~7200 м (используется коллекторная система с подразделением). Введите 720 (×10).</p>
@@ -138,7 +138,7 @@ export default function IceRinkArenasPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~78 млрд тг (допуск ±10%). 16+4.2+3.6+4.8+1.8+0.8+1.8+4.6+5.2+3.8+4.4+1.2+6+3.6+5.2+2.4+3.6+5 = 78 млрд тг. Барыс Арена (2015) — оценочно $130 млн ≈ 62 млрд тг (с инфляцией). С учётом современных систем IIHF Cat. A+ ~78 млрд тг.</p>

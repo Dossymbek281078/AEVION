@@ -348,7 +348,7 @@ export default function CPIDashboardPage() {
               textDecoration: "none",
               letterSpacing: 0.3,
             }}>
-              Играть → /cyberchess
+              Играть →
             </Link>
             <div style={{ marginTop: 24, fontSize: 11, color: C.faint }}>
               <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>← Что такое CPI?</Link>
@@ -422,7 +422,7 @@ export default function CPIDashboardPage() {
                 </div>
                 <div style={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
                   Твоя слабая зона: <strong style={{ color: C.yellow }}>{weakest.name}</strong> (avg {weakest.avg > 0 ? "+" : ""}{weakest.avg.toFixed(1)} / партия).
-                  {" "}Тренируй <strong style={{ color: C.text }}>пазлы {weakest.code}</strong> чтобы выправить CPI.
+                  {" "}Тренируй <strong style={{ color: C.text }}>задачи {weakest.code}</strong> чтобы выправить CPI.
                 </div>
               </section>
             )}
@@ -512,7 +512,7 @@ export default function CPIDashboardPage() {
         <div style={{ marginTop: 24, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
           <Link href="/cyberchess" style={{ color: C.purple, textDecoration: "none" }}>← CyberChess</Link>
           <span style={{ color: C.faint }}>·</span>
-          <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>CPI spec / формула</Link>
+          <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>Как считается CPI</Link>
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>

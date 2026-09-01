@@ -2775,6 +2775,17 @@ export default function Globus3D({
           (target as HTMLElement).isContentEditable);
       if (isEditable) return;
 
+      // Глобус — виджет, а не вся страница. Слушатель висит на window, и до
+      // 31.08.2026 он съедал Tab, пробел, Enter и стрелки ВЕЗДЕ на главной:
+      // замер на проде — 40 нажатий Tab из 40 оставляли фокус на body при
+      // 121 ссылке и 25 кнопках. Клавиатурой по главной пройти было нельзя.
+      // Теперь клавиши глобуса работают, только когда фокус ВНУТРИ него;
+      // войти — Tab до глобуса, выйти — Escape.
+      const корень = containerRef.current;
+      const вГлобусе =
+        !!корень && !!document.activeElement && корень.contains(document.activeElement);
+      if (!вГлобусе) return;
+
       const kRot = 0.07;
       let handled = true;
       switch (e.key) {
@@ -2810,6 +2821,13 @@ export default function Globus3D({
             Math.min(MAX_DIST, distanceRef.current / 0.9),
           );
           break;
+        case "Escape": {
+          // Без выхода виджет становится ловушкой: Tab внутри переключает
+          // метки и наружу не выпускает. Escape возвращает фокус странице.
+          const корень = containerRef.current;
+          if (корень) корень.blur();
+          break;
+        }
         case "Tab": {
           const visible = markerMeshesRef.current.filter(
             (x) => x.group.visible,
@@ -3119,6 +3137,9 @@ export default function Globus3D({
     >
       <div
         ref={containerRef}
+        tabIndex={0}
+        role="application"
+        aria-label="Интерактивный глобус AEVION: стрелки вращают, Tab внутри переключает метки, Escape выходит"
         style={{
           width: "100%",
           height: globeHeight,

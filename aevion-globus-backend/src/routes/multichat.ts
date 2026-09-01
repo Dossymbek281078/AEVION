@@ -18,6 +18,7 @@
 // single response with one entry per agent — fan-out is parallel via
 // Promise.allSettled so a slow / failing agent doesn't block the rest.
 
+import { clientIp } from "../lib/rateLimit";
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { getPool } from "../lib/dbPool";
@@ -45,7 +46,12 @@ multichatRouter.use(requireAuth);
 const dispatchLimiter = rateLimit({
   capacity: 12,
   refillPerSec: 12 / 60,
-  keyFn: (req) => `mc:${req.auth?.sub || req.ip || "anon"}`,
+  // clientIp(), а не сырой req.ip: свой keyFn случайно отказывается от
+  // нормализации, которую умолчание rateLimit() делает само. Без неё анонимный
+  // посетитель с обычной домашней IPv6-выдачей получает свежее окно с каждого
+  // адреса своей подсети — то есть предел на ПЛАТНЫЙ вызов ИИ не ограничивает
+  // расход. Ключ по пользователю остаётся первым: он точнее адреса.
+  keyFn: (req) => `mc:${req.auth?.sub || clientIp(req)}`,
 });
 
 type Conversation = {
@@ -1168,7 +1174,7 @@ export const multichatPublicRouter = Router();
 const dissentPreviewLimiter = rateLimit({
   capacity: 30,
   refillPerSec: 0.5,
-  keyFn: (req) => `mc-dissent:${req.ip || "anon"}`,
+  keyFn: (req) => `mc-dissent:${clientIp(req)}`,
 });
 
 multichatPublicRouter.post("/dissent/preview", dissentPreviewLimiter, (req, res) => {
@@ -1207,7 +1213,7 @@ multichatPublicRouter.post("/dissent/preview", dissentPreviewLimiter, (req, res)
 const receiptVerifyLimiter = rateLimit({
   capacity: 60,
   refillPerSec: 1,
-  keyFn: (req) => `mc-verify:${req.ip || "anon"}`,
+  keyFn: (req) => `mc-verify:${clientIp(req)}`,
 });
 
 multichatPublicRouter.post("/receipt/verify", receiptVerifyLimiter, async (req, res) => {

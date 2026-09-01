@@ -618,6 +618,13 @@ export const openapiSpec = {
     "/api/qskyway/airspace/anchor/verify": { post: { summary: "Verify an OTS proof {city, contentHash, otsProofB64}; reports Bitcoin anchoring and current-snapshot match separately", security: [] } },
     "/api/qskyway/airspace/proof": { get: { summary: "The shipped Bitcoin (OpenTimestamps) proof for the airspace edition in use, verified on the fly; says separately whether it still covers the current edition", security: [] } },
     "/api/qskyway/airspace/register": { post: { summary: "Register the signed airspace edition in the QRight registry (idempotent on content hash)", security: [] } },
+    // Публикует ТЕ САМЫЕ байты, над которыми взят contentHash редакции. Без
+    // этого привязка к Bitcoin доказывала лишь, что какой-то дайджест
+    // проштампован, но не что он относится к нашему воздушному пространству.
+    // Байты, подписанные у двойника города. Без них знак «подписано» обещал
+    // проверяемость, которой нет: подписан объект ДО добавления полей ответа.
+    "/api/qskyway/city/signed-payload": { get: { summary: "The exact bytes the city twin signature covers, so anyone can recompute the hash and check the Ed25519 attestation. Note this is NOT the whole /city response - that one has extra fields appended.", responses: { "200": { description: "payload, contentHash and a step-by-step recipe" }, "404": { description: "unknown city" } } } },
+    "/api/qskyway/airspace/edition": { get: { summary: "The exact bytes the edition contentHash is taken over, so anyone can recompute the hash and check what the Bitcoin timestamp actually attests. Returns the payload string AS IS - re-serialising it will yield a different hash.", responses: { "200": { description: "payload, contentHash and a step-by-step recipe" }, "404": { description: "unknown city; the response lists the ones that exist" } } } },
     "/api/qskyway/airspace/impact": { get: { summary: "How many pad-to-pad routes fit under the published ceiling: both directions counted separately, plus how many stay flyable when the ceiling is a hard constraint and how many pads the regulator authorizes nothing over", security: [] } },
     "/api/qskyway/height-substitution": { get: { summary: "Whether heights taken from the city's own type statistics (75th percentile of the same building type) actually sit under any corridor: how many such buildings exist, how many stand under routes, and how many pad-to-pad routes pass over one", security: [] } },
     "/api/qskyway/height-dispute": { get: { summary: "Whether a height the twin itself distrusts actually raises any corridor: disputed buildings (OSM tag vs the figure published by the object's own article) and how many pad-to-pad routes rest on one, measured by the routing engine", security: [] } },
@@ -769,10 +776,80 @@ export const openapiSpec = {
               "application/json": {
                 schema: {
                   type: "object",
+                  // Описание приведено к тому, что ручка ОТДАЁТ (замер на проде
+                  // 23.08.2026). Прежняя версия обещала поле `cert` и поле
+                  // `reason`; в ответе их нет — сертификат лежит в `certificate`,
+                  // а при 404 приходит `error`. По такой спеке сгенерированный
+                  // клиент читал бы undefined и молчал.
                   properties: {
-                    valid: { type: "boolean" },
-                    reason: { type: "string", nullable: true, description: "When valid=false, why" },
-                    cert: { $ref: "#/components/schemas/IPCertificate" },
+                    valid: {
+                      type: "boolean",
+                      description:
+                        "Сертификат найден. Это НЕ вердикт проверки и НЕ признак отзыва: " +
+                        "у любого найденного сертификата значение всегда true, " +
+                        "включая отозванный. Отзыв смотрите в поле status " +
+                        "(active | revoked), а сошлось ли доказательство — " +
+                        "в integrityVerified.",
+                    },
+                    verified: { type: "boolean", description: "Запрос обслужен (совпадает с valid)" },
+                    integrityVerified: {
+                      type: "boolean",
+                      description:
+                        "Вердикт проверки: хеш содержимого сошёлся, подпись не разошлась, " +
+                        "щит активен. Единственное поле, которое можно показывать человеку " +
+                        "как «сертификат подтверждён».",
+                    },
+                    verifiedAt: { type: "string", format: "date-time" },
+                    certificate: { $ref: "#/components/schemas/IPCertificate" },
+                    integrity: {
+                      type: "object",
+                      description: "Послойный разбор: каждое поле — отдельная независимая проверка",
+                      properties: {
+                        contentHashValid: { type: "boolean" },
+                        contentHashRule: {
+                          type: "string",
+                          enum: ["v1", "v2"],
+                          nullable: true,
+                          description:
+                            "Каким правилом сошёлся хеш. null — не сошёлся ни одним. v1 — правило до канонизации: страна и город хешем НЕ покрыты.",
+                        },
+                        signatureHmacValid: { type: "boolean", nullable: true, description: "null = проверять нечего" },
+                        signatureHmacReason: { type: "string", enum: ["OK", "NO_SIGNED_AT", "MISMATCH", "ERROR"] },
+                        qsignKeyVersion: { type: "integer" },
+                        currentKeyVersion: { type: "integer" },
+                        keyRotatedSinceSigning: { type: "boolean" },
+                        quantumShieldStatus: { type: "string" },
+                        shieldLegacy: { type: "boolean" },
+                        shieldId: { type: "string", nullable: true },
+                        shards: { type: "integer" },
+                        threshold: { type: "integer" },
+                        authorCosign: { type: "object", description: "{present:false} либо {present:true, valid, fingerprint}" },
+                      },
+                    },
+                    shardDistribution: {
+                      type: "object",
+                      properties: {
+                        policy: { type: "string" },
+                        realDistributed: { type: "boolean", description: "false = все доли лежат у нас, разделение защитой не является" },
+                        locations: { type: "array", items: { type: "object" } },
+                        witness: { type: "object", nullable: true },
+                      },
+                    },
+                    bitcoinAnchor: {
+                      type: "object",
+                      properties: {
+                        status: { type: "string", enum: ["not_stamped", "pending", "bitcoin-confirmed", "failed"] },
+                        bitcoinBlockHeight: { type: "integer", nullable: true },
+                        stampedAt: { type: "string", format: "date-time", nullable: true },
+                        upgradedAt: { type: "string", format: "date-time", nullable: true },
+                        hasProof: { type: "boolean" },
+                        network: { type: "string" },
+                        proofUrl: { type: "string", nullable: true },
+                        upgradeUrl: { type: "string", nullable: true },
+                      },
+                    },
+                    legalBasis: { type: "object" },
+                    stats: { type: "object" },
                   },
                 },
               },

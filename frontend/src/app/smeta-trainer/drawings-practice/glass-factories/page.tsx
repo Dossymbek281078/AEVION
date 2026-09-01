@@ -30,7 +30,7 @@ export default function GlassFactoriesPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Стекольные заводы</div>
@@ -107,7 +107,7 @@ export default function GlassFactoriesPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V газа, ×100 м³/час"
+            aria-label="V газа, ×100 м³/час" placeholder="V газа, ×100 м³/час"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 3300 × 1000 = 3 300 000 МДж/сут / 36 МДж/м³ = 91 700 м³/сут / 24 ч = 3820 м³/час. С учётом КПД печи 80% → ~4700 м³/час. Введите 24 (×100 = 2400 м³/час чистого, без учёта дополнит. подогрева Lehr/Float Bath + регенерации).</p>
@@ -139,7 +139,7 @@ export default function GlassFactoriesPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~65 млрд тг (допуск ±10%). 14+18+12+5+3.6+4.2+0.6+2.8+1.2+3.8+1.8+1.4+2.4+4.6+3.8+1.6+0.2 = 81 млрд тг (но с учётом скидок CAPEX и оптимизации = 65 млрд). Удельная стоимость ~110 млн тг/т·сутки производства — соответствует мировым float-glass проектам Pilkington/Guardian.</p>

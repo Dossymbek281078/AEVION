@@ -1,11 +1,12 @@
 "use client";
 
+import { channelNow } from "@/lib/channelNow";
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { BuyLink } from "@/components/BuyLink";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
-import { productById } from "@/lib/products";
+import { channelFrom, productById, withChannel } from "@/lib/products";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 // QRenew — cellular-renewal program. Two live tools over the deterministic
@@ -52,6 +53,15 @@ const BUY = [productById("oijxmq"), productById("tmuyxw")].filter(
 const TIER_COLOR: Record<string, string> = { A: "#55C093", B: "#5BB6D0", C: "#DDB253", D: "#E0787F" };
 
 export default function QRenewClient() {
+  // Метка канала для ссылок в кассу. Ролики ведут именно сюда, поэтому
+  // потеря метки на этой странице стоит дороже всего: покупка приходит
+  // как пришедшая ниоткуда. Держится в состоянии и заполняется после
+  // отрисовки — на сервере адреса ещё нет, и чтение из window разошлось
+  // бы с серверной разметкой.
+  const [channel, setChannel] = useState<string | null>(null);
+  useEffect(() => {
+    setChannel(channelNow());
+  }, []);
   const [vals, setVals] = useState<Record<string, string>>({});
   const [bio, setBio] = useState<BioResult | null>(null);
   const [bioErr, setBioErr] = useState<string | null>(null);
@@ -196,7 +206,7 @@ export default function QRenewClient() {
           {BUY.map((p) => (
             <BuyLink
               key={p.id}
-              href={p.href}
+              href={withChannel(p.href, channel, "qrenew")}
               source="qrenew"
               productId={p.id}
               priceUsd={p.priceUsd}

@@ -14,7 +14,7 @@ export default function StormwaterDetentionTunnelPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Stormwater Detention</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Stormwater Detention</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🌧️ Stormwater Detention Tunnel — городское ливневое</h1>
           <p className="mt-3 text-slate-400 leading-relaxed max-w-3xl">Модуль #304. Алматы 2024 наводнение Тысячелетие (350 м³/с peak) → план мегатоннеля ливневой канализации под город (cathedral-style TBM Robbins Ø8 м × 12 км под главными бульварами). Reference: Tokyo G-Cans Underground Discharge Channel (50 м H × 177 м wide × 5 chambers underground), Hong Kong WHHDS, London Lee Tunnel + Thames Tideway, Chicago TARP (175 mi tunnels). Detention buffers stormwater peak до treatment plant capacity 50-100 м³/с, prevents flooding city + combined sewer overflow CSO. ASCE Stormwater BMP + EPA Best Practices + СНиП 2.04.03.</p>
@@ -48,7 +48,7 @@ export default function StormwaterDetentionTunnelPage() {
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Объём storage</h2>
           <p className="text-slate-300">Tunnel Ø8 м × 10 км. Useable fraction 70% (gravity flow + air gap). Объём (м³)?</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="м³" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="м³" placeholder="м³" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>Площадь = π(8/2)² = 50.3 м². V = 50.3 × 10 000 × 0.7 = <strong>~280 000 м³</strong>. Покрывает 1-hr 100-year storm event 300 м³/с × 1 hr × 50% peak factor.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс tunnel</h2>
@@ -61,7 +61,7 @@ export default function StormwaterDetentionTunnelPage() {
             <li>SCADA + InfoWorks ICM + monitoring = 0.4 млрд</li>
             <li>Cathodic protection ICCP + проектирование 5% + ПИР + PNR + страхование = 0.6 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${correct.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~22 млрд тг (~$47M USD)</strong> на 10 км Ø8 м detention tunnel. Удельная — $4700/м tunnel. Тоже сэкономит $10-50M в damage prevention per major flood event.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — H2S corrosion</h2>

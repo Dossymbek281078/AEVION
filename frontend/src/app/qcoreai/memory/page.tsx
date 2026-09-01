@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/ToastProvider";
 import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -33,6 +34,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string
 };
 
 export default function MemoryPage() {
+  const { showToast } = useToast();
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,24 +70,48 @@ export default function MemoryPage() {
   const togglePin = async (mem: MemoryItem) => {
     const newPinned = !mem.pinned;
     setMemories((prev) => prev.map((m) => m.id === mem.id ? { ...m, pinned: newPinned } : m));
+    // Тот же дефект, что был у deleteMemory ниже, и починка та же.
+    //
+    // Откат стоял ТОЛЬКО в catch, а fetch не бросает исключение на 4xx/5xx —
+    // он спокойно возвращает ответ. Значит отказ сервера оставлял булавку
+    // нарисованной: человек считал запись закреплённой, а после перезагрузки
+    // она оказывалась незакреплённой. Отказ выглядел успехом.
+    //
+    // Найдено 29.08.2026 по признаку «непоследовательность внутри одного
+    // файла»: у соседней функции проверка уже была, у этой нет.
     try {
-      await fetch(apiUrl(`/api/qcoreai/me/memories/${mem.id}`), {
+      const r = await fetch(apiUrl(`/api/qcoreai/me/memories/${mem.id}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...bearerHeader() },
         body: JSON.stringify({ pinned: newPinned }),
       });
+      if (!r.ok) {
+        setMemories((prev) => prev.map((m) => m.id === mem.id ? { ...m, pinned: mem.pinned } : m));
+        showToast(`Не удалось изменить закрепление (${r.status}).`, "error");
+      }
     } catch {
-      // revert
       setMemories((prev) => prev.map((m) => m.id === mem.id ? { ...m, pinned: mem.pinned } : m));
+      showToast("Не удалось изменить закрепление — проверьте связь.", "error");
     }
   };
 
   const deleteMemory = async (id: string) => {
+    // Оптимистичное удаление: строку убираем сразу, чтобы список не мигал.
+    //
+    // Но откат стоял ТОЛЬКО в catch, а `fetch` не бросает исключение на 500 или
+    // 403 — он спокойно возвращает ответ. То есть неудавшееся удаление
+    // оставляло запись скрытой: человек считал, что удалил, а после
+    // перезагрузки она возвращалась. Отказ выглядел успехом.
     setMemories((prev) => prev.filter((m) => m.id !== id));
     try {
-      await fetch(apiUrl(`/api/qcoreai/me/memories/${id}`), { method: "DELETE", headers: bearerHeader() });
+      const r = await fetch(apiUrl(`/api/qcoreai/me/memories/${id}`), { method: "DELETE", headers: bearerHeader() });
+      if (!r.ok) {
+        await loadMemories();
+        showToast(`Не удалось удалить (${r.status}). Запись на месте.`, "error");
+      }
     } catch {
       await loadMemories();
+      showToast("Не удалось удалить — проверьте связь. Запись на месте.", "error");
     }
   };
 

@@ -30,7 +30,7 @@ export default function DairyPlantsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Молочные заводы</div>
@@ -99,7 +99,7 @@ export default function DairyPlantsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Объём, м³"
+            aria-label="Объём, м³" placeholder="Объём, м³"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 200000÷1030 ≈ 194 м³ суточн. + 194×0.67×1.25 ≈ 162 м³ резерв ≈ 356 м³ ≈ 8 танков по 30 м³ + 2 по 50 м³. Включая UHT/пастер. танки + сливок ≈ 600 м³ → запас 4×. Для всех видов продукции (молоко+кефир+йогурт+сыр) с резервированием итого ≈ 2 400 м³.</p>
@@ -121,7 +121,7 @@ export default function DairyPlantsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~9.8 млрд тг (допуск ±10%). 4800+850+720+980+1200+580+720 = 9 850 млн тг.</p>

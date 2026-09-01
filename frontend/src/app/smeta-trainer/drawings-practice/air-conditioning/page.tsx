@@ -263,7 +263,7 @@ export default function AirConditioningPage() {
                 type="text"
                 value={ex2Input}
                 onChange={(e) => setEx2Input(e.target.value)}
-                placeholder="м"
+                aria-label="Ответ, м" placeholder="м"
                 className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:border-cyan-500 outline-none"
               />
               <button
@@ -315,7 +315,7 @@ export default function AirConditioningPage() {
                 type="text"
                 value={ex3Input}
                 onChange={(e) => setEx3Input(e.target.value)}
-                placeholder="тенге"
+                aria-label="тенге" placeholder="тенге"
                 className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:border-cyan-500 outline-none"
               />
               <button
@@ -369,7 +369,7 @@ export default function AirConditioningPage() {
                 type="text"
                 value={ex4Input}
                 onChange={(e) => setEx4Input(e.target.value)}
-                placeholder="кВт"
+                aria-label="кВт" placeholder="кВт"
                 className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:border-cyan-500 outline-none"
               />
               <button

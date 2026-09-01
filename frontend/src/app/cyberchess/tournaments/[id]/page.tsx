@@ -521,7 +521,7 @@ export default function TournamentDetailPage({
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
           }}
         >
-          tournament_id: {tournamentId}
+          Адрес турнира: {tournamentId}
         </div>
         {/* Образец обязан сказать о себе ДО того, как человек начнёт читать
             сетку. В списке турниров подпись уже стоит (12.08), а здесь её не
@@ -646,7 +646,7 @@ function BracketView({
   liveMatchId: string | null;
 }) {
   if (loading && rounds.length === 0) {
-    return <SkeletonBox label="Загружаем bracket..." />;
+    return <SkeletonBox label="Загружаем сетку турнира..." />;
   }
   if (rounds.length === 0) {
     return <EmptyBox label="Сетка ещё не сформирована." />;
@@ -1044,8 +1044,27 @@ function StandingsView({
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  // Хук объявлен ДО ранних возвратов: ниже их два (скелет загрузки и
+  // сетка на выбывание), и если хук оставить после них, число хуков между
+  // отрисовками будет разным — React считает это ошибкой и роняет страницу.
+  const sortedStandings = useMemo(() => {
+    const arr = [...standings];
+    const getter: Record<SortKey, (r: StandingRow) => number> = {
+      score: (r) => r.score,
+      buchholz: (r) => r.buchholz,
+      rating: (r) => r.rating,
+      games: (r) => r.gamesPlayed,
+    };
+    const fn = getter[sortKey];
+    arr.sort((a, b) => {
+      const diff = fn(a) - fn(b);
+      return sortDir === "asc" ? diff : -diff;
+    });
+    return arr;
+  }, [standings, sortKey, sortDir]);
+
   if (loading && standings.length === 0) {
-    return <SkeletonBox label="Считаем standings..." />;
+    return <SkeletonBox label="Считаем таблицу..." />;
   }
 
   if (format === "single_elimination") {
@@ -1111,21 +1130,6 @@ function StandingsView({
   }
 
   // A) Sortable swiss / round_robin → table
-  const sortedStandings = useMemo(() => {
-    const arr = [...standings];
-    const getter: Record<SortKey, (r: StandingRow) => number> = {
-      score: (r) => r.score,
-      buchholz: (r) => r.buchholz,
-      rating: (r) => r.rating,
-      games: (r) => r.gamesPlayed,
-    };
-    const fn = getter[sortKey];
-    arr.sort((a, b) => {
-      const diff = fn(a) - fn(b);
-      return sortDir === "asc" ? diff : -diff;
-    });
-    return arr;
-  }, [standings, sortKey, sortDir]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -1154,7 +1158,7 @@ function StandingsView({
       }}
     >
       {standings.length === 0 ? (
-        <EmptyBox label="Standings пока пустые." />
+        <EmptyBox label="Таблица пока пустая." />
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
@@ -1180,7 +1184,7 @@ function StandingsView({
               <th
                 onClick={() => handleSort("buchholz")}
                 style={thStyle({ active: sortKey === "buchholz", sortable: true, align: "center" })}
-                title="Сортировать по Buchholz"
+                title="Сортировать по коэффициенту Бухгольца"
               >
                 Buchholz <SortArrow active={sortKey === "buchholz"} />
               </th>

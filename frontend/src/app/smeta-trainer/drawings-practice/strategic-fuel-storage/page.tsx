@@ -30,7 +30,7 @@ export default function StrategicFuelStoragePage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Стратегические нефтехранилища</div>
@@ -107,7 +107,7 @@ export default function StrategicFuelStoragePage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Масса стали, ×100 кг (для 162 т → 1620)"
+            aria-label="Масса стали, ×100 кг (для 162 т → 1620)" placeholder="Масса стали, ×100 кг (для 162 т → 1620)"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: M_ст = π × 45.6 × 12 × 0.015 × 7850 = 202 000 кг = 202 т (средняя толщ. 15 мм); M_дно = π × 22.8² × 0.01 × 7850 = 128 000 кг = 128 т; M_крыша = π × 22.8² × 0.005 × 7850 / cos(22.5°) ≈ 69 т. Итого ~400 т. С учётом плавающего понтона и узлов = ~500 т. Для 600 000 м³ парка (30 РВС) = 30 × 500 = 15 000 т. Но в учебной задаче — ~162 т на 1 РВС (с упрощённым понтоном и без узлов = чистая сталь оболочки).</p>
@@ -137,7 +137,7 @@ export default function StrategicFuelStoragePage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~165 млрд тг (допуск ±10%). 24+9+4+8+18+22+32+14+4+8+6+5+4+3.5+3.5 = 165 млрд тг. Удельная стоимость ~330 тыс. тг/т хранилищной мощности. Стратегический резерв США (SPR) обходится ~$3.5 за баррель ёмкости.</p>

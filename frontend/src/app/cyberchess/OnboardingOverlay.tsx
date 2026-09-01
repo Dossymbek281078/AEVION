@@ -18,6 +18,7 @@
 
 // Число уроков — из данных. Вписанное рядом с источником оно устаревает
 // молча: 28.08.2026 то же «14» стояло в трёх местах сразу.
+import { useEffect, useRef } from "react";
 import { LESSONS } from "./coachLessons";
 
 export type OnboardingChoice = {
@@ -99,12 +100,64 @@ const INTENTS: Array<{
   hint: string;
 }> = [
   { intent: "play", icon: "♟", title: "Играть", hint: "Партия против AI 800–2400 — 5 секунд до старта" },
-  { intent: "learn", icon: "🎓", title: "Учиться", hint: `Курс из ${LESSONS.length} уроков и живой AI-тренер` },
-  { intent: "puzzles", icon: "⚡", title: "Пазлы", hint: "Тысячи задач под твой уровень" },
+  { intent: "learn", icon: "🎓", title: "Учиться", hint: `Курс из ${LESSONS.length} уроков и живой ИИ-тренер` },
+  { intent: "puzzles", icon: "⚡", title: "Задачи", hint: "Тысячи задач под твой уровень" },
 ];
 
 export default function OnboardingOverlay({ onComplete, onSkip, mode = "dark" }: Props) {
   const p = makePalette(mode);
+  const oknoRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * Клавиатура в модальном окне. Замерено на боевой сборке 31.08.2026:
+   * Escape окно НЕ закрывал (проверено с фокусом снаружи и внутри, контроль —
+   * крестик закрывает), а фокус при открытии оставался на BODY, то есть
+   * человек с клавиатурой оказывался ПОЗАДИ окна, которое перехватывает все
+   * нажатия. Это первый экран, который видит новичок.
+   *
+   * Три вещи, которых модальному окну не хватало:
+   *  - Escape закрывает так же, как крестик;
+   *  - фокус уезжает внутрь при открытии;
+   *  - Tab не выходит наружу, пока окно открыто.
+   */
+  useEffect(() => {
+    const bylFokus = document.activeElement as HTMLElement | null;
+    const okno = oknoRef.current;
+    okno?.querySelector<HTMLElement>("button")?.focus();
+
+    function naKlavishu(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleSkip();
+        return;
+      }
+      if (e.key !== "Tab" || !okno) return;
+      const knopki = Array.from(
+        okno.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'),
+      );
+      if (!knopki.length) return;
+      const pervaya = knopki[0];
+      const poslednyaya = knopki[knopki.length - 1];
+      if (e.shiftKey && document.activeElement === pervaya) {
+        e.preventDefault();
+        poslednyaya.focus();
+      } else if (!e.shiftKey && document.activeElement === poslednyaya) {
+        e.preventDefault();
+        pervaya.focus();
+      }
+    }
+
+    document.addEventListener("keydown", naKlavishu);
+    return () => {
+      document.removeEventListener("keydown", naKlavishu);
+      // Возвращаем фокус туда, откуда его забрали: иначе после закрытия
+      // человек продолжает Tab с начала страницы.
+      bylFokus?.focus?.();
+    };
+    // handleSkip замыкает только пропсы, менять подписку между отрисовками
+    // не нужно — окно живёт от открытия до закрытия.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function pick(intent: "play" | "learn" | "puzzles") {
     markOnboardingDone();
@@ -119,6 +172,7 @@ export default function OnboardingOverlay({ onComplete, onSkip, mode = "dark" }:
 
   return (
     <div
+      ref={oknoRef}
       role="dialog"
       aria-modal="true"
       aria-label="С чего начать в CyberChess"

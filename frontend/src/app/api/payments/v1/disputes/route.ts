@@ -140,7 +140,12 @@ export async function POST(req: NextRequest) {
       withCors(
         new Response(idem.cachedBody, {
           status: 200,
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            // Повтор обязан называть себя повтором, иначе он неотличим от
+            // нового спора: тот же 200, тот же объект.
+            "idempotent-replayed": "true",
+          },
         })
       ),
       gate.rateHeaders
@@ -230,7 +235,11 @@ export async function POST(req: NextRequest) {
   void fanoutDisputeWebhook("dispute.created", dispute);
 
   const responseBody = JSON.stringify(dispute);
-  idem.cleanup?.();
+  // 31.08.2026. Здесь стояло cleanup?.() без аргумента, и в кэш повтора
+  // уходило тело ЗАПРОСА: на повтор вызывающий получал своё же
+  // {"link_id":...} вместо объекта спора. Тот же дефект был у возвратов, и
+  // я счёл его единичным — нашёл вторую половину класса только сторож.
+  idem.cleanup?.(responseBody);
   return attachRateHeaders(
     withCors(
       new Response(responseBody, {

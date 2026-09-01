@@ -173,7 +173,7 @@ function ExerciseCard({ ex }: { ex: Exercise }) {
             onChange={(e) => setVal(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !rev && setRev(true)}
             disabled={rev}
-            placeholder="Введите число..."
+            aria-label="Введите число" placeholder="Введите число..."
             className="flex-1 border border-cyan-300 dark:border-cyan-700 rounded px-2 py-1.5 text-sm font-mono bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
           />
           <span className="self-center text-xs text-slate-500 dark:text-slate-400 font-mono">
@@ -402,7 +402,7 @@ export default function ThermalCalcPage() {
               type="text"
               value={matFilter}
               onChange={(e) => setMatFilter(e.target.value)}
-              placeholder="🔍 Фильтр по названию материала..."
+              aria-label="🔍 Фильтр по названию материала..." placeholder="🔍 Фильтр по названию материала..."
               className="flex-1 min-w-[180px] border border-cyan-300 dark:border-cyan-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
             />
           </div>

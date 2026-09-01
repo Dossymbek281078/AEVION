@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { formatPaymentAmount } from "@/lib/paymentAmount";
 import { use, useEffect, useMemo, useState, type CSSProperties } from "react";
 
 type Currency = "USD" | "EUR" | "KZT" | "AEC";
@@ -41,11 +42,10 @@ const FALLBACK_METHODS: PaymentMethod[] = [
 ];
 
 function formatAmount(amount: number, currency: Currency) {
-  if (currency === "AEC") return `${amount.toLocaleString()} AEC`;
-  if (currency === "KZT") return `${amount.toLocaleString("ru-RU")} ₸`;
-  if (currency === "EUR")
-    return `€${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // Сумма приходит в МИНОРНЫХ единицах (так объявляет API и его спека).
+  // Раньше здесь она печаталась как есть, и цена на экране была в сто раз
+  // больше выставленной. Показатель валюты живёт в одном месте.
+  return formatPaymentAmount(amount, currency);
 }
 
 type Phase =
@@ -65,6 +65,8 @@ export default function PayPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  // Расхождение между экраном и сервером: null — расхождения нет.
+  const [serverAck, setServerAck] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [link, setLink] = useState<PaymentLink | null>(null);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
@@ -177,11 +179,23 @@ export default function PayPage({
       trimmedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)
         ? trimmedEmail
         : undefined;
+    // Статус «оплачено» выше пишется в localStorage, то есть в браузере. Запрос
+    // на сервер уходил «выстрелил и забыл»: результат игнорировался целиком.
+    // Значит при отказе экран говорил «оплачено», а сервер об этом не знал.
+    //
+    // Тяжесть честная: это вторичная поверхность сайта (хранилище в памяти
+    // процесса), покупателя продаваемого модуля ведут на бэкенд. Но человек,
+    // увидевший «оплачено», верит экрану независимо от того, какая поверхность
+    // перед ним.
     void fetch(`${window.location.origin}/api/pay/${link.id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ method, last4, payer_email }),
-    }).catch(() => undefined);
+    })
+      .then((r) => {
+        if (!r.ok) setServerAck(`Отметка не сохранена на сервере (${r.status}). Экран показывает оплату только в этом браузере.`);
+      })
+      .catch(() => setServerAck("Отметку не удалось сохранить на сервере — проверьте связь. Экран показывает оплату только в этом браузере."));
   }
 
   function handlePay(e: React.FormEvent) {
@@ -289,6 +303,17 @@ export default function PayPage({
     return (
       <Shell>
         <Card>
+          {serverAck && (
+            <div
+              style={{
+                color: "#92400e", background: "rgba(245,158,11,0.08)",
+                border: "1px solid rgba(245,158,11,0.25)",
+                borderRadius: 10, padding: "8px 12px", fontSize: 12, marginBottom: 12,
+              }}
+            >
+              {serverAck}
+            </div>
+          )}
           <div
             style={{
               fontSize: 48,

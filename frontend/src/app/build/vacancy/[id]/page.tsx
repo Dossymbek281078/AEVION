@@ -3138,7 +3138,7 @@ function ExportCsvButton({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const slug = vacancyTitle.replace(/[^a-z0-9]/gi, "-").toLowerCase().slice(0, 40);
+      const slug = vacancyTitle.replace(/[^a-z0-9а-яё]+/giu, "-").toLowerCase().replace(/^-+|-+$/g, "").slice(0, 40);
       a.download = `applications-${slug}-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();

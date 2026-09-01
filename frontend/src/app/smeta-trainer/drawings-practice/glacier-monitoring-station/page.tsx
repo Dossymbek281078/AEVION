@@ -13,7 +13,7 @@ export default function GlacierMonitoringStationPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Glacier Monitoring Station</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Glacier Monitoring Station</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🧊 Glacier Monitoring Station Tian Shan</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #322. Туюк-Су glacier observatory (Заилийский Алатау) — старейшая в Центральной Азии станция (с 1957 г), документирует -0.7-1.0 m/year mass balance loss climate change impact. Также Карабатан + Шумкара + Молодёжный glaciers. Reference: WGMS World Glacier Monitoring Service + GLIMS Global Land Ice Measurements from Space + USGS Benchmark Glaciers. Equipment: ablation stakes annual surveying + automated weather stations + GPS-RTK ice elevation + RADAR ice thickness + seismic monitoring. Critical for water resource planning Алматы — glaciers feed Малая Алматинка river system. WGMS + GLIMS + СН РК 3.02-04 + Закон РК О водных ресурсах.</p>
@@ -47,7 +47,7 @@ export default function GlacierMonitoringStationPage() {
           ].map((o) => (<label key={o.v} className={`block px-4 py-3 rounded-lg border cursor-pointer transition ${oc(ex1, o.v, ok.ex1)}`}><input type="radio" name="ex1" value={o.v} checked={ex1 === o.v} onChange={() => setEx1(o.v)} className="mr-3" />{o.t}</label>))}</div>
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Mass balance loss (m/year)</h2>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="м/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="м/год" placeholder="м/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>Туюк-Су glacier 2010-2024 average mass balance ≈ <strong>-0.8 m/year</strong> ice equivalent. Glaciers Алатау losing -50% volume since 1900.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс 5-glacier network</h2>
@@ -60,7 +60,7 @@ export default function GlacierMonitoringStationPage() {
             <li>Data centre Almaty + ArcGIS + Elmer/Ice software + servers = 0.5 млрд</li>
             <li>Helicopter access supply + safety equipment + проект 4% + 5-year ops = 0.95 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~3.5 млрд тг (~$7.5M USD)</strong> на 5-glacier monitoring network + 5-year operation. Critical для water security planning Алматы.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Water security implications</h2>

@@ -30,7 +30,7 @@ export default function PlanetariumSciencePage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Планетарии и научные музеи</div>
@@ -105,7 +105,7 @@ export default function PlanetariumSciencePage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="S, м²"
+            aria-label="S, м²" placeholder="S, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: S = 2π × 11² = 2π × 121 = 760 м² полная полусфера. При наклоне 30° (tilt dome) видимая зрителем зона ~55% = 418 м² → 6 проекторов Carl Zeiss VELVET ×40 000 лм × 0.92 (overlap loss) = 220 800 лм для 380 м² рабочей пов. = ~580 лк = высокая яркость 4K HDR.</p>
@@ -134,7 +134,7 @@ export default function PlanetariumSciencePage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~4.8 млрд тг (допуск ±10%). 1.4+0.5+0.35+0.95+0.18+0.18+0.35+0.18+0.16+0.18+0.14+0.18+0.18+0.18 = 5.1 млрд тг ≈ 4.8 млрд тг (с оптимизацией). Алматинский Планетарий (модернизация 2021 с проектором Carl Zeiss) — ~$8 млн = 3.7 млрд тг (на цены 2026 ~4.5 млрд тг). Современный Astana Planetarium премиум-уровень = 4.8 млрд тг.</p>

@@ -12,18 +12,22 @@
  *
  * Setup:
  *   1. LS dashboard → Store → Products → New product (subscription)
- *      - Lite   $24/mo  + $240/yr variant
- *      - Medium $39/mo  + $390/yr variant
- *      - Full   $89/mo  + $890/yr variant
+ *      - Lite   $19/mo  + $190/yr variant
+ *      - Medium $29/mo  + $290/yr variant
+ *      - Full   $49/mo  + $490/yr variant
  *   2. Open each variant; the numeric variant id is in the URL:
  *      lemonsqueezy.com/dashboard/.../products/<pid>/variants/<VARIANT_ID>
  *   3. Paste each id into the matching env var on Railway.
  *
  * Prices on the LS variant are the source of truth — they MUST match the tier
- * prices in data/pricing.ts (lite 24/240, medium 39/390, full 89/890).
+ * prices in data/pricing.ts (lite 19/190, medium 29/290, full 49/490).
  *
- * REPRICED 2026-07-22 (see docs/PRICING_STRATEGY_2026-07.md) — lite/medium/full
- * moved up from 19/29/49. If LS variants for these tiers were already live
+ * ⚠️ ЦЕНЫ МЕНЯЛИСЬ ДВАЖДЫ. 22.07.2026 их подняли до 24/39/89, а 13.08.2026
+ * вернули к 19/29/49 (коммит d424fbf07, «цены приведены к рынку»). Числа выше —
+ * действующие, они совпадают с data/pricing.ts и с ответом /api/pricing на проде
+ * (проверено 29.08.2026). Прежняя редакция этого файла велела ставить в кассе
+ * 24/39/89 — то есть БОЛЬШЕ, чем показывает витрина; настроивший по ней вариант
+ * списывал бы с покупателя лишнее. Если вариант уже заведён со старой ценой,
  * with the old prices, the dashboard price on each variant MUST be updated
  * (or a new variant created and the env var repointed) — this file only
  * changes what data/pricing.ts *displays/computes*, it cannot change what an
@@ -89,6 +93,35 @@ const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
   // возвращал null, и подписка за $149 провижинила тариф «lite» ($19).
   app_devhub:      "LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO",
 };
+
+/**
+ * Сопоставлены ли ссылки товаров с идентификаторами вариантов магазина.
+ *
+ * Повод (28.08.2026). `/api/health/channels` отвечал `canPay: true`, потому что
+ * у Lemon Squeezy заданы ключ и магазин. Но выдача доступа висит НЕ на этом, а
+ * на переменной КОНКРЕТНОГО варианта: в вебхуке ветка товара берётся по
+ * `process.env[...VARIANT_X]`, и при незаданной переменной сравнение не
+ * совпадает, обработчик доходит до `return res.json({ ok: true, ignored })` —
+ * заплативший получает успешный ответ и НИ ОДНОГО права. Магазин при этом
+ * деньги принял.
+ *
+ * То есть имя поля `canPay` шире того, о чём оно отчитывалось: «провайдер
+ * настроен» и «покупка превращается в доступ» — разные вопросы, и второй
+ * снаружи спросить было нечем.
+ *
+ * СЕКРЕТОВ НЕ ОТДАЁМ: наружу идут только ссылки товаров (`app_devhub`) — это
+ * наши внутренние имена, а не значения. Идентификаторы вариантов и длины
+ * переменных здесь не появляются, как и во всей ручке состояния каналов.
+ */
+export function variantMappingStatus(): {
+  total: number;
+  mapped: number;
+  unmapped: LemonSqueezyReference[];
+} {
+  const refs = Object.keys(TIER_VARIANT_ENV) as LemonSqueezyReference[];
+  const unmapped = refs.filter((r) => !process.env[TIER_VARIANT_ENV[r]]?.trim());
+  return { total: refs.length, mapped: refs.length - unmapped.length, unmapped };
+}
 
 function isReference(s: string): s is LemonSqueezyReference {
   // hasOwnProperty.call, а не `in`: `in` идёт по цепочке прототипов, и
@@ -260,4 +293,31 @@ export function appSlugForModuleId(moduleId: string): string | null {
     if (id === moduleId) return slug;
   }
   return isReference(`app_${moduleId}`) ? moduleId : null;
+}
+
+/**
+ * Что реально можно купить прямо сейчас.
+ *
+ * ЗАЧЕМ. `/api/pricing/checkout/healthz` отвечал `lemonsqueezy.configured:
+ * true`, глядя только на ключ API и магазин. Но начать покупку нельзя без
+ * ВАРИАНТА товара, а варианты задаются отдельными переменными. То есть
+ * «настроен» и «покупку можно начать» — разные вопросы под одним словом,
+ * и второй снаружи был не виден вовсе.
+ *
+ * Замечено 29.08.2026 накануне запуска модуля: проверка готовности
+ * говорила «цена $19», а можно ли эту цену заплатить — не отвечал никто.
+ *
+ * Возвращаем ИМЕНА переменных, не значения: имя не секрет, значение —
+ * идентификатор товара в чужой панели, ему в ответе не место.
+ */
+export function lemonSqueezySellable(): {
+  configured: string[];
+  missing: string[];
+} {
+  const configured: string[] = [];
+  const missing: string[] = [];
+  for (const [ref, env] of Object.entries(TIER_VARIANT_ENV)) {
+    (process.env[env]?.trim() ? configured : missing).push(ref);
+  }
+  return { configured: configured.sort(), missing: missing.sort() };
 }

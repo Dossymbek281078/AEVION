@@ -112,6 +112,11 @@ export default function QCoreAnalyticsPage() {
   const [goalRuns, setGoalRuns] = useState("");
   const [goalCost, setGoalCost] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Разделы, которые НЕ загрузились. Нужны, потому что раньше их отказ был
+  // неотличим от пустоты: у пяти запросов ниже не проверялся res.ok, и ответ
+  // 500 или 402 (платная стена) просто не давал items — раздел рисовался
+  // пустым. Человек читает это как «данных нет», а не «не загрузилось».
+  const [partial, setPartial] = useState<string[]>([]);
 
   const refresh = async () => {
     setError(null);
@@ -123,29 +128,45 @@ export default function QCoreAnalyticsPage() {
         fetch(apiUrl("/api/qcoreai/analytics/sessions?days=7&limit=5"), { headers: bearerHeader() }),
         fetch(apiUrl("/api/qcoreai/analytics/by-tag?limit=15"), { headers: bearerHeader() }),
       ]);
+      // Собираем разделы, которые не показали правду. Два разных повода:
+      //   !res.ok        — запрос не удался (500, 402 платная стена);
+      //   json.degraded  — запрос УДАЛСЯ, но хранилище недоступно, и сервер
+      //                    честно пометил ответ (см. storageDegraded в
+      //                    backend/src/routes/qcoreai.ts).
+      // Второй случай приходит с кодом 200 и без этой проверки выглядел бы как
+      // «у вас нет данных» — то есть ровно та ложь, ради которой всё и делалось.
+      const failed: string[] = [];
       const json = await aRes.json();
       if (!aRes.ok) throw new Error(json?.error || `HTTP ${aRes.status}`);
       setData(json);
       const tsJson = await tsRes.json().catch(() => ({}));
+      if (!tsRes.ok || tsJson?.degraded) failed.push("динамика по дням");
       if (Array.isArray(tsJson?.items)) setTimeseries(tsJson.items);
       const tagJson = await tagRes.json().catch(() => ({}));
+      if (!tagRes.ok || tagJson?.degraded) failed.push("топ тегов");
       if (Array.isArray(tagJson?.items)) setTopTags(tagJson.items);
       const sessJson = await sessRes.json().catch(() => ({}));
+      if (!sessRes.ok || sessJson?.degraded) failed.push("сессии");
       if (Array.isArray(sessJson?.items)) setTopSessions(sessJson.items);
       const tagCostJson = await tagCostRes.json().catch(() => ({}));
+      if (!tagCostRes.ok || tagCostJson?.degraded) failed.push("стоимость по тегам");
       if (Array.isArray(tagCostJson?.items)) setTagCosts(tagCostJson.items);
 
       // Provider latency
       try {
         const latRes = await fetch(apiUrl("/api/qcoreai/analytics/provider-latency"), { headers: bearerHeader() });
         const latData = await latRes.json().catch(() => ({}));
+        if (!latRes.ok || latData?.degraded) failed.push("задержки провайдеров");
         if (Array.isArray(latData?.items)) setProviderLatency(latData.items);
       } catch { /* non-critical */ }
+
+      setPartial(failed);
 
       // Load analytics goals
       try {
         const gRes = await fetch(apiUrl("/api/qcoreai/me/analytics-goal"), { headers: bearerHeader() });
         const gData = await gRes.json().catch(() => ({}));
+        if (!gRes.ok) setPartial((prev) => prev.includes("цель по расходу") ? prev : [...prev, "цель по расходу"]);
         if (gData?.goal) setGoal(gData.goal);
       } catch { /* non-critical */ }
 
@@ -157,10 +178,13 @@ export default function QCoreAnalyticsPage() {
           fetch(apiUrl("/api/qcoreai/analytics/run-quality"), { headers: bearerHeader() }),
         ]);
         const cData = await cRes.json().catch(() => ({}));
+        if (!cRes.ok) setPartial((prev) => prev.includes("когорты") ? prev : [...prev, "когорты"]);
         if (Array.isArray(cData?.cohorts)) setCohorts(cData.cohorts);
         const hData = await hRes.json().catch(() => ({}));
+        if (!hRes.ok) setPartial((prev) => prev.includes("активные часы") ? prev : [...prev, "активные часы"]);
         if (Array.isArray(hData?.hours)) setTopHours(hData.hours);
         const qData = await qRes.json().catch(() => ({}));
+        if (!qRes.ok) setPartial((prev) => prev.includes("качество прогонов") ? prev : [...prev, "качество прогонов"]);
         if (qData?.brief !== undefined) setRunQuality(qData);
       } catch { /* non-critical */ }
     } catch (e: any) {
@@ -258,6 +282,19 @@ export default function QCoreAnalyticsPage() {
           </div>
         </div>
 
+        {partial.length > 0 && (
+          <div
+            style={{
+              color: "#92400e", background: "rgba(245,158,11,0.08)",
+              border: "1px solid rgba(245,158,11,0.25)",
+              borderRadius: 10, padding: "8px 12px", fontSize: 12, marginBottom: 12,
+            }}
+          >
+            Часть данных не загрузилась: {partial.join(", ")}. Показанное неполно —
+            это не значит, что у вас нет данных.
+          </div>
+        )}
+
         {error && (
           <div
             style={{
@@ -328,7 +365,16 @@ export default function QCoreAnalyticsPage() {
                       const body = { monthlyRuns: goalRuns ? parseInt(goalRuns) : null, monthlyCostUsd: goalCost ? parseFloat(goalCost) : null };
                       const res = await fetch(apiUrl("/api/qcoreai/me/analytics-goal"), { method: "PUT", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify(body) });
                       const d = await res.json().catch(() => ({}));
-                      if (d.goal) { setGoal(d.goal); setGoalEdit(false); }
+                      // Молчание на СОХРАНЕНИИ недопустимо: раньше при отказе
+                      // редактор просто не закрывался, и человек не знал,
+                      // сохранилось ли. Молчать можно об уборке, не о действии.
+                      if (!res.ok || !d.goal) {
+                        setError(d?.error || `Не удалось сохранить цель (${res.status}). Попробуйте ещё раз.`);
+                        return;
+                      }
+                      setError(null);
+                      setGoal(d.goal);
+                      setGoalEdit(false);
                     }} style={{ alignSelf: "flex-end", padding: "5px 14px", borderRadius: 6, border: "none", background: "#0f172a", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
                   </div>
                 ) : goal ? (

@@ -54,6 +54,13 @@ interface EventsSummary {
   checkoutBySource?: Record<string, number>;
   /** Канал привлечения из метки ?c= (BuyLink кладёт его в meta.channel). */
   checkoutByChannel?: Record<string, number>;
+  purchaseByChannel?: Record<string, number>;
+  purchaseRevenueByChannel?: Record<string, number>;
+  purchaseCount?: number;
+  purchaseWithKnownAmount?: number;
+  truncated?: boolean;
+  consideredEvents?: number;
+  totalEvents?: number;
   byIndustry: Record<string, number>;
   /** Канал раздачи (tt / ig / yt …) — по нему видно, какая раздача привела людей. */
   byChannel?: Record<string, number>;
@@ -278,7 +285,7 @@ export default function PricingAdminPage() {
           </p>
           <input
             type="password"
-            placeholder="x-admin-token"
+            aria-label="Admin token" placeholder="x-admin-token"
             value={tokenInput}
             onChange={(e) => setTokenInput(e.target.value)}
             style={{
@@ -516,6 +523,57 @@ export default function PricingAdminPage() {
                 title={t("pricing.admin.breakdown.checkoutByChannel")}
                 data={summary.checkoutByChannel ?? {}}
                 accent="#7c3aed"
+              />
+              {/* Панели выше считают НАЧАЛА оплаты. Этого мало, чтобы решать,
+                  куда тратить: канал приводит много заходов в кассу и ноль
+                  покупок — и выглядит лучшим. Общий срез «по каналам» ещё
+                  хуже: он складывает просмотры, нажатия и заходы, то есть
+                  вознаграждает трафик, а не выручку.
+
+                  Ниже — то, чем платят. Выручка отдельно от счёта покупок и
+                  честно подписана: у возврата PayBox в адрес уходит ref, а не
+                  сумма, поэтому известна она не у всех. Сколько покупок с
+                  известной суммой — в подписи, иначе частичная выручка
+                  читается как полная и молча занижает канал. */}
+              {/* Числа ниже считаются по ПОСЛЕДНИМ N событиям журнала, а окно
+                  времени применяется уже к ним. Если журнал длиннее предела,
+                  ответ «за 30 дней» на самом деле дан не за 30 дней, и выручка
+                  по каналам окажется тихо заниженной. Говорим об этом прямо:
+                  число без знаменателя здесь опаснее отсутствия числа. */}
+              {summary.truncated ? (
+                <div
+                  style={{
+                    gridColumn: "1 / -1",
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    background: "#fef3c7",
+                    color: "#78350f",
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  Окно обрезано журналом: учтено {summary.consideredEvents ?? "?"} событий из{" "}
+                  {summary.totalEvents ?? "?"}. Числа ниже — НЕ за весь выбранный период.
+                </div>
+              ) : null}
+              <Breakdown
+                title={t("pricing.admin.breakdown.purchaseByChannel")}
+                data={summary.purchaseByChannel ?? {}}
+                accent="#0f766e"
+              />
+              {/* «Ожидаемая», а не «выручка»: сумма берётся из адреса возврата,
+                  то есть НАША, а не списанная кассой. Разница перестала быть
+                  теоретической 01.09.2026 — соседнее окно показало, что цену у
+                  Gumroad и LemonSqueezy назначает продавец, а сверки не было
+                  нигде. Широкое имя поля читается шире, чем оно отвечает, и по
+                  такому имени делают денежные выводы.
+
+                  Подпись N/M — знаменатель: по скольким покупкам сумма вообще
+                  известна. У возврата PayBox в адрес уходит ref, а не сумма. */}
+              <Breakdown
+                title={`${t("pricing.admin.breakdown.purchaseRevenueByChannel")} · ${summary.purchaseWithKnownAmount ?? 0}/${summary.purchaseCount ?? 0}`}
+                data={summary.purchaseRevenueByChannel ?? {}}
+                accent="#166534"
               />
               {/* Их две панели выше считают НАЧАЛА ОПЛАТЫ. Эта — клики по кнопке
                   «купить» в разрезе товаров: при 26 товарах и трёх продажах за

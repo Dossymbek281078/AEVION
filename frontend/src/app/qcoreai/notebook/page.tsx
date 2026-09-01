@@ -354,14 +354,20 @@ export default function NotebookPage() {
                       const blob = new Blob([text], { type: "text/markdown" });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement("a"); a.href = url; a.download = `${c.name.toLowerCase().replace(/\s+/g, "-")}.md`; a.click(); URL.revokeObjectURL(url);
+                    } else {
+                      // Молчание здесь читалось как «экспорт не работает»:
+                      // человек жал кнопку и не получал ни файла, ни причины.
+                      alert(`Не удалось выгрузить подборку (${r.status}). Файл не создан.`);
                     }
-                  } catch { /* ignore */ }
+                  } catch {
+                    alert("Не удалось выгрузить подборку — проверьте связь. Файл не создан.");
+                  }
                 }}
                 style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 11, color: "#64748b", padding: "1px 3px" }}
               >
                 📋
               </button>
-              <button onClick={async (e) => { e.stopPropagation(); await fetch(apiUrl(`/api/qcoreai/notebook/collections/${c.id}`), { method: "DELETE", headers: bearerHeader() }); setCollections((p) => p.filter((x) => x.id !== c.id)); }} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 11, color: "#fca5a5", padding: "1px 3px" }}>×</button>
+              <button onClick={async (e) => { e.stopPropagation(); const delRes = await fetch(apiUrl(`/api/qcoreai/notebook/collections/${c.id}`), { method: "DELETE", headers: bearerHeader() }); if (!delRes.ok) return; setCollections((p) => p.filter((x) => x.id !== c.id)); }} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 11, color: "#fca5a5", padding: "1px 3px" }}>×</button>
             </span>
           ))}
           <div style={{ display: "flex", gap: 4 }}>

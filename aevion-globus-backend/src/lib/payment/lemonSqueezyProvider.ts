@@ -32,6 +32,7 @@
  *   reference we passed as `order_number` (or fall back to custom_data via
  *   /v1/checkouts/{id} if we cached the LS checkout id on creation).
  */
+import { buildSuccessUrl } from "./successUrl";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type {
   PaymentIntent,
@@ -78,14 +79,9 @@ function publicBaseUrl(): string {
  * дальше, так что параметры передаём, а не теряем.
  */
 export function successRedirectUrl(base: string, intentId: string, input: PaymentIntentInput): string {
-  const m = /^tier_([a-z]+)_(monthly|annual)$/.exec(input.reference ?? "");
-  const q = new URLSearchParams({ provider: "lemonsqueezy", intentId });
-  if (m) {
-    q.set("tier", m[1]);
-    q.set("period", m[2]);
-  }
-  if (typeof input.amountCents === "number") q.set("total", String(input.amountCents));
-  return `${base}/pricing/checkout/success?${q.toString()}`;
+  // Собирает общий сборщик: адрес возврата был в трёх копиях, и они
+  // разошлись — appId не клал никто, а tier знал только этот помощник.
+  return buildSuccessUrl(base, input, { provider: "lemonsqueezy", intentId });
 }
 
 // In-memory cache: our intentId → LS checkout id (so getIntent can fetch the

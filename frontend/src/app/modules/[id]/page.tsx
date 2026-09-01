@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import { getApiBase } from "@/lib/apiBase";
 import { pickLang } from "@/lib/qrightServerI18n";
 
@@ -253,7 +254,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const data = await loadDetail(id);
   if (!data || data === "not_found") {
-    return { title: `Module ${id} — AEVION` };
+    // Не подставляем id в заголовок: под каждый выдуманный адрес получалась
+    // страница с УНИКАЛЬНЫМ названием вида «Module zzqq-vydumannyj-777 —
+    // AEVION», то есть с виду отдельный раздел сайта. Массу почти пустых
+    // страниц с разными заголовками поисковики считают манипуляцией и
+    // понижают весь домен. Замерено 06.08.2026 на живом проде.
+    return { title: "Module not found — AEVION" };
   }
   // OG card lives on the backend so it inherits live tier/status colors
   // without a client-side rebuild step. Absolute URL only matters when the
@@ -265,6 +271,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description: data.description,
     alternates: {
+      // СВОЙ canonical, динамический — адрес зависит от модуля.
+      // Без него страница модуля наследовала бы canonical каталога /modules,
+      // как только он свой объявит, и говорила бы «я копия каталога».
+      // Порядок важен: сперва canonical дочерним, потом разделу. Обратный
+      // порядок 30.08.2026 сломал три страницы разом, поймал сторож.
+      canonical: `/modules/${encodeURIComponent(id)}`,
       types: {
         "application/rss+xml": rssUrl,
       },
@@ -297,28 +309,14 @@ export default async function ModuleDetailPage({ params, searchParams }: Props) 
     loadGraph(),
   ]);
 
+  // Модуля нет в реестре — отвечаем честным 404, а не страницей с кодом 200.
+  // Отличаем от временной ошибки: loadDetail возвращает "not_found" только на
+  // HTTP 404 от бэкенда, а при таймауте или сбое — null, и тогда страница
+  // по-прежнему покажет объяснение, а не спрячется за 404.
   if (detail === "not_found") {
-    return (
-      <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "48px 16px" }}>
-        <div style={{ maxWidth: 720, margin: "0 auto" }}>
-          <div style={{ marginBottom: 16 }}>
-            <Link
-              href="/modules"
-              style={{ fontSize: 12, fontWeight: 700, color: "#0d9488", textDecoration: "none" }}
-            >
-              {t.back}
-            </Link>
-          </div>
-          <div style={{ ...card, color: "#b91c1c", borderColor: "rgba(185,28,28,0.2)" }}>
-            <div style={{ fontWeight: 800, fontSize: 16 }}>{t.notFoundTitle}</div>
-            <div style={{ fontSize: 13, marginTop: 6 }}>
-              {t.notFoundDetail.replace("{id}", id)}
-            </div>
-          </div>
-        </div>
-      </main>
-    );
+    notFound();
   }
+
 
   if (!detail) {
     return (

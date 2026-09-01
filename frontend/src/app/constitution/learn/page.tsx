@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFunnel } from "@/lib/useFunnel";
 import {
   classify,
   DEFAULT_SLIDERS,
@@ -173,15 +174,24 @@ export default function ConstitutionLearnPage() {
     setProgress(loadProgress());
   }, []);
 
+  const { track } = useFunnel();
+
   const complete = useCallback((id: LessonId) => {
+    // Флаг ставится внутри апдейтера, а СОБЫТИЕ шлётся после него: React
+    // вызывает апдейтер дважды, и отправка изнутри дала бы два события на
+    // один пройденный урок. Повторное прохождение не считается — prev уже
+    // содержит урок.
+    let firstTime = false;
     setProgress((prev) => {
       if (prev.has(id)) return prev;
+      firstTime = true;
       const next = new Set(prev);
       next.add(id);
       saveProgress(next);
       return next;
     });
-  }, []);
+    if (firstTime) track("academy_lesson_done", { lesson: id });
+  }, [track]);
 
   const reset = () => {
     saveProgress(new Set());
@@ -191,6 +201,10 @@ export default function ConstitutionLearnPage() {
   const allDone = progress.size === LESSONS.length;
 
   const downloadCert = async () => {
+    // Событие на ЯВНОМ действии, а не на переходе allDone в истину: прогресс
+    // восстанавливается из хранилища при загрузке, и по переходу мы считали бы
+    // сертификатом каждый заход человека, прошедшего курс когда-то.
+    track("academy_cert", { lessons: LESSONS.length });
     setCertBusy(true);
     try {
       const r = await fetch("/api-backend/api/constitution/pdf", {

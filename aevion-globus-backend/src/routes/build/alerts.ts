@@ -137,8 +137,41 @@ export async function dispatchJobAlerts(vacancy: {
     ].join("\n");
 
     // Send in chunks of 50 (Resend max)
+    // Считаем ПРИНЯТОЕ провайдером, а не разосланное нами. Раньше строка ниже
+    // печатала «отправлено N подписчикам» безусловно: отказ Resend — 4xx, 5xx,
+    // исчерпанная суточная квота — выглядел в журнале полной рассылкой. На
+    // такую запись потом ссылаются как на доказательство, поэтому она хуже,
+    // чем её отсутствие.
+    //
+    // Ждём пачки, а не стреляем и забываем: без ожидания посчитать нечего.
+    // Пачек по 50 на вакансию — единицы, задержка незаметна.
+    let accepted = 0;
     for (let i = 0; i < matches.length; i += 50) {
       const batch = matches.slice(i, i + 50);
+        // Сведено 31.08 при сборке к 10.09: обе стороны дописали РАЗНОЕ в одно
+        // место. Наша — разбор ответа провайдера (раньше «письмо отправлено»
+        // печаталось независимо от кода, и отказ выглядел в журнале удачей).
+        // Их — отметка расхода в счётчике суточной квоты. Нужны обе: первая
+        // не даёт соврать в журнале, вторая не даёт молча выжечь квоту.
+      try {
+        const resp = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ from: "QBuild <noreply@aevion.app>", to: batch, subject, text }),
+        });
+        if (resp.ok) {
+          accepted += batch.length;
+        } else {
+          const body = await resp.text().catch(() => "");
+          console.warn(
+            `[build] ПАЧКА ОПОВЕЩЕНИЙ НЕ ПРИНЯТА (${resp.status}): ${batch.length} адресов, вакансия ${vacancy.id}: ${body.slice(0, 200)}`,
+          );
+        }
+      } catch (e) {
+        console.warn(
+          `[build] ПАЧКА ОПОВЕЩЕНИЙ НЕ УШЛА: ${batch.length} адресов, вакансия ${vacancy.id}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
       fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -156,7 +189,7 @@ export async function dispatchJobAlerts(vacancy: {
       // тогда, когда письма уже перестали доходить.
       noteEmailSent(batch.length);
     }
-    console.info(`[build] job alerts sent to ${matches.length} subscribers for vacancy ${vacancy.id}`);
+    console.info(`[build] job alerts accepted for ${accepted} of ${matches.length} subscribers for vacancy ${vacancy.id}`);
   } catch (e) {
     console.warn("[build] dispatchJobAlerts failed:", (e as Error).message);
   }

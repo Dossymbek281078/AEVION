@@ -123,7 +123,7 @@ export default async function SdksPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(420px, 100%), 1fr))",
               gap: 20,
               marginBottom: 32,
             }}

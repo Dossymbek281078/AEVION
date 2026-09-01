@@ -13,7 +13,7 @@ export default function MrnaVaccinePilotPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">mRNA Vaccine Pilot</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">mRNA Vaccine Pilot</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">💉 mRNA Vaccine Pilot Plant</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #314. Pilot mRNA Vaccine Plant Almaty/Astana — план посткованая капасити для emergency response (BioNTech / Moderna model). Reference: BioNTech Marburg 1B doses/year, Moderna Norwood Massachusetts 600M doses, Pfizer Puurs Belgium 4B/year. Process: linearized plasmid template + IVT in-vitro transcription (T7 RNA polymerase + NTPs) → mRNA + Cap analog ARCA + 5-mC + pseudouridine modified → LNP Lipid Nanoparticle encapsulation (4 lipids ALC-0315/ALC-0159/cholesterol/DSPC) → fill-finish sterile vials. Capacity 10M doses/year pilot. EU GMP Annex 1 + FDA + ICH Q5/Q6 + СН РК 3.02-19.</p>
@@ -47,7 +47,7 @@ export default function MrnaVaccinePilotPage() {
           ].map((o) => (<label key={o.v} className={`block px-4 py-3 rounded-lg border cursor-pointer transition ${oc(ex1, o.v, ok.ex1)}`}><input type="radio" name="ex1" value={o.v} checked={ex1 === o.v} onChange={() => setEx1(o.v)} className="mr-3" />{o.t}</label>))}</div>
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Doses per year</h2>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="доз" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="доз" placeholder="доз" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>50 L IVT × 1 g mRNA/L × 30 doses per μg × 1000 µg/g = ~1.5M doses/batch × 7 batches/year = <strong>~10M doses/year</strong> pilot scale.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс mRNA pilot</h2>
@@ -60,7 +60,7 @@ export default function MrnaVaccinePilotPage() {
             <li>Cold chain -80 °C ULT × 30 + -20 °C distribution = 1.5 млрд</li>
             <li>Validation + проектирование 5% + EU GMP audit + insurance = 3 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~32 млрд тг (~$70M USD)</strong> на 10M doses/year mRNA pilot. BioNTech Marburg 1B doses = $400M.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Cold chain</h2>

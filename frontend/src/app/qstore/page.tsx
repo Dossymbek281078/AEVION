@@ -430,13 +430,13 @@ export default function QStorePage() {
                 List a new product
               </div>
               <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <input
+                <input aria-label="Title"
                   placeholder="Title *"
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                   style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14 }}
                 />
-                <textarea
+                <textarea aria-label="Description"
                   placeholder="Description"
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
@@ -453,7 +453,7 @@ export default function QStorePage() {
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
-                  <input
+                  <input aria-label="Price"
                     type="number"
                     placeholder="Price (USD, 0 = free)"
                     value={form.price}
@@ -579,7 +579,7 @@ export default function QStorePage() {
                 {c.name}
               </button>
             ))}
-            <input
+            <input aria-label="Search"
               placeholder="Search..."
               value={searchQ}
               onChange={(e) => setSearchQ(e.target.value)}

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { queryNumber } from "../lib/queryNumber";
+import { queryDate } from "../lib/queryDate";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import jwt from "jsonwebtoken";
@@ -34,12 +35,15 @@ export const pricingRouter = Router();
  * Путь: aevion-globus-backend/data/leads.jsonl
  * Один файл — append-only, потокобезопасно для одного процесса.
  */
-const LEADS_FILE = process.env.LEADS_FILE
-  ? process.env.LEADS_FILE
-  : join(process.cwd(), "data", "leads.jsonl");
+/** Resolved per call, not at import: a test that sets LEADS_FILE after this
+ * module is first imported would otherwise write into the real data/ file —
+ * exactly how the paywall suite polluted data/subscriptions.jsonl. */
+function leadsFile(): string {
+  return process.env.LEADS_FILE || join(process.cwd(), "data", "leads.jsonl");
+}
 
 function ensureLeadsDir() {
-  const dir = dirname(LEADS_FILE);
+  const dir = dirname(leadsFile());
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
@@ -200,7 +204,13 @@ pricingRouter.get("/bundles", (_req, res) => {
 pricingRouter.post("/quote", (req, res) => {
   const body = req.body ?? {};
   const tierId = body.tierId as TierId | undefined;
-  if (!tierId || !["free", "lite", "medium", "full", "enterprise"].includes(tierId)) {
+  // Список тарифов НЕ перечисляем: он уже есть в каталоге, а копия расходится.
+  // Замер 01.09.2026: витрина получает шесть тарифов, включая pro («Universe»,
+  // $149/мес), рисует для него кнопку — а эта проверка отвечала 400
+  // invalid_tier. Калькулятор цен ломался на самом дорогом тарифе.
+  // Это была ЧЕТВЁРТАЯ копия одного пропуска: раньше pro путали с Lite в стене
+  // (починено 22.07), в письме о покупке и в разборе ссылки заказа (31.08).
+  if (!tierId || !getTier(tierId)) {
     return res.status(400).json({ error: "invalid_tier", tierId });
   }
   const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
@@ -241,7 +251,7 @@ pricingRouter.post("/promo/validate", (req, res) => {
   if (!code) {
     return res.status(400).json({ valid: false, reason: "empty_code" });
   }
-  if (!tierId || !["free", "lite", "medium", "full", "enterprise"].includes(tierId)) {
+  if (!tierId || !getTier(tierId)) {
     return res.status(400).json({ valid: false, reason: "invalid_tier" });
   }
   const { promo, reason } = resolvePromoCode(code, tierId, period);
@@ -298,7 +308,7 @@ pricingRouter.post("/lead", (req, res) => {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
   const company = typeof body.company === "string" ? body.company.trim().slice(0, 200) : undefined;
   const industry = typeof body.industry === "string" ? body.industry.trim().slice(0, 60) : undefined;
-  const tier = typeof body.tier === "string" && ["free", "lite", "medium", "full", "enterprise"].includes(body.tier)
+  const tier = typeof body.tier === "string" && getTier(body.tier)
     ? (body.tier as TierId)
     : undefined;
   const seats = Number.isFinite(body.seats) ? Math.min(10000, Math.max(1, Math.floor(body.seats))) : undefined;
@@ -332,7 +342,7 @@ pricingRouter.post("/lead", (req, res) => {
 
   try {
     ensureLeadsDir();
-    appendFileSync(LEADS_FILE, JSON.stringify(lead) + "\n", "utf8");
+    appendFileSync(leadsFile(), JSON.stringify(lead) + "\n", "utf8");
   } catch (e) {
     console.error("[pricing/lead] write failed", e);
     return res.status(500).json({ error: "storage_error" });
@@ -347,8 +357,8 @@ pricingRouter.post("/lead", (req, res) => {
  */
 pricingRouter.get("/leads/count", (_req, res) => {
   try {
-    if (!existsSync(LEADS_FILE)) return res.json({ total: 0 });
-    const content = readFileSync(LEADS_FILE, "utf8");
+    if (!existsSync(leadsFile())) return res.json({ total: 0 });
+    const content = readFileSync(leadsFile(), "utf8");
     const lines = content.split("\n").filter((l) => l.trim().length > 0);
     res.json({ total: lines.length });
   } catch (e) {
@@ -377,8 +387,8 @@ pricingRouter.get("/leads", (req, res) => {
   const limit = Math.min(Math.max(queryNumber(req.query.limit, 100), 1), 500);
 
   try {
-    if (!existsSync(LEADS_FILE)) return res.json({ items: [], total: 0 });
-    const content = readFileSync(LEADS_FILE, "utf8");
+    if (!existsSync(leadsFile())) return res.json({ items: [], total: 0 });
+    const content = readFileSync(leadsFile(), "utf8");
     const lines = content.split("\n").filter((l) => l.trim().length > 0);
     const tail = lines.slice(-limit).reverse();
     const items: PricingLead[] = [];
@@ -486,9 +496,12 @@ pricingRouter.get("/trust", (_req, res) => {
  * Хранение: data/newsletter.jsonl (gitignored).
  * =========================== */
 
-const NEWSLETTER_FILE = process.env.NEWSLETTER_FILE
-  ? process.env.NEWSLETTER_FILE
-  : join(process.cwd(), "data", "newsletter.jsonl");
+/** Resolved per call, not at import: a test that sets NEWSLETTER_FILE after this
+ * module is first imported would otherwise write into the real data/ file —
+ * exactly how the paywall suite polluted data/subscriptions.jsonl. */
+function newsletterFile(): string {
+  return process.env.NEWSLETTER_FILE || join(process.cwd(), "data", "newsletter.jsonl");
+}
 
 const NEWSLETTER_RATE = new Map<string, { count: number; reset: number }>();
 function newsletterRateLimited(ip: string): boolean {
@@ -538,9 +551,9 @@ pricingRouter.post("/newsletter", (req, res) => {
   };
 
   try {
-    const dir = dirname(NEWSLETTER_FILE);
+    const dir = dirname(newsletterFile());
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(NEWSLETTER_FILE, JSON.stringify(entry) + "\n", "utf8");
+    appendFileSync(newsletterFile(), JSON.stringify(entry) + "\n", "utf8");
   } catch (e) {
     console.error("[newsletter] write failed", e);
     return res.status(500).json({ error: "storage_error" });
@@ -555,8 +568,8 @@ pricingRouter.post("/newsletter", (req, res) => {
  */
 pricingRouter.get("/newsletter/count", (_req, res) => {
   try {
-    if (!existsSync(NEWSLETTER_FILE)) return res.json({ total: 0 });
-    const content = readFileSync(NEWSLETTER_FILE, "utf8");
+    if (!existsSync(newsletterFile())) return res.json({ total: 0 });
+    const content = readFileSync(newsletterFile(), "utf8");
     const lines = content.split("\n").filter((l) => l.trim().length > 0);
     res.json({ total: lines.length });
   } catch (e) {
@@ -570,17 +583,26 @@ pricingRouter.get("/newsletter/count", (_req, res) => {
  * Хранение: data/affiliate.jsonl, data/partners.jsonl, data/edu.jsonl
  * =========================== */
 
-const AFFILIATE_FILE = process.env.AFFILIATE_FILE
-  ? process.env.AFFILIATE_FILE
-  : join(process.cwd(), "data", "affiliate.jsonl");
+/** Resolved per call, not at import: a test that sets AFFILIATE_FILE after this
+ * module is first imported would otherwise write into the real data/ file —
+ * exactly how the paywall suite polluted data/subscriptions.jsonl. */
+function affiliateFile(): string {
+  return process.env.AFFILIATE_FILE || join(process.cwd(), "data", "affiliate.jsonl");
+}
 
-const PARTNERS_FILE = process.env.PARTNERS_FILE
-  ? process.env.PARTNERS_FILE
-  : join(process.cwd(), "data", "partners.jsonl");
+/** Resolved per call, not at import: a test that sets PARTNERS_FILE after this
+ * module is first imported would otherwise write into the real data/ file —
+ * exactly how the paywall suite polluted data/subscriptions.jsonl. */
+function partnersFile(): string {
+  return process.env.PARTNERS_FILE || join(process.cwd(), "data", "partners.jsonl");
+}
 
-const EDU_FILE = process.env.EDU_FILE
-  ? process.env.EDU_FILE
-  : join(process.cwd(), "data", "edu.jsonl");
+/** Resolved per call, not at import: a test that sets EDU_FILE after this
+ * module is first imported would otherwise write into the real data/ file —
+ * exactly how the paywall suite polluted data/subscriptions.jsonl. */
+function eduFile(): string {
+  return process.env.EDU_FILE || join(process.cwd(), "data", "edu.jsonl");
+}
 
 const PROGRAM_RATE = new Map<string, { count: number; reset: number }>();
 function programRateLimited(ip: string, kind: string): boolean {
@@ -782,7 +804,7 @@ pricingRouter.post("/affiliate/apply", (req, res) => {
   };
 
   try {
-    persistApplication(AFFILIATE_FILE, app);
+    persistApplication(affiliateFile(), app);
   } catch (e) {
     console.error("[affiliate/apply] write failed", e);
     return res.status(500).json({ error: "storage_error" });
@@ -830,7 +852,7 @@ pricingRouter.post("/partners/apply", (req, res) => {
   };
 
   try {
-    persistApplication(PARTNERS_FILE, app);
+    persistApplication(partnersFile(), app);
   } catch (e) {
     console.error("[partners/apply] write failed", e);
     return res.status(500).json({ error: "storage_error" });
@@ -875,7 +897,7 @@ pricingRouter.post("/edu/apply", (req, res) => {
   };
 
   try {
-    persistApplication(EDU_FILE, app);
+    persistApplication(eduFile(), app);
   } catch (e) {
     console.error("[edu/apply] write failed", e);
     return res.status(500).json({ error: "storage_error" });
@@ -907,7 +929,7 @@ pricingRouter.get("/applications", (req, res) => {
     return res.status(400).json({ error: "invalid_kind", expected: ["affiliate", "partner", "edu"] });
   }
   const file =
-    kind === "affiliate" ? AFFILIATE_FILE : kind === "partner" ? PARTNERS_FILE : EDU_FILE;
+    kind === "affiliate" ? affiliateFile() : kind === "partner" ? partnersFile() : eduFile();
 
   const limit = Math.min(Math.max(queryNumber(req.query.limit, 100), 1), 500);
 
@@ -947,8 +969,8 @@ pricingRouter.get("/newsletter/list", (req, res) => {
   const limit = Math.min(Math.max(queryNumber(req.query.limit, 100), 1), 500);
 
   try {
-    if (!existsSync(NEWSLETTER_FILE)) return res.json({ items: [], total: 0 });
-    const content = readFileSync(NEWSLETTER_FILE, "utf8");
+    if (!existsSync(newsletterFile())) return res.json({ items: [], total: 0 });
+    const content = readFileSync(newsletterFile(), "utf8");
     const lines = content.split("\n").filter((l) => l.trim().length > 0);
     const tail = lines.slice(-limit).reverse();
     const items: NewsletterEntry[] = [];
@@ -1073,7 +1095,7 @@ pricingRouter.post("/affiliate/magic-link", (req, res) => {
     return res.status(400).json({ error: "invalid_email" });
   }
 
-  const apps = readJsonlAll<ProgramApplication>(AFFILIATE_FILE);
+  const apps = readJsonlAll<ProgramApplication>(affiliateFile());
   const found = apps.find((a) => a.email === email);
 
   if (found) {
@@ -1105,7 +1127,7 @@ pricingRouter.get("/affiliate/dashboard", (req, res) => {
     return res.status(401).json({ error: "unauthorized" });
   }
 
-  const apps = readJsonlAll<ProgramApplication>(AFFILIATE_FILE);
+  const apps = readJsonlAll<ProgramApplication>(affiliateFile());
   const found = apps.find((a) => a.email === email);
   if (!found) return res.status(404).json({ error: "not_found" });
 
@@ -1157,7 +1179,7 @@ pricingRouter.post("/partners/magic-link", (req, res) => {
     return res.status(400).json({ error: "invalid_email" });
   }
 
-  const apps = readJsonlAll<ProgramApplication>(PARTNERS_FILE);
+  const apps = readJsonlAll<ProgramApplication>(partnersFile());
   const found = apps.find((a) => a.email === email);
 
   if (found) {
@@ -1209,7 +1231,7 @@ pricingRouter.get("/partners/dashboard", (req, res) => {
     return res.status(401).json({ error: "unauthorized" });
   }
 
-  const apps = readJsonlAll<ProgramApplication>(PARTNERS_FILE);
+  const apps = readJsonlAll<ProgramApplication>(partnersFile());
   const found = apps.find((a) => a.email === email);
   if (!found) return res.status(404).json({ error: "not_found" });
 
@@ -1256,7 +1278,7 @@ pricingRouter.post("/partners/deals", (req, res) => {
     return res.status(401).json({ error: "unauthorized" });
   }
 
-  const apps = readJsonlAll<ProgramApplication>(PARTNERS_FILE);
+  const apps = readJsonlAll<ProgramApplication>(partnersFile());
   if (!apps.find((a) => a.email === email)) {
     return res.status(404).json({ error: "partner_not_found" });
   }
@@ -1327,7 +1349,13 @@ pricingRouter.post("/partners/deals", (req, res) => {
 pricingRouter.get("/changelog", (req, res) => {
   const KIND_VALUES: ChangelogKind[] = ["added", "changed", "removed", "deprecated", "promo", "module"];
   const kind = typeof req.query.kind === "string" ? (req.query.kind as ChangelogKind) : undefined;
-  const since = typeof req.query.since === "string" ? req.query.since : undefined;
+  // `?since=zzz` раньше молча отдавал ПУСТОЙ журнал: сравнение строк
+  // ("2026-01-01" >= "zzz") ложно, и неверный запрос выглядел честным
+  // ответом «изменений нет». 500 тут не было, потому потребитель мягче
+  // СУБД — но неверный ответ хуже отказа: на него сошлются как на факт.
+  const sinceRaw = queryDate(req.query.since);
+  if (sinceRaw === undefined) return res.status(400).json({ error: "invalid_since" });
+  const since = sinceRaw ?? undefined;
   const limit = Math.min(Math.max(queryNumber(req.query.limit, 100), 1), 500);
   const offset = Math.max(queryNumber(req.query.offset, 0), 0);
 

@@ -34,3 +34,33 @@ export function verifyVerdict(ok: boolean, valid: unknown): Verdict {
   // подделкой нельзя.
   return "unknown";
 }
+
+
+export type VerifyReason = "tampered" | "forged" | null;
+
+/**
+ * КАКАЯ половина не сошлась — и только по ПОЛОЖИТЕЛЬНОМУ признаку.
+ *
+ * Бэкенд считает `hashValid` и `signatureValid` раздельно, потому что действия
+ * противоположные: документ изменён после выпуска — перевыпустить; подпись не
+ * наша — кто-то выдаёт чужую бумагу за нашу.
+ *
+ * ⚠️ Прежняя версия жила внутри компонента и писала «подпись не наша» всякий
+ * раз, когда `hashValid` не был строго `false` — включая случай, когда поля нет
+ * вовсе. То есть по ОТСУТСТВУЮЩИМ данным выбиралось более тяжёлое из двух
+ * обвинений. Сегодня такой ответ недостижим, но дефолт был выбран не в ту
+ * сторону, а такие дефолты переживают тот код, который их делал безопасными.
+ *
+ * Нет положительного признака — нет обвинения: `null`, и человек видит «не
+ * сошлось» без указания виновного.
+ */
+export function verifyReasonOf(
+  verdict: Verdict,
+  hashValid: unknown,
+  signatureValid: unknown,
+): VerifyReason {
+  if (verdict !== "invalid") return null;
+  if (hashValid === false) return "tampered";
+  if (signatureValid === false) return "forged";
+  return null;
+}

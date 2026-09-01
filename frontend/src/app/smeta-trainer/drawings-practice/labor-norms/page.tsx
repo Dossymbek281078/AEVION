@@ -236,7 +236,7 @@ export default function LaborNormsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
       {/* Header */}
-      <div className="border-b border-blue-200 dark:border-blue-900/40 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-10">
+      <div style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-blue-200 dark:border-blue-900/40 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
           <Link
             href="/smeta-trainer/drawings-practice/hub"
@@ -339,7 +339,7 @@ export default function LaborNormsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="🔎 Поиск по работам (название, единица, группа)..."
+              aria-label="Поиск по работам" placeholder="🔎 Поиск по работам (название, единица, группа)..."
               className="w-full px-4 py-2.5 rounded-lg border-2 border-blue-300 dark:border-blue-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
@@ -383,7 +383,7 @@ export default function LaborNormsPage() {
           ) : (
             <div className="overflow-x-auto rounded-lg border border-blue-200 dark:border-blue-900/40 bg-white dark:bg-slate-900 shadow-sm">
               <table className="min-w-full text-sm">
-                <thead className="bg-blue-100 dark:bg-blue-900/40 text-blue-900 dark:text-blue-200 sticky top-0">
+                <thead style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-blue-100 dark:bg-blue-900/40 text-blue-900 dark:text-blue-200 sticky top-0">
                   <tr>
                     <th className="px-3 py-2 text-left font-semibold">Вид работы</th>
                     <th className="px-3 py-2 text-left font-semibold">Ед. изм.</th>
@@ -455,7 +455,7 @@ export default function LaborNormsPage() {
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400 mb-1.5">
                   Объём работ
                 </label>
-                <input
+                <input aria-label="Объём работ"
                   type="number"
                   inputMode="decimal"
                   min="0"
@@ -470,7 +470,7 @@ export default function LaborNormsPage() {
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400 mb-1.5">
                   Норма времени
                 </label>
-                <input
+                <input aria-label="Норма времени"
                   type="number"
                   inputMode="decimal"
                   min="0"
@@ -578,7 +578,7 @@ export default function LaborNormsPage() {
                         if (e.key === "Enter" && !isRevealed) submitAnswer(ex.id);
                       }}
                       disabled={isRevealed}
-                      placeholder="Ваш ответ..."
+                      aria-label="Ваш ответ" placeholder="Ваш ответ..."
                       className="flex-1 px-3 py-2 rounded-lg border-2 border-blue-300 dark:border-blue-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500 disabled:opacity-70"
                     />
                     <span className="text-sm text-slate-500 dark:text-slate-400">{ex.unit}</span>

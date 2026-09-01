@@ -74,6 +74,10 @@ const cardBase: CSSProperties = {
 
 export default function AuditPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
+  // ⚠️ 01.09.2026: «записей нет» и «не смогли спросить» выглядели одинаково —
+  // при отказе список оставался пустым, и экран утверждал факт о данных,
+  // которых ни разу не получил. Тот же дефект был на соседней странице споров.
+  const [спросили, setСпросили] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("");
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -87,11 +91,13 @@ export default function AuditPage() {
         cache: "no-store",
       });
       if (!r.ok) {
+        setСпросили(false);
         setLoading(false);
         return;
       }
       const data: { data: AuditEntry[] } = await r.json();
       setEntries(data.data || []);
+      setСпросили(true);
     } catch {
       // offline
     } finally {
@@ -347,6 +353,11 @@ export default function AuditPage() {
 
         {loading ? (
           <div style={{ ...cardBase, color: "#64748b", fontSize: 14 }}>Loading audit…</div>
+        ) : filtered.length === 0 && спросили === false ? (
+          <div style={{ ...cardBase, color: "#b45309", fontSize: 14 }}>
+            Could not load the audit trail — the service did not answer. This is
+            not the same as having no entries: try refresh in a moment.
+          </div>
         ) : filtered.length === 0 ? (
           <div style={{ ...cardBase, color: "#64748b", fontSize: 14 }}>
             No audit entries yet. Try creating a link / firing a test webhook /

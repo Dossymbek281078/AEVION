@@ -604,7 +604,7 @@ export default function HelpPage() {
           ) : (
             <form onSubmit={handleContactSubmit} style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <label style={{ display: "grid", gap: 4 }}>
+                <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>
                     {t("helpRoot.contactForm.topic")}
                   </span>
@@ -612,6 +612,8 @@ export default function HelpPage() {
                     value={contactTopic}
                     onChange={(e) => setContactTopic(e.target.value)}
                     style={{
+                      width: "100%",
+                      boxSizing: "border-box",
                       padding: "8px 10px",
                       borderRadius: 8,
                       border: "1px solid rgba(15,23,42,0.15)",
@@ -627,7 +629,7 @@ export default function HelpPage() {
                     <option value="investor">{t("helpRoot.contactForm.topicInvestor")}</option>
                   </select>
                 </label>
-                <label style={{ display: "grid", gap: 4 }}>
+                <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>
                     {t("helpRoot.contactForm.email")}
                   </span>
@@ -637,6 +639,8 @@ export default function HelpPage() {
                     onChange={(e) => setContactEmail(e.target.value)}
                     placeholder="you@example.com"
                     style={{
+                      width: "100%",
+                      boxSizing: "border-box",
                       padding: "8px 10px",
                       borderRadius: 8,
                       border: "1px solid rgba(15,23,42,0.15)",
@@ -656,6 +660,8 @@ export default function HelpPage() {
                   onChange={(e) => setContactSubject(e.target.value)}
                   placeholder={t("helpRoot.contactForm.subjectPlaceholder")}
                   style={{
+                    width: "100%",
+                    boxSizing: "border-box",
                     padding: "8px 10px",
                     borderRadius: 8,
                     border: "1px solid rgba(15,23,42,0.15)",

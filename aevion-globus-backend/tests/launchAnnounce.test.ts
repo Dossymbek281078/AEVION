@@ -175,7 +175,10 @@ describe("дата запуска обязана называть свой ис�
     // ничего не проверяющий.
     const withDate = Object.values(LAUNCH_MODULES).filter((m) => m.date);
     expect(withDate.length).toBeGreaterThanOrEqual(1);
-    expect(withDate[0].dateSource).toMatch(/launch\/2026-08-30|CyberChess/);
+    // Расширено 30.08.2026: источником стал ПЛАН ОСНОВАТЕЛЯ, а он
+    // авторитетнее имени ветки. Строгость сохранена — шаблон по-прежнему
+    // требует назвать конкретный артефакт, а не общие слова.
+    expect(withDate[0].dateSource).toMatch(/launch\/2026-08-30|CyberChess|ПЛАН-даты-запуска/);
   });
 
   test("ни одно письмо не печатает null или undefined вместо даты", () => {

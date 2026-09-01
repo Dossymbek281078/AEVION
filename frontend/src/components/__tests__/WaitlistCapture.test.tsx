@@ -30,6 +30,14 @@ function stubFetch(status: number) {
 }
 
 beforeEach(() => {
+  // Канал живёт в хранилище вкладки (channelNow, 31.08.2026), поэтому соседний
+  // тест с меткой оставляет её следующему — и проверки «без метки» молча
+  // становятся слабее. Чистим, чтобы каждая проверка отвечала за себя.
+  try {
+    sessionStorage.clear();
+  } catch {
+    // приватный режим — хранилища нет
+  }
   vi.stubGlobal("fetch", ORIGINAL_FETCH);
 });
 
@@ -161,5 +169,47 @@ describe("читаемость на телефоне", () => {
     const el = screen.getByText(/Письмо приходит на запуск модуля/);
     const size = parseFloat((el as HTMLElement).style.fontSize || "0");
     expect(size, "условие подписки стало мельче 13px").toBeGreaterThanOrEqual(13);
+  });
+});
+
+describe("подписка сообщает канал привлечения", () => {
+  /*
+   * До 31.08.2026 в запросе было только поле source — «с какой страницы».
+   * Про покупки мы знали канал, про подписчиков нет, хотя список для запуска и
+   * есть главный актив воронки: по нему решают, куда вкладывать силы.
+   *
+   * Канал идёт ОТДЕЛЬНЫМ полем: дописывать его в source нельзя — тот разбирает
+   * рассылка (метки через запятую), и лишнее значение развело бы письма не туда.
+   */
+  test("метка из адреса уходит вместе с адресом почты", async () => {
+    window.history.replaceState({}, "", "/go?c=tg");
+    const calls = stubFetch(201);
+    render(<WaitlistCapture source="go" />);
+    await fillAndSubmit("kto@primer.ru");
+
+    await waitFor(() => expect(calls.length).toBe(1));
+    const body = calls[0].body as Record<string, unknown>;
+    expect(body.channel, "канал не доехал до учёта").toBeTruthy();
+    expect(body.source, "источник подменён каналом").toBe("go");
+  });
+
+  test("без метки поля нет — пустое значение хуже отсутствия", async () => {
+    window.history.replaceState({}, "", "/go");
+    const calls = stubFetch(201);
+    render(<WaitlistCapture source="go" />);
+    await fillAndSubmit("kto2@primer.ru");
+
+    await waitFor(() => expect(calls.length).toBe(1));
+    expect(Object.keys(calls[0].body as object)).not.toContain("channel");
+  });
+
+  test("выдуманная метка в учёт не едет", async () => {
+    window.history.replaceState({}, "", "/go?c=zzzz");
+    const calls = stubFetch(201);
+    render(<WaitlistCapture source="go" />);
+    await fillAndSubmit("kto3@primer.ru");
+
+    await waitFor(() => expect(calls.length).toBe(1));
+    expect(Object.keys(calls[0].body as object)).not.toContain("channel");
   });
 });

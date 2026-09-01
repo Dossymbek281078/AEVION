@@ -1,3 +1,4 @@
+import { observedIp } from "../lib/observedIp";
 import { Router } from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -41,7 +42,17 @@ authRouter.get("/email/healthz", (_req, res) => {
       process.env.SMTP_USER?.trim() &&
       process.env.SMTP_PASS?.trim(),
   );
-  const resend = Boolean(process.env.RESEND_API_KEY?.trim() || process.env.RESEND_KEY?.trim());
+  // ⚠️ 29.08.2026: отсюда убрано альтернативное имя RESEND_KEY.
+  //
+  // Ручка принимала два имени, а НИ ОДИН отправитель второе не читает:
+  // lib/build/email.ts, routes/build/alerts.ts, applications.ts и vacancies.ts
+  // все берут только RESEND_API_KEY. То есть при заданном RESEND_KEY эта
+  // проверка бодро отвечала «почта настроена», а письма не уходили бы ни
+  // одно — и именно эта ручка существует, чтобы ответить на вопрос «может ли
+  // новый человек зарегистрироваться».
+  //
+  // Проверка, которая мягче исполнителя, хуже отсутствующей: она успокаивает.
+  const resend = Boolean(process.env.RESEND_API_KEY?.trim());
   // Brevo — ТРЕТИЙ транспорт, и им уходит письмо подписчику списка раннего
   // доступа (sendWaitlistConfirm -> sendBrevoEmail, ключ BREVO_API_KEY).
   // Замер 28.08.2026: ручка отвечала canSend: true, проверив только SMTP и
@@ -49,6 +60,10 @@ authRouter.get("/email/healthz", (_req, res) => {
   // запускное письмо НЕ отправляется. Если ключа Brevo нет, каждое такое
   // письмо молча не уходит (отказ честный, но виден только в журнале и
   // Sentry), а снаружи платформа отвечает, что с почтой всё хорошо.
+  //
+  // Сведено 31.08 при сборке к 10.09: обе правки независимы и обе нужны —
+  // одна убирает имя, которого никто не читает, вторая добавляет транспорт,
+  // которым и уходит запускное письмо. Выбор стороны потерял бы половину.
   const brevo = Boolean(process.env.BREVO_API_KEY?.trim());
   res.json({
     ok: true,
@@ -172,15 +187,11 @@ async function ensureAuthTier2Tables(): Promise<void> {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────
 
-function clientIp(req: { headers: any; socket?: any; ip?: string }): string | null {
-  const xff = req.headers?.["x-forwarded-for"];
-  const first = Array.isArray(xff)
-    ? xff[0]
-    : typeof xff === "string"
-    ? xff.split(",")[0]?.trim()
-    : null;
-  return first || req.ip || req.socket?.remoteAddress || null;
-}
+// Адрес для записи берём из общего модуля: раньше здесь читалось ЛЕВОЕ
+// значение X-Forwarded-For, которое пишет сам вызывающий, — разбор в
+// комментарии к lib/observedIp.ts. Копий этой функции в проекте было четыре,
+// и они разошлись; поэтому теперь одно правило, а не пятая копия.
+const clientIp = observedIp;
 
 function clientUa(req: { headers: any }): string | null {
   const ua = req.headers?.["user-agent"];

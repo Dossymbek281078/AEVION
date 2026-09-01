@@ -206,7 +206,7 @@ export default function BudgetManagementPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/85 backdrop-blur">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link
             href="/smeta-trainer/drawings-practice/hub"
@@ -333,7 +333,7 @@ export default function BudgetManagementPage() {
                           [ex.id]: { value: e.target.value, status: "idle" },
                         }))
                       }
-                      placeholder="Ваш ответ"
+                      aria-label="Ваш ответ" placeholder="Ваш ответ"
                       className="w-40 rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
                     />
                     <span className="text-xs text-slate-500">{ex.unit}</span>

@@ -20,6 +20,13 @@ const SPEC = {
       },
     },
     parameters: {
+      IdempotentReplayed: {
+        name: "Idempotent-Replayed",
+        in: "header",
+        description:
+          "Present and set to \"true\" when this response was replayed from a previous request with the same Idempotency-Key. Its absence means the action was performed now. On refunds this is the difference between money that moved and money that did not.",
+        schema: { type: "string", enum: ["true"] },
+      },
       IdempotencyKey: {
         name: "Idempotency-Key",
         in: "header",
@@ -64,7 +71,19 @@ const SPEC = {
             type: "object",
             required: ["type", "message"],
             properties: {
-              type: { type: "string" },
+              type: {
+                type: "string",
+                description:
+                  "Whose side the failure is on. api_error means the request was fine and we could not complete it — retry is meaningful there and pointless for invalid_request_error.",
+                enum: [
+                  "authentication_error",
+                  "invalid_request_error",
+                  "rate_limit_error",
+                  "api_error",
+                  "storage_unavailable",
+                  "not_found",
+                ],
+              },
               message: { type: "string" },
             },
           },
@@ -212,6 +231,11 @@ const SPEC = {
           paid_at: { type: ["integer", "null"] },
           reference: { type: "string" },
           payments: { type: "integer" },
+          sample: {
+            type: "boolean",
+            description:
+              "Present and true when this settlement comes from the starter data set, not from a real payout. Absent on real settlements. The field lives on the record itself because a response travels alone: nothing else in it says where it came from.",
+          },
           royalty: {
             type: "array",
             items: {
@@ -584,7 +608,7 @@ const SPEC = {
           },
           "409": {
             description:
-              "Link is not paid, already fully refunded, or amount exceeds remaining.",
+              "Link is not paid, already fully refunded, the amount exceeds remaining, or the refund history for this link may have been truncated and we will not issue a refund we cannot verify.",
             content: {
               "application/json": { schema: { $ref: "#/components/schemas/Error" } },
             },
@@ -701,6 +725,43 @@ const SPEC = {
         },
       },
     },
+    "/v1/webhooks/{id}/test": {
+      post: {
+        summary: "Send a test delivery to a webhook endpoint",
+        operationId: "testWebhook",
+        description:
+          "Rate limited to 30 requests per minute — half the platform default, because each call makes us open a connection to your server. Signs a sample payload with the endpoint secret and delivers it to the registered URL, so you can verify your signature check end to end. Returns 200 when your endpoint accepted the delivery and 502 when it did not; the body carries the outcome either way, including the signature we sent.",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Your endpoint accepted the test delivery.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    webhook_id: { type: "string" },
+                    event: { type: "string" },
+                    delivered: { type: "boolean" },
+                    http_code: { type: "integer", nullable: true },
+                    duration_ms: { type: "integer" },
+                    timestamp: { type: "integer" },
+                    signature: { type: "string" },
+                    url: { type: "string" },
+                    error: { type: "string", nullable: true },
+                    payload: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          "502": { description: "Your endpoint rejected or did not answer the test delivery." },
+        },
+      },
+    },
     "/v1/webhooks/process": {
       get: {
         summary: "Read webhook delivery queue stats",
@@ -744,6 +805,33 @@ const SPEC = {
             },
           },
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/v1/health": {
+      get: {
+        summary: "Storage durability of the Payments Rail",
+        operationId: "paymentsHealth",
+        description:
+          "Whether payment records currently survive a restart. The storage layer falls back to process memory when no durable backend is configured, and that fallback is silent: every endpoint still answers 200. This is how an integrator can tell. `durable` covers refunds, disputes, the audit log and the webhook queue. `linksDurable` answers separately for payment links, which are not written to the durable backend at all, so configuring one does not change it.",
+        responses: {
+          "200": {
+            description: "Durability report.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean" },
+                    durable: { type: "boolean" },
+                    linksDurable: { type: "boolean" },
+                    degradedSince: { type: "string", nullable: true },
+                    note: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },

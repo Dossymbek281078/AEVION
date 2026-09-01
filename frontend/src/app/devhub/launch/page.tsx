@@ -56,6 +56,7 @@ import { PageTracking } from "@/components/PageTracking";
 // aevion-globus-backend/CLAUDE.md). Не проверил — не обещаю.
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/devhub/launch" },
   title: "AEVION DevHub — ранний доступ",
   // Описание для поиска обязано обещать столько же, сколько текст страницы, а не
   // больше. Здесь стояло «сценарии сборки под ключ» — то самое обещание, от
@@ -103,13 +104,13 @@ export default async function DevhubLaunchPage({
   const source = channel ? `devhub-${channel}` : "devhub";
 
   return (
-    <main className={paper.paper} style={{ minHeight: "100vh", padding: "32px 18px 56px" }}>
+    <main className={paper.paper} style={{ minHeight: "100vh", padding: "clamp(16px, 4vw, 32px) 18px 56px" }}>
       {/* Заходы сюда не считались до 28.08.2026: страница собирает адреса, но
           события page_view не слала. Воронка считает переходы ОТ page_view,
           поэтому её посетители не попадали в знаменатель — конверсия выглядела
           лучше, чем есть. Компонент сам читает ?c= из ссылки. */}
       <PageTracking page="devhub-launch" />
-      <div style={{ maxWidth: 620, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
+      <div style={{ maxWidth: 620, margin: "0 auto", display: "flex", flexDirection: "column", gap: "clamp(18px, 4vw, 28px)" }}>
         <header>
           <div className={paper.kicker}>AEVION · DevHub</div>
           <h1
@@ -118,7 +119,7 @@ export default async function DevhubLaunchPage({
           >
             Опишите приложение словами
           </h1>
-          <p style={{ color: "var(--ink-soft)", fontSize: 15.5, lineHeight: 1.6, margin: "12px 0 0" }}>
+          <p style={{ color: "var(--ink-soft)", fontSize: 15.5, lineHeight: 1.5, margin: "10px 0 0" }}>
             «Сделай таймер помодоро с настройкой длительности» — и DevHub собирает
             проект: код, страницы, а при необходимости картинки и озвучку к ним.
             Начинать со списка возможностей не нужно, он ниже — просто чтобы вы

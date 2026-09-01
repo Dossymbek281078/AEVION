@@ -9,6 +9,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { useToast } from "@/components/ToastProvider";
 import { apiUrl } from "@/lib/apiBase";
+import { activatable } from "@/lib/activatable";
 
 type AuditEntry = {
   id: string;
@@ -360,7 +361,10 @@ export default function QuantumShieldPublicPage() {
                   color: "#0f766e",
                   cursor: "pointer",
                 }}
-                onClick={() => fileInputRef.current?.click()}
+                // Зона перетаскивания: настоящей кнопкой не заменить — внутри лежит
+                // само поле, и у неё есть onDrop. Помощник даёт роль, фокус и
+                // Enter/Пробел, иначе «or click to browse» работает только мышью.
+                {...activatable(() => fileInputRef.current?.click())}
               >
                 <b>Drop shard JSONs here</b> or click to browse
                 <input

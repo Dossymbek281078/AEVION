@@ -31,7 +31,11 @@ describe("подтверждение подписки на странице за
     const h = PAGE.indexOf(H);
     expect(h, "на странице нет заголовка «Открываем …»").toBeGreaterThan(-1);
     const date = PAGE.slice(h + H.length, h + H.length + 40)
-      .split("<")[0].trim();
+      // Границей даты служит и кавычка: заголовок стал выражением с
+      // условием, и без этого в дату попадал хвост выражения.
+      .split("<")[0]
+      .split('"')[0]
+      .trim();
     expect(date.length, "после «Открываем» не удалось прочитать дату").toBeGreaterThan(3);
     expect(
       PAGE.slice(at, at + 160),

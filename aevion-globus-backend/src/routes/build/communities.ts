@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
+import { queryDate } from "../../lib/queryDate";
 
 export const communitiesRouter = Router();
 
@@ -59,9 +60,8 @@ communitiesRouter.get("/:slug", async (req, res) => {
     // Проверяем ФОРМАТОМ, а не одним `Date.parse`: `Date.parse("1")` в Node
     // возвращает валидную дату (год 2001), которую Postgres не принимает, —
     // то есть проверка через него одна слабее базы.
-    const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ][\d:.+\-Z]*)?$/;
-    const before = typeof req.query.before === "string" ? req.query.before : null;
-    if (before !== null && (!ISO_DATE.test(before) || Number.isNaN(Date.parse(before)))) {
+    const before = queryDate(req.query.before);
+    if (before === undefined) {
       return fail(res, 400, "invalid_before");
     }
 

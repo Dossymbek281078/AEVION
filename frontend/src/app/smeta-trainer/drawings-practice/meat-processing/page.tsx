@@ -30,7 +30,7 @@ export default function MeatProcessingPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Мясокомбинаты и пищепром</div>
@@ -99,7 +99,7 @@ export default function MeatProcessingPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Расход холода, кВт·ч/сутки"
+            aria-label="Расход холода, кВт·ч/сутки" placeholder="Расход холода, кВт·ч/сутки"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: Q = 5000×1.7×22 + 5000×230 = 187 000 + 1 150 000 = 1 337 000 кДж ≈ 371 кВт·ч. С учётом ограждений + воздухообмен + COP=0.3 ≈ 1250 кВт·ч.</p>
@@ -118,7 +118,7 @@ export default function MeatProcessingPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~12.5 млрд тг (допуск ±10%). 7200+1400+1600+980+520+380+420 = 12 500 млн тг.</p>

@@ -3,6 +3,7 @@ import { pgIntId } from "../lib/queryNumber";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { requesterId } from "../lib/devhubGuest";
+import { requestGuestLink, confirmGuestLink } from "../lib/devhubGuestLink";
 import { noteEmailSent } from "../lib/brevoQuota";
 // Ограничитель дорогих ручек. Тот же помощник, что стоит на 27 соседних ручках в
 // коммите d9cc19ce0 (28.07) — он ждёт мержа 22 дня, поэтому здесь пока только две
@@ -34,16 +35,21 @@ function dhCostlyLimit(keyPrefix: string) {
   });
 }
 import { getPool } from "../lib/dbPool";
-import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
+import { ensureDevHubTables, isDevHubDbReady, getDevHubDbError } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders, type ChatImage } from "../services/qcoreai/providers";
 import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcoreai/jsonReply";
 import { smartComplete } from "../services/qcoreai/smartComplete";
+import { insertSmartRun } from "../lib/smartRunLog";
+import { costUsd } from "../services/qcoreai/pricing";
 import { applyHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
 import { classifyGithubResponse, githubUnreachable } from "../lib/githubFailure";
+import { buildRunInstructions } from "../lib/devhubRunInstructions";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
 import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
+import { redactInfraDetails } from "../lib/safeErrorText";
+import { checkPublicUrl } from "../lib/publicUrlOnly";
 
 export const devhubRouter = Router();
 
@@ -93,17 +99,138 @@ function dhSendLimit() {
   });
 }
 
+/**
+ * Создание проекта и сниппета — записи в базу, доступные БЕЗ входа и без
+ * какой-либо платы. Замер 29.08.2026: ни ограничителя темпа, ни потолка на
+ * пользователя, ни общего ограничителя на приложении — то есть любой скрипт
+ * мог заполнять таблицу проектов сколько угодно.
+ *
+ * Дорогие ручки защищены иначе (месячная норма), и это верно: там тратятся
+ * деньги. Здесь тратится место и время базы, а значит и работа всех
+ * остальных.
+ *
+ * Число выбрано так, чтобы человек его не заметил: десять проектов в минуту —
+ * это больше, чем создают руками за целый вечер. Настраивается переменной, но
+ * умолчание СТРОГОЕ: защита, включающаяся только при настройке, — это защита,
+ * которой нет.
+ */
+function dhCreateLimit() {
+  const raw = Number(process.env.DEVHUB_CREATE_RATE_LIMIT);
+  const max = Number.isFinite(raw) && raw > 0 ? raw : 10;
+  return rateLimit({
+    windowMs: 60_000,
+    max,
+    keyPrefix: "dhcreate",
+    message: "Слишком много записей подряд. Подождите минуту.",
+  });
+}
+
 devhubRouter.use(
   ["/media/email", "/media/email-template-send", "/media/sms", "/media/whatsapp"],
   dhSendLimit(),
 );
 
+/**
+ * Ограничитель для формы связывания. Отдельный и СТРОЖЕ обычного: форма
+ * отправляет письма на адрес, который назвал вызывающий, то есть без
+ * предела она становится рассылочной пушкой чужими руками. Три попытки в
+ * десять минут — человек, ищущий свою покупку, столько не сделает.
+ */
+function dhLinkLimit() {
+  const raw = Number(process.env.DEVHUB_LINK_RATE_LIMIT);
+  const max = Number.isFinite(raw) && raw > 0 ? raw : 3;
+  return rateLimit({
+    windowMs: 10 * 60_000,
+    max,
+    keyPrefix: "dhlink",
+    message: "Слишком много попыток. Подождите десять минут.",
+  });
+}
+
+// Одна фраза на все исходы. Разные ответы превратили бы форму в способ
+// узнать, кто у нас покупал: достаточно перебрать адреса и смотреть текст.
+const LINK_NEUTRAL = "Если на этой почте есть покупка DevHub, мы отправили на неё письмо со ссылкой.";
+
+// POST /api/devhub/guest/link-request — «я оплатил, вот адрес покупки»
+devhubRouter.post("/guest/link-request", dhLinkLimit(), async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const guestId = requesterId(req, auth?.sub);
+  const email = typeof req.body?.email === "string" ? req.body.email : "";
+  const siteBase = process.env.PUBLIC_SITE_URL || "https://aevion.app";
+
+  const outcome = await requestGuestLink(guestId, email, siteBase);
+
+  // Отказ ХРАНИЛИЩА и отказ ТРАНСПОРТА наружу не маскируем под успех:
+  // человек иначе будет ждать письма, которого не будет. Но и подробностей
+  // не выдаём — категория, без адреса базы и имени провайдера.
+  if (outcome === "storage_down" || outcome === "transport_down") {
+    return res.status(503).json({
+      ok: false,
+      error: "link_unavailable",
+      message: "Сейчас не получилось отправить письмо. Попробуйте позже.",
+    });
+  }
+  // "sent" и "no_purchase" отвечают ОДИНАКОВО — и кодом, и текстом.
+  return res.json({ ok: true, message: LINK_NEUTRAL });
+});
+
+// POST /api/devhub/guest/link-confirm — переход по ссылке из письма
+devhubRouter.post("/guest/link-confirm", dhLinkLimit(), async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const guestId = requesterId(req, auth?.sub);
+  const id = typeof req.body?.id === "string" ? req.body.id : "";
+  const token = typeof req.body?.token === "string" ? req.body.token : "";
+
+  const outcome = await confirmGuestLink(id, token, guestId);
+  if (outcome === "storage_down") {
+    return res.status(503).json({ ok: false, error: "link_unavailable" });
+  }
+  if (outcome === "invalid") {
+    // 400, а не 500: данные прислал клиент. Пятисотка ушла бы в Sentry и
+    // топила бы там настоящие аварии.
+    return res.status(400).json({
+      ok: false,
+      error: "link_invalid",
+      message: "Ссылка не подошла: она устарела, уже использована или открыта в другом браузере.",
+    });
+  }
+  return res.json({ ok: true, message: "Покупка подключена. Обновите страницу." });
+});
+
 // GET /api/devhub/health — module health probe for aevion hub
 devhubRouter.get("/health", (_req, res) => {
+  // `status` был КОНСТАНТОЙ "ok" — строкой, записанной в исходнике. Он не
+  // проверял ничего, в том числе базу: при упавшем Postgres поле `db`
+  // честно показывало "in-memory", а `status` продолжал говорить "ok".
+  //
+  // Дороже всего это стоило смоуку: он сверяет именно `status === "ok"`, то
+  // есть его проверка здоровья не могла покраснеть в принципе, пока процесс
+  // вообще отвечает. Проверка, которая не умеет краснеть, хуже отсутствующей —
+  // на неё ссылаются как на доказательство.
+  //
+  // Код ответа остаётся 200: хаб модулей считает живым всё, что ответило 2xx,
+  // и деградация базы не означает, что модуль недоступен. Меняется поле, а
+  // не доступность.
+  //
+  // Причина отдаётся ПРИЗНАКОМ, а не текстом: сообщение об ошибке подключения
+  // несёт адрес, порт и имя пользователя базы, и наружу таким вещам нельзя.
+  const dbReady = isDevHubDbReady();
   res.json({
-    status: "ok",
+    status: dbReady ? "ok" : "degraded",
+    // ОБЛАСТЬ ОХВАТА рядом со статусом. Слово `status` шире того, о чём эта
+    // ручка знает: она отвечает про наше ХРАНИЛИЩЕ и ни про что больше.
+    // Провайдеры (ключи, зона Cloudflare, платные API) живут в
+    // /providers/health, и там сейчас бывает не всё зелено — а читатель,
+    // увидев "ok", решает, что с модулем полный порядок.
+    //
+    // Класс записан в правилах: имя поля шире того, что оно сообщает.
+    // Лечится не переименованием (его читают снаружи и в смоуке), а тем,
+    // что рядом сказано, о чём именно этот ответ.
+    covers: "storage",
+    providersCheckedAt: "/api/devhub/providers/health",
     module: "devhub",
-    db: isDevHubDbReady() ? "postgres" : "in-memory",
+    db: dbReady ? "postgres" : "in-memory",
+    dbError: dbReady ? null : Boolean(getDevHubDbError()),
     timestamp: new Date().toISOString(),
   });
 });
@@ -121,6 +248,13 @@ devhubRouter.get("/health", (_req, res) => {
 // ИИ без предела. Ключ отдельный: общий на все генерации означал бы, что один
 // модуль расходует лимит другого (см. feedback_default_that_means_share).
 devhubRouter.post("/ask", dhCostlyLimit("dhask"), async (req, res) => {
+  // Метка модуля расщеплена на «вошёл / не вошёл» СПЕЦИАЛЬНО. Ручка зовёт
+  // платного поставщика и входа не требует, поэтому анонимный расход шёл в
+  // учёт одной строкой вместе с расходом платящих — отделить было нельзя.
+  // Схему не трогаем: колонка module свободный текст, сравнений с закрытым
+  // списком нет (проверено), сводка группирует по значению.
+  const askAuth = verifyBearerOptional(req);
+  const askModule = askAuth?.sub ? "devhub" : "devhub-anon";
   const question = typeof req.body?.question === "string" ? req.body.question.trim().slice(0, 8000) : "";
   const context = typeof req.body?.context === "string" ? req.body.context.trim().slice(0, 8000) : "";
   if (!question) return res.status(400).json({ error: "question required" });
@@ -129,11 +263,11 @@ devhubRouter.post("/ask", dhCostlyLimit("dhask"), async (req, res) => {
     ? `Context (a developer's project/code):\n${context}\n\nQuestion: ${question}`
     : question;
   try {
-    const { answer, routing } = await smartComplete({ userInput }, { module: "devhub" });
+    const { answer, routing } = await smartComplete({ userInput }, { module: askModule });
     return res.json({ answer, routing });
   } catch (e: any) {
     captureException(e);
-    return res.status(502).json({ error: e?.message || "ask failed" });
+    return res.status(502).json({ error: redactInfraDetails(e) || "ask failed" });
   }
 });
 
@@ -240,16 +374,34 @@ function creditMonth(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-async function getUserTier(userId: string): Promise<StudioTier> {
-  if (!isDevHubDbReady()) return memTiers.get(userId) ?? "free";
+/**
+ * `tierKnown: false` means we had to guess. Answering a bare "free" on a failed
+ * read took the plan a customer had paid for away from them for as long as the
+ * database wobbled, and said nothing about it — the mirror image of the usage
+ * meter answering 0. The last value we actually saw is preferred to the guess.
+ */
+async function getUserTierChecked(userId: string): Promise<{ tier: StudioTier; tierKnown: boolean }> {
+  if (!isDevHubDbReady()) return { tier: memTiers.get(userId) ?? "free", tierKnown: true };
   try {
     const r = await pool.query(`SELECT "tier" FROM "DevHubTier" WHERE "userId"=$1`, [userId]);
-    if (r.rows[0]?.tier) return r.rows[0].tier as StudioTier;
-    // Check email-based tier (set by payment webhook before user registered)
+    if (r.rows[0]?.tier) return { tier: r.rows[0].tier as StudioTier, tierKnown: true };
+    // Тариф, оплаченный ДО регистрации. Ищем двумя путями, потому что
+    // человек приходит к нам двумя: как учётная запись и как ГОСТЬ.
+    //
+    // Второй путь и был дырой: модуль намеренно работает без аккаунта,
+    // оплата приходит с одним адресом почты, а тариф искался только через
+    // AEVIONUser — значит заплативший гость видел бесплатный тариф.
+    // Связь «гость → почта» кладёт тот способ, который выберет владелец
+    // продукта; чтение одинаково для всех трёх.
     const er = await pool.query(`
       SELECT det."tier" FROM "AEVIONUser" au
       JOIN "DevHubEmailTier" det ON det."email" = LOWER(au."email")
-      WHERE au."id" = $1 LIMIT 1
+      WHERE au."id" = $1
+      UNION ALL
+      SELECT det2."tier" FROM "DevHubGuestEmail" ge
+      JOIN "DevHubEmailTier" det2 ON det2."email" = LOWER(ge."email")
+      WHERE ge."guestId" = $1
+      LIMIT 1
     `, [userId]);
     if (er.rows[0]?.tier && er.rows[0].tier !== "free") {
       const promoted = er.rows[0].tier as StudioTier;
@@ -258,10 +410,23 @@ async function getUserTier(userId: string): Promise<StudioTier> {
         INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
         ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
       `, [userId, promoted]).catch(() => {});
-      return promoted;
+      return { tier: promoted, tierKnown: true };
     }
-    return "free";
-  } catch { return "free"; }
+    // No row is a real answer: this user is on the free plan. But a setUserTier
+    // whose write failed parks the value in memTiers, and that map used to be
+    // read only with the database KNOWN to be down — so an upgrade applied
+    // during a wobble never took effect at all.
+    const parked = memTiers.get(userId);
+    if (parked) return { tier: parked, tierKnown: true };
+    return { tier: "free", tierKnown: true };
+  } catch {
+    // Prefer the last value we actually saw over the guess.
+    return { tier: memTiers.get(userId) ?? "free", tierKnown: false };
+  }
+}
+
+async function getUserTier(userId: string): Promise<StudioTier> {
+  return (await getUserTierChecked(userId)).tier;
 }
 
 async function setUserTier(userId: string, tier: StudioTier): Promise<void> {
@@ -274,24 +439,73 @@ async function setUserTier(userId: string, tier: StudioTier): Promise<void> {
   } catch { memTiers.set(userId, tier); }
 }
 
-async function getMonthUsage(userId: string, month: string, capability: CapabilityKey): Promise<number> {
-  if (!isDevHubDbReady()) return memUsage.get(`${userId}:${month}:${capability}`) ?? 0;
+/**
+ * Returns `null` when the meter could not be read — NOT 0.
+ *
+ * Zero is the honest answer for a fresh month, so answering 0 on a failed read
+ * made a database outage indistinguishable from a user who had spent nothing,
+ * and every quota gate opened for as long as it lasted. Callers have to decide
+ * what to do about an unknown; they can no longer be handed a wrong number.
+ */
+async function getMonthUsage(userId: string, month: string, capability: CapabilityKey): Promise<number | null> {
+  const memKey = `${userId}:${month}:${capability}`;
+  if (!isDevHubDbReady()) return memUsage.get(memKey) ?? 0;
   try {
     const r = await pool.query(
       `SELECT "used" FROM "DevHubUsage" WHERE "userId"=$1 AND "month"=$2 AND "capability"=$3`,
       [userId, month, capability]
     );
-    return r.rows[0]?.used ?? 0;
-  } catch { return 0; }
+    // debitCredit() parks a charge here when its own write failed. That map was
+    // previously only read with the database KNOWN to be down, so with the
+    // database nominally up the debit went nowhere at all. Adding it back is
+    // the only way the fallback means anything.
+    return (r.rows[0]?.used ?? 0) + (memUsage.get(memKey) ?? 0);
+  } catch (e) {
+    // Тип уже заставляет вызывающего обработать неизвестность — но без следа
+    // никто не узнает, ЧТО перестало меряться: предел на платных ручках
+    // перестаёт применяться, а снаружи это выглядит обычной работой.
+    // Не роняем: отказ УЧЁТА не должен ломать оплаченное действие.
+    // В сборщик ошибок, а не только в журнал: предупреждение в потоке
+    // Railway никто не читает проактивно — проверено, у Sentry.init нет
+    // captureConsole, значит console.warn туда не попадает. След годится
+    // для разбирательства, но отказ, снимающий ПРЕДЕЛ РАСХОДА, должен
+    // приводить человека, а не ждать, пока он придёт сам.
+    //
+    // Путь СПИСАНИЯ это уже делает (devhub/debitCredit) — путь ЧТЕНИЯ был
+    // единственным несимметричным местом.
+    captureException(e, { route: "devhub/getMonthUsage", userId, month, capability });
+    console.warn(
+      `[devhub/credit] расход за месяц не прочитан — предел не применяется: ` +
+        `user=${userId} month=${month} capability=${capability}: ${redactInfraDetails(e)}`,
+    );
+    return null;
+  }
 }
 
-async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<{ allowed: boolean; used: number; limit: number; tier: StudioTier }> {
+type CreditVerdict = { allowed: boolean; used: number; limit: number; tier: StudioTier; usedKnown: boolean };
+
+async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<CreditVerdict> {
   const tier = await getUserTier(userId);
   const limit = TIER_LIMITS[tier][capability];
-  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier };
+  if (limit === -1) return { allowed: true, used: 0, limit: -1, tier, usedKnown: true };
   const month = creditMonth();
   const used = await getMonthUsage(userId, month, capability);
-  return { allowed: used + amount <= limit, used, limit, tier };
+  if (used === null) {
+    // Letting the request through is the lesser mistake — blocking a paying
+    // customer over a database blip is worse than one uncharged generation.
+    // What is not acceptable is passing in silence, which is how a whole
+    // unmetered month left no trace anywhere.
+    return { allowed: true, used: 0, limit, tier, usedKnown: false };
+  }
+  return { allowed: used + amount <= limit, used, limit, tier, usedKnown: true };
+}
+
+/**
+ * Spread into a metered route's response so an unverified allowance travels
+ * with the answer instead of being inferred from its absence.
+ */
+function creditNote(verdict: CreditVerdict): { creditUnverified: true } | Record<string, never> {
+  return verdict.usedKnown ? {} : { creditUnverified: true };
 }
 
 async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
@@ -310,22 +524,59 @@ async function debitCredit(userId: string, capability: CapabilityKey, amount = 1
       ON CONFLICT ("userId","month","capability")
       DO UPDATE SET "used"="DevHubUsage"."used"+$5, "tier"=$6, "updatedAt"=NOW()
     `, [id, userId, month, capability, amount, tier]);
-  } catch {
+  } catch (e) {
     const key = `${userId}:${month}:${capability}`;
     memUsage.set(key, (memUsage.get(key) ?? 0) + amount);
+    // Списание не роняем — работа уже выполнена, — но и молчать нельзя:
+    // трата в памяти живёт до перезапуска и при выкатке обнулится.
+    console.warn(
+      `[devhub/debit] списание не записано, отложено в память (обнулится при выкатке): ` +
+        `user=${userId} month=${month} capability=${capability} amount=${amount}: ${redactInfraDetails(e)}`,
+    );
   }
 }
 
-async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; month: string; usage: Record<CapabilityKey, { used: number; limit: number }> }> {
-  const tier = await getUserTier(userId);
+/**
+ * Списание, которое не имеет права уронить уже выполненную работу — но и молчать
+ * не имеет права.
+ *
+ * Десять маршрутов зовут списание как `debitQuietly(...)`. Это
+ * защита в глубину, а не рабочая ветка: `debitCredit` сам ловит отказ базы и
+ * паркует списание в память, а чтение тарифа тоже не бросает. То есть сегодня
+ * внешний catch сработать не может.
+ *
+ * Убирать его всё равно нельзя: если внутренности однажды начнут бросать,
+ * маршрут упадёт УЖЕ ПОСЛЕ удачной генерации, и человек потеряет результат, за
+ * который заплатил. Но проглатывать молча — значит согласиться, что о пропаже
+ * списания никто не узнает: ни журнал, ни Sentry, ни счётчик расхода.
+ *
+ * Поэтому отказ остаётся не смертельным и становится ВИДИМЫМ, с указанием, ЧТО
+ * и У КОГО не списалось — след без этих двух вещей бесполезен.
+ */
+function debitQuietly(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
+  return debitCredit(userId, capability, amount).catch((e) => {
+    const why = e instanceof Error ? e.message : String(e);
+    console.error(`[DevHub] СПИСАНИЕ НЕ ВЫПОЛНЕНО: ${capability} x${amount} для ${userId}: ${why}`);
+    captureException(e, { route: "devhub/debitCredit", userId, capability, amount });
+  });
+}
+
+type UsageCell = { used: number; limit: number; usedKnown?: false };
+
+async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; tierKnown: boolean; month: string; usage: Record<CapabilityKey, UsageCell>; anyUnknown: boolean }> {
+  const { tier, tierKnown } = await getUserTierChecked(userId);
   const month = creditMonth();
   const caps: CapabilityKey[] = ["video", "image", "tts", "music", "deploy"];
-  const usage: Record<string, { used: number; limit: number }> = {};
+  const usage: Record<string, UsageCell> = {};
+  let anyUnknown = false;
   for (const cap of caps) {
     const used = await getMonthUsage(userId, month, cap);
-    usage[cap] = { used, limit: TIER_LIMITS[tier][cap] };
+    // A capability whose meter could not be read is shown as 0 so the screen
+    // still renders, but carries the flag that says the 0 is not a measurement.
+    if (used === null) anyUnknown = true;
+    usage[cap] = { used: used ?? 0, limit: TIER_LIMITS[tier][cap], ...(used === null ? { usedKnown: false as const } : {}) };
   }
-  return { tier, month, usage: usage as Record<CapabilityKey, { used: number; limit: number }> };
+  return { tier, tierKnown, month, usage: usage as Record<CapabilityKey, UsageCell>, anyUnknown };
 }
 
 // ── Deferred post-deploy work ────────────────────────────────────────────────
@@ -358,6 +609,23 @@ export function __clearDeferredDevHubWork() {
 }
 
 // ── Exported reset helpers for tests ─────────────────────────────────────────
+/**
+ * ТОЛЬКО ДЛЯ ТЕСТОВ. Списание идёт внутри платных маршрутов, а они ходят к
+ * внешним поставщикам — поднимать их ради проверки УЧЁТА значило бы мерить не
+ * то. Экспорт по образцу __resetDevHubStore, уже принятому в файле.
+ *
+ * Нужен для ветки, которую иначе не достать: при отказе ЗАПИСИ трата паркуется
+ * в памяти, и её обязано быть видно при ЖИВОЙ базе. До 27.08 карта читалась
+ * только при заведомо мёртвой базе, то есть списание уходило в никуда.
+ */
+export async function __debitCreditForTest(
+  userId: string,
+  capability: CapabilityKey,
+  amount: number,
+): Promise<void> {
+  return debitQuietly(userId, capability, amount);
+}
+
 export function __resetDevHubStore() {
   memProjects.clear();
   memFiles.clear();
@@ -415,11 +683,26 @@ async function dbListProjects(userId: string): Promise<DevHubProject[]> {
     `SELECT * FROM "DevHubProject" WHERE "userId"=$1 ORDER BY "updatedAt" DESC`,
     [userId]
   );
-  return r.rows.map(rowToProject);
+  // Same overlay as dbGetProject: a project whose save failed has to be listed,
+  // or the shelf shows the user one fewer project than they have.
+  const rows: DevHubProject[] = r.rows.map(rowToProject);
+  const parked = [...memProjects.values()].filter((p) => p.userId === userId);
+  if (parked.length === 0) return rows;
+  const byId = new Map<string, DevHubProject>(rows.map((p) => [p.id, p]));
+  for (const p of parked) byId.set(p.id, p);
+  return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 async function dbGetProject(id: string): Promise<DevHubProject | null> {
   if (!isDevHubDbReady()) return memProjects.get(id) ?? null;
+  // memProjects holds state a save could not persist. Routes fall back to it
+  // only when the READ throws, which misses the ordinary case: the write
+  // failed, the read is healthy, and the row simply is not there. Preferring
+  // the parked copy is what keeps a "created" project from vanishing — and
+  // dbSaveProject drops the entry the moment a write lands, so it cannot
+  // shadow the database for longer than the failure lasts.
+  const parked = memProjects.get(id);
+  if (parked) return parked;
   const r = await pool.query(`SELECT * FROM "DevHubProject" WHERE "id"=$1`, [id]);
   return r.rows[0] ? rowToProject(r.rows[0]) : null;
 }
@@ -435,6 +718,10 @@ async function dbSaveProject(p: DevHubProject): Promise<void> {
     [p.id, p.userId, p.name, p.description, p.stack, p.status, p.repoUrl, p.deployUrl,
      p.customDomain, JSON.stringify(p.envVars), JSON.stringify(p.collaborators), p.createdAt, p.updatedAt]
   );
+  // The row is now the truth again, so the parked copy must go — otherwise the
+  // rescue above becomes its own bug and a stale in-memory project outranks
+  // every later database read for the life of the process.
+  memProjects.delete(p.id);
 }
 
 async function dbDeleteProject(id: string): Promise<void> {
@@ -443,6 +730,12 @@ async function dbDeleteProject(id: string): Promise<void> {
     for (const [fid, f] of memFiles) { if (f.projectId === id) memFiles.delete(fid); }
     return;
   }
+  // Drop the parked copy too, or the overlay in dbGetProject resurrects a
+  // project the user just deleted — a hole the overlay itself opens.
+  // Drop the parked copy too, or the overlay in dbGetProject resurrects a
+  // project the user just deleted — a hole the overlay itself opens.
+  memProjects.delete(id);
+  for (const [fid, f] of memFiles) { if (f.projectId === id) memFiles.delete(fid); }
   await pool.query(`DELETE FROM "DevHubFile" WHERE "projectId"=$1`, [id]);
   await pool.query(`DELETE FROM "DevHubProject" WHERE "id"=$1`, [id]);
 }
@@ -553,6 +846,9 @@ async function dbSaveDeployment(d: DevHubDeployment): Promise<void> {
        "status"=$4,"deployUrl"=$5,"buildLog"=$6,"completedAt"=$8`,
     [d.id, d.projectId, d.userId, d.status, d.deployUrl, d.buildLog, d.triggeredAt, d.completedAt]
   );
+  // The row is the truth again — a stale parked copy would freeze the status
+  // the IDE shows at whatever it was when the write last failed.
+  memDeployments.delete(d.id);
 }
 
 async function dbListDeployments(projectId: string, limit = 10): Promise<DevHubDeployment[]> {
@@ -566,7 +862,17 @@ async function dbListDeployments(projectId: string, limit = 10): Promise<DevHubD
     `SELECT * FROM "DevHubDeployment" WHERE "projectId"=$1 ORDER BY "triggeredAt" DESC LIMIT $2`,
     [projectId, limit]
   );
-  return r.rows.map(rowToDeployment);
+  // Same overlay as projects and checkpoints: a deployment record whose save
+  // failed is parked here, and this list is the only place the IDE learns a
+  // deploy happened at all. Missing rows read as "nothing was deployed".
+  const rows: DevHubDeployment[] = r.rows.map(rowToDeployment);
+  const parked = [...memDeployments.values()].filter((d) => d.projectId === projectId);
+  if (parked.length === 0) return rows;
+  const byId = new Map<string, DevHubDeployment>(rows.map((d) => [d.id, d]));
+  for (const d of parked) byId.set(d.id, d);
+  return [...byId.values()]
+    .sort((a, b) => b.triggeredAt.localeCompare(a.triggeredAt))
+    .slice(0, limit);
 }
 
 function rowToDeployment(row: any): DevHubDeployment {
@@ -586,6 +892,8 @@ async function dbSaveCheckpoint(c: DevHubCheckpoint): Promise<void> {
      VALUES ($1,$2,$3,$4,$5,$6)`,
     [c.id, c.projectId, c.userId, c.label, JSON.stringify(c.files), c.createdAt]
   );
+  // The row is the truth again; drop the parked copy so it cannot shadow it.
+  memCheckpoints.delete(c.id);
 }
 
 async function dbLatestCheckpoint(projectId: string): Promise<DevHubCheckpoint | null> {
@@ -599,11 +907,27 @@ async function dbLatestCheckpoint(projectId: string): Promise<DevHubCheckpoint |
     `SELECT * FROM "DevHubCheckpoint" WHERE "projectId"=$1 ORDER BY "createdAt" DESC LIMIT 1`,
     [projectId]
   );
-  return r.rows[0] ? rowToCheckpoint(r.rows[0]) : null;
+  const row = r.rows[0] ? rowToCheckpoint(r.rows[0]) : null;
+  // A checkpoint whose save failed is parked in memCheckpoints, which used to
+  // be read only with the database KNOWN to be down. Undo would then restore an
+  // OLDER checkpoint over the user's work — the safety net doing the damage.
+  const parked = newestParkedCheckpoint(projectId);
+  if (!parked) return row;
+  if (!row) return parked;
+  return parked.createdAt.localeCompare(row.createdAt) >= 0 ? parked : row;
+}
+
+function newestParkedCheckpoint(projectId: string): DevHubCheckpoint | null {
+  return [...memCheckpoints.values()]
+    .filter((c) => c.projectId === projectId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
 }
 
 async function dbDeleteCheckpoint(id: string): Promise<void> {
   if (!isDevHubDbReady()) { memCheckpoints.delete(id); return; }
+  // Consumed checkpoints must go from both places, or a reverted one comes
+  // back as the newest undo point.
+  memCheckpoints.delete(id);
   await pool.query(`DELETE FROM "DevHubCheckpoint" WHERE "id"=$1`, [id]);
 }
 
@@ -620,7 +944,17 @@ async function dbListCheckpoints(projectId: string, limit = 20): Promise<DevHubC
     `SELECT * FROM "DevHubCheckpoint" WHERE "projectId"=$1 ORDER BY "createdAt" DESC LIMIT $2`,
     [projectId, limit]
   );
-  return r.rows.map(rowToCheckpoint);
+  const rows: DevHubCheckpoint[] = r.rows.map(rowToCheckpoint);
+  // Same overlay as dbLatestCheckpoint: the history and the restore-to-a-point
+  // walk both read this list, so a parked checkpoint missing from it would make
+  // restore skip the very state it was taken to protect.
+  const parked = [...memCheckpoints.values()].filter((c) => c.projectId === projectId);
+  if (parked.length === 0) return rows;
+  const byId = new Map<string, DevHubCheckpoint>(rows.map((c) => [c.id, c]));
+  for (const c of parked) byId.set(c.id, c);
+  return [...byId.values()]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit);
 }
 
 function rowToCheckpoint(row: any): DevHubCheckpoint {
@@ -640,7 +974,7 @@ async function createCheckpoint(
   label: string,
   targetPaths: string[],
   existingFiles: Array<{ path: string; content: string }>
-): Promise<string | null> {
+): Promise<{ id: string; storage: "db" | "memory" } | null> {
   if (targetPaths.length === 0) return null;
   const checkpoint: DevHubCheckpoint = {
     id: crypto.randomUUID(),
@@ -653,8 +987,13 @@ async function createCheckpoint(
     })),
     createdAt: now(),
   };
-  try { await dbSaveCheckpoint(checkpoint); } catch { memCheckpoints.set(checkpoint.id, checkpoint); }
-  return checkpoint.id;
+  // Отказ записи проглатывался в память, а наружу уходил только id — то есть
+  // вызывающий не мог отличить сохранённую точку от живущей до перезапуска.
+  // Для отката это дорого: человек видит кнопку «отменить правки ИИ», жмёт её
+  // назавтра, а точки уже нет. Признак теперь уходит вместе с id.
+  let storage: "db" | "memory" = "db";
+  try { await dbSaveCheckpoint(checkpoint); } catch { memCheckpoints.set(checkpoint.id, checkpoint); storage = "memory"; }
+  return { id: checkpoint.id, storage };
 }
 
 /** Reverts every file a single checkpoint touched to its prior content (or
@@ -663,14 +1002,18 @@ async function createCheckpoint(
  * the latest checkpoint) and /checkpoints/:id/restore (applies a whole run
  * of consecutive checkpoints, newest first, so per-path writes converge on
  * the target checkpoint's own priorContent — the correct layered result). */
-async function applyCheckpointRevert(projectId: string, checkpoint: DevHubCheckpoint): Promise<string[]> {
+async function applyCheckpointRevert(projectId: string, checkpoint: DevHubCheckpoint): Promise<{ paths: string[]; storage: "db" | "memory" }> {
   const revertedFiles: string[] = [];
+  // Откат тоже может лечь в память: тогда файлы «восстановлены» до ближайшего
+  // перезапуска, а человеку сказано «восстановлено N файлов». Признак нужен
+  // здесь по той же причине, что у генерации и контрольной точки.
+  let storage: "db" | "memory" = "db";
   for (const f of checkpoint.files) {
     if (f.priorContent === null) {
       try { await dbDeleteFile(projectId, f.path); }
       catch {
         for (const [fid, mf] of memFiles) {
-          if (mf.projectId === projectId && mf.path === f.path) { memFiles.delete(fid); break; }
+          if (mf.projectId === projectId && mf.path === f.path) { memFiles.delete(fid); storage = "memory"; break; }
         }
       }
     } else {
@@ -688,7 +1031,7 @@ async function applyCheckpointRevert(projectId: string, checkpoint: DevHubCheckp
     revertedFiles.push(f.path);
   }
   try { await dbDeleteCheckpoint(checkpoint.id); } catch { memCheckpoints.delete(checkpoint.id); }
-  return revertedFiles;
+  return { paths: revertedFiles, storage };
 }
 
 // ── Built-in templates ────────────────────────────────────────────────────────
@@ -699,7 +1042,7 @@ export const TEMPLATES = [
   {
     id: "next-app",
     name: "Next.js App",
-    description: "Full-stack React with API routes",
+    description: "React с серверными маршрутами — фронт и API в одном проекте",
     stack: "next",
     files: [
       {
@@ -722,7 +1065,7 @@ export const TEMPLATES = [
   {
     id: "express-api",
     name: "Express API",
-    description: "REST API with TypeScript",
+    description: "REST API на TypeScript",
     stack: "express",
     files: [
       {
@@ -753,7 +1096,7 @@ export const TEMPLATES = [
   {
     id: "landing",
     name: "Landing Page",
-    description: "Static HTML/CSS/JS landing page",
+    description: "Посадочная страница на чистых HTML, CSS и JS",
     stack: "static",
     files: [
       {
@@ -776,7 +1119,7 @@ export const TEMPLATES = [
   {
     id: "react-spa",
     name: "React SPA",
-    description: "Single page app with Vite",
+    description: "Одностраничное приложение на Vite",
     stack: "react",
     files: [
       {
@@ -824,7 +1167,7 @@ export const TEMPLATES = [
   {
     id: "dashboard",
     name: "Analytics Dashboard",
-    description: "Charts and data visualization with Next.js",
+    description: "Графики и визуализация данных на Next.js",
     stack: "next",
     files: [
       {
@@ -972,8 +1315,19 @@ async function generateCodeWithAI(
   // A screenshot needs a vision-capable model; the first configured provider
   // may be text-only. Pick honestly or refuse — never silently drop the image.
   let provider = configured[0];
+  let visionChain: typeof configured = [];
   if (images?.length) {
-    const vision = configured.find((pr) => VISION_PROVIDERS.has(pr.id));
+    // Список, а не один: при отказе первого пробуем следующего. До 31.08.2026
+    // здесь стоял find() — брался ПЕРВЫЙ подходящий и только он. При трёх
+    // настроенных ключах запасных не было ни одного, а панель показывала
+    // возможность живой: три ключа означали «любой годится, чтобы включить»,
+    // а не «три запасных на случай отказа».
+    //
+    // Образец взят из этого же файла: у картинок цепочка уже написана, и там
+    // же объяснено почему — отказ одного платного провайдера не должен
+    // ронять всю возможность.
+    visionChain = configured.filter((pr) => VISION_PROVIDERS.has(pr.id));
+    const vision = visionChain[0];
     if (!vision) {
       throw new Error("NO_VISION_PROVIDER: attach-a-screenshot needs ANTHROPIC_API_KEY, GEMINI_API_KEY or OPENAI_API_KEY — none configured");
     }
@@ -998,7 +1352,24 @@ async function generateCodeWithAI(
   onProgress?.("calling_model");
   let result;
   try {
-    result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+    // Порядок попыток: при картинке — вся цепочка зрячих провайдеров, иначе
+    // один выбранный. Ошибку КАЖДОГО запоминаем: молча съесть их значило бы
+    // потерять причину отказа, а она отличает «кончились деньги» от «ключ
+    // неверный».
+    const attempts: Array<{ provider: string; error: string }> = [];
+    const chain = images?.length && visionChain.length > 0 ? visionChain : [provider];
+    for (const cand of chain) {
+      try {
+        result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+        provider = cand;
+        break;
+      } catch (inner) {
+        attempts.push({ provider: cand.id, error: inner instanceof Error ? inner.message : String(inner) });
+      }
+    }
+    if (!result) {
+      throw new Error("ALL_PROVIDERS_FAILED: " + attempts.map((a) => a.provider + ": " + a.error).join(" | "));
+    }
   } catch (e) {
     if (e instanceof Error && e.message.startsWith("NO_VISION_PROVIDER")) throw e;
     const path = targetFiles[0] || "generated.ts";
@@ -1091,7 +1462,7 @@ interface ProjectPlan {
  * "help me figure out what to build, in what order" layer that sits before
  * generate_code, not a replacement for it. Works with no open project
  * (greenfield) or accounts for an existing one's files when given. */
-async function planProjectWithAI(idea: string, existingFiles: Array<{ path: string; content: string }>): Promise<ProjectPlan> {
+async function planProjectWithAI(idea: string, existingFiles: Array<{ path: string; content: string }>, moduleTag: string): Promise<ProjectPlan> {
   const fallback: ProjectPlan = {
     ok: true, aiGenerated: false,
     summary: idea, targetUsers: "", stack: "next",
@@ -1124,6 +1495,28 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
       { role: "system", content: systemPrompt },
       { role: "user", content: userMsg },
     ], provider.defaultModel, 0.3);
+      // Учёт расхода. До 31.08.2026 его здесь не было вовсе: /plan зовёт
+      // платного поставщика НАПРЯМУЮ, минуя smartComplete, а учёт пишет
+      // именно smartComplete. Расход ручки был невидим полностью — и это
+      // при том, что входа она не требует.
+      //
+      // Таблица цен берётся платформенная (services/qcoreai/pricing):
+      // второй источник цен развёл бы наш отчёт с отчётом qcoreai.
+      // costUsd честно возвращает 0 для модели без цены — лучше выдумки,
+      // но значит: 0 здесь читается как «цена неизвестна», а не «бесплатно».
+      try {
+        insertSmartRun({
+          module: moduleTag,
+          resolved: "single",
+          costUsd: costUsd(
+            provider.id,
+            provider.defaultModel,
+            result.usage?.prompt_tokens,
+            result.usage?.completion_tokens,
+          ),
+          savedUsd: 0,
+        });
+      } catch { /* учёт не должен ронять ответ, ради которого его зовут */ }
     const parsed = extractJsonObject(result.reply) as any;
     if (!parsed) throw new Error("unparseable plan reply");
     const milestones = Array.isArray(parsed.milestones)
@@ -1154,7 +1547,7 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
 // ═════════════════════════════════════════════════════════════════════════════
 
 // POST /api/devhub/projects
-devhubRouter.post("/projects", async (req, res) => {
+devhubRouter.post("/projects", dhCreateLimit(), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const { name, description, stack = "next" } = req.body || {};
@@ -1311,7 +1704,17 @@ devhubRouter.get("/projects", async (req, res) => {
   try {
     const projects = await dbListProjects(userId);
     const flags = await Promise.all(projects.map(computeNeedsRedeploy));
-    res.json({ projects: projects.map((p, i) => ({ ...p, needsRedeploy: flags[i] })), total: projects.length });
+    // Признак хранилища в ОТВЕТЕ, а не только в /health. Когда база не
+    // поднялась, модуль честно работает по памяти — но пустой список тогда
+    // неотличим от «у вас нет проектов», а проекты лежат в Postgres и просто
+    // не читаются. Замер 28.08 подтвердил: ответ был `{projects:[],total:0}`
+    // без единого намёка. Соседи отдают такой признак давно (подписка на
+    // ранний доступ — поле `storage`), здесь его не было.
+    res.json({
+      projects: projects.map((p, i) => ({ ...p, needsRedeploy: flags[i] })),
+      total: projects.length,
+      storage: isDevHubDbReady() ? "db" : "memory",
+    });
   } catch (e: any) {
     captureException(e, { route: "devhub/projects:list", userId });
     // Раньше отсюда уходил список из запасной памяти — в проде пустой, — и
@@ -1350,7 +1753,16 @@ devhubRouter.get("/projects/:id", async (req, res) => {
     const role = project.userId === userId ? "owner" : (project.collaborators.find(c => c.userId === userId)?.role ?? "viewer");
     res.json({ project, files, role });
   } catch (e: any) {
-    return res.status(500).json({ error: "internal_error" });
+    // Было 500 «internal_error», тогда как ВОСЕМНАДЦАТЬ соседних чтений в этом
+    // же файле отвечают 503 storage_unavailable. Замер 28.08 (роутер поднят с
+    // нечитаемой базой) показал этот разнобой: одна ручка из девятнадцати
+    // говорила «у нас сломалось», остальные — «хранилище недоступно, проект на
+    // месте». Для человека разница большая: первое читается как потеря.
+    //
+    // 500 к тому же поднимает тревогу как наша авария, а недоступность базы у
+    // нас уже описана отдельным кодом.
+    captureException(e, { route: "devhub/projects:get", userId });
+    return replyStorageUnavailable(res);
   }
 });
 
@@ -1510,7 +1922,15 @@ devhubRouter.get("/projects/:id/files/:filepath", async (req, res) => {
     if (!file) return res.status(404).json({ error: "file not found" });
     res.json({ file });
   } catch {
-    return res.status(500).json({ error: "internal_error" });
+    // Недоступность хранилища — это НЕ «сломались мы». 500 поднимает
+    // тревогу в Sentry и тонет в шуме, среди которого потом не видно
+    // настоящих аварий; 503 с отдельным кодом называет причину.
+    //
+    // Остаток свипа 28.08 (тогда закрыли 25 мест): эти два читающих
+    // обработчика файлов в список не попали — сторож знал семь путей,
+    // а имя обещало «ни одно чтение».
+    captureException(new Error("devhub file read failed"));
+    return replyStorageUnavailable(res);
   }
 });
 
@@ -1531,7 +1951,15 @@ devhubRouter.get("/projects/:id/file", async (req, res) => {
     if (!file) return res.status(404).json({ error: "file not found" });
     res.json({ file });
   } catch {
-    return res.status(500).json({ error: "internal_error" });
+    // Недоступность хранилища — это НЕ «сломались мы». 500 поднимает
+    // тревогу в Sentry и тонет в шуме, среди которого потом не видно
+    // настоящих аварий; 503 с отдельным кодом называет причину.
+    //
+    // Остаток свипа 28.08 (тогда закрыли 25 мест): эти два читающих
+    // обработчика файлов в список не попали — сторож знал семь путей,
+    // а имя обещало «ни одно чтение».
+    captureException(new Error("devhub file read failed"));
+    return replyStorageUnavailable(res);
   }
 });
 
@@ -1668,10 +2096,18 @@ devhubRouter.delete("/projects/:id/files/:filepath", async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 // POST /api/devhub/projects/:id/generate
-devhubRouter.post("/projects/:id/generate", async (req, res) => {
+// Генерация кода — самое дорогое действие модуля, и ограничителя у неё НЕ БЫЛО,
+// хотя у соседних дорогих ручек он есть: `/ask` и `/media/upload-image` его
+// получили, эту пропустили. Проект можно завести без входа (гостевая
+// личность), поэтому аноним мог жечь платную генерацию без предела.
+// Ключ отдельный: общий на все генерации означал бы, что один модуль
+// расходует предел другого.
+devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  // String(): добавление ограничителя меняет вывод типов Express — параметр
+  // становится `string | string[]`. Приводим явно, а не через as.
+  const project = await loadOwnedProjectOrReply(String(req.params.id), userId, res);
   if (!project) return;
   const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
   if (!prompt || typeof prompt !== "string") {
@@ -1716,7 +2152,7 @@ devhubRouter.post("/projects/:id/generate", async (req, res) => {
     if (typeof e?.message === "string" && e.message.startsWith("NO_VISION_PROVIDER")) {
       return res.status(503).json({ error: e.message.replace("NO_VISION_PROVIDER: ", "") });
     }
-    res.status(500).json({ error: e?.message || "generation failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "generation failed" });
   }
 });
 
@@ -1725,7 +2161,13 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
   const existingFiles = await dbListFiles(project.id);
   const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress);
   onProgress?.("saving");
-  const checkpointId = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
+  let storage: "db" | "memory" = "db";
+  const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
+  const checkpointId = cpRes?.id ?? null;
+  // Точка могла лечь только в память — тогда «отменить правки ИИ» не
+  // переживёт перезапуска. Это часть ТОГО ЖЕ обещания, что и файлы,
+  // поэтому признак у ответа общий: memory, если подвело хоть одно.
+  if (cpRes?.storage === "memory") storage = "memory";
   for (const gf of generatedFiles) {
     const file: DevHubFile = {
       id: crypto.randomUUID(),
@@ -1738,6 +2180,11 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
     try {
       await dbUpsertFile(file);
     } catch {
+      // Генерация — ПЛАТНЫЙ шаг. Если файлы легли только в память процесса,
+      // человек заплатил и потеряет результат при перезапуске, ничего об этом
+      // не узнав. Признак ведётся здесь, в общем помощнике, поэтому его
+      // получают обе точки генерации: обычная и потоковая.
+      storage = "memory";
       const existing = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === gf.path);
       if (existing) {
         existing.content = file.content;
@@ -1751,7 +2198,7 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
   return {
     files: generatedFiles, aiGenerated, ...(continued ? { continued } : {}),
     ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
-    checkpointId, projectId: project.id,
+    checkpointId, projectId: project.id, storage,
   };
 }
 
@@ -1862,7 +2309,7 @@ devhubRouter.post("/projects/:id/database/design", async (req, res) => {
         : "Files generated — set DATABASE_URL in Env Vars and run the schema to go live. No database was provisioned.",
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "database design failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "database design failed" });
   }
 });
 
@@ -1894,27 +2341,46 @@ devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
 
   const { provisionProjectDatabase } = await import("../lib/devhubDbProvision");
   const result = await provisionProjectDatabase({ projectId: project.id, schemaSql });
+  // Отметка поставщика — там же, где он ДЕЙСТВИТЕЛЬНО используется, как у
+  // остальных шестнадцати. Отдельного опроса состояния нет намеренно: он
+  // означал бы живое подключение к административной базе на каждый вопрос
+  // о здоровье, а настоящий ответ даёт только настоящая выдача базы.
+  //
+  // До 30.08.2026 возможность «База данных» объявлялась рабочей, не спросив
+  // поставщика ни разу: панель показывала «live» по наличию переменной.
+  if (result.ok) noteProviderSuccess("database");
+  else noteProviderFailure("database", result.error);
   if (!result.ok) return res.status(502).json({ error: result.error });
 
   project.envVars = { ...(project.envVars || {}), DATABASE_URL: result.databaseUrl };
   project.updatedAt = now();
+  // Здесь уже создан НАСТОЯЩИЙ внешний ресурс: схема и роль на сервере баз.
+  // Если ссылка на него легла только в память процесса, после перезапуска
+  // проект её потеряет, а сама база останется висеть без владельца. Текст
+  // ниже при этом УТВЕРЖДАЛ, что DATABASE_URL сохранён.
+  let storage: "db" | "memory" = "db";
   try {
     await dbSaveProject(project);
   } catch {
     memProjects.set(project.id, project);
+    storage = "memory";
   }
 
   // The URL contains the credential — returned once so the caller can show it,
   // never logged.
+  const savedNote = storage === "memory"
+    ? " ВНИМАНИЕ: наше хранилище было недоступно, поэтому ссылка сохранена только в памяти и может пропасть при перезапуске. Скопируйте DATABASE_URL себе сейчас."
+    : "";
   res.json({
     ok: true,
     schema: result.schema,
     role: result.role,
     appliedSchemaSql: result.appliedSchemaSql,
     databaseUrl: result.databaseUrl,
-    note: result.appliedSchemaSql
+    storage,
+    note: (result.appliedSchemaSql
       ? "Database created, schema applied, DATABASE_URL saved to this project's env vars."
-      : "Database created and DATABASE_URL saved. No db/schema.sql found, so no tables were created yet.",
+      : "Database created and DATABASE_URL saved. No db/schema.sql found, so no tables were created yet.") + savedNote,
   });
 });
 
@@ -1962,12 +2428,19 @@ devhubRouter.delete("/projects/:id/database", async (req, res) => {
   const { DATABASE_URL: _dropped, ...rest } = project.envVars || {};
   project.envVars = rest;
   project.updatedAt = now();
+  // База УЖЕ удалена по-настоящему — схема и роль на сервере снесены. Если
+  // запись об этом легла только в память, после перезапуска проект снова будет
+  // считать, что у него есть DATABASE_URL на удалённую базу, и приложение
+  // человека упадёт с невнятной ошибкой подключения.
+  //
+  // Зеркало случая с ВЫДАЧЕЙ базы: там ссылка терялась, здесь остаётся лишней.
+  let storageFallback = false;
   try {
     await dbSaveProject(project);
   } catch {
-    memProjects.set(project.id, project);
+    memProjects.set(project.id, project); storageFallback = true;
   }
-  res.json({ ok: true, note: "Schema, role and DATABASE_URL removed. The data is gone." });
+  res.json({ ok: true, note: "Schema, role and DATABASE_URL removed. The data is gone.", ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // POST /api/devhub/projects/:id/generate/undo — revert the project's most
@@ -1989,11 +2462,19 @@ devhubRouter.post("/projects/:id/generate/undo", async (req, res) => {
     if (!checkpoint) {
       return res.json({ ok: false, message: "No AI change to undo for this project" });
     }
-    const revertedFiles = await applyCheckpointRevert(project.id, checkpoint);
-    return res.json({ ok: true, revertedFiles, label: checkpoint.label });
+    // tsc здесь МОЛЧИТ: результат уходил прямо в res.json, а тело ответа не
+    // типизировано. Ровно тот случай, из-за которого клиент получил бы объект
+    // вместо списка путей и «отменить» перестало бы работать молча.
+    const revert = await applyCheckpointRevert(project.id, checkpoint);
+    return res.json({
+      ok: true,
+      revertedFiles: revert.paths,
+      label: checkpoint.label,
+      storage: revert.storage,
+    });
   } catch (e: any) {
     captureException(e, { route: "devhub/generate:undo", projectId: project.id });
-    return res.status(500).json({ error: e?.message || "undo failed" });
+    return res.status(500).json({ error: redactInfraDetails(e) || "undo failed" });
   }
 });
 
@@ -2018,7 +2499,10 @@ devhubRouter.get("/projects/:id/checkpoints", async (req, res) => {
     });
   } catch (e: any) {
     captureException(e, { route: "devhub/checkpoints:list", projectId: project.id });
-    return res.status(500).json({ error: e?.message || "failed to list checkpoints" });
+    // список точек восстановления — это ЧТЕНИЕ: недоступность базы это 503,
+    // а 500 читается как «сломались мы» и поднимает ложную тревогу.
+    captureException(e as Error);
+    return replyStorageUnavailable(res);
   }
 });
 
@@ -2046,14 +2530,16 @@ devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req,
     const toApply = history.slice(0, targetIndex + 1);
     const targetLabel = history[targetIndex].label;
     const revertedFiles = new Set<string>();
+    let revertStorage: "db" | "memory" = "db";
     for (const checkpoint of toApply) {
-      const paths = await applyCheckpointRevert(project.id, checkpoint);
-      paths.forEach((p) => revertedFiles.add(p));
+      const step = await applyCheckpointRevert(project.id, checkpoint);
+      step.paths.forEach((p) => revertedFiles.add(p));
+      if (step.storage === "memory") revertStorage = "memory";
     }
-    return res.json({ ok: true, revertedFiles: [...revertedFiles], restoredToLabel: targetLabel, stepsApplied: toApply.length });
+    return res.json({ ok: true, revertedFiles: [...revertedFiles], restoredToLabel: targetLabel, storage: revertStorage, stepsApplied: toApply.length });
   } catch (e: any) {
     captureException(e, { route: "devhub/checkpoints:restore", projectId: project.id });
-    return res.status(500).json({ error: e?.message || "restore failed" });
+    return res.status(500).json({ error: redactInfraDetails(e) || "restore failed" });
   }
 });
 
@@ -2061,8 +2547,17 @@ devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req,
 // project-scoped (no /projects/:id/ prefix): works standalone for someone
 // who hasn't created a project yet, and optionally accounts for an existing
 // project's files when `projectId` is given in the body.
-devhubRouter.post("/plan", async (req, res) => {
+// Ограничитель добавлен 31.08.2026. До него ручка была БЕЗ предела вовсе,
+// хотя planProjectWithAI зовёт callProvider — то есть настоящего платного
+// поставщика (OpenAI/Anthropic по ключу). Входа ручка не требует.
+// Я сам сперва счёл её бесплатной: проверил только вызовы smartComplete,
+// а платный путь здесь ДРУГОЙ. Контроль отвечал не на тот вопрос.
+// Предел взят тот же, что у соседней платной /ask — заводить второй
+// способ ограничивать одно и то же незачем.
+devhubRouter.post("/plan", dhCostlyLimit("dhplan"), async (req, res) => {
   const auth = verifyBearerOptional(req);
+  // Метка та же, что у /ask: расход анонимных должен быть отделим.
+  const planModule = auth?.sub ? "devhub" : "devhub-anon";
   const userId = requesterId(req, auth?.sub);
   const { idea, projectId } = req.body || {};
   if (!idea || typeof idea !== "string" || !idea.trim()) {
@@ -2082,11 +2577,11 @@ devhubRouter.post("/plan", async (req, res) => {
   }
 
   try {
-    const plan = await planProjectWithAI(idea.trim(), existingFiles);
+    const plan = await planProjectWithAI(idea.trim(), existingFiles, planModule);
     return res.json(plan);
   } catch (e: any) {
     captureException(e, { route: "devhub/plan" });
-    return res.status(500).json({ error: e?.message || "planning failed" });
+    return res.status(500).json({ error: redactInfraDetails(e) || "planning failed" });
   }
 });
 
@@ -2109,7 +2604,7 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
       upgrade: "/studio#upgrade",
     });
   }
-  await debitCredit(userId, "deploy").catch(() => {});
+  await debitQuietly(userId, "deploy");
 
   const deploymentId = crypto.randomUUID();
   const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
@@ -2181,7 +2676,19 @@ Built, but ${url} did not answer 2xx in time`;
         project.updatedAt = now();
         try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
       }
-    })().catch(() => {});
+    })().catch((e) => {
+      // Эта задача решает, ЖИВ ли деплой, и записывает вердикт. Если она
+      // бросит, выкатка навсегда останется в промежуточном состоянии, а на
+      // экране это неотличимо от «ещё собирается».
+      //
+      // Сегодня бросить она не может: verifyDeploymentServes ловит сетевые
+      // ошибки внутри и всегда возвращает ответ, а записи прикрыты своими
+      // try/catch с запасной памятью. Перехват остаётся защитой в глубину —
+      // но не молчаливой: без следа о застрявшей выкатке никто не узнает.
+      const why = e instanceof Error ? e.message : String(e);
+      console.error(`[DevHub] ВЕРДИКТ ВЫКАТКИ НЕ ЗАПИСАН: ${deployment.id} для проекта ${project.id}: ${why}`);
+      captureException(e, { route: "devhub/deploy:verify", deploymentId: deployment.id, projectId: project.id });
+    });
 
     return res.json({ ok: true, deploymentId: deployment.id, status: "building", url, serviceId: result.serviceId, reusedService: !result.created });
   }
@@ -2384,6 +2891,8 @@ devhubRouter.get("/projects/:id/collaborators", async (req, res) => {
 
 // POST /api/devhub/projects/:id/collaborators
 devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
+  // Приглашение в память = соучастник потеряет доступ после перезапуска.
+  let storageFallback = false;
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
@@ -2432,9 +2941,9 @@ devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/collaborators:post", projectId: project.id });
-    memProjects.set(project.id, project);
+    memProjects.set(project.id, project); storageFallback = true;
   }
-  res.status(201).json({ collaborators: project.collaborators, resolved: displayEmail || collabUserId });
+  res.status(201).json({ collaborators: project.collaborators, resolved: displayEmail || collabUserId , ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // DELETE /api/devhub/projects/:id/collaborators/:userId
@@ -2487,6 +2996,9 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     });
     if (!userResp.ok) {
       const errText = await userResp.text();
+      // Capability-level: the token itself is the problem, so the shop window
+      // should stop calling GitHub live.
+      noteProviderFailure("github", `GitHub auth failed: ${String(errText).slice(0, 100)}`);
       return res.json({ ok: false, message: `GitHub auth error: ${errText}` });
     }
     const ghUser = await userResp.json() as { login: string };
@@ -2509,6 +3021,7 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     });
     if (!createResp.ok) {
       const errText = await createResp.text();
+      noteProviderFailure("github", `GitHub repo create failed: ${String(errText).slice(0, 100)}`);
       return res.json({ ok: false, message: `GitHub repo create error: ${errText}` });
     }
     const repoData = await createResp.json() as { html_url: string };
@@ -2518,6 +3031,10 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     // 3. Push each project file
     const files = await dbListFiles(project.id);
     let pushedFiles = 0;
+    // Files GitHub refused. Counting only the successes and still answering
+    // ok:true meant a repo missing half the project read as a clean push —
+    // and it is the repo a per-project deploy then builds from.
+    const failedFiles: Array<{ path: string; reason: string }> = [];
     for (const file of files) {
       try {
         const fileResp = await fetch(
@@ -2536,8 +3053,18 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
           },
         );
         if (fileResp.ok) pushedFiles += 1;
-      } catch {
-        // continue with other files
+        else {
+          const body = await fileResp.text().catch(() => "");
+          let reason = `HTTP ${fileResp.status}`;
+          try {
+            const parsed = JSON.parse(body);
+            if (parsed?.message) reason = `${reason}: ${parsed.message}`;
+          } catch { /* body was not JSON — the status alone is the reason */ }
+          failedFiles.push({ path: file.path, reason });
+        }
+      } catch (e) {
+        // Keep pushing the rest, but never lose the fact that this one didn't.
+        failedFiles.push({ path: file.path, reason: e instanceof Error ? e.message : String(e) });
       }
     }
 
@@ -2551,9 +3078,29 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
       memProjects.set(project.id, project);
     }
 
+    if (failedFiles.length > 0) {
+      // A file GitHub refused is a condition of this push — too large, a stale
+      // sha — not an outage of the integration; recording it as one would put
+      // the strip in the red over somebody's oversized asset. Nothing landing
+      // at all is different: that is the integration failing.
+      if (pushedFiles === 0) noteProviderFailure("github", `nothing reached the repo: ${failedFiles[0]?.reason ?? "all files refused"}`);
+      return res.json({
+        ok: pushedFiles > 0,
+        repoUrl,
+        pushedFiles,
+        failedFiles,
+        ...degraded(
+          `${failedFiles.length} of ${files.length} file(s) were not pushed: ${failedFiles
+            .slice(0, 3)
+            .map((f) => `${f.path} (${f.reason})`)
+            .join("; ")}${failedFiles.length > 3 ? "; …" : ""}`,
+        ),
+      });
+    }
+    noteProviderSuccess("github");
     return res.json({ ok: true, repoUrl, pushedFiles });
   } catch (e: any) {
-    return res.json({ ok: false, message: e?.message || "GitHub push failed" });
+    return res.json({ ok: false, message: redactInfraDetails(e) || "GitHub push failed" });
   }
 });
 
@@ -2599,6 +3146,7 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
     }
 
     const skipped: string[] = [];
+    const failed: Array<{ path: string; reason: string }> = [];
     const candidates = treeData.tree.filter((n) => {
       if (n.type !== "blob") return false;
       if (SYNC_BINARY_EXT.test(n.path) || (n.size ?? 0) > SYNC_MAX_FILE_BYTES) { skipped.push(n.path); return false; }
@@ -2617,10 +3165,18 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
     const toWrite: Array<{ path: string; content: string }> = [];
 
     for (const node of candidates) {
+      // `skipped` means "we were never going to sync this" — a binary, an
+      // oversized file, anything past the cap. A file we TRIED to read and
+      // could not is a different fact and belongs in `failed`: putting both in
+      // one list let a genuine loss pass for policy, and the project came back
+      // part-new part-stale with a message that said only "Synced".
       const blobResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/blobs/${node.sha}`, { headers: ghHeaders });
-      if (!blobResp.ok) { skipped.push(node.path); continue; }
+      if (!blobResp.ok) { failed.push({ path: node.path, reason: `HTTP ${blobResp.status}` }); continue; }
       const blob = await blobResp.json() as { content?: string; encoding?: string };
-      if (blob.encoding !== "base64" || typeof blob.content !== "string") { skipped.push(node.path); continue; }
+      if (blob.encoding !== "base64" || typeof blob.content !== "string") {
+        failed.push({ path: node.path, reason: `unexpected encoding ${blob.encoding ?? "none"}` });
+        continue;
+      }
       const content = Buffer.from(blob.content, "base64").toString("utf8");
       const current = byPath.get(node.path);
       if (!current) { created.push(node.path); toWrite.push({ path: node.path, content }); }
@@ -2630,10 +3186,13 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
 
     let checkpointId: string | null = null;
     if (toWrite.length > 0) {
-      checkpointId = await createCheckpoint(
+      const cp = await createCheckpoint(
         project.id, userId, `GitHub sync from ${owner}/${repo}@${branch}`,
         toWrite.map((f) => f.path), existing
       );
+      checkpointId = cp?.id ?? null;
+      // Точка могла лечь только в память — тогда «отменить» переживёт
+      // не дольше перезапуска. Признак есть у cp.storage.
       for (const f of toWrite) {
         const file: DevHubFile = {
           id: crypto.randomUUID(), projectId: project.id, path: f.path,
@@ -2648,16 +3207,23 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
       }
     }
 
+    // The frontend shows `message` verbatim in its toast, so a loss that is
+    // only present in a separate field would never reach the person looking.
+    const lossNote = failed.length
+      ? ` ⚠ ${failed.length} file${failed.length > 1 ? "s" : ""} could not be read and are missing from this sync: ${failed.map((f) => f.path).join(", ")}`
+      : "";
+
     res.json({
       ok: true, branch, updated, created, unchanged,
       ...(skipped.length ? { skipped } : {}),
+      ...(failed.length ? { failed, ...degraded(`${failed.length} of ${candidates.length} files could not be read from ${owner}/${repo}@${branch}`) } : {}),
       ...(checkpointId ? { checkpointId } : {}),
-      message: toWrite.length
+      message: (toWrite.length
         ? `Synced ${owner}/${repo}@${branch}: ${updated.length} updated, ${created.length} new (undo restores the pre-sync state)`
-        : `Already in sync with ${owner}/${repo}@${branch}`,
+        : `Already in sync with ${owner}/${repo}@${branch}`) + lossNote,
     });
   } catch (e: any) {
-    res.status(502).json({ error: e?.message || "GitHub sync failed" });
+    res.status(502).json({ error: redactInfraDetails(e) || "GitHub sync failed" });
   }
 });
 
@@ -2725,6 +3291,11 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
     // without sha for an existing file).
     const files = await dbListFiles(project.id);
     let pushedFiles = 0;
+    // Counting only the all-or-nothing case let nine files out of ten vanish
+    // into an `ok: true` pull request — the same defect /github/push already
+    // fixed. A PR is reviewed and merged on the belief it holds the change it
+    // claims, so every file that did not land is named.
+    const failedFiles: Array<{ path: string; reason: string }> = [];
     for (const file of files) {
       try {
         const encodedPath = file.path.split("/").map(encodeURIComponent).join("/");
@@ -2748,8 +3319,18 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
           }),
         });
         if (putResp.ok) pushedFiles += 1;
-      } catch {
-        // continue with other files
+        else {
+          const body = await putResp.text().catch(() => "");
+          let reason = `HTTP ${putResp.status}`;
+          try {
+            const parsed = JSON.parse(body);
+            if (parsed?.message) reason = `${reason}: ${parsed.message}`;
+          } catch { /* body was not JSON — the status alone is the reason */ }
+          failedFiles.push({ path: file.path, reason });
+        }
+      } catch (e) {
+        // Keep committing the rest, but never lose the fact that this one didn't.
+        failedFiles.push({ path: file.path, reason: e instanceof Error ? e.message : String(e) });
       }
     }
     if (files.length > 0 && pushedFiles === 0) {
@@ -2766,10 +3347,25 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
       return res.json({ ok: false, message: `GitHub PR create error: ${(await prResp.text()).slice(0, 300)}`, branch, pushedFiles });
     }
     const prData = await prResp.json() as { html_url: string; number: number };
-    return res.json({ ok: true, prUrl: prData.html_url, prNumber: prData.number, branch, pushedFiles });
+    return res.json({
+      ok: true,
+      prUrl: prData.html_url,
+      prNumber: prData.number,
+      branch,
+      pushedFiles,
+      ...(failedFiles.length > 0
+        ? {
+            failedFiles,
+            ...degraded(
+              `${pushedFiles} of ${files.length} files reached the pull request; ` +
+              `${failedFiles.length} did not: ${failedFiles.map((f) => f.path).join(", ")}`,
+            ),
+          }
+        : {}),
+    });
   } catch (e: any) {
     captureException(e, { route: "devhub/github:pull-request", projectId: project.id });
-    return res.json({ ok: false, message: e?.message || "GitHub pull request creation failed" });
+    return res.json({ ok: false, message: redactInfraDetails(e) || "GitHub pull request creation failed" });
   }
 });
 
@@ -2820,7 +3416,7 @@ devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req,
     return res.json({ ok: true, merged: true, sha: mergeData.sha, message: mergeData.message });
   } catch (e: any) {
     captureException(e, { route: "devhub/github:merge-pull-request", projectId: project.id });
-    return res.json({ ok: false, message: e?.message || "GitHub pull request merge failed" });
+    return res.json({ ok: false, message: redactInfraDetails(e) || "GitHub pull request merge failed" });
   }
 });
 
@@ -2903,7 +3499,7 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
     });
   } catch (e: any) {
     // A thrown fetch says nothing about the token, so it must not read as one.
-    return res.json({ branches: [], ...githubUnreachable(e?.message) });
+    return res.json({ branches: [], ...githubUnreachable(redactInfraDetails(e)) });
   }
 });
 
@@ -2924,6 +3520,8 @@ devhubRouter.get("/templates", (_req, res) => {
 
 // POST /api/devhub/projects/:id/apply-template
 devhubRouter.post("/projects/:id/apply-template", async (req, res) => {
+  // Шаблон разворачивает файлы проекта; в памяти они не переживут перезапуск.
+  let storageFallback = false;
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
@@ -2951,12 +3549,12 @@ devhubRouter.post("/projects/:id/apply-template", async (req, res) => {
         existing.language = file.language;
         existing.updatedAt = file.updatedAt;
       } else {
-        memFiles.set(file.id, file);
+        memFiles.set(file.id, file); storageFallback = true;
       }
     }
     savedFiles.push(file);
   }
-  res.json({ ok: true, files: savedFiles, template: template.id });
+  res.json({ ok: true, files: savedFiles, template: template.id , ...(storageFallback ? MEMORY_NOTE : {}) });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -3038,17 +3636,24 @@ devhubRouter.post("/projects/:id/domain", async (req, res) => {
   }
   project.customDomain = domain.trim();
   project.updatedAt = now();
+  // Человек получает инструкцию по DNS и считает домен привязанным. Если
+  // запись легла только в память процесса, привязка исчезнет при
+  // перезапуске, а он будет ждать, пока заработает CNAME, которого у нас
+  // больше нет. Форма та же, что у соседей после сведения 28.08.
+  let storageFallback = false;
   try {
     await dbSaveProject(project);
   } catch (e) {
     captureException(e, { route: "devhub/domain:post", projectId: project.id });
     memProjects.set(project.id, project);
+    storageFallback = true;
   }
   res.json({
     ok: true,
     domain: project.customDomain,
     cname: "devhub.aevion.app",
     message: "Point your CNAME to devhub.aevion.app",
+    ...(storageFallback ? MEMORY_NOTE : {}),
   });
 });
 
@@ -3178,12 +3783,25 @@ devhubRouter.get("/snippets", async (req, res) => {
       arr = arr.filter((s) => s.tags.some((tg) => tg.toLowerCase() === t));
     }
     const snippets = arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
-    res.json({ snippets: snippets.map((s) => publicSnippet(s, viewerId)), total: snippets.length });
+    // Пустая память при УПАВШЕМ чтении — это не «полка пуста», а «полку не
+    // прочитали». Замер 28.08 (роутер с нечитаемой базой) показал, что ручка
+    // отвечала 200 и `total: 0`, и отличить одно от другого было нельзя.
+    // Соседний список проектов такой случай уже различает; здесь не различал.
+    if (snippets.length === 0) {
+      replyStorageUnavailable(res);
+      return;
+    }
+    // В памяти что-то есть — отдаём, но честно называем источник.
+    res.json({
+      snippets: snippets.map((s) => publicSnippet(s, viewerId)),
+      total: snippets.length,
+      storage: "memory",
+    });
   }
 });
 
 // POST /api/devhub/snippets — create a snippet
-devhubRouter.post("/snippets", async (req, res) => {
+devhubRouter.post("/snippets", dhCreateLimit(), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const { title, content, language, tags } = req.body || {};
@@ -3257,7 +3875,10 @@ devhubRouter.delete("/snippets/:id", async (req, res) => {
     // Молчаливый успех здесь хуже отказа: человек увидел бы, что сниппет снят,
     // а он остался бы на публичной полке.
     captureException(e, { route: "devhub/snippets:delete", snippetId: snippet.id });
-    return res.status(500).json({ error: "delete failed" });
+    // удаление сниппета — отказ хранилища, не наша поломка: недоступность базы это 503,
+    // а 500 читается как «сломались мы» и поднимает ложную тревогу.
+    captureException(e as Error);
+    return replyStorageUnavailable(res);
   }
   memSnippets.delete(snippet.id);
   res.json({ ok: true, id: snippet.id });
@@ -3387,19 +4008,24 @@ devhubRouter.post("/media/tts", async (req, res) => {
         }
       }
       if (!finalResp.ok) {
+        // The voice capability read "live" for weeks while every call failed
+        // on a model ElevenLabs had removed. Record what the call did, so the
+        // shop window can say degraded with this reason.
+        noteProviderFailure("audio_tts", `ElevenLabs HTTP ${finalResp.status}: ${firstErr.slice(0, 100)}`);
         return res.status(finalResp.status).json({ error: `ElevenLabs error: ${firstErr.slice(0, 200)}`, triedModels: [TTS_MODEL, ...TTS_MODEL_FALLBACKS] });
       }
     }
+    noteProviderSuccess("audio_tts");
 
     const audioBuffer = Buffer.from(await finalResp.arrayBuffer());
     res.setHeader("X-Tts-Model", usedModel);
-    await debitCredit(ttsUserId, "tts", text.trim().length).catch(() => {});
+    await debitQuietly(ttsUserId, "tts", text.trim().length);
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
     res.setHeader("Cache-Control", "no-store");
     res.send(audioBuffer);
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "TTS generation failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "TTS generation failed" });
   }
 });
 
@@ -3438,6 +4064,9 @@ devhubRouter.post("/media/email", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      // Brevo answered 401 to every call from one IP for a week while the
+      // capability read "live" — the key existed, that was the whole test.
+      noteProviderFailure("email", `Brevo HTTP ${r.status}: ${errText.slice(0, 100)}`);
       return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json().catch(() => ({}));
@@ -3448,12 +4077,14 @@ devhubRouter.post("/media/email", async (req, res) => {
     // «сторож занижал свой охват». SMS и WhatsApp сюда НЕ входят: у них отдельная
     // квота, и смешивать их значило бы врать обоими числами.
     noteEmailSent();
+    if (messageId) noteProviderSuccess("email");
+    else noteProviderFailure("email", "Brevo accepted the request but returned no messageId — delivery not confirmed");
     res.json({
       ok: true, messageId,
       ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Email send failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Email send failed" });
   }
 });
 
@@ -3520,7 +4151,7 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
 
     res.json({ ok: true, provider: "lemonsqueezy", checkoutId, url: checkoutUrl });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Payment link creation failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Payment link creation failed" });
   }
 });
 
@@ -3637,6 +4268,7 @@ devhubRouter.post("/media/image", async (req, res) => {
       return res.status(503).json({
         error: "No image provider configured — set OPENAI_API_KEY, or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID (Workers AI), or TOGETHER_API_KEY",
         setupUrl: "https://platform.openai.com/api-keys",
+        ...creditNote(imgCredit),
       });
     }
     // Single provider: preserve its upstream status + error text verbatim
@@ -3664,6 +4296,7 @@ devhubRouter.post("/media/image", async (req, res) => {
         : "All image providers failed",
       providersBlocked: fixes.length > 0,
       attempts,
+      ...creditNote(imgCredit),
     });
   }
 
@@ -3684,12 +4317,15 @@ devhubRouter.post("/media/image", async (req, res) => {
   // A provider in the chain worked — clear any earlier failure so the shop
   // window goes green again on its own.
   noteProviderSuccess("image");
-  await debitCredit(imgUserId, "image").catch(() => {});
+  await debitQuietly(imgUserId, "image");
   res.json({
     ok: true, url: imageUrl, storage, provider: result.provider,
     ...(attempts.length ? { fallbackFrom: attempts.map((a) => a.provider) } : {}),
     revisedPrompt: result.revisedPrompt, creditsUsed: 1,
-    creditsRemaining: imgCredit.limit === -1 ? -1 : imgCredit.limit - imgCredit.used - 1,
+    // A balance computed from an unreadable meter is an invented number, so it
+    // is withheld rather than printed as if it were counted.
+    creditsRemaining: imgCredit.limit === -1 ? -1 : imgCredit.usedKnown ? imgCredit.limit - imgCredit.used - 1 : null,
+    ...creditNote(imgCredit),
   });
 });
 
@@ -3733,7 +4369,7 @@ devhubRouter.post("/media/sfx", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.send(audioBuffer);
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "SFX generation failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "SFX generation failed" });
   }
 });
 
@@ -3777,7 +4413,7 @@ devhubRouter.post("/media/music", async (req, res) => {
     });
     if (!rr.ok) return null;
     const pred = await rr.json() as { id: string; status: string };
-    await debitCredit(musicUserId, "music").catch(() => {});
+    await debitQuietly(musicUserId, "music");
     // Async unlike the ElevenLabs path — say so instead of handing back a
     // body the caller cannot play.
     return { ok: true, provider: "replicate/musicgen", async: true, predictionId: pred.id, status: pred.status, fallbackFrom: reason };
@@ -3807,19 +4443,25 @@ devhubRouter.post("/media/music", async (req, res) => {
     if (!r.ok) {
       const errText = await r.text();
       const fb = await musicGenFallback(`ElevenLabs ${r.status}`);
-      if (fb) return res.json(fb);
+      // Only both providers being out is a capability failure: a MusicGen
+      // fallback still hands the user a track, so calling that "degraded"
+      // would cry wolf.
+      if (fb) { noteProviderSuccess("audio_music"); return res.json(fb); }
+      noteProviderFailure("audio_music", `ElevenLabs HTTP ${r.status} and no MusicGen fallback available`);
       return res.status(r.status).json({ error: `ElevenLabs Music error: ${errText.slice(0, 300)}` });
     }
     const audioBuffer = Buffer.from(await r.arrayBuffer());
-    await debitCredit(musicUserId, "music").catch(() => {});
+    noteProviderSuccess("audio_music");
+    await debitQuietly(musicUserId, "music");
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
     res.setHeader("Cache-Control", "no-store");
     res.send(audioBuffer);
   } catch (e: any) {
     const fb = await musicGenFallback(e?.message || "ElevenLabs request failed").catch(() => null);
-    if (fb) return res.json(fb);
-    res.status(500).json({ error: e?.message || "Music compose failed" });
+    if (fb) { noteProviderSuccess("audio_music"); return res.json(fb); }
+    noteProviderFailure("audio_music", `${e?.message || "ElevenLabs request failed"} and no MusicGen fallback available`);
+    res.status(500).json({ error: redactInfraDetails(e) || "Music compose failed" });
   }
 });
 
@@ -3896,7 +4538,7 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
     const created = await createResp.json() as { result: { id: string } };
     res.json({ ok: true, action: "created", domain, cname: target, recordId: created.result.id });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Domain setup failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Domain setup failed" });
   }
 });
 
@@ -3946,7 +4588,7 @@ devhubRouter.post("/media/voice-clone", async (req, res) => {
     const data = await r.json() as { voice_id: string; requires_verification?: boolean };
     res.json({ ok: true, voiceId: data.voice_id, requiresVerification: data.requires_verification ?? false });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Voice clone failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Voice clone failed" });
   }
 });
 
@@ -4013,7 +4655,7 @@ devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
     if (voiceId) {
       fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, { method: "DELETE", headers: { "xi-api-key": apiKey } }).catch(() => {});
     }
-    res.status(500).json({ error: e?.message || "Voice preview failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Voice preview failed" });
   }
 });
 
@@ -4049,7 +4691,7 @@ devhubRouter.post("/media/stt", async (req, res) => {
     const data = await r.json() as { text?: string; language_code?: string; language_probability?: number };
     res.json({ ok: true, text: data.text || "", language: data.language_code || null, confidence: data.language_probability ?? null });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "STT failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "STT failed" });
   }
 });
 
@@ -4081,7 +4723,7 @@ devhubRouter.post("/media/drive-search", async (req, res) => {
     const data = await r.json() as { files: Array<{ id: string; name: string; mimeType: string; modifiedTime?: string; size?: string }> };
     res.json({ ok: true, files: data.files || [] });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Drive search failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Drive search failed" });
   }
 });
 
@@ -4148,7 +4790,7 @@ devhubRouter.post("/projects/:id/drive/import", async (req, res) => {
     }
     res.json({ ok: true, path, bytes: content.length, mimeType: meta.mimeType, storage });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Drive import failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Drive import failed" });
   }
 });
 
@@ -4249,7 +4891,7 @@ devhubRouter.get("/projects/:id/preview-proxy", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.send(html);
   } catch (e: any) {
-    res.status(502).json({ error: e?.message || "failed to fetch deployed page" });
+    res.status(502).json({ error: redactInfraDetails(e) || "failed to fetch deployed page" });
   }
 });
 
@@ -4262,6 +4904,22 @@ devhubRouter.get("/projects/:id/preview-proxy", async (req, res) => {
 // others (matches the existing "report per-step errors, don't abort" contract).
 type WorkflowStepResult = { step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string };
 
+/**
+ * Runs one step of an agent workflow.
+ *
+ * Note on saving: these steps call dbUpsertFile directly and let it throw.
+ * They used to wrap it in `try { … } catch { memFiles.set(f.id, f) }`, which
+ * was wrong twice over. dbUpsertFile already handles "no database configured"
+ * itself, so that catch only ever fired on a genuine database failure — and it
+ * then reported the step as ok with a savedAs path, telling someone a file
+ * exists when it does not survive a restart. It also wrote to memFiles keyed by
+ * f.id, which dbUpsertFile's own comment calls out as the way to leave a stale
+ * duplicate that later reads return instead of the new content.
+ *
+ * A throw here becomes `{ ok: false, error }` for that step and nothing else,
+ * so one failed save no longer passes for a success and no longer takes the
+ * rest of the run down with it.
+ */
 async function executeWorkflowStep(
   project: DevHubProject,
   userId: string,
@@ -4279,7 +4937,8 @@ async function executeWorkflowStep(
         : (step.saveAs ? [String(step.saveAs)] : []);
       const existingFiles = await dbListFiles(project.id);
       const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
-      const checkpointId = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
+      const cpStep = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
+      const checkpointId = cpStep?.id ?? null;
       for (const gf of files) {
         const f: DevHubFile = {
           id: crypto.randomUUID(), projectId: project.id, path: gf.path,
@@ -4315,7 +4974,7 @@ async function executeWorkflowStep(
         id: crypto.randomUUID(), projectId: project.id, path: savedAs,
         content: url, language: detectLanguage(savedAs), updatedAt: now(),
       };
-      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      await dbUpsertFile(f);
       return { step: i, type, ok: true, output: { url }, savedAs };
     }
     if (type === "tts") {
@@ -4343,7 +5002,7 @@ async function executeWorkflowStep(
           id: crypto.randomUUID(), projectId: project.id, path: savedAs,
           content: cdnUrl, language: "plaintext", updatedAt: now(),
         };
-        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        await dbUpsertFile(f);
         return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
       }
       const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
@@ -4351,7 +5010,7 @@ async function executeWorkflowStep(
         id: crypto.randomUUID(), projectId: project.id, path: savedAs,
         content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
       };
-      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      await dbUpsertFile(f);
       return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
     }
     if (type === "sfx") {
@@ -4377,7 +5036,7 @@ async function executeWorkflowStep(
           id: crypto.randomUUID(), projectId: project.id, path: savedAs,
           content: cdnUrl, language: "plaintext", updatedAt: now(),
         };
-        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        await dbUpsertFile(f);
         return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
       }
       const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
@@ -4385,7 +5044,7 @@ async function executeWorkflowStep(
         id: crypto.randomUUID(), projectId: project.id, path: savedAs,
         content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
       };
-      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      await dbUpsertFile(f);
       return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
     }
     if (type === "music") {
@@ -4413,7 +5072,7 @@ async function executeWorkflowStep(
           id: crypto.randomUUID(), projectId: project.id, path: savedAs,
           content: cdnUrl, language: "plaintext", updatedAt: now(),
         };
-        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        await dbUpsertFile(f);
         return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
       }
       const savedAs = step.saveAs ? String(step.saveAs) : `public/music-${i}.mp3.b64`;
@@ -4421,7 +5080,7 @@ async function executeWorkflowStep(
         id: crypto.randomUUID(), projectId: project.id, path: savedAs,
         content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
       };
-      try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+      await dbUpsertFile(f);
       return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
     }
     return { step: i, type, ok: false, error: `unknown step type: ${type}` };
@@ -4452,10 +5111,10 @@ function groupWorkflowSteps(steps: any[]): number[][] {
 }
 
 // POST /api/devhub/projects/:id/agent/workflow — orchestrate multi-step AI workflow
-devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
+devhubRouter.post("/projects/:id/agent/workflow", dhCostlyLimit("dhwf"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));   // как у /projects/:id/generate: с промежуточным слоем тип параметра шире
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -4493,7 +5152,7 @@ const AGENT_WORKFLOW_TEMPLATES = [
   {
     id: "landing",
     name: "Landing page",
-    description: "Hero + headline + CTA + voiceover + sound effect",
+    description: "Заглавный экран: заголовок, кнопка, озвучка и звук",
     steps: [
       { type: "code", prompt: "Modern landing page: hero section with headline, subheadline, and CTA button. Tailwind, dark theme.", saveAs: "pages/index.tsx" },
       { type: "image", prompt: "Futuristic abstract gradient, purple and teal, soft glow, hero background", size: "1792x1024", saveAs: "public/hero.url.txt" },
@@ -4505,7 +5164,7 @@ const AGENT_WORKFLOW_TEMPLATES = [
   {
     id: "blog",
     name: "Blog post",
-    description: "Article with header image + audio narration",
+    description: "Статья с картинкой в шапке и озвучкой",
     steps: [
       { type: "code", prompt: "Blog post page with title, date, hero image, and markdown article body in Next.js", saveAs: "pages/post.tsx" },
       { type: "image", prompt: "Editorial illustration, flat design, vibrant colors, abstract concept", size: "1024x1024", saveAs: "public/article-hero.url.txt" },
@@ -4530,10 +5189,10 @@ devhubRouter.get("/agent/templates", (_req, res) => {
 });
 
 // POST /api/devhub/projects/:id/agent/workflow/stream — SSE per-step progress
-devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
+devhubRouter.post("/projects/:id/agent/workflow/stream", dhCostlyLimit("dhwfs"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));   // как у /projects/:id/generate: с промежуточным слоем тип параметра шире
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -4612,10 +5271,13 @@ devhubRouter.post("/media/sms", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      noteProviderFailure("sms", `Brevo HTTP ${r.status}: ${errText.slice(0, 100)}`);
       return res.status(r.status).json({ error: `Brevo SMS error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json().catch(() => ({}));
     const messageId = (data as any)?.messageId ?? null;
+    if (messageId) noteProviderSuccess("sms");
+    else noteProviderFailure("sms", "Brevo accepted the SMS but returned no messageId — delivery not confirmed");
     res.json({
       ok: true,
       reference: (data as any)?.reference ?? null,
@@ -4624,7 +5286,7 @@ devhubRouter.post("/media/sms", async (req, res) => {
       ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "SMS send failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "SMS send failed" });
   }
 });
 
@@ -4661,16 +5323,19 @@ devhubRouter.post("/media/whatsapp", async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text();
+      noteProviderFailure("whatsapp", `Brevo HTTP ${r.status}: ${errText.slice(0, 100)}`);
       return res.status(r.status).json({ error: `Brevo WhatsApp error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json().catch(() => ({}));
     const messageId = (data as any)?.messageId ?? null;
+    if (messageId) noteProviderSuccess("whatsapp");
+    else noteProviderFailure("whatsapp", "Brevo accepted the request but returned no messageId — delivery not confirmed");
     res.json({
       ok: true, messageId,
       ...(messageId ? {} : degraded("Brevo accepted the request but returned no messageId — delivery not confirmed")),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "WhatsApp send failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "WhatsApp send failed" });
   }
 });
 
@@ -4757,7 +5422,7 @@ devhubRouter.post("/media/upload-image", dhCostlyLimit("dhmedia_upload"), async 
       uploaded: data.result.uploaded,
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Image upload failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Image upload failed" });
   }
 });
 
@@ -4861,17 +5526,23 @@ devhubRouter.post("/media/translate", async (req, res) => {
       // translate call is refused — the account state is only visible from a
       // real call (verified against our own key, 2026-07-26).
       if (r.status === 456) {
+        noteProviderFailure("translate", "DeepL says the quota is exhausted (456) — the key's own /v2/usage can still read 0");
         return res.status(456).json({
           error: "Translation unavailable — the DeepL account is out of quota. Their usage page can still show 0 used, so check the account or swap DEEPL_API_KEY.",
           provider: "deepl",
           accountUrl: "https://www.deepl.com/account/usage",
         });
       }
+      noteProviderFailure("translate", `DeepL HTTP ${r.status}: ${errText.slice(0, 100)}`);
       return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json() as { translations: Array<{ text: string; detected_source_language: string }> };
     const first = data.translations?.[0];
-    if (!first) return res.status(500).json({ error: "no translation returned" });
+    if (!first) {
+      noteProviderFailure("translate", "DeepL answered 200 with no translation in the body");
+      return res.status(500).json({ error: "no translation returned" });
+    }
+    noteProviderSuccess("translate");
     res.json({
       ok: true,
       text: first.text,
@@ -4879,7 +5550,7 @@ devhubRouter.post("/media/translate", async (req, res) => {
       targetLang: targetLang.toUpperCase(),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Translation failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Translation failed" });
   }
 });
 
@@ -4970,7 +5641,7 @@ devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
         : {}),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "File translation failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "File translation failed" });
   }
 });
 
@@ -4999,7 +5670,7 @@ devhubRouter.get("/media/email-templates", async (req, res) => {
       })),
     });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Templates fetch failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Templates fetch failed" });
   }
 });
 
@@ -5033,7 +5704,7 @@ devhubRouter.post("/media/email-template-send", async (req, res) => {
     noteEmailSent(); // тот же общий потолок 300 писем в сутки, см. выше
     res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Template send failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Template send failed" });
   }
 });
 
@@ -5097,6 +5768,8 @@ devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
+  // Массовый перевод — ПЛАТНЫЙ. Файлы в памяти исчезнут при перезапуске.
+  let storageFallback = false;
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
@@ -5160,7 +5833,7 @@ devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
         catch {
           const existing = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === newPath);
           if (existing) { existing.content = out.content; existing.updatedAt = out.updatedAt; }
-          else memFiles.set(out.id, out);
+          else memFiles.set(out.id, out); storageFallback = true;
         }
         results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: true, outputPath: newPath, bytes: translated.length });
       } catch (e: any) {
@@ -5171,6 +5844,7 @@ devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
 
   const okCount = results.filter((r) => r.ok).length;
   res.json({
+    ...(storageFallback ? MEMORY_NOTE : {}),
     ok: okCount === results.length,
     total: results.length,
     successCount: okCount,
@@ -5440,6 +6114,21 @@ devhubRouter.get("/projects/:id/export", async (req, res) => {
     };
     entries.push({ path: "aevion-export.json", content: Buffer.from(JSON.stringify(meta, null, 2), "utf8") });
 
+    // ...and a note saying how to actually run what we just handed over. The
+    // export was a folder with no instructions: whether it could be started,
+    // and with which command, was left to whoever downloaded it.
+    entries.push({
+      path: "HOW-TO-RUN.md",
+      content: Buffer.from(
+        buildRunInstructions({
+          projectName: project.name,
+          stack: project.stack,
+          files: files.map((f) => ({ path: f.path, content: f.content })),
+        }),
+        "utf8",
+      ),
+    });
+
     const zip = buildZipStored(entries);
     const filename = `${slugify(project.name)}-${project.id.slice(0, 8)}.zip`;
     res.setHeader("Content-Type", "application/zip");
@@ -5447,7 +6136,7 @@ devhubRouter.get("/projects/:id/export", async (req, res) => {
     res.setHeader("Content-Length", zip.length);
     res.send(zip);
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "export failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "export failed" });
   }
 });
 
@@ -5556,7 +6245,7 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
       }
     }, 5000);
 
-    await debitCredit(userId, "deploy").catch(() => {});
+    await debitQuietly(userId, "deploy");
     return res.json({
       ok: true,
       deploymentId,
@@ -5570,7 +6259,7 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
     deployment.buildLog = e?.message || "deploy failed";
     deployment.completedAt = now();
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
-    return res.status(500).json({ ok: false, error: e?.message || "Vercel deploy failed" });
+    return res.status(500).json({ ok: false, error: redactInfraDetails(e) || "Vercel deploy failed" });
   }
 });
 
@@ -5675,9 +6364,15 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
 
     deployment.status = "building";
     deployment.deployUrl = pagesUrl;
-    deployment.buildLog = `CF Pages deployment uploaded via wrangler`;
+    // Пропущенные файлы называются поимённо: молчаливый пропуск означал бы,
+    // что на сайте не хватает страницы, а выкатка отчиталась успехом.
+    deployment.buildLog =
+      `CF Pages deployment uploaded via wrangler` +
+      (wranglerResult.skipped.length
+        ? ` | НЕ ЗАГРУЖЕНЫ ${wranglerResult.skipped.length} файл(ов) с недопустимым путём: ${wranglerResult.skipped.slice(0, 10).join(", ")}`
+        : "");
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
-    await debitCredit(userId, "deploy").catch(() => {});
+    await debitQuietly(userId, "deploy");
 
     // 4. Provision aevion.build domain (best-effort — don't fail deploy if zone not configured)
     let customDomain: string | null = null;
@@ -5688,12 +6383,23 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
         const domainSlug = `${slugify(project.name)}-${project.id.slice(0, 6)}`;
         const fullDomain = `${domainSlug}.aevion.build`;
 
-        // 4a. Add custom domain to CF Pages project
-        await fetch(`${cfBase}/pages/projects/${pageName}/domains`, {
+        // 4a. Add custom domain to CF Pages project.
+        //
+        // Ответ ОБЯЗАН быть прочитан. Раньше все три вызова к Cloudflare шли без
+        // проверки, а ниже безусловно выполнялось `customDomain = fullDomain` —
+        // то есть при отказе провайдера выкатка всё равно сообщала поддомен,
+        // которого не существует. Зона aevion.build не делегирована, так что
+        // это не гипотеза: отказ здесь — обычный случай, а не редкий.
+        const addResp = await fetch(`${cfBase}/pages/projects/${pageName}/domains`, {
           method: "POST",
           headers: { ...cfHeaders, "Content-Type": "application/json" },
           body: JSON.stringify({ name: fullDomain }),
         });
+        // 409 — домен уже привязан к этому проекту, это не отказ.
+        if (!addResp.ok && addResp.status !== 409) {
+          const body = await addResp.text().catch(() => "");
+          throw new Error(`Pages domain refused (${addResp.status}): ${body.slice(0, 200)}`);
+        }
 
         // 4b. CNAME DNS record: fullDomain → pageName.pages.dev
         const dnsTarget = `${pageName}.pages.dev`;
@@ -5703,10 +6409,12 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
         const existingId = listData.result?.[0]?.id;
 
         const dnsBody = JSON.stringify({ type: "CNAME", name: fullDomain, content: dnsTarget, ttl: 1, proxied: true });
-        if (existingId) {
-          await fetch(`${zoneBase}/${existingId}`, { method: "PUT", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
-        } else {
-          await fetch(zoneBase, { method: "POST", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
+        const dnsResp = existingId
+          ? await fetch(`${zoneBase}/${existingId}`, { method: "PUT", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody })
+          : await fetch(zoneBase, { method: "POST", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
+        if (!dnsResp.ok) {
+          const body = await dnsResp.text().catch(() => "");
+          throw new Error(`DNS record refused (${dnsResp.status}): ${body.slice(0, 200)}`);
         }
 
         customDomain = fullDomain;
@@ -5725,6 +6433,11 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     deferred(async () => {
       const d = memDeployments.get(deployment.id) ?? deployment;
       const serves = await verifyDeploymentServes(pagesUrl);
+      // Pages is the one deploy path that actually works, so when it stops
+      // working the shop window should be the first to say it — not the user
+      // whose page never came up.
+      if (serves) noteProviderSuccess("pages");
+      else noteProviderFailure("pages", "the deployed page does not serve (2xx never came back after retries)");
       if (serves) {
         d.status = "live"; d.completedAt = now();
       } else {
@@ -5752,6 +6465,16 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // Second arg is the delay between attempts — 1ms keeps this a fast probe
     // rather than the 25s wait the deploy path uses.
     const domainReady = domainUrl ? await verifyDeploymentServes(domainUrl, 1).catch(() => false) : false;
+    // The `domain` capability still decides "live" from token presence alone —
+    // the very "a key is not a working capability" lie the health layer exists
+    // to kill. Tokens are all set and the zone is still undelegated, so every
+    // *.aevion.build address fails DNS while the shop window says live. Record
+    // what the deploy actually observed; /studio/capabilities merges it and
+    // reports `degraded` with this reason.
+    if (customDomain) {
+      if (domainReady) noteProviderSuccess("domain");
+      else noteProviderFailure("domain", `${customDomain} does not resolve — the aevion.build zone is not delegated to Cloudflare`);
+    }
     return res.json({
       ok: true,
       provider: "cloudflare-pages",
@@ -5771,7 +6494,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     deployment.status = "failed"; deployment.buildLog = e?.message || "deploy failed";
     deployment.completedAt = now();
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
-    return res.status(500).json({ ok: false, error: e?.message || "Cloudflare Pages deploy failed" });
+    return res.status(500).json({ ok: false, error: redactInfraDetails(e) || "Cloudflare Pages deploy failed" });
   }
 });
 
@@ -5876,7 +6599,16 @@ devhubRouter.post("/media/upload-audio", async (req, res) => {
   try {
     let buf: Buffer;
     if (sourceUrl) {
-      const sr = await fetch(String(sourceUrl));
+      // Без этой проверки посторонний заставлял НАШ сервер сходить по любому
+      // адресу, включая внутренние: метаданные облака, соседние службы, админки.
+      // Результат возвращался ему кодом статуса. Ручка была закрыта только тем,
+      // что не настроено хранилище, — то есть случайно.
+      //
+      // Потеряно при мерже 30.08.2026 (взята чужая сторона файла) и возвращено:
+      // сторож publicUrlOnly требует именно ВЫЗОВА, а не импорта, и поймал.
+      const verdict = await checkPublicUrl(String(sourceUrl));
+      if (!verdict.ok) return res.status(400).json({ error: verdict.reason });
+      const sr = await fetch(verdict.url.toString());
       if (!sr.ok) return res.status(sr.status).json({ error: `source fetch failed: ${sr.status}` });
       buf = Buffer.from(await sr.arrayBuffer());
     } else {
@@ -5893,7 +6625,7 @@ devhubRouter.post("/media/upload-audio", async (req, res) => {
     if (!result.ok) return res.status(502).json({ error: result.error });
     res.json({ ok: true, key: finalKey, url: result.url, bytes: buf.length, mimeType: ct });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Audio upload failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Audio upload failed" });
   }
 });
 
@@ -5941,7 +6673,7 @@ devhubRouter.post("/media/email-template-create", async (req, res) => {
     if (!data.id) return res.status(500).json({ error: "Brevo did not return template id" });
     res.json({ ok: true, id: data.id, name: payload.templateName, subject: payload.subject });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Template create failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "Template create failed" });
   }
 });
 
@@ -6025,6 +6757,9 @@ const TTS_MODEL_FALLBACKS = ["eleven_turbo_v2_5", "eleven_flash_v2_5"];
 const BINARY_EXTENSIONS = /\.(mp3|wav|ogg|png|jpg|jpeg|webp|gif|pdf|zip|woff2?|ttf|otf)$/i;
 
 devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
+  // Человек загрузил СВОЙ код. Если файлы легли только в память процесса, при
+  // перезапуске он их потеряет, а ответ говорил, сколько импортировано.
+  let storageFallback = false;
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
@@ -6052,7 +6787,12 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
 
   for (const entry of parsed) {
     // Skip metadata + directory entries
-    if (entry.path === "aevion-export.json") { skipped.push({ path: entry.path, reason: "metadata" }); continue; }
+    // Both files the export adds itself. Without this, a project that is
+    // exported and re-imported gains a file each round.
+    if (entry.path === "aevion-export.json" || entry.path === "HOW-TO-RUN.md") {
+      skipped.push({ path: entry.path, reason: "metadata" });
+      continue;
+    }
     if (entry.path.endsWith("/")) { skipped.push({ path: entry.path, reason: "directory" }); continue; }
     if (entry.path.includes("..")) { skipped.push({ path: entry.path, reason: "path traversal" }); continue; }
     if (entry.path.length > 240) { skipped.push({ path: entry.path, reason: "path too long" }); continue; }
@@ -6090,13 +6830,16 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
     catch {
       existingFiles = [...memFiles.values()].filter((f) => f.projectId === project!.id);
     }
-    checkpointId = await createCheckpoint(
+    const cp = await createCheckpoint(
       project.id,
       userId,
       `ZIP import (${toWrite.length} file${toWrite.length === 1 ? "" : "s"})`,
       toWrite.map((w) => w.file.path),
       existingFiles,
     );
+    checkpointId = cp?.id ?? null;
+    // Точка могла лечь только в память — тогда «отменить» переживёт
+    // не дольше перезапуска. Признак есть у cp.storage.
   }
 
   for (const { file: f, bytes, binary } of toWrite) {
@@ -6104,12 +6847,13 @@ devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
     catch {
       const ex = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === f.path);
       if (ex) { ex.content = f.content; ex.language = f.language; ex.updatedAt = f.updatedAt; }
-      else memFiles.set(f.id, f);
+      else memFiles.set(f.id, f); storageFallback = true;
     }
     imported.push({ path: f.path, bytes, binary });
   }
 
   res.json({
+    ...(storageFallback ? MEMORY_NOTE : {}),
     ok: imported.length > 0,
     importedCount: imported.length,
     skippedCount: skipped.length,
@@ -6220,7 +6964,7 @@ devhubRouter.post("/media/video", async (req, res) => {
     }
 
     const prediction = await resp.json() as { id: string; status: string; urls?: { get?: string } };
-    await debitCredit(userId, "video").catch(() => {});
+    await debitQuietly(userId, "video");
     return res.json({
       ok: true,
       predictionId: prediction.id,
@@ -6230,10 +6974,12 @@ devhubRouter.post("/media/video", async (req, res) => {
       audio: chosen.audio,
       realism: wantsRealism,
       creditsUsed: 1,
-      creditsRemaining: credit.limit === -1 ? -1 : credit.limit - credit.used - 1,
+      // Withheld rather than invented when the meter could not be read.
+      creditsRemaining: credit.limit === -1 ? -1 : credit.usedKnown ? credit.limit - credit.used - 1 : null,
+      ...creditNote(credit),
     });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Video generation failed" });
+    return res.status(500).json({ error: redactInfraDetails(e) || "Video generation failed" });
   }
 });
 
@@ -6279,10 +7025,10 @@ devhubRouter.post("/media/3d", async (req, res) => {
       return res.status(r.status).json({ error: `Replicate error: ${t.slice(0, 300)}` });
     }
     const prediction = await r.json() as { id: string; status: string };
-    await debitCredit(userId, "video").catch(() => {});
+    await debitQuietly(userId, "video");
     res.json({ ok: true, predictionId: prediction.id, status: prediction.status, model: chosen.id, modelLabel: chosen.label, format: "glb" });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || "3D generation failed" });
+    res.status(500).json({ error: redactInfraDetails(e) || "3D generation failed" });
   }
 });
 
@@ -6323,7 +7069,7 @@ devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {
       seconds: pred.metrics?.predict_time ?? null,
     });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Status check failed" });
+    return res.status(500).json({ error: redactInfraDetails(e) || "Status check failed" });
   }
 });
 
@@ -6399,7 +7145,7 @@ devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
 
     return res.json({ ok: true, domain: fullDomain, url: `https://${fullDomain}`, cname: deployTarget });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Domain provision failed" });
+    return res.status(500).json({ error: redactInfraDetails(e) || "Domain provision failed" });
   }
 });
 
@@ -6488,28 +7234,221 @@ devhubRouter.get("/providers/health", async (_req, res) => {
       });
       return { ok: r.ok, detail: r.ok ? "key valid (billing not visible here)" : `HTTP ${r.status}` };
     }),
+    // Добавлено 28.08.2026. Замер показал границу: проверок было ПЯТЬ на
+    // семнадцать возможностей, то есть панель говорила «настроено» по наличию
+    // переменной, а по-настоящему проверялась меньше трети. Ниже — четыре
+    // недостающих провайдера, на которых держатся перевод, публикация,
+    // выгрузка в репозиторий и вся озвучка.
+    //
+    // Все вызовы читающие и бесплатные: спрашиваем, действителен ли ключ.
+    // Витрина эту ручку НЕ зовёт (проверено), поэтому лишней нагрузки на
+    // посетителя не появляется — платят только смоук и человек руками.
+    probe("deepl", async () => {
+      if (!process.env.DEEPL_API_KEY) return { ok: false, detail: "DEEPL_API_KEY not set" };
+      const r = await fetch("https://api-free.deepl.com/v2/usage", {
+        headers: { Authorization: `DeepL-Auth-Key ${process.env.DEEPL_API_KEY}` },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("github", async () => {
+      if (!process.env.GITHUB_TOKEN) return { ok: false, detail: "GITHUB_TOKEN not set" };
+      const r = await fetch("https://api.github.com/user", {
+        headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, "User-Agent": "aevion-devhub" },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("vercel", async () => {
+      if (!process.env.VERCEL_API_TOKEN) return { ok: false, detail: "VERCEL_API_TOKEN not set" };
+      const r = await fetch("https://api.vercel.com/v2/user", {
+        headers: { Authorization: `Bearer ${process.env.VERCEL_API_TOKEN}` },
+      });
+      return { ok: r.ok, detail: `HTTP ${r.status}` };
+    }),
+    probe("elevenlabs", async () => {
+      if (!process.env.ELEVENLABS_API_KEY) return { ok: false, detail: "ELEVENLABS_API_KEY not set" };
+      const r = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
+        headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY },
+      });
+      // Ключ действителен. Остаток знаков отсюда виден, но судить по нему
+      // здесь не берёмся: это ответ на другой вопрос.
+      return { ok: r.ok, detail: r.ok ? "key valid" : `HTTP ${r.status}` };
+    }),
   ]);
 
   const failing = checks.filter((c) => !c.ok);
   res.json({ checks, healthy: failing.length === 0, failing: failing.map((c) => c.name) });
 });
 
-devhubRouter.get("/studio/capabilities", (_req, res) => {
+// Зона aevion.build: делегирована ли она на самом деле.
+//
+// 29.08.2026: список возможностей объявлял домен "live" по ОДНОМУ признаку —
+// заданы ли ключи Cloudflare. А наша же проба cloudflare_health (тридцатью
+// строками выше) знала правду и прямо писала: пока регистратор не указал на
+// Cloudflare, каждый выданный адрес *.aevion.build не разрешается. Два наших
+// ответа об одном и том же спорили в одном файле, и ежедневный смоук это ловил.
+//
+// Ответ кэшируем: список возможностей открывают часто, а зона меняется раз в
+// жизнь. Отказ пробы НЕ считаем отрицанием — возвращаем null («не знаю»), иначе
+// сетевая икота выключала бы работающую возможность.
+let zoneCache: { at: number; active: boolean | null } = { at: 0, active: null };
+const ZONE_TTL_MS = 5 * 60_000;
+// Отказ живёт в кэше НАМНОГО меньше успеха, и это не мелочь: при равном сроке
+// секундный сбой сети запирал на пять минут ответ «needs_token» — то есть мы
+// просили человека настроить то, что у него уже настроено. Незнание не должно
+// залипать наравне со знанием: успех — состояние, отказ — событие.
+const ZONE_FAIL_TTL_MS = 30_000;
+
+/** Сброс кэша зоны — для тестов: иначе первый случай отравляет второй. */
+export function __resetAevionBuildZoneCache(): void {
+  zoneCache = { at: 0, active: null };
+}
+
+async function aevionBuildZoneActive(): Promise<boolean | null> {
+  if (!process.env.CLOUDFLARE_ZONE_ID || !process.env.CLOUDFLARE_API_TOKEN) return null;
+  const now = Date.now();
+  const ttl = zoneCache.active === null ? ZONE_FAIL_TTL_MS : ZONE_TTL_MS;
+  if (zoneCache.at !== 0 && now - zoneCache.at < ttl) return zoneCache.active;
+  try {
+    const r = await fetch(
+      `https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE_ID}`,
+      { headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } },
+    );
+    const b: any = await r.json().catch(() => ({}));
+    const active = b?.result?.status === "active";
+    zoneCache = { at: now, active };
+    return active;
+  } catch {
+    zoneCache = { at: now, active: null };
+    return null;
+  }
+}
+
+// GET /api/devhub/studio/deploy-stats?days=N — доля успешных публикаций.
+//
+// Вопрос основателя, на который до 31.08.2026 ответа не было: доходит ли
+// человек до РАБОТАЮЩЕГО приложения. «Шестнадцать возможностей» и «движок
+// VS Code» описывают наличие механизма, а не результат.
+//
+// Данные лежали в "DevHubDeployment" с самого начала: двенадцать обращений к
+// таблице, и все вида «покажи выкатки этого проекта». Ни одного считающего —
+// число было в базе и недоступно никому без доступа к базе.
+//
+// Ручка ЧИТАЮЩАЯ: ничего не пишет и ничего не меняет.
+devhubRouter.get("/studio/deploy-stats", async (req, res) => {
+  const raw = Number(req.query.days);
+  const days = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 365) : 30;
+
+  // Статус в таблице — свободная строка (interface DevHubDeployment), закрытого
+  // перечисления нет. Поэтому считаем ФАКТИЧЕСКОЕ распределение, а не заранее
+  // придуманный список: иначе новый статус молча выпадет из знаменателя.
+  const counts = new Map<string, number>();
+  let storage: "db" | "memory" = "db";
+
+  if (!isDevHubDbReady()) {
+    storage = "memory";
+    const since = Date.now() - days * 86_400_000;
+    for (const d of memDeployments.values()) {
+      if (Date.parse(d.triggeredAt) >= since) {
+        counts.set(d.status, (counts.get(d.status) ?? 0) + 1);
+      }
+    }
+  } else {
+    // Отказ хранилища — НЕ наша поломка, и отвечать на него пятисоткой значит
+    // выдать чужую недоступность за свою аварию. Поймал не я: платформенный
+    // сторож devhubReadsAreHonestWhenStorageFails увидел «deploy-stats -> 500»
+    // при первом же прогоне. Штатный ответ здесь 503 storage_unavailable, и
+    // помощник для него уже есть — второй способ отвечать заводить незачем.
+    try {
+      const r = await pool.query(
+        `SELECT "status", COUNT(*)::int AS n
+           FROM "DevHubDeployment"
+          WHERE "triggeredAt" >= NOW() - ($1::int * INTERVAL '1 day')
+          GROUP BY "status"`,
+        [days],
+      );
+      for (const row of r.rows as Array<{ status: string; n: number }>) {
+        counts.set(row.status, Number(row.n));
+      }
+    } catch {
+      return replyStorageUnavailable(res);
+    }
+  }
+
+  const byStatus = [...counts.entries()]
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count);
+  const total = byStatus.reduce((s, x) => s + x.count, 0);
+  const live = counts.get("live") ?? 0;
+
+  return res.json({
+    days,
+    total,
+    byStatus,
+    // NULL, а не 0, когда считать не из чего. Ноль здесь читался бы как
+    // «ни одна публикация не удалась» — это другое утверждение, и оно
+    // отправило бы человека чинить работающее.
+    //
+    // ⚠️ Мутация «убрать тернарник» этим сторожем НЕ ловится, и это не дыра:
+    // при total = 0 голый расчёт даёт NaN, а NaN в JSON сериализуется в null.
+    // Снаружи ответ тот же — значит и падать нечему. Проверено: JSON.stringify
+    // от NaN даёт null.
+    //
+    // Явная запись оставлена намеренно: полагаться на то, что NaN «случайно»
+    // превратится в правильный ответ, — это работать через побочный эффект
+    // сериализации. Первый же потребитель ВНУТРИ процесса получит NaN, а не
+    // null, и сравнение `=== null` у него молча не сработает.
+    successRate: total > 0 ? Math.round((1000 * live) / total) / 10 : null,
+    // Признак едет В САМИХ ДАННЫХ: при недоступной базе числа считаны из
+    // памяти процесса и живут до перезапуска. Молча выдать их за историю —
+    // тот же класс, что пустой список вместо отказа.
+    storage,
+  });
+});
+
+devhubRouter.get("/studio/capabilities", async (_req, res) => {
+  // Живая проба вместо переменной: переменную ставит человек, проверив зону,
+  // и она протухает молча в тот день, когда зона перестанет отвечать.
+  // Проба берётся из кэша (5 мин при успехе, 30 с при отказе), так что на
+  // каждый запрос сети нет.
+  const zoneActive = await aevionBuildZoneActive();
   const caps = [
-    { id: "code", name: "Code Editor", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
-    { id: "translate", name: "Translation", description: "DeepL translation for generated copy", status: process.env.DEEPL_API_KEY ? "live" : "needs_token", token: "DEEPL_API_KEY" },
-    { id: "database", name: "Database", description: "Real Postgres per project — schema + login role, DATABASE_URL wired in", status: process.env.DEVHUB_DB_ADMIN_URL ? "live" : "needs_token", token: "DEVHUB_DB_ADMIN_URL" },
+    { id: "code", name: "Редактор кода", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
+    { id: "translate", name: "Перевод", description: "DeepL translation for generated copy", status: process.env.DEEPL_API_KEY ? "live" : "needs_token", token: "DEEPL_API_KEY" },
+    { id: "database", name: "База данных", description: "Real Postgres per project — schema + login role, DATABASE_URL wired in", status: process.env.DEVHUB_DB_ADMIN_URL ? "live" : "needs_token", token: "DEVHUB_DB_ADMIN_URL" },
     { id: "github", name: "GitHub", description: "Auto-push to GitHub repo", status: process.env.GITHUB_TOKEN ? "live" : "needs_token", token: "GITHUB_TOKEN" },
-    { id: "railway", name: "Railway Deploy", description: "Deploy backends to Railway — not available yet (per-project services not implemented)", status: process.env.DEVHUB_RAILWAY_PER_PROJECT ? "live" : "not_available", token: "RAILWAY_API_TOKEN" },
-    { id: "vercel", name: "Vercel Deploy", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
-    { id: "pages", name: "Cloudflare Pages Deploy", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
-    { id: "domain", name: "Domain (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && process.env.CLOUDFLARE_ACCOUNT_ID) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
-    { id: "video", name: "Video Generation", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
-    { id: "image", name: "Image Generation", description: "AI images — OpenAI → Workers AI (flux) → Together fallback chain", status: (process.env.OPENAI_API_KEY || (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) || process.env.TOGETHER_API_KEY) ? "live" : "needs_token", tokens: ["OPENAI_API_KEY", "CLOUDFLARE_API_TOKEN", "TOGETHER_API_KEY"] },
-    { id: "screenshot_code", name: "Screenshot → Code", description: "Attach a design screenshot in the AI chat — a vision model recreates it as code", status: (process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) ? "live" : "needs_token", tokens: ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"] },
-    { id: "audio_tts", name: "Voice (TTS)", description: "ElevenLabs text-to-speech", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
-    { id: "audio_music", name: "Music & SFX", description: "AI music and sound effects", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
-    { id: "email", name: "Email", description: "Brevo transactional email", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
+    { id: "railway", name: "Выкатка на Railway", description: "Deploy backends to Railway — not available yet (per-project services not implemented)", status: process.env.DEVHUB_RAILWAY_PER_PROJECT ? "live" : "not_available", token: "RAILWAY_API_TOKEN" },
+    { id: "vercel", name: "Выкатка на Vercel", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
+    { id: "pages", name: "Публикация на Cloudflare Pages", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
+    // Замер 28.08.2026 на проде: панель считала домен НАСТРОЕННЫМ, потому что
+    // три переменные заданы. А наша же проверка провайдеров в этом самом файле
+    // спрашивает Cloudflare о зоне и требует status === "active" — на проде она
+    // отвечает "unknown". То есть два наших ответа об одном и том же расходились,
+    // и человек читал «Настроено: 14 из 16», где домен был среди настроенных.
+    //
+    // Наличие ключа — не то же самое, что делегированная зона. Пока она не
+    // делегирована, честный ответ — not_available, как у Railway. Флаг
+    // DEVHUB_AEVION_BUILD_ZONE_ACTIVE включает возможность обратно, когда зона
+    // заработает: возвращать её должен человек, который это проверил.
+    { id: "domain", name: "Домен (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: zoneActive === true ? "live" : "not_available",
+      // Причина в lastError: интерфейс показывает её подсказкой. Без неё
+      // человек видит выключенную возможность и не знает, чего ждать —
+      // «не работает» без причины читается как поломка у нас.
+      lastError: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && zoneActive === false)
+        ? "ключи заданы, но зона aevion.build не делегирована — выданные адреса не разрешаются"
+        : undefined,
+      tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
+    { id: "video", name: "Генерация видео", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
+    // 3D объявлен на странице модуля среди возможностей «в одном проекте»,
+    // а в этом списке его не было вовсе: панель показывала «настроено N из 16»,
+    // и человек, считающий по списку, обещания не находил. Ключ тот же, что у
+    // видео, поэтому состояние честно совпадает — но называться должно своим
+    // именем: интерфейс до сих пор спрашивал про 3D под идентификатором video.
+    { id: "3d", name: "Генерация 3D", description: "Image → 3D mesh via Replicate (TRELLIS, Hunyuan3D)", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
+    { id: "image", name: "Генерация картинок", description: "AI images — OpenAI → Workers AI (flux) → Together fallback chain", status: (process.env.OPENAI_API_KEY || (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) || process.env.TOGETHER_API_KEY) ? "live" : "needs_token", tokens: ["OPENAI_API_KEY", "CLOUDFLARE_API_TOKEN", "TOGETHER_API_KEY"] },
+    { id: "screenshot_code", name: "Скриншот в код", description: "Attach a design screenshot in the AI chat — a vision model recreates it as code", status: (process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) ? "live" : "needs_token", tokens: ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"] },
+    { id: "audio_tts", name: "Озвучка", description: "ElevenLabs text-to-speech", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
+    { id: "audio_music", name: "Музыка и звуки", description: "AI music and sound effects", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
+    { id: "email", name: "Почта", description: "Brevo transactional email", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
     { id: "sms", name: "SMS", description: "Brevo SMS", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
     { id: "whatsapp", name: "WhatsApp", description: "WhatsApp Business API", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
   ];
@@ -6535,18 +7474,49 @@ devhubRouter.get("/studio/credits", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   try {
-    const result = await getAllMonthUsage(userId);
+    const { anyUnknown, ...result } = await getAllMonthUsage(userId);
     return res.json({
       ...result,
-      tierInfo: {
-        free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
-        pro:        { video: 50,  image: 200, tts: 30000,  music: 100, deploy: -1 },
-        enterprise: { video: -1,  image: -1,  tts: -1,     music: -1,  deploy: -1 },
-      },
+      // Сведено вручную из трёх правок, и все три нужны.
+      //
+      // ОТ ПЕРЕНОСИМЫХ КОММИТОВ: различение ТРЁХ случаев — не прочитан расход,
+      // не прочитан тариф, не прочитано ни то ни другое. Ноль расхода и слово
+      // «free» — честные ответы сами по себе, поэтому отказ базы был от них
+      // неотличим: предел переставал применяться, а платящий молча получал
+      // бесплатные лимиты.
+      //
+      // ОТ ТЕКУЩЕЙ ВЕТКИ: `tierInfo` отдаёт ТУ ЖЕ таблицу, по которой стоит
+      // ограничитель, и адрес обновления — нынешний. В переносимых версиях
+      // здесь литеральная копия таблицы и ещё `aevion.vercel.app`; принять их
+      // сторону целиком значило бы откатить и то, и другое.
+      //
+      // Тексты переведены: они уходят в ответ, который читает витрина.
+      ...(anyUnknown || !result.tierKnown
+        ? degraded(
+            !result.tierKnown && anyUnknown
+              ? "Ни тариф, ни расход за месяц не удалось прочитать из базы — показанные числа не являются " +
+                "замером, и предел при этой проверке не применялся"
+              : anyUnknown
+                ? "Расход за месяц не удалось прочитать из базы — показанные числа не являются замером, " +
+                  "и предел при этой проверке не применялся"
+                : "Тариф не удалось прочитать из базы — показан последний известный, а не текущий",
+          )
+        : {}),
+      tierInfo: TIER_LIMITS,
+      // ЧИТАТЕЛЯ У ЭТОГО ПОЛЯ НЕТ, и это осознанно (проверено 28.08.2026:
+      // ноль обращений во всём фронтенде). Наша витрина ведёт кнопку ПРЯМО на
+      // оплату (ссылка из каталога товаров), а не на раздел страницы — на один
+      // шаг короче, и это лучше для покупателя.
+      //
+      // Поле оставлено для СТОРОННИХ клиентов API: им нужен адрес, куда вести
+      // человека, и якорь `#upgrade` на /studio существует (проверено).
+      //
+      // Если кто-то соберётся «починить» витрину, заставив её читать это поле —
+      // это будет ШАГ НАЗАД: покупатель получит лишний переход вместо кассы.
       upgradeUrl: "https://aevion.app/studio#upgrade",
     });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Credits fetch failed" });
+    return res.status(500).json({ error: redactInfraDetails(e) || "Credits fetch failed" });
   }
 });
 
@@ -6566,6 +7536,6 @@ devhubRouter.post("/studio/tier", async (req, res) => {
     await setUserTier(target, tier as StudioTier);
     return res.json({ ok: true, userId: target, tier });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Tier update failed" });
+    return res.status(500).json({ error: redactInfraDetails(e) || "Tier update failed" });
   }
 });

@@ -251,7 +251,7 @@ export default function BankGuaranteesInsurancePage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice"
@@ -447,7 +447,7 @@ export default function BankGuaranteesInsurancePage() {
                         inputMode="decimal"
                         value={answers[ex.id] ?? ""}
                         onChange={(e) => setAnswer(ex.id, e.target.value)}
-                        placeholder="Введите число"
+                        aria-label="Введите число" placeholder="Введите число"
                         className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:border-amber-500 focus:outline-none w-48"
                       />
                       <span className="text-sm text-slate-400">{ex.unit}</span>

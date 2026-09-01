@@ -11,6 +11,7 @@ export const metadata: Metadata = {
     siteName: "AEVION",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/explore" },
 };
 
 export default function ExploreLayout({ children }: { children: React.ReactNode }) {

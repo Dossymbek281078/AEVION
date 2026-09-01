@@ -41,6 +41,7 @@ import { emitEcosystemEvent } from "../lib/ecosystemEvents";
 import rateLimit from "express-rate-limit";
 import { ensureQGoodTables, isQGoodDbReady } from "../lib/ensureQGoodTables";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { queryDate } from "../lib/queryDate";
 
 export const qgoodRouter = Router();
 
@@ -447,6 +448,86 @@ qgoodRouter.get("/matching-pools", readLimit, async (_req, res) => {
     captureQGoodError(err, { route: "GET /matching-pools" });
     console.error("[qgood] matching_pools_list_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "matching_pools_list_failed" });
+  }
+});
+
+/**
+ * GET /api/qgood/matching-pools/:id/matches — что этот пул уже софинансировал.
+ *
+ * ЗАЧЕМ. Таблица "QGoodMatch" до 28.08.2026 только заполнялась. Между тем
+ * запись в неё сопровождается ДВИЖЕНИЕМ ДЕНЕГ: у пула уменьшается
+ * remainingCents, у кампании растёт raisedCents, а строка QGoodMatch —
+ * единственная запись о том, из какого пула и за какое пожертвование ушла
+ * сумма. Прочитать её было нечем: ни ручки, ни выгрузки.
+ *
+ * То есть след движения денег существовал и был недоступен. При этом индекс
+ * "QGoodMatch_pool_idx" ON ("poolId","createdAt") создан — то есть запрос
+ * по пулу и времени задумывался и просто не был написан.
+ *
+ * Доступ — как у всех админских ручек этого модуля (isAdmin + QGOOD_ADMIN_EMAILS).
+ */
+qgoodRouter.get("/matching-pools/:id/matches", async (req, res) => {
+  try {
+    await ensureTables();
+    const auth = verifyBearerOptional(req);
+    if (!isAdmin(auth)) return res.status(403).json({ error: "admin_only" });
+
+    const limit = Math.min(
+      Math.max(parseInt(String(req.query.limit || "100"), 10) || 100, 1),
+      500,
+    );
+
+    // Курсор проверяется ДО подстановки: произвольная строка ушла бы в SQL как
+    // время и уронила запрос пятисоткой вместо честного 400.
+    // ⚠️ 31.08.2026: здесь стоял свой Date.parse. Мусор он отклоняет, но
+    // `?before=1` пропускает как 2001 год, а `?before=2026` — как 1 января.
+    // Это не пятисотка и не ошибка: человек получает ТИХО неверную выборку и
+    // не узнаёт об этом. Платформенный queryDate проверяет ФОРМУ до разбора.
+    //
+    // Сторож queryDateGuard требовал именно его, и он был прав — я сперва
+    // прочитал его красное как ложную тревогу, потому что проверка тут ЕСТЬ.
+    // «Проверка есть» и «проверка не слабее платформенной» — разные утверждения.
+    const beforeIso = queryDate(req.query.before);
+    if (beforeIso === undefined) {
+      return res.status(400).json({ error: "invalid_before", hint: "ISO-8601 timestamp" });
+    }
+    const before: Date | null = beforeIso ? new Date(beforeIso) : null;
+
+    const poolId = String(req.params.id || "");
+    const pg = getPool();
+    const args: unknown[] = [poolId];
+    let where = `WHERE "poolId" = $1`;
+    if (before) {
+      args.push(before);
+      where += ` AND "createdAt" < $${args.length}`;
+    }
+    args.push(limit);
+
+    const rows = await pg.query(
+      `SELECT "id","campaignId","donationId","amountCents","currency","createdAt"
+         FROM "QGoodMatch" ${where}
+        ORDER BY "createdAt" DESC LIMIT $${args.length}`,
+      args,
+    );
+    // Сумма и количество — по ВСЕМУ пулу, отдельно от показанной страницы.
+    // Число, равное пределу выборки, читается как весь список.
+    const totals = await pg.query(
+      `SELECT COUNT(*)::int AS "n", COALESCE(SUM("amountCents"),0)::bigint AS "sum"
+         FROM "QGoodMatch" WHERE "poolId" = $1`,
+      [poolId],
+    );
+    res.json({
+      poolId,
+      matches: rows.rows,
+      returned: rows.rows.length,
+      total: totals.rows?.[0]?.n ?? null,
+      matchedCentsTotal: Number(totals.rows?.[0]?.sum ?? 0),
+      limit,
+    });
+  } catch (err: unknown) {
+    captureQGoodError(err, { route: "GET /matching-pools/:id/matches" });
+    console.error("[qgood] matches_read_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "matches_read_failed" });
   }
 });
 

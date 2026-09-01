@@ -200,6 +200,25 @@ export default function ConstitutionPage() {
   const { track } = useFunnel();
   useEffect(() => { track("page_view"); }, [track]);
 
+  // Касса возвращает сюда после УСПЕШНОЙ оплаты: `?upgrade=success&tier=...`.
+  // До 29.08.2026 страница этот признак не читала, и человек, только что
+  // заплативший, попадал на обычную страницу — ни благодарности, ни
+  // подтверждения. Понять, прошла ли оплата, он не мог.
+  //
+  // Сегодня путь спит: LemonSqueezy не настроен. Он оживёт ровно в день, когда
+  // зададут ключи, — и тогда молчание встретит ПЕРВОГО настоящего покупателя.
+  const [paidTier, setPaidTier] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("upgrade") !== "success") return;
+    const tier = q.get("tier");
+    setPaidTier(tier === "team" ? "Team" : "Pro");
+    // Событие в словаре воронки БЫЛО, а слал его никто: завершение покупки
+    // не фиксировалось вовсе. Теперь фиксируется.
+    track("upgrade_complete", { tier: tier ?? "pro" });
+  }, [track]);
+
   // Auto-redirect first-time visitors to /welcome (unless they came via deep-link)
   useEffect(() => {
     try {
@@ -455,13 +474,26 @@ export default function ConstitutionPage() {
     if (tourStep === null || tourStep === 0) return new Set();
     return changedKeys(TOUR[tourStep - 1].sliders, TOUR[tourStep].sliders);
   }, [tourStep]);
+  // Событие `tour_completed` было в словаре воронки и не отправлялось ниоткуда:
+  // мы знали, сколько человек НАЧАЛО знакомство с продуктом, и никогда —
+  // сколько дошло до конца. Начало без завершения — это половина воронки.
+  //
+  // Флаг нужен, чтобы событие ушло ОДИН раз за тур: на последний шаг можно
+  // вернуться кнопкой «назад-вперёд», и без него мы считали бы одно
+  // прохождение несколько раз, то есть завысили бы собственную метрику.
+  const tourFinishedRef = useRef(false);
   const goToTourStep = useCallback((idx: number) => {
     const clamped = Math.max(0, Math.min(TOUR.length - 1, idx));
     setTourStep(clamped);
     setSliders(TOUR[clamped].sliders);
-  }, []);
+    if (clamped === TOUR.length - 1 && !tourFinishedRef.current) {
+      tourFinishedRef.current = true;
+      track("tour_completed", { steps: TOUR.length });
+    }
+  }, [track]);
   const startTour = useCallback(() => {
     track("tour_started");
+    tourFinishedRef.current = false; // новый тур считается заново
     goToTourStep(0);
   }, [goToTourStep, track]);
   const exitTour = useCallback(() => setTourStep(null), []);
@@ -753,6 +785,15 @@ export default function ConstitutionPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
+      {paidTier ? (
+        <div
+          role="status"
+          className="mx-auto mt-4 mb-2 max-w-3xl rounded-xl border border-emerald-400/40 bg-emerald-500/10 p-4 text-sm text-emerald-100"
+        >
+          <strong className="block mb-1">{t("constitution.pay.thanksTitle")}</strong>
+          {t("constitution.pay.thanksBody", { tier: paidTier })}
+        </div>
+      ) : null}
       <div className="max-w-6xl mx-auto">
       {/* Общий замер платформы. Свою подробную воронку модуль ведёт сам
           (useFunnel → /api/constitution/funnel/track), но она отдельная: в
@@ -1058,7 +1099,7 @@ export default function ConstitutionPage() {
             {overSaveLimit && <ProPaywallBanner savedTotal={savedTotal} limit={planLimits?.savedScenarios ?? 5} />}
 
             <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
-              <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">
+              <h3 id="constitution-save-heading" className="text-lg font-semibold text-[#f5d27a] mb-3">
                 {t("constitution.save.heading")}
                 {savedTotal > 0 ? ` (${t("constitution.save.total", { count: savedTotal })})` : ""}
                 {plan === "pro" && (
@@ -1071,6 +1112,12 @@ export default function ConstitutionPage() {
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
+                  // Поле держалось на одной подсказке, а она исчезает при
+                  // вводе — читалка объявляла его безымянным ровно тогда,
+                  // когда в нём работают. Найдено сторожем AEVION-A11yNamesWatch
+                  // 28.08.2026. Связываю с заголовком блока: новых ключей
+                  // не завожу — словарь сейчас перестраивает соседняя ветка.
+                  aria-labelledby="constitution-save-heading"
                   placeholder={t("constitution.save.titlePlaceholder")}
                   className="flex-1 min-w-[180px] bg-[#050a1a] border border-[#d4af37]/30 rounded px-3 py-2 text-sm"
                   maxLength={120}
@@ -1937,6 +1984,8 @@ function AiAdvisorModal({
   onApply: (sliders: Sliders, explanation: string) => void;
 }) {
   const { t } = useI18n();
+  // Свой счётчик модуля, как у остального: useFunnel -> /api/constitution/funnel/track.
+  const { track } = useFunnel();
   const [description, setDescription] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -1958,6 +2007,10 @@ function AiAdvisorModal({
     setError(null);
     setProvider(null);
     setStreamText("");
+    // Расход платного совета виден в воронке. Событие ai_suggest было в
+    // словаре, а слал его ноль мест: суточный лимит aiSuggestPerDay тратился
+    // невидимо. Шлём в точке РАСХОДА, а не успеха, и без текста запроса.
+    track("ai_suggest", { length: description.trim().length });
     let finalSliders: Sliders | null = null;
     let finalExplanation = "";
     let finalProvider = "unknown";
@@ -2323,22 +2376,35 @@ type SocialData = {
 };
 
 function SocialPanel({ artifactId }: { artifactId: string }) {
+  // Своя воронка модуля, как у остального: useFunnel -> /api/constitution/funnel/track.
+  const { track } = useFunnel();
   const { t } = useI18n();
   const [data, setData] = useState<SocialData | null>(null);
   const [text, setText] = useState<string>("");
   const [authorName, setAuthorName] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  // Отказ загрузки не должен выглядеть как «никто не голосовал». Счётчики
+  // подставляли 0 при data === null, а null здесь наступает и когда сервер
+  // недоступен: ниже отказ проглатывался молча. Ноль тут ЛОЖЬ — мы не
+  // измерили, а не измерили ноль.
+  const [votesUnknown, setVotesUnknown] = useState<boolean>(false);
 
   const load = useCallback(async () => {
     try {
       const r = await fetch(
         `/api-backend/api/planet/constitution-artifacts/${artifactId}/social`,
       );
-      if (!r.ok) return;
+      if (!r.ok) {
+        setVotesUnknown(true);
+        return;
+      }
       setData((await r.json()) as SocialData);
+      setVotesUnknown(false);
     } catch {
-      /* ignore */
+      // Не роняем страницу из-за счётчика, но и не молчим: показ ниже скажет
+      // человеку, что чисел нет, вместо того чтобы назвать их нулями.
+      setVotesUnknown(true);
     }
   }, [artifactId]);
 
@@ -2348,6 +2414,9 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
 
   const castVote = async (vote: 1 | -1) => {
     const toggleOff = data?.votes.my === vote;
+    // Событие воронки. Снятие голоса тоже считаем — это действие человека, и
+    // не отличать его значило бы завышать долю «за». Направление в свойстве.
+    track("vote_cast", { vote: toggleOff ? 0 : vote });
     try {
       if (toggleOff) {
         await fetch(
@@ -2419,7 +2488,7 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
               : "border border-[#d4af37]/30 hover:bg-emerald-500/10"
           }`}
         >
-          👍 {data?.votes.up ?? 0}
+          👍 {data ? data.votes.up : votesUnknown ? "—" : "…"}
         </button>
         <button
           type="button"
@@ -2430,21 +2499,20 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
               : "border border-[#d4af37]/30 hover:bg-rose-500/10"
           }`}
         >
-          👎 {data?.votes.down ?? 0}
+          👎 {data ? data.votes.down : votesUnknown ? "—" : "…"}
         </button>
         <div className="px-3 py-1.5 text-sm text-[#9aa3c0]">
           {t("constitution.social.totalLabel")}{" "}
           <span
             className={`font-semibold ${
-              (data?.votes.total ?? 0) > 0
+              data && data.votes.total > 0
                 ? "text-emerald-300"
-                : (data?.votes.total ?? 0) < 0
+                : data && data.votes.total < 0
                   ? "text-rose-300"
                   : "text-[#9aa3c0]"
             }`}
           >
-            {(data?.votes.total ?? 0) > 0 ? "+" : ""}
-            {data?.votes.total ?? 0}
+            {data ? ((data.votes.total > 0 ? "+" : "") + String(data.votes.total)) : votesUnknown ? "—" : "…"}
           </span>
         </div>
       </div>

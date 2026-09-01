@@ -13,7 +13,7 @@ export default function LeaningTowerPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Leaning Tower — Intentional Tilt</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Leaning Tower — Intentional Tilt</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🗼 Башня с намеренным наклоном (Intentional Lean)</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #308. Архитектурно-туристическая башня-достопримечательность (концепт Astana / Алматы). Reference: Capital Gate Abu Dhabi (18° tilt vs Pisa 4° accidental), Gate of Europe Torres KIO Madrid (15°), Sloping Tower Wanaka NZ. Engineering challenge — eccentric load на foundation, requires diaphragm wall pile foundation, post-tensioned column system, finite element analysis ETABS / SAP2000. Wind load increased 30% per ASCE 7-22 для tilted geometry. Tuned Mass Damper TMD compensates lateral motion. ICC + ASCE 7-22 + СН РК 5.04-13.</p>
@@ -48,7 +48,7 @@ export default function LeaningTowerPage() {
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Tilt angle (degrees)</h2>
           <p className="text-slate-300">Tower H=80 m, offset crown 25 m vs base. Tilt angle = arctan(offset/H):</p>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="°" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="Ответ, °" placeholder="°" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>tan⁻¹(25/80) = 17.4° ≈ <strong>18°</strong>. Capital Gate Abu Dhabi 18°, world record.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс tower H=80 m</h2>
@@ -62,7 +62,7 @@ export default function LeaningTowerPage() {
             <li>MEP + fire ESFR + lightning IEC 62305 + observation deck fit-out = 1.5 млрд</li>
             <li>Wind tunnel + ETABS analysis + сертификация + projecting 6% + PNR = 1.4 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~35 млрд тг (~$75M USD)</strong>. Capital Gate Abu Dhabi 35 floors $400M (2010); удельная ~$2000/м² (vs обычный $1000/м²).</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Tilt monitoring</h2>

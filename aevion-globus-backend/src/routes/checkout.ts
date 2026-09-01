@@ -1,9 +1,10 @@
 import { Router } from "express";
+import { gumroadSellable } from "../lib/payment/gumroadProvider";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
 import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/payboxProvider";
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
-import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
+import { resolveLemonSqueezyVariant, lemonSqueezySellable } from "../data/lemonSqueezyVariants";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
   type TierId, type BillingPeriod, type CurrencyCode,
@@ -74,11 +75,11 @@ interface CheckoutBody {
    * Канал привлечения ("tt", "ig", …) — тот же, что витрина кладёт в ссылку
    * LemonSqueezy как checkout[custom][channel].
    *
-   * Заведено 01.09.2026. Без него покупки через PayBox и PayPal попадают в
-   * сводке выручки в ключ "direct": деньги не теряются, но ответ на вопрос
-   * «что окупилось» по ним получить нельзя. Едет тем же общим путём, что и
-   * выбранный модуль, — через customData, который PayBox превращает в
-   * pg_param_channel, а вебхук уже умеет такие поля читать.
+   * Без него покупки через PayBox, PayPal и серверные ссылки Gumroad попадают
+   * в сводке выручки в ключ "direct": деньги не теряются, но ответа «что
+   * окупилось» по ним нет. Едет общим путём — через customData, который PayBox
+   * превращает в pg_param_channel, а Gumroad кладёт в url_params[channel];
+   * оба поля наши вебхуки уже читают.
    */
   channel?: string;
   /** Валюта оплаты. "KZT" → локальный канал PayBox (если настроен), иначе USD/LS. */
@@ -187,8 +188,19 @@ checkoutRouter.post("/session", async (req, res) => {
         const intent = await payboxPaymentProvider.createIntent({
           reference, amountCents: kztCents, currency: "KZT", description, email: body.email ?? null,
           customData: собратьCustomData(liteModule, channel),
+          // Модуль для адреса возврата: страница после оплаты обязана
+          // назвать то, за что заплатили. Только при ОДНОМ купленном
+          // модуле — на наборе называть один было бы враньём.
+          successAppId:
+            (body.modules ?? []).length === 1 ? (body.modules ?? [])[0] : undefined,
         });
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paybox", intentId: intent.intentId });
+        // 31.08.2026. Валюта в ответе, потому что страница обещает её ЗАРАНЕЕ: она
+        // спрашивает состояние канала при загрузке и, если PayBox жив, говорит
+        // «оплата в тенге». А здесь вызов PayBox может упасть, и тогда мы уходим
+        // к запасным, которые считают в долларах. Обещание было дано по
+        // состоянию, а исход у ЭТОГО запроса может быть другим — пусть витрина
+        // узнаёт правду из ответа, а не выводит её из имени провайдера.
+        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paybox", currency: "KZT", intentId: intent.intentId });
       } catch (e) {
         capture(e);
         console.error("[checkout/session] PayBox createIntent failed, falling back to LS/Gumroad/stub", e);
@@ -203,8 +215,13 @@ checkoutRouter.post("/session", async (req, res) => {
         const intent = await paypalPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
           customData: собратьCustomData(liteModule, channel),
+          // Модуль для адреса возврата: страница после оплаты обязана
+          // назвать то, за что заплатили. Только при ОДНОМ купленном
+          // модуле — на наборе называть один было бы враньём.
+          successAppId:
+            (body.modules ?? []).length === 1 ? (body.modules ?? [])[0] : undefined,
         });
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paypal", intentId: intent.intentId });
+        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paypal", currency: "USD", intentId: intent.intentId });
       } catch (e) {
         capture(e);
         console.error("[checkout/session] PayPal createIntent failed, falling back to LS/Gumroad/stub", e);
@@ -213,9 +230,24 @@ checkoutRouter.post("/session", async (req, res) => {
 
     // 1) LemonSqueezy — основной живой процессинг подписок (аккаунт активирован).
     //    Используется, когда задан LS API + variant для этого tier:period.
+    // ⚠️ 29.08.2026: сюда добавлен СЕКРЕТ ВЕБХУКА, и это не косметика.
+    //
+    // Раньше готовность считалась по ключу, магазину и варианту — то есть
+    // отвечала на вопрос «сможем ли ВЗЯТЬ деньги» и молчала о том, сможем ли
+    // их ОТРАБОТАТЬ. Без LEMON_SQUEEZY_WEBHOOK_SECRET маршрут вебхука — это
+    // заглушка, отвечающая 200 OK и игнорирующая событие (см. его шапку).
+    // LemonSqueezy считает доставку успешной, покупатель платит, и не
+    // происходит НИЧЕГО: provisionSubscription зовут только два вебхука и
+    // путь бесплатного заказа, опроса заказов у нас нет вовсе.
+    //
+    // Хуже всего, что запасной провайдер при этом ЕСТЬ и работает: у Gumroad
+    // секрет вебхука необязателен, и выбор идёт как `lsReady ? ls : gumroad`.
+    // То есть неполная проверка не просто молчала — она уводила покупателя
+    // от единственного пути, который довёл бы товар.
     const lsReady =
       Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
       Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim()) &&
+      Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim()) &&
       Boolean(resolveLemonSqueezyVariant(reference));
     if (lsReady) {
       try {
@@ -225,8 +257,13 @@ checkoutRouter.post("/session", async (req, res) => {
         const intent = await lemonSqueezyPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
           customData: собратьCustomData(liteModule, channel),
+          // Модуль для адреса возврата: страница после оплаты обязана
+          // назвать то, за что заплатили. Только при ОДНОМ купленном
+          // модуле — на наборе называть один было бы враньём.
+          successAppId:
+            (body.modules ?? []).length === 1 ? (body.modules ?? [])[0] : undefined,
         });
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", intentId: intent.intentId });
+        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", currency: "USD", intentId: intent.intentId });
       } catch (e) {
         capture(e);
         console.error("[checkout/session] LS createIntent failed, falling back to Gumroad/stub", e);
@@ -242,7 +279,7 @@ checkoutRouter.post("/session", async (req, res) => {
         // покупка попадёт в сводке выручки в ключ "direct".
         customData: собратьCustomData(undefined, channel),
       });
-      return res.json({ url: intent.checkoutUrl, mode: "real", provider: "gumroad", intentId: intent.intentId });
+      return res.json({ url: intent.checkoutUrl, mode: "real", provider: "gumroad", currency: "USD", intentId: intent.intentId });
     }
 
     // 3) Процессинга для этого tier:period нет.
@@ -250,7 +287,7 @@ checkoutRouter.post("/session", async (req, res) => {
     // Раньше здесь стояла заглушка, которая ПРОВИЖИНИЛА подписку (source:
     // "stub_checkout") и уводила покупателя на /pricing/checkout/success?stub=true.
     // На проде 26.07.2026 в эту ветку попадал тариф Universe — самый дорогой
-    // продукт платформы, $249.99/мес и $2499.90/год: у него не заведён вариант
+    // продукт платформы, $249.99/мес и $2499.90/год по ценам того дня → $149/мес и $1490/год сейчас: у него не заведён вариант
     // LemonSqueezy, поэтому любой POST с email выдавал платную подписку бесплатно
     // и показывал страницу «оплачено». Эндпоинт публичный, авторизации нет.
     // Счётчик подписок вырос с 28 до 31 от трёх диагностических запросов — то есть
@@ -293,20 +330,70 @@ checkoutRouter.post("/webhook", (_req, res) => {
 
 // ── GET /subscriptions/count ──────────────────────────────────────────────────
 checkoutRouter.get("/subscriptions/count", (_req, res) => {
-  res.json({ total: countSubscriptions() });
+  // Смена типа сюда НЕ дошла бы типами: тело ответа не типизировано, и
+  // объект вместо числа уехал бы молча (feedback_return_type_change_tsc_...).
+  const подписки = countSubscriptions();
+  res.json({
+    total: подписки.ok ? подписки.total : null,
+    // Ноль и «не знаю» — разные ответы: ноль читается как «никто не купил».
+    unread: подписки.ok ? undefined : true,
+  });
 });
 
 // ── GET /healthz ──────────────────────────────────────────────────────────────
 checkoutRouter.get("/healthz", (_req, res) => {
+  const лс = lemonSqueezySellable();
+  // Тот же смысл, что и у маршрутизации выше: готовность включает СЕКРЕТ
+  // ВЕБХУКА, иначе отчёт называл бы основным того, кто возьмёт деньги и не
+  // выдаст купленное. Вариант тарифа здесь не проверяется намеренно — он
+  // свой у каждого тарифа и сообщается отдельным полем `sellable`.
+  // Два РАЗНЫХ вопроса, и путать их нельзя:
+  //   lsReady      — можно ли ВЗЯТЬ деньги (ключ + магазин);
+  //   lsCanDeliver — дойдёт ли покупка до выдачи (нужен секрет вебхука).
+  // Поле `configured` отвечает на первый — таким его читают снаружи, и
+  // отдельное `webhookConfigured` существует ровно чтобы разница была видна.
+  // А вот ВЫБОР провайдера обязан идти по второму: иначе кассу назначаем
+  // тому, кто возьмёт деньги и не выдаст купленное, тогда как у Gumroad
+  // секрет вебхука необязателен и выдача работает.
   const lsReady =
     Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
     Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim());
+  const lsCanDeliver =
+    lsReady && Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim());
   res.json({
     ok: true,
-    primaryProvider: lsReady ? "lemonsqueezy" : "gumroad",
+    primaryProvider: lsCanDeliver ? "lemonsqueezy" : "gumroad",
     providers: {
-      lemonsqueezy: { configured: lsReady, webhook: "/api/lemonsqueezy/webhook" },
-      gumroad: { configured: Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim()), webhook: "/api/gumroad/webhook" },
+      // `webhookConfigured` — отдельно от `configured`, и это не мелочь.
+      //
+      // `configured` отвечает «можно ли ВЗЯТЬ деньги» (есть ключ и магазин).
+      // Секрет вебхука отвечает «дойдёт ли покупка до выдачи»: без него
+      // обработчик отвечает провайдеру ok и молча игнорирует событие —
+      // провайдер считает доставку успешной и НЕ повторяет. То есть
+      // деньги списаны, а купленное не выдано, и снаружи всё зелено.
+      //
+      // Раньше healthz про секрет вебхука не спрашивал вовсе, и мог
+      // рапортовать «lemonsqueezy настроен» при мёртвой выдаче.
+      lemonsqueezy: {
+        configured: lsReady,
+        webhook: "/api/lemonsqueezy/webhook",
+        // ЧТО РЕАЛЬНО МОЖНО КУПИТЬ. `configured` отвечает «есть ключ и
+        // магазин», но начать покупку нельзя без ВАРИАНТА товара — а он
+        // задаётся отдельной переменной на каждый тариф и модуль.
+        // Два разных вопроса под одним словом; второй снаружи виден не был.
+        sellable: lemonSqueezySellable(),
+        webhookConfigured: Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim()),
+      },
+      gumroad: {
+        configured: Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim()),
+        // Какие тарифы Gumroad реально может продать. Токен отвечает «провайдер
+        // настроен», а продажа тарифа требует ссылки на товар — разные вопросы.
+        // Список тарифов берём тот же, что у LemonSqueezy: вселенная тарифов
+        // одна, и два её написания разъехались бы молча.
+        sellable: gumroadSellable([...лс.configured, ...лс.missing]),
+        webhook: "/api/gumroad/webhook",
+        webhookConfigured: Boolean(process.env.GUMROAD_WEBHOOK_SECRET?.trim()),
+      },
       paybox: { configured: isPayboxConfigured(), trigger: "currency=KZT", webhook: "/api/paybox/webhook" },
       paypal: { configured: isPaypalConfigured(), trigger: "method=paypal", webhook: "/api/paypal/webhook" },
     },

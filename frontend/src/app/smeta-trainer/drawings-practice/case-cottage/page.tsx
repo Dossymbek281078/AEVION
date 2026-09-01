@@ -74,7 +74,7 @@ export default function CaseCottagePage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      <header className="border-b border-amber-900/40 bg-slate-900/70 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-amber-900/40 bg-slate-900/70 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice/hub" className="text-amber-400 hover:text-amber-300 text-sm">
             ← К разделам
@@ -218,7 +218,7 @@ export default function CaseCottagePage() {
                   value={a1}
                   onChange={(e) => setA1(e.target.value)}
                   className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-amber-200 font-mono w-40"
-                  placeholder="напр. 24.9"
+                  aria-label="напр. 24.9" placeholder="напр. 24.9"
                 />
                 <span className="text-slate-400 text-sm">%</span>
                 {r1 === "ok" && <span className="text-emerald-400 text-sm">✓ Верно</span>}
@@ -257,7 +257,7 @@ export default function CaseCottagePage() {
                   value={a2}
                   onChange={(e) => setA2(e.target.value)}
                   className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-amber-200 font-mono w-48"
-                  placeholder="напр. 130625"
+                  aria-label="напр. 130625" placeholder="напр. 130625"
                 />
                 <span className="text-slate-400 text-sm">тг/м²</span>
                 {r2 === "ok" && <span className="text-emerald-400 text-sm">✓ Верно</span>}
@@ -296,7 +296,7 @@ export default function CaseCottagePage() {
                   value={a3}
                   onChange={(e) => setA3(e.target.value)}
                   className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-amber-200 font-mono w-40"
-                  placeholder="напр. 48"
+                  aria-label="напр. 48" placeholder="напр. 48"
                 />
                 <span className="text-slate-400 text-sm">м³</span>
                 {r3 === "ok" && <span className="text-emerald-400 text-sm">✓ Верно</span>}

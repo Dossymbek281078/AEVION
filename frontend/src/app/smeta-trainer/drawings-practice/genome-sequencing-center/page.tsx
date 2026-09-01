@@ -13,7 +13,7 @@ export default function GenomeSequencingCenterPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Genome Sequencing Center</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Genome Sequencing Center</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🧬 Геномный секвенирующий центр (NGS)</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #313. National Center of Biotechnology Astana — план «Kazakhstan Genome Initiative» secвенирования 100K-1M казахов для precision medicine. Reference: Beijing Genome Institute BGI Shenzhen 100M+ genomes/year, Sanger Cambridge UK, Broad MIT Cambridge USA. Technology — Illumina NovaSeq 6000 + X 1.5 TB output per run + PacBio Sequel IIe long-read 25 kb avg. Bioinformatics HPC cluster для variant calling + annotation. CLIA + GA4GH Standards + ISO 17025 + СН РК 4.04-09.</p>
@@ -47,7 +47,7 @@ export default function GenomeSequencingCenterPage() {
           ].map((o) => (<label key={o.v} className={`block px-4 py-3 rounded-lg border cursor-pointer transition ${oc(ex1, o.v, ok.ex1)}`}><input type="radio" name="ex1" value={o.v} checked={ex1 === o.v} onChange={() => setEx1(o.v)} className="mr-3" />{o.t}</label>))}</div>
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Samples/year</h2>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="штук" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="штук" placeholder="штук" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~100 000 samples/year</strong> при 12 NovaSeq instruments × 300 runs × ~30 samples/run.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс genomics center</h2>
@@ -60,7 +60,7 @@ export default function GenomeSequencingCenterPage() {
             <li>QC + biobank LN2 + cold storage = 0.7 млрд</li>
             <li>Building 3000 м² + cleanroom + проектирование 4% + insurance = 2 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~18 млрд тг (~$38M USD)</strong> для 100K samples/year genomics center.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Data security</h2>

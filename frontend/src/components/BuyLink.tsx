@@ -45,7 +45,9 @@ export function BuyLink({
       rel="noopener noreferrer"
       style={style}
       className={className}
-      onClick={() =>
+      onClick={() => {
+        // Метку канала, если её не передала страница, поставит сам track() —
+        // одинаково для всех десяти отправителей. Переданная здесь старше.
         track({
           type: "checkout_start",
           source,
@@ -54,8 +56,8 @@ export function BuyLink({
             ...(productId ? { product: productId } : {}),
             ...(channel ? { channel } : {}),
           },
-        })
-      }
+        });
+      }}
     >
       {children}
     </a>

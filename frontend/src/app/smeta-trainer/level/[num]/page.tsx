@@ -1,4 +1,5 @@
 import { Level1View } from "../../components/Level1View";
+import { notFound } from "next/navigation";
 import { Level2View } from "../../components/Level2View";
 import { Level3View } from "../../components/Level3View";
 import { Level4View } from "../../components/Level4View";
@@ -21,10 +22,27 @@ const LEVEL_META: Record<string, { role: string; title: string }> = {
 
 export default async function LevelPage({ params }: Props) {
   const { num } = await params;
-  const meta = LEVEL_META[num];
+  // Поиск по обычному объекту значением ИЗ АДРЕСА: у объекта есть унаследованные
+  // ключи, и `LEVEL_META["__proto__"]` возвращает прототип — он истинен, поэтому
+  // страница рисовала «Уровень __proto__ — undefined» как существующий уровень.
+  // Замер 28.08.2026 на живом сайте: ответ отличался от контроля той же длины на
+  // 449 байт. Спрашиваем СОБСТВЕННОЕ свойство, а не любое доступное.
+  const meta = Object.prototype.hasOwnProperty.call(LEVEL_META, num)
+    ? LEVEL_META[num]
+    : undefined;
 
   const numInt = parseInt(num);
   const levelDef = LEVELS.find((l) => l.num === numInt);
+
+  // Такого уровня НЕТ — честный 404 вместо 200 с пустой оболочкой.
+  // Замер 28.08.2026 на живом сайте: /level/99 и /level/qqq отвечали 200,
+  // то есть поисковику сообщалось «страница существует» для бесконечного
+  // множества выдуманных номеров.
+  //
+  // Здесь случай проще, чем на страницах с загрузчиком: источник правды
+  // ЛОКАЛЬНЫЙ (LEVEL_META и LEVELS), сеть не участвует. Значит «нет такого»
+  // это факт, а не догадка, и риска отдать 404 при чужой аварии нет вовсе.
+  if (!meta || !levelDef) notFound();
 
   return (
     <main className="min-h-screen bg-slate-100 flex flex-col">

@@ -143,6 +143,60 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
       );
     `);
 
+    // Связь «гость → почта». Модуль намеренно работает БЕЗ аккаунта, а
+    // оплата приходит вебхуком с одним лишь адресом почты. Тариф при этом
+    // ищется по идентификатору, и у гостя учётной записи нет — значит
+    // заплативший видит бесплатный тариф (замер 29.08.2026 на живом проде:
+    // /studio/credits с заголовком гостя отдаёт tier free).
+    //
+    // Эта таблица — недостающее звено, и она нужна при ЛЮБОМ из трёх
+    // способов починки (вход перед оплатой / адрес на нашей стороне /
+    // подсказка после оплаты). Заполняет её тот способ, который выберет
+    // владелец продукта; чтение тарифа одинаково для всех трёх.
+    //
+    // Записи сюда НЕ создаёт ничто, кроме подтверждённой связи: адрес
+    // здесь означает «этот гость доказал, что почта его», иначе любой
+    // получил бы чужой оплаченный тариф, назвав чужую почту.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "DevHubGuestEmail" (
+        "guestId"   TEXT PRIMARY KEY,
+        "email"     TEXT NOT NULL,
+        "linkedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "DevHubGuestEmail_email_idx"
+        ON "DevHubGuestEmail" ("email");
+    `);
+
+  // Токены связывания гостя с покупкой.
+  //
+  // Строка DevHubGuestEmail создаётся ТОЛЬКО после подтверждения по почте:
+  // иначе форма «я оплатил, вот мой адрес» стала бы способом присвоить
+  // чужую покупку — адрес покупателя знает кто угодно, кому он его называл.
+  //
+  // guestId запоминается в момент ЗАПРОСА, а не подтверждения. Иначе ссылку
+  // из чужого письма мог бы открыть посторонний и привязать покупку к своему
+  // браузеру. Так ссылка работает только там, откуда её попросили.
+  //
+  // Секрет хранится ХЕШЕМ, как у подтверждения адреса в routes/auth.ts:
+  // утечка базы не должна давать возможность войти в чужую покупку.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "DevHubGuestLinkToken" (
+      "id"         TEXT PRIMARY KEY,
+      "guestId"    TEXT NOT NULL,
+      "email"      TEXT NOT NULL,
+      "tokenHash"  TEXT NOT NULL,
+      "expiresAt"  TIMESTAMPTZ NOT NULL,
+      "usedAt"     TIMESTAMPTZ,
+      "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "DevHubGuestLinkToken_guest_idx"
+    ON "DevHubGuestLinkToken" ("guestId");
+  `);
+
     // One row per AI-driven multi-file write (generate_code / workflow "code"
     // step) — the prior content of every file it touched, so it can be
     // reverted in one shot ("undo the last AI change") without re-generating.

@@ -30,7 +30,7 @@ export default function DentalClinicsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Стоматологические клиники</div>
@@ -107,7 +107,7 @@ export default function DentalClinicsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Защита стены, ×10 мм Pb"
+            aria-label="Защита стены, ×10 мм Pb" placeholder="Защита стены, ×10 мм Pb"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: для прицельного 60-70 кВ — 2 мм Pb. Для ОПТГ 80-90 кВ — 2.5-3 мм Pb. Для КТ 100-120 кВ — 4-6 мм Pb. Для зала с несколькими аппаратами — расчёт по сумме экспозиций (typ. 1.8 мм Pb-эквив.). В учебной задаче — 1.8 мм Pb = 18 (×10).</p>
@@ -142,7 +142,7 @@ export default function DentalClinicsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~720 млн тг (допуск ±10%). 64+96+38+110+28+18+22+24+12+65+45+16+18+38+24+24+18+36+24 = 720 млн тг. Удельная стоимость ~2 млн тг/м² — премиум-класс. Damen Dental Алматы (8 кабинетов + флагман) — оценочно ~1 млрд тг.</p>

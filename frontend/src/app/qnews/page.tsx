@@ -585,7 +585,7 @@ export default function QNewsPage() {
           <div style={{ flex: "1 1 320px", minWidth: 0 }}>
             {/* Search + bookmarks filter */}
             <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-              <input
+              <input aria-label="Поиск по заголовкам и описаниям"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="🔍 Поиск по заголовкам и описаниям…"

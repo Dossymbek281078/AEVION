@@ -367,6 +367,10 @@ export default async function EnLongevityPage({
           </p>
           <div style={{ marginTop: 12 }}>
             <WaitlistCapture
+              // Английская страница СВЕТЛАЯ (#fff), в отличие от русской (#070b14),
+              // где тема задана dark осознанно. Без этой строки форма брала бы
+              // тёмное умолчание и стояла бы чёрным блоком на белом.
+              tone="light"
               source="en-longevity"
               lang="en"
               title="Told when the grading changes"

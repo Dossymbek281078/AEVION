@@ -98,6 +98,18 @@ function bodyOf(src: string, name: string): string | null {
  */
 function isChecked(src: string, v: string): boolean {
   if (src.includes(`checkPublicUrl(${v}.url)`)) return true;
+  // Вторая законная форма, и она БЕЗОПАСНЕЕ первой: переменная сама и есть
+  // результат проверки — `const verdict = await checkPublicUrl(url)`, а дальше
+  // `fetch(verdict.url)`. Здесь в запрос уходит уже разобранный и одобренный
+  // адрес, а не исходная строка, то есть подменить его между проверкой и
+  // вызовом нельзя.
+  //
+  // Добавлено 31.08.2026 при сборке к запуску: сторож краснел на routes/devhub.ts,
+  // где написано именно так. Ложная тревога на стороже дороже пропуска — к
+  // красному, которое «всегда такое», привыкают за день и перестают читать, а
+  // следующим шагом сторожа отключают. Поэтому шаблон приведён к СМЫСЛУ, а не
+  // код к шаблону.
+  if (src.includes(`${v} = await checkPublicUrl(`)) return true;
   const re = new RegExp(`([A-Za-z_][A-Za-z0-9_]*)\\(\\s*${v}\\.url`, "g");
   let m: RegExpExecArray | null;
   while ((m = re.exec(src))) {

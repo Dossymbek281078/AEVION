@@ -13,7 +13,7 @@ export default function ClimateArcticResearchStationPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Climate Research Station</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">Climate Research Station</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">❄️ Climate Research Station — High-Altitude</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #320. Big Almaty Tian Shan Climate Station H=2750-3500 м — мониторинг ледников, atmospheric CO2/CH4, glacial melt, permafrost изменения. Reference: WMO Global Atmosphere Watch + Mauna Loa Hawaii + Jungfraujoch Switzerland + Zugspitze Germany. Equipment: Picarro CRDS CO2/CH4/N2O analyzer + LIDAR aerosol profiler + meteo Vaisala + glacier mass balance stakes + GPS-RTK survey. Off-grid solar + battery + insulated cabin Polar-Class buildings. WMO + IPCC + GAW Standards + СН РК 3.02-04.</p>
@@ -47,7 +47,7 @@ export default function ClimateArcticResearchStationPage() {
           ].map((o) => (<label key={o.v} className={`block px-4 py-3 rounded-lg border cursor-pointer transition ${oc(ex1, o.v, ok.ex1)}`}><input type="radio" name="ex1" value={o.v} checked={ex1 === o.v} onChange={() => setEx1(o.v)} className="mr-3" />{o.t}</label>))}</div>
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — kWh/year power</h2>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="МВт·ч/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="МВт·ч/год" placeholder="МВт·ч/год" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>Solar 5 kWp × 1500 kWh/kWp/year (high-altitude DNI) = 7500 kWh + Wind 2 kW × 1000 hr × 0.3 capacity = 600 kWh + DG backup = ~8-10 MWh ≈ <strong>30 MWh/year off-grid station</strong>.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс climate station</h2>
@@ -60,7 +60,7 @@ export default function ClimateArcticResearchStationPage() {
             <li>VSAT + 4G + cabin furnishing + sample storage = 0.3 млрд</li>
             <li>Helicopter access support + supply + проектирование 5% + insurance + commissioning = 2.3 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~6.5 млрд тг (~$14M USD)</strong>. Mauna Loa Observatory $50M+ scale historical, Jungfraujoch Sphinx $80M+.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 4 — Data integrity</h2>

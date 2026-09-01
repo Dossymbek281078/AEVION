@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { formatSalary } from "@/lib/build/format";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
@@ -54,6 +55,11 @@ async function fetchEmployer(id: string) {
       `${getApiBase()}/api/build/stats/employers/${encodeURIComponent(id)}/overview`,
       { cache: "no-store", signal: AbortSignal.timeout(7000) },
     );
+    // 404 от сервера — «такого работодателя нет», это факт. Прочие
+    // неуспехи и `success:false` при коде 200 — «мы не смогли спросить»:
+    // признак отсутствия берём из КОДА ответа, а не из тела, иначе
+    // временный сбой API выбросил бы живые страницы из выдачи.
+    if (r.status === 404 || r.status === 410) return "absent" as const;
     if (!r.ok) return null;
     const j = await r.json();
     if (!j?.success) return null;
@@ -75,6 +81,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const data = await fetchEmployer(id);
+  if (data === "absent") notFound();
   const name = data?.employer?.name ?? "Employer";
   const open = data?.stats?.openVacancies ?? 0;
   const description = open > 0
@@ -94,6 +101,9 @@ export default async function EmployerPage({
 }) {
   const { id } = await params;
   const data = await fetchEmployer(id);
+  // Работодателя НЕТ — честный 404. При «не смогли спросить» остаётся 200
+  // и прежний вид.
+  if (data === "absent") notFound();
 
   if (!data?.employer) {
     return (

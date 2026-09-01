@@ -30,7 +30,7 @@ export default function HospitalsClinicsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Больницы и клиники</div>
@@ -102,7 +102,7 @@ export default function HospitalsClinicsPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Расход O₂, л/мин"
+            aria-label="Расход O₂, л/мин" placeholder="Расход O₂, л/мин"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 400+90+138 = 628 л/мин. С запасом 30% и неравномерностью → ~540 л/мин расчётный (при ~85% нагрузке среднеcуточно). Кислородная станция криогенная (жидкий O₂) или генератор PSA с резервом.</p>
@@ -123,7 +123,7 @@ export default function HospitalsClinicsPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~36 млрд тг (допуск ±10%). 12500+2800+4200+8500+3600+900+1400+2100 = 36 000 млн тг.</p>

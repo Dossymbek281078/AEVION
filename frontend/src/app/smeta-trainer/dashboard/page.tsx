@@ -94,7 +94,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-4 flex-wrap">
           <Link href="/smeta-trainer" className="text-xs text-slate-500 hover:text-slate-900">
             ← К курсу
@@ -225,7 +225,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 gap-2 mb-3">
               <input
                 type="text"
-                placeholder="Ваше имя"
+                aria-label="Ваше имя" placeholder="Ваше имя"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 maxLength={80}
@@ -233,7 +233,7 @@ export default function DashboardPage() {
               />
               <input
                 type="text"
-                placeholder="Группа (необязательно)"
+                aria-label="Группа (необязательно)" placeholder="Группа (необязательно)"
                 value={group}
                 onChange={(e) => setGroup(e.target.value)}
                 maxLength={40}

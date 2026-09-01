@@ -221,6 +221,8 @@ export default async function EnGoPage({
               посадочной, и письмо можно писать на его языке. */}
           <div style={{ marginTop: 12 }}>
             <WaitlistCapture
+              // Та же светлая страница, что и русская /go — см. пояснение там.
+              tone="light"
               source="en-go"
               lang="en"
               title="Told when the next module lands"

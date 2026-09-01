@@ -299,7 +299,7 @@ export default async function ModulesPage({ searchParams }: Props) {
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           <div style={{ ...card, color: "#b91c1c", borderColor: "rgba(185,28,28,0.2)" }}>
             <div style={{ fontWeight: 800 }}>Failed to load registry</div>
-            <div style={{ fontSize: 13 }}>The backend is temporarily unreachable.</div>
+            <div style={{ fontSize: 13 }}>The service is temporarily unavailable. Please try again in a minute.</div>
           </div>
         </div>
       </main>

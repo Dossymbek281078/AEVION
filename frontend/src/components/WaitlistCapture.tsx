@@ -21,6 +21,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { channelNow } from "@/lib/channelNow";
 
 type Status = "idle" | "sending" | "done" | "error";
 
@@ -62,6 +63,10 @@ const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,24}$/;
  */
 const COPY = {
   ru: {
+    title: "Забрать ранний доступ к модулям AEVION",
+    description: "Платформа выпускает модули по одному. Оставьте адрес — напишем в день запуска того, что вам ближе, и пришлём условия раннего доступа.",
+    promise: "Письмо приходит на запуск модуля. Отписка — одной ссылкой в каждом письме.",
+    buttonLabel: "Получить ранний доступ",
     placeholder: "вы@почта.рф",
     sending: "Отправляем…",
     emailLabel: "Адрес электронной почты",
@@ -75,6 +80,10 @@ const COPY = {
     offline: "Не дозвонились до сервера. Проверьте связь и повторите.",
   },
   en: {
+    title: "Get early access to AEVION modules",
+    description: "The platform ships one module at a time. Leave your address and we will write when the next one opens.",
+    promise: "One email per module launch. Unsubscribe in one click.",
+    buttonLabel: "Get early access",
     placeholder: "you@example.com",
     sending: "Sending…",
     emailLabel: "Email address",
@@ -91,10 +100,10 @@ const COPY = {
 
 export function WaitlistCapture({
   source,
-  title = "Забрать ранний доступ к модулям AEVION",
-  description = "Платформа выпускает модули по одному. Оставьте адрес — напишем в день запуска того, что вам ближе, и пришлём условия раннего доступа.",
-  promise = "Письмо приходит на запуск модуля. Отписка — одной ссылкой в каждом письме.",
-  buttonLabel = "Получить ранний доступ",
+  title,
+  description,
+  promise,
+  buttonLabel,
   tone = "dark",
   lang = "ru",
   doneText,
@@ -119,10 +128,25 @@ export function WaitlistCapture({
     setStatus("sending");
     setMessage("");
     try {
+      const канал =
+        typeof window === "undefined"
+          ? null
+          : channelNow()
       const r = await fetch(apiUrl("/api/constitution/waitlist/subscribe"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: value, source: source.slice(0, 60) }),
+        body: JSON.stringify({
+          email: value,
+          source: source.slice(0, 60),
+          // Канал привлечения — ОТДЕЛЬНО от source. source отвечает «с какой
+          // страницы», channel — «кто привёл». До 31.08.2026 второго не было
+          // вовсе: про покупки мы знали канал, а про подписчиков — нет, хотя
+          // список для запуска и есть главный актив воронки.
+          //
+          // Через channelFrom, а не сырым значением: чужое ?c= из посторонней
+          // ссылки в учёт не поедет, и словарь останется тот же, что у покупок.
+          ...(канал ? { channel: канал } : {}),
+        }),
       });
       if (r.ok) {
         // Ручка честно называет, КУДА легла подписка: "postgres" — сохранена,
@@ -182,10 +206,10 @@ export function WaitlistCapture({
       }}
     >
       <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 8px", letterSpacing: "-0.02em", color: fg }}>
-        {title}
+        {title ?? copy.title}
       </h2>
       <p style={{ fontSize: 14, lineHeight: 1.55, margin: "0 0 16px", color: muted, maxWidth: 620 }}>
-        {description}
+        {description ?? copy.description}
       </p>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
@@ -239,7 +263,7 @@ export function WaitlistCapture({
             whiteSpace: "nowrap",
           }}
         >
-          {status === "sending" ? copy.sending : buttonLabel}
+          {status === "sending" ? copy.sending : (buttonLabel ?? copy.buttonLabel)}
         </button>
       </div>
 
@@ -259,13 +283,13 @@ export function WaitlistCapture({
         </p>
       ) : null}
 
-      {promise ? (
+      {(promise ?? copy.promise) ? (
         // 13.5px, а не 12.5: замер в браузере при ширине 390 (iPhone) показал, что
         // это САМЫЙ мелкий содержательный текст на странице — и при этом он объясняет,
         // на что человек подписывается («письмо на запуск», «отписка одной ссылкой»).
         // Мельче только надзаголовки в 11px, но те — три слова заглавными, их читают
         // взглядом, а не построчно. Мелкое условие подписки — плохая мелочь.
-        <p style={{ margin: "12px 0 0", fontSize: 13.5, lineHeight: 1.55, color: muted }}>{promise}</p>
+        <p style={{ margin: "12px 0 0", fontSize: 13.5, lineHeight: 1.55, color: muted }}>{promise ?? copy.promise}</p>
       ) : null}
     </form>
   );

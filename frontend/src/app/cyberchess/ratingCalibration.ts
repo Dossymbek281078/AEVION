@@ -1,3 +1,6 @@
+import { TOCHNYE_HODY, NETOCHNOST, type MoveQuality } from "./moveQuality";
+import { hodIgrokaPoPly } from "./postGameSummary";
+
 /**
  * AEVION CyberChess — FIDE rating calibration anchors + CPI metric regression.
  *
@@ -48,8 +51,8 @@ export const RATING_ANCHORS: RatingAnchor[] = [
   { fide: 2270, internal: 2240, title: "FM-Norm",          badge: "▣", desc: "Близко к FM-норме — серьёзная клубная игра" },
   { fide: 2230, internal: 2200, title: "Strong CM",        badge: "▤", desc: "Сильный кандидат в мастера — глубокая дебютная подготовка" },
   { fide: 2180, internal: 2160, title: "CM+",              badge: "▥", desc: "Уверенный кандидат — тактика и эндшпиль на хорошем уровне" },
-  { fide: 2120, internal: 2100, title: "CM",               badge: "♘", desc: "Кандидат в мастера — теория дебюта, минимум блундеров" },
-  { fide: 2100, internal: 2080, title: "Candidate Master", badge: "♘", desc: "Опытный клубный — теория дебюта, минимум блундеров" },
+  { fide: 2120, internal: 2100, title: "CM",               badge: "♘", desc: "Кандидат в мастера — теория дебюта, минимум зевков" },
+  { fide: 2100, internal: 2080, title: "Candidate Master", badge: "♘", desc: "Опытный клубный — теория дебюта, минимум зевков" },
   { fide: 2050, internal: 2030, title: "Strong Expert",    badge: "✪", desc: "Сильный эксперт — тактически опасен, считает глубоко" },
   { fide: 2000, internal: 1980, title: "Expert",           badge: "★", desc: "Эксперт — стабильная игра, тактические мотивы быстро" },
   { fide: 1950, internal: 1930, title: "Expert-Norm",      badge: "✯", desc: "Близко к эксперту — крепкая клубная игра" },
@@ -61,7 +64,7 @@ export const RATING_ANCHORS: RatingAnchor[] = [
   { fide: 1500, internal: 1530, title: "Club Average",     badge: "●", desc: "Средний клубник — играет правилам, иногда ошибается под давлением" },
   { fide: 1400, internal: 1430, title: "Class C",          badge: "◐", desc: "3-й разряд — основы тактики, типовые ошибки в эндшпиле" },
   { fide: 1300, internal: 1340, title: "Improving",        badge: "◐", desc: "Развивающийся — изучает теорию, тренируется на пазлах" },
-  { fide: 1200, internal: 1240, title: "Casual",           badge: "○", desc: "Любитель — играет в удовольствие, периодические блундеры" },
+  { fide: 1200, internal: 1240, title: "Casual",           badge: "○", desc: "Любитель — играет в удовольствие, периодические зевки" },
   { fide: 1100, internal: 1150, title: "Late Beginner",    badge: "◌", desc: "Поздний новичок — освоил планирование на 2-3 хода" },
   { fide: 1000, internal: 1050, title: "Hobbyist",         badge: "◌", desc: "Хобби-уровень — знает правила, ещё учится планировать" },
   { fide: 800,  internal: 850,  title: "Beginner",         badge: "△", desc: "Новичок — освоил правила, фокус на безопасности фигур" },
@@ -142,13 +145,13 @@ export type CPIMetrics = {
   tacticalEfficiency: number;
   /** Сила эндшпиля, 0..1. 1.0 = безошибочная конверсия выигранных позиций */
   endgameStrength: number;
-  /** Доля грубых ошибок, 0..1. 0 = без блундеров, 0.3+ = частые блундеры */
+  /** Доля грубых ошибок, 0..1. 0 = без зевков, 0.3+ = частые зевки */
   blunderRate: number;
   /** Средне время на ход в секундах. Сладкое пятно ~30 сек */
   avgMoveTime: number;
   /** Кол-во партий в выборке (для confidence interval) */
   gamesPlayed: number;
-  /** Медиана per-move centipawn loss. Robust к outlier-блундерам.
+  /** Медиана per-move centipawn loss. Robust к outlier-зевкам.
    *  Optional — старые callers не предоставляют, predict просто игнорирует
    *  эту часть если weights без median coef. */
   medianCpLoss?: number;
@@ -336,7 +339,11 @@ export type SavedGameForCPI = {
    *  calibrateFromGames uses real cp-loss stats instead of heuristics. */
   analysis?: Array<{
     ply: number;
-    quality?: "best" | "good" | "ok" | "inaccuracy" | "mistake" | "blunder";
+    /** Ярлык из classifyDrop. Свой список здесь был ТРЕТЬИМ словарём в
+     *  модуле ("ok", "inaccuracy", "best") и не совпадал ни с чем, что
+     *  движок отдаёт, — поэтому типы «подтверждали» заведомо ложные
+     *  сравнения. Берём общий тип, тогда расхождение станет ошибкой сборки. */
+    quality?: MoveQuality;
     /** Centipawn loss for this ply (always ≥ 0). Undefined on legacy records. */
     cpLoss?: number;
   }>;
@@ -404,11 +411,21 @@ export function calibrateFromGames(games: SavedGameForCPI[]): CPIMetrics {
     // Analysis-based blunder/quality stats
     if (g.analysis && g.analysis.length > 0) {
       for (const a of g.analysis) {
+        // Считаем ТОЛЬКО ходы человека. Раньше в тот же счёт шли ходы
+        // соперника: движок на высоком уровне играет почти без ошибок, и его
+        // ходы разбавляли статистику человека — точность завышалась, доля
+        // зевков делилась пополам. Карточка разбора рядом соперника
+        // пропускала, то есть модуль давал два разных ответа о точности
+        // одного и того же человека.
+        if (!hodIgrokaPoPly(a.ply, g.playerColor)) continue;
         analyzedPlies++;
         if (a.quality === "blunder") blunderMoves++;
         else if (a.quality === "mistake") mistakeMoves++;
-        else if (a.quality === "inaccuracy") inaccuracyMoves++;
-        else if (a.quality === "best" || a.quality === "good") bestOrGoodMoves++;
+        else if (a.quality === NETOCHNOST) inaccuracyMoves++;
+        // Точными считаем и brilliant/great: раньше здесь стояло
+        // `"best" || "good"`, а ярлыка "best" движок не отдаёт вовсе —
+        // блестящие ходы шли мимо всех счётчиков и занижали accuracyPct.
+        else if (a.quality && TOCHNYE_HODY.has(a.quality)) bestOrGoodMoves++;
         if (typeof a.cpLoss === "number" && a.cpLoss >= 0) cpLosses.push(a.cpLoss);
       }
     }
@@ -475,7 +492,7 @@ export function calibrateFromGames(games: SavedGameForCPI[]): CPIMetrics {
   if (analyzedPlies > 30) {
     blunderRate = blunderMoves / analyzedPlies;
   } else {
-    // Heuristic: короткие проигранные партии → много блундеров
+    // Heuristic: короткие проигранные партии → много зевков
     const shortLosses = games.filter(g => {
       const r = (g.result || "").toLowerCase();
       const isLoss = r.includes("ai wins") || r.includes("you resigned");

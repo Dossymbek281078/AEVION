@@ -3,6 +3,7 @@ import { readBuildInfo } from "./lib/buildInfo";
 import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
 import { emailSenderStatus } from "./routes/provisioning";
+import { providerStatus } from "./lib/providerGuard";
 import { lemonSqueezyVariantStatus } from "./data/lemonSqueezyVariants";
 dotenv.config();
 
@@ -13,6 +14,7 @@ import { qrightRouter } from "./routes/qright";
 import { qsignRouter } from "./routes/qsign";
 import { qsignV2Router } from "./routes/qsignV2";
 import { startWebhookWorker } from "./lib/qsignV2/webhooks";
+import { startOtsUpgradeWorker } from "./lib/opentimestamps/upgradeWorker";
 import { initSentry } from "./lib/qsignV2/sentry";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
@@ -20,6 +22,7 @@ import { authOauthRouter } from "./routes/authOauth";
 import { tiktokRouter } from "./routes/tiktok";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
+import { helpContactRouter } from "./routes/helpContact";
 import { statusRouter } from "./routes/status";
 import { entitlementsRouter } from "./routes/entitlements";
 import { requireModule } from "./lib/planGate";
@@ -264,6 +267,14 @@ function healthPayload() {
     // здесь — это будущий отказ на живом покупателе. Только признаки, без
     // самих идентификаторов вариантов.
     lsVariants: safeLsVariantStatus(),
+    // Кем на самом деле делается проверка личности и платёж в бюро.
+    // Переменные в проде НЕ заданы, и код молча берёт заглушку: проверка
+    // паспорта отвечает «успех», не посмотрев паспорт, а платёжная заглушка
+    // сама помечает платёж оплаченным. Сам сторож это уже ловит и пишет в
+    // лог, но лог никто не читает снаружи — значит состояние надо отдавать
+    // тем же способом, что режимы подписи, почты и вариантов кассы.
+    // Имя поля узкое намеренно: это провайдеры БЮРО, а не всей платформы.
+    bureauProviders: safeBureauProviders(),
   };
 }
 
@@ -282,6 +293,23 @@ function safeLsVariantStatus() {
     return lemonSqueezyVariantStatus();
   } catch {
     return null;
+  }
+}
+
+/**
+ * health не должен падать из-за диагностики.
+ *
+ * При отказе отдаём null, а не «заглушки нет»: неотвеченный вопрос не равен
+ * благополучию, и читатель обязан отличить «не знаю» от «всё настроено».
+ */
+function safeBureauProviders() {
+  try {
+    return {
+      kyc: providerStatus("BUREAU_KYC_PROVIDER"),
+      payment: providerStatus("BUREAU_PAYMENT_PROVIDER"),
+    };
+  } catch {
+    return { kyc: null, payment: null };
   }
 }
 
@@ -402,6 +430,12 @@ app.get("/api/globus/projects/:id", (req, res) => {
 });
 
 app.use("/api/modules", modulesRouter);
+
+// Приём обращений со страницы помощи. Ручка вызывалась формой с 12.08 и
+// отвечала 404; запасная ветка (открыть почтовый клиент) срабатывала ВСЕГДА
+// и вела на домен без записей MX. Теперь обращение сохраняется, и «принято»
+// говорится только по факту записи.
+app.use("/api/help", helpContactRouter);
 app.use("/api/status", statusRouter);
 
 // Module paywall — dormant unless the module id is listed in PAYWALL_MODULES
@@ -1118,6 +1152,18 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/startupx", "startup-exchange"],
   ["/api/ventures", "ventures"],
   ["/api/qventure", "qventure"],
+  // Добавлено 28.08.2026 сверкой таблицы шлюзов с MODULES_PRICING. Три
+  // платных модуля были в прайсе, но их префиксов здесь не было — значит
+  // ВКЛЮЧИТЬ для них стену было нечем: переменная PAYWALL_MODULES принимала
+  // бы их имя и молча ничего не делала. Ни один из трёх сейчас не включён,
+  // поэтому проводка ничего не меняет сегодня; она делает переключатель
+  // работающим. Полноту стережёт tests/paywallGateCoversPricing.test.ts.
+  ["/api/qmelanin", "qmelanin"],
+  ["/api/revenue", "revenue-hub"],
+  // qskyway крепится манифестом ниже (строка ~1328), а шлюзы регистрируются
+  // выше (~1196) — Express идёт по порядку регистрации, поэтому шлюз успевает
+  // встать перед роутером.
+  ["/api/qskyway", "qskyway"],
   ["/api/qreal", "qreal"],
   ["/api/deepsan", "deepsan"],
   ["/api/mapreality", "mapreality"],
@@ -1345,6 +1391,12 @@ const httpServer = app.listen(PORT, () => {
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
   // QSign v2 — DB-backed webhook delivery queue. Survives restarts.
   startWebhookWorker();
+
+  // Дообновление якорей OpenTimestamps. До 28.08.2026 полное доказательство
+  // забиралось ТОЛЬКО нажатием кнопки самим автором, и сертификат висел в
+  // состоянии «ожидает подтверждения» бессрочно — при том что якорь в биткойне
+  // уже существовал. Разбор — в самом модуле.
+  startOtsUpgradeWorker();
 
   // Карта версий токенов. Пока она не загружена, проверка отзыва НЕ
   // применяется (см. lib/tokenVersion.ts): это осознанный выбор направления

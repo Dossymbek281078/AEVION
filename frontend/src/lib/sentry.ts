@@ -68,7 +68,20 @@ async function ensureLoaded(): Promise<void> {
       window.Sentry.init({
         dsn,
         release: process.env.NEXT_PUBLIC_SENTRY_RELEASE,
-        environment: process.env.NEXT_PUBLIC_BANK_MODE || "test",
+        // Метка окружения. Раньше при незаданной переменной здесь молча
+        // вставало "test" — и БОЕВЫЕ ошибки уезжали в Sentry помеченными
+        // как тестовые, то есть их отфильтровывали вместе с шумом.
+        //
+        // Направление ошибки самое дорогое: тревога не приходит, и тишина
+        // неотличима от благополучия. Ровно этот же дефолт у баннера
+        // тестового режима (`bank/_components/TestModeBanner.tsx`) БЕЗОПАСЕН —
+        // там он показывает лишнее предупреждение. Одна переменная, один
+        // дефолт, противоположные последствия.
+        //
+        // `VERCEL_ENV` здесь недоступен: код клиентский, а он серверный.
+        // Поэтому запасной признак — адрес страницы: боевой домен значит
+        // боевое окружение. Явно заданная переменная по-прежнему главнее.
+        environment: sentryEnvironment(),
         tracesSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE || "0"),
       });
       inited = true;
@@ -111,4 +124,23 @@ export function captureMessage(msg: string, level: "info" | "warning" | "error" 
       // swallow
     }
   });
+}
+
+/**
+ * Метка окружения для Sentry. Экспортируется ради теста: направление
+ * ошибки здесь дороже самой ошибки, и проверять его надо отдельно.
+ *
+ * Явно заданная `NEXT_PUBLIC_BANK_MODE` главнее всего. Без неё раньше молча
+ * вставало "test", и БОЕВЫЕ ошибки уезжали помеченными как тестовые — их
+ * отфильтровывали вместе с шумом, а тишина неотличима от благополучия.
+ *
+ * `VERCEL_ENV` тут недоступен: код клиентский, а он серверный. Поэтому
+ * запасной признак — боевой домен.
+ */
+export function sentryEnvironment(hostname?: string): string {
+  const явно = process.env.NEXT_PUBLIC_BANK_MODE;
+  if (явно) return явно;
+  const host =
+    hostname ?? (typeof window !== "undefined" ? window.location.hostname : "");
+  return host === "aevion.app" ? "production" : "test";
 }

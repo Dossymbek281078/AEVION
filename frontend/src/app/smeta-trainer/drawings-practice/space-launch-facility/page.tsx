@@ -30,7 +30,7 @@ export default function SpaceLaunchFacilityPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Космодромы и стартовые комплексы</div>
@@ -107,7 +107,7 @@ export default function SpaceLaunchFacilityPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="V_бетона, м³"
+            aria-label="V_бетона, м³" placeholder="V_бетона, м³"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: V_фунд = 80×60×3 = 14 400 м³. Стенки газохода: 2×(80×30) × 2 м толщ. = 9600 м³. Дно газохода 80×12×2 = 1920 м³. Отклоняющая стенка ~600 м³. Итого без +10% = ~26 500 м³, минус полости/проёмы (~50%) → реальный ж/б B60 для интенсивной арматуры = ~12 500 м³.</p>
@@ -136,7 +136,7 @@ export default function SpaceLaunchFacilityPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~380 млрд тг (допуск ±10%). 18+48+32+18+38+42+28+14+8+22+38+32+18+24 = 380 млрд тг. Реальный «Байтерек» (с инфраструктурой) оценочно $1-1.5 млрд ≈ 470-700 млрд тг (по соглашению РФ-РК 2023). Стартовый комплекс — ~$0.8 млрд ≈ 380 млрд тг.</p>

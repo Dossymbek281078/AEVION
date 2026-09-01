@@ -150,7 +150,7 @@ export default function CleanRoomsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-teal-300 hover:text-teal-200 transition">
             ← К разделам
@@ -520,7 +520,7 @@ export default function CleanRoomsPage() {
                 onChange={(e) => setEx3(e.target.value)}
                 type="number"
                 className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100"
-                placeholder="300000000"
+                aria-label="Ответ" placeholder="300000000"
               />
             </label>
             <div className="flex flex-wrap gap-3 mt-4">

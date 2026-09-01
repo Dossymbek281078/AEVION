@@ -86,7 +86,7 @@ export default function CommFiberPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice/hub"
@@ -334,7 +334,7 @@ export default function CommFiberPage() {
               type="text"
               value={ex2Val}
               onChange={(e) => setEx2Val(e.target.value)}
-              placeholder="Длина в метрах"
+              aria-label="Длина в метрах" placeholder="Длина в метрах"
               className="w-full md:w-72 px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:border-fuchsia-500 focus:outline-none mb-4"
             />
             <div className="flex gap-3 flex-wrap">
@@ -379,7 +379,7 @@ export default function CommFiberPage() {
               type="text"
               value={ex3Val}
               onChange={(e) => setEx3Val(e.target.value)}
-              placeholder="Количество камер"
+              aria-label="Количество камер" placeholder="Количество камер"
               className="w-full md:w-72 px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:border-fuchsia-500 focus:outline-none mb-4"
             />
             <div className="flex gap-3 flex-wrap">
@@ -424,7 +424,7 @@ export default function CommFiberPage() {
               type="text"
               value={ex4Val}
               onChange={(e) => setEx4Val(e.target.value)}
-              placeholder="Стоимость в тенге"
+              aria-label="Стоимость в тенге" placeholder="Стоимость в тенге"
               className="w-full md:w-72 px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:border-fuchsia-500 focus:outline-none mb-4"
             />
             <div className="flex gap-3 flex-wrap">

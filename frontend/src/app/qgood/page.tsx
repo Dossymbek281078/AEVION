@@ -118,7 +118,18 @@ export default function QGoodPage() {
       </div>
 
       {/* Nav tabs */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e8d5f5', position: 'sticky', top: 0, zIndex: 10 }}>
+      {/* Полоса вкладок прилипает ПОД шапкой, а не под неё. Обе sticky с
+          top: 0, но у шапки слой 50 против 10 — прилипнув, полоса уезжала
+          под неё и пропадала ровно тогда, когда нужна.
+      
+          Замер (окно 1280x900, страница домотана до низа):
+            с этой строкой   -> вкладки доступны, top = высота шапки
+            с `top: 0`       -> 0 доступных точек из 16, top = 0
+      
+          Высоту публикует SiteHeader через ResizeObserver: она зависит от
+          ширины (89px на десктопе, 185px на телефоне — меню переносится),
+          поэтому фиксированное число здесь было бы неверным. */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e8d5f5', position: 'sticky', top: 'var(--aevion-header-h, 0px)', zIndex: 10 }}>
         <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', overflowX: 'auto' }}>
           {NAV_TABS.map(nt => (
             <button

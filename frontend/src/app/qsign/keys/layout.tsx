@@ -1,0 +1,32 @@
+import type { Metadata } from "next";
+
+/* Метаданные для клиентской страницы: сама она объявляет "use client" и
+ * экспортировать metadata не может — Next это запрещает.
+ *
+ * СВОЙ canonical обязателен. Без него страница наследует его из макета
+ * раздела и говорит поисковику «я копия раздела, показывай его вместо меня».
+ * Замер живого прода 30.08.2026: так вели себя 78 страниц сайта, включая
+ * ведущие к оплате. */
+export const metadata: Metadata = {
+  title: "AEVION QSign — ключи и версии",
+  description:
+    "Управление ключами подписи: версии, ротация и то, как старые подписи остаются проверяемыми.",
+  alternates: { canonical: "/qsign/keys" },
+  openGraph: {
+    title: "AEVION QSign — ключи и версии",
+    description:
+      "Управление ключами подписи: версии, ротация и то, как старые подписи остаются проверяемыми.",
+    type: "website",
+    siteName: "AEVION",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AEVION QSign — ключи и версии",
+    description:
+      "Управление ключами подписи: версии, ротация и то, как старые подписи остаются проверяемыми.",
+  },
+};
+
+export default function QSignKeysLayout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}

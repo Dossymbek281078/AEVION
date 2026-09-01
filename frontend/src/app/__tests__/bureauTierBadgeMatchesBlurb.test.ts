@@ -52,6 +52,25 @@ const QUALIFIERS = [
   "check it for",
   "coming",
   "в плане",
+  // Дополнено 31.08.2026 при сборке к 10.09. Два тарифа называли свою
+  // недоступность честно и явно, а сторож их не признавал — его словарь
+  // оговорок оказался уже, чем язык, которым люди пишут:
+  //
+  //   «Identity check is in demo mode right now… Ask us before buying this tier.»
+  //   «Cryptographic co-signing is being finalised — ask us to confirm…»
+  //
+  // Это ровно тот класс, на котором мы сегодня обжигались весь день: ноль
+  // делает СЛОВАРЬ ПРОВЕРЯЮЩЕГО, а не предмет. Здесь он давал ложную тревогу,
+  // а ложная тревога на стороже дороже пропуска: к красному, которое «всегда
+  // такое», привыкают за день и отключают.
+  //
+  // Формулировки взяты точные, а не широкие. «ask us» добавлено осознанно: оно
+  // прямо отсылает покупателя спросить ДО покупки, то есть делает ту же
+  // работу, что «в плане», только вежливее.
+  "demo mode",
+  "being finalised",
+  "being finalized",
+  "ask us",
 ];
 
 /**
@@ -66,6 +85,64 @@ const QUALIFIERS = [
 const DELIVERED_OUTCOME = ["admissible", "apostille", "court-ready", "готовый к апостилю"];
 
 type Tier = { name: string; blurb: string; badge: string };
+
+/**
+ * ВСЕ возможные строковые значения поля.
+ *
+ * ⚠️ Дописано 31.08.2026 при сборке к 10.09. Прежняя версия искала только
+ * литерал `key: "..."` — и молча пропускала тариф, у которого значок стал
+ * ВЫЧИСЛЯЕМЫМ:
+ *
+ *     badge:
+ *       notaryCount && notaryCount > 0 && notarySig === "ed25519"
+ *         ? "▲ live"
+ *         : "▲ by request",
+ *
+ * Из трёх тарифов разбирался один, и сторож падал на своей же проверке
+ * «разбор сломан» — она и спасла. Без неё он бы тихо проверял один тариф из
+ * трёх и был зелёным.
+ *
+ * Проверять надо КАЖДЫЙ вариант, а не первый: если значок МОЖЕТ оказаться
+ * «недоступно», обещание под ним обязано это называть — иначе в тот день,
+ * когда условие свернётся в недоступность, страница начнёт обещать услугу,
+ * которой нет.
+ */
+function fieldAll(block: string, key: string): string[] {
+  const at = block.indexOf(key + ":");
+  if (at === -1) return [];
+  // Значение кончается на следующем поле того же объекта.
+  const rest = block.slice(at + key.length + 1);
+  // Значение кончается на следующем поле того же объекта. Ищем позиционно, без
+  // регулярок: обратный слэш в этой среде теряется на границе вызова, и шаблон
+  // молча перестаёт совпадать (первая версия этой правки именно так и легла —
+  // молча перестаёт совпадать. Первая версия этой правки именно так и легла:
+  // строки внутри неё превращались в настоящий перевод строки, файл переставал
+  // сказал «no tests» — то есть ни зелёный, ни красный, а молчание).
+  let stop = -1;
+  // "badge:" обязательно в списке: без него разбор ОБЕЩАНИЯ перескакивал через
+  // поле значка и захватывал его строки — «Notarized» получал обещание «▲ live».
+  // "badgeColor:" отдельной строкой не мешает: indexOf ищет точное "badge:".
+  for (const k of ["badge:", "badgeColor:", "cta:", "blurb:", "name:", "href:"]) {
+    const at = rest.indexOf(k);
+    if (at !== -1 && (stop === -1 || at < stop)) stop = at;
+  }
+  const value = stop === -1 ? rest : rest.slice(0, stop);
+  const out: string[] = [];
+  let i = value.indexOf('"');
+  while (i !== -1) {
+    const j = value.indexOf('"', i + 1);
+    if (j === -1) break;
+    const lit = value.slice(i + 1, j);
+    // Строку, стоящую справа от сравнения, брать нельзя: это ОПЕРАНД условия
+    // (kycMode === "stub"), а не возможное значение поля. Первая версия этой
+    // правки их брала — и сторож объявил значками «stub» и «ed25519».
+    const before = value.slice(Math.max(0, i - 5), i);
+    const isOperand = before.includes("==") || before.includes("!=");
+    if (lit.trim() && !isOperand) out.push(lit);
+    i = value.indexOf('"', j + 1);
+  }
+  return out;
+}
 
 /** Значение строкового поля внутри одного блока тарифа. */
 function field(block: string, key: string): string {
@@ -94,9 +171,34 @@ function tiers(): Tier[] {
   const parts = region.split('name: "');
   for (let i = 1; i < parts.length; i++) {
     const block = 'name: "' + parts[i];
-    const badge = field(block, "badge");
-    if (!badge) continue; // не тариф, а другой объект с полем name
-    out.push({ name: field(block, "name"), blurb: field(block, "blurb"), badge });
+    const badges = fieldAll(block, "badge");
+    if (!badges.length) continue; // не тариф, а другой объект с полем name
+    // badge — САМЫЙ СЛАБЫЙ из возможных: если хоть один вариант не обещает
+    // доступности, обещание под значком обязано называть недоступность.
+    // ⚠️ Значок и обещание у этих тарифов вычисляются ОДНИМ условием:
+    //
+    //     badge:  kycMode === "stub" ? "demo mode" : "available now"
+    //     blurb:  kycMode === "stub" ? "...в демо-режиме..." : "...проверено..."
+    //
+    // Значит вариант i значка идёт в паре ровно с вариантом i обещания.
+    // Сравнивать их независимо — выдумывать пару, которой не бывает: «значок
+    // недоступен» + «обещание работы» получилось бы из РАЗНЫХ веток условия.
+    // Первая версия этой правки так и делала и дала две ложные находки.
+    //
+    // Когда вариантов поровну — сверяем по позиции. Когда нет (один литерал
+    // против ternary) — берём самую слабую пару: это осознанный запас в
+    // сторону строгости, лишний раз покраснеть здесь дешевле, чем пропустить.
+    const blurbs = fieldAll(block, "blurb");
+    const name = field(block, "name");
+    if (badges.length === blurbs.length && badges.length > 1) {
+      for (let k = 0; k < badges.length; k++) {
+        out.push({ name, blurb: blurbs[k], badge: badges[k] });
+      }
+      continue;
+    }
+    const weakestBadge = badges.find((b) => !claimsAvailable(b)) ?? badges[0];
+    const weakestBlurb = blurbs.find((b) => !isQualified(b)) ?? blurbs[0] ?? "";
+    out.push({ name, blurb: weakestBlurb, badge: weakestBadge });
   }
   return out;
 }

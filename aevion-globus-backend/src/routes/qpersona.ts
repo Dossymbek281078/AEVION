@@ -119,9 +119,47 @@ async function dbUpdate(
   return rows[0] ?? null;
 }
 
+/*
+ * СЛУЖЕБНЫЕ ЗАПИСИ смоук-прогонов — не показывать и не считать.
+ *
+ * Замер на проде 01.09.2026: `/api/qpersona/personas?limit=100` вернул 37
+ * записей, и ВСЕ 37 — наши смоук-прогоны (`sm1784803084136`,
+ * `smoke-1784775240406-x`, `smoke-test-xyz`). Настоящих персон ноль. При этом
+ * витрина писала посетителю «37 personas created».
+ *
+ * Это не косметика: число на витрине по нашему стандарту берётся из
+ * фактического прогона, а здесь оно считало наши же проверки и выдавало их за
+ * людей. У страницы уже есть честное пустое состояние — «No personas yet» —
+ * значит после фильтра правильный экран появится сам.
+ *
+ * ⚠️ ОДИН признак на ВСЕ четыре функции, и это главное в этой правке. Отфильтруй
+ * мы только галерею — счётчик остался бы 37 при пустом списке, и мы своими
+ * руками сделали бы то, что ловим у других: два наших ответа об одном спорят.
+ *
+ * Условие для SQL и предикат для памяти обязаны совпадать. Их согласие
+ * проверяется тестом на общем наборе примеров, а не на честном слове.
+ */
+export const SMOKE_ALIAS_SQL =
+  "(alias ~ '^smoke([-_0-9]|$)' OR alias ~ '^sm[0-9]{6,}$')";
+
+export function isSmokeAlias(alias: string): boolean {
+  const a = String(alias ?? "");
+  // ⚠️ «начинается на smoke» было СЛИШКОМ широко: под него попадал живой
+  // человек `smokey-eyes`. Поймал отрицательный контроль в тесте, глазами не
+  // видно. Служебные метки всегда отделяют хвост: `smoke-1784…`, `smoke-test-…`.
+  // Признак, прячущий настоящих людей, хуже отсутствия признака: витрина стала
+  // бы честно пустой и одинаково бесполезной.
+  if (a === "smoke") return true;
+  if (a.startsWith("smoke") && /^[-_0-9]/.test(a.slice(5))) return true;
+  // `sm` + длинная метка времени: так подписывались прогоны до 01.09.
+  if (a.startsWith("sm") && /^[0-9]{6,}$/.test(a.slice(2))) return true;
+  return false;
+}
+
 async function dbList(limit: number, offset: number): Promise<PersonaRecord[]> {
   const { rows } = await pool.query(
-    `SELECT * FROM qpersona_profiles WHERE visibility = 'public'
+    `SELECT * FROM qpersona_profiles
+     WHERE visibility = 'public' AND NOT ${SMOKE_ALIAS_SQL}
      ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
     [limit, offset]
   );
@@ -129,11 +167,18 @@ async function dbList(limit: number, offset: number): Promise<PersonaRecord[]> {
 }
 
 async function dbStats(): Promise<{ total: number; latest: string[] }> {
+  // ⚠️ Здесь была ВТОРАЯ, более старая расходимость: галерея отбирала
+  // `visibility = 'public'`, а счётчик считал ВСЁ подряд — то есть включал
+  // непубличные записи, которых на витрине не видно никогда. Условие у обоих
+  // теперь одно и то же.
   const { rows: totRow } = await pool.query(
-    `SELECT COUNT(*)::text AS count FROM qpersona_profiles`
+    `SELECT COUNT(*)::text AS count FROM qpersona_profiles
+     WHERE visibility = 'public' AND NOT ${SMOKE_ALIAS_SQL}`
   );
   const { rows: latRow } = await pool.query(
-    `SELECT alias FROM qpersona_profiles ORDER BY created_at DESC LIMIT 5`
+    `SELECT alias FROM qpersona_profiles
+     WHERE visibility = 'public' AND NOT ${SMOKE_ALIAS_SQL}
+     ORDER BY created_at DESC LIMIT 5`
   );
   return {
     total: parseInt(totRow[0]?.count ?? "0", 10),
@@ -184,15 +229,15 @@ function memUpdate(
 
 function memList(limit: number, offset: number): PersonaRecord[] {
   return Array.from(memPersonas.values())
-    .filter((p) => p.visibility === "public")
+    .filter((p) => p.visibility === "public" && !isSmokeAlias(p.alias))
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(offset, offset + limit);
 }
 
 function memStats(): { total: number; latest: string[] } {
-  const all = Array.from(memPersonas.values()).sort((a, b) =>
-    b.created_at.localeCompare(a.created_at)
-  );
+  const all = Array.from(memPersonas.values())
+    .filter((p) => p.visibility === "public" && !isSmokeAlias(p.alias))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
   return {
     total: all.length,
     latest: all.slice(0, 5).map((p) => p.alias),

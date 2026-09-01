@@ -241,7 +241,7 @@ export default function SmokeRemovalPage() {
                 type="text"
                 value={ex1}
                 onChange={(e) => setEx1(e.target.value)}
-                placeholder="Введите расход в м³/ч"
+                aria-label="Введите расход в м³/ч" placeholder="Введите расход в м³/ч"
                 className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:border-red-500 focus:outline-none"
               />
               <button
@@ -383,7 +383,7 @@ export default function SmokeRemovalPage() {
                 type="text"
                 value={ex3}
                 onChange={(e) => setEx3(e.target.value)}
-                placeholder="Количество клапанов, шт"
+                aria-label="Количество клапанов, шт" placeholder="Количество клапанов, шт"
                 className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:border-red-500 focus:outline-none"
               />
               <button
@@ -445,7 +445,7 @@ export default function SmokeRemovalPage() {
                 type="text"
                 value={ex4}
                 onChange={(e) => setEx4(e.target.value)}
-                placeholder="Стоимость в тенге"
+                aria-label="Стоимость в тенге" placeholder="Стоимость в тенге"
                 className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:border-red-500 focus:outline-none"
               />
               <button

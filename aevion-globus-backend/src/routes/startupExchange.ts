@@ -342,6 +342,39 @@ function fail(res: Response, error: string, status = 400, extra?: Record<string,
 }
 
 // ─── GET /api/startupx/health ────────────────────────────────────────────────
+/*
+ * ПУБЛИЧНОЕ ЛИЦО БИРЖИ не должно состоять из наших же проверок.
+ *
+ * Замер на проде 01.09.2026: `/api/startupx/ideas?limit=50` вернул 19 заявок,
+ * из них 18 с заголовком «Smoke Idea smoke-1784…», а девятнадцатая называется
+ * «T». То есть витрина главного продукта — целиком наши смоук-прогоны.
+ *
+ * Это не косметика. Инвестор, пришедший смотреть заявки, видит девятнадцать
+ * пустых записей и уходит; основатель стартапа видит то же и не подаёт свою.
+ * И «19» — число на витрине, а по нашему стандарту числа берутся из
+ * фактического прогона, а не из наших проверок.
+ *
+ * ⚠️ ОДНО условие на ВСЕ места, где спрашивается публичность. Их двенадцать:
+ * список, счётчик, разбивки по стадиям и секторам, «за неделю», средний балл.
+ * Отфильтруй мы только список — счётчики остались бы прежними, и витрина
+ * заспорила бы сама с собой. Ровно этот дефект я чинил час назад в QPersona.
+ *
+ * Признак сужен намеренно: `smoke` только с отделяющим хвостом. Первая
+ * редакция ловила и живого человека `smokey-eyes` — признак, прячущий
+ * настоящих, хуже отсутствия признака.
+ */
+export const PUBLIC_LISTING_SQL =
+  "visibility='public' AND NOT (title ~ '^Smoke Idea' OR title ~ '^smoke([-_0-9]|$)' OR title = 'T')";
+
+/** То же правило для пути в памяти. Расходиться им нельзя — есть тест. */
+export function isSmokeListing(title: unknown): boolean {
+  const t = String(title ?? "").trim();
+  if (t === "T") return true;
+  if (t.startsWith("Smoke Idea")) return true;
+  if (t.startsWith("smoke") && /^[-_0-9]/.test(t.slice(5))) return true;
+  return false;
+}
+
 startupExchangeRouter.get("/health", (req: Request, res: Response) => {
   res.json({
     ok: true,
@@ -386,21 +419,21 @@ startupExchangeRouter.get("/stats", async (_req: Request, res: Response) => {
 
   try {
     if (isStartupExchangeDbReady()) {
-      const totalQ = await pool.query(`SELECT COUNT(*)::int AS n FROM startup_ideas WHERE visibility='public'`);
+      const totalQ = await pool.query(`SELECT COUNT(*)::int AS n FROM startup_ideas WHERE ${PUBLIC_LISTING_SQL}`);
       const tierQ = await pool.query(
         `SELECT COALESCE(tier, 'idea') AS tier, COUNT(*)::int AS n FROM startup_ideas
-         WHERE visibility='public' GROUP BY 1`,
+         WHERE ${PUBLIC_LISTING_SQL} GROUP BY 1`,
       );
       const stageQ = await pool.query(
-        `SELECT stage, COUNT(*)::int AS n FROM startup_ideas WHERE visibility='public' GROUP BY stage`,
+        `SELECT stage, COUNT(*)::int AS n FROM startup_ideas WHERE ${PUBLIC_LISTING_SQL} GROUP BY stage`,
       );
       const recentQ = await pool.query(
         `SELECT COUNT(*)::int AS n FROM startup_ideas
-         WHERE visibility='public' AND created_at > NOW() - INTERVAL '7 days'`,
+         WHERE ${PUBLIC_LISTING_SQL} AND created_at > NOW() - INTERVAL '7 days'`,
       );
       const scoredQ = await pool.query(
         `SELECT COUNT(*)::int AS n, COALESCE(AVG(assessment_score), 0)::float AS avg
-         FROM startup_ideas WHERE visibility='public' AND assessment_score IS NOT NULL`,
+         FROM startup_ideas WHERE ${PUBLIC_LISTING_SQL} AND assessment_score IS NOT NULL`,
       );
       // Заявки, разобранные прошлыми правилами. Версия защищена тестом, но
       // без этого счётчика её подъём остаётся теорией: непонятно, сколько строк
@@ -408,7 +441,7 @@ startupExchangeRouter.get("/stats", async (_req: Request, res: Response) => {
       // сравнимое.
       const staleQ = await pool.query(
         `SELECT COUNT(*)::int AS n FROM startup_ideas
-         WHERE visibility='public' AND assessment_score IS NOT NULL
+         WHERE ${PUBLIC_LISTING_SQL} AND assessment_score IS NOT NULL
            AND COALESCE(assessment_version, 0) < $1`,
         [ASSESSMENT_VERSION],
       );
@@ -434,7 +467,7 @@ startupExchangeRouter.get("/stats", async (_req: Request, res: Response) => {
     console.error("[StartupX] /stats DB error", e);
   }
 
-  const all = Array.from(memListings.values()).filter((r) => r.visibility === "public");
+  const all = Array.from(memListings.values()).filter((r) => r.visibility === "public" && !isSmokeListing(r.title));
   const byTier = emptyByTier();
   const byStage = emptyByStage();
   for (const r of all) {
@@ -484,7 +517,7 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
   try {
     if (isStartupExchangeDbReady()) {
       const args: unknown[] = [];
-      let where = `WHERE visibility='public'`;
+      let where = `WHERE ${PUBLIC_LISTING_SQL}`;
       if (tier) {
         args.push(tier);
         // Rows written before tiers existed carry the tier implied by `stage`;
@@ -529,7 +562,7 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
     console.error("[StartupX] GET /ideas DB error", e);
   }
 
-  let all = Array.from(memListings.values()).filter((r) => r.visibility === "public");
+  let all = Array.from(memListings.values()).filter((r) => r.visibility === "public" && !isSmokeListing(r.title));
   if (tier) all = all.filter((r) => (isTier(r.tier) ? r.tier : tierFromLegacyStage(r.stage)) === tier);
   if (sector) all = all.filter((r) => r.assessment?.sector?.id === sector.id);
   if (qRaw) {
@@ -597,7 +630,7 @@ startupExchangeRouter.get("/rss.xml", async (req: Request, res: Response) => {
   try {
     if (isStartupExchangeDbReady()) {
       const args: unknown[] = [];
-      let where = `WHERE visibility='public'`;
+      let where = `WHERE ${PUBLIC_LISTING_SQL}`;
       if (tier) {
         args.push(tier);
         where += ` AND COALESCE(tier, 'idea') = $${args.length}`;
@@ -617,7 +650,7 @@ startupExchangeRouter.get("/rss.xml", async (req: Request, res: Response) => {
       rows = r.rows as ListingRow[];
     } else {
       rows = Array.from(memListings.values())
-        .filter((l) => l.visibility === "public")
+        .filter((l) => l.visibility === "public" && !isSmokeListing(l.title))
         .filter((l) => !tier || (isTier(l.tier) ? l.tier : tierFromLegacyStage(l.stage)) === tier)
         .filter((l) => !sector || l.assessment?.sector?.id === sector.id)
         .filter((l) => !qRaw || `${l.title} ${l.description}`.toLowerCase().includes(qRaw.toLowerCase()))
@@ -694,7 +727,7 @@ startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {
   try {
     if (isStartupExchangeDbReady()) {
       const { rows } = await pool.query(
-        `SELECT * FROM startup_ideas WHERE id=$1 AND visibility='public'`,
+        `SELECT * FROM startup_ideas WHERE id=$1 AND ${PUBLIC_LISTING_SQL}`,
         [id],
       );
       const row = (rows as ListingRow[])[0];
@@ -868,7 +901,7 @@ startupExchangeRouter.post("/ideas/:id/reassess", assessLimiter, async (req: Req
   let row: ListingRow | undefined;
   if (isStartupExchangeDbReady()) {
     try {
-      const { rows } = await pool.query(`SELECT * FROM startup_ideas WHERE id=$1 AND visibility='public'`, [id]);
+      const { rows } = await pool.query(`SELECT * FROM startup_ideas WHERE id=$1 AND ${PUBLIC_LISTING_SQL}`, [id]);
       row = (rows as ListingRow[])[0];
     } catch (e) {
       console.error("[StartupX] reassess fetch error", e);
@@ -964,7 +997,7 @@ startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Reque
   try {
     if (isStartupExchangeDbReady()) {
       const { rows: exists } = await pool.query(
-        `SELECT id, title, founder_email FROM startup_ideas WHERE id=$1 AND visibility='public'`,
+        `SELECT id, title, founder_email FROM startup_ideas WHERE id=$1 AND ${PUBLIC_LISTING_SQL}`,
         [id],
       );
       const target = (exists as Array<{ id: number; title: string; founder_email: string | null }>)[0];
@@ -1470,7 +1503,7 @@ startupExchangeRouter.post(
       try {
         await ensureAiScoreColumn();
         const { rows } = await pool.query(
-          `SELECT * FROM startup_ideas WHERE id=$1 AND visibility='public'`,
+          `SELECT * FROM startup_ideas WHERE id=$1 AND ${PUBLIC_LISTING_SQL}`,
           [id],
         );
         idea = (rows as ListingRow[])[0];

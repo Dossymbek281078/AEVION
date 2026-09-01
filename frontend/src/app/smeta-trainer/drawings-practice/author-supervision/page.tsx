@@ -144,7 +144,7 @@ export default function AuthorSupervisionPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-10 border-b border-teal-900/40 bg-slate-950/90 backdrop-blur">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="sticky top-0 z-10 border-b border-teal-900/40 bg-slate-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link
             href="/smeta-trainer/drawings-practice"
@@ -266,7 +266,7 @@ export default function AuthorSupervisionPage() {
               <input
                 value={a1}
                 onChange={(e) => setA1(e.target.value)}
-                placeholder="тенге"
+                aria-label="тенге" placeholder="тенге"
                 className="w-48 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
               />
               <button
@@ -313,7 +313,7 @@ export default function AuthorSupervisionPage() {
               <input
                 value={a2}
                 onChange={(e) => setA2(e.target.value)}
-                placeholder="тенге"
+                aria-label="тенге" placeholder="тенге"
                 className="w-48 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
               />
               <button

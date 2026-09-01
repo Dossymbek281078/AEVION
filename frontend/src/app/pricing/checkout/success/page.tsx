@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
+import { apiUrl } from "@/lib/apiBase";
 
 const APP_LINKS: Record<string, { name: string; href: string }> = {
   qcoreai:    { name: "QCoreAI", href: "/qcoreai" },
@@ -19,6 +20,33 @@ const APP_LINKS: Record<string, { name: string; href: string }> = {
   lifebox:    { name: "LifeBox", href: "/lifebox" },
   shadownet:  { name: "ShadowNet", href: "/shadownet" },
   platform:   { name: "QRight", href: "/qright" },
+  ventures: { name: "AEVION Ventures", href: "/ventures" },
+  "multichat-engine": { name: "AEVION Multichat Engine", href: "/multichat-engine" },
+  qfusionai: { name: "QFusionAI", href: "/qfusionai" },
+  qright: { name: "QRight", href: "/qright" },
+  qsign: { name: "QSign", href: "/qsign" },
+  qtradeoffline: { name: "QTradeOffline", href: "/qtradeoffline" },
+  qmaskcard: { name: "QMaskCard", href: "/qmaskcard" },
+  veilnetx: { name: "VeilNetX", href: "/veilnetx" },
+  cyberchess: { name: "CyberChess", href: "/cyberchess" },
+  qlife: { name: "QLife", href: "/qlife" },
+  qgood: { name: "QGood", href: "/qgood" },
+  "kids-ai-content": { name: "Kids AI Content", href: "/kids-ai-content" },
+  "voice-of-earth": { name: "Voice of the Earth Series", href: "/voice-of-earth" },
+  "startup-exchange": { name: "Startup Exchange", href: "/startup-exchange" },
+  qventure: { name: "QVenture", href: "/qventure" },
+  qskyway: { name: "QSkyway", href: "/qskyway" },
+  qreal: { name: "QReal Studio", href: "/qreal" },
+  mapreality: { name: "MapReality", href: "/mapreality" },
+  "z-tide": { name: "Z-Tide", href: "/z-tide" },
+  qcontract: { name: "QContract", href: "/qcontract" },
+  qchaingov: { name: "QChainGov", href: "/qchaingov" },
+  "smeta-trainer": { name: "Smeta Trainer", href: "/smeta-trainer" },
+  qnews: { name: "QNews", href: "/qnews" },
+  qmedia: { name: "QMedia", href: "/qmedia" },
+  qai: { name: "QAI", href: "/qai" },
+  qevents: { name: "QEvents", href: "/qevents" },
+  constitution: { name: "Constitution", href: "/constitution" },
 };
 
 /** Как называется платёжный сервис на экране. Имена не склоняются, поэтому
@@ -64,10 +92,95 @@ function SuccessInner() {
       ? new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toLocaleDateString("ru-RU")
       : null;
 
-  const tierName = tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : "Pro";
-  const appLink = APP_LINKS[appId] ?? APP_LINKS["platform"];
+  const tierName = tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : null;
+
+  /*
+   * Что человек купил — знаем НЕ ВСЕГДА, и врать об этом нельзя.
+   *
+   * Замер 31.08.2026 в браузере: страница возврата говорила «Pro активирован!»
+   * на голом адресе и предлагала «Открыть QRight →» независимо от покупки.
+   * Проверено по коду всех четырёх касс: параметр appId не кладёт НИ ОДНА, то
+   * есть ссылку на QRight видел КАЖДЫЙ покупатель — включая тех, кто заплатил
+   * за QSign, QLearn или QCoreAI. Тариф теряется реже, но тоже теряется: у
+   * PayBox в адрес возврата уходит ref, а не tier, и казахстанский покупатель
+   * Lite читал «Pro активирован».
+   *
+   * Здесь тот же приём, что автор уже применил ниже к пункту «управлять
+   * подпиской»: не знаем — не называем. Неизвестный продукт ведёт в каталог,
+   * неизвестный тариф даёт «Оплата принята» без имени.
+   */
+  const knownApp = Object.prototype.hasOwnProperty.call(APP_LINKS, appId) && appId !== "platform";
+  const appLink = knownApp ? APP_LINKS[appId] : null;
+
+  /*
+   * ⚠️ 31.08.2026: экран УТВЕРЖДАЛ активацию, ничего не спросив.
+   *
+   * Замер: 305 строк, обращений к серверу НОЛЬ. Тариф брался из адреса
+   * (`?tier=pro`), и любой, кто открыл ссылку — или вернулся кнопкой «назад»,
+   * бросив оплату, — читал «Pro активирован!». На самом дорогом экране
+   * платформы, сразу после того, как деньги списаны.
+   *
+   * Это не падение и не ошибка: страница уверенно отвечает успехом. Именно
+   * поэтому её не видел ни один тест — ей нечем было упасть.
+   *
+   * Теперь спрашиваем сервер, кто мы есть, и сверяем с тем, что обещает адрес.
+   * Три состояния, а не два:
+   *
+   *   null   ещё спрашиваем      — «оплата принята, проверяем доступ»
+   *   true   тариф подтверждён   — «активирован», и это правда
+   *   false  не подтверждён      — «доступ появится за несколько минут»
+   *
+   * Третье состояние — не «ошибка»: у гостя без входа доступ и не может быть
+   * виден, а выдача после оплаты занимает секунды. Врать в эту сторону тоже
+   * нельзя — поэтому текст не пугает, а называет, что делать, если не появится.
+   */
+  const [confirmed, setConfirmed] = useState<boolean | null>(null);
 
   useEffect(() => {
+    if (stub) return;
+    let живо = true;
+    fetch(apiUrl("/api/me/entitlements"), { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!живо) return;
+        const план = String(d?.plan ?? "").toLowerCase();
+        // Тариф из адреса подтверждён, если сервер называет ТОТ ЖЕ. Незнание
+        // тарифа (PayBox не кладёт его в адрес) — не подтверждение: тогда
+        // достаточно того, что сервер видит любой платный.
+        const ждали = String(tier ?? "").toLowerCase();
+        setConfirmed(ждали ? план === ждали : план !== "" && план !== "free");
+      })
+      .catch(() => {
+        // Отказ сети — это «не знаем», а не «не активировано». Тон текста
+        // одинаков для обоих: мы не обещаем и не пугаем.
+        if (живо) setConfirmed(false);
+      });
+    return () => {
+      живо = false;
+    };
+  }, [stub, tier]);
+
+  /*
+   * ⚠️ 31.08.2026: ворота на учёт. Раньше событие уходило БЕЗУСЛОВНО, при
+   * каждом открытии адреса — то есть итоговый шаг воронки считал ЗАХОДЫ, а не
+   * покупки. Достаточно было вернуться кнопкой «назад», бросив оплату.
+   *
+   * Признак настоящего возврата на странице уже был: у каждой кассы он свой
+   * (intentId, ref, sale_id), и страница сводит их в `provider` выше. Нет
+   * признака — нет и покупки.
+   *
+   * Заглушка (?stub) в `provider` не попадает и не считается: показ не продажа.
+   *
+   * Общий PurchaseReturnTracker сюда не ставлю намеренно, хотя он и написан
+   * ровно для этого: он не несёт тариф, сумму и период, а они здесь в событии
+   * есть. Замена ради единообразия стоила бы трёх полей воронки — беру у него
+   * ПРИЁМ (ворота плюс защита от повторной отрисовки), а не тело.
+   */
+  const учтено = useRef(false);
+
+  useEffect(() => {
+    if (!provider || учтено.current) return;
+    учтено.current = true;
     track({
       type: "checkout_success",
       tier: tier ?? undefined,
@@ -106,8 +219,21 @@ function SuccessInner() {
           {stub
             ? t("pricing.checkoutSuccess.titleStub")
             : trialDays > 0
-              ? t("pricing.checkoutSuccess.titleTrial", { tier: tierName, days: trialDays })
-              : t("pricing.checkoutSuccess.titleActivated", { tier: tierName })}
+              ? tierName
+                ? t("pricing.checkoutSuccess.titleTrial", { tier: tierName, days: trialDays })
+                : t("pricing.checkoutSuccess.titleTrialNoTier", { days: trialDays })
+              : confirmed === true
+                ? tierName
+                  ? t("pricing.checkoutSuccess.titleActivated", { tier: tierName })
+                  : t("pricing.checkoutSuccess.titleActivatedNoTier")
+                : /*
+                   * Пока сервер не подтвердил — «оплата принята», а не
+                   * «активирован». Разница не в вежливости: второе человек
+                   * читает как «можно идти пользоваться», и если выдача не
+                   * прошла, он узнает об этом сам, наткнувшись на платную
+                   * стену, и уже не свяжет одно с другим.
+                   */
+                  t("pricing.checkoutSuccess.titlePending")}
         </h1>
 
         {/* Subtitle */}
@@ -116,7 +242,9 @@ function SuccessInner() {
             ? t("pricing.checkoutSuccess.subtitleStub")
             : trialDays > 0
               ? t("pricing.checkoutSuccess.subtitleTrial", { date: trialEndDate ?? "" })
-              : t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })}
+              : tierName
+                ? t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })
+                : t("pricing.checkoutSuccess.subtitleActivatedNoTier")}
         </p>
 
         {/* Trial end date badge */}
@@ -168,7 +296,7 @@ function SuccessInner() {
         {/* Action buttons */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
           <Link
-            href={appLink.href}
+            href={appLink ? appLink.href : "/apps"}
             style={{
               display: "inline-block", padding: "13px 28px",
               background: "#fff", color: "#0d9488",
@@ -176,7 +304,9 @@ function SuccessInner() {
               fontWeight: 800, fontSize: 15,
             }}
           >
-            {t("pricing.checkoutSuccess.openApp", { app: appLink.name })} →
+            {appLink
+              ? t("pricing.checkoutSuccess.openApp", { app: appLink.name })
+              : t("pricing.checkoutSuccess.openAppNoName")}{" "}→
           </Link>
           <Link
             href="/"
@@ -208,7 +338,12 @@ function SuccessInner() {
               { icon: "📧", text: processor
                   ? t("pricing.checkoutSuccess.nextEmail", { processor })
                   : t("pricing.checkoutSuccess.nextEmailNoName") },
-              { icon: "🚀", text: t("pricing.checkoutSuccess.nextOpenApp", { app: appLink.name }) },
+              {
+                icon: "🚀",
+                text: appLink
+                  ? t("pricing.checkoutSuccess.nextOpenApp", { app: appLink.name })
+                  : t("pricing.checkoutSuccess.nextOpenAppNoName"),
+              },
               // Куда идти управлять подпиской, можно сказать только зная сервис.
               // Не знаем — пункт не показываем, а не отправляем наугад.
               ...(processor

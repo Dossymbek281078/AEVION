@@ -47,7 +47,7 @@ export default function ShadowNetPage() {
           background: "rgba(0,0,0,0.85)",
           backdropFilter: "blur(8px)",
           position: "sticky",
-          top: 0,
+          top: 'var(--aevion-header-h, 0px)',
           zIndex: 10,
         }}
       >
@@ -57,6 +57,7 @@ export default function ShadowNetPage() {
             margin: "0 auto",
             padding: "14px 20px",
             display: "flex",
+            flexWrap: "wrap",
             alignItems: "center",
             gap: "14px",
             fontSize: "13px",

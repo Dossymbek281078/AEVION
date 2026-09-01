@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useI18n, translations, type Lang } from "@/lib/i18n";
+import { useI18n, loadDict, peekDict, type Lang } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
 
 // Warn ONCE if the translate endpoint fails, so a backend misconfiguration
@@ -303,9 +303,14 @@ type SourceLang = "en" | "ru";
 function getLangDict(target: Lang, source: SourceLang = "en"): { d: Record<string, string>; k: string[] } {
   const cacheKey = `${source}->${target}`;
   if (langDictCache.has(cacheKey)) return langDictCache.get(cacheKey)!;
-  const tbl = translations as Record<string, Record<string, string>>;
-  const srcTbl = tbl[source] ?? {};
-  const langTbl = tbl[target] ?? {};
+  // Both dictionaries are normally fetched before the translating effect runs
+  // (see the effect that waits on loadDict below). If one is missing anyway —
+  // its chunk failed — this degrades to "no seed pairs" and the live API path
+  // still works, but the result must NOT be cached: a later successful load
+  // would otherwise keep serving the empty map it was asked for once.
+  const srcTbl = peekDict(source);
+  const langTbl = peekDict(target);
+  if (!srcTbl || !langTbl) return { d: {}, k: [] };
   const d: Record<string, string> = {};
   for (const key of Object.keys(srcTbl)) {
     const src = srcTbl[key];
@@ -402,6 +407,9 @@ function shouldTranslate(s: string, lang: Lang): boolean {
   return lat || cyr; // other targets: translate EN/RU sources
 }
 
+/** Digits and a brand token: any honest translator returns this untouched. */
+const CANARY = "AEVION 2026 · 12345";
+
 const WS_LEAD = /^\s*/;
 const WS_TRAIL = /\s*$/;
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "TEXTAREA", "INPUT", "CODE", "PRE", "SVG", "NOSCRIPT"]);
@@ -421,6 +429,17 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
   // на проде 27.07 — `/multichat-engine` при ru делал 2 запроса presets, при en
   // ровно 1. То есть каждый fetch-на-mount уходил дважды, а локальное состояние
   // компонентов сбрасывалось.
+  /**
+   * The seed dictionaries arrive over the network now, so the translating pass
+   * has to wait for them.
+   *
+   * Only English is compiled into the page (see i18n.tsx); Russian is the other
+   * source language for the seed map, and the target may be a third. Running
+   * before they land would seed nothing and send every common UI word to the
+   * paid translation API instead of matching it for free.
+   */
+  const [seedReady, setSeedReady] = useState(0);
+
   const [resetToken, setResetToken] = useState(0);
   const settledLang = useRef<Lang | null>(null);
   useEffect(() => {
@@ -435,6 +454,19 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
     }
   }, [lang, langReady]);
 
+  useEffect(() => {
+    if (!langReady) return;
+    let alive = true;
+    // English is compiled in; these two may not be. Both resolve immediately
+    // once fetched, so a language switch back costs nothing.
+    Promise.all([loadDict("ru"), loadDict(lang)]).then(() => {
+      if (alive) setSeedReady((n) => n + 1);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [lang, langReady]);
+
   // observe=false → один стартовый проход перевода, БЕЗ live-MutationObserver.
   // Нужно для full-app оболочек (CyberChess и т.п.): там DOM меняется постоянно
   // (часы тикают, доска ходит, eval стримит), и подписка observer на весь субтри
@@ -447,6 +479,15 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
     // значит переводить страницу в язык, который пользователь не просил, и
     // портить исходный DOM до того, как придёт настоящее значение.
     if (!langReady) return;
+    // Wait for the fetch to have SETTLED, not to have succeeded.
+    //
+    // Asking for the dictionaries themselves here would be a trap: a chunk that
+    // fails to load never appears, so the check would never pass and live
+    // translation would be off for good — worse than the missing seed pairs it
+    // was guarding against, and silent. Settled means the free dictionary
+    // matches were given their chance; without them this pass still translates
+    // through the API.
+    if (seedReady === 0) return;
 
     // map = instant seed ∪ persisted API results (original -> translation).
     // cache = API results only (what we persist back).
@@ -463,6 +504,10 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
     // part of the page untranslated until a full reload. We now re-queue failed
     // strings up to MAX_ATTEMPTS so transient errors self-heal.
     const attempts = new Map<string, number>();
+    // Set once the canary has been answered; set `serviceLies` when it was
+    // answered wrongly, which stops every later flush.
+    let canaryChecked = false;
+    let serviceLies = false;
     // Serialize network flushes: only one /translate request in flight at a
     // time. Concurrent batches (observer + timer firing together) were
     // overwhelming the backend and causing the 502s in the first place.
@@ -563,19 +608,48 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
       // inFlight guard: never run two /translate requests at once. Prevents the
       // observer and the debounce timer from firing overlapping batches that
       // overload the backend (the original cause of the 502s).
-      if (destroyed || inFlight || pending.size === 0) return;
+      if (destroyed || inFlight || pending.size === 0 || serviceLies) return;
       inFlight = true;
       const batch = Array.from(pending).slice(0, 100);
       batch.forEach((b) => pending.delete(b));
+      // A canary rides along with the first batch of the session: digits and a
+      // brand token, which any translator returns unchanged.
+      //
+      // It was written after prod appeared to answer "Сохранить изменения" with
+      // "Quantencomputer-Sicherheit". That turned out to be my own terminal
+      // mangling Cyrillic before it left the machine — the service is fine, and
+      // with a correctly encoded request it answers "Änderungen speichern".
+      // The guard stays anyway, because the failure it imagines is real in kind:
+      // a translator answering beside the point produces fluent text a visitor
+      // cannot tell is wrong, which is worse than leaving the source language
+      // in place. One bad canary stops the session from applying any of it.
+      const withCanary = canaryChecked ? batch : [CANARY, ...batch];
       try {
         const r = await fetch(apiUrl("/api/i18n/translate"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target: lang, texts: batch }),
+          body: JSON.stringify({ target: lang, texts: withCanary }),
         });
         if (r.ok) {
           const data = (await r.json()) as { translations?: string[] };
-          const trs = data.translations || [];
+          let trs = data.translations || [];
+          if (!canaryChecked) {
+            canaryChecked = true;
+            const echoed = trs[0];
+            trs = trs.slice(1);
+            if (echoed !== CANARY) {
+              serviceLies = true;
+              pending.clear();
+              // Say it once, in terms someone can act on.
+              console.warn(
+                `[AutoTranslate] live translation disabled: the service answered ` +
+                `${JSON.stringify(CANARY)} with ${JSON.stringify(echoed)}. It is returning ` +
+                `invented text, so nothing from it is applied. Check POST /api/i18n/translate ` +
+                `(DeepL key / Claude fallback).`,
+              );
+              return;
+            }
+          }
           let changed = false;
           for (let i = 0; i < batch.length; i++) {
             const raw = trs[i];
@@ -584,7 +658,14 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
             // that come back unchanged) — so they are cached and never re-sent
             // on the next pass. Only a real change triggers a re-apply walk.
             map[batch[i]] = tr;
-            cache[batch[i]] = tr;
+            // Persist only real translations. An answer equal to the source is
+            // either a brand token or the shape a failure takes, and writing it
+            // to localStorage makes that permanent for this visitor: the page
+            // would keep its Russian captions even after the service recovered.
+            // In-session it is still remembered in `map`, so nothing is re-sent
+            // twice on one visit. (Measured 28.07.2026: 39 home-page captions
+            // stuck this way on prod, server-side, for every German visitor.)
+            if (tr !== batch[i]) cache[batch[i]] = tr;
             translatedValues.add(tr);
             if (tr !== batch[i]) changed = true;
           }
@@ -632,7 +713,7 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
     // и только следующим шагом React заменяет поддерево на исходное. Без
     // перезапуска перевод так и не ложился на новый DOM — проверено вживую:
     // RU → EN работал, EN → RU оставлял страницу английской.
-  }, [lang, observe, langReady, resetToken]);
+  }, [lang, observe, langReady, resetToken, seedReady]);
 
   return <div ref={ref} key={resetToken} style={{ display: "contents" }}>{children}</div>;
 }

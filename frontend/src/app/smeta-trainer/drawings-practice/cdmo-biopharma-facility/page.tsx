@@ -13,7 +13,7 @@ export default function CdmoBiopharmaFacilityPage() {
   const oc = (s: string, v: string, isok: boolean) => !showResults || s !== v ? (s === v ? "border-blue-500 bg-blue-500/20" : "border-slate-700 hover:border-slate-500") : isok ? "border-emerald-500 bg-emerald-500/20" : "border-rose-500 bg-rose-500/20";
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">CDMO Biopharma Facility</div></div></header>
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between"><Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300">← К разделам</Link><div className="text-xs text-slate-500">CDMO Biopharma Facility</div></div></header>
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <section><h1 className="text-3xl md:text-4xl font-bold">🧬 CDMO Biopharma Contract Manufacturing</h1>
           <p className="mt-3 text-slate-400 max-w-3xl">Модуль #312. CDMO Contract Development & Manufacturing Organization — план Astana Hub Biotech фасилити для monoclonal antibodies + recombinant proteins + cell-based therapies. Reference: Lonza Visp (Switzerland) 200K L bioreactors, Wuxi Biologics Wuxi China, Samsung Biologics Songdo, FUJIFILM Diosynth Texas. Mammalian cell culture CHO Chinese Hamster Ovary в bioreactors 2000-20000 L. Downstream processing protein A chromatography + viral inactivation + ultrafiltration. EU GMP Annex 1 (2022) + FDA CFR 21 + ICH Q5A/Q5B + СН РК 3.02-19.</p>
@@ -48,7 +48,7 @@ export default function CdmoBiopharmaFacilityPage() {
           ].map((o) => (<label key={o.v} className={`block px-4 py-3 rounded-lg border cursor-pointer transition ${oc(ex1, o.v, ok.ex1)}`}><input type="radio" name="ex1" value={o.v} checked={ex1 === o.v} onChange={() => setEx1(o.v)} className="mr-3" />{o.t}</label>))}</div>
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 2 — Bioreactor capacity (L)</h2>
-          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} placeholder="L" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex2} onChange={(e) => setEx2(e.target.value)} aria-label="Ответ, L" placeholder="L" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex2 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p>Working volume Sartorius Biostat STR 2000 L (vessel 2500 L total). Pilot scale.</p></div>}
         </section>
         <section className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4"><h2 className="text-xl font-semibold text-amber-300">Упражнение 3 — Капекс CDMO 2000 L</h2>
@@ -61,7 +61,7 @@ export default function CdmoBiopharmaFacilityPage() {
             <li>Stability + cold storage ULT + LN2 = 2.5 млрд</li>
             <li>Validation + IT 21 CFR Part 11 + проект 5% + insurance + PNR = 8.5 млрд</li>
           </ul>
-          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
+          <input type="text" value={ex3} onChange={(e) => setEx3(e.target.value)} aria-label="Сумма, тенге" placeholder="тг" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg" />
           {showResults && <div className={`p-4 rounded-lg ${ok.ex3 ? "bg-emerald-500/20 border border-emerald-500" : "bg-rose-500/20 border border-rose-500"}`}><p><strong>~60 млрд тг (~$130M USD)</strong> на 2000 L CDMO pilot. Wuxi Biologics 20K L plant $500-700M.</p></div>
           }
         </section>

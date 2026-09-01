@@ -1,5 +1,6 @@
 /**
- * Bureau запускается вторым (6 сентября), и у него тот же класс, что нашёлся
+ * Bureau запускается 10 сентября (дата перенесена основателем 29-30.08;
+ * прежде здесь стояло «вторым, 6 сентября»), и у него тот же класс, что нашёлся
  * сегодня в шахматах и qgood: при сбое загрузки страница писала
  * «No certificates yet — Protect your first work to see it here», то есть
  * предлагала начать заново человеку, у которого работы уже защищены.
@@ -25,10 +26,30 @@ describe("bureau: отказ отличим от «сертификатов не
     const at = src.indexOf("/api/pipeline/certificates");
     expect(at).toBeGreaterThan(-1);
     const block = src.slice(at, at + 900);
-    expect(/} else {[\s\S]{0,200}setCertsFailed\(true\)/.test(block),
-      "у ветки res.ok нет else с признаком").toBe(true);
-    expect(/catch\s*{[\s\S]{0,120}setCertsFailed\(true\)/.test(block),
-      "обработчик исключения молчит").toBe(true);
+
+    // ⚠️ Ужесточено 28.08.2026 после мутационной проверки. Прежние шаблоны
+    // искали признак в окне 200 и 120 символов ПОСЛЕ ключевого слова, а обе
+    // ветки стоят через строку друг от друга — поэтому ОДИН вызов попадал в
+    // оба окна. Мутация «убрать вызов из else» сторожа пережила: он не
+    // различал «признак ставят обе ветки» и «ставит только одна».
+    //
+    // Теперь считаем ВХОЖДЕНИЯ и проверяем каждую ветку своим узким окном.
+    const calls = block.match(/setCertsFailed\(true\)/g) || [];
+    expect(calls.length, "признак ставится не в обеих ветках").toBeGreaterThanOrEqual(2);
+
+    const elseAt = block.indexOf("} else {");
+    expect(elseAt, "у ветки res.ok нет else вовсе").toBeGreaterThan(-1);
+    expect(
+      block.slice(elseAt, elseAt + 60).includes("setCertsFailed(true)"),
+      "у ветки res.ok нет else с признаком",
+    ).toBe(true);
+
+    const catchAt = block.indexOf("catch");
+    expect(catchAt, "нет обработчика исключения вовсе").toBeGreaterThan(-1);
+    expect(
+      block.slice(catchAt, catchAt + 60).includes("setCertsFailed(true)"),
+      "обработчик исключения молчит",
+    ).toBe(true);
   });
 
   it("отказ показывается раньше пустого списка", () => {

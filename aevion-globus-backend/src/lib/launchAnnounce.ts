@@ -60,8 +60,11 @@ export const LAUNCH_MODULES: Record<
     // местах — здесь, в списке планов подтверждения и в записи о том,
     // с какого дня модуль считается открытым. 30.08 две из трёх остались
     // прежними, и письмо обещало запуск в день, когда его не было.
-    date: "30 сентября",
-    dateSource: "ветка launch/2026-08-30 + сводка вкладки CyberChess от 19.08.2026",
+        // Источник — ДОКУМЕНТ основателя, а не имя ветки: ветка называется
+        // датой и потому выглядит доказательством, не будучи им. При переносе
+        // менять надо документ, и dateSource должен вести именно туда.
+        date: "30 сентября",
+        dateSource: "план основателя 30.08.2026 (00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md)",
     page: "/cyberchess",
     opens: "задача дня, рейтинг и турниры",
   },
@@ -265,4 +268,91 @@ export function planLaunchAnnounce(
     preview: recipients.length ? buildLaunchEmail(moduleSlug, recipients[0]) : null,
     sent: 0,
   };
+}
+
+/**
+ * Что отправлять ПРЯМО СЕЙЧАС из готового плана.
+ *
+ * Отправка рассылки — единственное действие на платформе, которое нельзя
+ * отменить: письмо ушло живым людям. Поэтому решение «кому именно сейчас»
+ * вынесено сюда, в чистую функцию без ввода-вывода: её можно прогнать на
+ * любых списках и проверить без единого настоящего письма.
+ *
+ * Три правила, и каждое куплено чужой болью:
+ *
+ *   уже получил   повтор рассылки после обрыва не должен слать второй раз;
+ *                 список отправленных ведётся снаружи и передаётся сюда;
+ *   потолок суток у Brevo на нашем плане 300 писем в сутки, и он ЖЁСТКИЙ:
+ *                 291-е письмо просто не уйдёт, а мы об этом не узнаем;
+ *   остаток       сколько осталось на завтра — чтобы человек видел, что
+ *                 рассылка не закончена, а не решил, что все получили.
+ */
+export type SendBatch = {
+  /** Кому слать в этот заход. */
+  toSend: string[];
+  /** Уже получили раньше — пропущены. */
+  alreadySent: number;
+  /** Не влезли в сегодняшний потолок; их надо доотправить завтра. */
+  postponed: number;
+};
+
+export function planSendBatch(input: {
+  recipients: string[];
+  alreadySent: Iterable<string>;
+  /** Сколько писем сегодня уже ушло ЛЮБЫМ каналом. */
+  usedToday: number;
+  /** Потолок провайдера на сутки. */
+  dailyCap: number;
+}): SendBatch {
+  const было = new Set(
+    [...input.alreadySent].map((e) => e.trim().toLowerCase()).filter(Boolean),
+  );
+  const свежие = input.recipients
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((e) => !было.has(e));
+
+  const остатокСуток = Math.max(0, input.dailyCap - Math.max(0, input.usedToday));
+  const toSend = свежие.slice(0, остатокСуток);
+
+  return {
+    toSend,
+    alreadySent: input.recipients.length - свежие.length,
+    postponed: свежие.length - toSend.length,
+  };
+}
+
+/**
+ * Можно ли отправлять СЕЙЧАС — решение отдельно от отправки.
+ *
+ * Отправка рассылки необратима: письмо ушло живым людям, «уже» не отменяется.
+ * Поэтому охрана вынесена сюда и проверяется без единого настоящего письма.
+ *
+ * Три жеста нужны независимые, чтобы случайно их не совершить:
+ *   флаг --send                    осознанный запуск не того скрипта;
+ *   LAUNCH_ANNOUNCE_CONFIRM=<модуль> не повторяется стрелкой вверх в терминале;
+ *   совпадение с аргументом        защита от «отправил не тем».
+ *
+ * И четвёртое условие, не жест: день запуска должен наступить. Письмо
+ * «открылось» до открытия хуже молчания — его нельзя отозвать, а продукт
+ * человек не увидит.
+ */
+export type SendGate =
+  | { allowed: true }
+  | { allowed: false; reason: "dry" | "confirm-missing" | "confirm-mismatch" | "not-live" };
+
+export function checkSendGate(input: {
+  slug: string;
+  sendFlag: boolean;
+  confirmEnv: string | undefined;
+  isLive: boolean;
+}): SendGate {
+  if (!input.sendFlag) return { allowed: false, reason: "dry" };
+  const confirm = (input.confirmEnv ?? "").trim();
+  if (!confirm) return { allowed: false, reason: "confirm-missing" };
+  if (confirm !== input.slug) return { allowed: false, reason: "confirm-mismatch" };
+  // Проверяется ПОСЛЕДНЕЙ намеренно: человек, собравший все три жеста, должен
+  // получить в ответ именно «день не наступил», а не общий отказ.
+  if (!input.isLive) return { allowed: false, reason: "not-live" };
+  return { allowed: true };
 }

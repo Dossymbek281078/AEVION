@@ -22,14 +22,19 @@ interface CapabilitiesData {
   summary: { total: number; live: number; needsToken: number };
 }
 
-interface CapUsage { used: number; limit: number; }
+// `usedKnown: false` means the server could not read the meter. It still sends
+// a 0 so this panel renders, but 0 is also what a fresh month looks like — so
+// the bar has to say which it is rather than drawing a confident empty gauge.
+interface CapUsage { used: number; limit: number; usedKnown?: false; }
 interface CreditsData {
   tier: "free" | "pro" | "enterprise";
   month: string;
   usage: { video: CapUsage; image: CapUsage; tts: CapUsage; music: CapUsage; deploy: CapUsage };
+  degraded?: boolean;
+  degradedReason?: string;
 }
 
-function UsageBar({ label, icon, used, limit, color }: { label: string; icon: string; used: number; limit: number; color: string }) {
+function UsageBar({ label, icon, used, limit, color, known = true }: { label: string; icon: string; used: number; limit: number; color: string; known?: boolean }) {
   const pct = limit === -1 ? 0 : Math.min(100, (used / limit) * 100);
   const warn = pct >= 80 && limit !== -1;
   const limitLabel = limit === -1 ? "∞" : String(limit);
@@ -37,13 +42,21 @@ function UsageBar({ label, icon, used, limit, color }: { label: string; icon: st
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: "#0f172a" }}>{icon} {label}</span>
-        <span style={{ fontSize: 11, color: warn ? "#b45309" : "#64748b", fontWeight: warn ? 700 : 400 }}>
-          {limit === -1 ? `${used} used (∞)` : `${used} / ${limitLabel}`}
+        <span
+          data-testid={`usage-${label}`}
+          data-known={known ? "yes" : "no"}
+          style={{ fontSize: 11, color: !known ? "#92400e" : warn ? "#b45309" : "#64748b", fontWeight: warn || !known ? 700 : 400 }}
+        >
+          {!known ? `— / ${limitLabel}` : limit === -1 ? `${used} used (∞)` : `${used} / ${limitLabel}`}
         </span>
       </div>
       {limit !== -1 && (
         <div style={{ height: 5, borderRadius: 99, background: "#e2e8f0", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${pct}%`, borderRadius: 99, background: warn ? "#f59e0b" : color, transition: "width 0.4s" }} />
+          {/* An unread meter draws nothing rather than an empty bar, which
+              would read as "you have used none of it". */}
+          {known && (
+            <div style={{ height: "100%", width: `${pct}%`, borderRadius: 99, background: warn ? "#f59e0b" : color, transition: "width 0.4s" }} />
+          )}
         </div>
       )}
     </div>
@@ -236,12 +249,24 @@ export default function StudioPage() {
                 </a>
               )}
             </div>
+            {credits.degraded && (
+              <div
+                data-testid="credits-unreadable"
+                style={{
+                  marginBottom: 14, padding: "9px 12px", borderRadius: 8, fontSize: 12.5, lineHeight: 1.45,
+                  background: "#fffbeb", border: "1px solid #fde68a", color: "#92400e",
+                }}
+              >
+                <strong style={{ fontWeight: 700 }}>Расход за месяц сейчас не читается. </strong>
+                Цифры ниже — не измерение, а лимиты на этот запрос не проверялись.
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 20 }}>
-              <UsageBar label="Videos" icon="🎬" used={credits.usage.video.used} limit={credits.usage.video.limit} color="#7c3aed" />
-              <UsageBar label="Images" icon="🖼️" used={credits.usage.image.used} limit={credits.usage.image.limit} color="#0d9488" />
-              <UsageBar label="Music" icon="🎵" used={credits.usage.music.used} limit={credits.usage.music.limit} color="#b45309" />
-              <UsageBar label="TTS chars" icon="🎙️" used={credits.usage.tts.used} limit={credits.usage.tts.limit} color="#0369a1" />
-              <UsageBar label="Deploys" icon="🚀" used={credits.usage.deploy.used} limit={credits.usage.deploy.limit} color="#64748b" />
+              <UsageBar label="Videos" icon="🎬" used={credits.usage.video.used} limit={credits.usage.video.limit} known={credits.usage.video.usedKnown !== false} color="#7c3aed" />
+              <UsageBar label="Images" icon="🖼️" used={credits.usage.image.used} limit={credits.usage.image.limit} known={credits.usage.image.usedKnown !== false} color="#0d9488" />
+              <UsageBar label="Music" icon="🎵" used={credits.usage.music.used} limit={credits.usage.music.limit} known={credits.usage.music.usedKnown !== false} color="#b45309" />
+              <UsageBar label="TTS chars" icon="🎙️" used={credits.usage.tts.used} limit={credits.usage.tts.limit} known={credits.usage.tts.usedKnown !== false} color="#0369a1" />
+              <UsageBar label="Deploys" icon="🚀" used={credits.usage.deploy.used} limit={credits.usage.deploy.limit} known={credits.usage.deploy.usedKnown !== false} color="#64748b" />
             </div>
           </div>
         </div>
@@ -389,7 +414,7 @@ export default function StudioPage() {
         <div style={{ marginTop: 48, background: "#0f172a", borderRadius: 16, padding: "32px 36px", color: "#e2e8f0" }}>
           <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 8px", color: "#fff" }}>Activate all capabilities</h2>
           <p style={{ fontSize: 14, color: "#94a3b8", margin: "0 0 24px" }}>Add these env vars to Railway → AEVION backend service → Variables:</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))", gap: 12 }}>
             {[
               { token: "GITHUB_TOKEN", where: "github.com/settings/tokens", desc: "GitHub PAT — scope: repo, workflow" },
               { token: "RAILWAY_API_TOKEN", where: "railway.app → Account → API Tokens", desc: "Deploy backends to Railway" },

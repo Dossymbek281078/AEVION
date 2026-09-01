@@ -17,6 +17,7 @@ import jwt from "jsonwebtoken";
 import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
 import { internalMintForDevice } from "./aev";
 import { getPool } from "../lib/dbPool";
+import { captureException } from "../lib/sentry";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getKycProvider } from "../lib/kyc";
 import {
@@ -30,6 +31,8 @@ import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { emitEcosystemEvent } from "../lib/ecosystemEvents";
 import { safeErrorText } from "../lib/safeError";
+import { anchorSummary } from "../lib/opentimestamps/anchorSummary";
+import { queryDate } from "../lib/queryDate";
 const captureBureauError = makeServiceCapture("bureau");
 
 const bureauEmbedRateLimit = rateLimit({
@@ -41,11 +44,128 @@ const bureauEmbedRateLimit = rateLimit({
 export const bureauRouter = Router();
 const pool = getPool();
 
+/**
+ * Настроен ли НАСТОЯЩИЙ поставщик проверки личности.
+ *
+ * Замер на проде 27.08.2026: `GET /api/bureau/kyc-stub/<любой>` отвечает 200 и
+ * отдаёт страницу «AEVION KYC (stub)». Переменной BUREAU_KYC_PROVIDER в
+ * окружении нет, а заглушка закрывается только ЕЁ наличием — то есть на проде
+ * живёт демонстрационный путь, паспорт никто не смотрит.
+ *
+ * При этом карточка тарифа «Verified» ($19 за сертификат) была помечена
+ * «▲ available now» строкой в коде и обещала проверку паспорта партнёром.
+ * Пометка не могла ошибиться заметно: она утверждала одно и то же при любом
+ * состоянии площадки. Тот же класс, что пометка «live» у пустого реестра
+ * нотариусов, только на ПЛАТНОМ тарифе.
+ *
+ * Поэтому состояние отдаётся наружу, и витрина обязана его спрашивать.
+ */
+/**
+ * Имена, которые РЕАЛЬНО поддерживает фабрика `getKycProvider()`.
+ * Список продублирован сознательно (фабрику правит соседняя ветка, лезть туда
+ * нельзя), но он не может тихо разойтись: тест `kycModeIsHonest` спрашивает
+ * саму фабрику по каждому имени и краснеет, если она решает иначе.
+ */
+const KYC_LIVE_IDS = new Set(["sumsub"]);
+
+/**
+ * Общее правило для обоих барьеров.
+ *
+ * Нормализация ОБЯЗАНА совпадать с фабрикой посимвольно: она делает
+ * `(v || "stub").toLowerCase()` и НЕ обрезает пробелы. Прежняя версия здесь
+ * обрезала — и из-за этого `" sumsub"` (лишний пробел из панели окружения)
+ * читалось как «настоящий поставщик», тогда как фабрика на нём БРОСАЕТ
+ * исключение и поток не работает вовсе.
+ *
+ * Исходов три, а не два. Незнакомое имя — это не «живой» и не «заглушка», это
+ * «настроено неверно»: фабрика на нём падает. Отвечать в таком случае "live"
+ * значит обещать работающий приём денег и проверку паспорта там, где ни того,
+ * ни другого нет.
+ */
+function providerMode(
+  raw: string | undefined,
+  liveIds: ReadonlySet<string>,
+): "live" | "stub" | "misconfigured" {
+  const id = (raw || "stub").toLowerCase();
+  if (id === "stub") return "stub";
+  return liveIds.has(id) ? "live" : "misconfigured";
+}
+
+export function kycProviderMode(
+  env: NodeJS.ProcessEnv = process.env,
+): "live" | "stub" | "misconfigured" {
+  return providerMode(env.BUREAU_KYC_PROVIDER, KYC_LIVE_IDS);
+}
+
+/**
+ * Настроен ли НАСТОЯЩИЙ приём денег.
+ *
+ * Почему это здесь, рядом с проверкой личности. Отметка «Verified Author»
+ * ставится на сертификат только при одобренной проверке И подтверждённой
+ * оплате. Разобрав 27.08.2026 первый барьер (он оказался заглушкой), я сказал
+ * основателю «второй держит» — и это было сказано ПО КОДУ, а `getPayProvider()`
+ * по умолчанию возвращает ту же заглушку: `BUREAU_PAYMENT_PROVIDER || "stub"`.
+ * У заглушки `parseWebhook` тоже не смотрит заголовки, то есть подписи нет.
+ *
+ * Держит барьер или нет — зависит от переменной окружения, которую СНАРУЖИ НЕ
+ * ВИДНО. Пока её не видно, утверждать нельзя ни «держит», ни «не держит».
+ * Поэтому состояние отдаётся наружу: вопрос должен иметь ответ.
+ */
+/**
+ * Имена, которые РЕАЛЬНО поддерживает фабрика `getPaymentProvider()`,
+ * включая все три написания LemonSqueezy, которые она принимает.
+ * Проверяется тестом против самой фабрики — см. KYC_LIVE_IDS выше.
+ */
+const PAYMENT_LIVE_IDS = new Set([
+  "stripe",
+  "gumroad",
+  "lemonsqueezy",
+  "lemon-squeezy",
+  "lemon_squeezy",
+]);
+
+export function paymentProviderMode(
+  env: NodeJS.ProcessEnv = process.env,
+): "live" | "stub" | "misconfigured" {
+  return providerMode(env.BUREAU_PAYMENT_PROVIDER, PAYMENT_LIVE_IDS);
+}
+
+/**
+ * Чем подписывает нотариус — настоящей Ed25519 или демонстрационной HMAC.
+ *
+ * Сам сертификат это уже называет (см. signNotarization ниже) — но отсюда НЕ
+ * следует, что покупателя никто не вводит в заблуждение: так здесь было
+ * написано, и ровно этот вывод позволил карточке тарифа обещать «co-signs with
+ * Ed25519», пока значок шёл от непустого реестра нотариусов и про подпись не
+ * спрашивал вовсе (починено 29.08). Честный сертификат не делает честной
+ * витрину: их читают разные люди в разное время. Не хватало другого: узнать
+ * состояние СНАРУЖИ, не выпуская сертификат. Третий вопрос модуля из трёх —
+ * рядом с kyc и payment, чтобы на «настоящее ли это» отвечала одна команда.
+ *
+ * Секрета здесь не раскрывается: наличие ключа и так видно в каждом
+ * выпущенном сертификате.
+ */
+export function notarySignatureMode(
+  env: NodeJS.ProcessEnv = process.env,
+): "ed25519" | "demo" {
+  // Условие ровно то же, что в signNotarization: pem после trim непустой.
+  // Разойдутся — состояние будет описывать не тот код, что подписывает.
+  return env.BUREAU_NOTARY_SIGNING_KEY?.trim() ? "ed25519" : "demo";
+}
+
 bureauRouter.get("/health", (_req, res) => {
   res.json({
     status: "ok",
     service: "bureau",
     timestamp: new Date().toISOString(),
+    // "stub" значит: поток проверки личности работает, но паспорт не
+    // проверяется никем. Витрина не имеет права называть это «available now».
+    kyc: kycProviderMode(),
+    // Второй барьер перед отметкой «Verified Author». Тоже обязан быть виден:
+    // если оба в режиме заглушки, отметка достаётся без документа и без денег.
+    payment: paymentProviderMode(),
+    // Третий вопрос: чем подписывает нотариус в платном тарифе Notarized.
+    notarySignature: notarySignatureMode(),
   });
 });
 
@@ -636,8 +756,80 @@ bureauRouter.post("/payment/intent", async (req, res) => {
  * intent. Idempotent: re-calling on an already-verified cert is a no-op
  * that returns the current state.
  */
+/**
+ * Можно ли ВЫДАВАТЬ платный тариф прямо сейчас.
+ *
+ * Обе демонстрационные заглушки самозавершаются — так и задумано, чтобы поток
+ * работал в разработке без внешних действий:
+ *   kyc/stubProvider     getSession() ВСЕГДА отвечает "approved" с заявленным именем
+ *   payment/stubProvider getIntent()  сам помечает счёт оплаченным при первом чтении
+ *
+ * Значит без настоящих поставщиков проверки `kycStatus === "approved"` и
+ * `paymentStatus === "paid"` ниже проходят сами собой, и сертификат получает
+ * уровень «verified» без денег и без единого взгляда на документ. Для продукта,
+ * который продаёт ДОКАЗУЕМОСТЬ, это ложь в самих данных: на неё потом сошлётся
+ * третья сторона.
+ *
+ * Опираемся на ФАКТ («поставщик — заглушка»), а НЕ на NODE_ENV: в index.ts
+ * стоит `process.env.NODE_ENV || "development"`, а ни скрипт выкатки, ни
+ * nixpacks.toml эту переменную не задают — сторож по среде на нашем проде молча
+ * не сработал бы, а молчащий сторож хуже отсутствующего.
+ *
+ * Отказ закрытый: разработка и CI включают поток явным BUREAU_ALLOW_STUB_COMMERCE=1.
+ * Умолчание обязано быть безопасным, потому что прод — это ровно то место, где
+ * ничего не настроено.
+ */
+/**
+ * Ключи, без которых поставщик оплаты падает при первом же обращении.
+ *
+ * Зачем это здесь. Имя поставщика и его РАБОТОСПОСОБНОСТЬ — разные вещи:
+ * `BUREAU_PAYMENT_PROVIDER=stripe` без `STRIPE_SECRET_KEY` проходил проверку
+ * как «настоящий», а падал уже на выписке счёта. Соседняя вкладка измерила
+ * этот класс 29.08 на кассе «Конституции»: там завели ОДИН ключ из трёх, ветка
+ * включилась, заслонила собой рабочую кассу и упала. Частично настроенный
+ * поставщик хуже ненастроенного — тот хотя бы честно уступает.
+ *
+ * Перечислены только те ключи, которых провайдер требует через `need()`,
+ * то есть проверено по коду, а не по документации.
+ */
+const PAYMENT_REQUIRED_ENV: Record<string, readonly string[]> = {
+  stripe: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+};
+
+export function stubBarriersBlockingUpgrade(
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  if (env.BUREAU_ALLOW_STUB_COMMERCE === "1") return [];
+  const blocking: string[] = [];
+  if (kycProviderMode(env) !== "live") blocking.push("identity");
+  if (paymentProviderMode(env) !== "live") {
+    blocking.push("payment");
+  } else {
+    // Поставщик настоящий — но хватает ли ему ключей, чтобы работать.
+    const id = (env.BUREAU_PAYMENT_PROVIDER || "").toLowerCase();
+    const missing = (PAYMENT_REQUIRED_ENV[id] || []).filter(
+      (k) => !env[k]?.trim(),
+    );
+    if (missing.length > 0) blocking.push("payment");
+  }
+  return blocking;
+}
+
 bureauRouter.post("/upgrade/:certId", async (req, res) => {
   try {
+    // ДО обращения к базе — намеренно. Отказ «тариф не продаётся, пока
+    // поставщики не настроены» не зависит ни от базы, ни от сертификата, и
+    // ставить его после `ensureBureauTables()` значило бы возвращать 500 при
+    // недоступной базе вместо честного 503. Проверено тестом, который бьёт
+    // ручку заведомо несуществующими идентификаторами.
+    const blocking = stubBarriersBlockingUpgrade();
+    if (blocking.length > 0) {
+      return res.status(503).json({
+        error:
+          "Paid verification is not available: the identity and payment providers are not configured yet.",
+        stubBarriers: blocking,
+      });
+    }
     await ensureBureauTables();
     const { certId } = req.params;
     const { verificationId } = req.body || {};
@@ -1509,7 +1701,12 @@ bureauRouter.post("/org/accept/:token", async (req, res) => {
 /* ─────────────────── Stub-only helper for demo flow ─────────────────── */
 
 bureauRouter.get("/kyc-stub/:sessionId", (req: Request, res: Response) => {
-  if (process.env.BUREAU_KYC_PROVIDER && process.env.BUREAU_KYC_PROVIDER !== "stub") {
+  // Спрашиваем ту же функцию, что отдаёт состояние наружу, а не своё третье
+  // прочтение переменной. Раньше здесь было сравнение БЕЗ приведения регистра:
+  // при BUREAU_KYC_PROVIDER=STUB фабрика запускала демо-заглушку, а этот
+  // обработчик считал поставщика настоящим и отдавал 404 — три места читали
+  // одну переменную тремя разными способами.
+  if (kycProviderMode() !== "stub") {
     return res.status(404).json({ error: "stub flow disabled in this environment" });
   }
   const { sessionId } = req.params;
@@ -1612,7 +1809,25 @@ async function logBureauAudit(opts: {
         opts.payload ? JSON.stringify(opts.payload) : null,
       ]
     )
-    .catch(() => {});
+    .catch((e: unknown) => {
+      // Это журнал действий над сертификатами: кто выдал, кто проверил, кто
+      // отозвал. Для модуля, чей продукт — ДОКАЗУЕМОЕ авторство, молча
+      // пропавшая запись означает, что доказать потом будет нечем.
+      //
+      // Ронять действие нельзя: отказ журнала не должен отменять уже
+      // совершённую выдачу или отзыв. Но и молчать нельзя — пропажа записи
+      // снаружи неотличима от того, что действия не было.
+      const why = e instanceof Error ? e.message : String(e);
+      console.error(
+        `[Bureau] ЗАПИСЬ В ЖУРНАЛ НЕ ПРОШЛА: ${opts.action} по сертификату ${opts.certId ?? "—"} от ${opts.actor ?? "—"}: ${why}`,
+      );
+      captureException(e, {
+        route: "bureau/logBureauAudit",
+        action: opts.action,
+        certId: opts.certId,
+        actor: opts.actor,
+      });
+    });
 }
 
 // 🔹 GET /cert/:certId/embed — sanitized JSON for third-party pages.
@@ -1804,6 +2019,87 @@ bureauRouter.get("/admin/whoami", (req, res) => {
 });
 
 // 🔹 Admin: list verifications (?status, ?limit≤200).
+/**
+ * GET /api/bureau/admin/waitlist
+ *
+ * ЗАЧЕМ. Таблица "BureauWaitlist" до 28.08.2026 только ЗАПОЛНЯЛАСЬ: INSERT при
+ * записи человека и COUNT(*) ради числа на экране. Прочитать сам список было
+ * нечем — ни ручки, ни скрипта, ни выгрузки.
+ *
+ * То есть форма говорила «You're on the waitlist!», а механизма когда-либо
+ * этим списком воспользоваться не существовало. Обещание без механизма: люди
+ * оставляют адрес в ожидании письма, которое некому отправить.
+ *
+ * Доступ — ровно как у соседних админских ручек этого файла (isBureauAdmin,
+ * Bearer + роль/почта из BUREAU_ADMIN_EMAILS). Здесь это не формальность:
+ * наружу отдаются чужие адреса.
+ *
+ * Пагинация обычная, `before` — курсор по времени записи.
+ */
+bureauRouter.get("/admin/waitlist", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureBureauTables();
+
+  const limit = Math.min(
+    Math.max(parseInt(String(req.query.limit || "100"), 10) || 100, 1),
+    500,
+  );
+  const source = String(req.query.source || "").trim();
+
+  // Курсор проверяется ДО подстановки: строка произвольного вида уходила бы в
+  // SQL как время и роняла запрос пятисоткой вместо честного 400.
+  // ⚠️ 31.08.2026: здесь стоял свой Date.parse. Мусор он отклоняет, но
+  // `?before=1` пропускает как 2001 год, а `?before=2026` — как 1 января.
+  // Это не пятисотка и не ошибка: человек получает ТИХО неверную выборку и
+  // не узнаёт об этом. Платформенный queryDate проверяет ФОРМУ до разбора.
+  //
+  // Сторож queryDateGuard требовал именно его, и он был прав — я сперва
+  // прочитал его красное как ложную тревогу, потому что проверка тут ЕСТЬ.
+  // «Проверка есть» и «проверка не слабее платформенной» — разные утверждения.
+  const beforeIso = queryDate(req.query.before);
+  if (beforeIso === undefined) {
+    return res.status(400).json({ error: "invalid_before", hint: "ISO-8601 timestamp" });
+  }
+  const before: Date | null = beforeIso ? new Date(beforeIso) : null;
+
+  const args: unknown[] = [];
+  const conds: string[] = [];
+  if (source) {
+    args.push(source);
+    conds.push(`"source" = $${args.length}`);
+  }
+  if (before) {
+    args.push(before);
+    conds.push(`"createdAt" < $${args.length}`);
+  }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  args.push(limit);
+
+  try {
+    const r = await pool.query(
+      `SELECT "email","source","createdAt"
+         FROM "BureauWaitlist" ${where}
+        ORDER BY "createdAt" DESC LIMIT $${args.length}`,
+      args,
+    );
+    const total = await pool.query(`SELECT COUNT(*)::int AS "n" FROM "BureauWaitlist"`);
+    res.json({
+      rows: r.rows,
+      // Сколько ВСЕГО, отдельно от того, сколько показано: число, равное
+      // пределу выборки, иначе читается как весь список.
+      total: total.rows?.[0]?.n ?? null,
+      returned: r.rows.length,
+      limit,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "waitlist read failed";
+    console.error("[Bureau] admin waitlist:", msg);
+    captureBureauError(err, { route: "admin waitlist" });
+    res.status(500).json({ error: "waitlist_read_failed" });
+  }
+});
+
 bureauRouter.get("/admin/verifications", async (req, res) => {
   const a = isBureauAdmin(req);
   if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
@@ -2809,7 +3105,7 @@ bureauRouter.get("/cert-for-qright/:qrightObjectId", bureauEmbedRateLimit, async
       return res.status(400).json({ error: "qrightObjectId required" });
     }
     const r = await pool.query(
-      `SELECT "id","status","authorVerificationLevel","protectedAt"
+      `SELECT "id","status","authorVerificationLevel","protectedAt","otsStatus","otsBitcoinBlockHeight"
        FROM "IPCertificate"
        WHERE "objectId" = $1 AND "status" != 'revoked'
        ORDER BY "protectedAt" DESC
@@ -2828,12 +3124,18 @@ bureauRouter.get("/cert-for-qright/:qrightObjectId", bureauEmbedRateLimit, async
       status: string;
       authorVerificationLevel: string;
       protectedAt: Date;
+      otsStatus: string | null;
+      otsBitcoinBlockHeight: number | null;
     };
     res.json({
       certId: row.id,
       status: row.status,
       verificationLevel: row.authorVerificationLevel,
       protectedAt: row.protectedAt,
+      // Публичная страница защищённой работы про якорь не говорила вовсе, хотя
+      // это главное, чем запись отличается от строки в чьей-то базе. Считается
+      // тем же общим помощником, что и остальные поверхности реестра.
+      bitcoinAnchor: anchorSummary(row as unknown as Record<string, unknown>),
       viewUrl: `/bureau/cert/${row.id}`,
       upgradeUrl: row.authorVerificationLevel === "anonymous"
         ? `/bureau/upgrade/${row.id}`

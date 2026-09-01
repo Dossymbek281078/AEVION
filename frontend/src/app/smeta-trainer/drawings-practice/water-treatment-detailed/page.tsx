@@ -386,7 +386,7 @@ export default function WaterTreatmentDetailedPage() {
                         onChange={(e) =>
                           setAnswers((a) => ({ ...a, [ex.id]: e.target.value }))
                         }
-                        placeholder="Введите ответ"
+                        aria-label="Введите ответ" placeholder="Введите ответ"
                         className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100 w-44 focus:border-teal-500 outline-none"
                       />
                       <span className="text-sm text-slate-400">{ex.unit}</span>

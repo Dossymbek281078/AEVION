@@ -26,7 +26,7 @@ export default function PowerPlantsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Электростанции</div>
@@ -305,7 +305,7 @@ export default function PowerPlantsPage() {
             <input
               value={a3}
               onChange={(e) => setA3(e.target.value)}
-              placeholder="например: 33000000000"
+              aria-label="например: 33000000000" placeholder="например: 33000000000"
               className="mt-3 w-full md:w-80 px-4 py-3 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-pink-500"
             />
             {a3.length > 0 && (

@@ -45,7 +45,7 @@ export interface AgentPlan {
 
 /** Parse a money amount → integer cents. "$12.50", "12 долларов", "10 usd" → 1250 / 1200 / 1000. */
 export function extractAmountCents(message: string): number | null {
-  const m = message.match(/(?:\$|\busd\b|\bдоллар\w*)\s*([0-9]+(?:[.,][0-9]{1,2})?)|([0-9]+(?:[.,][0-9]{1,2})?)\s*(?:\$|usd|доллар\w*|бакс\w*)/i);
+  const m = message.match(/(?:\$|\busd\b|(?<![а-яё])доллар[а-яё]*)\s*([0-9]+(?:[.,][0-9]{1,2})?)|([0-9]+(?:[.,][0-9]{1,2})?)\s*(?:\$|usd|доллар\w*|бакс\w*)/i);
   if (!m) return null;
   const raw = (m[1] ?? m[2] ?? "").replace(",", ".");
   if (!raw) return null;

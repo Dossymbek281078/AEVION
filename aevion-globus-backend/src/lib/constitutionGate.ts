@@ -14,6 +14,8 @@ import type { Request, Response, NextFunction } from "express";
 import { verifyBearerOptional } from "./authJwt";
 import { getActivePlan } from "../routes/provisioning";
 import { clientIp } from "../lib/rateLimit";
+import { createHash } from "node:crypto";
+import { getPool } from "./dbPool";
 
 const ALLOWLIST = (process.env.CONSTITUTION_PRO_ALLOWLIST || "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -86,6 +88,81 @@ function clientKey(req: Request): string {
   return clientIp(req);
 }
 
+/* ───── Постоянный суточный счётчик (переживает выкатку) ─────────── */
+
+/**
+ * Счётчик в памяти процесса обнулялся при КАЖДОЙ выкатке: суточный предел в
+ * 10 запросов превращался в «10 на промежуток между выкатками». Механизм
+ * верный, срок жизни неверный — окно предела длиннее жизни процесса.
+ *
+ * 🔒 В таблицу кладётся ХЕШ адреса, а не адрес. Образец взят у воронки
+ * конституции (столбец fpHash): раз уж данные становятся постоянными, они не
+ * должны быть персональными. Соль отделяет наши хеши от чужих радужных таблиц.
+ */
+const AI_SALT = process.env.CONSTITUTION_ANON_SALT || "aevion-constitution-v1";
+let aiTableReady = false;
+let aiDbAvailable = false;
+
+function aiKeyHash(raw: string): string {
+  return createHash("sha256").update(`${raw}|${AI_SALT}`).digest("hex").slice(0, 32);
+}
+
+async function ensureAiDailyTable(): Promise<void> {
+  if (aiTableReady) return;
+  try {
+    await getPool().query(`
+      CREATE TABLE IF NOT EXISTS constitution_ai_daily (
+        "day"   TEXT NOT NULL,
+        "key"   TEXT NOT NULL,
+        "count" INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY ("day", "key")
+      );
+    `);
+    aiDbAvailable = true;
+  } catch {
+    aiDbAvailable = false;
+  }
+  aiTableReady = true;
+}
+
+/** Для тестов: следующая проверка снова спросит базу. */
+export function __resetAiDailyTableState(): void {
+  aiTableReady = false;
+  aiDbAvailable = false;
+}
+
+async function takeAiQuota(rawKey: string): Promise<{ allowed: boolean; used: number; limit: number }> {
+  await ensureAiDailyTable();
+  const limit = AI_FREE_DAILY_LIMIT;
+  if (aiDbAvailable) {
+    const day = new Date().toISOString().slice(0, 10);
+    const key = aiKeyHash(rawKey);
+    try {
+      const r = await getPool().query(
+        `SELECT "count" FROM constitution_ai_daily WHERE "day"=$1 AND "key"=$2`,
+        [day, key],
+      );
+      const used = Number(r.rows[0]?.count ?? 0);
+      if (used >= limit) return { allowed: false, used, limit };
+      await getPool().query(
+        `INSERT INTO constitution_ai_daily ("day","key","count") VALUES ($1,$2,1)
+         ON CONFLICT ("day","key") DO UPDATE SET "count" = constitution_ai_daily."count" + 1`,
+        [day, key],
+      );
+      return { allowed: true, used: used + 1, limit };
+    } catch (e) {
+      // Не роняем ответ из-за учёта, но и не молчим: без этой строки переход на
+      // счётчик в памяти был бы неотличим от нормальной работы, а предел при
+      // этом снова стал бы «на промежуток между выкатками».
+      console.warn(
+        `[constitution/ai] суточный счётчик не прочитан из базы, считаем в памяти ` +
+        `(предел обнулится при выкатке): ${(e as Error)?.message ?? e}`,
+      );
+    }
+  }
+  return checkAndIncrementAiUsage(rawKey);
+}
+
 /** Returns true when the free user is within daily AI limit and increments. */
 function checkAndIncrementAiUsage(key: string): { allowed: boolean; used: number; limit: number } {
   const now = Date.now();
@@ -100,11 +177,16 @@ function checkAndIncrementAiUsage(key: string): { allowed: boolean; used: number
 }
 
 /** Middleware: 429 if free AND over daily AI limit. Pro → pass through. */
-export function aiRateGate(req: Request, res: Response, next: NextFunction): void {
+/**
+ * Ворота стали АСИНХРОННЫМИ: счёт теперь в базе, а она асинхронна. Вызовы уже
+ * приведены через `as unknown as (...) => void`, поэтому подпись совпадает.
+ * Ошибок наружу не выпускаем — всё поймано внутри takeAiQuota.
+ */
+export async function aiRateGate(req: Request, res: Response, next: NextFunction): Promise<void> {
   const { plan } = resolvePlan(req);
   if (plan === "pro") { next(); return; }
   const key = clientKey(req);
-  const { allowed, used, limit } = checkAndIncrementAiUsage(key);
+  const { allowed, used, limit } = await takeAiQuota(key);
   if (allowed) { next(); return; }
   res.status(429).json({
     error: "ai_daily_limit",

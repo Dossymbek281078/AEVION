@@ -137,7 +137,7 @@ export default function CaseCafePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <header className="border-b border-rose-900/40 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-rose-900/40 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link
             href="/smeta-trainer/drawings-practice/hub"
@@ -285,7 +285,7 @@ export default function CaseCafePage() {
                 type="text"
                 value={ex1}
                 onChange={(e) => setEx1(e.target.value)}
-                placeholder="Введите расход в м³/ч"
+                aria-label="Введите расход в м³/ч" placeholder="Введите расход в м³/ч"
                 className="px-4 py-2 rounded-lg bg-slate-800 border border-rose-900/50 text-slate-100 focus:outline-none focus:border-rose-500 w-64"
               />
               <span className="text-slate-400">м³/ч</span>
@@ -444,7 +444,7 @@ export default function CaseCafePage() {
                 type="text"
                 value={ex4}
                 onChange={(e) => setEx4(e.target.value)}
-                placeholder="Введите площадь в м²"
+                aria-label="Введите площадь в м²" placeholder="Введите площадь в м²"
                 className="px-4 py-2 rounded-lg bg-slate-800 border border-rose-900/50 text-slate-100 focus:outline-none focus:border-rose-500 w-64"
               />
               <span className="text-slate-400">м²</span>

@@ -30,7 +30,7 @@ export default function KindergartenDetsadPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/smeta-trainer/drawings-practice" className="text-sm text-blue-300 hover:text-blue-200 transition">← К разделам</Link>
           <div className="text-xs text-slate-500">AEVION Smeta Trainer · Детские сады (ДДУ)</div>
@@ -106,7 +106,7 @@ export default function KindergartenDetsadPage() {
             type="text"
             value={ex2}
             onChange={(e) => setEx2(e.target.value)}
-            placeholder="Площадь, м²"
+            aria-label="Площадь, м²" placeholder="Площадь, м²"
             className="w-full max-w-xs px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Подсказка: 150 × 12.5 = 1875 м² ≈ 1850 м². Типовой ДДУ 150 мест занимает 1800-2000 м² застройки + 1000-1500 м² прогулочные площадки и спорт-зона = земельный участок ~3000-3500 м² (0.3-0.35 га). Реально: типовой проект Минпросвещ. РК ПДОП-150 — 1900 м² + 1100 м² двор = 0.3 га.</p>
@@ -135,7 +135,7 @@ export default function KindergartenDetsadPage() {
             type="text"
             value={ex3}
             onChange={(e) => setEx3(e.target.value)}
-            placeholder="Итого, тенге"
+            aria-label="Итого, тенге" placeholder="Итого, тенге"
             className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
           />
           <p className="text-xs text-slate-500">Цель: ~1.6 млрд тг (допуск ±10%). 360+140+220+120+80+60+38+65+95+80+110+65+38+45+84 = 1600 млн тг = 1.6 млрд тг. Удельная стоимость ~860 тыс. тг/м² или ~10.7 млн тг/место — соответствует типовым проектам ПДОП-150 Минпросвещения РК 2026.</p>

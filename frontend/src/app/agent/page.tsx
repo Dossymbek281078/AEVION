@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { activatable } from "@/lib/activatable";
 import { planFromMessage, parseLLMPlan, buildPlannerSystemPrompt, TOOLS, type AgentPlan } from "./lib/planner";
 import {
   diffLocalModels,
@@ -198,9 +199,20 @@ export default function AgentPage() {
 
         {/* Mode toggles */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
-          <span onClick={() => setSmart((v) => !v)} style={toggle(smart)}>🧠 Smart planning {smart ? "on" : "off"}</span>
+          {/* Переключатель, а не текст: до 31.08.2026 это был span с onClick —
+              мышью работал, Tab проходил мимо. Роль switch, а не button:
+              читалка обязана называть состояние «включено / выключено». */}
           <span
-            onClick={() => localId && setOffline((v) => !v)}
+            {...activatable(() => setSmart((v) => !v))}
+            role="switch"
+            aria-checked={smart}
+            style={toggle(smart)}
+          >🧠 Smart planning {smart ? "on" : "off"}</span>
+          <span
+            {...activatable(() => { if (localId) setOffline((v) => !v); })}
+            role="switch"
+            aria-checked={offline && !!localId}
+            aria-disabled={!localId}
             style={{ ...toggle(offline && !!localId), opacity: localId ? 1 : 0.5 }}
             title={localId ? `Local model: ${localId}` : "No configured local runtime detected"}
           >
@@ -269,7 +281,7 @@ export default function AgentPage() {
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="e.g. «нарисуй логотип для кофейни» · «выставь счёт на $25» · «объясни как работает RSA»"
+          aria-label="Опишите задачу" placeholder="e.g. «нарисуй логотип для кофейни» · «выставь счёт на $25» · «объясни как работает RSA»"
           rows={3}
           style={{
             width: "100%",

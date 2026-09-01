@@ -438,7 +438,7 @@ export default function CyberChessMatchmakingPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {serverRating && (
                   <span
-                    title={`Рейтинг ${speedOf(timeControl)} · ${serverRating.games} партий${serverRating.provisional ? " · провизорный (мало партий)" : ""}`}
+                    title={`Рейтинг ${speedOf(timeControl)} · ${serverRating.games} партий${serverRating.provisional ? " · неточный (мало партий)" : ""}`}
                     className="planet-badge cyan"
                   >
                     {speedOf(timeControl)} {serverRating.rating}
@@ -577,8 +577,15 @@ export default function CyberChessMatchmakingPage() {
           )}
         </section>
 
+        {/* Сказано последствием для человека, а не устройством системы.
+            Было: «Очередь и матчи живут в памяти бэкенда. Без активности
+            5 минут — выкинет из очереди.» Посетитель не знает, что такое
+            «память бэкенда», и не может по этой фразе ничего решить.
+            Найдено 27.08.2026 чтением того, что реально написано на экране:
+            вёрстка цела, ошибок нет, тесты зелёные — заметно только глазом. */}
         <footer className="planet-muted" style={{ textAlign: "center", fontSize: 11.5 }}>
-          Очередь и матчи живут в памяти бэкенда. Без активности 5 минут — выкинет из очереди.
+          Очередь не сохраняется: если перезагрузить страницу, поиск начнётся заново.
+          Через 5 минут без действий мы выведем вас из очереди.
         </footer>
       </div>
     </main>

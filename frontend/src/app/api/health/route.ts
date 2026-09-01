@@ -12,12 +12,25 @@ export function GET() {
       ? Math.round(process.memoryUsage().rss / 1024 / 1024)
       : null;
 
+  // 29.08.2026: пять поверхностей рапортовали ok жёсткой КОНСТАНТОЙ, и только
+  // шестая проверяла по-настоящему. Признак недосмотра — непоследовательность
+  // внутри одного файла: один автор, шесть однотипных записей, у одной
+  // поведение другое.
+  //
+  // Хуже, что рядом в том же ответе стоит честное `persistence: "memory"` —
+  // то есть ручка ЗНАЕТ, что данные живут в памяти процесса и теряются при
+  // перезапуске, и тут же говорит «ok» про все поверхности. Два наших ответа
+  // спорят об одном: кто прочитает ok, до persistence не дойдёт.
+  const durable = kvBackend() === "kv";
+  const lost = durable
+    ? undefined
+    : "хранилище в памяти процесса — записи теряются при перезапуске";
   const surfaces = [
-    { name: "links", count: store.links.size, ok: true },
-    { name: "checkouts", count: store.checkouts.size, ok: true },
-    { name: "subscriptions", count: store.subscriptions.size, ok: true },
-    { name: "webhooks", count: store.webhooks.size, ok: true },
-    { name: "settlements", count: store.settlements.size, ok: true },
+    { name: "links", count: store.links.size, ok: durable, note: lost },
+    { name: "checkouts", count: store.checkouts.size, ok: durable, note: lost },
+    { name: "subscriptions", count: store.subscriptions.size, ok: durable, note: lost },
+    { name: "webhooks", count: store.webhooks.size, ok: durable, note: lost },
+    { name: "settlements", count: store.settlements.size, ok: durable, note: lost },
     {
       name: "idempotency_cache",
       count: store.idempotency.size,
@@ -63,6 +76,19 @@ export function GET() {
         env: process.env.VERCEL_ENV || "local",
         // Идентификатор сборки — он есть всегда, даже когда git-метки нет.
         deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
+        // Режим банковского модуля — и он важнее, чем кажется.
+        //
+        // `NEXT_PUBLIC_BANK_MODE` читают ДВА места с одинаковым дефолтом
+        // "test", но с противоположными последствиями:
+        //   • TestModeBanner — при дефолте баннер ПОКАЖЕТСЯ (это безопасно:
+        //     лучше лишний раз предупредить, чем скрыть тестовый режим);
+        //   • lib/sentry.ts — при дефолте боевые ошибки помечаются как
+        //     `environment: "test"`, то есть их отфильтруют вместе с шумом.
+        //
+        // Второе — тихая потеря тревог, и снаружи она неотличима от тишины.
+        // Значение не секрет (это имя режима), поэтому показываем как есть;
+        // `null` означает, что переменная не задана вовсе.
+        bankMode: process.env.NEXT_PUBLIC_BANK_MODE ?? null,
       },
       runtime: typeof process !== "undefined" ? process.version : "edge",
       memory_rss_mb: memUsed,

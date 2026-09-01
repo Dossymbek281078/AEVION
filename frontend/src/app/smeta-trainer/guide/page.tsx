@@ -34,7 +34,7 @@ const TOC = [
 export default function GuidePage() {
   return (
     <main className="min-h-screen bg-slate-100">
-      <header className="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between sticky top-0 z-10">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <Link href="/smeta-trainer" className="text-slate-300 hover:text-emerald-400 text-sm">← На главную</Link>
           <span className="text-slate-600">·</span>

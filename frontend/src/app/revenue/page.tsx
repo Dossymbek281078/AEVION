@@ -855,7 +855,7 @@ function AppCard({ app }: { app: { appId: string; appName: string; channels: str
 function GumroadSetupCard({ full }: { full?: boolean }) {
   return (
     <div className={`bg-gray-900 border border-pink-500/20 rounded-xl p-5 ${full ? "" : "text-sm"}`}>
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="font-semibold text-pink-300 mb-1">Gumroad не настроен</div>
           <div className="text-gray-400 text-sm mb-3">

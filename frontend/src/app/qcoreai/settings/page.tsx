@@ -71,10 +71,28 @@ export default function SettingsPage() {
   };
 
   const clearFilters = async () => {
-    await fetch(apiUrl("/api/qcoreai/me/settings/content-filters"), {
-      method: "DELETE",
-      headers: bearerHeader(),
-    });
+    // Ответ сервера здесь выбрасывался, а поля и надпись «Saved» ставились
+    // безусловно. То есть при отказе человек видел пустые фильтры и успех,
+    // а после перезагрузки фильтры возвращались — отказ выглядел успехом.
+    //
+    // Механизм ошибки взят у save() в этом же файле, а не заведён новый:
+    // setError уже отрисовывается выше по странице.
+    setError(null);
+    try {
+      const r = await fetch(apiUrl("/api/qcoreai/me/settings/content-filters"), {
+        method: "DELETE",
+        headers: bearerHeader(),
+      });
+      if (!r.ok) {
+        setError(`Clear failed (${r.status}) — filters are unchanged`);
+        return;
+      }
+    } catch (e: any) {
+      setError(e?.message || "Clear failed — filters are unchanged");
+      return;
+    }
+    // Поля чистим ТОЛЬКО после подтверждения сервера, иначе экран разойдётся
+    // с тем, что на самом деле сохранено.
     setBlockedWords("");
     setMaxOutputLength("");
     setRequireSafeSearch(false);

@@ -7,6 +7,7 @@ import {
   requireBuildAuth,
   vString,
 } from "../../lib/build";
+import { queryDate } from "../../lib/queryDate";
 
 export const storiesRouter = Router();
 
@@ -37,9 +38,8 @@ storiesRouter.get("/", async (req, res) => {
     // такую строку не принимает — то есть проверка через один лишь Date.parse
     // слабее базы и 500 остаётся. Параметр называется beforeIso, значит и
     // требовать надо ISO: сначала форма, потом разбор.
-    const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ][\d:.+\-Z]*)?$/;
-    const beforeRaw = typeof req.query.before === "string" ? req.query.before : null;
-    if (beforeRaw !== null && (!ISO_DATE.test(beforeRaw) || Number.isNaN(Date.parse(beforeRaw)))) {
+    const beforeRaw = queryDate(req.query.before);
+    if (beforeRaw === undefined) {
       return fail(res, 400, "invalid_before");
     }
     const beforeIso = beforeRaw;

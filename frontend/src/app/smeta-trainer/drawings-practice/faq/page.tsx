@@ -512,7 +512,7 @@ export default function FaqPage() {
   return (
     <div className="min-h-screen bg-indigo-50/30 dark:bg-slate-950 text-slate-900 dark:text-indigo-100">
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-10 border-b border-indigo-200 dark:border-indigo-900 bg-indigo-100/80 dark:bg-slate-900/80 backdrop-blur">
+      <header style={{ top: "var(--aevion-header-h, 0px)" }} className="sticky top-0 z-10 border-b border-indigo-200 dark:border-indigo-900 bg-indigo-100/80 dark:bg-slate-900/80 backdrop-blur">
         <div className="max-w-screen-xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
           <Link
             href="/smeta-trainer/drawings-practice/hub"
@@ -564,7 +564,7 @@ export default function FaqPage() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Поиск по FAQ — вопрос, ответ, тег..."
+              aria-label="Поиск по FAQ — вопрос, ответ, тег..." placeholder="Поиск по FAQ — вопрос, ответ, тег..."
               className="w-full rounded-lg border-2 border-indigo-300 dark:border-indigo-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm sm:text-base text-slate-900 dark:text-indigo-100 placeholder-slate-400 dark:placeholder-indigo-400/60 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
             />
           </label>

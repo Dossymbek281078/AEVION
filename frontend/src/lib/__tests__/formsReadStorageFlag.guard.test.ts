@@ -122,8 +122,6 @@ const KNOWN_UNREAD = new Set([
   "app/developers/opengraph-image.tsx",
   "app/developers/page.tsx",
   "app/devhub/[id]/deploy/page.tsx",
-  "app/devhub/[id]/page.tsx",
-  "app/devhub/page.tsx",
   "app/fintech/playground/page.tsx",
   "app/mapreality/components/SignalCard.tsx",
   "app/mapreality/components/SignalForm.tsx",

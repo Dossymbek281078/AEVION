@@ -323,7 +323,11 @@ applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {
         .join(","),
     ).join("\n");
 
-    const vacancySlug = String(owner.rows[0].title || id).replace(/[^a-z0-9]/gi, "-").toLowerCase();
+    const slugRaw = String(owner.rows[0].title || id)
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase();
+    const vacancySlug = /[a-z0-9]/.test(slugRaw) ? slugRaw.slice(0, 40) : String(id);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="applications-${vacancySlug}-${new Date().toISOString().slice(0, 10)}.csv"`);
     return res.send(`${header}\n${body}`);
@@ -940,7 +944,13 @@ applicationsRouter.post("/:id/flag", async (req, res) => {
 
 async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECTED") {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return; // email not configured
+  if (!apiKey) {
+    // Пропуск без следа значит, что кандидат НЕ УЗНАЛ решения по своей заявке,
+    // и об этом не знает никто: ни он, ни рекрутер, ни дежурный. Решение
+    // «не отправлять» остаётся, видимость появляется.
+    console.warn(`[build] ПИСЬМО НЕ ОТПРАВЛЕНО (RESEND_API_KEY не задан): кандидат ${candidateId}, решение ${status}`);
+    return;
+  }
   try {
     const u = await pool.query(`SELECT "email","name" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`, [candidateId]);
     if (!u.rows[0]) return;
@@ -951,11 +961,27 @@ async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECT
     const text = status === "ACCEPTED"
       ? `Hi ${name},\n\nGreat news! Your application was accepted. The employer will reach out via AEVION QBuild messages.\n\nhttps://aevion.app/build/applications\n\n— AEVION QBuild`
       : `Hi ${name},\n\nThis employer has decided not to move forward. Keep browsing open vacancies.\n\nhttps://aevion.app/build/vacancies\n\n— AEVION QBuild`;
-    await fetch("https://api.resend.com/emails", {
+    const resp = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from: "QBuild <noreply@aevion.app>", to: email, subject, text }),
     });
+        // Сведено 31.08 при сборке к 10.09: обе стороны дописали РАЗНОЕ в одно
+        // место. Наша — разбор ответа провайдера (раньше «письмо отправлено»
+        // печаталось независимо от кода, и отказ выглядел в журнале удачей).
+        // Их — отметка расхода в счётчике суточной квоты. Нужны обе: первая
+        // не даёт соврать в журнале, вторая не даёт молча выжечь квоту.
+    // Ответ ОБЯЗАН быть прочитан: раньше строка «email sent» печаталась
+    // независимо от кода, и отказ провайдера выглядел в журнале удачей. Это
+    // хуже отсутствия журнала — на такую запись потом ссылаются как на
+    // доказательство отправки.
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.warn(
+        `[build] ПИСЬМО НЕ ПРИНЯТО ПРОВАЙДЕРОМ (${resp.status}): кандидат ${candidateId}, решение ${status}: ${body.slice(0, 200)}`,
+      );
+      return;
+    }
     // Одно письмо — один получатель. Отметка обязана стоять на КАЖДОМ пути:
     // счётчик, видящий часть путей, занижает расход и молчит именно тогда,
     // когда потолок выбран.

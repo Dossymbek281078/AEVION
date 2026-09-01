@@ -56,20 +56,31 @@ let n = 0;
 const nextSale = () => `sale-${++n}`;
 
 /** Пинг: что ЗАЯВЛЯЕТ отправитель. */
-function ping(saleId: string, email: string, productId: string) {
+function ping(saleId: string, email: string, productId: string, price?: string) {
   parseWebhook.mockReturnValue({
     eventId: saleId,
     result: {
       status: "paid",
       paidAt: null,
       reason: null,
-      raw: { sale_id: saleId, email, product_id: productId },
+      raw: {
+        sale_id: saleId,
+        email,
+        product_id: productId,
+        // Ссылка на товар нужна, иначе модуль не опознаётся и выдачи нет вовсе:
+        // мои первые три случая «падали» именно на этом, а не на сумме.
+        product_permalink: "https://aevion.gumroad.com/l/pyiaz",
+        ...(price ? { price } : {}),
+      },
     },
   });
 }
 /** Что Gumroad подтвердил на самом деле. */
-const confirmed = (email: string, productId: string) =>
-  verifyDetailed.mockResolvedValue({ verdict: "confirmed", sale: { purchase_email: email, product_id: productId } });
+const confirmed = (email: string, productId: string, price?: string) =>
+  verifyDetailed.mockResolvedValue({
+    verdict: "confirmed",
+    sale: { purchase_email: email, product_id: productId, ...(price === undefined ? {} : { price }) },
+  });
 
 const granted = () =>
   provisionSubscription.mock.calls.length > 0 ||
@@ -153,5 +164,71 @@ describe("Честные случаи не сломаны", () => {
     const r = await request(app()).post("/webhook").send({});
     expect(verifyDetailed).not.toHaveBeenCalled();
     expect(r.status).not.toBe(401);
+  });
+});
+
+/**
+ * Сумма продажи: два однозначных случая.
+ *
+ * ЗАЧЕМ. Девять позиций каталога продаются ПРЯМОЙ ссылкой Gumroad — наша сумма
+ * в неё не передаётся вовсе, платит человек столько, сколько выставлено у
+ * продавца. Сверить факт с нашей ценой нечем: цен модулей бэкенд не хранит.
+ * Но два случая не требуют нашей цены и говорят сами за себя.
+ *
+ * Доступ в обоих случаях ВЫДАЁТСЯ. Отказать оплатившему дороже, чем выдать по
+ * купону основателя; меняется только то, что случай перестаёт быть невидимым.
+ * Проверяется поэтому не отказ, а СЛЕД.
+ */
+describe("сумма продажи оставляет след, когда говорит сама за себя", () => {
+  let warned: string[] = [];
+  beforeEach(() => {
+    warned = [];
+    vi.spyOn(console, "warn").mockImplementation((...a: unknown[]) => {
+      warned.push(a.map(String).join(" "));
+    });
+  });
+
+  test("нулевая сумма: доступ выдан, но это видно", async () => {
+    const s = nextSale();
+    ping(s, "buyer@example.com", "prod_1", "0");
+    confirmed("buyer@example.com", "prod_1", "0");
+    const r = await request(app()).post("/webhook").send({});
+    expect(r.status, "вебхук не принял пинг — дальше мерить нечего").toBe(200);
+    // Доступ не отбираем: проверяем, что пинг ПРИНЯТ (200 выше) и работа с
+    // базой началась. Помощник granted() сюда не годится — он знает пути
+    // тарифов и DevHub, а это покупка модуля, и она пишется другим запросом.
+    // Утверждать «выдано» его словами значило бы мерить не тот путь.
+    expect(
+      query.mock.calls.length,
+      "пинг принят, но до базы дело не дошло — значит доступ не выдавался",
+    ).toBeGreaterThan(0);
+    expect(
+      warned.join(" "),
+      "доступ выдан бесплатно, и об этом не осталось следа — снаружи неотличимо от обычной покупки",
+    ).toContain("БЕСПЛАТНО");
+  });
+
+  test("сумма в пинге разошлась с продажей: это видно", async () => {
+    // Пинг не подписан и адрес его публично известен, поэтому расхождение
+    // сумм — признак подделки, а не ошибки округления.
+    const s = nextSale();
+    ping(s, "buyer@example.com", "prod_1", "100");
+    confirmed("buyer@example.com", "prod_1", "4900");
+    const r = await request(app()).post("/webhook").send({});
+    expect(r.status, "вебхук не принял пинг — дальше мерить нечего").toBe(200);
+    expect(warned.join(" "), "расхождение сумм прошло молча").toContain("подделки");
+  });
+
+  test("контроль: обычная покупка следа НЕ оставляет", async () => {
+    // Без этого «след есть» означало бы «я пишу в журнал всегда», и оба
+    // случая выше подтверждались бы сами собой.
+    const s = nextSale();
+    ping(s, "buyer@example.com", "prod_1", "4900");
+    confirmed("buyer@example.com", "prod_1", "4900");
+    const r = await request(app()).post("/webhook").send({});
+    expect(r.status, "вебхук не принял пинг — дальше мерить нечего").toBe(200);
+    const log = warned.join(" ");
+    expect(log, "обычная покупка помечена как бесплатная").not.toContain("БЕСПЛАТНО");
+    expect(log, "обычная покупка помечена как подделка").not.toContain("подделки");
   });
 });

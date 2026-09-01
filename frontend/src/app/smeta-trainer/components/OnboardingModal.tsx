@@ -1,7 +1,7 @@
 "use client";
 
 import { LESSONS } from "../lib/lessons";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const STORAGE_KEY = "aevion-smeta-onboarding-v1";
 
@@ -57,6 +57,54 @@ export function OnboardingModal() {
     setVisible(false);
   }
 
+  const окноRef = useRef<HTMLDivElement | null>(null);
+
+  // Разметка диалога появилась 28.08, но ПОВЕДЕНИЯ у окна не было: замер прода
+  // 01.09.2026 — Escape не закрывал, а фокус попадал внутрь только на 24-м
+  // нажатии Tab. До этого человек без мыши шёл по кнопкам страницы ПОД окном,
+  // то есть управлял тем, чего не видит. role="dialog" сам по себе фокус не
+  // переводит и Tab не удерживает — это делает код.
+  useEffect(() => {
+    if (!visible) return;
+    const узел = окноRef.current;
+    if (!узел) return;
+    const прежний = document.activeElement as HTMLElement | null;
+    const фокусируемые = () =>
+      Array.from(
+        узел.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((e) => e.offsetWidth > 0 || e.offsetHeight > 0);
+    (фокусируемые()[0] ?? узел).focus();
+
+    const наКлавишу = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        finish();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const сп = фокусируемые();
+      if (!сп.length) return;
+      const первый = сп[0];
+      const последний = сп[сп.length - 1];
+      if (e.shiftKey && document.activeElement === первый) {
+        e.preventDefault();
+        последний.focus();
+      } else if (!e.shiftKey && document.activeElement === последний) {
+        e.preventDefault();
+        первый.focus();
+      }
+    };
+    document.addEventListener("keydown", наКлавишу, true);
+    return () => {
+      document.removeEventListener("keydown", наКлавишу, true);
+      // Вернуть фокус туда, откуда его забрали: иначе после закрытия человек
+      // оказывается в начале страницы и теряет место.
+      прежний?.focus?.();
+    };
+  }, [visible]);
+
   if (!visible) return null;
 
   const s = STEPS[step];
@@ -69,6 +117,8 @@ export function OnboardingModal() {
           читать содержимое ПОД окном, хотя нажать там ничего нельзя.
           Замер прода 28.08.2026. */}
       <div
+        ref={окноRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="smeta-onboarding-title"

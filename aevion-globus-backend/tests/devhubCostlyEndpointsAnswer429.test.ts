@@ -57,10 +57,26 @@ async function долбить(путь: string): Promise<number[]> {
   return коды;
 }
 
+// Одиннадцать платных ручек модуля. Три верхние закрыты утром 01.09, восемь
+// нижних — в тот же день после того, как ПРОПУЩЕННЫЙ целевой тест показал их
+// в списке известных незащищённых.
+//
+// Проверять их потоком безопасно и бесплатно: у каждой проверка тела стоит в
+// первых строках обработчика, то есть пустое тело отбивается ДО обращения к
+// платному провайдеру. Это свойство закреплено отдельным утверждением ниже —
+// ослабнет проверка тела, и поток уйдёт в кассу, а мы об этом узнаем.
 const РУЧКИ: Array<[string, string]> = [
   ["/api/devhub/plan", "план проекта"],
   ["/api/devhub/projects/proba/agent/workflow", "прогон агента"],
   ["/api/devhub/projects/proba/agent/workflow/stream", "прогон агента потоком"],
+  ["/api/devhub/media/sfx", "звуковой эффект"],
+  ["/api/devhub/media/voice-clone", "клон голоса"],
+  ["/api/devhub/media/voice-clone/preview", "превью клона голоса"],
+  ["/api/devhub/media/stt", "распознавание речи"],
+  ["/api/devhub/media/translate", "перевод текста"],
+  ["/api/devhub/projects/proba/files/translate", "перевод файла"],
+  ["/api/devhub/projects/proba/files/translate-bulk", "перевод пачкой"],
+  ["/api/devhub/media/email-template-create", "шаблон письма"],
 ];
 
 describe("платные ручки DevHub упираются в потолок, а не отвечают бесконечно", () => {

@@ -32,7 +32,22 @@ import path from "node:path";
  * Тогда и склонение живо, и атрибут чист.
  */
 
-const ATTRS = ["title={", "aria-label={", "placeholder={", "alt={"];
+const NAMES = ["title", "aria-label", "placeholder", "alt", "label", "tooltip", "ariaLabel"];
+const ATTRS = NAMES.map((n) => n + "={");
+
+// ВТОРАЯ ФОРМА ЗАПИСИ: подсказка="текст" БЕЗ фигурных скобок.
+//
+// 01.09.2026, тот же день. Сторож читал только форму со скобками, и я
+// с ним же прошёл по платформе: получил 125 мест. Настоящих оказалось
+// 1365 — занижение в одиннадцать раз, и успело разойтись по окнам.
+// Именно так был записан русский в общем чипе: label="Провенанс данных".
+//
+// Отрицательный взгляд назад «(?<![A-Za-z-])» обязателен: без него
+// subtitle= совпадает с title=, а ariaLabel= с label=.
+const PLAIN = new RegExp(
+  "(?<![A-Za-z-])(" + NAMES.join("|") + ")=\"([^\"]*)\"",
+  "g",
+);
 
 function attributeExpressions(src: string): { at: number; expr: string }[] {
   const out: { at: number; expr: string }[] = [];
@@ -55,6 +70,12 @@ function attributeExpressions(src: string): { at: number; expr: string }[] {
       out.push({ at: src.slice(0, i).split(NL).length, expr: src.slice(i, j) });
       i = j;
     }
+  }
+  PLAIN.lastIndex = 0;
+  for (;;) {
+    const m = PLAIN.exec(src);
+    if (!m) break;
+    out.push({ at: src.slice(0, m.index).split(NL).length, expr: m[0] });
   }
   return out;
 }

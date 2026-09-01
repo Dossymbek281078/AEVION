@@ -8568,7 +8568,7 @@ export default function CyberChessPage(){
               title="Голосовой анализ позиции"
               style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
                 background:CC.surface2,color:CC.textDim}}>
-              🔊 Whisper
+              🔊 Вслух
             </button>
             {savedGames.length>0&&<button onClick={()=>sGamesModalOpen(true)}
               style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
@@ -10731,7 +10731,7 @@ export default function CyberChessPage(){
                   <span style={{fontSize:13,fontWeight:900,color:T.text}}>⚡ Анализ движком</span>
                   <span style={{display:"flex",alignItems:"center",gap:4}}>
                     <span style={{width:6,height:6,borderRadius:3,background:sfOk?T.accent:T.danger}}/>
-                    <span style={{fontSize:11,color:T.dim}}>{sfOk?"ready":"loading"}</span>
+                    <span style={{fontSize:11,color:T.dim}}>{sfOk?"готов":"загружается"}</span>
                   </span>
                 </div>
                 <span style={{fontSize:13,color:T.dim,transform:enginePanelExpanded?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
@@ -10798,7 +10798,7 @@ export default function CyberChessPage(){
               Click ▶ Analyze or make a move to see engine lines
             </div>}
             {mpvRunning&&<div style={{padding:"20px",textAlign:"center",color:T.purple,fontSize:14,fontWeight:700,background:"rgba(124,58,237,0.04)",borderRadius:10,border:`1px solid rgba(124,58,237,0.2)`}}>
-              ⚡ Analyzing depth {mpvDepth} with {mpvCount} lines...
+              ⚡ Считаю на глубине {mpvDepth}, вариантов: {mpvCount}…
             </div>}
           </div>}
 

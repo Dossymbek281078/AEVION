@@ -316,7 +316,7 @@ export function StrategyPanel({ s }: { s: Strategy }) {
       {isPass && s.reEntryConditions && s.reEntryConditions.length > 0 && (
         <div style={{ marginBottom: 14, border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 4, padding: "12px 16px" }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: "#991b1b", marginBottom: 6 }}>
-            Not investable as presented — what would have to change
+            В текущем виде инвестировать нельзя — что нужно изменить
           </div>
           <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--ink-soft, #45474c)", lineHeight: 1.55 }}>
             {s.reEntryConditions.map((c, i) => <li key={i} style={{ marginBottom: 3 }}>{c}</li>)}
@@ -351,7 +351,7 @@ export function StrategyPanel({ s }: { s: Strategy }) {
         background: isPass ? "#fffbeb" : "#f0fdf4",
         border: `1px solid ${isPass ? "#fde68a" : "#bbf7d0"}`,
       }}>
-        <strong>Portfolio:</strong> {s.portfolioNote}
+        <strong>Портфель:</strong> {s.portfolioNote}
       </div>
     </div>
   );
@@ -497,7 +497,7 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
                 <td style={{ padding: "8px", color: "var(--ink-faint, #74767c)" }}>{c.date || "—"}</td>
                 {data.mode === "live" && (
                   <td style={{ padding: "8px" }}>
-                    {c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700, textDecoration: "none" }}>link ↗</a> : "—"}
+                    {c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700, textDecoration: "none" }}>ссылка ↗</a> : "—"}
                   </td>
                 )}
               </tr>
@@ -588,7 +588,7 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
       {header}
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
         <span style={{ fontSize: 30, fontWeight: 800, color: pctColor, lineHeight: 1 }}>{ordinal(data.percentile ?? 0)}</span>
-        <span style={{ fontSize: 14, color: "var(--ink-soft, #45474c)" }}>percentile</span>
+        <span style={{ fontSize: 14, color: "var(--ink-soft, #45474c)" }}>перцентиль</span>
         <span style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>— scores higher than {data.percentile}% of {data.count} {data.basisLabel}</span>
       </div>
 
@@ -613,9 +613,9 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
 
       <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>
         {data.p25 != null && <span>25th pct: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p25)}</b></span>}
-        {data.median != null && <span>median: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.median)}</b></span>}
+        {data.median != null && <span>медиана: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.median)}</b></span>}
         {data.p75 != null && <span>75th pct: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p75)}</b></span>}
-        {data.best != null && <span>best seen: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.best)}</b></span>}
+        {data.best != null && <span>лучшее из виденного: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.best)}</b></span>}
       </div>
       <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>{data.disclaimer}</div>
     </div>

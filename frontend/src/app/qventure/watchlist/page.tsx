@@ -64,7 +64,7 @@ export default function WatchlistPage() {
             <h2 style={{ ...H2, marginBottom: 6 }}>Пока ничего не сохранено</h2>
             <p style={{ color: "var(--ink-faint, #74767c)", margin: "0 0 16px" }}>Запустите разбор и нажмите <strong>Сохранить в список</strong> — сделка появится здесь.</p>
             <Link href="/qventure" style={{ display: "inline-block", padding: "10px 22px", background: "var(--teal-deep, #075b53)", color: "#fff", borderRadius: 10, fontWeight: 700, textDecoration: "none" }}>
-              Analyze your first deal →
+              Разобрать первую сделку →
             </Link>
           </div>
         ) : (
@@ -126,7 +126,7 @@ export default function WatchlistPage() {
                         </td>
                         <td style={{ padding: "10px 14px", color: "var(--ink-faint, #74767c)", fontSize: 12.5 }}>{it.savedAt.slice(0, 10)}</td>
                         <td style={{ padding: "10px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
-                          <Link href={`/qventure/a/${it.id}`} style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700, textDecoration: "none", marginRight: 12, fontSize: 12.5 }}>Open →</Link>
+                          <Link href={`/qventure/a/${it.id}`} style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700, textDecoration: "none", marginRight: 12, fontSize: 12.5 }}>Открыть →</Link>
                           <button type="button" onClick={() => remove(it.id)} style={{ border: "none", background: "none", color: "var(--ink-faint, #74767c)", cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>Убрать</button>
                         </td>
                       </tr>

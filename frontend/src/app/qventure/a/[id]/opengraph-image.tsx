@@ -199,7 +199,7 @@ export default async function QVentureOgImage({
               maxWidth: 360,
             }}
           >
-            quant score · 4-role council · entry strategy
+            числовая оценка · совет из 4 ролей · стратегия входа
           </div>
         </div>
       </div>

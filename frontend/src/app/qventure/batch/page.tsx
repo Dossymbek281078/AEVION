@@ -221,7 +221,7 @@ export default function BatchPage() {
             <div style={{ ...SECTION }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
                 <h2 style={{ ...H2, margin: 0, flex: 1 }}>Рейтинг</h2>
-                <span style={{ fontSize: 12, color: "var(--ink-faint, #74767c)" }}>Sort:</span>
+                <span style={{ fontSize: 12, color: "var(--ink-faint, #74767c)" }}>Сортировка:</span>
                 {(["composite", "redFlags", "name"] as SortKey[]).map((k) => (
                   <button key={k} type="button" onClick={() => setSort(k)} style={{
                     padding: "5px 11px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer",
@@ -236,7 +236,7 @@ export default function BatchPage() {
                     <tr style={{ textAlign: "left", color: "var(--ink-faint, #74767c)", fontSize: 12, borderBottom: "2px solid var(--rule, #d4d3cc)" }}>
                       <th style={{ padding: "8px 6px" }}>#</th>
                       <th style={{ padding: "8px 6px" }}>Компания</th>
-                      <th style={{ padding: "8px 6px" }}>Sector · Stage</th>
+                      <th style={{ padding: "8px 6px" }}>Отрасль · стадия</th>
                       <th style={{ padding: "8px 6px", textAlign: "right" }}>Оценка</th>
                       <th style={{ padding: "8px 6px" }}>Вердикт</th>
                       <th style={{ padding: "8px 6px", textAlign: "right" }}>Флаги</th>
@@ -259,7 +259,7 @@ export default function BatchPage() {
                         <td style={{ padding: "9px 6px", textAlign: "right", fontWeight: 700, color: r.redFlags > 0 ? "#b45309" : "var(--ink-faint, #74767c)" }}>{r.redFlags}</td>
                         <td style={{ padding: "9px 6px", color: r.resilience === "underwater" || r.resilience === "fragile" ? "#b45309" : "var(--ink-soft, #45474c)", textTransform: "capitalize" }}>{r.resilience}</td>
                         <td style={{ padding: "9px 6px", textAlign: "right" }}>
-                          <Link href={`/qventure/a/${r.id}`} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none", whiteSpace: "nowrap" }}>Report →</Link>
+                          <Link href={`/qventure/a/${r.id}`} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none", whiteSpace: "nowrap" }}>Отчёт →</Link>
                         </td>
                       </tr>
                     ))}

@@ -148,7 +148,7 @@ export default function QVenturePage() {
             fontSize: 14, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none",
             borderBottom: "1px solid color-mix(in srgb, var(--teal, #0a7d72) 45%, transparent)",
           }}>
-            See a live example → <span style={{ fontWeight: 400, color: "var(--ink-faint, #74767c)" }}>(NeuroDx report)</span>
+            Живой пример → <span style={{ fontWeight: 400, color: "var(--ink-faint, #74767c)" }}>(NeuroDx report)</span>
           </Link>
         </div>
 
@@ -228,7 +228,7 @@ function MarketingSections() {
       </div>
 
       <div style={SECTION}>
-        <h2 style={H2}>Who it&apos;s for</h2>
+        <h2 style={H2}>Кому подходит</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
           {audience.map((a, i) => (
             <div key={i} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, background: "#fff" }}>
@@ -397,7 +397,7 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
           <button onClick={runSample} disabled={loading} type="button" style={ghostBtn(loading)}>
             ✨ Показать пример разбора
           </button>
-          <span style={{ fontSize: 12.5, color: "#94a3b8" }}>No input needed — loads a real seed-stage case.</span>
+          <span style={{ fontSize: 12.5, color: "#94a3b8" }}>Ничего вводить не нужно — загрузим настоящий пример стадии посева.</span>
         </div>
       </div>
       {result && <ResultView result={result} />}
@@ -617,7 +617,7 @@ function FormFields({ form, set, sectors, full = false }: {
         )}
       </div>
       <div style={{ marginBottom: full ? 14 : 0 }}>
-        <label style={LABEL}>What does it do? *</label>
+        <label style={LABEL}>Что делает продукт? *</label>
         <textarea style={{ ...INPUT, minHeight: 72, resize: "vertical" }} value={form.description} onChange={set("description")}
           placeholder="One-paragraph description of the product, the problem it solves, and the wedge." />
       </div>
@@ -648,10 +648,10 @@ function FormFields({ form, set, sectors, full = false }: {
           </summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
             <div><label style={LABEL}>ARR (USD)</label><input aria-label="ARR (USD)" style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
-            <div><label style={LABEL}>Gross margin (%)</label><input aria-label="Gross margin (%)" style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Валовая маржа (%)</label><input aria-label="Gross margin (%)" style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
             <div><label style={LABEL}>LTV / CAC ratio</label><input aria-label="LTV / CAC ratio" style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
             <div>
-              <label style={LABEL}>Churn (%)</label>
+              <label style={LABEL}>Отток (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
                 <input style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" />
                 <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label="Churn period">
@@ -664,7 +664,7 @@ function FormFields({ form, set, sectors, full = false }: {
             </div>
             <div><label style={LABEL}>Клиенты</label><input aria-label="Клиенты" style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
             <div>
-              <label style={LABEL}>Growth (%)</label>
+              <label style={LABEL}>Рост (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
                 <input style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} placeholder="15" inputMode="numeric" />
                 <select style={{ ...INPUT, width: 104 }} value={form.finGrowthPeriod} onChange={set("finGrowthPeriod")} aria-label="Growth period">

@@ -69,7 +69,7 @@ export default async function GalleryPage() {
           </p>
           <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
             <Link href="/qventure" style={{ padding: "10px 20px", background: "var(--teal-deep, #075b53)", color: "#fff", borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
-              Run your own analysis →
+              Свой разбор →
             </Link>
             <a href="/api-backend/api/qventure/examples.csv" style={{ padding: "10px 20px", background: "#fff", color: "var(--teal-deep, #075b53)", border: "1px solid var(--rule-mid, #b9b8b0)", borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
               ⬇ Download as CSV
@@ -80,7 +80,7 @@ export default async function GalleryPage() {
         {examples.length === 0 ? (
           <div style={{ textAlign: "center", padding: "50px 20px", color: "var(--ink-faint, #74767c)" }}>
             Examples are warming up — check back in a moment, or{" "}
-            <Link href="/qventure" style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700 }}>run your own analysis</Link>.
+            <Link href="/qventure" style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700 }}>запустите свой разбор</Link>.
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
@@ -122,9 +122,9 @@ export default async function GalleryPage() {
         )}
 
         <div style={{ marginTop: 22, padding: "18px 20px", borderRadius: 4, background: "var(--ink, #17181a)", color: "#fff", textAlign: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Have a company in mind?</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Есть компания на примете?</div>
           <Link href="/qventure" style={{ display: "inline-block", padding: "10px 22px", background: "var(--teal-deep, #075b53)", color: "#fff", borderRadius: 10, fontWeight: 700, textDecoration: "none" }}>
-            Get a fund-grade memo →
+            Инвестиционное резюме →
           </Link>
         </div>
       </ProductPageShell>

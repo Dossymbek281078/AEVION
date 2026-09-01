@@ -12517,7 +12517,7 @@ ${question.trim()}`;
         {title:"Эксклюзивные фичи AEVION",rows:[
           ["⚔ в «Мои партии»","Ghost Duel — дуэль с прошлой собой"],
           ["🤝 Друг онлайн","P2P без сервера — отправь другу ссылку"],
-          ["BoardArt в Настройках","Декор доски: Шанырак, Волна, Klimt…"],
+          ["Декор доски в настройках","Шанырак, Волна, Klimt…"],
           ["?? / !! тосты","Авто-обнаружение блунда/брилланта"],
           ["WhatIf в Analysis","AI объяснит любую кандидатную линию"],
         ]},
@@ -14266,7 +14266,7 @@ ${question.trim()}`;
             {!muted&&<div style={{paddingLeft:16,display:"flex",flexDirection:"column",gap:2}}>
               <Row label="↳ Звуки ходов" desc="Ход, взятие, рокировка, шах, премув." checked={sndMoves} onChange={()=>{const nv=!sndMoves;sSndMoves(nv);try{localStorage.setItem(SK_MOVES,nv?"1":"0")}catch{}}}/>
               <Row label="↳ Финальный сигнал" desc="Звук при мате, просрочке, сдаче." checked={sndClock} onChange={()=>{const nv=!sndClock;sSndClock(nv);try{localStorage.setItem(SK_CLOCK,nv?"1":"0")}catch{}}}/>
-              <Row label="↳ UI-события" desc="Уведомления, ачивки, toast-звуки." checked={sndUi} onChange={()=>{const nv=!sndUi;sSndUi(nv);try{localStorage.setItem(SK_UI,nv?"1":"0")}catch{}}}/>
+              <Row label="↳ События интерфейса" desc="Уведомления, награды, короткие звуки." checked={sndUi} onChange={()=>{const nv=!sndUi;sSndUi(nv);try{localStorage.setItem(SK_UI,nv?"1":"0")}catch{}}}/>
             </div>}
             <Row label="Голос-коуч (гроссмейстерский разбор)" desc="ИИ вслух объясняет ходы на уровне гроссмейстера. Включается в анализе и обучении, в партии — по желанию. В задачах не звучит." checked={liveCommentary} onChange={()=>{const nv=!liveCommentary;sLiveCommentary(nv);showToast(nv?"Голос-коуч включён — разбор в анализе/обучении":"Голос-коуч выключен","info")}}/>
             <Row label="Голос на Master Games" desc="Чтение разбора и заметок к ходам в библиотеке мастеров." checked={masterVoice} onChange={()=>{
@@ -14310,15 +14310,15 @@ ${question.trim()}`;
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎮 Игра</div>
-            <Row label="Auto-queen (превращение в ферзя)" desc="Пешка на 8-й сразу становится ферзём — без модалки. Для bullet/blitz и премувов. Выключи если нужны underpromotions (конь, ладья, слон)." checked={autoQueen} onChange={()=>sAutoQueen(v=>!v)}/>
+            <Row label="Сразу ферзь при превращении" desc="Пешка на 8-й сразу становится ферзём — без лишнего окна. Удобно в пуле и блице. Выключи, если нужно превращать в коня, ладью или слона." checked={autoQueen} onChange={()=>sAutoQueen(v=>!v)}/>
             <Row label="Подсказка дебюта (стрелка)" desc="Фиолетовая пунктирная стрелка показывает книжный ход в дебюте (первые 8 ходов, на твоём ходу). Помогает изучать теорию." checked={showBookArrow} onChange={()=>sShowBookArrow(v=>!v)}/>
             <Row label="Карта угроз" desc="Подсветка контроля доски: зелёный — белые, красный — чёрные, янтарный — спорно." checked={showThreatMap} onChange={()=>sShowThreatMap(v=>!v)}/>
             <Row label="Streamer Mode" desc="Скрывает рейтинг и историю — для стримов и публичных демо." checked={streamerMode} onChange={()=>sStreamerMode(v=>!v)}/>
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
               <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>Глубина анализа Stockfish (F2-3)</div>
-              <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>Для CPI и top-3 metrics. Не влияет на силу противника. <b style={{color:CC.text}}>Сейчас: depth={sfDepth}</b></div>
+              <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>Для CPI и трёх лучших показателей. Не влияет на силу противника. <b style={{color:CC.text}}>Сейчас: depth={sfDepth}</b></div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {[{d:14,lbl:"⚡ 14 (быстро)"},{d:18,lbl:"🎯 18 (баланс)"},{d:22,lbl:"📈 22 (точнее)"},{d:25,lbl:"🔬 25 (макс)"},{d:30,lbl:"🧠 30 (NNUE deep)"}].map(opt=>{
+                {[{d:14,lbl:"⚡ 14 (быстро)"},{d:18,lbl:"🎯 18 (баланс)"},{d:22,lbl:"📈 22 (точнее)"},{d:25,lbl:"🔬 25 (макс)"},{d:30,lbl:"🧠 30 (максимум)"}].map(opt=>{
                   const selected=sfDepth===opt.d;
                   return <button key={opt.d}
                     onClick={()=>{sSfDepth(opt.d);showToast(`Stockfish, глубина ${opt.d}`,"info")}}
@@ -14367,7 +14367,7 @@ ${question.trim()}`;
                 </button>;
               })}
             </div>
-            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>🖼 Декор доски (Board Art)</div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>🖼 Декор доски</div>
             <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap",marginBottom:SPACE[2]}}>
               {BOARD_ART_OPTIONS.map(opt=>{
                 const selected=boardArt===opt.v;

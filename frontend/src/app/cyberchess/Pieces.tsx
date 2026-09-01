@@ -14,10 +14,10 @@ export type PieceSetId = "cburnett" | "neon" | "minimal" | "bold";
 const LS_KEY = "aevion_chess_pieceset_v1";
 
 export const PIECE_SETS: { id: PieceSetId; name: string; hint: string }[] = [
-  { id: "cburnett", name: "Cburnett",  hint: "Classic vector (default)" },
-  { id: "neon",     name: "Neon",      hint: "AEVION glow" },
-  { id: "minimal",  name: "Minimal",   hint: "Clean monochrome" },
-  { id: "bold",     name: "Bold",      hint: "Heavy weight serif" },
+  { id: "cburnett", name: "Cburnett",  hint: "Классические, по умолчанию" },
+  { id: "neon",     name: "Neon",      hint: "Неоновое свечение AEVION" },
+  { id: "minimal",  name: "Minimal",   hint: "Чистые, одноцветные" },
+  { id: "bold",     name: "Bold",      hint: "Жирные, с засечками" },
 ];
 
 export function getActivePieceSet(): PieceSetId {

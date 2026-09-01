@@ -334,7 +334,7 @@ export default function DevHubPage() {
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <textarea
-              aria-label="Опишите, что построить"
+              aria-label={t("hero.ideaAria")}
               value={ideaPrompt}
               onChange={(e) => setIdeaPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) startFromIdea(); }}

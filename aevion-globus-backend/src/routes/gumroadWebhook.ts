@@ -286,6 +286,11 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
   const raw = result.raw as Record<string, string> | null ?? {};
 
+  // ФАКТИЧЕСКИ списанное, в долларах. Объявлено здесь, у начала тела, а не
+  // рядом с проверкой: читателей два и они в РАЗНЫХ вложенных блоках —
+  // тревоги о нулевой оплате и запись суммы в подписку. Первая редакция
+  // объявляла её внутри проверки, и до записи переменная не доживала.
+  let paidUsd: number | undefined;
   const saleId = raw.sale_id ?? raw.id ?? eventId ?? "";
   const email = (raw.email ?? "").trim().toLowerCase();
   const productId = raw.product_id ?? raw.short_product_id ?? "";
@@ -438,6 +443,8 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     if (verdict === "confirmed" && sale) {
       const paidCents = Number.parseInt(String(sale.price ?? ""), 10);
       const pingCents = Number.parseInt(String(raw.price ?? ""), 10);
+      // Наружу блока — её пишем в запись подписки ниже.
+      if (Number.isFinite(paidCents) && paidCents > 0) paidUsd = paidCents / 100;
       if (!Number.isFinite(paidCents) || paidCents <= 0) {
         console.warn(
           `[gumroad/webhook] sale ${saleId}: сумма ${JSON.stringify(sale.price ?? null)} — ` +
@@ -599,6 +606,10 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         period,
         modules: [],
         source: "gumroad",
+        // Сумма из ПРОДАЖИ (API), а не из пинга: пинг не подписан. Если сумма
+        // неизвестна или нулевая — поле не проставляем вовсе: ноль в выручке
+        // хуже пустоты, по нему потом посчитают деньги.
+        ...(paidUsd === undefined ? {} : { amountUsd: paidUsd }),
         ...(purchaseChannel ? { channel: purchaseChannel } : {}),
       });
 

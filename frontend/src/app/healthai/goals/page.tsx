@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { activatable } from "@/lib/activatable";
 import Link from "next/link";
 
 const LS_KEY = "aevion:healthai:goals";
@@ -130,8 +131,10 @@ export default function GoalsPage() {
               const done = !!state[today]?.[g.id];
               return (
                 <div key={g.id} className={`flex items-center gap-3 bg-slate-900 border rounded-xl px-4 py-3 cursor-pointer transition-colors ${done ? "border-emerald-700/50" : "border-slate-800 hover:border-slate-700"}`}
-                  onClick={() => toggle(g.id)}>
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${done ? "bg-emerald-500 border-emerald-500" : "border-slate-600"}`}>
+{...activatable(() => toggle(g.id))}
+role="checkbox"
+aria-checked={done}
+aria-label={g.title}>                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${done ? "bg-emerald-500 border-emerald-500" : "border-slate-600"}`}>
                     {done && <span className="text-white text-xs">✓</span>}
                   </div>
                   <span className="text-lg">{g.icon}</span>

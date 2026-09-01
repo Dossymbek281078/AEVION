@@ -1,7 +1,7 @@
 import { describe, test, expect, vi, beforeEach, afterAll } from "vitest";
 import express from "express";
 import request from "supertest";
-import { mkdtempSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -18,7 +18,8 @@ import { tmpdir } from "node:os";
  * подпись считает payboxProvider, и у него свой тест. Здесь важно, что вердикт
  * «подпись неверна» доводится до отказа, а не игнорируется.
  */
-process.env.SUBSCRIPTIONS_FILE = join(mkdtempSync(join(tmpdir(), "aevion-sig-")), "s.jsonl");
+const каталог = mkdtempSync(join(tmpdir(), "aevion-sig-"));
+process.env.SUBSCRIPTIONS_FILE = join(каталог, "s.jsonl");
 
 let вердикт: string | null = null;
 let полезная: Record<string, string> = {};
@@ -66,6 +67,8 @@ async function уведомление(email: string) {
 }
 
 afterAll(() => {
+  // Убираем за собой: иначе каждый прогон оставляет каталог в TEMP.
+  try { rmSync(каталог, { recursive: true, force: true }); } catch { /* уже нет */ }
   delete process.env.SUBSCRIPTIONS_FILE;
 });
 

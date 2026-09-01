@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import ModuleStatusNote from "./ModuleStatusNote";
 import { apiUrl } from "@/lib/apiBase";
 import paper from "@/styles/aevionPaper.module.css";
 import {
@@ -130,6 +131,7 @@ export default function QVenturePage() {
        <div className={paper.paper} style={{ background: "transparent", minHeight: 0 }}>
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
           <ModulePricingChip moduleId="qventure" theme="light" />
+          <ModuleStatusNote moduleId="qventure" />
         </div>
 
         {/* Masthead — newspaper treatment: kicker rule, serif headline. */}
@@ -592,14 +594,14 @@ function FormFields({ form, set, sectors, full = false }: {
         </div>
         <div>
           <label style={LABEL}>Отрасль</label>
-          <select style={INPUT} value={form.sector} onChange={set("sector")}>
+          <select aria-label="Отрасль" style={INPUT} value={form.sector} onChange={set("sector")}>
             {sectors.length === 0 && <option value="ai_app">ИИ-приложения</option>}
             {sectors.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </div>
         <div>
           <label style={LABEL}>Стадия</label>
-          <select style={INPUT} value={form.stage} onChange={set("stage")}>
+          <select aria-label="Стадия" style={INPUT} value={form.stage} onChange={set("stage")}>
             {STAGES.map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
           </select>
         </div>
@@ -618,14 +620,14 @@ function FormFields({ form, set, sectors, full = false }: {
       </div>
       <div style={{ marginBottom: full ? 14 : 0 }}>
         <label style={LABEL}>Что делает продукт? *</label>
-        <textarea style={{ ...INPUT, minHeight: 72, resize: "vertical" }} value={form.description} onChange={set("description")}
-          aria-label="What does it do?" placeholder="One-paragraph description of the product, the problem it solves, and the wedge." />
+        <textarea aria-label="Что делает продукт?" style={{ ...INPUT, minHeight: 72, resize: "vertical" }} value={form.description} onChange={set("description")}
+          placeholder="One-paragraph description of the product, the problem it solves, and the wedge." />
       </div>
       {full && (
         <div style={{ marginBottom: 16 }}>
           <label style={LABEL}>Тяга и метрики</label>
-          <textarea style={{ ...INPUT, minHeight: 56, resize: "vertical" }} value={form.tractionNotes} onChange={set("tractionNotes")}
-            aria-label="Traction / metrics" placeholder="e.g. $40k MRR growing 18% MoM, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x" />
+          <textarea aria-label="Тяга и метрики" style={{ ...INPUT, minHeight: 56, resize: "vertical" }} value={form.tractionNotes} onChange={set("tractionNotes")}
+            placeholder="e.g. $40k MRR growing 18% MoM, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x" />
           {/* Execution carries 28% of the composite and scores low — not neutral — when
               nothing is submitted. Saying so here beats letting someone submit an empty
               field and be surprised by the number. */}
@@ -653,7 +655,7 @@ function FormFields({ form, set, sectors, full = false }: {
             <div>
               <label style={LABEL}>Отток (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
-                <input style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} aria-label="Churn (%)" placeholder="3" inputMode="numeric" />
+                <input aria-label="Отток (%)" style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" />
                 <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label="Churn period">
                   <option value="weekly">/ week</option>
                   <option value="monthly">/ month</option>
@@ -666,7 +668,7 @@ function FormFields({ form, set, sectors, full = false }: {
             <div>
               <label style={LABEL}>Рост (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
-                <input style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} aria-label="Growth (%)" placeholder="15" inputMode="numeric" />
+                <input aria-label="Рост (%)" style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} placeholder="15" inputMode="numeric" />
                 <select style={{ ...INPUT, width: 104 }} value={form.finGrowthPeriod} onChange={set("finGrowthPeriod")} aria-label="Growth period">
                   <option value="WoW">WoW</option>
                   <option value="MoM">MoM</option>
@@ -679,9 +681,9 @@ function FormFields({ form, set, sectors, full = false }: {
           <div style={{ marginTop: 14 }}>
             <label style={LABEL}>Projected revenue (USD) — this year / +1yr / +2yr (for the hockey-stick check)</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-              <input style={INPUT} aria-label="Projected revenue this year" value={form.projY0} onChange={set("projY0")} placeholder="Y0: 2,000,000" inputMode="numeric" />
-              <input style={INPUT} aria-label="Projected revenue +1yr" value={form.projY1} onChange={set("projY1")} placeholder="Y1: 5,000,000" inputMode="numeric" />
-              <input style={INPUT} aria-label="Projected revenue +2yr" value={form.projY2} onChange={set("projY2")} placeholder="Y2: 12,000,000" inputMode="numeric" />
+              <input aria-label="Выручка, год 0" style={INPUT} value={form.projY0} onChange={set("projY0")} placeholder="Y0: 2,000,000" inputMode="numeric" />
+              <input aria-label="Выручка, год 1" style={INPUT} value={form.projY1} onChange={set("projY1")} placeholder="Y1: 5,000,000" inputMode="numeric" />
+              <input aria-label="Выручка, год 2" style={INPUT} value={form.projY2} onChange={set("projY2")} placeholder="Y2: 12,000,000" inputMode="numeric" />
             </div>
           </div>
         </details>

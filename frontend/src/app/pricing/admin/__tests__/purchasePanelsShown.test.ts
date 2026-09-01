@@ -6,11 +6,26 @@
  * при этом выглядит полной: соседние панели на месте.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const страница = readFileSync(join(process.cwd(), "src/app/pricing/admin/page.tsx"), "utf8");
-const словарь = readFileSync(join(process.cwd(), "src/lib/i18n-data.ts"), "utf8");
+/*
+ * ⚠️ 01.09.2026: сторож читал `i18n-data.ts` — а это после разбиения словаря по
+ * языкам (10.08) обрубок на 93 строки, ключей там нет вовсе. Проверка «подпись
+ * есть на всех трёх языках» искала в пустоте и была бы зелёной при ЛЮБОМ
+ * состоянии словаря, если бы ждала ноль. Она ждала три и потому честно упала —
+ * повезло.
+ *
+ * Это седьмой случай того же класса за два дня: проверки, написанные до
+ * разбиения, продолжают читать файл, из которого содержимое ушло. Ищите по
+ * признаку `i18n-data` в тестах.
+ */
+const ЯЗЫКИ = join(process.cwd(), "src", "lib", "i18n-lang");
+const словарь = readdirSync(ЯЗЫКИ)
+  .filter((f) => f.endsWith(".ts"))
+  .map((f) => readFileSync(join(ЯЗЫКИ, f), "utf8"))
+  .join(String.fromCharCode(10));
 
 describe("панели покупок по каналам", () => {
   it("страница читает оба поля ответа", () => {

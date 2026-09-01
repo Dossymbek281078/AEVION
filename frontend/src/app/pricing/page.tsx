@@ -2286,82 +2286,107 @@ export default function PricingPage() {
             <li key={i}>{n}</li>
           ))}
         </ul>
-        <div style={{ marginTop: 16, fontSize: 13, color: "#64748b" }}>
+        {/*
+          ⚠️ 01.09.2026: ряд был набран СТРОЧНЫМИ ссылками с полями, без
+          управления переносом. На 768px строки налезали друг на друга:
+          «Security & Compliance» оказывалась накрыта «Changelog», и нажатие
+          открывало НЕ ТУ страницу — человек попадал в журнал изменений вместо
+          страницы о безопасности.
+
+          Замер соседнего окна зондом достижимости: закрыта при проверке в
+          центр, в начало и в конец элемента — то есть не «при этой прокрутке»,
+          а всегда.
+
+          Это не перекрытие закреплённым слоем, а наложение СОДЕРЖИМОГО, и
+          лечится оно раскладкой, а не порядком слоёв: явный перенос с зазором.
+          Поля у ссылок убраны — иначе зазор сложился бы с ними вдвое.
+        */}
+        <div
+          style={{
+            marginTop: 16,
+            fontSize: 13,
+            color: "#64748b",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            rowGap: 8,
+          }}
+        >
           <Link
             href="/pricing/compare"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             {t("pricing.home.notes.fullMatrixLink")}
           </Link>
           <Link
             href="/pricing/cases"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             {t("pricing.home.notes.caseStudiesLink")}
           </Link>
           <Link
             href="/pricing/roadmap"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             Public roadmap →
           </Link>
           <Link
             href="/pricing/security"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             Security &amp; Compliance →
           </Link>
           <Link
             href="/pricing/refund-policy"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             Refund policy →
           </Link>
           <Link
             href="/pricing/changelog"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             Changelog →
           </Link>
           <Link
             href="/pricing/api-pricing"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             API pricing →
           </Link>
           <Link
             href="/pricing/affiliate"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             {t("pricing.home.notes.affiliateLink")}
           </Link>
           <Link
             href="/pricing/edu"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             {t("pricing.home.notes.eduLink")}
           </Link>
           <Link
             href="/pricing/partners"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             {t("pricing.home.notes.partnersLink")}
           </Link>
           <Link
             href="/pricing/integrations"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             {t("pricing.home.notes.integrationsLink")}
           </Link>
           <Link
             href="/pricing/migrations"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             {t("pricing.home.notes.migrationLink")}
           </Link>
           <Link
             href="/pricing/glossary"
-            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+            style={{ color: "#0d9488", fontWeight: 700 }}
           >
             {t("pricing.home.notes.glossaryLink")}
           </Link>

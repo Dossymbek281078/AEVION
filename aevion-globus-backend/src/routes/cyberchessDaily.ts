@@ -557,7 +557,12 @@ router.use(async (_req: Request, _res: Response, next: () => void) => {
  * Хэш простой (FNV-1a) намеренно: нужна воспроизводимость, а не стойкость.
  * Криптографический хэш дал бы то же самое дороже.
  */
-function dayOffsetHash(day: string, total: number): number {
+/**
+ * Выбор задачи дня: день -> смещение в банке. Экспортирован ради сторожа —
+ * от этой функции зависит, ради чего человек возвращается завтра, и она
+ * не была закреплена ничем.
+ */
+export function dayOffsetHash(day: string, total: number): number {
   let h = 2166136261;
   for (let i = 0; i < day.length; i++) {
     h ^= day.charCodeAt(i);

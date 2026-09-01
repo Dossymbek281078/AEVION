@@ -363,7 +363,20 @@ async function getUserTierChecked(userId: string): Promise<{ tier: StudioTier; t
       await pool.query(`
         INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
         ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
-      `, [userId, promoted]).catch(() => {});
+      `, [userId, promoted]).catch((e: unknown) => {
+        // Провал этой записи НЕ лишает человека оплаченного: тариф уже возвращён
+        // ниже, а следующий запрос снова найдёт его соединением. Поэтому не роняем.
+        //
+        // Но и молчать нельзя: если запись падает ВСЕГДА (нет прав, нет таблицы),
+        // соединение будет делаться вечно, и об этом не узнает никто. Рядом в этом
+        // же файле debitQuietly уже говорит, ЧТО и У КОГО не удалось — след без
+        // этих двух вещей бесполезен. Держим единообразие.
+        console.warn(
+          `[DevHub] тариф не перенесён в таблицу по пользователю: ${userId} → ${promoted}. ` +
+          `Доступ выдан, но каждый запрос будет искать соединением. Причина: ${
+            e instanceof Error ? e.message : String(e)}`,
+        );
+      });
       return { tier: promoted, tierKnown: true };
     }
     // No row is a real answer: this user is on the free plan. But a setUserTier

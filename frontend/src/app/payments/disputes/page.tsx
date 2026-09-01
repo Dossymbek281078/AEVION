@@ -135,6 +135,21 @@ function ensureDemoApiKey(): string {
 export default function DisputesPage() {
   const [links, setLinks] = useState<LocalLink[]>([]);
   const [disputes, setDisputes] = useState<ApiDispute[]>([]);
+  /*
+   * ⚠️ 01.09.2026: «споров нет» и «не смогли спросить» выглядели ОДИНАКОВО.
+   *
+   * При отказе стоял молчаливый выход (`if (!r.ok) return;`), список оставался
+   * пустым, и экран уверенно писал «No disputes yet». То есть страница
+   * утверждала факт о данных, которых ни разу не получила.
+   *
+   * Сегодня это видно на живом проде: адрес /api/payments/v1 отвечает 404
+   * (ручки в сборке, сайт выкачен старее), и посетитель читает «споров нет» —
+   * то есть делает вывод, что возможности нет вовсе.
+   *
+   * Правка полезна и ПОСЛЕ выкатки: сервер может лечь и потом, а страница
+   * снова скажет «споров нет». Пустота — это ответ, а незнание им не является.
+   */
+  const [спросили, setСпросили] = useState<boolean | null>(null);
   const [linkId, setLinkId] = useState("");
   const [reason, setReason] = useState("fraudulent");
   const [evidence, setEvidence] = useState("");
@@ -150,10 +165,15 @@ export default function DisputesPage() {
         headers: { Authorization: `Bearer ${apiKey}` },
         cache: "no-store",
       });
-      if (!r.ok) return;
+      if (!r.ok) {
+        setСпросили(false);
+        return;
+      }
       const data: { data: ApiDispute[] } = await r.json();
       setDisputes(data.data || []);
+      setСпросили(true);
     } catch {
+      setСпросили(false);
       // offline
     }
   }, []);
@@ -500,7 +520,12 @@ export default function DisputesPage() {
                 ↻ refresh
               </button>
             </div>
-            {disputes.length === 0 ? (
+            {disputes.length === 0 && спросили === false ? (
+              <p style={{ fontSize: 14, color: "#b45309", margin: 0 }}>
+                Could not load disputes — the service did not answer. This is not
+                the same as having none: try refresh in a moment.
+              </p>
+            ) : disputes.length === 0 ? (
               <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>
                 No disputes yet. Once you open one it appears here.
               </p>

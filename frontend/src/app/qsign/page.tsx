@@ -862,6 +862,7 @@ export default function QSignPage() {
             <div style={{ flex: 1, minWidth: 200 }}>
               <input
                 type={showToken ? "text" : "password"}
+                aria-label="Auth"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 placeholder="Bearer token (auto-filled from /auth)"
@@ -972,6 +973,7 @@ export default function QSignPage() {
                 </div>
               </div>
               <textarea
+                aria-label="Payload (JSON)"
                 value={payloadText}
                 onChange={(e) => setPayloadText(e.target.value)}
                 rows={8}
@@ -1356,6 +1358,7 @@ export default function QSignPage() {
             >
               <div style={label}>HMAC kid</div>
               <input
+                aria-label="HMAC kid"
                 value={verifyHmacKid}
                 onChange={(e) => setVerifyHmacKid(e.target.value)}
                 placeholder="leave empty → active"
@@ -1363,6 +1366,7 @@ export default function QSignPage() {
               />
               <div style={label}>HMAC sig</div>
               <input
+                aria-label="HMAC sig"
                 value={verifyHmacSig}
                 onChange={(e) => setVerifyHmacSig(e.target.value)}
                 placeholder="64 hex chars"
@@ -1370,6 +1374,7 @@ export default function QSignPage() {
               />
               <div style={label}>Ed25519 kid</div>
               <input
+                aria-label="Ed25519 kid"
                 value={verifyEdKid}
                 onChange={(e) => setVerifyEdKid(e.target.value)}
                 placeholder="optional"
@@ -1377,6 +1382,7 @@ export default function QSignPage() {
               />
               <div style={label}>Ed25519 sig</div>
               <input
+                aria-label="Ed25519 sig"
                 value={verifyEdSig}
                 onChange={(e) => setVerifyEdSig(e.target.value)}
                 placeholder="optional · 128 hex"
@@ -1685,6 +1691,7 @@ export default function QSignPage() {
 
             <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
               <input
+                aria-label="Webhook URL"
                 value={webhookUrlInput}
                 onChange={(e) => setWebhookUrlInput(e.target.value)}
                 placeholder="https://your-app.example.com/qsign-webhook"

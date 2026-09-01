@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { activatable } from "@/lib/activatable";
 import Link from "next/link";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
@@ -772,7 +773,10 @@ const { nodes, edges } = await cat.graph({
                     style={{ cursor: "pointer" }}
                     onMouseEnter={() => setHover({ id: n.id, x: p.x, y: p.y })}
                     onMouseLeave={() => setHover((h) => (h?.id === n.id ? null : h))}
-                    onClick={() => setSelected((s) => (s === n.id ? null : n.id))}
+  {...activatable(() => setSelected((s) => (s === n.id ? null : n.id)))}
+  aria-label={"Модуль " + n.id}
+  onFocus={() => setHover({ id: n.id, x: p.x, y: p.y })}
+  onBlur={() => setHover((h) => (h?.id === n.id ? null : h))}
                   >
                     <circle
                       r={r + 3}

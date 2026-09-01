@@ -428,8 +428,14 @@ export default function DevHubPage() {
                 {t("hero.subtitle")}
           </div>
           <div ref={ideaFieldRef} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {/* Оба атрибута нужны, и это не компромисс при сведении:
+                признак гидратации читает сторож предзаполнения, доступное имя —
+                читалка экрана. Взять одну сторону значило бы молча потерять
+                другую, и потеря была бы невидимой: поле работает в обоих
+                случаях, а теряется либо проверка, либо доступность. */}
             <textarea
               data-prehydration-field="ideaPrompt"
+              aria-label="Опишите, что построить"
               value={ideaPrompt}
               onChange={(e) => setIdeaPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) startFromIdea(); }}
@@ -975,8 +981,8 @@ export default function DevHubPage() {
                 onChange={(e) =>
                   setSnippetForm((f) => ({ ...f, title: e.target.value }))
                 }
-                placeholder={t("field.title")}
-                className="px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
+                aria-label="Title"
+                placeholder={t("field.title")}                className="px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
               />
               <input
                 type="text"
@@ -985,6 +991,7 @@ export default function DevHubPage() {
                 onChange={(e) =>
                   setSnippetForm((f) => ({ ...f, language: e.target.value }))
                 }
+                aria-label={t("snip.phLang")}
                 placeholder={t("snip.phLang")}
                 className="px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
               />
@@ -1006,6 +1013,7 @@ export default function DevHubPage() {
               onChange={(e) =>
                 setSnippetForm((f) => ({ ...f, tags: e.target.value }))
               }
+              aria-label={t("snip.phTags")}
               placeholder={t("snip.phTags")}
               className="mt-3 w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
             />
@@ -1058,6 +1066,7 @@ export default function DevHubPage() {
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                aria-label={t("modal.phName")}
                 placeholder={t("modal.phName")}
                 style={{ width: "100%", padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 16, boxSizing: "border-box" }}
                 autoFocus
@@ -1072,6 +1081,7 @@ export default function DevHubPage() {
                 type="text"
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                aria-label={t("modal.phDesc")}
                 placeholder={t("modal.phDesc")}
                 style={{ width: "100%", padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 16, boxSizing: "border-box" }}
               />

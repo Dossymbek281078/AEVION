@@ -59,6 +59,12 @@ const MONEY_PATH = [
   join(SRC, "routes", "checkout.ts"),
   join(SRC, "routes", "provisioning.ts"),
   join(SRC, "routes", "planningStubs.ts"),
+  // Сеть платежей: деньги через неё проходят так же, как через кассу.
+  join(SRC, "routes", "qpaynet.ts"),
+  // Квоты API: адрес контакта здесь починен 29.08 соседним окном
+  // (коммит 886fe5657), сторож нужен, чтобы починку не «улучшили» обратно
+  // на красивый адрес нашего домена — почты у него по-прежнему нет.
+  join(SRC, "routes", "apiQuotas.ts"),
   join(REPO, "frontend", "src", "app", "api", "payments", "v1", "_email.ts"),
 ];
 
@@ -68,6 +74,12 @@ const MONEY_PATH = [
  * Отличаем по соседству с полем отправителя, а не по имени ящика: `receipts@`
  * завтра могут переименовать, а смысл строки от этого не изменится.
  */
+/** Строка комментария: объяснение, а не обещание. */
+export function isComment(line: string): boolean {
+  const t = line.trim();
+  return t.startsWith("//") || t.startsWith("*") || t.startsWith("/*") || t.startsWith("{/*");
+}
+
 export function isSenderLine(line: string): boolean {
   // Регистр приводится намеренно: настоящие константы отправителя названы
   // FROM и FROM_EMAIL, а моя первая проба была написана строчными — она
@@ -87,6 +99,13 @@ function invitations(file: string): string[] {
   const out: string[] = [];
   for (const line of readFileSync(file, "utf8").split(NEWLINE)) {
     if (!line.includes(DOMAIN)) continue;
+    // Комментарий — не обещание пользователю. Отсев тот же, что в платформенном
+    // securityContactMatches.guard: там он появился по той же причине, и там же
+    // записано, почему ложная тревога в стороже опаснее пропуска — на неё
+    // перестают смотреть. У меня этот класс сегодня сработал ТРИЖДЫ: дважды в
+    // сторожах сайта и здесь, на взятом чужом файле, где мёртвый адрес живёт в
+    // объяснении, ПОЧЕМУ он убран.
+    if (isComment(line)) continue;
     if (isSenderLine(line)) continue;
     out.push(line.trim().slice(0, 90));
   }
@@ -114,6 +133,11 @@ describe("на денежном пути нет мёртвых почтовых 
       "приглашение писать принято за поле отправителя",
     ).toBe(false);
     expect(invitations(join(SRC, "lib", "netu-takogo-fajla.ts")), "несуществующий файл дал находки").toEqual([]);
+
+    // Комментарий с адресом — не находка, но и не повод ослепнуть: проверяем обе
+    // стороны. Первая редакция краснела на объяснении «почему адрес убран».
+    expect(isComment("    // было api@aevion.app, у домена нет записи MX"), "комментарий не опознан").toBe(true);
+    expect(isComment('    contact: "support@aevion.app",'), "код принят за комментарий").toBe(false);
 
     // ПОЛОЖИТЕЛЬНАЯ проба — без неё сторож ничем не нагружен. Замер: пока все
     // приглашения починены, ослепление поиска ничего не меняет, и мутация

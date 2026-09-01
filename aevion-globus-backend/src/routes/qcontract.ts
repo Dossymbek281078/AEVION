@@ -678,7 +678,20 @@ qcontractRouter.get("/openapi.json", (_req, res) => {
       version: "1.1.0",
       description:
         "Self-destruct smart documents API. Burn-after-N-reads, time expiry, password gate, email watermark, audit log, QRight legal cert.",
-      contact: { name: "AEVION", url: "https://aevion.app", email: "support@aevion.app" },
+      contact: {
+            name: "AEVION",
+            // Форма, а не почтовый ящик: у домена aevion.app нет записи MX,
+            // письмо туда не доходит ни до кого. Обращения формы пишутся на
+            // постоянный том и читаются защищённой ручкой — это проверено
+            // соседним окном по всей цепочке, а не по виду.
+            //
+            // Прецедент 29.08 (коммит 886fe5657) ставил вместо мёртвого адреса
+            // рабочий почтовый ящик. Здесь у поля контакта уже есть url, и он
+            // решает ту же задачу, не разнося личный адрес ещё по четырём
+            // ручкам. Канал раскрытия уязвимостей это НЕ меняет: он один и
+            // задан в /.well-known/security.txt, у него свой сторож.
+            url: "https://aevion.app/pricing/contact",
+          },
       license: { name: "Proprietary" },
     },
     servers: [{ url: `${base}/api/qcontract`, description: "Production" }],

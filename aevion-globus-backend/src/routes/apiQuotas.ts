@@ -11,6 +11,13 @@
 
 import { Router } from "express";
 
+// Адрес, который ДЕЙСТВИТЕЛЬНО принимает почту. Один на весь файл, потому
+// что 01.09.2026 нашлось: 29.08 починили ПОЛЕ contact, а человеческий текст
+// строкой ниже остался звать на api@aevion.app — у домена нет записи MX, и
+// письмо не доходит ни до кого. Поле и текст рядом расходятся молча, если у
+// них два источника; теперь источник один.
+const CONTACT_EMAIL = "yahiin1978@gmail.com";
+
 export const apiQuotasRouter = Router();
 
 const QUOTAS_VERSION = "1.1.0";
@@ -136,7 +143,13 @@ apiQuotasRouter.get("/", (_req, res) => {
     version: QUOTAS_VERSION,
     publishedAt: PUBLISHED_AT,
     docsUrl: "https://github.com/Dossymbek281078/AEVION/blob/main/docs/api/PUBLIC_API_QUOTAS.md",
-    contact: "api@aevion.app",
+    // Адрес, на который клиент API напишет, если упрётся в квоту. Стоял
+    // api@aevion.app — у домена aevion.app НЕТ записи MX (перепроверено
+    // 29.08.2026: DNS отдаёт SOA вместо MX), то есть письмо отбивается и
+    // обращение не доходит НИ ДО КОГО. Здесь тот же адрес, что в
+    // /.well-known/security.txt и на публичных страницах, — единственный,
+    // про который известно, что он принимает почту.
+    contact: CONTACT_EMAIL,
     keyFormat: {
       pattern: "aev_(test|live)_<24bytes_base64url>",
       headerName: "X-Aevion-Api-Key",
@@ -148,7 +161,7 @@ apiQuotasRouter.get("/", (_req, res) => {
       "Developer tier requests above 100/min return HTTP 429 with Retry-After.",
       "Paid tier monthly call quota — overage at per-endpoint rate-card with tier discount applied.",
       "Per-endpoint pricing & detailed quotas: https://aevion.app/pricing/api-pricing",
-      "Enterprise quotas negotiated per-contract; contact api@aevion.app.",
+      `Enterprise quotas negotiated per-contract; contact ${CONTACT_EMAIL}.`,
       "Per-request cost units are weighted: heavy endpoints (verify, snapshot) count 2; default 1.",
       "QPayNet merchant keys (qpn_live_*) are a separate per-merchant system, not part of this tier matrix.",
     ],

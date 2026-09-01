@@ -1592,7 +1592,7 @@ function isBureauAdmin(req: Request): { ok: boolean; email: string | null; reaso
   }
 }
 
-async function logBureauAudit(opts: {
+export async function logBureauAudit(opts: {
   action: string;
   certId: string | null;
   verificationId: string | null;
@@ -1612,7 +1612,22 @@ async function logBureauAudit(opts: {
         opts.payload ? JSON.stringify(opts.payload) : null,
       ]
     )
-    .catch(() => {});
+    .catch((e: unknown) => {
+      // Отказ НЕ глотаем молча. Раньше здесь стоял .catch(() => {}) —
+      // журнал аудита мог терять записи, не оставляя ни строки, а журнал,
+      // из которого запись исчезает беззвучно, аудитом не является.
+      //
+      // Операцию при этом НЕ роняем: у трёх вызывающих запись аудита
+      // сопутствующая, и падение здесь оборвало бы основное действие —
+      // лечение вышло бы дороже болезни. Меняется ровно одно: отказ
+      // перестаёт быть невидимым, и в след попадает ЧТО именно не легло.
+      const причина = e instanceof Error ? e.message : String(e);
+      console.error(
+        `[bureau/audit] запись НЕ легла: action=${opts.action} ` +
+          `verificationId=${opts.verificationId ?? "-"} :: ${причина}`
+      );
+      captureBureauError(e, { route: "bureau/audit", action: opts.action });
+    });
 }
 
 // 🔹 GET /cert/:certId/embed — sanitized JSON for third-party pages.

@@ -30,6 +30,7 @@ import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 import { upsertAppSubscription } from "../lib/appEntitlements";
+import { logBureauAudit } from "./bureau";
 
 // DevHub Studio Pro: upgrade DevHubTier + DevHubEmailTier on purchase
 async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
@@ -384,8 +385,29 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   // BureauVerification row (KYC approved but payment not yet confirmed).
   if (reference === "bureau-verified") {
     if (refunded || failed) {
-      console.log(`[gumroad/webhook] bureau ${result.status} for ${email} — ignored (one-time, no downgrade)`);
-      return res.json({ ok: true, ignored: `bureau_${result.status}` });
+      // Значок НЕ отзываем: проверка личности реально проводилась, и
+      // отзывать её за денежный спор — продуктовое решение, а не моё.
+      // Оно ждёт слова основателя.
+      //
+      // Но БЕЗ СЛЕДА оставлять нельзя ни при какой политике: раньше
+      // ветка возвращала ignored, не тронув запись, и "paymentStatus"
+      // навсегда оставался 'paid'. То есть деньги вернули, а наши
+      // собственные данные говорили "оплачено", и единственным следом
+      // был console.log — на проде это память процесса, то есть ничто.
+      //
+      // Поле "paymentStatus" намеренно НЕ трогаем: его читают ворота
+      // значка (bureau.ts: ready = kycStatus === "approved" &&
+      // paymentStatus === "paid"), и запись 'refunded' отозвала бы
+      // значок молча, приняв за основателя решение, которое он не принимал.
+      await logBureauAudit({
+        action: `payment_${result.status}_badge_kept`,
+        certId: null,
+        verificationId: null,
+        actor: `gumroad:${saleId}`,
+        payload: { email, saleId, status: result.status, reference },
+      });
+      console.log(`[gumroad/webhook] bureau ${result.status} for ${email} — badge kept, refund recorded`);
+      return res.json({ ok: true, ignored: `bureau_${result.status}`, recorded: true });
     }
     if (result.status === "paid") {
       try {

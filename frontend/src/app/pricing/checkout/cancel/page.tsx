@@ -2,7 +2,7 @@
 
 import { естьСледОплаты } from "@/lib/paymentTrace";
 import Link from "next/link";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
@@ -29,23 +29,33 @@ function CancelInner() {
    * доходит. Настроят — метку сюда добавить обязательно, иначе отказ станет
    * невидимым.
    */
+  const касса =
+    sp.get("provider") ??
+    (sp.get("paypal") ? "paypal" : null) ??
+    (sp.get("paybox") ? "paybox" : null);
   const следОплаты = естьСледОплаты({
-    provider:
-      sp.get("provider") ??
-      (sp.get("paypal") ? "paypal" : null) ??
-      (sp.get("paybox") ? "paybox" : null),
+    provider: касса,
     ref: sp.get("ref") ?? sp.get("session_id"),
     total: sp.get("total") ? Number(sp.get("total")) / 100 : null,
   });
 
+  // Защёлка: в режиме разработки React вызывает эффект дважды, и без неё один
+  // отказ считался бы за два. Приём взят у соседнего окна, которое чинило это
+  // же место параллельно; там он был, у меня нет.
+  const ужеОтмечено = useRef(false);
+
   useEffect(() => {
-    if (!следОплаты) return;
+    if (!следОплаты || ужеОтмечено.current) return;
+    ужеОтмечено.current = true;
     track({
       type: "checkout_cancel",
       tier: tier ?? undefined,
       source: "pricing",
+      // Касса в мете — тоже их находка: без неё видно, что отказ был, но не
+      // видно, у какой кассы люди отваливаются, а это разные починки.
+      meta: { provider: касса },
     });
-  }, [tier, следОплаты]);
+  }, [tier, следОплаты, касса]);
 
   return (
     <ProductPageShell maxWidth={680}>

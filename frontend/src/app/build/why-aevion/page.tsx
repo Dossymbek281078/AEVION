@@ -307,9 +307,19 @@ export default async function WhyAevionPage({
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
 
+/**
+ * Свой переключатель языка страницы стоял ровно под глобальной плашкой языка
+ * (она fixed, top:12, слой 60). Замер прода 01.09.2026: пункт «EN» был накрыт
+ * ею, и обход клавиатурой приводил фокус на невидимое.
+ *
+ * Отодвинут ниже плашки. Высоту она публикует сама в --aevion-pill-h, поэтому
+ * число здесь не зашито: на телефоне и на экране плашка разной высоты.
+ */
 function LangSwitcher({ lang }: { lang: Lang }) {
   return (
-    <div className="absolute right-4 top-4 z-20 inline-flex rounded-full border border-white/15 bg-black/40 p-1 text-xs backdrop-blur sm:right-8 sm:top-8">
+    <div
+        style={{ top: "calc(var(--aevion-pill-h, 0px) + 16px)" }}
+        className="absolute right-4 z-20 inline-flex rounded-full border border-white/15 bg-black/40 p-1 text-xs backdrop-blur sm:right-8 sm:top-8">
       <Link
         href="/build/why-aevion?lang=ru"
         className={`rounded-full px-3 py-1 ${lang === "ru" ? "bg-emerald-500 text-emerald-950 font-semibold" : "text-slate-300 hover:text-white"}`}

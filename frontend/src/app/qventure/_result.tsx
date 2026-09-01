@@ -107,6 +107,18 @@ export interface AnalysisResult {
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 
+// Подпись для человека отдельно от значения для машины. До 01.09.2026 список
+// стадий выводил САМО значение — покупатель видел «pre-seed» и «series-a»,
+// то есть внутренние ключи. Значение уходит на сервер и остаётся прежним;
+// меняется только то, что читают глазами. Образец рядом — VERDICT_LABEL.
+export const STAGE_LABEL: Record<(typeof STAGES)[number], string> = {
+  idea: "Идея",
+  "pre-seed": "Предпосев",
+  seed: "Посев",
+  "series-a": "Раунд A",
+  growth: "Рост",
+};
+
 // Newspaper palette (see feedback_aevion_light_newspaper_ui). Verdict keeps its
 // semantic split, but aligned to the paper red/teal/amber rather than SaaS slate.
 export const VERDICT_COLOR: Record<Verdict, string> = { invest: "#0a7d72", watch: "#b7791f", pass: "#b5241b" };

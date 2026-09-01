@@ -8,7 +8,7 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import paper from "@/styles/aevionPaper.module.css";
 import {
-  ResultView, ScoreGauge, STAGES, VERDICT_COLOR, VERDICT_LABEL,
+  ResultView, ScoreGauge, STAGES, STAGE_LABEL, VERDICT_COLOR, VERDICT_LABEL,
   SECTION, H2, SERIF, type AnalysisResult, type Verdict,
 } from "./_result";
 
@@ -511,7 +511,7 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 460 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "#64748b", fontSize: 12 }}>
-                <th style={{ padding: "6px 8px" }}>Factor</th>
+                <th style={{ padding: "6px 8px" }}>Фактор</th>
                 <th style={{ padding: "6px 8px", textAlign: "center" }}>{a.name}</th>
                 <th style={{ padding: "6px 8px", textAlign: "center" }}>{b.name}</th>
                 <th style={{ padding: "6px 8px", textAlign: "center" }}>Δ (B−A)</th>
@@ -536,7 +536,7 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
                 );
               })}
               <tr style={{ borderTop: "2px solid #e2e8f0" }}>
-                <td style={{ padding: "8px", fontWeight: 800, color: "var(--ink, #17181a)" }}>Composite</td>
+                <td style={{ padding: "8px", fontWeight: 800, color: "var(--ink, #17181a)" }}>Итог</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800 }}>{a.composite}</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800 }}>{b.composite}</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800, color: b.composite - a.composite >= 0 ? "#16a34a" : "#dc2626" }}>
@@ -591,16 +591,16 @@ function FormFields({ form, set, sectors, full = false }: {
           <input aria-label="Название компании или продукта" style={INPUT} value={form.name} onChange={set("name")} placeholder="e.g. NeuroDx" />
         </div>
         <div>
-          <label style={LABEL}>Sector</label>
+          <label style={LABEL}>Отрасль</label>
           <select style={INPUT} value={form.sector} onChange={set("sector")}>
-            {sectors.length === 0 && <option value="ai_app">AI Applications</option>}
+            {sectors.length === 0 && <option value="ai_app">ИИ-приложения</option>}
             {sectors.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </div>
         <div>
-          <label style={LABEL}>Stage</label>
+          <label style={LABEL}>Стадия</label>
           <select style={INPUT} value={form.stage} onChange={set("stage")}>
-            {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+            {STAGES.map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
           </select>
         </div>
         {full && (
@@ -662,7 +662,7 @@ function FormFields({ form, set, sectors, full = false }: {
                 </select>
               </div>
             </div>
-            <div><label style={LABEL}>Customers</label><input aria-label="Customers" style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Клиенты</label><input aria-label="Клиенты" style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
             <div>
               <label style={LABEL}>Growth (%)</label>
               <div style={{ display: "flex", gap: 6 }}>

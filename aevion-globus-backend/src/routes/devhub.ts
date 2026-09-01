@@ -1292,7 +1292,12 @@ async function generateCodeWithAI(
   existingFiles: Array<{ path: string; content: string }> = [],
   images?: ChatImage[],
   history?: ChatTurn[],
-  onProgress?: (stage: string) => void
+  onProgress?: (stage: string) => void,
+  // Метка модуля для учёта расхода. Раньше здесь стояла постоянная
+  // "devhub-generate", и отделить траты анонимных от трат вошедших было
+  // нельзя — а именно этот вопрос основатель и решает про потолок расходов.
+  // У /ask такое разделение есть с 31.08; здесь оно появилось 01.09.
+  moduleTag: string = "devhub-generate",
 ): Promise<GeneratedCodeResult> {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
@@ -1361,7 +1366,7 @@ async function generateCodeWithAI(
     for (const cand of chain) {
       try {
         result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
-        учтиГенерацию(cand.id, cand.defaultModel, result.usage, "devhub-generate");
+        учтиГенерацию(cand.id, cand.defaultModel, result.usage, moduleTag);
         provider = cand;
         break;
       } catch (inner) {
@@ -1400,7 +1405,7 @@ async function generateCodeWithAI(
         },
       ];
       const cont = await callProvider(provider.id, contMessages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
-      учтиГенерацию(provider.id, provider.defaultModel, cont.usage, "devhub-generate");
+      учтиГенерацию(provider.id, provider.defaultModel, cont.usage, moduleTag);
       const contParsed = parseGeneratedFiles(cont.reply, []);
       if (contParsed.mode !== "fallback") {
         const have = new Set(parsed.files.map((f) => f.path));
@@ -1430,7 +1435,7 @@ async function generateCodeWithAI(
     });
     try {
       result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
-      учтиГенерацию(provider.id, provider.defaultModel, result.usage, "devhub-generate");
+      учтиГенерацию(provider.id, provider.defaultModel, result.usage, moduleTag);
     } catch {
       break; // keep the last (still-broken) attempt rather than losing it to a retry-call failure
     }
@@ -2162,7 +2167,10 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
 /** Shared by /generate and /database/design: generate → checkpoint → save. */
 async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string) => void) {
   const existingFiles = await dbListFiles(project.id);
-  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress);
+  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
+      // Гость или вошедший — видно по идентификатору запросившего: у гостя
+      // он начинается с "guest:" либо равен "anonymous".
+      userId.startsWith("guest:") || userId === "anonymous" ? "devhub-generate-anon" : "devhub-generate");
   onProgress?.("saving");
   let storage: "db" | "memory" = "db";
   const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);

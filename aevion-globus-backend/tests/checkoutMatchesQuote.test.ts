@@ -27,12 +27,15 @@ for (const k of [
 ]) delete process.env[k];
 process.env.GUMROAD_DEFAULT_PERMALINK = "test-permalink";
 
-const { charged } = vi.hoisted(() => ({ charged: { cents: -1 } }));
+const { charged } = vi.hoisted(() => ({
+  charged: { cents: -1 } as { cents: number; customData?: Record<string, string> },
+}));
 vi.mock("../src/lib/payment/gumroadProvider", () => ({
   gumroadPaymentProvider: {
     id: "gumroad",
-    createIntent: async (input: { amountCents: number }) => {
+    createIntent: async (input: { amountCents: number; customData?: Record<string, string> }) => {
       charged.cents = input.amountCents;
+      charged.customData = input.customData;
       return { intentId: "i1", checkoutUrl: "https://example.test/checkout" };
     },
   },
@@ -110,5 +113,47 @@ describe("касса берёт ровно то, что показала вит�
     const sum8 = q8.subtotal;
     expect(withFan).toBeLessThan(Math.round(sum8 * 100));
     expect(noFan).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Канал привлечения доезжает от витрины до кассы.
+ *
+ * ЗАЧЕМ. Выручка по каналу считается только там, где известны ОБА поля —
+ * сумма и канал. До 01.09.2026 канал знала только витрина: в ссылку
+ * LemonSqueezy она клала его сама, а через нашу ручку чекаута он не проходил
+ * вовсе, и покупки PayBox/PayPal попадали в сводке в ключ "direct".
+ *
+ * Едет он общим путём — через customData, тем же, которым давно ездит
+ * выбранный модуль. Отдельного поля у провайдеров нет и не нужно.
+ */
+describe("канал привлечения доезжает до кассы", () => {
+  test("канал из тела запроса попадает в customData", async () => {
+    charged.customData = undefined;
+    const r = await request(app())
+      .post("/api/pricing/checkout/session")
+      .send({ tierId: "lite", period: "monthly", channel: "tt" });
+    expect(r.status, "чекаут не отдал сессию — дальше мерить нечего").toBe(200);
+    expect(charged.customData?.channel, "канал не доехал до кассы").toBe("tt");
+  });
+
+  test("без канала лишнего поля не появляется", async () => {
+    // Пустой канал хуже отсутствующего: в сводке он стал бы отдельным
+    // безымянным ключом, и сумма по каналам перестала бы сходиться с общей.
+    charged.customData = undefined;
+    const r = await request(app())
+      .post("/api/pricing/checkout/session")
+      .send({ tierId: "lite", period: "monthly" });
+    expect(r.status).toBe(200);
+    expect(charged.customData?.channel, "канал придуман на пустом месте").toBeUndefined();
+  });
+
+  test("слишком длинный канал обрезается, а не уходит целиком", async () => {
+    // Значение приходит из адресной строки, оттуда приезжает что угодно.
+    charged.customData = undefined;
+    await request(app())
+      .post("/api/pricing/checkout/session")
+      .send({ tierId: "lite", period: "monthly", channel: "x".repeat(200) });
+    expect(charged.customData?.channel?.length, "длина не ограничена").toBe(40);
   });
 });

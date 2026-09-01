@@ -170,12 +170,43 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     if (result.status === "paid") {
       const tierId = tierForReference(reference);
       const period = periodForReference(reference);
+      // СУММА — только если касса рассчиталась в долларах.
+      //
+      // 🔴 Ловушка единиц, из-за которой поле должно оставаться пустым в
+      // остальных случаях: pg_amount приходит в ОСНОВНОЙ единице валюты
+      // платежа, а у PayBox это тенге. Поле в записи подписки называется
+      // amountUsd. Записать одно в другое значило бы завысить выручку в сотни
+      // раз, и заметили бы это только по абсурдной цифре в панели.
+      //
+      // Пересчёт по курсу здесь делать нельзя: курса на день платежа мы не
+      // храним, а «сегодняшний» сделал бы прошлые суммы плавающими. Пустое
+      // поле честнее приблизительного — рядом в сводке всегда идёт
+      // знаменатель withAmount, и он покажет пробел как пробел.
+      const payboxCurrency = (raw.pg_currency ?? "").trim().toUpperCase();
+      const payboxAmount = Number(raw.pg_amount);
+      const amountUsd =
+        payboxCurrency === "USD" && Number.isFinite(payboxAmount) && payboxAmount > 0
+          ? payboxAmount
+          : undefined;
+
+      // КАНАЛ привлечения. Едет общим путём: витрина кладёт его в тело
+      // чекаута, провайдер превращает customData в pg_param_*, сюда он
+      // приходит как pg_param_channel — тем же способом, что и выбранный
+      // модуль строкой выше.
+      //
+      // До 01.09.2026 этого звена не было, и покупки через PayBox попадали в
+      // сводке выручки в ключ "direct": деньги не терялись, но ответа на
+      // вопрос «что окупилось» по ним не было.
+      const purchaseChannel = raw.pg_param_channel?.trim().slice(0, 40) || undefined;
+
       const provResult = await provisionSubscription({
         email,
         tierId,
         period,
         modules: module ? [module] : [],
         source: "paybox",
+        ...(amountUsd === undefined ? {} : { amountUsd }),
+        ...(purchaseChannel ? { channel: purchaseChannel } : {}),
       });
 
       // Помодульную покупку записываем ЕЩЁ и в базу. Тарифная запись живёт

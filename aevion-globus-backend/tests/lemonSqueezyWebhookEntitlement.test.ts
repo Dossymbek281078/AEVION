@@ -258,6 +258,10 @@ describe("Lemon Squeezy: сумма списания оставляет след
     expect(ok.status).toBe(200);
     const none = await post(event("subscription_created", "9002", "other@test.aev"));
     expect(none.status).toBe(200);
+    // Доказываем, что путь ОТРАБОТАЛ, прежде чем утверждать «следа нет»:
+    // на молчащем вебхуке (404, отвалившийся стенд) отрицания ниже верны
+    // впустую. Класс тот же, что у соседей: not.* проходит на пустом входе.
+    expect(mockProvision, "выдача прав не вызвана — значит путь не отработал").toHaveBeenCalled();
     const log = warned.join(" ");
     expect(log, "обычная оплата помечена как бесплатная").not.toContain("БЕСПЛАТНО");
     expect(log, "обычная оплата помечена как переплата").not.toContain("БОЛЬШЕ обещанного");

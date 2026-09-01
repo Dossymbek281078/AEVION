@@ -44,6 +44,23 @@ function gumroadPermalinkConfigured(reference: string): boolean {
   return Boolean(process.env[envKey] || process.env.GUMROAD_DEFAULT_PERMALINK);
 }
 
+/**
+ * Дополнительные поля, которые касса вернёт в вебхуке.
+ *
+ * Одна функция на всех провайдеров: раньше объект собирался в трёх местах
+ * одинаково, и добавить туда канал значило бы поправить три копии — а
+ * разъехались бы они молча.
+ */
+function собратьCustomData(
+  liteModule: string | undefined,
+  channel: string,
+): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  if (liteModule) out.module = liteModule;
+  if (channel) out.channel = channel;
+  return Object.keys(out).length ? out : undefined;
+}
+
 interface CheckoutBody {
   tierId: TierId;
   period?: "monthly" | "annual";
@@ -54,6 +71,17 @@ interface CheckoutBody {
   promoCode?: string;
   email?: string;
   trial?: boolean;
+  /**
+   * Канал привлечения ("tt", "ig", …) — тот же, что витрина кладёт в ссылку
+   * LemonSqueezy как checkout[custom][channel].
+   *
+   * Без него покупки через PayBox, PayPal и серверные ссылки Gumroad попадают
+   * в сводке выручки в ключ "direct": деньги не теряются, но ответа «что
+   * окупилось» по ним нет. Едет общим путём — через customData, который PayBox
+   * превращает в pg_param_channel, а Gumroad кладёт в url_params[channel];
+   * оба поля наши вебхуки уже читают.
+   */
+  channel?: string;
   /** Валюта оплаты. "KZT" → локальный канал PayBox (если настроен), иначе USD/LS. */
   currency?: CurrencyCode;
   /** Способ оплаты. "paypal" → канал PayPal (если настроен), иначе дефолтный каскад. */
@@ -64,6 +92,10 @@ interface CheckoutBody {
 checkoutRouter.post("/session", async (req, res) => {
   try {
     const body = (req.body ?? {}) as CheckoutBody;
+    // Канал режем по длине: значение приходит из адресной строки, а оттуда
+    // приезжает что угодно. Пустую строку не передаём вовсе — пустой канал
+    // хуже отсутствующего: в сводке он стал бы отдельным безымянным ключом.
+    const channel = typeof body.channel === "string" ? body.channel.trim().slice(0, 40) : "";
 
     if (!body.tierId || !["free", "lite", "medium", "full", "pro", "enterprise"].includes(body.tierId)) {
       return res.status(400).json({ error: "invalid_tier" });
@@ -155,7 +187,7 @@ checkoutRouter.post("/session", async (req, res) => {
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await payboxPaymentProvider.createIntent({
           reference, amountCents: kztCents, currency: "KZT", description, email: body.email ?? null,
-          customData: liteModule ? { module: liteModule } : undefined,
+          customData: собратьCustomData(liteModule, channel),
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
           // модуле — на наборе называть один было бы враньём.
@@ -182,7 +214,7 @@ checkoutRouter.post("/session", async (req, res) => {
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await paypalPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
-          customData: liteModule ? { module: liteModule } : undefined,
+          customData: собратьCustomData(liteModule, channel),
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
           // модуле — на наборе называть один было бы враньём.
@@ -224,7 +256,7 @@ checkoutRouter.post("/session", async (req, res) => {
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await lemonSqueezyPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
-          customData: liteModule ? { module: liteModule } : undefined,
+          customData: собратьCustomData(liteModule, channel),
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
           // модуле — на наборе называть один было бы враньём.
@@ -242,6 +274,10 @@ checkoutRouter.post("/session", async (req, res) => {
     if (gumroadPermalinkConfigured(reference)) {
       const intent = await gumroadPaymentProvider.createIntent({
         reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+        // Выбранного модуля в этой ветке нет — она для одноразовых продуктов,
+        // а модуль выбирают только у тарифа Lite. Канал передаём: без него
+        // покупка попадёт в сводке выручки в ключ "direct".
+        customData: собратьCustomData(undefined, channel),
       });
       return res.json({ url: intent.checkoutUrl, mode: "real", provider: "gumroad", currency: "USD", intentId: intent.intentId });
     }

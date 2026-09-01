@@ -1252,6 +1252,39 @@ function foldHistory(history: ChatTurn[] | undefined): string {
   return `Conversation so far (for context — the current request may refer back to it):\n${lines.join("\n")}\n\n`;
 }
 
+/**
+ * Учёт расхода генерации кода.
+ *
+ * До 01.09.2026 его здесь не было ВОВСЕ: generateCodeWithAI зовёт платного
+ * поставщика НАПРЯМУЮ (не через smartComplete, где учёт встроен), и все три
+ * вызова — основная генерация, продолжение ответа и самоисправление — уходили
+ * невидимо. Это главная платная работа модуля: именно за неё платят $149.
+ *
+ * Нашлось не просмотром кода, а вопросом «какие ещё ручки не пишут расход»
+ * после того, как тот же дефект закрыли у /plan 31.08.
+ *
+ * Цена берётся платформенной таблицей: второй источник цен развёл бы наш отчёт
+ * с отчётом qcoreai. costUsd честно возвращает 0 для модели без цены — значит
+ * 0 здесь читается как «цена неизвестна», а не как «бесплатно».
+ */
+function учтиГенерацию(
+  providerId: string,
+  model: string,
+  usage: { prompt_tokens?: number; completion_tokens?: number } | undefined,
+  moduleTag: string,
+): void {
+  try {
+    insertSmartRun({
+      module: moduleTag,
+      resolved: "single",
+      costUsd: costUsd(providerId, model, usage?.prompt_tokens, usage?.completion_tokens),
+      savedUsd: 0,
+    });
+  } catch {
+    // Учёт не должен ронять ответ, ради которого его зовут.
+  }
+}
+
 async function generateCodeWithAI(
   prompt: string,
   stack: string,
@@ -1328,6 +1361,7 @@ async function generateCodeWithAI(
     for (const cand of chain) {
       try {
         result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+        учтиГенерацию(cand.id, cand.defaultModel, result.usage, "devhub-generate");
         provider = cand;
         break;
       } catch (inner) {
@@ -1366,6 +1400,7 @@ async function generateCodeWithAI(
         },
       ];
       const cont = await callProvider(provider.id, contMessages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+      учтиГенерацию(provider.id, provider.defaultModel, cont.usage, "devhub-generate");
       const contParsed = parseGeneratedFiles(cont.reply, []);
       if (contParsed.mode !== "fallback") {
         const have = new Set(parsed.files.map((f) => f.path));
@@ -1395,6 +1430,7 @@ async function generateCodeWithAI(
     });
     try {
       result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+      учтиГенерацию(provider.id, provider.defaultModel, result.usage, "devhub-generate");
     } catch {
       break; // keep the last (still-broken) attempt rather than losing it to a retry-call failure
     }

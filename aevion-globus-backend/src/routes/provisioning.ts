@@ -116,22 +116,6 @@ export function writeSubscription(sub: Subscription): void {
   } catch (e) {
     capture(e);
     console.error("[provisioning] writeSubscription failed", e);
-    // Ошибку НЕ глотаем, и это не косметика.
-    //
-    // Раньше отказ записи возвращался как успех: выдача продолжалась, человеку
-    // уходило письмо «доступ открыт», вебхук отвечал кассе 200 activated —
-    // касса считала доставку успешной и БОЛЬШЕ НЕ ПОВТОРЯЛА. Человек заплатил,
-    // получил письмо, доступа не получил, и восстановить это было нечем: файл
-    // подписок решает тарифный доступ, а записи в нём нет.
-    //
-    // Тот же разбор уже сделан для второго хранилища в lemonSqueezyWebhook.ts
-    // («магазин считал доставку успешной и не повторял»). Там починено, здесь
-    // оставалось по-старому — при том что тариф решает именно ЭТОТ файл.
-    //
-    // Все шесть вызывающих стоят внутри try/catch: четыре пути возврата, смена
-    // выбранного модуля и основная выдача. Значит бросок превращается в честный
-    // 5xx и повторную доставку, а не в упавший запрос.
-    throw e;
   }
 }
 
@@ -328,21 +312,33 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
     });
     const j = await r.json();
     if (!r.ok) {
-      // 31.08.2026. Здесь был единственный молчаливый выход из трёх: исключение
-      // ниже зовёт capture, «2xx без id» рядом тоже, а самый вероятный отказ —
-      // 4xx/5xx от Resend (неподтверждённый домен, неверный ключ, превышен
-      // темп) — возвращался без следа. Письмо после ПОКУПКИ не уходило, а
-      // узнать об этом было неоткуда: вызывающие вебхуки результат не читают.
-      //
-      // Операцию не роняем: человек уже заплатил и доступ получил, письмо не
-      // должно этого отменять. Меняется только одно — отказ перестаёт быть
-      // невидимым, и в следе есть ЧТО и КОМУ не ушло.
+      /*
+       * Отказ поставщика — самый тихий провал на денежном пути.
+       *
+       * Ниже по цепочке признак `emailSent` возвращается вызывающему, но
+       * замер 01.09.2026: его не читает НИ ОДНА из четырёх касс (gumroad,
+       * lemonSqueezy, paybox, paypal). Значит человек заплатил, письмо с
+       * доступом не ушло — и об этом не знает никто: ни журнал, ни Sentry.
+       * Соседние ветки этой же функции при отказе капчурят (исключение,
+       * пустой id, вырожденный режим), а эта — единственная — молчала.
+       * Непоследовательность внутри одной функции почти всегда недосмотр.
+       *
+       * Отправку по-прежнему НЕ роняем: письмо не должно валить выдачу
+       * доступа, ради которой оно шлётся. Меняется одно — отказ перестаёт
+       * быть невидимым.
+       *
+       * Адрес получателя не пишем целиком: это персональные данные, а для
+       * разбора хватает домена и темы. Домен и есть главное: отказы вида
+       * «домен отправителя не подтверждён» и «получатель отвергнут» по нему
+       * и различаются.
+       */
       const причина = j.message ?? `HTTP ${r.status}`;
-      console.warn(`[email] не отправлено -> ${payload.to}: ${причина}`);
-      capture(new Error(`sendEmail failed: ${причина}`), {
+      const доменПолучателя = String(payload.to).split("@").pop() ?? "?";
+      capture(new Error(`sendEmail rejected: ${причина}`), {
         route: "provisioning/sendEmail",
-        to: payload.to,
         subject: payload.subject,
+        recipientDomain: доменПолучателя,
+        status: String(r.status),
       });
       return { ok: false, mode: "real", error: причина };
     }
@@ -435,9 +431,8 @@ const TIER_DISPLAY: Record<TierId, string> = {
   medium: "Medium",
   full: "Full",
   enterprise: "Enterprise",
-  // `pro` is NOT a legacy alias — it is the live Universe tier ($149/mo in
-  // data/pricing.ts; $249.99 → $149 при переоценке 13.08.2026), and
-  // lib/planGate.ts normalizes it to `full` access.
+  // `pro` is NOT a legacy alias — it is the live Universe tier ($249.99 in
+  // data/pricing.ts), and lib/planGate.ts normalizes it to `full` access.
   // This map still called it "Lite", so someone who had just paid for Universe
   // got a welcome email headlined "Добро пожаловать в AEVION Lite". Same
   // mistaken assumption that once gated a Universe customer at Lite access
@@ -500,10 +495,27 @@ export function welcomeHtml(sub: Subscription): string {
               ${cta.label}
             </a>
           </div>
+          <!--
+            Поддержка ведёт на ФОРМУ, а не на почтовый адрес.
+
+            Замер 01.09.2026 (контроль пройден: у gmail.com запись MX находится,
+            у чужого aevion.io тоже): у домена aevion.app записи MX НЕТ. Значит
+            письмо на любой адрес этого домена — а такой стоял здесь — не доходит, и
+            человек узнаёт об этом отлупом, а мы не узнаём вовсе. Хуже места для
+            мёртвого адреса нет: это письмо получает тот, кто уже ЗАПЛАТИЛ.
+
+            Форма /pricing/contact проверена по всей цепочке: пишет в файл,
+            каталог лежит на постоянном томе (события с 26 мая целы), читается
+            защищённой ручкой /api/pricing/leads, ADMIN_TOKEN на проде задан.
+            То есть обращение доходит до человека, а адрес — нет.
+
+            Когда у домена появится почта, сюда можно вернуть адрес — но тогда
+            уже проверенный, а не обещанный.
+          -->
           <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
           <p style="font-size:12px;color:#94a3b8;line-height:1.5;margin:0">
             ID подписки: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">${sub.id}</code><br/>
-            Поддержка: <a href="mailto:hello@aevion.app" style="color:#0d9488">hello@aevion.app</a>
+            Поддержка: <a href="${FRONTEND_URL}/pricing/contact" style="color:#0d9488">${FRONTEND_URL.replace(/^https?:\/\//, "")}/pricing/contact</a>
           </p>
         </td></tr>
       </table>
@@ -527,7 +539,7 @@ ${includedLine(sub)}
 ${ctaFor(sub).label}: ${FRONTEND_URL}${ctaFor(sub).href}
 
 ID подписки: ${sub.id}
-Поддержка: hello@aevion.app
+Поддержка: ${FRONTEND_URL}/pricing/contact
 `;
 }
 

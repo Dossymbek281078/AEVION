@@ -1,7 +1,7 @@
 import { describe, test, expect, vi, beforeEach, afterAll } from "vitest";
 import express from "express";
 import request from "supertest";
-import { mkdtempSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -99,6 +99,9 @@ function токен(email: string) {
 }
 
 afterAll(() => {
+  // Убираем за собой: без этого каждый прогон оставляет каталог в TEMP.
+  // Замер 01.09.2026 — за день накопилось 127 штук.
+  try { rmSync(каталог, { recursive: true, force: true }); } catch { /* уже нет */ }
   delete process.env.SUBSCRIPTIONS_FILE;
   delete process.env.PAYWALL_MODULES;
   delete process.env.AUTH_JWT_SECRET;

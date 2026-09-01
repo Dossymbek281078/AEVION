@@ -1,7 +1,7 @@
 import { describe, test, expect, vi, beforeEach, afterAll } from "vitest";
 import express from "express";
 import request from "supertest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -19,7 +19,8 @@ import { tmpdir } from "node:os";
  * решает именно этот файл.
  */
 
-process.env.SUBSCRIPTIONS_FILE = join(mkdtempSync(join(tmpdir(), "aevion-fw-")), "s.jsonl");
+const каталог = mkdtempSync(join(tmpdir(), "aevion-fw-"));
+process.env.SUBSCRIPTIONS_FILE = join(каталог, "s.jsonl");
 
 let ронятьЗапись = false;
 vi.mock("fs", async (настоящий) => {
@@ -66,6 +67,8 @@ async function оплатил(email: string) {
 }
 
 afterAll(() => {
+  // Убираем за собой: иначе каждый прогон оставляет каталог в TEMP.
+  try { rmSync(каталог, { recursive: true, force: true }); } catch { /* уже нет */ }
   delete process.env.SUBSCRIPTIONS_FILE;
 });
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import ModuleStatusNote from "./ModuleStatusNote";
 import { apiUrl } from "@/lib/apiBase";
 import paper from "@/styles/aevionPaper.module.css";
 import {
@@ -130,6 +131,7 @@ export default function QVenturePage() {
        <div className={paper.paper} style={{ background: "transparent", minHeight: 0 }}>
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
           <ModulePricingChip moduleId="qventure" theme="light" />
+          <ModuleStatusNote moduleId="qventure" />
         </div>
 
         {/* Masthead — newspaper treatment: kicker rule, serif headline. */}

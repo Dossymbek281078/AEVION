@@ -12,6 +12,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "../../../../__tests__/helpers/sourceCode";
 import { естьСледОплаты as следОплаты } from "@/lib/paymentTrace";
 
 describe("след оплаты", () => {
@@ -37,9 +38,8 @@ describe("след оплаты", () => {
     // В режиме разработки React вызывает эффект дважды. Без защёлки один отказ
     // считался бы за два, и доля брошенных оплат выросла бы вдвое на пустом
     // месте. Приём взят у соседнего окна, чинившего это же место параллельно.
-    const s = readFileSync(
-      join(process.cwd(), "src/app/pricing/checkout/cancel/page.tsx"),
-      "utf8",
+    const s = stripComments(
+      readFileSync(join(process.cwd(), "src/app/pricing/checkout/cancel/page.tsx"), "utf8"),
     );
     // Требуем и ПРОВЕРКУ, и ВЗВЕДЕНИЕ: первая редакция искала только упоминание
     // защёлки и пережила мутацию «убрать взведение» — условие-то осталось, а
@@ -57,9 +57,8 @@ describe("след оплаты", () => {
     // Без этого сторож стерёг УСЛОВИЕ и не стерёг САМ УЧЁТ: мутация
     // «перестать учитывать покупку вовсе» проходила молча. А это худший
     // исход из возможных — покупки просто исчезают из сводки и из рекламы.
-    const s = readFileSync(
-      join(process.cwd(), "src/app/pricing/checkout/success/page.tsx"),
-      "utf8",
+    const s = stripComments(
+      readFileSync(join(process.cwd(), "src/app/pricing/checkout/success/page.tsx"), "utf8"),
     );
     expect(s, "на экране покупки нет учёта").toContain("<PurchaseReturnTracker");
     // И он обязан получить сумму: без неё выручка по каналам станет пустой.
@@ -75,7 +74,7 @@ describe("след оплаты", () => {
       "src/app/pricing/checkout/success/page.tsx",
       "src/app/pricing/checkout/cancel/page.tsx",
     ]) {
-      const s = readFileSync(join(process.cwd(), путь), "utf8");
+      const s = stripComments(readFileSync(join(process.cwd(), путь), "utf8"));
       expect(s, `${путь} не зовёт общий признак`).toContain("естьСледОплаты({");
       // Проверяем СМЫСЛ, а не написание: на экране отмены к тому же условию
       // добавлена защёлка от двойного срабатывания, и точная строка там иная.

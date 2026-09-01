@@ -16,24 +16,22 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./helpers/sourceCode";
 
 const исходник = readFileSync(
   join(process.cwd(), "src/routes/provisioning.ts"),
   "utf8",
 );
 
-/** Только то, что реально уходит человеку: без комментариев. */
-function безКомментариев(s: string): string {
-  return s
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//"))
-    .join("\n");
-}
+/*
+ * Вырезалка — ОБЩАЯ, а не своя. Своя повторяла ту же наивную замену по
+ * шаблону, у которой 01.09.2026 нашлись два живых промаха: путь-шаблон в
+ * комментарии съедал код ниже, а двойная косая внутри кавычек обрубала строку.
+ * Второй способ делать то же самое — второй источник тех же ошибок.
+ */
 
 describe("поддержка в письме о покупке", () => {
-  const письмо = безКомментариев(исходник);
+  const письмо = stripComments(исходник);
 
   it("не зовёт на домен, который не принимает почту", () => {
     // Комментарии вырезаны намеренно: объяснение, ПОЧЕМУ адрес убран, само

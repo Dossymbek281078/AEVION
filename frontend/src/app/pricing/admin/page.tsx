@@ -58,6 +58,9 @@ interface EventsSummary {
   purchaseRevenueByChannel?: Record<string, number>;
   purchaseCount?: number;
   purchaseWithKnownAmount?: number;
+  truncated?: boolean;
+  consideredEvents?: number;
+  totalEvents?: number;
   byIndustry: Record<string, number>;
   /** Канал раздачи (tt / ig / yt …) — по нему видно, какая раздача привела людей. */
   byChannel?: Record<string, number>;
@@ -532,6 +535,27 @@ export default function PricingAdminPage() {
                   сумма, поэтому известна она не у всех. Сколько покупок с
                   известной суммой — в подписи, иначе частичная выручка
                   читается как полная и молча занижает канал. */}
+              {/* Числа ниже считаются по ПОСЛЕДНИМ N событиям журнала, а окно
+                  времени применяется уже к ним. Если журнал длиннее предела,
+                  ответ «за 30 дней» на самом деле дан не за 30 дней, и выручка
+                  по каналам окажется тихо заниженной. Говорим об этом прямо:
+                  число без знаменателя здесь опаснее отсутствия числа. */}
+              {summary.truncated ? (
+                <div
+                  style={{
+                    gridColumn: "1 / -1",
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    background: "#fef3c7",
+                    color: "#78350f",
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  Окно обрезано журналом: учтено {summary.consideredEvents ?? "?"} событий из{" "}
+                  {summary.totalEvents ?? "?"}. Числа ниже — НЕ за весь выбранный период.
+                </div>
+              ) : null}
               <Breakdown
                 title={t("pricing.admin.breakdown.purchaseByChannel")}
                 data={summary.purchaseByChannel ?? {}}
